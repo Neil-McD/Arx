@@ -53,6 +53,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       oneLiner: "Compatibility without restoring the launcher.",
       about: "Initial about",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 2,
       createdAt: nowMs,

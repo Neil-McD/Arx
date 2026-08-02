@@ -90,8 +90,8 @@ crons.daily(
 // compiler digest (free, deterministic) and knock for a memory cycle. The
 // knock is triple-gated — owner off-switch, 2-cycles/day cap, and a delta
 // check so unchanged signal never re-wakes the roles — and the heartbeat's
-// evidence gate has the final word. Founder-funded; no owner connection, no
-// cycle.
+// evidence gate has the final word. The canonical runtime admits founder
+// funding before any model call; the scheduler never guesses from credentials.
 crons.interval(
   "community memory sweep",
   { hours: 6 },
@@ -100,8 +100,8 @@ crons.interval(
 );
 
 // Concierge repair drain: fresh community-agent mentions are born into
-// asker-funded serve requests during the chat write. This deterministic,
-// token-free cron only repairs leftover pending mentions.
+// community-founder-funded serve requests during the chat write. This
+// deterministic, token-free cron only repairs leftover pending mentions.
 crons.interval(
   "process pending community agent mentions",
   { minutes: 5 },
@@ -110,8 +110,8 @@ crons.interval(
 );
 
 // Concierge serve repair drain: accepted community-agent mentions schedule an
-// immediate requester-funded worker at intake time. This cron only drains
-// leftover queued/stale requests.
+// immediate community-founder-funded worker at intake time. This cron only
+// drains leftover queued/stale requests.
 crons.interval(
   "process queued community agent serve requests",
   { minutes: 1 },

@@ -33,6 +33,7 @@ test("typing leases remain isolated by channel and legacy leases belong only to 
       slug: "typing-channel-community",
       name: "Typing channel community",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 3,
       createdAt: nowMs,

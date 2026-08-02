@@ -23,7 +23,6 @@ import {
 } from "./founderPlanCore";
 import {
   getExistingFounderInferenceGrant,
-  resolveCommunityInferenceFundingPolicy,
 } from "./founderInferenceCore";
 import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
@@ -461,26 +460,6 @@ export const syncFounderSubscriptionRiskStatusInternal = internalMutation({
   },
 });
 
-export const setCommunityFundingPolicyInternal = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    policy: v.union(
-      v.literal("legacy_byok_allowed"),
-      v.literal("managed_required"),
-    ),
-    nowMs: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const community = await ctx.db.get(args.communityId);
-    if (!community) throw new Error("community_not_found");
-    await ctx.db.patch(args.communityId, {
-      inferenceFundingPolicy: args.policy,
-      updatedAt: args.nowMs,
-    });
-    return { ok: true, communityId: args.communityId, policy: args.policy };
-  },
-});
-
 export const getFounderBillingOverview = query({
   args: { authSubject: v.optional(v.string()) },
   handler: async (ctx, args) => {
@@ -508,7 +487,7 @@ export const getFounderBillingOverview = query({
         .slice()
         .sort((a, b) => a.createdAt - b.createdAt)
         .map(async (community) => {
-          const [subscription, pendingCheckouts, fundingPolicy] =
+          const [subscription, pendingCheckouts] =
             await Promise.all([
               getFounderSubscriptionByCommunity(ctx, community._id, nowMs),
               ctx.db
@@ -517,8 +496,8 @@ export const getFounderBillingOverview = query({
                   q.eq("communityId", community._id).eq("status", "pending"),
                 )
                 .collect(),
-              resolveCommunityInferenceFundingPolicy({ ctx, community }),
             ]);
+          const fundingPolicy = community.inferenceFundingPolicy;
           const pendingCheckout = pendingCheckouts
             .filter(
               (checkout) =>

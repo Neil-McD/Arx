@@ -358,17 +358,6 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
     if (!assessment.enqueue) {
       return await recordSkipped(initialWakeEvidence.reason);
     }
-    const resolved = (await ctx.runQuery(
-      internalRefs.communityAgentRuntime.resolveCommunityAgentRunContextInternal,
-      { communityId: args.communityId },
-    )) as Record<string, any>;
-    const connection = (await ctx.runQuery(
-      internalRefs.providerConnections.getChatgptConnectionForUserInternal,
-      { userId: resolved.sponsorUserId },
-    )) as Record<string, any> | null;
-    if (!connection?.encryptedSecretHex) {
-      return await recordSkipped("owner_connection_missing");
-    }
     if (compilerEvidence.should_run) {
       try {
         await ctx.runMutation(
@@ -465,12 +454,9 @@ export const listCommunityMemorySweepTargetsInternal = internalQuery({
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(1000, Math.floor(Number(args.limit ?? 500))));
     const rows = (await ctx.db.query("communities" as any).take(limit)) as Array<Record<string, any>>;
-    return rows
-      .filter((row) => Boolean(row.ownerId))
-      .map((row) => ({
-        communityId: normalizeIdValue(row._id),
-        ownerId: normalizeIdValue(row.ownerId),
-      }));
+    return rows.map((row) => ({
+      communityId: normalizeIdValue(row._id),
+    }));
   },
 });
 
@@ -570,7 +556,7 @@ export const runCommunityMemorySweepInternal = internalAction({
   handler: async (ctx, args) => {
     const targets = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.listCommunityMemorySweepTargetsInternal, {
       limit: args.limitCommunities,
-    })) as Array<{ communityId: string; ownerId: string }>;
+    })) as Array<{ communityId: string }>;
     let enqueued = 0;
     let metabolized = 0;
     const skipped: Record<string, number> = {};
@@ -607,15 +593,6 @@ export const runCommunityMemorySweepInternal = internalAction({
       })) as { enqueue: boolean; reason: string };
       if (!assessment.enqueue) {
         skipped[assessment.reason] = (skipped[assessment.reason] ?? 0) + 1;
-        continue;
-      }
-      // Founder-funded: no usable owner connection means no cycle, checked
-      // cheaply here and rechecked by the heartbeat immediately before work.
-      const connection = (await ctx.runQuery(internalRefs.providerConnections.getChatgptConnectionForUserInternal, {
-        userId: target.ownerId,
-      })) as Record<string, any> | null;
-      if (!connection?.encryptedSecretHex) {
-        skipped.owner_connection_missing = (skipped.owner_connection_missing ?? 0) + 1;
         continue;
       }
       await ctx.runMutation(internalRefs.communityAgentHeartbeat.enqueueCommunityAgentHeartbeatInternal, {

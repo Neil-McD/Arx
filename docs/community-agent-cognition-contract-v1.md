@@ -1980,10 +1980,11 @@ never as node size in the communal graph.
 Two payment lanes, split by what the spend produces:
 
 - Memory is founder-funded. The directory is the community's compounding
-  asset and the founder owns that asset, so cycle inference runs on the
-  owner's connection. Defaults: on wherever the owner has a usable
-  connection, capped at two cycles per day, with an owner off-switch
-  (communityAgentConfigs.agentEnabled).
+  asset and the founder owns that asset, so cycle inference runs through the
+  community's canonical founder-funding admission. Exact legacy BYOK, an active
+  attached managed subscription, or the operator grant may fund a cycle. It is
+  capped at two cycles per day and retains the owner off-switch
+  (`communityAgentConfigs.agentEnabled`).
 - Direct Concierge chat, autonomous cognition, and AI-assisted setup generation are community-founder-funded. An approved existing founder
   supplies the OpenAI key after activation; a new founder supplies a verified $79
   monthly subscription attached to exactly one community; the active platform owner
@@ -2001,9 +2002,10 @@ Two payment lanes, split by what the spend produces:
 A memory sweep runs every six hours. It settles metabolizer scores from
 retrieval/outcome signals independently, measures canonical compiler and
 handoff work, and immediately schedules eligible communities. The heartbeat
-rechecks the owner off-switch, daily cycle cap, and founder connection before
-tokens can be spent, then owns the compile -> claim -> Steward pass -> settlement
-transition. Unchanged handled digest versions never re-wake the Steward.
+rechecks the owner off-switch and daily cycle cap, then the canonical runtime
+admits founder funding before tokens can be spent. The heartbeat owns the
+compile -> claim -> Steward pass -> settlement transition. Unchanged handled
+digest versions never re-wake the Steward.
 Frequency controls worst-case latency only; durable work state and cost gates
 own execution.
 

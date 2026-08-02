@@ -39,12 +39,19 @@ async function insertUser(ctx: any, suffix: string, nowMs = 1_000) {
   });
 }
 
-async function insertCommunity(ctx: any, ownerId: any, suffix: string, nowMs = 1_000) {
+async function insertCommunity(
+  ctx: any,
+  ownerId: any,
+  suffix: string,
+  nowMs = 1_000,
+  inferenceFundingPolicy: "legacy_byok_allowed" | "managed_required" = "managed_required",
+) {
   return await ctx.db.insert("communities", {
     ownerId,
     slug: `founder-inference-${suffix}`,
     name: `Community ${suffix}`,
     visibility: "unlisted",
+    inferenceFundingPolicy,
     entryPolicy: "approval",
     activeMemberCount: 1,
     createdAt: nowMs,
@@ -81,7 +88,13 @@ async function createActiveFundingFixture(
   return await t.run(async (ctx) => {
     const ownerId = await insertUser(ctx, `${suffix}-owner`, nowMs);
     const memberId = await insertUser(ctx, `${suffix}-member`, nowMs);
-    const communityId = await insertCommunity(ctx, ownerId, suffix, nowMs);
+    const communityId = await insertCommunity(
+      ctx,
+      ownerId,
+      suffix,
+      nowMs,
+      "legacy_byok_allowed",
+    );
     const grantId = await ctx.db.insert("founderInferenceGrants", {
       userId: ownerId,
       cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
@@ -122,12 +135,23 @@ function claimArgs(
   };
 }
 
-test("funding cutover is founder-level and fails closed without changing member authority", async () => {
+test("funding requires explicit community policy and fails closed without changing member authority", async () => {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {
     const ownerId = await insertUser(ctx, "owner");
     const memberId = await insertUser(ctx, "member");
-    const communityId = await insertCommunity(ctx, ownerId, "community");
+    const communityId = await insertCommunity(
+      ctx,
+      ownerId,
+      "community",
+      1_000,
+      "legacy_byok_allowed",
+    );
+    const managedCommunityId = await insertCommunity(
+      ctx,
+      ownerId,
+      "managed-community",
+    );
 
     await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
       ok: false,
@@ -145,6 +169,12 @@ test("funding cutover is founder-level and fails closed without changing member 
     await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
       ok: false,
       code: "owner_funding_choice_required",
+    });
+    await expect(
+      resolveCommunityInferenceFundingAdmission(ctx, managedCommunityId),
+    ).resolves.toEqual({
+      ok: false,
+      code: "founder_plan_required",
     });
 
     await ctx.db.patch(grantId, { status: "active", activatedAt: 3_000, updatedAt: 3_000 });
@@ -172,6 +202,12 @@ test("funding cutover is founder-level and fails closed without changing member 
       payerUserId: ownerId,
       grantId,
       modelId: "gpt-5.6-luna",
+    });
+    await expect(
+      resolveCommunityInferenceFundingAdmission(ctx, managedCommunityId),
+    ).resolves.toEqual({
+      ok: false,
+      code: "founder_plan_required",
     });
 
     const receiptKey = "community_agent_mention:test";

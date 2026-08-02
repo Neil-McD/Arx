@@ -38,6 +38,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       slug: "dm-typing-community",
       name: "DM typing community",
       visibility: "published",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 2,
       createdAt: nowMs,

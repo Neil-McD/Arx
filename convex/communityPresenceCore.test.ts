@@ -32,6 +32,7 @@ async function createScope(t: ReturnType<typeof convexTest>) {
       slug: "presence-community",
       name: "Presence community",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 1,
       createdAt: 1_000,

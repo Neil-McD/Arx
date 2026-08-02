@@ -1239,11 +1239,9 @@ export default defineSchema({
       }),
     ),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
-    inferenceFundingPolicy: v.optional(
-      v.union(
-        v.literal("legacy_byok_allowed"),
-        v.literal("managed_required"),
-      ),
+    inferenceFundingPolicy: v.union(
+      v.literal("legacy_byok_allowed"),
+      v.literal("managed_required"),
     ),
     entryPolicy: v.union(
       v.literal("open"),

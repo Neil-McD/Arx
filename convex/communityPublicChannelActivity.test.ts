@@ -25,6 +25,7 @@ test("public activity counts every active member-readable channel and excludes p
       slug: "public-channel-count",
       name: "Public channel count",
       visibility: "published",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 1,
       createdAt: 1_000,

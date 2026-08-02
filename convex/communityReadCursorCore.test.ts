@@ -31,6 +31,7 @@ async function createScope(t: ReturnType<typeof convexTest>) {
       slug: "read-cursor-community",
       name: "Read cursor community",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 1,
       createdAt: 1_000,

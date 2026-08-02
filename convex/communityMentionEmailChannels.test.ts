@@ -35,6 +35,7 @@ test("mention email suppression reads the exact source channel cursor", async ()
       slug: "mention-email-channel",
       name: "Mention email channel",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 2,
       createdAt: 1_000,

@@ -30,6 +30,7 @@ test("attention and acknowledgements remain independent per channel", async () =
       slug: "channel-attention",
       name: "Channel attention",
       visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
       activeMemberCount: 2,
       createdAt: 1_000,
