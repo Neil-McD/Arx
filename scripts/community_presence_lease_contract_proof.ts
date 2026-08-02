@@ -68,7 +68,7 @@ const publicStatsMapper = sectionBetween(
 );
 const presenceEffect = sectionBetween(
   controller,
-  "if (!sessionIdentity || !params.activeCommunityId) {\n      setActiveCommunityPresenceSummaryState(null);",
+  "let inFlight = false;",
   "const scopedCommunityAccessResolution = useMemo(",
 );
 const directoryPageQuery = communityDirectory.slice(
