@@ -1135,7 +1135,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const showInteractionProjection = Boolean(
     interactionProjection?.enabled &&
     activeCommunity &&
-    hasAuthenticatedPresentation,
+    hasAuthenticatedPresentation &&
+    hasResolvedCommunityChat &&
+    !isLoadingChat,
   );
   const communityComposerFocusTargetKey = (() => {
     if (
@@ -1143,7 +1145,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       !hasAuthenticatedPresentation ||
       isAuthRecoveringSignedIn ||
       !canUseComposer ||
-      (!showInteractionProjection && (!hasResolvedCommunityChat || isLoadingChat)) ||
+      !hasResolvedCommunityChat ||
+      isLoadingChat ||
       profilePanelUserId
     ) {
       return null;
@@ -1381,12 +1384,11 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const showCommunityChatBootstrap =
     hasAuthenticatedPresentation &&
     (isAuthRecoveringSignedIn ||
-      isResolvingSelectedCommunity ||
-      (!interactionProjection?.enabled &&
-        !!activeCommunity &&
+    (isResolvingSelectedCommunity ||
+      (!!activeCommunity &&
         !hasCommunityTimelineItems &&
         !communityChatError &&
-        (isLoadingChat || !hasResolvedCommunityChat)));
+        (isLoadingChat || !hasResolvedCommunityChat))));
 
   const renderCommunityAttachmentsPreview = (
     attachments: CommunityMessageAttachment[],

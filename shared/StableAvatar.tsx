@@ -56,9 +56,7 @@ export function StableAvatar(props: StableAvatarProps) {
   } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
   const isReady = useImageUrlReady(imageUrl);
-  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
-  const normalizedImageUrl = String(imageUrl ?? "").trim() || null;
-  const showImage = Boolean(normalizedImageUrl) && isReady && failedImageUrl !== normalizedImageUrl;
+  const showImage = Boolean(imageUrl) && isReady;
   const hasImageFrame = Boolean(imageFrame);
   const [rootSize, setRootSize] = useState({ width: 0, height: 0 });
   const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
@@ -88,7 +86,6 @@ export function StableAvatar(props: StableAvatarProps) {
 
   useEffect(() => {
     setNaturalSize({ width: 0, height: 0 });
-    setFailedImageUrl(null);
   }, [imageUrl]);
 
   const layout = useMemo(() => {
@@ -145,7 +142,7 @@ export function StableAvatar(props: StableAvatarProps) {
       {showImage ? (
         <img
           className={imageClassName}
-          src={normalizedImageUrl ?? undefined}
+          src={imageUrl ?? undefined}
           alt={alt}
           decoding="async"
           draggable={false}
@@ -157,7 +154,6 @@ export function StableAvatar(props: StableAvatarProps) {
               height: target.naturalHeight || target.height || 0,
             });
           }}
-          onError={() => setFailedImageUrl(normalizedImageUrl)}
         />
       ) : (
         fallback
