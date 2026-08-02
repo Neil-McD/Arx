@@ -27,6 +27,7 @@ assert.deepEqual(readAppRouteFromLocation(), {
   settingsPage: "billing",
   communitySlug: null,
   communityTab: "chat",
+  communityChannelSlug: null,
   communityResourceModuleId: null,
   communitySettingsPane: null,
   docsSlug: null,
@@ -175,10 +176,6 @@ assert.doesNotMatch(app, /setActiveView\("settings"\)/);
 assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);
 assert.match(mobileController, /params\.openGlobalSettings\("profile"\)/);
 assert.doesNotMatch(mobileController, /setActivePage\("workspace"\)/);
-assert.match(
-  globalOverlays,
-  /onOpenBilling: params\.onOpenPremiumBilling/,
-  "retained global premium action should route through the canonical billing callback",
-);
+assert.doesNotMatch(globalOverlays, /Premium|onOpenPremiumBilling/);
 
 console.log("global_settings_surface_contract_proof: ok");

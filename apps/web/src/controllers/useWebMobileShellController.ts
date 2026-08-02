@@ -37,9 +37,7 @@ export function useWebMobileShellController(params: {
   openDirectMessages: () => void;
   closeDirectMessages: () => void;
   closeThreadPage: () => void;
-  hasCommunityCreateAccess: boolean;
   openCommunityCreateFlow: () => void;
-  setIsFreeAccountInfoOpen: Dispatch<SetStateAction<boolean>>;
 }) {
   const openMobileCommunitySurface = useCallback(() => {
     const nextCommunitySlug = String(
@@ -120,15 +118,9 @@ export function useWebMobileShellController(params: {
 
   const openMobileCreateCommunity = useCallback(() => {
     params.setMobileOverlay(null);
-    if (params.hasCommunityCreateAccess) {
-      params.openCommunityCreateFlow();
-      return;
-    }
-    params.setIsFreeAccountInfoOpen(true);
+    params.openCommunityCreateFlow();
   }, [
-    params.hasCommunityCreateAccess,
     params.openCommunityCreateFlow,
-    params.setIsFreeAccountInfoOpen,
     params.setMobileOverlay,
   ]);
 

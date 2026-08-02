@@ -13,30 +13,17 @@ type CommunityLike = {
   id: string;
 };
 
-type AccountCommerceStatusLike = {
-  account_tier: string;
-  max_communities: number;
-};
-
 type UseWebCommunityUiControllerParams<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
-  BillingStatusT extends AccountCommerceStatusLike,
 > = {
   session: SessionT | null;
   ensureSession?: (session?: SessionT | null) => Promise<SessionT | null>;
-  communities: CommunityT[];
-  communityRoleById: Record<string, string>;
-  accountCommerceStatus: BillingStatusT | null;
-  accountCommerceError: string | null;
   isAccountSetupComplete: boolean;
   communityInitials: (value: string) => string;
-  loadAccountCommerceStatus: (session: SessionT) => Promise<BillingStatusT | null>;
-  persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onAccountSetupRequired?: () => void;
-  onOwnedCommunityLimitReached?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
   readBannerFileAsWideDataUrlWithinLimit: (file: File, maxChars: number) => Promise<string>;
   isLikelyImageFile: (file: File) => boolean;
@@ -45,16 +32,9 @@ type UseWebCommunityUiControllerParams<
   bannerLoadFailureMessage: string;
 };
 
-type CommunityCreateModalHostProps<
-  CommunityT extends CommunityLike,
-  BillingStatusT extends AccountCommerceStatusLike,
-> = {
+type CommunityCreateModalHostProps = {
   isOpen: boolean;
   hasSession: boolean;
-  communities: CommunityT[];
-  communityRoleById: Record<string, string>;
-  accountCommerceStatus: BillingStatusT | null;
-  accountCommerceError: string | null;
   isCreateBannerDragOver: boolean;
   isCreateAvatarDragOver: boolean;
   createCommunityBannerUrl: string | null;
@@ -81,29 +61,24 @@ type CommunityCreateModalHostProps<
   onChangeSlugEdited: (value: boolean) => void;
 };
 
-export type WebCommunityModalHostPropsShape<
-  CommunityT extends CommunityLike,
-  BillingStatusT extends AccountCommerceStatusLike,
-> = {
-  createModal: CommunityCreateModalHostProps<CommunityT, BillingStatusT>;
+export type WebCommunityModalHostPropsShape = {
+  createModal: CommunityCreateModalHostProps;
 };
 
 export type UseWebCommunityUiControllerResult<
   CommunityT extends CommunityLike,
-  BillingStatusT extends AccountCommerceStatusLike,
 > = {
   openCreateCommunityModal: (draft?: CreateCommunityIntentDraft | null) => void;
   resumeCreateCommunityIntent: (draft?: CreateCommunityIntentDraft | null) => void;
-  modalHostProps: WebCommunityModalHostPropsShape<CommunityT, BillingStatusT>;
+  modalHostProps: WebCommunityModalHostPropsShape;
 };
 
 export function useWebCommunityUiController<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
-  BillingStatusT extends AccountCommerceStatusLike,
 >(
-  params: UseWebCommunityUiControllerParams<SessionT, CommunityT, BillingStatusT>,
-): UseWebCommunityUiControllerResult<CommunityT, BillingStatusT> {
+  params: UseWebCommunityUiControllerParams<SessionT, CommunityT>,
+): UseWebCommunityUiControllerResult<CommunityT> {
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
@@ -125,19 +100,13 @@ export function useWebCommunityUiController<
     handleCreateCommunityBannerUpload,
     handleCreateBannerDrop,
     handleCreateAvatarDrop,
-  } = useCommunityCreateController<SessionT, CommunityT, BillingStatusT>({
+  } = useCommunityCreateController<SessionT, CommunityT>({
     session: params.session,
     ensureSession: params.ensureSession,
-    accountCommerceStatus: params.accountCommerceStatus,
     isAccountSetupComplete: params.isAccountSetupComplete,
-    communities: params.communities,
-    communityRoleById: params.communityRoleById,
-    loadAccountCommerceStatus: params.loadAccountCommerceStatus,
-    persistCreateCommunityIntent: params.persistCreateCommunityIntent,
     onPrimaryUnauthenticated: params.onPrimaryUnauthenticated,
     onCreateUnauthenticated: params.onCreateUnauthenticated,
     onAccountSetupRequired: params.onAccountSetupRequired,
-    onOwnedCommunityLimitReached: params.onOwnedCommunityLimitReached,
     onCommunityCreated: params.onCommunityCreated,
     createCommunityName,
     createCommunitySlug,
@@ -170,10 +139,6 @@ export function useWebCommunityUiController<
       createModal: {
         isOpen: showCreateCommunityModal,
         hasSession: Boolean(params.session),
-        communities: params.communities,
-        communityRoleById: params.communityRoleById,
-        accountCommerceStatus: params.accountCommerceStatus,
-        accountCommerceError: params.accountCommerceError,
         isCreateBannerDragOver,
         isCreateAvatarDragOver,
         createCommunityBannerUrl,

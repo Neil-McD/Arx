@@ -260,7 +260,6 @@ function mapCloudMentionCandidate(row: CloudCommunityMentionCandidateRow): Menti
     displayName,
     handle,
     avatarUrl: String(row.avatar_url ?? "").trim() || null,
-    premiumBadge: row.premium_badge ?? null,
     kind,
     ...(kind === "role" ? { roleKey: "everybody" as const } : {}),
     ...(kind === "role" ? { emailMode, emailCooldownUntil: row.email_cooldown_until ?? null } : {}),
@@ -857,7 +856,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           displayName: label,
           handle,
           avatarUrl: profile.avatar_url ?? null,
-          premiumBadge: profile.premium_badge ?? null,
         });
         return candidates;
       }, [])
@@ -2071,7 +2069,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                         senderLabel={viewModel.senderLabel}
                         senderHandle={senderProfile?.handle ?? null}
                         senderBio={senderProfile?.bio ?? null}
-                        senderPremiumBadge={senderProfile?.premium_badge ?? null}
                         avatarUrl={viewModel.avatarUrl}
                         avatarFocusX={senderProfile?.avatar_focus_x ?? 0.5}
                         avatarFocusY={senderProfile?.avatar_focus_y ?? 0.5}

@@ -4,7 +4,6 @@ import type {
   NativeToolAwareMessage,
   NativeToolInputContentPart,
 } from "./nativeToolProtocol";
-import type { PaidUsageBillingMode } from "./paidUsageBilling";
 
 export type RuntimeKernelStopReason =
   | "assistant_final"
@@ -74,9 +73,6 @@ export type RuntimeKernelFailureInput = {
   status: number;
   code: string;
   message: string;
-  toolKind?: string | null;
-  requiredCredits?: number | null;
-  paidUsageBillingMode?: PaidUsageBillingMode | null;
   pendingToolCallId?: string;
   pendingToolName?: string;
   stopReason?: RuntimeKernelStopReason;
@@ -150,9 +146,6 @@ export type RuntimeKernelFailure<TToolName extends string = string> =
     code: string;
     stopReason: RuntimeKernelStopReason;
     message: string;
-    toolKind?: string | null;
-    requiredCredits?: number | null;
-    paidUsageBillingMode?: PaidUsageBillingMode | null;
     pendingToolCallId?: string;
     pendingToolName?: string;
   };

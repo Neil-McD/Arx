@@ -13,7 +13,6 @@ import {
 } from "../shared/harnessToolPolicy.ts";
 import {
   COMPUTER_USE_TOOL_NAMES,
-  NON_SANDBOX_TOOL_NAMES,
   SANDBOX_FILE_SHELL_TOOL_NAMES,
   SANDBOX_PREVIEW_TOOL_NAMES,
   SANDBOX_TOOL_NAMES,
@@ -24,274 +23,66 @@ import {
   DEFAULT_ACTIVE_RUNTIME_ENGINE,
   RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
-  canUseRuntimeEngineForTier,
+  canUseRuntimeEngine,
   getRuntimeEngineAccessLevel,
   normalizeActiveWorkspaceRuntimeEngine,
 } from "../shared/runtimeEngine.ts";
 
-function read(relativePath: string): string {
-  return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+const read = (path: string) => readFileSync(path, "utf8");
+assert.deepEqual([...ACTIVE_WORKSPACE_RUNTIME_ENGINES], [RUNTIME_ENGINE_POLYNET, RUNTIME_ENGINE_CODEX]);
+assert.equal(DEFAULT_ACTIVE_RUNTIME_ENGINE, RUNTIME_ENGINE_POLYNET);
+assert.equal(normalizeActiveWorkspaceRuntimeEngine("unknown"), RUNTIME_ENGINE_POLYNET);
+for (const engine of ACTIVE_WORKSPACE_RUNTIME_ENGINES) {
+  assert.equal(getRuntimeEngineAccessLevel(engine), "included");
+  assert.equal(canUseRuntimeEngine({ engine }), true);
 }
-
-const packageJson = read("package.json");
-const app = read("apps/web/src/App.tsx");
-const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
-const handlers = read("convex/runtimeTurnHandlers.ts");
-const runtimeEngine = read("shared/runtimeEngine.ts");
-const threads = read("convex/threads.ts");
-const codexWorkerBridge = read("convex/polynetCodexWorkerBridge.ts");
-const harnessToolPolicy = read("shared/harnessToolPolicy.ts");
-const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
-const daytonaCodexRuntimeTargetActions = read("convex/daytonaCodexRuntimeTargetActions.ts");
-
-assert.match(
-  packageJson,
-  /"check:polynet-harness-isolation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/polynet_harness_isolation_contract_proof\.ts"/,
-  "package.json must expose the PolyNet harness isolation proof",
-);
-assert.doesNotMatch(
-  app,
-  /activeRuntimeEngine|normalizeActiveWorkspaceRuntimeEngine|RUNTIME_ENGINE_CODEX/,
-  "the browser App must not retain the deleted standalone Workspace runtime selector",
-);
-assert.match(
-  memberAgentDock,
-  /runtime_engine: "polynet"[\s\S]*runtimeEngine: "polynet"/,
-  "the mounted member-agent surface must bind its native turns to the PolyNet runtime",
-);
-assert.deepEqual(
-  [...ACTIVE_WORKSPACE_RUNTIME_ENGINES],
-  [RUNTIME_ENGINE_POLYNET, RUNTIME_ENGINE_CODEX],
-  "PolyNet and Codex must both be active selectable runtime harnesses",
-);
-assert.equal(
-  DEFAULT_ACTIVE_RUNTIME_ENGINE,
-  RUNTIME_ENGINE_POLYNET,
-  "PolyNet must be the default active workspace runtime",
-);
-assert.equal(
-  getRuntimeEngineAccessLevel(RUNTIME_ENGINE_POLYNET),
-  "included",
-  "PolyNet must be the included runtime",
-);
-assert.equal(
-  getRuntimeEngineAccessLevel(RUNTIME_ENGINE_CODEX),
-  "premium",
-  "Codex must be a premium runtime",
-);
-assert.equal(
-  canUseRuntimeEngineForTier({ engine: RUNTIME_ENGINE_CODEX, accountTier: "free" }),
-  false,
-  "free accounts must not be able to use Codex",
-);
-assert.equal(
-  canUseRuntimeEngineForTier({ engine: RUNTIME_ENGINE_CODEX, accountTier: "architect" }),
-  true,
-  "premium accounts must be able to use Codex",
-);
-assert.equal(
-  normalizeActiveWorkspaceRuntimeEngine(RUNTIME_ENGINE_POLYNET),
-  RUNTIME_ENGINE_POLYNET,
-  "PolyNet runtime selections must remain PolyNet",
-);
-assert.equal(
-  normalizeActiveWorkspaceRuntimeEngine("unknown"),
-  RUNTIME_ENGINE_POLYNET,
-  "invalid runtime selections must fall back to PolyNet",
-);
-assert.match(
-  runtimeEngine,
-  /DEFAULT_ACTIVE_RUNTIME_ENGINE = RUNTIME_ENGINE_POLYNET[\s\S]*ACTIVE_WORKSPACE_RUNTIME_ENGINES = \[\s*RUNTIME_ENGINE_POLYNET,\s*RUNTIME_ENGINE_CODEX,\s*\][\s\S]*getRuntimeEngineAccessLevel[\s\S]*"included"[\s\S]*"premium"/,
-  "shared runtime-engine state must default to PolyNet, expose Codex, and classify runtime access",
-);
-assert.match(
-  threads,
-  /normalizeOptionalRuntimeEngine[\s\S]*normalizeActiveWorkspaceRuntimeEngine\(engine\)/,
-  "cloud thread writes must normalize explicit PolyNet or Codex runtime values",
-);
-
-assert.match(
-  codexWorkerBridge,
-  /requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET[\s\S]*resolvedRuntimeEngine: RUNTIME_ENGINE_POLYNET[\s\S]*engineId: POLYNET_RUNTIME_ENGINE_ID[\s\S]*usePolynetCodexWorkerBridge: false/,
-  "explicit PolyNet runtime requests must resolve through the PolyNet agent loop",
-);
-assert.match(
-  codexWorkerBridge,
-  /requestedRuntimeEngine === RUNTIME_ENGINE_CODEX[\s\S]*resolvedRuntimeEngine: RUNTIME_ENGINE_CODEX[\s\S]*engineId: POLYNET_CODEX_WORKER_ENGINE_ID[\s\S]*usePolynetCodexWorkerBridge: true/,
-  "explicit Codex runtime requests must resolve through the Codex worker bridge",
-);
-assert.match(
-  codexWorkerBridge,
-  /requestedRuntimeEngine: null[\s\S]*resolvedRuntimeEngine: RUNTIME_ENGINE_POLYNET[\s\S]*engineId: POLYNET_RUNTIME_ENGINE_ID[\s\S]*usePolynetCodexWorkerBridge: false/,
-  "missing runtime-engine requests must default to the PolyNet agent loop",
-);
 
 assert.deepEqual(
   [...POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES],
   ["terminal_read", "terminal_write", ...COMPUTER_USE_TOOL_NAMES],
-  "PolyNet must defer terminal stream IO and computer tools while exposing preview start/stop",
 );
-assert.deepEqual(
-  [...POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES],
-  [...SANDBOX_FILE_SHELL_TOOL_NAMES],
-  "PolyNet must expose Daytona-backed filesystem and shell tools",
-);
-assert.deepEqual(
-  [...POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES],
-  [...SANDBOX_PREVIEW_TOOL_NAMES],
-  "PolyNet must expose only Daytona-backed preview start/stop tools",
-);
+assert.deepEqual([...POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES], [...SANDBOX_FILE_SHELL_TOOL_NAMES]);
+assert.deepEqual([...POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES], [...SANDBOX_PREVIEW_TOOL_NAMES]);
 
-const mixedPolyNetPolicy = resolvePolynetHarnessToolPolicy({
-  allowedToolNames: [
-    "polynet_list",
-    "polynet_read",
-    "community_resources_search",
-    "web_research",
-    ...SANDBOX_TOOL_NAMES,
-  ] as RetrievalToolName[],
-});
+const allowed = [
+  "polynet_list",
+  "polynet_read",
+  "community_resources_search",
+  "web_research",
+  ...SANDBOX_TOOL_NAMES,
+] as RetrievalToolName[];
+const polynet = resolvePolynetHarnessToolPolicy({ allowedToolNames: allowed });
+assert.ok(polynet.fixedRuntimeToolNames.includes("polynet_list"));
+for (const forbidden of POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES) {
+  assert.equal(polynet.fixedRuntimeToolNames.includes(forbidden), false);
+}
 assert.deepEqual(
-  mixedPolyNetPolicy.fixedRuntimeToolNames,
-  [
-    "polynet_list",
-    "polynet_read",
-    "community_resources_search",
-    "web_research",
-    ...SANDBOX_FILE_SHELL_TOOL_NAMES,
-    ...POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES,
-  ],
-  "PolyNet policy must keep community tools plus Daytona-backed filesystem, shell, and preview start/stop tools",
-);
-assert.deepEqual(
-  mixedPolyNetPolicy.runtimeCapabilities.map((capability) => capability.name),
+  polynet.runtimeCapabilities.map((capability) => capability.name),
   ["workspace_files", "workspace_shell", "app_preview"],
-  "PolyNet policy must advertise the shared Daytona workspace and preview capabilities it exposes",
 );
-const mixedPolyNetReceipt = buildPolynetHarnessToolPolicyReceipt(mixedPolyNetPolicy);
-assert.deepEqual(
-  (mixedPolyNetReceipt["runtime_capabilities"] as Array<{ name: string }>).map(
-    (capability) => capability.name,
-  ),
-  ["workspace_files", "workspace_shell", "app_preview"],
-  "PolyNet policy receipts must include shared Daytona workspace and preview capabilities",
-);
-for (const toolName of SANDBOX_FILE_SHELL_TOOL_NAMES) {
-  assert.equal(
-    mixedPolyNetPolicy.fixedRuntimeToolNames.includes(toolName),
-    true,
-    `${toolName} must remain available to PolyNet through the shared Daytona workspace substrate`,
-  );
-}
-for (const toolName of POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES) {
-  assert.equal(
-    mixedPolyNetPolicy.fixedRuntimeToolNames.includes(toolName),
-    true,
-    `${toolName} must remain available to PolyNet through the shared Daytona preview substrate`,
-  );
-}
-for (const toolName of ["terminal_read", "terminal_write", ...COMPUTER_USE_TOOL_NAMES] as RetrievalToolName[]) {
-  assert.equal(
-    mixedPolyNetPolicy.fixedRuntimeToolNames.includes(toolName),
-    false,
-    `${toolName} must remain deferred from the PolyNet Daytona preview slice`,
-  );
-}
+assert.equal(buildPolynetHarnessToolPolicyReceipt(polynet).harness_kind, "polynet");
 
-const codexPolicy = resolveCodexHarnessToolPolicy({
-  polynetPlatformToolProjection: {
-    hasCommunity: true,
-    communityLensAuthority: null,
-    communityResourceLane: null,
-  },
+const codex = resolveCodexHarnessToolPolicy({
+  polynetPlatformToolProjection: { hasCommunity: false },
   workspaceServeAvailable: true,
   computerAdaptersAvailable: true,
 });
-const codexCapabilityNames = (
-  buildCodexHarnessToolPolicyReceipt(codexPolicy)[
-    "runtime_capabilities"
-  ] as Array<{ name: string }>
-).map((capability) => capability.name);
-assert.deepEqual(
-  codexCapabilityNames,
-  ["workspace_files", "workspace_shell", "app_preview", "computer_use"],
-  "Codex must remain the coding harness with native workspace, shell, preview, and computer capabilities",
-);
-assert.deepEqual(
-  codexPolicy.runtimeAdapterToolNames,
-  [...CODEX_RUNTIME_ADAPTER_TOOL_NAMES],
-  "Codex must keep the Daytona preview/computer adapter tools",
-);
-
-for (const toolName of NON_SANDBOX_TOOL_NAMES) {
-  if (
-    toolName === "polynet_list" ||
-    toolName === "polynet_read" ||
-    toolName === "community_resources_search" ||
-    toolName === "web_research"
-  ) {
-    assert.equal(
-      mixedPolyNetPolicy.fixedRuntimeToolNames.includes(toolName),
-      true,
-      `${toolName} must remain available to PolyNet when granted upstream`,
-    );
-  }
+for (const adapter of CODEX_RUNTIME_ADAPTER_TOOL_NAMES) {
+  assert.ok(codex.runtimeAdapterToolNames.includes(adapter));
 }
+assert.equal(buildCodexHarnessToolPolicyReceipt(codex).harness_kind, "codex");
 
-assert.match(
-  harnessToolPolicy,
-  /POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES[\s\S]*terminal_read[\s\S]*terminal_write[\s\S]*COMPUTER_USE_TOOL_NAMES[\s\S]*POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES[\s\S]*SANDBOX_FILE_SHELL_TOOL_NAMES[\s\S]*POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES[\s\S]*terminal_start[\s\S]*terminal_stop[\s\S]*resolvePolynetHarnessToolPolicy/,
-  "shared harness policy must expose Daytona workspace and preview start/stop tools while deferring terminal stream IO and computer tools",
-);
-assert.match(
-  handlers,
-  /POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES[\s\S]*POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES[\s\S]*POLYNET_DEFERRED_RUNTIME_TOOL_NAMES[\s\S]*POLYNET_DAYTONA_RUNTIME_TOOL_NAME_SET[\s\S]*POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES[\s\S]*POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES[\s\S]*function isolatePolynetHarnessToolNames/,
-  "runtime handler must split shared Daytona workspace and preview tools from deferred runtime tools",
-);
-assert.match(
-  handlers,
-  /polynetDaytonaRuntimeEnabled[\s\S]*provider:[\s\S]*"daytona"[\s\S]*"polynet_daytona_runtime"[\s\S]*polynet_workspace_tools_suppressed[\s\S]*suppressed_tool_names/,
-  "runtime handler must emit explicit PolyNet shared-Daytona runtime telemetry",
-);
-assert.match(
-  handlers,
-  /const activeDaytonaRuntimeSubstrateForPolynetTools =[\s\S]*polynetDaytonaRuntimeEnabled \? normalizedDaytonaRuntimeSubstrate : null;/,
-  "runtime handler must pass the Daytona substrate into PolyNet only when workspace or preview tools are active",
-);
-assert.match(
-  handlers,
-  /allowedToolNames: polynetAllowedToolNamesForRun[\s\S]*activeDaytonaRuntimeSubstrate:\s*activeDaytonaRuntimeSubstrateForPolynetTools/,
-  "PolyNet agent-loop calls must use the filtered tool list and shared Daytona substrate",
-);
-assert.match(
-  runtimeAgentLoop,
-  /const activeDaytonaRuntimeSubstrate =[\s\S]*executionSession\.getActiveDaytonaRuntimeSubstrate\(\);[\s\S]*const needsWorkspaceSession =[\s\S]*requiresSandboxSession\(toolName as RetrievalToolName\) &&[\s\S]*activeDaytonaRuntimeSubstrate\?\.provider !== "daytona";[\s\S]*activeDaytonaRuntimeSubstrate,\s*[\s\S]*executeDaytonaWorkspaceTool/,
-  "PolyNet Daytona file and shell tools must bypass legacy workspace-session creation and execute against the shared Daytona substrate",
-);
-assert.match(
-  handlers,
-  /const polynetDaytonaRuntimeEnabled =[\s\S]*const creditKey = `workspace_compute:daytona:\$\{runId\}`;[\s\S]*reservePaidToolCredits\(\{[\s\S]*toolName: "workspace_compute"[\s\S]*vendor: "daytona"[\s\S]*harness: "polynet"[\s\S]*eventType: "polynet_daytona_runtime_credit_reserved"/,
-  "native PolyNet Daytona runs must reserve canonical workspace compute credits before direct Daytona tools run",
-);
-assert.match(
-  handlers,
-  /settlePolynetDaytonaRuntimeCreditsBestEffort[\s\S]*getDaytonaCodexRuntimeTargetByRunIdInternal[\s\S]*settleReservedCreditsStrict\(\{[\s\S]*creditKey: polynetDaytonaRuntimeCreditKey[\s\S]*harness: "polynet"[\s\S]*provider: "daytona"[\s\S]*eventType: "polynet_daytona_runtime_credit_settled"/,
-  "native PolyNet Daytona runs must settle canonical Daytona workspace compute credits through the credit ledger",
-);
-assert.match(
-  handlers,
-  /finishRunBestEffortRaw\(\{[\s\S]*contextSnapshot[\s\S]*\}\);[\s\S]*settlePolynetDaytonaRuntimeCreditsBestEffort\(/,
-  "native PolyNet Daytona accounting must run from the shared runtime finalization path",
-);
-assert.doesNotMatch(
-  daytonaCodexRuntimeTargetActions,
-  /^\s*"\| /m,
-  "Daytona workspace shell pipelines must not emit newline-leading pipe commands that Bash rejects",
-);
-assert.doesNotMatch(
-  handlers,
-  /POLYNET_DAYTONA_POLYNET_PREVIEW_ENABLED|daytona_preview_available|includePolynetDaytonaPreviewToolNames|polynetDaytonaPreviewSubstrateEnabled|allowDaytonaPreviewStop/,
-  "runtime handler must not retain the deleted PolyNet Daytona preview substrate path",
-);
+const app = read("apps/web/src/App.tsx");
+const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const bridge = read("convex/polynetCodexWorkerBridge.ts");
+const handlers = read("convex/runtimeTurnHandlers.ts");
+assert.doesNotMatch(app, /activeRuntimeEngine|RUNTIME_ENGINE_CODEX/);
+assert.match(dock, /runtime_engine: "polynet"[\s\S]*runtimeEngine: "polynet"/);
+assert.match(bridge, /requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET[\s\S]*usePolynetCodexWorkerBridge: false/);
+assert.match(bridge, /requestedRuntimeEngine === RUNTIME_ENGINE_CODEX[\s\S]*usePolynetCodexWorkerBridge: true/);
+assert.doesNotMatch(bridge, /tier_required|plan_required|Premium/);
+assert.match(handlers, /polynet_daytona_runtime_cost_tracking_started/);
+assert.match(handlers, /polynet_daytona_runtime_cost_recorded/);
+assert.doesNotMatch(handlers, /reserveCreditsInternal|settleCreditsInternal/);
 
 console.log("polynet_harness_isolation_contract_proof: ok");

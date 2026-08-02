@@ -81,7 +81,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Skills and harness | Settings-managed personal/community skills and fixed runtime tools | Are skills and fixed tools projected correctly? | Convex, PostHog, Sentry | skill resolution failures, duplicate skill conflicts, runtime tool-policy mismatches | partial |
 | Community core | chat, feed, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
 | Funnel and join | public funnel, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
-| Billing and entitlements | account commerce, credits, community subscriptions, payouts | Is money state correct? | Stripe, Convex audit, Sentry | checkout completion, webhook failures, subscription sync failures, credit reservation/settlement failures, payout blocked count | partial |
+| Billing and entitlements | founder funding, community subscriptions, application fees, payouts | Is money state correct? | Stripe, Convex audit, Sentry | checkout completion, webhook failures, subscription sync failures, founder allowance reservation/settlement failures, payout blocked count | partial |
 | Operator panel health | operator panel load, snapshots, attention queue | Can the operator trust the panel? | Convex, Sentry, proof scripts | snapshot freshness, query failures, missing evidence, unknown error codes, stale diagnostics | partial |
 
 ## KPI Contract
@@ -178,8 +178,8 @@ Each diagnostic signal should be classified with one of these statuses:
 | Checkout completion rate | Completed checkout sessions divided by starts | Stripe and Convex checkout sessions | Stripe, Convex | now |
 | Webhook failures | Failed Stripe webhook events | `criticalAuditEvents` and logs | Convex, Stripe | now |
 | Subscription sync failures | Provider subscription state not synced into canonical state | Convex audit/state checks | Convex, Stripe | now |
-| Credit reservation failures | Failed credit reservation attempts | Convex credit records/logs | Convex | now |
-| Credit settlement failures | Failed credit settlement/refund attempts | Convex credit records/logs | Convex | now |
+| Founder allowance reservation failures | Failed per-community Luna allowance reservation attempts | Founder usage cycles/receipts and logs | Convex | now |
+| Founder allowance settlement failures | Failed per-community Luna allowance settlement attempts | Founder usage cycles/receipts and logs | Convex | now |
 | Payout blocked count | Builders with paid communities and Connect not ready | Convex and Stripe Connect | Convex, Stripe | now |
 | Refund/dispute events | Refunds, disputes, chargebacks | Stripe | Stripe | later |
 

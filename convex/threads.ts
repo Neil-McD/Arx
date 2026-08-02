@@ -3183,7 +3183,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
     harnessProfile: v.optional(v.string()),
     harnessProfileSource: v.optional(v.string()),
     capabilityFamilies: v.optional(v.array(v.string())),
-    accountPlan: v.optional(v.union(v.literal("free"), v.literal("premium"))),
     latestUserText: v.optional(v.string()),
     startedAt: v.optional(v.number()),
     nowMs: v.optional(v.number()),
@@ -3273,7 +3272,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
     const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
     const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
     const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || undefined;
-    const accountPlan = args.accountPlan === "premium" ? "premium" : "free";
     const capabilityFamilies = Array.isArray(args.capabilityFamilies)
       ? args.capabilityFamilies
           .map((value) => String(value ?? "").trim())
@@ -3307,7 +3305,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
       harnessProfile,
       harnessProfileSource,
       capabilityFamilies,
-      accountPlan,
       workspaceSessionState: "none",
       runtimeHarnessTelemetrySummary: createEmptyRuntimeHarnessTelemetrySummary(),
       workspaceSessionUpdatedAt: startedAt,

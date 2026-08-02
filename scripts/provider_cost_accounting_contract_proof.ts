@@ -31,6 +31,8 @@ const schema = read("convex/schema.ts");
 const workspaceCredits = read("convex/workspaceCredits.ts");
 const crons = read("convex/crons.ts");
 const billingSurface = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const blaxelWorkspaceWake = read("convex/blaxelWorkspaceWake.ts");
+const platformToolCostAccounting = read("convex/platformToolCostAccounting.ts");
 const providerCostReconciliationDiagnostic = extractBetween(
   workspaceCredits,
   "export const getProviderCostReconciliationDiagnosticInternal = internalQuery",
@@ -256,44 +258,29 @@ assert.doesNotMatch(
   "provider cost recording must not use user-facing 4-decimal currency rounding",
 );
 assert.match(
-  workspaceCredits,
-  /async function recordProviderCostEntryBestEffort[\s\S]*console\.warn\("provider_cost_record_failed"/,
-  "provider cost mirror writes must not break primary credit settlement paths",
+  blaxelWorkspaceWake,
+  /recordPlatformToolCostBestEffort\(\{[\s\S]*rawVendorCostUsd: computeCostUsd[\s\S]*provider: "blaxel"[\s\S]*settlement_source: "project_workspace_lease"/,
+  "released Blaxel workspace leases must still submit absorbed provider runtime cost",
 );
 assert.match(
-  workspaceCredits,
-  /recordWorkspaceComputeChargeInternal[\s\S]*recordProviderCostEntryBestEffort\(ctx, \{[\s\S]*component: "blaxel_active_runtime"[\s\S]*billingDisposition: "rolled_into_user_usage"/,
-  "workspace compute settlement must mirror active Blaxel runtime cost into provider cost accounting",
+  platformToolCostAccounting,
+  /recordProviderCostInternal[\s\S]*billingDisposition: "platform_absorbed"[\s\S]*provider_cost_source: "platform_tool_cost_accounting"/,
+  "platform-absorbed tool cost must retain auditable provider evidence",
 );
 assert.match(
-  workspaceCredits,
-  /resolveCreditLedgerProviderCostEntry[\s\S]*toolName === "workspace_compute" && vendor === "daytona"[\s\S]*category: "workspace"[\s\S]*component: "daytona_codex_runtime_active"[\s\S]*quantityKind: "runtime_seconds"/,
-  "Daytona-backed Codex turns must settle as canonical workspace compute provider cost",
+  platformToolCostAccounting,
+  /provider === "daytona"[\s\S]*component: "daytona_codex_runtime_active"[\s\S]*quantityKind: "runtime_seconds"/,
+  "Daytona-backed Codex turns must classify as absorbed workspace runtime cost",
 );
 assert.match(
-  readFileSync(new URL("../convex/blaxelWorkspaceWake.ts", import.meta.url), "utf8"),
-  /recordTrackedBlaxelWorkspaceLeaseProviderCostBestEffort[\s\S]*recordProviderCostInternal[\s\S]*component: "blaxel_active_runtime"[\s\S]*billingDisposition: "tracked_only"[\s\S]*provider_cost_source: "workspace_lease_release_without_user_charge"/,
-  "released/refunded Blaxel workspace leases must still track absorbed provider runtime cost",
+  platformToolCostAccounting,
+  /costKey\.startsWith\("crawl_"\)[\s\S]*\? "web_crawl_provider_call"[\s\S]*: "web_research_call"/,
+  "web research and crawl calls must classify as absorbed web provider cost",
 );
 assert.match(
-  workspaceCredits,
-  /resolveCreditLedgerProviderCostEntry[\s\S]*toolName === "web_research"[\s\S]*component: action === "crawl" \? "web_crawl_provider_call" : "web_research_call"/,
-  "web research and crawl settlements must map into internal provider cost accounting",
-);
-assert.match(
-  workspaceCredits,
-  /component: action === "crawl" \? "web_crawl_provider_call" : "web_research_call"[\s\S]*provider: normalizeOptionalString\(metadata\.final_provider\) \?\? vendor \?\? "web_provider"/,
-  "web provider cost entries must prefer final provider evidence when available",
-);
-assert.match(
-  workspaceCredits,
-  /resolveCreditLedgerProviderCostEntry[\s\S]*toolName === "voice_transcribe"[\s\S]*component: "voice_transcription"/,
-  "voice settlements must map into internal provider cost accounting",
-);
-assert.match(
-  workspaceCredits,
-  /component: "voice_transcription"[\s\S]*provider:[\s\S]*normalizeOptionalString\(metadata\.final_provider\)[\s\S]*vendor[\s\S]*"voice_provider"/,
-  "voice provider cost entries must prefer final transcription provider evidence",
+  platformToolCostAccounting,
+  /costKey\.startsWith\("voice_"\)[\s\S]*component: "voice_transcription"/,
+  "voice calls must classify as absorbed transcription provider cost",
 );
 assert.match(
   workspaceCredits,

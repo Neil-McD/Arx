@@ -5,7 +5,6 @@ import { validateProfileHandle } from "../shared/profileHandle";
 import { maybeDeleteStorageAsset } from "./communityCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
 import { recordCurrentPlatformLegalAcceptance } from "./legalAcceptances";
-import type { PublicPremiumMemberBadge } from "./premiumMemberBadge";
 import { resolveUserProfileDisplayProjectionForUser } from "./userProfileProjection";
 import {
   SOCIAL_PROFILE_KINDS,
@@ -314,7 +313,6 @@ export const listProfilesByUserIds = query({
       avatar_focus_x: number;
       avatar_focus_y: number;
       avatar_zoom: number;
-      premium_badge: PublicPremiumMemberBadge | null;
     }> = [];
     for (const userId of normalizedUserIds) {
       const user = await findUserBySubject(ctx, userId);

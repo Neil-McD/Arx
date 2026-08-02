@@ -8,6 +8,7 @@ import {
   communityFounderFundingAllowsPublicAccess,
   getExistingFounderInferenceGrant,
   requireCommunityFounderFundingForPublish,
+  resolveAdditionalManagedCommunityAdmission,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
   suspendActiveFounderInferenceGrantForCredentialChange,
@@ -18,6 +19,7 @@ import {
 } from "./founderPlanCore";
 import { EXISTING_FOUNDER_INFERENCE_COHORT_KEY } from "../shared/founderInference";
 import { POLYNET_FOUNDER_PLAN_PRICING_VERSION } from "../shared/founderPlan";
+import type { FounderInferencePricing } from "./founderPlanPricing";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 
 const modules = import.meta.glob([
@@ -135,8 +137,8 @@ test("funding cutover is founder-level and fails closed without changing member 
     });
 
     await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
-      ok: true,
-      mode: "legacy_requester_chatgpt",
+      ok: false,
+      code: "founder_plan_required",
     });
     await expect(
       communityFounderFundingAllowsPublicAccess(ctx, futureCommunityId),
@@ -157,8 +159,8 @@ test("funding cutover is founder-level and fails closed without changing member 
       requireCommunityFounderFundingForPublish(ctx, futureCommunityId),
     ).rejects.toThrow("community_founder_funding_required_to_publish");
     await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
-      ok: true,
-      mode: "legacy_requester_chatgpt",
+      ok: false,
+      code: "owner_funding_choice_required",
     });
 
     await ctx.db.patch(grantId, { status: "active", activatedAt: 3_000, updatedAt: 3_000 });
@@ -239,6 +241,79 @@ test("funding cutover is founder-level and fails closed without changing member 
       ok: false,
       code: "owner_funding_suspended",
     });
+  });
+});
+
+test("founders can add unlimited communities sequentially when every existing community is funded", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    const nowMs = Date.now();
+    const ownerId = await insertUser(ctx, "unlimited-paid-owner", nowMs);
+    await expect(
+      resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
+    ).resolves.toEqual({ ok: true, fundedCommunityCount: 0 });
+
+    for (let index = 0; index < 12; index += 1) {
+      const communityId = await insertCommunity(
+        ctx,
+        ownerId,
+        `unlimited-paid-${index}`,
+        nowMs + index,
+      );
+      await ctx.db.patch(communityId, { inferenceFundingPolicy: "managed_required" });
+      await expect(
+        resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
+      ).resolves.toMatchObject({
+        ok: false,
+        blockingCommunityId: communityId,
+        code: "founder_plan_required",
+      });
+      await ctx.db.insert("founderSubscriptions", {
+        ownerUserId: ownerId,
+        communityId,
+        provider: "stripe",
+        providerCustomerId: "cus_unlimited_paid",
+        providerSubscriptionId: `sub_unlimited_paid_${index}`,
+        providerPriceId: "price_founder_79_monthly",
+        status: "active",
+        currentPeriodStartAt: nowMs - 1_000,
+        currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
+        cancelAtPeriodEnd: false,
+        lastProviderEventCreatedAt: nowMs,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      await expect(
+        resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
+      ).resolves.toEqual({ ok: true, fundedCommunityCount: index + 1 });
+    }
+  });
+});
+
+test("the canonical operator owner has unlimited complimentary communities", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    const nowMs = Date.now();
+    const ownerId = await insertUser(ctx, "unlimited-operator-owner", nowMs);
+    await ctx.db.insert("operatorRoles", {
+      userId: ownerId,
+      role: "owner",
+      active: true,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    for (let index = 0; index < 12; index += 1) {
+      const communityId = await insertCommunity(
+        ctx,
+        ownerId,
+        `unlimited-operator-${index}`,
+        nowMs + index,
+      );
+      await ctx.db.patch(communityId, { inferenceFundingPolicy: "managed_required" });
+    }
+    await expect(
+      resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
+    ).resolves.toEqual({ ok: true, fundedCommunityCount: 12 });
   });
 });
 
@@ -1148,6 +1223,110 @@ test("a community-targeted founder subscription meters managed Luna usage", asyn
   }
 });
 
+test("founder usage authority cannot be unattached or rebound across communities", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = 640_000;
+  await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, "binding-owner", nowMs);
+    const memberId = await insertUser(ctx, "binding-member", nowMs);
+    const firstCommunityId = await insertCommunity(ctx, ownerId, "binding-first", nowMs);
+    const secondCommunityId = await insertCommunity(ctx, ownerId, "binding-second", nowMs);
+    const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: ownerId,
+      communityId: firstCommunityId,
+      provider: "stripe",
+      providerCustomerId: "cus_binding",
+      providerSubscriptionId: "sub_binding",
+      providerPriceId: "price_binding",
+      status: "active",
+      currentPeriodStartAt: nowMs - 1_000,
+      currentPeriodEndAt: nowMs + 30_000,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const subscription = await ctx.db.get(founderSubscriptionId);
+    if (!subscription) throw new Error("test_subscription_missing");
+    const pricing: FounderInferencePricing = {
+      pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+      includedCostMicros: 20_000_000,
+      inputCostMicrosPerMillionTokens: 1_000_000,
+      outputCostMicrosPerMillionTokens: 2_000_000,
+      maxRunReservationCostMicros: 1_000_000,
+    };
+    const cycle = await syncFounderUsageCycle({
+      ctx,
+      subscription: subscription as any,
+      cycleStartAt: nowMs - 1_000,
+      cycleEndAt: nowMs + 30_000,
+      pricing,
+      nowMs,
+    });
+    if (!cycle) throw new Error("test_usage_cycle_missing");
+
+    await expect(
+      syncFounderUsageCycle({
+        ctx,
+        subscription: { ...subscription, communityId: undefined } as any,
+        cycleStartAt: nowMs - 1_000,
+        cycleEndAt: nowMs + 30_000,
+        pricing,
+        nowMs: nowMs + 1,
+      }),
+    ).rejects.toThrow("founder_subscription_community_missing");
+    await expect(
+      syncFounderUsageCycle({
+        ctx,
+        subscription: { ...subscription, communityId: secondCommunityId } as any,
+        cycleStartAt: nowMs - 1_000,
+        cycleEndAt: nowMs + 30_000,
+        pricing,
+        nowMs: nowMs + 2,
+      }),
+    ).rejects.toThrow("founder_usage_cycle_community_mismatch");
+
+    const receiptKey = "community_agent_mention:binding-mismatch";
+    await ctx.db.insert("communityInferenceReceipts", {
+      receiptKey,
+      sourceRunId: "community-agent-serve:binding-mismatch",
+      communityId: firstCommunityId,
+      actorUserId: memberId,
+      payerUserId: ownerId,
+      fundingMode: "platform_subscription",
+      founderSubscriptionId,
+      usageCycleId: cycle._id,
+      surface: "community_agent_mention",
+      provider: "openai",
+      modelId: "gpt-5.6-luna",
+      status: "authorized",
+      claimToken: "binding-claim",
+      leaseExpiresAt: nowMs + 60_000,
+      pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+      reservedCostMicros: 1_000,
+      authorizedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.patch(cycle._id, {
+      communityId: secondCommunityId,
+      reservedCostMicros: 1_000,
+      updatedAt: nowMs + 3,
+    });
+    await expect(
+      settleAuthorizedFounderInferenceReceipt({
+        ctx,
+        receiptKey,
+        claimToken: "binding-claim",
+        promptTokens: 1,
+        completionTokens: 1,
+        outcomeCode: "completed",
+        nowMs: nowMs + 4,
+      }),
+    ).rejects.toThrow("founder_usage_cycle_community_mismatch");
+  });
+});
+
 test("managed policy fails closed and founder checkouts remain independent per community", async () => {
   const t = convexTest(schema, modules);
   const nowMs = 650_000;
@@ -1469,5 +1648,71 @@ test("Stripe founder subscription sync is idempotent and ignores stale lifecycle
     else process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.output;
     if (priorEnv.reservation === undefined) delete process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS;
     else process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = priorEnv.reservation;
+  }
+});
+
+test("Stripe founder subscription sync rejects ownership changes before entitlement", async () => {
+  const priorPriceId = process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
+  process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = "price_founder_owner_binding";
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+      const checkoutOwnerId = await insertUser(ctx, "checkout-owner", 800_000);
+      const replacementOwnerId = await insertUser(ctx, "replacement-owner", 800_000);
+      const communityId = await insertCommunity(
+        ctx,
+        checkoutOwnerId,
+        "checkout-owner-binding",
+        800_000,
+      );
+      return { checkoutOwnerId, replacementOwnerId, communityId };
+    });
+    await t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-owner-binding",
+        ownerUserId: fixture.checkoutOwnerId,
+        communityId: fixture.communityId,
+        expiresAt: 9_000_000,
+        nowMs: 800_000,
+      },
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.communityId, {
+        ownerId: fixture.replacementOwnerId,
+        updatedAt: 801_000,
+      });
+    });
+    await expect(
+      t.mutation(
+        (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+        {
+          localSessionId: "founder-checkout-owner-binding",
+          providerCheckoutSessionId: "cs_founder_owner_binding",
+          providerCustomerId: "cus_founder_owner_binding",
+          providerSubscriptionId: "sub_founder_owner_binding",
+          providerPriceId: "price_founder_owner_binding",
+          subscriptionStatus: "active",
+          currentPeriodStartAt: 802_000,
+          currentPeriodEndAt: 3_292_802_000,
+          cancelAtPeriodEnd: false,
+          providerEventCreatedAt: 802_000,
+        },
+      ),
+    ).rejects.toThrow("founder_subscription_community_owner_mismatch");
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("founderSubscriptions").collect()).toHaveLength(0);
+      expect(await ctx.db.query("founderUsageCycles").collect()).toHaveLength(0);
+      const checkout = await ctx.db
+        .query("checkoutSessions")
+        .withIndex("by_sessionId", (q: any) =>
+          q.eq("sessionId", "founder-checkout-owner-binding"),
+        )
+        .first();
+      expect(checkout).toMatchObject({ status: "pending" });
+    });
+  } finally {
+    if (priorPriceId === undefined) delete process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
+    else process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = priorPriceId;
   }
 });

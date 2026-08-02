@@ -85,18 +85,28 @@ assert.match(
 );
 assert.match(
   premiumBilling,
-  /getAccountCommerceAccessForUserInternal[\s\S]*access\?\.operator_complimentary_access[\s\S]*throw new Error\("operator_billing_exempt"\)[\s\S]*ensureStripeCustomerForUser/,
-  "operator Premium checkout must fail before creating Stripe customer or checkout state",
+  /startPremiumSubscriptionCheckout[\s\S]*throw new Error\("premium_subscription_retired"\)/,
+  "the cached Premium endpoint must fail closed",
+);
+assert.doesNotMatch(
+  premiumBilling,
+  /getStripeClient|ensureStripeCustomerForUser|checkout\.sessions|ctx\.runMutation/,
+  "the cached Premium endpoint must not create Stripe or Convex state",
 );
 assert.match(
   billingUi,
-  /operator_complimentary_access === true[\s\S]*Operator access included[\s\S]*Included with the platform owner role/,
-  "personal billing must project operator access without a Premium checkout",
+  /case "operator_comped":[\s\S]*Operator access included[\s\S]*isOperatorComped \? null/,
+  "community funding must project operator access without a checkout",
 );
 assert.match(
   auth,
-  /PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES[\s\S]*operator_complimentary_access: operatorComplimentaryAccess[\s\S]*max_communities: meta\.maxCommunities/,
-  "operator product access must include a bounded community-count override",
+  /CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT = Number\.MAX_SAFE_INTEGER[\s\S]*operator_complimentary_access: operatorComplimentaryAccess[\s\S]*max_communities: CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT/,
+  "the cached-client community-count field must project unbounded compatibility rather than authority",
+);
+assert.doesNotMatch(
+  auth,
+  /PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES|maxCommunities/,
+  "operator complimentary funding must not restore a numeric ownership cap",
 );
 
 console.log("operator complimentary access contract proof passed");

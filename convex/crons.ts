@@ -37,56 +37,11 @@ crons.interval(
 );
 
 crons.interval(
-  "reconcile stale runtime workspace runs",
-  { minutes: 5 },
-  (internal as any).workspaceCredits.reconcileStaleRuntimeWorkspaceRunsInternal,
-  {
-    limit: 100,
-  },
-);
-
-crons.interval(
   "finalize expired blaxel project workspace leases",
   { minutes: 15 },
   (internal as any).blaxelWorkspaceWake.finalizeExpiredBlaxelProjectWorkspaceLeasesInternal,
   {
     limit: 100,
-  },
-);
-
-crons.interval(
-  "reconcile expired credit reservations",
-  { minutes: 15 },
-  (internal as any).workspaceCredits.reconcileExpiredCreditReservationsInternal,
-  {
-    limit: 100,
-  },
-);
-
-crons.interval(
-  "retry pending credit settlements",
-  { minutes: 15 },
-  (internal as any).workspaceCredits.retryPendingCreditSettlementsInternal,
-  {
-    limit: 50,
-  },
-);
-
-crons.interval(
-  "collect workspace usage by card",
-  { minutes: 15 },
-  (internal as any).workspaceCredits.collectWorkspaceUsageByCardInternal,
-  {
-    limit: 10,
-  },
-);
-
-crons.interval(
-  "execute workspace auto recharge",
-  { minutes: 15 },
-  (internal as any).workspaceAutoRecharge.sweepWorkspaceAutoRechargeExecutionsInternal,
-  {
-    limit: 20,
   },
 );
 
@@ -107,15 +62,6 @@ crons.interval(
     .sweepExpiredDaytonaCodexRuntimeTargetsInternal,
   {
     limit: 20,
-  },
-);
-
-crons.interval(
-  "expire stale tool balance checkouts",
-  { minutes: 15 },
-  (internal as any).workspaceCredits.expireStaleWorkspaceCreditTopupCheckoutSessionsInternal,
-  {
-    limit: 100,
   },
 );
 

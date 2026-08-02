@@ -14,10 +14,8 @@ import {
 } from "../shared/workspaceComputerProvider";
 import {
   estimateWorkspaceComputeUsd,
-  PAID_TOOL_PRICING_VERSION,
-  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-  priceWorkspaceUsageCredits,
 } from "../shared/workspaceCredits";
+import { recordPlatformToolCostBestEffort } from "./platformToolCostAccounting";
 
 type WorkspaceRuntimeSessionFailure = {
   ok: false;
@@ -296,19 +294,10 @@ export async function settleRuntimeWorkspaceSession(params: {
       ok: true;
       skipped?: boolean;
       creditReservationKey?: string | null;
-      creditsDebited?: number;
       computeCostUsd?: number;
       durationSeconds?: number;
       measuredDurationSeconds?: number;
       providerStandbyGraceSeconds?: number;
-    }
-  | {
-      ok: false;
-      creditReservationKey: string;
-      creditsDebited: number;
-      computeCostUsd: number;
-      durationSeconds: number;
-      error: string;
     }
 > {
   const creditReservationKey = normalizeOptionalString(params.session.creditReservationKey);
@@ -335,10 +324,7 @@ export async function settleRuntimeWorkspaceSession(params: {
     sandboxCpu: params.session.sandboxCpu,
     sandboxMemoryGiB: params.session.sandboxMemoryGiB,
   });
-  const creditsDebited = priceWorkspaceUsageCredits({ computeCostUsd });
   const metadata = {
-    pricing_version: PAID_TOOL_PRICING_VERSION,
-    target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
     provider: "blaxel",
     pricing_model: "blaxel_memory_gib_seconds_estimate",
     provider_billing_reconciliation: "pending",
@@ -353,70 +339,24 @@ export async function settleRuntimeWorkspaceSession(params: {
     sandbox_memory_gib: params.session.sandboxMemoryGiB,
     sandbox_disk_gib: params.session.sandboxDiskGiB,
   };
-  try {
-    await params.ctx.runMutation(
-      internal.workspaceCredits.recordWorkspaceComputeChargeInternal as any,
-      {
-        chargeKey: creditReservationKey,
-        userId: params.userId,
-        projectId: params.session.projectId,
-        runId: params.runId,
-        providerSandboxId: params.session.providerSandboxId,
-        startedAt: params.session.startedAt,
-        endedAt,
-        durationSeconds,
-        measuredDurationSeconds,
-        providerStandbyGraceSeconds,
-        providerReleaseReason: normalizeOptionalString(params.providerReleaseReason),
-        providerReleaseConfirmed: params.providerReleaseConfirmed === true,
-        sandboxCpu: params.session.sandboxCpu,
-        sandboxMemoryGiB: params.session.sandboxMemoryGiB,
-        sandboxDiskGiB: params.session.sandboxDiskGiB,
-        computeCostUsd,
-        creditsDebited,
-        creditReservationKey,
-        nowMs: endedAt,
-      },
-    );
-    return {
-      ok: true,
-      creditReservationKey,
-      creditsDebited,
-      computeCostUsd,
-      durationSeconds,
-      measuredDurationSeconds,
-      providerStandbyGraceSeconds,
-    };
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error ?? "");
-    try {
-      await params.ctx.runMutation(
-        internal.workspaceCredits.queueCreditSettlementRetryInternal as any,
-        {
-          creditKey: creditReservationKey,
-          status: "succeeded",
-          creditsSettled: creditsDebited,
-          rawVendorCostUsd: computeCostUsd,
-          metadata: {
-            ...metadata,
-            settlement_source: "workspace_compute_charge_recording_failed",
-          },
-          error: message || null,
-          nowMs: endedAt,
-        },
-      );
-    } catch {
-      // The reservation expiry reconciler remains the final fail-safe.
-    }
-    return {
-      ok: false,
-      creditReservationKey,
-      creditsDebited,
-      computeCostUsd,
-      durationSeconds,
-      error: message || "workspace_compute_charge_recording_failed",
-    };
-  }
+  await recordPlatformToolCostBestEffort({
+    ctx: params.ctx,
+    costKey: creditReservationKey,
+    userId: params.userId,
+    projectId: params.session.projectId,
+    runId: params.runId,
+    rawVendorCostUsd: computeCostUsd,
+    metadata,
+    nowMs: endedAt,
+  });
+  return {
+    ok: true,
+    creditReservationKey,
+    computeCostUsd,
+    durationSeconds,
+    measuredDurationSeconds,
+    providerStandbyGraceSeconds,
+  };
 }
 
 export async function releaseRuntimeWorkspaceSessionAccountingIfCurrent(params: {

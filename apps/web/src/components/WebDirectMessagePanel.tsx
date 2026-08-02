@@ -13,7 +13,6 @@ import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownU
 import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
 import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
-import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { parseMessageAttachments } from "../../../../shared/communityMessageParsing";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -646,7 +645,6 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
         <div className="community-dm-panel-title-block">
           <div className="community-dm-panel-title-row">
             <div className="community-dm-panel-title">{peerLabel}</div>
-            <PremiumMemberBadge badge={peer?.premium_badge ?? null} />
           </div>
           {peerPresenceKnown && peerLastActiveAt ? (
             <div className={`community-dm-panel-context is-presence${peerActiveNow ? " is-active-now" : ""}`}>

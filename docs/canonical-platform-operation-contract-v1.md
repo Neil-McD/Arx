@@ -100,7 +100,7 @@ tool names may remain only as private migration substrate while first-party
 callers are removed. They are not public tools and are deletion candidates
 once no private call path requires them.
 
-Premium capabilities such as web research are orthogonal overlays. They do
+Allowed capabilities such as web research are orthogonal overlays. They do
 not expand or fork the base Polynet repository contract.
 
 ## Product-surface boundary

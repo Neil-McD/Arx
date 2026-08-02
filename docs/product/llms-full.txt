@@ -310,7 +310,7 @@ polynet_write
 polynet_call
 ```
 
-Premium tools such as web research are optional overlays. They do not fork or
+Tools such as web research are optional overlays. They do not fork or
 expand the base Polynet repository contract.
 
 ## Context and Authority
@@ -620,7 +620,7 @@ Polynet does not consume, connect, mount, or proxy third-party MCP servers.
 5. Do not add third-party MCP credentials, mounts, or passthrough tools.
 6. Preserve the stable external `workspace` wire vocabulary only where the v0
    compatibility contract requires it.
-7. Premium overlays such as web research do not expand or fork the five-tool
+7. Capability overlays such as web research do not expand or fork the five-tool
    Polynet contract.
 
 ## Related Concepts
@@ -817,7 +817,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Community creation and funding are separate from Polynet Premium. Premium unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage; it does not authorize or fund a community.
+Each managed community has one funding choice: its own $79 monthly founder plan. Exact grandfathered communities may instead activate owner BYOK. There is no personal Premium plan or paid tool tier.
 
 ## Before You Start
 
@@ -887,10 +887,13 @@ The cash path is simple: configure the community, define the paid access model, 
 - Builder payouts depend on payout provider readiness.
 - Existing approved founders can continue managing their owned communities.
 - Each managed community requires its own verified $79 monthly funding subscription.
+- A paying founder may own an unlimited number of communities. There is no
+  account-level numeric cap, but every existing community must have current
+  funding before the next unlisted checkout draft can be created.
 - A new community begins as an unlisted managed draft and continues directly to founder checkout.
 - An unpaid managed draft can be configured, but cannot publish, appear in Discover, accept public joins, or run community-funded AI.
-- Polynet Premium does not increase community count or alter community fees.
-- Premium unlocks paid tools such as hosted workspace tools, web research, and premium runtimes.
+- Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
+- Paid-member community revenue always carries Polynet's 2.9% application fee, independent of founder funding mode.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
 - Polynet does not mount third-party MCP servers in member or community
@@ -1805,7 +1808,7 @@ never replace them.
 - The community-owned agent receives the same five operations under a
   server-mounted community root and fixed member authority.
 - Protected coding-harness context and tools belong to a separate trust domain.
-- Premium tools such as web research are entitlement-gated overlays, not a
+- Tools such as web research are capability-gated overlays, not a
   different Polynet repository contract.
 
 ## Rules
@@ -1927,125 +1930,94 @@ Summary: The authority model for paid access, checkout, and subscriptions.
 
 # Billing and Entitlements
 
-## Definition
+## Irreducible Model
 
-Billing is the payment system. Entitlements are the access truth derived from verified payment, grants, membership, or plan state.
+Polynet has two live money rails:
 
-Existing approved founders can keep owner-funded API access for their legacy-eligible communities without a Polynet founder subscription. A new community is managed-funded and cannot inherit that legacy exception. Polynet Premium remains a separate account subscription for personal premium tools; it cannot authorize a community, increase community count, or change community revenue fees.
+1. A founder pays $79 USD monthly for each managed community.
+2. Polynet keeps a 2.9% application fee from paid-member community revenue.
 
-One active canonical `operatorRoles` row with role `owner` grants the platform owner complimentary Polynet product access. This is a role-backed entitlement, never an email allowlist or a simulated Stripe subscription. It covers personal Premium through the existing account entitlement, a bounded community-count override, and platform-funded GPT 5.6 Luna for every community that owner owns. Community permissions, rate limits, pricing evidence, usage receipts, and raw provider-cost metering remain active. Stripe processing and the universal 2.9% fee on member revenue are transaction economics, not product-access charges, and remain unchanged.
+There is no personal Premium plan, commercial Free-versus-Premium tier, tool-credit purchase, top-up, auto-recharge, or card-backed tool-usage collection. Authenticated tool access is one product surface. Polynet absorbs tool/provider cost while retaining rate limits, provider quotas, and auditable cost evidence.
 
-## Polynet Founder Plan
+## Founder Funding
 
-The irreducible founder plan is $79 USD monthly for one specific community. Stripe webhook state is authoritative. A new founder creates one unlisted managed draft and continues directly to community-targeted checkout. The pending checkout records that community, and the verified webhook creates a subscription already bound to it. There is no unattached subscription inventory and no later attach step. An active managed subscription satisfies community inference funding without asking the founder or members for ChatGPT or an OpenAI API key. It funds supported community inference through Polynet's server-side OpenAI credential on fixed GPT 5.6 Luna and never changes the requesting member's access or tool authority.
+One active founder subscription authorizes exactly one attached managed community. A new community is an unlisted `managed_required` draft and continues to community-targeted checkout. Stripe webhook state, not the redirect, is authoritative.
 
-Each monthly cycle includes up to $20 in raw model cost. Before each supported managed turn, Polynet atomically reserves a configured worst-case amount from the remaining allowance; after provider usage is known, the reservation settles to the calculated token cost. The launch reservation is $1 of raw model cost per in-flight run, sized above the bounded multi-call community-agent paths while allowing up to twenty simultaneous reservations per community at a fresh allowance. Missing pricing evidence, an absent or ambiguous cycle, expired payment state, or exhausted allowance fails closed. The pricing configuration is explicit integer USD micros and must be sourced from a verified provider contract rather than guessed.
+A founder may own an unlimited number of communities. There is no account-level
+numeric limit and no account-wide bundle: each managed community needs its own
+current $79 subscription and its own allowance. The first community can be
+created as the checkout draft. A founder can create each next community only
+after every existing owned community has current canonical funding. Exact active
+legacy BYOK and the operator grant satisfy that funding check for their eligible
+communities; an unfunded draft blocks another draft.
 
-The funding kernel covers the three community-owned inference surfaces: direct community-agent mentions, autonomous community cognition, and AI-assisted community setup generation. Every surface resolves the same owner funding authority before provider start, uses fixed GPT 5.6 Luna, and writes the same idempotent, privacy-bounded receipt contract. The same admission controls publishing, public funnels, Discover, and new joins. Owners can configure an unpaid draft, but it cannot publicly launch or run community-funded AI. Founder Billing exposes one card per owned community, community-targeted checkout, webhook-backed status, the Stripe customer portal, and a resumable funding prompt for managed communities needing action. Usage-based overage charging and detailed usage UI remain later launch slices. Production activation requires verified Stripe configuration, an intentional Convex deployment, the canonical GitHub-to-Vercel web release, and authenticated canary evidence; local code or redirects alone never make the plan live.
+Each $79 monthly cycle includes up to $20 in raw GPT 5.6 Luna model cost for that community. Before supported managed inference begins, Polynet reserves a bounded worst-case amount from the community's current allowance and settles it to calculated token cost after provider usage is known. Missing pricing evidence, ambiguous cycle state, inactive payment state, or exhausted allowance fails closed.
 
-The platform-owner grant enters that same kernel as the explicit `platform_operator_grant` funding mode. It uses Polynet's server credential and records calculated Luna cost, but it does not reserve against a founder subscription allowance or create Stripe checkout state. Revoking or ambiguously duplicating the owner role removes the grant before provider start. Founder Billing projects `Operator access included` and provides no checkout action for operator-funded communities.
+The same funding kernel covers direct community-agent mentions, autonomous community cognition, and AI-assisted community setup. It also gates managed-community publishing, Discover visibility, public funnels, and new public joins. The payer never receives extra member permissions or tool authority.
 
-## Builder Revenue Path
+There are only two exceptions:
 
-The simple cash path is:
+- An exact grandfathered founder may activate one encrypted owner API key for communities that are both founder-grant eligible and `legacy_byok_allowed`. The transitional requester-ChatGPT lane is retired; an approved founder who has not activated must choose BYOK or $79 managed funding.
+- One active canonical `operatorRoles.owner` row grants the platform operator complimentary Polynet product and managed-community funding. It creates no simulated Stripe state and bypasses neither community authorization, rate limits, usage receipts, nor provider-cost accounting.
+  The operator grant has no artificial numeric community cap.
 
-1. A builder creates a community with a clear member promise.
-2. The builder configures paid access and connects payout readiness where required.
-3. The builder shares the community funnel.
-4. A prospective member signs in and chooses the paid access path.
-5. Checkout sends the member through the payment provider.
-6. Checkout finalization and provider/webhook verification create or update backend entitlement.
-7. The member can enter the community only after backend access truth exists.
-8. Builder revenue and payouts remain tied to verified provider and community revenue state.
+## Paid-Member Community Revenue
 
-This is the product value loop: the builder packages expertise into a community intelligence system, members pay for access to that system, and Polynet keeps access and payout state explicit.
+Paid-member commerce remains independent from founder funding:
 
-Every paid community uses one 2.9% Polynet application fee, whether its inference is funded by the $79 managed plan or by an approved legacy owner API key. Stripe processing fees are separate, are debited from the builder's connected account, and are not included in Polynet's 2.9%. The separate $20 personal Premium plan changes neither fee.
+1. The community owner completes Stripe Connect payout onboarding.
+2. The builder configures `paid_subscription` entry policy and an active price point.
+3. A member enters through the canonical community funnel and completes a `community_join` checkout on the builder's connected account.
+4. Provider/webhook verification creates the purchase claim, subscription lifecycle, membership, and access truth.
+5. The connected account owns the member customer, product, price, charge, processor fee, subscription, and payout. Polynet keeps only its 2.9% application fee.
 
-When a connected-account charge is successfully refunded, the proportional share of Polynet's application fee is reversed. Partial refunds use cumulative proportional allocation so rounding converges exactly when a charge becomes fully refunded. Pending, failed, or canceled refunds do not reverse the fee. Stripe state and a provider-scoped idempotent refund ledger are authoritative; retries cannot intentionally reverse the same fee share twice.
+Stripe processing fees are separate from Polynet's 2.9%. The fee is the same whether community inference is funded by $79 managed funding, grandfathered BYOK, or the operator grant.
 
-Community creator revenue uses direct Stripe Connect subscriptions on the builder's connected account, not platform-owned destination charges and not a Polynet-managed creator payout ledger. The connected account owns the member customer, product, price, charge, processor fee, subscription, and payout; Polynet collects only its application fee. Every local checkout, price, customer, and subscription record preserves the connected-account ID, and webhook events must match it before access state can change. This creator-commerce path is independent of the retired Builder Partner program.
+Full refunds revoke paid access; partial refunds retain access unless subscription state says otherwise. Opened disputes suspend access. Each successful partial or full refund reverses the cumulative proportional share of Polynet's application fee through an idempotent provider-scoped ledger. Pending, failed, and canceled refunds reverse no fee.
 
-Stripe account events and Connect events are separate webhook destinations with separate signing secrets. `STRIPE_WEBHOOK_SECRET` verifies Polynet-account events such as the $79 founder subscription. `STRIPE_CONNECT_WEBHOOK_SECRET` verifies events on connected accounts such as member checkout, renewals, refunds, and disputes. Member checkout fails before creating Stripe objects when the Connect secret is absent. A Connect event must contain the same top-level Stripe account ID stored on the local commerce record; a missing or different account fails closed. Event `livemode` must also match the configured Stripe credential so sandbox traffic cannot mutate live billing truth.
+Platform-account events use `STRIPE_WEBHOOK_SECRET`. Connected-account member-commerce events use `STRIPE_CONNECT_WEBHOOK_SECRET`. Provider account identity and live/test mode must match local commerce records before state can change.
 
-Community member access follows provider-backed subscription truth. Recurring invoice success refreshes the active subscription window. Payment failure follows Stripe subscription lifecycle state, usually a `past_due` grace state before terminal revocation. Full refunds revoke paid community access immediately. Partial refunds retain access unless subscription state later changes. Failed or canceled refunds restore from current Stripe subscription truth. Disputes and chargebacks suspend access when opened, remain revoked when lost, and restore only when Stripe shows a valid subscription after a win or funds reinstatement.
+## Provider Cost and Historical Finance
 
-Premium tool usage is entitled through Polynet Premium. Internally, paid tools should still write tool, vendor, Polynet price, raw vendor cost, cost-source evidence, and settlement evidence into the internal ledger so provider-cost accounting remains auditable.
+Successful tool and infrastructure use records vendor, cost category, measured quantity, raw provider cost, evidence source, and whether evidence is exact or estimated. This is cost accounting, not a user credit ledger and not an entitlement.
 
-Builder Partner v1 is retired. It has no member or operator product surface and creates no new attribution, commission, adjustment, payout batch, payout item, payout transfer, or Stripe transfer. Its accepted terms remain an archived legal artifact.
-
-The completed Partner retirement preserves `future_partner_grandfather_v1` only as historical identity and accepted-terms evidence for four legacy participants. It is not an entitlement, payout promise, balance, commission, active partner account, or founder-inference grant. The eight partner-derived `communityInferencePolicies` rows are migration residue from the superseded mental model and must be deleted by the bounded existing-founder cohort migration after an operator-controlled production backup.
-
-The canonical grandfathering truth is the conjunction of a founder-level `founderInferenceGrant` and a community-level `legacy_byok_allowed` funding policy. The bounded R41NB0W retirement removed one never-activated founder and grant. The remaining cohort can shrink only through a founder-specific managed transition. Partner status and retired Partner policy rows never authorize inference. During the bounded cutover, an unmarked pre-existing community owned by a grandfathered founder resolves as legacy for compatibility; every newly created community is explicitly `managed_required`. One active grandfathered founder grant and one encrypted OpenAI API key cover only that founder's legacy-eligible communities. A founder can be moved to managed billing only through an exact, operator-controlled transition that verifies the account and full owned-community set, makes those communities unlisted managed drafts, and deletes the pristine legacy grant.
-
-Across direct community-agent mentions, autonomous community cognition, and setup generation, an active grandfathered founder uses the owner's encrypted OpenAI key, while an active attached founder subscription or platform-owner grant uses Polynet's server-side OpenAI key. All paths use fixed GPT 5.6 Luna and write one idempotent, privacy-bounded usage receipt. For member-triggered mentions, the member remains the permission and tool principal and the community agent remains the response identity; payer identity never widens authority. A paid subscription attached to a non-operator community is canonical for that community and never falls back to a grandfathered key when inactive. Approved existing founders retain the former requester-ChatGPT route only until they activate during the bounded cutover.
-
-The terminal production inspection proved zero legacy source documents, zero financial rows, exact grant and policy evidence, no unexpected, mismatched, or duplicate records, and no truncation. The seven legacy Partner table schemas and the temporary migration code are deleted. The nine public retired tombstones remain only for cached-client compatibility and cannot read or write product or financial state.
-
-## Payout Readiness
-
-Paid communities need payout state to be understandable before launch. Stripe Connect or the active payout provider handles regulated payout setup, verification, and payout ability. Polynet should expose whether payouts are ready, pending, restricted, or require onboarding.
-
-Payout readiness does not grant community access. It determines whether the builder can safely collect and receive community revenue through the supported payout path.
+Historical tool-credit balances, top-up checkout rows, reservations, collections, and settlement evidence remain readable for liability reconciliation. They cannot be newly created, purchased, recharged, collected, or used to authorize product access. Fail-closed endpoint shells may remain only where the cached-production-client contract requires the old function name.
 
 ## Rules
 
-1. Payment redirects are not authoritative.
-2. Provider/webhook verification is authoritative.
-3. Checkout finalization should be idempotent.
-4. Community access should be evaluated per request.
-5. Builder payouts must remain consistent with verified community revenue state.
-6. Access should fail closed if billing evidence is missing or inconsistent.
-7. Builders should be shown payout readiness before they rely on paid community revenue.
-8. Paid access, management authority, and payout readiness are separate concepts.
-9. Polynet Premium entitlement is the source of truth for premium tool access.
-10. Builder Partner v1 must not enroll, attribute, accrue, adjust, mature, approve, or transfer money.
-11. Retired Partner grandfather evidence must not authorize product access or payment.
-12. Partner evidence and `communityInferencePolicies` must never authorize community inference.
-13. Existing-founder inference eligibility requires both the bounded founder-grant cohort and a legacy-eligible community; the grant is account-level but the funding policy is community-level.
-14. Community creator revenue stays Stripe-native unless Polynet intentionally changes to a held-funds payout architecture.
-15. Full refunds and opened disputes revoke or suspend paid community access through backend subscription lifecycle state.
-16. Paid-tool reporting should distinguish exact provider cost, estimated provider cost, and mixed provider evidence.
-17. Explicitly managed communities must never inherit pre-cutover compatibility, even before the legacy cohort is initialized.
-18. Managed community publishing and public acquisition require current founder-funding admission on the backend.
-17. A founder subscription authorizes exactly one attached community and must not widen member permissions.
-18. Managed inference must reserve allowance before provider start and settle or retain that reservation deterministically.
-19. Founder checkout must identify its community before redirect and may create at most one access-granting subscription for that community.
-20. Platform-account and connected-account Stripe events must be verified with their respective webhook secrets and may mutate only their own billing domain.
-21. Successful connected-account refunds must reverse the proportional Polynet application fee through an idempotent provider-scoped ledger; non-successful refunds must not.
-22. Complimentary platform-owner access must derive only from one active canonical owner role, must create no Stripe subscription state, and must not bypass community authorization, rate limits, or usage receipts.
+1. Redirects are UX only; verified provider/webhook state is authoritative.
+2. Checkout finalization is idempotent.
+3. Founder funding, member access, management authority, and payout readiness are separate truths.
+4. One $79 subscription attaches to one managed community and carries one $20 Luna allowance.
+5. Community ownership has no numeric cap, but every existing community must be currently funded before another checkout draft can be created.
+6. Paid-member revenue always uses the 2.9% application fee.
+7. Connect payouts and proportional application-fee refunds remain active.
+8. Legacy BYOK requires both exact founder-grant and community-policy evidence.
+9. The operator grant derives only from one active canonical owner role.
+10. Provider-cost records and usage receipts remain active even when Polynet absorbs cost.
+11. Historical retired financial rows are audit evidence only and grant no access.
 
 ## Common Mistakes
 
-- treating a successful redirect as membership
-- treating role as paid access
-- treating paid access as management authority
-- showing frontend access before backend entitlement exists
-- treating payout setup as proof that a member has access
-- letting a paid community launch with unclear payout readiness
-- treating a grandfather record as an active entitlement, balance, or payout promise
-- deriving founder inference eligibility from partner evidence or per-community policy rows
-- conflating the community owner payer with the member permission principal
-- falling back to a member or platform credential after owner funding is active
-- storing founder API-key material inside `communityInferencePolicies`
-- treating the $79 redirect as entitlement before the Stripe subscription webhook is verified
-- selling an unattached subscription slot and deciding its community later
-- silently falling back to a founder key when an attached paid subscription is inactive
-- letting the $20 personal Premium plan alter community funding, limits, or revenue fees
-- routing autonomous or setup inference around the canonical owner-funding receipt kernel
-- revoking member access for a refund but leaving Polynet's proportional application fee unreversed
-- recreating the deleted legacy Partner tables or temporary migration code
-- coupling retired Builder Partner concepts back into ordinary community creator revenue
-- treating estimated paid-tool provider cost as exact billing truth
-- configuring only the platform Stripe webhook and expecting direct connected-account charges to update member access
-- hard-coding the operator's email or treating operator access as a fake paid subscription
-- making complimentary inference invisible to rate limits, receipts, or internal cost accounting
+- treating a successful redirect as entitlement
+- selling an unattached founder subscription
+- treating $79 as an account-wide community bundle
+- restoring an account-level community cap or allowing stacked unpaid drafts
+- letting founder funding widen member permissions
+- changing the 2.9% fee based on community inference funding
+- configuring only the platform webhook and expecting Connect commerce to converge
+- revoking access after a refund without reversing the proportional application fee
+- restoring requester ChatGPT, Premium, tool credits, top-ups, card collection, or auto-recharge
+- deleting historical financial evidence before reconciliation
+- hard-coding the operator email or simulating a paid subscription for the operator
 
 ## Related Concepts
 
 - `entitlement`
 - `access-model`
 - `role`
+- `community`
+- `funnel`
 
 # Security And Privacy
 

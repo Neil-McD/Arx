@@ -12,13 +12,11 @@ import {
   type CommunityMembershipLike,
   type CommunityPricePointLike,
   type CommunitySubscriptionLike,
-  type UserEntitlementLike,
   adjustCommunityActiveMemberCountForMembershipTransition,
   communityMembershipRowIsActive,
   countCanonicalCommunityMembers,
   getCommunityAndMembership,
   getActiveCommunityBlock,
-  isActiveEntitlementWindow,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
   mapCommunityPricingRow,
@@ -35,7 +33,6 @@ import {
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   syncCommunityActiveMemberCount,
-  tierHasArchitectAccess,
   toIsoString,
 } from "./communityCore";
 import { logStructuredError } from "./errorLogging";
@@ -1216,38 +1213,6 @@ export const listCommunityMembershipCreatedAtRows = query({
       .sort((a, b) => a.createdAt - b.createdAt)
       .slice(0, limit)
       .map((row) => ({ created_at: toIsoString(row.createdAt) }));
-  },
-});
-
-export const communityOwnerHasArchitectAccess = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const nowMs = Date.now();
-    const { community } = await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    const entitlements = (await ctx.db
-      .query("userEntitlements")
-      .withIndex("by_user", (q: any) => q.eq("userId", community.ownerId))
-      .collect()) as UserEntitlementLike[];
-    const active = entitlements
-      .filter((row) =>
-        isActiveEntitlementWindow(nowMs, row.startsAt, row.endsAt),
-      )
-      .sort((a, b) => b.startsAt - a.startsAt);
-    return tierHasArchitectAccess(active[0]?.tier);
   },
 });
 

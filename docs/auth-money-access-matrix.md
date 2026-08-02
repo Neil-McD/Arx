@@ -2,167 +2,89 @@
 
 Status: active
 Last verified: 2026-08-01
-Scope: canonical web runtime, community monetization, provider-funded inference, and premium-tool accounting
+Scope: canonical web runtime, founder funding, paid-member commerce, and provider-cost evidence
 
-## 0) Current Account Ladder
+## 0) First Principles
 
-1. `anonymous free`
-   - one local guest thread
-   - no provider connection
-   - no community membership
-   - no paid-tool balance
-2. `authenticated free`
-   - can own one community
-   - can join and use communities when membership/entitlement exists
-   - can connect Stripe and monetize paid community access
-   - community revenue fees derive from that community's funding mode
-   - uses the included Polynet runtime
-3. `architect`
-   - internal account-tier value for Polynet Premium
-   - unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage
-   - does not authorize communities or change community revenue fees
-4. `platform owner overlay`
-   - requires exactly one active canonical `operatorRoles.owner` row
-   - receives complimentary product access without a Polynet checkout
-   - uses the existing Premium entitlement for personal tools
-   - can own a bounded operator maximum of communities and funds their GPT 5.6 Luna usage through Polynet
-   - remains subject to membership/permission checks, rate limits, usage receipts, provider-cost metering, Stripe processing, and the 2.9% community revenue fee
+The product has one authenticated capability surface and two payment rails:
 
-The product-facing model is Free plus Polynet Premium. The internal account-tier enum remains `free | architect`; `architect` is the Premium entitlement label.
+1. `$79 / month / managed community`, with `$20` raw GPT 5.6 Luna cost included for that community.
+2. `2.9%` Polynet application fee on paid-member community revenue.
 
-## 1) Irreducible Contract
+There is no personal Premium plan, paid account tier, tool balance product, top-up, auto-recharge, or card-backed tool collection.
+An authenticated founder may own an unlimited number of communities. Unlimited
+means no account-level numeric cap, not free bundled communities.
 
-The active system is defined by these inputs:
+## 1) Authority Matrix
 
-1. Surface: `web`
-2. Auth state: `anonymous` | `authenticated`
-3. Account tier: product-facing Free or Polynet Premium; internal enum `free | architect`
-4. Requested funding source: `demo_public` | `platform` | `user_key` | `user_chatgpt` | `auto`
-5. Provider connection state: ChatGPT connected, OpenAI key connected, or neither
-6. Active community lens: absent | present and server-validated
-7. Active project context: absent | present
-8. Community access state: owner, active membership, approved entitlement, pending, blocked, or visitor
-9. Community billing state: open, approval-gated, paid subscription, checkout pending, provider verified, or unavailable
-10. Premium usage ledger state: available, unavailable, reserved, settled, or released
-
-And these outputs:
-
-1. Runtime lane: `public` | `platform` | `chatgpt` | denied
-2. Resolved funding source: `demo_public` | `user_key` | `user_chatgpt` | null
-3. Entitled capability families
-4. Active capability families for this run
-5. Community funnel action: join, request access, checkout, enter, or blocked
-6. Community creation allowance
-7. Paid community checkout availability
-8. Paid-tool execution allowance
-
-## 2) Routing And Funding Rules
-
-1. Server code decides the runtime lane. The client is projection only.
-2. `demo_public` routes to the public lane when allowed.
-3. `user_chatgpt` requires authentication and a ChatGPT connection, then routes to `chatgpt`.
-4. `user_key` requires authentication and a connected key, then routes through the cloud platform lane with user-funded inference.
-5. `platform` currently prefers connected user-funded providers:
-   - ChatGPT connection -> `chatgpt` lane with `user_chatgpt` funding
-   - OpenAI key connection -> `platform` lane with `user_key` funding
-   - no provider -> denied with `provider_connection_required`
-6. Authenticated free users should not receive Polynet-funded inference by default.
-7. ChatGPT auth or an OpenAI key does not grant community access, payout readiness, or workspace-tool entitlement.
-8. The active platform owner is the narrow exception for community-owned inference: the owner role, not account email or client state, admits `platform_operator_grant` through the canonical receipt kernel.
-
-## 3) Capability Rules
-
-Entitled capability families come from auth state and account status:
-
-| Auth state | Tier | Entitled capability families |
+| Question | Canonical authority | Explicit non-authority |
 |---|---|---|
-| anonymous | n/a | `[]` |
-| authenticated | `free` | `["product_docs","community_tools"]` |
-| authenticated | Polynet Premium (`architect`) | `["product_docs","community_tools","web_research","sandbox_tools","workspace_tools"]` |
+| May this user access the product? | authenticated user/session | Premium/account-tier label |
+| May this user enter a community? | membership, entry policy, purchase claim, subscription lifecycle | founder funding, role alone, redirect |
+| May this user manage a community? | community owner/admin role | paid-member entitlement |
+| May this founder create another community? | every existing owned community has current canonical funding | account tier, numeric community cap |
+| May this managed community launch and run AI? | active attached $79 subscription and current allowance | unattached checkout, requester ChatGPT |
+| May this legacy community run AI? | exact founder grant + `legacy_byok_allowed` + active owner API key | Partner evidence, unactivated founder status |
+| Is the platform operator complimentary? | one active canonical `operatorRoles.owner` row | email allowlist, fake Stripe state |
+| May a builder collect member revenue? | ready Stripe Connect account + active price/entry policy | platform founder subscription |
+| What does Polynet earn on member revenue? | 2.9% application fee | funding mode or account tier |
+| What did a tool/provider cost? | provider-cost entry + usage receipt/evidence | user credit balance |
 
-Active capability families are narrower than entitled capability families:
+## 2) Founder Funding
 
-1. `product_docs` can be active for authenticated users.
-2. `community_tools` is active only when a community lens is present.
-3. `web_research` can be active when entitled.
-4. `sandbox_tools` can be active for Premium users and exposes run-scoped file/shell tools.
-5. `workspace_tools` is active only when entitled and a project context is present; it adds project-bound terminal/computer runtime controls.
+- A new community is an unlisted `managed_required` draft.
+- Checkout is community-targeted; one verified subscription attaches to one community.
+- The first community may be created without prior funding. Each next community
+  may be created only after every existing owned community is funded by its own
+  active subscription, exact eligible active BYOK, or the operator grant. This
+  prevents stacked unpaid drafts without imposing an ownership cap.
+- Each active cycle has a $20 raw Luna-cost allowance with atomic reservation and settlement.
+- Managed publishing, public funnel resolution, Discover listing, new public joins, and managed inference fail closed without current founder-funding admission.
+- The operator grant enters the same funding kernel without Stripe state or allowance debit, but still records calculated raw cost.
+- An eligible legacy founder must activate BYOK or select $79 managed funding. There is no requester-ChatGPT compatibility lane.
 
-Tool exposure is not free usage. Project workspace tools, web research, and other premium tools require Premium entitlement.
+## 3) Capability and Cost Rules
 
-## 4) Prompt Context Rules
+- Authenticated users receive the same protected capability families.
+- Community tools require a server-validated community lens.
+- Project workspace tools require project context and centralized project/provider admission.
+- Rate limits, provider quotas, safety boundaries, and approval gates still apply.
+- Successful web, crawl, voice, Daytona, Codex, Blaxel, and storage usage records platform-absorbed provider cost.
+- A provider-cost record is operational/financial evidence. It is not an entitlement or customer charge.
 
-Prompt injection is not tiered. Authenticated Free and Polynet Premium accounts use the same platform harness prompt stack.
+## 4) Paid-Member Commerce
 
-1. Community prompt context is injected only after backend community access validation.
-2. Workspace/project context is injected only when the thread has an active project context.
-3. Capability families decide active tools; account labels do not select a different prompt stack.
-4. Prompt code must not branch on Builder, Pro, or ad hoc paid-plan labels. It should consume normalized tier/capability context.
+- `paid_subscription` communities use active price points and `community_join` checkout.
+- Stripe Connect owns member customers, subscriptions, charges, processing fees, and payouts.
+- Polynet's application fee is always 290 basis points.
+- Platform and Connect webhook secrets are separate.
+- Full refunds and opened disputes revoke or suspend access through backend lifecycle state.
+- Successful refunds reverse the cumulative proportional application fee idempotently.
 
-## 5) Community Money Rules
+## 5) Historical Financial State
 
-1. Existing approved founders can keep managing existing owned communities.
-2. Polynet Premium does not grant another community.
-3. Community funding is evaluated per community, independently from personal account tier.
-4. Community creation is limited by `max_communities`, which is projected from backend entitlement state.
-5. Paid community checkout requires:
-   - paid community entry policy
-   - active price point
-   - owner payout access
-   - ready Stripe Connect account with charges and payouts enabled
-6. Stripe Checkout redirects are UX only.
-7. Stripe webhook/provider verification and backend checkout finalization are authoritative.
-8. Paid access becomes real only after backend entitlement, membership, claim, and subscription state agree.
-9. Payout readiness is separate from member entitlement.
-10. Community role is separate from paid access.
-11. Every paid community uses the same 2.9% Polynet platform fee; managed funding, legacy owner-API-key funding, and personal Premium do not change it.
-12. Legacy paid creator billing does not create or renew Polynet Premium access.
-13. Community creator revenue uses direct subscriptions on the builder's Stripe Connect account. The connected account owns the member charge and pays Stripe processing fees; Polynet keeps only the 2.9% application fee. Polynet does not run a separate creator payout ledger or gestation period for community revenue.
-14. Recurring invoice success/failure, subscription changes, full refunds, and disputes must converge through backend community subscription lifecycle state.
-15. Full refunds revoke paid community access. Partial refunds retain access unless the subscription lifecycle later says otherwise. Failed or canceled refunds restore from current Stripe subscription truth.
-16. Disputes and chargebacks suspend paid community access when opened, stay revoked when lost, and restore only from valid Stripe subscription truth when won or funds are reinstated.
-17. Each successful partial or full member refund reverses its cumulative proportional share of Polynet's 2.9% application fee through a provider-scoped idempotent ledger. Pending, failed, and canceled refunds reverse no fee.
-18. A newly created community is always an unlisted `managed_required` draft and continues to its own $79 monthly checkout.
-19. Managed publishing, public funnel resolution, Discover listing, and new public joins fail closed without current founder-funding admission.
-20. Existing approved founders retain owner-key funding only for legacy-eligible communities; an exact operator transition can remove that grant and move the full owned-community set to managed billing.
-21. One active platform-owner role replaces the ordinary one-community limit with a bounded operator maximum and makes all communities owned by that account platform-funded without founder checkout.
-22. Operator complimentary access is not a membership, management, or tool-authority bypass and does not remove rate limits, usage receipts, raw provider-cost accounting, Stripe processing fees, or Polynet's 2.9% application fee on member revenue.
+Historical tool-credit balances, top-ups, reservations, settlements, and card-collection rows are retained for audit and reconciliation only. New product creation, purchase, auto-recharge, collection, reservation, and settlement paths are retired. Cached-client compatibility shells fail closed and cannot read or write product or financial state unless the endpoint is explicitly an operator diagnostic.
 
-## 6) Premium Tool Accounting Rules
+## 6) Canonical Files
 
-Polynet Premium entitlement is the product-facing access rule for premium tools. Internally, premium tool usage is still ledgered for provider-cost accounting.
+- Founder constants: `shared/founderPlan.ts`
+- Founder checkout and status: `convex/founderBilling.ts`
+- Founder funding kernel: `convex/founderInferenceCore.ts`
+- Member commerce: `convex/communityCommerce.ts`
+- Stripe webhook convergence and fee refunds: `convex/httpBilling.ts`
+- Connect onboarding: `convex/creatorCommerce.ts`
+- Application fee: `shared/accountCommerce.ts`
+- Provider-cost accounting: `convex/platformToolCostAccounting.ts`, `convex/workspaceCredits.ts`
+- Capability gate: `shared/canonicalGateEngine.ts`
 
-1. Workspace tools should reserve accounting capacity before workspace infrastructure is created or used.
-2. Workspace tools settle actual compute usage and release unused reservations.
-3. Web research reserves before the call and strictly settles on success.
-4. Provider, raw cost, priced usage, and settlement evidence must stay auditable.
-5. Voice input reserves before transcription and strictly settles on success.
-6. Failed tool calls should release reserved balance when no paid tool result was delivered.
-7. Expired reservations are reconciled by scheduled backend cleanup.
+## 7) Drift Gate
 
-## 7) Canonical Files
+Any money or entitlement change must update this matrix and the billing reference together, regenerate product docs, and prove:
 
-- Gate engine: `/Users/neilmcdevitt/code/arx/shared/canonicalGateEngine.ts`
-- Gate parity matrix: `/Users/neilmcdevitt/code/arx/shared/contracts/gate_parity_matrix_v1.json`
-- Prompt/context projection: `/Users/neilmcdevitt/code/arx/shared/runtimePrompt.ts`
-- Billing/product truth: `/Users/neilmcdevitt/code/arx/docs/product/reference/billing-entitlements.md`
-- Creator commerce and Stripe Connect: `/Users/neilmcdevitt/code/arx/convex/creatorCommerce.ts`
-- Community checkout: `/Users/neilmcdevitt/code/arx/convex/communityCommerce.ts`
-- Stripe webhook handling: `/Users/neilmcdevitt/code/arx/convex/httpBilling.ts`
-- Premium tool accounting/pricing: `/Users/neilmcdevitt/code/arx/shared/workspaceCredits.ts`
-- Premium tool ledger: `/Users/neilmcdevitt/code/arx/convex/workspaceCredits.ts`
-- Workspace tool charge paths: `/Users/neilmcdevitt/code/arx/convex/workspaceRuntimeSession.ts`, `/Users/neilmcdevitt/code/arx/convex/workspaceTerminals.ts`
-- Web research charge path: `/Users/neilmcdevitt/code/arx/convex/runtimeAgentLoop.ts`
-- Voice charge path: `/Users/neilmcdevitt/code/arx/convex/httpVoice.ts`
-
-## 8) Drift Policy
-
-Any change to tier semantics, runtime lane routing, paid community checkout, Stripe Connect payout authority, or premium-tool accounting must:
-
-1. Update this matrix and product billing docs together.
-2. Regenerate product docs artifacts.
-3. Keep `npm run check:gate-parity` green.
-4. Keep `npm run check:no-builder-plan-infra` green.
-5. Keep `npm run check:workspace-credit-accounting-proof` green.
-6. Keep `npm run check:platform-harness-prompt-contract` green.
-7. Keep `npm run check:product-docs-index-proof` green.
+- exactly one $79 founder plan attached per managed community
+- exactly one $20 raw Luna allowance per attached billing cycle
+- unlimited paid communities with no numeric owner cap and no stacked unpaid drafts
+- exactly one 2.9% paid-member application fee
+- Connect payouts and proportional fee refunds remain intact
+- no active Premium, requester-ChatGPT, tool-credit, top-up, auto-recharge, or card-collection path
+- provider-cost and historical financial evidence remain auditable

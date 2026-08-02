@@ -96,19 +96,15 @@ Resource admission is separate from compute billing.
 
 Project and volume admission uses Polynet-owned truth:
 
-- all accounts: five active project volumes
-- first materialization requires purchased/prepaid tool balance or a card
+- authenticated accounts: five active project volumes
 - deleted or archived project rows do not count toward the limit
 - rows whose volume retention state is `deleted` do not count toward the limit
 - first volume creation for a project is gated; re-attaching the same existing
   volume remains idempotent
 
-The paid-tier signal is card-on-file truth. Purchased workspace tool balance can
-fund the first physical volume materialization, but it does not raise the
-project-volume limit. Included/free credits can pay for compute usage but must
-not create recurring storage liability or raise the project-volume limit by
-themselves. The Stripe customer id alone is not a card-on-file truth and must
-not be used as the admission authority.
+There is no paid-tier, card-on-file, or tool-balance admission signal. Polynet
+absorbs supported workspace provider cost while retaining the project limit,
+live provider quota, safety buffer, rate limits, and provider-cost evidence.
 
 Before any Blaxel provider call can create or wake a project volume, the server
 must run the central materialization admission path. For new volumes, that path
@@ -124,9 +120,11 @@ volume inventory and enforces that count with
 Existing undeleted project volumes skip the provider inventory check because no
 new Blaxel volume slot is being consumed.
 
-Agent workspace compute remains gated by workspace credit reservation before a
-Blaxel sandbox is created. File inspection and interactive starts can wake the
-same project workspace, but volume creation must pass resource admission first.
+Agent workspace compute remains gated by centralized project/resource and
+provider-quota admission before a Blaxel sandbox is created. File inspection and
+interactive starts can wake the same project workspace, but volume creation must
+pass resource admission first. Provider cost is recorded as platform accounting;
+there is no user tool-credit reservation or collection path.
 
 ## Stale Sandbox Reconciliation
 

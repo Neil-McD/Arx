@@ -91,15 +91,6 @@ export const getFounderSubscriptionCheckoutSessionInternal = internalQuery({
   },
 });
 
-export const getFounderSubscriptionByProviderSubscriptionIdInternal = internalQuery({
-  args: { providerSubscriptionId: v.string() },
-  handler: async (ctx, args) =>
-    await getFounderSubscriptionByProviderSubscriptionId(
-      ctx,
-      args.providerSubscriptionId,
-    ),
-});
-
 export const createPendingFounderSubscriptionCheckoutInternal = internalMutation({
   args: {
     sessionId: v.string(),
@@ -293,6 +284,11 @@ async function syncFounderSubscription(args: {
   ) {
     throw new Error("founder_subscription_community_mismatch");
   }
+  const community = await args.ctx.db.get(communityId);
+  if (!community) throw new Error("founder_subscription_community_missing");
+  if (String(community.ownerId) !== String(ownerUserId)) {
+    throw new Error("founder_subscription_community_owner_mismatch");
+  }
   if (
     checkout?.providerCustomerId &&
     String(checkout.providerCustomerId) !== providerCustomerId
@@ -467,36 +463,6 @@ export const syncFounderSubscriptionRiskStatusInternal = internalMutation({
       founderSubscriptionId: existing._id,
       subscriptionStatus: args.status,
       revokedReason,
-    };
-  },
-});
-
-export const getCurrentFounderPlanStatus = query({
-  args: { authSubject: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const nowMs = Date.now();
-    const subscriptions = (await ctx.db
-      .query("founderSubscriptions")
-      .withIndex("by_owner", (q) => q.eq("ownerUserId", userId))
-      .collect()) as FounderSubscriptionRow[];
-    return {
-      eligible: subscriptions.some((row) => founderSubscriptionStatusGrantsAccess({
-        status: row.status,
-        currentPeriodEndAt: row.currentPeriodEndAt,
-        nowMs,
-      })),
-      subscriptions: subscriptions.map((row) => ({
-        id: String(row._id),
-        community_id: row.communityId ? String(row.communityId) : null,
-        status: row.status,
-        current_period_start_at: new Date(row.currentPeriodStartAt).toISOString(),
-        current_period_end_at: new Date(row.currentPeriodEndAt).toISOString(),
-        cancel_at_period_end: row.cancelAtPeriodEnd,
-      })),
     };
   },
 });

@@ -284,9 +284,9 @@ The system must not end up with:
 1. one notion of identity in the bridge
 2. a different notion in Convex/runtime
 
-### Gate 3: Premium UX
+### Gate 3: Session UX
 
-Can bootstrap and refresh remain fast enough that the experience still feels premium?
+Can bootstrap and refresh remain fast enough that the experience stays responsive?
 
 If bootstrap/refresh becomes flaky or slow, the theoretical security win may not be worth the UX cost.
 

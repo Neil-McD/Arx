@@ -26,12 +26,6 @@ import {
   shouldDisableStreamingSmoothing,
 } from "./smoothStreamingText";
 import {
-  classifyPaidUsageFailure,
-  normalizePaidUsageBillingMode,
-  paidUsageBillingModeForPaidToolFailure,
-} from "./paidUsageBilling";
-import { normalizePaidToolKind } from "./workspaceCredits";
-import {
   type CreateAssistantMessageParams,
   type CreateThreadMessageParams,
   type GuestInferenceIssue,
@@ -48,11 +42,6 @@ import {
   normalizeGuestInferenceError,
 } from "./webTurnRunnerCore";
 import { isRecoverableRuntimeKernelStopReason } from "./runtimeKernelTypes";
-
-function normalizePositiveNumber(value: unknown): number | null {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
 
 export function useWebTurnRunnerController<
   SessionT,
@@ -801,29 +790,16 @@ export function useWebTurnRunnerController<
             }
             if (
               failure.category === "quota" ||
-              failure.category === "workspace_credits" ||
-              failure.category === "plan" ||
               failure.category === "provider_connection_required" ||
               failure.category === "misconfigured" ||
               failure.category === "disabled" ||
               failure.category === "unavailable"
             ) {
-              const paidUsageFailure = classifyPaidUsageFailure({
-                code: failure.code,
-                paidUsageBillingMode: failure.paidUsageBillingMode,
-                toolKind: failure.toolKind,
-              });
               current.setInferenceIssueModal({
                 reason: mapInferenceIssueReason(failure.category),
                 threadId,
                 mode: params.mode === "regenerate" ? "regenerate" : "respond",
                 message: failure.message.trim() || null,
-                toolKind: failure.toolKind,
-                requiredCredits: failure.requiredCredits,
-                paidUsageBillingMode:
-                  paidUsageFailure.paidUsageBillingMode ??
-                  failure.paidUsageBillingMode ??
-                  paidUsageBillingModeForPaidToolFailure(failure.toolKind),
               });
               return { cancelled: false, error: null };
             }
@@ -980,47 +956,19 @@ export function useWebTurnRunnerController<
               status: Number.isFinite(status) ? Math.max(0, Math.floor(status)) : 500,
               code,
               message: msg,
-              paidUsageBillingMode: normalizePaidUsageBillingMode(
-                parsed?.paid_usage_billing_mode ??
-                  parsed?.paidUsageBillingMode ??
-                  parsed?.billing_mode,
-              ),
             });
             if (
               category === "quota" ||
-              category === "workspace_credits" ||
-              category === "plan" ||
               category === "provider_connection_required" ||
               category === "misconfigured" ||
               category === "disabled" ||
               category === "unavailable"
             ) {
-              const toolKind = normalizePaidToolKind(
-                parsed?.tool_kind ?? parsed?.toolKind ?? parsed?.paid_tool_kind,
-              );
-              const explicitBillingMode = normalizePaidUsageBillingMode(
-                parsed?.paid_usage_billing_mode ??
-                  parsed?.paidUsageBillingMode ??
-                  parsed?.billing_mode,
-              );
-              const paidUsageFailure = classifyPaidUsageFailure({
-                code,
-                paidUsageBillingMode: explicitBillingMode,
-                toolKind,
-              });
               current.setInferenceIssueModal({
                 reason: mapInferenceIssueReason(category),
                 threadId,
                 mode: params.mode === "regenerate" ? "regenerate" : "respond",
                 message: msg.trim() || null,
-                toolKind,
-                requiredCredits: normalizePositiveNumber(
-                  parsed?.required_credits ?? parsed?.requiredCredits,
-                ),
-                paidUsageBillingMode:
-                  paidUsageFailure.paidUsageBillingMode ??
-                  explicitBillingMode ??
-                  paidUsageBillingModeForPaidToolFailure(toolKind),
               });
               streamInferenceIssueHandled = true;
               seenDone = true;

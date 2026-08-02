@@ -175,7 +175,7 @@ export default defineSchema({
 
   founderSubscriptions: defineTable({
     ownerUserId: v.id("users"),
-    communityId: v.optional(v.id("communities")),
+    communityId: v.id("communities"),
     provider: v.literal("stripe"),
     providerCustomerId: v.string(),
     providerSubscriptionId: v.string(),
@@ -203,7 +203,7 @@ export default defineSchema({
 
   founderUsageCycles: defineTable({
     founderSubscriptionId: v.id("founderSubscriptions"),
-    communityId: v.optional(v.id("communities")),
+    communityId: v.id("communities"),
     cycleKey: v.string(),
     cycleStartAt: v.number(),
     cycleEndAt: v.number(),

@@ -18,7 +18,7 @@ export type ServeRequestIntakeReason =
   | "requester_missing"
   | "requester_access_missing"
   | "agent_disabled"
-  | "requester_connection_missing"
+  | "owner_funding_choice_required"
   | "owner_credential_missing"
   | "owner_funding_suspended"
   | "founder_plan_required"
@@ -76,16 +76,6 @@ async function latestCommunityAgentConfig(ctx: any, communityId: any): Promise<R
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .take(5)) as Array<Record<string, any>>;
   return rows.slice().sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))[0] ?? null;
-}
-
-async function requesterHasChatgptConnection(ctx: any, requesterUserId: any): Promise<boolean> {
-  const row = (await ctx.db
-    .query("userProviderConnections" as any)
-    .withIndex("by_user_provider", (q: any) =>
-      q.eq("userId", requesterUserId).eq("provider", "chatgpt"),
-    )
-    .first()) as Record<string, any> | null;
-  return Boolean(row?.encryptedSecretHex);
 }
 
 async function existingServeRequestForMention(ctx: any, mentionId: any): Promise<Record<string, any> | null> {
@@ -396,6 +386,8 @@ export async function intakeCommunityAgentMention(args: {
       responseVisibilityScope: source.visibilityScope,
       skipReason: funding.code === "owner_credential_missing"
         ? "The community owner must connect an OpenAI API key."
+        : funding.code === "owner_funding_choice_required"
+          ? "The community owner must activate an OpenAI API key or fund this community at $79/month."
         : funding.code === "owner_funding_suspended"
           ? "Community inference funding is suspended."
           : funding.code === "founder_subscription_inactive"
@@ -407,25 +399,6 @@ export async function intakeCommunityAgentMention(args: {
     });
     return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
   }
-  if (
-    funding.mode === "legacy_requester_chatgpt" &&
-    !(await requesterHasChatgptConnection(args.ctx, source.requesterUserId))
-  ) {
-    const skipped = await skipMention({
-      ctx: args.ctx,
-      mention: args.mention,
-      intakeReason: "requester_connection_missing",
-      sourceRootId: source.sourceRootId,
-      sourceReplyId: source.sourceReplyId,
-      requesterUserId: source.requesterUserId,
-      sourceVisibilityScope: source.visibilityScope,
-      responseVisibilityScope: source.visibilityScope,
-      skipReason: "The mention author does not have a usable ChatGPT connection.",
-      nowMs: args.nowMs,
-    });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
-  }
-
   const requestId = await insertServeRequest({
     ctx: args.ctx,
     mention: args.mention,

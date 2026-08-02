@@ -1,20 +1,17 @@
 import type { KeyboardEvent, MutableRefObject } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { Sparkles, Users } from "lucide-react";
-import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import {
   splitBodyIntoMentionSegments,
   textContainsMentionToken,
   type ResolvedMentionForRendering,
 } from "../../../../shared/communityMentionRendering";
-import type { PremiumMemberBadgeSummary } from "../../../../shared/communityTypes";
 
 export type MentionCandidate = {
   userId: string;
   displayName: string;
   handle: string | null;
   avatarUrl: string | null;
-  premiumBadge?: PremiumMemberBadgeSummary | null;
   // Non-user candidates tag canonical server-side identities by key, not user id.
   kind?: "user" | "community_agent" | "role";
   roleKey?: "everybody";
@@ -398,7 +395,6 @@ export function MentionAutocompleteMenu(props: {
           <span className="mention-autocomplete-meta">
             <span className="mention-autocomplete-name-row">
               <span className="mention-autocomplete-name">{candidate.displayName}</span>
-              <PremiumMemberBadge badge={candidate.premiumBadge ?? null} />
             </span>
             {candidate.kind === "community_agent" ? (
               <span className="mention-autocomplete-subline">

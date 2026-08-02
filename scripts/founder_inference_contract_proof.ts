@@ -58,6 +58,14 @@ assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS = 7_900
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COMMUNITIES = 1/);
 assert.match(modelCatalog, /DEFAULT_ACTIVE_MODEL_ID = "gpt-5\.6-sol"/);
+const founderFundingSchema = schema.slice(
+  schema.indexOf("founderSubscriptions: defineTable"),
+  schema.indexOf("communityInferenceReceipts: defineTable"),
+);
+assert.match(founderFundingSchema, /founderSubscriptions: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)/);
+assert.match(founderFundingSchema, /founderUsageCycles: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)/);
+assert.doesNotMatch(founderFundingSchema, /communityId: v\.optional/);
+assert.doesNotMatch(planCore, /communityId\?:/);
 
 assert.match(
   schema,
@@ -97,19 +105,22 @@ assert.match(lifecycle, /requestedVisibility === "published"[\s\S]*community_fou
 assert.match(lifecycle, /requireCommunityFounderFundingForPublish/);
 assert.doesNotMatch(lifecycle, /attachFounderSubscriptionToCommunity\(\{/);
 assert.match(lifecycle, /inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED/);
-assert.match(core, /if \(!\(await existingFounderInferenceCohortIsInitialized\(ctx\)\)\) \{[\s\S]*legacy_requester_chatgpt/);
+assert.doesNotMatch(core, /existingFounderInferenceCohortIsInitialized|legacy_requester_chatgpt/);
 assert.match(core, /communityFounderFundingAllowsPublicAccess/);
 assert.match(core, /requireCommunityFounderFundingForPublish/);
 assert.match(communityPublic, /resolvePublicFunnelBySlug[\s\S]*communityFounderFundingAllowsPublicAccess/);
 assert.match(communityPublic, /listPublicDiscoverCommunities[\s\S]*communityFounderFundingAllowsPublicAccess/);
 assert.match(communityPublic, /joinPublicCommunityInternal[\s\S]*community_not_available/);
 assert.match(core, /return \{ ok: false, code: "founder_plan_required" \}/);
-assert.match(core, /grant\.status === "approved"[\s\S]*mode: "legacy_requester_chatgpt"/);
+assert.match(core, /grant\.status === "approved"[\s\S]*owner_funding_choice_required/);
 assert.match(core, /grant\.status === "suspended"[\s\S]*owner_funding_suspended/);
 assert.match(core, /mode: "owner_api_key"[\s\S]*payerUserId: community\.ownerId/);
 assert.match(core, /mode: "platform_subscription"[\s\S]*subscriptionId: attachedSubscription\._id/);
 assert.match(planCore, /reserveFounderUsage/);
 assert.match(planCore, /nextReserved \+ cycle\.settledCostMicros > cycle\.includedCostMicros/);
+assert.match(planCore, /founder_subscription_community_missing/);
+assert.match(planCore, /founder_usage_cycle_community_mismatch/);
+assert.match(core, /founder_usage_cycle_community_mismatch/);
 assert.match(pricing, /founder_inference_pricing_misconfigured/);
 assert.match(pricing, /Math\.ceil\(numerator \/ 1_000_000\)/);
 assert.match(founderBilling, /startFounderSubscriptionCheckout = action/);
@@ -123,13 +134,22 @@ assert.doesNotMatch(planCore, /attachFounderSubscriptionToCommunity/);
 assert.match(communityCommerce, /resolveCommunityInferenceFundingAdmission/);
 assert.match(communityCommerce, /POLYNET_COMMUNITY_PLATFORM_FEE_BPS/);
 assert.doesNotMatch(communityCommerce, /POLYNET_(MANAGED|LEGACY_BYOK)_COMMUNITY_PLATFORM_FEE_BPS/);
-assert.match(auth, /if \(tier === "architect"\) \{[\s\S]*maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,[\s\S]*platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS/);
+assert.match(auth, /function accountTierMeta\(\)[\s\S]*platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS/);
+assert.match(auth, /CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT = Number\.MAX_SAFE_INTEGER/);
+assert.doesNotMatch(auth, /POLYNET_FREE_MAX_COMMUNITIES|PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES|maxCommunities/);
+assert.match(auth, /getCanonicalTierByUserIdInternal[\s\S]*return "free"/);
+assert.doesNotMatch(auth, /if \(tier === "architect"\)/);
 assert.match(founderBilling, /founder_stripe_price_contract_invalid/);
 assert.match(founderBilling, /getMyAccountSetupStatus[\s\S]*profile_setup_required/);
 assert.match(founderBilling, /syncFounderSubscriptionFromStripeInternal = internalMutation/);
 assert.match(founderBilling, /syncFounderSubscriptionRiskStatusInternal = internalMutation/);
 assert.match(founderBilling, /founder_subscription_customer_mismatch/);
+assert.match(founderBilling, /founder_subscription_community_owner_mismatch/);
 assert.match(founderBilling, /founder_subscription_price_changed/);
+assert.doesNotMatch(
+  founderBilling,
+  /getCurrentFounderPlanStatus|getFounderSubscriptionByProviderSubscriptionIdInternal/,
+);
 assert.match(httpBilling, /syncFounderSubscriptionFromStripeSubscription/);
 assert.match(httpBilling, /getFounderSubscriptionCheckoutSessionInternal/);
 assert.match(httpBilling, /syncFounderSubscriptionRiskStatus[\s\S]*subscription_refunded/);
@@ -166,7 +186,8 @@ assert.match(backend, /COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE/);
 assert.match(backend, /COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE/);
 
 assert.match(intake, /resolveCommunityInferenceFundingAdmission/);
-assert.match(intake, /funding\.mode === "legacy_requester_chatgpt"[\s\S]*requesterHasChatgptConnection/);
+assert.match(intake, /owner_funding_choice_required[\s\S]*activate an OpenAI API key or fund this community at \$79\/month/);
+assert.doesNotMatch(intake + worker + core, /legacy_requester_chatgpt|requesterHasChatgptConnection/);
 assert.match(worker, /const directOpenAiFunded =[\s\S]*context\.funding\.mode === "platform_subscription"/);
 assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID[\s\S]*context\.funding\.mode === "owner_api_key" \? ownerApiKey : undefined/);
 assert.match(worker, /aggregatePromptTokens \+=/);
@@ -204,7 +225,7 @@ assert.match(settings, /eligible legacy communities listed here/);
 assert.match(settings, /Activate for eligible communities/);
 assert.match(billingSettings, /Community funding/);
 assert.match(billingSettings, /\$20 of GPT 5\.6 Luna usage/);
-assert.match(billingSettings, /Personal tools/);
+assert.doesNotMatch(billingSettings, /Personal tools|Premium|tool balance|Add credits/i);
 assert.doesNotMatch(billingSettings, /label: "Communities"/);
 assert.match(billingGateway, /founderBilling:getFounderBillingOverview/);
 assert.match(billingGateway, /founderBilling:startFounderSubscriptionCheckout/);
@@ -276,10 +297,12 @@ assert.match(
   cognitionContract,
   /Direct Concierge chat, autonomous cognition, and AI-assisted setup generation are community-founder-funded/,
 );
-assert.match(billingContract, /\$79 USD monthly for one specific community/);
-assert.match(billingContract, /new founder creates one unlisted managed draft and continues directly to community-targeted checkout/);
-assert.match(billingContract, /Each monthly cycle includes up to \$20 in raw model cost/);
-assert.match(billingContract, /Production activation requires verified Stripe configuration/);
+assert.match(billingContract, /\$79 USD monthly for each managed community/);
+assert.match(billingContract, /unlisted `managed_required` draft and continues to community-targeted checkout/);
+assert.match(billingContract, /Each \$79 monthly cycle includes up to \$20 in raw GPT 5\.6 Luna model cost/);
+assert.match(billingContract, /Stripe webhook state, not the redirect, is authoritative/);
+assert.match(billingContract, /2\.9% application fee/);
+assert.match(billingContract, /transitional requester-ChatGPT lane is retired/);
 assert.doesNotMatch(
   cognitionContract,
   /member_concierge`[\s\S]{0,300}requester-funded through the requester's provider connection/,

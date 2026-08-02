@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import { mutation } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import {
@@ -39,7 +39,10 @@ import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
-import { requireCommunityFounderFundingForPublish } from "./founderInferenceCore";
+import {
+  requireCommunityFounderFundingForPublish,
+  resolveAdditionalManagedCommunityAdmission,
+} from "./founderInferenceCore";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 import { ensureGeneralChannel } from "./communityChannelCore";
 
@@ -502,23 +505,12 @@ export const createCommunity = mutation({
     });
     await requireAccountSetupCompleteForUser(ctx, ownerId);
     const nowMs = Date.now();
-    const billingStatus = await ctx.runQuery(api.auth.getAccountCommerceStatus, {
-      authSubject: args.authSubject ?? undefined,
-      nowMs,
-    });
-    if (!billingStatus) {
-      throw new Error("community_builder_required");
-    }
-    const ownedCommunities = await ctx.db
-      .query("communities")
-      .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
-      .collect();
-    const maxCommunities = Math.max(0, Math.floor(Number(billingStatus.max_communities ?? 0)));
-    if (maxCommunities <= 0) {
-      throw new Error("community_builder_required");
-    }
-    if (maxCommunities > 0 && ownedCommunities.length >= maxCommunities) {
-      throw new Error("community_owner_limit_reached");
+    const additionalCommunityAdmission =
+      await resolveAdditionalManagedCommunityAdmission(ctx, ownerId);
+    if (!additionalCommunityAdmission.ok) {
+      throw new Error(
+        `community_funding_required_before_create:${additionalCommunityAdmission.code}`,
+      );
     }
     const slug = normalizeSlug(args.slug);
     const existing = await ctx.db

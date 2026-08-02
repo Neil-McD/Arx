@@ -7,15 +7,12 @@ Scope: deletion boundary + production hardening baseline
 
 These surfaces are non-negotiable for MVP and must not be deleted during reduction passes:
 
-1. Tier system:
-   - anonymous free
-   - authenticated free
-   - internal architect/dev-only
+1. One authenticated product capability set, with operator authority kept separate from customer pricing.
 2. Canonical community interaction substrate + canonical community UX.
 3. Member personal-agent harness under explicit community context.
 4. Separate community-owned agent, cognition, AI feed, and community research.
 5. Official Polynet MCP and canonical semantic operation seam.
-6. User-funded ChatGPT-auth lane for OpenAI inference.
+6. Founder inference funding through the $79 managed-community plan or an explicitly grandfathered BYOK grant.
 7. Voice UX.
 8. Community monetization rails (including Stripe Connect Express onboarding).
 
@@ -38,15 +35,19 @@ Core AI-agent paths:
 
 ## Inference and Auth (Must Keep)
 
-- User-funded ChatGPT lane path for eligible OpenAI aliases.
-- Platform and public fallback lanes.
+- Platform-funded inference for managed communities.
+- Explicitly grandfathered founder BYOK inference where the owner has selected and activated that option.
 - Community-scoped agent tooling remains available to authenticated users with
   sufficient entitlement and quota.
 - Public and private edge routing contracts remain explicit.
 
 ## Monetization Rails (Must Keep)
 
-- Public funnel -> checkout start -> checkout finalize -> webhook chain.
+- $79/month founder funding per managed community, including the $20/month raw Luna allowance.
+- Unlimited paid community ownership: no account-level numeric cap, one funding
+  source per community, and no stacked unfunded drafts.
+- Public funnel -> paid member checkout start -> checkout finalize -> webhook chain.
+- Universal 2.9% Polynet application fee on paid-member community revenue.
 - Connect onboard start (Stripe Connect account onboarding).
 - Webhook idempotency + entitlement reconciliation path.
 

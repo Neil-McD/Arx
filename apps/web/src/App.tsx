@@ -26,7 +26,9 @@ import {
 import {
   formatChatTime, formatCount, formatMoneyBaseUnits, formatPercent, formatRelativeTimeFromIso as formatRelativeTime, } from "../../../shared/contentFormatting";
 import {
-  formatAccountTierLabel, isAccountTierFree, formatPlanPrice, formatSubscriptionPrice, } from "../../../shared/accountCommerce";
+  formatPlanPrice,
+  formatSubscriptionPrice,
+} from "../../../shared/accountCommerce";
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import {
@@ -68,7 +70,6 @@ import { useWebPublicFunnelEntryController } from "./controllers/useWebPublicFun
 import { useWebShellActionController } from "./controllers/useWebShellActionController";
 import { useWebCommunityFunnelAboutController } from "./controllers/useWebCommunityFunnelAboutController";
 import {
-  persistWebCreateCommunityIntent,
   useWebPendingAuthIntentController,
 } from "./controllers/useWebPendingAuthIntentController";
 import { useWebCommunityNavigationActions } from "./controllers/useWebCommunityNavigationActions";
@@ -383,10 +384,6 @@ export default function App() {
     setIsLoadingAccountCommerce,
     accountCommerceError,
     setAccountCommerceError,
-    isSettingDevAccountTier,
-    setIsSettingDevAccountTier,
-    devAccountTierError,
-    setDevAccountTierError,
     isStartingStripeConnectOnboarding,
     setIsStartingStripeConnectOnboarding,
     checkoutStatus,
@@ -1176,7 +1173,6 @@ export default function App() {
     setDecidingCommunityJoinRequestId,
   });
 
-  const openPremiumBilling = () => openGlobalSettings("billing");
 
   const {
     discoverCommunities,
@@ -1511,38 +1507,18 @@ export default function App() {
     redeemPendingPurchasesInFlightRef,
   });
   const {
-    isFreeAccountInfoOpen,
-    setIsFreeAccountInfoOpen,
-    openFreeAccountInfo,
-    canUseDevTierOverride,
     userAccessPolicy,
-    setDevAccountTier,
-    startPremiumSubscriptionCheckout,
   } = useWebAccountPlanController({
     session,
-    accountCommerceStatus,
-    ensureSession: ensureUsableAuthSession,
-    requireSignIn,
-    loadAccountCommerceStatus,
-    setIsSettingDevAccountTier,
-    setDevAccountTierError,
   });
 
   const communityUi = useWebCommunityUiController<
     AuthSession,
-    CommunityRecord,
-    AccountCommerceStatus
+    CommunityRecord
   >({
     ...authenticatedSessionArg,
-    communities,
-    communityRoleById,
-    accountCommerceStatus,
-    accountCommerceError,
     isAccountSetupComplete: isAccountSetupCompleteForBuilderActions,
     communityInitials,
-    loadAccountCommerceStatus,
-    persistCreateCommunityIntent:
-      persistWebCreateCommunityIntent,
     onPrimaryUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
@@ -1550,7 +1526,6 @@ export default function App() {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
     onAccountSetupRequired: openProfileSetup,
-    onOwnedCommunityLimitReached: openFreeAccountInfo,
     onCommunityCreated: (community) => {
       setCommunities((prev) => [community, ...prev]);
       setCommunityRoleById((prev) => ({ ...prev, [community.id]: "owner" }));
@@ -1971,9 +1946,7 @@ export default function App() {
       openDirectMessages: handleOpenDirectMessages,
       closeDirectMessages: handleCloseDirectMessages,
       closeThreadPage: handleCloseCommunityInteractionDrawer,
-      hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
       openCommunityCreateFlow: openCreateCommunityModal,
-      setIsFreeAccountInfoOpen,
     });
     useWebMissingCommunityRouteGuard({
       publicRouteKind: shellPublicRoute.kind,
@@ -2600,10 +2573,6 @@ export default function App() {
     },
     billing: {
       session,
-      accountCommerceStatus,
-      isLoadingAccountCommerce,
-      accountCommerceError,
-      startPremiumSubscriptionCheckout,
       founderBillingOverview: founderBilling.overview,
       isLoadingFounderBilling: founderBilling.isLoading,
       founderBillingActionCommunityId: founderBilling.actionCommunityId,
@@ -2611,10 +2580,6 @@ export default function App() {
       startFounderSubscriptionCheckout: founderBilling.startCheckout,
       openFounderBillingPortal: founderBilling.openPortal,
       refreshFounderBilling: founderBilling.refresh,
-      canUseDevTierOverride,
-      isSettingDevAccountTier,
-      setDevAccountTier,
-      devAccountTierError,
       pendingPurchaseClaims,
       isLoadingPendingPurchases,
       isRedeemingPendingPurchases,
@@ -2674,13 +2639,7 @@ export default function App() {
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
     session: session,
-    accountCommerceStatus,
-    setAccountCommerceError,
-    setIsFreeAccountInfoOpen,
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
-    onOpenPremiumBilling: openPremiumBilling,
-    isFreeAccountInfoOpen,
-    accountCommerceError,
     communityModalHostProps: communityUi.modalHostProps,
     founderFundingPromptProps: {
       isOpen:
@@ -3079,7 +3038,6 @@ export default function App() {
       ? () => navigateTo("/discover")
       : handleOpenDiscover,
     openMobileCreateCommunity,
-    hasCommunityCreateAccess: Number(accountCommerceStatus?.max_communities ?? 0) > 0,
     openCommunityCreateFlow: openCreateCommunityModal,
     communities,
     railCommunities,
@@ -3107,7 +3065,6 @@ export default function App() {
     draggingCommunityId,
     setCommunityRailListElement,
     getCommunityRailItemBindings,
-    setIsFreeAccountInfoOpen,
     handleOpenGlobalSettings: isVisitorCommunitySurface
       ? () => navigateTo(buildSettingsPath("profile"))
       : () => openGlobalSettings("profile"),

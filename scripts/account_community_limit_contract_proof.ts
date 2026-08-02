@@ -1,61 +1,42 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
-function read(path: string): string {
-  return readFileSync(path, "utf8");
-}
-
+const read = (path: string) => readFileSync(path, "utf8");
 const auth = read("convex/auth.ts");
-const communityLifecycle = read("convex/communityLifecycle.ts");
+const lifecycle = read("convex/communityLifecycle.ts");
+const founderInference = read("convex/founderInferenceCore.ts");
 const createController = read("shared/useCommunityCreateController.ts");
-const accountModal = read("shared/FreeAccountIncludedModal.tsx");
-const accountMatrix = read("docs/auth-money-access-matrix.md");
-const builderQuickstart = read("docs/product/guides/builder-quickstart.md");
+const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
+const shellController = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
+const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
+const accountController = read("apps/web/src/controllers/useWebAccountPlanController.ts");
+const matrix = read("docs/auth-money-access-matrix.md");
 
 assert.match(
   auth,
-  /if \(tier === "architect"\) \{[\s\S]*?maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,[\s\S]*?platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,/,
-  "Personal Premium must not increase community count or change community fees",
+  /CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT = Number\.MAX_SAFE_INTEGER/,
 );
+assert.match(auth, /getCanonicalTierByUserIdInternal[\s\S]*return "free"/);
+assert.doesNotMatch(auth, /POLYNET_FREE_MAX_COMMUNITIES|PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES|maxCommunities/);
+assert.doesNotMatch(auth, /if \(tier === "architect"\)/);
+assert.match(lifecycle, /resolveAdditionalManagedCommunityAdmission\(ctx, ownerId\)/);
+assert.match(lifecycle, /community_funding_required_before_create/);
+assert.doesNotMatch(lifecycle, /max_communities|community_owner_limit_reached/);
 assert.match(
-  auth,
-  /POLYNET_FREE_MAX_COMMUNITIES[\s\S]*return \{[\s\S]*?maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,[\s\S]*?platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,/,
-  "free account tier should allow one community with the universal community platform fee",
+  founderInference,
+  /resolveAdditionalManagedCommunityAdmission[\s\S]*query\("communities"[\s\S]*by_owner[\s\S]*resolveCommunityInferenceFundingAdmission/,
 );
-assert.match(
-  auth,
-  /max_communities: meta\.maxCommunities/,
-  "account commerce status must project the canonical tier max_communities value",
-);
-assert.match(
-  communityLifecycle,
-  /ctx\.runQuery\(api\.auth\.getAccountCommerceStatus,[\s\S]*?billingStatus\.max_communities/,
-  "community creation must load max_communities from account commerce status",
-);
-assert.match(
-  communityLifecycle,
-  /ownedCommunities\.length >= maxCommunities[\s\S]*?community_owner_limit_reached/,
-  "community creation must enforce the server-side owner limit",
-);
-assert.match(
-  createController,
-  /accountCommerceStatus\?\.max_communities/,
-  "community create modal open path must use backend max_communities",
-);
-assert.match(
-  createController,
-  /status\.max_communities/,
-  "community create submit path must use backend max_communities",
-);
+assert.doesNotMatch(founderInference, /MAX_COMMUNITIES|fundedCommunityCount\s*[><=]/);
+assert.match(createController, /community_funding_required_before_create/);
+assert.doesNotMatch(createController, /max_communities|community_owner_limit_reached|onOwnedCommunityLimitReached/);
+assert.match(createModal, /Create and continue to payment/);
+assert.doesNotMatch(createModal, /max_communities|Community limit reached|needsPlan|limitReached/);
+assert.doesNotMatch(shellController, /hasCommunityCreateAccess|setIsFreeAccountInfoOpen/);
+assert.doesNotMatch(mobileController, /hasCommunityCreateAccess|setIsFreeAccountInfoOpen/);
+assert.equal(existsSync("shared/CommunityLimitModal.tsx"), false);
+assert.doesNotMatch(accountController, /Premium|startCloudPremium|setDevAccountTier/i);
+assert.match(matrix, /\$79 \/ month \/ managed community/);
+assert.match(matrix, /unlimited number of communities/);
+assert.match(matrix, /2\.9%/);
 
-for (const [label, contents] of [
-  ["free account modal", accountModal],
-  ["auth money access matrix", accountMatrix],
-  ["builder quickstart", builderQuickstart],
-] as const) {
-  assert.doesNotMatch(contents, /free (authenticated )?(user|account)s? (can|may).*(own|create|build) two communit/i, `${label} should not describe a two-community free limit`);
-}
-
-assert.match(accountModal, /Community funding is managed separately/i, "free account modal must separate community funding from Premium");
-assert.match(accountMatrix, /can own one community/i, "auth money access matrix must describe one free community");
-assert.match(builderQuickstart, /Community creation and funding are separate from Polynet Premium/i, "builder quickstart must separate community funding from Premium");
+console.log("account_community_limit_contract_proof: unlimited paid communities ok");

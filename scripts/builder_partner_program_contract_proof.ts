@@ -296,17 +296,11 @@ function proveLegalAndDocs(): void {
     "active legal content",
   );
 
-  for (const marker of [
-    "Builder Partner v1 is retired",
-    "future_partner_grandfather_v1",
-    "communityInferencePolicies",
-    "migration residue",
-    "founderInferenceGrants",
-    "exactly nine verified existing community owners",
-    "seven legacy Partner table schemas and the temporary migration code are deleted",
-  ]) {
-    assertIncludes(billingDocs, marker, "billing documentation");
-  }
+  assertExcludes(
+    billingDocs,
+    /Builder Partner|partner commission|partner payout|paid-tool usage/i,
+    "current billing documentation",
+  );
   for (const marker of [
     "Builder Partner v1 terminal state",
     "four retained grandfather grants",

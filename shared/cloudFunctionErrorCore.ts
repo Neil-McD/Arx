@@ -1,16 +1,7 @@
-import {
-  classifyPaidUsageFailure,
-  normalizePaidUsageBillingMode,
-  type PaidUsageBillingMode,
-} from "./paidUsageBilling";
-import { normalizePaidToolKind, type PaidToolKind } from "./workspaceCredits";
-
 export type CloudFunctionErrorCategory =
   | "auth"
   | "rate_limited"
   | "quota"
-  | "workspace_credits"
-  | "plan"
   | "provider_connection_required"
   | "misconfigured"
   | "disabled"
@@ -25,9 +16,6 @@ export type CloudFunctionError = {
   message: string;
   requestId: string | null;
   stage: string | null;
-  toolKind: PaidToolKind | null;
-  requiredCredits: number | null;
-  paidUsageBillingMode: PaidUsageBillingMode | null;
   category: CloudFunctionErrorCategory;
 };
 
@@ -86,7 +74,6 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
   status: number;
   code: string | null;
   message: string;
-  paidUsageBillingMode?: PaidUsageBillingMode | null;
 }): CloudFunctionErrorCategory {
   const code = (input.code ?? "").toLowerCase();
   const message = (input.message ?? "").toLowerCase();
@@ -95,19 +82,11 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
   if (code === "rate_limited") return "rate_limited";
   if (code === "platform_inference_quota_exceeded" || code === "provider_inference_quota_exceeded") return "quota";
   if (
-    classifyPaidUsageFailure({
-      code,
-      paidUsageBillingMode: input.paidUsageBillingMode,
-    }).isPaidUsageFailure
-  ) {
-    return "workspace_credits";
-  }
-  if (
     code === "platform_inference_not_allowed" ||
     code === "tier_required" ||
     code === "plan_required"
   )
-    return "plan";
+    return "unavailable";
   if (code === "provider_connection_required") return "provider_connection_required";
   if (
     code === "platform_inference_misconfigured" ||
@@ -133,18 +112,10 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
   return "unknown";
 }
 
-function normalizePositiveNumber(value: unknown): number | null {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
 async function readFunctionErrorBody(response: Response): Promise<{
   code: string | null;
   message: string;
   stage: string | null;
-  toolKind: PaidToolKind | null;
-  requiredCredits: number | null;
-  paidUsageBillingMode: PaidUsageBillingMode | null;
 }> {
   try {
     const json = (await response.clone().json()) as {
@@ -152,14 +123,6 @@ async function readFunctionErrorBody(response: Response): Promise<{
       message?: unknown;
       error?: unknown;
       stage?: unknown;
-      tool_kind?: unknown;
-      toolKind?: unknown;
-      paid_tool_kind?: unknown;
-      required_credits?: unknown;
-      requiredCredits?: unknown;
-      paid_usage_billing_mode?: unknown;
-      paidUsageBillingMode?: unknown;
-      billing_mode?: unknown;
     };
     const code = normalizeCode(json?.code);
     const message =
@@ -167,13 +130,8 @@ async function readFunctionErrorBody(response: Response): Promise<{
       (typeof json?.error === "string" && json.error.trim()) ||
       "";
     const stage = normalizeCode(json?.stage);
-    const toolKind = normalizePaidToolKind(json?.tool_kind ?? json?.toolKind ?? json?.paid_tool_kind);
-    const requiredCredits = normalizePositiveNumber(json?.required_credits ?? json?.requiredCredits);
-    const paidUsageBillingMode = normalizePaidUsageBillingMode(
-      json?.paid_usage_billing_mode ?? json?.paidUsageBillingMode ?? json?.billing_mode,
-    );
-    if (code || message || stage || toolKind || requiredCredits || paidUsageBillingMode) {
-      return { code, message, stage, toolKind, requiredCredits, paidUsageBillingMode };
+    if (code || message || stage) {
+      return { code, message, stage };
     }
   } catch {
     // ignore
@@ -186,9 +144,6 @@ async function readFunctionErrorBody(response: Response): Promise<{
         code: null,
         message: normalizePlainTextError(text, response.status),
         stage: null,
-        toolKind: null,
-        requiredCredits: null,
-        paidUsageBillingMode: null,
       };
     }
   } catch {
@@ -199,9 +154,6 @@ async function readFunctionErrorBody(response: Response): Promise<{
     code: null,
     message: "",
     stage: null,
-    toolKind: null,
-    requiredCredits: null,
-    paidUsageBillingMode: null,
   };
 }
 
@@ -215,7 +167,6 @@ export async function readCloudFunctionErrorCore(response: Response): Promise<Cl
     status: response.status,
     code: parsed.code,
     message,
-    paidUsageBillingMode: parsed.paidUsageBillingMode,
   });
   return {
     status: response.status,
@@ -223,9 +174,6 @@ export async function readCloudFunctionErrorCore(response: Response): Promise<Cl
     message,
     requestId,
     stage: parsed.stage ?? stageHeader,
-    toolKind: parsed.toolKind,
-    requiredCredits: parsed.requiredCredits,
-    paidUsageBillingMode: parsed.paidUsageBillingMode,
     category,
   };
 }
@@ -252,8 +200,6 @@ export function formatCloudFunctionErrorMessageCore(error: CloudFunctionError): 
 
 export function shouldFallbackFromPlatformErrorToPublicCore(error: CloudFunctionError): boolean {
   if (error.category === "quota") return true;
-  if (error.category === "workspace_credits") return false;
-  if (error.category === "plan") return true;
   if (error.category === "provider_connection_required") return true;
   if (error.category === "misconfigured") return true;
   if (error.category === "disabled") return true;

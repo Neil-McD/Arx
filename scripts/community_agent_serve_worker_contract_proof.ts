@@ -59,9 +59,10 @@ assert.match(
 );
 assert.match(
   readBlock,
-  /resolveCommunityInferenceFundingAdmission[\s\S]*funding\.mode === "legacy_requester_chatgpt"[\s\S]*requesterHasChatgptConnection/,
-  "serve context should require requester ChatGPT only for the bounded transition",
+  /resolveCommunityInferenceFundingAdmission[\s\S]*owner_funding_choice_required[\s\S]*activate an OpenAI API key or fund this community at \$79\/month/,
+  "serve context should fail closed until the owner chooses BYOK or the founder plan",
 );
+assert.doesNotMatch(readBlock, /legacy_requester_chatgpt|requesterHasChatgptConnection/);
 assert.match(
   readBlock,
   /readCanonicalCommunityAgentContext[\s\S]*!canonicalContext\.agentEnabled[\s\S]*agent_disabled/,

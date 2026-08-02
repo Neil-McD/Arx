@@ -34,11 +34,22 @@ This file is the execution contract for agents working in this repository.
 - Gated community access model (including for `Published` communities).
 - Public community funnels for founder-shared links (YouTube/social/direct).
 - Core member UX: join, navigate, post/chat, and voice.
-- Billing and provider/account connections.
-- Automated payouts for community builders (existing community payout flow).
+- One founder plan: $79 monthly for one specific managed community, including
+  up to $20 of raw GPT 5.6 Luna model cost per billing cycle.
+- A paying founder may own an unlimited number of communities. There is no
+  account-level numeric cap; each additional community requires its own current
+  funding, and a founder cannot stack multiple unfunded drafts.
+- Paid-member community commerce through Stripe Connect with one 2.9% Polynet
+  application fee, connected-account payouts, and proportional fee reversals
+  for successful refunds.
+- Exact legacy-founder BYOK activation and role-backed platform-owner
+  complimentary funding. There is no personal paid plan or commercial account
+  tier.
+- Provider-cost evidence, usage receipts, and rate/provider-quota enforcement.
 - Community-scoped AI agent interactions embedded in community surfaces.
 - Official Polynet MCP access for external agent harnesses.
-- Tiered access and quota enforcement for AI usage.
+- One authenticated capability surface; tool/provider usage is platform-funded
+  and remains rate-limited and cost-audited.
 - Existing thread and execution substrate retained only where current Polynet capabilities depend on it; it is not a standalone MVP destination.
 - Ongoing `App.tsx` decomposition and cleanup required for launch stability.
 
@@ -57,6 +68,10 @@ This file is the execution contract for agents working in this repository.
   remains in scope.
 - Duplicate/legacy UI surfaces not required for MVP journeys.
 - Extra inference-gating complexity beyond minimal tier limits.
+- Personal Premium subscriptions, personal tool credits or top-ups, card-backed
+  usage collection, auto-recharge, and Free-versus-Premium capability gates.
+- Transitional requester-ChatGPT community funding. An eligible legacy founder
+  must activate BYOK or fund each managed community at $79 monthly.
 - Nice-to-have platform expansions not directly improving creator setup + member participation.
 
 ---
@@ -105,7 +120,22 @@ If a cleanup touches any of the above, require explicit human confirmation.
 - Redirects are UX only; provider/webhook verification is authoritative.
 - `checkout_finalize` must remain idempotent.
 - Access decisions are entitlement-driven and evaluated per request.
-- Automated payouts for community builders remain active for MVP.
+- Each active $79 founder subscription authorizes exactly one attached managed
+  community and carries a $20 raw Luna-cost allowance for that community.
+- Community creation has no numeric owner limit. The first community may be
+  created as an unlisted checkout draft; each next community is admitted only
+  when every existing owned community has current canonical funding through its
+  own subscription, an exact active legacy BYOK grant, or the operator grant.
+- Every paid-member community charge uses the same 2.9% application fee,
+  independent of founder funding mode. Stripe processing fees remain separate.
+- Stripe Connect onboarding, connected-account subscription lifecycle, payouts,
+  disputes, and proportional application-fee refunds remain active for MVP.
+- Platform-owner complimentary funding derives only from one active canonical
+  `operatorRoles.owner` row. Legacy BYOK derives only from the bounded founder
+  grant plus a legacy-eligible community policy.
+- Personal Premium, tool-balance purchases, auto-recharge, and card-backed tool
+  collection are retired. Historical financial rows remain canonical audit and
+  reconciliation evidence until explicitly migrated; they grant no access.
 
 ### Security and Tool Boundaries
 - Web runtime cannot execute local filesystem/shell tools.

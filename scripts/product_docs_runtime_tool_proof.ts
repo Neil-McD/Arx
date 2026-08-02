@@ -52,21 +52,21 @@ function proveDocsCapabilityGate() {
   );
   assert.equal(
     authenticatedFree.entitledCapabilityFamilies.includes("web_research"),
-    false,
-    "authenticated free users should not receive premium web research tools",
+    true,
+    "authenticated users should receive web research tools without a paid account tier",
   );
   assert.equal(
     authenticatedFree.entitledCapabilityFamilies.includes("sandbox_tools"),
-    false,
-    "authenticated free users should not receive premium sandbox tools",
+    true,
+    "authenticated users should receive sandbox tools without a paid account tier",
   );
   assert.equal(
     authenticatedFree.entitledCapabilityFamilies.includes("workspace_tools"),
-    false,
-    "authenticated free users should not receive premium workspace tools",
+    true,
+    "authenticated users should receive workspace tools without a paid account tier",
   );
 
-  const architect = resolveCanonicalGatePolicy({
+  const retiredArchitectInput = resolveCanonicalGatePolicy({
     surface: "web",
     authState: "authenticated",
     tier: "architect",
@@ -75,8 +75,12 @@ function proveDocsCapabilityGate() {
     hasCommunityContext: true,
     hasProjectContext: true,
   });
-  assert.equal(architect.entitledCapabilityFamilies.includes("product_docs"), true);
-  assert.equal(architect.activeCapabilityFamilies.includes("product_docs"), true);
+  assert.equal(retiredArchitectInput.decision.effectiveTier, "auth_free");
+  assert.deepEqual(
+    retiredArchitectInput.entitledCapabilityFamilies,
+    authenticatedFree.entitledCapabilityFamilies,
+  );
+  assert.equal(retiredArchitectInput.activeCapabilityFamilies.includes("product_docs"), true);
   console.log("PASS: product docs capability is available to authenticated platform users");
 }
 

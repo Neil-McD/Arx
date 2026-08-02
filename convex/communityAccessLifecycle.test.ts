@@ -57,24 +57,45 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
         updatedAt: nowMs + offset,
       });
 
+    const openCommunityId = await insertCommunity("access-lifecycle-open", "open", 1);
+    const approvalCommunityId = await insertCommunity(
+      "access-lifecycle-approval",
+      "approval",
+      2,
+    );
+    const paidCommunityId = await insertCommunity(
+      "access-lifecycle-paid",
+      "paid_subscription",
+      3,
+    );
+    for (const [index, communityId] of [
+      openCommunityId,
+      approvalCommunityId,
+      paidCommunityId,
+    ].entries()) {
+      await ctx.db.insert("founderSubscriptions", {
+        ownerUserId: ownerId,
+        communityId,
+        provider: "stripe",
+        providerCustomerId: `cus_access_lifecycle_${index}`,
+        providerSubscriptionId: `sub_access_lifecycle_${index}`,
+        providerPriceId: "price_founder_79_monthly",
+        status: "active",
+        currentPeriodStartAt: nowMs - 1_000,
+        currentPeriodEndAt: nowMs + 10 * 365 * 24 * 60 * 60 * 1_000,
+        cancelAtPeriodEnd: false,
+        lastProviderEventCreatedAt: nowMs,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+    }
+
     return {
       ownerId,
       memberId,
-      openCommunityId: await insertCommunity(
-        "access-lifecycle-open",
-        "open",
-        1,
-      ),
-      approvalCommunityId: await insertCommunity(
-        "access-lifecycle-approval",
-        "approval",
-        2,
-      ),
-      paidCommunityId: await insertCommunity(
-        "access-lifecycle-paid",
-        "paid_subscription",
-        3,
-      ),
+      openCommunityId,
+      approvalCommunityId,
+      paidCommunityId,
     };
   });
 }
@@ -180,6 +201,18 @@ test("unfunded managed communities are absent from public acquisition surfaces",
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.openCommunityId, {
       inferenceFundingPolicy: "managed_required",
+    });
+    const existingSubscription = await ctx.db
+      .query("founderSubscriptions")
+      .withIndex("by_community", (q) => q.eq("communityId", fixture.openCommunityId))
+      .first();
+    if (!existingSubscription) throw new Error("fixture_founder_subscription_missing");
+    await ctx.db.patch(existingSubscription._id, {
+      status: "canceled",
+      currentPeriodEndAt: nowMs - 1,
+      endedAt: nowMs,
+      revokedReason: "test_unfunded_state",
+      updatedAt: nowMs,
     });
     await ctx.db.insert("founderInferenceGrants", {
       userId: fixture.memberId,

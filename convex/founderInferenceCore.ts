@@ -14,6 +14,7 @@ import {
 import {
   getFounderSubscriptionByCommunity,
   settleFounderUsageReservation,
+  type FounderSubscriptionRow,
   type FounderUsageCycleRow,
 } from "./founderPlanCore";
 import {
@@ -67,6 +68,10 @@ export type FounderInferenceReceiptRow = {
   updatedAt: number;
 };
 
+function normalizedId(value: unknown): string {
+  return String(value ?? "").trim();
+}
+
 export async function getExistingFounderInferenceGrant(
   ctx: any,
   userId: any,
@@ -77,14 +82,6 @@ export async function getExistingFounderInferenceGrant(
       q.eq("userId", userId).eq("cohortKey", EXISTING_FOUNDER_INFERENCE_COHORT_KEY),
     )
     .first()) as FounderInferenceGrantRow | null;
-}
-
-export async function existingFounderInferenceCohortIsInitialized(ctx: any): Promise<boolean> {
-  const row = await ctx.db
-    .query("founderInferenceGrants" as any)
-    .withIndex("by_cohort", (q: any) => q.eq("cohortKey", EXISTING_FOUNDER_INFERENCE_COHORT_KEY))
-    .first();
-  return Boolean(row);
 }
 
 export function normalizeCommunityInferenceFundingPolicy(
@@ -202,17 +199,6 @@ export async function resolveCommunityInferenceFundingAdmission(
   if (explicitFundingPolicy === COMMUNITY_FUNDING_POLICY_MANAGED) {
     return { ok: false, code: "founder_plan_required" };
   }
-  if (!(await existingFounderInferenceCohortIsInitialized(ctx))) {
-    return {
-      ok: true,
-      mode: "legacy_requester_chatgpt",
-      transitional: true,
-      payerUserId: null,
-      grantId: null,
-      modelId: null,
-    };
-  }
-
   const fundingPolicy = await resolveCommunityInferenceFundingPolicy({
     ctx,
     community,
@@ -224,14 +210,7 @@ export async function resolveCommunityInferenceFundingAdmission(
   const grant = await getExistingFounderInferenceGrant(ctx, community.ownerId);
   if (!grant) return { ok: false, code: "founder_plan_required" };
   if (grant.status === "approved") {
-    return {
-      ok: true,
-      mode: "legacy_requester_chatgpt",
-      transitional: true,
-      payerUserId: null,
-      grantId: null,
-      modelId: null,
-    };
+    return { ok: false, code: "owner_funding_choice_required" };
   }
   if (grant.status === "suspended") {
     return { ok: false, code: "owner_funding_suspended" };
@@ -247,6 +226,47 @@ export async function resolveCommunityInferenceFundingAdmission(
     grantId: grant._id,
     modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
   };
+}
+
+export type AdditionalManagedCommunityAdmission =
+  | {
+      ok: true;
+      fundedCommunityCount: number;
+    }
+  | {
+      ok: false;
+      blockingCommunityId: any;
+      code: Exclude<CommunityInferenceFundingAdmission, { ok: true }>["code"];
+    };
+
+/**
+ * Community ownership has no account-level cap. A founder may create the next
+ * managed community only after every existing community has current funding.
+ * This permits unlimited paid communities while preventing stacked unpaid
+ * drafts. Operator and legacy BYOK communities pass through the same canonical
+ * funding admission used by publish and inference.
+ */
+export async function resolveAdditionalManagedCommunityAdmission(
+  ctx: any,
+  ownerUserId: any,
+): Promise<AdditionalManagedCommunityAdmission> {
+  const communities = (await ctx.db
+    .query("communities" as any)
+    .withIndex("by_owner", (q: any) => q.eq("ownerId", ownerUserId))
+    .collect()) as Array<{ _id: any; createdAt?: unknown }>;
+  communities.sort((left, right) =>
+    Number(left.createdAt ?? 0) - Number(right.createdAt ?? 0));
+  for (const community of communities) {
+    const funding = await resolveCommunityInferenceFundingAdmission(ctx, community._id);
+    if (!funding.ok) {
+      return {
+        ok: false,
+        blockingCommunityId: community._id,
+        code: funding.code,
+      };
+    }
+  }
+  return { ok: true, fundedCommunityCount: communities.length };
 }
 
 export async function communityFounderFundingAllowsPublicAccess(
@@ -308,11 +328,24 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
     if (!receipt.usageCycleId || !receipt.founderSubscriptionId) {
       throw new Error("founder_usage_receipt_authority_missing");
     }
-    const cycle = (await args.ctx.db.get(
-      receipt.usageCycleId as any,
-    )) as FounderUsageCycleRow | null;
-    if (!cycle || String(cycle.founderSubscriptionId) !== String(receipt.founderSubscriptionId)) {
+    const [cycle, subscription] = (await Promise.all([
+      args.ctx.db.get(receipt.usageCycleId as any),
+      args.ctx.db.get(receipt.founderSubscriptionId as any),
+    ])) as [FounderUsageCycleRow | null, FounderSubscriptionRow | null];
+    if (
+      !cycle ||
+      !subscription ||
+      normalizedId(cycle.founderSubscriptionId) !== normalizedId(subscription._id) ||
+      normalizedId(subscription._id) !== normalizedId(receipt.founderSubscriptionId)
+    ) {
       throw new Error("founder_usage_cycle_authority_mismatch");
+    }
+    if (
+      normalizedId(cycle.communityId) !== normalizedId(receipt.communityId) ||
+      normalizedId(subscription.communityId) !== normalizedId(receipt.communityId) ||
+      normalizedId(subscription.ownerUserId) !== normalizedId(receipt.payerUserId)
+    ) {
+      throw new Error("founder_usage_cycle_community_mismatch");
     }
     if (
       receipt.pricingVersion !== cycle.pricingVersion ||

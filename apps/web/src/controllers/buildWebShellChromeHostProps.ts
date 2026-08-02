@@ -81,7 +81,6 @@ export function buildWebShellChromeHostProps(params: {
   directMessagesUnreadCount: number;
   handleOpenDiscover: () => void;
   openMobileCreateCommunity: () => void;
-  hasCommunityCreateAccess: boolean;
   openCommunityCreateFlow: () => void;
   communities: CommunityLike[];
   railCommunities: CommunityLike[];
@@ -98,7 +97,6 @@ export function buildWebShellChromeHostProps(params: {
   draggingCommunityId: string | null;
   setCommunityRailListElement: WebShellChromeHostProps["communityShell"]["setCommunityRailListElement"];
   getCommunityRailItemBindings: WebShellChromeHostProps["communityShell"]["getCommunityRailItemBindings"];
-  setIsFreeAccountInfoOpen: (value: boolean) => void;
   handleOpenGlobalSettings: () => void;
   settingsGroup: SettingsGroup;
   setSettingsPage: (page: WebShellChromeHostProps["settingsSidebar"]["onSelectPage"] extends (page: infer T) => void ? T : never) => void;
@@ -238,13 +236,7 @@ export function buildWebShellChromeHostProps(params: {
       draggingCommunityId: params.draggingCommunityId,
       setCommunityRailListElement: params.setCommunityRailListElement,
       getCommunityRailItemBindings: params.getCommunityRailItemBindings,
-      onOpenCommunityCreateCta: () => {
-        if (params.hasCommunityCreateAccess) {
-          params.openCommunityCreateFlow();
-          return;
-        }
-        params.setIsFreeAccountInfoOpen(true);
-      },
+      onOpenCommunityCreateCta: params.openCommunityCreateFlow,
       communityCreateCtaLabel: "+",
       communityCreateCtaTitle: "Create community",
       activeView: params.activeView,

@@ -1,6 +1,5 @@
 import { Bell, BellOff, MessageCircle, MessageCirclePlus, Search, UsersRound } from "lucide-react";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
-import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import type {
   DirectMessageConversation,
   DirectMessageNetworkPerson,
@@ -229,7 +228,6 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                 <span className="community-dm-inbox-row-top">
                   <span className="community-dm-inbox-row-name-line">
                     <span className="community-dm-inbox-row-name">{peerLabel}</span>
-                    <PremiumMemberBadge badge={peer?.premium_badge ?? null} />
                   </span>
                   <span className="community-dm-inbox-row-meta-group">
                     {isMuted ? (
@@ -289,7 +287,6 @@ export function WebDirectMessageInboxPanel(props: WebDirectMessageInboxPanelProp
                     <span className="community-dm-inbox-row-top">
                       <span className="community-dm-inbox-row-name-line">
                         <span className="community-dm-inbox-row-name">{displayName}</span>
-                        <PremiumMemberBadge badge={person.premium_badge ?? null} />
                       </span>
                     </span>
                     <span className="community-dm-inbox-row-meta">{presenceLabel}</span>

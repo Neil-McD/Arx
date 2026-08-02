@@ -149,7 +149,7 @@ for (const [ownerPath, requiredMarkers] of [
   ],
   [
     "apps/web/src/controllers/useWebAccountPlanController.ts",
-    ["startCloudPremiumSubscriptionCheckout", "setDevAccountTierCanonical"],
+    ["resolveUserAccessPolicy", "userAccessPolicy"],
   ],
   [
     "apps/web/src/controllers/useWebCommunityVoiceController.ts",

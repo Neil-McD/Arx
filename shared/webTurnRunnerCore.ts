@@ -1,16 +1,12 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
-import type { PaidUsageBillingMode } from "./paidUsageBilling";
 import type { RuntimeEngine } from "./runtimeEngine";
 import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface";
 import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext";
-import type { PaidToolKind } from "./workspaceCredits";
 
 export type InferenceIssueModalState = {
   reason:
     | "quota"
-    | "workspace_credits"
-    | "plan"
     | "provider_connection_required"
     | "misconfigured"
     | "disabled"
@@ -18,9 +14,6 @@ export type InferenceIssueModalState = {
   threadId: string;
   mode: "respond" | "regenerate";
   message: string | null;
-  toolKind?: PaidToolKind | null;
-  requiredCredits?: number | null;
-  paidUsageBillingMode?: PaidUsageBillingMode | null;
 };
 
 export type WebStreamingMeta<MemoryUsedItemT, HistoryUsedItemT, CommunityEvidenceUsedT> = {
@@ -228,8 +221,6 @@ export function buildPublicTurnMessages<ThreadMessageT extends PublicTurnThreadM
 export function mapInferenceIssueReason(
   category:
     | "quota"
-    | "workspace_credits"
-    | "plan"
     | "provider_connection_required"
     | "misconfigured"
     | "disabled"
@@ -237,8 +228,6 @@ export function mapInferenceIssueReason(
     | string,
 ): InferenceIssueModalState["reason"] {
   if (category === "quota") return "quota";
-  if (category === "workspace_credits") return "workspace_credits";
-  if (category === "plan") return "plan";
   if (category === "provider_connection_required") return "provider_connection_required";
   if (category === "misconfigured") return "misconfigured";
   if (category === "disabled") return "disabled";

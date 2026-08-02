@@ -105,10 +105,6 @@ export function paidToolKindForLedgerToolName(value: unknown): PaidToolKind | nu
   return null;
 }
 
-export function getPaidToolBalancePrimaryMessage(kind: PaidToolKind | null | undefined): string {
-  return kind ? PAID_TOOL_DEFINITIONS[kind].primaryMessage : "Premium tools need tool balance.";
-}
-
 export function getPaidToolLedgerLabel(toolName: string): string | null {
   const kind = paidToolKindForLedgerToolName(toolName);
   return kind ? PAID_TOOL_DEFINITIONS[kind].operatorLabel : null;

@@ -46,8 +46,9 @@ const runtimeAgentLoopSource = readFileSync(
   "utf8",
 );
 const classifyIndex = runtimeAgentLoopSource.indexOf("classifyWebResearchUrlAccess");
-const reserveIndex = runtimeAgentLoopSource.indexOf("reservePaidToolCredits", classifyIndex);
+const executeIndex = runtimeAgentLoopSource.indexOf("executeWebResearch", classifyIndex);
 assert.ok(classifyIndex > 0, "runtime loop should classify web_research URLs");
-assert.ok(reserveIndex > classifyIndex, "runtime loop should reject local web_research URLs before credit reservation");
+assert.ok(executeIndex > classifyIndex, "runtime loop should reject local web_research URLs before provider execution");
+assert.doesNotMatch(runtimeAgentLoopSource, /reservePaidToolCredits|reserveCreditsInternal/);
 
 console.log("web_research_local_url_policy_proof: ok");

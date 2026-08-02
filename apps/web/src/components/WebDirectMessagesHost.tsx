@@ -272,7 +272,6 @@ function buildVirtualConversationForPerson(
         avatar_focus_x: person.avatar_focus_x ?? 0.5,
         avatar_focus_y: person.avatar_focus_y ?? 0.5,
         avatar_zoom: person.avatar_zoom ?? 1,
-        premium_badge: person.premium_badge ?? null,
         status: "active",
         last_read_seq: 0,
       },

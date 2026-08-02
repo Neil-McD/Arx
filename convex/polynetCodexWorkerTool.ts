@@ -170,9 +170,8 @@ export function buildPolynetCodexWorkerToolTarget(): string | null {
 
 // The single bridged-tool endpoint: every PolyNet platform capability a
 // headless Codex turn can invoke lands here. One trust check (the same
-// run/owner/thread/engine validation as ingest and terminal), one billing
-// hook (per surface-entry policy; "free" today, credit reservation when paid
-// tools join), one audit point. Tool semantics come from the SAME
+// run/owner/thread/engine validation as ingest and terminal), one centralized
+// provider-admission and cost-evidence boundary, one audit point. Tool semantics come from the SAME
 // executeRetrievalHarnessTool dispatch the native loop uses.
 export async function handlePolynetCodexWorkerTool(
   ctx: any,

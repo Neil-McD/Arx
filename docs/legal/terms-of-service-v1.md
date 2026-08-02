@@ -11,7 +11,7 @@ status: active
 
 Effective May 21, 2026.
 
-These Terms of Service govern your access to and use of Polynet, including accounts, communities, AI features, paid communities, paid tools, and related services. By creating an account, completing account setup, using Polynet, or clicking to accept these terms, you agree to these terms.
+These Terms of Service govern your access to and use of Polynet, including accounts, communities, AI features, paid communities, founder subscriptions, and related services. By creating an account, completing account setup, using Polynet, or clicking to accept these terms, you agree to these terms.
 
 If you use Polynet on behalf of an organization, you represent that you have authority to bind that organization. If you do not agree to these terms, do not use Polynet.
 
@@ -65,15 +65,11 @@ Paid community access may be subscription-based. Subscriptions may renew until c
 
 Polynet may withhold, reverse, adjust, suspend, or delay payment-related activity when needed for fraud prevention, dispute handling, risk review, chargeback handling, legal compliance, account restrictions, provider requirements, or platform safety.
 
-## Paid Tool Usage And Tool Balance
+## Founder Subscription And AI Usage
 
-Polynet may offer paid tools, tool balance, usage credits, reservations, or metered features. Paid tools may include workspace tools, web research, voice input, compute, external provider calls, or other usage-based capabilities.
+Polynet may offer a founder subscription for each managed community. The current plan is $79 USD per month for one attached community and includes up to $20 in raw GPT 5.6 Luna model cost for that community's billing cycle. Provider-verified subscription state is authoritative. An inactive subscription or exhausted allowance may suspend managed-community AI and public acquisition until funding is restored.
 
-Paid tools are metered. Polynet may reserve tool balance before final usage is known and later settle the final amount based on usage records, provider cost evidence, elapsed runtime, model or tool selection, audio duration, vendor cost, or reasonable estimates where exact provider evidence is unavailable.
-
-Unused reservations may be released or credited back to tool balance where supported by the system. If final usage exceeds an initial reservation or available balance, Polynet may block additional paid-tool reservations until the unpaid amount is cleared.
-
-Tool balance is not a bank account, stored-value account, cash account, or cash-equivalent instrument. Except where required by law or expressly stated by Polynet, tool balance is non-refundable and usable only for supported Polynet features.
+Supported product tools may be subject to rate limits, provider quotas, safety boundaries, availability limits, and internal provider-cost metering. Provider-cost records are Polynet accounting evidence; they are not a customer tool balance, stored-value account, or separate customer charge.
 
 ## AI Features And Outputs
 
@@ -116,7 +112,7 @@ If you provide feedback or suggestions, Polynet may use them without restriction
 
 ## Partner Program
 
-The Builder Partner Program is governed by separate Builder Partner Terms. Those terms apply only if you participate in that program. Partner commissions, attribution, payout timing, eligibility, disclosure duties, and clawbacks are controlled by the applicable Builder Partner Terms and backend records.
+Retired incentive or partner-program records and previously accepted terms may be retained only where needed for legal, tax, fraud-prevention, accounting, dispute, or reconciliation obligations. They do not create a current program or entitlement.
 
 ## Suspension And Termination
 

@@ -61,7 +61,7 @@ polynet_write
 polynet_call
 ```
 
-Premium tools such as web research are optional overlays. They do not fork or
+Tools such as web research are optional overlays. They do not fork or
 expand the base Polynet repository contract.
 
 ## Context and Authority

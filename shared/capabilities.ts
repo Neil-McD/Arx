@@ -53,11 +53,7 @@ function resolveUserAccessPolicyViaCanonicalGate(input: {
   const isAnonymous = effectiveTier === "anon_free";
   const isAuthenticated = !isAnonymous;
 
-  const tier: AccountTier = isAnonymous
-    ? "unknown"
-    : effectiveTier === "architect"
-      ? effectiveTier
-      : "free";
+  const tier: AccountTier = isAnonymous ? "unknown" : "free";
 
   const threadMode: ThreadMode = isAuthenticated ? "multi_cloud" : "single_guest";
   const entitledCapabilityFamilies = policy.entitledCapabilityFamilies;

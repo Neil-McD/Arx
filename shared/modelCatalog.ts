@@ -17,7 +17,7 @@ export type ModelToggle = {
   enabled: boolean;
 };
 
-export type PremiumModelCatalogEntry = {
+export type ModelCatalogEntry = {
   id: string;
   label: string;
   section: Exclude<ModelSectionId, "all" | "free">;
@@ -25,7 +25,7 @@ export type PremiumModelCatalogEntry = {
   supportedFundingSources: readonly ModelFundingSource[];
 };
 
-type CatalogModelEntry = PremiumModelCatalogEntry & {
+type CatalogModelEntry = ModelCatalogEntry & {
   surfaces: readonly ModelCatalogSurface[];
   defaultEnabled: boolean;
   supportsImageInput: boolean;
@@ -54,7 +54,7 @@ const FREE_MODELS: readonly FreeModelEntry[] = [
   },
 ];
 
-const PREMIUM_MODELS: readonly CatalogModelEntry[] = [
+const CONNECTED_PROVIDER_MODELS: readonly CatalogModelEntry[] = [
   { id: DEFAULT_ACTIVE_MODEL_ID, label: DEFAULT_ACTIVE_MODEL_LABEL, section: "openai", description: "OpenAI", supportedFundingSources: ["user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
   { id: "gpt-5.5", label: "GPT 5.5", section: "openai", description: "OpenAI compatibility", supportedFundingSources: ["user_key", "user_chatgpt"], surfaces: ["web"], defaultEnabled: false, supportsImageInput: true },
   { id: "sonnet-4.6", label: "Sonnet 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
@@ -95,15 +95,15 @@ export function getPublicFreeModelMap(): Record<string, string> {
 }
 
 export function getDefaultModelToggles(surface: ModelCatalogSurface): ModelToggle[] {
-  return PREMIUM_MODELS.filter((model) => model.surfaces.includes(surface) && model.defaultEnabled).map((model) => ({
+  return CONNECTED_PROVIDER_MODELS.filter((model) => model.surfaces.includes(surface) && model.defaultEnabled).map((model) => ({
     id: model.id,
     label: model.label,
     enabled: true,
   }));
 }
 
-export function getPremiumModelCatalog(surface: ModelCatalogSurface): PremiumModelCatalogEntry[] {
-  return PREMIUM_MODELS.filter((model) => model.surfaces.includes(surface)).map((model) => ({
+export function getModelCatalog(surface: ModelCatalogSurface): ModelCatalogEntry[] {
+  return CONNECTED_PROVIDER_MODELS.filter((model) => model.surfaces.includes(surface)).map((model) => ({
     id: model.id,
     label: model.label,
     section: model.section,
@@ -113,7 +113,7 @@ export function getPremiumModelCatalog(surface: ModelCatalogSurface): PremiumMod
 }
 
 export function getModelRegistryRows(surface: ModelCatalogSurface): ModelRegistryRow[] {
-  return PREMIUM_MODELS.filter((model) => model.surfaces.includes(surface))
+  return CONNECTED_PROVIDER_MODELS.filter((model) => model.surfaces.includes(surface))
     .map((model, index) => ({
       id: model.id,
       provider: model.section,
@@ -130,8 +130,8 @@ export function getSupportedFundingSourcesForModel(modelId: string | null | unde
   if (!id) return [];
   const freeModel = FREE_MODELS.find((model) => model.id === id);
   if (freeModel) return [...freeModel.supportedFundingSources];
-  const premiumModel = PREMIUM_MODELS.find((model) => model.id === id);
-  if (premiumModel) return [...premiumModel.supportedFundingSources];
+  const connectedProviderModel = CONNECTED_PROVIDER_MODELS.find((model) => model.id === id);
+  if (connectedProviderModel) return [...connectedProviderModel.supportedFundingSources];
   return [];
 }
 
@@ -147,14 +147,14 @@ export function supportsModelImageInput(modelId: string | null | undefined): boo
   if (!id) return false;
   const freeModel = FREE_MODELS.find((model) => model.id === id);
   if (freeModel) return freeModel.supportsImageInput;
-  return PREMIUM_MODELS.find((model) => model.id === id)?.supportsImageInput === true;
+  return CONNECTED_PROVIDER_MODELS.find((model) => model.id === id)?.supportsImageInput === true;
 }
 
 export function isModelAvailableOnSurface(modelId: string | null | undefined, surface: ModelCatalogSurface): boolean {
   const id = normalizeModelId(modelId);
   if (!id) return false;
   if (FREE_MODEL_ALLOWLIST.has(id)) return true;
-  return PREMIUM_MODELS.some((model) => model.id === id && model.surfaces.includes(surface));
+  return CONNECTED_PROVIDER_MODELS.some((model) => model.id === id && model.surfaces.includes(surface));
 }
 
 export function isFreeModelId(modelId: string | null | undefined, allowlist: ReadonlySet<string> = FREE_MODEL_ALLOWLIST): boolean {

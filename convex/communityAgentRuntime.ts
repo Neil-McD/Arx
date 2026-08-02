@@ -781,10 +781,7 @@ export const runCommunityAgentLoopInternal = internalAction({
         applied_change_request_ids: [],
       };
     }
-    const directOwnerFunded = funding.mode !== "legacy_requester_chatgpt";
-    const modelId = directOwnerFunded
-      ? COMMUNITY_OWNER_FUNDED_MODEL_ID
-      : normalizeModelId(args.modelId);
+    const modelId = COMMUNITY_OWNER_FUNDED_MODEL_ID;
     const exactDigestId = boundedText(args.compilerDigestId, 128) || undefined;
     const exactDigestVersionKey = boundedText(args.compilerDigestVersionKey, 128) || undefined;
     if (Boolean(exactDigestId) !== Boolean(exactDigestVersionKey)) {
@@ -839,43 +836,41 @@ export const runCommunityAgentLoopInternal = internalAction({
     let aggregateCompletionTokens = 0;
     let aggregateUsageComplete = true;
     let fundingFinalized = false;
-    if (directOwnerFunded) {
-      try {
-        fundingSession = await beginCommunityInferenceFundingSession({
-          ctx,
-          communityId: args.communityId,
-          actorUserId: resolved.sponsorUserId,
-          surface: "community_autonomous_cognition",
-          receiptKey: `community_autonomous_cognition:${runId}`,
-          sourceRunId: `community-agent-runtime:${runId}`,
-          admission: funding,
-        });
-      } catch (error) {
-        const errorCode = boundedText(
-          error instanceof Error ? error.message : String(error),
-          120,
-        ) || "founder_inference_receipt_unavailable";
-        const finished: unknown = await ctx.runMutation(
-          internalRefs.communityAgentRuntime.finishCommunityAgentRunInternal,
-          {
-            runId,
-            status: "error",
-            stopReason: errorCode,
-            toolStepCount: 0,
-            appliedChangeRequestIds: [],
-            errorCode,
-            errorMessage: "Community inference funding could not be authorized.",
-          },
-        );
-        return {
-          ok: false,
-          skipped: false,
-          run: finished,
-          stop_reason: errorCode,
-          tool_step_count: 0,
-          applied_change_request_ids: [],
-        };
-      }
+    try {
+      fundingSession = await beginCommunityInferenceFundingSession({
+        ctx,
+        communityId: args.communityId,
+        actorUserId: resolved.sponsorUserId,
+        surface: "community_autonomous_cognition",
+        receiptKey: `community_autonomous_cognition:${runId}`,
+        sourceRunId: `community-agent-runtime:${runId}`,
+        admission: funding,
+      });
+    } catch (error) {
+      const errorCode = boundedText(
+        error instanceof Error ? error.message : String(error),
+        120,
+      ) || "founder_inference_receipt_unavailable";
+      const finished: unknown = await ctx.runMutation(
+        internalRefs.communityAgentRuntime.finishCommunityAgentRunInternal,
+        {
+          runId,
+          status: "error",
+          stopReason: errorCode,
+          toolStepCount: 0,
+          appliedChangeRequestIds: [],
+          errorCode,
+          errorMessage: "Community inference funding could not be authorized.",
+        },
+      );
+      return {
+        ok: false,
+        skipped: false,
+        run: finished,
+        stop_reason: errorCode,
+        tool_step_count: 0,
+        applied_change_request_ids: [],
+      };
     }
     const filesystemContext: CommunityAgentFilesystemContext = {
       communityId: args.communityId,

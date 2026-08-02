@@ -46,11 +46,11 @@ The community-owned runtime surfaces are:
 
 1. `member_concierge`
    - entered from a direct community-agent mention
-   - funded by the current community owner's OpenAI key after an approved existing
-     founder activates; approved-but-inactive founders retain the requester ChatGPT
-     route only during the bounded cutover, while managed communities require an
-     active $79 founder subscription attached to that community; the active platform
-     owner role receives the same platform-funded path without a subscription
+   - funded by the current community owner's OpenAI key only after an exact eligible
+     existing founder activates BYOK, or by an active $79 founder subscription
+     attached to that community; approved-but-inactive founders must choose one of
+     those funding modes, while the active platform-owner role receives the same
+     platform-funded path without a subscription
    - revalidates community access and source visibility for every turn
    - receives the same canonical five Polynet repository tools as the personal
      harness and official MCP
@@ -1750,7 +1750,7 @@ Rules:
 
 - This slice is intake only: No LLM, no reply, no memory write.
 - A queued serve request must have `sponsorUserId == requesterUserId`; this is the member tool-authority principal, not the payer.
-- An active existing-founder grant resolves the current community owner as payer and requires that owner's OpenAI API key. An active founder subscription permanently attached to the community resolves that owner as payer and the subscription as the server-side Luna funding authority. Approved-but-not-yet-activated founders retain the requester ChatGPT path only during the bounded cutover. An attached inactive subscription fails closed and never falls back to a founder key.
+- An active existing-founder grant resolves the current community owner as payer and requires that owner's OpenAI API key. An active founder subscription permanently attached to the community resolves that owner as payer and the subscription as the server-side Luna funding authority. Approved-but-not-yet-activated founders must choose eligible BYOK or the $79 plan. An attached inactive subscription fails closed and never falls back to a founder key.
 - `communityInteractionMentions.notifyState` is only the narrow drain marker for agent mentions:
   - `pending` = intake has not processed this mention
   - `sent` = intake accepted it into `communityAgentServeRequests`
@@ -1989,8 +1989,8 @@ Two payment lanes, split by what the spend produces:
   monthly subscription attached to exactly one community; the active platform owner
   role is complimentary. Polynet supplies the server-side OpenAI key for paid and
   operator-funded communities. All paths use GPT 5.6 Luna while the requesting member remains
-  the permission and tool principal. Approved-but-inactive existing founders retain
-  the former requester ChatGPT route only during the bounded cutover. Payment
+  the permission and tool principal. Approved-but-inactive existing founders must
+  choose eligible BYOK or the $79 managed plan. Payment
   identity never widens retrieval or tool authority. All three surfaces resolve the
   same funding admission and settle through the same privacy-bounded receipt kernel.
   Operator-funded receipts preserve rate limits and calculated raw provider cost but

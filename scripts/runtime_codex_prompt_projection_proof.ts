@@ -134,10 +134,10 @@ assert.match(
   /PLATFORM_HARNESS_CONTEXT[\s\S]*Projection Project[\s\S]*RUNTIME_TURN_ENVELOPE/,
   "projection must render project and runtime turn context",
 );
-assert.match(
+assert.doesNotMatch(
   projection.developerInstructions,
-  /Account plan: Free[\s\S]*Runtime available: PolyNet[\s\S]*Codex and other agent runtimes require Polynet Premium/,
-  "Codex projection must render the free-plan runtime entitlement boundary",
+  /Account plan:|Premium|upgrade|tool balance/i,
+  "Codex projection must not render a retired commercial account tier",
 );
 assert.match(
   projection.developerInstructions,

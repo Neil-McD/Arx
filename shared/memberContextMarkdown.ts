@@ -14,8 +14,6 @@ import {
 export type MemberAccountContextLike = {
   displayName: string | null;
   handle: string | null;
-  /** "premium" maps from the internal "architect" canonical tier. */
-  tier: "premium" | "free";
   timezone: string | null;
   inferenceProvider: "chatgpt" | "openai" | null;
   socialLinks: string[];
@@ -61,8 +59,8 @@ export function renderMemberContextMarkdown(args: {
   lens: MemberOntologyLens;
   communityId?: string | null;
   communityName?: string | null;
-  /* Lifecycle prompts exclude billing-adjacent lines (tier, inference
-     provider): the model cannot mention entitlements it never saw. */
+  /* Lifecycle prompts can exclude provider context: the model cannot mention
+     a connection it never saw. */
   includeBillingContext?: boolean;
 }): { memberMd: string; communityMd: string | null } {
   /* Defense in depth: callers pass lens-filtered rows, but the renderer
@@ -87,7 +85,6 @@ export function renderMemberContextMarkdown(args: {
 
   const includeBillingContext = args.includeBillingContext !== false;
   const accountLines: string[] = ["", "## Account"];
-  if (includeBillingContext) accountLines.push(`- Tier: ${account.tier}`);
   if (account.timezone?.trim()) accountLines.push(`- Timezone: ${account.timezone.trim()}`);
   if (includeBillingContext && account.inferenceProvider) {
     accountLines.push(`- Inference: ${INFERENCE_LABELS[account.inferenceProvider]}`);

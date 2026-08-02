@@ -294,7 +294,6 @@ assert.doesNotMatch(
 const goldenAccount = {
   displayName: "Neil",
   handle: "neil",
-  tier: "premium" as const,
   timezone: "America/New_York",
   inferenceProvider: "chatgpt" as const,
   socialLinks: ["https://x.com/neil"],
@@ -320,7 +319,6 @@ assert.equal(
     "# Member — Neil (@neil)",
     "",
     "## Account",
-    "- Tier: premium",
     "- Timezone: America/New_York",
     "- Inference: ChatGPT",
     "- Member of: Polynet (member · free_grant)",

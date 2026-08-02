@@ -37,7 +37,7 @@
       }
     },
     {
-      "id": "auth_architect_platform_requires_connection",
+      "id": "retired_architect_input_normalizes_to_authenticated",
       "input": {
         "authState": "authenticated",
         "tier": "architect",
@@ -50,7 +50,7 @@
         "cta": "connect_provider",
         "lane": null,
         "fundingSource": null,
-        "effectiveTier": "architect"
+        "effectiveTier": "auth_free"
       }
     },
     {

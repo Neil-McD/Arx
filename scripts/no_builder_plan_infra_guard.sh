@@ -75,6 +75,42 @@ for pattern in "${FORBIDDEN_PATTERNS[@]}"; do
   fi
 done
 
+PUBLIC_LANDING_TARGETS=(
+  apps/web/src/components/polynetLanding/ConversionLanding.tsx
+  apps/web/src/components/polynetLanding/ConversionLanding.css
+)
+PUBLIC_PRICING_FORBIDDEN_PATTERNS=(
+  'Start free'
+  'No card'
+  'Live in an afternoon'
+  "You don't pay until you get paid"
+  "Pro, when you're ready"
+  'No monthly bill'
+  'free until your community pays'
+  'optional Pro'
+  'AI-first community platform'
+  'premium-simplified'
+  'GPT 5\.6'
+  '\bLuna\b'
+  '\$20\b'
+  'AI credits?'
+  '\btokens?\b'
+)
+
+for pattern in "${PUBLIC_PRICING_FORBIDDEN_PATTERNS[@]}"; do
+  if ! guard_rg_assert_absent \
+    "retired or internal public-pricing claim: $pattern" \
+    -n -i "$pattern" "${PUBLIC_LANDING_TARGETS[@]}"; then
+    failed=1
+  fi
+done
+
+if ! guard_rg_assert_absent \
+  "retired Builder plan Stripe price env" \
+  -n -S 'STRIPE_BUILDER_PLAN_(BUILDER|PRO)_PRICE_ID' .env.example; then
+  failed=1
+fi
+
 ACCOUNT_NAMING_TARGETS=(convex apps shared docs package.json AGENTS.md)
 ACCOUNT_NAMING_FORBIDDEN_PATTERNS=(
   'builderBillingStatusGateway'

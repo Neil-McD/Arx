@@ -26,13 +26,7 @@ export function shouldOpenFounderInferencePrompt(params: {
 
 export function buildWebGlobalOverlayHostProps(params: {
   session: unknown | null;
-  accountCommerceStatus: { account_tier?: string | null } | null;
-  setAccountCommerceError: (value: string | null) => void;
-  setIsFreeAccountInfoOpen: (value: boolean) => void;
   providerConnectionModalHostProps: WebGlobalOverlayHostProps["providerConnectionModalHostProps"];
-  onOpenPremiumBilling: () => void;
-  isFreeAccountInfoOpen: boolean;
-  accountCommerceError: string | null;
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
   founderFundingPromptProps: WebGlobalOverlayHostProps["founderFundingPromptProps"];
   founderInferencePromptProps: WebGlobalOverlayHostProps["founderInferencePromptProps"];
@@ -40,12 +34,6 @@ export function buildWebGlobalOverlayHostProps(params: {
 }): WebGlobalOverlayHostProps {
   return {
     providerConnectionModalHostProps: params.providerConnectionModalHostProps,
-    freeAccountIncludedModalProps: {
-      isOpen: params.isFreeAccountInfoOpen,
-      accountAccessError: params.accountCommerceError,
-      onClose: () => params.setIsFreeAccountInfoOpen(false),
-      onOpenBilling: params.onOpenPremiumBilling,
-    },
     communityModalHostProps: params.communityModalHostProps,
     founderFundingPromptProps: params.founderFundingPromptProps,
     founderInferencePromptProps: params.founderInferencePromptProps,

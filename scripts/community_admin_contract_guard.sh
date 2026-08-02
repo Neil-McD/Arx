@@ -190,9 +190,6 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityMembershipCreatedAtRows = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityMembershipCreatedAtRows accepts authSubject"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasArchitectAccess = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
-  "communityOwnerHasArchitectAccess accepts authSubject"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\(\{\s*args:\s*\{\s*userId: v\.optional\(v\.id\("users"\)\),\s*authSubject: v\.optional\(v\.string\(\)\),' \
   "listCommunityRevenueSeries accepts authSubject"
 
@@ -376,16 +373,10 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 
 echo "[6/12] Ensuring manager-owned analytics queries resolve authenticated subject before access checks..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasArchitectAccess = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
-  "communityOwnerHasArchitectAccess resolves authenticated subject"
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\([\s\S]*?const userId = await resolveUserIdForAuthenticatedRequest\(\{\s*ctx,\s*userId: args\.userId,\s*authSubject: args\.authSubject \?\? null,' \
   "listCommunityRevenueSeries resolves authenticated subject"
 
 echo "[7/12] Ensuring analytics queries still require manager access..."
-require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'export const communityOwnerHasArchitectAccess = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
-  "communityOwnerHasArchitectAccess requires manager access"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const listCommunityRevenueSeries = query\([\s\S]*?await requireCommunityManager\(\{\s*ctx,\s*communityId: args\.communityId,\s*userId: args\.userId,' \
   "listCommunityRevenueSeries requires manager access"

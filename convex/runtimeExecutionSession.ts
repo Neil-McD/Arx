@@ -19,9 +19,8 @@ import {
   type RuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession.ts";
 import {
-  buildWorkspaceCreditBudgetSignal,
-  isWorkspaceCreditBudgetExpired,
-} from "./workspaceCreditBudgetSignal.ts";
+  isWorkspaceRuntimeWindowExpired,
+} from "./workspaceRuntimeWindowSignal.ts";
 import {
   buildToolObservationMessage,
   type NativeToolAwareMessage,
@@ -183,7 +182,6 @@ function buildTerminalToolResultDetails(
     "code",
     "message",
     "tool_kind",
-    "required_credits",
     "provider_id",
     "target_run_id",
     "target_id",
@@ -534,14 +532,11 @@ export function createPolynetExecutionSession(params: {
             details: workspaceSessionFailure.details ?? undefined,
           };
         }
-        if (isWorkspaceCreditBudgetExpired(workspaceSession)) {
+        if (isWorkspaceRuntimeWindowExpired(workspaceSession)) {
           workspaceSessionFailure = {
-            status: 402,
-            code: "workspace_credits_exhausted",
-            message: "This workspace tool budget expired. Add balance to keep using workspace tools.",
-            details: {
-              tool_kind: "workspace_tools",
-            },
+            status: 409,
+            code: "workspace_runtime_window_expired",
+            message: "This workspace runtime window expired. Start a new workspace session to continue.",
           };
           return {
             ok: false as const,
@@ -800,13 +795,12 @@ export function createPolynetExecutionSession(params: {
         });
         if (settlement.ok && !settlement.skipped) {
           await emitRunEvent(
-            "workspace_compute_charge_settled",
+            "workspace_provider_cost_recorded",
             {
               run_id: params.runId,
               sandbox_id: workspaceSession.providerSandboxId,
               project_id: workspaceSession.projectId ?? null,
-              credit_reservation_key: settlement.creditReservationKey ?? null,
-              credits_debited: settlement.creditsDebited ?? null,
+              provider_cost_key: settlement.creditReservationKey ?? null,
               compute_cost_usd: settlement.computeCostUsd ?? null,
               duration_seconds: settlement.durationSeconds ?? null,
               measured_duration_seconds: settlement.measuredDurationSeconds ?? null,
@@ -815,7 +809,7 @@ export function createPolynetExecutionSession(params: {
               provider_release_reason: providerRelease.reason,
               provider_release_confirmed: providerRelease.releaseConfirmed,
             },
-            `${params.runId}:workspace_compute_charge_settled:${settlement.creditReservationKey ?? "none"}`,
+            `${params.runId}:workspace_provider_cost_recorded:${settlement.creditReservationKey ?? "none"}`,
           );
           const released = await releaseRuntimeWorkspaceSessionAccountingIfCurrent({
             ctx: params.ctx,
@@ -830,7 +824,7 @@ export function createPolynetExecutionSession(params: {
                   run_id: params.runId,
                   sandbox_id: workspaceSession.providerSandboxId,
                   project_id: workspaceSession.projectId ?? null,
-                  credit_reservation_key: settlement.creditReservationKey ?? null,
+                  provider_cost_key: settlement.creditReservationKey ?? null,
                   released: released.released,
                   reason: released.reason,
                   release_decision_reason: releaseDecision.reason,
@@ -842,25 +836,10 @@ export function createPolynetExecutionSession(params: {
                   run_id: params.runId,
                   sandbox_id: workspaceSession.providerSandboxId,
                   project_id: workspaceSession.projectId ?? null,
-                  credit_reservation_key: settlement.creditReservationKey ?? null,
+                  provider_cost_key: settlement.creditReservationKey ?? null,
                   error_message: released.error,
                 },
             `${params.runId}:workspace_session_accounting_release:${settlement.creditReservationKey ?? "none"}`,
-          );
-        } else if (!settlement.ok) {
-          await emitRunEvent(
-            "workspace_compute_charge_settlement_failed",
-            {
-              run_id: params.runId,
-              sandbox_id: workspaceSession.providerSandboxId,
-              project_id: workspaceSession.projectId ?? null,
-              credit_reservation_key: settlement.creditReservationKey,
-              credits_debited: settlement.creditsDebited,
-              compute_cost_usd: settlement.computeCostUsd,
-              duration_seconds: settlement.durationSeconds,
-              error_message: settlement.error,
-            },
-            `${params.runId}:workspace_compute_charge_settlement_failed:${settlement.creditReservationKey}`,
           );
         }
       }

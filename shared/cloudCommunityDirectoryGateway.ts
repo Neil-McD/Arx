@@ -1,6 +1,5 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, parseGatewayNumberLike } from "./cloudGateway";
-import type { PremiumMemberBadgeSummary } from "./communityTypes";
 
 export type CloudCommunityDirectoryMemberRow = {
   id: string;
@@ -8,7 +7,6 @@ export type CloudCommunityDirectoryMemberRow = {
   user_id: string;
   display_name?: string | null;
   avatar_url?: string | null;
-  premium_badge?: PremiumMemberBadgeSummary | null;
   role: string;
   created_at: string;
 };
@@ -27,7 +25,6 @@ export type CloudCommunityMentionCandidateRow = {
   display_name?: string | null;
   handle?: string | null;
   avatar_url?: string | null;
-  premium_badge?: PremiumMemberBadgeSummary | null;
   role?: string | null;
   agent_key?: string | null;
   role_key?: "everybody" | string | null;

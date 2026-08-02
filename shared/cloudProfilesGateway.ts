@@ -1,7 +1,7 @@
 import { bootstrapConvexAuthenticatedClient, type ConvexClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, firstGatewayRow } from "./cloudGateway";
 import type { AccountSetupStatus } from "./accountSetup";
-import type { CommunityAvatarSummary, PremiumMemberBadgeSummary, ProfileCommunityContext } from "./communityTypes";
+import type { CommunityAvatarSummary, ProfileCommunityContext } from "./communityTypes";
 import type { SocialProfileLinks } from "./socialProfileLinks";
 
 type CloudProfilesGatewayParams<SessionT> = {
@@ -20,7 +20,6 @@ type CloudProfileBase = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-  premium_badge?: PremiumMemberBadgeSummary | null;
 };
 
 export type CloudProfileAvatarFieldInput = {

@@ -8,8 +8,8 @@ import {
   reensureBlaxelWorkspaceComputerForPaidSession,
 } from "./blaxelWorkspaceWake.ts";
 import {
-  WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE,
-} from "./workspaceCreditBudgetSignal.ts";
+  WORKSPACE_RUNTIME_WINDOW_EXPIRED_CODE,
+} from "./workspaceRuntimeWindowSignal.ts";
 import type { RuntimeWorkspaceSession } from "./workspaceRuntimeSession.ts";
 import type { RetrievalToolName } from "../shared/retrievalTools";
 
@@ -158,8 +158,8 @@ function abortReasonCode(reason: unknown): string | null {
   if (code) return code;
   const name = String(value?.name ?? "").trim();
   if (name === "RuntimeRunCancelledError") return "user_cancelled";
-  if (name === "WorkspaceCreditBudgetExpiredError") {
-    return WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE;
+  if (name === "WorkspaceRuntimeWindowExpiredError") {
+    return WORKSPACE_RUNTIME_WINDOW_EXPIRED_CODE;
   }
   return null;
 }
@@ -168,12 +168,8 @@ function workspaceBudgetExpiredFailure(): WorkspaceRuntimeToolFailure {
   return {
     ok: false,
     status: 402,
-    code: WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE,
-    message: "This workspace tool budget expired. Add balance to keep using workspace tools.",
-    details: {
-      tool_kind: "workspace_tools",
-      paid_usage_billing_mode: "prepaid_required",
-    },
+    code: WORKSPACE_RUNTIME_WINDOW_EXPIRED_CODE,
+    message: "This workspace runtime window expired. Start a new workspace session to continue.",
   };
 }
 
@@ -189,7 +185,7 @@ function signalAbortFailureOrThrow(
 ): WorkspaceRuntimeToolFailure | null {
   if (!signal?.aborted) return null;
   const code = abortReasonCode(signal.reason);
-  if (code === WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE) {
+  if (code === WORKSPACE_RUNTIME_WINDOW_EXPIRED_CODE) {
     return workspaceBudgetExpiredFailure();
   }
   throw runtimeAbortError(signal);

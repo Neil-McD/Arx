@@ -1,20 +1,8 @@
 import type { DragEvent } from "react";
 
-type CommunityRecordForModal = {
-  id: string;
-};
-
-type AccountCommerceStatusForModal = {
-  account_tier?: string | null;
-  max_communities?: number | null;
-} | null;
-
 type WebCreateCommunityModalProps = {
   isOpen: boolean;
   hasSession: boolean;
-  communities: CommunityRecordForModal[];
-  communityRoleById: Record<string, string | undefined>;
-  accountCommerceStatus: AccountCommerceStatusForModal;
   isCreateBannerDragOver: boolean;
   isCreateAvatarDragOver: boolean;
   createCommunityBannerUrl: string | null;
@@ -23,7 +11,6 @@ type WebCreateCommunityModalProps = {
   createCommunityOneLiner: string;
   createCommunitySlug: string;
   createCommunityError: string | null;
-  accountCommerceError: string | null;
   isCreatingCommunity: boolean;
   communityInitials: (value: string) => string;
   onClose: () => void;
@@ -46,9 +33,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
   const {
     isOpen,
     hasSession,
-    communities,
-    communityRoleById,
-    accountCommerceStatus,
     isCreateBannerDragOver,
     isCreateAvatarDragOver,
     createCommunityBannerUrl,
@@ -57,7 +41,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
     createCommunityOneLiner,
     createCommunitySlug,
     createCommunityError,
-    accountCommerceError,
     isCreatingCommunity,
     communityInitials,
     onClose,
@@ -77,14 +60,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
   } = props;
 
   if (!isOpen) return null;
-
-  const ownedCount = communities.reduce(
-    (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
-    0,
-  );
-  const max = accountCommerceStatus?.max_communities ?? 0;
-  const needsPlan = Boolean(hasSession && max <= 0);
-  const limitReached = Boolean(hasSession && max > 0 && ownedCount >= max);
 
   return (
     <div className="modal-overlay" onClick={onClose}>
@@ -212,7 +187,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
               </div>
             </div>
             {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
-            {accountCommerceError && <div className="auth-error">{accountCommerceError}</div>}
           </div>
         </div>
         <div className="modal-footer">
@@ -226,15 +200,11 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                 className="create-community-primary"
                 type="button"
                 onClick={() => void onPrimaryAction()}
-                disabled={isCreatingCommunity || needsPlan || limitReached || createCommunityName.trim().length === 0}
+                disabled={isCreatingCommunity || createCommunityName.trim().length === 0}
               >
                 {isCreatingCommunity
                   ? "Creating..."
-                  : needsPlan
-                    ? "Unavailable"
-                    : limitReached
-                      ? "Community limit reached"
-                      : "Create and continue to payment"}
+                  : "Create and continue to payment"}
               </button>
             )}
             <button className="create-community-secondary" onClick={onClose}>

@@ -1,5 +1,4 @@
 import type { ComponentProps } from "react";
-import { FreeAccountIncludedModal } from "../../../../shared/FreeAccountIncludedModal";
 import { WebCommunityModalHost } from "./WebCommunityModalHost";
 import { WebProviderConnectionModalHost } from "./WebProviderConnectionModalHost";
 import { WebFounderFundingPrompt } from "./WebFounderFundingPrompt";
@@ -9,7 +8,6 @@ export type WebGlobalOverlayHostProps = {
   providerConnectionModalHostProps: ComponentProps<
     typeof WebProviderConnectionModalHost
   >["modalHostProps"];
-  freeAccountIncludedModalProps: ComponentProps<typeof FreeAccountIncludedModal>;
   communityModalHostProps: ComponentProps<typeof WebCommunityModalHost>["modalHostProps"];
   founderFundingPromptProps: ComponentProps<typeof WebFounderFundingPrompt>;
   founderInferencePromptProps: ComponentProps<typeof WebFounderInferencePrompt>;
@@ -22,8 +20,6 @@ export function WebGlobalOverlayHost(props: WebGlobalOverlayHostProps) {
       <WebProviderConnectionModalHost
         modalHostProps={props.providerConnectionModalHostProps}
       />
-
-      <FreeAccountIncludedModal {...props.freeAccountIncludedModalProps} />
 
       <WebCommunityModalHost modalHostProps={props.communityModalHostProps} />
 

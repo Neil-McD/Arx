@@ -1916,14 +1916,16 @@ export const getOperatorMonetizationInternal = internalQuery({
     const paidCommunitiesWithMembers = Array.from(activePaidCommunityIds).filter((communityId) =>
       communitiesWithFirstMemberIds.has(communityId),
     ).length;
-    const completedCheckouts = checkouts.filter((row: any) => row.status === "complete");
+    const completedCommunityCheckouts = checkouts.filter(
+      (row: any) => row.status === "complete" && row.mode === "community_join",
+    );
     const creditTopupCheckouts = inRangeCheckouts.filter((row: any) => row.mode === "workspace_credit_topup");
     const creditTopupCompletions = creditTopupCheckouts.filter((row: any) => row.status === "complete");
     const communityJoinCheckouts = inRangeCheckouts.filter((row: any) => row.mode === "community_join");
     const communityJoinCompletions = communityJoinCheckouts.filter((row: any) => row.status === "complete");
-    const totalCompletions = inRangeCheckouts.filter((row: any) => row.status === "complete").length;
-    const expiredCheckouts = inRangeCheckouts.filter((row: any) => row.status === "expired");
-    const stalePendingCheckouts = inRangeCheckouts.filter((row: any) => {
+    const totalCompletions = communityJoinCompletions.length;
+    const expiredCheckouts = communityJoinCheckouts.filter((row: any) => row.status === "expired");
+    const stalePendingCheckouts = communityJoinCheckouts.filter((row: any) => {
       if (row.status !== "pending") return false;
       const expiresAt = Number(row.expiresAt ?? 0);
       return Number.isFinite(expiresAt) && expiresAt <= nowMs;
@@ -1934,9 +1936,9 @@ export const getOperatorMonetizationInternal = internalQuery({
       if (accountUserIds.has(userId)) activePayingCustomerIds.add(userId);
     }
     const checkoutPurchaserIds = new Set<string>();
-    for (const row of inRangeCheckouts) {
+    for (const row of communityJoinCompletions) {
       const userId = String(row.ownerUserId ?? "");
-      if (row.status === "complete" && accountUserIds.has(userId)) checkoutPurchaserIds.add(userId);
+      if (accountUserIds.has(userId)) checkoutPurchaserIds.add(userId);
     }
     const usageBuyerIds = new Set<string>();
     for (const row of creditTopupCompletions) {
@@ -1948,7 +1950,7 @@ export const getOperatorMonetizationInternal = internalQuery({
       ...Array.from(checkoutPurchaserIds),
     ]);
     const lifetimeCheckoutPurchaserIds = new Set<string>();
-    for (const row of completedCheckouts) {
+    for (const row of completedCommunityCheckouts) {
       const userId = String(row.ownerUserId ?? "");
       if (accountUserIds.has(userId)) lifetimeCheckoutPurchaserIds.add(userId);
     }
@@ -1975,17 +1977,8 @@ export const getOperatorMonetizationInternal = internalQuery({
       const usd = credits > 0 ? credits / WORKSPACE_CREDITS_PER_USD : 0;
       return addMoney(total, moneyFromUsd(usd));
     }, null);
-    const lifetimeCommunityCheckoutRevenue = completedCheckouts
-      .filter((row: any) => row.mode === "community_join")
+    const lifetimeCommunityCheckoutRevenue = completedCommunityCheckouts
       .reduce((total: MoneyMetric | null, row: any) => addMoney(total, moneyFromCheckout(row)), null);
-    const lifetimeCreditTopupRevenue = completedCheckouts
-      .filter((row: any) => row.mode === "workspace_credit_topup")
-      .reduce((total: MoneyMetric | null, row: any) => {
-        const credits = Number(row.workspaceCreditsAmount ?? 0);
-        const usd = credits > 0 ? credits / WORKSPACE_CREDITS_PER_USD : 0;
-        return addMoney(total, moneyFromUsd(usd));
-      }, null);
-    const lifetimeGrossRevenue = addMoney(lifetimeCommunityCheckoutRevenue, lifetimeCreditTopupRevenue);
     const emailSent = inRangeEmailOutboxRows.filter((row: any) => row.status === "sent").length;
     const emailDelivered = inRangeEmailDeliveryRows.filter((row: any) => {
       const eventType = String(row.eventType ?? "").toLowerCase();
@@ -2006,7 +1999,7 @@ export const getOperatorMonetizationInternal = internalQuery({
         eventType.includes("suppressed") ||
         eventType.includes("complained");
     }).length;
-    const grossRevenueInRange = addMoney(communityCheckoutRevenueInRange, creditTopupRevenueInRange);
+    const grossRevenueInRange = communityCheckoutRevenueInRange;
     return {
       computedAt: nowMs,
       creditTopupCheckoutStarts: creditTopupCheckouts.length,
@@ -2057,16 +2050,19 @@ export const getOperatorMonetizationInternal = internalQuery({
           communityPlatformRevShareAvailability: "estimated_from_current_fee_policy",
           creditTopupRevenueInRange,
           grossRevenueInRange,
-          averageRecordedLifetimeValue: divideMoney(lifetimeGrossRevenue, lifetimeCheckoutPurchaserIds.size),
+          averageRecordedLifetimeValue: divideMoney(
+            lifetimeCommunityCheckoutRevenue,
+            lifetimeCheckoutPurchaserIds.size,
+          ),
           platformNetRevenueInRange: null,
           platformNetRevenueAvailability: "not_instrumented",
         },
         checkouts: {
-          totalStarts: inRangeCheckouts.length,
+          totalStarts: communityJoinCheckouts.length,
           totalCompletions,
-          totalConversionRate: conversionRate(totalCompletions, inRangeCheckouts.length),
+          totalConversionRate: conversionRate(totalCompletions, communityJoinCheckouts.length),
           failedOrAbandoned: expiredCheckouts.length + stalePendingCheckouts.length,
-          pending: inRangeCheckouts.filter((row: any) => row.status === "pending").length,
+          pending: communityJoinCheckouts.filter((row: any) => row.status === "pending").length,
           expired: expiredCheckouts.length,
           communityStarts: communityJoinCheckouts.length,
           communityCompletions: communityJoinCompletions.length,

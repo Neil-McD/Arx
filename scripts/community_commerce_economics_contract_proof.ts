@@ -133,8 +133,8 @@ assert.match(
 );
 assert.match(
   httpBilling,
-  /premium_subscription_connected_event/,
-  "Connected-account events must not mutate platform Premium subscriptions.",
+  /founder_subscription_connected_event/,
+  "Connected-account events must not mutate platform founder subscriptions.",
 );
 assert.doesNotMatch(founderBilling, /stripeAccount\s*:/);
 assert.doesNotMatch(premiumBilling, /stripeAccount\s*:/);
@@ -157,9 +157,9 @@ assert.match(
 );
 assert.match(httpBilling, /event\.type === "charge\.refunded"/);
 
-assert.match(billingDocs, /Every paid community uses one 2\.9% Polynet application fee/);
-assert.match(billingDocs, /direct Stripe Connect subscriptions on the builder's connected account/);
+assert.match(billingDocs, /Polynet keeps a 2\.9% application fee from paid-member community revenue/);
+assert.match(billingDocs, /community_join` checkout on the builder's connected account/);
 assert.match(billingDocs, /Stripe processing fees are separate/);
-assert.match(billingDocs, /proportional share of Polynet's application fee is reversed/);
+assert.match(billingDocs, /reverses the cumulative proportional share of Polynet's application fee/);
 
 console.log("Community commerce economics contract proof passed.");

@@ -9,7 +9,7 @@ import type { FounderInferencePricing } from "./founderPlanPricing";
 export type FounderSubscriptionRow = {
   _id: any;
   ownerUserId: any;
-  communityId?: any;
+  communityId: any;
   provider: "stripe";
   providerCustomerId: string;
   providerSubscriptionId: string;
@@ -28,7 +28,7 @@ export type FounderSubscriptionRow = {
 export type FounderUsageCycleRow = {
   _id: any;
   founderSubscriptionId: any;
-  communityId?: any;
+  communityId: any;
   cycleKey: string;
   cycleStartAt: number;
   cycleEndAt: number;
@@ -105,6 +105,10 @@ export async function syncFounderUsageCycle(args: {
   pricing: FounderInferencePricing | null;
   nowMs: number;
 }): Promise<FounderUsageCycleRow | null> {
+  const subscriptionCommunityId = normalizedId(args.subscription.communityId);
+  if (!subscriptionCommunityId) {
+    throw new Error("founder_subscription_community_missing");
+  }
   if (!(args.cycleStartAt > 0) || !(args.cycleEndAt > args.cycleStartAt)) {
     throw new Error("founder_subscription_cycle_invalid");
   }
@@ -136,8 +140,10 @@ export async function syncFounderUsageCycle(args: {
     if (normalizedId(existing.founderSubscriptionId) !== normalizedId(args.subscription._id)) {
       throw new Error("founder_usage_cycle_identity_mismatch");
     }
+    if (normalizedId(existing.communityId) !== subscriptionCommunityId) {
+      throw new Error("founder_usage_cycle_community_mismatch");
+    }
     await args.ctx.db.patch(existing._id as any, {
-      communityId: args.subscription.communityId,
       cycleStartAt: args.cycleStartAt,
       cycleEndAt: args.cycleEndAt,
       status: "open",
@@ -145,7 +151,6 @@ export async function syncFounderUsageCycle(args: {
     });
     return {
       ...existing,
-      communityId: args.subscription.communityId,
       cycleStartAt: args.cycleStartAt,
       cycleEndAt: args.cycleEndAt,
       status: "open",

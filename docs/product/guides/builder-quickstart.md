@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Community creation and funding are separate from Polynet Premium. Premium unlocks Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage; it does not authorize or fund a community.
+Each managed community has one funding choice: its own $79 monthly founder plan. Exact grandfathered communities may instead activate owner BYOK. There is no personal Premium plan or paid tool tier.
 
 ## Before You Start
 
@@ -84,10 +84,13 @@ The cash path is simple: configure the community, define the paid access model, 
 - Builder payouts depend on payout provider readiness.
 - Existing approved founders can continue managing their owned communities.
 - Each managed community requires its own verified $79 monthly funding subscription.
+- A paying founder may own an unlimited number of communities. There is no
+  account-level numeric cap, but every existing community must have current
+  funding before the next unlisted checkout draft can be created.
 - A new community begins as an unlisted managed draft and continues directly to founder checkout.
 - An unpaid managed draft can be configured, but cannot publish, appear in Discover, accept public joins, or run community-funded AI.
-- Polynet Premium does not increase community count or alter community fees.
-- Premium unlocks paid tools such as hosted workspace tools, web research, and premium runtimes.
+- Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
+- Paid-member community revenue always carries Polynet's 2.9% application fee, independent of founder funding mode.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
 - Polynet does not mount third-party MCP servers in member or community

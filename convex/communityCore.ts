@@ -167,16 +167,6 @@ export type CommunityMembershipEntitlementState = {
   subscriptionCurrentPeriodEndAt: number | null;
 };
 
-export type UserEntitlementLike = {
-  _id: any;
-  userId: any;
-  tier: string;
-  startsAt: number;
-  endsAt?: number;
-  createdAt: number;
-  updatedAt: number;
-};
-
 type UserLike = {
   _id: any;
   authSubject?: string;
@@ -924,21 +914,6 @@ function communityAccessSourceIsDurable(
     source === "free_grant" ||
     source === "manual_grant"
   );
-}
-
-export function isActiveEntitlementWindow(nowMs: number, startsAt: unknown, endsAt: unknown): boolean {
-  const starts = Number(startsAt);
-  if (!Number.isFinite(starts) || starts > nowMs) return false;
-  const ends = Number(endsAt);
-  if (Number.isFinite(ends) && ends > 0 && nowMs > ends) return false;
-  return true;
-}
-
-export function tierHasArchitectAccess(rawTier: unknown): boolean {
-  const tier = String(rawTier ?? "")
-    .trim()
-    .toLowerCase();
-  return tier === "architect";
 }
 
 export async function resolvePublicUserId(

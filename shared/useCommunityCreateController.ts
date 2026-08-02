@@ -16,31 +16,17 @@ type CommunityLike = {
   id: string;
 };
 
-type BillingStatusLike = {
-  account_tier: string;
-  max_communities: number;
-};
-
 type UseCommunityCreateControllerArgs<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
-  BillingStatusT extends BillingStatusLike,
 > = {
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
-  accountCommerceStatus: BillingStatusT | null;
   isAccountSetupComplete: boolean;
-  communities: CommunityT[];
-  communityRoleById: Record<string, string>;
-  loadAccountCommerceStatus: (session: SessionT) => Promise<BillingStatusT | null>;
-  persistCreateCommunityIntent: (draft: CreateCommunityIntentDraft) => void;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onAccountSetupRequired?: () => void;
-  onOwnedCommunityLimitReached?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
-  getOwnedCountForOpenModal?: (communities: CommunityT[], communityRoleById: Record<string, string>) => number;
-  getOwnedCountForPrimary?: (communities: CommunityT[], communityRoleById: Record<string, string>) => number;
   createCommunityName: string;
   createCommunitySlug: string;
   createCommunitySlugEdited: boolean;
@@ -65,16 +51,6 @@ type UseCommunityCreateControllerArgs<
   bannerLoadFailureMessage: string;
 };
 
-function defaultOwnedCount<CommunityT extends CommunityLike>(
-  communities: CommunityT[],
-  communityRoleById: Record<string, string>,
-): number {
-  return communities.reduce(
-    (acc, community) => acc + (communityRoleById[community.id] === "owner" ? 1 : 0),
-    0,
-  );
-}
-
 function mapCreateCommunityErrorMessage(error: unknown): string {
   const message = typeof error === "string"
     ? error
@@ -93,8 +69,8 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
   if (message.includes("community_publish_ready_required")) {
     return "Published communities need a name, one-liner, avatar, and banner.";
   }
-  if (message === "community_owner_limit_reached") {
-    return "You've reached your community limit.";
+  if (message.includes("community_funding_required_before_create")) {
+    return "Fund your existing community before creating another one.";
   }
   return message;
 }
@@ -102,8 +78,7 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
 export function useCommunityCreateController<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
-  BillingStatusT extends BillingStatusLike,
->(args: UseCommunityCreateControllerArgs<SessionT, CommunityT, BillingStatusT>) {
+>(args: UseCommunityCreateControllerArgs<SessionT, CommunityT>) {
   const argsRef = useRef(args);
   argsRef.current = args;
 
@@ -111,22 +86,6 @@ export function useCommunityCreateController<
     if (args.createCommunitySlugEdited) return;
     args.setCreateCommunitySlug(slugifyCommunityName(args.createCommunityName));
   }, [args.createCommunityName, args.createCommunitySlugEdited, args.setCreateCommunitySlug]);
-
-  const getOwnedCountForOpenModal = useCallback(() => {
-    const current = argsRef.current;
-    if (current.getOwnedCountForOpenModal) {
-      return current.getOwnedCountForOpenModal(current.communities, current.communityRoleById);
-    }
-    return defaultOwnedCount(current.communities, current.communityRoleById);
-  }, []);
-
-  const getOwnedCountForPrimary = useCallback(() => {
-    const current = argsRef.current;
-    if (current.getOwnedCountForPrimary) {
-      return current.getOwnedCountForPrimary(current.communities, current.communityRoleById);
-    }
-    return defaultOwnedCount(current.communities, current.communityRoleById);
-  }, []);
 
   const resetCreateCommunityForm = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
     const current = argsRef.current;
@@ -152,17 +111,10 @@ export function useCommunityCreateController<
       current.onAccountSetupRequired?.();
       return;
     }
-    const max = current.accountCommerceStatus?.max_communities ?? 0;
-    const ownedCount = getOwnedCountForOpenModal();
-    if (max > 0 && ownedCount >= max) {
-      current.onOwnedCommunityLimitReached?.();
-      return;
-    }
-
     current.setCreateCommunityError(null);
     resetCreateCommunityForm(draft);
     current.setShowCreateCommunityModal(true);
-  }, [getOwnedCountForOpenModal, resetCreateCommunityForm]);
+  }, [resetCreateCommunityForm]);
 
   const buildCreateCommunityIntentFromState = useCallback((): CreateCommunityIntentDraft | null => {
     const current = argsRef.current;
@@ -276,35 +228,8 @@ export function useCommunityCreateController<
       return;
     }
 
-    const status = current.accountCommerceStatus ?? await current.loadAccountCommerceStatus(session);
-    if (!status) {
-      current.setCreateCommunityError("Couldn't check your account status. Try again.");
-      return;
-    }
-    const max = status.max_communities ?? 0;
-    const ownedCount = getOwnedCountForPrimary();
-    const needsCommunityCreationAccess = max <= 0;
-    const limitReached = max > 0 && ownedCount >= max;
-    const canCreate = !needsCommunityCreationAccess && !limitReached;
-    if (canCreate) {
-      await handleCreateCommunity();
-      return;
-    }
-    if (needsCommunityCreationAccess) {
-      current.setCreateCommunityError("Your account cannot create a community yet.");
-      return;
-    }
-
-    const draft = buildCreateCommunityIntentFromState();
-    if (!draft) return;
-
-    current.persistCreateCommunityIntent(draft);
-    closeCreateCommunityModal();
-    if (limitReached) {
-      current.onOwnedCommunityLimitReached?.();
-      return;
-    }
-  }, [buildCreateCommunityIntentFromState, closeCreateCommunityModal, getOwnedCountForPrimary, handleCreateCommunity]);
+    await handleCreateCommunity();
+  }, [buildCreateCommunityIntentFromState, closeCreateCommunityModal, handleCreateCommunity]);
 
   const handleCreateCommunityAvatarUpload = useCallback(async (file: File | null) => {
     const current = argsRef.current;

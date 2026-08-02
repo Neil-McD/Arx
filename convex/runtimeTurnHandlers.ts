@@ -97,22 +97,11 @@ import {
 import {
   type RetrievalToolName,
 } from "../shared/retrievalTools";
-import { reservePaidToolCredits } from "./paidToolCreditReservation";
+import { recordPlatformToolCostBestEffort } from "./platformToolCostAccounting";
 import {
-  settleReservedCreditsBestEffort,
-  settleReservedCreditsStrict,
-} from "./workspaceCreditSettlement";
-import {
-  creditsToUsd,
   DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
   estimateDaytonaWorkspaceComputeVendorCostUsd,
-  PAID_TOOL_PRICING_VERSION,
-  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-  priceDaytonaWorkspaceComputeCredits,
 } from "../shared/workspaceCredits";
-import {
-  POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS,
-} from "../shared/polynetCodexWorkerLimits";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
 
@@ -561,7 +550,6 @@ export async function handleRuntimeTurnRequest(args: {
       maxTokens,
       stream,
       inferenceSource,
-      runtimeAccountPlan,
       requestedRuntimeEngine,
       providerApiKeyOverride,
       runtimeCommunityId,
@@ -646,7 +634,6 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeExecutionMode,
       stream,
       inferenceSource,
-      accountPlan: runtimeAccountPlan,
     });
     if (!runtimeEngineResolution.ok) {
       return runtimeJsonResponse(runtimeEngineResolution.status, {
@@ -672,7 +659,6 @@ export async function handleRuntimeTurnRequest(args: {
       requestedModelId,
       lane,
       inferenceSource,
-      accountPlan: runtimeAccountPlan,
       requestedRuntimeEngine: runtimeEngineResolution.requestedRuntimeEngine ?? undefined,
       resolvedRuntimeEngine: runtimeEngineResolution.resolvedRuntimeEngine,
       executionMode: runtimeExecutionMode,
@@ -708,7 +694,6 @@ export async function handleRuntimeTurnRequest(args: {
       harnessProfile: resolvedRuntimeHarnessProfile,
       harnessProfileSource: "runtime_capability_resolution_v1",
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
-      accountPlan: runtimeAccountPlan,
       latestUserText,
       startedAt: runStartedAt,
       nowMs: runStartedAt,
@@ -807,21 +792,19 @@ export async function handleRuntimeTurnRequest(args: {
     };
     let polynetCodexWorkerLeaseAcquired = false;
     let polynetCodexWorkerLeaseReleased = false;
-    let polynetCodexRuntimeCreditKey: string | null = null;
-    let polynetCodexRuntimeCreditsReserved = 0;
+    let polynetCodexRuntimeCostKey: string | null = null;
     let polynetCodexRuntimeWorkerStartedAtMs: number | null = null;
     let polynetCodexRuntimeWorkerMachineId: string | null = null;
     let polynetCodexRuntimeTimingTotalMs: number | null = null;
-    let polynetCodexRuntimeCreditsSettled = false;
-    let polynetDaytonaRuntimeCreditKey: string | null = null;
-    let polynetDaytonaRuntimeCreditsReserved = 0;
+    let polynetCodexRuntimeCostRecorded = false;
+    let polynetDaytonaRuntimeCostKey: string | null = null;
     let polynetDaytonaRuntimeReserveStartedAtMs: number | null = null;
-    let polynetDaytonaRuntimeCreditsSettled = false;
-    const settlePolynetCodexRuntimeCreditsBestEffort = async (
+    let polynetDaytonaRuntimeCostRecorded = false;
+    const recordPolynetCodexRuntimeCostBestEffort = async (
       terminalReason: string,
     ): Promise<void> => {
-      if (!polynetCodexRuntimeCreditKey || polynetCodexRuntimeCreditsSettled) return;
-      polynetCodexRuntimeCreditsSettled = true;
+      if (!polynetCodexRuntimeCostKey || polynetCodexRuntimeCostRecorded) return;
+      polynetCodexRuntimeCostRecorded = true;
       const timingDurationSeconds =
         polynetCodexRuntimeTimingTotalMs !== null
           ? polynetCodexRuntimeTimingTotalMs / 1000
@@ -835,71 +818,42 @@ export async function handleRuntimeTurnRequest(args: {
         timingDurationSeconds ?? fallbackDurationSeconds ?? 0,
       );
       if (!(durationSeconds > 0)) {
-        await settleReservedCreditsBestEffort({
-          ctx,
-          creditKey: polynetCodexRuntimeCreditKey,
-          status: "refunded",
-          failureReason: terminalReason || "workspace_compute_not_started",
-          metadata: {
-            pricing_version: PAID_TOOL_PRICING_VERSION,
-            billing_product: "workspace_compute",
-            harness: "codex",
-            provider: "daytona",
-            pricing_model: "daytona_runtime_seconds_estimate",
-            worker_started: false,
-            terminal_reason: terminalReason,
-          },
-        });
         return;
       }
 
       const rawVendorCostUsd = estimateDaytonaWorkspaceComputeVendorCostUsd({
         durationSeconds,
       });
-      const creditsSettled = priceDaytonaWorkspaceComputeCredits({ durationSeconds });
-      try {
-        await settleReservedCreditsStrict({
-          ctx,
-          creditKey: polynetCodexRuntimeCreditKey,
-          status: "succeeded",
-          creditsSettled,
-          rawVendorCostUsd,
-          metadata: {
-            pricing_version: PAID_TOOL_PRICING_VERSION,
-            billing_product: "workspace_compute",
-            harness: "codex",
-            target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-            provider: "daytona",
-            pricing_model: "daytona_runtime_seconds_estimate",
-            provider_billing_reconciliation: "pending",
-            provider_billing_evidence: "estimated_from_runtime_duration",
-            daytona_workspace_compute_usd_per_second:
-              DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
-            duration_seconds: durationSeconds,
-            duration_source:
-              polynetCodexRuntimeTimingTotalMs !== null
-                ? "worker_timing_total_ms"
-                : "convex_observed_start_elapsed",
-            sandbox_id: polynetCodexRuntimeWorkerMachineId,
-            worker_machine_id: polynetCodexRuntimeWorkerMachineId,
-            reserved_credits: polynetCodexRuntimeCreditsReserved,
-            terminal_reason: terminalReason,
-          },
-        });
-      } catch (error) {
-        logStructuredError("polynet_codex_runtime_credit_settlement_failed", {
-          error,
-          run_id: runId,
-          credit_key: polynetCodexRuntimeCreditKey,
+      await recordPlatformToolCostBestEffort({
+        ctx,
+        costKey: polynetCodexRuntimeCostKey,
+        userId: actor.dbUserId,
+        projectId: runtimeProjectId ?? undefined,
+        runId,
+        rawVendorCostUsd,
+        metadata: {
+          harness: "codex",
+          provider: "daytona",
+          pricing_model: "daytona_runtime_seconds_estimate",
+          provider_billing_evidence: "estimated_from_runtime_duration",
+          daytona_workspace_compute_usd_per_second:
+            DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
           duration_seconds: durationSeconds,
-        });
-      }
+          duration_source:
+            polynetCodexRuntimeTimingTotalMs !== null
+              ? "worker_timing_total_ms"
+              : "convex_observed_start_elapsed",
+          sandbox_id: polynetCodexRuntimeWorkerMachineId,
+          worker_machine_id: polynetCodexRuntimeWorkerMachineId,
+          terminal_reason: terminalReason,
+        },
+      });
     };
-    const settlePolynetDaytonaRuntimeCreditsBestEffort = async (
+    const recordPolynetDaytonaRuntimeCostBestEffort = async (
       terminalReason: string,
     ): Promise<void> => {
-      if (!polynetDaytonaRuntimeCreditKey || polynetDaytonaRuntimeCreditsSettled) return;
-      polynetDaytonaRuntimeCreditsSettled = true;
+      if (!polynetDaytonaRuntimeCostKey || polynetDaytonaRuntimeCostRecorded) return;
+      polynetDaytonaRuntimeCostRecorded = true;
 
       let target: Record<string, unknown> | null = null;
       try {
@@ -915,7 +869,7 @@ export async function handleRuntimeTurnRequest(args: {
         logStructuredError("polynet_daytona_runtime_target_lookup_failed", {
           error,
           run_id: runId,
-          credit_key: polynetDaytonaRuntimeCreditKey,
+          cost_key: polynetDaytonaRuntimeCostKey,
         });
       }
 
@@ -924,77 +878,41 @@ export async function handleRuntimeTurnRequest(args: {
       const startedAtMs = polynetDaytonaRuntimeReserveStartedAtMs ?? runStartedAt;
       const durationSeconds = Math.max(0, (Date.now() - startedAtMs) / 1000);
       if (!target || !sandboxId || !(durationSeconds > 0)) {
-        await settleReservedCreditsBestEffort({
-          ctx,
-          creditKey: polynetDaytonaRuntimeCreditKey,
-          status: "refunded",
-          failureReason: target
-            ? "daytona_runtime_not_started"
-            : "daytona_runtime_target_not_created",
-          metadata: {
-            pricing_version: PAID_TOOL_PRICING_VERSION,
-            billing_product: "workspace_compute",
-            harness: "polynet",
-            provider: "daytona",
-            pricing_model: "daytona_runtime_seconds_estimate",
-            runtime_engine: "polynet",
-            worker_started: false,
-            terminal_reason: terminalReason,
-            target_id: targetId || null,
-            sandbox_id: sandboxId || null,
-          },
-        });
         return;
       }
 
       const rawVendorCostUsd = estimateDaytonaWorkspaceComputeVendorCostUsd({
         durationSeconds,
       });
-      const creditsSettled = priceDaytonaWorkspaceComputeCredits({ durationSeconds });
-      try {
-        await settleReservedCreditsStrict({
-          ctx,
-          creditKey: polynetDaytonaRuntimeCreditKey,
-          status: "succeeded",
-          creditsSettled,
-          rawVendorCostUsd,
-          metadata: {
-            pricing_version: PAID_TOOL_PRICING_VERSION,
-            billing_product: "workspace_compute",
-            harness: "polynet",
-            target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-            provider: "daytona",
-            runtime_engine: "polynet",
-            pricing_model: "daytona_runtime_seconds_estimate",
-            provider_billing_reconciliation: "pending",
-            provider_billing_evidence: "estimated_from_runtime_duration",
-            daytona_workspace_compute_usd_per_second:
-              DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
-            duration_seconds: durationSeconds,
-            duration_source: "convex_observed_run_elapsed",
-            target_id: targetId || null,
-            sandbox_id: sandboxId,
-            reserved_credits: polynetDaytonaRuntimeCreditsReserved,
-            terminal_reason: terminalReason,
-          },
-        });
-      } catch (error) {
-        logStructuredError("polynet_daytona_runtime_credit_settlement_failed", {
-          error,
-          run_id: runId,
-          credit_key: polynetDaytonaRuntimeCreditKey,
+      await recordPlatformToolCostBestEffort({
+        ctx,
+        costKey: polynetDaytonaRuntimeCostKey,
+        userId: actor.dbUserId,
+        projectId: runtimeProjectId ?? undefined,
+        runId,
+        rawVendorCostUsd,
+        metadata: {
+          harness: "polynet",
+          provider: "daytona",
+          runtime_engine: "polynet",
+          pricing_model: "daytona_runtime_seconds_estimate",
+          provider_billing_evidence: "estimated_from_runtime_duration",
+          daytona_workspace_compute_usd_per_second:
+            DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
           duration_seconds: durationSeconds,
-        });
-        return;
-      }
+          duration_source: "convex_observed_run_elapsed",
+          target_id: targetId || null,
+          sandbox_id: sandboxId,
+          terminal_reason: terminalReason,
+        },
+      });
       try {
         await appendRunEvent({
-          eventType: "polynet_daytona_runtime_credit_settled",
-          eventKey: `${runId}:polynet_daytona_runtime_credit_settled:1`,
+          eventType: "polynet_daytona_runtime_cost_recorded",
+          eventKey: `${runId}:polynet_daytona_runtime_cost_recorded:1`,
           payload: {
             run_id: runId,
-            credit_key: polynetDaytonaRuntimeCreditKey,
-            credits_settled: creditsSettled,
+            cost_key: polynetDaytonaRuntimeCostKey,
             raw_vendor_cost_usd: rawVendorCostUsd,
             duration_seconds: durationSeconds,
             target_id: targetId || null,
@@ -1002,7 +920,7 @@ export async function handleRuntimeTurnRequest(args: {
           },
         });
       } catch {
-        // Settlement is authoritative; audit event persistence is best effort.
+        // Cost evidence is authoritative; audit event persistence is best effort.
       }
     };
     const releasePolynetCodexWorkerLeaseBestEffort = async (
@@ -1070,14 +988,14 @@ export async function handleRuntimeTurnRequest(args: {
         if (params.status === "ok") {
           await recordCommunityOnboardingAgentDockTurnBestEffort();
         }
-        await settlePolynetDaytonaRuntimeCreditsBestEffort(
+        await recordPolynetDaytonaRuntimeCostBestEffort(
           params.status === "ok"
             ? "completed"
             : params.status === "cancelled"
               ? "cancelled"
               : params.errorCode || params.reason || "error",
         );
-        await settlePolynetCodexRuntimeCreditsBestEffort(
+        await recordPolynetCodexRuntimeCostBestEffort(
           params.status === "ok"
             ? "completed"
             : params.status === "cancelled"
@@ -1331,84 +1249,15 @@ export async function handleRuntimeTurnRequest(args: {
         POLYNET_DAYTONA_RUNTIME_TOOL_NAME_SET.has(toolName),
       );
     if (polynetDaytonaRuntimeEnabled) {
-      const reserveDurationSeconds =
-        POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS / 1000;
-      const reserveRawVendorCostUsd = estimateDaytonaWorkspaceComputeVendorCostUsd({
-        durationSeconds: reserveDurationSeconds,
-      });
-      const reserveCredits = priceDaytonaWorkspaceComputeCredits({
-        durationSeconds: reserveDurationSeconds,
-      });
-      const creditKey = `workspace_compute:daytona:${runId}`;
-      const reservation = await reservePaidToolCredits({
-        ctx,
-        creditKey,
-        userId: actor.dbUserId,
-        projectId: runtimeProjectId ?? undefined,
-        runId,
-        toolKind: "workspace_tools",
-        toolName: "workspace_compute",
-        action: "turn",
-        vendor: "daytona",
-        credits: reserveCredits,
-        rawVendorCostUsd: reserveRawVendorCostUsd,
-        polynetPriceUsd: creditsToUsd(reserveCredits),
-        metadata: {
-          pricing_version: PAID_TOOL_PRICING_VERSION,
-          billing_product: "workspace_compute",
-          harness: "polynet",
-          target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-          provider: "daytona",
-          runtime_engine: "polynet",
-          pricing_model: "daytona_runtime_seconds_estimate",
-          provider_billing_reconciliation: "pending",
-          provider_billing_evidence: "estimated_from_runtime_duration",
-          daytona_workspace_compute_usd_per_second:
-            DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
-          reserve_duration_seconds: reserveDurationSeconds,
-          reserve_raw_vendor_cost_usd: reserveRawVendorCostUsd,
-        },
-      });
-      if (!reservation.ok) {
-        const billingMode =
-          String(reservation.details.paid_usage_billing_mode ?? "").trim() ||
-          "card_preferred";
-        await persistPartialAssistantMessageBestEffort({
-          content: "",
-          status: "error",
-          reason: reservation.code,
-          errorCode: reservation.code,
-          errorMessage: reservation.message,
-        });
-        await finishRunBestEffortForRun({
-          status: "error",
-          reason: reservation.code,
-          errorCode: reservation.code,
-          errorMessage: reservation.message,
-        });
-        return runtimeJsonResponse(402, {
-          ok: false,
-          code: reservation.code,
-          error: reservation.code,
-          message: reservation.message,
-          status: 402,
-          tool_kind: "workspace_tools",
-          required_credits: reserveCredits,
-          paid_usage_billing_mode: billingMode,
-        });
-      }
-      polynetDaytonaRuntimeCreditKey = creditKey;
-      polynetDaytonaRuntimeCreditsReserved = reserveCredits;
+      const costKey = `workspace_compute:daytona:${runId}`;
+      polynetDaytonaRuntimeCostKey = costKey;
       polynetDaytonaRuntimeReserveStartedAtMs = Date.now();
       await appendRunEvent({
-        eventType: "polynet_daytona_runtime_credit_reserved",
-        eventKey: `${runId}:polynet_daytona_runtime_credit_reserved:1`,
+        eventType: "polynet_daytona_runtime_cost_tracking_started",
+        eventKey: `${runId}:polynet_daytona_runtime_cost_tracking_started:1`,
         payload: {
           run_id: runId,
-          credit_key: creditKey,
-          reserved_credits: reserveCredits,
-          reserve_duration_seconds: reserveDurationSeconds,
-          reserve_raw_vendor_cost_usd: reserveRawVendorCostUsd,
+          cost_key: costKey,
         },
       });
     }
@@ -1539,7 +1388,6 @@ export async function handleRuntimeTurnRequest(args: {
         runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
         runtime_engine_source: runtimeEngineResolution.runtimeEngineSource,
         engine_id: runtimeEngineId,
-        account_plan: runtimeAccountPlan,
         capability_families: resolvedRuntimeCapabilityFamilies,
         harness_profile: resolvedRuntimeHarnessProfile,
         invocation_surface: invocationSurface,
@@ -1753,95 +1601,19 @@ export async function handleRuntimeTurnRequest(args: {
             // lease without attempting the turn. Terminal finalization releases it.
           }
 
-          const codexRuntimeReserveDurationSeconds =
-            POLYNET_CODEX_WORKER_ACTIVE_RUN_WINDOW_MS / 1000;
-          const codexRuntimeReserveRawVendorCostUsd =
-            estimateDaytonaWorkspaceComputeVendorCostUsd({
-              durationSeconds: codexRuntimeReserveDurationSeconds,
-            });
-          const codexRuntimeReserveCredits = priceDaytonaWorkspaceComputeCredits({
-            durationSeconds: codexRuntimeReserveDurationSeconds,
-          });
-          const codexRuntimeCreditKey = `workspace_compute:daytona:${runId}`;
-          const codexRuntimeReservation = await reservePaidToolCredits({
-            ctx,
-            creditKey: codexRuntimeCreditKey,
-            userId: actor.dbUserId,
-            projectId: runtimeProjectId ?? undefined,
-            runId,
-            toolKind: "workspace_tools",
-            toolName: "workspace_compute",
-            action: "turn",
-            vendor: "daytona",
-            credits: codexRuntimeReserveCredits,
-            rawVendorCostUsd: codexRuntimeReserveRawVendorCostUsd,
-            polynetPriceUsd: creditsToUsd(codexRuntimeReserveCredits),
-            metadata: {
-              pricing_version: PAID_TOOL_PRICING_VERSION,
-              billing_product: "workspace_compute",
-              harness: "codex",
-              target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-              provider: "daytona",
-              pricing_model: "daytona_runtime_seconds_estimate",
-              provider_billing_reconciliation: "pending",
-              provider_billing_evidence: "estimated_from_runtime_duration",
-              daytona_workspace_compute_usd_per_second:
-                DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
-              reserve_duration_seconds: codexRuntimeReserveDurationSeconds,
-              reserve_raw_vendor_cost_usd: codexRuntimeReserveRawVendorCostUsd,
-              lease_id: leaseAcquireResult.leaseId ?? null,
-              lease_expires_at: leaseAcquireResult.expiresAt ?? null,
-            },
-          });
-          if (!codexRuntimeReservation.ok) {
-            const billingMode =
-              String(codexRuntimeReservation.details.paid_usage_billing_mode ?? "").trim() ||
-              "card_preferred";
-            await persistPartialAssistantMessageBestEffort({
-              content: "",
-              status: "error",
-              reason: codexRuntimeReservation.code,
-              errorCode: codexRuntimeReservation.code,
-              errorMessage: codexRuntimeReservation.message,
-              inferenceSourceOverride: streamedInferenceSource,
-              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-            });
-            await finishRunBestEffortForRun({
-              status: "error",
-              reason: codexRuntimeReservation.code,
-              errorCode: codexRuntimeReservation.code,
-              errorMessage: codexRuntimeReservation.message,
-            });
-            writer.send({
-              event: "error",
-              data: {
-                code: codexRuntimeReservation.code,
-                error: codexRuntimeReservation.message,
-                message: codexRuntimeReservation.message,
-                status: 402,
-                tool_kind: "workspace_tools",
-                required_credits: codexRuntimeReserveCredits,
-                paid_usage_billing_mode: billingMode,
-              },
-            });
-            return;
-          }
-          polynetCodexRuntimeCreditKey = codexRuntimeCreditKey;
-          polynetCodexRuntimeCreditsReserved = codexRuntimeReserveCredits;
+          const codexRuntimeCostKey = `workspace_compute:daytona:${runId}`;
+          polynetCodexRuntimeCostKey = codexRuntimeCostKey;
           try {
             await streamAppendRunEvent({
-              eventType: "polynet_codex_runtime_credit_reserved",
-              eventKey: `${runId}:polynet_codex_runtime_credit_reserved:1`,
+              eventType: "polynet_codex_runtime_cost_tracking_started",
+              eventKey: `${runId}:polynet_codex_runtime_cost_tracking_started:1`,
               payload: {
                 run_id: runId,
-                credit_key: codexRuntimeCreditKey,
-                reserved_credits: codexRuntimeReserveCredits,
-                reserve_duration_seconds: codexRuntimeReserveDurationSeconds,
-                reserve_raw_vendor_cost_usd: codexRuntimeReserveRawVendorCostUsd,
+                cost_key: codexRuntimeCostKey,
               },
             });
           } catch {
-            // Reservation is authoritative; audit event write is best-effort.
+            // Cost tracking is best-effort and never blocks the user turn.
           }
 
           if (runtimeProjectId) {
@@ -1926,7 +1698,6 @@ export async function handleRuntimeTurnRequest(args: {
             agentSoul: runtimeAgentProfile.agentSoul,
             runtimeTurnContext: codexRuntimeTurnContext,
             codexVisiblePolynetToolNames,
-            accountPlan: runtimeAccountPlan,
             currentDateTimeIso: codexPromptGeneratedAt.toISOString(),
             currentDateLabel: new Intl.DateTimeFormat("en-US", {
               dateStyle: "full",
@@ -2278,9 +2049,8 @@ export async function handleRuntimeTurnRequest(args: {
                       model_id: requestedModelId,
                       lane,
                       inference_source: streamedInferenceSource,
-                      workspace_compute_billing: {
-                        credit_key: polynetCodexRuntimeCreditKey,
-                        reserved_credits: polynetCodexRuntimeCreditsReserved,
+                      workspace_compute_cost_tracking: {
+                        cost_key: polynetCodexRuntimeCostKey,
                         daytona_workspace_compute_usd_per_second:
                           DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
                       },
@@ -2652,7 +2422,6 @@ export async function handleRuntimeTurnRequest(args: {
               projectId: runtimeProjectId,
               requestedModelId,
               inferenceSource,
-              accountPlan: runtimeAccountPlan,
               modelRef,
               messages: conversationMessages,
               maxTokens,
@@ -2831,9 +2600,6 @@ export async function handleRuntimeTurnRequest(args: {
                 error: loopResult.message,
                 message: loopResult.message,
                 status: loopResult.status,
-                tool_kind: loopResult.toolKind ?? null,
-                required_credits: loopResult.requiredCredits ?? null,
-                paid_usage_billing_mode: loopResult.paidUsageBillingMode ?? null,
               },
             });
             return;
@@ -2953,7 +2719,6 @@ export async function handleRuntimeTurnRequest(args: {
           projectId: runtimeProjectId,
           requestedModelId,
           inferenceSource,
-          accountPlan: runtimeAccountPlan,
           modelRef,
           messages: conversationMessages,
           maxTokens,
@@ -3114,9 +2879,6 @@ export async function handleRuntimeTurnRequest(args: {
           code: loopResult.code,
           error: loopResult.code,
           message: loopResult.message,
-          tool_kind: loopResult.toolKind ?? null,
-          required_credits: loopResult.requiredCredits ?? null,
-          paid_usage_billing_mode: loopResult.paidUsageBillingMode ?? null,
           run_id: runId,
         });
       }
@@ -3150,7 +2912,6 @@ export async function handleRuntimeTurnRequest(args: {
             timeZone: runtimeTimeZone,
           }).format(now),
           currentTimeZone: runtimeTimeZone,
-          accountPlan: runtimeAccountPlan,
         });
       const chatMessages = [
         { role: "system" as const, content: authenticatedScopedSystemPrompt },

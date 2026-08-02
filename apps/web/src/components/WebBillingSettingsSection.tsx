@@ -1,53 +1,8 @@
-import { useState } from "react";
-import { Check, Lock, Minus } from "lucide-react";
-import type { AccountCommerceStatus } from "../../../../shared/accountCommerceStatusGateway";
 import type {
   CloudFounderBillingCommunity,
   CloudFounderBillingOverview,
 } from "../../../../shared/cloudFounderBillingGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
-import {
-  isAccountTierFree,
-  POLYNET_PREMIUM_ACCOUNT_TIER,
-  POLYNET_PREMIUM_MONTHLY_PRICE_LABEL,
-  POLYNET_PREMIUM_PLAN_NAME,
-} from "../../../../shared/accountCommerce";
-
-const FREE_MONTHLY_PRICE_LABEL = "$0/mo";
-
-// Free vs Premium comparison rows. A boolean renders a check/dash; a string
-// renders inline copy for compact plan-specific values.
-const BILLING_PLAN_FEATURES: {
-  label: string;
-  free: boolean | string;
-  premium: boolean | string;
-}[] = [
-  { label: "Polynet runtime", free: true, premium: true },
-  { label: "Codex + future premium runtimes", free: false, premium: true },
-  { label: "Premium tool usage", free: false, premium: "Included" },
-  { label: "Hosted workspace tools", free: false, premium: true },
-];
-
-function splitPriceLabel(label: string): { amount: string; period: string } {
-  const slash = label.indexOf("/");
-  if (slash === -1) return { amount: label, period: "" };
-  return { amount: label.slice(0, slash), period: label.slice(slash) };
-}
-
-function BillingPlanCellValue({ value }: { value: boolean | string }) {
-  if (value === true)
-    return <Check size={16} strokeWidth={2.4} aria-label="Included" />;
-  if (value === false)
-    return (
-      <Minus
-        size={15}
-        strokeWidth={2.2}
-        className="billing-plan-dash"
-        aria-label="Not included"
-      />
-    );
-  return <span className="billing-plan-value-note">{value}</span>;
-}
 
 function formatUsdBaseUnits(value: number): string {
   return `$${(Math.max(0, value) / 100).toFixed(0)}`;
@@ -88,10 +43,6 @@ type SessionLike = {
 
 export type WebBillingSettingsSectionProps = {
   session: SessionLike;
-  accountCommerceStatus: AccountCommerceStatus | null;
-  isLoadingAccountCommerce: boolean;
-  accountCommerceError: string | null;
-  startPremiumSubscriptionCheckout: () => Promise<void> | void;
   founderBillingOverview: CloudFounderBillingOverview;
   isLoadingFounderBilling: boolean;
   founderBillingActionCommunityId: string | null;
@@ -99,10 +50,6 @@ export type WebBillingSettingsSectionProps = {
   startFounderSubscriptionCheckout: (communityId: string) => Promise<void> | void;
   openFounderBillingPortal: (communityId: string) => Promise<void> | void;
   refreshFounderBilling: () => Promise<unknown> | void;
-  canUseDevTierOverride: boolean;
-  isSettingDevAccountTier: boolean;
-  setDevAccountTier: (tier: "free" | "architect") => Promise<void> | void;
-  devAccountTierError: string | null;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
   isRedeemingPendingPurchases: boolean;
@@ -115,49 +62,6 @@ export type WebBillingSettingsSectionProps = {
 export function WebBillingSettingsSection(
   props: WebBillingSettingsSectionProps,
 ) {
-  const [isStartingPremiumCheckout, setIsStartingPremiumCheckout] =
-    useState(false);
-  const [premiumCheckoutError, setPremiumCheckoutError] = useState<
-    string | null
-  >(null);
-  const isOperatorComped =
-    props.accountCommerceStatus?.operator_complimentary_access === true;
-  const isPremium =
-    isOperatorComped ||
-    props.accountCommerceStatus?.account_tier === POLYNET_PREMIUM_ACCOUNT_TIER;
-  const isSignedIn = Boolean(props.session);
-  const actionLabel = !isSignedIn
-    ? "Sign in to upgrade"
-    : isOperatorComped
-      ? "Operator access included"
-      : isPremium
-        ? "Premium active"
-        : isStartingPremiumCheckout
-          ? "Opening checkout..."
-          : "Upgrade to Premium";
-  const canStartPremiumCheckout =
-    isSignedIn && !isPremium && !isStartingPremiumCheckout;
-
-  const handleStartPremiumCheckout = async () => {
-    if (!canStartPremiumCheckout) return;
-    setPremiumCheckoutError(null);
-    setIsStartingPremiumCheckout(true);
-    try {
-      await props.startPremiumSubscriptionCheckout();
-    } catch (error) {
-      setPremiumCheckoutError(
-        error instanceof Error
-          ? error.message
-          : "Premium checkout is temporarily unavailable.",
-      );
-    } finally {
-      setIsStartingPremiumCheckout(false);
-    }
-  };
-
-  const freePrice = splitPriceLabel(FREE_MONTHLY_PRICE_LABEL);
-  const premiumPrice = splitPriceLabel(POLYNET_PREMIUM_MONTHLY_PRICE_LABEL);
-
   return (
     <>
       <div className="panel-title">Billing</div>
@@ -243,146 +147,6 @@ export function WebBillingSettingsSection(
           </div>
           {props.founderBillingError ? (
             <div className="billing-settings-error">{props.founderBillingError}</div>
-          ) : null}
-        </div>
-
-        <div className="settings-section billing-page">
-          <div className="settings-section-title">Personal tools</div>
-          <p className="billing-page-sub">
-            You're on <strong>{isOperatorComped ? "Operator access" : isPremium ? "Premium" : "Free"}</strong>
-            — this controls personal tools, not community funding or fees.
-          </p>
-
-          <div className="billing-plan-scroll">
-            <div
-              className="billing-plan-table"
-              aria-label="Compare Free and Premium plans"
-            >
-              <div className="billing-plan-col billing-plan-col--features">
-                <div className="billing-plan-head billing-plan-head--intro">
-                  <div className="billing-plan-intro-title">Compare plans</div>
-                  <div className="billing-plan-intro-sub">
-                    Free runs on the Polynet runtime. Premium unlocks personal
-                    agent and workspace tools.
-                  </div>
-                </div>
-                {BILLING_PLAN_FEATURES.map((feature) => (
-                  <div className="billing-plan-featrow" key={feature.label}>
-                    {feature.label}
-                  </div>
-                ))}
-              </div>
-
-              <div className="billing-plan-col billing-plan-col--free">
-                <div className="billing-plan-head">
-                  <div className="billing-tier-name">Free</div>
-                  <div className="billing-tier-price">
-                    {freePrice.amount}
-                    <span>{freePrice.period}</span>
-                  </div>
-                  <div className="billing-tier-foot">
-                    {isPremium ? (
-                      <span className="billing-tier-note">
-                        Downgrade available
-                      </span>
-                    ) : (
-                      <span className="billing-tier-current">Current plan</span>
-                    )}
-                  </div>
-                </div>
-                {BILLING_PLAN_FEATURES.map((feature) => (
-                  <div className="billing-plan-valrow" key={feature.label}>
-                    <BillingPlanCellValue value={feature.free} />
-                  </div>
-                ))}
-              </div>
-
-              <div className="billing-plan-col billing-plan-col--premium">
-                <div className="billing-plan-head">
-                  <div className="billing-tier-name">
-                    {POLYNET_PREMIUM_PLAN_NAME}
-                    <span className="billing-tier-badge">Popular</span>
-                  </div>
-                  <div className="billing-tier-price">
-                    {premiumPrice.amount}
-                    <span>{premiumPrice.period}</span>
-                  </div>
-                  <div className="billing-tier-foot">
-                    <button
-                      type="button"
-                      className="platform-save-button platform-save-button--compact billing-tier-cta"
-                      onClick={() => void handleStartPremiumCheckout()}
-                      disabled={!canStartPremiumCheckout}
-                    >
-                      {actionLabel}
-                    </button>
-                    <div className="billing-tier-trust">
-                      <Lock size={11} strokeWidth={2} aria-hidden="true" />
-                      {isOperatorComped
-                        ? "Included with the platform owner role"
-                        : "Cancel anytime · secured by Stripe"}
-                    </div>
-                  </div>
-                </div>
-                {BILLING_PLAN_FEATURES.map((feature) => (
-                  <div className="billing-plan-valrow" key={feature.label}>
-                    <BillingPlanCellValue value={feature.premium} />
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {props.session && props.canUseDevTierOverride ? (
-            <div className="account-row">
-              <div className="account-identity">
-                <span>Internal tier override (dev)</span>
-                <strong>Creator-only testing control</strong>
-              </div>
-              <div className="auth-actions">
-                <button
-                  type="button"
-                  className={
-                    isAccountTierFree(
-                      props.accountCommerceStatus?.account_tier ?? "free",
-                    )
-                      ? ""
-                      : "secondary"
-                  }
-                  onClick={() => void props.setDevAccountTier("free")}
-                  disabled={
-                    props.isSettingDevAccountTier ||
-                    isAccountTierFree(
-                      props.accountCommerceStatus?.account_tier ?? "free",
-                    )
-                  }
-                >
-                  Free
-                </button>
-                <button
-                  type="button"
-                  className={isPremium ? "" : "secondary"}
-                  onClick={() => void props.setDevAccountTier("architect")}
-                  disabled={props.isSettingDevAccountTier || isPremium}
-                >
-                  Premium
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {props.accountCommerceError ? (
-            <div className="billing-settings-error">
-              {props.accountCommerceError}
-            </div>
-          ) : null}
-          {props.devAccountTierError ? (
-            <div className="billing-settings-error">
-              {props.devAccountTierError}
-            </div>
-          ) : null}
-          {premiumCheckoutError ? (
-            <div className="billing-settings-error">{premiumCheckoutError}</div>
           ) : null}
         </div>
 

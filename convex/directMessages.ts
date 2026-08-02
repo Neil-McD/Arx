@@ -670,7 +670,6 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
       avatar_focus_x: 0.5,
       avatar_focus_y: 0.5,
       avatar_zoom: 1,
-      premium_badge: null,
       status: row.status,
       last_read_seq: Math.max(0, Math.floor(row.lastReadSeq ?? 0)),
     };
@@ -684,7 +683,6 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
         avatar_focus_x: 0.5,
         avatar_focus_y: 0.5,
         avatar_zoom: 1,
-        premium_badge: null,
       };
   return {
     id: String(row._id),
@@ -695,7 +693,6 @@ async function mapDirectParticipant(ctx: any, row: DirectMessageParticipantLike)
     avatar_focus_x: profile.avatar_focus_x ?? 0.5,
     avatar_focus_y: profile.avatar_focus_y ?? 0.5,
     avatar_zoom: profile.avatar_zoom ?? 1,
-    premium_badge: profile.premium_badge ?? null,
     status: row.status,
     last_read_seq: Math.max(0, Math.floor(row.lastReadSeq ?? 0)),
   };
@@ -805,7 +802,6 @@ async function mapDirectTypingPresence(ctx: any, row: DirectMessageTypingPresenc
         avatar_focus_x: 0.5,
         avatar_focus_y: 0.5,
         avatar_zoom: 1,
-        premium_badge: null,
       };
   return {
     user_id: publicUserId ?? normalizeIdValue(row.userId),
@@ -814,7 +810,6 @@ async function mapDirectTypingPresence(ctx: any, row: DirectMessageTypingPresenc
     avatar_focus_x: profile.avatar_focus_x ?? 0.5,
     avatar_focus_y: profile.avatar_focus_y ?? 0.5,
     avatar_zoom: profile.avatar_zoom ?? 1,
-    premium_badge: profile.premium_badge ?? null,
     display_until_ms: row.displayUntil,
     updated_at: toIsoString(row.updatedAt),
   };
@@ -883,7 +878,6 @@ async function mapEligibleDirectMessageRecipient(args: {
     avatar_focus_x: profile.avatar_focus_x ?? 0.5,
     avatar_focus_y: profile.avatar_focus_y ?? 0.5,
     avatar_zoom: profile.avatar_zoom ?? 1,
-    premium_badge: profile.premium_badge ?? null,
     community_id: String(args.community._id),
     community_name: args.community.name,
     existing_conversation_id: existingConversation ? String(existingConversation._id) : null,

@@ -47,7 +47,6 @@ function mapAccountForMcp(account: Awaited<ReturnType<typeof loadMemberAccountCo
   return {
     display_name: account.displayName,
     handle: account.handle,
-    tier: account.tier,
     timezone: account.timezone,
     inference_provider: account.inferenceProvider,
     social_links: account.socialLinks,

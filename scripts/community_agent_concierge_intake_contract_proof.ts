@@ -99,9 +99,10 @@ assert.match(
 );
 assert.match(
   conciergeCore,
-  /resolveCommunityInferenceFundingAdmission[\s\S]*funding\.mode === "legacy_requester_chatgpt"[\s\S]*requesterHasChatgptConnection/,
-  "Concierge intake should require requester ChatGPT only during the approved-founder transition",
+  /owner_funding_choice_required[\s\S]*activate an OpenAI API key or fund this community at \$79\/month/,
+  "Concierge intake should fail closed until the owner chooses BYOK or the founder plan",
 );
+assert.doesNotMatch(conciergeCore, /legacy_requester_chatgpt|requesterHasChatgptConnection/);
 assert.doesNotMatch(
   concierge + conciergeCore,
   /runChatgptNativeToolCompletion|runOpenAiNativeToolCompletion|runNativeRuntimeKernel|createCommunityAgentRunInternal|runCommunityAgentCycleInternal/,

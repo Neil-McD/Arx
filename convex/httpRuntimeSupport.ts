@@ -153,7 +153,7 @@ function normalizeCanonicalTier(raw: unknown): CanonicalTier | null {
   const value = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (value === "free" || value === "architect") return value;
+  if (value === "free" || value === "architect") return "free";
   return null;
 }
 
@@ -161,9 +161,8 @@ function normalizeEffectiveTier(raw: unknown): EffectiveTier | null {
   const value = String(raw ?? "")
     .trim()
     .toLowerCase();
-  if (value === "anon_free" || value === "auth_free" || value === "architect") {
-    return value;
-  }
+  if (value === "anon_free") return "anon_free";
+  if (value === "auth_free" || value === "architect") return "auth_free";
   return null;
 }
 

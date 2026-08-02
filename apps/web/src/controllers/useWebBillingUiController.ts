@@ -20,10 +20,6 @@ export type UseWebBillingUiControllerResult<
   setIsLoadingAccountCommerce: Dispatch<SetStateAction<boolean>>;
   accountCommerceError: string | null;
   setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
-  isSettingDevAccountTier: boolean;
-  setIsSettingDevAccountTier: Dispatch<SetStateAction<boolean>>;
-  devAccountTierError: string | null;
-  setDevAccountTierError: Dispatch<SetStateAction<string | null>>;
   isStartingStripeConnectOnboarding: boolean;
   setIsStartingStripeConnectOnboarding: Dispatch<SetStateAction<boolean>>;
   checkoutStatus: "idle" | "loading" | "pending" | "succeeded" | "error";
@@ -53,8 +49,6 @@ export function useWebBillingUiController<
   const [accountCommerceStatus, setAccountCommerceStatus] = useState<BillingStatusT | null>(null);
   const [isLoadingAccountCommerce, setIsLoadingAccountCommerce] = useState(false);
   const [accountCommerceError, setAccountCommerceError] = useState<string | null>(null);
-  const [isSettingDevAccountTier, setIsSettingDevAccountTier] = useState(false);
-  const [devAccountTierError, setDevAccountTierError] = useState<string | null>(null);
   const [isStartingStripeConnectOnboarding, setIsStartingStripeConnectOnboarding] = useState(false);
 
   const [checkoutStatus, setCheckoutStatus] = useState<"idle" | "loading" | "pending" | "succeeded" | "error">(
@@ -85,10 +79,6 @@ export function useWebBillingUiController<
     setIsLoadingAccountCommerce,
     accountCommerceError,
     setAccountCommerceError,
-    isSettingDevAccountTier,
-    setIsSettingDevAccountTier,
-    devAccountTierError,
-    setDevAccountTierError,
     isStartingStripeConnectOnboarding,
     setIsStartingStripeConnectOnboarding,
     checkoutStatus,

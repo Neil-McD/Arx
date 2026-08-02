@@ -152,7 +152,6 @@ async function mapCommunityMentionUserCandidate(args: {
     display_name: projection.display_name ?? handle,
     handle,
     avatar_url: projection.avatar_url,
-    premium_badge: projection.premium_badge,
     role: args.role,
   };
 }

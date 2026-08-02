@@ -18,30 +18,19 @@ import {
 import {
   executeRuntimeWorkspaceTool,
 } from "./workspaceRuntimeTools.ts";
-import {
-  reservePaidToolCredits,
-} from "./paidToolCreditReservation.ts";
 import type {
   RuntimeWorkspaceSession,
 } from "./workspaceRuntimeSession.ts";
 import {
-  buildWorkspaceCreditBudgetSignal,
-  isWorkspaceCreditBudgetExpired,
-} from "./workspaceCreditBudgetSignal.ts";
+  buildWorkspaceRuntimeWindowSignal,
+  isWorkspaceRuntimeWindowExpired,
+} from "./workspaceRuntimeWindowSignal.ts";
 import { executeWebResearch } from "./webResearchTools";
 import type { WebResearchBillingEvidence } from "./webSearchTypes";
 import { classifyWebResearchUrlAccess } from "../shared/webResearchUrlPolicy.ts";
+import { recordPlatformToolCostBestEffort } from "./platformToolCostAccounting";
 import {
-  settleReservedCreditsBestEffort,
-  settleReservedCreditsStrict,
-} from "./workspaceCreditSettlement";
-import {
-  creditsToUsd,
   estimateWebResearchVendorCostUsd,
-  PAID_TOOL_PRICING_VERSION,
-  PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-  priceVendorCostUsdToWorkspaceCredits,
-  priceWebResearchCredits,
   type WebResearchCreditAction,
 } from "../shared/workspaceCredits";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
@@ -77,7 +66,6 @@ import {
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract";
 import {
   buildPlatformHarnessRuntimePromptBundle,
-  type RuntimeAccountPlan,
   type RuntimeCommunityPromptFields,
   type ThreadWorkingStatePrompt,
 } from "../shared/runtimePrompt";
@@ -197,23 +185,19 @@ function communityMemoryToolExecutionResult(params: {
   };
 }
 
-function newCreditKey(prefix: string): string {
+function newCostKey(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
-function buildWebResearchSettlementMetadata(params: {
-  reserveCredits: number;
-  reserveVendorCostUsd: number;
+function buildWebResearchCostMetadata(params: {
+  estimatedVendorCostUsd: number;
   finalVendorCostUsd: number;
   billingEvidence?: WebResearchBillingEvidence;
 }): Record<string, unknown> {
   const evidence = params.billingEvidence as any;
   const usage = evidence?.usage && typeof evidence.usage === "object" ? evidence.usage : null;
   return {
-    pricing_version: PAID_TOOL_PRICING_VERSION,
-    target_gross_margin_bps: PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
-    reserve_credits: params.reserveCredits,
-    reserve_vendor_cost_usd: params.reserveVendorCostUsd,
+    estimated_vendor_cost_usd: params.estimatedVendorCostUsd,
     final_vendor_cost_usd: params.finalVendorCostUsd,
     final_cost_source: typeof evidence?.costSource === "string" ? evidence.costSource : "estimated",
     final_provider: typeof evidence?.provider === "string" ? evidence.provider : null,
@@ -1182,38 +1166,8 @@ export async function executeRetrievalHarnessTool(params: {
 
   if (params.toolName === "web_crawl") {
     const webResearchAction = "crawl" as WebResearchCreditAction;
-    const webResearchCredits = priceWebResearchCredits(webResearchAction);
     const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
-    const creditKey = newCreditKey("crawl");
-    const reservation = await reservePaidToolCredits({
-      ctx: params.ctx,
-      creditKey,
-      userId: params.userId,
-      communityId: params.communityId ?? undefined,
-      projectId: params.projectId ?? undefined,
-      runId: params.runId,
-      toolKind: "web_research",
-      toolName: "web_research",
-      action: "crawl",
-      vendor: "source_url_fetcher",
-      credits: webResearchCredits,
-      rawVendorCostUsd: webResearchVendorCostUsd,
-      polynetPriceUsd: creditsToUsd(webResearchCredits),
-      metadata: {
-        estimated_vendor_cost_usd: webResearchVendorCostUsd,
-      },
-      nowMs: Date.now(),
-    });
-    if (!reservation.ok) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: reservation.code,
-        errorMessage: reservation.message,
-        details: reservation.details,
-      };
-    }
+    const costKey = newCostKey("crawl");
     let payload: unknown;
     try {
       payload = await params.ctx.runAction((api as any).community.crawlWebRoot, {
@@ -1231,12 +1185,6 @@ export async function executeRetrievalHarnessTool(params: {
         maxChars: normalizedArgs.maxChars,
       });
     } catch (error) {
-      await settleReservedCreditsBestEffort({
-        ctx: params.ctx,
-        creditKey,
-        status: "refunded",
-        failureReason: "web_crawl_threw",
-      });
       const message = error instanceof Error ? error.message : String(error);
       return {
         status: "error",
@@ -1247,28 +1195,19 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
 
-    try {
-      await settleReservedCreditsStrict({
-        ctx: params.ctx,
-        creditKey,
-        status: "succeeded",
-        creditsSettled: webResearchCredits,
-        rawVendorCostUsd: webResearchVendorCostUsd,
-        metadata: {
-          pricing_version: PAID_TOOL_PRICING_VERSION,
-          reserved_credits: webResearchCredits,
-          estimated_vendor_cost_usd: webResearchVendorCostUsd,
-        },
-      });
-    } catch {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "credits_settlement_failed",
-        errorMessage: "Web crawl succeeded, but credit settlement failed. Try again.",
-      };
-    }
+    await recordPlatformToolCostBestEffort({
+      ctx: params.ctx,
+      costKey,
+      userId: params.userId,
+      communityId: params.communityId ?? undefined,
+      projectId: params.projectId ?? undefined,
+      runId: params.runId,
+      rawVendorCostUsd: webResearchVendorCostUsd,
+      metadata: {
+        provider: "source_url_fetcher",
+        final_cost_source: "estimated",
+      },
+    });
     return {
       status: "ok",
       exitCode: 0,
@@ -1301,38 +1240,8 @@ export async function executeRetrievalHarnessTool(params: {
       }
     }
     const webResearchAction = action as WebResearchCreditAction;
-    const webResearchCredits = priceWebResearchCredits(webResearchAction);
     const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
-    const creditKey = newCreditKey("web");
-    const reservation = await reservePaidToolCredits({
-      ctx: params.ctx,
-      creditKey,
-      userId: params.userId,
-      communityId: params.communityId ?? undefined,
-      projectId: params.projectId ?? undefined,
-      runId: params.runId,
-      toolKind: "web_research",
-      toolName: "web_research",
-      action,
-      vendor: action === "search" ? "openai_xai_fallback" : "jina",
-      credits: webResearchCredits,
-      rawVendorCostUsd: webResearchVendorCostUsd,
-      polynetPriceUsd: creditsToUsd(webResearchCredits),
-      metadata: {
-        estimated_vendor_cost_usd: webResearchVendorCostUsd,
-      },
-      nowMs: Date.now(),
-    });
-    if (!reservation.ok) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: reservation.code,
-        errorMessage: reservation.message,
-        details: reservation.details,
-      };
-    }
+    const costKey = newCostKey("web");
     let result: Awaited<ReturnType<typeof executeWebResearch>>;
     try {
       result = await executeWebResearch({
@@ -1345,12 +1254,6 @@ export async function executeRetrievalHarnessTool(params: {
           typeof normalizedArgs.url === "string" ? normalizedArgs.url : undefined,
       });
     } catch (error) {
-      await settleReservedCreditsBestEffort({
-        ctx: params.ctx,
-        creditKey,
-        status: "refunded",
-        failureReason: "web_research_threw",
-      });
       const message = error instanceof Error ? error.message : String(error);
       return {
         status: "error",
@@ -1361,12 +1264,6 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     if (!result.ok) {
-      await settleReservedCreditsBestEffort({
-        ctx: params.ctx,
-        creditKey,
-        status: "refunded",
-        failureReason: result.code,
-      });
       return {
         status: "error",
         exitCode: null,
@@ -1379,32 +1276,20 @@ export async function executeRetrievalHarnessTool(params: {
       typeof result.billingEvidence?.rawVendorCostUsd === "number"
         ? Math.max(0, result.billingEvidence.rawVendorCostUsd)
         : webResearchVendorCostUsd;
-    const finalWebResearchCredits = priceVendorCostUsdToWorkspaceCredits({
+    await recordPlatformToolCostBestEffort({
+      ctx: params.ctx,
+      costKey,
+      userId: params.userId,
+      communityId: params.communityId ?? undefined,
+      projectId: params.projectId ?? undefined,
+      runId: params.runId,
       rawVendorCostUsd: finalVendorCostUsd,
+      metadata: buildWebResearchCostMetadata({
+        estimatedVendorCostUsd: webResearchVendorCostUsd,
+        finalVendorCostUsd,
+        billingEvidence: result.billingEvidence,
+      }),
     });
-    try {
-      await settleReservedCreditsStrict({
-        ctx: params.ctx,
-        creditKey,
-        status: "succeeded",
-        creditsSettled: finalWebResearchCredits,
-        rawVendorCostUsd: finalVendorCostUsd,
-        metadata: buildWebResearchSettlementMetadata({
-          reserveCredits: webResearchCredits,
-          reserveVendorCostUsd: webResearchVendorCostUsd,
-          finalVendorCostUsd,
-          billingEvidence: result.billingEvidence,
-        }),
-      });
-    } catch {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "credits_settlement_failed",
-        errorMessage: "Web research succeeded, but credit settlement failed. Try again.",
-      };
-    }
     return {
       status: "ok",
       exitCode: result.exitCode,
@@ -1475,24 +1360,20 @@ export async function executeRetrievalHarnessTool(params: {
         errorMessage: `${params.toolName} requires an active sandbox session.`,
       };
     }
-    if (isWorkspaceCreditBudgetExpired(workspaceSession)) {
+    if (isWorkspaceRuntimeWindowExpired(workspaceSession)) {
       return {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: "workspace_credits_exhausted",
-        errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
-        details: {
-          tool_kind: "workspace_tools",
-          paid_usage_billing_mode: "prepaid_required",
-        },
+        errorCode: "workspace_runtime_window_expired",
+        errorMessage: "This workspace runtime window expired. Start a new workspace session to continue.",
       };
     }
-    const budgetSignal = buildWorkspaceCreditBudgetSignal(
+    const budgetSignal = buildWorkspaceRuntimeWindowSignal(
       workspaceSession,
       params.signal,
     );
-    const startedBeforeBudgetExpiry = !isWorkspaceCreditBudgetExpired(workspaceSession);
+    const startedBeforeBudgetExpiry = !isWorkspaceRuntimeWindowExpired(workspaceSession);
     const result = await (async () => {
       try {
         return await executeRuntimeWorkspaceTool({
@@ -1508,18 +1389,14 @@ export async function executeRetrievalHarnessTool(params: {
     if (
       startedBeforeBudgetExpiry &&
       budgetSignal.signal?.aborted &&
-      isWorkspaceCreditBudgetExpired(workspaceSession)
+      isWorkspaceRuntimeWindowExpired(workspaceSession)
     ) {
       return {
         status: "error",
         exitCode: null,
         outputText: "",
-        errorCode: "workspace_credits_exhausted",
-        errorMessage: "This workspace tool budget expired. Add balance to keep using workspace tools.",
-        details: {
-          tool_kind: "workspace_tools",
-          paid_usage_billing_mode: "prepaid_required",
-        },
+        errorCode: "workspace_runtime_window_expired",
+        errorMessage: "This workspace runtime window expired. Start a new workspace session to continue.",
       };
     }
     if (!result.ok) {
@@ -1642,7 +1519,6 @@ async function executeRetrievalAgentLoop(
     threadId?: string | null;
     requestedModelId: string;
     inferenceSource: RuntimeInferenceSource;
-    accountPlan?: RuntimeAccountPlan | null;
     modelRef: string;
     messages: InferenceMessage[];
     maxTokens: number;
@@ -1840,7 +1716,6 @@ async function executeRetrievalAgentLoop(
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
-    accountPlan: params.accountPlan,
     invocationSurface: params.invocationSurface ?? "workspace",
     memberAgentSurfaceContext: params.memberAgentSurfaceContext,
     memberIdentityContextMd,
@@ -2811,7 +2686,6 @@ async function executeChatToolsAgentLoop(
     projectId?: string | null;
     requestedModelId: string;
     inferenceSource: RuntimeInferenceSource;
-    accountPlan?: RuntimeAccountPlan | null;
     modelRef: string;
     messages: InferenceMessage[];
     maxTokens: number;

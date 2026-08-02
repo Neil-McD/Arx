@@ -22,6 +22,9 @@ const communityPublic = read("convex/communityPublic.ts");
 const cloudBusinessAnalyticsGateway = read("shared/cloudBusinessAnalyticsGateway.ts");
 const cloudPublicFunnelGateway = read("shared/cloudPublicFunnelGateway.ts");
 const webApp = read("apps/web/src/App.tsx");
+const webAuthenticatedIdentityController = read(
+  "apps/web/src/controllers/useWebAuthenticatedIdentityController.ts",
+);
 const webLandingPage = read("apps/web/src/components/WebLandingPage.tsx");
 const monetizationQuery = extractBetween(
   operatorIntelligence,
@@ -32,7 +35,7 @@ const monetizationQuery = extractBetween(
 const communityListQuery = extractBetween(
   operatorIntelligence,
   "export const listOperatorCommunitiesInternal = internalQuery",
-  "export const listOperatorDeveloperAppPolicyAuditInternal = internalQuery",
+  "export const getOperatorCommunitySnapshotInternal = internalQuery",
   "operator communities query",
 );
 const platformBusinessVisitSchema = extractBetween(
@@ -85,7 +88,11 @@ assert.ok(
 );
 assert.match(operatorTypes, /export type OperatorOverviewSnapshot = /, "operator overview contract is missing");
 assert.match(operatorTypes, /export type OperatorMonetizationSnapshot = /, "operator monetization contract is missing");
-assert.match(operatorTypes, /creditTopupCheckoutStarts: number/, "operator monetization should track credit top-up starts");
+assert.match(
+  operatorTypes,
+  /creditTopupCheckoutStarts: number/,
+  "operator monetization should retain historical credit top-up starts for reconciliation",
+);
 assert.doesNotMatch(
   operatorTypes,
   new RegExp("buil" + "derPlanCheckoutStarts: number"),
@@ -148,7 +155,7 @@ assert.match(
 assert.match(
   operatorIntelligence,
   /row\.mode === "workspace_credit_topup"/,
-  "operator monetization should treat credits as the paid-tool checkout signal",
+  "operator monetization should retain the retired checkout classifier for historical audit",
 );
 assert.match(
   operatorTypes,
@@ -281,9 +288,9 @@ assert.match(
   "business visitor client should call the dedicated identification mutation",
 );
 assert.match(
-  webApp,
+  webAuthenticatedIdentityController,
   /identifyCloudBusinessVisitor\(\{ session \}\)/,
-  "app session lifecycle should identify the current business visitor",
+  "authenticated identity lifecycle should identify the current business visitor",
 );
 assert.doesNotMatch(
   businessAnalytics,
@@ -377,18 +384,18 @@ assert.match(
 );
 assert.match(
   monetizationQuery,
-  /const totalCompletions = inRangeCheckouts\.filter\(\(row: any\) => row\.status === "complete"\)\.length/,
-  "operator checkout completions should use the selected business window",
+  /const totalCompletions = communityJoinCompletions\.length/,
+  "operator current checkout completions should include only paid-member community commerce",
 );
 assert.match(
   monetizationQuery,
-  /totalConversionRate: conversionRate\(totalCompletions, inRangeCheckouts\.length\)/,
-  "operator checkout conversion should use starts and completions from the same window",
+  /totalConversionRate: conversionRate\(totalCompletions, communityJoinCheckouts\.length\)/,
+  "operator current checkout conversion should use community starts and completions from the same window",
 );
 assert.match(
   monetizationQuery,
-  /const grossRevenueInRange = addMoney\(communityCheckoutRevenueInRange, creditTopupRevenueInRange\)/,
-  "operator gross revenue should combine community checkout and credit top-up revenue",
+  /const grossRevenueInRange = communityCheckoutRevenueInRange/,
+  "operator current gross revenue must exclude retired credit top-ups",
 );
 assert.match(
   monetizationQuery,

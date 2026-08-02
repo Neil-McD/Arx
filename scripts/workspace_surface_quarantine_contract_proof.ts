@@ -403,8 +403,8 @@ assert.doesNotMatch(
 );
 assert.match(
   accountCommerceGateway,
-  /startCloudPremiumSubscriptionCheckout|startCloudConnectOnboarding/,
-  "Premium checkout and provider onboarding must remain available",
+  /startCloudConnectOnboarding/,
+  "Stripe Connect onboarding must remain available",
 );
 assert.match(
   landingPage,

@@ -1,24 +1,24 @@
 import type { RuntimeWorkspaceSession } from "./workspaceRuntimeSession.ts";
 
-export const WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE = "workspace_credits_exhausted";
+export const WORKSPACE_RUNTIME_WINDOW_EXPIRED_CODE = "workspace_runtime_window_expired";
 
-export class WorkspaceCreditBudgetExpiredError extends Error {
-  readonly code = WORKSPACE_CREDIT_BUDGET_EXPIRED_CODE;
+export class WorkspaceRuntimeWindowExpiredError extends Error {
+  readonly code = WORKSPACE_RUNTIME_WINDOW_EXPIRED_CODE;
 
-  constructor(message = "This workspace tool budget expired.") {
+  constructor(message = "This workspace runtime window expired.") {
     super(message);
-    this.name = "WorkspaceCreditBudgetExpiredError";
+    this.name = "WorkspaceRuntimeWindowExpiredError";
   }
 }
 
-export function isWorkspaceCreditBudgetExpired(
+export function isWorkspaceRuntimeWindowExpired(
   session: RuntimeWorkspaceSession | null | undefined,
 ): boolean {
   const expiresAt = Number(session?.creditBudgetExpiresAt ?? 0);
   return Number.isFinite(expiresAt) && expiresAt > 0 && Date.now() >= expiresAt;
 }
 
-export function buildWorkspaceCreditBudgetSignal(
+export function buildWorkspaceRuntimeWindowSignal(
   session: RuntimeWorkspaceSession,
   parentSignal?: AbortSignal,
 ): { signal?: AbortSignal; cleanup: () => void } {
@@ -26,18 +26,17 @@ export function buildWorkspaceCreditBudgetSignal(
   if (!Number.isFinite(expiresAt) || expiresAt <= 0) {
     return { signal: parentSignal, cleanup: () => {} };
   }
-  const remainingMs = Math.max(0, expiresAt - Date.now());
   const controller = new AbortController();
   let settled = false;
   const cleanupFns: Array<() => void> = [];
   const abort = (reason?: unknown) => {
     if (settled) return;
     settled = true;
-    controller.abort(reason ?? new WorkspaceCreditBudgetExpiredError());
+    controller.abort(reason ?? new WorkspaceRuntimeWindowExpiredError());
   };
   const timeout = setTimeout(
-    () => abort(new WorkspaceCreditBudgetExpiredError()),
-    remainingMs,
+    () => abort(new WorkspaceRuntimeWindowExpiredError()),
+    Math.max(0, expiresAt - Date.now()),
   );
   cleanupFns.push(() => clearTimeout(timeout));
   if (parentSignal) {

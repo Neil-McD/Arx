@@ -42,7 +42,7 @@ never replace them.
 - The community-owned agent receives the same five operations under a
   server-mounted community root and fixed member authority.
 - Protected coding-harness context and tools belong to a separate trust domain.
-- Premium tools such as web research are entitlement-gated overlays, not a
+- Tools such as web research are capability-gated overlays, not a
   different Polynet repository contract.
 
 ## Rules

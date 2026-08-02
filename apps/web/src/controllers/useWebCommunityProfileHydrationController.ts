@@ -128,14 +128,6 @@ export function useWebCommunityProfileHydrationController(
         avatar_zoom: cloudHasAvatar
           ? cloudProfile.avatar_zoom ?? 1
           : existing?.avatar_zoom ?? 1,
-        premium_badge:
-          (
-            cloudProfile as {
-              premium_badge?: UserProfile["premium_badge"];
-            }
-          ).premium_badge ??
-          existing?.premium_badge ??
-          undefined,
       }),
     } satisfies Record<string, UserProfile>;
   }, [

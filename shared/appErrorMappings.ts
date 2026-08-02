@@ -92,77 +92,6 @@ export function formatProviderConnectionErrorMessage(error: unknown, fallback: s
   return text || fallback;
 }
 
-type WorkspaceBillingCheckoutKind = "premium_subscription";
-
-function isRawServerErrorText(text: string): boolean {
-  const lower = text.trim().toLowerCase();
-  if (!lower) return false;
-  return (
-    lower.includes("server error: uncaught error") ||
-    lower.includes("uncaught error:") ||
-    lower.includes("[request id:") ||
-    lower.includes("/convex/") ||
-    lower.includes("../convex/") ||
-    lower.includes(" at ") ||
-    lower.includes("stripe_secret_key_missing") ||
-    lower.includes("stripe_webhook_secret_missing")
-  );
-}
-
-function getWorkspaceBillingCheckoutFallback(
-  _kind: WorkspaceBillingCheckoutKind,
-): string {
-  return "Premium checkout is temporarily unavailable. Please retry shortly.";
-}
-
-function readWorkspaceBillingCheckoutCode(text: string): string | null {
-  const directCode = normalizeErrorCode(readErrorCode(text));
-  if (directCode) return directCode;
-  const lower = text.toLowerCase();
-  const knownCodes = [
-    "stripe_secret_key_missing",
-    "stripe_webhook_secret_missing",
-    "stripe_checkout_url_missing",
-    "premium_stripe_price_id_missing",
-    "premium_subscription_success_url_invalid",
-    "premium_subscription_cancel_url_invalid",
-    "user_not_found",
-  ];
-  return knownCodes.find((code) => lower.includes(code)) ?? null;
-}
-
-export function formatWorkspaceBillingCheckoutError(
-  error: unknown,
-  options: { kind: WorkspaceBillingCheckoutKind },
-): string {
-  const fallback = getWorkspaceBillingCheckoutFallback(options.kind);
-  const rawText = readErrorText(error, fallback);
-  const structured = readStructuredErrorParts(rawText);
-  const text = structured.message ?? rawText;
-  const code = structured.code ?? readWorkspaceBillingCheckoutCode(text);
-
-  if (isAuthBootstrapCode(code) || includesAuthFailureText(text)) {
-    return "Session expired. Please sign in again.";
-  }
-  if (
-    code === "stripe_secret_key_missing" ||
-    code === "stripe_webhook_secret_missing" ||
-    code === "stripe_checkout_url_missing"
-  ) {
-    return fallback;
-  }
-  if (
-    code === "premium_subscription_success_url_invalid" ||
-    code === "premium_subscription_cancel_url_invalid"
-  ) {
-    return fallback;
-  }
-  if (code === "user_not_found") return "Session expired. Please sign in again.";
-  if (isTransientServerCode(code) || isRawServerErrorText(text)) return fallback;
-  if (code) return fallback;
-  return text || fallback;
-}
-
 export function formatAuthSessionErrorMessage(error: unknown, fallback: string): string {
   const text = readErrorText(error, fallback);
   const code = readErrorCode(text);
@@ -185,15 +114,6 @@ export function formatSendFlowErrorMessage(error: unknown, fallback: string): st
     return "Connect a provider in Account Settings to use this model.";
   }
   if (
-    code === "workspace_credits_exhausted" ||
-    code === "workspace_credits_unavailable" ||
-    code === "workspace_uncollected_usage_blocked" ||
-    code === "credits_exhausted" ||
-    code === "credits_unavailable"
-  ) {
-    return "Tool balance is unavailable for this action. Add balance or choose a different tool.";
-  }
-  if (
     code === "platform_inference_quota_exceeded" ||
     code === "provider_inference_quota_exceeded"
   ) {
@@ -205,7 +125,7 @@ export function formatSendFlowErrorMessage(error: unknown, fallback: string): st
     code === "plan_required" ||
     code === "model_not_allowed"
   ) {
-    return "This model requires a different plan or provider connection.";
+    return "This model is unavailable for this request. Connect a provider or choose another model.";
   }
   if (code === "community_contract_mismatch") {
     return "Community tools are temporarily unavailable while the backend contract is syncing. Please retry shortly.";

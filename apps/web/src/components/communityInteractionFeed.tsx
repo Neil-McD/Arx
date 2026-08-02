@@ -31,7 +31,6 @@ import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownU
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
-import { PremiumMemberBadge } from "../../../../shared/PremiumMemberBadge";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 
@@ -507,7 +506,6 @@ export function ProfileHoverCard(props: {
             >
               {props.label}
             </button>
-            <PremiumMemberBadge badge={props.profile?.premium_badge ?? null} />
           </div>
           {handleLabel ? <div className="chat-profile-hover-handle">{handleLabel}</div> : null}
         </div>
@@ -940,7 +938,6 @@ export function CommunityInteractionFeedList(
                         >
                           <span className="community-interaction-author">{label}</span>
                         </ProfileHoverCard>
-                        <PremiumMemberBadge badge={profile?.premium_badge ?? null} />
                         {badge ? <span className="community-interaction-badge">{badge}</span> : null}
                         {chip ? <span className="community-interaction-kind">{chip}</span> : null}
                         <span>{props.formatChatTime(first.root.created_at)}</span>

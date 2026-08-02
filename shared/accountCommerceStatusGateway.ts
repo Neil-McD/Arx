@@ -25,11 +25,8 @@ export type AccountCommerceStatus = {
   };
 };
 
-export type DevAccountTier = "free" | "architect";
-
 function normalizeAccountTier(raw: unknown): AccountCommerceStatus["account_tier"] {
-  const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "architect") return "architect";
+  void raw;
   return "free";
 }
 
@@ -102,24 +99,8 @@ async function loadAccountCommerceStatusViaConvex(session: AuthSessionLike): Pro
   };
 }
 
-async function setDevAccountTierViaConvex(session: AuthSessionLike, tier: DevAccountTier): Promise<void> {
-  requireConvexUrl();
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
-  await client.mutation("auth:setDevTierOverride" as any, {
-    authSubject,
-    tier,
-  });
-}
-
 export async function loadAccountCommerceStatusCanonical(params: {
   session: AuthSessionLike;
 }): Promise<AccountCommerceStatus | null> {
   return await loadAccountCommerceStatusViaConvex(params.session);
-}
-
-export async function setDevAccountTierCanonical(params: {
-  session: AuthSessionLike;
-  tier: DevAccountTier;
-}): Promise<void> {
-  await setDevAccountTierViaConvex(params.session, params.tier);
 }

@@ -1,17 +1,5 @@
 import type { CommunityBillingPeriod } from "./communityTypes";
 
-export type AccountTierUi = "free" | "architect";
-
-export const POLYNET_PREMIUM_PLAN_NAME = "Polynet Premium";
-export const POLYNET_PREMIUM_ACCOUNT_TIER = "architect" as const;
-export const POLYNET_FREE_MAX_COMMUNITIES = 1;
-export const POLYNET_PREMIUM_MONTHLY_PRICE_USD = 20;
-export const POLYNET_PREMIUM_MONTHLY_PRICE_BASE_UNITS = 2000;
-export const POLYNET_PREMIUM_MONTHLY_PRICE_LABEL = "$20/mo";
-export const POLYNET_PREMIUM_INCLUDED_USAGE_LABEL = "Premium tool usage included";
-export const POLYNET_PREMIUM_DESCRIPTION =
-  "Grants access to Codex and future premium runtimes, web research, hosted workspace tools, and premium tool usage.";
-
 export type StripeConnectReturnAction = "refresh" | "return";
 export type StripeConnectContext = "account" | "community";
 
@@ -60,29 +48,6 @@ export function formatSubscriptionPrice(args: {
   }
   if (currency === "USD") return `$${value.toFixed(0)}${suffix}`;
   return `${value.toFixed(0)} ${currency}${suffix}`;
-}
-
-function normalizeAccountTierRaw(value: string | null | undefined): string {
-  return String(value ?? "")
-    .trim()
-    .toLowerCase();
-}
-
-export function normalizeAccountTierForUi(value: string | null | undefined): AccountTierUi {
-  const raw = normalizeAccountTierRaw(value);
-  if (raw === "architect") return "architect";
-  return "free";
-}
-
-export function isAccountTierFree(value: string | null | undefined): boolean {
-  return normalizeAccountTierRaw(value) === "free";
-}
-
-export function formatAccountTierLabel(
-  value: string | null | undefined,
-): "Free" | "Polynet Premium" {
-  if (normalizeAccountTierForUi(value) === "architect") return POLYNET_PREMIUM_PLAN_NAME;
-  return "Free";
 }
 
 function normalizeStripeConnectAction(

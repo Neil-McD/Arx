@@ -291,15 +291,14 @@ export async function disposeRuntimeWorkspaceSession(params: {
   if (settlement.ok && !settlement.skipped) {
     await appendRunEventBestEffort({
       appendRunEvent: params.appendRunEvent,
-      eventType: "workspace_compute_charge_settled",
-      eventKey: `${params.runId}:workspace_compute_charge_settled:${settlement.creditReservationKey ?? "none"}`,
+      eventType: "workspace_provider_cost_recorded",
+      eventKey: `${params.runId}:workspace_provider_cost_recorded:${settlement.creditReservationKey ?? "none"}`,
       payload: withSource(
         {
           run_id: params.runId,
           sandbox_id: params.session.providerSandboxId,
           project_id: params.session.projectId,
-          credit_reservation_key: settlement.creditReservationKey ?? null,
-          credits_debited: settlement.creditsDebited ?? null,
+          provider_cost_key: settlement.creditReservationKey ?? null,
           compute_cost_usd: settlement.computeCostUsd ?? null,
           duration_seconds: settlement.durationSeconds ?? null,
           measured_duration_seconds: settlement.measuredDurationSeconds ?? null,
@@ -325,7 +324,7 @@ export async function disposeRuntimeWorkspaceSession(params: {
             run_id: params.runId,
             sandbox_id: params.session.providerSandboxId,
             project_id: params.session.projectId,
-            credit_reservation_key: settlement.creditReservationKey ?? null,
+            provider_cost_key: settlement.creditReservationKey ?? null,
             released: released.released,
             reason: released.reason,
             release_decision_reason: releaseDecision.reason,
@@ -357,7 +356,7 @@ export async function disposeRuntimeWorkspaceSession(params: {
           run_id: params.runId,
           sandbox_id: params.session.providerSandboxId,
           project_id: params.session.projectId,
-          credit_reservation_key: settlement.creditReservationKey ?? null,
+          provider_cost_key: settlement.creditReservationKey ?? null,
           error_message: releaseAccountingError,
         },
         params.source,
@@ -369,46 +368,6 @@ export async function disposeRuntimeWorkspaceSession(params: {
       creditReservationKey: settlement.creditReservationKey ?? null,
       released: false,
       error: releaseAccountingError,
-    };
-  }
-
-  if (settlement.ok !== true) {
-    const settlementFailure = settlement as {
-      creditReservationKey?: unknown;
-      creditsDebited?: unknown;
-      computeCostUsd?: unknown;
-      durationSeconds?: unknown;
-      error?: unknown;
-    };
-    const settlementCreditReservationKey = String(
-      settlementFailure.creditReservationKey ?? "",
-    ).trim();
-    const settlementError =
-      String(settlementFailure.error ?? "").trim() ||
-      "workspace_compute_charge_settlement_failed";
-    await appendRunEventBestEffort({
-      appendRunEvent: params.appendRunEvent,
-      eventType: "workspace_compute_charge_settlement_failed",
-      eventKey: `${params.runId}:workspace_compute_charge_settlement_failed:${settlementCreditReservationKey || "none"}`,
-      payload: withSource(
-        {
-          run_id: params.runId,
-          sandbox_id: params.session.providerSandboxId,
-          project_id: params.session.projectId,
-          credit_reservation_key: settlementCreditReservationKey || null,
-          credits_debited: settlementFailure.creditsDebited ?? null,
-          compute_cost_usd: settlementFailure.computeCostUsd ?? null,
-          duration_seconds: settlementFailure.durationSeconds ?? null,
-          error_message: settlementError,
-        },
-        params.source,
-      ),
-    });
-    return {
-      ok: false,
-      outcome: "settlement_failed",
-      creditReservationKey: settlementCreditReservationKey || null,
-      error: settlementError,
     };
   }
 

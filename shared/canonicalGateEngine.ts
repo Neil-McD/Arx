@@ -16,18 +16,13 @@ export type CapabilityFamily =
   | "web_research"
   | "sandbox_tools"
   | "workspace_tools";
-export const AUTHENTICATED_FREE_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
-  "product_docs",
-  "community_tools",
-];
-export const PREMIUM_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
+export const AUTHENTICATED_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
   "product_docs",
   "community_tools",
   "web_research",
   "sandbox_tools",
   "workspace_tools",
 ];
-export const AUTHENTICATED_PLATFORM_CAPABILITIES = PREMIUM_PLATFORM_CAPABILITIES;
 export type RuntimeLane = "public" | "platform" | "chatgpt";
 export type GateCode =
   | "ok"
@@ -66,7 +61,6 @@ export type CanonicalGatePolicy = {
   harnessProfile: string;
 };
 
-const CANONICAL_TIER_SET = new Set<CanonicalTier>(["free", "architect"]);
 const VALID_AUTH_STATE = new Set<AuthState>(["anonymous", "authenticated"]);
 const VALID_MODEL_CLASS = new Set<ModelClass>(["free_model", "paid_model"]);
 const VALID_REQUESTED_FUNDING_SOURCE = new Set<RequestedFundingSource>([
@@ -120,11 +114,9 @@ function normalizeRequestedFundingSource(
 }
 
 function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
-  const normalized = toLowerTrimmed(rawTier);
-  if (normalized === "architect") return "architect";
-  if (CANONICAL_TIER_SET.has(normalized as CanonicalTier)) {
-    return normalized as CanonicalTier;
-  }
+  // Historical labels remain accepted at transport boundaries, but the
+  // retired account tier can no longer change product capability or commerce.
+  void rawTier;
   return "free";
 }
 
@@ -132,8 +124,8 @@ function resolveEffectiveTier(input: { authState?: unknown; tier?: unknown }): E
   const authState = normalizeAuthState(input?.authState);
   const canonicalTier = normalizeCanonicalTier(input?.tier);
   if (authState === "anonymous") return "anon_free";
-  if (canonicalTier === "free") return "auth_free";
-  return canonicalTier;
+  void canonicalTier;
+  return "auth_free";
 }
 
 function normalizeHasProjectContext(rawValue: unknown): boolean {
@@ -191,10 +183,7 @@ export function resolveEntitledCapabilityFamiliesForGate(input: {
     tier: input?.tier,
   });
   if (effectiveTier === "anon_free") return [];
-  if (effectiveTier === "auth_free") {
-    return [...AUTHENTICATED_FREE_PLATFORM_CAPABILITIES];
-  }
-  return [...PREMIUM_PLATFORM_CAPABILITIES];
+  return [...AUTHENTICATED_PLATFORM_CAPABILITIES];
 }
 
 export function resolveActiveCapabilityFamiliesForGate(

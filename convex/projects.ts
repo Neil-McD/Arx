@@ -34,7 +34,6 @@ import {
   countWorkspaceVolumesForAdmission,
   evaluateWorkspaceProjectCreateAdmission,
   evaluateWorkspaceVolumeMaterializationAdmission,
-  resolveWorkspaceResourceAccountTier,
 } from "../shared/workspaceResourceAdmission";
 import {
   destroyBlaxelWorkspaceSandbox,
@@ -121,58 +120,9 @@ function buildNextProjectName(existingProjects: Array<{ name?: string | null }>)
   return buildNextDefaultProjectName(existingProjects.map((project) => project.name ?? null));
 }
 
-async function readWorkspaceCreditBalanceForProjectOwner(args: {
-  ctx: any;
-  ownerId: any;
-}) {
-  const rows = await args.ctx.db
-    .query("workspaceCreditBalances")
-    .withIndex("by_user", (q: any) => q.eq("userId", args.ownerId))
-    .take(2);
-  if (rows.length > 1) throw new Error("workspace_credit_balance_duplicate");
-  return rows[0] ?? null;
-}
-
-async function resolveWorkspaceResourceAccountTierForOwner(args: {
-  ctx: any;
-  ownerId: any;
-}) {
-  const [workspaceCreditBalance, hasCardOnFile] = await Promise.all([
-    readWorkspaceCreditBalanceForProjectOwner({
-      ctx: args.ctx,
-      ownerId: args.ownerId,
-    }),
-    resolveWorkspaceHasCardOnFileForOwner({
-      ctx: args.ctx,
-      ownerId: args.ownerId,
-    }),
-  ]);
-  return resolveWorkspaceResourceAccountTier({
-    hasCardOnFile,
-    workspaceCreditBalance,
-  });
-}
-
-async function resolveWorkspaceHasCardOnFileForOwner(args: {
-  ctx: any;
-  ownerId: any;
-}): Promise<boolean> {
-  const stripeCustomer = await args.ctx.db
-    .query("userStripeCustomers")
-    .withIndex("by_user", (q: any) => q.eq("userId", args.ownerId))
-    .first();
-  return Boolean(
-    stripeCustomer?.paymentMethodStatus === "active" &&
-      String(stripeCustomer.providerDefaultPaymentMethodId ?? "").trim().startsWith("pm_") &&
-      !(Number(stripeCustomer.cardRemovedAt ?? 0) > 0),
-  );
-}
-
 function workspaceResourceAdmissionStatus(code: string): number {
   if (code === "project_not_found") return 404;
   if (
-    code === "workspace_volume_funding_required" ||
-    code === "workspace_card_required_for_additional_volume" ||
     code === "workspace_volume_limit_reached" ||
     code === "project_limit_reached"
   ) {
@@ -195,12 +145,6 @@ function workspaceResourceAdmissionMessage(code: string): string {
   }
   if (code === "project_volume_resource_mismatch") {
     return "This project volume is bound to a different provider resource.";
-  }
-  if (code === "workspace_volume_funding_required") {
-    return "Add prepaid credits or a card before creating workspace storage.";
-  }
-  if (code === "workspace_card_required_for_additional_volume") {
-    return "Additional workspace storage requires a card on file.";
   }
   if (code === "workspace_volume_limit_reached") {
     return "Workspace project volume limit reached.";
@@ -676,23 +620,11 @@ export const prepareCloudProjectVolumeMaterializationInternal = internalMutation
       };
     }
 
-    const [ownerProjectRows, workspaceCreditBalance, hasCardOnFile] = await Promise.all([
-      ctx.db
-        .query("cloudProjects")
-        .withIndex("by_owner", (q) => q.eq("ownerId", project.ownerId))
-        .collect(),
-      readWorkspaceCreditBalanceForProjectOwner({
-        ctx,
-        ownerId: project.ownerId,
-      }),
-      resolveWorkspaceHasCardOnFileForOwner({
-        ctx,
-        ownerId: project.ownerId,
-      }),
-    ]);
+    const ownerProjectRows = await ctx.db
+      .query("cloudProjects")
+      .withIndex("by_owner", (q) => q.eq("ownerId", project.ownerId))
+      .collect();
     const admission = evaluateWorkspaceVolumeMaterializationAdmission({
-      hasCardOnFile,
-      workspaceCreditBalance,
       existingVolumeCount: countWorkspaceVolumesForAdmission(ownerProjectRows),
       providerVolumeCount: args.providerVolumeCount ?? null,
       providerVolumeLimit: args.providerVolumeLimit ?? null,
@@ -703,7 +635,6 @@ export const prepareCloudProjectVolumeMaterializationInternal = internalMutation
         code: admission.code,
         message: admission.message,
         details: {
-          account_tier: admission.accountTier,
           current_count: admission.currentCount,
           requested_count: admission.requestedCount,
           limit: admission.limit,
@@ -963,12 +894,7 @@ export const createCloudProjectForOwner = mutation({
       .query("cloudProjects")
       .withIndex("by_owner", (q) => q.eq("ownerId", ownerId))
       .collect();
-    const accountTier = await resolveWorkspaceResourceAccountTierForOwner({
-      ctx,
-      ownerId,
-    });
     const admission = evaluateWorkspaceProjectCreateAdmission({
-      accountTier,
       existingProjectCount: countWorkspaceProjectsForAdmission(existingRows),
     });
     if (!admission.ok) {

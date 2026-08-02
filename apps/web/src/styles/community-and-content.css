@@ -3211,10 +3211,6 @@
   text-overflow: ellipsis;
 }
 
-.community-context-member-copy .premium-member-badge {
-  margin-left: -2px;
-}
-
 .community-context-member-copy {
   flex: 1 1 auto;
   min-width: 0;

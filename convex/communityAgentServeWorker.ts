@@ -307,16 +307,6 @@ function serveRequestIsClaimable(request: ServeRequestRow): boolean {
   );
 }
 
-async function requesterHasChatgptConnection(ctx: any, requesterUserId: any): Promise<boolean> {
-  const row = (await ctx.db
-    .query("userProviderConnections" as any)
-    .withIndex("by_user_provider", (q: any) =>
-      q.eq("userId", requesterUserId).eq("provider", "chatgpt"),
-    )
-    .first()) as Record<string, any> | null;
-  return Boolean(row?.encryptedSecretHex);
-}
-
 async function listContentBlocksForRoot(ctx: any, rootId: any): Promise<ContentBlockRow[]> {
   return (await ctx.db
     .query("communityInteractionContentBlocks" as any)
@@ -570,6 +560,8 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         errorCode: funding.code,
         errorMessage: funding.code === "owner_credential_missing"
           ? "The community owner must connect an OpenAI API key."
+          : funding.code === "owner_funding_choice_required"
+            ? "The community owner must activate an OpenAI API key or fund this community at $79/month."
           : funding.code === "owner_funding_suspended"
             ? "Community inference funding is suspended."
             : funding.code === "founder_subscription_inactive"
@@ -577,16 +569,6 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
             : funding.code === "founder_plan_required"
               ? "The community requires an active founder plan."
               : "Community inference funding could not be resolved.",
-      };
-    }
-    if (
-      funding.mode === "legacy_requester_chatgpt" &&
-      !(await requesterHasChatgptConnection(ctx, request.requesterUserId))
-    ) {
-      return {
-        ok: false as const,
-        errorCode: "requester_connection_missing",
-        errorMessage: "The requester does not have a usable ChatGPT connection.",
       };
     }
     const sponsorUser = (await ctx.db.get(request.sponsorUserId as any)) as {

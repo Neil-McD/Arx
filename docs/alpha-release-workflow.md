@@ -279,7 +279,7 @@ After every production release, verify the changed surface and at least these co
 If the release touched billing, check both:
 
 - Community checkout and Stripe Connect payout readiness
-- Runtime credit top-up when runtime accounting is touched
+- Founder subscription, per-community allowance, and provider-cost evidence when founder funding is touched
 
 ## Decision Rules
 

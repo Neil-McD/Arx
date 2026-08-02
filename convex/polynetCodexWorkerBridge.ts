@@ -7,12 +7,10 @@ import type { RuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacke
 import type { RetrievalToolName } from "../shared/retrievalTools";
 import type { CommunityLensAuthority } from "../shared/communityLensAuthority";
 import {
-  canUseRuntimeEngineForTier,
   RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
-import type { RuntimeAccountPlan } from "../shared/runtimePrompt";
 import type { RuntimeInvocationSurface } from "../shared/runtimeInvocationSurface";
 import type { MemberAgentSurfaceContextV1 } from "../shared/memberAgentSurfaceContext";
 
@@ -224,7 +222,6 @@ export function resolvePolynetRuntimeEngine(params: {
   runtimeExecutionMode: "agentic" | "chat";
   stream: boolean;
   inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
-  accountPlan?: RuntimeAccountPlan | null;
 }): PolynetRuntimeEngineResolution {
   if (params.requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET) {
     return {
@@ -239,25 +236,6 @@ export function resolvePolynetRuntimeEngine(params: {
   }
 
   if (params.requestedRuntimeEngine === RUNTIME_ENGINE_CODEX) {
-    if (
-      !canUseRuntimeEngineForTier({
-        engine: params.requestedRuntimeEngine,
-        accountTier: params.accountPlan,
-      })
-    ) {
-      return {
-        ok: false,
-        status: 403,
-        code: "runtime_plan_required",
-        message: "Codex requires Polynet Premium. Upgrade in Billing to use Codex and premium agent runtimes.",
-        requestedRuntimeEngine: params.requestedRuntimeEngine,
-        resolvedRuntimeEngine: null,
-        runtimeEngineSource: "request",
-        engineId: null,
-        usePolynetCodexWorkerBridge: false,
-        disabledReason: "runtime_requires_premium",
-      };
-    }
     const failure = resolveExplicitCodexWorkerFailure(params);
     if (failure) {
       return {
@@ -313,7 +291,6 @@ export function buildPolynetCodexWorkerTurnInputs(params: {
   agentSoul: string | null;
   runtimeTurnContext: RuntimeTurnContextPacket;
   codexVisiblePolynetToolNames: readonly RetrievalToolName[];
-  accountPlan?: RuntimeAccountPlan | null;
   currentDateTimeIso: string | null;
   currentDateLabel: string | null;
   currentTimeZone: string | null;
@@ -338,7 +315,6 @@ export function buildPolynetCodexWorkerTurnInputs(params: {
     projectLabel: projectContext?.label ?? null,
     projectDescription: projectContext?.description ?? null,
     runtimeTurnContext: params.runtimeTurnContext,
-    accountPlan: params.accountPlan,
     currentDateTimeIso: params.currentDateTimeIso,
     currentDateLabel: params.currentDateLabel,
     currentTimeZone: params.currentTimeZone,

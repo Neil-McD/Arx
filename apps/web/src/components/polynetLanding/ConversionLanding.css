@@ -1,7 +1,7 @@
 @import url("https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=Inter:wght@400;500;600&display=swap");
 
-/* Conversion landing (design locked in polynet-landing-mocks/08-premium-simplified.html).
-   All selectors scoped under .pn-landing. No scroll-reveal animations (disabled site-wide
+/* Conversion landing. All selectors scoped under .pn-landing.
+   No scroll-reveal animations (disabled site-wide
    on the previous landing for good reason) — only the demo window animates. */
 
 .pn-landing {
@@ -161,7 +161,7 @@
 .pn-landing .shead h2 { font-weight: 700; font-size: clamp(26px, 3.3vw, 40px); line-height: 1.1; }
 .pn-landing .shead p { margin-top: 13px; color: var(--pn-dim); font-size: clamp(16px, 1.3vw, 18px); }
 
-/* benefits — typography, no cards */
+/* benefits — typography without card containers */
 .pn-landing .bens { display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px; }
 .pn-landing .ben { border-left: 2px solid var(--pn-pink); padding-left: 20px; }
 .pn-landing .ben h3 { font-size: 19px; font-weight: 600; margin-bottom: 7px; letter-spacing: -0.01em; }
@@ -181,8 +181,7 @@
 .pn-landing .cmp .us { text-align: center; }
 .pn-landing .cmp .row.h .them { color: var(--pn-dim); text-align: center; }
 .pn-landing .cmp .row.h .us { color: var(--pn-pink); text-align: center; }
-.pn-landing .ck { color: var(--pn-good); font-weight: 600; }
-.pn-landing .xk { color: var(--pn-dimmer); }
+.pn-landing .cmp .us { color: var(--pn-text); font-weight: 500; }
 .pn-landing .midcta { margin-top: 36px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .pn-landing .midcta span { color: var(--pn-dimmer); font-size: 13.5px; }
 
@@ -195,18 +194,18 @@
 .pn-landing .howline .num { font-family: "Sora", sans-serif; font-weight: 700; font-size: 14px; color: var(--pn-pink); margin-bottom: 7px; }
 .pn-landing .howline .hs h3 { font-size: 17px; font-weight: 600; margin-bottom: 5px; }
 .pn-landing .howline .hs p { color: var(--pn-dim); font-size: 14px; }
-.pn-landing .migrate { margin-top: 34px; color: var(--pn-dim); font-size: 14.5px; }
-.pn-landing .migrate b { color: var(--pn-text); font-weight: 600; }
-
-/* pricing — journey strip */
-.pn-landing .journey { border: 1px solid var(--pn-border); border-radius: 16px; background: var(--pn-surface); display: flex; max-width: 880px; overflow: hidden; }
-.pn-landing .journey .j { flex: 1; padding: 26px 26px; position: relative; }
-.pn-landing .journey .j + .j { border-left: 1px solid var(--pn-border); }
-.pn-landing .journey .stage { font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--pn-dimmer); margin-bottom: 8px; }
-.pn-landing .journey .j.hi .stage { color: var(--pn-pink); }
-.pn-landing .journey .amt { font-family: "Sora", sans-serif; font-size: 23px; font-weight: 700; margin-bottom: 6px; }
-.pn-landing .journey .j.hi .amt { color: var(--pn-pink); }
-.pn-landing .journey p { color: var(--pn-dim); font-size: 13.5px; }
+/* pricing — one plan, one community */
+.pn-landing .offer { border: 1px solid var(--pn-border); border-radius: 16px; background: var(--pn-surface); display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); max-width: 880px; overflow: hidden; }
+.pn-landing .offer-price, .pn-landing .offer-includes { padding: 32px; }
+.pn-landing .offer-price { display: flex; flex-direction: column; align-items: flex-start; border-right: 1px solid var(--pn-border); }
+.pn-landing .offer .stage { font-size: 12px; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--pn-pink); margin-bottom: 10px; }
+.pn-landing .offer .amt { font-family: "Sora", sans-serif; font-size: clamp(38px, 5vw, 54px); font-weight: 700; line-height: 1; letter-spacing: -0.04em; }
+.pn-landing .offer .amt span { color: var(--pn-dim); font-family: "Inter", system-ui, sans-serif; font-size: 15px; font-weight: 500; letter-spacing: 0; }
+.pn-landing .offer-price p { max-width: 320px; margin-top: 14px; color: var(--pn-dim); font-size: 14px; }
+.pn-landing .offer-price .btn { margin-top: 26px; }
+.pn-landing .offer-includes ul { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 22px; margin: 0; padding: 0; list-style: none; }
+.pn-landing .offer-includes li { position: relative; padding-left: 20px; color: var(--pn-dim); font-size: 13.5px; line-height: 1.45; }
+.pn-landing .offer-includes li::before { content: "✓"; position: absolute; left: 0; color: var(--pn-good); font-weight: 700; }
 .pn-landing .price-micro { margin-top: 18px; color: var(--pn-dimmer); font-size: 13.5px; }
 
 /* faq */
@@ -242,7 +241,8 @@
   .pn-landing .howline { flex-direction: column; gap: 22px; }
   .pn-landing .howline .hs::after { display: none; }
   .pn-landing .howline .hs { padding-right: 0; }
-  .pn-landing .journey { flex-direction: column; }
-  .pn-landing .journey .j + .j { border-left: none; border-top: 1px solid var(--pn-border); }
+  .pn-landing .offer { grid-template-columns: 1fr; }
+  .pn-landing .offer-price { border-right: none; border-bottom: 1px solid var(--pn-border); }
+  .pn-landing .offer-includes ul { grid-template-columns: 1fr; }
   .pn-landing nav.pn-nav .links { display: none; }
 }

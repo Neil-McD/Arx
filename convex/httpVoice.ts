@@ -1,17 +1,9 @@
 import {
-  creditsToUsd,
   estimateVoiceTranscriptionVendorCostUsd,
-  priceVoiceTranscriptionCredits,
   VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS,
   type VoiceTranscriptionProvider,
 } from "../shared/workspaceCredits";
-import {
-  settleReservedCreditsBestEffort,
-  settleReservedCreditsStrict,
-} from "./workspaceCreditSettlement";
-import {
-  reservePaidToolCredits,
-} from "./paidToolCreditReservation";
+import { recordPlatformToolCostBestEffort } from "./platformToolCostAccounting";
 
 type VoiceTranscribeInput = {
   audio_base64?: unknown;
@@ -94,11 +86,9 @@ type VoicePriceQuote = {
   model: string;
   durationSeconds: number;
   rawVendorCostUsd: number;
-  credits: number;
-  polynetPriceUsd: number;
 };
 
-function newCreditKey(prefix: string): string {
+function newProviderCostKey(prefix: string): string {
   return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
 }
 
@@ -164,14 +154,11 @@ function quoteVoiceTranscription(params: {
   durationSeconds: number;
 }): VoicePriceQuote {
   const rawVendorCostUsd = estimateVoiceTranscriptionVendorCostUsd(params);
-  const credits = priceVoiceTranscriptionCredits(params);
   return {
     provider: params.provider,
     model: params.model,
     durationSeconds: params.durationSeconds,
     rawVendorCostUsd,
-    credits,
-    polynetPriceUsd: creditsToUsd(credits),
   };
 }
 
@@ -194,7 +181,6 @@ function voiceSettlementMetadata(params: {
     reserve_duration_ms: params.durationEvidence.durationMs,
     reserve_duration_source: params.durationEvidence.source,
     final_vendor_cost_usd: params.quote.rawVendorCostUsd,
-    requested_polynet_price_usd: params.quote.polynetPriceUsd,
     fallback_used: params.fallbackUsed,
     primary_error: params.primaryError ?? null,
   };
@@ -588,7 +574,6 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
       if (!auth.ok) return auth.response;
       void auth.actor.authSubject;
 
-      let reservedCreditKey: string | null = null;
       try {
         const input = await readJsonBounded<VoiceTranscribeInput>(req);
         const audioBase64Raw = typeof input.audio_base64 === "string" ? input.audio_base64.trim() : "";
@@ -661,61 +646,9 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
           duration_source: durationEvidence.source,
         });
 
-        const creditKey = newCreditKey("voice");
-        reservedCreditKey = creditKey;
-        const primaryConfig = resolveVoicePrimaryConfig();
+        const providerCostKey = newProviderCostKey("voice");
         const fallbackConfig = resolveVoiceFallbackConfig();
-        const primaryQuote = quoteVoiceTranscription({
-          provider: "openai",
-          model: primaryConfig.model,
-          durationSeconds: durationEvidence.durationSeconds,
-        });
-        const fallbackQuote = quoteVoiceTranscription({
-          provider: "groq",
-          model: fallbackConfig.model,
-          durationSeconds: durationEvidence.durationSeconds,
-        });
         const fallbackKeyPresent = Boolean(fallbackConfig.apiKey);
-        const reserveQuote =
-          fallbackKeyPresent && fallbackQuote.credits > primaryQuote.credits ? fallbackQuote : primaryQuote;
-        const voiceCredits = reserveQuote.credits;
-        const reservation = await reservePaidToolCredits({
-          ctx,
-          creditKey,
-          userId: auth.actor.userId,
-          toolKind: "voice_input",
-          toolName: "voice_transcribe",
-          action: "transcribe",
-          vendor: "openai_groq",
-          credits: voiceCredits,
-          rawVendorCostUsd: reserveQuote.rawVendorCostUsd,
-          polynetPriceUsd: creditsToUsd(voiceCredits),
-          metadata: {
-            pricing_mode: "duration_seconds",
-            reserve_provider: reserveQuote.provider,
-            reserve_model: reserveQuote.model,
-            reserve_vendor_cost_usd: reserveQuote.rawVendorCostUsd,
-            reserve_polynet_price_usd: reserveQuote.polynetPriceUsd,
-            duration_seconds: durationEvidence.durationSeconds,
-            duration_ms: durationEvidence.durationMs,
-            duration_source: durationEvidence.source,
-            surface: surface || null,
-            mime_type: mimeType,
-            audio_bytes: bytes.byteLength,
-          },
-          nowMs: Date.now(),
-        });
-        if (!reservation.ok) {
-          return jsonResponse(req, 402, {
-            ok: false,
-            error: reservation.code,
-            code: reservation.code,
-            tool_kind: "voice_input",
-            required_credits: voiceCredits,
-            paid_usage_billing_mode: reservation.details.paid_usage_billing_mode,
-            message: reservation.message,
-          });
-        }
 
         const primary = await transcribeWithOpenAi({ bytes, mimeType, language, prompt });
         if (primary.ok) {
@@ -726,31 +659,19 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             model: primary.model,
             durationSeconds: settledDurationSeconds,
           });
-          try {
-            await settleReservedCreditsStrict({
-              ctx,
-              creditKey,
-              status: "succeeded",
-              creditsSettled: settledQuote.credits,
-              rawVendorCostUsd: settledQuote.rawVendorCostUsd,
-              metadata: voiceSettlementMetadata({
-                quote: settledQuote,
-                durationEvidence,
-                finalDurationSource: settledDurationSource,
-                responseFormat: primary.responseFormat ?? null,
-                fallbackUsed: false,
-              }),
-            });
-          } catch {
-            reservedCreditKey = null;
-            return jsonResponse(req, 503, {
-              ok: false,
-              error: "credits_settlement_failed",
-              code: "credits_settlement_failed",
-              message: "Voice transcription succeeded, but credit settlement failed. Try again.",
-            });
-          }
-          reservedCreditKey = null;
+          await recordPlatformToolCostBestEffort({
+            ctx,
+            costKey: providerCostKey,
+            userId: auth.actor.userId,
+            rawVendorCostUsd: settledQuote.rawVendorCostUsd,
+            metadata: voiceSettlementMetadata({
+              quote: settledQuote,
+              durationEvidence,
+              finalDurationSource: settledDurationSource,
+              responseFormat: primary.responseFormat ?? null,
+              fallbackUsed: false,
+            }),
+          });
           return jsonResponse(req, 200, {
             ok: true,
             text: primary.text,
@@ -761,12 +682,6 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
         }
 
         if (preferPrimary) {
-          await settleReservedCreditsBestEffort({
-            ctx,
-            creditKey,
-            status: "refunded",
-            failureReason: "primary_failed",
-          });
           return jsonResponse(req, 502, {
             ok: false,
             error: "voice_transcription_failed",
@@ -778,12 +693,6 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
         }
 
         if (!fallbackKeyPresent) {
-          await settleReservedCreditsBestEffort({
-            ctx,
-            creditKey,
-            status: "refunded",
-            failureReason: "fallback_missing",
-          });
           return jsonResponse(req, 502, {
             ok: false,
             error: "voice_transcription_failed",
@@ -803,32 +712,20 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             model: fallback.model,
             durationSeconds: settledDurationSeconds,
           });
-          try {
-            await settleReservedCreditsStrict({
-              ctx,
-              creditKey,
-              status: "succeeded",
-              creditsSettled: settledQuote.credits,
-              rawVendorCostUsd: settledQuote.rawVendorCostUsd,
-              metadata: voiceSettlementMetadata({
-                quote: settledQuote,
-                durationEvidence,
-                finalDurationSource: settledDurationSource,
-                responseFormat: fallback.responseFormat ?? null,
-                fallbackUsed: true,
-                primaryError: primary.message ?? null,
-              }),
-            });
-          } catch {
-            reservedCreditKey = null;
-            return jsonResponse(req, 503, {
-              ok: false,
-              error: "credits_settlement_failed",
-              code: "credits_settlement_failed",
-              message: "Voice transcription succeeded, but credit settlement failed. Try again.",
-            });
-          }
-          reservedCreditKey = null;
+          await recordPlatformToolCostBestEffort({
+            ctx,
+            costKey: providerCostKey,
+            userId: auth.actor.userId,
+            rawVendorCostUsd: settledQuote.rawVendorCostUsd,
+            metadata: voiceSettlementMetadata({
+              quote: settledQuote,
+              durationEvidence,
+              finalDurationSource: settledDurationSource,
+              responseFormat: fallback.responseFormat ?? null,
+              fallbackUsed: true,
+              primaryError: primary.message ?? null,
+            }),
+          });
           return jsonResponse(req, 200, {
             ok: true,
             text: fallback.text,
@@ -842,12 +739,6 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
         const errors = [primary.message, fallback.message].filter(
           (value): value is string => typeof value === "string" && value.trim().length > 0,
         );
-        await settleReservedCreditsBestEffort({
-          ctx,
-          creditKey,
-          status: "refunded",
-          failureReason: "transcription_failed",
-        });
         return jsonResponse(req, 502, {
           ok: false,
           error: "voice_transcription_failed",
@@ -865,14 +756,6 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
               ? "invalid_request"
               : "internal_error";
         const status = code === "request_too_large" ? 413 : code === "invalid_request" ? 400 : 500;
-        if (reservedCreditKey) {
-          await settleReservedCreditsBestEffort({
-            ctx,
-            creditKey: reservedCreditKey,
-            status: "refunded",
-            failureReason: code,
-          });
-        }
         return jsonResponse(req, status, {
           ok: false,
           error: code,

@@ -7,23 +7,14 @@ type EffectiveTier = "anon_free" | "auth_free" | "architect";
 type AuthState = "anonymous" | "authenticated";
 
 function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
-  const normalized = String(rawTier ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "architect") return "architect";
+  void rawTier;
   return "free";
 }
 
 function resolveEffectiveTier(input: { authState: AuthState; tier: CanonicalTier }): EffectiveTier {
   if (input.authState === "anonymous") return "anon_free";
-  if (input.tier === "free") return "auth_free";
-  return input.tier;
-}
-
-function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
-  if (startsAt > nowMs) return false;
-  if (typeof endsAt === "number" && nowMs > endsAt) return false;
-  return true;
+  void input.tier;
+  return "auth_free";
 }
 
 export const getCanonicalTierByUserId = query({
@@ -38,16 +29,9 @@ export const getCanonicalTierByUserId = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
-    const rows = await ctx.db
-      .query("userEntitlements")
-      .withIndex("by_user", (q) => q.eq("userId", userId))
-      .collect();
-    const activeRows = rows
-      .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
-      .sort((a, b) => b.startsAt - a.startsAt);
-    const canonicalTier = normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
-    return canonicalTier;
+    void userId;
+    void args.nowMs;
+    return normalizeCanonicalTier("free");
   },
 });
 
@@ -82,15 +66,8 @@ export const getEffectiveTierByAuthSubject = query({
       };
     }
 
-    const nowMs = args.nowMs ?? Date.now();
-    const rows = await ctx.db
-      .query("userEntitlements")
-      .withIndex("by_user", (q) => q.eq("userId", user._id))
-      .collect();
-    const activeRows = rows
-      .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
-      .sort((a, b) => b.startsAt - a.startsAt);
-    const canonicalTier = normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
+    void args.nowMs;
+    const canonicalTier = normalizeCanonicalTier("free");
     const effectiveTier = resolveEffectiveTier({ authState, tier: canonicalTier });
     return {
       authState,

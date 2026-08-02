@@ -1,5 +1,5 @@
-/* Conversion landing page — design locked in polynet-landing-mocks/08-premium-simplified.html.
-   Composed by WebLandingPage.tsx. One CTA (onJoin) repeated; pink is reserved for the AI. */
+/* Conversion landing page composed by WebLandingPage.tsx.
+   One CTA (onJoin) repeated; pink is reserved for the community AI. */
 import { useCallback, useEffect, useRef, useState } from "react";
 
 type JoinProps = { onJoin: () => void };
@@ -51,15 +51,15 @@ function Caret() {
 /* --- demo scenes ------------------------------------------------------- */
 
 const SCENE_CAPTIONS: Array<{ strong: string; rest: string }> = [
-  { strong: "Answers every member, 24/7", rest: " — even at 2:47 AM, in your voice." },
-  { strong: "Nothing evaporates", rest: " — great answers become playbooks, reused by every member." },
-  { strong: "New members onboard themselves", rest: " — greeted, guided to a first win, retained." },
+  { strong: "Answers with community context", rest: " — grounded in shared resources and past learnings." },
+  { strong: "Useful knowledge compounds", rest: " — what works becomes reusable community intelligence." },
+  { strong: "The right context finds each member", rest: " — without digging through old conversations." },
 ];
 
 const Q_TEXT = "How should I price my first paid cohort? ~400 on the waitlist.";
 const A_TEXT =
-  "Start at $149 and cap cohort one at ~200 — scarcity converts the list and de-risks delivery. Another member ran this exact play and sold out. Want the launch sequence?";
-const WELCOME_TEXT = "Welcome! You said you're launching a course — here's your first-win path:";
+  "Start at $149 and cap cohort one at ~200 — that keeps delivery focused while validating demand. A member documented a similar launch in the community. Want the playbook?";
+const WELCOME_TEXT = "Here's the community context for planning your first launch:";
 
 type SceneProps = { onDone: () => void };
 
@@ -107,7 +107,7 @@ function SceneAnswer(props: SceneProps & { onAnswered: () => void }) {
         <div className="av ai" />
         <div className="body">
           <div className="nm">
-            Community AI <span>trained on your content</span>
+            Community AI <span>using community knowledge</span>
           </div>
           <div className="tx">
             {a.shown}
@@ -150,8 +150,8 @@ function SceneMemory(props: SceneProps & { onSaved: () => void }) {
         <div className={`savecard${saved ? " on" : ""}`}>
           <span className="ic">◆</span>
           <span className="l">
-            Saved to <b>Cohort pricing playbook</b>
-            <em>Reused 31 times by members</em>
+            Added to <b>Cohort pricing playbook</b>
+            <em>Available to the community</em>
           </span>
         </div>
       </div>
@@ -160,9 +160,9 @@ function SceneMemory(props: SceneProps & { onSaved: () => void }) {
 }
 
 const ONBOARD_STEPS = [
-  "Read the launch playbook",
-  "Meet 3 members in your niche",
-  "Draft your offer with the AI",
+  "Cohort pricing playbook",
+  "Member launch recap",
+  "Offer workshop notes",
 ];
 
 function SceneOnboard(props: SceneProps) {
@@ -336,7 +336,7 @@ function LandingNav({ onJoin }: JoinProps) {
               scrollToId("compare");
             }}
           >
-            vs Skool &amp; Discord
+            The difference
           </a>
           <a
             href="#pricing"
@@ -349,7 +349,7 @@ function LandingNav({ onJoin }: JoinProps) {
           </a>
         </div>
         <button type="button" className="btn btn-primary" onClick={onJoin}>
-          Start free <span className="arrow">→</span>
+          Create your community <span className="arrow">→</span>
         </button>
       </div>
     </nav>
@@ -363,16 +363,16 @@ function Hero({ onJoin }: JoinProps) {
       <div className="wrap">
         <div className="inner">
           <div className="pill">
-            <b>Early access</b> · The AI-first community platform
+            <b>Early access</b> · Collective intelligence for communities
           </div>
-          <h1>Give your community an AI that answers for you.</h1>
+          <h1>Build a community that gets smarter every day.</h1>
           <p className="sub">
-            Train it on your content and your voice. Every member gets 1:1 help around the clock —
-            you keep the work only you can do.
+            Polynet brings your members, knowledge, and community AI into one living system — so
+            useful context compounds instead of disappearing in chat.
           </p>
           <div className="cta">
             <button type="button" className="btn btn-primary btn-lg" onClick={onJoin}>
-              Start free <span className="arrow">→</span>
+              Create your community <span className="arrow">→</span>
             </button>
             <a
               className="btn btn-ghost btn-lg"
@@ -386,7 +386,7 @@ function Hero({ onJoin }: JoinProps) {
             </a>
           </div>
           <div className="micro">
-            <b>No card</b> · Bring your members from Skool or Discord · Live in an afternoon
+            <b>One simple plan</b> · $79/month per community
           </div>
         </div>
         <DemoWindow />
@@ -412,20 +412,20 @@ function Benefits() {
       <div className="wrap">
         <div className="shead">
           <div className="eyebrow">Why Polynet</div>
-          <h2>Stop being the bottleneck in your own community.</h2>
+          <h2>Stop being the bottleneck. Let your community’s knowledge compound.</h2>
         </div>
         <div className="bens">
           <div className="ben">
-            <h3>Never answer twice</h3>
-            <p>The AI handles repeat questions 24/7 — trained on your content, in your voice.</p>
+            <h3>Preserve what works</h3>
+            <p>Useful answers, resources, and outcomes become durable community knowledge.</p>
           </div>
           <div className="ben">
-            <h3>Your knowledge compounds</h3>
-            <p>Great answers become playbooks instead of scrolling away. Smarter every week.</p>
+            <h3>Put knowledge to work</h3>
+            <p>The community AI uses relevant context to help members move forward.</p>
           </div>
           <div className="ben">
-            <h3>Members stay</h3>
-            <p>Everyone gets 1:1 help on demand — the thing that makes people renew.</p>
+            <h3>Stay the expert, not the help desk</h3>
+            <p>Give members access to the community’s intelligence without repeating yourself.</p>
           </div>
         </div>
         <p className="personas-line">
@@ -437,12 +437,12 @@ function Benefits() {
   );
 }
 
-const COMPARISON_ROWS: Array<{ label: string; them: boolean }> = [
-  { label: "An AI trained on your content, in your voice", them: false },
-  { label: "Answers every member 1:1, 24/7", them: false },
-  { label: "Knowledge saved into searchable playbooks", them: false },
-  { label: "Onboards every new member for you", them: false },
-  { label: "Sell memberships & paid access", them: true },
+const COMPARISON_ROWS: Array<{ label: string; conventional: string; polynet: string }> = [
+  { label: "Conversations", conventional: "Organized in feeds", polynet: "Become reusable context" },
+  { label: "Knowledge", conventional: "Stored in posts and files", polynet: "Available to members and agents" },
+  { label: "AI", conventional: "An add-on for admins", polynet: "A community participant" },
+  { label: "Value over time", conventional: "More content to search", polynet: "A community that learns" },
+  { label: "Commerce", conventional: "Paid memberships", polynet: "Memberships plus collective intelligence" },
 ];
 
 function Comparison({ onJoin }: JoinProps) {
@@ -451,29 +451,27 @@ function Comparison({ onJoin }: JoinProps) {
       <div className="wrap">
         <div className="shead">
           <div className="eyebrow">The difference</div>
-          <h2>Built for the AI era.</h2>
+          <h2>Community software gives people a place to talk. Polynet helps them think together.</h2>
         </div>
         <div className="cmp">
           <div className="row h">
             <div>&nbsp;</div>
-            <div className="them">Skool / Discord</div>
+            <div className="them">Community software</div>
             <div className="us">Polynet</div>
           </div>
           {COMPARISON_ROWS.map((row) => (
             <div className="row" key={row.label}>
               <div className="lbl">{row.label}</div>
-              <div className="them">{row.them ? <span className="ck">✓</span> : <span className="xk">—</span>}</div>
-              <div className="us">
-                <span className="ck">✓</span>
-              </div>
+              <div className="them">{row.conventional}</div>
+              <div className="us">{row.polynet}</div>
             </div>
           ))}
         </div>
         <div className="midcta">
           <button type="button" className="btn btn-primary" onClick={onJoin}>
-            Start free <span className="arrow">→</span>
+            Create your community <span className="arrow">→</span>
           </button>
-          <span>No card · Live in an afternoon</span>
+          <span>$79/month per community</span>
         </div>
       </div>
     </section>
@@ -486,63 +484,72 @@ function HowItWorks() {
       <div className="wrap">
         <div className="shead">
           <div className="eyebrow">How it works</div>
-          <h2>Live in an afternoon.</h2>
+          <h2>Turn participation into shared intelligence.</h2>
         </div>
         <div className="howline">
           <div className="hs">
             <div className="num">01</div>
-            <h3>Bring your content</h3>
-            <p>Courses, docs, videos, past Q&amp;As.</p>
+            <h3>Create your community</h3>
+            <p>Define its purpose, access, and member experience.</p>
           </div>
           <div className="hs">
             <div className="num">02</div>
-            <h3>Your AI trains on you</h3>
-            <p>Your method, your voice — nothing else.</p>
+            <h3>Add shared knowledge</h3>
+            <p>Bring resources, expertise, and useful community context.</p>
           </div>
           <div className="hs">
             <div className="num">03</div>
-            <h3>Invite your members</h3>
-            <p>One link. 1:1 help from day one.</p>
+            <h3>Let intelligence compound</h3>
+            <p>Members and agents reuse what the community learns.</p>
           </div>
         </div>
-        <p className="migrate">
-          Coming from Skool or Discord? <b>Move in an afternoon</b> — we help with the transition.
-        </p>
       </div>
     </section>
   );
 }
 
-function PricingJourney() {
+const INCLUDED_FEATURES = [
+  "Your hosted community and member space",
+  "A dedicated community AI",
+  "Polynet-hosted inference",
+  "Shared knowledge, resources, and memory",
+  "Posts, chat, and voice",
+  "Member access and community invitations",
+  "Paid memberships and automated payouts",
+  "Connections to external AI tools",
+];
+
+function PricingOffer({ onJoin }: JoinProps) {
   return (
     <section className="blk tight" id="pricing">
       <div className="wrap">
         <div className="shead">
           <div className="eyebrow">Pricing</div>
-          <h2>You don't pay until you get paid.</h2>
+          <h2>One plan. One intelligent community.</h2>
         </div>
-        <div className="journey">
-          <div className="j hi">
-            <div className="stage">Launch</div>
-            <div className="amt">Free</div>
-            <p>
-              Everything you need: your community, your trained AI, your members. No card, no trial
-              clock.
-            </p>
+        <div className="offer">
+          <div className="offer-price">
+            <div className="stage">Polynet community</div>
+            <div className="amt">
+              $79 <span>/month</span>
+            </div>
+            <p>Per community. Create as many communities as you want; each is billed separately.</p>
+            <button type="button" className="btn btn-primary" onClick={onJoin}>
+              Create your community <span className="arrow">→</span>
+            </button>
           </div>
-          <div className="j">
-            <div className="stage">Grow</div>
-            <div className="amt">Pro, when you're ready</div>
-            <p>Optional power: deeper AI, more memory, advanced controls.</p>
-          </div>
-          <div className="j">
-            <div className="stage">Earn</div>
-            <div className="amt">No monthly bill</div>
-            <p>When members pay you, we keep a small share. If you earn nothing, you pay nothing.</p>
+          <div className="offer-includes">
+            <div className="stage">Included</div>
+            <ul>
+              {INCLUDED_FEATURES.map((feature) => (
+                <li key={feature}>{feature}</li>
+              ))}
+            </ul>
           </div>
         </div>
         <p className="price-micro">
-          No $99/month just to keep the lights on. Polynet is free until your community pays you.
+          Polynet keeps a 2.9% platform fee from paid-member revenue. Stripe processing fees apply
+          separately.
         </p>
       </div>
     </section>
@@ -552,19 +559,23 @@ function PricingJourney() {
 const FAQ_ITEMS: Array<{ q: string; a: string }> = [
   {
     q: "Do I need to be technical?",
-    a: "No. If you can upload a file and paste a link, you can launch. No code, no prompt engineering.",
+    a: "No. Polynet hosts the community AI and inference for you. You can build the community, add resources, and invite members without managing AI infrastructure.",
   },
   {
-    q: "What about my existing Skool or Discord community?",
-    a: "Bring it with you. Import your content, invite members with one link — most creators move in an afternoon, and we help.",
+    q: "Do I pay per account or per community?",
+    a: "Per community. Each community is $79 per month. You can create as many communities as you want, and each is billed separately.",
   },
   {
-    q: "What if the AI gets something wrong?",
-    a: "Every answer cites its sources, you can correct it in one click, and corrections become memory — it gets sharper the more your community uses it.",
+    q: "What is Polynet-hosted inference?",
+    a: "Your community AI runs on Polynet. You do not need to connect or manage a separate AI provider for your hosted community.",
   },
   {
-    q: "What does free actually include?",
-    a: "The real thing: your community, your trained AI, your members. You only ever pay two ways — optional Pro upgrades, and a small share of memberships you charge for. If you earn nothing, you pay nothing.",
+    q: "Can I charge members for access?",
+    a: "Yes. Polynet supports paid memberships and automated payouts. Polynet keeps a 2.9% platform fee from paid-member revenue, and Stripe processing fees apply separately.",
+  },
+  {
+    q: "What makes Polynet different from community software?",
+    a: "Polynet is built around collective intelligence. Community knowledge can be used by members and agents instead of remaining trapped in feeds, files, and old conversations.",
   },
 ];
 
@@ -593,11 +604,11 @@ function CloseCta({ onJoin }: JoinProps) {
   return (
     <section className="close">
       <div className="wrap">
-        <div className="note">Communities are becoming intelligent. Get yours there first.</div>
-        <h2>Keep being the expert. Stop being the bottleneck.</h2>
+        <div className="note">One plan · $79/month per community</div>
+        <h2>Build the community that learns with its members.</h2>
         <div className="cta">
           <button type="button" className="btn btn-primary btn-lg" onClick={onJoin}>
-            Start free <span className="arrow">→</span>
+            Create your community <span className="arrow">→</span>
           </button>
         </div>
       </div>
@@ -615,7 +626,7 @@ function LandingFooter() {
             Polynet<b>.</b>
           </span>
         </span>
-        <span className="lg">© Polynet 2026 · The AI-first community platform</span>
+        <span className="lg">© Polynet 2026 · The collective intelligence platform for communities</span>
       </div>
     </footer>
   );
@@ -631,7 +642,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
         <Benefits />
         <Comparison onJoin={onJoin} />
         <HowItWorks />
-        <PricingJourney />
+        <PricingOffer onJoin={onJoin} />
         <Faq />
         <CloseCta onJoin={onJoin} />
       </main>

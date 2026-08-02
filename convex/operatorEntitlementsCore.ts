@@ -1,5 +1,3 @@
-export const PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES = 1_000;
-
 type OperatorRoleRow = {
   role?: unknown;
   active?: unknown;

@@ -44,7 +44,7 @@ Polynet does not consume, connect, mount, or proxy third-party MCP servers.
 5. Do not add third-party MCP credentials, mounts, or passthrough tools.
 6. Preserve the stable external `workspace` wire vocabulary only where the v0
    compatibility contract requires it.
-7. Premium overlays such as web research do not expand or fork the five-tool
+7. Capability overlays such as web research do not expand or fork the five-tool
    Polynet contract.
 
 ## Related Concepts

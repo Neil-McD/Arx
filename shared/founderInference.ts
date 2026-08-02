@@ -28,14 +28,6 @@ export type FounderInferenceGrantStatus = "approved" | "active" | "suspended";
 export type CommunityInferenceFundingAdmission =
   | {
       ok: true;
-      mode: "legacy_requester_chatgpt";
-      transitional: true;
-      payerUserId: null;
-      grantId: null;
-      modelId: null;
-    }
-  | {
-      ok: true;
       mode: "owner_api_key";
       transitional: false;
       payerUserId: unknown;
@@ -62,6 +54,7 @@ export type CommunityInferenceFundingAdmission =
       code:
         | "community_not_found"
         | "founder_plan_required"
+        | "owner_funding_choice_required"
         | "owner_funding_suspended"
         | "owner_credential_missing"
         | "founder_subscription_inactive"

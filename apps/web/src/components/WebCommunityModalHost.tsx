@@ -2,7 +2,7 @@ import type { WebCommunityModalHostPropsShape } from "../controllers/useWebCommu
 import { WebCreateCommunityModal } from "./WebCreateCommunityModal";
 
 type WebCommunityModalHostProps = {
-  modalHostProps: WebCommunityModalHostPropsShape<{ id: string }, { account_tier: string; max_communities: number }>;
+  modalHostProps: WebCommunityModalHostPropsShape;
 };
 
 export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
@@ -14,9 +14,6 @@ export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
         <WebCreateCommunityModal
           isOpen={createModal.isOpen}
           hasSession={createModal.hasSession}
-          communities={createModal.communities}
-          communityRoleById={createModal.communityRoleById}
-          accountCommerceStatus={createModal.accountCommerceStatus}
           isCreateBannerDragOver={createModal.isCreateBannerDragOver}
           isCreateAvatarDragOver={createModal.isCreateAvatarDragOver}
           createCommunityBannerUrl={createModal.createCommunityBannerUrl}
@@ -25,7 +22,6 @@ export function WebCommunityModalHost(props: WebCommunityModalHostProps) {
           createCommunityOneLiner={createModal.createCommunityOneLiner}
           createCommunitySlug={createModal.createCommunitySlug}
           createCommunityError={createModal.createCommunityError}
-          accountCommerceError={createModal.accountCommerceError}
           isCreatingCommunity={createModal.isCreatingCommunity}
           communityInitials={createModal.communityInitials}
           onClose={createModal.onClose}

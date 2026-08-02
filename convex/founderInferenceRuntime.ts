@@ -49,9 +49,6 @@ export async function beginCommunityInferenceFundingSession(args: {
   admission: CommunityInferenceFundingAdmission;
 }): Promise<CommunityInferenceFundingSession> {
   if (args.admission.ok === false) throw new Error(args.admission.code);
-  if (args.admission.mode === "legacy_requester_chatgpt") {
-    throw new Error("founder_inference_cutover_required");
-  }
   const receiptKey = String(args.receiptKey ?? "").trim();
   const sourceRunId = String(args.sourceRunId ?? "").trim();
   if (!receiptKey || !sourceRunId) throw new Error("founder_inference_receipt_identity_required");

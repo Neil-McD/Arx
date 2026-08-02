@@ -18,7 +18,6 @@ function assertOrdered(source: string, snippets: string[], message: string) {
 }
 
 const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
-const workspaceCredits = read("convex/workspaceCredits.ts");
 const blaxelWorkspaceWake = read("convex/blaxelWorkspaceWake.ts");
 const workspaceTerminals = read("convex/workspaceTerminals.ts");
 const blaxelWorkspaceClient = read("convex/blaxelWorkspaceClient.ts");
@@ -58,24 +57,15 @@ assert.match(
 );
 assert.match(
   workspaceRuntimeSession,
-  /recordWorkspaceComputeChargeInternal[\s\S]*measuredDurationSeconds,[\s\S]*providerStandbyGraceSeconds,[\s\S]*providerReleaseReason:[\s\S]*providerReleaseConfirmed:/,
-  "runtime workspace settlement must persist measured/grace/release metadata into the charge writer",
+  /recordPlatformToolCostBestEffort\([\s\S]*rawVendorCostUsd: computeCostUsd[\s\S]*metadata,[\s\S]*nowMs: endedAt/,
+  "runtime workspace settlement must persist measured provider cost without charging a user ledger",
 );
 assert.match(
-  workspaceCredits,
-  /recordWorkspaceComputeChargeInternal[\s\S]*measuredDurationSeconds: v\.optional\(v\.number\(\)\)[\s\S]*providerStandbyGraceSeconds: v\.optional\(v\.number\(\)\)[\s\S]*providerReleaseReason: v\.optional\(v\.union\(v\.string\(\), v\.null\(\)\)\)[\s\S]*providerReleaseConfirmed: v\.optional\(v\.union\(v\.boolean\(\), v\.null\(\)\)\)/,
-  "workspace compute charge writer must accept provider lifecycle split metadata",
+  workspaceRuntimeSession,
+  /metadata = \{[\s\S]*duration_seconds:[\s\S]*measured_duration_seconds:[\s\S]*provider_standby_grace_seconds:[\s\S]*provider_release_reason:[\s\S]*provider_release_confirmed:/,
+  "workspace provider-cost evidence must keep lifecycle split metadata",
 );
-assert.match(
-  workspaceCredits,
-  /metadata: \{[\s\S]*final_duration_seconds[\s\S]*measured_duration_seconds[\s\S]*provider_standby_grace_seconds[\s\S]*provider_release_reason[\s\S]*provider_release_confirmed/,
-  "workspace compute charge writer must store provider lifecycle split metadata on the ledger",
-);
-assert.match(
-  workspaceCredits,
-  /provider_cost_source: "workspace_compute_charge"[\s\S]*duration_seconds[\s\S]*measured_duration_seconds[\s\S]*provider_standby_grace_seconds[\s\S]*provider_release_reason[\s\S]*provider_release_confirmed/,
-  "workspace compute provider-cost mirror must store provider lifecycle split metadata",
-);
+assert.doesNotMatch(workspaceRuntimeSession, /recordWorkspaceComputeChargeInternal|reserveCreditsInternal|settleCreditsInternal/);
 
 assert.equal(
   /BLAXEL_AUTO_STANDBY_GRACE_SECONDS = 15/.test(sharedWorkspaceProvider),
@@ -93,63 +83,21 @@ assert.doesNotMatch(
   "provider release must not report confirmed standby without provider evidence",
 );
 
-assert.match(
-  workspaceCredits,
-  /function isBlaxelWorkspaceComputeReservation\(entry: any\)[\s\S]*toolName\) === "workspace_compute"[\s\S]*vendor\) === "blaxel"[\s\S]*Boolean\(entry\?\.projectId\)/,
-  "Blaxel workspace reservation detection must require provider, tool name, and project ownership",
-);
-assert.match(
-  workspaceCredits,
-  /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*isBlaxelWorkspaceComputeReservation\(entry\)[\s\S]*providerSandboxProviderId\) === "blaxel"[\s\S]*providerSandboxCreditReservationKey[\s\S]*entry\?\.creditKey/,
-  "active project pointer protection must be keyed by the current Blaxel sandbox reservation",
-);
-assert.doesNotMatch(
-  workspaceCredits,
-  /hasActiveBlaxelProjectWorkspaceLeasePointer[\s\S]*isBlaxelProjectWorkspaceLeaseReservation/,
-  "project pointer protection must not exclude runtime_workspace_session by action type",
-);
-assertOrdered(
-  workspaceCredits,
-  [
-    "async function shouldSkipExpiredBlaxelWorkspaceReservation",
-    "await hasActiveBlaxelProjectWorkspaceLeasePointer(ctx, entry)",
-    "return true;",
-    "if (isBlaxelRuntimeWorkspaceReservation(entry))",
-    "return await hasRunningRuntimeRunForWorkspaceReservation(ctx, entry)",
-    "return false;",
-  ],
-  "generic expired cleanup must prefer project pointer truth, then running runtime truth",
-);
-assert.match(
-  workspaceCredits,
-  /hasRunningRuntimeRunForWorkspaceReservation[\s\S]*by_owner_runId[\s\S]*status\) === "running"[\s\S]*run\?\.projectId\) === projectId/,
-  "orphan runtime reservations must still require an active matching runtime run",
-);
-
 assertOrdered(
   blaxelWorkspaceWake,
   [
     "async function resolveReusableProjectWorkspaceLease",
     "providerSandboxCreditReservationKey",
-    "getCreditLedgerEntryByKeyInternal",
-    'ledgerEntry.status !== "reserved"',
-    'String(ledgerEntry.userId ?? "") !== String(params.ownerId ?? "")',
-    "normalizeOptionalString(ledgerEntry.projectId) !== String(params.projectId)",
-    "!isBlaxelWorkspaceLeaseLedgerEntry(ledgerEntry)",
-    "canReuseWorkspaceLeaseForIntent({",
+    "providerSandboxCreditBudgetExpiresAt",
+    "projectCreditBudgetExpiresAt <= Date.now()",
     "inspectBlaxelWorkspaceComputer({",
   ],
-  "reusable lease path must trust the active project pointer and reserved ledger entry before provider reuse",
+  "reusable lease path must trust the active project pointer, bounded lease window, and provider truth",
 );
 assert.doesNotMatch(
   blaxelWorkspaceWake,
-  /isRuntimeWorkspaceSessionLeaseLedgerEntry|isRunningRuntimeWorkspaceSessionLease/,
-  "project-attached runtime workspace leases must not require the original runtime run to still be running",
-);
-assert.match(
-  blaxelWorkspaceWake,
-  /canReuseWorkspaceLeaseForIntent[\s\S]*compareWorkspaceComputerLifecycleIntents[\s\S]*requestedLifecycleIntent/,
-  "lease reuse must still reject weaker lifecycle leases",
+  /getCreditLedgerEntryByKeyInternal|reserveCreditsInternal|settleCreditsInternal|settleReservedCreditsBestEffort/,
+  "workspace lifecycle must not consult or mutate the retired user-credit ledger",
 );
 assert.match(
   blaxelWorkspaceWake,
@@ -159,17 +107,8 @@ assert.match(
 
 assert.match(
   blaxelWorkspaceWake,
-  /async function recordTrackedBlaxelWorkspaceLeaseProviderCostBestEffort[\s\S]*recordProviderCostInternal[\s\S]*billingDisposition: "tracked_only"[\s\S]*provider_cost_source: "workspace_lease_release_without_user_charge"/,
-  "released Blaxel workspace leases must still track provider cost before refunding the user-facing reservation",
-);
-assertOrdered(
-  blaxelWorkspaceWake,
-  [
-    "await recordTrackedBlaxelWorkspaceLeaseProviderCostBestEffort({",
-    "await settleReservedCreditsBestEffort({",
-    'status: "refunded"',
-  ],
-  "released Blaxel workspace leases must record tracked provider cost before refunding the user-facing reservation",
+  /settleBillableBlaxelWorkspaceLeaseBestEffort[\s\S]*recordPlatformToolCostBestEffort\([\s\S]*rawVendorCostUsd: computeCostUsd[\s\S]*settlement_source: "project_workspace_lease"/,
+  "released Blaxel workspace leases must record platform-absorbed provider cost",
 );
 assertOrdered(
   blaxelWorkspaceWake,
@@ -177,20 +116,10 @@ assertOrdered(
     "export async function finalizeBillableBlaxelProjectWorkspaceLease",
     "providerSandboxProviderId) !== \"blaxel\"",
     "providerSandboxCreditReservationKey",
-    'ledgerEntry.status !== "reserved"',
-    "ledgerOwnerMatches",
-    "ledgerProjectMatches",
-    "params.requireExpiredReservation === true",
-    "!isBlaxelWorkspaceLeaseLedgerEntry(ledgerEntry)",
     "settleBillableBlaxelWorkspaceLeaseBestEffort({",
     "clearProjectWorkspaceLeaseAccounting({",
   ],
-  "project finalizer must settle and clear any current Blaxel workspace lease action owned by the project pointer",
-);
-assert.doesNotMatch(
-  blaxelWorkspaceWake,
-  /isProjectFinalizableBlaxelWorkspaceLeaseLedgerEntry/,
-  "project finalization must not keep an action-type exclusion wrapper",
+  "project finalizer must record and clear the current Blaxel workspace lease owned by the project pointer",
 );
 
 assertOrdered(
@@ -211,14 +140,13 @@ assertOrdered(
 assertOrdered(
   crons,
   [
-    "reconcile stale runtime workspace runs",
-    "reconcileStaleRuntimeWorkspaceRunsInternal",
     "finalize expired blaxel project workspace leases",
     "finalizeExpiredBlaxelProjectWorkspaceLeasesInternal",
-    "reconcile expired credit reservations",
-    "reconcileExpiredCreditReservationsInternal",
+    "record blaxel storage provider costs",
+    "recordBlaxelStorageProviderCostsInternal",
   ],
-  "cron order must reconcile stale runtime runs and project leases before generic reservation cleanup",
+  "cron order must finalize project leases before recording recurring provider costs",
 );
+assert.doesNotMatch(crons, /reconcileExpiredCreditReservationsInternal/);
 
 console.log("blaxel_workspace_lifecycle_accounting_proof: ok");

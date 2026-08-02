@@ -4,12 +4,7 @@ import {
 } from "./convexAuthSessionProbe";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 import { isStandaloneWebApp } from "./browserRuntimeMode";
-import {
-  normalizePaidUsageBillingMode,
-  type PaidUsageBillingMode,
-} from "./paidUsageBilling";
 import { VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS } from "./voiceCapture";
-import { normalizePaidToolKind, type PaidToolKind } from "./workspaceCredits";
 
 export type AuthUser = {
   id: string;
@@ -61,25 +56,16 @@ export type AuthSessionEnsureResult =
 export class VoiceTranscriptionRequestError extends Error {
   readonly status: number;
   readonly code: string | null;
-  readonly toolKind: PaidToolKind | null;
-  readonly requiredCredits: number | null;
-  readonly paidUsageBillingMode: PaidUsageBillingMode | null;
 
   constructor(args: {
     message: string;
     status: number;
     code?: string | null;
-    toolKind?: PaidToolKind | null;
-    requiredCredits?: number | null;
-    paidUsageBillingMode?: PaidUsageBillingMode | null;
   }) {
     super(args.message);
     this.name = "VoiceTranscriptionRequestError";
     this.status = args.status;
     this.code = args.code ?? null;
-    this.toolKind = args.toolKind ?? null;
-    this.requiredCredits = args.requiredCredits ?? null;
-    this.paidUsageBillingMode = args.paidUsageBillingMode ?? null;
   }
 }
 
@@ -117,11 +103,6 @@ export async function readAuthError(response: Response): Promise<string> {
   return `Cloud error (${response.status})`;
 }
 
-function normalizePositiveCredits(value: unknown): number | null {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
-}
-
 async function readVoiceTranscriptionRequestError(
   response: Response,
 ): Promise<VoiceTranscriptionRequestError> {
@@ -130,14 +111,6 @@ async function readVoiceTranscriptionRequestError(
       code?: unknown;
       error?: unknown;
       message?: unknown;
-      tool_kind?: unknown;
-      toolKind?: unknown;
-      paid_tool_kind?: unknown;
-      required_credits?: unknown;
-      requiredCredits?: unknown;
-      paid_usage_billing_mode?: unknown;
-      paidUsageBillingMode?: unknown;
-      billing_mode?: unknown;
     };
     const message =
       readString(json.message) ??
@@ -147,17 +120,6 @@ async function readVoiceTranscriptionRequestError(
       message,
       status: response.status,
       code: readString(json.code) ?? readString(json.error),
-      toolKind: normalizePaidToolKind(
-        json.tool_kind ?? json.toolKind ?? json.paid_tool_kind,
-      ),
-      requiredCredits: normalizePositiveCredits(
-        json.required_credits ?? json.requiredCredits,
-      ),
-      paidUsageBillingMode: normalizePaidUsageBillingMode(
-        json.paid_usage_billing_mode ??
-          json.paidUsageBillingMode ??
-          json.billing_mode,
-      ),
     });
   } catch {
     return new VoiceTranscriptionRequestError({

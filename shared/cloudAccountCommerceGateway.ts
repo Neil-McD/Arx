@@ -5,22 +5,6 @@ type CloudAccountCommerceGatewayParams<SessionT> = {
 
 // Gateway class: authenticated query/mutation bridge, caller-hardened session, fail-closed.
 
-export async function startCloudPremiumSubscriptionCheckout<SessionT>(
-  params: CloudAccountCommerceGatewayParams<SessionT> & {
-    successUrl: string;
-    cancelUrl: string;
-  },
-): Promise<{ checkout_url?: unknown }> {
-  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  return (await client.action("premiumBilling:startPremiumSubscriptionCheckout" as any, {
-    authSubject,
-    successUrl: params.successUrl,
-    cancelUrl: params.cancelUrl,
-  })) as {
-    checkout_url?: unknown;
-  };
-}
-
 export async function startCloudConnectOnboarding<SessionT>(
   params: CloudAccountCommerceGatewayParams<SessionT> & {
     context: "account" | "community";

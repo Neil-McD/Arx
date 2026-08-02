@@ -18,7 +18,6 @@ import {
   type MemberOntologyLens,
 } from "../shared/memberOntology";
 import type { MemberAccountContextLike } from "../shared/memberContextMarkdown";
-import { getCanonicalTierByUserIdInternal } from "./auth";
 import { communityMembershipRowIsActive } from "./communityCore";
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 
@@ -290,7 +289,7 @@ export async function loadMemberAccountContext(
   userId: any,
   nowMs: number,
 ): Promise<MemberAccountContextLike> {
-  const [user, detail, providerConnections, membershipRows, ownedRows, canonicalTier] =
+  const [user, detail, providerConnections, membershipRows, ownedRows] =
     await Promise.all([
       ctx.db.get(userId),
       getUniqueUserProfileDetailByUserId(ctx, userId),
@@ -306,7 +305,6 @@ export async function loadMemberAccountContext(
         .query("communities")
         .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
         .collect(),
-      getCanonicalTierByUserIdInternal(ctx, userId, nowMs),
     ]);
 
   const hasChatgpt = providerConnections.some((row: any) => row?.provider === "chatgpt");
@@ -333,7 +331,6 @@ export async function loadMemberAccountContext(
   return {
     displayName: detail?.displayName ?? null,
     handle: user?.handle ?? null,
-    tier: canonicalTier === "architect" ? "premium" : "free",
     timezone: detail?.timezone ?? null,
     inferenceProvider: hasChatgpt ? "chatgpt" : hasOpenAi ? "openai" : null,
     socialLinks,

@@ -37,10 +37,6 @@ export function readFirstLocalStorageValue(
   return null;
 }
 
-export function buildPremiumSubscriptionReturnUrl(): string {
-  return `${window.location.origin}/settings/billing`;
-}
-
 export function buildCurrentTelemetryPathname(): string | null {
   if (typeof window === "undefined") return null;
   return buildTelemetryRouteLabel({

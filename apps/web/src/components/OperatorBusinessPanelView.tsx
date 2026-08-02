@@ -42,10 +42,6 @@ export function OperatorBusinessPanelView(props: {
     accountSetupOverview && accountSetupOverview.totals.users > 0
       ? accountSetupOverview.totals.completed / accountSetupOverview.totals.users
       : null;
-  const creditTopupConversion =
-    props.monetization && props.monetization.creditTopupCheckoutStarts > 0
-      ? props.monetization.creditTopupCheckoutCompletions / props.monetization.creditTopupCheckoutStarts
-      : null;
   const communityCheckoutConversion =
     props.monetization && props.monetization.communityCheckoutStarts > 0
       ? props.monetization.communityCheckoutCompletions / props.monetization.communityCheckoutStarts
@@ -56,11 +52,11 @@ export function OperatorBusinessPanelView(props: {
   const platformRevenueMetric =
     businessKpis?.revenue.platformNetRevenueAvailability === "available"
       ? businessKpis.revenue.platformNetRevenueInRange
-      : businessKpis?.revenue.creditTopupRevenueInRange ?? null;
+      : null;
   const platformRevenueNote =
     businessKpis?.revenue.platformNetRevenueAvailability === "available"
       ? "Net platform revenue in the selected window."
-      : "Credit top-ups; take-rate pending.";
+      : "Current platform net revenue is not instrumented; retired tool-credit sales are excluded.";
   const communityRevShareNote =
     businessKpis?.revenue.communityPlatformRevShareAvailability === "estimated_from_current_fee_policy"
       ? "Estimated Polynet share of completed community checkouts."
@@ -92,9 +88,9 @@ export function OperatorBusinessPanelView(props: {
           <span className="operator-dashboard__metric-note">{communityRevShareNote}</span>
         </div>
         <div>
-          <span>Tool usage</span>
-          <strong>{formatUsdAmount(toolEconomics?.totals.revenueUsd)}</strong>
-          <span className="operator-dashboard__metric-note">Settled paid-tool usage in the selected window.</span>
+          <span>Historical provider cost</span>
+          <strong>{formatUsdAmount(toolEconomics?.totals.vendorCostUsd)}</strong>
+          <span className="operator-dashboard__metric-note">Provider cost reconstructed from the retired tool-credit ledger.</span>
         </div>
         <div>
           <span>Platform revenue</span>
@@ -148,16 +144,16 @@ export function OperatorBusinessPanelView(props: {
         <h2>Platform revenue</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Credit revenue</span>
-            <strong>{formatMoney(businessKpis?.revenue.creditTopupRevenueInRange ?? null)}</strong>
+            <span>Net platform revenue</span>
+            <strong>{formatMoney(platformRevenueMetric)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Active paying users</span>
             <strong>{businessKpis?.users.activePayingCustomers ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Usage buyers</span>
-            <strong>{businessKpis?.users.usageBuyersInRange ?? 0}</strong>
+            <span>Community fee estimate</span>
+            <strong>{formatMoney(businessKpis?.revenue.communityPlatformRevShareInRange ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
             <span>Checkout purchasers</span>
@@ -178,14 +174,14 @@ export function OperatorBusinessPanelView(props: {
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Tool balance revenue</h2>
+        <h2>Historical tool-credit liabilities</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Credit top-up starts</span>
+            <span>Archived top-up starts</span>
             <strong>{props.monetization?.creditTopupCheckoutStarts ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Credit top-up completions</span>
+            <span>Archived top-up completions</span>
             <strong>{props.monetization?.creditTopupCheckoutCompletions ?? 0}</strong>
           </div>
           <div className="operator-dashboard__row">
@@ -235,13 +231,13 @@ export function OperatorBusinessPanelView(props: {
                 </div>
               ))
           ) : (
-            <div className="operator-dashboard__empty">No paid-tool credit activity returned.</div>
+            <div className="operator-dashboard__empty">No historical tool-credit activity returned.</div>
           )}
         </div>
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Tool balance accounting</h2>
+        <h2>Historical tool-credit reconciliation</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
             <span>Health</span>
@@ -287,16 +283,16 @@ export function OperatorBusinessPanelView(props: {
               </div>
             ))
           ) : (
-            <div className="operator-dashboard__empty">No sampled tool-balance accounting issues returned.</div>
+            <div className="operator-dashboard__empty">No sampled historical credit-liability issues returned.</div>
           )}
         </div>
       </section>
 
       <section className="operator-dashboard__panel">
-        <h2>Tool economics</h2>
+        <h2>Historical tool-credit cost evidence</h2>
         <div className="operator-dashboard__table">
           <div className="operator-dashboard__row">
-            <span>Tool revenue</span>
+            <span>Archived ledger price</span>
             <strong>{formatUsdAmount(toolEconomics?.totals.revenueUsd)}</strong>
           </div>
           <div className="operator-dashboard__row">
@@ -304,7 +300,7 @@ export function OperatorBusinessPanelView(props: {
             <strong>{formatUsdAmount(toolEconomics?.totals.vendorCostUsd)}</strong>
           </div>
           <div className="operator-dashboard__row">
-            <span>Gross margin</span>
+            <span>Historical gross margin</span>
             <strong>{formatPercent(toolEconomics?.totals.grossMarginRate ?? null)}</strong>
           </div>
           <div className="operator-dashboard__row">
@@ -336,11 +332,9 @@ export function OperatorBusinessPanelView(props: {
                 </div>
               ))
           ) : (
-            <div className="operator-dashboard__empty">No settled paid-tool ledger rows returned.</div>
+            <div className="operator-dashboard__empty">No settled historical tool-credit rows returned.</div>
           )}
-          <div className="operator-dashboard__empty">
-            Target: {formatPercent((toolEconomics?.targets.grossMarginBps ?? 6000) / 10000)} gross margin.
-          </div>
+          <div className="operator-dashboard__empty">Audit evidence only; this product is retired.</div>
         </div>
       </section>
 
@@ -366,10 +360,6 @@ export function OperatorBusinessPanelView(props: {
           <div className="operator-dashboard__row">
             <span>Community checkout conversion</span>
             <strong>{formatPercent(communityCheckoutConversion)}</strong>
-          </div>
-          <div className="operator-dashboard__row">
-            <span>Credit top-up conversion</span>
-            <strong>{formatPercent(creditTopupConversion)}</strong>
           </div>
         </div>
       </section>

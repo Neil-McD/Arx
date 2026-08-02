@@ -33,8 +33,7 @@ export function normalizeActiveWorkspaceRuntimeEngine(raw: unknown): RuntimeEngi
     : DEFAULT_ACTIVE_RUNTIME_ENGINE;
 }
 
-export type RuntimeEngineAccessLevel = "included" | "premium";
-export type RuntimeEngineAccountPlan = "free" | "premium" | "unknown";
+export type RuntimeEngineAccessLevel = "included";
 
 export function getRuntimeEngineDisplayName(engine: RuntimeEngine | null): string {
   if (engine === RUNTIME_ENGINE_CODEX) return "Codex";
@@ -42,20 +41,11 @@ export function getRuntimeEngineDisplayName(engine: RuntimeEngine | null): strin
 }
 
 export function getRuntimeEngineAccessLevel(engine: RuntimeEngine | null): RuntimeEngineAccessLevel {
-  return engine === RUNTIME_ENGINE_POLYNET ? "included" : "premium";
+  return "included";
 }
 
-export function normalizeRuntimeEngineAccountPlan(raw: unknown): RuntimeEngineAccountPlan {
-  const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "premium" || value === "architect") return "premium";
-  if (value === "free" || value === "auth_free") return "free";
-  return "unknown";
-}
-
-export function canUseRuntimeEngineForTier(params: {
+export function canUseRuntimeEngine(params: {
   engine: RuntimeEngine | null;
-  accountTier?: unknown;
 }): boolean {
-  if (getRuntimeEngineAccessLevel(params.engine) === "included") return true;
-  return normalizeRuntimeEngineAccountPlan(params.accountTier) === "premium";
+  return params.engine === RUNTIME_ENGINE_POLYNET || params.engine === RUNTIME_ENGINE_CODEX;
 }

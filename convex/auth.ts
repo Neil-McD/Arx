@@ -12,16 +12,11 @@ import {
   redactWorkosUserVerificationLookup,
   resolveTrustedEmailVerification,
 } from "./workosEmailVerification";
-import { canUseCreatorDevTierOverride } from "../shared/devTierOverride";
-import {
-  POLYNET_FREE_MAX_COMMUNITIES,
-} from "../shared/accountCommerce";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
 import {
   hasPlatformOwnerComplimentaryAccess,
-  PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES,
 } from "./operatorEntitlementsCore";
 
 type CanonicalTier = "free" | "architect";
@@ -29,32 +24,20 @@ type EffectiveTier = "anon_free" | "auth_free" | "architect";
 type AuthState = "anonymous" | "authenticated";
 
 type AccountTierMeta = {
-  maxCommunities: number;
   platformFeeBps: number;
   hasPayouts: boolean;
 };
 
-function accountTierMeta(tier: CanonicalTier): AccountTierMeta {
-  if (tier === "architect") {
-    return {
-      maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,
-      platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
-      hasPayouts: true,
-    };
-  }
+// Rolling cached clients still require a numeric field. It is a compatibility
+// projection only; community creation authority is funding-backed on the
+// server and has no account-level ownership cap.
+const CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT = Number.MAX_SAFE_INTEGER;
+
+function accountTierMeta(): AccountTierMeta {
   return {
-    maxCommunities: POLYNET_FREE_MAX_COMMUNITIES,
     platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
     hasPayouts: true,
   };
-}
-
-function normalizeCanonicalTier(rawTier: unknown): CanonicalTier {
-  const normalized = String(rawTier ?? "")
-    .trim()
-    .toLowerCase();
-  if (normalized === "architect") return "architect";
-  return "free";
 }
 
 function resolveEffectiveTier(input: { authState: AuthState; canonicalTier: CanonicalTier }): EffectiveTier {
@@ -63,40 +46,12 @@ function resolveEffectiveTier(input: { authState: AuthState; canonicalTier: Cano
   return input.canonicalTier;
 }
 
-function readEnv(name: string): string {
-  try {
-    const value = (globalThis as any)?.process?.env?.[name];
-    if (typeof value === "string" && value.trim()) return value.trim();
-  } catch {
-    // Convex environments may not expose process.env in every runtime.
-  }
-  return "";
-}
-
-function isExplicitLocalDevEnvironment(): boolean {
-  const nodeEnv = readEnv("NODE_ENV").toLowerCase();
-  return nodeEnv === "development" || nodeEnv === "test";
-}
-
-function isActiveWindow(nowMs: number, startsAt: number, endsAt?: number): boolean {
-  if (startsAt > nowMs) return false;
-  if (typeof endsAt === "number" && nowMs > endsAt) return false;
-  return true;
-}
-
-export async function getCanonicalTierByUserIdInternal(ctx: any, userId: any, nowMs: number): Promise<CanonicalTier> {
-  const rows = (await ctx.db
-    .query("userEntitlements")
-    .withIndex("by_user", (q: any) => q.eq("userId", userId))
-    .collect()) as Array<{
-    tier: unknown;
-    startsAt: number;
-    endsAt?: number;
-  }>;
-  const activeRows = rows
-    .filter((row) => isActiveWindow(nowMs, row.startsAt, row.endsAt))
-    .sort((a, b) => b.startsAt - a.startsAt);
-  return normalizeCanonicalTier(activeRows[0]?.tier ?? "free");
+export async function getCanonicalTierByUserIdInternal(
+  _ctx: any,
+  _userId: any,
+  _nowMs: number,
+): Promise<CanonicalTier> {
+  return "free";
 }
 
 function normalizeOptionalString(raw: unknown): string | null {
@@ -353,37 +308,8 @@ export const setDevTierOverride = mutation({
     tier: v.union(v.literal("free"), v.literal("architect")),
     nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
-    const actor = await resolveAuthenticatedActor({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    if (
-      !canUseCreatorDevTierOverride({
-        email: actor.email,
-        isDev: isExplicitLocalDevEnvironment(),
-        featureFlag: readEnv("ARX_ENABLE_DEV_TIER_OVERRIDE") || "false",
-      })
-    ) {
-      throw new Error("dev_tier_override_forbidden");
-    }
-
-    const tier = normalizeCanonicalTier(args.tier);
-    await ctx.db.insert("userEntitlements", {
-      userId: actor.dbUserId,
-      tier,
-      source: "admin_override",
-      startsAt: nowMs,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
-    return {
-      ok: true,
-      canonicalTier,
-      effectiveTier: resolveEffectiveTier({ authState: "authenticated", canonicalTier }),
-    };
+  handler: async () => {
+    throw new Error("account_tier_retired");
   },
 });
 
@@ -428,10 +354,7 @@ export const getAccountCommerceStatus = query({
       getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs),
       hasPlatformOwnerComplimentaryAccess(ctx, actor.dbUserId),
     ]);
-    const baseMeta = accountTierMeta(canonicalTier);
-    const meta = operatorComplimentaryAccess
-      ? { ...baseMeta, maxCommunities: PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES }
-      : baseMeta;
+    const meta = accountTierMeta();
     const hasPayoutAccess = meta.hasPayouts;
     const stripeConnect = hasPayoutAccess
       ? ((await ctx.runQuery(
@@ -466,7 +389,7 @@ export const getAccountCommerceStatus = query({
       user_id: actor.authSubject,
       account_tier: canonicalTier,
       operator_complimentary_access: operatorComplimentaryAccess,
-      max_communities: meta.maxCommunities,
+      max_communities: CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT,
       platform_fee_bps: meta.platformFeeBps,
       stripe_connect: {
         status: stripeConnectStatus,
@@ -524,15 +447,12 @@ export const getAccountCommerceAccessForUserInternal = internalQuery({
       getCanonicalTierByUserIdInternal(ctx as never, args.userId, nowMs),
       hasPlatformOwnerComplimentaryAccess(ctx, args.userId),
     ]);
-    const baseMeta = accountTierMeta(accountTier);
-    const meta = operatorComplimentaryAccess
-      ? { ...baseMeta, maxCommunities: PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES }
-      : baseMeta;
+    const meta = accountTierMeta();
     return {
       user_id: String(args.userId),
       account_tier: accountTier,
       operator_complimentary_access: operatorComplimentaryAccess,
-      max_communities: meta.maxCommunities,
+      max_communities: CACHED_CLIENT_UNBOUNDED_COMMUNITY_LIMIT,
       platform_fee_bps: meta.platformFeeBps,
       has_payouts: meta.hasPayouts,
     };

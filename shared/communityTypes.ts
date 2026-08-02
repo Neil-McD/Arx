@@ -70,7 +70,6 @@ export type DirectMessageParticipant = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-  premium_badge?: PremiumMemberBadgeSummary | null;
   status: "active" | "left";
   last_read_seq: number;
 };
@@ -105,7 +104,6 @@ export type DirectMessageRecipient = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-  premium_badge?: PremiumMemberBadgeSummary | null;
   community_id: string;
   community_name: string;
   existing_conversation_id: string | null;
@@ -155,7 +153,6 @@ export type DirectMessageTypingPresenceUser = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-  premium_badge?: PremiumMemberBadgeSummary | null;
   display_until_ms: number;
   updated_at?: string | null;
 };
@@ -382,11 +379,6 @@ export type CommunityAnalyticsSnapshot = {
 
 export type CommunityPricingMode = "free" | "monthly" | "annual";
 
-export type PremiumMemberBadgeSummary = {
-  kind: "polynet_premium";
-  label: "Premium";
-};
-
 export type UserProfile = {
   user_id: string;
   display_name: string | null;
@@ -399,7 +391,6 @@ export type UserProfile = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-  premium_badge?: PremiumMemberBadgeSummary | null;
 };
 
 export type UserProfileDetail = UserProfile & {

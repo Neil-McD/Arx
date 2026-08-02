@@ -11,7 +11,7 @@ status: active
 
 Effective May 21, 2026.
 
-This Privacy & AI Data Policy explains how Polynet collects, uses, shares, and protects information when you use Polynet, including accounts, communities, AI features, paid communities, paid tools, and connected services.
+This Privacy & AI Data Policy explains how Polynet collects, uses, shares, and protects information when you use Polynet, including accounts, communities, AI features, paid communities, founder subscriptions, and connected services.
 
 ## Information We Collect
 
@@ -22,7 +22,7 @@ This may include:
 1. account information, such as name, email, authentication identifiers, profile details, handle, avatar, and account settings;
 2. community information, such as community names, descriptions, settings, resources, memberships, roles, join requests, posts, messages, and moderation activity;
 3. AI and tool activity, such as prompts, messages, model or provider selections, tool inputs, tool outputs, usage records, runtime evidence, voice input metadata, and settlement evidence;
-4. payment and commerce information, such as checkout status, subscription status, entitlement state, Stripe Connect readiness, payout status, refunds, disputes, chargeback evidence, platform fees, partner commissions, and related audit records;
+4. payment and commerce information, such as checkout status, subscription status, entitlement state, Stripe Connect readiness, payout status, refunds, disputes, chargeback evidence, platform fees, and retained historical partner-program audit records;
 5. connected provider information, such as whether a provider account is connected, provider account metadata, token status, key status, or connection health;
 6. device, log, cookie, local storage, and analytics information, such as pages viewed, routes, approximate timestamps, browser or device metadata, session state, error logs, security logs, and product usage events; and
 7. support, safety, fraud-prevention, and compliance information you or third parties provide.
@@ -36,7 +36,7 @@ Polynet uses information to:
 1. create, authenticate, and secure accounts;
 2. operate communities, memberships, roles, access, resources, and community AI features;
 3. provide AI, search, voice, tool, workspace, and connected-app functionality;
-4. process billing, entitlements, platform fees, refunds, disputes, partner commissions, and payout readiness;
+4. process billing, entitlements, platform fees, refunds, disputes, payout readiness, and reconciliation of retained historical partner-program records;
 5. personalize and improve product experiences;
 6. detect abuse, fraud, security issues, policy violations, and payment risk;
 7. debug, monitor, analyze, and improve reliability and performance;
@@ -66,7 +66,7 @@ Community builders and authorized community roles may be able to view or manage 
 
 Polynet uses Stripe, Stripe Connect, or other supported payment providers for payments, subscriptions, community revenue, payout readiness, and related payment operations.
 
-Polynet may store payment status, checkout identifiers, subscription identifiers, entitlement state, refund and dispute state, charge or invoice evidence, platform fee records, partner commission records, payout readiness, and audit metadata needed to operate access, billing, fraud prevention, risk review, accounting, support, and compliance.
+Polynet may store payment status, checkout identifiers, subscription identifiers, entitlement state, refund and dispute state, charge or invoice evidence, platform fee records, retained historical partner-program records, payout readiness, and audit metadata needed to operate access, billing, fraud prevention, risk review, accounting, support, and compliance.
 
 Stripe and other payment providers may collect and process payment, identity, tax, bank, and payout information under their own terms and privacy policies.
 

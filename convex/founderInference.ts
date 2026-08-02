@@ -69,7 +69,6 @@ function fundingAuthorityMatches(args: {
   const { admission } = args;
   if (
     admission.ok === false ||
-    admission.mode === "legacy_requester_chatgpt" ||
     admission.mode !== args.expectedFundingMode ||
     normalizedId(admission.payerUserId) !== normalizedId(args.expectedPayerUserId)
   ) {

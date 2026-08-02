@@ -771,69 +771,6 @@ body {
   color: var(--text-selected);
 }
 
-.nav-item.premium-locked {
-  position: relative;
-  overflow: hidden;
-  border-color: transparent;
-}
-
-.nav-item.premium-locked.active {
-  border-color: transparent;
-}
-
-.nav-item.premium-locked::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(110deg,
-      color-mix(in srgb, var(--bg-card) 65%, transparent) 0%,
-      transparent 65%);
-  opacity: 0.55;
-  pointer-events: none;
-}
-
-.premium-member-badge {
-  position: relative;
-  color: var(--accent-pink, var(--accent-gold));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  flex: 0 0 auto;
-  vertical-align: -3px;
-  align-self: center;
-}
-
-.premium-member-badge svg {
-  width: 16px;
-  height: 16px;
-  stroke: currentColor;
-  fill: none;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-/* Snug the badge toward the author name in chat meta rows. */
-.community-interaction-meta-row .premium-member-badge {
-  margin-left: -3px;
-  margin-top: 1px;
-}
-
-/* Profile panel renders the name as an 18px heading; scale the mark with it. */
-.community-profile-panel-name-row .premium-member-badge svg {
-  width: 20px;
-  height: 20px;
-}
-
-.premium-member-badge-label {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip: rect(0 0 0 0);
-  white-space: nowrap;
-}
-
 .nav-icon {
   width: 16px;
   height: 16px;

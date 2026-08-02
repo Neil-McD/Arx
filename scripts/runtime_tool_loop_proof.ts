@@ -818,60 +818,6 @@ async function proveFailureBudget() {
   console.log("PASS: runtime tool loop failure-budget proof");
 }
 
-async function proveToolBalanceFailureIsTerminal() {
-  let providerInvocation = 0;
-  const result = await runSerialNativeToolLoop<RetrievalToolName>({
-    messages: [
-      { role: "system", content: "You are in a workspace." },
-      { role: "user", content: "Search the web." },
-    ],
-    maxIterations: 6,
-    runCompletion: async () => {
-      providerInvocation += 1;
-      return {
-        ok: true,
-        type: "tool_call",
-        providerCallId: `tool-balance-call-${providerInvocation}`,
-        toolName: "web_research",
-        arguments: { action: "search", query: "current facts" },
-        assistantToolCallMessage: buildAssistantToolCallMessage({
-          content: null,
-          providerCallId: `tool-balance-call-${providerInvocation}`,
-          toolName: "web_research",
-          rawArguments: JSON.stringify({ action: "search", query: "current facts" }),
-        }),
-        promptTokens: 20 + providerInvocation,
-        completionTokens: 6,
-        resolvedModelId: "mock-model",
-      };
-    },
-    normalizeToolArguments,
-    executeTool: async () => ({
-      status: "error",
-      exitCode: null,
-      outputText: "",
-      errorCode: "credits_exhausted",
-      errorMessage: "Web research uses paid provider calls, so it needs tool balance before it runs.",
-    }),
-  });
-
-  assert.equal(result.ok, false, "expected tool-balance failures to stop immediately");
-  if (!result.ok) {
-    assert.equal(result.status, 402);
-    assert.equal(result.code, "workspace_credits_exhausted");
-    assert.equal(result.stopReason, "tool_error_unrecoverable");
-    assert.equal(
-      result.message,
-      "Web research uses paid provider calls, so it needs tool balance before it runs.",
-    );
-    assert.equal(result.stepCount, 1);
-    assert.equal(result.steps.length, 1);
-    assert.equal(result.steps[0]?.toolResultErrorCode, "credits_exhausted");
-  }
-
-  console.log("PASS: runtime tool loop tool-balance terminal proof");
-}
-
 async function proveToolBudgetExhaustion() {
   let providerInvocation = 0;
   const result = await runSerialNativeToolLoop<RetrievalToolName>({
@@ -1055,7 +1001,6 @@ await proveParallelBatchDrainsCancelledSiblingResults();
 await proveSuccessfulToolLoop();
 await proveRepeatedCallBudget();
 await proveFailureBudget();
-await proveToolBalanceFailureIsTerminal();
 await proveToolBudgetExhaustion();
 await proveBatchBudgetExhaustionIsAtomic();
 await proveNoProgressBudget();

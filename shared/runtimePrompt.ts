@@ -70,8 +70,6 @@ export type RuntimeTemporalContextPromptFields = {
   currentTimeZone?: string | null;
 };
 
-export type RuntimeAccountPlan = "free" | "premium" | "unknown";
-
 export type RuntimePromptSectionLayer = "stable" | "scoped" | "volatile";
 
 export type RuntimePromptSectionOwner =
@@ -157,7 +155,6 @@ export type RuntimeWorkspaceTerminalPrompt = {
 export type RuntimePlatformHarnessPromptParams = RuntimeCommunityPromptFields & {
   loopBudget: RuntimeKernelBudget;
   allowedToolNames: readonly RetrievalToolName[];
-  accountPlan?: RuntimeAccountPlan | null;
   communityResourceLane?: CommunityResourceRuntimeLaneState | null;
   harnessName: "chat_tools";
   projectLabel?: string | null;
@@ -349,7 +346,6 @@ function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string 
 function buildPlatformHarnessContextPrompt(params: {
   harnessName: "chat_tools";
   allowedToolNames: readonly RetrievalToolName[];
-  accountPlan?: RuntimeAccountPlan | null;
   projectLabel?: string | null;
   projectDescription?: string | null;
 }): string {
@@ -380,10 +376,6 @@ function buildPlatformHarnessContextPrompt(params: {
       "computer_stop",
     ].includes(toolName),
   );
-  const hasLiveWebTools = params.allowedToolNames.some((toolName) =>
-    ["web_research", "web_crawl"].includes(toolName),
-  );
-  const accountPlan = normalizeAccountPlan(params.accountPlan);
   const projectLabel = String(params.projectLabel ?? "").trim();
   const projectDescription = String(params.projectDescription ?? "").trim();
   const hasProjectContext = Boolean(projectLabel || projectDescription || hasProjectWorkspaceTools);
@@ -406,14 +398,6 @@ function buildPlatformHarnessContextPrompt(params: {
       ? "Sandbox filesystem root: run-scoped scratch sandbox."
       : null,
     `Allowed tools: ${params.allowedToolNames.join(",") || "(none)"}.`,
-    accountPlan === "free" && (!hasSandboxFileTools || !hasProjectWorkspaceTools || !hasLiveWebTools)
-      ? "Account plan: Free. Runtime available: PolyNet. Codex and other agent runtimes require Polynet Premium. Premium-only tools not available in this run: workspace app/file/shell/browser tools and live web research/crawl tools."
-      : accountPlan === "premium"
-        ? "Account plan: Premium. Premium tools are still limited to the listed allowed tools for this run."
-        : null,
-    accountPlan === "free" && (!hasSandboxFileTools || !hasProjectWorkspaceTools || !hasLiveWebTools)
-      ? "If the user asks to build, run, inspect, browse, crawl, screenshot, or modify apps, websites, workspaces, files, terminals, or sandboxes using unavailable tools, do not attempt the work. Explain that it requires Polynet Premium and direct them to Billing to upgrade."
-      : null,
     hasSandboxFileTools && hasProjectContext
       ? "All file paths are relative to the project workspace root."
       : null,
@@ -424,35 +408,6 @@ function buildPlatformHarnessContextPrompt(params: {
   ]
     .filter(Boolean)
     .join("\n");
-}
-
-function normalizeAccountPlan(raw: unknown): RuntimeAccountPlan {
-  const value = String(raw ?? "")
-    .trim()
-    .toLowerCase();
-  if (value === "free" || value === "premium") return value;
-  return "unknown";
-}
-
-function buildChatAccountAccessPrompt(accountPlanRaw: RuntimeAccountPlan | null | undefined): string | null {
-  const accountPlan = normalizeAccountPlan(accountPlanRaw);
-  if (accountPlan === "free") {
-    return [
-      "ACCOUNT_AND_TOOL_ACCESS",
-      "Account plan: Free.",
-      "Runtime available: PolyNet. Codex and other agent runtimes require Polynet Premium.",
-      "Workspace app/file/shell/browser tools and live web research/crawl tools require Premium.",
-      "If the user asks to build, run, inspect, browse, crawl, screenshot, or modify apps, websites, workspaces, files, terminals, or sandboxes using unavailable tools, explain that it requires Polynet Premium and direct them to Billing to upgrade.",
-    ].join("\n");
-  }
-  if (accountPlan === "premium") {
-    return [
-      "ACCOUNT_AND_TOOL_ACCESS",
-      "Account plan: Premium.",
-      "This remains a chat-only run unless workspace or live web tools are explicitly listed in the active runtime.",
-    ].join("\n");
-  }
-  return null;
 }
 
 function buildExplanationContractPrompt(): string {
@@ -988,7 +943,6 @@ export function buildPlatformHarnessRuntimePromptBundle(
       text: buildPlatformHarnessContextPrompt({
         harnessName: params.harnessName,
         allowedToolNames: params.allowedToolNames,
-        accountPlan: params.accountPlan,
         projectLabel: params.projectLabel,
         projectDescription: params.projectDescription,
       }),
@@ -1034,7 +988,6 @@ export function buildPlatformHarnessRuntimeSystemPrompt(
 export function composePlatformChatRuntimeSystemPrompt(
   params: RuntimeCommunityPromptFields & RuntimeTemporalContextPromptFields & {
     projectContext?: RuntimeProjectContextPrompt | null;
-    accountPlan?: RuntimeAccountPlan | null;
   },
 ): string {
   return joinPromptBlocks([
@@ -1049,7 +1002,6 @@ export function composePlatformChatRuntimeSystemPrompt(
       communitySystemPrompt: params.communitySystemPrompt,
     }),
     buildPlatformChatHarnessContextPrompt(),
-    buildChatAccountAccessPrompt(params.accountPlan),
     renderProjectContextForPrompt(params.projectContext ?? null),
     buildRuntimeTemporalContextPrompt({
       currentDateTimeIso: params.currentDateTimeIso,

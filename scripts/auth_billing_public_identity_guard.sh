@@ -51,13 +51,10 @@ require_multiline_match "$AUTH_FILE" \
   'export const getAccountCommerceStatus = query\([\s\S]*?user_id: actor\.authSubject' \
   "getAccountCommerceStatus returns public user_id"
 
-echo "[3/5] Ensuring dev-tier override response stays minimal and avoids public userId residue..."
+echo "[3/5] Ensuring the retired dev-tier endpoint fails closed..."
 require_multiline_match "$AUTH_FILE" \
-  'export const setDevTierOverride = mutation\([\s\S]*?return \{\s*ok: true,\s*canonicalTier,\s*effectiveTier: resolveEffectiveTier[\s\S]*?\n\}\);\n\nexport const getAccountCommerceStatus = query\(' \
-  "setDevTierOverride returns tier-only payload"
-reject_multiline_match "$AUTH_FILE" \
-  'export const setDevTierOverride = mutation\([\s\S]*?return \{[\s\S]*?userId:[\s\S]*?\n\}\);\n\nexport const getAccountCommerceStatus = query\(' \
-  "setDevTierOverride omits userId"
+  'export const setDevTierOverride = mutation\([\s\S]*?throw new Error\("account_tier_retired"\)' \
+  "setDevTierOverride fails closed"
 
 echo "[4/5] Ensuring account commerce gateway uses the canonical auth query seam..."
 require_multiline_match "$GATEWAY_FILE" \
