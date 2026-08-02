@@ -8,6 +8,7 @@ import {
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
+import { resolveBuilderFundingProjection } from "../shared/builderFunding";
 import {
   buildCheckoutSuccessUrl,
   newOpaqueToken,
@@ -505,6 +506,20 @@ export const getFounderBillingOverview = query({
                 checkout.expiresAt > nowMs,
             )
             .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
+          const fundingProjection = resolveBuilderFundingProjection({
+            fundingPolicy,
+            operatorComplimentaryAccess: operatorComped,
+            checkoutPending: Boolean(pendingCheckout),
+            subscription: subscription
+              ? {
+                  status: subscription.status,
+                  currentPeriodEndAt: subscription.currentPeriodEndAt,
+                }
+              : null,
+            legacyGrantStatus: grant?.status ?? null,
+            legacyApiKeyConnected: Boolean(openAiConnection?.encryptedSecretHex),
+            nowMs,
+          });
           let status:
             | "operator_comped"
             | "legacy_ready"
@@ -544,6 +559,9 @@ export const getFounderBillingOverview = query({
             community_name: community.name,
             community_slug: community.slug,
             funding_policy: fundingPolicy,
+            funding_lane: fundingProjection.lane,
+            funding_state: fundingProjection.state,
+            allowed_actions: fundingProjection.allowedActions,
             funding_mode: operatorComped
               ? "operator_comp"
               : managed

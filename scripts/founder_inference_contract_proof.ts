@@ -310,8 +310,11 @@ assert.match(
   cognitionContract,
   /Direct Concierge chat, autonomous cognition, and AI-assisted setup generation are community-founder-funded/,
 );
-assert.match(billingContract, /\$79 USD monthly for each managed community/);
-assert.match(billingContract, /Community visibility, public access, and member commerce remain independent from founder AI funding/);
+assert.match(billingContract, /\$79 USD monthly for Builder on each managed community/);
+assert.match(billingContract, /Community visibility, public access, and member commerce remain independent from Builder funding/);
+assert.match(billingContract, /exactly three funding lanes/);
+assert.match(billingContract, /frozen legacy-eligible community/);
+assert.match(billingContract, /Every other community, including every newly created community, uses Builder/);
 assert.match(billingContract, /only AI execution fails closed/);
 assert.match(billingContract, /Each \$79 monthly cycle includes up to \$20 in raw GPT 5\.6 Luna model cost/);
 assert.match(billingContract, /Stripe webhook state, not the redirect, is authoritative/);

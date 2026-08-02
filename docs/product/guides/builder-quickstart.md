@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Each managed community uses its own $79 monthly founder plan to run Polynet-hosted AI. Exact grandfathered communities may instead activate owner BYOK. There is no personal Premium plan or paid tool tier.
+Each managed community uses its own $79 monthly Builder subscription to run Polynet-hosted AI. Frozen legacy-eligible communities may instead use the owner's API key, and the canonical platform operator receives included Builder funding. Every new community is Builder-only. There is no account-wide Builder entitlement, personal Premium plan, or paid tool tier.
 
 ## Before You Start
 
@@ -30,7 +30,7 @@ If those answers are vague, more settings will not fix the product.
 ## Core Steps
 
 1. Create the community as an unlisted draft.
-2. Fund that community through its $79 monthly founder plan.
+2. Fund that community through its $79 monthly Builder subscription.
 3. Define the community purpose and public profile.
 4. Configure the community agent.
 5. Add resources that represent durable community knowledge.
@@ -82,15 +82,15 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Existing approved founders can continue managing their owned communities.
+- Existing approved founders can continue managing their frozen legacy-eligible communities through owner API funding or choose Builder per community.
 - Each managed community requires its own verified $79 monthly funding subscription to run Polynet-hosted AI.
-- A paying founder may own an unlimited number of communities. There is no
+- A paying builder may own an unlimited number of communities. There is no
   account-level numeric cap, but every existing community must have current
   funding before the next unlisted checkout draft can be created.
-- The canonical create flow begins as an unlisted managed draft and continues directly to founder checkout, but AI funding does not control visibility.
+- The canonical create flow begins as an unlisted managed draft and continues directly to Builder checkout, but AI funding does not control visibility.
 - An unpaid managed community can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its community-funded AI remains disabled.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
-- Paid-member community revenue always carries Polynet's 2.9% application fee, independent of founder funding mode.
+- Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.
 - Moderators help with moderation and join request review, not paid access.
 - Polynet does not mount third-party MCP servers in member or community

@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 const founderPlan = read("shared/founderPlan.ts");
+const builderFunding = read("shared/builderFunding.ts");
 const founderPlanCore = read("convex/founderPlanCore.ts");
 const founderBilling = read("convex/founderBilling.ts");
 const founderInference = read("convex/founderInferenceCore.ts");
@@ -55,7 +56,30 @@ assert.match(founderPlan, /MONTHLY_PRICE_BASE_UNITS = 7_900/);
 assert.match(founderPlan, /INCLUDED_COST_MICROS = 20_000_000/);
 assert.match(founderPlan, /INCLUDED_COMMUNITIES = 1/);
 assert.match(founderPlan, /COMMUNITY_PLATFORM_FEE_BPS = 290/);
+assert.match(founderPlan, /POLYNET_BUILDER_OFFER_NAME = "Builder"/);
+for (const lane of ["legacy_choice", "builder_included", "builder"]) {
+  assert.match(builderFunding, new RegExp(`"${lane}"`));
+}
+for (const action of [
+  "activate_owner_api",
+  "manage_owner_api",
+  "buy_builder",
+  "resume_checkout",
+  "manage_builder",
+]) {
+  assert.match(builderFunding, new RegExp(`"${action}"`));
+}
+assert.match(builderFunding, /fundingPolicy === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK/);
+assert.match(builderFunding, /if \(input\.operatorComplimentaryAccess\)/);
+assert.doesNotMatch(builderFunding, /createdAt|Date\./, "legacy eligibility must never expand with time");
 assert.match(founderBilling, /POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS/);
+assert.match(founderBilling, /resolveBuilderFundingProjection/);
+assert.match(founderBilling, /funding_lane: fundingProjection\.lane/);
+assert.match(founderBilling, /funding_state: fundingProjection\.state/);
+assert.match(founderBilling, /allowed_actions: fundingProjection\.allowedActions/);
+assert.match(founderBillingGateway, /BuilderFundingLane/);
+assert.match(founderBillingGateway, /BuilderFundingState/);
+assert.match(founderBillingGateway, /BuilderFundingAction/);
 assert.match(founderBilling, /communityId/);
 assert.match(
   schema,
@@ -247,6 +271,11 @@ for (const currentFundingTruth of [currentTerms, billingDocs]) {
   assert.match(currentFundingTruth, /paid-member checkout/);
   assert.match(currentFundingTruth, /inactive or exhausted|funding is missing or inactive/);
 }
+assert.match(billingDocs, /exactly three funding lanes/);
+assert.match(billingDocs, /frozen legacy-eligible community/);
+assert.match(billingDocs, /platform operator included Builder funding/);
+assert.match(billingDocs, /Every other community, including every newly created community, uses Builder/);
+assert.match(billingDocs, /per community rather than as an account tier/);
 assert.match(termsSupersessionNotice, /accepted by 27\s+production users/);
 assert.match(termsSupersessionNotice, /Existing v1 acceptances continue to satisfy account setup/);
 assert.match(termsSupersessionNotice, /New acceptance writes require `terms_of_service_v2`/);
