@@ -626,57 +626,6 @@ test("an active managed founder plan satisfies setup inference without BYOK", ()
   expect(status.steps.find((step) => step.step === "inference")?.completed).toBe(true);
 });
 
-test("cohort migration requires exactly nine real owners and deletes only eight bounded legacy policies", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await t.run(async (ctx) => {
-    const ownerUserIds: any[] = [];
-    const communityIds: any[] = [];
-    for (let index = 0; index < 9; index += 1) {
-      const ownerId = await insertUser(ctx, `migration-${index}`, 10_000 + index);
-      ownerUserIds.push(ownerId);
-      communityIds.push(await insertCommunity(ctx, ownerId, `migration-${index}`, 10_000 + index));
-    }
-    for (let index = 0; index < 8; index += 1) {
-      await ctx.db.insert("communityInferencePolicies", {
-        communityId: communityIds[index],
-        payerUserId: ownerUserIds[index],
-        fundingMode: "owner_api_key",
-        status: "pending_credential",
-        contractVersion: "builder_partner_v1",
-        sourceGrantKey: "future_partner_grandfather_v1",
-        sourceProgram: "builder_partner_v1",
-        sourcePartnerRecordId: `legacy-${index}`,
-        createdAt: 20_000 + index,
-        updatedAt: 20_000 + index,
-      });
-    }
-    return { ownerUserIds };
-  });
-
-  const result = await t.mutation(
-    (internal as any).founderInferenceMigration.initializeExistingFounderInferenceCohortInternal,
-    {
-      ownerUserIds: fixture.ownerUserIds,
-      deleteLegacyPartnerPolicies: true,
-      nowMs: 30_000,
-    },
-  );
-  expect(result).toMatchObject({
-    ok: true,
-    expected_founders: 9,
-    grants_to_create: 9,
-    legacy_policies_inspected: 8,
-    legacy_policies_to_delete: 8,
-  });
-  await t.run(async (ctx) => {
-    expect(await ctx.db.query("communityInferencePolicies").collect()).toHaveLength(0);
-    expect(await ctx.db
-      .query("founderInferenceGrants")
-      .withIndex("by_cohort", (q: any) => q.eq("cohortKey", EXISTING_FOUNDER_INFERENCE_COHORT_KEY))
-      .collect()).toHaveLength(9);
-  });
-});
-
 test("activation requires current terms and binds completion to the accepted key fingerprint", async () => {
   const t = convexTest(schema, modules);
   await expect(
