@@ -31,7 +31,7 @@ export function useWebMobileShellController(params: {
   openGlobalSettings: (page: SettingsPage) => void;
   openCommunityChat: (
     communitySlug: string,
-    opts?: { clearUnread?: boolean; pushSnapshot?: boolean },
+    opts?: { pushSnapshot?: boolean },
   ) => void;
   handleOpenDiscover: () => void;
   openDirectMessages: () => void;
@@ -44,7 +44,7 @@ export function useWebMobileShellController(params: {
       params.selectedActiveCommunitySlug ?? params.activeCommunitySlug ?? "",
     ).trim();
     if (nextCommunitySlug) {
-      params.openCommunityChat(nextCommunitySlug, { clearUnread: true });
+      params.openCommunityChat(nextCommunitySlug);
       return;
     }
     params.handleOpenDiscover();

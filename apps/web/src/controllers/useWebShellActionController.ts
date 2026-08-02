@@ -12,10 +12,7 @@ export function useWebShellActionController(params: {
   selectedActiveCommunitySlug: string | null;
   isAuthenticated: boolean;
   goBack: () => boolean;
-  openCommunityChat: (
-    communitySlug: string,
-    options: { clearUnread: true },
-  ) => void;
+  openCommunityChat: (communitySlug: string) => void;
   resolveAndEnterMemberDestination: (options: {
     replace: true;
   }) => Promise<boolean>;
@@ -35,7 +32,7 @@ export function useWebShellActionController(params: {
         "",
     ).trim();
     if (communitySlug) {
-      params.openCommunityChat(communitySlug, { clearUnread: true });
+      params.openCommunityChat(communitySlug);
       return;
     }
     if (params.isAuthenticated) {
@@ -64,7 +61,7 @@ export function useWebShellActionController(params: {
       params.activeCommunitySlug ?? "",
     ).trim();
     if (communitySlug) {
-      params.openCommunityChat(communitySlug, { clearUnread: true });
+      params.openCommunityChat(communitySlug);
     }
   }, [params.activeCommunitySlug, params.openCommunityChat]);
 

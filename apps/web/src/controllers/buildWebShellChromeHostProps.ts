@@ -88,7 +88,7 @@ export function buildWebShellChromeHostProps(params: {
   isLoadingCommunities: boolean;
   selectedActiveCommunitySlug: string | null;
   handleSelectActiveCommunity: (community: CommunityLike) => boolean;
-  openCommunityChat: (slug: string, options: { clearUnread: boolean }) => void;
+  openCommunityChat: (slug: string) => void;
   communityInitials: (value: string) => string;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
@@ -226,8 +226,7 @@ export function buildWebShellChromeHostProps(params: {
       selectedActiveCommunitySlug: params.selectedActiveCommunitySlug,
       activePage: params.activePage,
       onSelectActiveCommunity: params.handleSelectActiveCommunity,
-      onOpenCommunityChat: (slug) =>
-        params.openCommunityChat(slug, { clearUnread: true }),
+      onOpenCommunityChat: params.openCommunityChat,
       communityInitials: params.communityInitials,
       showDesktopCommunityRail: params.showDesktopCommunityRail,
       showDesktopCommunityNav: params.showDesktopCommunityNav,

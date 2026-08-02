@@ -124,13 +124,13 @@ assertMatches(
   /subscribeCloudCommunityInteractionRoots[\s\S]*communityId: activeCommunityId,[\s\S]*channelId: activeChannelId,/,
 );
 
-const mutationPath = "shared/useCommunityChatMutationController.ts";
-const mutation = read(mutationPath);
+const composerPath = "apps/web/src/controllers/useWebCommunityChatController.ts";
+const composer = read(composerPath);
 [
   'channelId ?? "general"',
-  "activeChannelId = current.activeChannelId",
-  "channelId: activeChannelId",
-].forEach((required) => assertIncludes(mutationPath, mutation, required));
+  "current.activeChannelId",
+  "channelId: current.activeChannelId",
+].forEach((required) => assertIncludes(composerPath, composer, required));
 
 const attentionPath = "apps/web/src/controllers/useWebCommunityAttentionController.ts";
 const attention = read(attentionPath);

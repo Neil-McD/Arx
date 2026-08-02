@@ -13,7 +13,7 @@ const crons = read("convex/crons.ts");
 const directory = read("convex/communityDirectory.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const profileHandle = read("shared/profileHandle.ts");
-const sender = read("shared/useCommunityChatMutationController.ts");
+const sender = read("apps/web/src/controllers/useWebCommunityChatController.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 
 assert.match(
@@ -258,12 +258,12 @@ assert.match(
 
 assert.match(
   sender,
-  /isReplySend[\s\S]*textContainsEverybodyMentionToken\(bodyToSend\)[\s\S]*@everybody can only be used in top-level community posts/,
+  /replySnapshot && textContainsEverybodyMentionToken\(rawText\)[\s\S]*@everybody can only be used in top-level community posts/,
   "the client must block manual @everybody tokens in reply sends before optimistic insertion",
 );
 assert.match(
   sender,
-  /current\.canMentionEverybodyRef\?\.current[\s\S]*!isReplySend[\s\S]*textContainsEverybodyMentionToken\(bodyToSend\)/,
+  /current\.canMentionEverybodyRef\.current[\s\S]*!replySnapshot[\s\S]*textContainsEverybodyMentionToken\(rawText\)/,
   "manual @everybody serialization must only happen for root sends",
 );
 assert.match(

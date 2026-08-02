@@ -41,7 +41,6 @@ export function useWebCommunityNavigationActions(params: {
   setCommunityOnboardingFirstPostFocusRequest: (
     update: (current: number) => number,
   ) => void;
-  markCommunityChatSelected: () => void;
   applyCommunityShellState: (value: {
     communityTab: CommunityTab;
   }) => void;
@@ -174,7 +173,6 @@ export function useWebCommunityNavigationActions(params: {
   const handleSelectCommunityTab = useCallback(
     (tab: CommunityTab) => {
       params.setCommunityResourceModuleId(null);
-      if (tab === "chat") params.markCommunityChatSelected();
       if (isCommunityRouteManagedTab(tab)) {
         const slug = String(
           params.selectedActiveCommunitySlug ??
@@ -193,7 +191,6 @@ export function useWebCommunityNavigationActions(params: {
     [
       params.activeCommunity?.slug,
       params.applyCommunityShellState,
-      params.markCommunityChatSelected,
       params.openCommunityTab,
       params.selectedActiveCommunitySlug,
       params.setCommunityResourceModuleId,

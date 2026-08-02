@@ -37,7 +37,6 @@ import {
 import { useWebCommunityChannelsController } from "./controllers/useWebCommunityChannelsController";
 import {
   useWebCommunityChatController,
-  WEB_COMMUNITY_REACTION_EMOJIS,
   type WebCommunityMessageAttachment,
 } from "./controllers/useWebCommunityChatController";
 import {
@@ -98,7 +97,6 @@ import {
   copyTextToClipboard,
   getAvatarColor,
   getInitials,
-  shouldShowCommunitySenderMeta,
 } from "../../../shared/chatUi";
 import {
   type AppPage,
@@ -153,10 +151,7 @@ import { useCommunityDirectoryLifecycle } from "../../../shared/useCommunityDire
 import { useCommunityMembersReviewController } from "../../../shared/useCommunityMembersReviewController";
 import { useCommunityAdminAnalyticsLifecycle } from "../../../shared/useCommunityAdminAnalyticsLifecycle";
 import { useCommunityMembersReviewLifecycle } from "../../../shared/useCommunityMembersReviewLifecycle";
-import {
-  parseReplyPrefix,
-  truncateReplyPreview,
-} from "../../../shared/communityMessageParsing";
+import { truncateReplyPreview } from "../../../shared/communityMessageParsing";
 import {
   formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
@@ -595,10 +590,8 @@ export default function App() {
     activeChannelId,
     canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
-    hasActiveCommunity: Boolean(activeCommunity) && isActiveCommunityChannelReady,
     interaction: communityInteractionProjection,
     isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
-    loadProfiles: (userIds, activeSession) => loadUserProfiles(userIds, activeSession),
     onMessageSent: ({ communityId, hasAttachments, hasReply }) => {
       captureProductAnalyticsEvent("community message sent", {
         community_id: communityId,
@@ -612,9 +605,6 @@ export default function App() {
     canMentionEverybodyRef,
   });
   const {
-    messages: communityMessages,
-    activityEvents: communityActivityEvents,
-    messageById: communityMessageById,
     messageInput: communityMessageInput,
     setMessageInput: setCommunityMessageInput,
     messageMentions: communityMessageMentions,
@@ -622,31 +612,12 @@ export default function App() {
     attachments: communityAttachments,
     error: communityChatError,
     setError: setCommunityChatError,
-    copiedMessageId: copiedCommunityMessageId,
-    unreadCount,
-    setUnreadCount,
-    isUserAtBottom,
-    setIsUserAtBottom,
-    isUserAtBottomRef,
     isSendingMessage: isSendingCommunityMessage,
     replyingToMessage,
     setReplyingToMessage,
-    reactions: messageReactions,
-    reactionPickerMessageId,
-    setReactionPickerMessageId,
-    editingMessageId,
-    editingMessageText,
-    setEditingMessageText,
-    editingMessagePrefix,
-    isLoadingChat,
-    isLoadingMoreChat,
-    communityChatHasMore,
-    hasResolvedCommunityChat,
     resetChatState: resetCommunityChatState,
-    messageListRef: communityChatListRef,
     inputRef: chatInputRef,
     fileInputRef: communityFileInputRef,
-    handleChatScroll,
     handleAttachmentFileInputChange: handleCommunityFileInputChange,
     ingestAttachmentsFromFileList: ingestCommunityAttachmentsFromFileList,
     handleAttachmentDrop: handleCommunityAttachmentDrop,
@@ -664,17 +635,8 @@ export default function App() {
       setIndex: setCommunityChatLightboxIndex,
       onClose: closeCommunityChatLightbox,
     },
-    handleToggleReaction,
     handleStartReply,
-    handleStartEdit,
-    handleCancelEdit,
-    handleSaveEdit,
-    handleDeleteMessage,
     handleSendCommunityMessage,
-    copyMessage: handleCopyCommunityMessage,
-    scrollToMessage: scrollToCommunityMessage,
-    scrollToBottom: scrollCommunityChatToBottom,
-    markChatSelected: markCommunityChatSelected,
     setMessageInputFromTextarea: setCommunityMessageInputFromTextarea,
   } = communityChat;
   const communityContent = useWebCommunityContentController({
@@ -964,7 +926,6 @@ export default function App() {
     setActivePage,
     setActiveView,
     applyCommunityShellState,
-    setUnreadCount,
   });
   const {
     chatgptConnection,
@@ -1235,8 +1196,6 @@ export default function App() {
       cloudProfile,
       profilesByUserId,
       communityDirectoryMembers,
-      communityMessages,
-      communityActivityEvents,
       communityInteractionRoots,
       communityInteractionRepliesByRootId,
       loadUserProfiles,
@@ -1955,7 +1914,6 @@ export default function App() {
     setCommunityResourceModuleId,
     setMobileOverlay,
     setCommunityOnboardingFirstPostFocusRequest,
-    markCommunityChatSelected,
     applyCommunityShellState,
     openCommunityTab,
     navigateTo,
@@ -2138,7 +2096,7 @@ export default function App() {
       onBackToCommunityChat: () => {
         const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
         if (nextCommunitySlug) {
-          openCommunityChat(nextCommunitySlug, { clearUnread: true, pushSnapshot: false });
+          openCommunityChat(nextCommunitySlug, { pushSnapshot: false });
         }
       },
       aiAgentHasSession: Boolean(session),
@@ -2279,22 +2237,11 @@ export default function App() {
       resourceModalProps,
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
-      isLoadingChat,
-      hasResolvedCommunityChat,
-      isLoadingMoreChat,
-      communityChatHasMore,
-      communityMessages,
-      communityActivityEvents,
-      communityMessageById,
-      messageReactions,
       typingPresence: communityTypingUsers,
       onCommunityTypingSignal: signalCommunityTyping,
       onCommunityTypingClear: clearCommunityTyping,
       profilesByUserId: savedProfilesByUserId,
       mentionableCommunityMembers: communityDirectoryMembers,
-      editingMessageId,
-      editingMessageText,
-      reactionPickerMessageId,
       replyingToMessage,
       communityAttachments,
       communityMessageInput,
@@ -2305,16 +2252,9 @@ export default function App() {
       onConnectCommunityAgentServeProvider: handleConnectCommunityAgentServeProvider,
       isSendingCommunityMessage,
       communityChatError,
-      copiedCommunityMessageId,
-      isUserAtBottom,
-      unreadCount,
-      reactionEmojis: WEB_COMMUNITY_REACTION_EMOJIS,
-      messageListRef: communityChatListRef,
       fileInputRef: communityFileInputRef,
       chatInputRef,
-      onChatScroll: handleChatScroll,
       onFinishProfileSetup: openProfileSetup,
-      onScrollToBottom: scrollCommunityChatToBottom,
       onSetReplyingToMessage: setReplyingToMessage,
       onRemoveCommunityAttachment: removeCommunityAttachment,
       onCommunityAttachmentError: setCommunityChatError,
@@ -2329,24 +2269,13 @@ export default function App() {
       onCommunityMessageInputChange: setCommunityMessageInputFromTextarea,
       onSendCommunityMessage: handleSendCommunityMessage,
       displayName,
-      shouldShowCommunitySenderMeta,
       getAvatarColor,
       getInitials,
       formatChatTime,
-      parseReplyPrefix,
       truncateReplyPreview,
       renderTextWithLinks,
-      onScrollToReplyMessage: scrollToCommunityMessage,
       onOpenCommunityChatLightbox: openCommunityChatLightbox,
-      onToggleReaction: handleToggleReaction,
-      onSetReactionPickerMessageId: setReactionPickerMessageId,
       onStartReply: handleStartReply,
-      onCopyMessage: handleCopyCommunityMessage,
-      onStartEdit: handleStartEdit,
-      onDeleteMessage: handleDeleteMessage,
-      onEditingMessageTextChange: setEditingMessageText,
-      onSaveEdit: handleSaveEdit,
-      onCancelEdit: handleCancelEdit,
       voiceButtonProps: {
         state: mainCommunityVoiceButtonState,
         title: activeCommunityVoiceButtonOwner === "drawer"
@@ -2569,7 +2498,7 @@ export default function App() {
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false })
     : { chat: false, ai_feed: false, resources: false, events: false };
   const activeCommunityAttentionCount =
-    Number(Boolean(activeCommunityAttentionSummary.chat || (activePage === "community" && activeCommunityId && unreadCount > 0))) +
+    Number(Boolean(activeCommunityAttentionSummary.chat)) +
     Number(Boolean(activeCommunityAttentionSummary.ai_feed)) +
     Number(Boolean(activeCommunityAttentionSummary.resources)) +
     Number(Boolean(activeCommunityAttentionSummary.events));
@@ -2850,9 +2779,8 @@ export default function App() {
   const activeIndicators = activeCommunityId
     ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false, mentions: false })
     : { chat: false, ai_feed: false, resources: false, events: false, mentions: false };
-  const localActiveCommunityChatAttention = Boolean(activePage === "community" && activeCommunityId && unreadCount > 0);
   const communityTabIndicators = {
-    chat: Boolean(activeIndicators.chat || localActiveCommunityChatAttention),
+    chat: Boolean(activeIndicators.chat),
     ai_feed: Boolean(activeIndicators.ai_feed),
     resources: Boolean(activeIndicators.resources),
     events: Boolean(activeIndicators.events),
@@ -2864,9 +2792,6 @@ export default function App() {
     if (indicators.chat || indicators.ai_feed || indicators.resources || indicators.events || indicators.mentions) {
       communityRailAttentionById[communityId] = true;
     }
-  }
-  if (activeCommunityId && localActiveCommunityChatAttention) {
-    communityRailAttentionById[activeCommunityId] = true;
   }
   /* The visitor lens on the shell: /c/:slug feeds the SAME nav the member
      page uses — community identity from the public payload, every capability

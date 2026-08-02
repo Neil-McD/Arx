@@ -28,8 +28,6 @@ const backfill = read("convex/communityInteractionBackfill.ts");
 const schema = read("convex/schema.ts");
 const chatGateway = read("shared/cloudCommunityChatGateway.ts");
 const interactionGateway = read("shared/cloudCommunityInteractionsGateway.ts");
-const dataController = read("shared/useCommunityChatDataController.ts");
-const sendController = read("shared/useCommunityChatMutationController.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityAttention = read("convex/communityAttention.ts");
 const webAttentionController = read(
@@ -38,6 +36,14 @@ const webAttentionController = read(
 const legacyPreloadLifecyclePath = join(
   root,
   "apps/web/src/controllers/useWebCommunityChatPreloadLifecycle.ts",
+);
+const legacyDataControllerPath = join(
+  root,
+  "shared/useCommunityChatDataController.ts",
+);
+const legacyMutationControllerPath = join(
+  root,
+  "shared/useCommunityChatMutationController.ts",
 );
 
 function assertIncludes(sourceName: string, source: string, needle: string): void {
@@ -75,14 +81,14 @@ assert.match(
   "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
   "| R-002 | Legacy compatibility message rows created by canonical composer | Deleted for the staging clean-room composer.",
   "| R-005 | Projection feature flag and authenticated legacy client bootstrap | Deleted for production projection promotion.",
-  "| R-006 | Legacy web timeline props and inactive client state | `DELETE CANDIDATE` |",
+  "| R-006 | Legacy web timeline props and inactive client state | Deleted with the orphaned web data and mixed mutation controllers.",
   "Canonical interaction reads must not use legacy chat rows as source-of-truth.",
   "Canonical interaction writes must not insert legacy chat rows directly.",
   "The web interaction gateway must not call legacy chat mutations.",
   "The normal web chat UI must not mount legacy chat preload, realtime, or scroll-pagination lifecycles; canonical projection refresh must use canonical interaction reads/subscriptions.",
   "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
   "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, production chat rendering, and community attention chat dots no longer require legacy chat row replacement; canonical sends no longer fall back to the legacy chat writer when the canonical writer is missing.",
-  "The shared community send controller may keep legacy sends only for non-projection compatibility call paths; normal web chat uses canonical projection sends, and a missing canonical writer fails closed.",
+  "The web composer writes only through the canonical interaction gateway and has no legacy send fallback.",
   "Canonical projection reply targets without a canonical root id fail closed.",
 ].forEach((needle) => assertIncludes("residue map", residueMap, needle));
 
@@ -145,8 +151,6 @@ assert.match(
 );
 for (const [label, source] of [
   ["chat gateway", chatGateway],
-  ["chat data controller", dataController],
-  ["chat mutation controller", sendController],
   ["community chat backend", communityChat],
 ] as const) {
   assert.doesNotMatch(
@@ -166,50 +170,19 @@ assert.doesNotMatch(
   "chat edit/delete gateway calls should not accept ignored senderId params",
 );
 assert.doesNotMatch(
-  dataController,
-  /init:\s*\{\s*signal:|communityFetchAbortScope|beginScopedAbortRequest|finishScopedAbortRequest|abortAllScopedRequests|isAbortError/,
-  "chat data controller should not keep fake Convex abort plumbing",
-);
-assert.doesNotMatch(
-  sendController,
-  /senderId:\s*session\.user\.id/,
-  "chat mutation controller should trust backend auth instead of forwarding senderId hints",
-);
-
-assert.match(
-  sendController,
-  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*community_interaction_writer_missing[\s\S]*community_interaction_reply_target_unmapped[\s\S]*createCommunityComposerIdempotencyKey/,
-  "shared send controller should route sends through one explicit fail-closed canonical-vs-legacy decision",
-);
-assert.doesNotMatch(
-  sendController,
-  /reason:\s*"writer_missing"|return\s+\{\s*kind:\s*"legacy",\s*reason:\s*"writer_missing"\s*\}/,
-  "projection-active sends should not fall back to legacy when the canonical writer is missing",
+  webChatController,
+  /createCloudThreadUserMessageRows|ensureCommunityChatThread|loadCommunityChat|projection_disabled|useCommunityChatDataController|useCommunityChatMutationController/,
+  "the web composer should have no legacy data or send fallback",
 );
 assert.match(
-  sendController,
-  /const sendRoute = resolveCommunityChatSendRoute\(\{[\s\S]*useCanonicalCommunityInteractions[\s\S]*hasCanonicalWriter: Boolean\(createCanonicalMessageRows\)[\s\S]*hasReplyTarget: Boolean\(replySnapshot\)[\s\S]*replyRootId[\s\S]*\}\)/,
-  "shared send controller should compute the send route once after attachment preparation",
-);
-assert.doesNotMatch(
-  sendController,
-  /canonicalEligible|canUseCanonicalComposer|reason:\s*"reply_target_unmapped"/,
-  "shared send controller should not keep duplicated canonical eligibility booleans",
+  webChatController,
+  /if \(replySnapshot && !replyRootId\)[\s\S]*createCloudCommunityInteractionComposerMessageRows<AuthSession>\(\{[\s\S]*rootId: replyRootId/,
+  "the web composer should fail closed on unmapped replies and write canonically",
 );
 assert.match(
-  sendController,
-  /const legacyReplyToMessageId[\s\S]*replySnapshot\?\.legacy_message_id[\s\S]*return replyRootId \? null : replyToId/,
-  "shared send controller should separate legacy reply ids from canonical reply target ids",
-);
-assert.match(
-  sendController,
-  /createCloudThreadUserMessageRows[\s\S]*attachments: serializedAttachments[\s\S]*replyToId: legacyReplyToMessageId/,
-  "shared send controller should keep the legacy fallback explicit and payload-bounded",
-);
-assert.match(
-  sendController,
-  /if \(sendRoute\.kind === "canonical"\)[\s\S]*await createCanonicalMessageRows\([\s\S]*current\.setCommunityMessages\(\(prev\) => prev\.filter\(\(message\) => message\.id !== optimisticId\)\)[\s\S]*messageId: sendRoute\.idempotencyKey[\s\S]*return;/,
-  "canonical sends should complete from canonical mutation success without legacy row replacement",
+  webChatController,
+  /current\.interaction\.insertOptimistic\(\{[\s\S]*await createCloudCommunityInteractionComposerMessageRows<AuthSession>\([\s\S]*current\.onMessageSent\(\{/,
+  "canonical sends should reconcile through one projection and one writer",
 );
 const createComposerMessage = extractExportedConst(interactions, "createCommunityInteractionComposerMessage");
 assert.match(
@@ -222,20 +195,25 @@ assert.doesNotMatch(
   /createLegacyCompatibilityChatMessageForInteraction|ensureLegacyCompatibilityChatThread|insertLegacyChatLinkIfMissing|mapLegacyCompatibilityMessageRow|communityChatMessages" as any|communityChatThreads" as any|communityInteractionLegacyChatLinks" as any/,
   "canonical composer should not create legacy chat rows or legacy links",
 );
-assert.match(
-  sendController,
-  /const threadId = await current\.ensureCommunityChatThread\(activeCommunityId, session\);[\s\S]*const created = await createCloudThreadUserMessageRows[\s\S]*const record = created\[0\] \? current\.toCommunityChatMessage/,
-  "legacy sends should keep the returned-row optimistic replacement path",
-);
-assert.match(
+assert.doesNotMatch(
   chatPanel,
-  /showInteractionProjection[\s\S]*WebCommunityInteractionProjection[\s\S]*className="chat-messages"/,
-  "chat panel should keep canonical projection and legacy fallback in one visible branch",
+  /CommunityChatMessageRow|communityMessages|communityActivityEvents|showLegacyInteractionSurface/,
+  "the chat panel should not keep the legacy timeline renderer or prop contract",
 );
 assert.equal(
   existsSync(legacyPreloadLifecyclePath),
   false,
   "the legacy chat preload lifecycle should be deleted from the web app",
+);
+assert.equal(
+  existsSync(legacyDataControllerPath),
+  false,
+  "the orphaned legacy web data controller should be deleted",
+);
+assert.equal(
+  existsSync(legacyMutationControllerPath),
+  false,
+  "the orphaned mixed legacy/canonical mutation controller should be deleted",
 );
 assert.doesNotMatch(
   app,
@@ -249,8 +227,8 @@ assert.doesNotMatch(
 );
 assert.match(
   webChatController,
-  /useCanonicalCommunityInteractions: hasActiveCommunity/,
-  "the authenticated web composer should select the canonical writer directly",
+  /createCloudCommunityInteractionComposerMessageRows<AuthSession>/,
+  "the authenticated web composer should call the canonical writer directly",
 );
 assert.doesNotMatch(
   webChatController,
