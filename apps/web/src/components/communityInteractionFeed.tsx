@@ -541,6 +541,9 @@ export function TypingIndicator(props: {
             readyClassName="has-image"
             name={user.display_name || props.displayName(user.user_id)}
             imageUrl={user.avatar_url}
+            focusX={user.avatar_focus_x}
+            focusY={user.avatar_focus_y}
+            zoom={user.avatar_zoom}
             alt=""
             aria-hidden={true}
             fallback={<span>{props.getInitials(user.display_name || props.displayName(user.user_id))}</span>}

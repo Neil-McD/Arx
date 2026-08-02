@@ -21,8 +21,12 @@ export type CommunityRailMember = {
   user_id: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role: string;
   created_at?: string | null;
+  last_active_at?: string | null;
 };
 
 export type CommunityAdmissionEntryPolicy = "open" | "approval" | "paid_subscription";
@@ -126,6 +130,25 @@ function formatMemberActivityLabel(lastActiveAt: string | null | undefined, isOn
   return relative ? `Active ${relative}` : null;
 }
 
+function parseMemberActivityTime(raw: string | null | undefined): number {
+  const value = Date.parse(String(raw ?? ""));
+  return Number.isFinite(value) ? value : 0;
+}
+
+function compareMembersByActivity(
+  a: CommunityRailMember,
+  b: CommunityRailMember,
+  observedLastActiveAtByUserId: Record<string, string>,
+): number {
+  const activityDelta =
+    parseMemberActivityTime(observedLastActiveAtByUserId[b.user_id] ?? b.last_active_at) -
+    parseMemberActivityTime(observedLastActiveAtByUserId[a.user_id] ?? a.last_active_at);
+  if (activityDelta !== 0) return activityDelta;
+  const createdDelta = parseMemberActivityTime(a.created_at) - parseMemberActivityTime(b.created_at);
+  if (createdDelta !== 0) return createdDelta;
+  return String(a.user_id).localeCompare(String(b.user_id));
+}
+
 function isCommunityMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean {
   return node.kind === "directory_node" || node.kind === "resource_node";
 }
@@ -174,8 +197,12 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     ? formatMemoryLabel(memoryOverview.agent.activity_state || memoryOverview.agent.status)
     : null;
 
-  const onlineMembers = members.filter((member) => online.has(member.user_id));
-  const offlineMembers = members.filter((member) => !online.has(member.user_id));
+  const onlineMembers = members
+    .filter((member) => online.has(member.user_id))
+    .sort((a, b) => compareMembersByActivity(a, b, observedLastActiveAtByUserId));
+  const offlineMembers = members
+    .filter((member) => !online.has(member.user_id))
+    .sort((a, b) => compareMembersByActivity(a, b, observedLastActiveAtByUserId));
   const offlineTotal = knownMemberCount !== null
     ? Math.max(0, knownMemberCount - onlineTotal)
     : offlineMembers.length;
@@ -365,7 +392,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     const isOnline = online.has(member.user_id);
     const latestObservedLastActiveAt = observedLastActiveAtByUserId[member.user_id];
     const activityLabel = formatMemberActivityLabel(
-      latestObservedLastActiveAt,
+      latestObservedLastActiveAt ?? member.last_active_at,
       isOnline,
     );
     const isOwnerMember = member.user_id === props.ownerId || member.role === "owner";
@@ -381,7 +408,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         <button
           className="community-context-member-trigger"
           type="button"
-          aria-label={`Open ${name}'s profile`}
+          aria-label={
+            activityLabel
+              ? `Open ${name}'s profile, ${activityLabel}`
+              : `Open ${name}'s profile`
+          }
           onClick={() => props.onOpenMemberProfile?.(member.user_id)}
         >
           <span
@@ -393,6 +424,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               readyClassName="has-image"
               name={name}
               imageUrl={member.avatar_url}
+              focusX={member.avatar_focus_x}
+              focusY={member.avatar_focus_y}
+              zoom={member.avatar_zoom}
               alt=""
               aria-hidden={true}
               fallback={<span>{props.getInitials(name)}</span>}

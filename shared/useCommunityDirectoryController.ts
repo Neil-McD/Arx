@@ -8,6 +8,18 @@ import {
 
 const COMMUNITY_DIRECTORY_PAGE_SIZE = 25;
 
+function dedupeCommunityDirectoryRows(
+  rows: CloudCommunityDirectoryMemberRow[],
+): CloudCommunityDirectoryMemberRow[] {
+  const seen = new Set<string>();
+  return rows.filter((row) => {
+    const id = String(row.id ?? "").trim();
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+}
+
 export function useCommunityDirectoryController<SessionT extends SessionLike>(params: {
   activeCommunityId: string | null;
   presentationIdentity?: string | null;
@@ -73,7 +85,7 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
       if (communityDirectoryLoadSeqRef.current !== seq) return;
       presentationScopeRef.current = loadScope;
       setPresentationScope(loadScope);
-      setCommunityDirectoryMembers(page.rows);
+      setCommunityDirectoryMembers(dedupeCommunityDirectoryRows(page.rows));
       setCommunityDirectoryMemberCount(page.totalCount);
       setCommunityDirectoryMembersNextCursor(page.continueCursor);
       setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
@@ -117,7 +129,9 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
           const id = String(row.id ?? "");
           return id && !seen.has(id);
         });
-        return nextRows.length > 0 ? [...previous, ...nextRows] : previous;
+        return nextRows.length > 0
+          ? dedupeCommunityDirectoryRows([...previous, ...nextRows])
+          : previous;
       });
       if (typeof page.totalCount === "number") {
         setCommunityDirectoryMemberCount(page.totalCount);
@@ -125,10 +139,33 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
       setCommunityDirectoryMembersNextCursor(page.continueCursor);
       setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
     } catch (error) {
+      const message = error instanceof Error ? error.message : "Failed to load more members.";
+      if (message.includes("community_directory_cursor_invalid")) {
+        try {
+          const page = await listCloudCommunityDirectoryPage({
+            session: usableSession,
+            communityId,
+            cursor: null,
+            pageSize: COMMUNITY_DIRECTORY_PAGE_SIZE,
+          });
+          if (communityDirectoryLoadSeqRef.current !== seq) return;
+          setCommunityDirectoryMembers(dedupeCommunityDirectoryRows(page.rows));
+          setCommunityDirectoryMemberCount(page.totalCount);
+          setCommunityDirectoryMembersNextCursor(page.continueCursor);
+          setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
+          return;
+        } catch (refreshError) {
+          if (communityDirectoryLoadSeqRef.current !== seq) return;
+          setCommunityDirectoryMembersLoadError(
+            refreshError instanceof Error
+              ? refreshError.message
+              : "Failed to refresh members.",
+          );
+          return;
+        }
+      }
       if (communityDirectoryLoadSeqRef.current === seq) {
-        setCommunityDirectoryMembersLoadError(
-          error instanceof Error ? error.message : "Failed to load more members.",
-        );
+        setCommunityDirectoryMembersLoadError(message);
       }
     } finally {
       if (communityDirectoryLoadSeqRef.current === seq) {

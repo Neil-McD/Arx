@@ -61,10 +61,9 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
     const viewport = viewportRef.current;
     if (!viewport) return;
     const syncViewport = () => {
-      const rect = viewport.getBoundingClientRect();
       setViewportSize({
-        width: Math.max(0, Math.round(rect.width)),
-        height: Math.max(0, Math.round(rect.height)),
+        width: Math.max(0, viewport.clientWidth),
+        height: Math.max(0, viewport.clientHeight),
       });
     };
     syncViewport();

@@ -5,7 +5,7 @@
    CommunityContextPanel — fed by the public data plane. On top: one gate
    (logo, banner, VSL, counts, one-liner, Join, "View it first") and the
    rope in the composer slot. Locks reopen the gate. */
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
@@ -19,7 +19,6 @@ import {
   renderHeroMediaDefault,
   renderTextWithLinks,
   type CommunityFunnelSurfaceAction,
-  type CommunityFunnelSurfaceBanner,
 } from "./CommunityFunnelSurface";
 import {
   CommunityVisitorChatFrostChip,
@@ -54,13 +53,10 @@ type WebCommunityVisitorSurfaceProps = {
   title: string;
   action: CommunityFunnelSurfaceAction;
   host: VisitorHostLike | null;
-  banner: CommunityFunnelSurfaceBanner | null;
   aboutText: string;
   communityCreatedAt: string | null;
   heroMediaKind: CommunityFunnelHeroMediaKind;
   heroMediaUrl: string | null;
-  heroArtImageUrl?: string | null;
-  heroArtImageStyle?: CSSProperties | null;
   featuredMessages: VisitorFeaturedMessageLike[] | null;
   stats: WebCommunityVisitorSurfaceStats;
   memoryOverview: CloudCommunityPolynetOverview | null;
