@@ -5,6 +5,8 @@ import { join } from "node:path";
 const root = process.cwd();
 const heartbeat = readFileSync(join(root, "convex/communityAgentHeartbeat.ts"), "utf8");
 const runtime = readFileSync(join(root, "convex/communityAgentRuntime.ts"), "utf8");
+const fundingRuntime = readFileSync(join(root, "convex/founderInferenceRuntime.ts"), "utf8");
+const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
@@ -28,6 +30,21 @@ assert.match(heartbeat, /export const runCommunityAgentHeartbeatInternal = inter
 assert.doesNotMatch(heartbeat, /export const .* = action\(|export const .* = mutation\(/);
 assert.doesNotMatch(heartbeat, /userPrompt|prompt: v\.string|authSubject/);
 assert.doesNotMatch(heartbeat, /\.collect\(\)/);
+assert.doesNotMatch(
+  heartbeat,
+  /providerConnections|getChatgptConnectionForUserInternal|owner_connection_missing/,
+  "heartbeat scheduling must not guess community funding from owner credentials",
+);
+assert.match(
+  crons,
+  /canonical runtime admits founder[\s\S]*funding before any model call/,
+  "cron contract should identify the runtime as founder-funding authority",
+);
+assert.doesNotMatch(
+  crons,
+  /asker-funded|requester-funded|no owner connection/,
+  "community-agent cron comments should not restore retired requester or credential funding",
+);
 
 {
   const singleCommunityHeartbeatSurface = heartbeat.slice(
@@ -65,6 +82,12 @@ assert.match(
   heartbeat,
   /ctx\.runAction\([\s\S]*internalRefs\.communityAgentRuntime\.runCommunityAgentCycleInternal[\s\S]*communityId: args\.communityId[\s\S]*triggerType: "heartbeat"[\s\S]*heartbeatId/,
   "heartbeat action should bridge into the canonical runtime with heartbeat trigger",
+);
+const heartbeatAction = exportedFunctionBlock(heartbeat, "runCommunityAgentHeartbeatInternal");
+assert.doesNotMatch(
+  heartbeatAction,
+  /resolveCommunityAgentRunContextInternal|providerConnections/,
+  "heartbeat action should leave context and funding resolution to the canonical runtime",
 );
 assert.match(
   heartbeat,
@@ -123,6 +146,11 @@ assert.match(
 );
 
 const sweepBlock = exportedFunctionBlock(heartbeat, "runCommunityMemorySweepInternal");
+assert.doesNotMatch(
+  sweepBlock,
+  /ownerId|providerConnections|owner_connection_missing/,
+  "memory sweep should schedule by community work only and leave funding admission to the runtime",
+);
 assert.match(
   sweepBlock,
   /settleCommunityMemorySignalsInternal[\s\S]*assessCommunityAgentCycleInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
@@ -154,6 +182,19 @@ assert.match(
   runtime,
   /COMMUNITY_AGENT_RUNNING_RUN_STALE_MS = 30 \* 60 \* 1000/,
   "runtime should define a bounded stale-running window",
+);
+const runtimeLoop = exportedFunctionBlock(runtime, "runCommunityAgentLoopInternal");
+const fundingAdmissionIndex = runtimeLoop.indexOf("resolveCommunityInferenceFundingForAction");
+const providerSessionIndex = runtimeLoop.indexOf("beginCommunityInferenceFundingSession");
+assert.ok(fundingAdmissionIndex >= 0, "community runtime should resolve canonical founder funding");
+assert.ok(
+  providerSessionIndex > fundingAdmissionIndex,
+  "community runtime should admit canonical founder funding before opening a provider session",
+);
+assert.match(
+  fundingRuntime,
+  /admission\.mode === "owner_api_key"[\s\S]*getOpenAiConnectionForUserInternal[\s\S]*admission\.payerUserId/,
+  "only exact legacy BYOK admission should load an owner OpenAI credential",
 );
 assert.match(
   runtime,
@@ -204,6 +245,11 @@ assert.match(
   docs,
   /Canonical Compiler-to-Agent Handoff[\s\S]*immutable digest version[\s\S]*`pending` is claimable[\s\S]*`running` has a bounded lease[\s\S]*`handled` is\s+terminal[\s\S]*never compiles evidence itself/,
   "docs should describe the durable autonomous handoff contract",
+);
+assert.match(
+  docs,
+  /Memory is founder-funded[\s\S]*canonical founder-funding admission[\s\S]*Exact legacy BYOK[\s\S]*managed subscription[\s\S]*operator grant/,
+  "docs should describe every canonical autonomous-cognition funding lane",
 );
 
 console.log("community_agent_heartbeat_contract_proof: ok");
