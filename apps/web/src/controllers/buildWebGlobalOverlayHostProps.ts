@@ -25,17 +25,14 @@ export function shouldOpenFounderInferencePrompt(params: {
 }
 
 export function buildWebGlobalOverlayHostProps(params: {
-  session: unknown | null;
   providerConnectionModalHostProps: WebGlobalOverlayHostProps["providerConnectionModalHostProps"];
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
-  founderFundingPromptProps: WebGlobalOverlayHostProps["founderFundingPromptProps"];
   founderInferencePromptProps: WebGlobalOverlayHostProps["founderInferencePromptProps"];
   appToast: string | null;
 }): WebGlobalOverlayHostProps {
   return {
     providerConnectionModalHostProps: params.providerConnectionModalHostProps,
     communityModalHostProps: params.communityModalHostProps,
-    founderFundingPromptProps: params.founderFundingPromptProps,
     founderInferencePromptProps: params.founderInferencePromptProps,
     appToast: params.appToast,
   };
