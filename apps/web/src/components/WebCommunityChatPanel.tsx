@@ -384,9 +384,7 @@ export type WebCommunityChatPanelProps = {
     | "getInitials"
     | "formatChatTime"
     | "renderTextWithLinks"
-  > & {
-    enabled: boolean;
-  };
+  >;
 };
 
 function parseTimelineTime(value: string): number {
@@ -1132,15 +1130,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     hasSession && activeCommunity?.id && onOpenDirectMessageFromCommunity,
   );
   const communityChatPresentationMode = resolveWebCommunityChatPresentationMode({
-    canonicalProjectionEnabled: Boolean(interactionProjection?.enabled),
     hasActiveCommunity: Boolean(activeCommunity),
     hasAuthenticatedPresentation,
     isAuthRecoveringSignedIn,
     isResolvingSelectedCommunity,
-    hasCommunityTimelineItems,
-    hasCommunityChatError: Boolean(communityChatError),
-    isLoadingChat,
-    hasResolvedCommunityChat,
   });
   const showInteractionProjection = communityChatPresentationMode === "canonical";
   const showCanonicalCommunityBootstrap =
@@ -1386,9 +1379,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     selectedInteractionRootId,
     setDrawerReplyAttachmentsAndRef,
   ]);
-
-  const showCommunityChatBootstrap =
-    communityChatPresentationMode === "legacy_bootstrap";
 
   const renderCommunityAttachmentsPreview = (
     attachments: CommunityMessageAttachment[],
@@ -1791,31 +1781,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       </div>
     </div>
   ) : null;
-
-  if (showCommunityChatBootstrap) {
-    return (
-      <>
-        <div className="community-chat community-chat-bootstrap">
-          <div className="workspace-body chat-feed">
-            <div className="community-chat-page-loading-shell" aria-busy="true" aria-live="polite">
-              <div className="community-chat-page-loading-card">
-                <div className="community-chat-page-loading-title">
-                  {isResolvingSelectedCommunity ? "Opening community…" : "Loading chat…"}
-                </div>
-                <div className="community-chat-page-loading-copy">
-                  {isResolvingSelectedCommunity
-                    ? "Resolving the selected community and preparing chat."
-                    : "Preparing messages and member identity."}
-                </div>
-                <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
-              </div>
-            </div>
-          </div>
-        </div>
-        <WebCommunityChatLightboxModal {...lightboxModalProps} />
-      </>
-    );
-  }
 
   const mobileMembersOverlay = mobileMembersOverlayOpen ? (
     <WebMobileDrawer

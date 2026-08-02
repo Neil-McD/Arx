@@ -132,10 +132,10 @@ assert.doesNotMatch(
   /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION/,
   "the web projection should not be gated behind a Vite env flag",
 );
-assert.match(
+assert.doesNotMatch(
   interactionController,
-  /export const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
-  "the projection owner should make canonical interactions the normal web chat surface",
+  /COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  "the canonical projection should not retain a dead constant feature gate",
 );
 assert.match(
   interactionController,
@@ -144,7 +144,7 @@ assert.match(
 );
 assert.match(
   app,
-  /useWebCommunityInteractionProjection<MessageAttachment>\([\s\S]*interactionProjection:\s*\{[\s\S]*enabled:\s*COMMUNITY_INTERACTION_PROJECTION_ENABLED[\s\S]*roots:\s*isActiveCommunityChannelReady\s*\?\s*visibleCommunityInteractionRoots\s*:\s*\[\][\s\S]*selectedRootId:\s*isActiveCommunityChannelReady\s*\?\s*selectedCommunityInteractionRootId\s*:\s*null/,
+  /useWebCommunityInteractionProjection<MessageAttachment>\([\s\S]*interactionProjection:\s*\{[\s\S]*roots:\s*isActiveCommunityChannelReady\s*\?\s*visibleCommunityInteractionRoots\s*:\s*\[\][\s\S]*selectedRootId:\s*isActiveCommunityChannelReady\s*\?\s*selectedCommunityInteractionRootId\s*:\s*null/,
   "App should pass canonical optimistic roots only after the requested channel resolves",
 );
 assert.match(
@@ -157,10 +157,10 @@ assert.doesNotMatch(
   /listCloudCommunityInteractionRootsPage|listCloudCommunityInteractionReplies|subscribeCloudCommunityInteractionRoots|subscribeCloudCommunityInteractionReplies|toggleCloudCommunityInteractionReaction|editCloudCommunityInteractionMessage|deleteCloudCommunityInteractionMessage/,
   "App should compose the projection controller without owning its gateway lifecycle",
 );
-assert.match(
+assert.doesNotMatch(
   chatController,
-  /useCommunityChatRealtime\(\{[\s\S]*isEnabled:[\s\S]*isCommunityPageActive[\s\S]*hasResolvedCommunityChat[\s\S]*!interaction\.enabled/,
-  "legacy chat realtime should remain disabled while canonical projection is the normal chat surface",
+  /useCommunityChatRealtime|useCommunityChatViewport/,
+  "the canonical web owner should not mount legacy realtime or legacy scroll pagination",
 );
 assert.match(
   chatController,
@@ -190,7 +190,7 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /resolveWebCommunityChatPresentationMode\(\{[\s\S]*canonicalProjectionEnabled:[\s\S]*hasActiveCommunity:[\s\S]*hasAuthenticatedPresentation/,
+  /resolveWebCommunityChatPresentationMode\(\{[\s\S]*hasActiveCommunity:[\s\S]*hasAuthenticatedPresentation/,
   "chat panel should delegate structural ownership to the canonical presentation resolver",
 );
 assert.match(
@@ -200,13 +200,13 @@ assert.match(
 );
 assert.match(
   chatPresentationMode,
-  /if \(input\.canonicalProjectionEnabled\) \{[\s\S]*return "canonical";[\s\S]*return "canonical_bootstrap";[\s\S]*return "legacy";[\s\S]*return "legacy_bootstrap";/,
-  "canonical mode must resolve before and independently of the legacy bootstrap",
+  /if \(input\.hasAuthenticatedPresentation && input\.hasActiveCommunity\)[\s\S]*return "canonical";[\s\S]*return "canonical_bootstrap";[\s\S]*return "legacy";/,
+  "authenticated community chat must resolve only to canonical owners",
 );
-assert.match(
+assert.doesNotMatch(
   chatPanel,
-  /const showCommunityChatBootstrap =\s*communityChatPresentationMode === "legacy_bootstrap"/,
-  "the legacy chat bootstrap must be confined to the legacy fallback",
+  /legacy_bootstrap|showCommunityChatBootstrap/,
+  "the dead legacy bootstrap presentation mode should be deleted",
 );
 assert.match(
   chatPanel,
@@ -1103,7 +1103,7 @@ assert.match(
 
 assert.match(
   contract,
-  /Current UI Projection Slice[\s\S]*canonical projection is the normal production and staging chat surface[\s\S]*legacy chat timeline is not a production UI routing option[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*legacy chat realtime is disabled for the normal web chat UI[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends use the canonical composer bridge[\s\S]*missing canonical writer fails closed[\s\S]*canonical projection does not rely on legacy chat realtime[\s\S]*stale interaction reads must not overwrite/,
+  /Current UI Projection Slice[\s\S]*canonical projection is the normal production and staging chat surface[\s\S]*legacy chat timeline is not a production UI routing option[\s\S]*projection subscribes to canonical interaction roots and replies directly[\s\S]*normal web chat UI does not mount legacy preload, realtime, or scroll-pagination lifecycles[\s\S]*canonical interaction read bundles expose public actor user ids[\s\S]*top-level composer sends use the canonical composer bridge[\s\S]*missing canonical writer fails closed[\s\S]*canonical projection does not rely on any legacy chat client lifecycle[\s\S]*stale interaction reads must not overwrite/,
   "interaction contract should document the active UI projection slice",
 );
 assert.match(

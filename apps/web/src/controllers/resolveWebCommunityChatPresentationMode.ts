@@ -1,19 +1,13 @@
 export type WebCommunityChatPresentationMode =
   | "canonical"
   | "canonical_bootstrap"
-  | "legacy_bootstrap"
   | "legacy";
 
 type ResolveWebCommunityChatPresentationModeInput = {
-  canonicalProjectionEnabled: boolean;
   hasActiveCommunity: boolean;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
   isResolvingSelectedCommunity: boolean;
-  hasCommunityTimelineItems: boolean;
-  hasCommunityChatError: boolean;
-  isLoadingChat: boolean;
-  hasResolvedCommunityChat: boolean;
 };
 
 /**
@@ -27,30 +21,14 @@ type ResolveWebCommunityChatPresentationModeInput = {
 export function resolveWebCommunityChatPresentationMode(
   input: ResolveWebCommunityChatPresentationModeInput,
 ): WebCommunityChatPresentationMode {
-  if (input.canonicalProjectionEnabled) {
-    if (input.hasAuthenticatedPresentation && input.hasActiveCommunity) {
-      return "canonical";
-    }
-    if (
-      input.hasAuthenticatedPresentation &&
-      (input.isAuthRecoveringSignedIn || input.isResolvingSelectedCommunity)
-    ) {
-      return "canonical_bootstrap";
-    }
-    return "legacy";
+  if (input.hasAuthenticatedPresentation && input.hasActiveCommunity) {
+    return "canonical";
   }
-
   if (
     input.hasAuthenticatedPresentation &&
-    (input.isAuthRecoveringSignedIn ||
-      input.isResolvingSelectedCommunity ||
-      (input.hasActiveCommunity &&
-        !input.hasCommunityTimelineItems &&
-        !input.hasCommunityChatError &&
-        (input.isLoadingChat || !input.hasResolvedCommunityChat)))
+    (input.isAuthRecoveringSignedIn || input.isResolvingSelectedCommunity)
   ) {
-    return "legacy_bootstrap";
+    return "canonical_bootstrap";
   }
-
   return "legacy";
 }

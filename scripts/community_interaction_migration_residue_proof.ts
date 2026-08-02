@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -34,6 +34,10 @@ const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityAttention = read("convex/communityAttention.ts");
 const webAttentionController = read(
   "apps/web/src/controllers/useWebCommunityAttentionController.ts",
+);
+const legacyPreloadLifecyclePath = join(
+  root,
+  "apps/web/src/controllers/useWebCommunityChatPreloadLifecycle.ts",
 );
 
 function assertIncludes(sourceName: string, source: string, needle: string): void {
@@ -70,11 +74,12 @@ assert.match(
   "| R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` |",
   "| R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` |",
   "| R-002 | Legacy compatibility message rows created by canonical composer | Deleted for the staging clean-room composer.",
-  "| R-005 | Projection feature flag and legacy timeline fallback | Deleted for production projection promotion.",
+  "| R-005 | Projection feature flag and authenticated legacy client bootstrap | Deleted for production projection promotion.",
+  "| R-006 | Legacy web timeline props and inactive client state | `DELETE CANDIDATE` |",
   "Canonical interaction reads must not use legacy chat rows as source-of-truth.",
   "Canonical interaction writes must not insert legacy chat rows directly.",
   "The web interaction gateway must not call legacy chat mutations.",
-  "Legacy chat realtime must remain disabled for the normal web chat UI; canonical projection refresh must use canonical interaction reads/subscriptions.",
+  "The normal web chat UI must not mount legacy chat preload, realtime, or scroll-pagination lifecycles; canonical projection refresh must use canonical interaction reads/subscriptions.",
   "Community attention chat dots must derive from canonical interaction roots/replies, not `communityChatMessages`.",
   "No longer blockers: canonical composer sends, canonical projection sends, canonical optimistic reconciliation, production chat rendering, and community attention chat dots no longer require legacy chat row replacement; canonical sends no longer fall back to the legacy chat writer when the canonical writer is missing.",
   "The shared community send controller may keep legacy sends only for non-projection compatibility call paths; normal web chat uses canonical projection sends, and a missing canonical writer fails closed.",
@@ -227,20 +232,40 @@ assert.match(
   /showInteractionProjection[\s\S]*WebCommunityInteractionProjection[\s\S]*className="chat-messages"/,
   "chat panel should keep canonical projection and legacy fallback in one visible branch",
 );
+assert.equal(
+  existsSync(legacyPreloadLifecyclePath),
+  false,
+  "the legacy chat preload lifecycle should be deleted from the web app",
+);
+assert.doesNotMatch(
+  app,
+  /useWebCommunityChatPreloadLifecycle|ensureCommunityChatThread|loadCommunityChat/,
+  "App should not preload, ensure, or read a legacy chat thread",
+);
+assert.doesNotMatch(
+  webChatController,
+  /useCommunityChatRealtime|useCommunityChatViewport|loadOlderCommunityChat/,
+  "the web chat owner should not mount legacy realtime or scroll-pagination lifecycles",
+);
 assert.match(
   webChatController,
-  /useCommunityChatRealtime\(\{[\s\S]*isEnabled:[\s\S]*isCommunityPageActive[\s\S]*hasResolvedCommunityChat[\s\S]*!interaction\.enabled/,
-  "legacy chat realtime should be disabled for the normal web chat UI",
+  /useCanonicalCommunityInteractions: hasActiveCommunity/,
+  "the authenticated web composer should select the canonical writer directly",
+);
+assert.doesNotMatch(
+  webChatController,
+  /interaction\.enabled/,
+  "the web composer should not retain a dead canonical projection gate",
 );
 assert.doesNotMatch(
   `${app}\n${interactionController}`,
   /VITE_ENABLE_COMMUNITY_INTERACTION_PROJECTION/,
   "production projection should not depend on a Vite env flag",
 );
-assert.match(
+assert.doesNotMatch(
   interactionController,
-  /export const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;/,
-  "canonical projection should be the normal app-level chat surface",
+  /COMMUNITY_INTERACTION_PROJECTION_ENABLED/,
+  "canonical projection should not retain a dead feature-gate constant",
 );
 assert.match(
   interactionController,
@@ -249,7 +274,7 @@ assert.match(
 );
 assert.match(
   communityAttention,
-  /getLatestCommunityChatActivityAt[\s\S]*query\("communityInteractionRoots" as any\)[\s\S]*by_community_status_createdAt[\s\S]*query\("communityInteractionReplies" as any\)[\s\S]*by_community_status_createdAt/,
+  /getLatestCommunityChannelChatActivityAt[\s\S]*listChannelReadableRows<CommunityInteractionRootLike>\([\s\S]*tableName: "communityInteractionRoots"[\s\S]*listChannelReadableRows<CommunityInteractionReplyLike>\([\s\S]*tableName: "communityInteractionReplies"/,
   "community attention chat dots should derive from canonical interaction activity",
 );
 assert.match(
@@ -306,13 +331,18 @@ assert.match(
 );
 assert.match(
   communityTypingCore,
-  /withIndex\("by_community_displayUntil", \(q: any\) =>[\s\S]*\.gt\("displayUntil", nowMs\)[\s\S]*\.order\("desc"\)[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
-  "typing presence reads should use the active-window index and bounded take",
+  /withIndex\("by_channel_displayUntil", \(q: any\) =>[\s\S]*\.gt\("displayUntil", nowMs\)[\s\S]*\.order\("desc"\)[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
+  "typing presence reads should use the canonical channel active-window index and bounded take",
+);
+assert.match(
+  communityTypingCore,
+  /withIndex\("by_community_channel_displayUntil", \(q: any\) =>[\s\S]*\.eq\("channelId", undefined\)[\s\S]*\.gt\("displayUntil", nowMs\)[\s\S]*\.take\(COMMUNITY_TYPING_PRESENCE_SCAN_LIMIT \+ 1\)/,
+  "temporary general-channel compatibility reads should also remain bounded",
 );
 assert.doesNotMatch(
   communityTypingCore,
-  /\.collect\(\)|\.sort\(/,
-  "typing presence reads should not collect/sort all community typing rows",
+  /\.collect\(\)/,
+  "typing presence reads should not collect all community typing rows",
 );
 
 const deleteOwnMessage = extractExportedConst(communityChat, "deleteOwnMessage");

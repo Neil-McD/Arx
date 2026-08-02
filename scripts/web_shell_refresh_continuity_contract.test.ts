@@ -51,14 +51,11 @@ describe("web shell refresh continuity contract", () => {
     const ownerGate = panel.slice(start, end);
 
     expect(ownerGate).toContain("resolveWebCommunityChatPresentationMode");
-    expect(ownerGate).toContain("interactionProjection?.enabled");
     expect(ownerGate).toContain("hasAuthenticatedPresentation");
     expect(ownerGate).toContain('communityChatPresentationMode === "canonical"');
     expect(ownerGate).toContain('communityChatPresentationMode === "canonical_bootstrap"');
     expect(ownerGate).toContain('communityChatPresentationMode === "legacy"');
-    expect(panel).toMatch(
-      /const showCommunityChatBootstrap =\s*communityChatPresentationMode === "legacy_bootstrap"/,
-    );
+    expect(panel).not.toContain("legacy_bootstrap");
     expect(panel).toContain(
       "community-interaction-projection has-context-panel community-interaction-bootstrap",
     );
