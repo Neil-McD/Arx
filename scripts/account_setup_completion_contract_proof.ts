@@ -22,6 +22,9 @@ const onboardingProfileController = read(
 );
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const legalReaderModal = read("apps/web/src/components/WebPlatformLegalReaderModal.tsx");
+const legalRegistry = read("shared/legalDocuments.ts");
+const legalAcceptances = read("convex/legalAcceptances.ts");
+const legalContent = read("apps/web/src/docs/legalDocumentsContent.ts");
 
 assert.match(schema, /handle: v\.optional\(v\.string\(\)\)/, "users table must store a public profile handle");
 assert.match(schema, /normalizedHandle: v\.optional\(v\.string\(\)\)/, "users table must store normalized handle");
@@ -120,6 +123,12 @@ assert.match(onboardingPage, /Terms of Service[\s\S]*Privacy &amp; AI Data Polic
 assert.match(onboardingPage, /platformLegalReady[\s\S]*?profileReady[\s\S]*?platformLegalReady/, "onboarding profile step must require platform legal acceptance before Next");
 assert.match(onboardingPage, /WebPlatformLegalReaderModal/, "onboarding legal documents must render through the shared reader modal");
 assert.match(legalReaderModal, /polynet-onboarding-legal-reader message-text/, "the shared legal reader must render documents in the scrollable modal reader");
+assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v2"/, "current account setup must present Terms v2");
+assert.match(legalRegistry, /HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1"/, "Terms v1 must remain explicitly historical");
+assert.match(legalAcceptances, /TERMS_OF_SERVICE_ACCEPTANCE_VERSIONS/, "existing Terms v1 acceptance must remain setup-compatible");
+assert.match(legalAcceptances, /args\.termsVersion !== TERMS_OF_SERVICE_DOCUMENT\.version/, "new setup acceptance must require the current Terms version");
+assert.match(legalContent, /terms-of-service-v2\.md\?raw/, "the legal reader must project current Terms v2");
+assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/, "the legal reader must not project historical Terms v1 as current");
 assert.match(onboardingPage, /chatgpt\.onConnect/, "onboarding inference step must reuse ChatGPT provider flow");
 assert.match(onboardingPage, /openai\.onConnect/, "onboarding inference step must reuse OpenAI provider flow");
 assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -237,10 +238,27 @@ function proveCachedClientTombstones(backendSource: string, compatibilitySource:
 
 function proveLegalAndDocs(): void {
   const legalTerms = readText("docs/legal/builder-partner-terms-v2.md");
+  const retirementNotice = readText("docs/legal/builder-partner-terms-v2-retirement-notice.md");
   const billingDocs = readText("docs/product/reference/billing-entitlements.md");
   const releaseDocs = readText("docs/alpha-release-workflow.md");
+  assert.equal(
+    createHash("sha256").update(legalTerms).digest("hex"),
+    "63f0cc88984aadbb40999e100d370381a8fe84f57d5b3e6651edf9460091b11a",
+    "accepted Builder Partner terms must remain byte-for-byte immutable",
+  );
   assertIncludes(legalTerms, "version: builder_partner_terms_v2", "immutable historical partner terms");
   assertIncludes(legalTerms, "Termination does not remove Polynet's right", "immutable historical partner terms");
+  for (const marker of [
+    "Builder Partner v1 is retired",
+    "four `builder_partner_terms_v2` acceptances",
+    "four corresponding",
+    "`legacyProgramGrants` remain historical evidence",
+    "63f0cc88984aadbb40999e100d370381a8fe84f57d5b3e6651edf9460091b11a",
+    "new product contract and new legal",
+    "version",
+  ]) {
+    assertIncludes(retirementNotice, marker, "Builder Partner retirement notice");
+  }
   assertExcludes(readText("shared/legalDocuments.ts"), /builder_partner|Builder Partner/, "active legal registry");
   assertExcludes(
     readText("apps/web/src/docs/legalDocumentsContent.ts"),

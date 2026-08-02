@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
@@ -34,6 +35,15 @@ const publicLanding = read("apps/web/src/components/polynetLanding/ConversionLan
 const publicLandingStyles = read("apps/web/src/components/polynetLanding/ConversionLanding.css");
 const envExample = read(".env.example");
 const modelCatalog = read("shared/modelCatalog.ts");
+const legalRegistry = read("shared/legalDocuments.ts");
+const legalAcceptances = read("convex/legalAcceptances.ts");
+const legalContent = read("apps/web/src/docs/legalDocumentsContent.ts");
+const historicalTerms = read("docs/legal/terms-of-service-v1.md");
+const currentTerms = read("docs/legal/terms-of-service-v2.md");
+const termsSupersessionNotice = read("docs/legal/terms-of-service-v1-supersession-notice.md");
+const historicalBuilderPartnerTerms = read("docs/legal/builder-partner-terms-v2.md");
+const builderPartnerRetirementNotice = read("docs/legal/builder-partner-terms-v2-retirement-notice.md");
+const billingDocs = read("docs/product/reference/billing-entitlements.md");
 const retiredPremiumStyles = [
   read("apps/web/src/index.css"),
   read("apps/web/src/styles/shell-and-onboarding.css"),
@@ -198,6 +208,59 @@ assert.match(modelCatalog, /CONNECTED_PROVIDER_MODELS/);
 assert.doesNotMatch(
   retiredPremiumStyles,
   /premium-gate-|premium-locked|premium-member-badge|billing-plan-col--premium/,
+);
+
+// Accepted legal bodies are immutable evidence. Current legal and product surfaces
+// project the present funding boundary without rewriting historical acceptance.
+assert.equal(
+  createHash("sha256").update(historicalTerms).digest("hex"),
+  "35b58f601f6be0725a4db36ffce87928640b0d554275b9c290747e8abd184b10",
+  "accepted Terms v1 must remain byte-for-byte immutable",
+);
+assert.equal(
+  createHash("sha256").update(historicalBuilderPartnerTerms).digest("hex"),
+  "63f0cc88984aadbb40999e100d370381a8fe84f57d5b3e6651edf9460091b11a",
+  "accepted Builder Partner terms must remain byte-for-byte immutable",
+);
+assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v2"/);
+assert.match(legalRegistry, /HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1"/);
+assert.match(
+  legalRegistry,
+  /TERMS_OF_SERVICE_ACCEPTANCE_VERSIONS = \[[\s\S]*TERMS_OF_SERVICE_VERSION,[\s\S]*HISTORICAL_TERMS_OF_SERVICE_VERSION/,
+);
+assert.match(legalRegistry, /sourcePath: "docs\/legal\/terms-of-service-v2\.md"/);
+assert.match(legalRegistry, /sourcePath: "docs\/legal\/terms-of-service-v1\.md"/);
+assert.match(legalAcceptances, /new Set<string>\(TERMS_OF_SERVICE_ACCEPTANCE_VERSIONS\)/);
+assert.match(legalAcceptances, /args\.termsVersion !== TERMS_OF_SERVICE_DOCUMENT\.version/);
+assert.match(
+  legalAcceptances,
+  /documentVersion: TERMS_OF_SERVICE_DOCUMENT\.version/,
+  "new Terms acceptance writes must record only the current version",
+);
+assert.match(legalContent, /terms-of-service-v2\.md\?raw/);
+assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/);
+assert.doesNotMatch(currentTerms, /managed-community AI and public acquisition/);
+for (const currentFundingTruth of [currentTerms, billingDocs]) {
+  assert.match(currentFundingTruth, /managed-community AI|only AI execution fails closed/);
+  assert.match(currentFundingTruth, /public funnels/);
+  assert.match(currentFundingTruth, /public joins/);
+  assert.match(currentFundingTruth, /paid-member checkout/);
+  assert.match(currentFundingTruth, /inactive or exhausted|funding is missing or inactive/);
+}
+assert.match(termsSupersessionNotice, /accepted by 27\s+production users/);
+assert.match(termsSupersessionNotice, /Existing v1 acceptances continue to satisfy account setup/);
+assert.match(termsSupersessionNotice, /New acceptance writes require `terms_of_service_v2`/);
+assert.match(
+  termsSupersessionNotice,
+  /35b58f601f6be0725a4db36ffce87928640b0d554275b9c290747e8abd184b10/,
+);
+assert.match(builderPartnerRetirementNotice, /Builder Partner v1 is retired/);
+assert.match(builderPartnerRetirementNotice, /four `builder_partner_terms_v2` acceptances/);
+assert.match(builderPartnerRetirementNotice, /four corresponding[\s\S]*`legacyProgramGrants`/);
+assert.match(builderPartnerRetirementNotice, /new product contract and new legal[\s\S]*version/);
+assert.match(
+  builderPartnerRetirementNotice,
+  /63f0cc88984aadbb40999e100d370381a8fe84f57d5b3e6651edf9460091b11a/,
 );
 
 // Historical financial schemas stay readable until liabilities are reconciled.
