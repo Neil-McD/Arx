@@ -49,5 +49,8 @@ This map is the deletion queue for the community chat substrate migration. It se
 
 ## Next Deletion Order
 
-1. Backfill historical legacy attachments into canonical attachment rows.
-2. Delete legacy chat reads and backfill/admin tools after data migration is audited.
+1. Run the bounded, read-only `communityInteractionAttachmentMigration:inspectLegacyAttachmentStatePageInternal` query through every page and aggregate `status_counts` without truncation.
+2. Stop before mutation unless the audit samples and counts establish an exact repair policy. `pending_backfill` needs canonical rows; `blocked_by_non_uploaded_canonical_rows`, malformed links, missing targets, community mismatches, and attachment overflows require explicit resolution rather than blind insertion.
+3. Backfill only the audited historical attachment targets through a separate bounded, idempotent mutation slice.
+4. Re-run the complete read-only audit and require every fallback-dependent and integrity-error count to be zero before deleting `communityInteractionLegacyAttachments` or the read fallback.
+5. Delete legacy chat reads and backfill/admin tools only after the broader chat-row migration is separately audited.

@@ -23,7 +23,7 @@ export type NormalizedInteractionAttachmentInput = {
   dataUrl?: string;
 };
 
-const MAX_LEGACY_INTERACTION_ATTACHMENTS = 8;
+export const MAX_LEGACY_INTERACTION_ATTACHMENTS = 8;
 const MAX_ATTACHMENT_NAME_CHARS = 256;
 const MAX_ATTACHMENT_MIME_CHARS = 160;
 const MAX_LEGACY_IMAGE_DATA_URL_CHARS = 600_000;

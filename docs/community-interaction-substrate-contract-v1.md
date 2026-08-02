@@ -407,6 +407,8 @@ Rules:
 - migration-only legacy attachment hydration may resolve linked legacy chat attachments only when canonical attachment rows are absent, until canonical attachment backfill is complete
 - migration-only legacy attachment hydration lives outside the canonical interaction core in `communityInteractionLegacyAttachments`
 - canonical attachment row reads and storage URL resolution live outside the canonical interaction core in `communityInteractionAttachmentBridge`
+- the temporary `communityInteractionAttachmentMigration` operator query audits legacy links in bounded pages and never mutates attachment state
+- legacy attachment fallback cannot be deleted until the complete audit reports zero `pending_backfill`, `blocked_by_non_uploaded_canonical_rows`, malformed-link, missing-target, community-mismatch, and overflow classifications
 - viewer reaction state must be loaded only for the visible root/reply target ids, never by scanning all reactions for a viewer
 - reaction summary updates must not rescan every reaction on a target
 - read APIs do not read compiler, source-trace, archive, or memory tables

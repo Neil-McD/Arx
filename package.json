@@ -100,6 +100,7 @@
     "check:community-gateway-cleanup-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_gateway_cleanup_contract_proof.ts",
     "check:community-chat-image-lightbox-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_chat_image_lightbox_proof.ts",
     "check:community-chat-attachment-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_chat_attachment_policy_proof.ts",
+    "check:community-interaction-attachment-migration-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_attachment_migration_contract_proof.ts",
     "check:community-interaction-substrate-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_substrate_contract_proof.ts",
     "check:community-interactions-write-core-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interactions_write_core_contract_proof.ts",
     "check:community-interactions-read-model-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interactions_read_model_contract_proof.ts",
