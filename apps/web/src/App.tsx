@@ -2047,7 +2047,9 @@ export default function App() {
   const communityContextJoinRequests = useMemo(
     () =>
       communityJoinRequests
-        .filter((request) => String(request.status ?? "").trim().toLowerCase() === "pending")
+        .filter((request) =>
+          request.community_id === activeCommunityId &&
+          String(request.status ?? "").trim().toLowerCase() === "pending")
         .map((request) => {
           const profile = savedProfilesByUserId[request.user_id] ?? null;
           return {
@@ -2062,7 +2064,7 @@ export default function App() {
             createdAtLabel: formatRelativeTime(request.created_at),
           };
         }),
-    [communityJoinRequests, displayName, savedProfilesByUserId],
+    [activeCommunityId, communityJoinRequests, displayName, savedProfilesByUserId],
   );
 
   const { communityChatPanelProps, communitySecondarySurfaceProps } =

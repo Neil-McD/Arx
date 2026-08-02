@@ -16,6 +16,10 @@ import { fetchCloudMyCommunityAccessById } from "../../../../shared/cloudCommuni
 import {
   refreshCloudCommunityPresence,
 } from "../../../../shared/cloudPublicFunnelGateway";
+import {
+  resolveAuthPresentationIdentity,
+  type AuthSessionLike,
+} from "../../../../shared/authSession";
 
 type PresenceFace = {
   user_id: string;
@@ -38,6 +42,7 @@ type PresenceSummary = {
 
 type ScopedPresenceSummary = {
   communityId: string;
+  sessionIdentity: string;
   summary: PresenceSummary | null;
 };
 
@@ -55,7 +60,11 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     useState<ScopedPresenceSummary | null>(null);
   const accessRequestIdRef = useRef(0);
   const activeCommunityIdRef = useRef(params.activeCommunityId);
+  const sessionRef = useRef(params.session);
+  const accessSessionIdentityRef = useRef<string | null>(null);
+  const sessionIdentity = resolveAuthPresentationIdentity(params.session as AuthSessionLike);
   activeCommunityIdRef.current = params.activeCommunityId;
+  sessionRef.current = params.session;
 
   const reloadActiveCommunityAccess = useCallback(async (communityId: string, session: SessionT): Promise<void> => {
     const requestedCommunityId = String(communityId ?? "").trim();
@@ -95,7 +104,8 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   }, [params.ensureSession]);
 
   useEffect(() => {
-    if (!params.session || !params.activeCommunityId) {
+    if (!sessionIdentity || !params.activeCommunityId) {
+      accessSessionIdentityRef.current = null;
       const requestId = (accessRequestIdRef.current += 1);
       dispatchCommunityAccessResolution({
         type: "reset",
@@ -103,11 +113,27 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
       });
       return;
     }
-    void reloadActiveCommunityAccess(params.activeCommunityId, params.session);
-  }, [params.session, params.activeCommunityId, reloadActiveCommunityAccess]);
+    accessSessionIdentityRef.current = sessionIdentity;
+    const communityId = params.activeCommunityId;
+    const refresh = () => {
+      const currentSession = sessionRef.current;
+      if (!currentSession) return;
+      void reloadActiveCommunityAccess(communityId, currentSession);
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") refresh();
+    };
+    refresh();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => {
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [sessionIdentity, params.activeCommunityId, reloadActiveCommunityAccess]);
 
   useEffect(() => {
-    if (!params.session || !params.activeCommunityId) {
+    if (!sessionIdentity || !params.activeCommunityId) {
       setActiveCommunityPresenceSummaryState(null);
       return;
     }
@@ -118,7 +144,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
       if (cancelled || inFlight || document.visibilityState !== "visible") return;
       inFlight = true;
       try {
-        const usableSession = await params.ensureSession(params.session);
+        const usableSession = await params.ensureSession(sessionRef.current);
         if (!usableSession) return;
         const summary = await refreshCloudCommunityPresence<SessionT, PresenceSummary>({
           session: usableSession,
@@ -127,6 +153,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
         if (!cancelled && activeCommunityIdRef.current === communityId) {
           setActiveCommunityPresenceSummaryState({
             communityId,
+            sessionIdentity,
             summary: summary ?? null,
           });
         }
@@ -151,7 +178,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
       window.clearInterval(intervalId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
-  }, [params.activeCommunityId, params.session, params.ensureSession]);
+  }, [params.activeCommunityId, params.ensureSession, sessionIdentity]);
 
   useEffect(() => {
     setActiveCommunityPresenceSummaryState(null);
@@ -164,30 +191,35 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     ),
     [communityAccessResolution, params.activeCommunityId],
   );
+  const isAccessSessionIdentityScoped = Boolean(
+    sessionIdentity && accessSessionIdentityRef.current === sessionIdentity,
+  );
   const presentationActiveCommunityAccess =
-    scopedCommunityAccessResolution.status === "resolved" ||
+    isAccessSessionIdentityScoped &&
+    (scopedCommunityAccessResolution.status === "resolved" ||
     scopedCommunityAccessResolution.status === "refreshing" ||
-    scopedCommunityAccessResolution.status === "failed"
+    scopedCommunityAccessResolution.status === "failed")
       ? scopedCommunityAccessResolution.access
       : null;
   const currentActiveCommunityAccess =
-    scopedCommunityAccessResolution.status === "resolved"
+    isAccessSessionIdentityScoped && scopedCommunityAccessResolution.status === "resolved"
       ? scopedCommunityAccessResolution.access
       : null;
   const isLoadingCommunityAccess =
-    Boolean(params.session) &&
-    (scopedCommunityAccessResolution.status === "pending" ||
+    Boolean(sessionIdentity) &&
+    (!isAccessSessionIdentityScoped ||
+      scopedCommunityAccessResolution.status === "pending" ||
       scopedCommunityAccessResolution.status === "refreshing");
   const communityAccessLoadError =
-    scopedCommunityAccessResolution.status === "failed"
+    isAccessSessionIdentityScoped && scopedCommunityAccessResolution.status === "failed"
       ? scopedCommunityAccessResolution.error
       : null;
   const retryActiveCommunityAccess = useCallback(() => {
-    if (!params.session || !params.activeCommunityId) return;
-    void reloadActiveCommunityAccess(params.activeCommunityId, params.session);
+    const currentSession = sessionRef.current;
+    if (!currentSession || !params.activeCommunityId) return;
+    void reloadActiveCommunityAccess(params.activeCommunityId, currentSession);
   }, [
     params.activeCommunityId,
-    params.session,
     reloadActiveCommunityAccess,
   ]);
 
@@ -195,8 +227,9 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     const communityId = String(params.activeCommunityId ?? "").trim();
     if (!communityId) return null;
     if (activeCommunityPresenceSummaryState?.communityId !== communityId) return null;
+    if (activeCommunityPresenceSummaryState.sessionIdentity !== sessionIdentity) return null;
     return activeCommunityPresenceSummaryState.summary;
-  }, [activeCommunityPresenceSummaryState, params.activeCommunityId]);
+  }, [activeCommunityPresenceSummaryState, params.activeCommunityId, sessionIdentity]);
 
   const communityAccessCapabilities = useMemo(
     () => deriveCommunityAccessCapabilities(presentationActiveCommunityAccess),

@@ -177,8 +177,13 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /showInteractionProjection[\s\S]*interactionProjection\?\.enabled[\s\S]*hasResolvedCommunityChat[\s\S]*!isLoadingChat/,
-  "chat panel should only switch projections once the authenticated chat surface is resolved",
+  /const showInteractionProjection = Boolean\(\s*interactionProjection\?\.enabled &&\s*activeCommunity &&\s*hasAuthenticatedPresentation,\s*\);/,
+  "canonical chat should own presentation as soon as the authenticated community boundary exists",
+);
+assert.match(
+  chatPanel,
+  /const showCommunityChatBootstrap =[\s\S]*!interactionProjection\?\.enabled &&[\s\S]*hasResolvedCommunityChat/,
+  "the legacy chat bootstrap must be confined to the legacy fallback",
 );
 assert.match(
   chatPanel,
@@ -468,6 +473,11 @@ assert.match(
   "the canonical directory controller must expose initial and paginated reads",
 );
 assert.match(
+  directoryController,
+  /requestedPresentationScope[\s\S]*isPresentationScoped[\s\S]*communityDirectoryMembers: isPresentationScoped/,
+  "the directory must synchronously scope member presentation to identity and community",
+);
+assert.match(
   app,
   /communityAdministration\.directory/,
   "App should compose the canonical directory owner",
@@ -689,8 +699,8 @@ assert.match(
 );
 assert.match(
   app,
-  /communityContextJoinRequests = useMemo\([\s\S]*\.filter\(\(request\) => String\(request\.status \?\? ""\)\.trim\(\)\.toLowerCase\(\) === "pending"\)[\s\S]*createdAtLabel: formatRelativeTime\(request\.created_at\)/,
-  "App should pass only pending request rows into the context rail request dropdown",
+  /communityContextJoinRequests = useMemo\([\s\S]*\.filter\(\(request\) =>[\s\S]*request\.community_id === activeCommunityId &&[\s\S]*String\(request\.status \?\? ""\)\.trim\(\)\.toLowerCase\(\) === "pending"[\s\S]*createdAtLabel: formatRelativeTime\(request\.created_at\)/,
+  "App should pass only active-community pending request rows into the context rail request dropdown",
 );
 assert.match(
   app,

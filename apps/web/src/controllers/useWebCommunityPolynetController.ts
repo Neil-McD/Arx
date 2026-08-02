@@ -7,6 +7,10 @@ import {
   subscribeCloudCommunityPolynetOverview,
   type CloudCommunityPolynetOverview,
 } from "../../../../shared/cloudCommunityPolynetGateway";
+import {
+  resolveAuthPresentationIdentity,
+  type AuthSessionLike,
+} from "../../../../shared/authSession";
 
 function formatCommunityPolynetError(raw: unknown): string {
   const value = String(raw ?? "").trim();
@@ -50,7 +54,9 @@ export function useWebCommunityPolynetController<SessionT>(
   const [overview, setOverview] = useState<CloudCommunityPolynetOverview | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attemptedCommunityId, setAttemptedCommunityId] = useState<string | null>(null);
   const requestSeqRef = useRef(0);
+  const sessionIdentity = resolveAuthPresentationIdentity(args.session as AuthSessionLike);
 
   const isStaleRequest = useCallback((requestSeq: number, communityId: string, communityTab: CommunityTab) => {
     const current = argsRef.current;
@@ -66,6 +72,7 @@ export function useWebCommunityPolynetController<SessionT>(
   const resetPolynetState = useCallback(() => {
     requestSeqRef.current += 1;
     setOverview(null);
+    setAttemptedCommunityId(null);
     setError(null);
     setIsLoading(false);
   }, []);
@@ -77,13 +84,13 @@ export function useWebCommunityPolynetController<SessionT>(
     const requestSeq = ++requestSeqRef.current;
     const communityTab = argsRef.current.communityTab;
     const nodeLimit = resolveCommunityPolynetNodeLimit(communityTab);
+    setAttemptedCommunityId(communityId);
     setIsLoading(true);
     setError(null);
     try {
       const usableSession = await argsRef.current.ensureSession(sessionInput ?? argsRef.current.session);
       if (isStaleRequest(requestSeq, communityId, communityTab)) return null;
       if (!usableSession) {
-        setOverview(null);
         return null;
       }
       const nextOverview = await fetchCloudCommunityPolynetOverview<SessionT>({
@@ -96,7 +103,6 @@ export function useWebCommunityPolynetController<SessionT>(
       return nextOverview ?? null;
     } catch (err) {
       if (isStaleRequest(requestSeq, communityId, communityTab)) return null;
-      setOverview(null);
       setError(formatCommunityPolynetError(err instanceof Error ? err.message : err));
       return null;
     } finally {
@@ -123,17 +129,17 @@ export function useWebCommunityPolynetController<SessionT>(
       resetPolynetState();
       return;
     }
-    if (!args.session || !args.canViewPolynet) {
+    if (!sessionIdentity || !args.canViewPolynet) {
       resetPolynetState();
       return;
     }
-    void loadOverview(args.activeCommunityId, args.session);
+    void loadOverview(args.activeCommunityId, argsRef.current.session);
   }, [
     args.activeCommunityId,
     args.activePage,
     args.canViewPolynet,
     args.communityTab,
-    args.session,
+    sessionIdentity,
     loadOverview,
     resetPolynetState,
   ]);
@@ -142,7 +148,7 @@ export function useWebCommunityPolynetController<SessionT>(
     if (
       !shouldLoadCommunityPolynet(args.activePage, args.communityTab)
       || !args.activeCommunityId
-      || !args.session
+      || !sessionIdentity
       || !args.canViewPolynet
     ) {
       return;
@@ -158,7 +164,7 @@ export function useWebCommunityPolynetController<SessionT>(
     void (async () => {
       try {
         const latest = argsRef.current;
-        const usableSession = await latest.ensureSession(args.session);
+        const usableSession = await latest.ensureSession(latest.session);
         if (cancelled || !usableSession) return;
         const current = argsRef.current;
         if (
@@ -192,6 +198,7 @@ export function useWebCommunityPolynetController<SessionT>(
             }
             // Realtime truth wins over an older in-flight HTTP refresh.
             requestSeqRef.current += 1;
+            setAttemptedCommunityId(communityId);
             setOverview(nextOverview);
             setError(null);
             setIsLoading(false);
@@ -219,14 +226,27 @@ export function useWebCommunityPolynetController<SessionT>(
     args.activePage,
     args.canViewPolynet,
     args.communityTab,
-    args.session,
+    sessionIdentity,
   ]);
+
+  const activeCommunityId = String(args.activeCommunityId ?? "").trim() || null;
+  const shouldPresent = Boolean(
+    sessionIdentity &&
+    activeCommunityId &&
+    args.canViewPolynet &&
+    shouldLoadCommunityPolynet(args.activePage, args.communityTab),
+  );
+  const presentedOverview = shouldPresent && overview?.community.id === activeCommunityId
+    ? overview
+    : null;
+  const isPresentationScoped = shouldPresent && attemptedCommunityId === activeCommunityId;
+  const presentedError = isPresentationScoped ? error : null;
 
   return {
     state: {
-      overview,
-      isLoading,
-      error,
+      overview: presentedOverview,
+      isLoading: shouldPresent && (isLoading || (!isPresentationScoped && !presentedError)),
+      error: presentedError,
     },
     actions: {
       refresh: () => {
