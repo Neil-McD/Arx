@@ -1145,6 +1145,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const showInteractionProjection = communityChatPresentationMode === "canonical";
   const showCanonicalCommunityBootstrap =
     communityChatPresentationMode === "canonical_bootstrap";
+  const showLegacyInteractionSurface = communityChatPresentationMode === "legacy";
   const communityComposerFocusTargetKey = (() => {
     if (
       !activeCommunity?.id ||
@@ -1950,6 +1951,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                       />
                     </div>
                   </div>
+                  <div className="community-interaction-main-composer">
+                    {mainCommunityComposer}
+                  </div>
                 </div>
                 <aside className="community-context-panel" aria-label="Community">
                   <div className="community-context-rail">
@@ -2115,7 +2119,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             </div>
           )}
 
-          {!showInteractionProjection && !isUserAtBottom && (
+          {showLegacyInteractionSurface && !isUserAtBottom && (
             <button
               className="scroll-to-bottom workspace"
               type="button"
@@ -2136,7 +2140,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           )}
         </div>
 
-        {!showInteractionProjection ? mainCommunityComposer : null}
+        {showLegacyInteractionSurface ? mainCommunityComposer : null}
 
         {isProfileSetupGateActive ? (
           <div className="community-chat-profile-gate">
@@ -2150,7 +2154,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
         {communityChatError && <div className="auth-error">{communityChatError}</div>}
       </div>
 
-      {!showInteractionProjection ? profilePanelElement : null}
+      {showLegacyInteractionSurface ? profilePanelElement : null}
 
       <WebCommunityChatLightboxModal {...lightboxModalProps} />
       {mobileMembersOverlay}

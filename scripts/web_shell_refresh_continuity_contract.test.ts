@@ -55,11 +55,26 @@ describe("web shell refresh continuity contract", () => {
     expect(ownerGate).toContain("hasAuthenticatedPresentation");
     expect(ownerGate).toContain('communityChatPresentationMode === "canonical"');
     expect(ownerGate).toContain('communityChatPresentationMode === "canonical_bootstrap"');
+    expect(ownerGate).toContain('communityChatPresentationMode === "legacy"');
     expect(panel).toMatch(
       /const showCommunityChatBootstrap =\s*communityChatPresentationMode === "legacy_bootstrap"/,
     );
     expect(panel).toContain(
       "community-interaction-projection has-context-panel community-interaction-bootstrap",
+    );
+  });
+
+  it("keeps the composer under exactly one presentation owner during bootstrap", () => {
+    const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+
+    expect(panel).toMatch(
+      /showCanonicalCommunityBootstrap[\s\S]*community-interaction-bootstrap[\s\S]*community-interaction-main-composer[\s\S]*mainCommunityComposer/,
+    );
+    expect(panel).toContain(
+      "{showLegacyInteractionSurface ? mainCommunityComposer : null}",
+    );
+    expect(panel).not.toContain(
+      "{!showInteractionProjection ? mainCommunityComposer : null}",
     );
   });
 
