@@ -223,13 +223,19 @@ assert.match(communityAdminGateway, /draftCommunityResourceContentFromSources[\s
 assert.match(settings, /Community inference funding/);
 assert.match(settings, /eligible legacy communities listed here/);
 assert.match(settings, /Activate for eligible communities/);
+assert.doesNotMatch(settings, /GPT 5\.6|\bLuna\b/i);
 assert.match(billingSettings, /Community funding/);
-assert.match(billingSettings, /\$20 of GPT 5\.6 Luna usage/);
+assert.match(billingSettings, /Polynet-hosted inference/);
+assert.doesNotMatch(billingSettings, /GPT 5\.6|\bLuna\b|\$20/i);
 assert.doesNotMatch(billingSettings, /Personal tools|Premium|tool balance|Add credits/i);
 assert.doesNotMatch(billingSettings, /label: "Communities"/);
 assert.match(billingGateway, /founderBilling:getFounderBillingOverview/);
 assert.match(billingGateway, /founderBilling:startFounderSubscriptionCheckout/);
 assert.match(billingGateway, /founderBilling:startFounderBillingPortal/);
+assert.doesNotMatch(
+  billingGateway,
+  /model_id|included_cost_micros|(?:reserved|settled|remaining)_cost_micros/,
+);
 assert.match(billingController, /founder_community/);
 assert.match(billingController, /scrubCurrentRouteSearchParams/);
 assert.match(billingController, /fundingAttentionCommunities/);
@@ -247,6 +253,7 @@ assert.match(inferencePrompt, /Not now/);
 assert.doesNotMatch(inferencePrompt, /\$79/);
 assert.match(inferenceController, /isActivationPromptDismissed/);
 assert.match(inferenceController, /dismissActivationPrompt/);
+assert.doesNotMatch(inferenceController, /GPT 5\.6|\bLuna\b|model_id/i);
 assert.match(globalOverlayHost, /WebFounderInferencePrompt/);
 assert.match(
   globalOverlayPropsBuilder,

@@ -149,7 +149,7 @@ export function WebAccountSettingsSection(
             Community inference funding
           </div>
           <div className="settings-section-desc">
-            Your grandfathered founder access lets one OpenAI API key fund GPT 5.6 Luna for the eligible legacy communities listed here.
+            Your grandfathered founder access lets one OpenAI API key fund inference for the eligible legacy communities listed here.
           </div>
           <div className={`account-provider-card${
             props.founderInferenceStatus.status === "active" && props.founderInferenceStatus.key_connected
@@ -174,7 +174,7 @@ export function WebAccountSettingsSection(
                         : "Ready to activate"}
               </span>
             </div>
-            <div className="account-provider-card-title">GPT 5.6 Luna for your communities</div>
+            <div className="account-provider-card-title">OpenAI API access for your communities</div>
             <div className="account-provider-card-desc">
               Members keep their own permissions. Your key pays only for supported community inference and is never shared with members.
             </div>
@@ -226,7 +226,7 @@ export function WebAccountSettingsSection(
                     !hasAcceptedFounderInferenceTerms
                   }
                 >
-                  {props.isSavingFounderInference ? "Testing Luna…" : "Activate for eligible communities"}
+                  {props.isSavingFounderInference ? "Testing API access…" : "Activate for eligible communities"}
                 </button>
               )}
             </div>

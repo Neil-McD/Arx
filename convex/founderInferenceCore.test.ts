@@ -366,9 +366,11 @@ test("one active platform owner receives metered operator-funded Luna without a 
     const asOperatorOwner = t.withIdentity({
       subject: "founder-inference-operator-owner",
     });
-    await expect(
-      asOperatorOwner.query((api as any).founderBilling.getFounderBillingOverview, {}),
-    ).resolves.toMatchObject({
+    const billingOverview = await asOperatorOwner.query(
+      (api as any).founderBilling.getFounderBillingOverview,
+      {},
+    );
+    expect(billingOverview).toMatchObject({
       communities: [
         {
           community_id: String(fixture.communityId),
@@ -379,13 +381,21 @@ test("one active platform owner receives metered operator-funded Luna without a 
       ],
       managed_monthly_total_base_units: 0,
     });
-    await expect(
-      asOperatorOwner.query((api as any).founderInference.getCurrentFounderInferenceStatus, {}),
-    ).resolves.toMatchObject({
+    expect(billingOverview).not.toHaveProperty("model_id");
+    expect(billingOverview).not.toHaveProperty("included_cost_micros");
+    expect(billingOverview.communities[0]).not.toHaveProperty("model_id");
+    expect(billingOverview.communities[0]).not.toHaveProperty("included_cost_micros");
+    expect(billingOverview.communities[0]).not.toHaveProperty("usage");
+    const inferenceStatus = await asOperatorOwner.query(
+      (api as any).founderInference.getCurrentFounderInferenceStatus,
+      {},
+    );
+    expect(inferenceStatus).toMatchObject({
       eligible: false,
       key_connected: false,
       communities: [],
     });
+    expect(inferenceStatus).not.toHaveProperty("model_id");
 
     const receiptKey = "community_agent_mention:operator-funded";
     const claimed = await t.mutation(

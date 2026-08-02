@@ -70,7 +70,7 @@ export function WebBillingSettingsSection(
           <div className="settings-section-title">Community funding</div>
           <div className="settings-section-desc">
             Each managed community is {formatUsdBaseUnits(props.founderBillingOverview.monthly_price_base_units)}/month,
-            includes $20 of GPT 5.6 Luna usage, and uses a 2.9% Polynet platform fee.
+            includes Polynet-hosted inference, and uses a 2.9% Polynet platform fee.
             Legacy communities may keep owner-funded API access with the same 2.9% fee.
           </div>
           {props.isLoadingFounderBilling && props.founderBillingOverview.communities.length === 0 ? (
@@ -98,9 +98,9 @@ export function WebBillingSettingsSection(
                       <strong>{founderBillingStatusLabel(community)}</strong>
                       <small>
                         {isOperatorComped
-                          ? `Included · GPT 5.6 Luna usage is metered internally · ${community.platform_fee_bps / 100}% fee`
+                          ? `Included · Polynet-hosted inference · ${community.platform_fee_bps / 100}% fee`
                           : community.funding_mode === "managed"
-                          ? `${formatUsdBaseUnits(community.monthly_price_base_units)}/month · $20 included usage · ${community.platform_fee_bps / 100}% fee`
+                          ? `${formatUsdBaseUnits(community.monthly_price_base_units)}/month · Polynet-hosted inference · ${community.platform_fee_bps / 100}% fee`
                           : `Owner API key · ${community.platform_fee_bps / 100}% fee`}
                       </small>
                     </div>

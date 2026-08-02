@@ -107,7 +107,6 @@ export const getCurrentFounderInferenceStatus = query({
         eligible: false,
         cohort_key: null,
         status: null,
-        model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
         key_connected: false,
         key_last_four: null,
         activated_at: null,
@@ -121,7 +120,6 @@ export const getCurrentFounderInferenceStatus = query({
         eligible: false,
         cohort_key: null,
         status: null,
-        model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
         key_connected: false,
         key_last_four: null,
         communities: [],
@@ -151,7 +149,6 @@ export const getCurrentFounderInferenceStatus = query({
       eligible: legacyCommunities.length > 0,
       cohort_key: grant.cohortKey,
       status: grant.status,
-      model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
       key_connected: Boolean(connection?.encryptedSecretHex),
       key_last_four: String(connection?.keyLastFour ?? "").trim() || null,
       activated_at: grant.activatedAt ? new Date(grant.activatedAt).toISOString() : null,
@@ -294,7 +291,7 @@ export const activateFounderInference = action({
     if (probe.type !== "assistant" || !String(probe.assistantText ?? "").trim()) {
       throw new Error("founder_inference_probe_empty");
     }
-    return await ctx.runMutation(
+    await ctx.runMutation(
       internalRefs.founderInference.completeFounderInferenceActivationInternal,
       {
         userId,
@@ -302,6 +299,7 @@ export const activateFounderInference = action({
         nowMs: Date.now(),
       },
     );
+    return { ok: true, status: "active" };
   },
 });
 

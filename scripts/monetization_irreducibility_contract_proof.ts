@@ -9,6 +9,7 @@ const founderPlan = read("shared/founderPlan.ts");
 const founderPlanCore = read("convex/founderPlanCore.ts");
 const founderBilling = read("convex/founderBilling.ts");
 const founderInference = read("convex/founderInferenceCore.ts");
+const founderInferenceApi = read("convex/founderInference.ts");
 const communityLifecycle = read("convex/communityLifecycle.ts");
 const communityCommerce = read("convex/communityCommerce.ts");
 const auth = read("convex/auth.ts");
@@ -25,6 +26,10 @@ const voice = read("convex/httpVoice.ts");
 const crons = read("convex/crons.ts");
 const schema = read("convex/schema.ts");
 const billingUi = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const accountUi = read("apps/web/src/components/WebAccountSettingsSection.tsx");
+const founderInferenceController = read("apps/web/src/controllers/useWebFounderInferenceController.ts");
+const founderBillingGateway = read("shared/cloudFounderBillingGateway.ts");
+const founderInferenceGateway = read("shared/cloudFounderInferenceGateway.ts");
 const publicLanding = read("apps/web/src/components/polynetLanding/ConversionLanding.tsx");
 const publicLandingStyles = read("apps/web/src/components/polynetLanding/ConversionLanding.css");
 const envExample = read(".env.example");
@@ -88,6 +93,37 @@ assert.match(httpBilling, /syncCommunitySubscriptionFromStripeSubscription/);
 assert.match(premiumBilling, /premium_subscription_retired/);
 assert.doesNotMatch(premiumBilling, /getStripeClient|checkout\.sessions|ctx\.runMutation/);
 assert.doesNotMatch(billingUi, /Premium|tool balance|auto recharge|Add credits/i);
+assert.match(billingUi, /includes Polynet-hosted inference/);
+const founderCustomerSurface = [
+  billingUi,
+  accountUi,
+  founderInferenceController,
+  founderBillingGateway,
+  founderInferenceGateway,
+].join("\n");
+for (const internalOfferDetail of [
+  /GPT 5\.6/i,
+  /\bLuna\b/i,
+  /\$20\b/,
+  /included_cost_micros/,
+  /(?:reserved|settled|remaining)_cost_micros/,
+  /model_id/,
+]) {
+  assert.doesNotMatch(founderCustomerSurface, internalOfferDetail);
+}
+const founderBillingOverviewQuery = founderBilling.slice(
+  founderBilling.indexOf("export const getFounderBillingOverview"),
+  founderBilling.indexOf("export const getFounderBillingPortalTargetInternal"),
+);
+assert.doesNotMatch(
+  founderBillingOverviewQuery,
+  /founderUsageCycles|model_id|included_cost_micros|(?:reserved|settled|remaining)_cost_micros/,
+);
+const founderInferenceStatusQuery = founderInferenceApi.slice(
+  founderInferenceApi.indexOf("export const getCurrentFounderInferenceStatus"),
+  founderInferenceApi.indexOf("export const prepareFounderInferenceActivationInternal"),
+);
+assert.doesNotMatch(founderInferenceStatusQuery, /model_id/);
 
 const retiredCardFunctions = stripeCustomers.slice(
   stripeCustomers.indexOf("export const refreshWorkspaceCardOnFileStatus"),

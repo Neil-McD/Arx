@@ -2,16 +2,12 @@ import { api, internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
   POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
   POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
   founderSubscriptionStatusGrantsAccess,
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
-import {
-  COMMUNITY_FUNDING_POLICY_MANAGED,
-  COMMUNITY_OWNER_FUNDED_MODEL_ID,
-} from "../shared/founderInference";
+import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 import {
   buildCheckoutSuccessUrl,
   newOpaqueToken,
@@ -29,9 +25,7 @@ import {
   getExistingFounderInferenceGrant,
   resolveCommunityInferenceFundingPolicy,
 } from "./founderInferenceCore";
-import {
-  requireFounderInferencePricingFromEnv,
-} from "./founderPlanPricing";
+import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { getStripeClient } from "./stripeCore";
 import {
@@ -514,7 +508,7 @@ export const getFounderBillingOverview = query({
         .slice()
         .sort((a, b) => a.createdAt - b.createdAt)
         .map(async (community) => {
-          const [subscription, pendingCheckouts, fundingPolicy, openCycles] =
+          const [subscription, pendingCheckouts, fundingPolicy] =
             await Promise.all([
               getFounderSubscriptionByCommunity(ctx, community._id, nowMs),
               ctx.db
@@ -524,12 +518,6 @@ export const getFounderBillingOverview = query({
                 )
                 .collect(),
               resolveCommunityInferenceFundingPolicy({ ctx, community }),
-              ctx.db
-                .query("founderUsageCycles")
-                .withIndex("by_community_status", (q) =>
-                  q.eq("communityId", community._id).eq("status", "open"),
-                )
-                .collect(),
             ]);
           const pendingCheckout = pendingCheckouts
             .filter(
@@ -538,15 +526,6 @@ export const getFounderBillingOverview = query({
                 checkout.expiresAt > nowMs,
             )
             .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
-          const activeCycle = subscription
-            ? openCycles.find(
-                (cycle) =>
-                  String(cycle.founderSubscriptionId) === String(subscription._id) &&
-                  cycle.cycleStartAt <= nowMs &&
-                  cycle.cycleEndAt > nowMs,
-              ) ?? null
-            : null;
-
           let status:
             | "operator_comped"
             | "legacy_ready"
@@ -592,9 +571,7 @@ export const getFounderBillingOverview = query({
                 ? "managed"
                 : "legacy_byok",
             status,
-            model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
             monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
-            included_cost_micros: POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
             platform_fee_bps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,
             checkout_pending: Boolean(pendingCheckout),
             subscription_id: subscription ? String(subscription._id) : null,
@@ -605,25 +582,11 @@ export const getFounderBillingOverview = query({
               ? new Date(subscription.currentPeriodEndAt).toISOString()
               : null,
             cancel_at_period_end: subscription?.cancelAtPeriodEnd === true,
-            usage: activeCycle
-              ? {
-                  reserved_cost_micros: activeCycle.reservedCostMicros,
-                  settled_cost_micros: activeCycle.settledCostMicros,
-                  remaining_cost_micros: Math.max(
-                    0,
-                    activeCycle.includedCostMicros -
-                      activeCycle.reservedCostMicros -
-                      activeCycle.settledCostMicros,
-                  ),
-                }
-              : null,
           };
         }),
     );
     return {
-      model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
       monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
-      included_cost_micros: POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS,
       communities: rows,
       managed_monthly_total_base_units: rows.filter(
         (row) => row.funding_mode === "managed",

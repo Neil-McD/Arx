@@ -11,7 +11,6 @@ const EMPTY_STATUS: CloudFounderInferenceStatus = {
   eligible: false,
   cohort_key: null,
   status: null,
-  model_id: "gpt-5.6-luna",
   key_connected: false,
   key_last_four: null,
   activated_at: null,
@@ -28,7 +27,7 @@ function messageForError(error: unknown): string {
     return "Confirm the community inference funding terms before activation.";
   }
   if (message.includes("provider_inference_misconfigured")) {
-    return "This OpenAI key cannot access GPT 5.6 Luna.";
+    return "This OpenAI key cannot be used for community inference.";
   }
   if (message.includes("provider_inference_quota_exceeded")) {
     return "This OpenAI account does not currently have usable API quota.";
@@ -92,7 +91,7 @@ export function useWebFounderInferenceController(params: {
     try {
       await activateCloudFounderInference({ session: usableSession, acceptedTerms });
       await refresh(usableSession);
-      setSuccess("GPT 5.6 Luna is active for your eligible legacy communities.");
+      setSuccess("OpenAI API access is active for your eligible legacy communities.");
     } catch (activationError) {
       setError(messageForError(activationError));
     } finally {

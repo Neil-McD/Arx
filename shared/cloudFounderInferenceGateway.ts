@@ -5,7 +5,6 @@ export type CloudFounderInferenceStatus = {
   eligible: boolean;
   cohort_key: string | null;
   status: "approved" | "active" | "suspended" | null;
-  model_id: string;
   key_connected: boolean;
   key_last_four: string | null;
   activated_at: string | null;
@@ -17,7 +16,6 @@ const INELIGIBLE_STATUS: CloudFounderInferenceStatus = {
   eligible: false,
   cohort_key: null,
   status: null,
-  model_id: "gpt-5.6-luna",
   key_connected: false,
   key_last_four: null,
   activated_at: null,
@@ -54,7 +52,6 @@ function coerceStatus(payload: unknown): CloudFounderInferenceStatus {
     eligible: row.eligible === true,
     cohort_key: nullableString(row.cohort_key),
     status,
-    model_id: nullableString(row.model_id) ?? "gpt-5.6-luna",
     key_connected: row.key_connected === true,
     key_last_four: nullableString(row.key_last_four),
     activated_at: nullableString(row.activated_at),
