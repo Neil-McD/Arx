@@ -141,5 +141,8 @@ describe("web shell refresh continuity contract", () => {
     expect(imageReady).toContain("finish(image.naturalWidth > 0)");
     expect(stableFramedMedia).toContain("failedImageUrl");
     expect(stableFramedMedia).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
+    expect(stableFramedMedia).toContain("imageRef.current");
+    expect(stableFramedMedia).toContain("image?.complete");
+    expect(stableFramedMedia).toContain("syncNaturalSizeFromImage(event.currentTarget)");
   });
 });
