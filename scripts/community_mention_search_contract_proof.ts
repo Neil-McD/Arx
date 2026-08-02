@@ -10,7 +10,7 @@ const communityDirectory = read("convex/communityDirectory.ts");
 const gateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const autocomplete = read("apps/web/src/components/communityMentionAutocomplete.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
-const sender = read("shared/useCommunityChatMutationController.ts");
+const sender = read("apps/web/src/controllers/useWebCommunityChatController.ts");
 
 assert.match(
   packageJson,
@@ -86,7 +86,7 @@ assert.doesNotMatch(
 
 assert.match(
   sender,
-  /textContainsMentionToken\(bodyToSend, mention\.token\)/,
+  /textContainsMentionToken\(rawText, mention\.token\)/,
   "send-time mention validation must remain the authority after autocomplete selection",
 );
 

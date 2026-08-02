@@ -1,7 +1,7 @@
 export type WebCommunityChatPresentationMode =
   | "canonical"
   | "canonical_bootstrap"
-  | "legacy";
+  | "empty";
 
 type ResolveWebCommunityChatPresentationModeInput = {
   hasActiveCommunity: boolean;
@@ -30,5 +30,5 @@ export function resolveWebCommunityChatPresentationMode(
   ) {
     return "canonical_bootstrap";
   }
-  return "legacy";
+  return "empty";
 }

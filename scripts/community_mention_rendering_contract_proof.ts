@@ -191,7 +191,13 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
 // belongs to the message-level edge and wash, not a filled inline name chip.
 {
   const { readFileSync } = await import("node:fs");
-  const styles = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
+  const styles = [
+    readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8"),
+    readFileSync(
+      new URL("../apps/web/src/styles/community-and-content.css", import.meta.url),
+      "utf8",
+    ),
+  ].join("\n");
   assert.doesNotMatch(
     styles,
     /\.community-mention-chip\.is-self\s*\{/,
@@ -213,7 +219,7 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     "utf8",
   );
   const senderSource = readFileSync(
-    new URL("../shared/useCommunityChatMutationController.ts", import.meta.url),
+    new URL("../apps/web/src/controllers/useWebCommunityChatController.ts", import.meta.url),
     "utf8",
   );
   const appSource = readFileSync(
@@ -240,12 +246,12 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     senderSource,
-    /textContainsMentionToken\(bodyToSend, mention\.token\)/,
+    /textContainsMentionToken\(rawText, mention\.token\)/,
     "shared sender must keep mentions by exact inserted token",
   );
   assert.doesNotMatch(
     senderSource,
-    /bodyToSend\.includes\(mention\.token\)/,
+    /rawText\.includes\(mention\.token\)/,
     "shared sender must not use substring checks for mention survival",
   );
   assert.doesNotMatch(
@@ -284,13 +290,13 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     "member mention candidates must not be generated from the global cached profile map",
   );
   assert.match(
-    appSource,
+    senderSource,
     /useState<CommittedMention\[\]>\(\[\]\)/,
-    "the App-level composer mention state must use the canonical committed mention type",
+    "the canonical composer mention state must use the committed mention type",
   );
   assert.match(
-    appSource,
-    /useEffect\(\(\) => \{[\s\S]*setCommunityChatError\(null\);[\s\S]*setCommunityMessageMentions\(\[\]\);[\s\S]*\}, \[activeCommunityId,/,
+    senderSource,
+    /const resetChatState = useCallback\(\(\) => \{[\s\S]*setMessageMentions\(\[\]\);[\s\S]*useEffect\(\(\) => \{[\s\S]*resetChatState\(\);[\s\S]*params\.activeCommunityId/,
     "switching active communities must drop committed mention payloads so stale cross-community tokens become plain text",
   );
   assert.match(
@@ -315,27 +321,27 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     senderSource,
-    /mention\.kind === "role"[\s\S]*mentionsToSend\.push\(\{ roleKey: mention\.roleKey \?\? "everybody" \}\)/,
+    /mention\.kind === "role"[\s\S]*mentionsToSend\.push\(\{[\s\S]*roleKey: mention\.roleKey \?\? EVERYBODY_MENTION_ROLE_KEY/,
     "shared sender must serialize committed @everybody mentions as roleKey payloads",
   );
   assert.match(
     appSource,
-    /const canMentionEverybodyRef = useRef\(false\)[\s\S]*useCommunityChatMutationController\(\{[\s\S]*canMentionEverybodyRef[\s\S]*canMentionEverybodyRef\.current = canManageMembersActiveCommunity/,
+    /const canMentionEverybodyRef = useRef\(false\)[\s\S]*useWebCommunityChatController\(\{[\s\S]*canMentionEverybodyRef[\s\S]*canMentionEverybodyRef\.current = canManageMembersActiveCommunity/,
     "manual @everybody detection must be gated by the same owner-admin capability as the UI candidate without stale closures",
   );
   assert.match(
     senderSource,
-    /const committedEverybodyMention = mentionDraft\.find\([\s\S]*mentionTokenIsEverybody\(mention\.token\)[\s\S]*textContainsMentionToken\(bodyToSend, mention\.token\)/,
+    /const committedEverybodyMention = mentionDraft\.find\([\s\S]*mentionTokenIsEverybody\(mention\.token\)[\s\S]*textContainsMentionToken\(rawText, mention\.token\)/,
     "manual @everybody/@everyone detection must not override a committed colliding user or agent token",
   );
   assert.match(
     senderSource,
-    /current\.canMentionEverybodyRef\?\.current[\s\S]*!seenMentionKeys\.has\(`role:\$\{EVERYBODY_MENTION_ROLE_KEY\}`\)[\s\S]*!committedEverybodyMention[\s\S]*textContainsEverybodyMentionToken\(bodyToSend\)[\s\S]*mentionsToSend\.push\(\{ roleKey: EVERYBODY_MENTION_ROLE_KEY \}\)/,
+    /current\.canMentionEverybodyRef\.current[\s\S]*!seenMentionKeys\.has\(`role:\$\{EVERYBODY_MENTION_ROLE_KEY\}`\)[\s\S]*!committedEverybodyMention[\s\S]*textContainsEverybodyMentionToken\(rawText\)[\s\S]*mentionsToSend\.push\(\{ roleKey: EVERYBODY_MENTION_ROLE_KEY \}\)/,
     "owners/admins who literally type @everybody or @everyone must send the canonical roleKey payload",
   );
   assert.match(
-    appSource,
-    /confirmEverybodyMentionSend[\s\S]*Unread members may also get an email after 15 minutes[\s\S]*once every 72 hours/,
+    senderSource,
+    /Unread members may also get an email after 15 minutes[\s\S]*once every 72 hours[\s\S]*window\.confirm\(confirmation\)/,
     "@everybody sends must show the mass-email warning before the message is committed",
   );
   assert.match(
@@ -359,7 +365,13 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     new URL("../apps/web/src/components/WebCommunityChatPanel.tsx", import.meta.url),
     "utf8",
   );
-  const baseCss = readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8");
+  const baseCss = [
+    readFileSync(new URL("../apps/web/src/base.css", import.meta.url), "utf8"),
+    readFileSync(
+      new URL("../apps/web/src/styles/community-and-content.css", import.meta.url),
+      "utf8",
+    ),
+  ].join("\n");
   assert.match(
     menuSource,
     /export function MentionComposerHighlight/,

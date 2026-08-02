@@ -339,7 +339,7 @@ assert.doesNotMatch(chatPanel, /subscribeCloudDirectMessages/, "community chat p
 assert.doesNotMatch(chatPanel, /sendCloudDirectMessage/, "community chat panel must not own DM sends");
 assert.doesNotMatch(chatPanel, /cloudDirectMessagesGateway/, "community chat panel must not import the DM gateway directly");
 assert.doesNotMatch(chatPanel, /messages: \[\.\.\.previous\.messages, message\]/, "DM sends must not use local append as the source of truth");
-assert.match(chatPanel, /onMessageSender=\{canOpenDirectMessageFromCommunity \? openDirectMessage : undefined\}/, "profile hover message button must open the DM flow only when community context is available");
+assert.match(chatPanel, /onMessageUser=\{canOpenDirectMessageFromCommunity \? openDirectMessage : undefined\}/, "profile hover message button must open the DM flow only when community context is available");
 assert.doesNotMatch(chatPanel, /<WebDirectMessagePanel/, "community chat panel must not render a duplicate right-side DM panel");
 assert.doesNotMatch(chatPanel, /follow|follower|following/i, "DM UI slice must not add follow controls");
 
