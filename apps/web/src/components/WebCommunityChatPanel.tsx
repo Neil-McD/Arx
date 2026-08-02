@@ -51,6 +51,7 @@ import {
   type WebCommunityInteractionProjectionProps,
 } from "./WebCommunityInteractionProjection";
 import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
+import { resolveWebCommunityChatPresentationMode } from "../controllers/resolveWebCommunityChatPresentationMode";
 import {
   MentionAutocompleteMenu,
   MentionComposerHighlight,
@@ -1132,11 +1133,20 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const canOpenDirectMessageFromCommunity = Boolean(
     hasSession && activeCommunity?.id && onOpenDirectMessageFromCommunity,
   );
-  const showInteractionProjection = Boolean(
-    interactionProjection?.enabled &&
-    activeCommunity &&
+  const communityChatPresentationMode = resolveWebCommunityChatPresentationMode({
+    canonicalProjectionEnabled: Boolean(interactionProjection?.enabled),
+    hasActiveCommunity: Boolean(activeCommunity),
     hasAuthenticatedPresentation,
-  );
+    isAuthRecoveringSignedIn,
+    isResolvingSelectedCommunity,
+    hasCommunityTimelineItems,
+    hasCommunityChatError: Boolean(communityChatError),
+    isLoadingChat,
+    hasResolvedCommunityChat,
+  });
+  const showInteractionProjection = communityChatPresentationMode === "canonical";
+  const showCanonicalCommunityBootstrap =
+    communityChatPresentationMode === "canonical_bootstrap";
   const communityComposerFocusTargetKey = (() => {
     if (
       !activeCommunity?.id ||
@@ -1379,14 +1389,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   ]);
 
   const showCommunityChatBootstrap =
-    hasAuthenticatedPresentation &&
-    (isAuthRecoveringSignedIn ||
-      isResolvingSelectedCommunity ||
-      (!interactionProjection?.enabled &&
-        !!activeCommunity &&
-        !hasCommunityTimelineItems &&
-        !communityChatError &&
-        (isLoadingChat || !hasResolvedCommunityChat)));
+    communityChatPresentationMode === "legacy_bootstrap";
 
   const renderCommunityAttachmentsPreview = (
     attachments: CommunityMessageAttachment[],
@@ -1928,6 +1931,41 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 mainComposer={interactionProjection.mobileThreadPage ? null : mainCommunityComposer}
                 drawerComposer={drawerReplyComposer}
               />
+            </div>
+          ) : showCanonicalCommunityBootstrap ? (
+            <div className="community-interaction-scroll">
+              <div
+                className="community-interaction-projection has-context-panel community-interaction-bootstrap"
+                aria-busy="true"
+                aria-live="polite"
+              >
+                <div className="community-interaction-main">
+                  <div className="community-chat-page-loading-shell">
+                    <div className="community-chat-page-loading-card">
+                      <div className="community-chat-page-loading-title">Opening community…</div>
+                      <div className="community-chat-page-loading-copy">
+                        Resolving the selected community and preparing chat.
+                      </div>
+                      <div
+                        className="community-chat-page-loading-progress web-skeleton-pill"
+                        aria-hidden="true"
+                      />
+                    </div>
+                  </div>
+                </div>
+                <aside className="community-context-panel" aria-label="Community">
+                  <div className="community-context-rail">
+                    <div className="community-context-rail-head">
+                      <div className="community-chat-page-loading-title">Community</div>
+                    </div>
+                    <div className="community-interaction-bootstrap-context" aria-hidden="true">
+                      <div className="web-skeleton-pill" />
+                      <div className="web-skeleton-pill" />
+                      <div className="web-skeleton-pill" />
+                    </div>
+                  </div>
+                </aside>
+              </div>
             </div>
           ) : (
             <div

@@ -38,6 +38,9 @@ const memberManagementController = read(
   "apps/web/src/controllers/useWebCommunityMemberManagementController.ts",
 );
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const chatPresentationMode = read(
+  "apps/web/src/controllers/resolveWebCommunityChatPresentationMode.ts",
+);
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
@@ -177,12 +180,22 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /const showInteractionProjection = Boolean\(\s*interactionProjection\?\.enabled &&\s*activeCommunity &&\s*hasAuthenticatedPresentation,\s*\);/,
-  "canonical chat should own presentation as soon as the authenticated community boundary exists",
+  /resolveWebCommunityChatPresentationMode\(\{[\s\S]*canonicalProjectionEnabled:[\s\S]*hasActiveCommunity:[\s\S]*hasAuthenticatedPresentation/,
+  "chat panel should delegate structural ownership to the canonical presentation resolver",
 );
 assert.match(
   chatPanel,
-  /const showCommunityChatBootstrap =[\s\S]*!interactionProjection\?\.enabled &&[\s\S]*hasResolvedCommunityChat/,
+  /const showInteractionProjection = communityChatPresentationMode === "canonical";[\s\S]*const showCanonicalCommunityBootstrap =[\s\S]*communityChatPresentationMode === "canonical_bootstrap"/,
+  "canonical chat should own either the live projection or its geometry-compatible bootstrap",
+);
+assert.match(
+  chatPresentationMode,
+  /if \(input\.canonicalProjectionEnabled\) \{[\s\S]*return "canonical";[\s\S]*return "canonical_bootstrap";[\s\S]*return "legacy";[\s\S]*return "legacy_bootstrap";/,
+  "canonical mode must resolve before and independently of the legacy bootstrap",
+);
+assert.match(
+  chatPanel,
+  /const showCommunityChatBootstrap =\s*communityChatPresentationMode === "legacy_bootstrap"/,
   "the legacy chat bootstrap must be confined to the legacy fallback",
 );
 assert.match(

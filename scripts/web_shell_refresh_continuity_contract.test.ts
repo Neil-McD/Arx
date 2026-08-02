@@ -46,16 +46,28 @@ describe("web shell refresh continuity contract", () => {
 
   it("keeps canonical chat mounted independently of the legacy chat loader", () => {
     const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
-    const start = panel.indexOf("const showInteractionProjection = Boolean");
+    const start = panel.indexOf("const communityChatPresentationMode =");
     const end = panel.indexOf("const communityComposerFocusTargetKey", start);
     const ownerGate = panel.slice(start, end);
 
+    expect(ownerGate).toContain("resolveWebCommunityChatPresentationMode");
     expect(ownerGate).toContain("interactionProjection?.enabled");
     expect(ownerGate).toContain("hasAuthenticatedPresentation");
-    expect(ownerGate).not.toContain("hasResolvedCommunityChat");
-    expect(ownerGate).not.toContain("isLoadingChat");
+    expect(ownerGate).toContain('communityChatPresentationMode === "canonical"');
+    expect(ownerGate).toContain('communityChatPresentationMode === "canonical_bootstrap"');
     expect(panel).toMatch(
-      /const showCommunityChatBootstrap =[\s\S]*!interactionProjection\?\.enabled &&/,
+      /const showCommunityChatBootstrap =\s*communityChatPresentationMode === "legacy_bootstrap"/,
+    );
+    expect(panel).toContain(
+      "community-interaction-projection has-context-panel community-interaction-bootstrap",
+    );
+  });
+
+  it("publishes the build identity of the JavaScript actually running in the page", () => {
+    const main = read("apps/web/src/main.tsx");
+
+    expect(main).toContain(
+      'document.documentElement.setAttribute("data-polynet-build-id", APP_BUILD_ID)',
     );
   });
 

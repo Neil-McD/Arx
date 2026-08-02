@@ -2566,6 +2566,25 @@
   flex-shrink: 0;
 }
 
+.community-interaction-bootstrap-context {
+  display: grid;
+  gap: 12px;
+  padding: 10px 16px;
+}
+
+.community-interaction-bootstrap-context .web-skeleton-pill {
+  width: 100%;
+  height: 12px;
+}
+
+.community-interaction-bootstrap-context .web-skeleton-pill:nth-child(2) {
+  width: 72%;
+}
+
+.community-interaction-bootstrap-context .web-skeleton-pill:nth-child(3) {
+  width: 86%;
+}
+
 .community-context-rail-name {
   font-size: 16px;
   font-weight: 600;
