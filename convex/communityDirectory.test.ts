@@ -34,6 +34,16 @@ test("member directory uses stable opaque membership pagination and ignores pres
   const t = convexTest(schema, modules);
   const ownerId = await createUser(t, OWNER_SUBJECT, 100);
   const fixture = await t.run(async (ctx) => {
+    await ctx.db.insert("userProfileDetails", {
+      userId: ownerId,
+      displayName: "Directory owner",
+      avatarUrl: "https://example.com/directory-owner.png",
+      avatarFocusX: 0.23,
+      avatarFocusY: 0.71,
+      avatarZoom: 1.8,
+      createdAt: 100,
+      updatedAt: 100,
+    });
     const communityId = await ctx.db.insert("communities", {
       ownerId,
       slug: "stable-directory",
@@ -123,6 +133,13 @@ test("member directory uses stable opaque membership pagination and ignores pres
     },
   );
   expect(firstPage.page[0]?.id).toBe(`owner:${String(fixture.communityId)}`);
+  expect(firstPage.page[0]).toMatchObject({
+    display_name: "Directory owner",
+    avatar_url: "https://example.com/directory-owner.png",
+    avatar_focus_x: 0.23,
+    avatar_focus_y: 0.71,
+    avatar_zoom: 1.8,
+  });
   expect(firstPage.totalCount).toBe(31);
   expect(firstPage.continueCursor).toEqual(expect.any(String));
   expect(Number.isFinite(Number(firstPage.continueCursor))).toBe(false);

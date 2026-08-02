@@ -15,6 +15,7 @@ const userEditor = read("apps/web/src/components/WebUserAvatarEditorModal.tsx");
 const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const communityContextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
+const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const indexCss = read("apps/web/src/index.css");
 
@@ -157,6 +158,11 @@ assert.match(
   "onboarding must use the user avatar editor",
 );
 
+assert.match(
+  communityDirectoryGateway,
+  /export type CloudCommunityDirectoryMemberRow = \{[\s\S]*avatar_focus_x\?: number \| null;[\s\S]*avatar_focus_y\?: number \| null;[\s\S]*avatar_zoom\?: number \| null;/,
+  "community directory gateway rows must declare canonical avatar framing metadata",
+);
 assert.match(
   communityContextPanel,
   /export type CommunityRailMember = \{[\s\S]*avatar_focus_x\?: number \| null;[\s\S]*avatar_focus_y\?: number \| null;[\s\S]*avatar_zoom\?: number \| null;/,
