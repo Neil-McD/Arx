@@ -1,0 +1,37 @@
+import { describe, expect, test } from "vitest";
+
+import { hasAcceptedCurrentPlatformLegalFromRows } from "./legalAcceptances";
+
+const privacyAcceptance = {
+  documentKey: "privacy_ai_data_policy",
+  documentVersion: "privacy_ai_data_policy_v1",
+};
+
+describe("platform legal acceptance compatibility", () => {
+  test("historical Terms v1 acceptance remains sufficient", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v1" },
+      privacyAcceptance,
+    ])).toBe(true);
+  });
+
+  test("current Terms v2 acceptance is sufficient", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v2" },
+      privacyAcceptance,
+    ])).toBe(true);
+  });
+
+  test("unknown Terms versions fail closed", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_unknown" },
+      privacyAcceptance,
+    ])).toBe(false);
+  });
+
+  test("privacy acceptance remains independently required", () => {
+    expect(hasAcceptedCurrentPlatformLegalFromRows([
+      { documentKey: "terms_of_service", documentVersion: "terms_of_service_v2" },
+    ])).toBe(false);
+  });
+});
