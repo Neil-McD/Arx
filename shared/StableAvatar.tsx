@@ -1,5 +1,6 @@
 import {
-  useEffect,
+  useCallback,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -55,13 +56,21 @@ export function StableAvatar(props: StableAvatarProps) {
     onDrop,
   } = props;
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const imageRef = useRef<HTMLImageElement | null>(null);
   const isReady = useImageUrlReady(imageUrl);
   const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
   const normalizedImageUrl = String(imageUrl ?? "").trim() || null;
   const showImage = Boolean(normalizedImageUrl) && isReady && failedImageUrl !== normalizedImageUrl;
   const hasImageFrame = Boolean(imageFrame);
   const [rootSize, setRootSize] = useState({ width: 0, height: 0 });
-  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  const [measuredImage, setMeasuredImage] = useState<{
+    imageUrl: string | null;
+    width: number;
+    height: number;
+  }>({ imageUrl: null, width: 0, height: 0 });
+  const naturalSize = measuredImage.imageUrl === normalizedImageUrl
+    ? { width: measuredImage.width, height: measuredImage.height }
+    : { width: 0, height: 0 };
   const combinedClassName = [
     className,
     showImage ? readyClassName : fallbackClassName,
@@ -69,16 +78,19 @@ export function StableAvatar(props: StableAvatarProps) {
     .filter(Boolean)
     .join(" ");
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!showImage || !hasImageFrame) return;
     const root = rootRef.current;
     if (!root) return;
     const syncRootSize = () => {
       const rect = root.getBoundingClientRect();
-      setRootSize({
-        width: Math.max(0, Math.round(rect.width)),
-        height: Math.max(0, Math.round(rect.height)),
-      });
+      const width = Math.max(0, Math.round(rect.width));
+      const height = Math.max(0, Math.round(rect.height));
+      setRootSize((current) =>
+        current.width === width && current.height === height
+          ? current
+          : { width, height },
+      );
     };
     syncRootSize();
     const observer = new ResizeObserver(syncRootSize);
@@ -86,10 +98,27 @@ export function StableAvatar(props: StableAvatarProps) {
     return () => observer.disconnect();
   }, [hasImageFrame, showImage]);
 
-  useEffect(() => {
-    setNaturalSize({ width: 0, height: 0 });
+  useLayoutEffect(() => {
     setFailedImageUrl(null);
-  }, [imageUrl]);
+  }, [normalizedImageUrl]);
+
+  const syncNaturalImageSize = useCallback((target: HTMLImageElement | null) => {
+    if (!normalizedImageUrl || !target?.complete || target.naturalWidth <= 0 || target.naturalHeight <= 0) {
+      return;
+    }
+    const width = target.naturalWidth;
+    const height = target.naturalHeight;
+    setMeasuredImage((current) =>
+      current.imageUrl === normalizedImageUrl && current.width === width && current.height === height
+        ? current
+        : { imageUrl: normalizedImageUrl, width, height },
+    );
+  }, [normalizedImageUrl]);
+
+  useLayoutEffect(() => {
+    if (!showImage || !hasImageFrame) return;
+    syncNaturalImageSize(imageRef.current);
+  }, [hasImageFrame, showImage, syncNaturalImageSize]);
 
   const layout = useMemo(() => {
     if (!showImage || !imageFrame) return null;
@@ -144,19 +173,14 @@ export function StableAvatar(props: StableAvatarProps) {
     >
       {showImage ? (
         <img
+          ref={imageRef}
           className={imageClassName}
           src={normalizedImageUrl ?? undefined}
           alt={alt}
           decoding="async"
           draggable={false}
           style={framedImageStyle}
-          onLoad={(event) => {
-            const target = event.currentTarget;
-            setNaturalSize({
-              width: target.naturalWidth || target.width || 0,
-              height: target.naturalHeight || target.height || 0,
-            });
-          }}
+          onLoad={(event) => syncNaturalImageSize(event.currentTarget)}
           onError={() => setFailedImageUrl(normalizedImageUrl)}
         />
       ) : (

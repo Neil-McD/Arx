@@ -21,6 +21,9 @@ export type CommunityRailMember = {
   user_id: string;
   display_name?: string | null;
   avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   role: string;
   created_at?: string | null;
 };
@@ -393,6 +396,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               readyClassName="has-image"
               name={name}
               imageUrl={member.avatar_url}
+              focusX={member.avatar_focus_x}
+              focusY={member.avatar_focus_y}
+              zoom={member.avatar_zoom}
               alt=""
               aria-hidden={true}
               fallback={<span>{props.getInitials(name)}</span>}

@@ -14,6 +14,7 @@ const editor = read("apps/web/src/components/WebCommunityAvatarEditorModal.tsx")
 const userEditor = read("apps/web/src/components/WebUserAvatarEditorModal.tsx");
 const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
+const communityContextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const indexCss = read("apps/web/src/index.css");
 
@@ -60,6 +61,21 @@ assert.match(
   stableAvatar,
   /overflow:\s*style\?\.overflow\s*\?\?\s*"hidden"/,
   "stable avatar must clip canonical avatar images to the avatar frame",
+);
+assert.match(
+  stableAvatar,
+  /useLayoutEffect\(\(\) => \{[\s\S]*syncNaturalImageSize\(imageRef\.current\)/,
+  "stable avatar must measure cached images before paint",
+);
+assert.match(
+  stableAvatar,
+  /measuredImage\.imageUrl === normalizedImageUrl/,
+  "stable avatar natural dimensions must stay scoped to the current image URL",
+);
+assert.doesNotMatch(
+  stableAvatar,
+  /setNaturalSize\(\{ width: 0, height: 0 \}\)/,
+  "stable avatar must not erase a cached image measurement after load",
 );
 
 assert.match(userAvatar, /imageFrame=\{\{/, "user avatars must pass canonical framing to StableAvatar");
@@ -139,6 +155,32 @@ assert.match(
   onboardingPage,
   /WebUserAvatarEditorModal/,
   "onboarding must use the user avatar editor",
+);
+
+assert.match(
+  communityContextPanel,
+  /export type CommunityRailMember = \{[\s\S]*avatar_focus_x\?: number \| null;[\s\S]*avatar_focus_y\?: number \| null;[\s\S]*avatar_zoom\?: number \| null;/,
+  "community rail members must retain canonical avatar framing metadata",
+);
+assert.match(
+  communityContextPanel,
+  /imageUrl=\{member\.avatar_url\}[\s\S]*focusX=\{member\.avatar_focus_x\}[\s\S]*focusY=\{member\.avatar_focus_y\}[\s\S]*zoom=\{member\.avatar_zoom\}/,
+  "community rail member avatars must render with canonical framing metadata",
+);
+assert.match(
+  baseCss,
+  /\.community-context-face::after\s*\{[\s\S]*box-shadow:\s*inset 0 0 0 2px var\(--bg-workspace\);/,
+  "presence face rings must overlay the image instead of shrinking its viewport",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.community-context-face\s*\{[^}]*border:\s*2px/s,
+  "presence face roots must not consume crop space with a border",
+);
+assert.match(
+  indexCss,
+  /\.mobile-topbar-members \.community-context-face::after\s*\{[\s\S]*box-shadow:\s*inset 0 0 0 2px var\(--surface-workspace, var\(--bg-workspace\)\);/,
+  "mobile presence face rings must preserve the canonical crop viewport",
 );
 assert.doesNotMatch(
   onboardingPage,
