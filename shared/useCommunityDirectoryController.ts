@@ -4,9 +4,9 @@ import type { SessionLike } from "./communityAdminCore";
 import {
   type CloudCommunityDirectoryMemberRow,
   listCloudCommunityDirectoryPage,
+  listCloudCommunityDirectoryWindow,
 } from "./cloudCommunityDirectoryGateway";
-
-const COMMUNITY_DIRECTORY_PAGE_SIZE = 25;
+import { COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE } from "./communityDirectoryWindow";
 
 function dedupeCommunityDirectoryRows(
   rows: CloudCommunityDirectoryMemberRow[],
@@ -40,6 +40,11 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
   const [attemptedPresentationScope, setAttemptedPresentationScope] = useState<string | null>(null);
   const communityDirectoryLoadSeqRef = useRef(0);
   const presentationScopeRef = useRef<string | null>(null);
+  const communityDirectoryMembersRef = useRef<CloudCommunityDirectoryMemberRow[]>([]);
+  const communityDirectoryRefreshSeqRef = useRef<number | null>(null);
+  const communityDirectoryLoadMoreCursorRef = useRef<string | null>(null);
+  const communityDirectoryNextCursorRef = useRef<string | null>(null);
+  communityDirectoryMembersRef.current = communityDirectoryMembers;
 
   const requestedCommunityId = String(params.activeCommunityId ?? "").trim() || null;
   const presentationIdentity = params.presentationIdentity === undefined
@@ -51,6 +56,9 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
 
   useEffect(() => {
     communityDirectoryLoadSeqRef.current += 1;
+    communityDirectoryRefreshSeqRef.current = null;
+    communityDirectoryLoadMoreCursorRef.current = null;
+    communityDirectoryNextCursorRef.current = null;
     setIsLoadingCommunityDirectoryMembers(false);
     setIsLoadingMoreCommunityDirectoryMembers(false);
     setCommunityDirectoryMembersNextCursor(null);
@@ -65,6 +73,7 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
     const usableSession = await resolveUsableSession(session, params.ensureSession);
     if (!usableSession) return;
     const seq = (communityDirectoryLoadSeqRef.current += 1);
+    communityDirectoryRefreshSeqRef.current = seq;
     const loadScope = `${presentationIdentity ?? "authenticated"}:${communityId}`;
     const isSameScopeRefresh = presentationScopeRef.current === loadScope;
     setAttemptedPresentationScope(loadScope);
@@ -72,21 +81,31 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
     setIsLoadingMoreCommunityDirectoryMembers(false);
     setCommunityDirectoryMembersLoadError(null);
     if (!isSameScopeRefresh) {
+      communityDirectoryNextCursorRef.current = null;
       setCommunityDirectoryMembersNextCursor(null);
       setCommunityDirectoryMembersHasMore(false);
     }
     try {
-      const page = await listCloudCommunityDirectoryPage({
+      const targetRowCount = isSameScopeRefresh
+        ? Math.max(
+            COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE,
+            communityDirectoryMembersRef.current.length,
+          )
+        : COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE;
+      const page = await listCloudCommunityDirectoryWindow({
         session: usableSession,
         communityId,
-        cursor: null,
-        pageSize: COMMUNITY_DIRECTORY_PAGE_SIZE,
+        targetRowCount,
+        isCurrent: () => communityDirectoryLoadSeqRef.current === seq,
       });
-      if (communityDirectoryLoadSeqRef.current !== seq) return;
+      if (!page || communityDirectoryLoadSeqRef.current !== seq) return;
       presentationScopeRef.current = loadScope;
       setPresentationScope(loadScope);
-      setCommunityDirectoryMembers(dedupeCommunityDirectoryRows(page.rows));
+      const nextMembers = dedupeCommunityDirectoryRows(page.rows);
+      communityDirectoryMembersRef.current = nextMembers;
+      setCommunityDirectoryMembers(nextMembers);
       setCommunityDirectoryMemberCount(page.totalCount);
+      communityDirectoryNextCursorRef.current = page.continueCursor;
       setCommunityDirectoryMembersNextCursor(page.continueCursor);
       setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
     } catch (error) {
@@ -99,6 +118,9 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
       if (communityDirectoryLoadSeqRef.current === seq) {
         setIsLoadingCommunityDirectoryMembers(false);
       }
+      if (communityDirectoryRefreshSeqRef.current === seq) {
+        communityDirectoryRefreshSeqRef.current = null;
+      }
     }
   }, [params.ensureSession, presentationIdentity]);
 
@@ -108,11 +130,21 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
   ) => {
     const loadScope = `${presentationIdentity ?? "authenticated"}:${communityId}`;
     if (presentationScopeRef.current !== loadScope) return;
+    if (communityDirectoryRefreshSeqRef.current !== null) return;
     const cursor = communityDirectoryMembersNextCursor;
-    if (!cursor) return;
+    if (!cursor || communityDirectoryLoadMoreCursorRef.current === cursor) return;
+    const seq = communityDirectoryLoadSeqRef.current;
     const usableSession = await resolveUsableSession(session, params.ensureSession);
     if (!usableSession) return;
-    const seq = communityDirectoryLoadSeqRef.current;
+    if (
+      communityDirectoryLoadSeqRef.current !== seq ||
+      communityDirectoryRefreshSeqRef.current !== null ||
+      communityDirectoryLoadMoreCursorRef.current === cursor ||
+      communityDirectoryNextCursorRef.current !== cursor
+    ) {
+      return;
+    }
+    communityDirectoryLoadMoreCursorRef.current = cursor;
     setIsLoadingMoreCommunityDirectoryMembers(true);
     setCommunityDirectoryMembersLoadError(null);
     try {
@@ -120,7 +152,7 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
         session: usableSession,
         communityId,
         cursor,
-        pageSize: COMMUNITY_DIRECTORY_PAGE_SIZE,
+        pageSize: COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE,
       });
       if (communityDirectoryLoadSeqRef.current !== seq) return;
       setCommunityDirectoryMembers((previous) => {
@@ -129,28 +161,37 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
           const id = String(row.id ?? "");
           return id && !seen.has(id);
         });
-        return nextRows.length > 0
+        const next = nextRows.length > 0
           ? dedupeCommunityDirectoryRows([...previous, ...nextRows])
           : previous;
+        communityDirectoryMembersRef.current = next;
+        return next;
       });
       if (typeof page.totalCount === "number") {
         setCommunityDirectoryMemberCount(page.totalCount);
       }
+      communityDirectoryNextCursorRef.current = page.continueCursor;
       setCommunityDirectoryMembersNextCursor(page.continueCursor);
       setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to load more members.";
       if (message.includes("community_directory_cursor_invalid")) {
         try {
-          const page = await listCloudCommunityDirectoryPage({
+          const page = await listCloudCommunityDirectoryWindow({
             session: usableSession,
             communityId,
-            cursor: null,
-            pageSize: COMMUNITY_DIRECTORY_PAGE_SIZE,
+            targetRowCount: Math.max(
+              COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE,
+              communityDirectoryMembersRef.current.length,
+            ),
+            isCurrent: () => communityDirectoryLoadSeqRef.current === seq,
           });
-          if (communityDirectoryLoadSeqRef.current !== seq) return;
-          setCommunityDirectoryMembers(dedupeCommunityDirectoryRows(page.rows));
+          if (!page || communityDirectoryLoadSeqRef.current !== seq) return;
+          const nextMembers = dedupeCommunityDirectoryRows(page.rows);
+          communityDirectoryMembersRef.current = nextMembers;
+          setCommunityDirectoryMembers(nextMembers);
           setCommunityDirectoryMemberCount(page.totalCount);
+          communityDirectoryNextCursorRef.current = page.continueCursor;
           setCommunityDirectoryMembersNextCursor(page.continueCursor);
           setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
           return;
@@ -170,6 +211,9 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
     } finally {
       if (communityDirectoryLoadSeqRef.current === seq) {
         setIsLoadingMoreCommunityDirectoryMembers(false);
+      }
+      if (communityDirectoryLoadMoreCursorRef.current === cursor) {
+        communityDirectoryLoadMoreCursorRef.current = null;
       }
     }
   }, [

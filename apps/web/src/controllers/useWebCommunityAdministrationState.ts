@@ -56,9 +56,10 @@ function readInitialAnalyticsRange(): AnalyticsRange {
 export function useWebCommunityAdministrationState(params: {
   activeCommunityId: string | null;
   ensureSession: EnsureAuthSession;
+  resumeEpoch: number;
   session: AuthSession | null;
 }) {
-  const { activeCommunityId, ensureSession, session } = params;
+  const { activeCommunityId, ensureSession, resumeEpoch, session } = params;
 
   const joinRequests =
     useWebCommunityJoinRequestsController<WebCommunityJoinRequest>({
@@ -82,6 +83,7 @@ export function useWebCommunityAdministrationState(params: {
     activeCommunityId,
     session,
     ensureSession,
+    resumeEpoch,
   });
 
   const [analyticsSummary, setAnalyticsSummary] =

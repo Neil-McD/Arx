@@ -87,6 +87,7 @@ import { useWebMemberEntryController } from "./controllers/useWebMemberEntryCont
 import { useWebCommunityEntryBridgeController } from "./controllers/useWebCommunityEntryBridgeController";
 import { useWebShellNavigationController } from "./controllers/useWebShellNavigationController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
+import { useWebAppActivityController } from "./controllers/useWebAppActivityController";
 import {
   captureProductAnalyticsEvent,
 } from "./posthogAnalytics";
@@ -232,6 +233,7 @@ type PublicPlanSummary = SharedPublicPlanSummary;
 type CommunityAiFeedPost = SharedCommunityAiFeedPost;
 type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 export default function App() {
+  const appActivity = useWebAppActivityController();
   const directMessages = useWebDirectMessagesController();
   const {
     isOpen: isDirectMessagesOpen,
@@ -267,11 +269,12 @@ export default function App() {
     sessionArg,
     authenticatedSessionArg,
   } = useWebAppAuthController({
+    resumeEpoch: appActivity.resumeEpoch,
     onSessionLost: accountGraphLifecycle.onSessionLost,
     onSessionMissingAfterBootstrap:
       accountGraphLifecycle.onSessionMissingAfterBootstrap,
     onSessionReady: accountGraphLifecycle.onSessionReady,
-    onSessionFocusReady: accountGraphLifecycle.onSessionFocusReady,
+    onSessionResumeReady: accountGraphLifecycle.onSessionResumeReady,
     onDidJustSignIn: accountGraphLifecycle.onDidJustSignIn,
     onAfterSignOut: accountGraphLifecycle.onAfterSignOut,
   });
@@ -741,6 +744,7 @@ export default function App() {
   const communityAdministration = useWebCommunityAdministrationState({
     activeCommunityId,
     ensureSession: ensureUsableAuthSession,
+    resumeEpoch: appActivity.resumeEpoch,
     session,
   });
   const {
@@ -1249,6 +1253,7 @@ export default function App() {
     useWebCommunityProfileHydrationController({
       activePage,
       canonicalSessionUserId,
+      resumeEpoch: appActivity.resumeEpoch,
       session,
       cloudProfile,
       profilesByUserId,
@@ -1329,6 +1334,7 @@ export default function App() {
     communityIds: communityAttentionCommunityIds,
     communityTab,
     ensureSession: ensureUsableAuthSession,
+    resumeEpoch: appActivity.resumeEpoch,
     session,
     chat: {
       hasResolved: communityInteractionProjection.enabled
@@ -1378,6 +1384,7 @@ export default function App() {
     activePage,
     communityTab,
     ...sessionArg,
+    resumeEpoch: appActivity.resumeEpoch,
     activeCommunityId,
     loadCommunityDirectoryMembers,
   });

@@ -1,5 +1,9 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import { coerceGatewayRows, parseGatewayNumberLike } from "./cloudGateway";
+import {
+  COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE,
+  loadCommunityDirectoryWindow,
+} from "./communityDirectoryWindow";
 
 export type CloudCommunityDirectoryMemberRow = {
   id: string;
@@ -54,7 +58,7 @@ export async function listCloudCommunityDirectoryPage<SessionT>(
     authSubject,
     communityId: params.communityId,
     cursor: params.cursor ?? null,
-    pageSize: params.pageSize ?? 25,
+    pageSize: params.pageSize ?? COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE,
   }) as {
     page?: unknown;
     totalCount?: unknown;
@@ -70,6 +74,25 @@ export async function listCloudCommunityDirectoryPage<SessionT>(
         : null,
     isDone: payload?.isDone === true,
   };
+}
+
+export async function listCloudCommunityDirectoryWindow<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  targetRowCount: number;
+  isCurrent?: () => boolean;
+}): Promise<CloudCommunityDirectoryPage | null> {
+  return loadCommunityDirectoryWindow({
+    targetRowCount: params.targetRowCount,
+    getRowKey: (row: CloudCommunityDirectoryMemberRow) => String(row.id ?? ""),
+    isCurrent: params.isCurrent,
+    loadPage: ({ cursor, pageSize }) => listCloudCommunityDirectoryPage({
+      session: params.session,
+      communityId: params.communityId,
+      cursor,
+      pageSize,
+    }),
+  });
 }
 
 export async function searchCloudCommunityMentionCandidates<SessionT>(

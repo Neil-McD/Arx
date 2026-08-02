@@ -192,27 +192,27 @@ export function useWebAccountGraphLifecycle() {
     });
   }, [runInstrumentedLoad]);
 
-  const onSessionFocusReady = useCallback(async (session: AuthSession) => {
+  const onSessionResumeReady = useCallback(async (session: AuthSession) => {
     const userId = String(session.user?.id ?? "").trim() || null;
     const actions = actionsRef.current;
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "account_graph_refresh",
       status: "start",
-      detail: { phase: "session_focus_ready", userId },
+      detail: { phase: "session_resume_ready", userId },
     });
     const startedAt = Date.now();
     void Promise.allSettled([
       runInstrumentedLoad(
         "billing_status_load",
         session,
-        "session_focus_ready_secondary",
+        "session_resume_ready_secondary",
         actions.loadBilling,
       ),
       runInstrumentedLoad(
         "communities_load",
         session,
-        "session_focus_ready_secondary",
+        "session_resume_ready_secondary",
         actions.loadCommunities,
       ),
     ]).then((results) => {
@@ -224,7 +224,7 @@ export function useWebAccountGraphLifecycle() {
         name: "account_graph_refresh",
         status: failureCount > 0 ? "failure" : "success",
         detail: {
-          phase: "session_focus_ready",
+          phase: "session_resume_ready",
           userId,
           failureCount,
           durationMs: Date.now() - startedAt,
@@ -260,7 +260,7 @@ export function useWebAccountGraphLifecycle() {
     onSessionLost,
     onSessionMissingAfterBootstrap,
     onSessionReady,
-    onSessionFocusReady,
+    onSessionResumeReady,
     onDidJustSignIn,
     onAfterSignOut,
   };

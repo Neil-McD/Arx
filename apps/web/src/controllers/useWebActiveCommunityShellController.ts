@@ -20,6 +20,7 @@ import {
   resolveAuthPresentationIdentity,
   type AuthSessionLike,
 } from "../../../../shared/authSession";
+import { useResumeEpochEffect } from "../../../../shared/useResumeEpochEffect";
 
 type PresenceFace = {
   user_id: string;
@@ -51,6 +52,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession: (session?: SessionT | null) => Promise<SessionT | null>;
+  resumeEpoch: number;
 }) {
   const [communityAccessResolution, dispatchCommunityAccessResolution] = useReducer(
     reduceCommunityAccessResolution<CommunityAccess>,
@@ -63,6 +65,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const activeCommunityIdRef = useRef(params.activeCommunityId);
   const sessionRef = useRef(params.session);
   const accessSessionIdentityRef = useRef<string | null>(null);
+  const refreshPresenceRef = useRef<() => void>(() => {});
   const sessionIdentity = resolveAuthPresentationIdentity(params.session as AuthSessionLike);
   activeCommunityIdRef.current = params.activeCommunityId;
   sessionRef.current = params.session;
@@ -116,25 +119,21 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     }
     accessSessionIdentityRef.current = sessionIdentity;
     const communityId = params.activeCommunityId;
-    const refresh = () => {
-      const currentSession = sessionRef.current;
-      if (!currentSession) return;
-      void reloadActiveCommunityAccess(communityId, currentSession);
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    refresh();
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
+    const currentSession = sessionRef.current;
+    if (!currentSession) return;
+    void reloadActiveCommunityAccess(communityId, currentSession);
   }, [sessionIdentity, params.activeCommunityId, reloadActiveCommunityAccess]);
+
+  useResumeEpochEffect(params.resumeEpoch, () => {
+    const communityId = String(activeCommunityIdRef.current ?? "").trim();
+    const currentSession = sessionRef.current;
+    if (!sessionIdentity || !communityId || !currentSession) return;
+    void reloadActiveCommunityAccess(communityId, currentSession);
+  });
 
   useEffect(() => {
     if (!sessionIdentity || !params.activeCommunityId) {
+      refreshPresenceRef.current = () => {};
       setActiveCommunityPresenceSummaryState(null);
       return;
     }
@@ -200,20 +199,23 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
         inFlight = false;
       }
     };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") void tick();
+    refreshPresenceRef.current = () => {
+      void tick();
     };
     void tick();
     const intervalId = window.setInterval(() => {
       void tick();
     }, COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       cancelled = true;
+      refreshPresenceRef.current = () => {};
       window.clearInterval(intervalId);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, [params.activeCommunityId, params.ensureSession, sessionIdentity]);
+
+  useResumeEpochEffect(params.resumeEpoch, () => {
+    refreshPresenceRef.current();
+  });
 
   const scopedCommunityAccessResolution = useMemo(
     () => scopeCommunityAccessResolution(
