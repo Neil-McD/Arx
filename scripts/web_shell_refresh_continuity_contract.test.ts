@@ -103,6 +103,20 @@ describe("web shell refresh continuity contract", () => {
     );
   });
 
+  it("reserves selected-community geometry while auth restoration is unresolved", () => {
+    const projection = read(
+      "apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts",
+    );
+    const start = projection.indexOf("isResolvingSelectedCommunity:");
+    const end = projection.indexOf("hasAuthenticatedPresentation:", start);
+    const resolutionGate = projection.slice(start, end);
+
+    expect(resolutionGate).toContain("!params.isAuthBootstrapComplete");
+    expect(resolutionGate).toContain("params.hasAuthenticatedPresentation");
+    expect(resolutionGate).toContain('params.activePage === "community"');
+    expect(resolutionGate).toContain("params.selectedActiveCommunitySlug");
+  });
+
   it("keeps the composer under canonical presentation ownership during bootstrap", () => {
     const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 

@@ -31,6 +31,17 @@ describe("web community chat presentation mode", () => {
     ).toBe("canonical_bootstrap");
   });
 
+  it("reserves canonical shell geometry before auth restoration finishes", () => {
+    expect(
+      resolveWebCommunityChatPresentationMode({
+        ...canonicalReady,
+        hasActiveCommunity: false,
+        hasAuthenticatedPresentation: false,
+        isResolvingSelectedCommunity: true,
+      }),
+    ).toBe("canonical_bootstrap");
+  });
+
   it("never hands an authenticated transition to a legacy chat owner", () => {
     const transition: WebCommunityChatPresentationMode[] = [
       resolveWebCommunityChatPresentationMode(canonicalReady),

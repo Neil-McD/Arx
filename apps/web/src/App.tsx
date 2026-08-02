@@ -1972,6 +1972,7 @@ export default function App() {
       session: session,
       ensureSession: ensureUsableAuthSession,
       selectedActiveCommunitySlug,
+      isAuthBootstrapComplete,
       hasAuthenticatedPresentation: hasAuthenticatedAppShellPresentation,
       isAuthRecoveringSignedIn: isAuthRecoveringSignedInAppShell,
       hasSession: Boolean(session),

@@ -25,6 +25,7 @@ type BuildWebCommunitySurfaceProjectionParams = {
   session: WebCommunityChatPanelProps["session"];
   ensureSession: WebCommunitySecondaryPanelsProps["settings"]["ensureSession"];
   selectedActiveCommunitySlug: string | null;
+  isAuthBootstrapComplete: boolean;
   hasAuthenticatedPresentation: boolean;
   isAuthRecoveringSignedIn: boolean;
   hasSession: boolean;
@@ -292,7 +293,7 @@ export function buildWebCommunitySurfaceProjection(
       : null,
     session: params.session,
     isResolvingSelectedCommunity:
-      params.hasAuthenticatedPresentation &&
+      (!params.isAuthBootstrapComplete || params.hasAuthenticatedPresentation) &&
       params.activePage === "community" &&
       Boolean(String(params.selectedActiveCommunitySlug ?? "").trim()) &&
       !params.activeCommunity &&
