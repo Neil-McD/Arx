@@ -161,10 +161,10 @@ assert.doesNotMatch(
   /useCommunityChatRealtime|useCommunityChatViewport/,
   "the canonical web owner should not mount legacy realtime or legacy scroll pagination",
 );
-assert.match(
+assert.doesNotMatch(
   chatController,
-  /current\.onMessageSent\(\{[\s\S]*current\.interaction\.loadRoots\(activeCommunityId, activeSession\)/,
-  "send completion should request canonical projection refresh through canonical reads",
+  /current\.interaction\.load(?:Roots|Replies)\(/,
+  "send completion should leave reconciliation to the canonical live subscription owner",
 );
 assert.match(
   interactionController,
