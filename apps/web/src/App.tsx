@@ -54,7 +54,6 @@ import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccount
 import { useWebProviderConnectionsController } from "./controllers/useWebProviderConnectionsController";
 import { useWebFounderInferenceController } from "./controllers/useWebFounderInferenceController";
 import { useWebFounderBillingController } from "./controllers/useWebFounderBillingController";
-import { useWebAccountPlanController } from "./controllers/useWebAccountPlanController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
 import { useWebCommunityDirectoryState } from "./controllers/useWebCommunityDirectoryState";
@@ -1487,12 +1486,6 @@ export default function App() {
     setAccountCommerceStatus,
     redeemPendingPurchasesInFlightRef,
   });
-  const {
-    userAccessPolicy,
-  } = useWebAccountPlanController({
-    session,
-  });
-
   const communityUi = useWebCommunityUiController<
     AuthSession,
     CommunityRecord

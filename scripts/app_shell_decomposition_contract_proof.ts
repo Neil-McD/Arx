@@ -91,7 +91,6 @@ assert.match(
 const boundedFeatureOwners = [
   "apps/web/src/components/WebAppCompositionRoot.tsx",
   "apps/web/src/controllers/buildWebAuthShellProjection.ts",
-  "apps/web/src/controllers/useWebAccountPlanController.ts",
   "apps/web/src/controllers/useWebAuthErrorToastLifecycle.ts",
   "apps/web/src/controllers/useWebCommunityDirectoryState.ts",
   "apps/web/src/controllers/useWebCommunityFunnelAboutController.ts",
@@ -146,10 +145,6 @@ for (const [ownerPath, requiredMarkers] of [
   [
     "apps/web/src/controllers/useWebProviderConnectionsController.ts",
     ["useState", "useEffect", "loadCloudProviderConnections"],
-  ],
-  [
-    "apps/web/src/controllers/useWebAccountPlanController.ts",
-    ["resolveUserAccessPolicy", "userAccessPolicy"],
   ],
   [
     "apps/web/src/controllers/useWebCommunityVoiceController.ts",

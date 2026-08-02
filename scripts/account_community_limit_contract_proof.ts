@@ -9,7 +9,6 @@ const createController = read("shared/useCommunityCreateController.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
 const shellController = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
-const accountController = read("apps/web/src/controllers/useWebAccountPlanController.ts");
 const matrix = read("docs/auth-money-access-matrix.md");
 
 assert.match(
@@ -34,7 +33,6 @@ assert.doesNotMatch(createModal, /max_communities|Community limit reached|needsP
 assert.doesNotMatch(shellController, /hasCommunityCreateAccess|setIsFreeAccountInfoOpen/);
 assert.doesNotMatch(mobileController, /hasCommunityCreateAccess|setIsFreeAccountInfoOpen/);
 assert.equal(existsSync("shared/CommunityLimitModal.tsx"), false);
-assert.doesNotMatch(accountController, /Premium|startCloudPremium|setDevAccountTier/i);
 assert.match(matrix, /\$79 \/ month \/ managed community/);
 assert.match(matrix, /unlimited number of communities/);
 assert.match(matrix, /2\.9%/);

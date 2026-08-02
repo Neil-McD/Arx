@@ -411,6 +411,21 @@ assert.match(
   /import \{ ConversionLanding \} from "\.\/polynetLanding\/ConversionLanding";[\s\S]*import "\.\/polynetLanding\/ConversionLanding\.css";[\s\S]*return <ConversionLanding onJoin=\{props\.onTryFree\} \/>;/,
   "the public entry surface must remain owned by ConversionLanding and its dedicated stylesheet",
 );
+for (const retiredLeaf of [
+  "apps/web/public/landing-polynet/globe.png",
+  "apps/web/src/components/WebLandingPage.css",
+  "apps/web/src/components/polynetLanding/LandingSections.tsx",
+  "apps/web/src/components/polynetLanding/NetworkVisualization.tsx",
+  "apps/web/src/controllers/useWebAccountPlanController.ts",
+  "shared/capabilities.ts",
+  "shared/usePendingPublicCommunityJoinController.ts",
+]) {
+  assert.equal(
+    existsSync(retiredLeaf),
+    false,
+    `${retiredLeaf} must remain deleted as an unowned product leaf`,
+  );
+}
 assert.match(
   landingCss,
   /\.pn-landing\s*\{/,
