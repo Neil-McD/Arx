@@ -40,12 +40,9 @@ import type {
 import { useCommunityChatDataController } from "../../../../shared/useCommunityChatDataController";
 import { useCommunityChatLightbox } from "../../../../shared/useCommunityChatLightbox";
 import { useCommunityChatMutationController } from "../../../../shared/useCommunityChatMutationController";
-import { useCommunityChatRealtime } from "../../../../shared/useCommunityChatRealtime";
-import { useCommunityChatViewport } from "../../../../shared/useCommunityChatViewport";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 
 const COMMUNITY_CHAT_PAGE_SIZE = 50;
-const COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX = 140;
 const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
 const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
@@ -84,7 +81,6 @@ type EnsureAuthSession = (
 ) => Promise<AuthSession | null>;
 
 type CommunityInteractionComposerBoundary = {
-  enabled: boolean;
   error: string | null;
   selectedRootId: string | null;
   insertOptimistic: (pending: {
@@ -121,8 +117,6 @@ type UseWebCommunityChatControllerParams = {
   ensureSession: EnsureAuthSession;
   hasActiveCommunity: boolean;
   interaction: CommunityInteractionComposerBoundary;
-  isCommunityChatActive: boolean;
-  isCommunityPageActive: boolean;
   isProfileSetupComplete: boolean;
   loadProfiles: (userIds: string[], session: AuthSession) => Promise<void>;
   onMessageSent: (event: {
@@ -290,8 +284,6 @@ export function useWebCommunityChatController(
     ensureSession,
     hasActiveCommunity,
     interaction,
-    isCommunityChatActive,
-    isCommunityPageActive,
     isProfileSetupComplete,
     loadProfiles,
     onMessageSent,
@@ -311,9 +303,7 @@ export function useWebCommunityChatController(
   const [unreadCount, setUnreadCount] = useState(0);
   const [isUserAtBottom, setIsUserAtBottom] = useState(true);
   const isUserAtBottomRef = useRef(true);
-  const messageIdsRef = useRef<Set<string>>(new Set());
   const messageListRef = useRef<HTMLDivElement | null>(null);
-  const loadOlderFromScrollRef = useRef<(() => void) | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
@@ -325,8 +315,6 @@ export function useWebCommunityChatController(
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const [editingMessageText, setEditingMessageText] = useState("");
   const [editingMessagePrefix, setEditingMessagePrefix] = useState<string | null>(null);
-  const capturePrependAnchorRef = useRef<() => void>(() => {});
-  const clearPendingPrependAnchorRef = useRef<() => void>(() => {});
 
   useEffect(() => {
     if (!messageInput) setMessageMentions([]);
@@ -335,10 +323,6 @@ export function useWebCommunityChatController(
   useEffect(() => {
     attachmentsRef.current = attachments;
   }, [attachments]);
-
-  useEffect(() => {
-    messageIdsRef.current = new Set(messages.map((message) => message.id));
-  }, [messages]);
 
   const {
     isCommunityChatLightboxOpen,
@@ -373,7 +357,6 @@ export function useWebCommunityChatController(
     toCommunityChatMessage,
     ensureCommunityChatThread,
     loadCommunityChat,
-    loadOlderCommunityChat,
     resetCommunityChatDataState,
   } = useCommunityChatDataController<
     AuthSession,
@@ -390,75 +373,14 @@ export function useWebCommunityChatController(
     setUnreadCount,
     setIsUserAtBottom,
     isUserAtBottomRef,
-    capturePrependAnchor: () => capturePrependAnchorRef.current(),
-    clearPendingPrependAnchor: () => clearPendingPrependAnchorRef.current(),
+    capturePrependAnchor: () => undefined,
+    clearPendingPrependAnchor: () => undefined,
     onLoadChatStart: () => setError(null),
     onLoadChatError: setError,
     onHydrateProfiles: loadProfiles,
   });
 
-  const {
-    handleChatScroll,
-    capturePrependAnchor,
-    clearPendingPrependAnchor,
-  } = useCommunityChatViewport({
-    isEnabled: isCommunityChatActive,
-    communityMessages: messages,
-    communityChatListRef: messageListRef,
-    isUserAtBottom,
-    isUserAtBottomRef,
-    setIsUserAtBottom,
-    setUnreadCount,
-    loadMoreThresholdPx: COMMUNITY_CHAT_LOAD_MORE_THRESHOLD_PX,
-    canLoadOlder: Boolean(
-      session
-      && activeCommunityId
-      && isCommunityChatActive
-      && communityChatHasMore
-      && !isLoadingChat
-      && !isLoadingMoreChat
-    ),
-    onLoadOlder: () => loadOlderFromScrollRef.current?.(),
-  });
-
-  capturePrependAnchorRef.current = capturePrependAnchor;
-  clearPendingPrependAnchorRef.current = clearPendingPrependAnchor;
-  loadOlderFromScrollRef.current = () => {
-    if (!session || !activeCommunityId) return;
-    void loadOlderCommunityChat(activeCommunityId, session);
-  };
-
-  useCommunityChatRealtime({
-    // Canonical roots/replies are the normal UI. This is the explicit legacy fallback.
-    isEnabled:
-      isCommunityPageActive
-      && hasResolvedCommunityChat
-      && !interaction.enabled,
-    session,
-    ensureSession,
-    activeCommunityId,
-    ensureCommunityChatThread,
-    toCommunityChatMessage,
-    communityMessageIdsRef: messageIdsRef,
-    isUserAtBottomRef,
-    setUnreadCount,
-    setCommunityMessages: setMessages,
-    setMessageReactions: setReactions,
-    setCommunityActivityEvents: setActivityEvents,
-    onLoadProfiles: loadProfiles,
-  });
-
-  useEffect(() => {
-    if (!isCommunityPageActive || !activeCommunityId || !hasResolvedCommunityChat) return;
-    if (isCommunityChatActive || !isUserAtBottomRef.current) return;
-    setIsUserAtBottom(false);
-    isUserAtBottomRef.current = false;
-  }, [
-    activeCommunityId,
-    hasResolvedCommunityChat,
-    isCommunityChatActive,
-    isCommunityPageActive,
-  ]);
+  const handleChatScroll = useCallback(() => undefined, []);
 
   const {
     handleToggleReaction,
@@ -477,10 +399,7 @@ export function useWebCommunityChatController(
     ensureSession,
     missingPayloadMessage: "Message sent, but no payload returned.",
     ensureCommunityChatThread,
-    useCanonicalCommunityInteractions: Boolean(
-      interaction.enabled
-      && hasActiveCommunity
-    ),
+    useCanonicalCommunityInteractions: hasActiveCommunity,
     onCanonicalOptimisticInsert: interaction.insertOptimistic,
     onCanonicalOptimisticSettle: interaction.settleOptimistic,
     createCommunityInteractionMessageRows: (writeParams) =>
@@ -528,7 +447,6 @@ export function useWebCommunityChatController(
     },
     onCommunityMessageSent: ({ communityId, hasAttachments, hasReply }) => {
       onMessageSent({ communityId, hasAttachments, hasReply });
-      if (!interaction.enabled) return;
       void interaction.loadRoots(communityId, session);
       if (hasReply && interaction.selectedRootId) {
         void interaction.loadReplies(interaction.selectedRootId, session);
@@ -575,9 +493,8 @@ export function useWebCommunityChatController(
     setEditingMessageText("");
     setEditingMessagePrefix(null);
     resetCommunityChatDataState();
-    clearPendingPrependAnchor();
     if (inputRef.current) inputRef.current.style.height = "auto";
-  }, [clearPendingPrependAnchor, resetCommunityChatDataState]);
+  }, [resetCommunityChatDataState]);
 
   useEffect(() => {
     resetChatState();

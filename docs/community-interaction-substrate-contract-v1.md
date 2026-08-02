@@ -423,13 +423,13 @@ Rules:
 - the projection reads roots with `listCommunityInteractionRoots`
 - the projection opens exactly one drawer with replies from `listCommunityInteractionReplies`
 - the projection subscribes to canonical interaction roots and replies directly
-- legacy chat realtime is disabled for the normal web chat UI
+- the normal web chat UI does not mount legacy preload, realtime, or scroll-pagination lifecycles
 - canonical interaction read bundles expose public actor user ids for UI identity/profile hydration
 - top-level composer sends use the canonical composer bridge, including prepared attachments
 - drawer reply sends use the canonical composer bridge when the reply target has a canonical root id, including prepared attachments
 - a missing canonical writer fails closed instead of falling back to the legacy chat writer
 - legacy timeline sends remain on the legacy chat writer only for non-projection compatibility call paths
-- successful sends may request a canonical projection reload, but canonical projection does not rely on legacy chat realtime
+- successful sends may request a canonical projection reload; canonical projection does not rely on any legacy chat client lifecycle
 - stale interaction reads must not overwrite the projection after a community switch or reset
 - General is the default navigation channel and continues to omit a channel id at the client boundary for rolling compatibility
 - custom-channel URLs carry an authorized slug while server reads and writes carry the resolved channel id

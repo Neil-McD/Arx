@@ -54,7 +54,7 @@ assert.match(
 );
 assert.match(
   shared,
-  /export type MobileOverlay = "community" \| "community_selector" \| "members" \| null;/,
+  /export type MobileOverlay =[\s\S]*\| "community"[\s\S]*\| "community_selector"[\s\S]*\| "members"[\s\S]*\| null;/,
   "community navigation, the selector, and Members should remain dismissible overlays",
 );
 assert.match(
@@ -69,7 +69,7 @@ assert.match(
 );
 assert.match(
   interactionProjectionController,
-  /if \(!COMMUNITY_INTERACTION_PROJECTION_ENABLED \|\| !activeCommunityId\) return;[\s\S]*if \(shellVariant === "mobile"\) return;[\s\S]*readStoredSelectedRoot/,
+  /if \(!activeCommunityId\) return;[\s\S]*if \(shellVariant === "mobile"\) return;[\s\S]*readStoredSelectedRoot/,
   "mobile Community should not reopen a stale thread selection from storage",
 );
 assert.match(

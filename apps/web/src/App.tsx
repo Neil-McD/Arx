@@ -32,7 +32,6 @@ import {
 import { useCheckoutFinalizeController } from "../../../shared/useCheckoutFinalizeController";
 import { useWebCommunityUiController } from "./controllers/useWebCommunityUiController";
 import {
-  COMMUNITY_INTERACTION_PROJECTION_ENABLED,
   useWebCommunityInteractionProjection,
 } from "./controllers/useWebCommunityInteractionProjection";
 import { useWebCommunityChannelsController } from "./controllers/useWebCommunityChannelsController";
@@ -176,7 +175,6 @@ import {
 import { useWebAccountCommerceActions } from "./controllers/useWebAccountCommerceActions";
 import { useWebCommerceClaimActions } from "./controllers/useWebCommerceClaimActions";
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
-import { useWebCommunityChatPreloadLifecycle } from "./controllers/useWebCommunityChatPreloadLifecycle";
 import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
 import { useWebMobileShellController } from "./controllers/useWebMobileShellController";
@@ -603,11 +601,6 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     hasActiveCommunity: Boolean(activeCommunity) && isActiveCommunityChannelReady,
     interaction: communityInteractionProjection,
-    isCommunityChatActive:
-      isActiveCommunityChannelReady &&
-      activePage === "community" &&
-      communityTab === "chat",
-    isCommunityPageActive: activePage === "community",
     isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
     loadProfiles: (userIds, activeSession) => loadUserProfiles(userIds, activeSession),
     onMessageSent: ({ communityId, hasAttachments, hasReply }) => {
@@ -653,8 +646,6 @@ export default function App() {
     isLoadingMoreChat,
     communityChatHasMore,
     hasResolvedCommunityChat,
-    ensureCommunityChatThread,
-    loadCommunityChat,
     resetChatState: resetCommunityChatState,
     messageListRef: communityChatListRef,
     inputRef: chatInputRef,
@@ -1030,7 +1021,6 @@ export default function App() {
   >({
     activeCommunityId,
     ...authenticatedSessionArg,
-    ensureCommunityChatThread,
     confirmAction: (message) => confirm(message),
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: reloadActiveCommunityAccess,
@@ -1267,13 +1257,6 @@ export default function App() {
   const shouldHydrateCommunityContextPanel =
     activePage === "community" &&
     communityTab === "chat";
-  useWebCommunityChatPreloadLifecycle<AuthSession>({
-    session: session,
-    activePage,
-    activeCommunityId,
-    hasResolvedCommunityChat,
-    loadCommunityChat,
-  });
 
   useCommunitySettingsAccessLifecycle<AuthSession, CommunityRecord>({
     activePage,
@@ -1328,9 +1311,7 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     session,
     chat: {
-      hasResolved: communityInteractionProjection.enabled
-        ? isActiveCommunityChannelReady && !isLoadingCommunityInteractions
-        : hasResolvedCommunityChat,
+      hasResolved: isActiveCommunityChannelReady && !isLoadingCommunityInteractions,
     },
     interactions: {
       roots: communityInteractionRoots,
@@ -2398,7 +2379,6 @@ export default function App() {
         onClose: closeCommunityChatLightbox,
       },
       interactionProjection: {
-        enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
         mobileThreadPage: mobileThreadPageOpen,
         onMobileReadingModeChange: mobileChromeScrollTrackingEnabled
           ? setMobileChromeReadingMode

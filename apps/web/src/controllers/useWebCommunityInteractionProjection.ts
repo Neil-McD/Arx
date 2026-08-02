@@ -36,8 +36,6 @@ const COMMUNITY_INTERACTION_REPLY_LIMIT = 80;
 const INTERACTION_SELECTED_ROOT_STORAGE_PREFIX = "polynet:interaction:selectedRoot:";
 const MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS = 160;
 
-export const COMMUNITY_INTERACTION_PROJECTION_ENABLED = true;
-
 type EnsureAuthSession = (
   session?: AuthSession | null,
   source?: string,
@@ -387,7 +385,7 @@ export function useWebCommunityInteractionProjection<
     activeSession: AuthSession | null = sessionRef.current,
   ) => {
     const rootId = String(rawRootId ?? "").trim();
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !rootId) return;
+    if (!rootId) return;
     const usableSession = await ensureSession(activeSession ?? undefined);
     if (!usableSession) return;
     const requestId = (repliesRequestIdRef.current[rootId] ?? 0) + 1;
@@ -421,7 +419,7 @@ export function useWebCommunityInteractionProjection<
   ) => {
     const communityId = String(rawCommunityId ?? "").trim();
     const channelId = activeChannelId;
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !communityId) {
+    if (!communityId) {
       reset();
       return;
     }
@@ -479,8 +477,7 @@ export function useWebCommunityInteractionProjection<
     const channelId = activeChannelId;
     const beforeCreatedAt = nextBeforeCreatedAtRef.current;
     if (
-      !COMMUNITY_INTERACTION_PROJECTION_ENABLED
-      || !communityId
+      !communityId
       || beforeCreatedAt === null
       || isLoadingOlderRootsRef.current
     ) {
@@ -522,7 +519,7 @@ export function useWebCommunityInteractionProjection<
   }, [activeChannelId, activeCommunityId, ensureSession]);
 
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId || !canonicalSessionUserId) return;
+    if (!activeCommunityId || !canonicalSessionUserId) return;
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
@@ -584,8 +581,7 @@ export function useWebCommunityInteractionProjection<
 
   useEffect(() => {
     if (
-      !COMMUNITY_INTERACTION_PROJECTION_ENABLED
-      || !isCommunityChatActive
+      !isCommunityChatActive
       || !activeCommunityId
       || !canonicalSessionUserId
     ) {
@@ -636,7 +632,7 @@ export function useWebCommunityInteractionProjection<
   }, [activeCommunityId, canonicalSessionUserId, ensureSession, isCommunityChatActive]);
 
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !selectedRootId || !canonicalSessionUserId) return;
+    if (!selectedRootId || !canonicalSessionUserId) return;
     const rootId = selectedRootId;
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
@@ -749,7 +745,7 @@ export function useWebCommunityInteractionProjection<
   }, [activeChannelId, activeCommunityId]);
 
   useEffect(() => {
-    if (!COMMUNITY_INTERACTION_PROJECTION_ENABLED || !activeCommunityId) return;
+    if (!activeCommunityId) return;
     if (shellVariant === "mobile") return;
     const selectionBoundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
     if (restoredSelectionBoundaryRef.current === selectionBoundary) return;
@@ -824,7 +820,6 @@ export function useWebCommunityInteractionProjection<
 
   const normalizedSessionUserId = String(canonicalSessionUserId ?? "").trim();
   const requestedBoundary =
-    COMMUNITY_INTERACTION_PROJECTION_ENABLED &&
     session &&
     normalizedSessionUserId &&
     activeCommunityId
@@ -898,7 +893,6 @@ export function useWebCommunityInteractionProjection<
   );
 
   return {
-    enabled: COMMUNITY_INTERACTION_PROJECTION_ENABLED,
     roots: presentedRoots,
     repliesByRootId: presentedRepliesByRootId,
     visibleRoots,

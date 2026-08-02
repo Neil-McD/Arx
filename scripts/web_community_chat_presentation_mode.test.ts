@@ -5,26 +5,18 @@ import {
 } from "../apps/web/src/controllers/resolveWebCommunityChatPresentationMode";
 
 const canonicalReady = {
-  canonicalProjectionEnabled: true,
   hasActiveCommunity: true,
   hasAuthenticatedPresentation: true,
   isAuthRecoveringSignedIn: false,
   isResolvingSelectedCommunity: false,
-  hasCommunityTimelineItems: true,
-  hasCommunityChatError: false,
-  isLoadingChat: false,
-  hasResolvedCommunityChat: true,
 };
 
 describe("web community chat presentation mode", () => {
-  it("keeps canonical chat mounted through auth and legacy-loader refreshes", () => {
+  it("keeps canonical chat mounted through auth refreshes", () => {
     expect(
       resolveWebCommunityChatPresentationMode({
         ...canonicalReady,
         isAuthRecoveringSignedIn: true,
-        hasCommunityTimelineItems: false,
-        isLoadingChat: true,
-        hasResolvedCommunityChat: false,
       }),
     ).toBe("canonical");
   });
@@ -34,26 +26,22 @@ describe("web community chat presentation mode", () => {
       resolveWebCommunityChatPresentationMode({
         ...canonicalReady,
         hasActiveCommunity: false,
-        hasCommunityTimelineItems: false,
         isResolvingSelectedCommunity: true,
       }),
     ).toBe("canonical_bootstrap");
   });
 
-  it("never hands a canonical transition to the legacy bootstrap owner", () => {
+  it("never hands an authenticated transition to a legacy chat owner", () => {
     const transition: WebCommunityChatPresentationMode[] = [
       resolveWebCommunityChatPresentationMode(canonicalReady),
       resolveWebCommunityChatPresentationMode({
         ...canonicalReady,
-        hasCommunityTimelineItems: false,
-        isLoadingChat: true,
-        hasResolvedCommunityChat: false,
+        isAuthRecoveringSignedIn: true,
         isResolvingSelectedCommunity: true,
       }),
       resolveWebCommunityChatPresentationMode({
         ...canonicalReady,
         hasActiveCommunity: false,
-        hasCommunityTimelineItems: false,
         isResolvingSelectedCommunity: true,
       }),
       resolveWebCommunityChatPresentationMode(canonicalReady),
@@ -65,18 +53,16 @@ describe("web community chat presentation mode", () => {
       "canonical_bootstrap",
       "canonical",
     ]);
-    expect(transition).not.toContain("legacy_bootstrap");
+    expect(transition).not.toContain("legacy");
   });
 
-  it("preserves the legacy bootstrap only when canonical chat is disabled", () => {
+  it("uses the legacy-shaped shell only for signed-out or empty app state", () => {
     expect(
       resolveWebCommunityChatPresentationMode({
         ...canonicalReady,
-        canonicalProjectionEnabled: false,
-        hasCommunityTimelineItems: false,
-        isLoadingChat: true,
-        hasResolvedCommunityChat: false,
+        hasActiveCommunity: false,
+        hasAuthenticatedPresentation: false,
       }),
-    ).toBe("legacy_bootstrap");
+    ).toBe("legacy");
   });
 });
