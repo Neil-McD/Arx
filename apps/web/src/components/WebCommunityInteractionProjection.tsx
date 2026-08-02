@@ -116,8 +116,10 @@ export type WebCommunityInteractionProjectionProps = {
     online_faces?: CommunityPresenceFace[] | null;
     online_last_active_at_by_user_id?: Record<string, string> | null;
   } | null;
+  isLoadingCommunityPresence?: boolean;
   communityMemberCount?: number | null;
   communityMembers?: CommunityRailMember[] | null;
+  hasResolvedCommunityMembers?: boolean;
   communityMembersHasMore?: boolean;
   isLoadingCommunityMembers?: boolean;
   isLoadingMoreCommunityMembers?: boolean;
@@ -126,6 +128,7 @@ export type WebCommunityInteractionProjectionProps = {
   communityId?: string | null;
   communityOwnerId?: string | null;
   canManageCommunityMembers?: boolean;
+  canPresentManageCommunityMembers?: boolean;
   communityEntryPolicy?: CommunityAdmissionEntryPolicy | null;
   canSetCommunityFreeAccessMode?: boolean;
   isSettingCommunityFreeAccessMode?: boolean;
@@ -224,8 +227,10 @@ export function CommunityInteractionContextPanelSurface(
           onlineFaces={props.presenceSummary?.online_faces ?? null}
           onlineCount={props.presenceSummary?.online_count ?? null}
           onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)}
+          isLoadingPresence={props.isLoadingCommunityPresence}
           memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
           members={props.communityMembers ?? null}
+          hasResolvedMembers={props.hasResolvedCommunityMembers}
           membersHasMore={props.communityMembersHasMore}
           isLoadingMembers={props.isLoadingCommunityMembers}
           isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
@@ -236,6 +241,7 @@ export function CommunityInteractionContextPanelSurface(
           activityScopeKey={props.communityId ?? null}
           ownerId={props.communityOwnerId ?? null}
           canManageMembers={canManageCommunityMembers}
+          canPresentManageMembers={props.canPresentManageCommunityMembers}
           entryPolicy={props.communityEntryPolicy ?? null}
           canSetFreeAccessMode={props.canSetCommunityFreeAccessMode}
           isSettingFreeAccessMode={props.isSettingCommunityFreeAccessMode}

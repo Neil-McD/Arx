@@ -58,6 +58,9 @@ export function buildWebShellChromeHostProps(params: {
   communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
   communityTabIndicators: WebShellChromeHostProps["communityShell"]["communityTabIndicators"];
   communityChannels: WebShellChromeHostProps["communityShell"]["communityChannels"];
+  hasResolvedCommunityChannels: boolean;
+  isLoadingCommunityChannels: boolean;
+  isResolvingInitialCommunityAccess: boolean;
   selectedCommunityChannelSlug: string;
   communityChannelIndicators: WebShellChromeHostProps["communityShell"]["communityChannelIndicators"];
   handleSelectCommunityChannel: WebShellChromeHostProps["communityShell"]["onSelectCommunityChannel"];
@@ -71,6 +74,7 @@ export function buildWebShellChromeHostProps(params: {
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
+  canPresentManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
   lockedCommunityNavTabs?: WebShellChromeHostProps["communityShell"]["lockedCommunityNavTabs"];
   handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
@@ -86,6 +90,7 @@ export function buildWebShellChromeHostProps(params: {
   railCommunities: CommunityLike[];
   communityRailAttentionById: WebShellChromeHostProps["communityShell"]["communityRailAttentionById"];
   isLoadingCommunities: boolean;
+  hasResolvedCommunities: boolean;
   selectedActiveCommunitySlug: string | null;
   handleSelectActiveCommunity: (community: CommunityLike) => boolean;
   openCommunityChat: (slug: string, options: { clearUnread: boolean }) => void;
@@ -180,6 +185,9 @@ export function buildWebShellChromeHostProps(params: {
       communityTab: params.communityTab,
       communityTabIndicators: params.communityTabIndicators,
       communityChannels: params.communityChannels,
+      hasResolvedCommunityChannels: params.hasResolvedCommunityChannels,
+      isLoadingCommunityChannels: params.isLoadingCommunityChannels,
+      isResolvingInitialCommunityAccess: params.isResolvingInitialCommunityAccess,
       selectedCommunityChannelSlug: params.selectedCommunityChannelSlug,
       communityChannelIndicators: params.communityChannelIndicators,
       onSelectCommunityChannel: params.handleSelectCommunityChannel,
@@ -193,6 +201,8 @@ export function buildWebShellChromeHostProps(params: {
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canViewActiveCommunityPolynet: params.canViewActiveCommunityPolynet,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
+      canPresentManageMembersActiveCommunity:
+        params.canPresentManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
       lockedCommunityNavTabs: params.lockedCommunityNavTabs ?? null,
       onSelectCommunityTab: params.handleSelectCommunityTab,
@@ -223,6 +233,7 @@ export function buildWebShellChromeHostProps(params: {
       })),
       communityRailAttentionById: params.communityRailAttentionById,
       isLoadingCommunities: params.isLoadingCommunities,
+      hasResolvedCommunities: params.hasResolvedCommunities,
       selectedActiveCommunitySlug: params.selectedActiveCommunitySlug,
       activePage: params.activePage,
       onSelectActiveCommunity: params.handleSelectActiveCommunity,

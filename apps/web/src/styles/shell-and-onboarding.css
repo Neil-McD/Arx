@@ -340,6 +340,12 @@ body {
   padding: 0;
 }
 
+.community-rail-button.community-rail-skeleton {
+  background: color-mix(in srgb, var(--surface-card) 58%, transparent);
+  border-radius: var(--radius-sm);
+  pointer-events: none;
+}
+
 .community-rail-button.community-rail-community.reorder-enabled {
   cursor: grab;
   touch-action: none;
@@ -604,6 +610,22 @@ body {
 .community-channel-list {
   display: flex;
   flex-direction: column;
+}
+
+.community-nav-skeleton-rows {
+  display: grid;
+  gap: 2px;
+  width: 100%;
+}
+
+.community-nav-skeleton-row {
+  width: 100%;
+  height: 33px;
+  border-radius: var(--radius-sm);
+}
+
+.community-nav-skeleton-management {
+  display: contents;
 }
 
 .community-channel-item .community-channel-icon {

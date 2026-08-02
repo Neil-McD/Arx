@@ -72,6 +72,9 @@ export type WebCommunityShellProps = {
     name: string;
     is_general: boolean;
   }>;
+  hasResolvedCommunityChannels: boolean;
+  isLoadingCommunityChannels: boolean;
+  isResolvingInitialCommunityAccess: boolean;
   selectedCommunityChannelSlug: string;
   communityChannelIndicators: Record<string, { chat: boolean; mentions: boolean }>;
   onSelectCommunityChannel: (channel: {
@@ -90,6 +93,7 @@ export type WebCommunityShellProps = {
   canViewActiveCommunitySettings: boolean;
   canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
+  canPresentManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
   /* Visitor lens: tabs render locked instead of hidden. */
   lockedCommunityNavTabs?: Partial<Record<CommunityTab, boolean>> | null;
@@ -105,6 +109,7 @@ export type WebCommunityShellProps = {
   railCommunities: CommunityLike[];
   communityRailAttentionById: Record<string, boolean>;
   isLoadingCommunities: boolean;
+  hasResolvedCommunities: boolean;
   selectedActiveCommunitySlug: string | null;
   activePage: AppPage;
   onSelectActiveCommunity: (community: CommunityLike) => boolean;

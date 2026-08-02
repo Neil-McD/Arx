@@ -1,5 +1,6 @@
 import { CommunityNav } from "../../../../shared/CommunityNav";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { shouldShowFirstResolutionSkeleton } from "../../../../shared/shellLoadingPresentation";
 import { WebMobileBottomRail } from "./WebMobileBottomRail";
 import { WebMobileDrawer } from "./WebMobileDrawer";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
@@ -10,6 +11,11 @@ type WebMobileCommunityShellProps = {
 
 export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
   const { communityShell } = props;
+  const showCommunitySelectorSkeleton = shouldShowFirstResolutionSkeleton({
+    isLoading: communityShell.isLoadingCommunities,
+    hasResolved: communityShell.hasResolvedCommunities,
+    contentCount: communityShell.railCommunities.length,
+  });
 
   if (!communityShell.showMobileShell) return null;
 
@@ -42,6 +48,9 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           communityTab={communityShell.communityTab}
           tabIndicators={communityShell.communityTabIndicators}
           channels={communityShell.communityChannels}
+          hasResolvedChannels={communityShell.hasResolvedCommunityChannels}
+          isLoadingChannels={communityShell.isLoadingCommunityChannels}
+          isResolvingInitialAccess={communityShell.isResolvingInitialCommunityAccess}
           selectedChannelSlug={communityShell.selectedCommunityChannelSlug}
           channelIndicators={communityShell.communityChannelIndicators}
           onSelectChannel={(channel) => {
@@ -62,6 +71,7 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           canViewActiveCommunitySettings={communityShell.canViewActiveCommunitySettings}
           canViewActiveCommunityPolynet={communityShell.canViewActiveCommunityPolynet}
           canManageMembersActiveCommunity={communityShell.canManageMembersActiveCommunity}
+          canPresentManageMembersActiveCommunity={communityShell.canPresentManageMembersActiveCommunity}
           canViewActiveCommunityAnalytics={communityShell.canViewActiveCommunityAnalytics}
           lockedTabs={communityShell.lockedCommunityNavTabs ?? undefined}
           buttonType="button"
@@ -122,7 +132,19 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
                 <div className="mobile-community-selector-divider" aria-hidden="true" />
                 <div className="mobile-community-selector-section-label">My communities</div>
               </div>
-              {communityShell.communities.length > 0 ? (
+              {showCommunitySelectorSkeleton ? (
+                <div
+                  className="mobile-community-selector-list mobile-community-selector-skeleton"
+                  aria-hidden="true"
+                >
+                  {Array.from({ length: 3 }).map((_, index) => (
+                    <div key={index} className="mobile-community-selector-item">
+                      <span className="mobile-community-selector-avatar web-skeleton-block" />
+                      <span className="mobile-community-selector-skeleton-name web-skeleton-row" />
+                    </div>
+                  ))}
+                </div>
+              ) : communityShell.communities.length > 0 ? (
                 <div className="mobile-community-selector-list">
                   {communityShell.railCommunities.map((community) => {
                     const isActive =

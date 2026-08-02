@@ -188,6 +188,7 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
   return {
     communityDirectoryMembers: isPresentationScoped ? communityDirectoryMembers : [],
     communityDirectoryMemberCount: isPresentationScoped ? communityDirectoryMemberCount : null,
+    hasResolvedCommunityDirectoryMembers: isPresentationScoped,
     isLoadingCommunityDirectoryMembers:
       Boolean(requestedPresentationScope) &&
       (isLoadingCommunityDirectoryMembers || (!isPresentationScoped && !presentationLoadError)),

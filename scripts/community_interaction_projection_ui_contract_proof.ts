@@ -527,7 +527,7 @@ assert.match(
 );
 assert.match(
   app,
-  /interactionProjection:\s*\{[\s\S]*communityMemberCount: communityDirectoryMemberCount,[\s\S]*communityMembers: communityDirectoryMembers,[\s\S]*communityMembersHasMore: communityDirectoryMembersHasMore,[\s\S]*isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,[\s\S]*isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,[\s\S]*communityMembersLoadError: communityDirectoryMembersLoadError,[\s\S]*loadMoreCommunityDirectoryMembers/,
+  /interactionProjection:\s*\{[\s\S]*communityMemberCount: communityDirectoryMemberCount,[\s\S]*communityMembers: communityDirectoryMembers,[\s\S]*hasResolvedCommunityMembers: hasResolvedCommunityDirectoryMembers,[\s\S]*communityMembersHasMore: communityDirectoryMembersHasMore,[\s\S]*isLoadingCommunityMembers: isLoadingCommunityDirectoryMembers,[\s\S]*isLoadingMoreCommunityMembers: isLoadingMoreCommunityDirectoryMembers,[\s\S]*communityMembersLoadError: communityDirectoryMembersLoadError,[\s\S]*loadMoreCommunityDirectoryMembers/,
   "App should pass directory count/loading/pagination state into the chat right rail",
 );
 assert.doesNotMatch(
@@ -537,18 +537,28 @@ assert.doesNotMatch(
 );
 assert.match(
   projection,
-  /communityMemberCount\?: number \| null;[\s\S]*communityMembers\?: CommunityRailMember\[\] \| null;[\s\S]*communityMembersHasMore\?: boolean;[\s\S]*isLoadingCommunityMembers\?: boolean;[\s\S]*isLoadingMoreCommunityMembers\?: boolean;[\s\S]*communityMembersLoadError\?: string \| null;[\s\S]*onLoadMoreCommunityMembers\?: \(\) => void;/,
+  /communityMemberCount\?: number \| null;[\s\S]*communityMembers\?: CommunityRailMember\[\] \| null;[\s\S]*hasResolvedCommunityMembers\?: boolean;[\s\S]*communityMembersHasMore\?: boolean;[\s\S]*isLoadingCommunityMembers\?: boolean;[\s\S]*isLoadingMoreCommunityMembers\?: boolean;[\s\S]*communityMembersLoadError\?: string \| null;[\s\S]*onLoadMoreCommunityMembers\?: \(\) => void;/,
   "interaction projection should model roster count/loading/pagination state for the right rail",
 );
 assert.match(
   projection,
-  /memberCount=\{props\.communityMemberCount \?\? props\.presenceSummary\?\.member_count \?\? null\}[\s\S]*membersHasMore=\{props\.communityMembersHasMore\}[\s\S]*isLoadingMembers=\{props\.isLoadingCommunityMembers\}[\s\S]*isLoadingMoreMembers=\{props\.isLoadingMoreCommunityMembers\}[\s\S]*membersLoadError=\{props\.communityMembersLoadError\}[\s\S]*onLoadMoreMembers=\{props\.onLoadMoreCommunityMembers\}/,
+  /memberCount=\{props\.communityMemberCount \?\? props\.presenceSummary\?\.member_count \?\? null\}[\s\S]*hasResolvedMembers=\{props\.hasResolvedCommunityMembers\}[\s\S]*membersHasMore=\{props\.communityMembersHasMore\}[\s\S]*isLoadingMembers=\{props\.isLoadingCommunityMembers\}[\s\S]*isLoadingMoreMembers=\{props\.isLoadingMoreCommunityMembers\}[\s\S]*membersLoadError=\{props\.communityMembersLoadError\}[\s\S]*onLoadMoreMembers=\{props\.onLoadMoreCommunityMembers\}/,
   "interaction projection should pass roster state through to the context panel",
 );
 assert.match(
   contextPanel,
-  /Members — \{memberCountLabel\}/,
+  /showInitialMembersSkeleton[\s\S]*<> — \{memberCountLabel\}<\/\>/,
   "context panel should label the member population from a total-count label",
+);
+assert.match(
+  contextPanel,
+  /isLoadingPresence[\s\S]*community-context-facepile-skeleton[\s\S]*community-context-memory-skeleton[\s\S]*community-context-members-skeleton/,
+  "context panel should expose independent geometry-matched first-resolution skeletons",
+);
+assert.doesNotMatch(
+  contextPanel,
+  /Loading members\.\.\.|Loading memory\.\.\./,
+  "right-rail first resolution should not collapse to loading text",
 );
 assert.match(
   contextPanel,
@@ -602,13 +612,13 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /canManageMembers\?: boolean;[\s\S]*onOpenMemberSettings\?: \(member: CommunityRailMember\) => void;/,
+  /canManageMembers\?: boolean;[\s\S]*canPresentManageMembers\?: boolean;[\s\S]*onOpenMemberSettings\?: \(member: CommunityRailMember\) => void;/,
   "context panel should model an optional manager-only member settings affordance",
 );
 assert.match(
   contextPanel,
-  /const canOpenSettings = Boolean\([\s\S]*props\.canManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)/,
-  "context panel should hide member settings for normal viewers and owner rows",
+  /const canShowSettings = Boolean\([\s\S]*props\.canPresentManageMembers[\s\S]*props\.onOpenMemberSettings[\s\S]*!isOwnerMember[\s\S]*!String\(member\.id \?\? ""\)\.startsWith\("owner:"\)[\s\S]*const canOpenSettings = Boolean\(canShowSettings && props\.canManageMembers\)/,
+  "context panel should retain manager presentation while requiring current authority to open settings",
 );
 assert.match(
   contextPanel,
@@ -677,13 +687,13 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /const isFreeAdmissionMode = entryPolicy === "open" \|\| entryPolicy === "approval";[\s\S]*const canShowFreeAccessSwitch = Boolean\([\s\S]*isFreeAdmissionMode[\s\S]*props\.canSetFreeAccessMode[\s\S]*props\.onSetFreeAccessMode/,
-  "context panel should hide the Auto-join switch for paid communities and unauthorized viewers",
+  /const isFreeAdmissionMode = entryPolicy === "open" \|\| entryPolicy === "approval";[\s\S]*const canShowFreeAccessSwitch = Boolean\([\s\S]*isFreeAdmissionMode[\s\S]*props\.canPresentManageMembers[\s\S]*props\.onSetFreeAccessMode/,
+  "context panel should retain the Auto-join presentation for managers while access refreshes",
 );
 assert.match(
   contextPanel,
-  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
-  "context panel should render the free-access mode as an accessible Auto-join switch",
+  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*disabled=\{!props\.canSetFreeAccessMode \|\| props\.isSettingFreeAccessMode\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
+  "context panel should render the free-access mode as an accessible switch gated by current authority",
 );
 assert.match(
   contextPanel,
@@ -692,8 +702,13 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /const canShowJoinRequests = Boolean\([\s\S]*props\.canReviewJoinRequests[\s\S]*props\.joinReviewMode === "free_approval"[\s\S]*pendingJoinRequests\.length > 0/,
-  "context panel should only pop the request affordance for free approval queues the viewer can review",
+  /const canShowJoinRequests = Boolean\([\s\S]*props\.canPresentManageMembers[\s\S]*props\.joinReviewMode === "free_approval"[\s\S]*pendingJoinRequests\.length > 0/,
+  "context panel should retain the free-approval request affordance for presented managers",
+);
+assert.match(
+  contextPanel,
+  /disabled=\{!props\.canReviewJoinRequests \|\| isDeciding\}/,
+  "join-request mutations should remain gated by current review authority",
 );
 assert.match(
   contextPanel,
