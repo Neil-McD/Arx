@@ -7,6 +7,7 @@ import type {
   CommunityAnalyticsSummary,
 } from "../../../../shared/communityTypes";
 import { useCommunityDirectoryController } from "../../../../shared/useCommunityDirectoryController";
+import { resolveAuthPresentationIdentity } from "../../../../shared/authSession";
 import { useWebActiveCommunityShellController } from "./useWebActiveCommunityShellController";
 import { useWebCommunityAdminUiController } from "./useWebCommunityAdminUiController";
 import { useWebCommunityAgentConfigUiController } from "./useWebCommunityAgentConfigUiController";
@@ -73,6 +74,7 @@ export function useWebCommunityAdministrationState(params: {
 
   const directory = useCommunityDirectoryController<AuthSession>({
     activeCommunityId,
+    presentationIdentity: resolveAuthPresentationIdentity(session),
     ensureSession,
   });
 

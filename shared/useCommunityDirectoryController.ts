@@ -10,6 +10,7 @@ const COMMUNITY_DIRECTORY_PAGE_SIZE = 25;
 
 export function useCommunityDirectoryController<SessionT extends SessionLike>(params: {
   activeCommunityId: string | null;
+  presentationIdentity?: string | null;
   ensureSession?: EnsureSessionFn<SessionT>;
 }) {
   const [communityDirectoryMembers, setCommunityDirectoryMembers] = useState<
@@ -23,18 +24,27 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
   const [communityDirectoryMembersHasMore, setCommunityDirectoryMembersHasMore] = useState(false);
   const [communityDirectoryMembersLoadError, setCommunityDirectoryMembersLoadError] =
     useState<string | null>(null);
+  const [presentationScope, setPresentationScope] = useState<string | null>(null);
+  const [attemptedPresentationScope, setAttemptedPresentationScope] = useState<string | null>(null);
   const communityDirectoryLoadSeqRef = useRef(0);
+  const presentationScopeRef = useRef<string | null>(null);
+
+  const requestedCommunityId = String(params.activeCommunityId ?? "").trim() || null;
+  const presentationIdentity = params.presentationIdentity === undefined
+    ? "authenticated"
+    : String(params.presentationIdentity ?? "").trim() || null;
+  const requestedPresentationScope = requestedCommunityId && presentationIdentity
+    ? `${presentationIdentity}:${requestedCommunityId}`
+    : null;
 
   useEffect(() => {
     communityDirectoryLoadSeqRef.current += 1;
-    setCommunityDirectoryMembers([]);
-    setCommunityDirectoryMemberCount(null);
     setIsLoadingCommunityDirectoryMembers(false);
     setIsLoadingMoreCommunityDirectoryMembers(false);
     setCommunityDirectoryMembersNextCursor(null);
     setCommunityDirectoryMembersHasMore(false);
     setCommunityDirectoryMembersLoadError(null);
-  }, [params.activeCommunityId]);
+  }, [requestedPresentationScope]);
 
   const loadCommunityDirectoryMembers = useCallback(async (
     communityId: string,
@@ -43,11 +53,16 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
     const usableSession = await resolveUsableSession(session, params.ensureSession);
     if (!usableSession) return;
     const seq = (communityDirectoryLoadSeqRef.current += 1);
+    const loadScope = `${presentationIdentity ?? "authenticated"}:${communityId}`;
+    const isSameScopeRefresh = presentationScopeRef.current === loadScope;
+    setAttemptedPresentationScope(loadScope);
     setIsLoadingCommunityDirectoryMembers(true);
     setIsLoadingMoreCommunityDirectoryMembers(false);
     setCommunityDirectoryMembersLoadError(null);
-    setCommunityDirectoryMembersNextCursor(null);
-    setCommunityDirectoryMembersHasMore(false);
+    if (!isSameScopeRefresh) {
+      setCommunityDirectoryMembersNextCursor(null);
+      setCommunityDirectoryMembersHasMore(false);
+    }
     try {
       const page = await listCloudCommunityDirectoryPage({
         session: usableSession,
@@ -56,16 +71,14 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
         pageSize: COMMUNITY_DIRECTORY_PAGE_SIZE,
       });
       if (communityDirectoryLoadSeqRef.current !== seq) return;
+      presentationScopeRef.current = loadScope;
+      setPresentationScope(loadScope);
       setCommunityDirectoryMembers(page.rows);
       setCommunityDirectoryMemberCount(page.totalCount);
       setCommunityDirectoryMembersNextCursor(page.continueCursor);
       setCommunityDirectoryMembersHasMore(Boolean(page.continueCursor && !page.isDone));
     } catch (error) {
       if (communityDirectoryLoadSeqRef.current === seq) {
-        setCommunityDirectoryMembers([]);
-        setCommunityDirectoryMemberCount(null);
-        setCommunityDirectoryMembersNextCursor(null);
-        setCommunityDirectoryMembersHasMore(false);
         setCommunityDirectoryMembersLoadError(
           error instanceof Error ? error.message : "Failed to load members.",
         );
@@ -75,12 +88,14 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
         setIsLoadingCommunityDirectoryMembers(false);
       }
     }
-  }, [params.ensureSession]);
+  }, [params.ensureSession, presentationIdentity]);
 
   const loadMoreCommunityDirectoryMembers = useCallback(async (
     communityId: string,
     session: SessionT,
   ) => {
+    const loadScope = `${presentationIdentity ?? "authenticated"}:${communityId}`;
+    if (presentationScopeRef.current !== loadScope) return;
     const cursor = communityDirectoryMembersNextCursor;
     if (!cursor) return;
     const usableSession = await resolveUsableSession(session, params.ensureSession);
@@ -123,15 +138,28 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
   }, [
     communityDirectoryMembersNextCursor,
     params.ensureSession,
+    presentationIdentity,
   ]);
 
+  const isPresentationScoped = Boolean(
+    requestedPresentationScope && presentationScope === requestedPresentationScope,
+  );
+  const presentationLoadError = attemptedPresentationScope === requestedPresentationScope
+    ? communityDirectoryMembersLoadError
+    : null;
+
   return {
-    communityDirectoryMembers,
-    communityDirectoryMemberCount,
-    isLoadingCommunityDirectoryMembers,
-    isLoadingMoreCommunityDirectoryMembers,
-    communityDirectoryMembersHasMore,
-    communityDirectoryMembersLoadError,
+    communityDirectoryMembers: isPresentationScoped ? communityDirectoryMembers : [],
+    communityDirectoryMemberCount: isPresentationScoped ? communityDirectoryMemberCount : null,
+    isLoadingCommunityDirectoryMembers:
+      Boolean(requestedPresentationScope) &&
+      (isLoadingCommunityDirectoryMembers || (!isPresentationScoped && !presentationLoadError)),
+    isLoadingMoreCommunityDirectoryMembers:
+      isPresentationScoped && isLoadingMoreCommunityDirectoryMembers,
+    communityDirectoryMembersHasMore:
+      isPresentationScoped && communityDirectoryMembersHasMore,
+    communityDirectoryMembersLoadError:
+      presentationLoadError,
     loadCommunityDirectoryMembers,
     loadMoreCommunityDirectoryMembers,
   };

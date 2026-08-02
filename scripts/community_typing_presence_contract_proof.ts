@@ -55,7 +55,7 @@ const listTyping = sectionBetween(
 );
 const subscriptionLifecycle = sectionBetween(
   hook,
-  "useEffect(() => {\n    if (!args.isEnabled || !args.session || !args.activeCommunityId)",
+  "useEffect(() => {\n    if (!args.isEnabled || !sessionIdentity || !args.activeCommunityId)",
   "useEffect(() => {\n    if (!args.isEnabled || !args.activeCommunityId) return;",
 );
 const typingScopeLifecycle = sectionBetween(
@@ -169,8 +169,13 @@ assert.match(
 );
 assert.doesNotMatch(
   subscriptionLifecycle,
-  /activeScopeRef|clearCloudCommunityTyping/,
-  "auth refresh may reconnect the live subscription but must not clear the active typing scope",
+  /activeScopeRef|clearCloudCommunityTyping|args\.session\]/,
+  "token rotation must neither reconnect typing nor clear the active typing scope",
+);
+assert.match(
+  subscriptionLifecycle,
+  /sessionIdentity/,
+  "typing subscription lifetime must follow stable actor identity",
 );
 assert.match(
   typingScopeLifecycle,

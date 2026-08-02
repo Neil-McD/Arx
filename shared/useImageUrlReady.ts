@@ -37,17 +37,20 @@ export function ensureImageUrlReady(
     };
     const settleReady = () => {
       if (typeof image.decode === "function") {
-        void image.decode().catch(() => {}).finally(() => finish(true));
+        void image.decode()
+          .then(() => finish(image.naturalWidth > 0))
+          .catch(() => finish(false));
         return;
       }
-      finish(true);
+      finish(image.naturalWidth > 0);
     };
     image.decoding = "async";
     image.onload = settleReady;
     image.onerror = () => finish(false);
     image.src = normalized;
     if (image.complete) {
-      settleReady();
+      if (image.naturalWidth > 0) settleReady();
+      else finish(false);
     }
   });
 
