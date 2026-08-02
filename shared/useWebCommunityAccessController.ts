@@ -3,9 +3,13 @@ import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } fr
 import { listCloudCommunityMembershipRows } from "./cloudCommunityMembershipGateway";
 import { listCloudProfileRowsByUserIds } from "./cloudProfilesGateway";
 import { mergeUserProfileEntries } from "./userProfileMerge";
-import { preloadImageUrls } from "./preloadImageUrls";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { formatWorkspaceRestoreErrorMessage } from "./appErrorMappings";
+import {
+  beginProfileHydrationRequest,
+  createProfileHydrationRequestRegistry,
+  finishProfileHydrationRequest,
+} from "./profileHydrationRequestRegistry";
 
 type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfileT> = {
   toCanonicalCommunityVisibility: (
@@ -17,7 +21,6 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfile
   loadingResetKey?: string | null;
   setIsLoadingCommunities: Dispatch<SetStateAction<boolean>>;
   setHasResolvedCommunities: Dispatch<SetStateAction<boolean>>;
-  setCommunityRoleById: Dispatch<SetStateAction<Record<string, string>>>;
   setCommunities: Dispatch<SetStateAction<CommunityRecordT[]>>;
   applyCommunityShellState: (opts: { communitySlug?: string | null }) => void;
 
@@ -38,18 +41,27 @@ export function useWebCommunityAccessController<
   argsRef.current = args;
   const loadCommunitiesSeqRef = useRef(0);
   const hasCompletedInitialLoadRef = useRef(false);
-  const hydratedProfileIdsRef = useRef<Set<string>>(new Set());
+  const profileRequestRegistryRef = useRef(createProfileHydrationRequestRegistry());
 
   useEffect(() => {
+    loadCommunitiesSeqRef.current += 1;
     hasCompletedInitialLoadRef.current = false;
-    hydratedProfileIdsRef.current = new Set();
+    profileRequestRegistryRef.current = createProfileHydrationRequestRegistry();
   }, [args.loadingResetKey]);
 
   const loadCommunities = useCallback(async (session: SessionT): Promise<void> => {
-    const current = argsRef.current;
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    const usableSession = await resolveUsableSession(
+      session,
+      argsRef.current.ensureSession,
+    );
     if (!usableSession) return;
+    const current = argsRef.current;
+    const requestScope = String(current.loadingResetKey ?? "");
     const seq = (loadCommunitiesSeqRef.current += 1);
+    const isCurrentRequest = () => (
+      loadCommunitiesSeqRef.current === seq &&
+      String(argsRef.current.loadingResetKey ?? "") === requestScope
+    );
     const shouldShowLoading = !hasCompletedInitialLoadRef.current;
     try {
       if (shouldShowLoading) {
@@ -59,17 +71,10 @@ export function useWebCommunityAccessController<
         session: usableSession,
         selectMode: "full",
       });
-      if (loadCommunitiesSeqRef.current !== seq) return;
+      if (!isCurrentRequest()) return;
       const typedRows = rows as Array<{
-        community_id: string;
-        role: string;
         communities: CommunityRecordT;
       }>;
-      const roleMap: Record<string, string> = {};
-      for (const row of typedRows) {
-        if (row.community_id) roleMap[row.community_id] = row.role;
-      }
-
       const list = typedRows
         .map((row) => row.communities)
         .filter(Boolean)
@@ -77,32 +82,30 @@ export function useWebCommunityAccessController<
           ...community,
           visibility: current.toCanonicalCommunityVisibility(community.visibility, "unlisted"),
         }));
-      await preloadImageUrls(
-        list.flatMap((community: any) => [community?.avatar_url ?? null, community?.banner_url ?? null]),
-        { maxUrls: 12, timeoutMs: 1500 },
-      );
-      if (loadCommunitiesSeqRef.current !== seq) return;
-      current.setCommunityRoleById(roleMap);
-      current.setCommunities(list);
-      if (!current.activeCommunitySlug) {
+      if (!isCurrentRequest()) return;
+      const latest = argsRef.current;
+      latest.setCommunities(list);
+      if (!latest.activeCommunitySlug) {
         const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;
-        if (nextCommunitySlug) current.applyCommunityShellState({ communitySlug: nextCommunitySlug });
+        if (nextCommunitySlug) latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });
         return;
       }
-      if (!list.some((item) => String(item.slug ?? "").trim() === current.activeCommunitySlug) && list.length > 0) {
+      if (!list.some((item) => String(item.slug ?? "").trim() === latest.activeCommunitySlug) && list.length > 0) {
         const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;
-        if (nextCommunitySlug) current.applyCommunityShellState({ communitySlug: nextCommunitySlug });
+        if (nextCommunitySlug) latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });
       }
     } catch (error) {
-      console.warn(
-        "Failed to load communities:",
-        formatWorkspaceRestoreErrorMessage(error, "Couldn't load your communities right now."),
-      );
+      if (isCurrentRequest()) {
+        console.warn(
+          "Failed to load communities:",
+          formatWorkspaceRestoreErrorMessage(error, "Couldn't load your communities right now."),
+        );
+      }
     } finally {
-      if (loadCommunitiesSeqRef.current === seq) {
+      if (isCurrentRequest()) {
         hasCompletedInitialLoadRef.current = true;
-        current.setIsLoadingCommunities(false);
-        current.setHasResolvedCommunities(true);
+        argsRef.current.setIsLoadingCommunities(false);
+        argsRef.current.setHasResolvedCommunities(true);
       }
     }
   }, []);
@@ -112,30 +115,46 @@ export function useWebCommunityAccessController<
     session: SessionT,
     options: LoadUserProfilesOptions = {},
   ): Promise<void> => {
-    const current = argsRef.current;
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
+    const usableSession = await resolveUsableSession(
+      session,
+      argsRef.current.ensureSession,
+    );
     if (!usableSession) return;
-    const unique = Array.from(new Set(userIds.map((id) => id.trim()).filter(Boolean)));
-    const idsToFetch = options.force
-      ? unique
-      : unique.filter((id) => !hydratedProfileIdsRef.current.has(id));
-    if (idsToFetch.length === 0) return;
+    const current = argsRef.current;
+    const requestScope = String(current.loadingResetKey ?? "");
+    const registry = profileRequestRegistryRef.current;
+    const request = beginProfileHydrationRequest(registry, userIds, options);
+    if (!request) return;
     try {
       const profiles = (await listCloudProfileRowsByUserIds<SessionT>({
         session: usableSession,
-        userIds: idsToFetch,
+        userIds: request.userIds,
       })) as unknown as UserProfileT[];
-      for (const id of idsToFetch) {
-        hydratedProfileIdsRef.current.add(id);
+      if (
+        profileRequestRegistryRef.current !== registry ||
+        String(argsRef.current.loadingResetKey ?? "") !== requestScope
+      ) {
+        return;
       }
-      if (profiles.length === 0) return;
-      await preloadImageUrls(
-        profiles.map((profile: any) => profile?.avatar_url ?? null),
-        { maxUrls: profiles.length, timeoutMs: 1200 },
+      const currentUserIds = finishProfileHydrationRequest(
+        registry,
+        request,
+        { successful: true },
       );
-      current.setProfilesByUserId((prev) => mergeUserProfileEntries(prev, profiles));
+      const currentProfiles = profiles.filter((profile) => (
+        currentUserIds.has(String(profile.user_id ?? "").trim())
+      ));
+      if (currentProfiles.length === 0) return;
+      argsRef.current.setProfilesByUserId((prev) => (
+        mergeUserProfileEntries(prev, currentProfiles)
+      ));
     } catch {
-      // ignore
+      if (
+        profileRequestRegistryRef.current === registry &&
+        String(argsRef.current.loadingResetKey ?? "") === requestScope
+      ) {
+        finishProfileHydrationRequest(registry, request, { successful: false });
+      }
     }
   }, []);
 

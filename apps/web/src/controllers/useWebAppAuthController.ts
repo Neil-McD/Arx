@@ -39,10 +39,11 @@ import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
 type AsyncVoid = void | Promise<void>;
 
 type UseWebAppAuthControllerParams = {
+  resumeEpoch: number;
   onSessionLost: () => AsyncVoid;
   onSessionMissingAfterBootstrap: () => AsyncVoid;
   onSessionReady: (session: AuthSession) => AsyncVoid;
-  onSessionFocusReady: (session: AuthSession) => AsyncVoid;
+  onSessionResumeReady: (session: AuthSession) => AsyncVoid;
   onDidJustSignIn: () => void;
   onBeforeSignOut?: () => AsyncVoid;
   onAfterSignOut?: () => AsyncVoid;
@@ -151,7 +152,7 @@ export function useWebAppAuthController(
   const onSessionLostRef = useLatestRef(params.onSessionLost);
   const onSessionMissingAfterBootstrapRef = useLatestRef(params.onSessionMissingAfterBootstrap);
   const onSessionReadyRef = useLatestRef(params.onSessionReady);
-  const onSessionFocusReadyRef = useLatestRef(params.onSessionFocusReady);
+  const onSessionResumeReadyRef = useLatestRef(params.onSessionResumeReady);
   const onDidJustSignInRef = useLatestRef(params.onDidJustSignIn);
   const onBeforeSignOutRef = useLatestRef(params.onBeforeSignOut);
   const onAfterSignOutRef = useLatestRef(params.onAfterSignOut);
@@ -473,6 +474,7 @@ export function useWebAppAuthController(
   }, [clearSessionLocally, refreshAuthSessionLocked, refreshAuthSessionLockedResult]);
 
   useWebAuthSessionLifecycle<AuthSession>({
+    resumeEpoch: params.resumeEpoch,
     session,
     sessionRef,
     refreshTimeoutRef,
@@ -532,11 +534,11 @@ export function useWebAppAuthController(
         });
       })();
     },
-    onFocusWithSession: (currentSession) => {
+    onResumeWithSession: (currentSession) => {
       void (async () => {
-        const usableSession = await ensureUsableAuthSession(currentSession, "session_focus");
+        const usableSession = await ensureUsableAuthSession(currentSession, "session_resume");
         if (!usableSession) return;
-        await onSessionFocusReadyRef.current(usableSession);
+        await onSessionResumeReadyRef.current(usableSession);
       })();
     },
   });

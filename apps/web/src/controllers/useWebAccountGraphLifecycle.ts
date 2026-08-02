@@ -1,11 +1,10 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useRef } from "react";
 
 import type { AuthSession } from "../auth";
 import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
-import type { WebAccountGraphHydrationPhase } from "../webAppContracts";
 
 type SignedOutReason = "session_lost" | "session_missing_after_bootstrap";
 
@@ -36,9 +35,6 @@ function firstRejectedReason(results: PromiseSettledResult<void>[]): unknown {
 }
 
 export function useWebAccountGraphLifecycle() {
-  const [phase, setPhase] =
-    useState<WebAccountGraphHydrationPhase>("idle");
-  const runIdRef = useRef(0);
   const actionsRef = useRef<AccountGraphActions>(NOOP_ACTIONS);
 
   const runInstrumentedLoad = useCallback(async (
@@ -74,8 +70,6 @@ export function useWebAccountGraphLifecycle() {
   }, []);
 
   const onSignedOut = useCallback(async (reason: SignedOutReason) => {
-    runIdRef.current += 1;
-    setPhase("idle");
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "auth_full_signed_out_reset",
@@ -93,13 +87,11 @@ export function useWebAccountGraphLifecycle() {
   }, []);
 
   const onSessionReady = useCallback(async (session: AuthSession) => {
-    const runId = ++runIdRef.current;
     const userId = String(session.user?.id ?? "").trim() || null;
     const actions = actionsRef.current;
     const communitiesAreCritical =
       actions.shouldTreatCommunitiesAsCritical();
     const criticalStartedAt = Date.now();
-    setPhase("critical");
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "account_graph_hydrate",
@@ -120,7 +112,6 @@ export function useWebAccountGraphLifecycle() {
     const criticalFailureCount = criticalResults.filter(
       (result) => result.status === "rejected",
     ).length;
-    if (runIdRef.current === runId) setPhase("secondary");
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "account_graph_hydrate",
@@ -173,7 +164,6 @@ export function useWebAccountGraphLifecycle() {
       const failureCount = results.filter(
         (result) => result.status === "rejected",
       ).length;
-      if (runIdRef.current === runId) setPhase("ready");
       emitWorkspaceEvent({
         scope: "lifecycle",
         name: "account_graph_secondary_hydrate",
@@ -192,27 +182,27 @@ export function useWebAccountGraphLifecycle() {
     });
   }, [runInstrumentedLoad]);
 
-  const onSessionFocusReady = useCallback(async (session: AuthSession) => {
+  const onSessionResumeReady = useCallback(async (session: AuthSession) => {
     const userId = String(session.user?.id ?? "").trim() || null;
     const actions = actionsRef.current;
     emitWorkspaceEvent({
       scope: "lifecycle",
       name: "account_graph_refresh",
       status: "start",
-      detail: { phase: "session_focus_ready", userId },
+      detail: { phase: "session_resume_ready", userId },
     });
     const startedAt = Date.now();
     void Promise.allSettled([
       runInstrumentedLoad(
         "billing_status_load",
         session,
-        "session_focus_ready_secondary",
+        "session_resume_ready_secondary",
         actions.loadBilling,
       ),
       runInstrumentedLoad(
         "communities_load",
         session,
-        "session_focus_ready_secondary",
+        "session_resume_ready_secondary",
         actions.loadCommunities,
       ),
     ]).then((results) => {
@@ -224,7 +214,7 @@ export function useWebAccountGraphLifecycle() {
         name: "account_graph_refresh",
         status: failureCount > 0 ? "failure" : "success",
         detail: {
-          phase: "session_focus_ready",
+          phase: "session_resume_ready",
           userId,
           failureCount,
           durationMs: Date.now() - startedAt,
@@ -255,12 +245,11 @@ export function useWebAccountGraphLifecycle() {
   }, []);
 
   return {
-    phase,
     actionsRef,
     onSessionLost,
     onSessionMissingAfterBootstrap,
     onSessionReady,
-    onSessionFocusReady,
+    onSessionResumeReady,
     onDidJustSignIn,
     onAfterSignOut,
   };

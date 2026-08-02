@@ -29,11 +29,8 @@ import {
   type CommunityInteractionReplyBundle,
   type CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
-import type { AppShellVariant } from "../../../../shared/webAppRouteState";
-
 const COMMUNITY_INTERACTION_ROOT_LIMIT = 50;
 const COMMUNITY_INTERACTION_REPLY_LIMIT = 80;
-const INTERACTION_SELECTED_ROOT_STORAGE_PREFIX = "polynet:interaction:selectedRoot:";
 const MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS = 160;
 
 type EnsureAuthSession = (
@@ -79,7 +76,6 @@ type UseWebCommunityInteractionProjectionParams = {
   ensureSession: EnsureAuthSession;
   isCommunityChatActive: boolean;
   session: AuthSession | null;
-  shellVariant: AppShellVariant;
 };
 
 function formatProjectionError(error: unknown): string {
@@ -95,35 +91,6 @@ function formatProjectionError(error: unknown): string {
     return "Finish your profile to view community threads.";
   }
   return message.trim() || "Failed to load community threads.";
-}
-
-function selectedRootStorageKey(communityId: string, channelId: string | null): string {
-  return `${INTERACTION_SELECTED_ROOT_STORAGE_PREFIX}${communityId}:${channelId ?? "general"}`;
-}
-
-function readStoredSelectedRoot(communityId: string | null, channelId: string | null): string | null {
-  if (!communityId) return null;
-  try {
-    const value = window.localStorage.getItem(selectedRootStorageKey(communityId, channelId));
-    return value && value.trim() ? value : null;
-  } catch {
-    return null;
-  }
-}
-
-function writeStoredSelectedRoot(
-  communityId: string | null,
-  channelId: string | null,
-  rootId: string | null,
-): void {
-  if (!communityId) return;
-  try {
-    const key = selectedRootStorageKey(communityId, channelId);
-    if (rootId) window.localStorage.setItem(key, rootId);
-    else window.localStorage.removeItem(key);
-  } catch {
-    // Storage is a convenience only; the server remains authoritative.
-  }
 }
 
 function storedIdempotencyKey(rawKey: string, kind: "root" | "reply"): string {
@@ -307,7 +274,6 @@ export function useWebCommunityInteractionProjection<
     ensureSession,
     isCommunityChatActive,
     session,
-    shellVariant,
   } = params;
   const [roots, setRoots] = useState<CommunityInteractionRootBundle[]>([]);
   const [nextBeforeCreatedAt, setNextBeforeCreatedAt] = useState<number | null>(null);
@@ -327,6 +293,7 @@ export function useWebCommunityInteractionProjection<
   const [loadingRepliesRootId, setLoadingRepliesRootId] = useState<string | null>(null);
 
   const rootsRef = useRef<CommunityInteractionRootBundle[]>([]);
+  const repliesByRootIdRef = useRef<Record<string, CommunityInteractionReplyBundle[]>>({});
   const nextBeforeCreatedAtRef = useRef<number | null>(null);
   const isLoadingOlderRootsRef = useRef(false);
   const pendingRef = useRef<PendingCanonicalInteraction<AttachmentT>[]>([]);
@@ -336,11 +303,11 @@ export function useWebCommunityInteractionProjection<
   const rootsRequestIdRef = useRef(0);
   const repliesRequestIdRef = useRef<Record<string, number>>({});
   const dismissedServeIssueIdsRef = useRef<Set<string>>(new Set());
-  const restoredSelectionBoundaryRef = useRef<string | null>(null);
   const sessionRef = useRef<AuthSession | null>(session);
 
   sessionRef.current = session;
   rootsRef.current = roots;
+  repliesByRootIdRef.current = repliesByRootId;
   nextBeforeCreatedAtRef.current = nextBeforeCreatedAt;
   isLoadingOlderRootsRef.current = isLoadingOlderRoots;
   pendingRef.current = pending;
@@ -520,6 +487,13 @@ export function useWebCommunityInteractionProjection<
 
   useEffect(() => {
     if (!activeCommunityId || !canonicalSessionUserId) return;
+    const hasCurrentRoots = rootsRef.current.some((bundle) =>
+      rootMatchesChannel(bundle, activeCommunityId, activeChannelId)
+    );
+    if (!hasCurrentRoots) {
+      setIsLoadingRoots(true);
+    }
+    setError(null);
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
@@ -634,6 +608,10 @@ export function useWebCommunityInteractionProjection<
   useEffect(() => {
     if (!selectedRootId || !canonicalSessionUserId) return;
     const rootId = selectedRootId;
+    if (!repliesByRootIdRef.current[rootId]) {
+      setLoadingRepliesRootId(rootId);
+    }
+    setRepliesErrorByRootId((current) => ({ ...current, [rootId]: null }));
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
@@ -712,15 +690,11 @@ export function useWebCommunityInteractionProjection<
           replyToMessageId: interaction.replyToMessageId,
           attachments: interaction.serializedAttachments,
         });
-        void loadRoots(interaction.communityId, activeSession);
-        if (interaction.kind === "reply" && interaction.rootId) {
-          void loadReplies(interaction.rootId, activeSession);
-        }
       } catch {
         markFailed();
       }
     })();
-  }, [loadReplies, loadRoots]);
+  }, []);
 
   const discardPending = useCallback((idempotencyKey: string) => {
     setPending((current) => current.filter((item) => item.idempotencyKey !== idempotencyKey));
@@ -729,35 +703,12 @@ export function useWebCommunityInteractionProjection<
   const selectRoot = useCallback((rawRootId: string) => {
     const rootId = String(rawRootId ?? "").trim();
     if (!rootId) return;
-    setSelectedRootId((current) => {
-      const next = current === rootId ? null : rootId;
-      writeStoredSelectedRoot(activeCommunityId, activeChannelId, next);
-      if (next && !repliesByRootId[next]) {
-        void loadReplies(next);
-      }
-      return next;
-    });
-  }, [activeChannelId, activeCommunityId, loadReplies, repliesByRootId]);
+    setSelectedRootId((current) => current === rootId ? null : rootId);
+  }, []);
 
   const closeDrawer = useCallback(() => {
     setSelectedRootId(null);
-    writeStoredSelectedRoot(activeCommunityId, activeChannelId, null);
-  }, [activeChannelId, activeCommunityId]);
-
-  useEffect(() => {
-    if (!activeCommunityId) return;
-    if (shellVariant === "mobile") return;
-    const selectionBoundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
-    if (restoredSelectionBoundaryRef.current === selectionBoundary) return;
-    const rootsLoadedForCommunity =
-      roots.length > 0 && rootMatchesChannel(roots[0], activeCommunityId, activeChannelId);
-    if (!rootsLoadedForCommunity) return;
-    restoredSelectionBoundaryRef.current = selectionBoundary;
-    const storedRootId = readStoredSelectedRoot(activeCommunityId, activeChannelId);
-    if (storedRootId && roots.some((bundle) => bundle.root.id === storedRootId)) {
-      setSelectedRootId((current) => current ?? storedRootId);
-    }
-  }, [activeChannelId, activeCommunityId, roots, shellVariant]);
+  }, []);
 
   const toggleReaction = useCallback(async (
     targetType: "root" | "reply",
@@ -805,7 +756,6 @@ export function useWebCommunityInteractionProjection<
     if (!usableSession) return;
     if (targetType === "root" && selectedRootId === targetId) {
       setSelectedRootId(null);
-      writeStoredSelectedRoot(activeCommunityId, activeChannelId, null);
     }
     try {
       await deleteCloudCommunityInteractionMessage<AuthSession>({
@@ -816,7 +766,7 @@ export function useWebCommunityInteractionProjection<
     } catch {
       // The live projection remains authoritative.
     }
-  }, [activeChannelId, activeCommunityId, ensureSession, selectedRootId]);
+  }, [ensureSession, selectedRootId]);
 
   const normalizedSessionUserId = String(canonicalSessionUserId ?? "").trim();
   const requestedBoundary =
@@ -836,8 +786,7 @@ export function useWebCommunityInteractionProjection<
       boundaryRef.current = requestedBoundary;
       reset();
     }
-    void loadRoots(activeCommunityId, sessionRef.current);
-  }, [activeCommunityId, loadRoots, requestedBoundary, reset]);
+  }, [activeCommunityId, requestedBoundary, reset]);
 
   const insertOptimistic = useCallback((
     interaction: CommunityInteractionOptimisticInsert<AttachmentT>,

@@ -51,7 +51,6 @@ export function WebCommunityHost(props: WebCommunityHostProps) {
     }
   }, [
     chatPanelProps.canPostMessages,
-    chatPanelProps.hasResolvedCommunityChat,
     chatPanelProps.isAuthRecoveringSignedIn,
     chatPanelProps.isProfileSetupComplete,
     communityTab,

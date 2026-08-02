@@ -58,6 +58,7 @@ export function buildWebShellChromeHostProps(params: {
   communityTab: WebShellChromeHostProps["communityShell"]["communityTab"];
   communityTabIndicators: WebShellChromeHostProps["communityShell"]["communityTabIndicators"];
   communityChannels: WebShellChromeHostProps["communityShell"]["communityChannels"];
+  isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
   communityChannelIndicators: WebShellChromeHostProps["communityShell"]["communityChannelIndicators"];
   handleSelectCommunityChannel: WebShellChromeHostProps["communityShell"]["onSelectCommunityChannel"];
@@ -88,7 +89,7 @@ export function buildWebShellChromeHostProps(params: {
   isLoadingCommunities: boolean;
   selectedActiveCommunitySlug: string | null;
   handleSelectActiveCommunity: (community: CommunityLike) => boolean;
-  openCommunityChat: (slug: string, options: { clearUnread: boolean }) => void;
+  openCommunityChat: (slug: string) => void;
   communityInitials: (value: string) => string;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
@@ -180,6 +181,7 @@ export function buildWebShellChromeHostProps(params: {
       communityTab: params.communityTab,
       communityTabIndicators: params.communityTabIndicators,
       communityChannels: params.communityChannels,
+      isLoadingCommunityChannels: params.isLoadingCommunityChannels,
       selectedCommunityChannelSlug: params.selectedCommunityChannelSlug,
       communityChannelIndicators: params.communityChannelIndicators,
       onSelectCommunityChannel: params.handleSelectCommunityChannel,
@@ -226,8 +228,7 @@ export function buildWebShellChromeHostProps(params: {
       selectedActiveCommunitySlug: params.selectedActiveCommunitySlug,
       activePage: params.activePage,
       onSelectActiveCommunity: params.handleSelectActiveCommunity,
-      onOpenCommunityChat: (slug) =>
-        params.openCommunityChat(slug, { clearUnread: true }),
+      onOpenCommunityChat: params.openCommunityChat,
       communityInitials: params.communityInitials,
       showDesktopCommunityRail: params.showDesktopCommunityRail,
       showDesktopCommunityNav: params.showDesktopCommunityNav,

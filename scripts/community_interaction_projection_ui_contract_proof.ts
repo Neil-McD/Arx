@@ -70,7 +70,6 @@ const communityDirectoryPageQuery = communityDirectory.slice(
 );
 const communityPublic = read("convex/communityPublic.ts");
 const communityAdmin = read("convex/communityAdmin.ts");
-const sendController = read("shared/useCommunityChatMutationController.ts");
 const interactions = read("convex/communityInteractions.ts");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const contextFaceCss = sectionBetween(
@@ -162,10 +161,10 @@ assert.doesNotMatch(
   /useCommunityChatRealtime|useCommunityChatViewport/,
   "the canonical web owner should not mount legacy realtime or legacy scroll pagination",
 );
-assert.match(
+assert.doesNotMatch(
   chatController,
-  /onCommunityMessageSent:[\s\S]*interaction\.loadRoots\(communityId, session\)/,
-  "send completion should request canonical projection refresh through canonical reads",
+  /current\.interaction\.load(?:Roots|Replies)\(/,
+  "send completion should leave reconciliation to the canonical live subscription owner",
 );
 assert.match(
   interactionController,
@@ -200,7 +199,7 @@ assert.match(
 );
 assert.match(
   chatPresentationMode,
-  /if \(input\.hasAuthenticatedPresentation && input\.hasActiveCommunity\)[\s\S]*return "canonical";[\s\S]*return "canonical_bootstrap";[\s\S]*return "legacy";/,
+  /if \(input\.hasAuthenticatedPresentation && input\.hasActiveCommunity\)[\s\S]*return "canonical";[\s\S]*return "canonical_bootstrap";[\s\S]*return "empty";/,
   "authenticated community chat must resolve only to canonical owners",
 );
 assert.doesNotMatch(
@@ -208,10 +207,10 @@ assert.doesNotMatch(
   /legacy_bootstrap|showCommunityChatBootstrap/,
   "the dead legacy bootstrap presentation mode should be deleted",
 );
-assert.match(
+assert.doesNotMatch(
   chatPanel,
-  /showInteractionProjection && interactionProjection[\s\S]*community-interaction-scroll[\s\S]*WebCommunityInteractionProjection[\s\S]*:\s*\([\s\S]*className="chat-messages"/,
-  "chat panel should keep the legacy message timeline as the fallback projection",
+  /CommunityChatMessageRow|communityMessages|communityActivityEvents|showLegacyInteractionSurface/,
+  "chat panel should not keep the legacy message timeline or its state contract",
 );
 assert.match(
   chatPanel,
@@ -220,7 +219,7 @@ assert.match(
 );
 assert.match(
   app,
-  /renderTextWithLinks,[\s\S]*onScrollToReplyMessage: scrollToCommunityMessage/,
+  /renderTextWithLinks,[\s\S]*interactionProjection:\s*\{/,
   "App should pass safe link rendering into the community chat panel",
 );
 assert.doesNotMatch(
@@ -942,19 +941,19 @@ assert.match(
   "gateway should expose the canonical composer bridge mutation",
 );
 assert.match(
-  sendController,
-  /resolveCommunityChatSendRoute[\s\S]*projection_disabled[\s\S]*community_interaction_writer_missing[\s\S]*community_interaction_reply_target_unmapped/,
-  "send controller should keep canonical projection writes behind one explicit fail-closed route decision",
+  chatController,
+  /if \(replySnapshot && !replyRootId\)[\s\S]*Reply target is unavailable[\s\S]*createCloudCommunityInteractionComposerMessageRows<AuthSession>/,
+  "web composer should fail closed on unmapped replies and write only through the canonical gateway",
 );
 assert.doesNotMatch(
-  sendController,
-  /reason:\s*"writer_missing"|return\s+\{\s*kind:\s*"legacy",\s*reason:\s*"writer_missing"\s*\}/,
-  "projection-active sends should not fall back to legacy when the canonical writer is missing",
+  chatController,
+  /createCloudThreadUserMessageRows|ensureCommunityChatThread|loadCommunityChat|projection_disabled/,
+  "web composer should not retain a legacy writer or loader fallback",
 );
 assert.match(
-  sendController,
-  /onCanonicalOptimisticInsert[\s\S]*idempotencyKey: sendRoute\.idempotencyKey[\s\S]*attachments: preparedAttachments[\s\S]*serializedAttachments/,
-  "canonical optimistic projection rows should use the route idempotency key and prepared attachments",
+  chatController,
+  /current\.interaction\.insertOptimistic\(\{[\s\S]*idempotencyKey,[\s\S]*attachments: preparedAttachments,[\s\S]*serializedAttachments/,
+  "canonical optimistic projection rows should use the write idempotency key and prepared attachments",
 );
 assert.match(
   interactionController,

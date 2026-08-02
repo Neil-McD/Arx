@@ -5,6 +5,7 @@ import {
 } from "../../../../shared/useAuthSessionLifecycle";
 
 export function useWebAuthSessionLifecycle<TSession extends ExpiringSessionLike>(params: {
+  resumeEpoch: number;
   session: TSession | null;
   sessionRef: MutableRefObject<TSession | null>;
   refreshTimeoutRef: MutableRefObject<number | null>;
@@ -14,9 +15,10 @@ export function useWebAuthSessionLifecycle<TSession extends ExpiringSessionLike>
   onDidJustSignIn: () => void;
   onSessionAvailable: (session: TSession) => void;
   onSessionMissing: () => void;
-  onFocusWithSession: (session: TSession) => void;
+  onResumeWithSession: (session: TSession) => void;
 }) {
   useAuthSessionLifecycle({
+    resumeEpoch: params.resumeEpoch,
     session: params.session,
     sessionRef: params.sessionRef,
     refreshTimeoutRef: params.refreshTimeoutRef,
@@ -24,7 +26,7 @@ export function useWebAuthSessionLifecycle<TSession extends ExpiringSessionLike>
     onMount: params.onMountOAuthBootstrap,
     onSessionAvailable: params.onSessionAvailable,
     onSessionMissing: params.onSessionMissing,
-    onFocusWithSession: params.onFocusWithSession,
+    onResumeWithSession: params.onResumeWithSession,
     didJustSignInRef: params.didJustSignInRef,
     onDidJustSignIn: params.onDidJustSignIn,
   });

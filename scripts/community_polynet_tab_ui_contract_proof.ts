@@ -111,7 +111,7 @@ assert.match(
 );
 assert.match(
   app,
-  /openCommunityChat\(nextCommunitySlug, \{ clearUnread: true, pushSnapshot: false \}\)/,
+  /openCommunityChat\(nextCommunitySlug, \{ pushSnapshot: false \}\)/,
   "Polynet back action should route to the same community chat without relying on browser history",
 );
 assert.match(section, /overview\.graph\.nodes\.map/, "Polynet graph should render backend-projected nodes");
@@ -204,7 +204,16 @@ assert.doesNotMatch(
   "The local memory drawer state should be removed",
 );
 
-const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
+const css = [
+  readFileSync(join(root, "apps/web/src/base.css"), "utf8"),
+  readFileSync(join(root, "apps/web/src/styles/shell-and-onboarding.css"), "utf8"),
+  readFileSync(join(root, "apps/web/src/styles/community-and-content.css"), "utf8"),
+  readFileSync(
+    join(root, "apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
+    "utf8",
+  ),
+  readFileSync(join(root, "apps/web/src/index.css"), "utf8"),
+].join("\n");
 const polynetBackRule = readCssRuleBody(css, ".community-polynet-back");
 assert.match(
   css,

@@ -6,7 +6,7 @@ const root = process.cwd();
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const communityChat = readFileSync(join(root, "convex/communityChat.ts"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityChatGateway.ts"), "utf8");
-const mutationController = readFileSync(join(root, "shared/useCommunityChatMutationController.ts"), "utf8");
+const composerController = readFileSync(join(root, "apps/web/src/controllers/useWebCommunityChatController.ts"), "utf8");
 
 function extractNumberConst(source: string, name: string): number {
   const match = source.match(new RegExp(`const ${name} = ([0-9_]+);`));
@@ -74,12 +74,12 @@ assert.match(
 );
 
 assert.match(
-  mutationController,
+  composerController,
   /message_attachment_limit_exceeded[\s\S]*You can attach up to 8 files per message/,
   "attachment count policy errors should map to user-facing chat copy",
 );
 assert.match(
-  mutationController,
+  composerController,
   /message_attachment_payload_too_large[\s\S]*One attachment preview is too large/,
   "attachment payload policy errors should map to user-facing chat copy",
 );

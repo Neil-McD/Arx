@@ -9,9 +9,8 @@ const activity = readFileSync(join(root, "convex/communityActivity.ts"), "utf8")
 const resources = readFileSync(join(root, "convex/communityResources.ts"), "utf8");
 const aiFeed = readFileSync(join(root, "convex/communityAiFeed.ts"), "utf8");
 const chatGateway = readFileSync(join(root, "shared/cloudCommunityChatGateway.ts"), "utf8");
-const realtime = readFileSync(join(root, "shared/useCommunityChatRealtime.ts"), "utf8");
 const chatPanel = readFileSync(join(root, "apps/web/src/components/WebCommunityChatPanel.tsx"), "utf8");
-const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
+const css = readFileSync(join(root, "apps/web/src/styles/community-and-content.css"), "utf8");
 
 assert.match(
   packageJson,
@@ -59,12 +58,6 @@ assert.match(
   chatGateway,
   /subscribeCloudCommunityActivityEvents[\s\S]*communityActivity:listCommunityActivityEvents/,
   "chat gateway should expose a live activity-event subscription",
-);
-
-assert.match(
-  realtime,
-  /subscribeCloudCommunityActivityEvents[\s\S]*setCommunityActivityEvents\(rows\)/,
-  "chat realtime should hydrate activity events into chat state",
 );
 
 assert.match(

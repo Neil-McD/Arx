@@ -2,10 +2,6 @@ type TimeoutRef = { current: number | null };
 type ExpiringSessionLike = {
   expires_at: number;
 };
-type SessionRef<TSession> = {
-  current: TSession | null;
-};
-
 function computeRefreshDelayMs(params: {
   expiresAtSec: number;
   nowSec?: number;
@@ -54,7 +50,7 @@ export function scheduleRefreshTimer(params: {
   return delayMs;
 }
 
-async function refreshSessionIfNearExpiry(params: {
+export async function refreshSessionIfNearExpiry(params: {
   session: ExpiringSessionLike | null | undefined;
   refreshLocked: () => Promise<unknown>;
   nowSec?: number;
@@ -67,24 +63,4 @@ async function refreshSessionIfNearExpiry(params: {
   if (session.expires_at > nowSec + thresholdSec) return false;
   await params.refreshLocked();
   return true;
-}
-
-export function bindFocusRefresh<TSession extends ExpiringSessionLike>(params: {
-  sessionRef: SessionRef<TSession>;
-  refreshLocked: () => Promise<unknown>;
-  onFocusWithSession: (session: TSession) => void;
-  thresholdSec?: number;
-}): () => void {
-  const onFocus = () => {
-    const current = params.sessionRef.current;
-    if (!current) return;
-    void refreshSessionIfNearExpiry({
-      session: current,
-      refreshLocked: params.refreshLocked,
-      thresholdSec: params.thresholdSec ?? 60,
-    });
-    params.onFocusWithSession(current);
-  };
-  window.addEventListener("focus", onFocus);
-  return () => window.removeEventListener("focus", onFocus);
 }

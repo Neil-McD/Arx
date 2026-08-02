@@ -89,10 +89,4 @@ export type WebNavSnapshot = NavSnapshotBase & {
   routePath: string;
 };
 
-export type WebAccountGraphHydrationPhase =
-  | "idle"
-  | "critical"
-  | "secondary"
-  | "ready";
-
 export type WebUserProfilesById = Record<string, UserProfile>;

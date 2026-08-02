@@ -27,7 +27,6 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     communityTab?: CommunityTab;
     communityChannelSlug?: string | null;
   }) => void;
-  setUnreadCount?: Dispatch<SetStateAction<number>>;
 }) {
   const paramsRef = useRef(params);
   paramsRef.current = params;
@@ -79,7 +78,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
   }, [syncCommunitySelection]);
 
   const openCommunityTab = useCallback(
-    (nextCommunitySlug: string, nextCommunityTab: CommunityTab, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
+    (nextCommunitySlug: string, nextCommunityTab: CommunityTab, opts?: { pushSnapshot?: boolean }) => {
       const current = paramsRef.current;
       const normalizedSlug = String(nextCommunitySlug ?? "").trim();
       if (!normalizedSlug) return;
@@ -107,13 +106,12 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
         communitySlug: matchedCommunity.slug,
         communityTab: transition.nextCommunityTab,
       });
-      if (opts?.clearUnread) current.setUnreadCount?.(0);
     },
     [openPublicCommunityFunnel, resolveCommunityBySlug],
   );
 
   const openCommunityChat = useCallback(
-    (nextCommunitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
+    (nextCommunitySlug: string, opts?: { pushSnapshot?: boolean }) => {
       openCommunityTab(nextCommunitySlug, "chat", opts);
     },
     [openCommunityTab],
@@ -134,7 +132,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
   );
 
   const openJoinedCommunityBySlug = useCallback(
-    (communitySlug: string, opts?: { clearUnread?: boolean; pushSnapshot?: boolean }) => {
+    (communitySlug: string, opts?: { pushSnapshot?: boolean }) => {
       openCommunityBySlug(communitySlug, opts);
     },
     [openCommunityBySlug],

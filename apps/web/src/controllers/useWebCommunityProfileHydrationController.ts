@@ -6,6 +6,7 @@ import type {
 } from "../../../../shared/communityTypes";
 import { mergeUserProfileEntry } from "../../../../shared/userProfileMerge";
 import { shortId } from "../../../../shared/chatUi";
+import { useResumeEpochEffect } from "../../../../shared/useResumeEpochEffect";
 import type { AuthSession } from "../auth";
 
 type ActorRoot = {
@@ -24,12 +25,11 @@ type ActorReply = {
 type UseWebCommunityProfileHydrationControllerParams = {
   activePage: string;
   canonicalSessionUserId: string | null;
+  resumeEpoch: number;
   session: AuthSession | null;
   cloudProfile: UserProfileDetail | null;
   profilesByUserId: Record<string, UserProfile>;
   communityDirectoryMembers: readonly { user_id?: string | null }[];
-  communityMessages: readonly { sender_id?: string | null }[];
-  communityActivityEvents: readonly { actor_user_id?: string | null }[];
   communityInteractionRoots: readonly ActorRoot[];
   communityInteractionRepliesByRootId: Record<
     string,
@@ -54,14 +54,6 @@ export function useWebCommunityProfileHydrationController(
     for (const member of params.communityDirectoryMembers) {
       const userId = String(member.user_id ?? "").trim();
       if (userId) ids.add(userId);
-    }
-    for (const message of params.communityMessages) {
-      const senderId = String(message.sender_id ?? "").trim();
-      if (senderId) ids.add(senderId);
-    }
-    for (const event of params.communityActivityEvents) {
-      const actorId = String(event.actor_user_id ?? "").trim();
-      if (actorId) ids.add(actorId);
     }
     for (const bundle of params.communityInteractionRoots) {
       const actorId = String(bundle.root.actor_user_id ?? "").trim();
@@ -88,11 +80,9 @@ export function useWebCommunityProfileHydrationController(
   }, [
     params.activePage,
     params.canonicalSessionUserId,
-    params.communityActivityEvents,
     params.communityDirectoryMembers,
     params.communityInteractionRepliesByRootId,
     params.communityInteractionRoots,
-    params.communityMessages,
   ]);
 
   const profilesByUserId = useMemo(() => {
@@ -166,39 +156,25 @@ export function useWebCommunityProfileHydrationController(
 
   useEffect(() => {
     if (!params.canonicalSessionUserId || !sessionRef.current || visibleProfileIds.length === 0) return;
-    const hydrate = () => {
-      const currentSession = sessionRef.current;
-      if (!currentSession) return;
-      void params.loadUserProfiles(visibleProfileIds, currentSession);
-      void params.loadSelfProfile(currentSession);
-    };
-    const refresh = () => {
-      const currentSession = sessionRef.current;
-      if (!currentSession) return;
-      void params.loadUserProfiles(visibleProfileIds, currentSession, {
-        force: true,
-      });
-      void params.loadSelfProfile(currentSession);
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") refresh();
-    };
-    hydrate();
-    window.addEventListener("focus", refresh);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("focus", refresh);
-      document.removeEventListener(
-        "visibilitychange",
-        handleVisibilityChange,
-      );
-    };
+    const currentSession = sessionRef.current;
+    if (!currentSession) return;
+    void params.loadUserProfiles(visibleProfileIds, currentSession);
+    void params.loadSelfProfile(currentSession);
   }, [
     params.loadSelfProfile,
     params.loadUserProfiles,
     params.canonicalSessionUserId,
     visibleProfileIds,
   ]);
+
+  useResumeEpochEffect(params.resumeEpoch, () => {
+    const currentSession = sessionRef.current;
+    if (!params.canonicalSessionUserId || !currentSession || visibleProfileIds.length === 0) return;
+    void params.loadUserProfiles(visibleProfileIds, currentSession, {
+      force: true,
+    });
+    void params.loadSelfProfile(currentSession);
+  });
 
   return { profilesByUserId, displayName };
 }

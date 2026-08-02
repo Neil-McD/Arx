@@ -540,8 +540,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
              the graph will replace a beat later — absent beats flicker. */
           null
         ) : props.isLoadingMemory && !memoryOverview ? (
-          <div className="community-context-memory-empty">
-            <span>Loading memory...</span>
+          <div className="community-context-memory-summary" aria-label="Loading memory">
+            <div className="community-context-memory-preview web-skeleton-block" />
+            <div className="community-context-memory-loading-status web-skeleton-row" />
           </div>
         ) : props.memoryLoadError ? (
           <div className="community-context-memory-error">
@@ -724,7 +725,18 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           </>
         ) : null}
         {!lockedMembers && loadedMemberCount === 0 && props.isLoadingMembers ? (
-          <div className="community-context-members-status">Loading members...</div>
+          <div className="community-context-members-loading" aria-label="Loading members">
+            {Array.from({ length: 6 }).map((_, index) => (
+              <div className="community-context-member community-context-member-skeleton" key={index}>
+                <span className="community-context-member-avatar web-skeleton-block" />
+                <span
+                  className={`community-context-member-skeleton-name web-skeleton-row${
+                    index % 3 === 1 ? " is-short" : ""
+                  }`}
+                />
+              </div>
+            ))}
+          </div>
         ) : null}
         {!lockedMembers && shouldShowMembersFooter ? (
           <div

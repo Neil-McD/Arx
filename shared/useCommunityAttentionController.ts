@@ -7,6 +7,7 @@ import {
 } from "./cloudCommunityAttentionGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
+import { useResumeEpochEffect } from "./useResumeEpochEffect";
 
 type SessionLike = unknown;
 
@@ -25,6 +26,7 @@ type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
   session: SessionT | null;
   communityIds: string[];
   ensureSession?: EnsureSessionFn<SessionT>;
+  resumeEpoch: number;
   pollIntervalMs?: number;
 };
 
@@ -75,8 +77,6 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
   const [attentionByCommunityId, setAttentionByCommunityId] = useState<
     Record<string, CommunityAttentionIndicators>
   >({});
-  const [isLoadingCommunityAttention, setIsLoadingCommunityAttention] = useState(false);
-  const [communityAttentionError, setCommunityAttentionError] = useState<string | null>(null);
   const loadGenerationRef = useRef(0);
   const inFlightMarkKeysRef = useRef<Set<string>>(new Set());
   const sessionIdentity = resolveAuthPresentationIdentity(args.session as AuthSessionLike);
@@ -97,13 +97,9 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
 
     if (!usableSession || communityIds.length === 0) {
       setAttentionByCommunityId({});
-      setCommunityAttentionError(null);
-      setIsLoadingCommunityAttention(false);
       return;
     }
 
-    setIsLoadingCommunityAttention(true);
-    setCommunityAttentionError(null);
     try {
       const rows = await listCloudCommunityAttentionRows({
         session: usableSession,
@@ -124,13 +120,8 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
         };
       }
       setAttentionByCommunityId(nextAttentionMap);
-    } catch (error) {
+    } catch {
       if (loadGenerationRef.current !== generation) return;
-      setCommunityAttentionError(error instanceof Error ? error.message : "Failed to load community attention.");
-    } finally {
-      if (loadGenerationRef.current === generation) {
-        setIsLoadingCommunityAttention(false);
-      }
     }
   }, []);
 
@@ -188,23 +179,10 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
     void refreshCommunityAttention();
   }, [normalizedCommunityIds, refreshCommunityAttention, sessionIdentity]);
 
-  useEffect(() => {
+  useResumeEpochEffect(args.resumeEpoch, () => {
     if (!sessionIdentity || normalizedCommunityIds.length === 0) return;
-    const handleWindowFocus = () => {
-      void refreshCommunityAttention();
-    };
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void refreshCommunityAttention();
-      }
-    };
-    window.addEventListener("focus", handleWindowFocus);
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => {
-      window.removeEventListener("focus", handleWindowFocus);
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-    };
-  }, [sessionIdentity, normalizedCommunityIds, refreshCommunityAttention]);
+    void refreshCommunityAttention();
+  });
 
   useEffect(() => {
     if (!sessionIdentity || normalizedCommunityIds.length === 0) return;
@@ -218,8 +196,6 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
 
   return {
     attentionByCommunityId,
-    isLoadingCommunityAttention,
-    communityAttentionError,
     refreshCommunityAttention,
     markCommunitySurfaceSeen,
   };

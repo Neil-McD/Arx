@@ -38,6 +38,7 @@ type CommunityNavProps = {
     name: string;
     is_general: boolean;
   }>;
+  isLoadingChannels?: boolean;
   selectedChannelSlug?: string | null;
   channelIndicators?: Record<string, { chat: boolean; mentions: boolean }>;
   onSelectChannel?: (channel: {
@@ -91,6 +92,7 @@ export function CommunityNav({
   subtitle = null,
   lockedTabs = {},
   channels = [],
+  isLoadingChannels = false,
   selectedChannelSlug = "general",
   channelIndicators = {},
   onSelectChannel,
@@ -119,9 +121,8 @@ export function CommunityNav({
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
-  const displayedChannels = channels.length > 0
-    ? channels
-    : [{ id: "", slug: "general", name: "General", is_general: true }];
+  const showChannelLoadingSkeleton =
+    isLoadingChannels && channels.every((channel) => !channel.id);
 
   useEffect(() => {
     if (!isAddChannelOpen) return;
@@ -209,7 +210,12 @@ export function CommunityNav({
         {subtitle ? <div className="community-nav-subtitle">{subtitle}</div> : null}
       </div>
       <div className="community-channel-list" aria-label="Channels">
-        {displayedChannels.map((channel) => {
+        {showChannelLoadingSkeleton ? (
+          <div className="community-channel-loading" aria-label="Loading channels">
+            <div className="community-channel-loading-row web-skeleton-row" />
+            <div className="community-channel-loading-row is-short web-skeleton-row" />
+          </div>
+        ) : channels.map((channel) => {
           const isSelected =
             communityTab === "chat" &&
             (selectedChannelSlug ?? "general") === channel.slug;

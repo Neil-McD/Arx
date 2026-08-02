@@ -60,6 +60,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           communityTab={props.communityShell.communityTab}
           tabIndicators={props.communityShell.communityTabIndicators}
           channels={props.communityShell.communityChannels}
+          isLoadingChannels={props.communityShell.isLoadingCommunityChannels}
           selectedChannelSlug={props.communityShell.selectedCommunityChannelSlug}
           channelIndicators={props.communityShell.communityChannelIndicators}
           onSelectChannel={props.communityShell.onSelectCommunityChannel}

@@ -72,6 +72,7 @@ export type WebCommunityShellProps = {
     name: string;
     is_general: boolean;
   }>;
+  isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
   communityChannelIndicators: Record<string, { chat: boolean; mentions: boolean }>;
   onSelectCommunityChannel: (channel: {

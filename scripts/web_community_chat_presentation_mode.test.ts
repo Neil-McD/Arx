@@ -31,6 +31,17 @@ describe("web community chat presentation mode", () => {
     ).toBe("canonical_bootstrap");
   });
 
+  it("reserves canonical shell geometry before auth restoration finishes", () => {
+    expect(
+      resolveWebCommunityChatPresentationMode({
+        ...canonicalReady,
+        hasActiveCommunity: false,
+        hasAuthenticatedPresentation: false,
+        isResolvingSelectedCommunity: true,
+      }),
+    ).toBe("canonical_bootstrap");
+  });
+
   it("never hands an authenticated transition to a legacy chat owner", () => {
     const transition: WebCommunityChatPresentationMode[] = [
       resolveWebCommunityChatPresentationMode(canonicalReady),
@@ -56,13 +67,13 @@ describe("web community chat presentation mode", () => {
     expect(transition).not.toContain("legacy");
   });
 
-  it("uses the legacy-shaped shell only for signed-out or empty app state", () => {
+  it("uses an inert empty shell for signed-out or empty app state", () => {
     expect(
       resolveWebCommunityChatPresentationMode({
         ...canonicalReady,
         hasActiveCommunity: false,
         hasAuthenticatedPresentation: false,
       }),
-    ).toBe("legacy");
+    ).toBe("empty");
   });
 });

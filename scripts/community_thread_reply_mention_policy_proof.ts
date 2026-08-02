@@ -8,15 +8,16 @@ function read(relativePath: string): string {
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const mentionAutocomplete = read("apps/web/src/components/communityMentionAutocomplete.tsx");
 const interactionProjection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
+const interactionProjectionController = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
 const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
-const mutationController = read("shared/useCommunityChatMutationController.ts");
+const composerController = read("apps/web/src/controllers/useWebCommunityChatController.ts");
 const app = read("apps/web/src/App.tsx");
 const packageJson = read("package.json");
 
 assert.match(
   chatPanel,
-  /type CommunityReplyTarget = Pick<CommunityChatMessage, "id" \| "sender_id" \| "body"> & \{[\s\S]*interaction_root_id\?: string \| null;[\s\S]*interaction_reply_id\?: string \| null;[\s\S]*legacy_message_id\?: string \| null;/,
+  /type CommunityReplyTarget = \{[\s\S]*id: string;[\s\S]*sender_id: string;[\s\S]*body: string;[\s\S]*interaction_root_id\?: string \| null;[\s\S]*interaction_reply_id\?: string \| null;[\s\S]*legacy_message_id\?: string \| null;/,
   "drawer reply targets must carry an explicit canonical interaction reply id",
 );
 assert.match(
@@ -80,28 +81,23 @@ assert.doesNotMatch(
   "community-agent replies must not silently no-op behind a visible Reply action",
 );
 assert.match(
-  mutationController,
+  composerController,
   /interaction_reply_id\?: string \| null;/,
   "send drafts must preserve canonical interaction reply ids",
 );
 assert.match(
-  mutationController,
-  /const interactionReplyToId = String\(replySnapshot\?\.interaction_reply_id \?\? ""\)\.trim\(\) \|\| null;[\s\S]*const canonicalReplyToMessageId = interactionReplyToId \?\? legacyReplyToMessageId;/,
+  composerController,
+  /const interactionReplyToId =[\s\S]*String\(replySnapshot\?\.interaction_reply_id \?\? ""\)\.trim\(\) \|\| null;[\s\S]*const canonicalReplyToMessageId =[\s\S]*interactionReplyToId \?\? legacyReplyToMessageId;/,
   "canonical sends should prefer the explicit interaction reply id before falling back to legacy chat ids",
 );
 assert.match(
-  mutationController,
-  /createCanonicalMessageRows\(\{[\s\S]*rootId: sendRoute\.rootId,[\s\S]*replyToMessageId: canonicalReplyToMessageId,/,
+  composerController,
+  /createCloudCommunityInteractionComposerMessageRows<AuthSession>\(\{[\s\S]*rootId: replyRootId,[\s\S]*replyToMessageId: canonicalReplyToMessageId,/,
   "canonical thread replies must submit the hidden target reply id",
 );
 assert.match(
-  mutationController,
-  /createCloudThreadUserMessageRows[\s\S]*replyToId: legacyReplyToMessageId,/,
-  "legacy chat sends must keep using legacy chat reply ids",
-);
-assert.match(
-  app,
-  /target_reply_id: p\.replyToMessageId,/,
+  interactionProjectionController,
+  /target_reply_id: pending\.replyToMessageId,/,
   "optimistic canonical replies should keep the same hidden target pointer",
 );
 assert.doesNotMatch(

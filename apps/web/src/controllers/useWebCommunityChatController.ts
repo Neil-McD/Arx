@@ -1,7 +1,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type MutableRefObject,
@@ -17,7 +16,6 @@ import {
   readChatImageAsDataUrl,
   readTextAttachmentPreview,
 } from "../../../../shared/attachmentHelpers";
-import { copyTextToClipboard } from "../../../../shared/chatUi";
 import {
   createCloudCommunityInteractionComposerMessageRows,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
@@ -25,50 +23,29 @@ import {
   uploadCloudCommunityChatAttachmentFile,
 } from "../../../../shared/cloudCommunityChatGateway";
 import {
-  buildReplyPrefix,
-  extractTextFromContentJson,
-  parseMessageAttachments,
-  parseReplyPrefix,
   type CommunityMessageAttachment,
 } from "../../../../shared/communityMessageParsing";
-import type {
-  ChatLightboxImage,
-  CommunityActivityEvent,
-  CommunityChatMessage as SharedCommunityChatMessage,
-  MessageReaction,
-} from "../../../../shared/communityTypes";
-import { useCommunityChatDataController } from "../../../../shared/useCommunityChatDataController";
+import { resolveAuthSubject } from "../../../../shared/authSession";
+import { resolveUsableSession } from "../../../../shared/ensureUsableSession";
+import { textContainsMentionToken } from "../../../../shared/communityMentionRendering";
+import type { ChatLightboxImage } from "../../../../shared/communityTypes";
 import { useCommunityChatLightbox } from "../../../../shared/useCommunityChatLightbox";
-import { useCommunityChatMutationController } from "../../../../shared/useCommunityChatMutationController";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 
-const COMMUNITY_CHAT_PAGE_SIZE = 50;
 const MAX_WEB_ATTACHMENTS_PER_MESSAGE = 8;
 const MAX_WEB_IMAGE_UPLOAD_BYTES = 25 * 1024 * 1024;
 const MAX_WEB_MEDIA_UPLOAD_BYTES = 50 * 1024 * 1024;
 const MAX_WEB_FILE_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024;
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000;
-export const WEB_COMMUNITY_REACTION_EMOJIS = [
-  "👍",
-  "❤️",
-  "😂",
-  "🔥",
-  "🫡",
-  "🎉",
-];
-
 export type WebCommunityMessageAttachment = CommunityMessageAttachment & {
   file?: File | null;
 };
 
-export type WebCommunityChatMessage =
-  SharedCommunityChatMessage<WebCommunityMessageAttachment>;
-
-export type WebCommunityReplyTarget = Pick<
-  WebCommunityChatMessage,
-  "id" | "sender_id" | "body"
-> & {
+export type WebCommunityReplyTarget = {
+  id: string;
+  sender_id: string;
+  body: string;
   interaction_root_id?: string | null;
   interaction_reply_id?: string | null;
   legacy_message_id?: string | null;
@@ -82,7 +59,6 @@ type EnsureAuthSession = (
 
 type CommunityInteractionComposerBoundary = {
   error: string | null;
-  selectedRootId: string | null;
   insertOptimistic: (pending: {
     idempotencyKey: string;
     communityId: string;
@@ -100,14 +76,6 @@ type CommunityInteractionComposerBoundary = {
     idempotencyKey: string;
     status: "failed";
   }) => void;
-  loadRoots: (
-    communityId?: string | null,
-    session?: AuthSession | null,
-  ) => Promise<void>;
-  loadReplies: (
-    rootId: string,
-    session?: AuthSession | null,
-  ) => Promise<void>;
 };
 
 type UseWebCommunityChatControllerParams = {
@@ -115,10 +83,8 @@ type UseWebCommunityChatControllerParams = {
   activeChannelId: string | null;
   canonicalSessionUserId: string | null;
   ensureSession: EnsureAuthSession;
-  hasActiveCommunity: boolean;
   interaction: CommunityInteractionComposerBoundary;
   isProfileSetupComplete: boolean;
-  loadProfiles: (userIds: string[], session: AuthSession) => Promise<void>;
   onMessageSent: (event: {
     communityId: string;
     hasAttachments: boolean;
@@ -128,6 +94,87 @@ type UseWebCommunityChatControllerParams = {
   session: AuthSession | null;
   canMentionEverybodyRef: MutableRefObject<boolean>;
 };
+
+type WebCommunityMessageSendDraft = {
+  text?: string;
+  attachments?: WebCommunityMessageAttachment[];
+  mentions?: CommittedMention[];
+  replyingToMessage?: WebCommunityReplyTarget | null;
+  inputRef?: MutableRefObject<HTMLTextAreaElement | null> | null;
+  clearDraft?: () => void;
+  restoreDraft?: () => void;
+};
+
+const EVERYBODY_MENTION_ROLE_KEY = "everybody";
+const EVERYBODY_MENTION_TOKENS = ["@everybody", "@everyone"] as const;
+
+function mentionTokenIsEverybody(rawToken: unknown): boolean {
+  const token = String(rawToken ?? "").trim().toLowerCase();
+  return EVERYBODY_MENTION_TOKENS.some((candidate) => token === candidate);
+}
+
+function textContainsEverybodyMentionToken(text: string): boolean {
+  return EVERYBODY_MENTION_TOKENS.some((token) =>
+    textContainsMentionToken(text, token),
+  );
+}
+
+function isProfileSetupRequiredError(error: unknown): boolean {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "";
+  return message.includes("profile_setup_required");
+}
+
+function mapCommunityComposerErrorMessage(error: unknown): string {
+  const message =
+    typeof error === "string"
+      ? error
+      : error instanceof Error
+        ? error.message
+        : "Failed to send message.";
+  if (message.includes("profile_setup_required")) {
+    return "Finish your profile before posting in communities.";
+  }
+  if (message.includes("message_attachment_limit_exceeded")) {
+    return "You can attach up to 8 files per message.";
+  }
+  if (message.includes("message_attachment_payload_too_large")) {
+    return "One attachment preview is too large. Try a smaller image.";
+  }
+  if (
+    message.includes("community_interaction_reply_target_unmapped") ||
+    message.includes("interaction_legacy_reply_target") ||
+    message.includes("interaction_target_reply_invalid")
+  ) {
+    return "Reply target is unavailable. Reopen the thread and try again.";
+  }
+  if (message.includes("interaction_mention_everybody_reply_not_allowed")) {
+    return "@everybody can only be used in top-level community posts.";
+  }
+  if (message.includes("interaction_mention_everybody_edit_create_not_allowed")) {
+    return "Create a new top-level post to notify everybody.";
+  }
+  return message;
+}
+
+function createCommunityComposerIdempotencyKey(
+  communityId: string,
+  channelId: string | null,
+  rootId: string | null,
+): string {
+  return [
+    "community-composer",
+    communityId,
+    channelId ?? "general",
+    rootId ? `reply:${rootId}` : "root",
+    Date.now().toString(36),
+    Math.random().toString(36).slice(2, 10),
+  ].join(":");
+}
 
 function displayNameForAttachmentFile(file: File, fallbackIndex: number): string {
   const existingName = (file.name ?? "").trim();
@@ -277,44 +324,18 @@ function serializeAttachmentsForWrite(
 export function useWebCommunityChatController(
   params: UseWebCommunityChatControllerParams,
 ) {
-  const {
-    activeCommunityId,
-    activeChannelId,
-    canonicalSessionUserId,
-    ensureSession,
-    hasActiveCommunity,
-    interaction,
-    isProfileSetupComplete,
-    loadProfiles,
-    onMessageSent,
-    onOpenProfileSetup,
-    session,
-    canMentionEverybodyRef,
-  } = params;
-
-  const [messages, setMessages] = useState<WebCommunityChatMessage[]>([]);
-  const [activityEvents, setActivityEvents] = useState<CommunityActivityEvent[]>([]);
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
   const [messageInput, setMessageInput] = useState("");
   const [messageMentions, setMessageMentions] = useState<CommittedMention[]>([]);
   const [attachments, setAttachments] = useState<WebCommunityMessageAttachment[]>([]);
   const attachmentsRef = useRef<WebCommunityMessageAttachment[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [copiedMessageId, setCopiedMessageId] = useState<string | null>(null);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [isUserAtBottom, setIsUserAtBottom] = useState(true);
-  const isUserAtBottomRef = useRef(true);
-  const messageListRef = useRef<HTMLDivElement | null>(null);
   const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [isSendingMessage, setIsSendingMessage] = useState(false);
   const [replyingToMessage, setReplyingToMessage] =
     useState<WebCommunityReplyTarget | null>(null);
-  const [reactions, setReactions] = useState<MessageReaction[]>([]);
-  const [reactionPickerMessageId, setReactionPickerMessageId] =
-    useState<string | null>(null);
-  const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
-  const [editingMessageText, setEditingMessageText] = useState("");
-  const [editingMessagePrefix, setEditingMessagePrefix] = useState<string | null>(null);
 
   useEffect(() => {
     if (!messageInput) setMessageMentions([]);
@@ -349,177 +370,222 @@ export function useWebCommunityChatController(
     ingestAttachmentsFromFileList: ingestAttachments,
   });
 
-  const {
-    isLoadingChat,
-    isLoadingMoreChat,
-    communityChatHasMore,
-    hasResolvedCommunityChat,
-    toCommunityChatMessage,
-    ensureCommunityChatThread,
-    loadCommunityChat,
-    resetCommunityChatDataState,
-  } = useCommunityChatDataController<
-    AuthSession,
-    WebCommunityMessageAttachment,
-    WebCommunityChatMessage,
-    MessageReaction
-  >({
-    extractTextFromContentJson,
-    parseMessageAttachments,
-    ensureSession,
-    pageSize: COMMUNITY_CHAT_PAGE_SIZE,
-    setCommunityMessages: setMessages,
-    setMessageReactions: setReactions,
-    setUnreadCount,
-    setIsUserAtBottom,
-    isUserAtBottomRef,
-    capturePrependAnchor: () => undefined,
-    clearPendingPrependAnchor: () => undefined,
-    onLoadChatStart: () => setError(null),
-    onLoadChatError: setError,
-    onHydrateProfiles: loadProfiles,
-  });
+  const handleStartReply = useCallback((message: WebCommunityReplyTarget) => {
+    if (message.id.startsWith("pending-")) return;
+    setReplyingToMessage(message);
+    setTimeout(() => inputRef.current?.focus(), 0);
+  }, []);
 
-  const handleChatScroll = useCallback(() => undefined, []);
+  const handleSendCommunityMessage = useCallback(async (
+    draft?: WebCommunityMessageSendDraft,
+  ) => {
+    const current = paramsRef.current;
+    const activeCommunityId = current.activeCommunityId;
+    if (!activeCommunityId) return;
+    const activeSession = await resolveUsableSession(
+      current.session,
+      current.ensureSession,
+    );
+    if (!activeSession) return;
+    const sessionUserId =
+      String(current.canonicalSessionUserId ?? "").trim() ||
+      resolveAuthSubject(activeSession);
+    if (!sessionUserId) return;
 
-  const {
-    handleToggleReaction,
-    handleStartReply,
-    handleStartEdit,
-    handleCancelEdit,
-    handleSaveEdit,
-    handleDeleteMessage,
-    handleSendCommunityMessage,
-  } = useCommunityChatMutationController({
-    activeCommunityId,
-    activeChannelId,
-    canMentionEverybodyRef,
-    session,
-    sessionUserId: canonicalSessionUserId,
-    ensureSession,
-    missingPayloadMessage: "Message sent, but no payload returned.",
-    ensureCommunityChatThread,
-    useCanonicalCommunityInteractions: hasActiveCommunity,
-    onCanonicalOptimisticInsert: interaction.insertOptimistic,
-    onCanonicalOptimisticSettle: interaction.settleOptimistic,
-    createCommunityInteractionMessageRows: (writeParams) =>
-      createCloudCommunityInteractionComposerMessageRows<
-        AuthSession,
-        Parameters<typeof toCommunityChatMessage>[0]
-      >({
-        session: writeParams.session,
-        communityId: writeParams.communityId,
-        channelId: writeParams.channelId,
-        idempotencyKey: writeParams.idempotencyKey,
-        text: writeParams.text,
-        rootId: writeParams.rootId ?? null,
-        replyToMessageId: writeParams.replyToMessageId ?? null,
-        mentions: writeParams.mentions,
-        attachments: writeParams.attachments,
-      }),
-    toCommunityChatMessage,
-    loadCommunityChat,
-    parseReplyPrefix,
-    buildReplyPrefix,
-    beforeSendValidate: async () => {
-      if (!isProfileSetupComplete) {
-        onOpenProfileSetup();
-        return "Finish your profile before posting in communities.";
+    const rawText = String(draft?.text ?? messageInput).trim();
+    const attachmentsToSend = draft?.attachments
+      ? [...draft.attachments]
+      : [...attachmentsRef.current];
+    if (!rawText && attachmentsToSend.length === 0) return;
+    if (!current.isProfileSetupComplete) {
+      current.onOpenProfileSetup();
+      setError("Finish your profile before posting in communities.");
+      return;
+    }
+
+    const replySnapshot = draft
+      ? draft.replyingToMessage ?? null
+      : replyingToMessage;
+    const replyRootId =
+      String(replySnapshot?.interaction_root_id ?? "").trim() || null;
+    if (replySnapshot && !replyRootId) {
+      setError("Reply target is unavailable. Reopen the thread and try again.");
+      return;
+    }
+    const interactionReplyToId =
+      String(replySnapshot?.interaction_reply_id ?? "").trim() || null;
+    const legacyReplyToMessageId =
+      String(replySnapshot?.legacy_message_id ?? "").trim() || null;
+    const canonicalReplyToMessageId =
+      interactionReplyToId ?? legacyReplyToMessageId;
+    if (replySnapshot && textContainsEverybodyMentionToken(rawText)) {
+      setError("@everybody can only be used in top-level community posts.");
+      return;
+    }
+
+    const mentionDraft = draft?.mentions ?? messageMentions;
+    const mentionsToSend: {
+      userId?: string;
+      agentKey?: string;
+      roleKey?: string;
+    }[] = [];
+    const seenMentionKeys = new Set<string>();
+    for (const mention of mentionDraft) {
+      const mentionKey =
+        mention.kind === "role"
+          ? `role:${mention.roleKey ?? EVERYBODY_MENTION_ROLE_KEY}`
+          : mention.kind === "community_agent"
+            ? `agent:${mention.agentKey ?? "community_agent"}`
+            : `user:${mention.userId}`;
+      if (seenMentionKeys.has(mentionKey)) continue;
+      if (!textContainsMentionToken(rawText, mention.token)) continue;
+      seenMentionKeys.add(mentionKey);
+      if (mention.kind === "role") {
+        mentionsToSend.push({
+          roleKey: mention.roleKey ?? EVERYBODY_MENTION_ROLE_KEY,
+        });
+      } else if (mention.kind === "community_agent") {
+        mentionsToSend.push({ agentKey: mention.agentKey ?? "community_agent" });
+      } else if (mention.userId) {
+        mentionsToSend.push({ userId: mention.userId });
       }
-      return null;
-    },
-    confirmEverybodyMentionSend: async ({ emailMode }) => {
-      if (typeof window === "undefined") return true;
-      const message =
+    }
+    const committedEverybodyMention = mentionDraft.find(
+      (mention) =>
+        (mention.kind === "role" || mentionTokenIsEverybody(mention.token)) &&
+        (mention.roleKey ?? EVERYBODY_MENTION_ROLE_KEY) ===
+          EVERYBODY_MENTION_ROLE_KEY &&
+        textContainsMentionToken(rawText, mention.token),
+    );
+    if (
+      current.canMentionEverybodyRef.current &&
+      !replySnapshot &&
+      !seenMentionKeys.has(`role:${EVERYBODY_MENTION_ROLE_KEY}`) &&
+      !committedEverybodyMention &&
+      textContainsEverybodyMentionToken(rawText)
+    ) {
+      mentionsToSend.push({ roleKey: EVERYBODY_MENTION_ROLE_KEY });
+    }
+    if (mentionsToSend.some((mention) => mention.roleKey === EVERYBODY_MENTION_ROLE_KEY)) {
+      const emailMode = committedEverybodyMention?.emailMode ?? null;
+      const confirmation =
         emailMode === "in_app_only"
           ? "This @everybody mention will notify members in app only. The email blast is on cooldown."
           : emailMode === "in_app_and_email"
             ? "This @everybody mention will notify members in app. Unread members may also get an email after 15 minutes. Email blasts are limited to once every 72 hours."
             : "This @everybody mention will notify members in app. If the email blast is available, unread members may also get an email after 15 minutes.";
-      return window.confirm(message);
-    },
-    onProfileSetupRequired: onOpenProfileSetup,
-    prepareAttachmentsForSend,
-    serializeAttachmentsForWrite,
-    onOptimisticSendScrollIntent: () => {
-      setIsUserAtBottom(true);
-      isUserAtBottomRef.current = true;
-    },
-    onCommunityMessageSent: ({ communityId, hasAttachments, hasReply }) => {
-      onMessageSent({ communityId, hasAttachments, hasReply });
-      void interaction.loadRoots(communityId, session);
-      if (hasReply && interaction.selectedRootId) {
-        void interaction.loadReplies(interaction.selectedRootId, session);
+      if (typeof window !== "undefined" && !window.confirm(confirmation)) return;
+    }
+
+    const restoreDraft = () => {
+      if (draft?.restoreDraft) {
+        draft.restoreDraft();
+        return;
       }
-    },
-    chatInputRef: inputRef,
-    communityAttachmentsRef: attachmentsRef,
-    communityMessageInput: messageInput,
-    communityMessageMentions: messageMentions,
-    communityMessages: messages,
-    messageReactions: reactions,
-    replyingToMessage,
-    editingMessageId,
-    editingMessageText,
-    editingMessagePrefix,
-    setCommunityMessages: setMessages,
-    setMessageReactions: setReactions,
-    setCommunityMessageInput: setMessageInput,
-    setCommunityAttachments: setAttachments,
-    setReplyingToMessage,
-    setReactionPickerMessageId,
-    setEditingMessageId,
-    setEditingMessageText,
-    setEditingMessagePrefix,
-    setIsSendingCommunityMessage: setIsSendingMessage,
-    setCommunityChatError: setError,
-  });
+      setMessageInput(rawText);
+      setAttachments(attachmentsToSend);
+      setReplyingToMessage(replySnapshot);
+    };
+    if (draft?.clearDraft) {
+      draft.clearDraft();
+    } else {
+      setMessageInput("");
+      setMessageMentions([]);
+      setAttachments([]);
+      setReplyingToMessage(null);
+    }
+    const composerInputRef = draft?.inputRef ?? inputRef;
+    if (composerInputRef?.current) composerInputRef.current.style.height = "auto";
+
+    const idempotencyKey = createCommunityComposerIdempotencyKey(
+      activeCommunityId,
+      current.activeChannelId,
+      replyRootId,
+    );
+    const createdAt = new Date().toISOString();
+    let insertedOptimistic = false;
+    setIsSendingMessage(true);
+    setError(null);
+    try {
+      const preparedAttachments = await prepareAttachmentsForSend(
+        attachmentsToSend,
+        activeSession,
+        activeCommunityId,
+      );
+      const serializedAttachments =
+        serializeAttachmentsForWrite(preparedAttachments);
+      current.interaction.insertOptimistic({
+        idempotencyKey,
+        communityId: activeCommunityId,
+        channelId: current.activeChannelId,
+        kind: replyRootId ? "reply" : "root",
+        rootId: replyRootId,
+        replyToMessageId: canonicalReplyToMessageId,
+        text: rawText,
+        attachments: preparedAttachments,
+        serializedAttachments,
+        createdAt,
+        senderId: sessionUserId,
+      });
+      insertedOptimistic = true;
+      await createCloudCommunityInteractionComposerMessageRows<AuthSession>({
+        session: activeSession,
+        communityId: activeCommunityId,
+        channelId: current.activeChannelId,
+        idempotencyKey,
+        text: rawText,
+        rootId: replyRootId,
+        replyToMessageId: canonicalReplyToMessageId,
+        mentions: mentionsToSend,
+        attachments: serializedAttachments,
+      });
+      current.onMessageSent({
+        communityId: activeCommunityId,
+        hasAttachments: preparedAttachments.length > 0,
+        hasReply: Boolean(replySnapshot),
+      });
+    } catch (sendError) {
+      if (isProfileSetupRequiredError(sendError)) current.onOpenProfileSetup();
+      if (insertedOptimistic) {
+        current.interaction.settleOptimistic({
+          idempotencyKey,
+          status: "failed",
+        });
+      }
+      setError(mapCommunityComposerErrorMessage(sendError));
+      restoreDraft();
+    } finally {
+      setIsSendingMessage(false);
+    }
+  }, [messageInput, messageMentions, replyingToMessage]);
 
   const resetChatState = useCallback(() => {
     setError(null);
-    setMessages([]);
-    setActivityEvents([]);
     setMessageInput("");
     setMessageMentions([]);
     setAttachments([]);
-    setUnreadCount(0);
-    setIsUserAtBottom(true);
-    isUserAtBottomRef.current = true;
     setIsSendingMessage(false);
     setReplyingToMessage(null);
-    setReactions([]);
-    setReactionPickerMessageId(null);
-    setEditingMessageId(null);
-    setEditingMessageText("");
-    setEditingMessagePrefix(null);
-    resetCommunityChatDataState();
     if (inputRef.current) inputRef.current.style.height = "auto";
-  }, [resetCommunityChatDataState]);
+  }, []);
 
   useEffect(() => {
     resetChatState();
-  }, [activeCommunityId, resetChatState]);
+  }, [params.activeCommunityId, resetChatState]);
 
   useEffect(() => {
     setError(null);
     setMessageInput("");
     setMessageMentions([]);
     setAttachments([]);
-    setUnreadCount(0);
-    setIsUserAtBottom(true);
-    isUserAtBottomRef.current = true;
     setIsSendingMessage(false);
     setReplyingToMessage(null);
-    setReactionPickerMessageId(null);
-    setEditingMessageId(null);
-    setEditingMessageText("");
-    setEditingMessagePrefix(null);
     if (inputRef.current) inputRef.current.style.height = "auto";
-  }, [activeChannelId]);
+  }, [params.activeChannelId]);
 
   useEffect(() => {
     const setupGateMessage =
-      [error, interaction.error].find((message) =>
+      [error, params.interaction.error].find((message) =>
         Boolean(
           message
           && (
@@ -530,45 +596,8 @@ export function useWebCommunityChatController(
         ),
       ) ?? null;
     if (!setupGateMessage) return;
-    onOpenProfileSetup();
-  }, [error, interaction.error, onOpenProfileSetup]);
-
-  const copyMessage = useCallback(async (messageId: string, text: string) => {
-    await copyTextToClipboard(text);
-    setCopiedMessageId(messageId);
-    window.setTimeout(() => {
-      setCopiedMessageId((current) => (current === messageId ? null : current));
-    }, 2000);
-  }, []);
-
-  const messageById = useMemo(() => {
-    const byId = new Map<string, WebCommunityChatMessage>();
-    for (const message of messages) byId.set(message.id, message);
-    return byId;
-  }, [messages]);
-
-  const scrollToMessage = useCallback((messageId: string) => {
-    document.getElementById(`msg-${messageId}`)?.scrollIntoView({
-      behavior: "smooth",
-      block: "center",
-    });
-  }, []);
-
-  const scrollToBottom = useCallback(() => {
-    setIsUserAtBottom(true);
-    isUserAtBottomRef.current = true;
-    setUnreadCount(0);
-    messageListRef.current?.scrollTo({
-      top: messageListRef.current.scrollHeight,
-      behavior: "smooth",
-    });
-  }, []);
-
-  const markChatSelected = useCallback(() => {
-    setUnreadCount(0);
-    setIsUserAtBottom(true);
-    isUserAtBottomRef.current = true;
-  }, []);
+    params.onOpenProfileSetup();
+  }, [error, params.interaction.error, params.onOpenProfileSetup]);
 
   const setMessageInputFromTextarea = useCallback((
     value: string,
@@ -581,9 +610,6 @@ export function useWebCommunityChatController(
   }, []);
 
   return {
-    messages,
-    activityEvents,
-    messageById,
     messageInput,
     setMessageInput,
     messageMentions,
@@ -591,33 +617,12 @@ export function useWebCommunityChatController(
     attachments,
     error,
     setError,
-    copiedMessageId,
-    unreadCount,
-    setUnreadCount,
-    isUserAtBottom,
-    setIsUserAtBottom,
-    isUserAtBottomRef,
     isSendingMessage,
     replyingToMessage,
     setReplyingToMessage,
-    reactions,
-    reactionPickerMessageId,
-    setReactionPickerMessageId,
-    editingMessageId,
-    editingMessageText,
-    setEditingMessageText,
-    editingMessagePrefix,
-    isLoadingChat,
-    isLoadingMoreChat,
-    communityChatHasMore,
-    hasResolvedCommunityChat,
-    ensureCommunityChatThread,
-    loadCommunityChat,
     resetChatState,
-    messageListRef,
     inputRef,
     fileInputRef,
-    handleChatScroll,
     handleAttachmentFileInputChange,
     ingestAttachmentsFromFileList: ingestAttachments,
     handleAttachmentDrop,
@@ -635,17 +640,8 @@ export function useWebCommunityChatController(
       setIndex: setCommunityChatLightboxIndex,
       onClose: closeCommunityChatLightbox,
     },
-    handleToggleReaction,
     handleStartReply,
-    handleStartEdit,
-    handleCancelEdit,
-    handleSaveEdit,
-    handleDeleteMessage,
     handleSendCommunityMessage,
-    copyMessage,
-    scrollToMessage,
-    scrollToBottom,
-    markChatSelected,
     setMessageInputFromTextarea,
   };
 }
