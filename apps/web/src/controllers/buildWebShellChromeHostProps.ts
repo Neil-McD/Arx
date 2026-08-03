@@ -119,7 +119,9 @@ export function buildWebShellChromeHostProps(params: {
       isThreadPage: params.mobileThreadPageOpen,
       showBackButton: params.showMobileSettingsIndex || params.mobileThreadPageOpen,
       showDrawerButton:
-        !params.showMobileSettingsShell && !params.mobileThreadPageOpen,
+        !params.isPublicCommunityFunnel &&
+        !params.showMobileSettingsShell &&
+        !params.mobileThreadPageOpen,
       hasActiveCommunity: Boolean(params.activeCommunity),
       activeCommunityName: params.activeCommunity?.name ?? null,
       activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
@@ -141,6 +143,7 @@ export function buildWebShellChromeHostProps(params: {
         : params.showMobileSettingsIndex
           ? params.handleExitMobileSettings
           : null,
+      canOpenCommunitySelector: !params.isPublicCommunityFunnel,
       onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
       onOpenMembers: () => params.setMobileOverlay("members"),
     },

@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } fr
 import {
   classifyPublicCommunityJoinError, clearPendingPublicJoin, getErrorMessage, joinPublicCommunityRpc, storePendingPublicJoin, } from "../../../../shared/pay_first";
 import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
+import { resolveAuthSubject } from "../../../../shared/authSession";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
 
 import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
@@ -56,6 +57,7 @@ type UseWebPublicFunnelActionsArgs<
   setPublicJoinError: Dispatch<SetStateAction<string | null>>;
   setPublicCommunity: Dispatch<SetStateAction<PublicCommunityT | null>>;
   setPublicCommunityAccess: Dispatch<SetStateAction<CommunityAccessT | null>>;
+  setPublicCommunityAccessResolutionKey: Dispatch<SetStateAction<string | null>>;
 
   setIsLoadingMyPublicCommunityJoinRequest: Dispatch<SetStateAction<boolean>>;
   setMyPublicCommunityJoinRequest: Dispatch<SetStateAction<MyCommunityJoinRequestT | null>>;
@@ -69,7 +71,14 @@ type UseWebPublicFunnelActionsArgs<
   navigateToUrl: (url: string) => void;
 };
 
-type CommunityAccessRow = { community_id: string; can_enter_community?: boolean; is_owner: boolean };
+type CommunityAccessRow = {
+  community_id: string;
+  can_enter_community?: boolean;
+  is_owner: boolean;
+  can_manage_branding?: boolean;
+  can_manage_publishing?: boolean;
+  can_manage_pricing?: boolean;
+};
 
 export function useWebPublicFunnelActions<
   PublicCommunityT extends {
@@ -381,9 +390,10 @@ export function useWebPublicFunnelActions<
       current.setIsLoadingPublicCommunity(true);
       current.setPublicCommunityError(null);
       current.setPublicJoinError(null);
+      current.setPublicCommunityAccessResolutionKey(null);
+      current.setMyPublicCommunityJoinRequest(null);
+      current.setPublicCommunityAccess(null);
       if (!isSameSlugRefresh) {
-        current.setMyPublicCommunityJoinRequest(null);
-        current.setPublicCommunityAccess(null);
         current.setPublicCommunity(null);
         current.setPublicCommunityPlans([]);
       }
@@ -467,6 +477,7 @@ export function useWebPublicFunnelActions<
         void (async () => {
           const rawSession = current.getSession();
           const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
+          const accessSubject = session ? resolveAuthSubject(session) : null;
           let hasEnterAccess = false;
           let accessLookupFailed = false;
           if (session) {
@@ -475,14 +486,20 @@ export function useWebPublicFunnelActions<
                 session,
                 communitySlug: resolvedSlug,
               });
-              if (current.getCurrentPublicCommunitySlug() !== resolvedSlug) return;
+              if (
+                current.getCurrentPublicCommunitySlug() !== resolvedSlug ||
+                resolveAuthSubject(current.getSession()) !== accessSubject
+              ) return;
               hasEnterAccess = Boolean(access && (access.can_enter_community || access.is_owner));
               current.setPublicCommunityAccess(access);
               if (hasEnterAccess) {
                 current.setMyPublicCommunityJoinRequest(null);
               }
             } catch (error) {
-              if (current.getCurrentPublicCommunitySlug() !== resolvedSlug) return;
+              if (
+                current.getCurrentPublicCommunitySlug() !== resolvedSlug ||
+                resolveAuthSubject(current.getSession()) !== accessSubject
+              ) return;
               accessLookupFailed = true;
               current.setPublicCommunityAccess(null);
               current.setMyPublicCommunityJoinRequest(null);
@@ -493,6 +510,12 @@ export function useWebPublicFunnelActions<
             }
           } else if (current.getCurrentPublicCommunitySlug() === resolvedSlug) {
             current.setPublicCommunityAccess(null);
+          }
+
+          if (current.getCurrentPublicCommunitySlug() === resolvedSlug) {
+            current.setPublicCommunityAccessResolutionKey(
+              accessSubject ? `${accessSubject}:${resolvedSlug}` : null,
+            );
           }
 
           if (
@@ -514,6 +537,10 @@ export function useWebPublicFunnelActions<
               : "Failed to load community.";
         current.setPublicCommunityError(message);
         current.setIsLoadingPublicCommunity(false);
+        const currentSubject = resolveAuthSubject(current.getSession());
+        current.setPublicCommunityAccessResolutionKey(
+          currentSubject ? `${currentSubject}:${requestedSlug}` : null,
+        );
       }
     },
     [loadMyJoinRequestBySlug],

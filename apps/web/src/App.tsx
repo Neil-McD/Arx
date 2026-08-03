@@ -176,7 +176,7 @@ import { useWebCommunityPolynetController } from "./controllers/useWebCommunityP
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
 import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAuthStripeConnectLifecycle";
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
-import { useWebJoinedCommunityRouteResolution } from "./controllers/useWebJoinedCommunityRouteResolution";
+import { useWebRouteAccessBoundaryController } from "./controllers/useWebRouteAccessBoundaryController";
 import { useWebSelectedCommunityController } from "./controllers/useWebSelectedCommunityController";
 import { useWebPublicCommunityRouteController } from "./controllers/useWebPublicCommunityRouteController";
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
@@ -442,9 +442,6 @@ export default function App() {
   const shellNavigation = useWebShellNavigationController({
     session,
     isAuthBootstrapComplete,
-    canonicalSessionUserId,
-    isOperatorAccessResolved,
-    operatorAccess,
     hasOperatorAccess,
     publicRoute,
     setPublicRoute,
@@ -1387,6 +1384,8 @@ export default function App() {
     setPublicJoinError: publicCommunityUi.setPublicJoinError,
     setPublicCommunity: publicCommunityUi.setPublicCommunity,
     setPublicCommunityAccess: publicCommunityUi.setPublicCommunityAccess,
+    setPublicCommunityAccessResolutionKey:
+      publicCommunityUi.setPublicCommunityAccessResolutionKey,
     setIsLoadingMyPublicCommunityJoinRequest: publicCommunityUi.setIsLoadingMyPublicCommunityJoinRequest,
     setMyPublicCommunityJoinRequest: publicCommunityUi.setMyPublicCommunityJoinRequest,
     setIsLoadingPublicCommunity: publicCommunityUi.setIsLoadingPublicCommunity,
@@ -1539,10 +1538,10 @@ export default function App() {
     publicCommunityAccess: publicCommunityUi.publicCommunityAccess,
     myPublicCommunityJoinRequest: publicCommunityUi.myPublicCommunityJoinRequest,
     isSignedIn: Boolean(session),
-    /* Re-fire the funnel load only when signed-in status flips — not on every
-       session object identity change, which re-hammered the load (and the
-       expensive stats query) and blinked the right panel. */
-    sessionDependency: Boolean(session),
+    /* Re-fire only when the authenticated subject changes — not on every
+       session object identity change — so access cannot leak across accounts
+       and the expensive public stats query remains stable. */
+    sessionDependency: resolveAuthSubject(session),
     loadPublicCommunity,
   });
   const communityEntryBridge = useWebCommunityEntryBridgeController({
@@ -1571,18 +1570,50 @@ export default function App() {
   } = communityEntryBridge;
   /* Visitor lens: locked shell-nav tabs reopen the join gate on the funnel
      surface (nonce bump crosses the shell/surface boundary). */
-  useWebJoinedCommunityRouteResolution<AuthSession, CommunityRecord, CommunityAccess>({
-    publicRouteKind: shellPublicRoute.kind,
-    activePage,
-    activeCommunitySlug: selectedActiveCommunitySlug,
-    communities,
-    session: session,
-    isAuthBootstrapComplete,
-    ensureSession: ensureUsableAuthSession,
-    loadCommunities,
-    syncCommunitySelection,
-    navigateTo,
-  });
+  const communityPreviewAccessState =
+    shellPublicRoute.kind !== "community_funnel_preview"
+      ? "not_applicable" as const
+      : authPresentationState !== "signed_in"
+        ? "resolving" as const
+        : publicCommunityUi.publicCommunityAccessResolutionKey !==
+            `${resolveAuthSubject(session) ?? ""}:${shellPublicRoute.slug}`
+          ? "resolving" as const
+          : publicCommunityUi.publicCommunityAccess?.is_owner ||
+              publicCommunityUi.publicCommunityAccess?.can_manage_branding ||
+              publicCommunityUi.publicCommunityAccess?.can_manage_publishing ||
+              publicCommunityUi.publicCommunityAccess?.can_manage_pricing
+            ? "allowed" as const
+            : "denied" as const;
+  const operatorRouteAccessState =
+    activePage !== "operator"
+      ? "not_applicable" as const
+      : !isOperatorAccessResolved
+        ? "resolving" as const
+        : operatorAccess
+          ? "allowed" as const
+          : "denied" as const;
+  const { shouldHoldRouteForAccess } =
+    useWebRouteAccessBoundaryController<
+      AuthSession,
+      CommunityRecord,
+      CommunityAccess
+    >({
+      publicRoute: shellPublicRoute,
+      activePage,
+      activeCommunitySlug: selectedActiveCommunitySlug,
+      pathname: shellNavigation.readCurrentPathname(),
+      authState: authPresentationState,
+      communities,
+      session,
+      isAuthBootstrapComplete,
+      communityPreviewAccessState,
+      operatorAccessState: operatorRouteAccessState,
+      ensureSession: ensureUsableAuthSession,
+      loadCommunities,
+      syncCommunitySelection,
+      resolveAndEnterMemberDestination,
+      navigateTo,
+    });
 
   useWebPostAuthBillingLifecycle({
     session: session,
@@ -2773,9 +2804,9 @@ export default function App() {
       communityRailAttentionById[communityId] = true;
     }
   }
-  /* The visitor lens on the shell: /c/:slug feeds the SAME nav the member
-     page uses — community identity from the public payload, every capability
-     false, gated tabs locked. One more lens, not another page. */
+  /* The visitor lens reuses the community-local navigation without exposing
+     the authenticated global rail: public identity, locked capabilities, one
+     funnel render path. */
   const isVisitorCommunitySurface =
     publicRoute.kind === "community_funnel" || publicRoute.kind === "community_funnel_preview";
   const visitorShellActiveCommunity =
@@ -2952,6 +2983,10 @@ export default function App() {
     hasLeftPanel,
     isGlobalSettings,
   });
+
+  if (shouldHoldRouteForAccess) {
+    return <div className="landing-auth-hold" aria-hidden="true" />;
+  }
 
   return (
     <WebAppCompositionRoot

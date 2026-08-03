@@ -22,6 +22,7 @@ type WebMobileTopBarProps = {
   memberCount: number | null;
   onOpenDrawer: () => void;
   onBack?: (() => void) | null;
+  canOpenCommunitySelector: boolean;
   onOpenCommunitySelector: () => void;
   onOpenMembers: () => void;
 };
@@ -51,6 +52,7 @@ export function WebMobileTopBar({
   memberCount,
   onOpenDrawer,
   onBack = null,
+  canOpenCommunitySelector,
   onOpenCommunitySelector,
   onOpenMembers,
 }: WebMobileTopBarProps) {
@@ -63,6 +65,38 @@ export function WebMobileTopBar({
     !isThreadPage &&
     rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
   const drawerLabel = isAgent ? "Open threads" : "Open community navigation";
+  const communitySelectorContent = (
+    <>
+      {hasActiveCommunity && !isDiscover ? (
+        <CommunityAvatar
+          className="mobile-topbar-community-avatar"
+          imageUrl={activeCommunityAvatarUrl}
+          focusX={activeCommunityAvatarFocusX}
+          focusY={activeCommunityAvatarFocusY}
+          zoom={activeCommunityAvatarZoom}
+          name={communityLabel}
+          fallback={activeCommunityInitials}
+          fallbackClassName="mobile-topbar-community-initials"
+        />
+      ) : (
+        <svg className="mobile-topbar-discover-icon" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="m15.8 8.2-2.5 5.1-5.1 2.5 2.5-5.1 5.1-2.5z" />
+        </svg>
+      )}
+      <span className="mobile-topbar-community-name">{selectorLabel}</span>
+      {canOpenCommunitySelector ? (
+        <svg className="mobile-topbar-community-chevron" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="m7 9.5 5 5 5-5" />
+        </svg>
+      ) : null}
+      {activeCommunityAttentionCount > 0 && !isDiscover ? (
+        <span className="mobile-topbar-attention" aria-label={`${activeCommunityAttentionCount} updates`}>
+          {activeCommunityAttentionCount > 99 ? "99+" : activeCommunityAttentionCount}
+        </span>
+      ) : null}
+    </>
+  );
 
   return (
     <header className={`mobile-topbar${showMembers ? " has-members" : ""}${isThreadPage ? " is-thread-page" : ""}`}>
@@ -98,40 +132,24 @@ export function WebMobileTopBar({
         ) : isAgent ? (
           <span className="mobile-topbar-context-label">Polynet AI</span>
         ) : (
-          <button
-            type="button"
-            className="mobile-topbar-community-selector"
-            aria-label={hasActiveCommunity ? "Switch community" : "Discover or create community"}
-            title={hasActiveCommunity ? "Switch community" : "Discover or create community"}
-            onClick={onOpenCommunitySelector}
-          >
-            {hasActiveCommunity && !isDiscover ? (
-              <CommunityAvatar
-                className="mobile-topbar-community-avatar"
-                imageUrl={activeCommunityAvatarUrl}
-                focusX={activeCommunityAvatarFocusX}
-                focusY={activeCommunityAvatarFocusY}
-                zoom={activeCommunityAvatarZoom}
-                name={communityLabel}
-                fallback={activeCommunityInitials}
-                fallbackClassName="mobile-topbar-community-initials"
-              />
-            ) : (
-              <svg className="mobile-topbar-discover-icon" viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="9" />
-                <path d="m15.8 8.2-2.5 5.1-5.1 2.5 2.5-5.1 5.1-2.5z" />
-              </svg>
-            )}
-            <span className="mobile-topbar-community-name">{selectorLabel}</span>
-            <svg className="mobile-topbar-community-chevron" viewBox="0 0 24 24" aria-hidden="true">
-              <path d="m7 9.5 5 5 5-5" />
-            </svg>
-            {activeCommunityAttentionCount > 0 && !isDiscover ? (
-              <span className="mobile-topbar-attention" aria-label={`${activeCommunityAttentionCount} updates`}>
-                {activeCommunityAttentionCount > 99 ? "99+" : activeCommunityAttentionCount}
-              </span>
-            ) : null}
-          </button>
+          canOpenCommunitySelector ? (
+            <button
+              type="button"
+              className="mobile-topbar-community-selector"
+              aria-label={hasActiveCommunity ? "Switch community" : "Discover or create community"}
+              title={hasActiveCommunity ? "Switch community" : "Discover or create community"}
+              onClick={onOpenCommunitySelector}
+            >
+              {communitySelectorContent}
+            </button>
+          ) : (
+            <div
+              className="mobile-topbar-community-selector"
+              aria-label={`${communityLabel} community`}
+            >
+              {communitySelectorContent}
+            </div>
+          )
         )}
       </div>
 

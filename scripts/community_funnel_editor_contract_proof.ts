@@ -104,7 +104,12 @@ assert.ok(
 assert.match(
   shellProjection,
   /const isVisitorCommunityRoute =[\s\S]*"community_funnel"[\s\S]*"community_funnel_preview";/,
-  "the shell must treat /c/:slug and its /preview as the same visitor route (rail + nav)",
+  "the shell must treat /c/:slug and its /preview as the same visitor route",
+);
+assert.match(
+  shellProjection,
+  /const showDesktopCommunityRail =\s*isAppRoute/,
+  "the public visitor funnel must not expose the authenticated global community rail",
 );
 
 // --- Honest analytics: the owner's own preview must not log a funnel visit ---

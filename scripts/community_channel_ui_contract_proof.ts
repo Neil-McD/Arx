@@ -105,7 +105,7 @@ const communityRouteController = read(communityRouteControllerPath);
 );
 
 const joinedRouteResolutionPath =
-  "apps/web/src/controllers/useWebJoinedCommunityRouteResolution.ts";
+  "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts";
 assertIncludes(
   joinedRouteResolutionPath,
   read(joinedRouteResolutionPath),
