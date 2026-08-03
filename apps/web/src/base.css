@@ -417,3 +417,7 @@
 *::-webkit-scrollbar-thumb:hover {
   background: var(--scrollbar-thumb-hover);
 }
+:where(.stable-framed-media) {
+  position: relative;
+  overflow: hidden;
+}

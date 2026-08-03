@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { resolveCurrentReadyImageUrl } from "../shared/useImageUrlReady";
+import { normalizeImageResourceUrl } from "../shared/useImageResource";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -39,12 +39,38 @@ describe("web shell refresh continuity contract", () => {
   it("uses shape-stable loading states for unresolved shell resources", () => {
     const nav = read("shared/CommunityNav.tsx");
     const context = read("apps/web/src/components/CommunityContextPanel.tsx");
+    const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+    const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
+    const app = read("apps/web/src/App.tsx");
 
     expect(nav).toContain("community-channel-loading-row web-skeleton-row");
     expect(context).toContain("community-context-memory-preview web-skeleton-block");
     expect(context).toContain("community-context-member-skeleton");
     expect(context).not.toContain("Loading members...");
     expect(context).not.toContain("Loading memory...");
+    expect(facepile).toContain("visibleFaces.length === 0 && props.isLoading");
+    expect(interaction).toMatch(
+      /isLoadingRoots:[\s\S]*!requestedBoundary \|\| !isPresentationScopedToBoundary \|\| isLoadingRoots/,
+    );
+    expect(interaction).toMatch(
+      /const reset = useCallback\(\(isNextBoundaryLoading = false\)[\s\S]*setIsLoadingRoots\(isNextBoundaryLoading\)[\s\S]*boundaryRef\.current = requestedBoundary;[\s\S]*reset\(true\)/,
+    );
+    expect(app).toMatch(
+      /isAwaitingActiveCommunityInteractionScope = Boolean\([\s\S]*!activeCommunityChannelResolutionError &&[\s\S]*!isActiveCommunityChannelReady \|\| !activeChannelCommunityId[\s\S]*isLoadingRoots:[\s\S]*isAwaitingActiveCommunityInteractionScope/,
+    );
+  });
+
+  it("never presents an unresolved presence snapshot as offline truth", () => {
+    const context = read("apps/web/src/components/CommunityContextPanel.tsx");
+    const shell = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
+    const types = read("shared/communityTypes.ts");
+
+    expect(types).toContain("online_user_ids?: string[] | null");
+    expect(shell).toContain('status: "pending" | "resolved" | "failed"');
+    expect(context).toContain("hasResolvedPresence = props.onlineUserIds instanceof Set");
+    expect(context).toContain("props.isLoadingPresence");
+    expect(context).toContain("Recently active");
+    expect(context).not.toMatch(/const online = props\.onlineUserIds \?\? new Set/);
   });
 
   it("keeps the session ensure callback stable across transport-session rotation", () => {
@@ -214,20 +240,18 @@ describe("web shell refresh continuity contract", () => {
   });
 
   it("falls back instead of admitting cached broken avatar images", () => {
-    const imageReady = read("shared/useImageUrlReady.ts");
-    const stableAvatar = read("shared/StableAvatar.tsx");
+    const imageResource = read("shared/useImageResource.ts");
+    const stableMedia = read("shared/StableFramedMedia.tsx");
 
-    expect(imageReady).toContain("finish(image.naturalWidth > 0)");
-    expect(stableAvatar).toContain("failedImageUrl");
-    expect(stableAvatar).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
+    expect(imageResource).toContain("failedResources.add(url)");
+    expect(imageResource).toContain("image.onerror = () => finish(null)");
+    expect(stableMedia).toContain("showImage && layout");
   });
 
-  it("never reuses readiness from a previous avatar URL", () => {
-    expect(resolveCurrentReadyImageUrl("https://example.com/a.png", "https://example.com/a.png"))
+  it("normalizes image-resource identity before cache lookup", () => {
+    expect(normalizeImageResourceUrl(" https://example.com/a.png "))
       .toBe("https://example.com/a.png");
-    expect(resolveCurrentReadyImageUrl("https://example.com/b.png", "https://example.com/a.png"))
-      .toBeNull();
-    expect(resolveCurrentReadyImageUrl(null, "https://example.com/a.png"))
-      .toBeNull();
+    expect(normalizeImageResourceUrl("  ")).toBeNull();
+    expect(normalizeImageResourceUrl(null)).toBeNull();
   });
 });

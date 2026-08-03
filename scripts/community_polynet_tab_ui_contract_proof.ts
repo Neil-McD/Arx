@@ -23,26 +23,21 @@ function readCssRuleBody(css: string, selector: string): string {
 }
 
 // Memory belongs in the community context/right-panel path, so the left nav
-// should hide the Polynet item unless a caller explicitly opts into it.
-assert.match(
+// should not retain a hidden Polynet configuration branch.
+assert.doesNotMatch(
   communityNav,
-  /showPolynetItem = false/,
-  "CommunityNav should hide the Polynet item by default",
+  /showPolynetItem|showPolynetButton|onSelectTab\("polynet"\)/,
+  "CommunityNav should not carry a hidden Polynet item or selection path",
 );
-assert.match(
-  communityNav,
-  /const showPolynetButton = canViewActiveCommunityPolynet && showPolynetItem;/,
-  "CommunityNav should gate the Polynet item on both access and surface visibility",
-);
-assert.match(
+assert.doesNotMatch(
   desktopChrome,
-  /showPolynetItem=\{false\}/,
-  "Desktop community nav should hide the Polynet tab (memory opens from the rail preview)",
+  /showPolynetItem|canViewActiveCommunityPolynet/,
+  "Desktop community nav should not transport dead Polynet visibility state",
 );
-assert.match(
+assert.doesNotMatch(
   mobileShell,
-  /showPolynetItem=\{false\}/,
-  "Mobile community nav should hide the Polynet tab from the left panel",
+  /showPolynetItem|canViewActiveCommunityPolynet/,
+  "Mobile community nav should not transport dead Polynet visibility state",
 );
 
 assert.match(

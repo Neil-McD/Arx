@@ -61,14 +61,10 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           maxActiveChannels={communityShell.maxActiveCommunityChannels}
           canViewMembersActiveCommunity={communityShell.canViewMembersActiveCommunity}
           canViewActiveCommunitySettings={communityShell.canViewActiveCommunitySettings}
-          canViewActiveCommunityPolynet={communityShell.canViewActiveCommunityPolynet}
           canManageMembersActiveCommunity={communityShell.canManageMembersActiveCommunity}
           canViewActiveCommunityAnalytics={communityShell.canViewActiveCommunityAnalytics}
           isLoadingAccess={communityShell.isLoadingCommunityAccess}
           lockedTabs={communityShell.lockedCommunityNavTabs ?? undefined}
-          buttonType="button"
-          includeButtonTitles
-          showPolynetItem={false}
           onCopyCommunityJoinLink={communityShell.onCopyCommunityJoinLink}
           onSelectTab={communityShell.onSelectCommunityTabFromMobile}
         />

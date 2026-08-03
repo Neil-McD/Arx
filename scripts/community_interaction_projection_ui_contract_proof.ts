@@ -62,6 +62,7 @@ const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfac
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const directoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
+const communityTypes = read("shared/communityTypes.ts");
 const directoryController = read("shared/useCommunityDirectoryController.ts");
 const activeCommunityShellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
 const communityDirectory = read("convex/communityDirectory.ts");
@@ -550,6 +551,16 @@ assert.match(
   "context panel should label the member population from a total-count label",
 );
 assert.match(
+  projection,
+  /COMMUNITY_CONTEXT_PROJECTION_KEYS[\s\S]*StableCommunityInteractionContextPanelSurface = memo[\s\S]*pickCommunityContextProjection\(props\)/,
+  "right-panel rendering should be isolated from feed-only prop churn",
+);
+assert.match(
+  communityNav,
+  /export const CommunityNav = memo\(function CommunityNav/,
+  "left navigation should not rerender for unrelated shell content updates",
+);
+assert.match(
   contextPanel,
   /Offline — \{offlineCountLabel\}/,
   "context panel should label offline members from the total-count model",
@@ -828,10 +839,15 @@ assert.match(
   /client\.query\("communityDirectory:listCommunityDirectoryPage" as any/,
   "directory gateway should read chat rail members through the member-facing directory query",
 );
+assert.match(
+  communityTypes,
+  /last_active_at: string;/,
+  "directory rows must expose their canonical activity timestamp",
+);
 assert.doesNotMatch(
   directoryGateway,
-  /last_active_at|countCommunityDirectoryMembers/,
-  "directory pages must not duplicate live presence or expose a separate recount query",
+  /countCommunityDirectoryMembers/,
+  "directory pages must not expose a separate recount query",
 );
 assert.doesNotMatch(
   directoryGateway,
@@ -850,32 +866,32 @@ assert.match(
 );
 assert.match(
   communityDirectoryPageQuery,
-  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*cursor: args\.cursor \?\? null[\s\S]*maximumRowsRead:/,
-  "directory pages should use the durable membership index and an opaque bounded cursor",
+  /by_community_lastSeenAt[\s\S]*\.order\("desc"\)[\s\S]*\.paginate\(\{[\s\S]*cursor: args\.cursor \?\? null[\s\S]*maximumRowsRead:/,
+  "directory pages should use the activity ledger and an opaque bounded cursor",
 );
 assert.match(
   communityDirectoryPageQuery,
-  /const ownerRows = isFirstPage[\s\S]*communityMembershipRowIsActive[\s\S]*String\(row\.userId\) !== String\(community\.ownerId\)[\s\S]*page: \[\.\.\.ownerRows, \.\.\.memberRows\]/,
-  "directory pages should pin the owner once and filter inactive or duplicate owner membership rows",
+  /resolveCommunityPresenceAuthorization[\s\S]*authorization\.authorized[\s\S]*communityMembershipRowIsActive[\s\S]*page: memberRows/,
+  "directory pages should reauthorize activity rows and filter inactive memberships",
 );
 assert.match(
   communityDirectoryPageQuery,
   /totalCount: readCommunityActiveMemberCount\(community\)[\s\S]*continueCursor: rawPage\.isDone \? null : rawPage\.continueCursor/,
   "directory pages should consume the durable member count and preserve Convex cursor semantics",
 );
-assert.doesNotMatch(
-  communityDirectoryPageQuery,
-  /communityPresence|last_active_at|\.collect\(\)|normalizeDirectoryCursor|orderedCandidates|listCanonicalCommunityMemberMembershipRows|countCanonicalCommunityMembersFromRows/,
-  "directory pagination must not materialize presence, memberships, or an offset-sorted shadow roster",
-);
 assert.match(
+  communityDirectory,
+  /last_active_at: toIsoString\(args\.lastSeenAt\)/,
+  "directory rows should carry activity from the canonical ordering ledger",
+);
+assert.doesNotMatch(
   memberPresenceSummaryQuery,
-  /online_last_active_at_by_user_id: summary\.onlineLastActiveAtByUserId/,
-  "member-gated presence summary should include fresh online last-active timestamps",
+  /online_last_active_at_by_user_id|onlineLastActiveAtByUserId/,
+  "presence summary should not duplicate directory activity timestamps",
 );
 assert.match(
   activeCommunityShellController,
-  /type ScopedPresenceSummary = \{[\s\S]*communityId: string;[\s\S]*sessionIdentity: string;[\s\S]*summary: PresenceSummary \| null;[\s\S]*useState<ScopedPresenceSummary \| null>[\s\S]*activeCommunityIdRef\.current === communityId[\s\S]*setActiveCommunityPresenceSummaryState\(\(previous\) => reuseEquivalentValue\(previous, \{[\s\S]*communityId,[\s\S]*sessionIdentity,[\s\S]*summary: summary \?\? null,[\s\S]*activeCommunityPresenceSummaryState\?\.communityId !== communityId\) return null;[\s\S]*activeCommunityPresenceSummaryState\.sessionIdentity !== sessionIdentity\) return null;/,
+  /type ScopedPresenceSummary = \{[\s\S]*communityId: string;[\s\S]*sessionIdentity: string;[\s\S]*summary: CommunityPresenceSummary \| null;[\s\S]*useState<ScopedPresenceSummary \| null>[\s\S]*activeCommunityIdRef\.current === communityId[\s\S]*setActiveCommunityPresenceSummaryState\(\(previous\) => reuseEquivalentValue\(previous, \{[\s\S]*communityId,[\s\S]*sessionIdentity,[\s\S]*summary: summary \?\? null,[\s\S]*activeCommunityPresenceSummaryState\?\.communityId !== communityId\) return null;[\s\S]*activeCommunityPresenceSummaryState\.sessionIdentity !== sessionIdentity\) return null;/,
   "active community shell controller should scope and identity-stabilize presence summaries",
 );
 assert.doesNotMatch(
@@ -888,25 +904,20 @@ assert.doesNotMatch(
   /last_active_at|online_last_active_at_by_user_id|onlineLastActiveAtByUserId/,
   "public community funnel payloads must not expose per-member last active timestamps",
 );
-assert.doesNotMatch(
-  contextPanel,
-  /last_active_at/,
-  "context panel member rows must not carry a second offline activity source",
-);
 assert.match(
   contextPanel,
   /formatMemberActivityLabel[\s\S]*Active now[\s\S]*Active \$\{relative\}/,
   "context panel should format online and relative member activity labels",
 );
 assert.match(
-  contextPanel,
-  /observedActivity\.scopeKey === activityScopeKey[\s\S]*setObservedActivity\(\{ scopeKey: activityScopeKey, byUserId: \{\} \}\)[\s\S]*props\.onlineLastActiveAtByUserId[\s\S]*formatMemberActivityLabel\([\s\S]*latestObservedLastActiveAt,[\s\S]*community-context-member-activity/,
-  "context panel should render activity only from the scoped live-presence projection",
+  `${communityTypes}\n${contextPanel}`,
+  /last_active_at: string;[\s\S]*formatMemberActivityLabel\([\s\S]*member\.last_active_at,[\s\S]*community-context-member-activity/,
+  "context panel should render activity directly from directory rows",
 );
-assert.match(
+assert.doesNotMatch(
   projection,
-  /online_last_active_at_by_user_id\?: Record<string, string> \| null;[\s\S]*onlineLastActiveAtByUserId=\{props\.presenceSummary\?\.online_last_active_at_by_user_id \?\? null\}/,
-  "interaction projection should pass fresh member-gated presence timestamps into the context panel",
+  /online_last_active_at_by_user_id|onlineLastActiveAtByUserId|activityScopeKey/,
+  "interaction projection should not carry the retired live-only activity map",
 );
 assert.match(
   baseCss,

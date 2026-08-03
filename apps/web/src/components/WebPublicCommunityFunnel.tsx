@@ -2,7 +2,6 @@ import type {
   CommunityFunnelConfig,
 } from "../../../../shared/communityTypes";
 import {
-  buildCommunityFunnelActionCardArt,
   buildCommunityFunnelCopy,
   filterOnlineAvatarFaces,
 } from "../../../../shared/communityFunnelUi";
@@ -225,10 +224,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
     (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
     (canJoinWithApproval && (approvalPending || (approvalDenied && !canRequestAgain)));
-  const actionCardArt = buildCommunityFunnelActionCardArt({
-    community: publicCommunity,
-    funnel,
-  });
   const funnelErrors = [publicCommunityError, publicJoinError, checkoutError].filter(
     Boolean,
   ) as string[];
@@ -318,22 +313,10 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       title={communityName}
       action={action}
       host={publicCommunity?.host ?? null}
-      banner={
-        publicCommunity?.banner_url
-          ? {
-              url: publicCommunity.banner_url,
-              focusX: publicCommunity.banner_focus_x ?? null,
-              focusY: publicCommunity.banner_focus_y ?? null,
-              zoom: publicCommunity.banner_zoom ?? null,
-            }
-          : null
-      }
       aboutText={aboutText}
       communityCreatedAt={publicCommunity?.created_at ?? null}
       heroMediaKind={funnel?.hero_media_kind ?? "image"}
       heroMediaUrl={funnel?.hero_media_url ?? null}
-      heroArtImageUrl={actionCardArt.imageUrl}
-      heroArtImageStyle={actionCardArt.imageStyle ?? null}
       featuredMessages={publicCommunity?.featured_messages ?? null}
       stats={{
         onlineCount,

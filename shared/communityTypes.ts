@@ -4,6 +4,54 @@ import type { SocialProfileLinks } from "./socialProfileLinks";
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityBillingPeriod = "monthly" | "annual";
 
+export type CommunityPresenceFace = {
+  user_id: string;
+  display_name: string | null;
+  avatar_url: string | null;
+  avatar_color?: string | null;
+  initials?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+};
+
+export type CommunityPresenceSummary = {
+  member_count?: number | null;
+  admin_count?: number | null;
+  online_count?: number | null;
+  online_count_capped?: boolean | null;
+  online_faces?: CommunityPresenceFace[] | null;
+  online_user_ids?: string[] | null;
+};
+
+export type CommunityDirectoryMember = {
+  id: string;
+  community_id: string;
+  user_id: string;
+  display_name?: string | null;
+  avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+  role: string;
+  created_at: string;
+  last_active_at: string;
+};
+
+export type CommunityShellCommunity = {
+  id: string;
+  slug: string | null;
+  name: string;
+  avatar_url: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
+  banner_url?: string | null;
+  banner_focus_x?: number | null;
+  banner_focus_y?: number | null;
+  banner_zoom?: number | null;
+};
+
 export type PublicPlanSummary = {
   name: string;
   description: string | null;

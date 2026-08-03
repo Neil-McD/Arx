@@ -4,19 +4,9 @@ import {
   COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE,
   loadCommunityDirectoryWindow,
 } from "./communityDirectoryWindow";
+import type { CommunityDirectoryMember } from "./communityTypes";
 
-export type CloudCommunityDirectoryMemberRow = {
-  id: string;
-  community_id: string;
-  user_id: string;
-  display_name?: string | null;
-  avatar_url?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  role: string;
-  created_at: string;
-};
+export type CloudCommunityDirectoryMemberRow = CommunityDirectoryMember;
 
 export type CloudCommunityDirectoryPage = {
   rows: CloudCommunityDirectoryMemberRow[];

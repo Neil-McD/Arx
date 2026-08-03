@@ -70,14 +70,10 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           maxActiveChannels={props.communityShell.maxActiveCommunityChannels}
           canViewMembersActiveCommunity={props.communityShell.canViewMembersActiveCommunity}
           canViewActiveCommunitySettings={props.communityShell.canViewActiveCommunitySettings}
-          canViewActiveCommunityPolynet={props.communityShell.canViewActiveCommunityPolynet}
           canManageMembersActiveCommunity={props.communityShell.canManageMembersActiveCommunity}
           canViewActiveCommunityAnalytics={props.communityShell.canViewActiveCommunityAnalytics}
           isLoadingAccess={props.communityShell.isLoadingCommunityAccess}
           lockedTabs={props.communityShell.lockedCommunityNavTabs ?? undefined}
-          buttonType="button"
-          includeButtonTitles
-          showPolynetItem={false}
           onCopyCommunityJoinLink={props.communityShell.onCopyCommunityJoinLink}
           onSelectTab={props.communityShell.onSelectCommunityTab}
         />

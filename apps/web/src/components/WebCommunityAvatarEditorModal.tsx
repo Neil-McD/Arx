@@ -7,11 +7,12 @@ import {
   type PointerEvent as ReactPointerEvent,
 } from "react";
 import {
-  clampCommunityAvatarZoom,
-  computeCommunityAvatarLayout,
-  focusFromCommunityAvatarLayoutPosition,
-  getCommunityAvatarLayoutImageStyle,
-} from "../../../../shared/communityAvatarUi";
+  clampCoverZoom,
+  computeCoverFrameLayout,
+  focusFromCoverFramePosition,
+  getCoverFrameImageStyle,
+} from "../../../../shared/coverFrameUi";
+import { useImageResource } from "../../../../shared/useImageResource";
 
 type WebCommunityAvatarEditorModalProps = {
   isOpen: boolean;
@@ -54,7 +55,7 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
   const dragStateRef = useRef<DragState | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
-  const [naturalSize, setNaturalSize] = useState({ width: 0, height: 0 });
+  const imageResource = useImageResource(avatarUrl);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -80,22 +81,18 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
     }
   }, [isOpen]);
 
-  useEffect(() => {
-    setNaturalSize({ width: 0, height: 0 });
-  }, [avatarUrl]);
-
   const layout = useMemo(
     () =>
-      computeCommunityAvatarLayout({
+      computeCoverFrameLayout({
         viewportWidth: viewportSize.width,
         viewportHeight: viewportSize.height,
-        naturalWidth: naturalSize.width,
-        naturalHeight: naturalSize.height,
+        naturalWidth: imageResource.status === "ready" ? imageResource.resource.width : 0,
+        naturalHeight: imageResource.status === "ready" ? imageResource.resource.height : 0,
         focusX,
         focusY,
         zoom,
       }),
-    [focusX, focusY, naturalSize.height, naturalSize.width, viewportSize.height, viewportSize.width, zoom],
+    [focusX, focusY, imageResource, viewportSize.height, viewportSize.width, zoom],
   );
 
   const commitDraggedPosition = useCallback(
@@ -103,7 +100,7 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
       if (!layout) return;
       const clampedLeft = Math.max(layout.minLeft, Math.min(0, nextLeft));
       const clampedTop = Math.max(layout.minTop, Math.min(0, nextTop));
-      const nextFocus = focusFromCommunityAvatarLayoutPosition(layout, clampedLeft, clampedTop);
+      const nextFocus = focusFromCoverFramePosition(layout, clampedLeft, clampedTop);
       onChangeFocusX(nextFocus.focusX);
       onChangeFocusY(nextFocus.focusY);
       onDirty();
@@ -172,20 +169,13 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
               onPointerUp={handlePointerEnd}
               onPointerCancel={handlePointerEnd}
             >
-              <img
+              {layout ? <img
                 className="banner-editor-image"
                 src={avatarUrl}
                 alt={props.imageAlt ?? "Community avatar preview"}
                 draggable={false}
-                onLoad={(event) => {
-                  const target = event.currentTarget;
-                  setNaturalSize({
-                    width: target.naturalWidth || target.width || 0,
-                    height: target.naturalHeight || target.height || 0,
-                  });
-                }}
-                style={layout ? getCommunityAvatarLayoutImageStyle(layout) : undefined}
-              />
+                style={getCoverFrameImageStyle(layout)}
+              /> : null}
             </div>
             <div className="create-community-hint banner-editor-hint">
               {props.hint ?? "Drag the image to frame it inside the logo."}
@@ -199,7 +189,7 @@ export function WebCommunityAvatarEditorModal(props: WebCommunityAvatarEditorMod
                 min="100"
                 max="250"
                 step="1"
-                value={Math.round(clampCommunityAvatarZoom(zoom) * 100)}
+                value={Math.round(clampCoverZoom(zoom) * 100)}
                 onChange={(event) => {
                   onChangeZoom(Number(event.target.value) / 100);
                   onDirty();

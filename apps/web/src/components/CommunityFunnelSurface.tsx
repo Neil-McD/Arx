@@ -40,13 +40,6 @@ export type CommunityFunnelSurfaceFeaturedMessage = {
   reactions?: Array<{ emoji: string; count: number }> | null;
 };
 
-export type CommunityFunnelSurfaceBanner = {
-  url: string | null;
-  focusX?: number | null;
-  focusY?: number | null;
-  zoom?: number | null;
-};
-
 export type CommunityFunnelSurfaceAction = {
   communityName: string;
   communityLinkLabel?: string | null;

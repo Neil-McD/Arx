@@ -8,7 +8,6 @@ import {
 
 import type { CommunityFunnelConfig } from "../../../../shared/communityTypes";
 import {
-  buildCommunityFunnelActionCardArt,
   buildCommunityFunnelCopy,
   filterOnlineAvatarFaces,
   formatCommunityLink,
@@ -102,11 +101,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const cardOneLiner = funnelOneLiner.trim() || funnelCopy.body;
   const aboutText = funnelAbout.trim();
   const communityLink = previewCommunity.slug ? formatCommunityLink(previewCommunity.slug) : null;
-  const actionCardArt = buildCommunityFunnelActionCardArt({
-    community: previewCommunity,
-    funnel: communityFunnelConfig,
-    heroMediaUrlOverride: mediaPreviewUrl,
-  });
   const isPublishedVisibility = previewVisibilityLabel === "Published";
   const isFreePricing = previewFunnelAction !== "checkout";
   const pricingLabel = isFreePricing ? "FREE" : "Paid";

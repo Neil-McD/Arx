@@ -20,6 +20,7 @@ import {
   resolveUserProfileDisplayProjectionForUser,
 } from "./userProfileProjection";
 import { readEverybodyMentionEmailAvailability } from "./communityMentionBroadcasts";
+import { resolveCommunityPresenceAuthorization } from "./communityPresenceCore";
 
 const COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE = 25;
 const COMMUNITY_DIRECTORY_MAX_PAGE_SIZE = 100;
@@ -103,6 +104,7 @@ async function mapCommunityDirectoryOwnerRow(args: {
   ctx: any;
   community: CommunityLike;
   userIdCache: Map<string, string | null>;
+  lastSeenAt: number;
 }) {
   return {
     id: `owner:${String(args.community._id)}`,
@@ -113,6 +115,7 @@ async function mapCommunityDirectoryOwnerRow(args: {
     ...(await resolveUserProfileDisplayProjection(args.ctx, args.community.ownerId)),
     role: "owner",
     created_at: toIsoString(args.community.createdAt),
+    last_active_at: toIsoString(args.lastSeenAt),
   };
 }
 
@@ -120,6 +123,7 @@ async function mapCommunityDirectoryMembershipRow(args: {
   ctx: any;
   row: CommunityMembershipLike;
   userIdCache: Map<string, string | null>;
+  lastSeenAt: number;
 }) {
   return {
     id: String(args.row._id),
@@ -130,6 +134,7 @@ async function mapCommunityDirectoryMembershipRow(args: {
     ...(await resolveUserProfileDisplayProjection(args.ctx, args.row.userId)),
     role: normalizeCommunityRoleForOutput(args.row.role) || "member",
     created_at: toIsoString(args.row.createdAt),
+    last_active_at: toIsoString(args.lastSeenAt),
   };
 }
 
@@ -303,45 +308,51 @@ export const listCommunityDirectoryPage = query({
       communityId: args.communityId,
     });
     const pageSize = normalizeDirectoryPageSize(args.pageSize);
-    const isFirstPage = args.cursor === null || args.cursor === undefined;
-    const memberPageSize = isFirstPage ? pageSize - 1 : pageSize;
     const rawPage = await ctx.db
-      .query("communityMemberships")
-      .withIndex("by_community_createdAt", (q) =>
+      .query("communityPresence")
+      .withIndex("by_community_lastSeenAt", (q) =>
         q.eq("communityId", args.communityId),
       )
-      .order("asc")
+      .order("desc")
       .paginate({
         cursor: args.cursor ?? null,
-        numItems: memberPageSize,
-        maximumRowsRead: Math.max(memberPageSize * 3, memberPageSize),
+        numItems: pageSize,
+        maximumRowsRead: Math.max(pageSize * 3, pageSize),
       });
     const userIdCache = new Map<string, string | null>();
-    const ownerRows = isFirstPage
-      ? [
-          await mapCommunityDirectoryOwnerRow({
-            ctx,
-            community,
-            userIdCache,
-          }),
-        ]
-      : [];
-    const activeMemberRows = (rawPage.page as CommunityMembershipLike[]).filter(
-      (row) =>
-        communityMembershipRowIsActive(row) &&
-        String(row.userId) !== String(community.ownerId),
-    );
-    const memberRows = await Promise.all(
-      activeMemberRows.map((row) =>
-        mapCommunityDirectoryMembershipRow({
+    const seenUserIds = new Set<string>();
+    const memberRows: any[] = [];
+    for (const presence of rawPage.page as Array<{ userId: any; lastSeenAt: number }>) {
+      const userIdKey = String(presence.userId ?? "").trim();
+      if (!userIdKey || seenUserIds.has(userIdKey)) continue;
+      seenUserIds.add(userIdKey);
+      const authorization = await resolveCommunityPresenceAuthorization({
+        ctx,
+        community,
+        userId: presence.userId,
+      });
+      if (!authorization.authorized) continue;
+      if (String(presence.userId) === String(community.ownerId)) {
+        memberRows.push(await mapCommunityDirectoryOwnerRow({
           ctx,
-          row,
+          community,
           userIdCache,
-        }),
-      ),
-    );
+          lastSeenAt: presence.lastSeenAt,
+        }));
+        continue;
+      }
+      if (!authorization.membership || !communityMembershipRowIsActive(authorization.membership)) {
+        continue;
+      }
+      memberRows.push(await mapCommunityDirectoryMembershipRow({
+        ctx,
+        row: authorization.membership,
+        userIdCache,
+        lastSeenAt: presence.lastSeenAt,
+      }));
+    }
     return {
-      page: [...ownerRows, ...memberRows],
+      page: memberRows,
       totalCount: readCommunityActiveMemberCount(community),
       continueCursor: rawPage.isDone ? null : rawPage.continueCursor,
       isDone: rawPage.isDone,

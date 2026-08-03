@@ -1,6 +1,6 @@
 import type { KeyboardEvent } from "react";
 import { CommunityAvatar } from "./CommunityAvatar";
-import { getCommunityBannerImageStyle } from "./communityBannerUi";
+import { StableFramedMedia } from "./StableFramedMedia";
 
 type DiscoverCommunityCardProps = {
   name: string;
@@ -75,22 +75,15 @@ export function DiscoverCommunityCard({
       onClick={handleActivate}
       onKeyDown={handleKeyDown}
     >
-      <div className="discover-card-banner">
-        {bannerUrl ? (
-          <img
-            className="discover-card-banner-img"
-            src={bannerUrl}
-            alt=""
-            decoding="async"
-            draggable={false}
-            style={getCommunityBannerImageStyle({
-              focusX: bannerFocusX,
-              focusY: bannerFocusY,
-              zoom: bannerZoom,
-            })}
-          />
-        ) : null}
-      </div>
+      <StableFramedMedia
+        className="discover-card-banner"
+        imageClassName="discover-card-banner-img"
+        imageUrl={bannerUrl}
+        frame={{ focusX: bannerFocusX, focusY: bannerFocusY, zoom: bannerZoom }}
+        alt=""
+        loading="lazy"
+        aria-hidden
+      />
       <div className="discover-card-body">
         <div className="discover-card-header">
           <CommunityAvatar

@@ -1,25 +1,18 @@
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import type { CommunityPresenceFace } from "../../../../shared/communityTypes";
 
-export type CommunityPresenceFace = {
-  user_id: string;
-  display_name?: string | null;
-  avatar_url?: string | null;
-  avatar_color?: string | null;
-  initials?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-};
+export type { CommunityPresenceFace } from "../../../../shared/communityTypes";
 
 export function CommunityPresenceFacepile(props: {
   faces?: CommunityPresenceFace[] | null;
   onlineCount?: number | null;
   onlineCountCapped?: boolean;
+  isLoading?: boolean;
   limit?: number;
   decorative?: boolean;
 }) {
   const visibleFaces = (props.faces ?? []).slice(0, props.limit ?? 7);
-  if (visibleFaces.length === 0) return null;
+  if (visibleFaces.length === 0 && !props.isLoading) return null;
 
   const onlineTotal = typeof props.onlineCount === "number"
     ? Math.max(0, Math.floor(props.onlineCount))
@@ -31,7 +24,16 @@ export function CommunityPresenceFacepile(props: {
       className="community-context-facepile"
       aria-hidden={props.decorative || undefined}
     >
-      {visibleFaces.map((face) => (
+      {visibleFaces.length === 0 && props.isLoading
+        ? Array.from({ length: 2 }).map((_, index) => (
+            <span
+              className="community-context-face web-skeleton-block"
+              style={{ zIndex: 2 - index }}
+              key={index}
+            />
+          ))
+        : null}
+      {visibleFaces.map((face, index) => (
         <UserAvatar
           key={face.user_id}
           className="community-context-face"
@@ -43,6 +45,7 @@ export function CommunityPresenceFacepile(props: {
           zoom={face.avatar_zoom}
           fallback={face.initials ?? "?"}
           fallbackStyle={face.avatar_color ? { color: face.avatar_color } : undefined}
+          style={{ zIndex: visibleFaces.length - index }}
           title={props.decorative ? undefined : face.display_name ?? undefined}
           alt=""
           aria-hidden={props.decorative || undefined}
@@ -51,6 +54,7 @@ export function CommunityPresenceFacepile(props: {
       {extraFaces > 0 ? (
         <span
           className="community-context-face community-context-face-more"
+          style={{ zIndex: 0 }}
           title={props.onlineCountCapped ? `${onlineTotal} or more people online` : undefined}
         >
           {props.onlineCountCapped ? `${onlineTotal}+` : `+${extraFaces}`}

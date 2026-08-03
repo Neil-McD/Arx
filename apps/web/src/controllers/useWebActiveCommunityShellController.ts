@@ -10,7 +10,10 @@ import {
   reduceCommunityAccessResolution,
   scopeCommunityAccessResolution,
 } from "../../../../shared/communityAccessResolution";
-import type { CommunityAccess } from "../../../../shared/communityTypes";
+import type {
+  CommunityAccess,
+  CommunityPresenceSummary,
+} from "../../../../shared/communityTypes";
 import { COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS } from "../../../../shared/communityPresenceContract";
 import { fetchCloudMyCommunityAccessById } from "../../../../shared/cloudCommunityAccessGateway";
 import {
@@ -23,29 +26,11 @@ import {
 import { reuseEquivalentValue } from "../../../../shared/reuseEquivalentValue";
 import { useResumeEpochEffect } from "../../../../shared/useResumeEpochEffect";
 
-type PresenceFace = {
-  user_id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-};
-
-type PresenceSummary = {
-  member_count?: number | null;
-  admin_count?: number | null;
-  online_count?: number | null;
-  online_count_capped?: boolean | null;
-  online_faces?: PresenceFace[] | null;
-  online_user_ids?: string[] | null;
-  online_last_active_at_by_user_id?: Record<string, string> | null;
-};
-
 type ScopedPresenceSummary = {
   communityId: string;
   sessionIdentity: string;
-  summary: PresenceSummary | null;
+  summary: CommunityPresenceSummary | null;
+  status: "pending" | "resolved" | "failed";
 };
 
 export function useWebActiveCommunityShellController<SessionT>(params: {
@@ -147,13 +132,19 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     let cancelled = false;
     let inFlight = false;
     const communityId = String(params.activeCommunityId ?? "").trim();
+    setActiveCommunityPresenceSummaryState({
+      communityId,
+      sessionIdentity,
+      summary: null,
+      status: "pending",
+    });
     const tick = async () => {
       if (cancelled || inFlight || document.visibilityState !== "visible") return;
       inFlight = true;
       try {
         const usableSession = await params.ensureSession(sessionRef.current);
         if (!usableSession) return;
-        const summary = await refreshCloudCommunityPresence<SessionT, PresenceSummary>({
+        const summary = await refreshCloudCommunityPresence<SessionT, CommunityPresenceSummary>({
           session: usableSession,
           communityId,
         });
@@ -162,11 +153,22 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
             communityId,
             sessionIdentity,
             summary: summary ?? null,
+            status: "resolved",
           }));
         }
       } catch (error) {
         if (!cancelled) {
           console.warn("Failed to refresh community presence:", error);
+          setActiveCommunityPresenceSummaryState((previous) => {
+            if (
+              previous?.communityId !== communityId ||
+              previous.sessionIdentity !== sessionIdentity ||
+              previous.status === "resolved"
+            ) {
+              return previous;
+            }
+            return { communityId, sessionIdentity, summary: null, status: "failed" };
+          });
         }
       } finally {
         inFlight = false;
@@ -235,6 +237,15 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     if (activeCommunityPresenceSummaryState.sessionIdentity !== sessionIdentity) return null;
     return activeCommunityPresenceSummaryState.summary;
   }, [activeCommunityPresenceSummaryState, params.activeCommunityId, sessionIdentity]);
+  const isLoadingActiveCommunityPresence = Boolean(
+    sessionIdentity &&
+    params.activeCommunityId &&
+    (
+      activeCommunityPresenceSummaryState?.communityId !== params.activeCommunityId ||
+      activeCommunityPresenceSummaryState.sessionIdentity !== sessionIdentity ||
+      activeCommunityPresenceSummaryState.status === "pending"
+    ),
+  );
 
   const communityAccessCapabilities = useMemo(
     () => deriveCommunityAccessCapabilities(activeCommunityAccess),
@@ -296,9 +307,10 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const funnelPreviewOnlineFaces = communitySocialSummary.onlineFaces;
 
   const activeCommunityOnlineUserIds = useMemo(() => {
-    const ids = activeCommunityPresenceSummary?.online_user_ids;
+    if (!activeCommunityPresenceSummary) return null;
+    const ids = activeCommunityPresenceSummary.online_user_ids;
     return new Set(Array.isArray(ids) ? ids.filter((id): id is string => Boolean(id)) : []);
-  }, [activeCommunityPresenceSummary?.online_user_ids]);
+  }, [activeCommunityPresenceSummary]);
 
   return {
     activeCommunityAccess,
@@ -306,6 +318,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     communityAccessLoadError,
     retryActiveCommunityAccess,
     activeCommunityPresenceSummary,
+    isLoadingActiveCommunityPresence,
     communitySocialSummary,
     reloadActiveCommunityAccess,
     communityAccessCapabilities,

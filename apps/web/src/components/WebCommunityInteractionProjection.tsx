@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   MessageCircle,
   MessageSquare,
@@ -33,6 +33,7 @@ import type { CloudCommunityMemberBillingHistory } from "../../../../shared/clou
 import type {
   CommunityTypingPresenceBundle,
   CommunityTypingPresenceUser,
+  CommunityPresenceSummary,
   UserProfile,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -99,7 +100,6 @@ export type WebCommunityInteractionProjectionProps = {
   onRetrySend?: (idempotencyKey: string) => void;
   onDiscardPending?: (idempotencyKey: string) => void;
   typingPresence?: CommunityTypingPresenceBundle;
-  onlineUserIds?: Set<string>;
   chatLastSeenAt?: number | null;
   rootChangeReason?: "initial" | "newer" | "older" | "reset";
   canLoadOlderRoots?: boolean;
@@ -108,14 +108,9 @@ export type WebCommunityInteractionProjectionProps = {
   onCaughtUp?: () => void;
   onMobileReadingModeChange?: (active: boolean) => void;
   onOpenCommunityChatLightbox?: (images: CommunityChatMediaImage[], index: number) => void;
-  presenceSummary?: {
-    member_count?: number | null;
-    admin_count?: number | null;
-    online_count?: number | null;
-    online_count_capped?: boolean | null;
-    online_faces?: CommunityPresenceFace[] | null;
-    online_last_active_at_by_user_id?: Record<string, string> | null;
-  } | null;
+  presenceSummary?: CommunityPresenceSummary | null;
+  isLoadingCommunityPresence?: boolean;
+  onlineUserIds?: Set<string> | null;
   communityMemberCount?: number | null;
   communityMembers?: CommunityRailMember[] | null;
   communityMembersHasMore?: boolean;
@@ -178,11 +173,83 @@ import {
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
 
-export function CommunityInteractionContextPanelSurface(
+const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
+  "activeCommunityName",
+  "presenceSummary",
+  "isLoadingCommunityPresence",
+  "onlineUserIds",
+  "communityMemberCount",
+  "communityMembers",
+  "communityMembersHasMore",
+  "isLoadingCommunityMembers",
+  "isLoadingMoreCommunityMembers",
+  "communityMembersLoadError",
+  "onLoadMoreCommunityMembers",
+  "communityId",
+  "communityOwnerId",
+  "canManageCommunityMembers",
+  "communityEntryPolicy",
+  "canSetCommunityFreeAccessMode",
+  "isSettingCommunityFreeAccessMode",
+  "communityFreeAccessModeError",
+  "onSetCommunityFreeAccessMode",
+  "canReviewCommunityJoinRequests",
+  "communityJoinReviewMode",
+  "communityJoinRequests",
+  "isLoadingCommunityJoinRequests",
+  "communityJoinRequestsError",
+  "decidingCommunityJoinRequestId",
+  "onApproveCommunityJoinRequest",
+  "onDenyCommunityJoinRequest",
+  "communityMemoryOverview",
+  "isLoadingCommunityMemory",
+  "communityMemoryError",
+  "onRefreshCommunityMemory",
+  "onOpenCommunityMemory",
+  "contextPanelLockedSections",
+  "onContextPanelLockedSectionActivate",
+  "communityMemoryCountLabel",
+  "contextPanelMembersPreview",
+  "onOpenProfile",
+  "onMessageUser",
+  "currentUserId",
+  "displayName",
+  "getInitials",
+  "getAvatarColor",
+  "canViewMemberPlanDetails",
+  "isActiveCommunityOwner",
+  "communityInitials",
+  "onSetCommunityMemberRole",
+  "onRemoveCommunityMember",
+  "onBanCommunityMember",
+  "loadMemberBillingHistory",
+] as const satisfies readonly (keyof WebCommunityInteractionProjectionProps)[];
+
+type CommunityContextProjectionProps = Pick<
+  WebCommunityInteractionProjectionProps,
+  (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]
+> & {
+  containerClassName?: string;
+  ariaLabel?: string;
+};
+
+function pickCommunityContextProjection(
   props: WebCommunityInteractionProjectionProps & {
     containerClassName?: string;
     ariaLabel?: string;
   },
+): CommunityContextProjectionProps {
+  return {
+    ...Object.fromEntries(
+      COMMUNITY_CONTEXT_PROJECTION_KEYS.map((key) => [key, props[key]]),
+    ) as Pick<WebCommunityInteractionProjectionProps, (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]>,
+    containerClassName: props.containerClassName,
+    ariaLabel: props.ariaLabel,
+  };
+}
+
+const StableCommunityInteractionContextPanelSurface = memo(function StableCommunityInteractionContextPanelSurface(
+  props: CommunityContextProjectionProps,
 ) {
   const [selectedCommunityMemberId, setSelectedCommunityMemberId] = useState<string | null>(null);
   const selectedCommunityMember = useMemo(() => {
@@ -224,6 +291,8 @@ export function CommunityInteractionContextPanelSurface(
           onlineFaces={props.presenceSummary?.online_faces ?? null}
           onlineCount={props.presenceSummary?.online_count ?? null}
           onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)}
+          isLoadingPresence={props.isLoadingCommunityPresence}
+          onlineUserIds={props.onlineUserIds ?? null}
           memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
           members={props.communityMembers ?? null}
           membersHasMore={props.communityMembersHasMore}
@@ -231,9 +300,6 @@ export function CommunityInteractionContextPanelSurface(
           isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
           membersLoadError={props.communityMembersLoadError}
           onLoadMoreMembers={props.onLoadMoreCommunityMembers}
-          onlineUserIds={props.onlineUserIds ?? null}
-          onlineLastActiveAtByUserId={props.presenceSummary?.online_last_active_at_by_user_id ?? null}
-          activityScopeKey={props.communityId ?? null}
           ownerId={props.communityOwnerId ?? null}
           canManageMembers={canManageCommunityMembers}
           entryPolicy={props.communityEntryPolicy ?? null}
@@ -292,6 +358,15 @@ export function CommunityInteractionContextPanelSurface(
       />
     </>
   );
+});
+
+export function CommunityInteractionContextPanelSurface(
+  props: WebCommunityInteractionProjectionProps & {
+    containerClassName?: string;
+    ariaLabel?: string;
+  },
+) {
+  return <StableCommunityInteractionContextPanelSurface {...pickCommunityContextProjection(props)} />;
 }
 
 

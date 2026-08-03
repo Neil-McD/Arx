@@ -2598,9 +2598,10 @@
 }
 
 .community-context-facepile {
+  --community-presence-face-size: 30px;
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   padding: 0 16px 13px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-muted);
@@ -2608,8 +2609,8 @@
 
 .community-context-face {
   position: relative;
-  width: 30px;
-  height: 30px;
+  width: var(--community-presence-face-size);
+  height: var(--community-presence-face-size);
   border-radius: 50%;
   background: var(--border-strong);
   color: var(--text-secondary);
@@ -2620,6 +2621,10 @@
   font-weight: 500;
   overflow: hidden;
   flex-shrink: 0;
+}
+
+.community-context-face + .community-context-face {
+  margin-left: calc(var(--community-presence-face-size) * -0.22);
 }
 
 .community-context-face-more {

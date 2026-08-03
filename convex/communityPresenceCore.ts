@@ -14,7 +14,6 @@ import {
   readCommunityActiveMemberCount,
   resolveCommunityMembershipEntitlementState,
   resolvePublicUserId,
-  toIsoString,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
@@ -226,7 +225,6 @@ export async function resolveMemberCommunityPresenceSummary(
   onlineCountCapped: boolean;
   onlineFaces: CommunityPresenceFace[];
   onlineUserIds: string[];
-  onlineLastActiveAtByUserId: Record<string, string>;
 }> {
   const presenceWindow = await resolveAuthorizedCommunityPresenceWindow(
     ctx,
@@ -253,13 +251,11 @@ export async function resolveMemberCommunityPresenceSummary(
   ).filter(Boolean) as CommunityPresenceFace[];
 
   const onlineUserIds: string[] = [];
-  const onlineLastActiveAtByUserId: Record<string, string> = {};
   for (const entry of onlineUserEntries) {
     const publicUserId =
       (await resolvePublicUserId(ctx, entry.userId, userIdCache))
       ?? String(entry.userId);
     onlineUserIds.push(publicUserId);
-    onlineLastActiveAtByUserId[publicUserId] = toIsoString(entry.lastSeenAt);
   }
 
   const durableMemberCount = readCommunityActiveMemberCount(community);
@@ -280,6 +276,5 @@ export async function resolveMemberCommunityPresenceSummary(
     onlineCountCapped: presenceWindow.countCapped,
     onlineFaces,
     onlineUserIds,
-    onlineLastActiveAtByUserId,
   };
 }
