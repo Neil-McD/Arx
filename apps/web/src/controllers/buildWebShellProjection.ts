@@ -58,8 +58,9 @@ export function buildWebShellProjection(params: {
     !isAppRoute &&
     params.isPublicCommunityFunnel &&
     !isMobileVisitorCommunity;
-  /* The visitor lens: /c/:slug and its /preview render the SAME community
-     layout a member sees — shell nav column included. One render path. */
+  /* The visitor lens keeps the community-local navigation, but never exposes
+     the authenticated global community rail. One funnel render path, one
+     public acquisition context. */
   const showDesktopPublicFunnelNav =
     isVisitorCommunityRoute && params.shellVariant !== "mobile";
   const showDesktopCommunityNav =
@@ -69,8 +70,10 @@ export function buildWebShellProjection(params: {
       !showMobilePublicFunnel) ||
     showDesktopPublicFunnelNav;
   const showDesktopCommunityRail =
-    (isAppRoute && !isOperatorPage && !showMobileAppShell && !showMobilePublicFunnel) ||
-    showDesktopPublicFunnelNav;
+    isAppRoute &&
+    !isOperatorPage &&
+    !showMobileAppShell &&
+    !showMobilePublicFunnel;
   const shouldShowDesktopCommunityRail =
     showDesktopCommunityRail && !isPublicAppPage;
   const hasLeftPanel =

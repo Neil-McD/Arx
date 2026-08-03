@@ -24,8 +24,8 @@ const app = read("apps/web/src/App.tsx");
 const authenticatedIdentityController = read(
   "apps/web/src/controllers/useWebAuthenticatedIdentityController.ts",
 );
-const shellNavigation = read(
-  "apps/web/src/controllers/useWebShellNavigationController.ts",
+const routeAccessBoundary = read(
+  "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts",
 );
 const appMainSurfaceHost = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const operatorHost = read("apps/web/src/components/WebOperatorDashboardHost.tsx");
@@ -244,8 +244,8 @@ assert.match(
   "the optional access probe must record a resolved denial instead of leaving the route pending",
 );
 assert.match(
-  shellNavigation,
-  /current\.activePage !== "operator"[\s\S]*!current\.isOperatorAccessResolved \|\| current\.operatorAccess[\s\S]*resolveAndEnter/,
+  routeAccessBoundary,
+  /projection\.kind === "redirect_member_entry"[\s\S]*resolveAndEnterMemberDestination/,
   "unauthorized operator routes must wait for access resolution and then fail closed to a member destination",
 );
 assert.match(
@@ -295,7 +295,7 @@ assert.doesNotMatch(
 );
 assert.match(
   shellProjection,
-  /isOperatorPage[\s\S]*!isOperatorPage && !showMobileAppShell/,
+  /isOperatorPage[\s\S]*const showDesktopCommunityRail =[\s\S]*isAppRoute &&[\s\S]*!isOperatorPage &&[\s\S]*!showMobileAppShell/,
   "the desktop operator console must remain full width without the community rail",
 );
 assert.doesNotMatch(

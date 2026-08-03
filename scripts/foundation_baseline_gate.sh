@@ -60,6 +60,7 @@ run_step "Cached production client compatibility proof" npm run check:cached-pro
 run_step "Official Polynet MCP contract proof" npm run check:polynet-workspace-mcp-proof
 run_step "Official Polynet MCP authorization proof" npm run check:polynet-workspace-mcp-auth-proof
 run_step "App shell decomposition contract" npm run check:app-shell-decomposition-contract
+run_step "Web route access boundary proof" npm run check:web-route-access-boundary-proof
 run_step "Founder inference contract proof" npm run check:founder-inference-proof
 run_step "Founder inference behavior" npm run check:founder-inference-behavior
 run_step "Monetization irreducibility contract" npm run check:monetization-irreducibility-proof

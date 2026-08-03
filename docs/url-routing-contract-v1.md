@@ -4,7 +4,8 @@
 
 Define one simple, durable URL grammar for Polynet so future work on communities, users, apps, and public funnels does not improvise route structure.
 
-This is a contract document, not an implementation rewrite.
+The web route-access boundary implements this contract through one canonical
+projection after authentication bootstrap.
 
 ## First Principles
 
@@ -22,7 +23,11 @@ Today the app uses pathname as the canonical route contract.
 
 Current canonical/pathname routes include:
 
+- `/`
+- `/login`
+- `/onboarding`
 - `/discover`
+- `/docs`
 - `/settings/profile`
 - `/settings/account`
 - `/settings/billing`
@@ -47,6 +52,28 @@ Polynet should have four route classes:
 3. Internal operating routes
 4. Transactional routes
 
+## Route Authority Boundary
+
+Route parsing never grants access. After authentication bootstrap, one
+route-access projection classifies the requested URL as:
+
+- public;
+- member entry;
+- authenticated platform;
+- community-authorized;
+- community-preview-authorized;
+- operator-authorized; or
+- legacy migration entry.
+
+Signed-out users may render only `/`, `/login`, `/c/:slug`, `/claim`, and
+`/checkout/success`. Signed-out authenticated-platform routes replace the URL
+with `/`. Signed-out or unauthorized community-operating routes replace the URL
+with `/c/:slug`.
+
+While authentication or scoped authority is unresolved, the web renders a
+neutral hold instead of application chrome. Redirects are UX only; cloud
+session, membership, entitlement, and operator checks remain authoritative.
+
 ## Platform Routes
 
 These are top-level application destinations:
@@ -56,6 +83,9 @@ These are top-level application destinations:
 - `/settings/account`
 - `/settings/billing`
 - `/settings/appearance`
+
+They require an authenticated session. Direct signed-out navigation returns to
+`/`; merely encountering `/onboarding` must not initiate authentication.
 
 The retired `/settings/partner` and `/settings/partners` paths are compatibility
 aliases that resolve to `/settings/billing`; they are not page identities.
@@ -71,6 +101,10 @@ Use explicit namespaces.
 - `/c/:slug`
 
 This is the public community home / funnel.
+
+`/c/:slug/preview` reuses the funnel renderer but is an authenticated
+owner/manager capability, not a second public funnel. Unauthorized preview
+requests resolve to `/c/:slug`.
 
 ### Users
 
@@ -119,6 +153,9 @@ Preferred direction:
 - `/c/:slug/analytics`
 
 This keeps object identity stable while making the active view explicit.
+Every internal community route requires both authentication and current
+community access. The browser holds while access is verified and fails closed
+to the public funnel.
 
 ## Legacy Workspace Compatibility
 
@@ -161,6 +198,8 @@ These are not entity homes and should not be overloaded into other route familie
 3. Public funnel and internal operating views should not share one route with hidden app-state differences.
 4. Entity namespaces should remain explicit.
 5. Do not add new public entity classes without defining their namespace first.
+6. Standard and `/m` shell variants must share the same access decision.
+7. Automatic redirects replace browser history rather than adding entries.
 
 ## Transitional Note
 

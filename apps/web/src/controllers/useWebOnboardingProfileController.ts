@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
-import { hasRecentAuthFlowPending, type AuthSession } from "../auth";
+import type { AuthSession } from "../auth";
 import {
   loadCloudAccountSetupStatus,
   prepareCloudProfileAvatarField,
@@ -428,18 +428,6 @@ export function useWebOnboardingProfileController(params: {
     params.publicRouteKind,
     params.session,
     routeTryPolynetFree,
-  ]);
-
-  useEffect(() => {
-    if (params.activePage !== "onboarding") return;
-    if (!params.isAuthBootstrapComplete || params.session) return;
-    if (hasRecentAuthFlowPending()) return;
-    params.requireSignIn({ reason: "try_polynet_free", payload: {} });
-  }, [
-    params.activePage,
-    params.isAuthBootstrapComplete,
-    params.requireSignIn,
-    params.session,
   ]);
 
   useEffect(() => {

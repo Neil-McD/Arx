@@ -56,9 +56,6 @@ type MemberEntryActions = {
 export function useWebShellNavigationController(params: {
   session: AuthSession | null;
   isAuthBootstrapComplete: boolean;
-  canonicalSessionUserId: string | null;
-  isOperatorAccessResolved: boolean;
-  operatorAccess: unknown;
   hasOperatorAccess: boolean;
   publicRoute: PublicRoute;
   setPublicRoute: Dispatch<SetStateAction<PublicRoute>>;
@@ -100,7 +97,6 @@ export function useWebShellNavigationController(params: {
   });
   const navStackRef = useRef<WebNavSnapshot[]>([]);
   const legacyWorkspaceRedirectRef = useRef<string | null>(null);
-  const operatorRouteRedirectRef = useRef<string | null>(null);
 
   const applyAppRouteState = useCallback((nextAppRoute: AppRouteState) => {
     const current = paramsRef.current;
@@ -330,38 +326,6 @@ export function useWebShellNavigationController(params: {
       nextPath,
     );
   }, []);
-
-  useEffect(() => {
-    const current = paramsRef.current;
-    if (current.activePage !== "operator") {
-      operatorRouteRedirectRef.current = null;
-      return;
-    }
-    if (!current.isAuthBootstrapComplete) return;
-    if (!current.session) {
-      navigateTo("/", { replace: true });
-      return;
-    }
-    if (!current.isOperatorAccessResolved || current.operatorAccess) return;
-    const redirectKey = String(
-      current.canonicalSessionUserId ?? "operator-denied",
-    );
-    if (operatorRouteRedirectRef.current === redirectKey) return;
-    operatorRouteRedirectRef.current = redirectKey;
-    void memberEntryActionsRef.current
-      .resolveAndEnter({ session: current.session, replace: true })
-      .then((entered) => {
-        if (!entered) navigateTo("/discover", { replace: true });
-      });
-  }, [
-    navigateTo,
-    params.activePage,
-    params.canonicalSessionUserId,
-    params.isAuthBootstrapComplete,
-    params.isOperatorAccessResolved,
-    params.operatorAccess,
-    params.session,
-  ]);
 
   useWebPathRouteLifecycle({
     publicRouteKind: params.publicRoute.kind,
