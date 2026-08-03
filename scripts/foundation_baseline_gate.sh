@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=49
+TOTAL_STEPS=50
 CURRENT_STEP=1
 
 run_step() {
@@ -64,6 +64,7 @@ run_step "Web route access boundary proof" npm run check:web-route-access-bounda
 run_step "Founder inference contract proof" npm run check:founder-inference-proof
 run_step "Founder inference behavior" npm run check:founder-inference-behavior
 run_step "Monetization irreducibility contract" npm run check:monetization-irreducibility-proof
+run_step "Canonical Builder offer surface contract" npm run check:builder-offer-surface-proof
 run_step "Operator complimentary access contract" npm run check:operator-complimentary-access-proof
 run_step "Community commerce economics contract" npm run check:community-commerce-economics-proof
 run_step "Community commerce economics behavior" npm run check:community-commerce-economics-behavior

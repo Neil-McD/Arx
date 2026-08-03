@@ -170,12 +170,12 @@ export function useWebFounderBillingController(params: {
       (community) =>
         community.funding_mode === "managed" &&
         [
-          "managed_required",
-          "managed_checkout_pending",
-          "past_due",
-          "canceled",
-          "ended",
-        ].includes(community.status),
+          "builder_required",
+          "checkout_pending",
+          "builder_inactive",
+          "builder_past_due",
+          "builder_ended",
+        ].includes(community.funding_state),
     ),
     refresh,
     startCheckout,

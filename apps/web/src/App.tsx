@@ -171,6 +171,7 @@ import { useWebCommerceClaimActions } from "./controllers/useWebCommerceClaimAct
 import { useWebPublicFunnelActions } from "./controllers/useWebPublicFunnelActions";
 import { useWebDiscoverPreloadLifecycle } from "./controllers/useWebDiscoverPreloadLifecycle";
 import { useWebBillingUiController } from "./controllers/useWebBillingUiController";
+import { useWebBuilderOfferController } from "./controllers/useWebBuilderOfferController";
 import { useWebMobileShellController } from "./controllers/useWebMobileShellController";
 import { useWebCommunityPolynetController } from "./controllers/useWebCommunityPolynetController";
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
@@ -952,6 +953,11 @@ export default function App() {
     operatorComplimentaryAccess:
       accountCommerceStatus?.operator_complimentary_access === true,
   });
+  const builderOffer = useWebBuilderOfferController({
+    startCheckout: founderBilling.startCheckout,
+    openPortal: founderBilling.openPortal,
+    openLegacyFunding: () => openGlobalSettings("account"),
+  });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,
     sessionRef,
@@ -1451,7 +1457,6 @@ export default function App() {
   >({
     ...authenticatedSessionArg,
     isAccountSetupComplete: isAccountSetupCompleteForBuilderActions,
-    communityInitials,
     onPrimaryUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
@@ -1467,13 +1472,18 @@ export default function App() {
       });
       void founderBilling.startCheckoutAfterCommunityCreated(community.id);
     },
-    readBannerFileAsWideDataUrlWithinLimit,
-    isLikelyImageFile,
-    maxCreateImageDataUrlChars: WEB_IMAGE_DATA_URL_CHAR_LIMIT,
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
-    bannerLoadFailureMessage: "Failed to load banner.",
   });
-  const { openCreateCommunityModal } = communityUi;
+  const createBlockingFundingCommunity = founderBilling.fundingAttentionCommunities[0] ?? null;
+  const openCreateCommunityModal: typeof communityUi.openCreateCommunityModal = (draft = null) => {
+    if (createBlockingFundingCommunity) {
+      builderOffer.open({
+        community: createBlockingFundingCommunity,
+      });
+      return;
+    }
+    communityUi.openCreateCommunityModal(draft);
+  };
   const { resumePendingAuthIntent } =
     useWebPendingAuthIntentController({
       session,
@@ -2495,6 +2505,11 @@ export default function App() {
       founderInferenceSuccess: founderInference.success,
       handleActivateFounderInference: founderInference.activate,
       handleSuspendFounderInference: founderInference.suspend,
+      founderBillingOverview: founderBilling.overview,
+      isLoadingFounderBilling: founderBilling.isLoading,
+      onOpenBuilderOffer: (community) => builderOffer.open({ community }),
+      onOpenCommunityBilling: () => openGlobalSettings("billing"),
+      onOpenCreateCommunity: () => openCreateCommunityModal(),
       formatRelativeTime,
     },
     billing: {
@@ -2503,9 +2518,11 @@ export default function App() {
       isLoadingFounderBilling: founderBilling.isLoading,
       founderBillingActionCommunityId: founderBilling.actionCommunityId,
       founderBillingError: founderBilling.error,
-      startFounderSubscriptionCheckout: founderBilling.startCheckout,
       openFounderBillingPortal: founderBilling.openPortal,
       refreshFounderBilling: founderBilling.refresh,
+      onOpenBuilderOffer: (community) => builderOffer.open({ community }),
+      onOpenLegacyFunding: () => openGlobalSettings("account"),
+      onOpenCreateCommunity: () => openCreateCommunityModal(),
       pendingPurchaseClaims,
       isLoadingPendingPurchases,
       isRedeemingPendingPurchases,
@@ -2572,6 +2589,15 @@ export default function App() {
       keyConnected: founderInference.status.key_connected,
       onContinue: () => { founderInference.dismissActivationPrompt(); openGlobalSettings("account"); },
       onClose: founderInference.dismissActivationPrompt,
+    },
+    builderOfferProps: {
+      community: builderOffer.community,
+      isSubmitting:
+        Boolean(builderOffer.community) &&
+        founderBilling.actionCommunityId === builderOffer.community?.community_id,
+      error: founderBilling.error,
+      onClose: builderOffer.close,
+      onConfirm: builderOffer.confirm,
     },
     appToast,
   });

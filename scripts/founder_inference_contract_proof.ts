@@ -228,12 +228,12 @@ assert.match(wikiArchitect, /apiKeyOverride: fundingSession\.apiKeyOverride/g);
 assert.match(communityAdminGateway, /runCommunityWikiArchitectProposal[\s\S]*requestId: crypto\.randomUUID\(\)/);
 assert.match(communityAdminGateway, /draftCommunityResourceContentFromSources[\s\S]*requestId: crypto\.randomUUID\(\)/);
 
-assert.match(settings, /Community inference funding/);
-assert.match(settings, /eligible legacy communities listed here/);
+assert.match(settings, /Legacy API funding/);
+assert.match(settings, /legacy-eligible communities/);
 assert.match(settings, /Activate for eligible communities/);
 assert.doesNotMatch(settings, /GPT 5\.6|\bLuna\b/i);
-assert.match(billingSettings, /Community funding/);
-assert.match(billingSettings, /Polynet-hosted inference/);
+assert.match(billingSettings, /Builder/);
+assert.match(billingSettings, /Polynet-hosted community AI/);
 assert.doesNotMatch(billingSettings, /GPT 5\.6|\bLuna\b|\$20/i);
 assert.doesNotMatch(billingSettings, /Personal tools|Premium|tool balance|Add credits/i);
 assert.doesNotMatch(billingSettings, /label: "Communities"/);
@@ -302,7 +302,7 @@ assert.equal(shouldOpenFounderInferencePrompt({
 }), false);
 assert.match(createController, /visibility: "unlisted"/);
 assert.doesNotMatch(createModal, /option value="published"/);
-assert.match(createModal, /Create and continue to payment/);
+assert.match(createModal, /Get Builder/);
 assert.match(webApp, /founderBilling\.startCheckoutAfterCommunityCreated\(community\.id\)/);
 assert.match(legal, /does not transfer the founder's administrative permissions to a member/);
 assert.match(legal, /Receipts do not contain the API key, prompts, responses, or tool output/);

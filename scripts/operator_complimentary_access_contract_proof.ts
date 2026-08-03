@@ -95,7 +95,7 @@ assert.doesNotMatch(
 );
 assert.match(
   billingUi,
-  /case "operator_comped":[\s\S]*Operator access included[\s\S]*isOperatorComped \? null/,
+  /community\.funding_mode === "operator_comp"[\s\S]*Operator access included[\s\S]*isOperatorComped \? null/,
   "community funding must project operator access without a checkout",
 );
 assert.match(

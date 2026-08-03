@@ -2,6 +2,15 @@ import { useEffect, useState } from "react";
 
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
 import type { CloudFounderInferenceStatus } from "../../../../shared/cloudFounderInferenceGateway";
+import type {
+  CloudFounderBillingCommunity,
+  CloudFounderBillingOverview,
+} from "../../../../shared/cloudFounderBillingGateway";
+import {
+  builderFundingActionLabel,
+  formatBuilderOfferPrice,
+  resolveBuilderOfferPrimaryAction,
+} from "../../../../shared/builderOffer";
 
 type SessionLike = {
   user: {
@@ -50,6 +59,11 @@ export type WebAccountSettingsSectionProps = {
   founderInferenceSuccess: string | null;
   handleActivateFounderInference: (acceptedTerms: boolean) => Promise<void> | void;
   handleSuspendFounderInference: () => Promise<void> | void;
+  founderBillingOverview: CloudFounderBillingOverview;
+  isLoadingFounderBilling: boolean;
+  onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
+  onOpenCommunityBilling: () => void;
+  onOpenCreateCommunity: () => void;
   formatRelativeTime: (value: string) => string;
 };
 
@@ -82,6 +96,27 @@ export function WebAccountSettingsSection(
       setIsSubmittingSignOut(false);
     }
   };
+  const builderAttentionCommunity = props.founderBillingOverview.communities.find((community) =>
+    [
+      "builder_required",
+      "checkout_pending",
+      "builder_inactive",
+      "builder_past_due",
+      "builder_ended",
+    ].includes(community.funding_state),
+  ) ?? null;
+  const activeBuilderCount = props.founderBillingOverview.communities.filter((community) =>
+    ["builder_active", "builder_canceling", "builder_included"].includes(community.funding_state),
+  ).length;
+  const legacyApiCount = props.founderBillingOverview.communities.filter(
+    (community) => community.funding_state === "legacy_api_active",
+  ).length;
+  const builderAttentionAction = builderAttentionCommunity
+    ? resolveBuilderOfferPrimaryAction({
+        state: builderAttentionCommunity.funding_state,
+        allowedActions: builderAttentionCommunity.allowed_actions,
+      })
+    : null;
 
   return (
     <>
@@ -129,6 +164,65 @@ export function WebAccountSettingsSection(
         ) : null}
       </div>
 
+      {props.session ? (
+        <div className="settings-section builder-account-section">
+          <div className="settings-section-title">Builder communities</div>
+          <div className="settings-section-desc">
+            Builder is attached to communities, not your account. Each Builder community is {formatBuilderOfferPrice()}.
+          </div>
+          {props.isLoadingFounderBilling && props.founderBillingOverview.communities.length === 0 ? (
+            <div className="chat-loading">
+              <div className="loading-spinner" />
+              <span>Checking Builder…</span>
+            </div>
+          ) : (
+            <div className="builder-account-summary">
+              <div>
+                {props.founderBillingOverview.communities.length === 0 ? (
+                  <>
+                    <strong>No Builder community yet</strong>
+                    <span>Create your first community to continue.</span>
+                  </>
+                ) : builderAttentionCommunity ? (
+                  <>
+                    <strong>{builderAttentionCommunity.community_name} needs attention</strong>
+                    <span>Complete Builder funding before creating another community.</span>
+                  </>
+                ) : (
+                  <>
+                    <strong>
+                      {activeBuilderCount > 0
+                        ? `Builder active for ${activeBuilderCount} ${activeBuilderCount === 1 ? "community" : "communities"}`
+                        : "Community AI funded"}
+                    </strong>
+                    <span>
+                      {legacyApiCount > 0
+                        ? `${legacyApiCount} ${legacyApiCount === 1 ? "community uses" : "communities use"} legacy API funding.`
+                        : "All owned communities are current."}
+                    </span>
+                  </>
+                )}
+              </div>
+              {props.founderBillingOverview.communities.length === 0 ? (
+                <button type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
+              ) : builderAttentionCommunity && builderAttentionAction ? (
+                <button type="button" onClick={() => props.onOpenBuilderOffer(builderAttentionCommunity)}>
+                  {builderFundingActionLabel({
+                    action: builderAttentionAction,
+                    state: builderAttentionCommunity.funding_state,
+                    includePrice: builderAttentionAction === "buy_builder",
+                  })}
+                </button>
+              ) : (
+                <button className="secondary" type="button" onClick={props.onOpenCommunityBilling}>
+                  Manage billing
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       <WebSignOutConfirmModal
         isOpen={Boolean(props.session) && isSignOutConfirmOpen}
         isSubmitting={isSubmittingSignOut}
@@ -146,10 +240,10 @@ export function WebAccountSettingsSection(
               <path d="M12 4v16" />
               <circle cx="12" cy="12" r="9" />
             </svg>
-            Community inference funding
+            Legacy API funding
           </div>
           <div className="settings-section-desc">
-            Your grandfathered founder access lets one OpenAI API key fund inference for the eligible legacy communities listed here.
+            Exact legacy-eligible communities may use your OpenAI API key instead of Builder.
           </div>
           <div className={`account-provider-card${
             props.founderInferenceStatus.status === "active" && props.founderInferenceStatus.key_connected
@@ -157,7 +251,7 @@ export function WebAccountSettingsSection(
               : ""
           }`}>
             <div className="account-provider-card-kicker">
-              <span>Existing founder access</span>
+              <span>Legacy community access</span>
               <span className={`account-provider-status${
                 props.founderInferenceStatus.status === "active" && props.founderInferenceStatus.key_connected
                   ? " connected"
@@ -174,7 +268,7 @@ export function WebAccountSettingsSection(
                         : "Ready to activate"}
               </span>
             </div>
-            <div className="account-provider-card-title">OpenAI API access for your communities</div>
+            <div className="account-provider-card-title">OpenAI API funding for eligible communities</div>
             <div className="account-provider-card-desc">
               Members keep their own permissions. Your key pays only for supported community inference and is never shared with members.
             </div>
@@ -241,11 +335,10 @@ export function WebAccountSettingsSection(
             <path d="M12 5v14" />
             <circle cx="12" cy="12" r="9" />
           </svg>
-          Inference provider
+          Personal AI connection
         </div>
         <div className="settings-section-desc">
-          Connect ChatGPT or an OpenAI API key for Polynet inference. You do not
-          need both.
+          Connect ChatGPT or an OpenAI API key for your personal Polynet agent. This does not activate Builder for a community.
         </div>
         {!props.session ? (
           <div className="model-note">

@@ -1,216 +1,85 @@
-import type { DragEvent } from "react";
+import { formatBuilderOfferPrice } from "../../../../shared/builderOffer";
+import { WebBuilderOfferSummary } from "./WebBuilderOfferSummary";
 
 type WebCreateCommunityModalProps = {
   isOpen: boolean;
   hasSession: boolean;
-  isCreateBannerDragOver: boolean;
-  isCreateAvatarDragOver: boolean;
-  createCommunityBannerUrl: string | null;
-  createCommunityAvatarUrl: string | null;
   createCommunityName: string;
-  createCommunityOneLiner: string;
   createCommunitySlug: string;
   createCommunityError: string | null;
   isCreatingCommunity: boolean;
-  communityInitials: (value: string) => string;
   onClose: () => void;
   onPrimaryAction: () => Promise<void> | void;
-  onSetBannerDragOver: (value: boolean) => void;
-  onSetAvatarDragOver: (value: boolean) => void;
-  onBannerDrop: (event: DragEvent<HTMLDivElement>) => void;
-  onAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
-  onUploadBanner: (file: File | null) => Promise<void> | void;
-  onUploadAvatar: (file: File | null) => Promise<void> | void;
-  onRemoveBanner: () => void;
-  onRemoveAvatar: () => void;
   onChangeName: (value: string) => void;
-  onChangeOneLiner: (value: string) => void;
   onChangeSlug: (value: string) => void;
   onChangeSlugEdited: (value: boolean) => void;
 };
 
 export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
-  const {
-    isOpen,
-    hasSession,
-    isCreateBannerDragOver,
-    isCreateAvatarDragOver,
-    createCommunityBannerUrl,
-    createCommunityAvatarUrl,
-    createCommunityName,
-    createCommunityOneLiner,
-    createCommunitySlug,
-    createCommunityError,
-    isCreatingCommunity,
-    communityInitials,
-    onClose,
-    onPrimaryAction,
-    onSetBannerDragOver,
-    onSetAvatarDragOver,
-    onBannerDrop,
-    onAvatarDrop,
-    onUploadBanner,
-    onUploadAvatar,
-    onRemoveBanner,
-    onRemoveAvatar,
-    onChangeName,
-    onChangeOneLiner,
-    onChangeSlug,
-    onChangeSlugEdited,
-  } = props;
-
-  if (!isOpen) return null;
+  if (!props.isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal create-community-modal" onClick={(event) => event.stopPropagation()}>
-        <div className="modal-header">
-          <div className="create-community-heading">
-            <div className="modal-title">Create community</div>
-            <div className="create-community-subtitle">
-              Start with the identity and access basics. You can refine the funnel and AI agent after.
-            </div>
-          </div>
-          <button className="modal-close" onClick={onClose} title="Close">
-            ×
+    <div className="modal-overlay builder-offer-overlay" onClick={props.onClose}>
+      <div
+        className="modal create-community-modal builder-create-modal"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="builder-create-title"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <button className="modal-close builder-offer-close" onClick={props.onClose} title="Close">
+          ×
+        </button>
+
+        <div id="builder-create-title">
+          <WebBuilderOfferSummary />
+        </div>
+
+        <div className="builder-create-fields">
+          <label className="create-community-field">
+            <span>Community name</span>
+            <input
+              autoFocus
+              type="text"
+              placeholder="Your community"
+              value={props.createCommunityName}
+              onChange={(event) => props.onChangeName(event.target.value)}
+            />
+          </label>
+          <details className="builder-create-url">
+            <summary>Customize community URL</summary>
+            <label className="create-community-field">
+              <span>polynet.ai/c/</span>
+              <input
+                type="text"
+                placeholder="your-community"
+                value={props.createCommunitySlug}
+                onChange={(event) => {
+                  props.onChangeSlug(event.target.value);
+                  props.onChangeSlugEdited(true);
+                }}
+              />
+            </label>
+          </details>
+        </div>
+
+        {props.createCommunityError ? (
+          <div className="auth-error builder-offer-error">{props.createCommunityError}</div>
+        ) : null}
+
+        <div className="builder-offer-actions">
+          <button
+            className="builder-offer-primary"
+            type="button"
+            onClick={() => void props.onPrimaryAction()}
+            disabled={props.isCreatingCommunity || props.createCommunityName.trim().length === 0}
+          >
+            {props.isCreatingCommunity
+              ? "Creating community…"
+              : props.hasSession
+                ? `Get Builder — ${formatBuilderOfferPrice()}`
+                : "Sign in to continue"}
           </button>
-        </div>
-        <div className="modal-body">
-          <div className="create-community-form">
-            <div className="create-community-layout">
-              <div className="create-community-branding">
-                <div
-                  className={`create-community-banner${isCreateBannerDragOver ? " drag-over" : ""}`}
-                  onDragOver={(event) => {
-                    event.preventDefault();
-                    onSetBannerDragOver(true);
-                  }}
-                  onDragLeave={() => onSetBannerDragOver(false)}
-                  onDrop={onBannerDrop}
-                >
-                  <div className="create-community-banner-media">
-                    {createCommunityBannerUrl ? (
-                      <img src={createCommunityBannerUrl} alt="Community banner preview" draggable={false} />
-                    ) : (
-                      <div className="create-community-banner-placeholder">Banner preview</div>
-                    )}
-                  </div>
-                </div>
-                <div className="create-community-branding-actions">
-                  <label className="create-banner-btn">
-                    Upload banner
-                    <input
-                      type="file"
-                      accept="image/*"
-                      onChange={(event) => {
-                        const file = event.target.files?.[0] ?? null;
-                        event.target.value = "";
-                        void onUploadBanner(file);
-                      }}
-                    />
-                  </label>
-                  {createCommunityBannerUrl ? (
-                    <button className="create-banner-remove" type="button" onClick={onRemoveBanner}>
-                      Remove
-                    </button>
-                  ) : null}
-                </div>
-
-                <div className="create-community-avatar-shell">
-                  <div
-                    className={`create-community-avatar${isCreateAvatarDragOver ? " drag-over" : ""}`}
-                    onDragOver={(event) => {
-                      event.preventDefault();
-                      onSetAvatarDragOver(true);
-                    }}
-                    onDragLeave={() => onSetAvatarDragOver(false)}
-                    onDrop={onAvatarDrop}
-                  >
-                    {createCommunityAvatarUrl ? (
-                      <img src={createCommunityAvatarUrl} alt="Community avatar preview" draggable={false} />
-                    ) : (
-                      <span>{communityInitials(createCommunityName || "Community")}</span>
-                    )}
-                  </div>
-                  <div className="create-community-avatar-actions">
-                    <label className="create-avatar-btn">
-                      Upload avatar
-                      <input
-                        type="file"
-                        accept="image/*"
-                        onChange={(event) => void onUploadAvatar(event.target.files?.[0] ?? null)}
-                      />
-                    </label>
-                    {createCommunityAvatarUrl ? (
-                      <button className="create-avatar-remove" type="button" onClick={onRemoveAvatar}>
-                        Remove
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              </div>
-
-              <div className="create-community-details">
-                <label className="create-community-field">
-                  <span>Name</span>
-                  <input
-                    type="text"
-                    placeholder="Community name"
-                    value={createCommunityName}
-                    onChange={(event) => onChangeName(event.target.value)}
-                  />
-                </label>
-                <label className="create-community-field">
-                  <span>One-liner</span>
-                  <textarea
-                    placeholder="One-liner about who this is for"
-                    rows={3}
-                    value={createCommunityOneLiner}
-                    onChange={(event) => onChangeOneLiner(event.target.value)}
-                  />
-                </label>
-                <label className="create-community-field">
-                  <span>Slug</span>
-                  <input
-                    type="text"
-                    placeholder="your-community"
-                    value={createCommunitySlug}
-                    onChange={(event) => {
-                      onChangeSlug(event.target.value);
-                      onChangeSlugEdited(true);
-                    }}
-                  />
-                  <span className="create-community-hint">
-                    Lowercase letters, numbers, and dashes. Your community starts as a private draft.
-                  </span>
-                </label>
-              </div>
-            </div>
-            {createCommunityError && <div className="auth-error">{createCommunityError}</div>}
-          </div>
-        </div>
-        <div className="modal-footer">
-          <div className="create-community-actions">
-            {!hasSession ? (
-              <button className="create-community-primary" type="button" onClick={() => void onPrimaryAction()}>
-                Sign in to create
-              </button>
-            ) : (
-              <button
-                className="create-community-primary"
-                type="button"
-                onClick={() => void onPrimaryAction()}
-                disabled={isCreatingCommunity || createCommunityName.trim().length === 0}
-              >
-                {isCreatingCommunity
-                  ? "Creating..."
-                  : "Create and continue to payment"}
-              </button>
-            )}
-            <button className="create-community-secondary" onClick={onClose}>
-              Cancel
-            </button>
-          </div>
         </div>
       </div>
     </div>

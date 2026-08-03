@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useRef, type Dispatch, type DragEvent, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import { type CreateCommunityIntentDraft } from "./createCommunityIntent";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
-import { createCloudCommunity, prepareCloudCommunityBrandingField } from "./cloudCommunityAdminGateway";
+import { createCloudCommunity } from "./cloudCommunityAdminGateway";
 import { isValidCommunitySlug, slugifyCommunityName } from "./communitySlug";
-import { readCommunityAvatarFileAsDataUrlWithinLimit } from "./imageTransforms";
 
 type SessionLike = {
   user: {
@@ -30,25 +29,13 @@ type UseCommunityCreateControllerArgs<
   createCommunityName: string;
   createCommunitySlug: string;
   createCommunitySlugEdited: boolean;
-  createCommunityAvatarUrl: string | null;
-  createCommunityOneLiner: string;
-  createCommunityBannerUrl: string | null;
   setCreateCommunityName: Dispatch<SetStateAction<string>>;
   setCreateCommunitySlug: Dispatch<SetStateAction<string>>;
   setCreateCommunitySlugEdited: Dispatch<SetStateAction<boolean>>;
-  setCreateCommunityAvatarUrl: Dispatch<SetStateAction<string | null>>;
-  setCreateCommunityOneLiner: Dispatch<SetStateAction<string>>;
-  setCreateCommunityBannerUrl: Dispatch<SetStateAction<string | null>>;
   setCreateCommunityError: Dispatch<SetStateAction<string | null>>;
   setShowCreateCommunityModal: Dispatch<SetStateAction<boolean>>;
   setIsCreatingCommunity: Dispatch<SetStateAction<boolean>>;
-  setIsCreateAvatarDragOver: Dispatch<SetStateAction<boolean>>;
-  setIsCreateBannerDragOver: Dispatch<SetStateAction<boolean>>;
-  readBannerFileAsWideDataUrlWithinLimit: (file: File, maxChars: number) => Promise<string>;
-  isLikelyImageFile: (file: File) => boolean;
-  maxCreateImageDataUrlChars: number;
   createUnauthenticatedErrorMessage: string;
-  bannerLoadFailureMessage: string;
 };
 
 function mapCreateCommunityErrorMessage(error: unknown): string {
@@ -92,11 +79,6 @@ export function useCommunityCreateController<
     current.setCreateCommunityName(draft?.name ?? "");
     current.setCreateCommunitySlug(draft?.slug ?? "");
     current.setCreateCommunitySlugEdited(Boolean(draft?.slug_edited));
-    current.setCreateCommunityAvatarUrl(null);
-    current.setCreateCommunityOneLiner(draft?.one_liner ?? "");
-    current.setCreateCommunityBannerUrl(null);
-    current.setIsCreateAvatarDragOver(false);
-    current.setIsCreateBannerDragOver(false);
   }, []);
 
   const closeCreateCommunityModal = useCallback(() => {
@@ -136,7 +118,7 @@ export function useCommunityCreateController<
       slug,
       slug_edited: current.createCommunitySlugEdited,
       visibility: "unlisted",
-      one_liner: current.createCommunityOneLiner.trim() || null,
+      one_liner: null,
     };
   }, []);
 
@@ -175,28 +157,16 @@ export function useCommunityCreateController<
 
     current.setIsCreatingCommunity(true);
     try {
-      const [avatarField, bannerField] = await Promise.all([
-        prepareCloudCommunityBrandingField({
-          session,
-          kind: "avatar",
-          nextValue: current.createCommunityAvatarUrl,
-        }),
-        prepareCloudCommunityBrandingField({
-          session,
-          kind: "banner",
-          nextValue: current.createCommunityBannerUrl,
-        }),
-      ]);
       const community = await createCloudCommunity<SessionT, CommunityT>({
         session,
         name,
         slug,
         visibility: "unlisted",
-        avatarStorageId: avatarField.storageId ?? null,
-        avatarUrl: avatarField.url ?? null,
-        oneLiner: current.createCommunityOneLiner.trim() || null,
-        bannerStorageId: bannerField.storageId ?? null,
-        bannerUrl: bannerField.url ?? null,
+        avatarStorageId: null,
+        avatarUrl: null,
+        oneLiner: null,
+        bannerStorageId: null,
+        bannerUrl: null,
       });
       if (!community?.id) {
         current.setCreateCommunityError("Failed to create community.");
@@ -231,69 +201,11 @@ export function useCommunityCreateController<
     await handleCreateCommunity();
   }, [buildCreateCommunityIntentFromState, closeCreateCommunityModal, handleCreateCommunity]);
 
-  const handleCreateCommunityAvatarUpload = useCallback(async (file: File | null) => {
-    const current = argsRef.current;
-    if (!file) return;
-    try {
-      const dataUrl = await readCommunityAvatarFileAsDataUrlWithinLimit(file, current.maxCreateImageDataUrlChars);
-      current.setCreateCommunityAvatarUrl(dataUrl);
-    } catch (error) {
-      const message = typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : "Failed to load image.";
-      current.setCreateCommunityError(message);
-    }
-  }, []);
-
-  const handleCreateCommunityBannerUpload = useCallback(async (file: File | null) => {
-    const current = argsRef.current;
-    if (!file) return;
-    if (!current.isLikelyImageFile(file)) {
-      current.setCreateCommunityError("Banner must be an image file.");
-      return;
-    }
-    try {
-      const dataUrl = await current.readBannerFileAsWideDataUrlWithinLimit(file, current.maxCreateImageDataUrlChars);
-      current.setCreateCommunityBannerUrl(dataUrl);
-    } catch (error) {
-      const message = typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : current.bannerLoadFailureMessage;
-      current.setCreateCommunityError(message);
-    }
-  }, []);
-
-  const handleCreateBannerDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
-    const current = argsRef.current;
-    event.preventDefault();
-    event.stopPropagation();
-    current.setIsCreateBannerDragOver(false);
-    const file = event.dataTransfer.files?.[0] ?? null;
-    if (file) void handleCreateCommunityBannerUpload(file);
-  }, [handleCreateCommunityBannerUpload]);
-
-  const handleCreateAvatarDrop = useCallback((event: DragEvent<HTMLDivElement>) => {
-    const current = argsRef.current;
-    event.preventDefault();
-    event.stopPropagation();
-    current.setIsCreateAvatarDragOver(false);
-    const file = event.dataTransfer.files?.[0] ?? null;
-    if (file) void handleCreateCommunityAvatarUpload(file);
-  }, [handleCreateCommunityAvatarUpload]);
-
   return {
     openCreateCommunityModal,
     closeCreateCommunityModal,
     resumeCreateCommunityIntent: openCreateCommunityModal,
     handleCreateCommunityPrimaryAction,
     handleCreateCommunity,
-    handleCreateCommunityAvatarUpload,
-    handleCreateCommunityBannerUpload,
-    handleCreateBannerDrop,
-    handleCreateAvatarDrop,
   };
 }
