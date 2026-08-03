@@ -66,7 +66,7 @@ assert.match(
 );
 assert.match(
   platformDiagnostics,
-  /DIAGNOSTIC_METADATA_ALLOWLIST[\s\S]*"auth\.session_established": \["bootstrapPath", "rotatedSessionFollowed"\][\s\S]*"auth\.session_refreshed": \[\][\s\S]*"access\.operator_access_granted": \["role", "source"\]/,
+  /DIAGNOSTIC_METADATA_ALLOWLIST[\s\S]*"auth\.session_established": \[[\s\S]*"bootstrapPath"[\s\S]*"rotatedSessionFollowed"[\s\S]*"chainDepth"[\s\S]*"auth\.session_refreshed": \[[\s\S]*"generation"[\s\S]*"refreshMode"[\s\S]*"waited"[\s\S]*"leaseTakeover"[\s\S]*"chainDepth"[\s\S]*"access\.operator_access_granted": \["role", "source"\]/,
   "platform diagnostics metadata must be event-type allowlisted",
 );
 assert.match(

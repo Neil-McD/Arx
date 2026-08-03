@@ -86,9 +86,19 @@ const DIAGNOSTIC_METADATA_SAFE_KEY_EXCEPTIONS = [
 ];
 
 const DIAGNOSTIC_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
-  "auth.session_established": ["bootstrapPath", "rotatedSessionFollowed"],
+  "auth.session_established": [
+    "bootstrapPath",
+    "rotatedSessionFollowed",
+    "chainDepth",
+  ],
   "auth.bootstrap_failed": ["recoveredWithStoredToken"],
-  "auth.session_refreshed": [],
+  "auth.session_refreshed": [
+    "generation",
+    "refreshMode",
+    "waited",
+    "leaseTakeover",
+    "chainDepth",
+  ],
   "auth.session_refresh_failed": ["recoveredWithStoredToken"],
   "access.operator_access_granted": ["role", "source"],
   "access.operator_access_denied": [],

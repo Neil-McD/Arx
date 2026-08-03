@@ -15,6 +15,7 @@ import type * as appOAuth from "../appOAuth.js";
 import type * as auth from "../auth.js";
 import type * as authActor from "../authActor.js";
 import type * as authIdentity from "../authIdentity.js";
+import type * as authSessionLifecycleCore from "../authSessionLifecycleCore.js";
 import type * as authSessionMaintenanceCore from "../authSessionMaintenanceCore.js";
 import type * as authSessions from "../authSessions.js";
 import type * as billing from "../billing.js";
@@ -254,6 +255,7 @@ declare const fullApi: ApiFromModules<{
   auth: typeof auth;
   authActor: typeof authActor;
   authIdentity: typeof authIdentity;
+  authSessionLifecycleCore: typeof authSessionLifecycleCore;
   authSessionMaintenanceCore: typeof authSessionMaintenanceCore;
   authSessions: typeof authSessions;
   billing: typeof billing;
