@@ -5,6 +5,7 @@ import { decryptStoredSecret, encryptSecret } from "./providerConnections";
 import {
   pruneRevokedAuthSessionsBatch,
   requireAuthSessionMaintenanceSecret,
+  scrubRevokedAuthSessionSecretsBatch,
 } from "./authSessionMaintenanceCore";
 import {
   AUTH_SESSION_ABSOLUTE_TTL_MS,
@@ -1642,6 +1643,27 @@ export const pruneRevokedAuthSessionsForMaintenance = mutation({
     return await pruneRevokedAuthSessionsBatch({
       ctx,
       revokedBeforeMs: args.revokedBeforeMs,
+      limit: args.limit,
+      dryRun: args.dryRun,
+    });
+  },
+});
+
+export const scrubRevokedAuthSessionSecretsForMaintenance = mutation({
+  args: {
+    secret: v.string(),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    requireAuthSessionMaintenanceSecret({
+      expectedSecret: readEnv("ARX_AUTH_MIGRATION_AUDIT_SECRET"),
+      providedSecret: args.secret,
+    });
+    return await scrubRevokedAuthSessionSecretsBatch({
+      ctx,
+      cursor: args.cursor,
       limit: args.limit,
       dryRun: args.dryRun,
     });

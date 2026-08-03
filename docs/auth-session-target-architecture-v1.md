@@ -75,6 +75,8 @@ leader. Exact lease and generation fencing decides write authority.
 - first use of a legacy row initializes both windows to avoid a rollout-wide logout
 - logout, terminal refresh failure, and expiry revoke the row
 - revocation erases encrypted credentials and any refresh lease
+- bounded maintenance scrubs credential material from historical revoked rows
+  created before zeroization became a revocation invariant
 - transient provider failures release the lease and preserve a still-valid access token
 
 ## 6. Request Flow

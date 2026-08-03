@@ -5,11 +5,16 @@ import { expect, test } from "vitest";
 
 import schema from "./schema";
 import {
+  authSessionHasCredentialMaterial,
   MAX_AUTH_SESSION_PRUNE_BATCH_SIZE,
+  MAX_AUTH_SESSION_SCRUB_BATCH_SIZE,
   normalizeAuthSessionPruneCutoff,
   normalizeAuthSessionPruneLimit,
+  normalizeAuthSessionScrubCursor,
+  normalizeAuthSessionScrubLimit,
   pruneRevokedAuthSessionsBatch,
   requireAuthSessionMaintenanceSecret,
+  scrubRevokedAuthSessionSecretsBatch,
 } from "./authSessionMaintenanceCore";
 
 const modules = import.meta.glob([
@@ -56,6 +61,30 @@ test("prune inputs are finite, positive, and server-clamped", () => {
   expect(() => normalizeAuthSessionPruneCutoff(Number.NaN)).toThrow(
     "auth_session_maintenance_cutoff_invalid",
   );
+});
+
+test("scrub inputs are bounded and cursors fail closed", () => {
+  expect(normalizeAuthSessionScrubLimit(undefined)).toBe(100);
+  expect(normalizeAuthSessionScrubLimit(25.9)).toBe(25);
+  expect(normalizeAuthSessionScrubLimit(10_000)).toBe(
+    MAX_AUTH_SESSION_SCRUB_BATCH_SIZE,
+  );
+  expect(normalizeAuthSessionScrubCursor(undefined)).toBeNull();
+  expect(normalizeAuthSessionScrubCursor(null)).toBeNull();
+  expect(normalizeAuthSessionScrubCursor("cursor")).toBe("cursor");
+  expect(() => normalizeAuthSessionScrubCursor(123)).toThrow(
+    "auth_session_maintenance_cursor_invalid",
+  );
+});
+
+test("credential detection covers secrets, token metadata, and refresh leases", () => {
+  expect(authSessionHasCredentialMaterial({})).toBe(false);
+  expect(authSessionHasCredentialMaterial({ encryptedSecretHex: "cipher" })).toBe(true);
+  expect(authSessionHasCredentialMaterial({ secretIvHex: "iv" })).toBe(true);
+  expect(authSessionHasCredentialMaterial({ secretVersion: 1 })).toBe(true);
+  expect(authSessionHasCredentialMaterial({ accessTokenExpiresAt: 1 })).toBe(true);
+  expect(authSessionHasCredentialMaterial({ refreshLeaseId: "lease" })).toBe(true);
+  expect(authSessionHasCredentialMaterial({ refreshLeaseExpiresAt: 1 })).toBe(true);
 });
 
 test("maintenance authorization fails closed and preserves exact secret matching", () => {
@@ -151,4 +180,83 @@ test("execution drains eligible sessions in idempotent bounded batches", async (
       "recent",
     ]);
   });
+});
+
+test("revoked credential scrub is bounded, idempotent, and preserves active rows", async () => {
+  const t = convexTest(schema, modules);
+  await insertSessionFixture(t, [
+    { sessionId: "active" },
+    { sessionId: "revoked-secret", revokedAt: 100 },
+    { sessionId: "revoked-lease", revokedAt: 200 },
+    { sessionId: "revoked-clean", revokedAt: 300 },
+  ]);
+  await t.run(async (ctx) => {
+    const rows = await ctx.db.query("authSessions").collect();
+    const leaseRow = rows.find((row) => row.sessionId === "revoked-lease")!;
+    const cleanRow = rows.find((row) => row.sessionId === "revoked-clean")!;
+    await ctx.db.patch(leaseRow._id, {
+      encryptedSecretHex: undefined,
+      secretIvHex: undefined,
+      secretVersion: undefined,
+      refreshLeaseId: "lease",
+      refreshLeaseExpiresAt: 999,
+    });
+    await ctx.db.patch(cleanRow._id, {
+      encryptedSecretHex: undefined,
+      secretIvHex: undefined,
+      secretVersion: undefined,
+    });
+  });
+
+  const audit = await t.run(async (ctx) =>
+    await scrubRevokedAuthSessionSecretsBatch({
+      ctx,
+      limit: 2,
+    }),
+  );
+  expect(audit).toMatchObject({
+    scanned: 2,
+    eligible: 2,
+    scrubbed: 0,
+    has_more: true,
+    done: false,
+    dry_run: true,
+  });
+
+  const first = await t.run(async (ctx) =>
+    await scrubRevokedAuthSessionSecretsBatch({
+      ctx,
+      limit: 2,
+      dryRun: false,
+    }),
+  );
+  expect(first).toMatchObject({ scrubbed: 2, has_more: true, done: false });
+  const second = await t.run(async (ctx) =>
+    await scrubRevokedAuthSessionSecretsBatch({
+      ctx,
+      cursor: first.continue_cursor,
+      limit: 2,
+      dryRun: false,
+    }),
+  );
+  expect(second).toMatchObject({ scrubbed: 0, has_more: false, done: true });
+
+  await t.run(async (ctx) => {
+    const after = await ctx.db.query("authSessions").collect();
+    const active = after.find((row) => row.sessionId === "active")!;
+    expect(active.encryptedSecretHex).toBe("encrypted");
+    for (const row of after.filter((candidate) => candidate.revokedAt !== undefined)) {
+      expect(authSessionHasCredentialMaterial(row)).toBe(false);
+      expect(row.revokedAt).toBeTypeOf("number");
+    }
+  });
+
+  const repeated = await t.run(async (ctx) =>
+    await scrubRevokedAuthSessionSecretsBatch({
+      ctx,
+      limit: 100,
+      dryRun: false,
+    }),
+  );
+  expect(repeated).toMatchObject({ scrubbed: 0, done: true });
 });
