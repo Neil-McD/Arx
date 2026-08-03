@@ -178,7 +178,7 @@ test("member directory pages authorized activity newest-first with canonical tim
   expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
   expect(rows.some((row) => row.id === fixture.revokedMembershipId)).toBe(false);
   expect(rows.every((row) => typeof row.last_active_at === "string")).toBe(true);
-  expect(rows.at(-1)).toMatchObject({
+  expect(rows[rows.length - 1]).toMatchObject({
     id: `owner:${String(fixture.communityId)}`,
     display_name: "Directory owner",
     avatar_url: "https://example.com/directory-owner.png",
