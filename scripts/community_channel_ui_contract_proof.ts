@@ -47,7 +47,11 @@ const header = read(headerPath);
 [
   "community-channel-header",
   'aria-haspopup="menu"',
-  'aria-label={`Manage ${channel.name}`}',
+  'aria-label={`Channel options for ${channel.name}`}',
+  "canOpenChannelMenu",
+  "community-channel-header-menu-system-note",
+  "Default channel",
+  "Can’t be renamed or deleted",
   "Rename channel",
   "Delete channel",
   "!channel.is_general",
@@ -152,12 +156,24 @@ assertMatches(
 );
 
 const interactionStylesPath = "apps/web/src/styles/community-and-content.css";
+const interactionStyles = read(interactionStylesPath);
 [
   ".community-channel-header",
   ".community-channel-header-menu-trigger",
   ".community-channel-header-menu",
+  ".community-channel-header-menu-system-note",
 ].forEach((required) =>
-  assertIncludes(interactionStylesPath, read(interactionStylesPath), required),
+  assertIncludes(interactionStylesPath, interactionStyles, required),
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-header\s*\{[\s\S]*?border-bottom:\s*1px\s+solid\s+var\(--border-default\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-header-identity\s*\{[\s\S]*?color:\s*var\(--text-muted\);[\s\S]*?\.community-channel-header-identity h1\s*\{[\s\S]*?font-weight:\s*500;/,
 );
 
 const routePath = "shared/webAppRouteState.ts";

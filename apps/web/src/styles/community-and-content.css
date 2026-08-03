@@ -3385,7 +3385,7 @@
   gap: 12px;
   height: var(--web-topbar-height, 48px);
   padding: 0 12px 0 18px;
-  border-bottom: 1px solid var(--border-subtle);
+  border-bottom: 1px solid var(--border-default);
   background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
 }
 
@@ -3394,7 +3394,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: var(--text-primary);
+  color: var(--text-muted);
 }
 
 .community-channel-header-identity > svg {
@@ -3408,7 +3408,7 @@
   overflow: hidden;
   color: inherit;
   font-size: 14px;
-  font-weight: 700;
+  font-weight: 500;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3480,6 +3480,38 @@
 
 .community-channel-header-menu button.is-danger {
   color: var(--accent-danger, #ef6a72);
+}
+
+.community-channel-header-menu-system-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  padding: 8px 9px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.community-channel-header-menu-system-note > svg {
+  flex: 0 0 auto;
+  margin-top: 1px;
+  color: var(--text-faint);
+}
+
+.community-channel-header-menu-system-note > span {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+}
+
+.community-channel-header-menu-system-note strong {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.community-channel-header-menu-system-note small {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.35;
 }
 
 .community-interaction-feed-scroll {

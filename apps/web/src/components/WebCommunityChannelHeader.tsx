@@ -5,7 +5,7 @@ import {
   useState,
   type FormEvent,
 } from "react";
-import { Ellipsis, Hash, Pencil, Trash2, X } from "lucide-react";
+import { Ellipsis, Hash, LockKeyhole, Pencil, Trash2, X } from "lucide-react";
 
 export type WebCommunityChannelHeaderChannel = {
   id: string;
@@ -76,12 +76,15 @@ export function WebCommunityChannelHeader({
   const renameInputRef = useRef<HTMLInputElement | null>(null);
   const deleteCancelRef = useRef<HTMLButtonElement | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
-  const canManageChannel = Boolean(
+  const canManageCustomChannel = Boolean(
     canManage &&
     !channel.is_general &&
     channel.id &&
     onRenameChannel &&
     onDeleteChannel,
+  );
+  const canOpenChannelMenu = Boolean(
+    canManage && (channel.is_general || canManageCustomChannel),
   );
 
   const restoreMenuTriggerFocus = () => {
@@ -195,13 +198,13 @@ export function WebCommunityChannelHeader({
           <Hash size={17} strokeWidth={1.9} aria-hidden="true" />
           <h1>{channel.name}</h1>
         </div>
-        {canManageChannel ? (
+        {canOpenChannelMenu ? (
           <div className="community-channel-header-actions" ref={menuRef}>
             <button
               ref={menuTriggerRef}
               className="community-channel-header-menu-trigger"
               type="button"
-              aria-label={`Manage ${channel.name}`}
+              aria-label={`Channel options for ${channel.name}`}
               aria-haspopup="menu"
               aria-expanded={isMenuOpen}
               disabled={Boolean(managingChannelId)}
@@ -213,21 +216,37 @@ export function WebCommunityChannelHeader({
               <div
                 className="community-channel-header-menu"
                 role="menu"
-                aria-label={`Manage ${channel.name}`}
+                aria-label={`Channel options for ${channel.name}`}
               >
-                <button type="button" role="menuitem" onClick={() => openManagement("rename")}>
-                  <Pencil size={15} aria-hidden="true" />
-                  Rename channel
-                </button>
-                <button
-                  className="is-danger"
-                  type="button"
-                  role="menuitem"
-                  onClick={() => openManagement("delete")}
-                >
-                  <Trash2 size={15} aria-hidden="true" />
-                  Delete channel
-                </button>
+                {channel.is_general ? (
+                  <div
+                    className="community-channel-header-menu-system-note"
+                    role="menuitem"
+                    aria-disabled="true"
+                  >
+                    <LockKeyhole size={15} aria-hidden="true" />
+                    <span>
+                      <strong>Default channel</strong>
+                      <small>Can’t be renamed or deleted</small>
+                    </span>
+                  </div>
+                ) : (
+                  <>
+                    <button type="button" role="menuitem" onClick={() => openManagement("rename")}>
+                      <Pencil size={15} aria-hidden="true" />
+                      Rename channel
+                    </button>
+                    <button
+                      className="is-danger"
+                      type="button"
+                      role="menuitem"
+                      onClick={() => openManagement("delete")}
+                    >
+                      <Trash2 size={15} aria-hidden="true" />
+                      Delete channel
+                    </button>
+                  </>
+                )}
               </div>
             ) : null}
           </div>
