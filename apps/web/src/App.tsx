@@ -2943,7 +2943,6 @@ export default function App() {
     maxActiveCommunityChannels,
     canViewMembersActiveCommunity: !isVisitorCommunitySurface && canViewMembersActiveCommunity,
     canViewActiveCommunitySettings: !isVisitorCommunitySurface && canViewActiveCommunitySettings,
-    canViewActiveCommunityPolynet: !isVisitorCommunitySurface && canViewActiveCommunityPolynet,
     canManageMembersActiveCommunity: !isVisitorCommunitySurface && canManageMembersActiveCommunity,
     canViewActiveCommunityAnalytics: !isVisitorCommunitySurface && canViewActiveCommunityAnalytics,
     isLoadingCommunityAccess:

@@ -89,7 +89,6 @@ export type WebCommunityShellProps = {
   maxActiveCommunityChannels: number;
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
-  canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
   isLoadingCommunityAccess: boolean;

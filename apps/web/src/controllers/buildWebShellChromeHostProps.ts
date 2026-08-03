@@ -70,7 +70,6 @@ export function buildWebShellChromeHostProps(params: {
   maxActiveCommunityChannels: number;
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
-  canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
   isLoadingCommunityAccess: boolean;
@@ -183,7 +182,6 @@ export function buildWebShellChromeHostProps(params: {
       maxActiveCommunityChannels: params.maxActiveCommunityChannels,
       canViewMembersActiveCommunity: params.canViewMembersActiveCommunity,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
-      canViewActiveCommunityPolynet: params.canViewActiveCommunityPolynet,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
       isLoadingCommunityAccess: params.isLoadingCommunityAccess,

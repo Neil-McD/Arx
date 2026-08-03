@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { Brain, Check, Hash, Plus, UserPlus, X } from "lucide-react";
+import { Check, Hash, Plus, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { getCommunityBannerImageStyle } from "./communityBannerUi";
 
@@ -18,19 +18,11 @@ type CommunityNavProps = {
   tabIndicators?: Partial<Record<CommunityTab, boolean>> & { mentions?: boolean };
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
-  canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
   isLoadingAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
-  buttonType?: "button" | "submit" | "reset";
-  includeButtonTitles?: boolean;
-  showSettingsItem?: boolean;
-  // Memory belongs in the community context/right-panel path, not the left nav.
-  showPolynetItem?: boolean;
-  /** Guest mode (public funnel): subtitle line under the banner (the community's promise). */
-  subtitle?: string | null;
   /** Guest mode (public funnel): tabs rendered with a lock glyph instead of an indicator dot. */
   lockedTabs?: Partial<Record<CommunityTab, boolean>>;
   channels?: Array<{
@@ -81,17 +73,11 @@ export function CommunityNav({
   tabIndicators = {},
   canViewMembersActiveCommunity,
   canViewActiveCommunitySettings,
-  canViewActiveCommunityPolynet,
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
   isLoadingAccess = false,
   onSelectTab,
   onCopyCommunityJoinLink,
-  buttonType,
-  includeButtonTitles = false,
-  showSettingsItem = true,
-  showPolynetItem = false,
-  subtitle = null,
   lockedTabs = {},
   channels = [],
   isLoadingChannels = false,
@@ -110,14 +96,9 @@ export function CommunityNav({
   const [channelName, setChannelName] = useState("");
   const copyResetTimeoutRef = useRef<number | null>(null);
   const channelNameInputRef = useRef<HTMLInputElement | null>(null);
-  const maybeTitle = (label: string): string | undefined => {
-    return includeButtonTitles ? label : undefined;
-  };
-  const showSettingsButton = canViewActiveCommunitySettings && showSettingsItem;
-  const showPolynetButton = canViewActiveCommunityPolynet && showPolynetItem;
+  const showSettingsButton = canViewActiveCommunitySettings;
   const showManagementSection =
     showSettingsButton ||
-    showPolynetButton ||
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
@@ -209,7 +190,6 @@ export function CommunityNav({
             />
           ) : null}
         </div>
-        {subtitle ? <div className="community-nav-subtitle">{subtitle}</div> : null}
       </div>
       <div className="community-channel-list" aria-label="Channels">
         {showChannelLoadingSkeleton ? (
@@ -226,12 +206,12 @@ export function CommunityNav({
             <button
               key={channel.id || channel.slug}
               className={isSelected ? "nav-item community-channel-item active" : "nav-item community-channel-item"}
-              type={buttonType}
+              type="button"
               onClick={() => {
                 if (onSelectChannel) onSelectChannel(channel);
                 else onSelectTab("chat");
               }}
-              title={maybeTitle(channel.name)}
+              title={channel.name}
             >
               <span className="nav-icon community-channel-icon" aria-hidden="true">
                 <Hash size={17} strokeWidth={1.8} />
@@ -246,17 +226,17 @@ export function CommunityNav({
         {!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel ? (
           <button
             className="nav-item community-channel-add"
-            type={buttonType}
+            type="button"
             disabled={isAtChannelLimit}
             onClick={() => {
               clearCreateChannelError?.();
               setIsAddChannelOpen(true);
             }}
-            title={maybeTitle(
+            title={
               isAtChannelLimit
                 ? `Channel limit reached (${maxActiveChannels})`
-                : "Add Channel",
-            )}
+                : "Add Channel"
+            }
           >
             <span className="nav-icon" aria-hidden="true">
               <Plus size={17} strokeWidth={1.8} />
@@ -269,10 +249,10 @@ export function CommunityNav({
       </div>
       <button
         className={communityTab === "ai_feed" ? "nav-item active" : "nav-item"}
-        type={buttonType}
+        type="button"
         onClick={() => onSelectTab("ai_feed")}
-        title={maybeTitle("AI Feed")}
-        >
+        title="AI Feed"
+      >
         <span className="nav-icon">
           <svg
             viewBox="0 0 24 24"
@@ -293,10 +273,10 @@ export function CommunityNav({
       </button>
       <button
         className={communityTab === "resources" ? "nav-item active" : "nav-item"}
-        type={buttonType}
+        type="button"
         onClick={() => onSelectTab("resources")}
-        title={maybeTitle("Resources")}
-        >
+        title="Resources"
+      >
         <span className="nav-icon">
           <svg viewBox="0 0 24 24">
             <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
@@ -308,9 +288,9 @@ export function CommunityNav({
       </button>
       <button
         className={communityTab === "events" ? "nav-item active" : "nav-item"}
-        type={buttonType}
+        type="button"
         onClick={() => onSelectTab("events")}
-        title={maybeTitle("Events")}
+        title="Events"
       >
         <span className="nav-icon">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -341,9 +321,9 @@ export function CommunityNav({
           {showSettingsButton ? (
             <button
               className={communityTab === "settings" ? "nav-item active" : "nav-item"}
-              type={buttonType}
+              type="button"
               onClick={() => onSelectTab("settings")}
-              title={maybeTitle("Settings")}
+              title="Settings"
             >
               <span className="nav-icon">
                 <svg
@@ -359,25 +339,12 @@ export function CommunityNav({
               Settings
             </button>
           ) : null}
-          {showPolynetButton && (
-            <button
-              className={communityTab === "polynet" ? "nav-item active" : "nav-item"}
-              type={buttonType}
-              onClick={() => onSelectTab("polynet")}
-              title={maybeTitle("Polynet")}
-            >
-              <span className="nav-icon">
-                <Brain size={19} strokeWidth={1.8} />
-              </span>
-              Polynet
-            </button>
-          )}
           {canManageMembersActiveCommunity && (
             <button
               className={communityTab === "ai_agent" ? "nav-item active" : "nav-item"}
-              type={buttonType}
+              type="button"
               onClick={() => onSelectTab("ai_agent")}
-              title={maybeTitle("AI Agent")}
+              title="AI Agent"
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24">
@@ -398,9 +365,9 @@ export function CommunityNav({
           {canManageMembersActiveCommunity && (
             <button
               className={communityTab === "funnel" ? "nav-item active" : "nav-item"}
-              type={buttonType}
+              type="button"
               onClick={() => onSelectTab("funnel")}
-              title={maybeTitle("Funnel")}
+              title="Funnel"
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -415,9 +382,9 @@ export function CommunityNav({
           {canViewActiveCommunityAnalytics && (
             <button
               className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
-              type={buttonType}
+              type="button"
               onClick={() => onSelectTab("analytics")}
-              title={maybeTitle("Analytics")}
+              title="Analytics"
             >
               <span className="nav-icon">
                 <svg viewBox="0 0 24 24">
@@ -441,9 +408,9 @@ export function CommunityNav({
         <div className="community-nav-footer">
           <button
             className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}
-            type={buttonType}
+            type="button"
             onClick={() => void handleCopyJoinLink()}
-            title={maybeTitle(inviteTitle)}
+            title={inviteTitle}
             aria-label={inviteTitle}
           >
             <span className="nav-icon">

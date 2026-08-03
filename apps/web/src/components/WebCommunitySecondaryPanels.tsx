@@ -105,10 +105,13 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
   return (
     <>
-      {props.communityTab === "settings" &&
-        renderCenteredPane(<WebCommunitySettingsSection {...settingsSectionProps} />)}
-      <WebCommunityAvatarEditorModal {...avatarEditorModalProps} />
-      <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
+      {props.communityTab === "settings" ? (
+        <>
+          {renderCenteredPane(<WebCommunitySettingsSection {...settingsSectionProps} />)}
+          <WebCommunityAvatarEditorModal {...avatarEditorModalProps} />
+          <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
+        </>
+      ) : null}
 
       {props.communityTab === "ai_feed" && renderCenteredPane(<CommunityAiFeedPanel {...props.feed} />)}
 
@@ -124,15 +127,18 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       {props.communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}
 
-      {props.communityTab === "resources" &&
-        renderCenteredPane(<WebCommunityResourcesSection {...props.resources} />)}
+      {props.communityTab === "resources" ? (
+        <>
+          {renderCenteredPane(<WebCommunityResourcesSection {...props.resources} />)}
+          <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
+          <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
+          <WebCommunityResourceModal {...props.resourceModal} />
+        </>
+      ) : null}
 
       {props.communityTab === "events" &&
         renderCenteredPane(<WebCommunityEventsSection {...props.events} />)}
 
-      <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
-      <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
-      <WebCommunityResourceModal {...props.resourceModal} />
     </>
   );
 }
