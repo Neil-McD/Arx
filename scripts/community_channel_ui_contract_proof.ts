@@ -32,13 +32,6 @@ const nav = read(navPath);
   "canManageMembersActiveCommunity && onCreateChannel",
   "Channels are visible to every community member.",
   "community-channel-loading-row web-skeleton-row",
-  'aria-haspopup="menu"',
-  'aria-label={`Manage ${channel.name}`}',
-  "Rename channel",
-  "Delete channel",
-  "!channel.is_general",
-  "Existing messages will be retained.",
-  "channelManagementDialogRef",
   "MODAL_FOCUSABLE_SELECTOR",
   "trapModalFocus",
 ].forEach((required) => assertIncludes(navPath, nav, required));
@@ -47,6 +40,21 @@ assertNotMatches(
   nav,
   /channels\.length\s*>\s*0[\s\S]*name:\s*"General"/,
 );
+assertNotMatches(navPath, nav, /community-channel-menu-trigger|Rename channel|Delete channel/);
+
+const headerPath = "apps/web/src/components/WebCommunityChannelHeader.tsx";
+const header = read(headerPath);
+[
+  "community-channel-header",
+  'aria-haspopup="menu"',
+  'aria-label={`Manage ${channel.name}`}',
+  "Rename channel",
+  "Delete channel",
+  "!channel.is_general",
+  "Existing messages will be retained.",
+  "MODAL_FOCUSABLE_SELECTOR",
+  "trapModalFocus",
+].forEach((required) => assertIncludes(headerPath, header, required));
 
 const gatewayPath = "shared/cloudCommunityChannelsGateway.ts";
 const gateway = read(gatewayPath);
@@ -117,13 +125,39 @@ const app = read(appPath);
   'activeCommunityChannelResolutionStatus === "not_found"',
   '"Return to General"',
   "retryActiveCommunityChannels",
+  "selectedChannel: activeCommunityChannel",
+  "canManageActiveChannel",
+  "onRenameChannel: handleRenameCommunityChannel",
+  "onDeleteChannel: handleDeleteCommunityChannel",
 ].forEach((required) => assertIncludes(appPath, app, required));
+
+const interactionProjectionPath =
+  "apps/web/src/components/WebCommunityInteractionProjection.tsx";
+const interactionProjection = read(interactionProjectionPath);
+[
+  "WebCommunityChannelHeader",
+  "props.activeChannel",
+  "props.canManageActiveChannel",
+  "props.onRenameChannel",
+  "props.onDeleteChannel",
+].forEach((required) =>
+  assertIncludes(interactionProjectionPath, interactionProjection, required),
+);
 
 const shellStylesPath = "apps/web/src/styles/shell-and-onboarding.css";
 assertMatches(
   shellStylesPath,
   read(shellStylesPath),
   /\.community-nav\s*\{[\s\S]*?overflow-y:\s*auto;/,
+);
+
+const interactionStylesPath = "apps/web/src/styles/community-and-content.css";
+[
+  ".community-channel-header",
+  ".community-channel-header-menu-trigger",
+  ".community-channel-header-menu",
+].forEach((required) =>
+  assertIncludes(interactionStylesPath, read(interactionStylesPath), required),
 );
 
 const routePath = "shared/webAppRouteState.ts";

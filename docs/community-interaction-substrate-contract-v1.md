@@ -445,7 +445,9 @@ Rules:
 - roots, pagination, subscriptions, optimistic sends, retries, selected drawer state, typing, unread dividers, and read acknowledgements share one community-and-channel boundary
 - channel switching clears transient composer/reply state and cannot expose roots or pending sends from another channel
 - only community managers see Add Channel; the dialog accepts one display name and the server remains authoritative for normalization, authorization, and the ten-channel limit
-- only community managers see custom-channel management; rename preserves the canonical slug and delete archives without deleting interaction history
+- every resolved member channel renders one canonical conversation header so the active scope remains explicit independently of sidebar or mobile-drawer state
+- only community managers see custom-channel management in that active-channel header; rename preserves the canonical slug and delete archives without deleting interaction history
+- the sidebar owns channel selection and creation only; it does not duplicate edit or delete controls on channel rows
 - General has no management menu and both server mutations reject General even if called outside the UI
 - archived channels are unavailable to active navigation and new reads/writes while remaining valid historical lineage for audit, backfill, evidence, and memory integrity
 - an unavailable channel slug falls back to General after the authorized channel list resolves

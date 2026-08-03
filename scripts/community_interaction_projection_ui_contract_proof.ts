@@ -1057,8 +1057,8 @@ assert.doesNotMatch(
 
 assert.match(
   baseCss,
-  /\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*calc\(var\(--web-topbar-height,\s*48px\)\s*\+\s*10px\)\s+18px\s+4px;/,
-  "projection feed should reserve the web topbar while leaving space for the pane-scoped composer",
+  /\.community-channel-header\s*\{[\s\S]*flex:\s*0\s+0\s+var\(--web-topbar-height,\s*48px\);[\s\S]*\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*10px\s+18px\s+4px;/,
+  "the active-channel header should own the web topbar band while the feed keeps compact pane padding",
 );
 assert.match(
   baseCss,
@@ -1104,6 +1104,11 @@ assert.match(
   baseCss,
   /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-interaction-feed-scroll\s*\{[\s\S]*padding:\s*8px\s+12px\s+18px;/,
   "mobile projection feed should use compact pane padding because the mobile shell owns topbar clearance",
+);
+assert.match(
+  baseCss,
+  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-channel-header\s*\{[\s\S]*min-height:\s*calc\(var\(--mobile-topbar-clearance\)\s*\+\s*44px\);/,
+  "mobile active-channel identity should render below the fixed mobile topbar",
 );
 assert.match(
   baseCss,

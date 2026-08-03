@@ -29,6 +29,10 @@ import {
 import type { MentionCandidate } from "./communityMentionAutocomplete";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import { CommunityMemberSettingsDialog } from "./CommunityMemberSettingsDialog";
+import {
+  WebCommunityChannelHeader,
+  type WebCommunityChannelHeaderChannel,
+} from "./WebCommunityChannelHeader";
 import type { CloudCommunityMemberBillingHistory } from "../../../../shared/cloudCommunityAdminGateway";
 import type {
   CommunityTypingPresenceBundle,
@@ -53,6 +57,13 @@ import {
 
 export type WebCommunityInteractionProjectionProps = {
   activeCommunityName: string;
+  activeChannel?: WebCommunityChannelHeaderChannel | null;
+  canManageActiveChannel?: boolean;
+  managingChannelId?: string | null;
+  manageChannelError?: string | null;
+  onClearManageChannelError?: () => void;
+  onRenameChannel?: (channelId: string, name: string) => Promise<unknown>;
+  onDeleteChannel?: (channel: WebCommunityChannelHeaderChannel) => Promise<boolean>;
   roots: CommunityInteractionRootBundle[];
   selectedRootId: string | null;
   mobileThreadPage?: boolean;
@@ -697,6 +708,17 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     <>
     <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
+        {props.activeChannel ? (
+          <WebCommunityChannelHeader
+            channel={props.activeChannel}
+            canManage={Boolean(props.canManageActiveChannel)}
+            managingChannelId={props.managingChannelId}
+            manageChannelError={props.manageChannelError}
+            clearManageChannelError={props.onClearManageChannelError}
+            onRenameChannel={props.onRenameChannel}
+            onDeleteChannel={props.onDeleteChannel}
+          />
+        ) : null}
         <div
           className="community-interaction-feed-scroll"
           ref={scrollRef}

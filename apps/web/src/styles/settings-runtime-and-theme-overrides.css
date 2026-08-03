@@ -8192,6 +8192,13 @@ button.message-citation-chip:hover {
   padding: calc(var(--mobile-topbar-clearance) + 12px) 12px 12px;
 }
 
+.app-root.mobile-shell .community-chat .community-channel-header {
+  flex-basis: auto;
+  height: auto;
+  min-height: calc(var(--mobile-topbar-clearance) + 44px);
+  padding: var(--mobile-topbar-clearance) 10px 0 14px;
+}
+
 .app-root.mobile-shell .community-chat .community-interaction-feed-scroll {
   padding: 8px 12px 18px;
 }
