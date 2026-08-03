@@ -131,10 +131,8 @@ if [[ -z "$SECRET" ]]; then
   exit 1
 fi
 
-TARGET_ARGS=()
 TARGET_LABEL="configured development deployment"
 if [[ "$PROD" == true ]]; then
-  TARGET_ARGS=(--prod)
   TARGET_LABEL="production Convex deployment"
 fi
 
@@ -159,9 +157,15 @@ run_batch() {
       }));
     '
   )"
-  npx convex run "${TARGET_ARGS[@]}" --typecheck disable --codegen disable \
-    authSessions:scrubRevokedAuthSessionSecretsForMaintenance \
-    "$args_json"
+  if [[ "$PROD" == true ]]; then
+    npx convex run --prod --typecheck disable --codegen disable \
+      authSessions:scrubRevokedAuthSessionSecretsForMaintenance \
+      "$args_json"
+  else
+    npx convex run --typecheck disable --codegen disable \
+      authSessions:scrubRevokedAuthSessionSecretsForMaintenance \
+      "$args_json"
+  fi
 }
 
 CURSOR_B64="$(node -e 'process.stdout.write(Buffer.from("null").toString("base64url"))')"
