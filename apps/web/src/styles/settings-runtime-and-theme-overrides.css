@@ -8335,6 +8335,11 @@ button.message-citation-chip:hover {
   margin-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
 }
 
+.app-root.mobile-shell .community-chat .community-interaction-bootstrap-composer {
+  height: 66px;
+  margin: 0 12px calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
+}
+
 .app-root.mobile-shell .community-chat .community-interaction-reply-input-bar {
   margin: 0;
   border-radius: 18px;
@@ -9394,14 +9399,6 @@ button.message-citation-chip:hover {
   font-size: 15px;
   font-weight: 750;
   letter-spacing: -0.01em;
-}
-
-.community-events-refreshing {
-  display: block;
-  margin-top: 2px;
-  color: var(--text-faint);
-  font-size: 11px;
-  font-weight: 600;
 }
 
 .community-events-content {

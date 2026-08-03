@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { AppPage, CommunityTab } from "./appShellNavigation";
+import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
 import type { CommunityEventsRange } from "./useCommunityEventsController";
 
 export function useCommunityEventsTabLifecycle<SessionT>(params: {
@@ -12,15 +13,23 @@ export function useCommunityEventsTabLifecycle<SessionT>(params: {
   requireCommunityPage?: boolean;
   shouldLoad?: boolean;
 }) {
+  const sessionRef = useRef(params.session);
+  sessionRef.current = params.session;
+  const sessionIdentity = resolveAuthPresentationIdentity(
+    params.session as AuthSessionLike,
+  );
+
   useEffect(() => {
-    if (!params.session || !params.activeCommunityId) return;
+    if (!sessionIdentity || !params.activeCommunityId) return;
     if (!params.shouldLoad) {
       if ((params.requireCommunityPage ?? false) && params.activePage !== "community") return;
       if (params.communityTab !== "events") return;
     }
-    void params.loadCommunityEvents(params.activeCommunityId, params.session, params.range);
+    const currentSession = sessionRef.current;
+    if (!currentSession) return;
+    void params.loadCommunityEvents(params.activeCommunityId, currentSession, params.range);
   }, [
-    params.session,
+    sessionIdentity,
     params.activeCommunityId,
     params.activePage,
     params.communityTab,

@@ -14,6 +14,8 @@ const operatorCommunitiesPanelView = read("apps/web/src/components/OperatorCommu
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
 const aiFeedPanel = read("apps/web/src/components/CommunityAiFeedPanel.tsx");
+const resourcesLifecycle = read("shared/useCommunityResourcesTabLifecycle.ts");
+const eventsLifecycle = read("shared/useCommunityEventsTabLifecycle.ts");
 
 assert.doesNotMatch(
   app,
@@ -96,20 +98,55 @@ assert.doesNotMatch(
   /buildWebWorkspaceSurfaceProjection|buildWorkspaceRightPanelUserData|buildWebWorkspaceLandingProjection/,
   "the retired Workspace presentation must not be projected from App",
 );
-assert.match(
+assert.doesNotMatch(
   resourcesPanel,
-  /showInitialResourceLoading[\s\S]*Refreshing knowledge\.\.\.[\s\S]*\{showInitialResourceLoading \?/,
-  "resources tab must keep existing content visible during background refresh",
+  /Refreshing knowledge/,
+  "resources background refresh must not insert a grid row or move the editor",
 );
 assert.match(
+  resourcesPanel,
+  /className="knowledge-workspace" aria-busy=\{isRefreshingResources\}/,
+  "resources background refresh must remain semantic without changing geometry",
+);
+assert.doesNotMatch(
   eventsPanel,
-  /state\.isLoadingEvents && !showInitialEventsLoading[\s\S]*Updating…[\s\S]*\{showInitialEventsLoading \?/,
-  "events tab must keep existing content visible during background refresh",
+  /community-events-refreshing|Updating…/,
+  "events background refresh must not change the month header height",
+);
+assert.doesNotMatch(
+  aiFeedPanel,
+  /Refreshing AI feed/,
+  "AI feed background refresh must not insert a third grid child",
 );
 assert.match(
   aiFeedPanel,
-  /showInitialFeedLoading[\s\S]*Refreshing AI feed\.\.\.[\s\S]*: showInitialFeedLoading \?/,
-  "AI feed tab must keep existing posts visible during background refresh",
+  /aria-busy=\{state\.isLoading\}/,
+  "AI feed background refresh must remain semantic without changing geometry",
+);
+for (const [label, lifecycle] of [
+  ["resources", resourcesLifecycle],
+  ["events", eventsLifecycle],
+] as const) {
+  assert.match(
+    lifecycle,
+    /resolveAuthPresentationIdentity/,
+    `${label} hydration must key presentation work by stable actor identity`,
+  );
+  assert.match(
+    lifecycle,
+    /const sessionRef = useRef\(params\.session\)/,
+    `${label} hydration must use a ref for the latest transport credential`,
+  );
+  assert.doesNotMatch(
+    lifecycle,
+    /\[\s*params\.session,/,
+    `${label} hydration must not reload when only the transport token rotates`,
+  );
+}
+assert.match(
+  eventsPanel,
+  /className="community-events-content" aria-busy=\{state\.isLoadingEvents\}/,
+  "events background refresh must remain semantic without changing geometry",
 );
 
 console.log("ui_stability_contract_proof: ok");

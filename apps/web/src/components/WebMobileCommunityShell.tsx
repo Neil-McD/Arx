@@ -64,6 +64,7 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           canViewActiveCommunityPolynet={communityShell.canViewActiveCommunityPolynet}
           canManageMembersActiveCommunity={communityShell.canManageMembersActiveCommunity}
           canViewActiveCommunityAnalytics={communityShell.canViewActiveCommunityAnalytics}
+          isLoadingAccess={communityShell.isLoadingCommunityAccess}
           lockedTabs={communityShell.lockedCommunityNavTabs ?? undefined}
           buttonType="button"
           includeButtonTitles

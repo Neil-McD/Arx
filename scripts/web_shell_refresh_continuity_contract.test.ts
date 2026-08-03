@@ -60,17 +60,55 @@ describe("web shell refresh continuity contract", () => {
     expect(ensureBlock).not.toMatch(/refreshAuthSessionLockedResult, session\]/);
   });
 
-  it("keeps presentation capability separate from authoritative mutation guards", () => {
+  it("serializes credential refresh before resume data fan-out", () => {
+    const lifecycle = read("shared/useAuthSessionLifecycle.ts");
+    const start = lifecycle.indexOf("function useSessionResumeRefresh");
+    const end = lifecycle.indexOf("\n\nexport function useAuthSessionLifecycle", start);
+    const resumeBlock = lifecycle.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(resumeBlock).toMatch(/await refreshSessionIfNearExpiry\(/);
+    expect(resumeBlock).toMatch(
+      /await refreshSessionIfNearExpiry\([\s\S]*const usableCandidate = params\.sessionRef\.current;[\s\S]*onResumeWithSessionRef\.current\(usableCandidate\)/,
+    );
+    expect(resumeBlock).not.toMatch(/void refreshSessionIfNearExpiry\(/);
+  });
+
+  it("uses one retained access snapshot for stable shell capabilities", () => {
     const controller = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
 
-    expect(controller).toContain("presentationActiveCommunityAccess");
-    expect(controller).toContain("authoritativeCommunityAccessCapabilities");
+    expect(controller).toContain("const activeCommunityAccess =");
+    expect(controller).not.toContain("presentationActiveCommunityAccess");
+    expect(controller).not.toContain("currentActiveCommunityAccess");
+    expect(controller).not.toContain("authoritativeCommunityAccessCapabilities");
+    expect(controller).not.toContain("authoritativeCommunityNavVisibility");
+    expect(controller).not.toMatch(
+      /const isLoadingCommunityAccess[\s\S]*?scopedCommunityAccessResolution\.status === "refreshing"/,
+    );
     expect(controller).toMatch(
-      /deriveCommunityActionGuards\(authoritativeCommunityAccessCapabilities\)/,
+      /if \(accessSessionIdentityRef\.current !== sessionIdentity\) \{[\s\S]*type: "reset"[\s\S]*\}[\s\S]*accessSessionIdentityRef\.current = sessionIdentity/,
+    );
+    expect(controller).toMatch(
+      /deriveCommunityActionGuards\(communityAccessCapabilities\)/,
     );
     expect(controller).toMatch(
       /deriveCommunityNavVisibility\(communityAccessCapabilities\)/,
     );
+  });
+
+  it("reserves permission-dependent navigation geometry during initial access loading", () => {
+    const nav = read("shared/CommunityNav.tsx");
+    const shell = read("apps/web/src/components/WebShellChromeHost.tsx");
+
+    expect(nav).toContain("isLoadingAccess = false");
+    expect(nav).toMatch(
+      /const showChannelLoadingSkeleton =[\s\S]*isLoadingAccess \|\| \(isLoadingChannels/,
+    );
+    expect(nav).toContain("!showChannelLoadingSkeleton && canManageMembersActiveCommunity");
+    expect(nav).toContain('className="community-nav-access-loading"');
+    expect(nav).toContain('className="community-nav-invite-loading web-skeleton-block"');
+    expect(shell).toContain("isLoadingAccess={props.communityShell.isLoadingCommunityAccess}");
   });
 
   it("hydrates the account graph once per signed-in identity, not once per token", () => {
@@ -87,6 +125,9 @@ describe("web shell refresh continuity contract", () => {
 
   it("keeps canonical chat mounted without a legacy chat loader", () => {
     const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+    const bootstrap = read(
+      "apps/web/src/components/WebCommunityInteractionBootstrap.tsx",
+    );
     const start = panel.indexOf("const communityChatPresentationMode =");
     const end = panel.indexOf("const communityComposerFocusTargetKey", start);
     const ownerGate = panel.slice(start, end);
@@ -98,7 +139,7 @@ describe("web shell refresh continuity contract", () => {
     expect(ownerGate).not.toContain('communityChatPresentationMode === "legacy"');
     expect(ownerGate).not.toContain("showLegacyInteractionSurface");
     expect(panel).not.toContain("legacy_bootstrap");
-    expect(panel).toContain(
+    expect(bootstrap).toContain(
       "community-interaction-projection has-context-panel community-interaction-bootstrap",
     );
   });
@@ -119,9 +160,19 @@ describe("web shell refresh continuity contract", () => {
 
   it("keeps the composer under canonical presentation ownership during bootstrap", () => {
     const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+    const bootstrap = read(
+      "apps/web/src/components/WebCommunityInteractionBootstrap.tsx",
+    );
+    const responsiveStyles = read(
+      "apps/web/src/styles/settings-runtime-and-theme-overrides.css",
+    );
 
     expect(panel).toMatch(
-      /showCanonicalCommunityBootstrap[\s\S]*community-interaction-bootstrap[\s\S]*community-interaction-main-composer[\s\S]*mainCommunityComposer/,
+      /showCanonicalCommunityBootstrap[\s\S]*WebCommunityInteractionBootstrap mainComposer=\{mainCommunityComposer\}/,
+    );
+    expect(bootstrap).toContain("community-interaction-main-composer");
+    expect(responsiveStyles).toMatch(
+      /\.app-root\.mobile-shell \.community-chat \.community-interaction-bootstrap-composer\s*\{[\s\S]*height:\s*66px;[\s\S]*margin:\s*0 12px calc\(env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-bottom-rail-height\) \+ 8px\);/,
     );
     expect(panel).not.toContain("showLegacyInteractionSurface");
     expect(panel).not.toContain(

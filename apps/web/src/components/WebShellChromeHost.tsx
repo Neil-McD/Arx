@@ -28,8 +28,6 @@ export type WebShellChromeHostProps = {
   communityShell: WebCommunityShellProps;
   settingsSidebar: WebSettingsSidebarProps;
   hasLeftPanel: boolean;
-  showDesktopCommunityRail: boolean;
-  showDesktopCommunityNav: boolean;
   isGlobalSettings: boolean;
   mainSurface: ReactNode;
   globalOverlays: ReactNode;
@@ -75,6 +73,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           canViewActiveCommunityPolynet={props.communityShell.canViewActiveCommunityPolynet}
           canManageMembersActiveCommunity={props.communityShell.canManageMembersActiveCommunity}
           canViewActiveCommunityAnalytics={props.communityShell.canViewActiveCommunityAnalytics}
+          isLoadingAccess={props.communityShell.isLoadingCommunityAccess}
           lockedTabs={props.communityShell.lockedCommunityNavTabs ?? undefined}
           buttonType="button"
           includeButtonTitles
@@ -93,8 +92,8 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     mobileOverlay: Boolean(props.mobileOverlay),
     mobileChromeAutoHideEnabled: props.mobileChromeAutoHideEnabled,
     mobileChromeReadingMode: props.mobileChromeReadingMode,
-    showDesktopCommunityRail: props.showDesktopCommunityRail,
-    showDesktopCommunityNav: props.showDesktopCommunityNav,
+    showDesktopCommunityRail: props.communityShell.showDesktopCommunityRail,
+    showDesktopCommunityNav: props.communityShell.showDesktopCommunityNav,
     isGlobalSettings: props.isGlobalSettings,
     hasLeftPanel: props.hasLeftPanel,
     reserveCommunityNavTopbarSpace:

@@ -102,14 +102,14 @@ export function CommunityAiFeedPanel(props: CommunityAiFeedPanelProps) {
         </div>
       </div>
 
-      {state.isLoading && !showInitialFeedLoading ? (
-        <div className="analytics-refreshing-note">Refreshing AI feed...</div>
-      ) : null}
       {state.error && !showBlockingFeedError ? (
         <div className="analytics-refreshing-note">AI feed refresh failed.</div>
       ) : null}
 
-      <div className={`feed-post-list ${isEmpty ? "ai-feed-list-empty" : ""}`}>
+      <div
+        className={`feed-post-list ${isEmpty ? "ai-feed-list-empty" : ""}`}
+        aria-busy={state.isLoading}
+      >
         {showBlockingFeedError ? (
           <div className="community-panel-state-shell">
             <div className="feed-error-card">

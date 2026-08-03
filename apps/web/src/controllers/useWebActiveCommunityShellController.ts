@@ -20,6 +20,7 @@ import {
   resolveAuthPresentationIdentity,
   type AuthSessionLike,
 } from "../../../../shared/authSession";
+import { reuseEquivalentValue } from "../../../../shared/reuseEquivalentValue";
 import { useResumeEpochEffect } from "../../../../shared/useResumeEpochEffect";
 
 type PresenceFace = {
@@ -116,6 +117,13 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
       });
       return;
     }
+    if (accessSessionIdentityRef.current !== sessionIdentity) {
+      const requestId = (accessRequestIdRef.current += 1);
+      dispatchCommunityAccessResolution({
+        type: "reset",
+        requestId,
+      });
+    }
     accessSessionIdentityRef.current = sessionIdentity;
     const communityId = params.activeCommunityId;
     const currentSession = sessionRef.current;
@@ -150,11 +158,11 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
           communityId,
         });
         if (!cancelled && activeCommunityIdRef.current === communityId) {
-          setActiveCommunityPresenceSummaryState({
+          setActiveCommunityPresenceSummaryState((previous) => reuseEquivalentValue(previous, {
             communityId,
             sessionIdentity,
             summary: summary ?? null,
-          });
+          }));
         }
       } catch (error) {
         if (!cancelled) {
@@ -196,22 +204,17 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const isAccessSessionIdentityScoped = Boolean(
     sessionIdentity && accessSessionIdentityRef.current === sessionIdentity,
   );
-  const presentationActiveCommunityAccess =
+  const activeCommunityAccess =
     isAccessSessionIdentityScoped &&
     (scopedCommunityAccessResolution.status === "resolved" ||
     scopedCommunityAccessResolution.status === "refreshing" ||
     scopedCommunityAccessResolution.status === "failed")
       ? scopedCommunityAccessResolution.access
       : null;
-  const currentActiveCommunityAccess =
-    isAccessSessionIdentityScoped && scopedCommunityAccessResolution.status === "resolved"
-      ? scopedCommunityAccessResolution.access
-      : null;
   const isLoadingCommunityAccess =
     Boolean(sessionIdentity) &&
     (!isAccessSessionIdentityScoped ||
-      scopedCommunityAccessResolution.status === "pending" ||
-      scopedCommunityAccessResolution.status === "refreshing");
+      scopedCommunityAccessResolution.status === "pending");
   const communityAccessLoadError =
     isAccessSessionIdentityScoped && scopedCommunityAccessResolution.status === "failed"
       ? scopedCommunityAccessResolution.error
@@ -234,30 +237,22 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   }, [activeCommunityPresenceSummaryState, params.activeCommunityId, sessionIdentity]);
 
   const communityAccessCapabilities = useMemo(
-    () => deriveCommunityAccessCapabilities(presentationActiveCommunityAccess),
-    [presentationActiveCommunityAccess],
-  );
-  const authoritativeCommunityAccessCapabilities = useMemo(
-    () => deriveCommunityAccessCapabilities(currentActiveCommunityAccess),
-    [currentActiveCommunityAccess],
+    () => deriveCommunityAccessCapabilities(activeCommunityAccess),
+    [activeCommunityAccess],
   );
   const communityNavVisibility = useMemo(
     () => deriveCommunityNavVisibility(communityAccessCapabilities),
     [communityAccessCapabilities],
   );
   const communityActionGuards = useMemo(
-    () => deriveCommunityActionGuards(authoritativeCommunityAccessCapabilities),
-    [authoritativeCommunityAccessCapabilities],
-  );
-  const authoritativeCommunityNavVisibility = useMemo(
-    () => deriveCommunityNavVisibility(authoritativeCommunityAccessCapabilities),
-    [authoritativeCommunityAccessCapabilities],
+    () => deriveCommunityActionGuards(communityAccessCapabilities),
+    [communityAccessCapabilities],
   );
 
-  const isActiveCommunityOwner = authoritativeCommunityAccessCapabilities.isOwner;
+  const isActiveCommunityOwner = communityAccessCapabilities.isOwner;
   const isActiveCommunityAdmin =
-    String(currentActiveCommunityAccess?.effective_role ?? "").trim().toLowerCase() === "admin";
-  const communitySettingsLayer = deriveCommunitySettingsLayer(currentActiveCommunityAccess);
+    String(activeCommunityAccess?.effective_role ?? "").trim().toLowerCase() === "admin";
+  const communitySettingsLayer = deriveCommunitySettingsLayer(activeCommunityAccess);
   const canManageCommunitySettings =
     communitySettingsLayer === "admin" || communitySettingsLayer === "owner";
   const canViewMemberPlanDetailsActiveCommunity = isActiveCommunityOwner || isActiveCommunityAdmin;
@@ -267,7 +262,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const canPostMessagesActiveCommunity = communityActionGuards.canPostMessages;
   const canManageResourcesActiveCommunity = communityActionGuards.canManageResources;
   const canModerateContentActiveCommunity = communityActionGuards.canModerateContent;
-  const canManageMembersActiveCommunity = authoritativeCommunityNavVisibility.canManageMembers;
+  const canManageMembersActiveCommunity = communityNavVisibility.canManageMembers;
   const canReviewJoinRequestsActiveCommunity = communityActionGuards.canReviewJoinRequests;
   const canViewActiveCommunityAnalytics = communityNavVisibility.canViewAnalytics;
 
@@ -306,7 +301,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   }, [activeCommunityPresenceSummary?.online_user_ids]);
 
   return {
-    activeCommunityAccess: currentActiveCommunityAccess,
+    activeCommunityAccess,
     isLoadingCommunityAccess,
     communityAccessLoadError,
     retryActiveCommunityAccess,

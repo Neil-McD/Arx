@@ -540,9 +540,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </button>
         <div className="community-events-month-copy">
           <h2>{formatMonthLabel(monthDate)}</h2>
-          {state.isLoadingEvents && !showInitialEventsLoading ? (
-            <span className="community-events-refreshing" role="status">Updating…</span>
-          ) : null}
         </div>
         <button
           className="community-events-month-btn"

@@ -75,12 +75,12 @@ const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-
 const contextFaceCss = sectionBetween(
   baseCss,
   ".community-context-face {",
-  ".community-context-face + .community-context-face",
+  ".community-context-face-more",
 );
 const contextMemberAvatarMediaCss = sectionBetween(
   baseCss,
   ".community-context-member-avatar-media {",
-  ".community-context-member-avatar img",
+  ".community-context-member-dot",
 );
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 const chatBlockMarkdownUi = read("shared/chatBlockMarkdownUi.tsx");
@@ -875,8 +875,8 @@ assert.match(
 );
 assert.match(
   activeCommunityShellController,
-  /type ScopedPresenceSummary = \{[\s\S]*communityId: string;[\s\S]*summary: PresenceSummary \| null;[\s\S]*useState<ScopedPresenceSummary \| null>[\s\S]*activeCommunityIdRef\.current === communityId[\s\S]*setActiveCommunityPresenceSummaryState\(\{[\s\S]*communityId,[\s\S]*summary: summary \?\? null,[\s\S]*activeCommunityPresenceSummaryState\?\.communityId !== communityId\) return null;/,
-  "active community shell controller should scope presence summaries to the active community",
+  /type ScopedPresenceSummary = \{[\s\S]*communityId: string;[\s\S]*sessionIdentity: string;[\s\S]*summary: PresenceSummary \| null;[\s\S]*useState<ScopedPresenceSummary \| null>[\s\S]*activeCommunityIdRef\.current === communityId[\s\S]*setActiveCommunityPresenceSummaryState\(\(previous\) => reuseEquivalentValue\(previous, \{[\s\S]*communityId,[\s\S]*sessionIdentity,[\s\S]*summary: summary \?\? null,[\s\S]*activeCommunityPresenceSummaryState\?\.communityId !== communityId\) return null;[\s\S]*activeCommunityPresenceSummaryState\.sessionIdentity !== sessionIdentity\) return null;/,
+  "active community shell controller should scope and identity-stabilize presence summaries",
 );
 assert.doesNotMatch(
   communityDirectory,

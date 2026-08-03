@@ -1,5 +1,6 @@
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { AppPage, CommunityTab } from "./appShellNavigation";
+import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
 
 export function useCommunityResourcesTabLifecycle<SessionT>(params: {
   activePage: AppPage;
@@ -10,15 +11,23 @@ export function useCommunityResourcesTabLifecycle<SessionT>(params: {
   requireCommunityPage?: boolean;
   shouldLoad?: boolean;
 }) {
+  const sessionRef = useRef(params.session);
+  sessionRef.current = params.session;
+  const sessionIdentity = resolveAuthPresentationIdentity(
+    params.session as AuthSessionLike,
+  );
+
   useEffect(() => {
-    if (!params.session || !params.activeCommunityId) return;
+    if (!sessionIdentity || !params.activeCommunityId) return;
     if (!params.shouldLoad) {
       if ((params.requireCommunityPage ?? false) && params.activePage !== "community") return;
       if (params.communityTab !== "resources") return;
     }
-    void params.loadCommunityResources(params.activeCommunityId, params.session);
+    const currentSession = sessionRef.current;
+    if (!currentSession) return;
+    void params.loadCommunityResources(params.activeCommunityId, currentSession);
   }, [
-    params.session,
+    sessionIdentity,
     params.activeCommunityId,
     params.activePage,
     params.communityTab,

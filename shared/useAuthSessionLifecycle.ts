@@ -103,12 +103,20 @@ function useSessionResumeRefresh<TSession extends ExpiringSessionLike>(params: {
   useResumeEpochEffect(params.resumeEpoch, () => {
     const current = params.sessionRef.current;
     if (!current) return;
-    void refreshSessionIfNearExpiry({
-      session: current,
-      refreshLocked: () => refreshLockedRef.current(),
-      thresholdSec: params.thresholdSec ?? 60,
-    });
-    onResumeWithSessionRef.current(current);
+    void (async () => {
+      try {
+        await refreshSessionIfNearExpiry({
+          session: current,
+          refreshLocked: () => refreshLockedRef.current(),
+          thresholdSec: params.thresholdSec ?? 60,
+        });
+      } catch {
+        // The canonical resume callback performs the final usable-session check.
+      }
+      const usableCandidate = params.sessionRef.current;
+      if (!usableCandidate) return;
+      onResumeWithSessionRef.current(usableCandidate);
+    })();
   });
 }
 

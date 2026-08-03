@@ -9,9 +9,9 @@ import type { MobileMemberFace, MobileOverlay } from "../components/webShellChro
 
 type CommunityLike = {
   id: string;
-  slug?: string | null;
+  slug: string | null;
   name: string;
-  avatar_url?: string | null;
+  avatar_url: string | null;
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
@@ -73,6 +73,7 @@ export function buildWebShellChromeHostProps(params: {
   canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
+  isLoadingCommunityAccess: boolean;
   lockedCommunityNavTabs?: WebShellChromeHostProps["communityShell"]["lockedCommunityNavTabs"];
   handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
@@ -166,21 +167,7 @@ export function buildWebShellChromeHostProps(params: {
       forceMobileCommunityRoot: params.forceMobileCommunityRoot,
       setMobileOverlay: params.setMobileOverlay,
       onSelectMobileRootPage: params.handleSelectMobileRootPage,
-      activeCommunity: params.activeCommunity
-        ? {
-            id: params.activeCommunity.id,
-            slug: params.activeCommunity.slug ?? null,
-            name: params.activeCommunity.name,
-            avatar_url: params.activeCommunity.avatar_url ?? null,
-            avatar_focus_x: params.activeCommunity.avatar_focus_x ?? null,
-            avatar_focus_y: params.activeCommunity.avatar_focus_y ?? null,
-            avatar_zoom: params.activeCommunity.avatar_zoom ?? null,
-            banner_url: params.activeCommunity.banner_url ?? null,
-            banner_focus_x: params.activeCommunity.banner_focus_x ?? null,
-            banner_focus_y: params.activeCommunity.banner_focus_y ?? null,
-            banner_zoom: params.activeCommunity.banner_zoom ?? null,
-          }
-        : null,
+      activeCommunity: params.activeCommunity,
       communityTab: params.communityTab,
       communityTabIndicators: params.communityTabIndicators,
       communityChannels: params.communityChannels,
@@ -199,6 +186,7 @@ export function buildWebShellChromeHostProps(params: {
       canViewActiveCommunityPolynet: params.canViewActiveCommunityPolynet,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
+      isLoadingCommunityAccess: params.isLoadingCommunityAccess,
       lockedCommunityNavTabs: params.lockedCommunityNavTabs ?? null,
       onSelectCommunityTab: params.handleSelectCommunityTab,
       onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,
@@ -208,24 +196,8 @@ export function buildWebShellChromeHostProps(params: {
       directMessagesUnreadCount: params.directMessagesUnreadCount,
       onOpenDiscover: params.handleOpenDiscover,
       onOpenMobileCreateCommunity: params.openMobileCreateCommunity,
-      communities: params.communities.map((community) => ({
-        id: community.id,
-        slug: community.slug ?? null,
-        name: community.name,
-        avatar_url: community.avatar_url ?? null,
-        avatar_focus_x: community.avatar_focus_x ?? null,
-        avatar_focus_y: community.avatar_focus_y ?? null,
-        avatar_zoom: community.avatar_zoom ?? null,
-      })),
-      railCommunities: params.railCommunities.map((community) => ({
-        id: community.id,
-        slug: community.slug ?? null,
-        name: community.name,
-        avatar_url: community.avatar_url ?? null,
-        avatar_focus_x: community.avatar_focus_x ?? null,
-        avatar_focus_y: community.avatar_focus_y ?? null,
-        avatar_zoom: community.avatar_zoom ?? null,
-      })),
+      communities: params.communities,
+      railCommunities: params.railCommunities,
       communityRailAttentionById: params.communityRailAttentionById,
       isLoadingCommunities: params.isLoadingCommunities,
       selectedActiveCommunitySlug: params.selectedActiveCommunitySlug,
@@ -253,8 +225,6 @@ export function buildWebShellChromeHostProps(params: {
       onSelectPage: params.setSettingsPage,
     },
     hasLeftPanel: params.hasLeftPanel,
-    showDesktopCommunityRail: params.showDesktopCommunityRail,
-    showDesktopCommunityNav: params.showDesktopCommunityNav,
     isGlobalSettings: params.isGlobalSettings,
   };
 }
