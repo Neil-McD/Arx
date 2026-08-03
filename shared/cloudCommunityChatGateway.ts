@@ -1,10 +1,8 @@
-import { ConvexReactClient } from "convex/react";
+import type { ConvexReactClient } from "convex/react";
 import { api } from "../convex/_generated/api";
-import { resolveAuthSubject, resolveConvexRuntimeToken } from "./authSession";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 import {
-  createAuthenticatedConvexRealtimeClient,
-  type ConvexRealtimeAuthState,
+  acquireAuthenticatedConvexRealtimeClient,
   type ConvexRealtimeEnsureSession,
 } from "./convexRealtimeAuth";
 
@@ -36,40 +34,16 @@ function coerceObjectRows<TRow>(payload: unknown): TRow[] {
   return [payload as TRow];
 }
 
-function resolveSessionRuntimeToken(sessionRaw: unknown): string {
-  return String(resolveConvexRuntimeToken((sessionRaw ?? null) as any) ?? "").trim();
-}
-
 export function createCloudCommunityChatLiveClient<SessionT>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     ensureSession?: ConvexRealtimeEnsureSession<SessionT>;
   },
 ): CloudCommunityChatLiveClient {
-  const authSubject = resolveAuthSubject(params.session as any);
-  if (!authSubject) {
-    throw new Error("convex_auth_subject_required");
-  }
-  const runtimeToken = resolveSessionRuntimeToken(params.session);
-  if (!runtimeToken) {
-    throw new Error("convex_identity_token_required");
-  }
-
-  const authState: ConvexRealtimeAuthState<SessionT> = {
-    sessionRef: { current: params.session },
-    ensureSessionRef: { current: params.ensureSession },
-  };
-  const realtimeClient = createAuthenticatedConvexRealtimeClient({
+  return acquireAuthenticatedConvexRealtimeClient({
     convexUrl: requireConvexUrl(),
-    authState,
-    source: "community_chat_live",
+    session: params.session,
+    ensureSession: params.ensureSession,
   });
-  return {
-    client: realtimeClient.client,
-    authSubject,
-    close: () => {
-      realtimeClient.close();
-    },
-  };
 }
 
 function emitLiveRows<TRow>(

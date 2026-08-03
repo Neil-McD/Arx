@@ -30,6 +30,8 @@ import {
   storeAuthResumeState,
 } from "../../../../shared/authResumeState";
 import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPkce";
+import { resolveAuthSubject } from "../../../../shared/authSession";
+import { closeAuthenticatedConvexRealtimeClientsForSubject } from "../../../../shared/convexRealtimeAuth";
 import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
@@ -109,6 +111,17 @@ function buildAuthSessionCacheKey(session: AuthSession | null | undefined): stri
   return null;
 }
 
+function closeRealtimeTransportForReplacedIdentity(
+  currentSession: AuthSession | null | undefined,
+  nextSession: AuthSession | null | undefined,
+): void {
+  const currentSubject = resolveAuthSubject(currentSession ?? null);
+  const nextSubject = resolveAuthSubject(nextSession ?? null);
+  if (currentSubject && currentSubject !== nextSubject) {
+    closeAuthenticatedConvexRealtimeClientsForSubject(currentSubject);
+  }
+}
+
 function readAuthCallbackErrorFromLocation(): string | null {
   try {
     const url = new URL(window.location.href);
@@ -171,6 +184,8 @@ export function useWebAppAuthController(
   }, []);
 
   const clearSessionLocally = useCallback(async (): Promise<void> => {
+    const authSubject = resolveAuthSubject(sessionRef.current);
+    if (authSubject) closeAuthenticatedConvexRealtimeClientsForSubject(authSubject);
     sessionRef.current = null;
     sessionReadyIdentityRef.current = null;
     ensuredSessionCacheRef.current = null;
@@ -185,6 +200,7 @@ export function useWebAppAuthController(
   }, [clearSessionLocally]);
 
   const adoptAuthSession = useCallback((nextSession: AuthSession): void => {
+    closeRealtimeTransportForReplacedIdentity(sessionRef.current, nextSession);
     sessionRef.current = nextSession;
     const cacheKey = buildAuthSessionCacheKey(nextSession);
     ensuredSessionCacheRef.current = cacheKey
@@ -205,6 +221,7 @@ export function useWebAppAuthController(
       onRefreshed: (refreshed) => {
         if (authSessionEpochRef.current !== epochAtRefreshStart) return;
         setAuthError(null);
+        closeRealtimeTransportForReplacedIdentity(sessionRef.current, refreshed);
         setAuthSession(refreshed);
         sessionRef.current = refreshed;
       },

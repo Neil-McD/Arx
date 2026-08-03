@@ -304,8 +304,10 @@ assert.match(gateway, /clearCloudDirectTyping/, "web gateway must expose a DM ty
 assert.match(gateway, /directMessages:clearDirectTyping/, "web gateway typing clear must use the canonical backend mutation");
 assert.match(authSession, /function resolveConvexRuntimeToken[\s\S]*access_token[\s\S]*id_token/, "Convex runtime auth must prefer the rotating access token over the ID-token fallback");
 assert.match(convexAuthenticatedClient, /resolveConvexRuntimeToken[\s\S]*client\.setAuth\(runtimeToken\)/, "one-shot Convex requests must use the rotating runtime token");
-assert.match(gateway, /createAuthenticatedConvexRealtimeClient/, "DM subscriptions must use the shared refresh-aware realtime client");
-assert.match(communityChatGateway, /createAuthenticatedConvexRealtimeClient/, "community subscriptions must use the same refresh-aware realtime client");
+assert.match(gateway, /acquireAuthenticatedConvexRealtimeClient/, "DM subscriptions must lease the shared refresh-aware realtime transport");
+assert.match(communityChatGateway, /acquireAuthenticatedConvexRealtimeClient/, "community subscriptions must lease the same refresh-aware realtime transport");
+assert.doesNotMatch(gateway, /createAuthenticatedConvexRealtimeClient/, "DM gateway must not construct a domain-local realtime transport");
+assert.doesNotMatch(communityChatGateway, /createAuthenticatedConvexRealtimeClient/, "community gateway must not construct a domain-local realtime transport");
 assert.doesNotMatch(gateway, /\.setAuth\(/, "DM gateway must not implement a second raw auth callback");
 assert.doesNotMatch(communityChatGateway, /\.setAuth\(/, "community gateway must not implement a second raw auth callback");
 assert.match(convexRealtimeAuth, /forceRefreshToken[\s\S]*forceRefresh: true/, "realtime auth must honor the Convex SDK's forced token refresh signal");

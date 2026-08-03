@@ -45,7 +45,8 @@ assert.match(
   /client\.query\("communityIntelligenceDirectory:getCommunityPolynetOverview" as any/,
   "Polynet gateway should read the overview projection",
 );
-assert.match(gateway, /createAuthenticatedConvexRealtimeClient/, "Polynet live updates should reuse authenticated Convex realtime infrastructure");
+assert.match(gateway, /acquireAuthenticatedConvexRealtimeClient/, "Polynet live updates should lease the canonical authenticated Convex realtime transport");
+assert.doesNotMatch(gateway, /createAuthenticatedConvexRealtimeClient/, "Polynet gateway must not construct a domain-local realtime transport");
 assert.match(gateway, /watchQuery\([\s\S]*api\.communityIntelligenceDirectory\.getCommunityPolynetOverview/, "Polynet live updates should subscribe to the same overview projection");
 assert.doesNotMatch(gateway, /setInterval|setTimeout/, "Polynet overview continuity should use subscriptions instead of polling");
 assert.doesNotMatch(
