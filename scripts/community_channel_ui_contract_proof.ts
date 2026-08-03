@@ -174,12 +174,17 @@ const interactionStyles = read(interactionStylesPath);
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-header\s*\{[\s\S]*?border-bottom:\s*1px\s+solid\s+var\(--border-default\);/,
+  /\.community-channel-header\s*\{[\s\S]*?padding:\s*0\s+18px;[\s\S]*?border-bottom:\s*1px\s+solid\s+var\(--border-default\);/,
 );
 assertMatches(
   interactionStylesPath,
   interactionStyles,
   /\.community-channel-header-identity\s*\{[\s\S]*?color:\s*var\(--text-muted\);[\s\S]*?\.community-channel-header-identity h1\s*\{[\s\S]*?font-weight:\s*500;/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-header-menu-trigger\s*\{[\s\S]*?color:\s*var\(--text-muted\);/,
 );
 
 const routePath = "shared/webAppRouteState.ts";
