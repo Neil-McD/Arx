@@ -35,6 +35,12 @@ export function normalizeAuthSessionScrubCursor(value: unknown): string | null {
   return value;
 }
 
+export function normalizeAuthSessionScrubOrder(value: unknown): "asc" | "desc" {
+  if (value === undefined || value === null || value === "asc") return "asc";
+  if (value === "desc") return "desc";
+  throw new Error("auth_session_maintenance_order_invalid");
+}
+
 export function requireAuthSessionMaintenanceSecret(args: {
   expectedSecret: unknown;
   providedSecret: unknown;
@@ -76,6 +82,7 @@ export async function scrubRevokedAuthSessionSecretsBatch(args: {
   cursor?: unknown;
   limit?: unknown;
   dryRun?: boolean;
+  order?: unknown;
 }): Promise<{
   scanned: number;
   eligible: number;
@@ -85,14 +92,16 @@ export async function scrubRevokedAuthSessionSecretsBatch(args: {
   dry_run: boolean;
   continue_cursor: string;
   batch_limit: number;
+  order: "asc" | "desc";
 }> {
   const cursor = normalizeAuthSessionScrubCursor(args.cursor);
   const limit = normalizeAuthSessionScrubLimit(args.limit);
+  const order = normalizeAuthSessionScrubOrder(args.order);
   const dryRun = args.dryRun !== false;
   const page = await args.ctx.db
     .query("authSessions")
     .withIndex("by_revokedAt", (q: any) => q.gt("revokedAt", 0))
-    .order("asc")
+    .order(order)
     .paginate({ cursor, numItems: limit });
 
   const candidates = page.page.filter((row: any) => {
@@ -124,6 +133,7 @@ export async function scrubRevokedAuthSessionSecretsBatch(args: {
     dry_run: dryRun,
     continue_cursor: page.continueCursor,
     batch_limit: limit,
+    order,
   };
 }
 

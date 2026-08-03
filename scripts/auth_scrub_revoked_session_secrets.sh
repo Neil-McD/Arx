@@ -14,16 +14,20 @@ DEFAULT_MAX_BATCHES=200
 
 usage() {
   cat <<'EOF'
-Usage: bash scripts/auth_scrub_revoked_session_secrets.sh [--limit <count>] [--max-batches <count>] [--execute] [--prod] [--help]
+Usage: bash scripts/auth_scrub_revoked_session_secrets.sh [--limit <count>] [--max-batches <count>] [--order <asc|desc>] [--stop-after-clean-overlap] [--execute] [--prod] [--help]
 
 Audits revoked auth session rows and removes any remaining encrypted credential,
 token-expiry, or refresh-lease fields in bounded cursor pages. The default target
 is the configured Convex development deployment and the default mode is audit-only.
 Production requires the explicit --prod flag; writes require --execute.
+Newest-first overlap mode is for a reverse continuation after a proven clean
+oldest-first prefix: it ignores an initial clean edge, drains eligible rows, and
+stops only after entering a full clean overlap page.
 
 Defaults:
   --limit 100
   --max-batches 200
+  --order asc
   configured development deployment
   audit only; no row is changed without --execute
 EOF
@@ -73,6 +77,8 @@ LIMIT="$DEFAULT_LIMIT"
 MAX_BATCHES="$DEFAULT_MAX_BATCHES"
 EXECUTE=false
 PROD=false
+ORDER="asc"
+STOP_AFTER_CLEAN_OVERLAP=false
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -91,6 +97,18 @@ while [[ $# -gt 0 ]]; do
       }
       MAX_BATCHES="$2"
       shift 2
+      ;;
+    --order)
+      [[ $# -ge 2 ]] || {
+        echo "FAIL: --order requires asc or desc" >&2
+        exit 1
+      }
+      ORDER="$2"
+      shift 2
+      ;;
+    --stop-after-clean-overlap)
+      STOP_AFTER_CLEAN_OVERLAP=true
+      shift
       ;;
     --execute)
       EXECUTE=true
@@ -124,6 +142,14 @@ if ! [[ "$MAX_BATCHES" =~ ^[0-9]+$ ]] || [[ "$MAX_BATCHES" -le 0 ]]; then
   echo "FAIL: --max-batches must be a positive integer" >&2
   exit 1
 fi
+if [[ "$ORDER" != "asc" && "$ORDER" != "desc" ]]; then
+  echo "FAIL: --order must be asc or desc" >&2
+  exit 1
+fi
+if [[ "$STOP_AFTER_CLEAN_OVERLAP" == true && "$ORDER" != "desc" ]]; then
+  echo "FAIL: --stop-after-clean-overlap requires --order desc" >&2
+  exit 1
+fi
 
 SECRET="$(lookup_key "ARX_AUTH_MIGRATION_AUDIT_SECRET")"
 if [[ -z "$SECRET" ]]; then
@@ -141,37 +167,52 @@ echo "Scope: ${TARGET_LABEL}"
 echo "Batch limit: ${LIMIT}"
 echo "Maximum batches: ${MAX_BATCHES}"
 echo "Mode: $([[ "$EXECUTE" == true ]] && echo execute || echo audit-only)"
+echo "Order: ${ORDER}"
+echo "Stop after clean overlap: ${STOP_AFTER_CLEAN_OVERLAP}"
 
 run_batch() {
   local dry_run="$1"
   local cursor_b64="$2"
   local args_json
   args_json="$(
-    SECRET_VALUE="$SECRET" CURSOR_B64="$cursor_b64" LIMIT_VALUE="$LIMIT" DRY_RUN_VALUE="$dry_run" node -e '
+    SECRET_VALUE="$SECRET" CURSOR_B64="$cursor_b64" LIMIT_VALUE="$LIMIT" DRY_RUN_VALUE="$dry_run" ORDER_VALUE="$ORDER" node -e '
       const cursor = JSON.parse(Buffer.from(process.env.CURSOR_B64 || "bnVsbA", "base64url").toString("utf8"));
       process.stdout.write(JSON.stringify({
         secret: process.env.SECRET_VALUE,
         cursor,
         limit: Number(process.env.LIMIT_VALUE),
         dryRun: process.env.DRY_RUN_VALUE === "true",
+        order: process.env.ORDER_VALUE,
       }));
     '
   )"
-  if [[ "$PROD" == true ]]; then
-    npx convex run --prod --typecheck disable --codegen disable \
-      authSessions:scrubRevokedAuthSessionSecretsForMaintenance \
-      "$args_json"
-  else
-    npx convex run --typecheck disable --codegen disable \
-      authSessions:scrubRevokedAuthSessionSecretsForMaintenance \
-      "$args_json"
-  fi
+  local attempt
+  for attempt in 1 2 3 4 5; do
+    if [[ "$PROD" == true ]]; then
+      if npx convex run --prod --typecheck disable --codegen disable \
+        authSessions:scrubRevokedAuthSessionSecretsForMaintenance \
+        "$args_json"; then
+        return 0
+      fi
+    else
+      if npx convex run --typecheck disable --codegen disable \
+        authSessions:scrubRevokedAuthSessionSecretsForMaintenance \
+        "$args_json"; then
+        return 0
+      fi
+    fi
+    if [[ "$attempt" -lt 5 ]]; then
+      echo "WARN: batch request failed; retrying attempt $((attempt + 1))/5" >&2
+    fi
+  done
+  return 1
 }
 
 CURSOR_B64="$(node -e 'process.stdout.write(Buffer.from("null").toString("base64url"))')"
 TOTAL_SCANNED=0
 TOTAL_ELIGIBLE=0
 TOTAL_SCRUBBED=0
+SEEN_ELIGIBLE=false
 DRY_RUN=true
 if [[ "$EXECUTE" == true ]]; then
   DRY_RUN=false
@@ -179,10 +220,10 @@ fi
 
 for ((batch = 1; batch <= MAX_BATCHES; batch += 1)); do
   RESULT="$(run_batch "$DRY_RUN" "$CURSOR_B64")"
-  IFS=$'\t' read -r SCANNED ELIGIBLE SCRUBBED HAS_MORE DONE RESULT_DRY_RUN NEXT_CURSOR_B64 < <(
+  IFS=$'\t' read -r SCANNED ELIGIBLE SCRUBBED HAS_MORE DONE RESULT_DRY_RUN RESULT_ORDER NEXT_CURSOR_B64 < <(
     RESULT_JSON="$RESULT" node -e '
       const result = JSON.parse(process.env.RESULT_JSON || "{}");
-      const required = ["scanned", "eligible", "scrubbed", "has_more", "done", "dry_run", "continue_cursor"];
+      const required = ["scanned", "eligible", "scrubbed", "has_more", "done", "dry_run", "order", "continue_cursor"];
       for (const key of required) {
         if (!(key in result)) throw new Error(`auth_scrub_result_missing_${key}`);
       }
@@ -194,6 +235,7 @@ for ((batch = 1; batch <= MAX_BATCHES; batch += 1)); do
         result.has_more,
         result.done,
         result.dry_run,
+        result.order,
         cursorB64,
       ].map(String).join("\t"));
     '
@@ -201,6 +243,10 @@ for ((batch = 1; batch <= MAX_BATCHES; batch += 1)); do
 
   if [[ "$RESULT_DRY_RUN" != "$DRY_RUN" ]]; then
     echo "FAIL: server dry-run mode did not match requested mode" >&2
+    exit 1
+  fi
+  if [[ "$RESULT_ORDER" != "$ORDER" ]]; then
+    echo "FAIL: server order did not match requested order" >&2
     exit 1
   fi
   for value in "$SCANNED" "$ELIGIBLE" "$SCRUBBED"; do
@@ -218,6 +264,13 @@ for ((batch = 1; batch <= MAX_BATCHES; batch += 1)); do
   TOTAL_ELIGIBLE=$((TOTAL_ELIGIBLE + ELIGIBLE))
   TOTAL_SCRUBBED=$((TOTAL_SCRUBBED + SCRUBBED))
   echo "Batch ${batch}: scanned=${SCANNED} eligible=${ELIGIBLE} scrubbed=${SCRUBBED} has_more=${HAS_MORE}"
+
+  if [[ "$ELIGIBLE" -gt 0 ]]; then
+    SEEN_ELIGIBLE=true
+  elif [[ "$STOP_AFTER_CLEAN_OVERLAP" == true && "$SEEN_ELIGIBLE" == true ]]; then
+    echo "Complete overlap: scanned=${TOTAL_SCANNED} eligible=${TOTAL_ELIGIBLE} scrubbed=${TOTAL_SCRUBBED}."
+    exit 0
+  fi
 
   if [[ "$DONE" == true && "$HAS_MORE" == false ]]; then
     echo "Complete: scanned=${TOTAL_SCANNED} eligible=${TOTAL_ELIGIBLE} scrubbed=${TOTAL_SCRUBBED}."

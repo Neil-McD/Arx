@@ -1655,6 +1655,7 @@ export const scrubRevokedAuthSessionSecretsForMaintenance = mutation({
     cursor: v.optional(v.union(v.string(), v.null())),
     limit: v.optional(v.number()),
     dryRun: v.optional(v.boolean()),
+    order: v.optional(v.union(v.literal("asc"), v.literal("desc"))),
   },
   handler: async (ctx, args) => {
     requireAuthSessionMaintenanceSecret({
@@ -1666,6 +1667,7 @@ export const scrubRevokedAuthSessionSecretsForMaintenance = mutation({
       cursor: args.cursor,
       limit: args.limit,
       dryRun: args.dryRun,
+      order: args.order,
     });
   },
 });

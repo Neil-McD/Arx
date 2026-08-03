@@ -12,6 +12,7 @@ import {
   normalizeAuthSessionPruneLimit,
   normalizeAuthSessionScrubCursor,
   normalizeAuthSessionScrubLimit,
+  normalizeAuthSessionScrubOrder,
   pruneRevokedAuthSessionsBatch,
   requireAuthSessionMaintenanceSecret,
   scrubRevokedAuthSessionSecretsBatch,
@@ -74,6 +75,12 @@ test("scrub inputs are bounded and cursors fail closed", () => {
   expect(normalizeAuthSessionScrubCursor("cursor")).toBe("cursor");
   expect(() => normalizeAuthSessionScrubCursor(123)).toThrow(
     "auth_session_maintenance_cursor_invalid",
+  );
+  expect(normalizeAuthSessionScrubOrder(undefined)).toBe("asc");
+  expect(normalizeAuthSessionScrubOrder("asc")).toBe("asc");
+  expect(normalizeAuthSessionScrubOrder("desc")).toBe("desc");
+  expect(() => normalizeAuthSessionScrubOrder("sideways")).toThrow(
+    "auth_session_maintenance_order_invalid",
   );
 });
 
@@ -259,4 +266,49 @@ test("revoked credential scrub is bounded, idempotent, and preserves active rows
     }),
   );
   expect(repeated).toMatchObject({ scrubbed: 0, done: true });
+});
+
+test("revoked credential scrub can traverse newest-first with truthful receipts", async () => {
+  const t = convexTest(schema, modules);
+  await insertSessionFixture(t, [
+    { sessionId: "active" },
+    { sessionId: "oldest", revokedAt: 100 },
+    { sessionId: "middle", revokedAt: 200 },
+    { sessionId: "newest", revokedAt: 300 },
+  ]);
+
+  const first = await t.run(async (ctx) =>
+    await scrubRevokedAuthSessionSecretsBatch({
+      ctx,
+      limit: 2,
+      order: "desc",
+      dryRun: false,
+    }),
+  );
+  expect(first).toMatchObject({
+    scanned: 2,
+    eligible: 2,
+    scrubbed: 2,
+    has_more: true,
+    done: false,
+    order: "desc",
+  });
+
+  const second = await t.run(async (ctx) =>
+    await scrubRevokedAuthSessionSecretsBatch({
+      ctx,
+      cursor: first.continue_cursor,
+      limit: 2,
+      order: "desc",
+      dryRun: false,
+    }),
+  );
+  expect(second).toMatchObject({
+    scanned: 1,
+    eligible: 1,
+    scrubbed: 1,
+    has_more: false,
+    done: true,
+    order: "desc",
+  });
 });

@@ -27,6 +27,8 @@ assert.match(sessions, /requireAuthSessionMaintenanceSecret/);
 assert.match(sessions, /scrubRevokedAuthSessionSecretsForMaintenance/);
 assert.match(core, /scrubRevokedAuthSessionSecretsBatch[\s\S]*withIndex\("by_revokedAt"/);
 assert.match(core, /paginate\(\{ cursor, numItems: limit \}\)/);
+assert.match(core, /normalizeAuthSessionScrubOrder/);
+assert.match(core, /\.order\(order\)/);
 assert.match(core, /encryptedSecretHex: undefined[\s\S]*refreshLeaseExpiresAt: undefined/);
 assert.match(script, /--execute/);
 assert.match(script, /Mode:.*audit-only/);
@@ -42,5 +44,8 @@ assert.match(scrubScript, /--execute/);
 assert.match(scrubScript, /MAX_BATCHES/);
 assert.match(scrubScript, /scrub pagination made no truthful forward progress/);
 assert.match(scrubScript, /scrubRevokedAuthSessionSecretsForMaintenance/);
+assert.match(scrubScript, /--stop-after-clean-overlap/);
+assert.match(scrubScript, /server order did not match requested order/);
+assert.match(scrubScript, /retrying attempt/);
 
 console.log("auth_session_retention_contract_proof: ok");
