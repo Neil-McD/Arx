@@ -301,3 +301,154 @@ test("the audit reports a General slug collision without creating a channel", as
     expect(await ctx.db.query("communityChannels").collect()).toHaveLength(1);
   });
 });
+
+test("archived custom-channel projections remain canonical historical lineage", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await t.run(async (ctx) => {
+    const ownerId = await ctx.db.insert("users", {
+      authSubject: "channel-audit-archived-owner",
+      displayName: "Channel audit archived owner",
+      handle: "channel-audit-archived-owner",
+      normalizedHandle: "channel-audit-archived-owner",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    const communityId = await ctx.db.insert("communities", {
+      ownerId,
+      slug: "channel-audit-archived",
+      name: "Channel audit archived",
+      visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 1,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("communityChannels", {
+      communityId,
+      systemRole: "general",
+      slug: "general",
+      name: "General",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 0,
+      createdAt: 1_100,
+      updatedAt: 1_100,
+    });
+    const channelId = await ctx.db.insert("communityChannels", {
+      communityId,
+      slug: "past-project",
+      name: "Past project",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "archived",
+      position: 1,
+      createdByUserId: ownerId,
+      createdAt: 1_200,
+      updatedAt: 3_000,
+    });
+    const rootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId,
+      channelId,
+      actorType: "human",
+      actorUserId: ownerId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Archived channel root",
+      replyCount: 1,
+      reactionSummary: [],
+      idempotencyKey: "channel-audit-archived-root",
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    await ctx.db.insert("communityInteractionReplies", {
+      communityId,
+      channelId,
+      rootId,
+      seq: 1,
+      actorType: "human",
+      actorUserId: ownerId,
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Archived channel reply",
+      reactionSummary: [],
+      idempotencyKey: "channel-audit-archived-reply",
+      createdAt: 2_001,
+      updatedAt: 2_001,
+    });
+    const mentionId = await ctx.db.insert("communityInteractionMentions", {
+      communityId,
+      channelId,
+      rootId,
+      mentionKind: "role",
+      mentionedRoleKey: "everybody",
+      notifyState: "pending",
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    const broadcastId = await ctx.db.insert("communityMentionBroadcasts", {
+      communityId,
+      channelId,
+      roleKey: "everybody",
+      actorUserId: ownerId,
+      sourceRootId: rootId,
+      sourceMentionId: mentionId,
+      sourceCreatedAt: 2_000,
+      emailMode: "in_app_only",
+      status: "canceled",
+      processedCount: 0,
+      recipientCount: 0,
+      skippedCount: 0,
+      errorCode: "source_channel_archived",
+      createdAt: 2_000,
+      updatedAt: 3_000,
+    });
+    await ctx.db.patch(mentionId, { sourceBroadcastId: broadcastId });
+    await ctx.db.insert("communityReadCursors", {
+      communityId,
+      channelId,
+      userId: ownerId,
+      streamKind: "chat",
+      seenThroughAt: 2_001,
+      createdAt: 2_100,
+      updatedAt: 2_100,
+    });
+    await ctx.db.insert("communityTypingPresence", {
+      communityId,
+      channelId,
+      userId: ownerId,
+      displayUntil: 2_500,
+      createdAt: 2_100,
+      updatedAt: 2_100,
+    });
+    return { communityId };
+  });
+
+  for (const phase of [
+    "roots",
+    "replies",
+    "mentions",
+    "mention_broadcasts",
+    "read_cursors",
+    "typing_presence",
+  ] as const) {
+    await t.run(async (ctx) => {
+      await expect(
+        auditGeneralChannelMigrationBatchCore({
+          ctx,
+          communityId: fixture.communityId,
+          phase,
+          paginationOpts: { numItems: 100, cursor: null },
+        }),
+      ).resolves.toMatchObject({
+        scanned: 1,
+        already_canonical: 1,
+        unexpected_channel: 0,
+        invalid: 0,
+        migration_blocked: false,
+      });
+    });
+  }
+});

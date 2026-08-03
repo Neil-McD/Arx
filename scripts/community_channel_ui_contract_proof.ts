@@ -32,6 +32,15 @@ const nav = read(navPath);
   "canManageMembersActiveCommunity && onCreateChannel",
   "Channels are visible to every community member.",
   "community-channel-loading-row web-skeleton-row",
+  'aria-haspopup="menu"',
+  'aria-label={`Manage ${channel.name}`}',
+  "Rename channel",
+  "Delete channel",
+  "!channel.is_general",
+  "Existing messages will be retained.",
+  "channelManagementDialogRef",
+  "MODAL_FOCUSABLE_SELECTOR",
+  "trapModalFocus",
 ].forEach((required) => assertIncludes(navPath, nav, required));
 assertNotMatches(
   navPath,
@@ -44,6 +53,8 @@ const gateway = read(gatewayPath);
 [
   ".communityChannels.listCommunityChannels",
   '"communityChannels:createCommunityChannel"',
+  '"communityChannels:renameCommunityChannel"',
+  '"communityChannels:deleteCommunityChannel"',
   "authSubject",
 ].forEach((required) => assertIncludes(gatewayPath, gateway, required));
 
@@ -58,15 +69,44 @@ const channelController = read(channelControllerPath);
   'selection.status === "resolved"',
   "retryChannels",
   "A channel with that name already exists.",
+  "renameCloudCommunityChannel",
+  "deleteCloudCommunityChannel",
+  "manageInFlightChannelIdRef",
+  "onChannelDeleted",
+  "resolveWebCommunityChannelDeleteCompletion(paramsRef, communityId)",
 ].forEach((required) => assertIncludes(channelControllerPath, channelController, required));
 assertNotMatches(
   channelControllerPath,
   channelController,
   /selection\.status\s*!==\s*"not_found"[\s\S]*?setRequestedChannelSlug\(null\)/,
 );
+assertNotMatches(
+  channelControllerPath,
+  channelController,
+  /current\.onChannelDeleted\?\.\(/,
+);
 
 const channelApiPath = "convex/communityChannels.ts";
-assertIncludes(channelApiPath, read(channelApiPath), "listReadableCommunityChannels");
+const channelApi = read(channelApiPath);
+[
+  "listReadableCommunityChannels",
+  "renameCommunityChannel",
+  "deleteCommunityChannel",
+  "requireCommunityManager",
+  "renameActiveCommunityChannel",
+  "archiveActiveCommunityChannel",
+].forEach((required) => assertIncludes(channelApiPath, channelApi, required));
+
+const channelCorePath = "convex/communityChannelCore.ts";
+const channelCore = read(channelCorePath);
+[
+  "requireCommunityChannelLineage",
+  "community_general_channel_immutable",
+  "renameActiveCommunityChannel",
+  "archiveActiveCommunityChannel",
+  'status: "archived"',
+  'if (channel.status === "archived") return channel',
+].forEach((required) => assertIncludes(channelCorePath, channelCore, required));
 
 const appPath = "apps/web/src/App.tsx";
 const app = read(appPath);

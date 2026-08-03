@@ -7,7 +7,7 @@ import {
   getGeneralChannel,
   interactionIsChannelAddressable,
   listGeneralChannelProjectionRows,
-  requireActiveCommunityChannel,
+  requireCommunityChannelLineage,
 } from "./communityChannelCore";
 import {
   normalizeIdValue,
@@ -109,7 +109,7 @@ async function resolveSourceChannel(args: {
   }
   if (!root.channelId) return { state: "phase_order_blocked" };
   try {
-    const channel = await requireActiveCommunityChannel({
+    const channel = await requireCommunityChannelLineage({
       ctx: args.ctx,
       communityId: args.communityId,
       channelId: root.channelId,
@@ -182,7 +182,7 @@ export async function backfillGeneralChannelBatchCore(args: {
       }
       if (root.channelId) {
         try {
-          await requireActiveCommunityChannel({
+          await requireCommunityChannelLineage({
             ctx: args.ctx,
             communityId: args.communityId,
             channelId: root.channelId,
@@ -267,7 +267,7 @@ export async function backfillGeneralChannelBatchCore(args: {
       let expectedChannelId = root.channelId;
       if (expectedChannelId) {
         try {
-          await requireActiveCommunityChannel({
+          await requireCommunityChannelLineage({
             ctx: args.ctx,
             communityId: args.communityId,
             channelId: expectedChannelId,
@@ -368,7 +368,7 @@ export async function backfillGeneralChannelBatchCore(args: {
 
     if (row.channelId && (!channelId || !idsMatch(row.channelId, channelId))) {
       try {
-        await requireActiveCommunityChannel({
+        await requireCommunityChannelLineage({
           ctx: args.ctx,
           communityId: args.communityId,
           channelId: row.channelId,

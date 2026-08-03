@@ -8,7 +8,7 @@ import {
   GENERAL_CHANNEL_SYSTEM_ROLE,
   interactionIsChannelAddressable,
   listGeneralChannelProjectionRows,
-  requireActiveCommunityChannel,
+  requireCommunityChannelLineage,
 } from "./communityChannelCore";
 import { normalizeIdValue } from "./communityCore";
 
@@ -200,7 +200,7 @@ async function resolveSourceChannel(args: {
   }
   if (!root.channelId) return { state: "phase_order_blocked" };
   try {
-    const channel = await requireActiveCommunityChannel({
+    const channel = await requireCommunityChannelLineage({
       ctx: args.ctx,
       communityId: args.communityId,
       channelId: root.channelId,
@@ -310,7 +310,7 @@ export async function auditGeneralChannelMigrationBatchCore(args: {
         }
       } else {
         try {
-          await requireActiveCommunityChannel({
+          await requireCommunityChannelLineage({
             ctx: args.ctx,
             communityId: args.communityId,
             channelId: row.channelId,
@@ -346,7 +346,7 @@ export async function auditGeneralChannelMigrationBatchCore(args: {
       let expectedChannelId = root.channelId ?? channelId;
       if (root.channelId) {
         try {
-          await requireActiveCommunityChannel({
+          await requireCommunityChannelLineage({
             ctx: args.ctx,
             communityId: args.communityId,
             channelId: root.channelId,
@@ -427,7 +427,7 @@ export async function auditGeneralChannelMigrationBatchCore(args: {
 
     if (row.channelId && (!channelId || !idsMatch(row.channelId, channelId))) {
       try {
-        await requireActiveCommunityChannel({
+        await requireCommunityChannelLineage({
           ctx: args.ctx,
           communityId: args.communityId,
           channelId: row.channelId,

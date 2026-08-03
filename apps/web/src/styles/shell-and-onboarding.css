@@ -521,6 +521,110 @@ body {
   flex-direction: column;
 }
 
+.community-channel-row {
+  position: relative;
+}
+
+.community-channel-row.has-open-menu {
+  z-index: 20;
+}
+
+.community-channel-row.can-manage .community-channel-item {
+  padding-right: 40px;
+}
+
+.community-channel-management {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  z-index: 3;
+  transform: translateY(-50%);
+}
+
+.community-channel-menu-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.community-channel-row:hover .community-channel-menu-trigger,
+.community-channel-row:focus-within .community-channel-menu-trigger,
+.community-channel-row.has-open-menu .community-channel-menu-trigger {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.community-channel-menu-trigger:hover:not(:disabled),
+.community-channel-menu-trigger:focus-visible {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-channel-menu-trigger:disabled {
+  cursor: default;
+  opacity: 0.52;
+}
+
+.community-channel-menu {
+  position: absolute;
+  top: calc(100% + 5px);
+  right: 0;
+  width: 184px;
+  padding: 5px;
+  border: 1px solid var(--stroke-divider-accent);
+  border-radius: 10px;
+  background: var(--surface-panel);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.34);
+}
+
+.community-channel-menu button {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 8px 9px;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.community-channel-menu button:hover,
+.community-channel-menu button:focus-visible {
+  background: var(--hover-overlay);
+}
+
+.community-channel-menu button.is-danger,
+.community-channel-modal-actions button.is-danger {
+  color: var(--accent-danger, #ef6a72);
+}
+
+.community-channel-modal-actions button.is-danger {
+  border-color: color-mix(in srgb, var(--accent-danger, #ef6a72) 48%, transparent);
+  background: color-mix(in srgb, var(--accent-danger, #ef6a72) 12%, transparent);
+}
+
+@media (hover: none) {
+  .community-channel-menu-trigger {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
 .community-channel-loading {
   display: grid;
   gap: 2px;

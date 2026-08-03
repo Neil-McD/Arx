@@ -522,6 +522,11 @@ export default function App() {
       );
       if (path) navigateTo(path);
     },
+    onChannelDeleted: (deleted) => {
+      if (String(communityChannelSlug ?? "general").trim().toLowerCase() !== deleted.slug) return;
+      const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat");
+      if (path) navigateTo(path);
+    },
   });
   const {
     channels: activeCommunityChannels,
@@ -538,6 +543,11 @@ export default function App() {
     createChannelError: communityChannelCreateError,
     clearCreateChannelError: clearCommunityChannelCreateError,
     createChannel: handleCreateCommunityChannel,
+    managingChannelId: managingCommunityChannelId,
+    manageChannelError: communityChannelManageError,
+    clearManageChannelError: clearCommunityChannelManageError,
+    renameChannel: handleRenameCommunityChannel,
+    deleteChannel: handleDeleteCommunityChannel,
   } = communityChannels;
   const activeChannelCommunityId = isActiveCommunityChannelReady
     ? activeCommunityId
@@ -2951,9 +2961,14 @@ export default function App() {
     handleCreateCommunityChannel: isVisitorCommunitySurface
       ? () => Promise.resolve(null)
       : handleCreateCommunityChannel,
+    handleRenameCommunityChannel,
+    handleDeleteCommunityChannel,
     isCreatingCommunityChannel,
     communityChannelCreateError,
     clearCommunityChannelCreateError,
+    managingCommunityChannelId,
+    communityChannelManageError,
+    clearCommunityChannelManageError,
     isAtCommunityChannelLimit,
     maxActiveCommunityChannels,
     canViewMembersActiveCommunity: !isVisitorCommunitySurface && canViewMembersActiveCommunity,

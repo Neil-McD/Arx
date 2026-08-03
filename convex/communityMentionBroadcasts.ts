@@ -148,6 +148,16 @@ async function broadcastChannelMatchesRoot(
 }
 
 async function sourceIsStillBroadcastable(ctx: any, broadcast: BroadcastRow): Promise<boolean> {
+  if (broadcast.channelId) {
+    const channel = await ctx.db.get(broadcast.channelId);
+    if (
+      !channel ||
+      channel.status !== "active" ||
+      normalizeIdValue(channel.communityId) !== normalizeIdValue(broadcast.communityId)
+    ) {
+      return false;
+    }
+  }
   const sourceMention = (await ctx.db.get(broadcast.sourceMentionId)) as Record<string, any> | null;
   if (!sourceMention || sourceMention.notifyState !== "pending") return false;
   if (sourceMention.mentionedRoleKey !== EVERYBODY_MENTION_ROLE_KEY) return false;

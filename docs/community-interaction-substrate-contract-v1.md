@@ -125,6 +125,14 @@ transaction, and stores the fixed `all_members`/`members` policy. Entitled
 members may list every active channel. V1 has no per-channel ACL, invite,
 visibility, posting-policy, tier, or role configuration.
 
+Owners and entitled admins may rename or delete custom channels. Rename changes
+only the display name; channel id, slug, position, access policy, and all
+interaction lineage remain stable. Delete is a soft archive: the channel leaves
+active navigation and all new read/write paths, releases one active-channel
+slot, and retains its interaction, mention, broadcast, cursor, typing, evidence,
+and memory lineage. Archive is idempotent so a lost mutation response is safe to
+retry. General is immutable and cannot be renamed or archived.
+
 Every community/public interaction root belongs to one channel and every reply
 inherits its root's channel. Mention rows and `@everybody` broadcast ledgers
 derive that same source channel so attention and recipient fanout never infer
@@ -141,7 +149,7 @@ authorized channels, keeps General on the legacy-compatible `/chat` route, and
 uses `/chat/:channelSlug` for an explicitly selected custom channel.
 
 Public Channels V1 does not add an All aggregation, channel ACLs, private
-channels, pinning, reordering, archive/delete, or channel-specific settings.
+channels, pinning, reordering, restore, permanent deletion, or policy settings.
 
 The public community funnel's messages-today metadata aggregates all active
 all-member channels. It includes only live `community`/`public` rows plus the
@@ -437,6 +445,9 @@ Rules:
 - roots, pagination, subscriptions, optimistic sends, retries, selected drawer state, typing, unread dividers, and read acknowledgements share one community-and-channel boundary
 - channel switching clears transient composer/reply state and cannot expose roots or pending sends from another channel
 - only community managers see Add Channel; the dialog accepts one display name and the server remains authoritative for normalization, authorization, and the ten-channel limit
+- only community managers see custom-channel management; rename preserves the canonical slug and delete archives without deleting interaction history
+- General has no management menu and both server mutations reject General even if called outside the UI
+- archived channels are unavailable to active navigation and new reads/writes while remaining valid historical lineage for audit, backfill, evidence, and memory integrity
 - an unavailable channel slug falls back to General after the authorized channel list resolves
 - post-style and Slack-style presentation remain UI decisions over the same root/reply data
 

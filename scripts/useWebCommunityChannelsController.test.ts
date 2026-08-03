@@ -1,8 +1,9 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import type { CloudCommunityChannel } from "../shared/cloudCommunityChannelsGateway";
 import {
   resolveWebCommunityChannelSelection,
+  resolveWebCommunityChannelDeleteCompletion,
   shouldResetWebCommunityChannelPresentation,
 } from "../apps/web/src/controllers/useWebCommunityChannelsController";
 
@@ -116,5 +117,48 @@ describe("community channel presentation continuity", () => {
       nextCommunityId: "community-id",
       hasSession: false,
     })).toBe(true);
+  });
+});
+
+describe("community channel delete completion", () => {
+  it("uses the latest route callback after an in-flight delete", () => {
+    const staleRouteCallback = vi.fn();
+    const latestRouteCallback = vi.fn();
+    const paramsRef = {
+      current: {
+        activeCommunityId: "community-id" as string | null,
+        onChannelDeleted: staleRouteCallback,
+      },
+    };
+
+    paramsRef.current = {
+      activeCommunityId: "community-id",
+      onChannelDeleted: latestRouteCallback,
+    };
+
+    const completion = resolveWebCommunityChannelDeleteCompletion(
+      paramsRef,
+      "community-id",
+    );
+    completion.onChannelDeleted?.(product);
+
+    expect(completion.shouldApply).toBe(true);
+    expect(latestRouteCallback).toHaveBeenCalledWith(product);
+    expect(staleRouteCallback).not.toHaveBeenCalled();
+  });
+
+  it("ignores a delete completion after leaving its community", () => {
+    const routeCallback = vi.fn();
+    const completion = resolveWebCommunityChannelDeleteCompletion({
+      current: {
+        activeCommunityId: "community-b",
+        onChannelDeleted: routeCallback,
+      },
+    }, "community-a");
+
+    completion.onChannelDeleted?.(product);
+
+    expect(completion).toEqual({ shouldApply: false });
+    expect(routeCallback).not.toHaveBeenCalled();
   });
 });

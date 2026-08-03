@@ -57,7 +57,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
         updatedAt: nowMs,
       });
     }
-    return { communityId };
+    return { communityId, ownerId };
   });
 }
 
@@ -221,4 +221,180 @@ test("channel names are required and bounded before any custom row is written", 
   ).rejects.toThrow("community_channel_name_too_long");
 
   expect(await t.run(async (ctx) => await ctx.db.query("communityChannels").collect())).toEqual([]);
+});
+
+test("managers rename and soft-delete custom channels while General stays immutable", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asAdmin = t.withIdentity({ subject: ADMIN_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+
+  const created = await asOwner.mutation(api.communityChannels.createCommunityChannel, {
+    communityId: fixture.communityId,
+    name: "Product",
+  });
+  const adminCreated = await asAdmin.mutation(api.communityChannels.createCommunityChannel, {
+    communityId: fixture.communityId,
+    name: "Operations",
+  });
+  const catalog = await asOwner.query(api.communityChannels.listCommunityChannels, {
+    communityId: fixture.communityId,
+  });
+  const general = catalog.channels.find((channel) => channel.is_general);
+  if (!general) throw new Error("general_channel_missing");
+
+  await expect(
+    asOwner.mutation(api.communityChannels.renameCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: created.id as any,
+      name: "  Product   Feedback  ",
+    }),
+  ).resolves.toMatchObject({
+    id: created.id,
+    name: "Product Feedback",
+    slug: "product",
+  });
+  await expect(
+    asMember.mutation(api.communityChannels.renameCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: created.id as any,
+      name: "Member rename",
+    }),
+  ).rejects.toThrow("community_forbidden");
+  await expect(
+    asAdmin.mutation(api.communityChannels.renameCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: adminCreated.id as any,
+      name: "Operations Hub",
+    }),
+  ).resolves.toMatchObject({
+    id: adminCreated.id,
+    name: "Operations Hub",
+    slug: "operations",
+  });
+  await expect(
+    asOwner.mutation(api.communityChannels.renameCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: created.id as any,
+      name: "operations hub",
+    }),
+  ).rejects.toThrow("community_channel_name_taken");
+  await expect(
+    asOwner.mutation(api.communityChannels.renameCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: general.id as any,
+      name: "Lobby",
+    }),
+  ).rejects.toThrow("community_general_channel_immutable");
+
+  const otherChannelId = await t.run(async (ctx) => {
+    const otherCommunityId = await ctx.db.insert("communities", {
+      ownerId: fixture.ownerId,
+      slug: "other-managed-channel-catalog",
+      name: "Other managed channel catalog",
+      visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 1,
+      createdAt: 1_750_000_000_000,
+      updatedAt: 1_750_000_000_000,
+    });
+    return await ctx.db.insert("communityChannels", {
+      communityId: otherCommunityId,
+      slug: "other-custom",
+      name: "Other custom",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 1,
+      createdByUserId: fixture.ownerId,
+      createdAt: 1_750_000_000_000,
+      updatedAt: 1_750_000_000_000,
+    });
+  });
+  await expect(
+    asOwner.mutation(api.communityChannels.renameCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: otherChannelId,
+      name: "Cross-community rename",
+    }),
+  ).rejects.toThrow("community_channel_unavailable");
+  await expect(
+    asOwner.mutation(api.communityChannels.deleteCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: general.id as any,
+    }),
+  ).rejects.toThrow("community_general_channel_immutable");
+  await expect(
+    asAdmin.mutation(api.communityChannels.deleteCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: adminCreated.id as any,
+    }),
+  ).resolves.toEqual({
+    deleted_channel_id: adminCreated.id,
+    deleted_channel_slug: "operations",
+  });
+
+  const rootId = await t.run(async (ctx) =>
+    await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.communityId,
+      channelId: created.id as any,
+      actorType: "human",
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Retained after channel deletion",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: "retained-channel-root",
+      createdAt: 1_750_000_000_100,
+      updatedAt: 1_750_000_000_100,
+    }),
+  );
+  await expect(
+    asMember.mutation(api.communityChannels.deleteCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: created.id as any,
+    }),
+  ).rejects.toThrow("community_forbidden");
+  await expect(
+    asOwner.mutation(api.communityChannels.deleteCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: created.id as any,
+    }),
+  ).resolves.toEqual({
+    deleted_channel_id: created.id,
+    deleted_channel_slug: "product",
+  });
+  await expect(
+    asOwner.mutation(api.communityChannels.deleteCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: created.id as any,
+    }),
+  ).resolves.toEqual({
+    deleted_channel_id: created.id,
+    deleted_channel_slug: "product",
+  });
+
+  const afterDelete = await asOwner.query(api.communityChannels.listCommunityChannels, {
+    communityId: fixture.communityId,
+  });
+  expect(afterDelete.channels.map((channel) => channel.id)).not.toContain(created.id);
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(created.id as any)).toMatchObject({
+      status: "archived",
+      name: "Product Feedback",
+      slug: "product",
+    });
+    expect(await ctx.db.get(rootId)).toMatchObject({ channelId: created.id });
+  });
+
+  await expect(
+    asOwner.mutation(api.communityChannels.renameCommunityChannel, {
+      communityId: fixture.communityId,
+      channelId: created.id as any,
+      name: "Archived rename",
+    }),
+  ).rejects.toThrow("community_channel_unavailable");
 });

@@ -196,7 +196,7 @@ export async function ensureGeneralChannel(args: {
   return created;
 }
 
-export async function requireActiveCommunityChannel(args: {
+export async function requireCommunityChannelLineage(args: {
   ctx: { db: any };
   communityId: any;
   channelId: any;
@@ -206,6 +206,18 @@ export async function requireActiveCommunityChannel(args: {
   )) as CommunityChannelLike | null;
   if (!channel) throw new Error("community_channel_not_found");
   assertChannelForCommunity(channel, args.communityId);
+  if (channel.status !== "active" && channel.status !== "archived") {
+    throw new Error("community_channel_invalid");
+  }
+  return channel;
+}
+
+export async function requireActiveCommunityChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  channelId: any;
+}): Promise<CommunityChannelLike> {
+  const channel = await requireCommunityChannelLineage(args);
   if (channel.status !== "active") {
     throw new Error("community_channel_inactive");
   }
@@ -340,10 +352,21 @@ async function resolveAvailableChannelSlug(args: {
   ctx: { db: any };
   communityId: any;
   name: string;
+  nowMs: number;
 }): Promise<string> {
   const base = channelSlugBase(args.name);
-  for (let suffix = 1; suffix <= MAX_ACTIVE_COMMUNITY_CHANNELS + 1; suffix += 1) {
-    const suffixText = suffix === 1 ? "" : `-${suffix}`;
+  const timestampToken = Math.max(0, Math.floor(args.nowMs)).toString(36);
+  const suffixes = [
+    ...Array.from(
+      { length: MAX_ACTIVE_COMMUNITY_CHANNELS + 1 },
+      (_, index) => index === 0 ? "" : `-${index + 1}`,
+    ),
+    ...Array.from(
+      { length: MAX_ACTIVE_COMMUNITY_CHANNELS + 1 },
+      (_, index) => `-${timestampToken}${index === 0 ? "" : `-${index + 1}`}`,
+    ),
+  ];
+  for (const suffixText of suffixes) {
     const candidate = `${base.slice(0, 64 - suffixText.length).replace(/-+$/g, "")}${suffixText}`;
     const collision = await args.ctx.db
       .query("communityChannels" as any)
@@ -386,12 +409,13 @@ export async function createActiveCommunityChannel(args: {
   ) {
     throw new Error("community_channel_name_taken");
   }
+  const nowMs = args.nowMs ?? Date.now();
   const slug = await resolveAvailableChannelSlug({
     ctx: args.ctx,
     communityId: args.communityId,
     name,
+    nowMs,
   });
-  const nowMs = args.nowMs ?? Date.now();
   const position = activeChannels.reduce(
     (maximum, channel) => Math.max(maximum, channel.position),
     -1,
@@ -413,6 +437,87 @@ export async function createActiveCommunityChannel(args: {
     communityId: args.communityId,
     channelId,
   });
+}
+
+async function requireCustomCommunityChannelLineage(args: {
+  ctx: { db: any };
+  communityId: any;
+  channelId: any;
+}): Promise<CommunityChannelLike> {
+  let channel: CommunityChannelLike;
+  try {
+    channel = await requireCommunityChannelLineage(args);
+  } catch {
+    throw new Error("community_channel_unavailable");
+  }
+  if (channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) {
+    throw new Error("community_general_channel_immutable");
+  }
+  return channel;
+}
+
+async function requireMutableCommunityChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  channelId: any;
+}): Promise<CommunityChannelLike> {
+  const channel = await requireCustomCommunityChannelLineage(args);
+  if (channel.status !== "active") {
+    throw new Error("community_channel_unavailable");
+  }
+  return channel;
+}
+
+export async function renameActiveCommunityChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  channelId: any;
+  name: unknown;
+  nowMs?: number;
+}): Promise<CommunityChannelLike> {
+  const channel = await requireMutableCommunityChannel(args);
+  const name = normalizeCommunityChannelName(args.name);
+  const normalizedName = name.toLocaleLowerCase("en-US");
+  const activeChannels = await listActiveCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  if (
+    activeChannels.some(
+      (candidate) =>
+        normalizeIdValue(candidate._id) !== normalizeIdValue(channel._id) &&
+        normalizeCommunityChannelName(candidate.name).toLocaleLowerCase("en-US") ===
+          normalizedName,
+    )
+  ) {
+    throw new Error("community_channel_name_taken");
+  }
+  if (channel.name === name) return channel;
+  await args.ctx.db.patch(channel._id, {
+    name,
+    updatedAt: args.nowMs ?? Date.now(),
+  });
+  return await requireActiveCommunityChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    channelId: channel._id,
+  });
+}
+
+export async function archiveActiveCommunityChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  channelId: any;
+  nowMs?: number;
+}): Promise<CommunityChannelLike> {
+  const channel = await requireCustomCommunityChannelLineage(args);
+  if (channel.status === "archived") return channel;
+  const updatedAt = args.nowMs ?? Date.now();
+  await args.ctx.db.patch(channel._id, {
+    status: "archived",
+    updatedAt,
+  });
+  return { ...channel, status: "archived", updatedAt };
 }
 
 export async function requireChannelForAddressableRoot(args: {

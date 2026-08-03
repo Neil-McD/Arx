@@ -123,6 +123,11 @@ assert.match(
   /sourceIsStillBroadcastable[\s\S]*broadcast\.sourceReplyId[\s\S]*broadcast\.sourceRootId/,
   "old reply-sourced broadcast rows must remain drainable/cleanable while new rows are root-only",
 );
+assert.match(
+  mentionBroadcasts,
+  /sourceIsStillBroadcastable[\s\S]*broadcast\.channelId[\s\S]*channel\.status !== "active"[\s\S]*channel\.communityId/,
+  "archiving a channel must stop any queued @everybody broadcast before recipient fanout",
+);
 
 assert.match(
   mentionBroadcasts,

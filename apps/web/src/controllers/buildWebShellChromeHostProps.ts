@@ -52,9 +52,14 @@ export function buildWebShellChromeHostProps(params: {
   communityChannelIndicators: WebShellChromeHostProps["communityShell"]["communityChannelIndicators"];
   handleSelectCommunityChannel: WebShellChromeHostProps["communityShell"]["onSelectCommunityChannel"];
   handleCreateCommunityChannel: WebShellChromeHostProps["communityShell"]["onCreateCommunityChannel"];
+  handleRenameCommunityChannel: WebShellChromeHostProps["communityShell"]["onRenameCommunityChannel"];
+  handleDeleteCommunityChannel: WebShellChromeHostProps["communityShell"]["onDeleteCommunityChannel"];
   isCreatingCommunityChannel: boolean;
   communityChannelCreateError: string | null;
   clearCommunityChannelCreateError: () => void;
+  managingCommunityChannelId: string | null;
+  communityChannelManageError: string | null;
+  clearCommunityChannelManageError: () => void;
   isAtCommunityChannelLimit: boolean;
   maxActiveCommunityChannels: number;
   canViewMembersActiveCommunity: boolean;
@@ -167,9 +172,14 @@ export function buildWebShellChromeHostProps(params: {
       communityChannelIndicators: params.communityChannelIndicators,
       onSelectCommunityChannel: params.handleSelectCommunityChannel,
       onCreateCommunityChannel: params.handleCreateCommunityChannel,
+      onRenameCommunityChannel: params.handleRenameCommunityChannel,
+      onDeleteCommunityChannel: params.handleDeleteCommunityChannel,
       isCreatingCommunityChannel: params.isCreatingCommunityChannel,
       communityChannelCreateError: params.communityChannelCreateError,
       clearCommunityChannelCreateError: params.clearCommunityChannelCreateError,
+      managingCommunityChannelId: params.managingCommunityChannelId,
+      communityChannelManageError: params.communityChannelManageError,
+      clearCommunityChannelManageError: params.clearCommunityChannelManageError,
       isAtCommunityChannelLimit: params.isAtCommunityChannelLimit,
       maxActiveCommunityChannels: params.maxActiveCommunityChannels,
       canViewMembersActiveCommunity: params.canViewMembersActiveCommunity,

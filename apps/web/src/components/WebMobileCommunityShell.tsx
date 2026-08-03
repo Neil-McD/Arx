@@ -54,9 +54,14 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
             if (created) communityShell.setMobileOverlay(null);
             return created;
           }}
+          onRenameChannel={communityShell.onRenameCommunityChannel}
+          onDeleteChannel={communityShell.onDeleteCommunityChannel}
           isCreatingChannel={communityShell.isCreatingCommunityChannel}
           createChannelError={communityShell.communityChannelCreateError}
           clearCreateChannelError={communityShell.clearCommunityChannelCreateError}
+          managingChannelId={communityShell.managingCommunityChannelId}
+          manageChannelError={communityShell.communityChannelManageError}
+          clearManageChannelError={communityShell.clearCommunityChannelManageError}
           isAtChannelLimit={communityShell.isAtCommunityChannelLimit}
           maxActiveChannels={communityShell.maxActiveCommunityChannels}
           canViewMembersActiveCommunity={communityShell.canViewMembersActiveCommunity}

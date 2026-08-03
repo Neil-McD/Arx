@@ -5,6 +5,8 @@ import { expect, test } from "vitest";
 
 import schema from "./schema";
 import {
+  archiveActiveCommunityChannel,
+  createActiveCommunityChannel,
   ensureGeneralChannel,
   ensureReplyChannelMatchesRoot,
   getGeneralChannel,
@@ -15,6 +17,7 @@ import {
   listReadableCommunityChannels,
   requireActiveCommunityChannel,
   requireChannelForAddressableRoot,
+  requireCommunityChannelLineage,
   requireReadableChannelForAddressableRow,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
@@ -74,6 +77,37 @@ test("General is created exactly once with the immutable system identity", async
       updatedAt: 2_000,
     });
     expect(await ctx.db.query("communityChannels").collect()).toHaveLength(1);
+  });
+});
+
+test("repeated archive and recreate cycles keep channel slugs unique without unbounded scans", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  await t.run(async (ctx) => {
+    const slugs: string[] = [];
+    for (let index = 0; index < 13; index += 1) {
+      const channel = await createActiveCommunityChannel({
+        ctx,
+        communityId: fixture.communityId,
+        createdByUserId: fixture.ownerId,
+        name: "Repeated channel",
+        nowMs: 2_000 + index,
+      });
+      slugs.push(channel.slug);
+      await archiveActiveCommunityChannel({
+        ctx,
+        communityId: fixture.communityId,
+        channelId: channel._id,
+        nowMs: 3_000 + index,
+      });
+    }
+    expect(new Set(slugs).size).toBe(slugs.length);
+    expect(slugs.slice(0, 3)).toEqual([
+      "repeated-channel",
+      "repeated-channel-2",
+      "repeated-channel-3",
+    ]);
+    expect(slugs[11]).toMatch(/^repeated-channel-[a-z0-9]+$/);
   });
 });
 
@@ -322,6 +356,21 @@ test("active channel resolution fails closed across communities and archived row
       createdAt: 2_000,
       updatedAt: 2_000,
     });
+
+    await expect(
+      requireCommunityChannelLineage({
+        ctx,
+        communityId: fixture.communityId,
+        channelId: archivedChannelId,
+      }),
+    ).resolves.toMatchObject({ status: "archived" });
+    await expect(
+      requireCommunityChannelLineage({
+        ctx,
+        communityId: otherCommunityId,
+        channelId: archivedChannelId,
+      }),
+    ).rejects.toThrow("community_channel_invalid");
 
     await expect(
       requireActiveCommunityChannel({

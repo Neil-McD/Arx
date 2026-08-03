@@ -390,7 +390,7 @@ test("duplicate legacy cursor and typing rows remain entirely unmodified", async
   }
 });
 
-test("the General migration accepts canonical custom-channel projections", async () => {
+test("the General migration accepts retained archived-channel projections", async () => {
   const t = convexTest(schema, modules);
   const fixture = await t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", {
@@ -430,7 +430,7 @@ test("the General migration accepts canonical custom-channel projections", async
       name: "Custom",
       accessMode: "all_members",
       postingPolicy: "members",
-      status: "active",
+      status: "archived",
       position: 1,
       createdByUserId: ownerId,
       createdAt: 1_500,

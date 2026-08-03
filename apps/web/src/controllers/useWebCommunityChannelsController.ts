@@ -3,6 +3,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AuthSession } from "../auth";
 import {
   createCloudCommunityChannel,
+  deleteCloudCommunityChannel,
+  renameCloudCommunityChannel,
   subscribeCloudCommunityChannels,
   type CloudCommunityChannel,
 } from "../../../../shared/cloudCommunityChannelsGateway";
@@ -14,6 +16,33 @@ type EnsureAuthSession = (
   source?: string,
   options?: { forceRefresh?: boolean },
 ) => Promise<AuthSession | null>;
+
+type ManageableCommunityChannel = Pick<
+  CloudCommunityChannel,
+  "id" | "slug" | "name" | "is_general"
+>;
+
+type CommunityChannelDeleteCompletionParams = {
+  activeCommunityId: string | null;
+  onChannelDeleted?: (channel: ManageableCommunityChannel) => void;
+};
+
+export function resolveWebCommunityChannelDeleteCompletion(
+  paramsRef: { current: CommunityChannelDeleteCompletionParams },
+  operationCommunityId: string,
+): {
+  shouldApply: boolean;
+  onChannelDeleted?: (channel: ManageableCommunityChannel) => void;
+} {
+  const latest = paramsRef.current;
+  if (latest.activeCommunityId !== operationCommunityId) {
+    return { shouldApply: false };
+  }
+  return {
+    shouldApply: true,
+    onChannelDeleted: latest.onChannelDeleted,
+  };
+}
 
 const GENERAL_FALLBACK_CHANNEL: CloudCommunityChannel = {
   id: "",
@@ -39,8 +68,17 @@ function formatChannelError(error: unknown): string {
   if (message.includes("community_channel_name_taken")) {
     return "A channel with that name already exists.";
   }
-  if (message.includes("community_manager_required")) {
-    return "Only community managers can add channels.";
+  if (
+    message.includes("community_forbidden") ||
+    message.includes("community_manager_required")
+  ) {
+    return "Only community managers can manage channels.";
+  }
+  if (message.includes("community_general_channel_immutable")) {
+    return "General cannot be renamed or deleted.";
+  }
+  if (message.includes("community_channel_unavailable")) {
+    return "This channel is no longer available.";
   }
   if (message.includes("auth_session_required")) {
     return "Sign in again to load channels.";
@@ -136,6 +174,7 @@ export function useWebCommunityChannelsController(params: {
   ensureSession: EnsureAuthSession;
   setRequestedChannelSlug: (slug: string | null) => void;
   onChannelCreated?: (channel: CloudCommunityChannel) => void;
+  onChannelDeleted?: (channel: ManageableCommunityChannel) => void;
 }) {
   const paramsRef = useRef(params);
   paramsRef.current = params;
@@ -148,8 +187,11 @@ export function useWebCommunityChannelsController(params: {
   const [channelsError, setChannelsError] = useState<string | null>(null);
   const [isCreatingChannel, setIsCreatingChannel] = useState(false);
   const [createChannelError, setCreateChannelError] = useState<string | null>(null);
+  const [managingChannelId, setManagingChannelId] = useState<string | null>(null);
+  const [manageChannelError, setManageChannelError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
   const createInFlightCommunityIdRef = useRef<string | null>(null);
+  const manageInFlightChannelIdRef = useRef<string | null>(null);
   const channelScopeCommunityIdRef = useRef<string | null>(null);
   const channelScopeSessionIdentityRef = useRef<string | null>(null);
   const sessionIdentity = resolveAuthPresentationIdentity(params.session);
@@ -169,8 +211,11 @@ export function useWebCommunityChannelsController(params: {
       setMaxActiveChannels(10);
       setHasResolvedChannels(false);
       createInFlightCommunityIdRef.current = null;
+      manageInFlightChannelIdRef.current = null;
       setIsCreatingChannel(false);
       setCreateChannelError(null);
+      setManagingChannelId(null);
+      setManageChannelError(null);
     }
     channelScopeCommunityIdRef.current = sessionIdentity ? nextCommunityId : null;
     channelScopeSessionIdentityRef.current = sessionIdentity;
@@ -294,6 +339,94 @@ export function useWebCommunityChannelsController(params: {
     }
   }, []);
 
+  const renameChannel = useCallback(async (
+    channelIdRaw: string,
+    nameRaw: string,
+  ): Promise<CloudCommunityChannel | null> => {
+    const current = paramsRef.current;
+    const communityId = String(current.activeCommunityId ?? "").trim();
+    const channelId = String(channelIdRaw ?? "").trim();
+    const name = String(nameRaw ?? "").trim().replace(/\s+/g, " ");
+    if (!communityId || !channelId || !name || manageInFlightChannelIdRef.current) return null;
+    manageInFlightChannelIdRef.current = channelId;
+    setManagingChannelId(channelId);
+    setManageChannelError(null);
+    try {
+      const usableSession = await current.ensureSession(current.session ?? undefined);
+      if (!usableSession) throw new Error("auth_session_required");
+      const renamed = await renameCloudCommunityChannel({
+        session: usableSession,
+        communityId,
+        channelId,
+        name,
+      });
+      if (paramsRef.current.activeCommunityId !== communityId) return null;
+      setChannels((existing) => normalizeChannels(
+        communityId,
+        existing.map((channel) => channel.id === renamed.id ? renamed : channel),
+      ));
+      return renamed;
+    } catch (error) {
+      if (paramsRef.current.activeCommunityId === communityId) {
+        setManageChannelError(formatChannelError(error));
+      }
+      return null;
+    } finally {
+      if (manageInFlightChannelIdRef.current === channelId) {
+        manageInFlightChannelIdRef.current = null;
+      }
+      if (paramsRef.current.activeCommunityId === communityId) {
+        setManagingChannelId(null);
+      }
+    }
+  }, []);
+
+  const deleteChannel = useCallback(async (
+    channel: ManageableCommunityChannel,
+  ): Promise<boolean> => {
+    const current = paramsRef.current;
+    const communityId = String(current.activeCommunityId ?? "").trim();
+    const channelId = String(channel.id ?? "").trim();
+    if (!communityId || !channelId || channel.is_general || manageInFlightChannelIdRef.current) {
+      return false;
+    }
+    manageInFlightChannelIdRef.current = channelId;
+    setManagingChannelId(channelId);
+    setManageChannelError(null);
+    try {
+      const usableSession = await current.ensureSession(current.session ?? undefined);
+      if (!usableSession) throw new Error("auth_session_required");
+      const deleted = await deleteCloudCommunityChannel({
+        session: usableSession,
+        communityId,
+        channelId,
+      });
+      if (deleted.deleted_channel_id !== channelId) {
+        throw new Error("community_channel_delete_mismatch");
+      }
+      const completion = resolveWebCommunityChannelDeleteCompletion(paramsRef, communityId);
+      if (!completion.shouldApply) return false;
+      setChannels((existing) => normalizeChannels(
+        communityId,
+        existing.filter((candidate) => candidate.id !== channelId),
+      ));
+      completion.onChannelDeleted?.(channel);
+      return true;
+    } catch (error) {
+      if (paramsRef.current.activeCommunityId === communityId) {
+        setManageChannelError(formatChannelError(error));
+      }
+      return false;
+    } finally {
+      if (manageInFlightChannelIdRef.current === channelId) {
+        manageInFlightChannelIdRef.current = null;
+      }
+      if (paramsRef.current.activeCommunityId === communityId) {
+        setManagingChannelId(null);
+      }
+    }
+  }, []);
+
   const activeChannelId = selection.selectedChannel?.is_general
     ? null
     : String(selection.selectedChannel?.id ?? "").trim() || null;
@@ -320,18 +453,26 @@ export function useWebCommunityChannelsController(params: {
     channelsError: presentedChannelsError,
     isCreatingChannel,
     createChannelError,
+    managingChannelId,
+    manageChannelError,
+    clearManageChannelError: () => setManageChannelError(null),
     clearCreateChannelError: () => setCreateChannelError(null),
     retryChannels,
     createChannel,
+    renameChannel,
+    deleteChannel,
   }), [
     activeChannelId,
     channelsError,
     createChannel,
     createChannelError,
+    deleteChannel,
     hasResolvedChannels,
     isAtChannelLimit,
     isCreatingChannel,
     isLoadingChannels,
+    manageChannelError,
+    managingChannelId,
     maxActiveChannels,
     presentedChannels,
     presentedChannelsError,
@@ -339,6 +480,7 @@ export function useWebCommunityChannelsController(params: {
     requestedPresentationCommunityId,
     sessionIdentity,
     retryChannels,
+    renameChannel,
     selection.selectedChannel,
     selection.selectedChannelSlug,
     selection.status,

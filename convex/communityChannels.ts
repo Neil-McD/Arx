@@ -4,9 +4,11 @@ import {
   type CommunityChannelLike,
   GENERAL_CHANNEL_SYSTEM_ROLE,
   MAX_ACTIVE_COMMUNITY_CHANNELS,
+  archiveActiveCommunityChannel,
   createActiveCommunityChannel,
   getGeneralChannel,
   listReadableCommunityChannels,
+  renameActiveCommunityChannel,
 } from "./communityChannelCore";
 import {
   normalizeIdValue,
@@ -79,6 +81,64 @@ export const createCommunityChannel = mutation({
       createdByUserId: userId,
       name: args.name,
     }));
+  },
+});
+
+export const renameCommunityChannel = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    name: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    return mapCommunityChannel(await renameActiveCommunityChannel({
+      ctx,
+      communityId: args.communityId,
+      channelId: args.channelId,
+      name: args.name,
+    }));
+  },
+});
+
+export const deleteCommunityChannel = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const archived = await archiveActiveCommunityChannel({
+      ctx,
+      communityId: args.communityId,
+      channelId: args.channelId,
+    });
+    return {
+      deleted_channel_id: normalizeIdValue(archived._id),
+      deleted_channel_slug: archived.slug,
+    };
   },
 });
 

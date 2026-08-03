@@ -49,6 +49,36 @@ export async function createCloudCommunityChannel<SessionT>(
   }) as CloudCommunityChannel;
 }
 
+export async function renameCloudCommunityChannel<SessionT>(
+  params: CloudCommunityChannelsGatewayParams<SessionT> & {
+    communityId: string;
+    channelId: string;
+    name: string;
+  },
+): Promise<CloudCommunityChannel> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation("communityChannels:renameCommunityChannel" as any, {
+    authSubject,
+    communityId: params.communityId,
+    channelId: params.channelId,
+    name: params.name,
+  }) as CloudCommunityChannel;
+}
+
+export async function deleteCloudCommunityChannel<SessionT>(
+  params: CloudCommunityChannelsGatewayParams<SessionT> & {
+    communityId: string;
+    channelId: string;
+  },
+): Promise<{ deleted_channel_id: string; deleted_channel_slug: string }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation("communityChannels:deleteCommunityChannel" as any, {
+    authSubject,
+    communityId: params.communityId,
+    channelId: params.channelId,
+  }) as { deleted_channel_id: string; deleted_channel_slug: string };
+}
+
 export function subscribeCloudCommunityChannels(params: {
   liveClient: CloudCommunityChatLiveClient;
   communityId: string;
