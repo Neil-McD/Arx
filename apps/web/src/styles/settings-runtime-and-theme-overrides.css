@@ -10595,13 +10595,6 @@ button.message-citation-chip:hover {
   line-height: 1;
 }
 
-.community-onboarding-concierge-avatar .community-avatar-image {
-  width: 100%;
-  height: 100%;
-  display: block;
-  object-fit: cover;
-}
-
 .community-onboarding-concierge-avatar.is-speaking {
   animation: community-onboarding-concierge-speaking 900ms ease-in-out infinite;
 }

@@ -99,6 +99,7 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
           alt={props.alt}
           decoding="async"
           loading={props.loading}
+          referrerPolicy="no-referrer"
           draggable={false}
           style={{ ...props.imageStyle, ...getCoverFrameImageStyle(layout) }}
         />

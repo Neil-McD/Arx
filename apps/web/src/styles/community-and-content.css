@@ -5838,9 +5838,6 @@
 
 .community-profile-panel-community-avatar-image {
   display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .community-profile-panel-community-avatar-fallback {

@@ -239,13 +239,11 @@ describe("web shell refresh continuity contract", () => {
     expect(polynet).toContain("overview: presentedOverview");
   });
 
-  it("falls back instead of admitting cached broken avatar images", () => {
-    const imageResource = read("shared/useImageResource.ts");
+  it("does not paint avatar images before canonical geometry exists", () => {
     const stableMedia = read("shared/StableFramedMedia.tsx");
 
-    expect(imageResource).toContain("failedResources.add(url)");
-    expect(imageResource).toContain("image.onerror = () => finish(null)");
     expect(stableMedia).toContain("showImage && layout");
+    expect(stableMedia).toContain('referrerPolicy="no-referrer"');
   });
 
   it("normalizes image-resource identity before cache lookup", () => {
