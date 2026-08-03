@@ -2,6 +2,10 @@ import { internalAction, internalMutation, internalQuery, mutation } from "./_ge
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { decryptStoredSecret, encryptSecret } from "./providerConnections";
+import {
+  pruneRevokedAuthSessionsBatch,
+  requireAuthSessionMaintenanceSecret,
+} from "./authSessionMaintenanceCore";
 
 type StoredAuthSessionV1 = {
   accessToken: string;
@@ -1072,37 +1076,19 @@ export const pruneRevokedAuthSessionsForMaintenance = mutation({
     secret: v.string(),
     revokedBeforeMs: v.number(),
     limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const expectedSecret = readEnv("ARX_AUTH_MIGRATION_AUDIT_SECRET");
-    if (!expectedSecret || args.secret !== expectedSecret) {
-      throw new Error("auth_session_maintenance_unauthorized");
-    }
-    const limit =
-      typeof args.limit === "number" && Number.isFinite(args.limit) && args.limit > 0
-        ? Math.floor(args.limit)
-        : 500;
-    const rows = await ctx.db.query("authSessions").collect();
-    let deleted = 0;
-    let remaining = 0;
-
-    for (const row of rows) {
-      const revokedAt =
-        typeof row.revokedAt === "number" && Number.isFinite(row.revokedAt) ? Math.floor(row.revokedAt) : null;
-      if (revokedAt === null || revokedAt > args.revokedBeforeMs) continue;
-      if (deleted >= limit) {
-        remaining += 1;
-        continue;
-      }
-      await ctx.db.delete(row._id);
-      deleted += 1;
-    }
-
-    return {
-      deleted,
-      remaining,
-      done: remaining === 0,
-    };
+    requireAuthSessionMaintenanceSecret({
+      expectedSecret: readEnv("ARX_AUTH_MIGRATION_AUDIT_SECRET"),
+      providedSecret: args.secret,
+    });
+    return await pruneRevokedAuthSessionsBatch({
+      ctx,
+      revokedBeforeMs: args.revokedBeforeMs,
+      limit: args.limit,
+      dryRun: args.dryRun,
+    });
   },
 });
 

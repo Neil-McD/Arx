@@ -45,7 +45,8 @@ export default defineSchema({
   })
     .index("by_sessionId", ["sessionId"])
     .index("by_authSubject", ["authSubject"])
-    .index("by_user", ["userId"]),
+    .index("by_user", ["userId"])
+    .index("by_revokedAt", ["revokedAt"]),
 
   userEntitlements: defineTable({
     userId: v.id("users"),
