@@ -125,11 +125,17 @@ describe("web shell refresh continuity contract", () => {
     const bootstrap = read(
       "apps/web/src/components/WebCommunityInteractionBootstrap.tsx",
     );
+    const responsiveStyles = read(
+      "apps/web/src/styles/settings-runtime-and-theme-overrides.css",
+    );
 
     expect(panel).toMatch(
       /showCanonicalCommunityBootstrap[\s\S]*WebCommunityInteractionBootstrap mainComposer=\{mainCommunityComposer\}/,
     );
     expect(bootstrap).toContain("community-interaction-main-composer");
+    expect(responsiveStyles).toMatch(
+      /\.app-root\.mobile-shell \.community-chat \.community-interaction-bootstrap-composer\s*\{[\s\S]*height:\s*66px;[\s\S]*margin:\s*0 12px calc\(env\(safe-area-inset-bottom, 0px\) \+ var\(--mobile-bottom-rail-height\) \+ 8px\);/,
+    );
     expect(panel).not.toContain("showLegacyInteractionSurface");
     expect(panel).not.toContain(
       "{!showInteractionProjection ? mainCommunityComposer : null}",
