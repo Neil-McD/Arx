@@ -621,14 +621,18 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     restorePreviewComposerSnapshot,
   ]);
 
-  useEffect(() => {
-    if (communityMessageInput.trim()) {
+  const handleMainCommunityComposerUserInput = useCallback((
+    value: string,
+    textarea?: HTMLTextAreaElement,
+  ) => {
+    onCommunityMessageInputChange(value, textarea);
+    if (value.trim()) {
       onCommunityTypingSignal?.(null);
       return;
     }
     onCommunityTypingClear?.(null);
   }, [
-    communityMessageInput,
+    onCommunityMessageInputChange,
     onCommunityTypingClear,
     onCommunityTypingSignal,
   ]);
@@ -845,7 +849,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const mainMention = useMentionAutocomplete({
     candidates: mainMentionCandidates,
     textareaRef: chatInputRef,
-    applyText: (value, textarea) => onCommunityMessageInputChange(value, textarea),
+    applyText: handleMainCommunityComposerUserInput,
     onActiveQueryChange: setMainMentionQuery,
     onCommitMention: (mention) =>
       setCommunityMessageMentions((prev) =>
@@ -1049,17 +1053,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     }
     textarea.style.height = "auto";
     textarea.style.height = `${Math.min(textarea.scrollHeight, 120)}px`;
-  }, []);
-
-  useEffect(() => {
     if (!selectedInteractionRootId) return;
-    if (drawerReplyInput.trim()) {
+    if (value.trim()) {
       onCommunityTypingSignal?.(selectedInteractionRootId);
       return;
     }
     onCommunityTypingClear?.(selectedInteractionRootId);
   }, [
-    drawerReplyInput,
     onCommunityTypingClear,
     onCommunityTypingSignal,
     selectedInteractionRootId,
@@ -1364,7 +1364,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             placeholder={mainCommunityComposerPlaceholder}
             value={communityMessageInput}
             onChange={(event) => {
-              onCommunityMessageInputChange(event.target.value, event.target);
+              handleMainCommunityComposerUserInput(event.target.value, event.target);
               if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.target);
               syncMentionComposerHighlightScroll(event.target);
             }}
@@ -1384,7 +1384,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 handleMentionTokenBackspace({
                   event,
                   mentions: communityMessageMentions,
-                  applyText: onCommunityMessageInputChange,
+                  applyText: handleMainCommunityComposerUserInput,
                   setMentions: setCommunityMessageMentions,
                 })
               ) return;

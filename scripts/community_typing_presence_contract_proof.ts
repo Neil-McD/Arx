@@ -194,13 +194,18 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /communityMessageInput\.trim\(\)[\s\S]*onCommunityTypingSignal\?\.\(null\)[\s\S]*onCommunityTypingClear\?\.\(null\)/,
-  "channel typing must signal on text and clear when empty",
+  /handleMainCommunityComposerUserInput[\s\S]*onCommunityMessageInputChange\(value, textarea\)[\s\S]*onCommunityTypingSignal\?\.\(null\)[\s\S]*onCommunityTypingClear\?\.\(null\)/,
+  "channel typing must be owned by the real user-input path",
 );
 assert.match(
   chatPanel,
-  /drawerReplyInput\.trim\(\)[\s\S]*onCommunityTypingSignal\?\.\(selectedInteractionRootId\)[\s\S]*onCommunityTypingClear\?\.\(selectedInteractionRootId\)/,
-  "thread typing must signal and clear within its exact root scope",
+  /handleDrawerReplyInputChange[\s\S]*onCommunityTypingSignal\?\.\(selectedInteractionRootId\)[\s\S]*onCommunityTypingClear\?\.\(selectedInteractionRootId\)/,
+  "thread typing must be owned by the real user-input path within its exact root scope",
+);
+assert.doesNotMatch(
+  chatPanel,
+  /useEffect\(\(\) => \{[\s\S]{0,240}(?:communityMessageInput|drawerReplyInput)\.trim\(\)[\s\S]{0,240}onCommunityTypingSignal/,
+  "programmatic draft state must not announce typing",
 );
 assert.match(
   chatPanel,
