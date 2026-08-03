@@ -1,4 +1,9 @@
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
+import type {
+  BuilderFundingAction,
+  BuilderFundingLane,
+  BuilderFundingState,
+} from "./builderFunding";
 
 export type CloudFounderBillingCommunityStatus =
   | "operator_comped"
@@ -18,6 +23,9 @@ export type CloudFounderBillingCommunity = {
   community_name: string;
   community_slug: string;
   funding_policy: "legacy_byok_allowed" | "managed_required";
+  funding_lane: BuilderFundingLane;
+  funding_state: BuilderFundingState;
+  allowed_actions: BuilderFundingAction[];
   funding_mode: "managed" | "legacy_byok" | "operator_comp";
   status: CloudFounderBillingCommunityStatus;
   monthly_price_base_units: number;
@@ -51,6 +59,32 @@ function finiteNumber(value: unknown, fallback = 0): number {
   return Number.isFinite(parsed) ? parsed : fallback;
 }
 
+const BUILDER_FUNDING_LANES: BuilderFundingLane[] = [
+  "legacy_choice",
+  "builder_included",
+  "builder",
+];
+const BUILDER_FUNDING_STATES: BuilderFundingState[] = [
+  "legacy_api_available",
+  "legacy_api_active",
+  "legacy_api_suspended",
+  "builder_required",
+  "checkout_pending",
+  "builder_active",
+  "builder_canceling",
+  "builder_inactive",
+  "builder_past_due",
+  "builder_ended",
+  "builder_included",
+];
+const BUILDER_FUNDING_ACTIONS: BuilderFundingAction[] = [
+  "activate_owner_api",
+  "manage_owner_api",
+  "buy_builder",
+  "resume_checkout",
+  "manage_builder",
+];
+
 function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
   if (!value || typeof value !== "object") return null;
   const row = value as Record<string, unknown>;
@@ -73,6 +107,20 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
   const status = allowedStatuses.includes(rawStatus as CloudFounderBillingCommunityStatus)
     ? rawStatus as CloudFounderBillingCommunityStatus
     : "managed_required";
+  const rawFundingLane = nullableString(row.funding_lane);
+  const fundingLane = BUILDER_FUNDING_LANES.includes(rawFundingLane as BuilderFundingLane)
+    ? rawFundingLane as BuilderFundingLane
+    : "builder";
+  const rawFundingState = nullableString(row.funding_state);
+  const fundingState = BUILDER_FUNDING_STATES.includes(rawFundingState as BuilderFundingState)
+    ? rawFundingState as BuilderFundingState
+    : "builder_required";
+  const allowedActions = Array.isArray(row.allowed_actions)
+    ? row.allowed_actions.filter(
+        (action): action is BuilderFundingAction =>
+          BUILDER_FUNDING_ACTIONS.includes(action as BuilderFundingAction),
+      )
+    : [];
   return {
     community_id: communityId,
     community_name: nullableString(row.community_name) ?? "Untitled community",
@@ -80,6 +128,9 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
     funding_policy: row.funding_policy === "legacy_byok_allowed"
       ? "legacy_byok_allowed"
       : "managed_required",
+    funding_lane: fundingLane,
+    funding_state: fundingState,
+    allowed_actions: allowedActions,
     funding_mode:
       row.funding_mode === "operator_comp"
         ? "operator_comp"
