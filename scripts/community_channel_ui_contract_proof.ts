@@ -131,9 +131,15 @@ const app = read(appPath);
   "retryActiveCommunityChannels",
   "selectedChannel: activeCommunityChannel",
   "canManageActiveChannel",
+  "canManageMembersActiveCommunity &&\n          Boolean(activeCommunityChannel)",
   "onRenameChannel: handleRenameCommunityChannel",
   "onDeleteChannel: handleDeleteCommunityChannel",
 ].forEach((required) => assertIncludes(appPath, app, required));
+assertNotMatches(
+  appPath,
+  app,
+  /canManageActiveChannel:[\s\S]*?activeCommunityChannel\s*&&\s*!activeCommunityChannel\.is_general/,
+);
 
 const interactionProjectionPath =
   "apps/web/src/components/WebCommunityInteractionProjection.tsx";

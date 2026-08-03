@@ -2365,7 +2365,7 @@ export default function App() {
           : null,
         canManageActiveChannel:
           canManageMembersActiveCommunity &&
-          Boolean(activeCommunityChannel && !activeCommunityChannel.is_general),
+          Boolean(activeCommunityChannel),
         managingChannelId: managingCommunityChannelId,
         manageChannelError: communityChannelManageError,
         onClearManageChannelError: clearCommunityChannelManageError,
