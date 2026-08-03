@@ -546,6 +546,10 @@ export default function App() {
       : activeCommunityChannelResolutionStatus === "failed"
         ? activeCommunityChannelsError
         : null;
+  const isAwaitingActiveCommunityInteractionScope = Boolean(
+    !activeCommunityChannelResolutionError &&
+    (!isActiveCommunityChannelReady || !activeChannelCommunityId),
+  );
 
   const communityInteractionProjection = useWebCommunityInteractionProjection<MessageAttachment>({
     activeCommunityId: activeChannelCommunityId,
@@ -746,6 +750,7 @@ export default function App() {
     funnelPreviewOnlineFaces,
     activeCommunityOnlineUserIds,
     activeCommunityPresenceSummary,
+    isLoadingActiveCommunityPresence,
     reloadActiveCommunityAccess,
   } = communityAdministration.access;
   canMentionEverybodyRef.current = canManageMembersActiveCommunity;
@@ -2350,6 +2355,7 @@ export default function App() {
           : [],
         isLoadingRoots:
           isActiveCommunityChannelLoading ||
+          isAwaitingActiveCommunityInteractionScope ||
           (isActiveCommunityChannelReady && isLoadingCommunityInteractions),
         isLoadingReplies:
           isActiveCommunityChannelReady && isLoadingCommunityInteractionReplies,
@@ -2398,8 +2404,9 @@ export default function App() {
         typingPresence: isActiveCommunityChannelReady
           ? communityTypingUsers
           : undefined,
-        onlineUserIds: activeCommunityOnlineUserIds,
         presenceSummary: activeCommunityPresenceSummary,
+        isLoadingCommunityPresence: isLoadingActiveCommunityPresence,
+        onlineUserIds: activeCommunityOnlineUserIds,
         communityMemberCount: communityDirectoryMemberCount,
         communityMembers: communityDirectoryMembers,
         communityMembersHasMore: communityDirectoryMembersHasMore,

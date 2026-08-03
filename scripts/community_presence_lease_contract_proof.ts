@@ -241,8 +241,18 @@ assert.doesNotMatch(
 
 assert.match(
   contextPanel,
-  /onlineCountCapped\?: boolean[\s\S]*onlineCountLabel = `\$\{onlineTotal\}\$\{props\.onlineCountCapped \? "\+" : ""\}`/,
+  /onlineCountCapped\?: boolean[\s\S]*onlineCountIsLowerBound[\s\S]*onlineCountLabel = `\$\{onlineTotal\}\$\{onlineCountIsLowerBound \? "\+" : ""\}`/,
   "the member rail must label bounded online counts as lower bounds",
+);
+assert.match(
+  contextPanel,
+  /hasResolvedPresence = props\.onlineUserIds instanceof Set[\s\S]*props\.isLoadingPresence[\s\S]*Recently active/,
+  "the member rail must wait for live presence and degrade without falsely classifying members offline",
+);
+assert.match(
+  controller,
+  /activeCommunityPresenceSummary\.online_user_ids[\s\S]*new Set/,
+  "the live presence summary must remain the only online classification projection",
 );
 assert.match(
   facepile,

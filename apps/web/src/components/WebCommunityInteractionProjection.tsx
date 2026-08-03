@@ -100,7 +100,6 @@ export type WebCommunityInteractionProjectionProps = {
   onRetrySend?: (idempotencyKey: string) => void;
   onDiscardPending?: (idempotencyKey: string) => void;
   typingPresence?: CommunityTypingPresenceBundle;
-  onlineUserIds?: Set<string>;
   chatLastSeenAt?: number | null;
   rootChangeReason?: "initial" | "newer" | "older" | "reset";
   canLoadOlderRoots?: boolean;
@@ -110,6 +109,8 @@ export type WebCommunityInteractionProjectionProps = {
   onMobileReadingModeChange?: (active: boolean) => void;
   onOpenCommunityChatLightbox?: (images: CommunityChatMediaImage[], index: number) => void;
   presenceSummary?: CommunityPresenceSummary | null;
+  isLoadingCommunityPresence?: boolean;
+  onlineUserIds?: Set<string> | null;
   communityMemberCount?: number | null;
   communityMembers?: CommunityRailMember[] | null;
   communityMembersHasMore?: boolean;
@@ -175,6 +176,7 @@ import {
 const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
   "activeCommunityName",
   "presenceSummary",
+  "isLoadingCommunityPresence",
   "onlineUserIds",
   "communityMemberCount",
   "communityMembers",
@@ -289,6 +291,8 @@ const StableCommunityInteractionContextPanelSurface = memo(function StableCommun
           onlineFaces={props.presenceSummary?.online_faces ?? null}
           onlineCount={props.presenceSummary?.online_count ?? null}
           onlineCountCapped={Boolean(props.presenceSummary?.online_count_capped)}
+          isLoadingPresence={props.isLoadingCommunityPresence}
+          onlineUserIds={props.onlineUserIds ?? null}
           memberCount={props.communityMemberCount ?? props.presenceSummary?.member_count ?? null}
           members={props.communityMembers ?? null}
           membersHasMore={props.communityMembersHasMore}
@@ -296,7 +300,6 @@ const StableCommunityInteractionContextPanelSurface = memo(function StableCommun
           isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
           membersLoadError={props.communityMembersLoadError}
           onLoadMoreMembers={props.onLoadMoreCommunityMembers}
-          onlineUserIds={props.onlineUserIds ?? null}
           ownerId={props.communityOwnerId ?? null}
           canManageMembers={canManageCommunityMembers}
           entryPolicy={props.communityEntryPolicy ?? null}

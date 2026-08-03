@@ -39,12 +39,38 @@ describe("web shell refresh continuity contract", () => {
   it("uses shape-stable loading states for unresolved shell resources", () => {
     const nav = read("shared/CommunityNav.tsx");
     const context = read("apps/web/src/components/CommunityContextPanel.tsx");
+    const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+    const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
+    const app = read("apps/web/src/App.tsx");
 
     expect(nav).toContain("community-channel-loading-row web-skeleton-row");
     expect(context).toContain("community-context-memory-preview web-skeleton-block");
     expect(context).toContain("community-context-member-skeleton");
     expect(context).not.toContain("Loading members...");
     expect(context).not.toContain("Loading memory...");
+    expect(facepile).toContain("visibleFaces.length === 0 && props.isLoading");
+    expect(interaction).toMatch(
+      /isLoadingRoots:[\s\S]*!requestedBoundary \|\| !isPresentationScopedToBoundary \|\| isLoadingRoots/,
+    );
+    expect(interaction).toMatch(
+      /const reset = useCallback\(\(isNextBoundaryLoading = false\)[\s\S]*setIsLoadingRoots\(isNextBoundaryLoading\)[\s\S]*boundaryRef\.current = requestedBoundary;[\s\S]*reset\(true\)/,
+    );
+    expect(app).toMatch(
+      /isAwaitingActiveCommunityInteractionScope = Boolean\([\s\S]*!activeCommunityChannelResolutionError &&[\s\S]*!isActiveCommunityChannelReady \|\| !activeChannelCommunityId[\s\S]*isLoadingRoots:[\s\S]*isAwaitingActiveCommunityInteractionScope/,
+    );
+  });
+
+  it("never presents an unresolved presence snapshot as offline truth", () => {
+    const context = read("apps/web/src/components/CommunityContextPanel.tsx");
+    const shell = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
+    const types = read("shared/communityTypes.ts");
+
+    expect(types).toContain("online_user_ids?: string[] | null");
+    expect(shell).toContain('status: "pending" | "resolved" | "failed"');
+    expect(context).toContain("hasResolvedPresence = props.onlineUserIds instanceof Set");
+    expect(context).toContain("props.isLoadingPresence");
+    expect(context).toContain("Recently active");
+    expect(context).not.toMatch(/const online = props\.onlineUserIds \?\? new Set/);
   });
 
   it("keeps the session ensure callback stable across transport-session rotation", () => {

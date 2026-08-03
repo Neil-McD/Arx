@@ -46,6 +46,7 @@ type CommunityContextPanelProps = {
   isLoadingMoreMembers?: boolean;
   membersLoadError?: string | null;
   onLoadMoreMembers?: () => void;
+  isLoadingPresence?: boolean;
   onlineUserIds?: Set<string> | null;
   ownerId?: string | null;
   canManageMembers?: boolean;
@@ -128,7 +129,6 @@ function isCommunityMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean
 // accumulates knowledge (Polynet), and a grouped member roster (Discord).
 export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const sectionMode = props.sectionMode ?? "all";
-  const online = props.onlineUserIds ?? new Set<string>();
   const members = props.members ?? [];
   const pendingJoinRequests = props.pendingJoinRequests ?? [];
   const hasPendingJoinRequestOverflow =
@@ -136,10 +136,22 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const visiblePendingJoinRequests = hasPendingJoinRequestOverflow
     ? pendingJoinRequests.slice(0, PENDING_JOIN_REQUEST_DISPLAY_LIMIT)
     : pendingJoinRequests;
+  const hasResolvedPresence = props.onlineUserIds instanceof Set;
+  const onlineMembers = hasResolvedPresence
+    ? members.filter((member) => props.onlineUserIds?.has(member.user_id))
+    : [];
+  const offlineMembers = hasResolvedPresence
+    ? members.filter((member) => !props.onlineUserIds?.has(member.user_id))
+    : [];
+  const recentlyActiveMembers = !props.isLoadingPresence && !hasResolvedPresence
+    ? members
+    : [];
   const onlineTotal = typeof props.onlineCount === "number"
     ? props.onlineCount
-    : (props.onlineFaces ?? []).length;
-  const onlineCountLabel = `${onlineTotal}${props.onlineCountCapped ? "+" : ""}`;
+    : onlineMembers.length;
+  const onlineCountIsLowerBound =
+    props.onlineCountCapped || (props.onlineCount == null && Boolean(props.membersHasMore));
+  const onlineCountLabel = `${onlineTotal}${onlineCountIsLowerBound ? "+" : ""}`;
   const knownMemberCount = typeof props.memberCount === "number" ? props.memberCount : null;
   const loadedMemberCount = members.length;
   const memberCountLabel = knownMemberCount !== null
@@ -160,12 +172,11 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     ? formatMemoryLabel(memoryOverview.agent.activity_state || memoryOverview.agent.status)
     : null;
 
-  const onlineMembers = members.filter((member) => online.has(member.user_id));
-  const offlineMembers = members.filter((member) => !online.has(member.user_id));
-  const offlineTotal = knownMemberCount !== null
+  const hasExactOnlineTotal = typeof props.onlineCount === "number" && !props.onlineCountCapped;
+  const offlineTotal = knownMemberCount !== null && hasExactOnlineTotal
     ? Math.max(0, knownMemberCount - onlineTotal)
     : offlineMembers.length;
-  const offlineCountLabel = props.onlineCountCapped
+  const offlineCountLabel = !hasExactOnlineTotal
     ? `${offlineMembers.length}${props.membersHasMore || loadedMemberCount < (knownMemberCount ?? 0) ? "+" : ""}`
     : knownMemberCount !== null
       ? String(offlineTotal)
@@ -329,7 +340,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
 
   const renderMember = (member: CommunityRailMember, isAdmin = false) => {
     const name = (member.display_name ?? "").trim() || props.displayName(member.user_id);
-    const isOnline = online.has(member.user_id);
+    const isOnline = Boolean(props.onlineUserIds?.has(member.user_id));
     const activityLabel = formatMemberActivityLabel(
       member.last_active_at,
       isOnline,
@@ -469,6 +480,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         faces={props.onlineFaces}
         onlineCount={props.onlineCount}
         onlineCountCapped={props.onlineCountCapped}
+        isLoading={props.isLoadingPresence}
       />
 
       {sectionMode === "all" ? <div className="community-context-memory">
@@ -673,13 +685,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <span>See who&apos;s here when you&apos;re in.</span>
           </button>
         ) : null}
-        {!lockedMembers && onlineTotal > 0 ? (
+        {!lockedMembers && hasResolvedPresence && onlineTotal > 0 ? (
           <>
             <div className="community-context-section">Online — {onlineCountLabel}</div>
             {onlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {!lockedMembers && (
+        {!lockedMembers && hasResolvedPresence && (
           offlineMembers.length > 0 || (!props.onlineCountCapped && offlineTotal > 0)
         ) ? (
           <>
@@ -687,9 +699,19 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             {offlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {!lockedMembers && loadedMemberCount === 0 && props.isLoadingMembers ? (
+        {!lockedMembers && recentlyActiveMembers.length > 0 ? (
+          <>
+            <div className="community-context-section">Recently active</div>
+            {recentlyActiveMembers.map((member) =>
+              renderMember(member, isAdminRole(member, props.ownerId))
+            )}
+          </>
+        ) : null}
+        {!lockedMembers && (
+          props.isLoadingPresence || (loadedMemberCount === 0 && props.isLoadingMembers)
+        ) ? (
           <div className="community-context-members-loading" aria-label="Loading members">
-            {Array.from({ length: 6 }).map((_, index) => (
+            {Array.from({ length: Math.max(2, Math.min(6, loadedMemberCount || 6)) }).map((_, index) => (
               <div className="community-context-member community-context-member-skeleton" key={index}>
                 <span className="community-context-member-avatar web-skeleton-block" />
                 <span
@@ -701,7 +723,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             ))}
           </div>
         ) : null}
-        {!lockedMembers && shouldShowMembersFooter ? (
+        {!lockedMembers && !props.isLoadingPresence && shouldShowMembersFooter ? (
           <div
             ref={props.membersHasMore ? loadMoreSentinelRef : undefined}
             className="community-context-members-footer"

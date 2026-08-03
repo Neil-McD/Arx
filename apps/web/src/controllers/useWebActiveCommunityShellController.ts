@@ -30,6 +30,7 @@ type ScopedPresenceSummary = {
   communityId: string;
   sessionIdentity: string;
   summary: CommunityPresenceSummary | null;
+  status: "pending" | "resolved" | "failed";
 };
 
 export function useWebActiveCommunityShellController<SessionT>(params: {
@@ -131,6 +132,12 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     let cancelled = false;
     let inFlight = false;
     const communityId = String(params.activeCommunityId ?? "").trim();
+    setActiveCommunityPresenceSummaryState({
+      communityId,
+      sessionIdentity,
+      summary: null,
+      status: "pending",
+    });
     const tick = async () => {
       if (cancelled || inFlight || document.visibilityState !== "visible") return;
       inFlight = true;
@@ -146,11 +153,22 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
             communityId,
             sessionIdentity,
             summary: summary ?? null,
+            status: "resolved",
           }));
         }
       } catch (error) {
         if (!cancelled) {
           console.warn("Failed to refresh community presence:", error);
+          setActiveCommunityPresenceSummaryState((previous) => {
+            if (
+              previous?.communityId !== communityId ||
+              previous.sessionIdentity !== sessionIdentity ||
+              previous.status === "resolved"
+            ) {
+              return previous;
+            }
+            return { communityId, sessionIdentity, summary: null, status: "failed" };
+          });
         }
       } finally {
         inFlight = false;
@@ -219,6 +237,15 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     if (activeCommunityPresenceSummaryState.sessionIdentity !== sessionIdentity) return null;
     return activeCommunityPresenceSummaryState.summary;
   }, [activeCommunityPresenceSummaryState, params.activeCommunityId, sessionIdentity]);
+  const isLoadingActiveCommunityPresence = Boolean(
+    sessionIdentity &&
+    params.activeCommunityId &&
+    (
+      activeCommunityPresenceSummaryState?.communityId !== params.activeCommunityId ||
+      activeCommunityPresenceSummaryState.sessionIdentity !== sessionIdentity ||
+      activeCommunityPresenceSummaryState.status === "pending"
+    ),
+  );
 
   const communityAccessCapabilities = useMemo(
     () => deriveCommunityAccessCapabilities(activeCommunityAccess),
@@ -280,9 +307,10 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
   const funnelPreviewOnlineFaces = communitySocialSummary.onlineFaces;
 
   const activeCommunityOnlineUserIds = useMemo(() => {
-    const ids = activeCommunityPresenceSummary?.online_user_ids;
+    if (!activeCommunityPresenceSummary) return null;
+    const ids = activeCommunityPresenceSummary.online_user_ids;
     return new Set(Array.isArray(ids) ? ids.filter((id): id is string => Boolean(id)) : []);
-  }, [activeCommunityPresenceSummary?.online_user_ids]);
+  }, [activeCommunityPresenceSummary]);
 
   return {
     activeCommunityAccess,
@@ -290,6 +318,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     communityAccessLoadError,
     retryActiveCommunityAccess,
     activeCommunityPresenceSummary,
+    isLoadingActiveCommunityPresence,
     communitySocialSummary,
     reloadActiveCommunityAccess,
     communityAccessCapabilities,

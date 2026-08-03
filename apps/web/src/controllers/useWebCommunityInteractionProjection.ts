@@ -332,7 +332,7 @@ export function useWebCommunityInteractionProjection<
     });
   }, [repliesByRootId, roots]);
 
-  const reset = useCallback(() => {
+  const reset = useCallback((isNextBoundaryLoading = false) => {
     rootsRequestIdRef.current += 1;
     repliesRequestIdRef.current = {};
     setRoots([]);
@@ -340,7 +340,7 @@ export function useWebCommunityInteractionProjection<
     setIsLoadingOlderRoots(false);
     setRootChangeReason("reset");
     setError(null);
-    setIsLoadingRoots(false);
+    setIsLoadingRoots(isNextBoundaryLoading);
     setSelectedRootId(null);
     setRepliesByRootId({});
     setRepliesErrorByRootId({});
@@ -784,7 +784,7 @@ export function useWebCommunityInteractionProjection<
     }
     if (boundaryRef.current !== requestedBoundary) {
       boundaryRef.current = requestedBoundary;
-      reset();
+      reset(true);
     }
   }, [activeCommunityId, requestedBoundary, reset]);
 
@@ -847,8 +847,8 @@ export function useWebCommunityInteractionProjection<
     visibleRoots,
     selectedReplies,
     selectedRootId: presentedSelectedRootId,
-    isLoadingRoots: Boolean(requestedBoundary) &&
-      (!isPresentationScopedToBoundary || isLoadingRoots),
+    isLoadingRoots:
+      !requestedBoundary || !isPresentationScopedToBoundary || isLoadingRoots,
     isLoadingSelectedReplies:
       presentedSelectedRootId !== null && loadingRepliesRootId === presentedSelectedRootId,
     error: isPresentationScopedToBoundary ? error : null,
