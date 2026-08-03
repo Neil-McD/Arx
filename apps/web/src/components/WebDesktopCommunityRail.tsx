@@ -85,6 +85,8 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
                 title={community.name}
               >
                 <CommunityAvatar
+                  communityId={community.id}
+                  visualIdentity={community.visual_identity}
                   className="community-rail-avatar"
                   imageUrl={community.avatar_url}
                   focusX={community.avatar_focus_x}

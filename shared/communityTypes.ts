@@ -1,5 +1,6 @@
 import type { AccountSetupStatus } from "./accountSetup";
 import type { SocialProfileLinks } from "./socialProfileLinks";
+import type { CommunityVisualIdentity } from "./communityVisualIdentity";
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityBillingPeriod = "monthly" | "annual";
@@ -50,6 +51,8 @@ export type CommunityShellCommunity = {
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
+  branding_revision?: number | null;
+  visual_identity?: CommunityVisualIdentity | null;
 };
 
 export type PublicPlanSummary = {
@@ -69,6 +72,7 @@ export type CommunityFunnelConfig = {
 };
 
 export type DiscoverCommunitySnapshot = {
+  id?: string | null;
   slug: string;
   name: string;
   one_liner: string | null;
@@ -88,6 +92,8 @@ export type DiscoverCommunitySnapshot = {
   active_plan?: PublicPlanSummary | null;
   funnel?: CommunityFunnelConfig | null;
   member_count?: number | null;
+  branding_revision?: number | null;
+  visual_identity?: CommunityVisualIdentity | null;
 };
 
 export type CommunityAvatarSummary = {
@@ -98,6 +104,8 @@ export type CommunityAvatarSummary = {
   avatar_focus_x: number;
   avatar_focus_y: number;
   avatar_zoom: number;
+  branding_revision?: number | null;
+  visual_identity?: CommunityVisualIdentity | null;
 };
 
 export type ProfileCommunityContext = {

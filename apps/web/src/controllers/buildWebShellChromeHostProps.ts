@@ -112,6 +112,9 @@ export function buildWebShellChromeHostProps(params: {
         !params.showMobileSettingsShell &&
         !params.mobileThreadPageOpen,
       hasActiveCommunity: Boolean(params.activeCommunity),
+      activeCommunityId: params.activeCommunity?.id ?? null,
+      activeCommunityVisualIdentity:
+        params.activeCommunity?.visual_identity ?? null,
       activeCommunityName: params.activeCommunity?.name ?? null,
       activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
       activeCommunityAvatarFocusX:

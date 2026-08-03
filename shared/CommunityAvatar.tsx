@@ -1,9 +1,13 @@
 import type { CSSProperties, DragEventHandler, ReactNode } from "react";
 import { communityInitials } from "./messageMetadataUi";
 import { StableAvatar } from "./StableAvatar";
+import { useCommunityVisualIdentity } from "./CommunityVisualIdentityRegistry";
+import type { CommunityVisualIdentity } from "./communityVisualIdentity";
 import type { ImageFetchPriority } from "./useImageResource";
 
 type CommunityAvatarProps = {
+  communityId?: string | null;
+  visualIdentity?: CommunityVisualIdentity | null;
   name: string;
   imageUrl?: string | null;
   focusX?: number | null;
@@ -27,20 +31,25 @@ type CommunityAvatarProps = {
 };
 
 export function CommunityAvatar(props: CommunityAvatarProps) {
+  const identity = useCommunityVisualIdentity(
+    props.communityId,
+    props.visualIdentity,
+  );
+  const name = identity?.name ?? props.name;
   return (
     <StableAvatar
       className={props.className}
       readyClassName={props.readyClassName}
       fallbackClassName={props.fallbackClassName}
       imageClassName={props.imageClassName ?? "community-avatar-image"}
-      imageUrl={props.imageUrl}
+      imageUrl={identity?.avatar.url ?? props.imageUrl}
       imageFrame={{
-        focusX: props.focusX,
-        focusY: props.focusY,
-        zoom: props.zoom,
+        focusX: identity?.avatar.focus_x ?? props.focusX,
+        focusY: identity?.avatar.focus_y ?? props.focusY,
+        zoom: identity?.avatar.zoom ?? props.zoom,
       }}
-      alt={props.alt ?? props.name}
-      fallback={props.fallback ?? communityInitials(props.name)}
+      alt={props.alt ?? name}
+      fallback={props.fallback ?? communityInitials(name)}
       style={props.style}
       fallbackStyle={props.fallbackStyle}
       title={props.title}

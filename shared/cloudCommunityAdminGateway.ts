@@ -84,6 +84,8 @@ export type CloudCommunitySettingsSaveResult = {
   banner_zoom?: number | null;
   visibility: string;
   updated_at: string;
+  branding_revision?: number | null;
+  visual_identity?: import("./communityVisualIdentity").CommunityVisualIdentity | null;
 };
 
 export type CloudCommunityOneLinerSaveResult = {

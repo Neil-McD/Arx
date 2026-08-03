@@ -30,6 +30,7 @@ import {
   resolveCommunityMembershipEntitlementState,
   resolveCommunityEntryPolicy,
   resolveCommunityBrandingFields,
+  buildCommunityVisualIdentity,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   syncCommunityActiveMemberCount,
@@ -858,6 +859,8 @@ export const listCommunityMemberships = query({
           (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ??
           String(community.ownerId),
         created_at: toIsoString(community.createdAt),
+        branding_revision: community.brandingRevision ?? community.updatedAt,
+        visual_identity: buildCommunityVisualIdentity(community, branding),
       };
       return selectMode === "minimal"
         ? base

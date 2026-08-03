@@ -7,6 +7,7 @@ import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
+import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
 
 type ErrorBoundaryState = {
   error: Error | null;
@@ -365,7 +366,9 @@ document.documentElement.setAttribute("data-polynet-build-id", APP_BUILD_ID);
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>
     <ErrorBoundary>
-      {rootView}
+      <CommunityVisualIdentityRegistryProvider>
+        {rootView}
+      </CommunityVisualIdentityRegistryProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

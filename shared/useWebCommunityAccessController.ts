@@ -11,6 +11,11 @@ import {
   createProfileHydrationRequestRegistry,
   finishProfileHydrationRequest,
 } from "./profileHydrationRequestRegistry";
+import {
+  coerceCommunityVisualIdentity,
+  type CommunityVisualIdentity,
+  type CommunityVisualIdentityFields,
+} from "./communityVisualIdentity";
 
 type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfileT> = {
   toCanonicalCommunityVisibility: (
@@ -27,6 +32,7 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfile
 
   setProfilesByUserId: Dispatch<SetStateAction<Record<string, UserProfileT>>>;
   ensureSession?: EnsureSessionFn<SessionT>;
+  onVisualIdentitiesLoaded?: (identities: CommunityVisualIdentity[]) => void;
 };
 
 type LoadUserProfilesOptions = {
@@ -35,7 +41,7 @@ type LoadUserProfilesOptions = {
 
 export function useWebCommunityAccessController<
   SessionT,
-  CommunityRecordT extends { id: string; slug?: string | null; visibility: string },
+  CommunityRecordT extends CommunityVisualIdentityFields & { id: string; slug?: string | null; visibility: string },
   UserProfileT extends { user_id: string },
 >(args: UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfileT>) {
   const argsRef = useRef(args);
@@ -85,6 +91,14 @@ export function useWebCommunityAccessController<
         }));
       if (!isCurrentRequest()) return;
       const latest = argsRef.current;
+      latest.onVisualIdentitiesLoaded?.(
+        list
+          .map((community) => coerceCommunityVisualIdentity(
+            community.visual_identity,
+            community,
+          ))
+          .filter((identity): identity is CommunityVisualIdentity => Boolean(identity)),
+      );
       latest.setCommunities((previous) => reuseEquivalentValue(previous, list));
       if (!latest.activeCommunitySlug) {
         const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;

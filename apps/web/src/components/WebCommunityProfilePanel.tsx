@@ -40,6 +40,8 @@ function WebCommunityProfileCommunityStrip(props: {
       {visibleCommunities.map((community) => (
         <CommunityAvatar
           key={community.id}
+          communityId={community.id}
+          visualIdentity={community.visual_identity}
           className="community-profile-panel-community-avatar"
           imageClassName="community-profile-panel-community-avatar-image"
           fallbackClassName="community-profile-panel-community-avatar-fallback"

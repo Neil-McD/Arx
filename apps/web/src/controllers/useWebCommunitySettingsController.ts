@@ -7,6 +7,10 @@ import { useCommunitySettingsGovernanceController } from "../../../../shared/use
 import type { WebCommunityRecord } from "../webAppContracts";
 import type { useWebCommunityAdminUiController } from "./useWebCommunityAdminUiController";
 import type { useWebCommunitySettingsUiController } from "./useWebCommunitySettingsUiController";
+import {
+  coerceCommunityVisualIdentity,
+  type CommunityVisualIdentity,
+} from "../../../../shared/communityVisualIdentity";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -30,6 +34,7 @@ export function useWebCommunitySettingsController(params: {
   setCommunities: (
     updater: (current: WebCommunityRecord[]) => WebCommunityRecord[],
   ) => void;
+  onVisualIdentitySaved?: (identity: CommunityVisualIdentity) => void;
 }) {
   const { adminUi, settingsUi } = params;
   const { syncCommunitySettingsSelection } =
@@ -140,6 +145,11 @@ export function useWebCommunitySettingsController(params: {
     setCommunitySettingsError: settingsUi.setCommunitySettingsError,
     setIsSavingCommunitySettings: settingsUi.setIsSavingCommunitySettings,
     onSaveCommunitySettingsSuccess: (result) => {
+      const visualIdentity = coerceCommunityVisualIdentity(
+        result.visual_identity,
+        { id: result.community_id, ...result },
+      );
+      if (visualIdentity) params.onVisualIdentitySaved?.(visualIdentity);
       params.setCommunities((current) =>
         current.map((community) =>
           community.id === result.community_id
@@ -164,6 +174,10 @@ export function useWebCommunitySettingsController(params: {
                   "unlisted",
                 ),
                 updated_at: result.updated_at,
+                branding_revision:
+                  result.branding_revision ?? community.branding_revision ?? null,
+                visual_identity:
+                  visualIdentity ?? community.visual_identity ?? null,
               }
             : community,
         ),

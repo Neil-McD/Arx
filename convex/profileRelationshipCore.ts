@@ -2,6 +2,7 @@ import {
   communityMembershipRowIsActive,
   requireCommunityChatAccess,
   resolveCommunityBrandingFields,
+  buildCommunityVisualIdentity,
   type CommunityLike,
   type CommunityMembershipLike,
 } from "./communityCore";
@@ -73,6 +74,8 @@ async function mapCommunityAvatarSummary(
     avatar_focus_x: branding.avatar_focus_x,
     avatar_focus_y: branding.avatar_focus_y,
     avatar_zoom: branding.avatar_zoom,
+    branding_revision: community.brandingRevision ?? community.updatedAt,
+    visual_identity: buildCommunityVisualIdentity(community, branding),
   };
 }
 

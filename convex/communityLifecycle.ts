@@ -19,6 +19,8 @@ import {
   requireCommunityOwner,
   resolveCommunityEntryPolicy,
   resolveCommunityBrandingFields,
+  buildCommunityVisualIdentity,
+  nextCommunityBrandingRevision,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
@@ -68,6 +70,8 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   entry_policy: string;
   created_at: string;
   updated_at: string;
+  branding_revision: number;
+  visual_identity: ReturnType<typeof buildCommunityVisualIdentity>;
 }> {
   const branding = await resolveCommunityBrandingFields(ctx, row);
   const entryPolicy = resolveCommunityEntryPolicy(row);
@@ -93,6 +97,8 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
     entry_policy: entryPolicy,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
+    branding_revision: row.brandingRevision ?? row.updatedAt,
+    visual_identity: buildCommunityVisualIdentity(row, branding),
   };
 }
 
@@ -546,6 +552,7 @@ export const createCommunity = mutation({
       bannerFocusX: normalizeBannerFocus(args.bannerFocusX),
       bannerFocusY: normalizeBannerFocus(args.bannerFocusY),
       bannerZoom: normalizeBannerZoom(args.bannerZoom),
+      brandingRevision: nowMs,
       visibility: requestedVisibility,
       inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
       entryPolicy,
@@ -662,6 +669,11 @@ export const saveCommunitySettings = mutation({
       bannerZoom: settingsState.nextBannerZoom,
       visibility: settingsState.nextVisibility,
       entryPolicy: settingsState.nextEntryPolicy,
+      ...(
+        settingsState.identityChanged || settingsState.brandingChanged
+          ? { brandingRevision: nextCommunityBrandingRevision(community) }
+          : null
+      ),
       updatedAt: nowMs,
     });
 
@@ -700,6 +712,8 @@ export const saveCommunitySettings = mutation({
       banner_zoom: branding.banner_zoom,
       visibility: updated.visibility,
       updated_at: toIsoString(updated.updatedAt),
+      branding_revision: updated.brandingRevision ?? updated.updatedAt,
+      visual_identity: buildCommunityVisualIdentity(updated, branding),
     };
   },
 });
@@ -922,6 +936,11 @@ export const saveCommunityLaunchProfile = mutation({
       bannerFocusY: nextBannerFocusY,
       bannerZoom: nextBannerZoom,
       visibility: nextVisibility,
+      ...(
+        identityChanged || brandingChanged
+          ? { brandingRevision: nextCommunityBrandingRevision(community) }
+          : null
+      ),
       updatedAt: nowMs,
     });
 

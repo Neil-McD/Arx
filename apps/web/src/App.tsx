@@ -205,6 +205,7 @@ import {
   clearSourceIntegrationOAuthFinalizeSessionGuard,
   WEB_IMAGE_DATA_URL_CHAR_LIMIT,
 } from "./webAppRuntime";
+import { useWebCommunityVisualIdentityRegistryLifecycle } from "./controllers/useWebCommunityVisualIdentityRegistryLifecycle";
 
 const WebStandalonePublicRouteShell = lazy(() =>
   import("./components/WebStandalonePublicRouteShell").then((module) => ({
@@ -277,6 +278,8 @@ export default function App() {
     hasOperatorAccess,
   } = authenticatedIdentity;
   const profileStorageUserId = canonicalSessionUserId;
+  const { upsertCommunityVisualIdentities } =
+    useWebCommunityVisualIdentityRegistryLifecycle(canonicalSessionUserId);
   const shellState = useWebShellState();
   const {
     publicRoute,
@@ -439,6 +442,7 @@ export default function App() {
     setCommunities,
     applyCommunityShellState,
     setProfilesByUserId,
+    onVisualIdentitiesLoaded: upsertCommunityVisualIdentities,
   });
   const shellNavigation = useWebShellNavigationController({
     session,
@@ -1096,6 +1100,9 @@ export default function App() {
     session,
     settingsUi: communitySettingsUi,
     setCommunities,
+    onVisualIdentitySaved: (identity) => {
+      upsertCommunityVisualIdentities([identity]);
+    },
   });
   const {
     syncCommunitySettingsSelection,
@@ -1141,6 +1148,7 @@ export default function App() {
     loadDiscoverCommunities,
   } = useWebDiscoverController({
     toCanonicalCommunityVisibility,
+    onVisualIdentitiesLoaded: upsertCommunityVisualIdentities,
   });
 
   const { appToast, showAppToastMessage } = useWebToastController();

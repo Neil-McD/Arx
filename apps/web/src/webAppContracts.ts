@@ -3,6 +3,7 @@ import type {
   UserProfile,
 } from "../../../shared/communityTypes";
 import type { NavSnapshotBase } from "../../../shared/navSnapshot";
+import type { CommunityVisualIdentity } from "../../../shared/communityVisualIdentity";
 
 export type WebCommunityRecord = {
   id: string;
@@ -25,9 +26,12 @@ export type WebCommunityRecord = {
   owner_id: string;
   created_at: string;
   updated_at: string;
+  branding_revision?: number | null;
+  visual_identity?: CommunityVisualIdentity | null;
 };
 
 export type WebPublicCommunityRecord = {
+  id?: string;
   slug: string;
   name: string;
   one_liner: string | null;
@@ -57,6 +61,8 @@ export type WebPublicCommunityRecord = {
     avatar_focus_y?: number | null;
     avatar_zoom?: number | null;
   }> | null;
+  branding_revision?: number | null;
+  visual_identity?: CommunityVisualIdentity | null;
 };
 
 export type WebCommunityVoiceTranscriptTarget = {

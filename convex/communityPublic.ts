@@ -25,6 +25,7 @@ import {
   requireCommunityUserNotBlocked,
   resolveCommunityAccessBundle,
   resolveCommunityBrandingFields,
+  buildCommunityVisualIdentity,
   resolveCommunityEntryPolicy,
   resolvePublicUserId,
   resolveUserIdForAuthenticatedRequest,
@@ -592,6 +593,7 @@ export const listPublicDiscoverCommunities = query({
         const branding = await resolveCommunityBrandingFields(ctx, community);
         const entryPolicy = resolveCommunityEntryPolicy(community);
         return {
+          id: String(community._id),
           slug: community.slug,
           name: community.name,
           one_liner: community.oneLiner ?? null,
@@ -608,6 +610,8 @@ export const listPublicDiscoverCommunities = query({
           entry_policy: entryPolicy,
           created_at: toIsoString(community.createdAt),
           updated_at: toIsoString(community.updatedAt),
+          branding_revision: community.brandingRevision ?? community.updatedAt,
+          visual_identity: buildCommunityVisualIdentity(community, branding),
           active_plan: pickPreferredActivePlan(mappedPlans),
         };
       }),

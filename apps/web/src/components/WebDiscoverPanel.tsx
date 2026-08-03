@@ -22,6 +22,8 @@ function buildDiscoverCommunityCardProps(args: {
   const { community } = args;
   return {
     name: community.name,
+    communityId: community.id,
+    visualIdentity: community.visual_identity,
     slug: community.slug,
     oneLiner: community.one_liner ?? "",
     avatarUrl: community.avatar_url,

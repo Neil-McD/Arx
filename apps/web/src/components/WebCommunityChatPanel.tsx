@@ -53,6 +53,11 @@ import {
   type MentionCandidate,
 } from "./communityMentionAutocomplete";
 import type { CloudCommunityAgentServeIssue } from "../../../../shared/cloudCommunityAgentConciergeGateway";
+import { useCommunityVisualIdentityRegistryActions } from "../../../../shared/CommunityVisualIdentityRegistry";
+import {
+  coerceCommunityVisualIdentity,
+  type CommunityVisualIdentity,
+} from "../../../../shared/communityVisualIdentity";
 
 type CommunityTypingPresenceBundle = SharedCommunityTypingPresenceBundle;
 type UserProfile = SharedUserProfile;
@@ -301,6 +306,8 @@ export type WebCommunityChatPanelProps = {
 };
 
 export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
+  const { upsertCommunityVisualIdentities } =
+    useCommunityVisualIdentityRegistryActions();
   const {
     activeCommunity,
     session,
@@ -956,6 +963,14 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     })
       .then((context) => {
         if (cancelled) return;
+        upsertCommunityVisualIdentities(
+          [...context.owned_communities, ...context.mutual_communities]
+            .map((community) => coerceCommunityVisualIdentity(
+              community.visual_identity,
+              community,
+            ))
+            .filter((identity): identity is CommunityVisualIdentity => Boolean(identity)),
+        );
         setProfileCommunityContextByUserId((previous) => ({
           ...previous,
           [targetUserId]: context,
@@ -971,7 +986,13 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     return () => {
       cancelled = true;
     };
-  }, [activeCommunity?.id, profileCommunityContextByUserId, profilePanelUserId, session]);
+  }, [
+    activeCommunity?.id,
+    profileCommunityContextByUserId,
+    profilePanelUserId,
+    session,
+    upsertCommunityVisualIdentities,
+  ]);
 
   useEffect(() => {
     if (!profilePanelUserId) return;

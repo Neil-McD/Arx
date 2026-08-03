@@ -7,6 +7,7 @@ import {
   communityResourceIsMemberVisiblePage,
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility";
+import type { CommunityVisualIdentity } from "../shared/communityVisualIdentity";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -26,6 +27,7 @@ export type CommunityLike = {
   bannerFocusX?: number;
   bannerFocusY?: number;
   bannerZoom?: number;
+  brandingRevision?: number;
   visibility: "published" | "unlisted";
   entryPolicy?: CommunityEntryPolicy;
   activeMemberCount?: number;
@@ -360,6 +362,56 @@ export async function resolveCommunityBrandingFields(
     banner_focus_x: normalizeBannerFocus(row.bannerFocusX),
     banner_focus_y: normalizeBannerFocus(row.bannerFocusY),
     banner_zoom: normalizeBannerZoom(row.bannerZoom),
+  };
+}
+
+export type ResolvedCommunityBrandingFields = Awaited<
+  ReturnType<typeof resolveCommunityBrandingFields>
+>;
+
+export function resolveCommunityBrandingRevision(row: CommunityLike): number {
+  const stored = Math.floor(Number(row.brandingRevision));
+  if (Number.isFinite(stored) && stored >= 0) return stored;
+  const legacyUpdatedAt = Math.floor(Number(row.updatedAt));
+  return Number.isFinite(legacyUpdatedAt) && legacyUpdatedAt >= 0
+    ? legacyUpdatedAt
+    : 0;
+}
+
+export function nextCommunityBrandingRevision(row: CommunityLike): number {
+  return resolveCommunityBrandingRevision(row) + 1;
+}
+
+export function buildCommunityVisualIdentity(
+  row: CommunityLike,
+  branding: ResolvedCommunityBrandingFields,
+): CommunityVisualIdentity {
+  return {
+    community_id: String(row._id),
+    revision: resolveCommunityBrandingRevision(row),
+    name: row.name,
+    avatar: {
+      resource_key: branding.avatar_storage_id
+        ? `storage:${branding.avatar_storage_id}`
+        : branding.avatar_url
+          ? `url:${branding.avatar_url}`
+          : null,
+      url: branding.avatar_url,
+      focus_x: branding.avatar_focus_x,
+      focus_y: branding.avatar_focus_y,
+      zoom: branding.avatar_zoom,
+    },
+    banner: {
+      resource_key: branding.banner_storage_id
+        ? `storage:${branding.banner_storage_id}`
+        : branding.banner_url
+          ? `url:${branding.banner_url}`
+          : null,
+      url: branding.banner_url,
+      focus_x: branding.banner_focus_x,
+      focus_y: branding.banner_focus_y,
+      zoom: branding.banner_zoom,
+    },
   };
 }
 

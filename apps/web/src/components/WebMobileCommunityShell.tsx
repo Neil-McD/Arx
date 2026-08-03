@@ -147,6 +147,8 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
                         }}
                       >
                         <CommunityAvatar
+                          communityId={community.id}
+                          visualIdentity={community.visual_identity}
                           className="mobile-community-selector-avatar"
                           imageUrl={community.avatar_url}
                           focusX={community.avatar_focus_x}

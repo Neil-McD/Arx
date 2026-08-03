@@ -1,8 +1,12 @@
 import type { KeyboardEvent } from "react";
 import { CommunityAvatar } from "./CommunityAvatar";
 import { StableFramedMedia } from "./StableFramedMedia";
+import type { CommunityVisualIdentity } from "./communityVisualIdentity";
+import { useCommunityVisualIdentity } from "./CommunityVisualIdentityRegistry";
 
 type DiscoverCommunityCardProps = {
+  communityId?: string | null;
+  visualIdentity?: CommunityVisualIdentity | null;
   name: string;
   slug?: string | null;
   oneLiner: string;
@@ -39,6 +43,8 @@ function renderDiscoverPriceLabel(priceLabel: string) {
 
 export function DiscoverCommunityCard({
   name,
+  communityId,
+  visualIdentity,
   slug,
   oneLiner,
   avatarUrl,
@@ -54,6 +60,11 @@ export function DiscoverCommunityCard({
   ariaLabel,
   onActivate,
 }: DiscoverCommunityCardProps) {
+  const canonicalVisualIdentity = useCommunityVisualIdentity(
+    communityId,
+    visualIdentity,
+  );
+  const resolvedName = canonicalVisualIdentity?.name ?? name;
   const handleActivate = () => {
     if (!clickable || !onActivate) return;
     onActivate();
@@ -78,8 +89,12 @@ export function DiscoverCommunityCard({
       <StableFramedMedia
         className="discover-card-banner"
         imageClassName="discover-card-banner-img"
-        imageUrl={bannerUrl}
-        frame={{ focusX: bannerFocusX, focusY: bannerFocusY, zoom: bannerZoom }}
+        imageUrl={canonicalVisualIdentity?.banner.url ?? bannerUrl}
+        frame={{
+          focusX: canonicalVisualIdentity?.banner.focus_x ?? bannerFocusX,
+          focusY: canonicalVisualIdentity?.banner.focus_y ?? bannerFocusY,
+          zoom: canonicalVisualIdentity?.banner.zoom ?? bannerZoom,
+        }}
         alt=""
         loading="lazy"
         fetchPriority="low"
@@ -88,20 +103,21 @@ export function DiscoverCommunityCard({
       <div className="discover-card-body">
         <div className="discover-card-header">
           <CommunityAvatar
+            communityId={communityId}
+            visualIdentity={canonicalVisualIdentity}
             className="discover-card-avatar"
-            readyClassName="has-image"
             fallbackClassName="fallback"
             imageUrl={avatarUrl}
             focusX={avatarFocusX}
             focusY={avatarFocusY}
             zoom={avatarZoom}
-            name={name}
+            name={resolvedName}
             loading="lazy"
             fetchPriority="low"
           />
           <div className="discover-card-meta">
             <div className="discover-card-name-row">
-              <div className="discover-card-name">{name}</div>
+              <div className="discover-card-name">{resolvedName}</div>
               <span className="discover-tag price">{renderDiscoverPriceLabel(priceLabel)}</span>
             </div>
             {slug ? <div className="discover-card-slug">/{slug}</div> : null}

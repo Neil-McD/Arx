@@ -1,12 +1,17 @@
 import { useCallback, useRef, useState } from "react";
 import { listCloudDiscoverCommunities } from "./cloudDiscoverGateway";
 import type { DiscoverCommunitySnapshot } from "./communityTypes";
+import {
+  coerceCommunityVisualIdentity,
+  type CommunityVisualIdentity,
+} from "./communityVisualIdentity";
 
 type UseWebDiscoverControllerArgs = {
   toCanonicalCommunityVisibility: (
     value: unknown,
     fallback?: "published" | "unlisted",
   ) => "published" | "unlisted";
+  onVisualIdentitiesLoaded?: (identities: CommunityVisualIdentity[]) => void;
 };
 
 export function useWebDiscoverController(args: UseWebDiscoverControllerArgs) {
@@ -26,6 +31,14 @@ export function useWebDiscoverController(args: UseWebDiscoverControllerArgs) {
     setDiscoverError(null);
     try {
       const communities = await listCloudDiscoverCommunities({ limit: 60 });
+      current.onVisualIdentitiesLoaded?.(
+        communities
+          .map((community) => coerceCommunityVisualIdentity(
+            community.visual_identity,
+            community,
+          ))
+          .filter((identity): identity is CommunityVisualIdentity => Boolean(identity)),
+      );
       setDiscoverCommunities(
         communities.map((community) => ({
           ...community,

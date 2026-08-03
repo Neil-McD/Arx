@@ -2,6 +2,7 @@ import { ArrowLeft } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import type { MobileMemberFace, MobileRootPage } from "./webShellChromeShared";
+import type { CommunityVisualIdentity } from "../../../../shared/communityVisualIdentity";
 
 type WebMobileTopBarProps = {
   mode: "agent" | "discover" | "community";
@@ -10,6 +11,8 @@ type WebMobileTopBarProps = {
   showDrawerButton?: boolean;
   showBackButton?: boolean;
   hasActiveCommunity: boolean;
+  activeCommunityId?: string | null;
+  activeCommunityVisualIdentity?: CommunityVisualIdentity | null;
   activeCommunityName: string | null;
   activeCommunityAvatarUrl: string | null;
   activeCommunityAvatarFocusX?: number | null;
@@ -40,6 +43,8 @@ export function WebMobileTopBar({
   showDrawerButton = true,
   showBackButton = false,
   hasActiveCommunity,
+  activeCommunityId,
+  activeCommunityVisualIdentity,
   activeCommunityName,
   activeCommunityAvatarUrl,
   activeCommunityAvatarFocusX,
@@ -69,6 +74,8 @@ export function WebMobileTopBar({
     <>
       {hasActiveCommunity && !isDiscover ? (
         <CommunityAvatar
+          communityId={activeCommunityId}
+          visualIdentity={activeCommunityVisualIdentity}
           className="mobile-topbar-community-avatar"
           imageUrl={activeCommunityAvatarUrl}
           focusX={activeCommunityAvatarFocusX}
