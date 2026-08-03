@@ -102,6 +102,10 @@ describe("web shell refresh continuity contract", () => {
     const shell = read("apps/web/src/components/WebShellChromeHost.tsx");
 
     expect(nav).toContain("isLoadingAccess = false");
+    expect(nav).toMatch(
+      /const showChannelLoadingSkeleton =[\s\S]*isLoadingAccess \|\| \(isLoadingChannels/,
+    );
+    expect(nav).toContain("!showChannelLoadingSkeleton && canManageMembersActiveCommunity");
     expect(nav).toContain('className="community-nav-access-loading"');
     expect(nav).toContain('className="community-nav-invite-loading web-skeleton-block"');
     expect(shell).toContain("isLoadingAccess={props.communityShell.isLoadingCommunityAccess}");

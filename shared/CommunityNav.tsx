@@ -124,7 +124,7 @@ export function CommunityNav({
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
   const showChannelLoadingSkeleton =
-    isLoadingChannels && channels.every((channel) => !channel.id);
+    isLoadingAccess || (isLoadingChannels && channels.every((channel) => !channel.id));
 
   useEffect(() => {
     if (!isAddChannelOpen) return;
@@ -243,7 +243,7 @@ export function CommunityNav({
             </button>
           );
         })}
-        {canManageMembersActiveCommunity && onCreateChannel ? (
+        {!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel ? (
           <button
             className="nav-item community-channel-add"
             type={buttonType}
