@@ -6311,6 +6311,46 @@ button.message-citation-chip:hover {
   }
 }
 
+@media (max-height: 760px) {
+  .builder-offer-modal,
+  .create-community-modal.builder-create-modal {
+    max-height: calc(100vh - 16px);
+    padding: 24px 30px 22px;
+  }
+
+  .builder-offer-summary {
+    gap: 12px;
+  }
+
+  .builder-offer-summary h2 {
+    font-size: 38px;
+  }
+
+  .builder-offer-benefit {
+    padding: 9px 0;
+  }
+
+  .builder-create-fields {
+    margin-top: 14px;
+    padding-top: 14px;
+  }
+
+  .builder-offer-actions {
+    margin-top: 14px;
+  }
+}
+
+@media (max-width: 680px) and (max-height: 760px) {
+  .builder-offer-modal,
+  .create-community-modal.builder-create-modal {
+    padding-inline: 18px;
+  }
+
+  .builder-offer-summary h2 {
+    font-size: 32px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .builder-offer-modal,
   .create-community-modal.builder-create-modal {
