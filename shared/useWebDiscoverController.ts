@@ -1,7 +1,6 @@
 import { useCallback, useRef, useState } from "react";
 import { listCloudDiscoverCommunities } from "./cloudDiscoverGateway";
 import type { DiscoverCommunitySnapshot } from "./communityTypes";
-import { preloadImageUrls } from "./preloadImageUrls";
 
 type UseWebDiscoverControllerArgs = {
   toCanonicalCommunityVisibility: (
@@ -27,10 +26,6 @@ export function useWebDiscoverController(args: UseWebDiscoverControllerArgs) {
     setDiscoverError(null);
     try {
       const communities = await listCloudDiscoverCommunities({ limit: 60 });
-      await preloadImageUrls(
-        communities.flatMap((community) => [community.avatar_url ?? null, community.banner_url ?? null]),
-        { maxUrls: 16, timeoutMs: 1500 },
-      );
       setDiscoverCommunities(
         communities.map((community) => ({
           ...community,

@@ -15,6 +15,7 @@ function assertNearlyEqual(actual: number, expected: number, label: string) {
 
 const coverFrame = read("shared/coverFrameUi.ts");
 const imageResource = read("shared/useImageResource.ts");
+const imageVisibilityObserver = read("shared/imageVisibilityObserver.ts");
 const stableMedia = read("shared/StableFramedMedia.tsx");
 const stableAvatar = read("shared/StableAvatar.tsx");
 const userAvatar = read("shared/UserAvatar.tsx");
@@ -56,7 +57,12 @@ assert.match(imageResource, /image\.naturalHeight/);
 assert.match(imageResource, /export class ImageResourceCache/);
 assert.match(imageResource, /current\.url === url \? current : cache\.getState\(url\)/);
 assert.match(imageResource, /image\.decode\(\)\.then\(\(\) => finish\(resource\)\)\.catch\(\(\) => finish\(null\)\)/);
-assert.match(stableMedia, /useImageResource\(url\)/);
+assert.match(stableMedia, /useImageResource\(url, \{/);
+assert.match(stableMedia, /enabled: shouldLoad/);
+assert.match(stableMedia, /isImageLoadAllowed\(url, loading, loadPermission\)/);
+assert.match(stableMedia, /observeImageNearViewport\(root/);
+assert.match(imageVisibilityObserver, /let sharedRegistry: ImageVisibilityRegistry \| null = null/);
+assert.match(imageVisibilityObserver, /rootMargin: "400px 0px"/);
 assert.match(stableMedia, /computeCoverFrameLayout\(\{/);
 assert.match(stableMedia, /\{showImage && layout \? \(/, "an image must not paint before geometry exists");
 assert.match(stableMedia, /\.\.\.getCoverFrameImageStyle\(layout\)/);
@@ -68,6 +74,8 @@ assert.doesNotMatch(
 );
 assert.match(baseCss, /:where\(\.stable-framed-media\)\s*\{[\s\S]*position:\s*relative;/);
 assert.match(stableAvatar, /<StableFramedMedia/);
+assert.match(stableAvatar, /loading\?: "eager" \| "lazy"/);
+assert.match(stableAvatar, /fetchPriority\?: ImageFetchPriority/);
 
 for (const [label, source] of [
   ["user avatar", userAvatar],

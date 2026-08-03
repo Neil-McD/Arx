@@ -1,5 +1,6 @@
 import {
   useLayoutEffect,
+  useEffect,
   useMemo,
   useRef,
   useState,
@@ -9,7 +10,16 @@ import {
   type ReactNode,
 } from "react";
 import { computeCoverFrameLayout, getCoverFrameImageStyle, type CoverFrame } from "./coverFrameUi";
-import { normalizeImageResourceUrl, useImageResource } from "./useImageResource";
+import {
+  isImageLoadAllowed,
+  observeImageNearViewport,
+  type ImageLoadingMode,
+} from "./imageVisibilityObserver";
+import {
+  normalizeImageResourceUrl,
+  useImageResource,
+  type ImageFetchPriority,
+} from "./useImageResource";
 
 export type StableFramedMediaProps = {
   imageUrl: string | null | undefined;
@@ -24,7 +34,8 @@ export type StableFramedMediaProps = {
   imageStyle?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
-  loading?: "eager" | "lazy";
+  loading?: ImageLoadingMode;
+  fetchPriority?: ImageFetchPriority;
   onClick?: MouseEventHandler<HTMLDivElement>;
   onMouseEnter?: MouseEventHandler<HTMLDivElement>;
   onMouseLeave?: MouseEventHandler<HTMLDivElement>;
@@ -38,11 +49,30 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
   const [rootSize, setRootSize] = useState({ width: 0, height: 0 });
   const url = normalizeImageResourceUrl(props.imageUrl);
-  const imageResource = useImageResource(url);
+  const loading = props.loading ?? "eager";
+  const [loadPermission, setLoadPermission] = useState(() => ({
+    url,
+    loading,
+    allowed: loading === "eager",
+  }));
+  const shouldLoad = isImageLoadAllowed(url, loading, loadPermission);
+  const imageResource = useImageResource(url, {
+    enabled: shouldLoad,
+    fetchPriority: props.fetchPriority,
+  });
+
+  useEffect(() => {
+    if (!url || loading === "eager" || imageResource.status === "ready") return;
+    const root = rootRef.current;
+    if (!root) return;
+    return observeImageNearViewport(root, () => {
+      setLoadPermission({ url, loading, allowed: true });
+    });
+  }, [imageResource.status, loading, url]);
 
   useLayoutEffect(() => {
     const root = rootRef.current;
-    if (!root || !url) return;
+    if (!root || !url || (!shouldLoad && imageResource.status !== "ready")) return;
     const syncRootSize = () => {
       const rect = root.getBoundingClientRect();
       const width = Math.max(0, rect.width);
@@ -55,7 +85,7 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
     const observer = new ResizeObserver(syncRootSize);
     observer.observe(root);
     return () => observer.disconnect();
-  }, [url]);
+  }, [imageResource.status, shouldLoad, url]);
 
   const layout = useMemo(() => {
     if (imageResource.status !== "ready") return null;
@@ -98,7 +128,8 @@ export function StableFramedMedia(props: StableFramedMediaProps) {
           src={url ?? undefined}
           alt={props.alt}
           decoding="async"
-          loading={props.loading}
+          loading={loading}
+          fetchPriority={props.fetchPriority}
           referrerPolicy="no-referrer"
           draggable={false}
           style={{ ...props.imageStyle, ...getCoverFrameImageStyle(layout) }}

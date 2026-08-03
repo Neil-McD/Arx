@@ -41,6 +41,7 @@
     "check:account-setup-surface-orchestration-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_setup_surface_orchestration_proof.ts",
     "check:account-delete-error-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/account_delete_error_contract_proof.ts",
     "check:avatar-framing-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/avatar_framing_contract_proof.ts",
+    "check:image-loading-latency-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/image_loading_latency_contract_proof.ts",
     "check:profile-display-fallback-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_display_fallback_contract_proof.ts",
     "check:profile-text-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_text_contract_proof.ts",
     "check:profile-community-context-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/profile_community_context_contract_proof.ts",

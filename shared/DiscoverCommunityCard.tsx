@@ -82,6 +82,7 @@ export function DiscoverCommunityCard({
         frame={{ focusX: bannerFocusX, focusY: bannerFocusY, zoom: bannerZoom }}
         alt=""
         loading="lazy"
+        fetchPriority="low"
         aria-hidden
       />
       <div className="discover-card-body">
@@ -95,6 +96,8 @@ export function DiscoverCommunityCard({
             focusY={avatarFocusY}
             zoom={avatarZoom}
             name={name}
+            loading="lazy"
+            fetchPriority="low"
           />
           <div className="discover-card-meta">
             <div className="discover-card-name-row">

@@ -48,6 +48,8 @@ export function CommunityPresenceFacepile(props: {
           style={{ zIndex: visibleFaces.length - index }}
           title={props.decorative ? undefined : face.display_name ?? undefined}
           alt=""
+          loading="eager"
+          fetchPriority={index === 0 ? "high" : "auto"}
           aria-hidden={props.decorative || undefined}
         />
       ))}

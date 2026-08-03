@@ -1,8 +1,9 @@
-import { ensureImageResource } from "./useImageResource";
+import { ensureImageResource, type ImageFetchPriority } from "./useImageResource";
 
 type PreloadImageUrlsOptions = {
   maxUrls?: number;
   timeoutMs?: number;
+  fetchPriority?: ImageFetchPriority;
 };
 
 export async function preloadImageUrls(
@@ -27,7 +28,7 @@ export async function preloadImageUrls(
     uniqueUrls.map(
       async (url) => {
         await Promise.race([
-          ensureImageResource(url),
+          ensureImageResource(url, { fetchPriority: options?.fetchPriority }),
           new Promise<void>((resolve) => {
             window.setTimeout(resolve, timeoutMs);
           }),

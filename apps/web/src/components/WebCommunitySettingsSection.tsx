@@ -196,6 +196,8 @@ function CommunityBrandingSettingsSection({
             zoom: state.communitySettingsBannerZoom,
           }}
           alt="Community banner preview"
+          loading="eager"
+          fetchPriority="high"
           fallback={<div className="create-community-banner-placeholder">Banner preview</div>}
         />
         <label

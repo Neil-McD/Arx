@@ -1,5 +1,6 @@
 import type { CSSProperties, DragEventHandler, MouseEventHandler, ReactNode } from "react";
 import { StableAvatar } from "./StableAvatar";
+import type { ImageFetchPriority } from "./useImageResource";
 
 type UserAvatarProps = {
   name: string;
@@ -14,6 +15,8 @@ type UserAvatarProps = {
   style?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
+  loading?: "eager" | "lazy";
+  fetchPriority?: ImageFetchPriority;
   onClick?: MouseEventHandler<HTMLDivElement>;
   onMouseEnter?: MouseEventHandler<HTMLDivElement>;
   onMouseLeave?: MouseEventHandler<HTMLDivElement>;
@@ -54,6 +57,8 @@ export function UserAvatar(props: UserAvatarProps) {
       style={props.style}
       fallbackStyle={props.fallbackStyle}
       title={props.title}
+      loading={props.loading}
+      fetchPriority={props.fetchPriority}
       onClick={props.onClick}
       onMouseEnter={props.onMouseEnter}
       onMouseLeave={props.onMouseLeave}

@@ -183,6 +183,8 @@ export const CommunityNav = memo(function CommunityNav({
             zoom: activeCommunity?.banner_zoom,
           }}
           alt=""
+          loading="eager"
+          fetchPriority="high"
           aria-hidden
         />
       </div>

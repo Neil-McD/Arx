@@ -6,6 +6,7 @@ import type {
 } from "react";
 import type { CoverFrame } from "./coverFrameUi";
 import { StableFramedMedia } from "./StableFramedMedia";
+import type { ImageFetchPriority } from "./useImageResource";
 
 type StableAvatarProps = {
   imageUrl: string | null | undefined;
@@ -20,6 +21,8 @@ type StableAvatarProps = {
   imageStyle?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
+  loading?: "eager" | "lazy";
+  fetchPriority?: ImageFetchPriority;
   onClick?: MouseEventHandler<HTMLDivElement>;
   onMouseEnter?: MouseEventHandler<HTMLDivElement>;
   onMouseLeave?: MouseEventHandler<HTMLDivElement>;

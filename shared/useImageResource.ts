@@ -9,6 +9,8 @@ export type ImageResourceState =
 
 type ImageResourceLoader = (url: string) => Promise<ImageResource | null>;
 
+export type ImageFetchPriority = "high" | "low" | "auto";
+
 const DEFAULT_READY_RESOURCE_LIMIT = 256;
 const DEFAULT_FAILED_RESOURCE_LIMIT = 128;
 const DEFAULT_FAILED_RESOURCE_TTL_MS = 10_000;
@@ -140,7 +142,10 @@ export class ImageResourceCache {
 
 const imageResourceCache = new ImageResourceCache();
 
-function loadBrowserImage(url: string): Promise<ImageResource | null> {
+function loadBrowserImage(
+  url: string,
+  fetchPriority: ImageFetchPriority = "auto",
+): Promise<ImageResource | null> {
   if (typeof window === "undefined" || typeof Image === "undefined") return Promise.resolve(null);
   return new Promise<ImageResource | null>((resolve) => {
     const image = new Image();
@@ -162,6 +167,7 @@ function loadBrowserImage(url: string): Promise<ImageResource | null> {
     };
     image.decoding = "async";
     image.referrerPolicy = "no-referrer";
+    image.fetchPriority = fetchPriority;
     image.onload = finishLoaded;
     image.onerror = () => finish(null);
     image.src = url;
@@ -177,9 +183,17 @@ export function getReadyImageResource(value: string | null | undefined): ImageRe
   return url ? imageResourceCache.getReady(url) : null;
 }
 
-export function ensureImageResource(value: string | null | undefined): Promise<ImageResource | null> {
+export function ensureImageResource(
+  value: string | null | undefined,
+  options?: { fetchPriority?: ImageFetchPriority },
+): Promise<ImageResource | null> {
   const url = normalizeImageResourceUrl(value);
-  return url ? imageResourceCache.load(url, loadBrowserImage) : Promise.resolve(null);
+  return url
+    ? imageResourceCache.load(
+        url,
+        (resourceUrl) => loadBrowserImage(resourceUrl, options?.fetchPriority),
+      )
+    : Promise.resolve(null);
 }
 
 export function resolveImageResourcePresentationState(
@@ -192,13 +206,18 @@ export function resolveImageResourcePresentationState(
   return current.url === url ? current : cache.getState(url);
 }
 
-export function useImageResource(value: string | null | undefined): ImageResourceState {
+export function useImageResource(
+  value: string | null | undefined,
+  options?: { enabled?: boolean; fetchPriority?: ImageFetchPriority },
+): ImageResourceState {
   const url = normalizeImageResourceUrl(value);
+  const enabled = options?.enabled ?? true;
+  const fetchPriority = options?.fetchPriority;
   const [state, setState] = useState<ImageResourceState>(() => imageResourceCache.getState(url));
 
   useEffect(() => {
     setState(imageResourceCache.getState(url));
-    if (!url || imageResourceCache.getReady(url)) return;
+    if (!url || !enabled || imageResourceCache.getReady(url)) return;
 
     let cancelled = false;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
@@ -211,7 +230,7 @@ export function useImageResource(value: string | null | undefined): ImageResourc
     };
     const load = async (forceRetry = false) => {
       if (forceRetry) imageResourceCache.clearFailure(url);
-      const resource = await ensureImageResource(url);
+      const resource = await ensureImageResource(url, { fetchPriority });
       if (cancelled) return;
       if (resource) {
         clearRetryTimer();
@@ -241,7 +260,7 @@ export function useImageResource(value: string | null | undefined): ImageResourc
       clearRetryTimer();
       if (typeof window !== "undefined") window.removeEventListener("online", handleOnline);
     };
-  }, [url]);
+  }, [enabled, fetchPriority, url]);
 
   return resolveImageResourcePresentationState(state, url);
 }

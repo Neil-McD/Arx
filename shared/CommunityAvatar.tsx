@@ -1,6 +1,7 @@
 import type { CSSProperties, DragEventHandler, ReactNode } from "react";
 import { communityInitials } from "./messageMetadataUi";
 import { StableAvatar } from "./StableAvatar";
+import type { ImageFetchPriority } from "./useImageResource";
 
 type CommunityAvatarProps = {
   name: string;
@@ -15,6 +16,8 @@ type CommunityAvatarProps = {
   style?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
+  loading?: "eager" | "lazy";
+  fetchPriority?: ImageFetchPriority;
   onDragOver?: DragEventHandler<HTMLDivElement>;
   onDragLeave?: DragEventHandler<HTMLDivElement>;
   onDrop?: DragEventHandler<HTMLDivElement>;
@@ -41,6 +44,8 @@ export function CommunityAvatar(props: CommunityAvatarProps) {
       style={props.style}
       fallbackStyle={props.fallbackStyle}
       title={props.title}
+      loading={props.loading}
+      fetchPriority={props.fetchPriority}
       onDragOver={props.onDragOver}
       onDragLeave={props.onDragLeave}
       onDrop={props.onDrop}

@@ -374,6 +374,8 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               focusY={member.avatar_focus_y}
               zoom={member.avatar_zoom}
               alt=""
+              loading={isOnline ? "eager" : "lazy"}
+              fetchPriority={isOnline ? "auto" : "low"}
               aria-hidden={true}
               fallback={<span>{props.getInitials(name)}</span>}
             />

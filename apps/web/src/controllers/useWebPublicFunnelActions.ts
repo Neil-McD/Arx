@@ -411,7 +411,11 @@ export function useWebPublicFunnelActions<
             ? (payload.community.funnel?.hero_media_url ?? null)
             : null,
         ];
-        await preloadImageUrls(revealImageUrls, { maxUrls: 8, timeoutMs: 1500 });
+        void preloadImageUrls(revealImageUrls, {
+          maxUrls: 8,
+          timeoutMs: 1500,
+          fetchPriority: "high",
+        });
 
         const loadedCommunity = payload.community;
         const resolvedSlug = loadedCommunity.slug;
