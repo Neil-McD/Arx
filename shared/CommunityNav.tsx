@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Check, Hash, Plus, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
-import { getCommunityBannerImageStyle } from "./communityBannerUi";
+import { StableFramedMedia } from "./StableFramedMedia";
 
 type CommunityNavCommunityLike = {
   slug?: string | null;
@@ -173,23 +173,18 @@ export function CommunityNav({
   return (
     <aside className="community-nav">
       <div className="community-nav-header">
-        <div
+        <StableFramedMedia
           className={`community-nav-banner${activeCommunity?.banner_url ? " has-image" : ""}`}
-        >
-          {activeCommunity?.banner_url ? (
-            <img
-              className="community-nav-banner-img"
-              src={activeCommunity.banner_url}
-              alt=""
-              draggable={false}
-              style={getCommunityBannerImageStyle({
-                focusX: activeCommunity.banner_focus_x,
-                focusY: activeCommunity.banner_focus_y,
-                zoom: activeCommunity.banner_zoom,
-              })}
-            />
-          ) : null}
-        </div>
+          imageClassName="community-nav-banner-img"
+          imageUrl={activeCommunity?.banner_url}
+          frame={{
+            focusX: activeCommunity?.banner_focus_x,
+            focusY: activeCommunity?.banner_focus_y,
+            zoom: activeCommunity?.banner_zoom,
+          }}
+          alt=""
+          aria-hidden
+        />
       </div>
       <div className="community-channel-list" aria-label="Channels">
         {showChannelLoadingSkeleton ? (

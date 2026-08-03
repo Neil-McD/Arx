@@ -1,6 +1,6 @@
 import { existsSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
-import { resolveCurrentReadyImageUrl } from "../shared/useImageUrlReady";
+import { normalizeImageResourceUrl } from "../shared/useImageResource";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -214,20 +214,18 @@ describe("web shell refresh continuity contract", () => {
   });
 
   it("falls back instead of admitting cached broken avatar images", () => {
-    const imageReady = read("shared/useImageUrlReady.ts");
-    const stableAvatar = read("shared/StableAvatar.tsx");
+    const imageResource = read("shared/useImageResource.ts");
+    const stableMedia = read("shared/StableFramedMedia.tsx");
 
-    expect(imageReady).toContain("finish(image.naturalWidth > 0)");
-    expect(stableAvatar).toContain("failedImageUrl");
-    expect(stableAvatar).toContain("onError={() => setFailedImageUrl(normalizedImageUrl)}");
+    expect(imageResource).toContain("failedResources.add(url)");
+    expect(imageResource).toContain("image.onerror = () => finish(null)");
+    expect(stableMedia).toContain("showImage && layout");
   });
 
-  it("never reuses readiness from a previous avatar URL", () => {
-    expect(resolveCurrentReadyImageUrl("https://example.com/a.png", "https://example.com/a.png"))
+  it("normalizes image-resource identity before cache lookup", () => {
+    expect(normalizeImageResourceUrl(" https://example.com/a.png "))
       .toBe("https://example.com/a.png");
-    expect(resolveCurrentReadyImageUrl("https://example.com/b.png", "https://example.com/a.png"))
-      .toBeNull();
-    expect(resolveCurrentReadyImageUrl(null, "https://example.com/a.png"))
-      .toBeNull();
+    expect(normalizeImageResourceUrl("  ")).toBeNull();
+    expect(normalizeImageResourceUrl(null)).toBeNull();
   });
 });

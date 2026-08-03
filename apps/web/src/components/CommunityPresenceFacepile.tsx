@@ -31,7 +31,7 @@ export function CommunityPresenceFacepile(props: {
       className="community-context-facepile"
       aria-hidden={props.decorative || undefined}
     >
-      {visibleFaces.map((face) => (
+      {visibleFaces.map((face, index) => (
         <UserAvatar
           key={face.user_id}
           className="community-context-face"
@@ -43,6 +43,7 @@ export function CommunityPresenceFacepile(props: {
           zoom={face.avatar_zoom}
           fallback={face.initials ?? "?"}
           fallbackStyle={face.avatar_color ? { color: face.avatar_color } : undefined}
+          style={{ zIndex: visibleFaces.length - index }}
           title={props.decorative ? undefined : face.display_name ?? undefined}
           alt=""
           aria-hidden={props.decorative || undefined}
@@ -51,6 +52,7 @@ export function CommunityPresenceFacepile(props: {
       {extraFaces > 0 ? (
         <span
           className="community-context-face community-context-face-more"
+          style={{ zIndex: 0 }}
           title={props.onlineCountCapped ? `${onlineTotal} or more people online` : undefined}
         >
           {props.onlineCountCapped ? `${onlineTotal}+` : `+${extraFaces}`}

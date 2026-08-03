@@ -1,16 +1,11 @@
-import {
-  useCallback,
-  useLayoutEffect,
-  useMemo,
-  useRef,
-  useState,
-  type CSSProperties,
-  type DragEventHandler,
-  type MouseEventHandler,
-  type ReactNode,
+import type {
+  CSSProperties,
+  DragEventHandler,
+  MouseEventHandler,
+  ReactNode,
 } from "react";
-import { computeAvatarLayout, getAvatarLayoutImageStyle, type AvatarFrame } from "./avatarUi";
-import { useImageUrlReady } from "./useImageUrlReady";
+import type { CoverFrame } from "./coverFrameUi";
+import { StableFramedMedia } from "./StableFramedMedia";
 
 type StableAvatarProps = {
   imageUrl: string | null | undefined;
@@ -20,7 +15,7 @@ type StableAvatarProps = {
   readyClassName?: string;
   fallbackClassName?: string;
   imageClassName?: string;
-  imageFrame?: AvatarFrame;
+  imageFrame?: CoverFrame;
   style?: CSSProperties;
   imageStyle?: CSSProperties;
   fallbackStyle?: CSSProperties;
@@ -35,157 +30,5 @@ type StableAvatarProps = {
 };
 
 export function StableAvatar(props: StableAvatarProps) {
-  const {
-    imageUrl,
-    alt,
-    fallback,
-    className,
-    readyClassName,
-    fallbackClassName,
-    imageClassName,
-    imageFrame,
-    style,
-    imageStyle,
-    fallbackStyle,
-    title,
-    onClick,
-    onMouseEnter,
-    onMouseLeave,
-    onDragOver,
-    onDragLeave,
-    onDrop,
-  } = props;
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const imageRef = useRef<HTMLImageElement | null>(null);
-  const isReady = useImageUrlReady(imageUrl);
-  const [failedImageUrl, setFailedImageUrl] = useState<string | null>(null);
-  const normalizedImageUrl = String(imageUrl ?? "").trim() || null;
-  const showImage = Boolean(normalizedImageUrl) && isReady && failedImageUrl !== normalizedImageUrl;
-  const hasImageFrame = Boolean(imageFrame);
-  const [rootSize, setRootSize] = useState({ width: 0, height: 0 });
-  const [measuredImage, setMeasuredImage] = useState<{
-    imageUrl: string | null;
-    width: number;
-    height: number;
-  }>({ imageUrl: null, width: 0, height: 0 });
-  const naturalSize = measuredImage.imageUrl === normalizedImageUrl
-    ? { width: measuredImage.width, height: measuredImage.height }
-    : { width: 0, height: 0 };
-  const combinedClassName = [
-    className,
-    showImage ? readyClassName : fallbackClassName,
-  ]
-    .filter(Boolean)
-    .join(" ");
-
-  useLayoutEffect(() => {
-    if (!showImage || !hasImageFrame) return;
-    const root = rootRef.current;
-    if (!root) return;
-    const syncRootSize = () => {
-      const rect = root.getBoundingClientRect();
-      const width = Math.max(0, Math.round(rect.width));
-      const height = Math.max(0, Math.round(rect.height));
-      setRootSize((current) =>
-        current.width === width && current.height === height
-          ? current
-          : { width, height },
-      );
-    };
-    syncRootSize();
-    const observer = new ResizeObserver(syncRootSize);
-    observer.observe(root);
-    return () => observer.disconnect();
-  }, [hasImageFrame, showImage]);
-
-  useLayoutEffect(() => {
-    setFailedImageUrl(null);
-  }, [normalizedImageUrl]);
-
-  const syncNaturalImageSize = useCallback((target: HTMLImageElement | null) => {
-    if (!normalizedImageUrl || !target?.complete || target.naturalWidth <= 0 || target.naturalHeight <= 0) {
-      return;
-    }
-    const width = target.naturalWidth;
-    const height = target.naturalHeight;
-    setMeasuredImage((current) =>
-      current.imageUrl === normalizedImageUrl && current.width === width && current.height === height
-        ? current
-        : { imageUrl: normalizedImageUrl, width, height },
-    );
-  }, [normalizedImageUrl]);
-
-  useLayoutEffect(() => {
-    if (!showImage || !hasImageFrame) return;
-    syncNaturalImageSize(imageRef.current);
-  }, [hasImageFrame, showImage, syncNaturalImageSize]);
-
-  const layout = useMemo(() => {
-    if (!showImage || !imageFrame) return null;
-    return computeAvatarLayout({
-      viewportWidth: rootSize.width,
-      viewportHeight: rootSize.height,
-      naturalWidth: naturalSize.width,
-      naturalHeight: naturalSize.height,
-      focusX: imageFrame.focusX,
-      focusY: imageFrame.focusY,
-      zoom: imageFrame.zoom,
-    });
-  }, [
-    imageFrame?.focusX,
-    imageFrame?.focusY,
-    imageFrame?.zoom,
-    naturalSize.height,
-    naturalSize.width,
-    rootSize.height,
-    rootSize.width,
-    showImage,
-  ]);
-
-  const rootStyle: CSSProperties | undefined = showImage && hasImageFrame
-    ? {
-        ...style,
-        overflow: style?.overflow ?? "hidden",
-      }
-    : showImage
-      ? style
-      : (fallbackStyle ?? style);
-  const framedImageStyle: CSSProperties | undefined = layout
-    ? {
-        ...imageStyle,
-        ...getAvatarLayoutImageStyle(layout),
-      }
-    : imageStyle;
-
-  return (
-    <div
-      ref={rootRef}
-      className={combinedClassName}
-      style={rootStyle}
-      title={title}
-      onClick={onClick}
-      onMouseEnter={onMouseEnter}
-      onMouseLeave={onMouseLeave}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      aria-hidden={props["aria-hidden"]}
-    >
-      {showImage ? (
-        <img
-          ref={imageRef}
-          className={imageClassName}
-          src={normalizedImageUrl ?? undefined}
-          alt={alt}
-          decoding="async"
-          draggable={false}
-          style={framedImageStyle}
-          onLoad={(event) => syncNaturalImageSize(event.currentTarget)}
-          onError={() => setFailedImageUrl(normalizedImageUrl)}
-        />
-      ) : (
-        fallback
-      )}
-    </div>
-  );
+  return <StableFramedMedia {...props} frame={props.imageFrame} />;
 }

@@ -1,4 +1,4 @@
-import { ensureImageUrlReady } from "./useImageUrlReady";
+import { ensureImageResource } from "./useImageResource";
 
 type PreloadImageUrlsOptions = {
   maxUrls?: number;
@@ -27,7 +27,7 @@ export async function preloadImageUrls(
     uniqueUrls.map(
       async (url) => {
         await Promise.race([
-          ensureImageUrlReady(url),
+          ensureImageResource(url),
           new Promise<void>((resolve) => {
             window.setTimeout(resolve, timeoutMs);
           }),
