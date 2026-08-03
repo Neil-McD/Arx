@@ -5,28 +5,20 @@ import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting"
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
 import {
   CommunityPresenceFacepile,
-  type CommunityPresenceFace,
 } from "./CommunityPresenceFacepile";
 import type {
   CloudCommunityPolynetOverview,
   CloudCommunityPolynetOverviewNode,
 } from "../../../../shared/cloudCommunityPolynetGateway";
+import type {
+  CommunityDirectoryMember,
+  CommunityPresenceFace,
+} from "../../../../shared/communityTypes";
 
 const PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200;
 
-export type { CommunityPresenceFace } from "./CommunityPresenceFacepile";
-
-export type CommunityRailMember = {
-  id: string;
-  user_id: string;
-  display_name?: string | null;
-  avatar_url?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  role: string;
-  created_at?: string | null;
-};
+export type { CommunityPresenceFace } from "../../../../shared/communityTypes";
+export type CommunityRailMember = CommunityDirectoryMember;
 
 export type CommunityAdmissionEntryPolicy = "open" | "approval" | "paid_subscription";
 
@@ -55,8 +47,6 @@ type CommunityContextPanelProps = {
   membersLoadError?: string | null;
   onLoadMoreMembers?: () => void;
   onlineUserIds?: Set<string> | null;
-  onlineLastActiveAtByUserId?: Record<string, string> | null;
-  activityScopeKey?: string | null;
   ownerId?: string | null;
   canManageMembers?: boolean;
   entryPolicy?: CommunityAdmissionEntryPolicy | null;
@@ -140,13 +130,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const sectionMode = props.sectionMode ?? "all";
   const online = props.onlineUserIds ?? new Set<string>();
   const members = props.members ?? [];
-  const activityScopeKey = props.activityScopeKey ?? null;
-  const [observedActivity, setObservedActivity] = useState<{
-    scopeKey: string | null;
-    byUserId: Record<string, string>;
-  }>(() => ({ scopeKey: activityScopeKey, byUserId: {} }));
-  const observedLastActiveAtByUserId =
-    observedActivity.scopeKey === activityScopeKey ? observedActivity.byUserId : {};
   const pendingJoinRequests = props.pendingJoinRequests ?? [];
   const hasPendingJoinRequestOverflow =
     pendingJoinRequests.length > PENDING_JOIN_REQUEST_DISPLAY_LIMIT;
@@ -245,25 +228,6 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   useEffect(() => {
     if (!canShowJoinRequests) setJoinRequestsExpanded(false);
   }, [canShowJoinRequests]);
-
-  useEffect(() => {
-    setObservedActivity({ scopeKey: activityScopeKey, byUserId: {} });
-  }, [activityScopeKey]);
-
-  useEffect(() => {
-    const latest = props.onlineLastActiveAtByUserId ?? {};
-    const entries = Object.entries(latest).filter((entry): entry is [string, string] =>
-      Boolean(entry[0]) && Boolean(entry[1]),
-    );
-    if (entries.length === 0) return;
-    setObservedActivity((previous) => ({
-      scopeKey: activityScopeKey,
-      byUserId: {
-        ...(previous.scopeKey === activityScopeKey ? previous.byUserId : {}),
-        ...Object.fromEntries(entries),
-      },
-    }));
-  }, [activityScopeKey, props.onlineLastActiveAtByUserId]);
 
   const requestLoadMoreMembers = useCallback((options?: { force?: boolean }) => {
     if (!props.membersHasMore) return;
@@ -366,9 +330,8 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const renderMember = (member: CommunityRailMember, isAdmin = false) => {
     const name = (member.display_name ?? "").trim() || props.displayName(member.user_id);
     const isOnline = online.has(member.user_id);
-    const latestObservedLastActiveAt = observedLastActiveAtByUserId[member.user_id];
     const activityLabel = formatMemberActivityLabel(
-      latestObservedLastActiveAt,
+      member.last_active_at,
       isOnline,
     );
     const isOwnerMember = member.user_id === props.ownerId || member.role === "owner";

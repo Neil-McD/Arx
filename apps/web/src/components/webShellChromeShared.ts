@@ -11,7 +11,10 @@ import type {
   SettingsGroup,
   SettingsPage,
 } from "../../../../shared/appShellNavigation";
-import type { CommunityPresenceFace } from "./CommunityPresenceFacepile";
+import type {
+  CommunityPresenceFace,
+  CommunityShellCommunity,
+} from "../../../../shared/communityTypes";
 
 export type MobileOverlay =
   | "community"
@@ -22,19 +25,7 @@ export type MobileRootPage = "agent" | "community" | "messages";
 
 export type MobileMemberFace = CommunityPresenceFace;
 
-export type CommunityLike = {
-  id: string;
-  slug: string | null;
-  name: string;
-  avatar_url: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  banner_url?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-};
+export type CommunityLike = CommunityShellCommunity;
 
 export type CommunityRailBindings = {
   ref: (node: HTMLButtonElement | null) => void;

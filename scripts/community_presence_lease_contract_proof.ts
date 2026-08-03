@@ -18,9 +18,14 @@ const contract = read("shared/communityPresenceContract.ts");
 const core = read("convex/communityPresenceCore.ts");
 const communityPublic = read("convex/communityPublic.ts");
 const communityDirectory = read("convex/communityDirectory.ts");
+const presenceBackfill = read("convex/communityPresenceBackfill.ts");
+const membershipLifecycle = read("convex/communityMembershipLifecycle.ts");
+const communityLifecycle = read("convex/communityLifecycle.ts");
+const communityAdmin = read("convex/communityAdmin.ts");
 const directMessageEmails = read("convex/directMessageEmails.ts");
 const gateway = read("shared/cloudPublicFunnelGateway.ts");
 const directoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
+const communityTypes = read("shared/communityTypes.ts");
 const controller = read(
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
 );
@@ -101,6 +106,28 @@ assert.match(
   /renewCommunityPresenceLease[\s\S]*withIndex\("by_community_user"[\s\S]*ctx\.db\.patch[\s\S]*ctx\.db\.insert/,
   "heartbeats must coalesce through the community-user identity before inserting",
 );
+assert.match(
+  membershipLifecycle,
+  /activateCommunityMembershipCore[\s\S]*ensureCommunityPresenceBaseline/,
+  "every membership activation must establish its durable activity baseline",
+);
+assert.match(
+  communityLifecycle,
+  /createCommunity[\s\S]*ensureCommunityPresenceBaseline/,
+  "community creation must establish the owner activity baseline",
+);
+assert.match(
+  communityAdmin,
+  /revokeCommunityMemberInternal[\s\S]*deleteCommunityPresenceForUser/,
+  "member revocation must remove every presence row",
+);
+assert.match(
+  presenceBackfill,
+  /v\.literal\("owners"\)[\s\S]*v\.literal\("memberships"\)[\s\S]*v\.literal\("presence"\)/,
+  "historical coverage repair must be bounded, phased, and dry-run capable",
+);
+assert.match(presenceBackfill, /MAX_BATCH_SIZE = 100/);
+assert.match(presenceBackfill, /dryRun: v\.boolean\(\)/);
 
 assert.match(
   heartbeat,
@@ -192,19 +219,24 @@ assert.doesNotMatch(
 );
 
 assert.match(
-  directoryPageQuery,
-  /by_community_createdAt[\s\S]*\.order\("asc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
-  "the member directory must page the durable roster through one bounded canonical cursor",
+  communityDirectory,
+  /by_community_lastSeenAt[\s\S]*\.order\("desc"\)[\s\S]*\.paginate\(\{[\s\S]*maximumRowsRead:[\s\S]*readCommunityActiveMemberCount\(community\)/,
+  "the member directory must page the durable activity ledger through one bounded canonical cursor",
 );
-assert.doesNotMatch(
-  directoryPageQuery,
-  /communityPresence|by_community_lastSeenAt|last_active_at|\.collect\(\)|normalizeDirectoryCursor|orderedCandidates/,
-  "presence must remain an overlay and must never own directory ordering or pagination",
+assert.match(
+  communityDirectory,
+  /resolveCommunityPresenceAuthorization[\s\S]*last_active_at: toIsoString\(args\.lastSeenAt\)/,
+  "directory activity ordering must reauthorize rows and expose the canonical timestamp",
+);
+assert.match(
+  communityTypes,
+  /last_active_at: string;/,
+  "the directory gateway must carry canonical activity history",
 );
 assert.doesNotMatch(
   directoryGateway,
-  /last_active_at|countCommunityDirectoryMembers/,
-  "the directory gateway must not expose a duplicate activity history or recount surface",
+  /countCommunityDirectoryMembers/,
+  "the directory gateway must not expose a recount surface",
 );
 
 assert.match(

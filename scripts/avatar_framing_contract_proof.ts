@@ -30,6 +30,7 @@ const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const communityContextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
+const communityTypes = read("shared/communityTypes.ts");
 const baseCss = [
   read("apps/web/src/base.css"),
   read("apps/web/src/styles/shell-and-onboarding.css"),
@@ -141,9 +142,10 @@ assert.match(onboardingPage, /WebUserAvatarEditorModal/);
 assert.doesNotMatch(profileSettings, /WebCommunityAvatarEditorModal/);
 assert.doesNotMatch(onboardingPage, /WebCommunityAvatarEditorModal/);
 assert.match(
-  communityDirectoryGateway,
-  /avatar_focus_x\?: number \| null;[\s\S]*avatar_focus_y\?: number \| null;[\s\S]*avatar_zoom\?: number \| null;/,
+  communityTypes,
+  /export type CommunityDirectoryMember = \{[\s\S]*avatar_focus_x\?: number \| null;[\s\S]*avatar_focus_y\?: number \| null;[\s\S]*avatar_zoom\?: number \| null;/,
 );
+assert.match(communityDirectoryGateway, /CloudCommunityDirectoryMemberRow = CommunityDirectoryMember/);
 assert.match(
   communityContextPanel,
   /imageUrl=\{member\.avatar_url\}[\s\S]*focusX=\{member\.avatar_focus_x\}[\s\S]*focusY=\{member\.avatar_focus_y\}[\s\S]*zoom=\{member\.avatar_zoom\}/,

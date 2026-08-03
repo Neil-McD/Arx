@@ -47,6 +47,7 @@ import { getStripeClient } from "./stripeCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
+import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -1576,6 +1577,11 @@ export const revokeCommunityMemberInternal = internalMutation({
           args.communityId,
           membership.userId,
         );
+        await deleteCommunityPresenceForUser({
+          ctx,
+          communityId: args.communityId,
+          userId: membership.userId,
+        });
 
         const joinRequest = (await ctx.db
           .query("communityJoinRequests")

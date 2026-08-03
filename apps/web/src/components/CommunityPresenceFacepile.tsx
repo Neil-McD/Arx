@@ -1,15 +1,7 @@
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import type { CommunityPresenceFace } from "../../../../shared/communityTypes";
 
-export type CommunityPresenceFace = {
-  user_id: string;
-  display_name?: string | null;
-  avatar_url?: string | null;
-  avatar_color?: string | null;
-  initials?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-};
+export type { CommunityPresenceFace } from "../../../../shared/communityTypes";
 
 export function CommunityPresenceFacepile(props: {
   faces?: CommunityPresenceFace[] | null;

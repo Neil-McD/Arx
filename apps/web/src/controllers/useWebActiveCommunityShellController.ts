@@ -10,7 +10,10 @@ import {
   reduceCommunityAccessResolution,
   scopeCommunityAccessResolution,
 } from "../../../../shared/communityAccessResolution";
-import type { CommunityAccess } from "../../../../shared/communityTypes";
+import type {
+  CommunityAccess,
+  CommunityPresenceSummary,
+} from "../../../../shared/communityTypes";
 import { COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS } from "../../../../shared/communityPresenceContract";
 import { fetchCloudMyCommunityAccessById } from "../../../../shared/cloudCommunityAccessGateway";
 import {
@@ -23,29 +26,10 @@ import {
 import { reuseEquivalentValue } from "../../../../shared/reuseEquivalentValue";
 import { useResumeEpochEffect } from "../../../../shared/useResumeEpochEffect";
 
-type PresenceFace = {
-  user_id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-};
-
-type PresenceSummary = {
-  member_count?: number | null;
-  admin_count?: number | null;
-  online_count?: number | null;
-  online_count_capped?: boolean | null;
-  online_faces?: PresenceFace[] | null;
-  online_user_ids?: string[] | null;
-  online_last_active_at_by_user_id?: Record<string, string> | null;
-};
-
 type ScopedPresenceSummary = {
   communityId: string;
   sessionIdentity: string;
-  summary: PresenceSummary | null;
+  summary: CommunityPresenceSummary | null;
 };
 
 export function useWebActiveCommunityShellController<SessionT>(params: {
@@ -153,7 +137,7 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
       try {
         const usableSession = await params.ensureSession(sessionRef.current);
         if (!usableSession) return;
-        const summary = await refreshCloudCommunityPresence<SessionT, PresenceSummary>({
+        const summary = await refreshCloudCommunityPresence<SessionT, CommunityPresenceSummary>({
           session: usableSession,
           communityId,
         });

@@ -570,7 +570,6 @@ export const getCommunityPresenceSummary = query({
       online_count_capped: summary.onlineCountCapped,
       online_faces: summary.onlineFaces,
       online_user_ids: summary.onlineUserIds,
-      online_last_active_at_by_user_id: summary.onlineLastActiveAtByUserId,
     };
   },
 });

@@ -6,20 +6,9 @@ import type {
 } from "../../../../shared/appShellNavigation";
 import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
 import type { MobileMemberFace, MobileOverlay } from "../components/webShellChromeShared";
+import type { CommunityShellCommunity } from "../../../../shared/communityTypes";
 
-type CommunityLike = {
-  id: string;
-  slug: string | null;
-  name: string;
-  avatar_url: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  banner_url?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-};
+type CommunityLike = CommunityShellCommunity;
 
 export function buildWebShellChromeHostProps(params: {
   showMobileAppShell: boolean;

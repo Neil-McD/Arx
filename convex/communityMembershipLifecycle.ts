@@ -6,6 +6,7 @@ import {
   syncCommunityActiveMemberCount,
 } from "./communityCore";
 import { createCommunityOnboardingSessionForActivation } from "./communityOnboardingCore";
+import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -43,6 +44,12 @@ export async function activateCommunityMembershipCore(args: {
     });
     const refreshed = (await args.ctx.db.get(existing._id)) as CommunityMembershipLike | null;
     if (!refreshed) throw new Error("community_membership_not_found");
+    await ensureCommunityPresenceBaseline({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      baselineAt: Number(existing.activatedAt ?? existing.createdAt ?? args.nowMs),
+    });
     return {
       membership: refreshed,
       accessGranted: false,
@@ -84,6 +91,12 @@ export async function activateCommunityMembershipCore(args: {
   }
   const membership = (await args.ctx.db.get(membershipId)) as CommunityMembershipLike | null;
   if (!membership) throw new Error("community_membership_activation_failed");
+  await ensureCommunityPresenceBaseline({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+    baselineAt: args.nowMs,
+  });
   await syncCommunityActiveMemberCount({ ctx: args.ctx, communityId: args.communityId });
   try {
     await createCommunityOnboardingSessionForActivation({

@@ -14,7 +14,6 @@ import {
   readCommunityActiveMemberCount,
   resolveCommunityMembershipEntitlementState,
   resolvePublicUserId,
-  toIsoString,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
@@ -42,6 +41,54 @@ export type AuthorizedCommunityPresenceEntry = {
   userId: any;
   lastSeenAt: number;
 };
+
+export async function ensureCommunityPresenceBaseline(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+  baselineAt: number;
+}): Promise<{ created: boolean; lastSeenAt: number }> {
+  const baselineAt = normalizeCommunityPresenceTimestamp(args.baselineAt) ?? Date.now();
+  const rows = await args.ctx.db
+    .query("communityPresence" as any)
+    .withIndex("by_community_user", (q: any) =>
+      q.eq("communityId", args.communityId).eq("userId", args.userId),
+    )
+    .collect();
+  const existing = rows.reduce((newest: any | null, row: any) => {
+    if (!newest) return row;
+    return Number(row.lastSeenAt) > Number(newest.lastSeenAt) ? row : newest;
+  }, null);
+  if (existing) {
+    return {
+      created: false,
+      lastSeenAt: normalizeCommunityPresenceTimestamp(existing.lastSeenAt) ?? baselineAt,
+    };
+  }
+  await args.ctx.db.insert("communityPresence" as any, {
+    communityId: args.communityId,
+    userId: args.userId,
+    lastSeenAt: baselineAt,
+    createdAt: baselineAt,
+    updatedAt: baselineAt,
+  });
+  return { created: true, lastSeenAt: baselineAt };
+}
+
+export async function deleteCommunityPresenceForUser(args: {
+  ctx: any;
+  communityId: any;
+  userId: any;
+}): Promise<number> {
+  const rows = await args.ctx.db
+    .query("communityPresence" as any)
+    .withIndex("by_community_user", (q: any) =>
+      q.eq("communityId", args.communityId).eq("userId", args.userId),
+    )
+    .collect();
+  await Promise.all(rows.map((row: any) => args.ctx.db.delete(row._id)));
+  return rows.length;
+}
 
 export async function renewCommunityPresenceLease(args: {
   ctx: any;
@@ -79,12 +126,14 @@ export async function renewCommunityPresenceLease(args: {
   return issuedLease;
 }
 
-async function communityPresenceUserRemainsAuthorized(args: {
+export async function resolveCommunityPresenceAuthorization(args: {
   ctx: any;
   community: CommunityLike;
   userId: any;
-}): Promise<boolean> {
-  if (String(args.community.ownerId) === String(args.userId)) return true;
+}): Promise<{ authorized: boolean; membership: CommunityMembershipLike | null }> {
+  if (String(args.community.ownerId) === String(args.userId)) {
+    return { authorized: true, membership: null };
+  }
   const membershipRows = (await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) =>
@@ -99,7 +148,7 @@ async function communityPresenceUserRemainsAuthorized(args: {
       userId: args.userId,
     })
   ) {
-    return false;
+    return { authorized: false, membership };
   }
   const entitlement = await resolveCommunityMembershipEntitlementState({
     ctx: args.ctx,
@@ -107,7 +156,15 @@ async function communityPresenceUserRemainsAuthorized(args: {
     membership,
     userId: args.userId,
   });
-  return entitlement.isEntitled;
+  return { authorized: entitlement.isEntitled, membership };
+}
+
+export async function communityPresenceUserRemainsAuthorized(args: {
+  ctx: any;
+  community: CommunityLike;
+  userId: any;
+}): Promise<boolean> {
+  return (await resolveCommunityPresenceAuthorization(args)).authorized;
 }
 
 export async function resolveAuthorizedCommunityPresenceWindow(
@@ -168,7 +225,6 @@ export async function resolveMemberCommunityPresenceSummary(
   onlineCountCapped: boolean;
   onlineFaces: CommunityPresenceFace[];
   onlineUserIds: string[];
-  onlineLastActiveAtByUserId: Record<string, string>;
 }> {
   const presenceWindow = await resolveAuthorizedCommunityPresenceWindow(
     ctx,
@@ -195,13 +251,11 @@ export async function resolveMemberCommunityPresenceSummary(
   ).filter(Boolean) as CommunityPresenceFace[];
 
   const onlineUserIds: string[] = [];
-  const onlineLastActiveAtByUserId: Record<string, string> = {};
   for (const entry of onlineUserEntries) {
     const publicUserId =
       (await resolvePublicUserId(ctx, entry.userId, userIdCache))
       ?? String(entry.userId);
     onlineUserIds.push(publicUserId);
-    onlineLastActiveAtByUserId[publicUserId] = toIsoString(entry.lastSeenAt);
   }
 
   const durableMemberCount = readCommunityActiveMemberCount(community);
@@ -222,6 +276,5 @@ export async function resolveMemberCommunityPresenceSummary(
     onlineCountCapped: presenceWindow.countCapped,
     onlineFaces,
     onlineUserIds,
-    onlineLastActiveAtByUserId,
   };
 }

@@ -7,13 +7,17 @@ import schema from "./schema";
 import {
   COMMUNITY_PRESENCE_LEASE_DURATION_MS,
   communityPresenceLeaseIsActive,
+  deleteCommunityPresenceForUser,
+  ensureCommunityPresenceBaseline,
   issueCommunityPresenceLease,
   renewCommunityPresenceLease,
   resolveAuthorizedCommunityPresenceWindow,
 } from "./communityPresenceCore";
+import { backfillCommunityPresenceBatchCore } from "./communityPresenceBackfill";
 
 const modules = import.meta.glob([
   "./communityPresenceCore.ts",
+  "./communityPresenceBackfill.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -119,6 +123,82 @@ test("repeated and multi-tab heartbeats coalesce into one community-user lease",
       31_000 + COMMUNITY_PRESENCE_LEASE_DURATION_MS,
     );
   });
+});
+
+test("membership baselines are idempotent and never regress a heartbeat", async () => {
+  const t = convexTest(schema, modules);
+  const scope = await createScope(t);
+  await t.run(async (ctx) => {
+    await expect(ensureCommunityPresenceBaseline({
+      ctx,
+      ...scope,
+      baselineAt: 5_000,
+    })).resolves.toEqual({ created: true, lastSeenAt: 5_000 });
+    await renewCommunityPresenceLease({ ctx, ...scope, nowMs: 9_000 });
+    await expect(ensureCommunityPresenceBaseline({
+      ctx,
+      ...scope,
+      baselineAt: 6_000,
+    })).resolves.toEqual({ created: false, lastSeenAt: 9_000 });
+    const rows = await ctx.db.query("communityPresence")
+      .withIndex("by_community_user", (q) =>
+        q.eq("communityId", scope.communityId).eq("userId", scope.userId),
+      )
+      .collect();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]?.lastSeenAt).toBe(9_000);
+  });
+});
+
+test("revocation cleanup removes every duplicate presence row", async () => {
+  const t = convexTest(schema, modules);
+  const scope = await createScope(t);
+  await t.run(async (ctx) => {
+    for (const lastSeenAt of [1_000, 2_000, 3_000]) {
+      await ctx.db.insert("communityPresence", {
+        ...scope,
+        lastSeenAt,
+        createdAt: lastSeenAt,
+        updatedAt: lastSeenAt,
+      });
+    }
+    await expect(deleteCommunityPresenceForUser({ ctx, ...scope })).resolves.toBe(3);
+    const rows = await ctx.db.query("communityPresence")
+      .withIndex("by_community_user", (q) =>
+        q.eq("communityId", scope.communityId).eq("userId", scope.userId),
+      )
+      .collect();
+    expect(rows).toHaveLength(0);
+  });
+});
+
+test("presence backfill is dry-run first and seeds owner baselines idempotently", async () => {
+  const t = convexTest(schema, modules);
+  await createScope(t);
+  const dryRun = await t.run(async (ctx) =>
+    backfillCommunityPresenceBatchCore({
+      ctx,
+      phase: "owners",
+      paginationOpts: { cursor: null, numItems: 50 },
+      dryRun: true,
+    }));
+  expect(dryRun).toMatchObject({ would_create: 1, created: 0, complete: true });
+  const applied = await t.run(async (ctx) =>
+    backfillCommunityPresenceBatchCore({
+      ctx,
+      phase: "owners",
+      paginationOpts: { cursor: null, numItems: 50 },
+      dryRun: false,
+    }));
+  expect(applied).toMatchObject({ would_create: 0, created: 1, complete: true });
+  const repeated = await t.run(async (ctx) =>
+    backfillCommunityPresenceBatchCore({
+      ctx,
+      phase: "owners",
+      paginationOpts: { cursor: null, numItems: 50 },
+      dryRun: false,
+    }));
+  expect(repeated).toMatchObject({ created: 0, already_canonical: 1, complete: true });
 });
 
 test("bounded presence windows remain conservatively capped after authorization filtering", async () => {

@@ -30,7 +30,7 @@ async function createUser(
   );
 }
 
-test("member directory uses stable opaque membership pagination and ignores presence ordering", async () => {
+test("member directory pages authorized activity newest-first with canonical timestamps", async () => {
   const t = convexTest(schema, modules);
   const ownerId = await createUser(t, OWNER_SUBJECT, 100);
   const fixture = await t.run(async (ctx) => {
@@ -63,6 +63,13 @@ test("member directory uses stable opaque membership pagination and ignores pres
       active: true,
       createdAt: 200,
       updatedAt: 200,
+    });
+    await ctx.db.insert("communityPresence", {
+      communityId,
+      userId: ownerId,
+      lastSeenAt: 50_000,
+      createdAt: 100,
+      updatedAt: 50_000,
     });
 
     const activeMembershipIds: string[] = [];
@@ -115,6 +122,13 @@ test("member directory uses stable opaque membership pagination and ignores pres
       createdAt: 1_015.5,
       updatedAt: 2_000,
     });
+    await ctx.db.insert("communityPresence", {
+      communityId,
+      userId: revokedUserId,
+      lastSeenAt: 200_000,
+      createdAt: 1_015.5,
+      updatedAt: 200_000,
+    });
 
     return {
       communityId,
@@ -133,37 +147,11 @@ test("member directory uses stable opaque membership pagination and ignores pres
       pageSize: 10,
     },
   );
-  expect(firstPage.page[0]?.id).toBe(`owner:${String(fixture.communityId)}`);
-  expect(firstPage.page[0]).toMatchObject({
-    display_name: "Directory owner",
-    avatar_url: "https://example.com/directory-owner.png",
-    avatar_focus_x: 0.23,
-    avatar_focus_y: 0.71,
-    avatar_zoom: 1.8,
-  });
+  expect(firstPage.page[0]?.id).toBe(fixture.activeMembershipIds[0]);
+  expect(firstPage.page[0]?.last_active_at).toBe(new Date(100_000).toISOString());
   expect(firstPage.totalCount).toBe(31);
   expect(firstPage.continueCursor).toEqual(expect.any(String));
   expect(Number.isFinite(Number(firstPage.continueCursor))).toBe(false);
-
-  await t.run(async (ctx) => {
-    await ctx.db.patch(
-      (
-        await ctx.db
-          .query("communityPresence")
-          .withIndex("by_community_user", (q) =>
-            q
-              .eq("communityId", fixture.communityId)
-              .eq("userId", fixture.activeUserIds[29]),
-          )
-          .unique()
-      )!._id,
-      {
-        lastSeenAt: 900_000,
-        activeUntil: 1_000_000,
-        updatedAt: 900_000,
-      },
-    );
-  });
 
   const rows = [...firstPage.page];
   let cursor = firstPage.continueCursor;
@@ -184,12 +172,42 @@ test("member directory uses stable opaque membership pagination and ignores pres
   }
 
   expect(rows.map((row) => row.id)).toEqual([
-    `owner:${String(fixture.communityId)}`,
     ...fixture.activeMembershipIds,
+    `owner:${String(fixture.communityId)}`,
   ]);
   expect(new Set(rows.map((row) => row.id)).size).toBe(rows.length);
   expect(rows.some((row) => row.id === fixture.revokedMembershipId)).toBe(false);
-  expect(rows.every((row) => !("last_active_at" in row))).toBe(true);
+  expect(rows.every((row) => typeof row.last_active_at === "string")).toBe(true);
+  expect(rows.at(-1)).toMatchObject({
+    id: `owner:${String(fixture.communityId)}`,
+    display_name: "Directory owner",
+    avatar_url: "https://example.com/directory-owner.png",
+    avatar_focus_x: 0.23,
+    avatar_focus_y: 0.71,
+    avatar_zoom: 1.8,
+    last_active_at: new Date(50_000).toISOString(),
+  });
+
+  await t.run(async (ctx) => {
+    const presence = await ctx.db
+      .query("communityPresence")
+      .withIndex("by_community_user", (q) =>
+        q.eq("communityId", fixture.communityId).eq("userId", fixture.activeUserIds[29]),
+      )
+      .unique();
+    if (!presence) throw new Error("missing_presence_fixture");
+    await ctx.db.patch(presence._id, {
+      lastSeenAt: 900_000,
+      activeUntil: 1_000_000,
+      updatedAt: 900_000,
+    });
+  });
+  const refreshedFirstPage = await asOwner.query(
+    api.communityDirectory.listCommunityDirectoryPage,
+    { communityId: fixture.communityId, cursor: null, pageSize: 10 },
+  );
+  expect(refreshedFirstPage.page[0]?.id).toBe(fixture.activeMembershipIds[29]);
+  expect(refreshedFirstPage.page[0]?.last_active_at).toBe(new Date(900_000).toISOString());
 });
 
 test("member directory fails closed and never scans to invent a missing durable count", async () => {
@@ -197,7 +215,8 @@ test("member directory fails closed and never scans to invent a missing durable 
   const ownerId = await createUser(t, OWNER_SUBJECT, 100);
   const outsiderId = await createUser(t, "directory-outsider", 200);
   const communityId = await t.run(async (ctx) =>
-    await ctx.db.insert("communities", {
+    {
+      const id = await ctx.db.insert("communities", {
       ownerId,
       slug: "directory-without-count",
       name: "Directory without count",
@@ -206,7 +225,16 @@ test("member directory fails closed and never scans to invent a missing durable 
       entryPolicy: "open",
       createdAt: 100,
       updatedAt: 100,
-    }),
+      });
+      await ctx.db.insert("communityPresence", {
+        communityId: id,
+        userId: ownerId,
+        lastSeenAt: 100,
+        createdAt: 100,
+        updatedAt: 100,
+      });
+      return id;
+    },
   );
 
   await expect(
@@ -220,7 +248,7 @@ test("member directory fails closed and never scans to invent a missing durable 
     ),
   ).resolves.toMatchObject({
     totalCount: null,
-    page: [{ id: `owner:${String(communityId)}` }],
+    page: [{ id: `owner:${String(communityId)}`, last_active_at: new Date(100).toISOString() }],
   });
 
   await expect(

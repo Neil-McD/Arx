@@ -33,6 +33,7 @@ import type { CloudCommunityMemberBillingHistory } from "../../../../shared/clou
 import type {
   CommunityTypingPresenceBundle,
   CommunityTypingPresenceUser,
+  CommunityPresenceSummary,
   UserProfile,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -108,14 +109,7 @@ export type WebCommunityInteractionProjectionProps = {
   onCaughtUp?: () => void;
   onMobileReadingModeChange?: (active: boolean) => void;
   onOpenCommunityChatLightbox?: (images: CommunityChatMediaImage[], index: number) => void;
-  presenceSummary?: {
-    member_count?: number | null;
-    admin_count?: number | null;
-    online_count?: number | null;
-    online_count_capped?: boolean | null;
-    online_faces?: CommunityPresenceFace[] | null;
-    online_last_active_at_by_user_id?: Record<string, string> | null;
-  } | null;
+  presenceSummary?: CommunityPresenceSummary | null;
   communityMemberCount?: number | null;
   communityMembers?: CommunityRailMember[] | null;
   communityMembersHasMore?: boolean;
@@ -232,8 +226,6 @@ export function CommunityInteractionContextPanelSurface(
           membersLoadError={props.communityMembersLoadError}
           onLoadMoreMembers={props.onLoadMoreCommunityMembers}
           onlineUserIds={props.onlineUserIds ?? null}
-          onlineLastActiveAtByUserId={props.presenceSummary?.online_last_active_at_by_user_id ?? null}
-          activityScopeKey={props.communityId ?? null}
           ownerId={props.communityOwnerId ?? null}
           canManageMembers={canManageCommunityMembers}
           entryPolicy={props.communityEntryPolicy ?? null}
