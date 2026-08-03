@@ -21,6 +21,7 @@ type CommunityNavProps = {
   canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
+  isLoadingAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
   buttonType?: "button" | "submit" | "reset";
@@ -83,6 +84,7 @@ export function CommunityNav({
   canViewActiveCommunityPolynet,
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
+  isLoadingAccess = false,
   onSelectTab,
   onCopyCommunityJoinLink,
   buttonType,
@@ -324,7 +326,16 @@ export function CommunityNav({
         <span className="nav-item-label">Events</span>
         {lockedTabs.events ? <NavLockGlyph /> : communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
-      {showManagementSection && (
+      {isLoadingAccess ? (
+        <>
+          <div className="community-nav-divider" />
+          <div className="community-nav-access-loading" aria-label="Loading navigation">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
+            ))}
+          </div>
+        </>
+      ) : showManagementSection ? (
         <>
           <div className="community-nav-divider" />
           {showSettingsButton ? (
@@ -421,8 +432,12 @@ export function CommunityNav({
             </button>
           )}
         </>
-      )}
-      {canCopyJoinLink ? (
+      ) : null}
+      {isLoadingAccess ? (
+        <div className="community-nav-footer" aria-hidden="true">
+          <div className="community-nav-invite-loading web-skeleton-block" />
+        </div>
+      ) : canCopyJoinLink ? (
         <div className="community-nav-footer">
           <button
             className={`nav-item community-nav-invite${didCopyJoinLink ? " is-copied" : ""}`}

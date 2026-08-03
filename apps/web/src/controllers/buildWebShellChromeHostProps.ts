@@ -73,6 +73,7 @@ export function buildWebShellChromeHostProps(params: {
   canViewActiveCommunityPolynet: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
+  isLoadingCommunityAccess: boolean;
   lockedCommunityNavTabs?: WebShellChromeHostProps["communityShell"]["lockedCommunityNavTabs"];
   handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
@@ -185,6 +186,7 @@ export function buildWebShellChromeHostProps(params: {
       canViewActiveCommunityPolynet: params.canViewActiveCommunityPolynet,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,
+      isLoadingCommunityAccess: params.isLoadingCommunityAccess,
       lockedCommunityNavTabs: params.lockedCommunityNavTabs ?? null,
       onSelectCommunityTab: params.handleSelectCommunityTab,
       onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,

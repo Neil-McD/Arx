@@ -2946,6 +2946,7 @@ export default function App() {
     canViewActiveCommunityPolynet: !isVisitorCommunitySurface && canViewActiveCommunityPolynet,
     canManageMembersActiveCommunity: !isVisitorCommunitySurface && canManageMembersActiveCommunity,
     canViewActiveCommunityAnalytics: !isVisitorCommunitySurface && canViewActiveCommunityAnalytics,
+    isLoadingCommunityAccess: !isVisitorCommunitySurface && isLoadingCommunityAccess,
     lockedCommunityNavTabs: isVisitorCommunitySurface
       ? { ai_feed: true, resources: true, events: true }
       : null,
