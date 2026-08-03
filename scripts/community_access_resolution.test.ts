@@ -6,6 +6,11 @@ import {
   reduceCommunityAccessResolution,
   scopeCommunityAccessResolution,
 } from "../shared/communityAccessResolution";
+import {
+  deriveCommunityAccessCapabilities,
+  deriveCommunityActionGuards,
+  deriveCommunityNavVisibility,
+} from "../shared/communityAccessViewModel";
 
 type TestAccess = {
   community_id: string;
@@ -62,7 +67,7 @@ test("a stale response cannot overwrite a newer community access request", () =>
   expect(scopeCommunityAccessResolution(afterStaleA, "community-b").status).toBe("pending");
 });
 
-test("same-community refresh preserves presentation access while authority is pending", () => {
+test("same-community refresh preserves the last verified access snapshot", () => {
   const loading = reduceCommunityAccessResolution(
     createCommunityAccessResolutionState<TestAccess>(),
     { type: "begin", communityId: "community-a", requestId: 1 },
@@ -86,7 +91,54 @@ test("same-community refresh preserves presentation access while authority is pe
   });
 });
 
-test("refresh failure retains presentation access without restoring authority", () => {
+test("same-community refresh preserves navigation and action geometry", () => {
+  const access = {
+    community_id: "community-a",
+    user_id: "user-a",
+    is_owner: true,
+    is_entitled: true,
+    entitlement_role: "owner",
+    entitlement_ends_at: null,
+    effective_role: "owner",
+    can_view: true,
+    can_post_message: true,
+    can_manage_resources: true,
+    can_manage_members: true,
+  };
+  const loading = reduceCommunityAccessResolution(
+    createCommunityAccessResolutionState<typeof access>(),
+    { type: "begin", communityId: "community-a", requestId: 1 },
+  );
+  const resolved = reduceCommunityAccessResolution(loading, {
+    type: "resolve",
+    communityId: "community-a",
+    requestId: 1,
+    access,
+  });
+  const refreshing = reduceCommunityAccessResolution(resolved, {
+    type: "begin",
+    communityId: "community-a",
+    requestId: 2,
+  });
+  const scoped = scopeCommunityAccessResolution(refreshing, "community-a");
+  const capabilities = deriveCommunityAccessCapabilities(scoped.access);
+
+  expect(scoped.status).toBe("refreshing");
+  expect(deriveCommunityNavVisibility(capabilities)).toEqual({
+    canViewMembers: true,
+    canViewSettings: true,
+    canManageMembers: true,
+    canViewAnalytics: true,
+  });
+  expect(deriveCommunityActionGuards(capabilities)).toMatchObject({
+    canPostMessages: true,
+    canManageResources: true,
+    canManageMembers: true,
+    canViewCommunity: true,
+  });
+});
+
+test("refresh failure retains the last verified access snapshot", () => {
   const loading = reduceCommunityAccessResolution(
     createCommunityAccessResolutionState<TestAccess>(),
     { type: "begin", communityId: "community-a", requestId: 1 },

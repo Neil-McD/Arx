@@ -57,9 +57,9 @@ for (const tab of ["ai_agent", "funnel", "analytics"] as const) {
   );
 }
 
-const app = read("apps/web/src/App.tsx");
 const navigation = read("shared/appShellNavigation.ts");
 const activeCommunityShellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
+const tabAccessGuard = read("apps/web/src/controllers/useWebCommunityTabAccessGuard.ts");
 const membersReviewController = read("shared/useCommunityMembersReviewController.ts");
 
 assert.match(
@@ -78,33 +78,38 @@ assert.match(
   "AI Agent and Funnel tabs must remain builder-only",
 );
 assert.match(
-  app,
-  /if \(isLoadingCommunityAccess\) return;[\s\S]*if \(activeCommunityAccess\?\.community_id !== activeCommunityId\) return;/,
+  tabAccessGuard,
+  /params\.isLoadingCommunityAccess[\s\S]*params\.activeCommunityAccessId !== params\.activeCommunityId/,
   "tab normalization must wait for the current community access row",
 );
 assert.match(
   activeCommunityShellController,
-  /const currentActiveCommunityAccess = useMemo\(\(\) => \{[\s\S]*if \(activeCommunityAccess\?\.community_id !== communityId\) return null;[\s\S]*return activeCommunityAccess;/,
-  "active community shell must fail closed when the loaded access row belongs to another community",
+  /if \(accessSessionIdentityRef\.current !== sessionIdentity\) \{[\s\S]*type: "reset"[\s\S]*\}[\s\S]*const activeCommunityAccess =[\s\S]*isAccessSessionIdentityScoped[\s\S]*scopedCommunityAccessResolution\.access/,
+  "active community shell must scope retained access to the signed-in presentation identity",
 );
 assert.match(
   activeCommunityShellController,
-  /deriveCommunityAccessCapabilities\(currentActiveCommunityAccess\)/,
+  /deriveCommunityAccessCapabilities\(activeCommunityAccess\)/,
   "community capability booleans must derive from current-community access only",
 );
 assert.match(
   activeCommunityShellController,
-  /activeCommunityAccess: currentActiveCommunityAccess/,
+  /return \{[\s\S]*activeCommunityAccess,/,
   "downstream surfaces must receive current-community access only",
 );
-assert.match(
-  app,
-  /const normalizedTab = normalizeCommunityTabForAccess\(communityTab, \{[\s\S]*canViewSettings: canViewActiveCommunitySettings,[\s\S]*canViewPolynet: canViewActiveCommunityPolynet,[\s\S]*canManageMembers: canManageMembersActiveCommunity,[\s\S]*canViewAnalytics: canViewActiveCommunityAnalytics,[\s\S]*\}\);/,
-  "App must normalize the active tab from the same capability booleans used by CommunityNav",
+assert.doesNotMatch(
+  activeCommunityShellController,
+  /currentActiveCommunityAccess|authoritativeCommunityAccessCapabilities|authoritativeCommunityNavVisibility/,
+  "active community shell must not keep a second transient capability owner",
 );
 assert.match(
-  app,
-  /if \(normalizedTab === communityTab\) return;[\s\S]*setCommunityResourceModuleId\(null\);[\s\S]*applyCommunityShellState\(\{ communityTab: normalizedTab \}\);/,
+  tabAccessGuard,
+  /normalizeCommunityTabForAccess\([\s\S]*canViewSettings: params\.canViewSettings,[\s\S]*canViewPolynet: params\.canViewPolynet,[\s\S]*canManageMembers: params\.canManageMembers,[\s\S]*canViewAnalytics: params\.canViewAnalytics/,
+  "the tab guard must normalize from the same capability booleans used by CommunityNav",
+);
+assert.match(
+  tabAccessGuard,
+  /if \(normalizedTab === params\.communityTab\) return;[\s\S]*params\.setCommunityResourceModuleId\(null\);[\s\S]*params\.applyCommunityShellState\(\{ communityTab: normalizedTab \}\);/,
   "invalid active community tabs must collapse to a valid tab and clear stale resource selection",
 );
 assert.match(

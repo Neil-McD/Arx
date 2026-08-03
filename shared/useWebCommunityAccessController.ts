@@ -5,6 +5,7 @@ import { listCloudProfileRowsByUserIds } from "./cloudProfilesGateway";
 import { mergeUserProfileEntries } from "./userProfileMerge";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { formatWorkspaceRestoreErrorMessage } from "./appErrorMappings";
+import { reuseEquivalentValue } from "./reuseEquivalentValue";
 import {
   beginProfileHydrationRequest,
   createProfileHydrationRequestRegistry,
@@ -84,7 +85,7 @@ export function useWebCommunityAccessController<
         }));
       if (!isCurrentRequest()) return;
       const latest = argsRef.current;
-      latest.setCommunities(list);
+      latest.setCommunities((previous) => reuseEquivalentValue(previous, list));
       if (!latest.activeCommunitySlug) {
         const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;
         if (nextCommunitySlug) latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });

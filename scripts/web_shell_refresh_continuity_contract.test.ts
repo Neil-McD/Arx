@@ -60,13 +60,37 @@ describe("web shell refresh continuity contract", () => {
     expect(ensureBlock).not.toMatch(/refreshAuthSessionLockedResult, session\]/);
   });
 
-  it("keeps presentation capability separate from authoritative mutation guards", () => {
+  it("serializes credential refresh before resume data fan-out", () => {
+    const lifecycle = read("shared/useAuthSessionLifecycle.ts");
+    const start = lifecycle.indexOf("function useSessionResumeRefresh");
+    const end = lifecycle.indexOf("\n\nexport function useAuthSessionLifecycle", start);
+    const resumeBlock = lifecycle.slice(start, end);
+
+    expect(start).toBeGreaterThanOrEqual(0);
+    expect(end).toBeGreaterThan(start);
+    expect(resumeBlock).toMatch(/await refreshSessionIfNearExpiry\(/);
+    expect(resumeBlock).toMatch(
+      /await refreshSessionIfNearExpiry\([\s\S]*const usableCandidate = params\.sessionRef\.current;[\s\S]*onResumeWithSessionRef\.current\(usableCandidate\)/,
+    );
+    expect(resumeBlock).not.toMatch(/void refreshSessionIfNearExpiry\(/);
+  });
+
+  it("uses one retained access snapshot for stable shell capabilities", () => {
     const controller = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
 
-    expect(controller).toContain("presentationActiveCommunityAccess");
-    expect(controller).toContain("authoritativeCommunityAccessCapabilities");
+    expect(controller).toContain("const activeCommunityAccess =");
+    expect(controller).not.toContain("presentationActiveCommunityAccess");
+    expect(controller).not.toContain("currentActiveCommunityAccess");
+    expect(controller).not.toContain("authoritativeCommunityAccessCapabilities");
+    expect(controller).not.toContain("authoritativeCommunityNavVisibility");
+    expect(controller).not.toMatch(
+      /const isLoadingCommunityAccess[\s\S]*?scopedCommunityAccessResolution\.status === "refreshing"/,
+    );
     expect(controller).toMatch(
-      /deriveCommunityActionGuards\(authoritativeCommunityAccessCapabilities\)/,
+      /if \(accessSessionIdentityRef\.current !== sessionIdentity\) \{[\s\S]*type: "reset"[\s\S]*\}[\s\S]*accessSessionIdentityRef\.current = sessionIdentity/,
+    );
+    expect(controller).toMatch(
+      /deriveCommunityActionGuards\(communityAccessCapabilities\)/,
     );
     expect(controller).toMatch(
       /deriveCommunityNavVisibility\(communityAccessCapabilities\)/,

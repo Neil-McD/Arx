@@ -7,6 +7,7 @@ import {
   listCloudCommunityDirectoryWindow,
 } from "./cloudCommunityDirectoryGateway";
 import { COMMUNITY_DIRECTORY_DEFAULT_PAGE_SIZE } from "./communityDirectoryWindow";
+import { reuseEquivalentValue } from "./reuseEquivalentValue";
 
 export function useCommunityDirectoryController<SessionT extends SessionLike>(params: {
   activeCommunityId: string | null;
@@ -89,8 +90,9 @@ export function useCommunityDirectoryController<SessionT extends SessionLike>(pa
       if (!page || communityDirectoryLoadSeqRef.current !== seq) return;
       presentationScopeRef.current = loadScope;
       setPresentationScope(loadScope);
-      communityDirectoryMembersRef.current = page.rows;
-      setCommunityDirectoryMembers(page.rows);
+      const stableRows = reuseEquivalentValue(communityDirectoryMembersRef.current, page.rows);
+      communityDirectoryMembersRef.current = stableRows;
+      setCommunityDirectoryMembers(stableRows);
       setCommunityDirectoryMemberCount(page.totalCount);
       communityDirectoryNextCursorRef.current = page.continueCursor;
       setCommunityDirectoryMembersNextCursor(page.continueCursor);

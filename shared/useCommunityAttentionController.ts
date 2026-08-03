@@ -8,6 +8,7 @@ import {
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
 import { useResumeEpochEffect } from "./useResumeEpochEffect";
+import { reuseEquivalentValue } from "./reuseEquivalentValue";
 
 type SessionLike = unknown;
 
@@ -119,7 +120,7 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
           [surface]: false,
         };
       }
-      setAttentionByCommunityId(nextAttentionMap);
+      setAttentionByCommunityId((previous) => reuseEquivalentValue(previous, nextAttentionMap));
     } catch {
       if (loadGenerationRef.current !== generation) return;
     }
