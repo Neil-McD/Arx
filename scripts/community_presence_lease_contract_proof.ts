@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
@@ -18,7 +18,6 @@ const contract = read("shared/communityPresenceContract.ts");
 const core = read("convex/communityPresenceCore.ts");
 const communityPublic = read("convex/communityPublic.ts");
 const communityDirectory = read("convex/communityDirectory.ts");
-const presenceBackfill = read("convex/communityPresenceBackfill.ts");
 const membershipLifecycle = read("convex/communityMembershipLifecycle.ts");
 const communityLifecycle = read("convex/communityLifecycle.ts");
 const communityAdmin = read("convex/communityAdmin.ts");
@@ -121,13 +120,11 @@ assert.match(
   /revokeCommunityMemberInternal[\s\S]*deleteCommunityPresenceForUser/,
   "member revocation must remove every presence row",
 );
-assert.match(
-  presenceBackfill,
-  /v\.literal\("owners"\)[\s\S]*v\.literal\("memberships"\)[\s\S]*v\.literal\("presence"\)/,
-  "historical coverage repair must be bounded, phased, and dry-run capable",
+assert.equal(
+  existsSync(new URL("../convex/communityPresenceBackfill.ts", import.meta.url)),
+  false,
+  "the completed one-time presence migration surface must stay deleted",
 );
-assert.match(presenceBackfill, /MAX_BATCH_SIZE = 100/);
-assert.match(presenceBackfill, /dryRun: v\.boolean\(\)/);
 
 assert.match(
   heartbeat,

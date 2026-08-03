@@ -13,11 +13,9 @@ import {
   renewCommunityPresenceLease,
   resolveAuthorizedCommunityPresenceWindow,
 } from "./communityPresenceCore";
-import { backfillCommunityPresenceBatchCore } from "./communityPresenceBackfill";
 
 const modules = import.meta.glob([
   "./communityPresenceCore.ts",
-  "./communityPresenceBackfill.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -170,35 +168,6 @@ test("revocation cleanup removes every duplicate presence row", async () => {
       .collect();
     expect(rows).toHaveLength(0);
   });
-});
-
-test("presence backfill is dry-run first and seeds owner baselines idempotently", async () => {
-  const t = convexTest(schema, modules);
-  await createScope(t);
-  const dryRun = await t.run(async (ctx) =>
-    backfillCommunityPresenceBatchCore({
-      ctx,
-      phase: "owners",
-      paginationOpts: { cursor: null, numItems: 50 },
-      dryRun: true,
-    }));
-  expect(dryRun).toMatchObject({ would_create: 1, created: 0, complete: true });
-  const applied = await t.run(async (ctx) =>
-    backfillCommunityPresenceBatchCore({
-      ctx,
-      phase: "owners",
-      paginationOpts: { cursor: null, numItems: 50 },
-      dryRun: false,
-    }));
-  expect(applied).toMatchObject({ would_create: 0, created: 1, complete: true });
-  const repeated = await t.run(async (ctx) =>
-    backfillCommunityPresenceBatchCore({
-      ctx,
-      phase: "owners",
-      paginationOpts: { cursor: null, numItems: 50 },
-      dryRun: false,
-    }));
-  expect(repeated).toMatchObject({ created: 0, already_canonical: 1, complete: true });
 });
 
 test("bounded presence windows remain conservatively capped after authorization filtering", async () => {
