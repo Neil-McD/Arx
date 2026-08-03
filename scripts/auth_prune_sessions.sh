@@ -176,7 +176,7 @@ for ((batch = 1; batch <= MAX_BATCHES; batch += 1)); do
       for (const key of required) {
         if (!(key in result)) throw new Error(`auth_prune_result_missing_${key}`);
       }
-      process.stdout.write(required.map((key) => String(result[key])).join("\t"));
+      console.log(required.map((key) => String(result[key])).join("\t"));
     '
   )
   if [[ "$DRY_RUN" != false ]]; then
