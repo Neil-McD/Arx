@@ -38,14 +38,14 @@ The root graph pins:
 - OpenTelemetry `0.221.0` / `2.10.0` peer families
 - `axios@1.18.1`
 - `body-parser@2.3.0`
-- `brace-expansion@5.0.8`
+- `brace-expansion@5.0.9`
 - `fast-uri@4.1.1`
 - `js-yaml@5.2.2`
 - `protobufjs@8.7.1`
 - `shell-quote@1.10.0`
 - `tar@7.5.21`
 
-The web graph pins `brace-expansion@5.0.8`. The regenerated locks resolve
+The web graph pins `brace-expansion@5.0.9`. The regenerated locks resolve
 `postcss@8.5.23` and `dompurify@3.4.12` while retaining the accepted provider
 SDK versions.
 

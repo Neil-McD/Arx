@@ -73,19 +73,9 @@ export type WebCommunityShellProps = {
     is_general: boolean;
   }) => void;
   onCreateCommunityChannel: (name: string) => Promise<unknown>;
-  onRenameCommunityChannel: (channelId: string, name: string) => Promise<unknown>;
-  onDeleteCommunityChannel: (channel: {
-    id: string;
-    slug: string;
-    name: string;
-    is_general: boolean;
-  }) => Promise<boolean>;
   isCreatingCommunityChannel: boolean;
   communityChannelCreateError: string | null;
   clearCommunityChannelCreateError: () => void;
-  managingCommunityChannelId: string | null;
-  communityChannelManageError: string | null;
-  clearCommunityChannelManageError: () => void;
   isAtCommunityChannelLimit: boolean;
   maxActiveCommunityChannels: number;
   canViewMembersActiveCommunity: boolean;

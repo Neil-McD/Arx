@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type FormEvent } from "react";
-import { Check, Ellipsis, Hash, Pencil, Plus, Trash2, UserPlus, X } from "lucide-react";
+import { Check, Hash, Plus, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 
@@ -38,14 +38,9 @@ type CommunityNavProps = {
   channelIndicators?: Record<string, { chat: boolean; mentions: boolean }>;
   onSelectChannel?: (channel: CommunityNavChannel) => void;
   onCreateChannel?: (name: string) => Promise<unknown>;
-  onRenameChannel?: (channelId: string, name: string) => Promise<unknown>;
-  onDeleteChannel?: (channel: CommunityNavChannel) => Promise<boolean>;
   isCreatingChannel?: boolean;
   createChannelError?: string | null;
   clearCreateChannelError?: () => void;
-  managingChannelId?: string | null;
-  manageChannelError?: string | null;
-  clearManageChannelError?: () => void;
   isAtChannelLimit?: boolean;
   maxActiveChannels?: number;
 };
@@ -119,34 +114,20 @@ export const CommunityNav = memo(function CommunityNav({
   channelIndicators = {},
   onSelectChannel,
   onCreateChannel,
-  onRenameChannel,
-  onDeleteChannel,
   isCreatingChannel = false,
   createChannelError = null,
   clearCreateChannelError,
-  managingChannelId = null,
-  manageChannelError = null,
-  clearManageChannelError,
   isAtChannelLimit = false,
   maxActiveChannels = 10,
 }: CommunityNavProps) {
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
   const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
   const [channelName, setChannelName] = useState("");
-  const [openChannelMenuSlug, setOpenChannelMenuSlug] = useState<string | null>(null);
-  const [managedChannel, setManagedChannel] = useState<CommunityNavChannel | null>(null);
-  const [channelManagementMode, setChannelManagementMode] = useState<"rename" | "delete" | null>(null);
-  const [renamedChannelName, setRenamedChannelName] = useState("");
   const copyResetTimeoutRef = useRef<number | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
   const channelNameInputRef = useRef<HTMLInputElement | null>(null);
-  const renameChannelInputRef = useRef<HTMLInputElement | null>(null);
-  const deleteChannelCancelRef = useRef<HTMLButtonElement | null>(null);
   const addChannelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const addChannelDialogRef = useRef<HTMLFormElement | null>(null);
-  const channelManagementDialogRef = useRef<HTMLElement | null>(null);
-  const channelManagementTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const channelMenuRef = useRef<HTMLDivElement | null>(null);
   const showSettingsButton = canViewActiveCommunitySettings;
   const showManagementSection =
     showSettingsButton ||
@@ -178,19 +159,6 @@ export const CommunityNav = memo(function CommunityNav({
   }, [isAddChannelOpen]);
 
   useEffect(() => {
-    if (!channelManagementMode) return;
-    const frame = window.requestAnimationFrame(() => {
-      if (channelManagementMode === "rename") {
-        renameChannelInputRef.current?.focus();
-        renameChannelInputRef.current?.select();
-      } else {
-        deleteChannelCancelRef.current?.focus();
-      }
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [channelManagementMode]);
-
-  useEffect(() => {
     if (!isAddChannelOpen) return;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape" && !isCreatingChannel) {
@@ -209,56 +177,9 @@ export const CommunityNav = memo(function CommunityNav({
   }, [isAddChannelOpen, isCreatingChannel]);
 
   useEffect(() => {
-    if (!channelManagementMode) return;
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !managingChannelId) {
-        event.preventDefault();
-        event.stopPropagation();
-        setManagedChannel(null);
-        setChannelManagementMode(null);
-        setRenamedChannelName("");
-        clearManageChannelError?.();
-        restoreModalTriggerFocus(
-          channelManagementTriggerRef.current,
-          addChannelTriggerRef.current,
-        );
-        return;
-      }
-      trapModalFocus(event, channelManagementDialogRef.current);
-    };
-    document.addEventListener("keydown", handleKeyDown);
-    return () => document.removeEventListener("keydown", handleKeyDown);
-  }, [channelManagementMode, managingChannelId]);
-
-  useEffect(() => {
-    if (!openChannelMenuSlug) return;
-    const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!channelMenuRef.current?.contains(event.target as Node)) {
-        setOpenChannelMenuSlug(null);
-      }
-    };
-    const closeOnEscape = (event: KeyboardEvent) => {
-      if (event.key !== "Escape") return;
-      setOpenChannelMenuSlug(null);
-      restoreModalTriggerFocus(channelManagementTriggerRef.current);
-    };
-    document.addEventListener("pointerdown", closeOnOutsidePointer);
-    document.addEventListener("keydown", closeOnEscape);
-    return () => {
-      document.removeEventListener("pointerdown", closeOnOutsidePointer);
-      document.removeEventListener("keydown", closeOnEscape);
-    };
-  }, [openChannelMenuSlug]);
-
-  useEffect(() => {
     setIsAddChannelOpen(false);
     setChannelName("");
-    setOpenChannelMenuSlug(null);
-    setManagedChannel(null);
-    setChannelManagementMode(null);
-    setRenamedChannelName("");
     clearCreateChannelError?.();
-    clearManageChannelError?.();
   }, [activeCommunity?.slug]);
 
   useEffect(() => {
@@ -317,49 +238,6 @@ export const CommunityNav = memo(function CommunityNav({
     restoreModalTriggerFocus(addChannelTriggerRef.current);
   };
 
-  const closeChannelManagement = (force = false) => {
-    if (managingChannelId && !force) return;
-    setManagedChannel(null);
-    setChannelManagementMode(null);
-    setRenamedChannelName("");
-    clearManageChannelError?.();
-    restoreModalTriggerFocus(
-      channelManagementTriggerRef.current,
-      addChannelTriggerRef.current,
-    );
-  };
-
-  const openRenameChannel = (channel: CommunityNavChannel) => {
-    setOpenChannelMenuSlug(null);
-    setManagedChannel(channel);
-    setRenamedChannelName(channel.name);
-    setChannelManagementMode("rename");
-    clearManageChannelError?.();
-  };
-
-  const openDeleteChannel = (channel: CommunityNavChannel) => {
-    setOpenChannelMenuSlug(null);
-    setManagedChannel(channel);
-    setChannelManagementMode("delete");
-    clearManageChannelError?.();
-  };
-
-  const handleRenameChannel = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    const normalizedName = renamedChannelName.trim().replace(/\s+/g, " ");
-    if (!managedChannel || !normalizedName || !onRenameChannel || managingChannelId) return;
-    clearManageChannelError?.();
-    const renamed = await onRenameChannel(managedChannel.id, normalizedName);
-    if (renamed) closeChannelManagement(true);
-  };
-
-  const handleDeleteChannel = async () => {
-    if (!managedChannel || !onDeleteChannel || managingChannelId) return;
-    clearManageChannelError?.();
-    const deleted = await onDeleteChannel(managedChannel);
-    if (deleted) closeChannelManagement(true);
-  };
-
   return (
     <aside className="community-nav">
       <div className="community-nav-header">
@@ -389,25 +267,15 @@ export const CommunityNav = memo(function CommunityNav({
             communityTab === "chat" &&
             (selectedChannelSlug ?? "general") === channel.slug;
           const indicator = channelIndicators[channel.slug];
-          const canManageChannel = Boolean(
-            canManageMembersActiveCommunity &&
-            !channel.is_general &&
-            channel.id &&
-            onRenameChannel &&
-            onDeleteChannel,
-          );
-          const isMenuOpen = openChannelMenuSlug === channel.slug;
           return (
             <div
               key={channel.id || channel.slug}
-              className={`community-channel-row${isSelected ? " active" : ""}${canManageChannel ? " can-manage" : ""}${isMenuOpen ? " has-open-menu" : ""}`}
-              ref={isMenuOpen ? channelMenuRef : undefined}
+              className={`community-channel-row${isSelected ? " active" : ""}`}
             >
               <button
                 className={isSelected ? "nav-item community-channel-item active" : "nav-item community-channel-item"}
                 type="button"
                 onClick={() => {
-                  setOpenChannelMenuSlug(null);
                   if (onSelectChannel) onSelectChannel(channel);
                   else onSelectTab("chat");
                 }}
@@ -421,36 +289,6 @@ export const CommunityNav = memo(function CommunityNav({
                   <span className={`nav-item-dot${indicator.mentions ? " is-mention" : ""}`} aria-hidden="true" />
                 ) : null}
               </button>
-              {canManageChannel ? (
-                <div className="community-channel-management">
-                  <button
-                    className="community-channel-menu-trigger"
-                    type="button"
-                    aria-label={`Manage ${channel.name}`}
-                    aria-haspopup="menu"
-                    aria-expanded={isMenuOpen}
-                    disabled={Boolean(managingChannelId)}
-                    onClick={(event) => {
-                      channelManagementTriggerRef.current = event.currentTarget;
-                      setOpenChannelMenuSlug(isMenuOpen ? null : channel.slug);
-                    }}
-                  >
-                    <Ellipsis size={17} strokeWidth={1.9} />
-                  </button>
-                  {isMenuOpen ? (
-                    <div className="community-channel-menu" role="menu" aria-label={`Manage ${channel.name}`}>
-                      <button type="button" role="menuitem" onClick={() => openRenameChannel(channel)}>
-                        <Pencil size={15} aria-hidden="true" />
-                        Rename channel
-                      </button>
-                      <button className="is-danger" type="button" role="menuitem" onClick={() => openDeleteChannel(channel)}>
-                        <Trash2 size={15} aria-hidden="true" />
-                        Delete channel
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
             </div>
           );
         })}
@@ -720,125 +558,6 @@ export const CommunityNav = memo(function CommunityNav({
               </button>
             </div>
           </form>
-        </div>
-      ) : null}
-      {managedChannel && channelManagementMode ? (
-        <div
-          className="community-channel-modal-backdrop"
-          role="presentation"
-          onMouseDown={(event) => {
-            if (event.target === event.currentTarget) closeChannelManagement();
-          }}
-        >
-          {channelManagementMode === "rename" ? (
-            <form
-              ref={(element) => {
-                channelManagementDialogRef.current = element;
-              }}
-              className="community-channel-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="community-channel-rename-title"
-              tabIndex={-1}
-              onSubmit={(event) => void handleRenameChannel(event)}
-            >
-              <div className="community-channel-modal-header">
-                <div>
-                  <h2 id="community-channel-rename-title">Rename channel</h2>
-                  <p>The channel URL will stay the same so existing links keep working.</p>
-                </div>
-                <button
-                  type="button"
-                  className="community-channel-modal-close"
-                  onClick={() => closeChannelManagement()}
-                  aria-label="Close rename channel dialog"
-                  disabled={Boolean(managingChannelId)}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              <label className="community-channel-modal-field">
-                <span>Channel name</span>
-                <input
-                  ref={renameChannelInputRef}
-                  value={renamedChannelName}
-                  maxLength={48}
-                  onChange={(event) => {
-                    setRenamedChannelName(event.target.value);
-                    clearManageChannelError?.();
-                  }}
-                  disabled={Boolean(managingChannelId)}
-                />
-              </label>
-              {manageChannelError ? (
-                <div className="community-channel-modal-error" role="alert">
-                  {manageChannelError}
-                </div>
-              ) : null}
-              <div className="community-channel-modal-actions">
-                <button type="button" onClick={() => closeChannelManagement()} disabled={Boolean(managingChannelId)}>
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="is-primary"
-                  disabled={Boolean(managingChannelId) || !renamedChannelName.trim()}
-                >
-                  {managingChannelId ? "Saving…" : "Save"}
-                </button>
-              </div>
-            </form>
-          ) : (
-            <div
-              ref={(element) => {
-                channelManagementDialogRef.current = element;
-              }}
-              className="community-channel-modal"
-              role="dialog"
-              aria-modal="true"
-              aria-labelledby="community-channel-delete-title"
-              tabIndex={-1}
-            >
-              <div className="community-channel-modal-header">
-                <div>
-                  <h2 id="community-channel-delete-title">Delete #{managedChannel.name}?</h2>
-                  <p>Members will no longer see this channel. Existing messages will be retained.</p>
-                </div>
-                <button
-                  type="button"
-                  className="community-channel-modal-close"
-                  onClick={() => closeChannelManagement()}
-                  aria-label="Close delete channel dialog"
-                  disabled={Boolean(managingChannelId)}
-                >
-                  <X size={18} />
-                </button>
-              </div>
-              {manageChannelError ? (
-                <div className="community-channel-modal-error" role="alert">
-                  {manageChannelError}
-                </div>
-              ) : null}
-              <div className="community-channel-modal-actions">
-                <button
-                  ref={deleteChannelCancelRef}
-                  type="button"
-                  onClick={() => closeChannelManagement()}
-                  disabled={Boolean(managingChannelId)}
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  className="is-danger"
-                  onClick={() => void handleDeleteChannel()}
-                  disabled={Boolean(managingChannelId)}
-                >
-                  {managingChannelId ? "Deleting…" : "Delete channel"}
-                </button>
-              </div>
-            </div>
-          )}
         </div>
       ) : null}
     </aside>

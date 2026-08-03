@@ -531,6 +531,7 @@ export default function App() {
   const {
     channels: activeCommunityChannels,
     isLoadingChannels: isLoadingActiveCommunityChannels,
+    selectedChannel: activeCommunityChannel,
     activeChannelId,
     selectedChannelSlug: activeCommunityChannelSlug,
     channelResolutionStatus: activeCommunityChannelResolutionStatus,
@@ -2359,6 +2360,17 @@ export default function App() {
       },
       interactionProjection: {
         mobileThreadPage: mobileThreadPageOpen,
+        activeChannel: isActiveCommunityChannelReady
+          ? activeCommunityChannel
+          : null,
+        canManageActiveChannel:
+          canManageMembersActiveCommunity &&
+          Boolean(activeCommunityChannel),
+        managingChannelId: managingCommunityChannelId,
+        manageChannelError: communityChannelManageError,
+        onClearManageChannelError: clearCommunityChannelManageError,
+        onRenameChannel: handleRenameCommunityChannel,
+        onDeleteChannel: handleDeleteCommunityChannel,
         onMobileReadingModeChange: mobileChromeScrollTrackingEnabled
           ? setMobileChromeReadingMode
           : undefined,
@@ -2961,14 +2973,9 @@ export default function App() {
     handleCreateCommunityChannel: isVisitorCommunitySurface
       ? () => Promise.resolve(null)
       : handleCreateCommunityChannel,
-    handleRenameCommunityChannel,
-    handleDeleteCommunityChannel,
     isCreatingCommunityChannel,
     communityChannelCreateError,
     clearCommunityChannelCreateError,
-    managingCommunityChannelId,
-    communityChannelManageError,
-    clearCommunityChannelManageError,
     isAtCommunityChannelLimit,
     maxActiveCommunityChannels,
     canViewMembersActiveCommunity: !isVisitorCommunitySurface && canViewMembersActiveCommunity,

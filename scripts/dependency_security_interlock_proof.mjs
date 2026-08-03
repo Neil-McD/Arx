@@ -69,7 +69,7 @@ const exactRootResolutions = {
   "@opentelemetry/sdk-trace-node": "2.10.0",
   axios: "1.18.1",
   "body-parser": "2.3.0",
-  "brace-expansion": "5.0.8",
+  "brace-expansion": "5.0.9",
   "fast-uri": "4.1.1",
   "js-yaml": "5.2.2",
   protobufjs: "8.7.1",
@@ -92,13 +92,13 @@ for (const [packageName, expectedVersion] of Object.entries(exactRootResolutions
 
 assert.equal(
   webManifest.overrides?.["brace-expansion"],
-  "5.0.8",
+  "5.0.9",
   "web must pin the patched brace-expansion release",
 );
 assert.equal(
   webLock.packages?.["node_modules/brace-expansion"]?.version,
-  "5.0.8",
-  "web lock must resolve brace-expansion@5.0.8",
+  "5.0.9",
+  "web lock must resolve brace-expansion@5.0.9",
 );
 assert.equal(
   rootLock.packages?.["node_modules/postcss"]?.version,

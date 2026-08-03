@@ -32,13 +32,6 @@ const nav = read(navPath);
   "canManageMembersActiveCommunity && onCreateChannel",
   "Channels are visible to every community member.",
   "community-channel-loading-row web-skeleton-row",
-  'aria-haspopup="menu"',
-  'aria-label={`Manage ${channel.name}`}',
-  "Rename channel",
-  "Delete channel",
-  "!channel.is_general",
-  "Existing messages will be retained.",
-  "channelManagementDialogRef",
   "MODAL_FOCUSABLE_SELECTOR",
   "trapModalFocus",
 ].forEach((required) => assertIncludes(navPath, nav, required));
@@ -47,6 +40,25 @@ assertNotMatches(
   nav,
   /channels\.length\s*>\s*0[\s\S]*name:\s*"General"/,
 );
+assertNotMatches(navPath, nav, /community-channel-menu-trigger|Rename channel|Delete channel/);
+
+const headerPath = "apps/web/src/components/WebCommunityChannelHeader.tsx";
+const header = read(headerPath);
+[
+  "community-channel-header",
+  'aria-haspopup="menu"',
+  'aria-label={`Channel options for ${channel.name}`}',
+  "canOpenChannelMenu",
+  "community-channel-header-menu-system-note",
+  "Default channel",
+  "Can’t be renamed or deleted",
+  "Rename channel",
+  "Delete channel",
+  "!channel.is_general",
+  "Existing messages will be retained.",
+  "MODAL_FOCUSABLE_SELECTOR",
+  "trapModalFocus",
+].forEach((required) => assertIncludes(headerPath, header, required));
 
 const gatewayPath = "shared/cloudCommunityChannelsGateway.ts";
 const gateway = read(gatewayPath);
@@ -117,13 +129,62 @@ const app = read(appPath);
   'activeCommunityChannelResolutionStatus === "not_found"',
   '"Return to General"',
   "retryActiveCommunityChannels",
+  "selectedChannel: activeCommunityChannel",
+  "canManageActiveChannel",
+  "canManageMembersActiveCommunity &&\n          Boolean(activeCommunityChannel)",
+  "onRenameChannel: handleRenameCommunityChannel",
+  "onDeleteChannel: handleDeleteCommunityChannel",
 ].forEach((required) => assertIncludes(appPath, app, required));
+assertNotMatches(
+  appPath,
+  app,
+  /canManageActiveChannel:[\s\S]*?activeCommunityChannel\s*&&\s*!activeCommunityChannel\.is_general/,
+);
+
+const interactionProjectionPath =
+  "apps/web/src/components/WebCommunityInteractionProjection.tsx";
+const interactionProjection = read(interactionProjectionPath);
+[
+  "WebCommunityChannelHeader",
+  "props.activeChannel",
+  "props.canManageActiveChannel",
+  "props.onRenameChannel",
+  "props.onDeleteChannel",
+].forEach((required) =>
+  assertIncludes(interactionProjectionPath, interactionProjection, required),
+);
 
 const shellStylesPath = "apps/web/src/styles/shell-and-onboarding.css";
 assertMatches(
   shellStylesPath,
   read(shellStylesPath),
   /\.community-nav\s*\{[\s\S]*?overflow-y:\s*auto;/,
+);
+
+const interactionStylesPath = "apps/web/src/styles/community-and-content.css";
+const interactionStyles = read(interactionStylesPath);
+[
+  ".community-channel-header",
+  ".community-channel-header-menu-trigger",
+  ".community-channel-header-menu",
+  ".community-channel-header-menu-system-note",
+].forEach((required) =>
+  assertIncludes(interactionStylesPath, interactionStyles, required),
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-header\s*\{[\s\S]*?padding:\s*0\s+18px;[\s\S]*?border-bottom:\s*1px\s+solid\s+var\(--border-default\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-header-identity\s*\{[\s\S]*?color:\s*var\(--text-muted\);[\s\S]*?\.community-channel-header-identity h1\s*\{[\s\S]*?font-weight:\s*500;/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-header-menu-trigger\s*\{[\s\S]*?color:\s*var\(--text-muted\);/,
 );
 
 const routePath = "shared/webAppRouteState.ts";
