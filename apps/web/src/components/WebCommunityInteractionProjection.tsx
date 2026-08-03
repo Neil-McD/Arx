@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Fragment, memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   MessageCircle,
   MessageSquare,
@@ -172,11 +172,82 @@ import {
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
 
-export function CommunityInteractionContextPanelSurface(
+const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
+  "activeCommunityName",
+  "presenceSummary",
+  "onlineUserIds",
+  "communityMemberCount",
+  "communityMembers",
+  "communityMembersHasMore",
+  "isLoadingCommunityMembers",
+  "isLoadingMoreCommunityMembers",
+  "communityMembersLoadError",
+  "onLoadMoreCommunityMembers",
+  "communityId",
+  "communityOwnerId",
+  "canManageCommunityMembers",
+  "communityEntryPolicy",
+  "canSetCommunityFreeAccessMode",
+  "isSettingCommunityFreeAccessMode",
+  "communityFreeAccessModeError",
+  "onSetCommunityFreeAccessMode",
+  "canReviewCommunityJoinRequests",
+  "communityJoinReviewMode",
+  "communityJoinRequests",
+  "isLoadingCommunityJoinRequests",
+  "communityJoinRequestsError",
+  "decidingCommunityJoinRequestId",
+  "onApproveCommunityJoinRequest",
+  "onDenyCommunityJoinRequest",
+  "communityMemoryOverview",
+  "isLoadingCommunityMemory",
+  "communityMemoryError",
+  "onRefreshCommunityMemory",
+  "onOpenCommunityMemory",
+  "contextPanelLockedSections",
+  "onContextPanelLockedSectionActivate",
+  "communityMemoryCountLabel",
+  "contextPanelMembersPreview",
+  "onOpenProfile",
+  "onMessageUser",
+  "currentUserId",
+  "displayName",
+  "getInitials",
+  "getAvatarColor",
+  "canViewMemberPlanDetails",
+  "isActiveCommunityOwner",
+  "communityInitials",
+  "onSetCommunityMemberRole",
+  "onRemoveCommunityMember",
+  "onBanCommunityMember",
+  "loadMemberBillingHistory",
+] as const satisfies readonly (keyof WebCommunityInteractionProjectionProps)[];
+
+type CommunityContextProjectionProps = Pick<
+  WebCommunityInteractionProjectionProps,
+  (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]
+> & {
+  containerClassName?: string;
+  ariaLabel?: string;
+};
+
+function pickCommunityContextProjection(
   props: WebCommunityInteractionProjectionProps & {
     containerClassName?: string;
     ariaLabel?: string;
   },
+): CommunityContextProjectionProps {
+  return {
+    ...Object.fromEntries(
+      COMMUNITY_CONTEXT_PROJECTION_KEYS.map((key) => [key, props[key]]),
+    ) as Pick<WebCommunityInteractionProjectionProps, (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]>,
+    containerClassName: props.containerClassName,
+    ariaLabel: props.ariaLabel,
+  };
+}
+
+const StableCommunityInteractionContextPanelSurface = memo(function StableCommunityInteractionContextPanelSurface(
+  props: CommunityContextProjectionProps,
 ) {
   const [selectedCommunityMemberId, setSelectedCommunityMemberId] = useState<string | null>(null);
   const selectedCommunityMember = useMemo(() => {
@@ -284,6 +355,15 @@ export function CommunityInteractionContextPanelSurface(
       />
     </>
   );
+});
+
+export function CommunityInteractionContextPanelSurface(
+  props: WebCommunityInteractionProjectionProps & {
+    containerClassName?: string;
+    ariaLabel?: string;
+  },
+) {
+  return <StableCommunityInteractionContextPanelSurface {...pickCommunityContextProjection(props)} />;
 }
 
 

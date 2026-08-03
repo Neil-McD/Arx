@@ -551,6 +551,16 @@ assert.match(
   "context panel should label the member population from a total-count label",
 );
 assert.match(
+  projection,
+  /COMMUNITY_CONTEXT_PROJECTION_KEYS[\s\S]*StableCommunityInteractionContextPanelSurface = memo[\s\S]*pickCommunityContextProjection\(props\)/,
+  "right-panel rendering should be isolated from feed-only prop churn",
+);
+assert.match(
+  communityNav,
+  /export const CommunityNav = memo\(function CommunityNav/,
+  "left navigation should not rerender for unrelated shell content updates",
+);
+assert.match(
   contextPanel,
   /Offline — \{offlineCountLabel\}/,
   "context panel should label offline members from the total-count model",

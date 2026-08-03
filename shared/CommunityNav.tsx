@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type FormEvent } from "react";
+import { memo, useEffect, useRef, useState, type FormEvent } from "react";
 import { Check, Hash, Plus, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
@@ -67,7 +67,7 @@ function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | n
   return new URL(joinPath, window.location.origin).toString();
 }
 
-export function CommunityNav({
+export const CommunityNav = memo(function CommunityNav({
   activeCommunity,
   communityTab,
   tabIndicators = {},
@@ -488,4 +488,4 @@ export function CommunityNav({
       ) : null}
     </aside>
   );
-}
+});
