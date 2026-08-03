@@ -13,6 +13,12 @@ const discoverCard = read("shared/DiscoverCommunityCard.tsx");
 const communityNav = read("shared/CommunityNav.tsx");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+const discoverBanner = discoverCard.match(
+  /<StableFramedMedia\b(?=[^>]*className="discover-card-banner")[^>]*\/>/,
+)?.[0] ?? "";
+const discoverAvatar = discoverCard.match(
+  /<CommunityAvatar\b(?=[^>]*className="discover-card-avatar")[^>]*\/>/,
+)?.[0] ?? "";
 
 assert.doesNotMatch(
   discoverController,
@@ -37,13 +43,23 @@ assert.match(imageResource, /if \(!url \|\| !enabled \|\| imageResourceCache\.ge
 assert.match(imageResource, /image\.fetchPriority = fetchPriority/);
 
 assert.match(
-  discoverCard,
-  /className="discover-card-banner"[\s\S]{0,300}loading="lazy"[\s\S]{0,80}fetchPriority="low"/,
+  discoverBanner,
+  /loading="lazy"/,
   "Discover banners must be visibility-gated and low priority",
 );
 assert.match(
-  discoverCard,
-  /<CommunityAvatar[\s\S]{0,500}loading="lazy"[\s\S]{0,80}fetchPriority="low"/,
+  discoverBanner,
+  /fetchPriority="low"/,
+  "Discover banners must be visibility-gated and low priority",
+);
+assert.match(
+  discoverAvatar,
+  /loading="lazy"/,
+  "Discover avatars must use the same deferred canonical path",
+);
+assert.match(
+  discoverAvatar,
+  /fetchPriority="low"/,
   "Discover avatars must use the same deferred canonical path",
 );
 assert.match(

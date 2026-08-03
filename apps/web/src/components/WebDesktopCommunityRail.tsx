@@ -93,8 +93,6 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
                   focusY={community.avatar_focus_y}
                   zoom={community.avatar_zoom}
                   name={community.name}
-                  fallback={communityShell.communityInitials(community.name)}
-                  fallbackClassName="community-rail-initials"
                 />
                 {communityShell.communityRailAttentionById[community.id] ? (
                   <span className="community-rail-dot" aria-hidden="true" />

@@ -341,42 +341,11 @@ body {
   outline-offset: 3px;
 }
 
-.community-rail-initials {
-  width: 100%;
-  height: 100%;
-  display: grid;
-  place-items: center;
-  border-radius: var(--radius-sm);
-  background: var(--surface-card);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  letter-spacing: 0.2px;
-  color: var(--text-ink-primary);
-  pointer-events: none;
-  user-select: none;
-}
-
 .community-rail-avatar {
-  position: relative;
   width: 100%;
   height: 100%;
-  border-radius: var(--radius-sm);
   display: block;
-  overflow: hidden;
   pointer-events: none;
-  user-select: none;
-  -webkit-user-drag: none;
-}
-
-.community-rail-avatar.community-rail-initials {
-  display: grid;
-  place-items: center;
-}
-
-.community-avatar-image {
-  display: block;
-  user-select: none;
-  -webkit-user-drag: none;
 }
 
 .community-rail-dot {

@@ -106,7 +106,6 @@ export function DiscoverCommunityCard({
             communityId={communityId}
             visualIdentity={canonicalVisualIdentity}
             className="discover-card-avatar"
-            fallbackClassName="fallback"
             imageUrl={avatarUrl}
             focusX={avatarFocusX}
             focusY={avatarFocusY}

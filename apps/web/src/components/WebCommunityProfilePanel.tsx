@@ -43,8 +43,6 @@ function WebCommunityProfileCommunityStrip(props: {
           communityId={community.id}
           visualIdentity={community.visual_identity}
           className="community-profile-panel-community-avatar"
-          imageClassName="community-profile-panel-community-avatar-image"
-          fallbackClassName="community-profile-panel-community-avatar-fallback"
           name={community.name}
           imageUrl={community.avatar_url}
           focusX={community.avatar_focus_x}

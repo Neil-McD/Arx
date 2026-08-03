@@ -455,10 +455,6 @@
   content: none;
 }
 
-.discover-card.discover-card-skeleton .discover-card-avatar {
-  box-shadow: none;
-}
-
 .discover-skeleton-name {
   width: min(260px, 80%);
   height: 14px;

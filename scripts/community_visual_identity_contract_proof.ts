@@ -50,9 +50,15 @@ for (const [label, source] of [
   assert.match(source, /visualIdentity=/, `${label} must provide canonical identity fallback`);
 }
 
-const discoverImageRule = css.match(
-  /\.discover-card-avatar img,\s*\.discover-card-avatar-image\s*\{([^}]+)\}/,
-)?.[1] ?? "";
-assert.doesNotMatch(discoverImageRule, /width:|height:|object-fit:|transform:/);
+assert.match(
+  css,
+  /\.community-avatar-frame > img/,
+  "community avatar image presentation must have one canonical CSS owner",
+);
+assert.doesNotMatch(
+  css,
+  /\.discover-card-avatar(?:\s+img|-image)\s*\{/,
+  "Discover must not retain a surface-owned community avatar image rule",
+);
 
 console.log("community visual identity contract proof passed");

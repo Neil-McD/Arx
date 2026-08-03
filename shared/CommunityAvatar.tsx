@@ -16,7 +16,6 @@ type CommunityAvatarProps = {
   className: string;
   readyClassName?: string;
   fallbackClassName?: string;
-  imageClassName?: string;
   style?: CSSProperties;
   fallbackStyle?: CSSProperties;
   title?: string;
@@ -36,12 +35,14 @@ export function CommunityAvatar(props: CommunityAvatarProps) {
     props.visualIdentity,
   );
   const name = identity?.name ?? props.name;
+  const fallbackClassName = ["community-avatar-frame-fallback", props.fallbackClassName]
+    .filter(Boolean)
+    .join(" ");
   return (
     <StableAvatar
-      className={props.className}
+      className={`community-avatar-frame ${props.className}`}
       readyClassName={props.readyClassName}
-      fallbackClassName={props.fallbackClassName}
-      imageClassName={props.imageClassName ?? "community-avatar-image"}
+      fallbackClassName={fallbackClassName}
       imageUrl={identity?.avatar.url ?? props.imageUrl}
       imageFrame={{
         focusX: identity?.avatar.focus_x ?? props.focusX,

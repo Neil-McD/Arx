@@ -76,6 +76,26 @@ assert.match(baseCss, /:where\(\.stable-framed-media\)\s*\{[\s\S]*position:\s*re
 assert.match(stableAvatar, /<StableFramedMedia/);
 assert.match(stableAvatar, /loading\?: "eager" \| "lazy"/);
 assert.match(stableAvatar, /fetchPriority\?: ImageFetchPriority/);
+assert.match(
+  communityAvatar,
+  /className=\{`community-avatar-frame \$\{props\.className\}`\}/,
+  "every community avatar must receive the canonical visual frame",
+);
+assert.match(
+  baseCss,
+  /\.community-avatar-frame\s*\{[\s\S]*?border-radius:\s*var\(--radius-sm\);/,
+  "the canonical community avatar frame must own the shared shape",
+);
+assert.match(
+  communityAvatar,
+  /\["community-avatar-frame-fallback", props\.fallbackClassName\]/,
+  "every community avatar fallback must receive the canonical presentation",
+);
+assert.match(
+  baseCss,
+  /\.community-avatar-frame-fallback\s*\{/,
+  "community avatar fallbacks must have one canonical CSS owner",
+);
 
 for (const [label, source] of [
   ["user avatar", userAvatar],
@@ -175,8 +195,19 @@ assert.match(
   /style=\{\{ zIndex: visibleFaces\.length - index \}\}/,
   "the leftmost face must remain visually highest",
 );
-assert.match(baseCss, /\.community-rail-avatar\s*\{[\s\S]*?border-radius:\s*var\(--radius-sm\);/);
-assert.match(baseCss, /\.discover-card-avatar\s*\{[\s\S]*?border-radius:\s*12px;/);
+for (const [label, selector] of [
+  ["community rail", "community-rail-avatar"],
+  ["discover", "discover-card-avatar"],
+  ["profile community", "community-profile-panel-community-avatar"],
+] as const) {
+  const rule = baseCss.match(new RegExp(`\\.${selector}\\s*\\{([^}]*)\\}`))?.[1] ?? "";
+  assert.ok(rule, `${label} avatar surface rule must exist`);
+  assert.doesNotMatch(
+    rule,
+    /border-radius|box-shadow|background:|(?:^|[;\s])border:/,
+    `${label} must not override canonical community avatar presentation`,
+  );
+}
 assert.match(baseCss, /\.profile-avatar-drop\s*\{[\s\S]*?border-radius:\s*50%;/);
 assert.match(baseCss, /\.member-avatar\s*\{[\s\S]*?border-radius:\s*999px;/);
 
