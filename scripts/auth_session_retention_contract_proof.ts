@@ -26,5 +26,9 @@ assert.match(script, /--execute/);
 assert.match(script, /Mode:.*audit-only/);
 assert.match(script, /MAX_BATCHES/);
 assert.match(script, /prune made no truthful forward progress/);
+assert.match(
+  script,
+  /console\.log\(required\.map\(\(key\) => String\(result\[key\]\)\)\.join\("\\t"\)\)/,
+);
 
 console.log("auth_session_retention_contract_proof: ok");
