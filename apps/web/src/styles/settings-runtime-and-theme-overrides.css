@@ -9401,14 +9401,6 @@ button.message-citation-chip:hover {
   letter-spacing: -0.01em;
 }
 
-.community-events-refreshing {
-  display: block;
-  margin-top: 2px;
-  color: var(--text-faint);
-  font-size: 11px;
-  font-weight: 600;
-}
-
 .community-events-content {
   min-width: 0;
 }

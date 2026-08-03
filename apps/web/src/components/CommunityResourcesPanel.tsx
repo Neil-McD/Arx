@@ -1371,10 +1371,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           </div>
         </div>
 
-        {isRefreshingResources && !showInitialResourceLoading ? (
-          <div className="analytics-refreshing-note">Refreshing knowledge...</div>
-        ) : null}
-
         {showInitialResourceLoading ? (
           <div className="community-panel-state-shell">
             <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
@@ -1405,7 +1401,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             </div>
           </div>
         ) : (
-          <div className="knowledge-workspace">
+          <div className="knowledge-workspace" aria-busy={isRefreshingResources}>
             <aside className="knowledge-resource-rail" aria-label="Resources">
               <div className="knowledge-resource-list">
                 {categorySections.map((section) => {
