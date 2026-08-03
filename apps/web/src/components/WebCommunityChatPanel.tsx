@@ -32,6 +32,7 @@ import { useMessageAttachmentInputController } from "../../../../shared/useMessa
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
+import { WebCommunityInteractionBootstrap } from "./WebCommunityInteractionBootstrap";
 import { WebCommunityOnboardingConciergeGuide } from "./WebCommunityOnboardingConciergeGuide";
 import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import { WebMobileDrawer } from "./WebMobileDrawer";
@@ -1643,41 +1644,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             </div>
           ) : showCanonicalCommunityBootstrap ? (
             <div className="community-interaction-scroll">
-              <div
-                className="community-interaction-projection has-context-panel community-interaction-bootstrap"
-                aria-busy="true"
-                aria-live="polite"
-              >
-                <div className="community-interaction-main">
-                  <div className="community-chat-page-loading-shell">
-                    <div className="community-chat-page-loading-card">
-                      <div className="community-chat-page-loading-title">Opening community…</div>
-                      <div className="community-chat-page-loading-copy">
-                        Resolving the selected community and preparing chat.
-                      </div>
-                      <div
-                        className="community-chat-page-loading-progress web-skeleton-pill"
-                        aria-hidden="true"
-                      />
-                    </div>
-                  </div>
-                  <div className="community-interaction-main-composer">
-                    {mainCommunityComposer}
-                  </div>
-                </div>
-                <aside className="community-context-panel" aria-label="Community">
-                  <div className="community-context-rail">
-                    <div className="community-context-rail-head">
-                      <div className="community-chat-page-loading-title">Community</div>
-                    </div>
-                    <div className="community-interaction-bootstrap-context" aria-hidden="true">
-                      <div className="web-skeleton-pill" />
-                      <div className="web-skeleton-pill" />
-                      <div className="web-skeleton-pill" />
-                    </div>
-                  </div>
-                </aside>
-              </div>
+              <WebCommunityInteractionBootstrap mainComposer={mainCommunityComposer} />
             </div>
           ) : (
             <div className="chat-messages">

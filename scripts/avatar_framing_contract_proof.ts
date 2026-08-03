@@ -15,6 +15,8 @@ const userEditor = read("apps/web/src/components/WebUserAvatarEditorModal.tsx");
 const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.tsx");
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const communityContextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
+const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const indexCss = read("apps/web/src/index.css");
@@ -173,20 +175,25 @@ assert.match(
   /imageUrl=\{member\.avatar_url\}[\s\S]*focusX=\{member\.avatar_focus_x\}[\s\S]*focusY=\{member\.avatar_focus_y\}[\s\S]*zoom=\{member\.avatar_zoom\}/,
   "community rail member avatars must render with canonical framing metadata",
 );
-assert.match(
-  baseCss,
-  /\.community-context-face::after\s*\{[\s\S]*box-shadow:\s*inset 0 0 0 2px var\(--bg-workspace\);/,
-  "presence face rings must overlay the image instead of shrinking its viewport",
-);
 assert.doesNotMatch(
   baseCss,
   /\.community-context-face\s*\{[^}]*border:\s*2px/s,
   "presence face roots must not consume crop space with a border",
 );
-assert.match(
-  indexCss,
-  /\.mobile-topbar-members \.community-context-face::after\s*\{[\s\S]*box-shadow:\s*inset 0 0 0 2px var\(--surface-workspace, var\(--bg-workspace\)\);/,
-  "mobile presence face rings must preserve the canonical crop viewport",
+assert.doesNotMatch(
+  `${baseCss}\n${indexCss}`,
+  /community-context-face::after|community-context-face \+ \.community-context-face/,
+  "presence facepiles must not obscure canonical avatar viewports with rings or overlap",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.community-context-(?:face|member-avatar) img\s*\{/,
+  "community context surfaces must not override StableAvatar image geometry",
+);
+assert.doesNotMatch(
+  `${communityPresenceFacepile}\n${mobileTopBar}`,
+  /compact\?: boolean|\n\s+compact\n/,
+  "the shared facepile must not carry a presentation flag with no canonical behavior",
 );
 assert.doesNotMatch(
   onboardingPage,

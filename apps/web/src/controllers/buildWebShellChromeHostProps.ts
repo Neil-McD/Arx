@@ -253,8 +253,6 @@ export function buildWebShellChromeHostProps(params: {
       onSelectPage: params.setSettingsPage,
     },
     hasLeftPanel: params.hasLeftPanel,
-    showDesktopCommunityRail: params.showDesktopCommunityRail,
-    showDesktopCommunityNav: params.showDesktopCommunityNav,
     isGlobalSettings: params.isGlobalSettings,
   };
 }

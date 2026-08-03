@@ -2069,14 +2069,6 @@
   font-size: 8px;
 }
 
-.mobile-topbar-members .community-context-face::after {
-  box-shadow: inset 0 0 0 2px var(--surface-workspace, var(--bg-workspace));
-}
-
-.mobile-topbar-members .community-context-face + .community-context-face {
-  margin-left: -7px;
-}
-
 .mobile-topbar-member-count {
   overflow: hidden;
   color: var(--text-secondary);

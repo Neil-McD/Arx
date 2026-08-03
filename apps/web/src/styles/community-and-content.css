@@ -2585,6 +2585,12 @@
   width: 86%;
 }
 
+.community-interaction-bootstrap-composer {
+  height: 60px;
+  margin: 0 14px 14px;
+  border-radius: var(--composer-radius);
+}
+
 .community-context-rail-name {
   font-size: 16px;
   font-weight: 600;
@@ -2594,6 +2600,7 @@
 .community-context-facepile {
   display: flex;
   align-items: center;
+  gap: 2px;
   padding: 0 16px 13px;
   flex-shrink: 0;
   border-bottom: 1px solid var(--border-muted);
@@ -2613,25 +2620,6 @@
   font-weight: 500;
   overflow: hidden;
   flex-shrink: 0;
-}
-
-.community-context-face::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  border-radius: inherit;
-  box-shadow: inset 0 0 0 2px var(--bg-workspace);
-  pointer-events: none;
-}
-
-.community-context-face + .community-context-face {
-  margin-left: -9px;
-}
-
-.community-context-face img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
 }
 
 .community-context-face-more {
@@ -3213,15 +3201,6 @@
   align-items: center;
   justify-content: center;
   overflow: hidden;
-}
-
-.community-context-member-avatar img {
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  /* Self-clip to the circle so the parent doesn't need overflow:hidden — which
-     was clipping the presence dot that sits on the bottom-right edge. */
-  border-radius: 50%;
 }
 
 .community-context-member-dot {

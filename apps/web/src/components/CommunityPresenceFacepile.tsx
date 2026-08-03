@@ -16,7 +16,6 @@ export function CommunityPresenceFacepile(props: {
   onlineCount?: number | null;
   onlineCountCapped?: boolean;
   limit?: number;
-  compact?: boolean;
   decorative?: boolean;
 }) {
   const visibleFaces = (props.faces ?? []).slice(0, props.limit ?? 7);
@@ -29,7 +28,7 @@ export function CommunityPresenceFacepile(props: {
 
   return (
     <div
-      className={`community-context-facepile${props.compact ? " is-compact" : ""}`}
+      className="community-context-facepile"
       aria-hidden={props.decorative || undefined}
     >
       {visibleFaces.map((face) => (

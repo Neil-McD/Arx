@@ -168,7 +168,6 @@ export function WebMobileTopBar({
               <CommunityPresenceFacepile
                 faces={memberFaces}
                 limit={2}
-                compact
                 decorative
               />
             ) : (

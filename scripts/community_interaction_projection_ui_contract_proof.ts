@@ -75,12 +75,12 @@ const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-
 const contextFaceCss = sectionBetween(
   baseCss,
   ".community-context-face {",
-  ".community-context-face + .community-context-face",
+  ".community-context-face-more",
 );
 const contextMemberAvatarMediaCss = sectionBetween(
   baseCss,
   ".community-context-member-avatar-media {",
-  ".community-context-member-avatar img",
+  ".community-context-member-dot",
 );
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 const chatBlockMarkdownUi = read("shared/chatBlockMarkdownUi.tsx");

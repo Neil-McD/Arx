@@ -10,6 +10,18 @@ const app = read("apps/web/src/App.tsx");
 const compositionRoot = read(
   "apps/web/src/components/WebAppCompositionRoot.tsx",
 );
+const mainSurfaceFallback = read(
+  "apps/web/src/components/WebAppMainSurfaceFallback.tsx",
+);
+const communityInteractionBootstrap = read(
+  "apps/web/src/components/WebCommunityInteractionBootstrap.tsx",
+);
+const shellChromeHost = read(
+  "apps/web/src/components/WebShellChromeHost.tsx",
+);
+const shellChromeHostPropsBuilder = read(
+  "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
+);
 const entryStyles = read("apps/web/src/index.css");
 const globalStyles = read("apps/web/src/base.css");
 const featureStyles = [
@@ -79,13 +91,48 @@ for (const directPresentationOwner of [
 }
 assert.match(
   compositionRoot,
-  /const WebAppMainSurfaceHost = lazy[\s\S]*const WebMemberAgentDock = lazy/,
-  "the composition root must preserve lazy main-surface and member-agent boundaries",
+  /const WebAppMainSurfaceHost = lazy/,
+  "the primary main surface must retain its bounded route-level split",
+);
+assert.match(
+  compositionRoot,
+  /fallback=\{<WebAppMainSurfaceFallback \{\.\.\.props\.mainSurfaceHostProps\} \/>\}/,
+  "the primary lazy boundary must reserve a canonical main-surface shape",
+);
+assert.match(
+  mainSurfaceFallback,
+  /community-body[\s\S]*community-chat community-member-chat[\s\S]*workspace-body chat-feed[\s\S]*community-interaction-scroll[\s\S]*WebCommunityInteractionBootstrap/,
+  "the route fallback must reserve the complete community shell geometry",
+);
+assert.match(
+  communityInteractionBootstrap,
+  /community-interaction-projection has-context-panel community-interaction-bootstrap[\s\S]*community-interaction-main-composer[\s\S]*community-context-panel/,
+  "one shared bootstrap must own center, composer, and context-panel geometry",
+);
+assert.match(
+  compositionRoot,
+  /const WebMemberAgentDock = lazy/,
+  "the secondary member-agent dock may retain its lazy boundary",
 );
 assert.match(
   compositionRoot,
   /mainSurface=\{mainSurface\}[\s\S]*globalOverlays=\{globalOverlays\}/,
   "the composition root must inject the main surface and global portals into shell chrome",
+);
+assert.doesNotMatch(
+  shellChromeHost,
+  /^\s*showDesktopCommunity(?:Rail|Nav): boolean;/m,
+  "shell visibility must not have duplicate top-level ownership",
+);
+assert.match(
+  shellChromeHost,
+  /showDesktopCommunityRail: props\.communityShell\.showDesktopCommunityRail,[\s\S]*showDesktopCommunityNav: props\.communityShell\.showDesktopCommunityNav/,
+  "shell rendering and grid classes must read one canonical visibility projection",
+);
+assert.doesNotMatch(
+  shellChromeHostPropsBuilder,
+  /\n\s{4}showDesktopCommunity(?:Rail|Nav): params\.showDesktopCommunity(?:Rail|Nav),\n\s{4}isGlobalSettings:/,
+  "the shell props builder must not duplicate nested visibility state at the host boundary",
 );
 
 const boundedFeatureOwners = [

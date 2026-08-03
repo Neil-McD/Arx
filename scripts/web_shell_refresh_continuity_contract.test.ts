@@ -87,6 +87,9 @@ describe("web shell refresh continuity contract", () => {
 
   it("keeps canonical chat mounted without a legacy chat loader", () => {
     const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+    const bootstrap = read(
+      "apps/web/src/components/WebCommunityInteractionBootstrap.tsx",
+    );
     const start = panel.indexOf("const communityChatPresentationMode =");
     const end = panel.indexOf("const communityComposerFocusTargetKey", start);
     const ownerGate = panel.slice(start, end);
@@ -98,7 +101,7 @@ describe("web shell refresh continuity contract", () => {
     expect(ownerGate).not.toContain('communityChatPresentationMode === "legacy"');
     expect(ownerGate).not.toContain("showLegacyInteractionSurface");
     expect(panel).not.toContain("legacy_bootstrap");
-    expect(panel).toContain(
+    expect(bootstrap).toContain(
       "community-interaction-projection has-context-panel community-interaction-bootstrap",
     );
   });
@@ -119,10 +122,14 @@ describe("web shell refresh continuity contract", () => {
 
   it("keeps the composer under canonical presentation ownership during bootstrap", () => {
     const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+    const bootstrap = read(
+      "apps/web/src/components/WebCommunityInteractionBootstrap.tsx",
+    );
 
     expect(panel).toMatch(
-      /showCanonicalCommunityBootstrap[\s\S]*community-interaction-bootstrap[\s\S]*community-interaction-main-composer[\s\S]*mainCommunityComposer/,
+      /showCanonicalCommunityBootstrap[\s\S]*WebCommunityInteractionBootstrap mainComposer=\{mainCommunityComposer\}/,
     );
+    expect(bootstrap).toContain("community-interaction-main-composer");
     expect(panel).not.toContain("showLegacyInteractionSurface");
     expect(panel).not.toContain(
       "{!showInteractionProjection ? mainCommunityComposer : null}",

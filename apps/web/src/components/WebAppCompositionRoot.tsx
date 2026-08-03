@@ -6,9 +6,8 @@ import {
 } from "react";
 
 import type { AuthSession } from "../auth";
-import type {
-  WebAppMainSurfaceHostProps,
-} from "./WebAppMainSurfaceHost";
+import type { WebAppMainSurfaceHostProps } from "./WebAppMainSurfaceHost";
+import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
 import type {
   WebDirectMessagesHostProps,
 } from "./WebDirectMessagesHost";
@@ -66,13 +65,10 @@ export function WebAppCompositionRoot(props: {
       <WebDirectMessagesHost {...props.directMessagesHostProps} />
     </>
   );
-  const mainSurfaceFallback = (
-    <main className="workspace community-mode">
-      <div className="landing-auth-hold" aria-hidden="true" />
-    </main>
-  );
   const mainSurface = (
-    <Suspense fallback={mainSurfaceFallback}>
+    <Suspense
+      fallback={<WebAppMainSurfaceFallback {...props.mainSurfaceHostProps} />}
+    >
       <WebAppMainSurfaceHost {...props.mainSurfaceHostProps} />
     </Suspense>
   );
