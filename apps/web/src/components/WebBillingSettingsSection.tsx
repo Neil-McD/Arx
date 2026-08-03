@@ -1,38 +1,17 @@
+import type { BuilderFundingAction } from "../../../../shared/builderFunding";
+import {
+  POLYNET_BUILDER_OFFER,
+  builderFundingActionLabel,
+  builderFundingStateLabel,
+  formatBuilderOfferPrice,
+  resolveBuilderOfferPrimaryAction,
+  resolveBuilderOfferSecondaryAction,
+} from "../../../../shared/builderOffer";
 import type {
   CloudFounderBillingCommunity,
   CloudFounderBillingOverview,
 } from "../../../../shared/cloudFounderBillingGateway";
 import type { PendingPurchaseClaim } from "../../../../shared/pay_first";
-
-function formatUsdBaseUnits(value: number): string {
-  return `$${(Math.max(0, value) / 100).toFixed(0)}`;
-}
-
-function founderBillingStatusLabel(community: CloudFounderBillingCommunity): string {
-  switch (community.status) {
-    case "operator_comped":
-      return "Operator access included";
-    case "legacy_active":
-      return "Legacy API key active";
-    case "legacy_ready":
-      return "Legacy API key available";
-    case "legacy_suspended":
-      return "Legacy API key suspended";
-    case "managed_checkout_pending":
-      return "Payment processing";
-    case "managed_required":
-      return "Managed plan required";
-    case "cancel_at_period_end":
-      return "Active · cancels at period end";
-    case "past_due":
-      return "Payment past due";
-    case "canceled":
-    case "ended":
-      return "Subscription ended";
-    case "active":
-      return "Managed plan active";
-  }
-}
 
 type SessionLike = {
   user: {
@@ -47,9 +26,11 @@ export type WebBillingSettingsSectionProps = {
   isLoadingFounderBilling: boolean;
   founderBillingActionCommunityId: string | null;
   founderBillingError: string | null;
-  startFounderSubscriptionCheckout: (communityId: string) => Promise<void> | void;
   openFounderBillingPortal: (communityId: string) => Promise<void> | void;
   refreshFounderBilling: () => Promise<unknown> | void;
+  onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
+  onOpenLegacyFunding: () => void;
+  onOpenCreateCommunity: () => void;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
   isRedeemingPendingPurchases: boolean;
@@ -59,94 +40,157 @@ export type WebBillingSettingsSectionProps = {
   pendingPurchasesSuccess: string | null;
 };
 
-export function WebBillingSettingsSection(
-  props: WebBillingSettingsSectionProps,
-) {
+function runFundingAction(params: {
+  action: BuilderFundingAction;
+  community: CloudFounderBillingCommunity;
+  onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
+  onOpenLegacyFunding: () => void;
+  openFounderBillingPortal: (communityId: string) => Promise<void> | void;
+}) {
+  if (params.action === "buy_builder" || params.action === "resume_checkout") {
+    params.onOpenBuilderOffer(params.community);
+    return;
+  }
+  if (params.action === "manage_builder") {
+    void params.openFounderBillingPortal(params.community.community_id);
+    return;
+  }
+  params.onOpenLegacyFunding();
+}
+
+function communityFundingStateLabel(community: CloudFounderBillingCommunity): string {
+  if (community.funding_mode === "operator_comp") {
+    return "Operator access included";
+  }
+  if (
+    community.funding_state === "builder_canceling" &&
+    community.current_period_end_at
+  ) {
+    return `Builder active until ${new Date(community.current_period_end_at).toLocaleDateString()}`;
+  }
+  return builderFundingStateLabel(community.funding_state);
+}
+
+export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps) {
   return (
     <>
       <div className="panel-title">Billing</div>
       <div className="memory-panel">
-        <div className="settings-section">
-          <div className="settings-section-title">Community funding</div>
-          <div className="settings-section-desc">
-            Each managed community is {formatUsdBaseUnits(props.founderBillingOverview.monthly_price_base_units)}/month,
-            includes Polynet-hosted inference, and uses a 2.9% Polynet platform fee.
-            Legacy communities may keep owner-funded API access with the same 2.9% fee.
+        <div className="settings-section builder-settings-section">
+          <div className="builder-settings-heading">
+            <div>
+              <div className="settings-section-title">Builder</div>
+              <div className="settings-section-desc">
+                {formatBuilderOfferPrice()} for each community. Builder activates Polynet-hosted community AI.
+              </div>
+            </div>
+            <div className="builder-settings-price">
+              <strong>{formatBuilderOfferPrice()}</strong>
+              <span>{POLYNET_BUILDER_OFFER.scopeLabel}</span>
+            </div>
           </div>
+
           {props.isLoadingFounderBilling && props.founderBillingOverview.communities.length === 0 ? (
             <div className="chat-loading">
               <div className="loading-spinner" />
-              <span>Loading community billing…</span>
+              <span>Loading Builder…</span>
             </div>
           ) : props.founderBillingOverview.communities.length === 0 ? (
-            <div className="auth-status">No communities owned by this account.</div>
+            <div className="builder-empty-state">
+              <span>No communities yet.</span>
+              <button type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
+            </div>
           ) : (
-            <div className="model-list">
+            <div className="builder-community-list">
               {props.founderBillingOverview.communities.map((community) => {
-                const isActing =
-                  props.founderBillingActionCommunityId === community.community_id;
+                const primaryAction = resolveBuilderOfferPrimaryAction({
+                  state: community.funding_state,
+                  allowedActions: community.allowed_actions,
+                });
+                const secondaryAction = resolveBuilderOfferSecondaryAction({
+                  primaryAction,
+                  allowedActions: community.allowed_actions,
+                });
+                const isActing = props.founderBillingActionCommunityId === community.community_id;
                 const isOperatorComped = community.funding_mode === "operator_comp";
-                const canManage =
-                  Boolean(community.subscription_id) &&
-                  community.status !== "canceled" &&
-                  community.status !== "ended";
-                const isPending = community.status === "managed_checkout_pending";
                 return (
-                  <div className="account-row" key={community.community_id}>
-                    <div className="account-identity">
+                  <div className="builder-community-row" key={community.community_id}>
+                    <div className="builder-community-copy">
                       <span>{community.community_name}</span>
-                      <strong>{founderBillingStatusLabel(community)}</strong>
+                      <strong>{communityFundingStateLabel(community)}</strong>
                       <small>
-                        {isOperatorComped
-                          ? `Included · Polynet-hosted inference · ${community.platform_fee_bps / 100}% fee`
-                          : community.funding_mode === "managed"
-                          ? `${formatUsdBaseUnits(community.monthly_price_base_units)}/month · Polynet-hosted inference · ${community.platform_fee_bps / 100}% fee`
-                          : `Owner API key · ${community.platform_fee_bps / 100}% fee`}
+                        {community.funding_lane === "builder_included"
+                          ? "Polynet-hosted community AI is included."
+                          : community.funding_lane === "legacy_choice" && community.funding_state === "legacy_api_active"
+                            ? "Community AI is funded by your connected API key."
+                            : `${formatBuilderOfferPrice(community.monthly_price_base_units)} · Polynet-hosted community AI`}
                       </small>
                     </div>
-                    <div className="auth-actions">
-                      {canManage ? (
+                    <div className="builder-community-actions">
+                      {isOperatorComped ? null : secondaryAction ? (
                         <button
-                          type="button"
                           className="secondary"
-                          disabled={isActing}
-                          onClick={() => void props.openFounderBillingPortal(community.community_id)}
+                          type="button"
+                          onClick={() => runFundingAction({
+                            action: secondaryAction,
+                            community,
+                            onOpenBuilderOffer: props.onOpenBuilderOffer,
+                            onOpenLegacyFunding: props.onOpenLegacyFunding,
+                            openFounderBillingPortal: props.openFounderBillingPortal,
+                          })}
                         >
-                          {isActing ? "Opening…" : "Manage in Stripe"}
+                          {builderFundingActionLabel({
+                            action: secondaryAction,
+                            state: community.funding_state,
+                          })}
                         </button>
-                      ) : isOperatorComped ? null : (
+                      ) : null}
+                      {isOperatorComped ? null : primaryAction ? (
                         <button
                           type="button"
+                          className={primaryAction === "manage_builder" ? "secondary" : undefined}
                           disabled={isActing}
-                          onClick={() => void props.startFounderSubscriptionCheckout(community.community_id)}
+                          onClick={() => runFundingAction({
+                            action: primaryAction,
+                            community,
+                            onOpenBuilderOffer: props.onOpenBuilderOffer,
+                            onOpenLegacyFunding: props.onOpenLegacyFunding,
+                            openFounderBillingPortal: props.openFounderBillingPortal,
+                          })}
                         >
-                          {isPending
-                            ? "Resume checkout"
-                            : isActing
-                              ? "Opening…"
-                              : community.funding_mode === "legacy_byok"
-                                ? "Switch to managed · $79/month"
-                                : "Fund community · $79/month"}
+                          {isActing
+                            ? "Opening…"
+                            : builderFundingActionLabel({
+                                action: primaryAction,
+                                state: community.funding_state,
+                                includePrice: primaryAction === "buy_builder",
+                              })}
                         </button>
-                      )}
+                      ) : null}
                     </div>
                   </div>
                 );
               })}
             </div>
           )}
-          <div className="auth-actions">
-            <button
-              type="button"
-              className="secondary"
-              disabled={props.isLoadingFounderBilling}
-              onClick={() => void props.refreshFounderBilling()}
-            >
-              {props.isLoadingFounderBilling ? "Refreshing…" : "Refresh"}
-            </button>
-          </div>
+
+          <small className="builder-settings-disclosure">
+            Paid memberships carry a {POLYNET_BUILDER_OFFER.platformFeeBps / 100}% Polynet platform fee.
+            Stripe processing fees are separate.
+          </small>
+
           {props.founderBillingError ? (
-            <div className="billing-settings-error">{props.founderBillingError}</div>
+            <div className="builder-settings-retry">
+              <div className="billing-settings-error">{props.founderBillingError}</div>
+              <button
+                type="button"
+                className="secondary"
+                disabled={props.isLoadingFounderBilling}
+                onClick={() => void props.refreshFounderBilling()}
+              >
+                {props.isLoadingFounderBilling ? "Retrying…" : "Retry"}
+              </button>
+            </div>
           ) : null}
         </div>
 
@@ -156,9 +200,9 @@ export function WebBillingSettingsSection(
           props.pendingPurchasesError ||
           props.pendingPurchasesSuccess) ? (
           <div className="settings-section">
-            <div className="settings-section-title">Pending purchases</div>
+            <div className="settings-section-title">Member purchase recovery</div>
             <div className="settings-section-desc">
-              Recover access if payment completed before the join flow.
+              Recover community access if member payment completed before the join flow.
             </div>
             {props.isLoadingPendingPurchases ? (
               <div className="chat-loading">
@@ -166,19 +210,11 @@ export function WebBillingSettingsSection(
                 <span>Checking…</span>
               </div>
             ) : null}
-            {!props.isLoadingPendingPurchases &&
-            props.pendingPurchaseClaims.length > 0 ? (
+            {!props.isLoadingPendingPurchases && props.pendingPurchaseClaims.length > 0 ? (
               <div className="model-list">
                 {props.pendingPurchaseClaims.map((claim) => (
-                  <div
-                    key={`${claim.community_id}:${claim.expires_at}`}
-                    className="model-toggle"
-                  >
-                    <span>
-                      {claim.community_name ||
-                        claim.community_slug ||
-                        claim.community_id}
-                    </span>
+                  <div key={`${claim.community_id}:${claim.expires_at}`} className="model-toggle">
+                    <span>{claim.community_name || claim.community_slug || claim.community_id}</span>
                   </div>
                 ))}
               </div>
@@ -198,25 +234,18 @@ export function WebBillingSettingsSection(
                   props.pendingPurchaseClaims.length === 0
                 }
               >
-                {props.isRedeemingPendingPurchases
-                  ? "Claiming…"
-                  : "Claim access"}
+                {props.isRedeemingPendingPurchases ? "Claiming…" : "Claim access"}
               </button>
               <button
                 className="secondary"
                 type="button"
                 onClick={() => void props.refreshPendingPurchases()}
-                disabled={
-                  props.isRedeemingPendingPurchases ||
-                  props.isLoadingPendingPurchases
-                }
+                disabled={props.isRedeemingPendingPurchases || props.isLoadingPendingPurchases}
               >
                 Refresh
               </button>
             </div>
-            {props.pendingPurchasesError ? (
-              <div className="auth-error">{props.pendingPurchasesError}</div>
-            ) : null}
+            {props.pendingPurchasesError ? <div className="auth-error">{props.pendingPurchasesError}</div> : null}
           </div>
         ) : null}
       </div>

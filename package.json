@@ -232,6 +232,7 @@
     "check:founder-inference-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/founder_inference_contract_proof.ts",
     "check:founder-inference-behavior": "vitest run convex/founderInferenceCore.test.ts",
     "check:monetization-irreducibility-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/monetization_irreducibility_contract_proof.ts",
+    "check:builder-offer-surface-proof": "tsx scripts/builder_offer_surface_contract_proof.ts",
     "check:member-agent-dock-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_agent_dock_contract_proof.ts",
     "check:community-agent-heartbeat-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_heartbeat_contract_proof.ts",
     "check:community-agent-runtime-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_agent_runtime_contract_proof.ts",

@@ -28,12 +28,14 @@ export function buildWebGlobalOverlayHostProps(params: {
   providerConnectionModalHostProps: WebGlobalOverlayHostProps["providerConnectionModalHostProps"];
   communityModalHostProps: WebGlobalOverlayHostProps["communityModalHostProps"];
   founderInferencePromptProps: WebGlobalOverlayHostProps["founderInferencePromptProps"];
+  builderOfferProps: WebGlobalOverlayHostProps["builderOfferProps"];
   appToast: string | null;
 }): WebGlobalOverlayHostProps {
   return {
     providerConnectionModalHostProps: params.providerConnectionModalHostProps,
     communityModalHostProps: params.communityModalHostProps,
     founderInferencePromptProps: params.founderInferencePromptProps,
+    builderOfferProps: params.builderOfferProps,
     appToast: params.appToast,
   };
 }

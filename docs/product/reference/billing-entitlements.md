@@ -21,6 +21,14 @@ There is no personal Premium plan, commercial Free-versus-Premium tier, tool-cre
 
 One active Builder subscription authorizes Polynet-hosted inference for exactly one attached managed community. Community visibility, public access, and member commerce remain independent from Builder funding. Stripe webhook state, not the redirect, is authoritative.
 
+There are three customer-facing projections of this one offer:
+
+1. **Create Community** explains Builder first, asks only for the community name and optional URL, creates the unlisted checkout draft, and starts checkout.
+2. **Billing** shows each owned community's canonical funding state and the one valid next action: buy, resume checkout, fix payment, manage the subscription, or use the frozen legacy API lane where eligible.
+3. **Account** summarizes Builder per community and sends the builder into the same offer or Billing action. It does not invent an account-wide commercial entitlement.
+
+All three projections converge on the same checkout action, verified webhook state, community funding projection, and entitlement checks. No surface may infer access from its own local UI state.
+
 A founder may own an unlimited number of communities. There is no account-level
 numeric limit and no account-wide bundle: each managed community needs its own
 current $79 subscription and its own allowance. The first community can be

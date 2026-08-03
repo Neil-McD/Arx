@@ -7,6 +7,7 @@ const root = resolve(import.meta.dirname, "..");
 const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 
 const founderPlan = read("shared/founderPlan.ts");
+const builderOffer = read("shared/builderOffer.ts");
 const builderFunding = read("shared/builderFunding.ts");
 const founderPlanCore = read("convex/founderPlanCore.ts");
 const founderBilling = read("convex/founderBilling.ts");
@@ -127,10 +128,11 @@ assert.match(httpBilling, /syncCommunitySubscriptionFromStripeSubscription/);
 assert.match(premiumBilling, /premium_subscription_retired/);
 assert.doesNotMatch(premiumBilling, /getStripeClient|checkout\.sessions|ctx\.runMutation/);
 assert.doesNotMatch(billingUi, /Premium|tool balance|auto recharge|Add credits/i);
-assert.match(billingUi, /includes Polynet-hosted inference/);
+assert.match(billingUi, /Polynet-hosted community AI/);
 const founderCustomerSurface = [
   billingUi,
   accountUi,
+  builderOffer,
   founderInferenceController,
   founderBillingGateway,
   founderInferenceGateway,

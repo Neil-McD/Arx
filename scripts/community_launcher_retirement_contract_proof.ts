@@ -108,8 +108,8 @@ assert.doesNotMatch(
 
 assert.match(
   createModal,
-  /Create community[\s\S]*identity and access basics[\s\S]*refine the funnel and AI agent after/,
-  "community creation should remain a small identity and access form",
+  /WebBuilderOfferSummary[\s\S]*Community name[\s\S]*Customize community URL[\s\S]*Get Builder/,
+  "community creation should remain one offer-first identity form",
 );
 assert.match(
   webCreateController,
@@ -118,8 +118,8 @@ assert.match(
 );
 assert.match(
   createController,
-  /resolveUsableSession[\s\S]*isAccountSetupComplete[\s\S]*prepareCloudCommunityBrandingField[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*onCommunityCreated\(community\)/,
-  "canonical creation must preserve session, account, managed-draft, branding, mutation, and completion boundaries",
+  /resolveUsableSession[\s\S]*isAccountSetupComplete[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*avatarStorageId: null[\s\S]*oneLiner: null[\s\S]*onCommunityCreated\(community\)/,
+  "canonical creation must preserve session, account, attached draft, mutation, and completion boundaries without premature branding",
 );
 assert.match(
   app,

@@ -29,8 +29,8 @@ If those answers are vague, more settings will not fix the product.
 
 ## Core Steps
 
-1. Create the community as an unlisted draft.
-2. Fund that community through its $79 monthly Builder subscription.
+1. Open the Builder offer from Create Community, Billing, or Account.
+2. Name the community and start its $79 monthly Builder checkout. Polynet creates the unlisted draft immediately before checkout.
 3. Define the community purpose and public profile.
 4. Configure the community agent.
 5. Add resources that represent durable community knowledge.
@@ -87,7 +87,8 @@ The cash path is simple: configure the community, define the paid access model, 
 - A paying builder may own an unlimited number of communities. There is no
   account-level numeric cap, but every existing community must have current
   funding before the next unlisted checkout draft can be created.
-- The canonical create flow begins as an unlisted managed draft and continues directly to Builder checkout, but AI funding does not control visibility.
+- Create Community presents the Builder offer before asking only for the community name and optional URL. Its single primary action creates the unlisted managed draft and continues directly to Builder checkout.
+- Create Community, Billing, and Account project the same per-community Builder offer and converge on the same checkout and entitlement system. They are entry surfaces, not separate products or billing state.
 - An unpaid managed community can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its community-funded AI remains disabled.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
