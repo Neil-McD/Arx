@@ -217,13 +217,17 @@ const pinnedProjectionPath = "apps/web/src/components/WebCommunityInteractionPro
 const pinnedProjection = read(pinnedProjectionPath);
 [
   "community-channel-pinned-root",
+  "community-channel-pinned-root-unpin",
   "canManagePinnedRoot",
   "onSetPinnedRoot",
-  "Pinned",
+  'aria-label="Pinned post"',
+  'aria-label="Unpin from channel"',
   "resolveSelectedCommunityInteractionRoot",
   "roots={[props.pinnedRoot]}",
   "showDayDividers={false}",
 ].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
+assertNotMatches(pinnedProjectionPath, pinnedProjection, /community-channel-pinned-root-header/);
+assertNotMatches(pinnedProjectionPath, pinnedProjection, />\s*Pinned\s*</);
 assertNotMatches(
   pinnedProjectionPath,
   pinnedProjection,
@@ -327,8 +331,14 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
 );
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-unpin\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?color:\s*var\(--accent\);/,
+);
+assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-header/);
 assertMatches(
   interactionStylesPath,
   interactionStyles,
