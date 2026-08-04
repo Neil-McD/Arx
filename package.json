@@ -105,6 +105,7 @@
     "check:community-access-role-policy-proof": "tsx scripts/community_access_role_policy_proof.ts",
     "check:community-access-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_access_lifecycle_proof.ts",
     "check:community-lifecycle-foundation-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_lifecycle_foundation_contract_proof.ts && vitest run convex/communityLifecycleCore.test.ts",
+    "check:community-lifecycle-containment-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_lifecycle_containment_contract_proof.ts && vitest run convex/communityLifecycleCore.test.ts convex/communityAccessLifecycle.test.ts",
     "check:community-visitor-access-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_visitor_access_contract_proof.ts",
     "check:community-tab-access-normalization-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_tab_access_normalization_contract_proof.ts",
     "check:community-access-state-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_access_state_audit_proof.ts",

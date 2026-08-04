@@ -23,6 +23,7 @@ import {
   normalizeCommunityLifecycleGeneration,
   normalizeCommunityLifecycleStatus,
 } from "../shared/communityLifecycle";
+import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 
 const modules = import.meta.glob([
   "./communityCore.ts",
@@ -243,6 +244,53 @@ test("legacy active and sunsetting communities preserve paid-through access", as
         userId: fixture.memberId,
       }),
     ).resolves.toMatchObject({ community: { _id: fixture.sunsettingId } });
+  });
+});
+
+test("the membership activation kernel permits existing access but blocks new inactive-community access", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+
+  await t.run(async (ctx) => {
+    await expect(
+      activateCommunityMembershipCore({
+        ctx,
+        communityId: fixture.sunsettingId,
+        userId: fixture.memberId,
+        accessSource: "free_grant",
+        activationReason: "existing_member_refresh",
+        nowMs: 3_000,
+      }),
+    ).resolves.toMatchObject({ accessGranted: false });
+
+    const newMemberId = await ctx.db.insert("users", {
+      authSubject: "lifecycle-new-member",
+      displayName: "Lifecycle new member",
+      handle: "lifecycle-new-member",
+      normalizedHandle: "lifecycle-new-member",
+      createdAt: 3_000,
+      updatedAt: 3_000,
+    });
+    await expect(
+      activateCommunityMembershipCore({
+        ctx,
+        communityId: fixture.sunsettingId,
+        userId: newMemberId,
+        accessSource: "free_grant",
+        activationReason: "new_sunsetting_member",
+        nowMs: 3_000,
+      }),
+    ).rejects.toThrow("community_sunsetting");
+    await expect(
+      activateCommunityMembershipCore({
+        ctx,
+        communityId: fixture.archivedId,
+        userId: newMemberId,
+        accessSource: "manual_grant",
+        activationReason: "new_archived_member",
+        nowMs: 3_000,
+      }),
+    ).rejects.toThrow("community_archived");
   });
 });
 

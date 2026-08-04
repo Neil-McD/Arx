@@ -49,6 +49,11 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
+import {
+  communityIsOperational,
+  communityAcceptsNewOperations,
+  requireActiveCommunity,
+} from "./communityLifecycleCore";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -705,6 +710,7 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
   nowMs: number;
   grantReason: string;
 }): Promise<{ grantedMembership: boolean }> {
+  requireActiveCommunity(args.community);
   const existingMembershipRows = (await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) =>
@@ -891,6 +897,7 @@ export const listCommunityMemberships = query({
       communities: Record<string, unknown>;
     }> = [];
     for (const community of ownedCommunities
+      .filter((community) => communityIsOperational(community))
       .slice()
       .sort((a, b) => a.createdAt - b.createdAt)) {
       out.push({
@@ -905,6 +912,7 @@ export const listCommunityMemberships = query({
         row.communityId,
       )) as CommunityLike | null;
       if (!community) continue;
+      if (!communityIsOperational(community)) continue;
       if (String(community.ownerId) === String(row.userId)) continue;
       const entitlement = await resolveCommunityMembershipEntitlementState({
         ctx,
@@ -2003,6 +2011,12 @@ export const approvePendingJoinRequestsForOpenAccessInternal = internalMutation(
       handler: async () => {
         const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
         if (!community) throw new Error("community_not_found");
+        if (!communityAcceptsNewOperations(community)) {
+          return {
+            approved_pending_request_count: 0,
+            pending_request_overflow: false,
+          };
+        }
         if (resolveCommunityEntryPolicy(community) !== "open") {
           return {
             approved_pending_request_count: 0,

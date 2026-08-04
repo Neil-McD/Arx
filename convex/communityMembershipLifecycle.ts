@@ -7,6 +7,7 @@ import {
 } from "./communityCore";
 import { createCommunityOnboardingSessionForActivation } from "./communityOnboardingCore";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
+import { requireActiveCommunity } from "./communityLifecycleCore";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -56,6 +57,10 @@ export async function activateCommunityMembershipCore(args: {
       activationMarker: null,
     };
   }
+
+  const community = await args.ctx.db.get(args.communityId);
+  if (!community) throw new Error("community_not_found");
+  requireActiveCommunity(community);
 
   const activationSequence = Math.max(0, Math.floor(Number(existing?.activationSequence ?? 0))) + 1;
   const role = args.role ?? (

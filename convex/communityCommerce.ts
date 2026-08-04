@@ -41,12 +41,17 @@ import {
 } from "./stripeConnectAccountCore";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
+import {
+  normalizeCommunityLifecycleGeneration,
+  requireActiveCommunity,
+} from "./communityLifecycleCore";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
   sessionId: string;
   mode: string;
   communityId?: any;
+  communityLifecycleGeneration?: number;
   billingPeriod?: string;
   pricePointId?: any;
   amountBaseUnits?: number;
@@ -461,6 +466,10 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       .withIndex("by_slug", (q: any) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
+    requireActiveCommunity(community);
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    );
     const entryPolicy = resolveCommunityEntryPolicy(community as any);
     if (entryPolicy !== "paid_subscription") {
       throw new Error("paid_plan_required");
@@ -484,6 +493,7 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
     }
     return {
       communityId: community._id,
+      communityLifecycleGeneration,
       communitySlug: community.slug,
       communityName: community.name,
       billingPeriod,
@@ -568,6 +578,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
   args: {
     sessionId: v.string(),
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.number(),
     billingPeriod: v.string(),
     pricePointId: v.id("communityPricePoints"),
     amountBaseUnits: v.number(),
@@ -582,10 +593,20 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
+    if (!community) throw new Error("community_not_found");
+    requireActiveCommunity(community);
+    if (
+      normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
+      normalizeCommunityLifecycleGeneration(args.communityLifecycleGeneration)
+    ) {
+      throw new Error("community_checkout_lifecycle_stale");
+    }
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
       mode: "community_join",
       communityId: args.communityId,
+      communityLifecycleGeneration: args.communityLifecycleGeneration,
       billingPeriod: args.billingPeriod,
       pricePointId: args.pricePointId,
       amountBaseUnits: args.amountBaseUnits,
@@ -627,6 +648,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     await ctx.db.insert("purchaseClaims", {
       claimToken: args.claimToken,
       communityId: args.communityId,
+      communityLifecycleGeneration: args.communityLifecycleGeneration,
       billingPeriod: args.billingPeriod,
       pricePointId: args.pricePointId,
       amountBaseUnits: args.amountBaseUnits,
@@ -678,6 +700,17 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
       .first()) as CommunityCheckoutSessionRow | null;
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
+    if (!row.communityId) throw new Error("community_checkout_session_invalid");
+    const community = (await ctx.db.get(row.communityId)) as CommunityLike | null;
+    if (!community) throw new Error("community_not_found");
+    requireActiveCommunity(community);
+    if (
+      row.communityLifecycleGeneration !== undefined &&
+      normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
+        normalizeCommunityLifecycleGeneration(row.communityLifecycleGeneration)
+    ) {
+      throw new Error("community_checkout_lifecycle_stale");
+    }
     const providerAccountId = normalizeStripeObjectId(
       args.providerAccountId,
       "provider_account_id_required",
@@ -908,6 +941,7 @@ export const startPublicCommunityCheckout = action({
       },
     )) as {
       communityId: any;
+      communityLifecycleGeneration: number;
       communitySlug: string;
       communityName: string;
       billingPeriod: "monthly" | "annual";
@@ -1007,6 +1041,7 @@ export const startPublicCommunityCheckout = action({
       {
         sessionId,
         communityId: checkoutConfig.communityId,
+        communityLifecycleGeneration: checkoutConfig.communityLifecycleGeneration,
         billingPeriod,
         pricePointId: checkoutConfig.pricePointId,
         amountBaseUnits: checkoutConfig.amountBaseUnits,
@@ -1039,6 +1074,7 @@ export const startPublicCommunityCheckout = action({
           local_session_id: sessionId,
           claim_token: claimToken,
           community_id: String(checkoutConfig.communityId),
+          community_lifecycle_generation: String(checkoutConfig.communityLifecycleGeneration),
           community_slug: checkoutConfig.communitySlug,
           community_price_point_id: String(checkoutConfig.pricePointId),
           billing_period: billingPeriod,
@@ -1049,6 +1085,7 @@ export const startPublicCommunityCheckout = action({
             local_session_id: sessionId,
             claim_token: claimToken,
             community_id: String(checkoutConfig.communityId),
+            community_lifecycle_generation: String(checkoutConfig.communityLifecycleGeneration),
             community_slug: checkoutConfig.communitySlug,
             community_price_point_id: String(checkoutConfig.pricePointId),
             billing_period: billingPeriod,
@@ -1137,6 +1174,28 @@ export const finalizeCheckoutSession = query({
         status: "forbidden",
         message: "checkout_session_forbidden",
       };
+    }
+    if (session.mode === "community_join" && session.communityId) {
+      const community = (await ctx.db.get(session.communityId)) as CommunityLike | null;
+      let lifecycleIsCurrent = false;
+      if (community) {
+        try {
+          requireActiveCommunity(community);
+          lifecycleIsCurrent =
+            session.communityLifecycleGeneration === undefined ||
+            normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) ===
+              normalizeCommunityLifecycleGeneration(session.communityLifecycleGeneration);
+        } catch {
+          lifecycleIsCurrent = false;
+        }
+      }
+      if (!lifecycleIsCurrent) {
+        return {
+          ok: false,
+          status: "expired",
+          message: "community_checkout_lifecycle_stale",
+        };
+      }
     }
     if (session.expiresAt <= nowMs || session.status === "expired") {
       return {

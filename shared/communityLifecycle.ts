@@ -7,6 +7,10 @@ export const COMMUNITY_LIFECYCLE_STATUSES = [
 export type CommunityLifecycleStatus =
   (typeof COMMUNITY_LIFECYCLE_STATUSES)[number];
 
+export type CommunityNewOperationsErrorCode =
+  | "community_sunsetting"
+  | "community_archived";
+
 export const DEFAULT_COMMUNITY_LIFECYCLE_STATUS: CommunityLifecycleStatus =
   "active";
 export const DEFAULT_COMMUNITY_LIFECYCLE_GENERATION = 0;
@@ -57,6 +61,14 @@ export function communityAcceptsNewOperations(
   return (
     normalizeCommunityLifecycleStatus(community?.lifecycleStatus) === "active"
   );
+}
+
+export function resolveCommunityNewOperationsErrorCode(
+  community: CommunityLifecycleLike | null | undefined,
+): CommunityNewOperationsErrorCode | null {
+  const status = normalizeCommunityLifecycleStatus(community?.lifecycleStatus);
+  if (status === "active") return null;
+  return status === "archived" ? "community_archived" : "community_sunsetting";
 }
 
 export function communityIsLifecycleProtected(

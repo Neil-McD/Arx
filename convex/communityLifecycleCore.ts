@@ -2,7 +2,7 @@ import {
   communityAcceptsNewOperations,
   communityIsLifecycleProtected,
   communityIsOperational,
-  normalizeCommunityLifecycleStatus,
+  resolveCommunityNewOperationsErrorCode,
   type CommunityLifecycleLike,
 } from "../shared/communityLifecycle";
 
@@ -13,6 +13,7 @@ export {
   communityIsOperational,
   normalizeCommunityLifecycleGeneration,
   normalizeCommunityLifecycleStatus,
+  resolveCommunityNewOperationsErrorCode,
 } from "../shared/communityLifecycle";
 export type { CommunityLifecycleStatus } from "../shared/communityLifecycle";
 
@@ -34,13 +35,9 @@ export function requireActiveCommunity<
   TCommunity extends CommunityLifecycleLike,
 >(community: TCommunity): TCommunity {
   if (!communityAcceptsNewOperations(community)) {
-    const lifecycleStatus = normalizeCommunityLifecycleStatus(
-      community.lifecycleStatus,
-    );
     throw new Error(
-      lifecycleStatus === "archived"
-        ? "community_archived"
-        : "community_sunsetting",
+      resolveCommunityNewOperationsErrorCode(community) ??
+        "community_lifecycle_status_invalid",
     );
   }
   return community;

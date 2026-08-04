@@ -80,8 +80,7 @@ export function useWebPublicCommunityRouteController<
   const canEnterPublicCommunity = isPublicFunnelPreviewRoute
     ? false
     : Boolean(
-        params.publicCommunityAccess &&
-          (params.publicCommunityAccess.can_enter_community || params.publicCommunityAccess.is_owner),
+        params.publicCommunityAccess?.can_enter_community,
       );
   const myJoinRequestStatus = isPublicFunnelPreviewRoute
     ? ""

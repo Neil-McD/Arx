@@ -572,6 +572,7 @@ export default defineSchema({
     ),
     cancelAtPeriodEnd: v.optional(v.boolean()),
     communityId: v.optional(v.id("communities")),
+    communityLifecycleGeneration: v.optional(v.number()),
     billingPeriod: v.optional(v.string()),
     pricePointId: v.optional(v.id("communityPricePoints")),
     amountBaseUnits: v.optional(v.number()),
@@ -633,6 +634,7 @@ export default defineSchema({
   purchaseClaims: defineTable({
     claimToken: v.string(),
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     billingPeriod: v.optional(v.string()),
     pricePointId: v.optional(v.id("communityPricePoints")),
     amountBaseUnits: v.optional(v.number()),

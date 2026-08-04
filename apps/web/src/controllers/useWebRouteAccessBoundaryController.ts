@@ -115,7 +115,7 @@ export function useWebRouteAccessBoundaryController<
             communitySlug: slug,
           });
         if (cancelled) return;
-        if (access && (access.can_enter_community || access.is_owner)) {
+        if (access?.can_enter_community) {
           await params.loadCommunities(session);
           if (cancelled) return;
           params.syncCommunitySelection({

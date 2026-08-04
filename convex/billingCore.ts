@@ -10,6 +10,10 @@ import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import {
+  normalizeCommunityLifecycleGeneration,
+  requireActiveCommunity,
+} from "./communityLifecycleCore";
 
 export type CommunityLike = {
   _id: any;
@@ -18,6 +22,8 @@ export type CommunityLike = {
   name: string;
   oneLiner?: string;
   entryPolicy?: "open" | "approval" | "paid_subscription";
+  lifecycleStatus?: "active" | "sunsetting" | "archived";
+  lifecycleGeneration?: number;
 };
 
 export type CommunityPricePointLike = {
@@ -55,6 +61,7 @@ export type PurchaseClaimLike = {
   _id: any;
   claimToken: string;
   communityId: any;
+  communityLifecycleGeneration?: number;
   billingPeriod?: "monthly" | "annual";
   pricePointId?: any;
   amountBaseUnits?: number;
@@ -438,6 +445,14 @@ export async function redeemClaimRow(args: {
       accessGranted: false,
       grantMarker: null,
     };
+  }
+  requireActiveCommunity(community);
+  if (
+    args.claim.communityLifecycleGeneration !== undefined &&
+    normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
+      normalizeCommunityLifecycleGeneration(args.claim.communityLifecycleGeneration)
+  ) {
+    throw new Error("community_checkout_lifecycle_stale");
   }
   await requireCommunityUserNotBlocked({
     ctx: args.ctx,

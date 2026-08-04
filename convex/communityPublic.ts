@@ -52,6 +52,11 @@ import {
 import {
   listAllActiveChannelReadableRows,
 } from "./communityChannelCore";
+import {
+  communityAcceptsNewOperations,
+  requireActiveCommunity,
+  resolveCommunityNewOperationsErrorCode,
+} from "./communityLifecycleCore";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -354,6 +359,12 @@ export const resolvePublicFunnelBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return { ok: false };
+    if (!communityAcceptsNewOperations(community)) {
+      return {
+        ok: false,
+        reason: resolveCommunityNewOperationsErrorCode(community),
+      };
+    }
 
     const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
     const activePlan = pickPreferredActivePlan(mappedPlans);
@@ -402,6 +413,12 @@ export const resolvePublicFunnelStatsBySlug = query({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return { ok: false };
+    if (!communityAcceptsNewOperations(community)) {
+      return {
+        ok: false,
+        reason: resolveCommunityNewOperationsErrorCode(community),
+      };
+    }
 
     const activityCounts = await resolvePublicCommunityActivityCounts(ctx, community._id);
     return {
@@ -479,6 +496,7 @@ export const recordPublicFunnelVisitBySlug = mutation({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) return { ok: false };
+    if (!communityAcceptsNewOperations(community)) return { ok: false };
 
     let userId: any = undefined;
     const authSubject = String(args.authSubject ?? "").trim();
@@ -581,14 +599,28 @@ export const listPublicDiscoverCommunities = query({
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(200, Math.floor(args.limit ?? 60)));
-    const published = (await ctx.db
-      .query("communities")
-      .withIndex("by_visibility_updatedAt", (q) => q.eq("visibility", "published"))
-      .order("desc")
-      .take(limit)) as CommunityLike[];
+    const [legacyPublished, activePublished] = await Promise.all([
+      ctx.db
+        .query("communities")
+        .withIndex("by_lifecycle_visibility_updatedAt", (q) =>
+          q.eq("lifecycleStatus", undefined).eq("visibility", "published"),
+        )
+        .order("desc")
+        .take(limit),
+      ctx.db
+        .query("communities")
+        .withIndex("by_lifecycle_visibility_updatedAt", (q) =>
+          q.eq("lifecycleStatus", "active").eq("visibility", "published"),
+        )
+        .order("desc")
+        .take(limit),
+    ]);
+    const listable = ([...legacyPublished, ...activePublished] as CommunityLike[])
+      .sort((left, right) => right.updatedAt - left.updatedAt)
+      .slice(0, limit);
 
     const communities = (await Promise.all(
-      published.map(async (community) => {
+      listable.map(async (community) => {
         const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
         const branding = await resolveCommunityBrandingFields(ctx, community);
         const entryPolicy = resolveCommunityEntryPolicy(community);
@@ -757,6 +789,8 @@ async function joinPublicCommunityInternal(args: {
       community_id: String(args.community._id),
     };
   }
+
+  requireActiveCommunity(args.community);
 
   const joinRequestRows = (await args.ctx.db
     .query("communityJoinRequests")

@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const communityPublic = read("convex/communityPublic.ts");
 const communityCore = read("convex/communityCore.ts");
+const communityChannelCore = read("convex/communityChannelCore.ts");
 const appSource = read("apps/web/src/App.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
 const visitorChrome = read("apps/web/src/components/CommunityVisitorChrome.tsx");
@@ -97,8 +98,23 @@ assert.doesNotMatch(
 );
 assert.match(
   activityCounts,
-  /eq\("status", "live"\)/,
-  "messages-today must count only live interactions — hidden and deleted rows are not truths",
+  /resolvePublicCommunityInteractionActivityCounts\(/,
+  "public activity counts must delegate interaction visibility to the canonical channel-aware reader",
+);
+assert.match(
+  communityPublic,
+  /export async function resolvePublicCommunityInteractionActivityCounts[\s\S]*listAllActiveChannelReadableRows<PublicCommunityInteractionActivityRow>/,
+  "messages-today must use the canonical all-active-channel readable-row projection",
+);
+assert.match(
+  communityChannelCore,
+  /export async function listAllActiveChannelReadableRows[\s\S]*listChannelReadableRows<T>/,
+  "the all-channel projection must reuse the selected-channel readable-row authority",
+);
+assert.match(
+  communityChannelCore,
+  /async function listReadableRowsForChannelIds[\s\S]*\.eq\("status", "live"\)/,
+  "the canonical readable-row authority must admit only live interactions — hidden and deleted rows are not truths",
 );
 assert.match(
   activityCounts,

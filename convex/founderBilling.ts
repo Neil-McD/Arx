@@ -32,6 +32,10 @@ import {
   attachStripeCustomerToUser,
   ensureStripeCustomerForUser,
 } from "./stripeCustomers";
+import {
+  normalizeCommunityLifecycleGeneration,
+  requireActiveCommunity,
+} from "./communityLifecycleCore";
 
 const FOUNDER_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -98,6 +102,10 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
     if (!community || String(community.ownerId) !== String(args.ownerUserId)) {
       throw new Error("founder_subscription_community_forbidden");
     }
+    requireActiveCommunity(community);
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    );
     const existingSubscription = await getFounderSubscriptionByCommunity(
       ctx,
       args.communityId,
@@ -142,6 +150,7 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
       provider: "stripe",
       ownerUserId: args.ownerUserId,
       communityId: args.communityId,
+      communityLifecycleGeneration,
       billingPeriod: "monthly",
       amountBaseUnits: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
       currency: "usd",
@@ -181,6 +190,16 @@ export const attachFounderStripeCheckoutSessionInternal = internalMutation({
       !row.communityId
     ) {
       throw new Error("founder_subscription_checkout_invalid");
+    }
+    const community = await ctx.db.get(row.communityId);
+    if (!community) throw new Error("community_not_found");
+    requireActiveCommunity(community);
+    if (
+      row.communityLifecycleGeneration !== undefined &&
+      normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
+        normalizeCommunityLifecycleGeneration(row.communityLifecycleGeneration)
+    ) {
+      throw new Error("founder_subscription_checkout_lifecycle_stale");
     }
     if (args.providerPriceId !== readFounderStripePriceId()) {
       throw new Error("founder_subscription_price_mismatch");

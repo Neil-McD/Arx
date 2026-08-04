@@ -105,9 +105,9 @@ export function useWebCommunityAccessController<
         if (nextCommunitySlug) latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });
         return;
       }
-      if (!list.some((item) => String(item.slug ?? "").trim() === latest.activeCommunitySlug) && list.length > 0) {
+      if (!list.some((item) => String(item.slug ?? "").trim() === latest.activeCommunitySlug)) {
         const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;
-        if (nextCommunitySlug) latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });
+        latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });
       }
     } catch (error) {
       if (isCurrentRequest()) {
