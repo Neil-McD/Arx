@@ -458,6 +458,22 @@ test("a publish-ready first community may be created as published before managed
       const community = await ctx.db
         .query("communities")
         .withIndex("by_slug", (q) => q.eq("slug", "published-before-ai-funding"))
+        .unique();
+      return {
+        lifecycleStatus: community?.lifecycleStatus,
+        lifecycleGeneration: community?.lifecycleGeneration,
+      };
+    }),
+  ).resolves.toEqual({
+    lifecycleStatus: "active",
+    lifecycleGeneration: 0,
+  });
+
+  await expect(
+    t.run(async (ctx) => {
+      const community = await ctx.db
+        .query("communities")
+        .withIndex("by_slug", (q) => q.eq("slug", "published-before-ai-funding"))
         .first();
       if (!community) throw new Error("created_community_missing");
       return await resolveCommunityInferenceFundingAdmission(ctx, community._id);

@@ -9,6 +9,8 @@ const communityPublic = read("convex/communityPublic.ts");
 const communityAdmin = read("convex/communityAdmin.ts");
 const communityCommerce = read("convex/communityCommerce.ts");
 const founderBilling = read("convex/founderBilling.ts");
+const billingCore = read("convex/billingCore.ts");
+const lifecycleCore = read("convex/communityLifecycleCore.ts");
 const publicMemory = read("convex/communityIntelligenceDirectory.ts");
 const capabilityDirectory = read("convex/communityCapabilityContext.ts");
 const profileRelationship = read("convex/profileRelationshipCore.ts");
@@ -65,6 +67,27 @@ assert.match(
   founderBilling,
   /createPendingFounderSubscriptionCheckoutInternal[\s\S]*?requireActiveCommunity\(community\)/,
 );
+assert.match(
+  lifecycleCore,
+  /requireMatchingCommunityLifecycleGeneration[\s\S]*?normalizeCommunityLifecycleGeneration\([\s\S]*?expectedGeneration/,
+  "one lifecycle authority must normalize legacy absence to generation zero before exact comparison",
+);
+for (const [name, source] of [
+  ["community checkout", communityCommerce],
+  ["founder checkout", founderBilling],
+  ["purchase claim", billingCore],
+] as const) {
+  assert.match(
+    source,
+    /requireMatchingCommunityLifecycleGeneration\(/,
+    `${name} must use the canonical exact-generation guard`,
+  );
+  assert.doesNotMatch(
+    source,
+    /communityLifecycleGeneration !== undefined\s*&&/,
+    `${name} must not treat a missing legacy generation as a wildcard`,
+  );
+}
 
 for (const [name, source] of [
   ["route boundary", routeBoundary],

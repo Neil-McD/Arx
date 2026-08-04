@@ -35,6 +35,7 @@ import {
 import {
   normalizeCommunityLifecycleGeneration,
   requireActiveCommunity,
+  requireMatchingCommunityLifecycleGeneration,
 } from "./communityLifecycleCore";
 
 const FOUNDER_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
@@ -124,9 +125,32 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
         q.eq("communityId", args.communityId).eq("status", "pending"),
       )
       .collect();
-    const activePending = existing.filter(
-      (row) => row.mode === "founder_subscription" && row.expiresAt > args.nowMs,
-    );
+    const activePending: typeof existing = [];
+    for (const row of existing) {
+      if (row.mode !== "founder_subscription") continue;
+      let generationIsCurrent = false;
+      try {
+        requireMatchingCommunityLifecycleGeneration({
+          community,
+          expectedGeneration: row.communityLifecycleGeneration,
+          errorCode: "founder_subscription_checkout_lifecycle_stale",
+        });
+        generationIsCurrent = true;
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          error.message !== "founder_subscription_checkout_lifecycle_stale"
+        ) {
+          throw error;
+        }
+        generationIsCurrent = false;
+      }
+      if (row.expiresAt > args.nowMs && generationIsCurrent) {
+        activePending.push(row);
+      } else {
+        await ctx.db.patch(row._id, { status: "expired", updatedAt: args.nowMs });
+      }
+    }
     if (activePending.length > 1) {
       throw new Error("founder_subscription_checkout_ambiguous");
     }
@@ -138,11 +162,6 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
         expiresAt: row.expiresAt,
         reused: true,
       };
-    }
-    for (const row of existing) {
-      if (row.mode === "founder_subscription" && row.expiresAt <= args.nowMs) {
-        await ctx.db.patch(row._id, { status: "expired", updatedAt: args.nowMs });
-      }
     }
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
@@ -194,13 +213,11 @@ export const attachFounderStripeCheckoutSessionInternal = internalMutation({
     const community = await ctx.db.get(row.communityId);
     if (!community) throw new Error("community_not_found");
     requireActiveCommunity(community);
-    if (
-      row.communityLifecycleGeneration !== undefined &&
-      normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
-        normalizeCommunityLifecycleGeneration(row.communityLifecycleGeneration)
-    ) {
-      throw new Error("founder_subscription_checkout_lifecycle_stale");
-    }
+    requireMatchingCommunityLifecycleGeneration({
+      community,
+      expectedGeneration: row.communityLifecycleGeneration,
+      errorCode: "founder_subscription_checkout_lifecycle_stale",
+    });
     if (args.providerPriceId !== readFounderStripePriceId()) {
       throw new Error("founder_subscription_price_mismatch");
     }

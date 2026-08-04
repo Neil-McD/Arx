@@ -1388,6 +1388,42 @@ test("managed policy fails closed and founder checkouts remain independent per c
     sessionId: "founder-checkout-first",
     reused: true,
   });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.firstCommunityId, {
+      lifecycleStatus: "active",
+      lifecycleGeneration: 2,
+      updatedAt: nowMs + 1,
+    });
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-restored-generation",
+        ownerUserId: fixture.ownerId,
+        communityId: fixture.firstCommunityId,
+        expiresAt: nowMs + 60_000,
+        nowMs: nowMs + 1,
+      },
+    ),
+  ).resolves.toMatchObject({
+    sessionId: "founder-checkout-restored-generation",
+    reused: false,
+  });
+  await t.run(async (ctx) => {
+    const stale = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", "founder-checkout-first"))
+      .unique();
+    const current = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) =>
+        q.eq("sessionId", "founder-checkout-restored-generation"),
+      )
+      .unique();
+    expect(stale?.status).toBe("expired");
+    expect(current?.communityLifecycleGeneration).toBe(2);
+  });
   await expect(
     t.mutation(
       (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,

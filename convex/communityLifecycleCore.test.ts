@@ -9,6 +9,7 @@ import {
   assertCommunityMayBeArchived,
   requireActiveCommunity,
   requireCommunityOwnerAnyLifecycle,
+  requireMatchingCommunityLifecycleGeneration,
   requireOperationalCommunity,
 } from "./communityLifecycleCore";
 import {
@@ -20,6 +21,8 @@ import {
   resolveCommunityMembershipEntitlementState,
 } from "./communityCore";
 import {
+  communityAcceptsNewOperations,
+  communityIsOperational,
   normalizeCommunityLifecycleGeneration,
   normalizeCommunityLifecycleStatus,
 } from "../shared/communityLifecycle";
@@ -104,8 +107,40 @@ test("legacy lifecycle fields normalize without changing active behavior", () =>
   expect(() => normalizeCommunityLifecycleGeneration(-1)).toThrow(
     "community_lifecycle_generation_invalid",
   );
+  for (const malformed of [null, "0", 1.5, Number.NaN, Number.POSITIVE_INFINITY]) {
+    expect(() => normalizeCommunityLifecycleGeneration(malformed)).toThrow(
+      "community_lifecycle_generation_invalid",
+    );
+  }
+  expect(communityIsOperational(null)).toBe(false);
+  expect(communityIsOperational(undefined)).toBe(false);
+  expect(communityAcceptsNewOperations(null)).toBe(false);
   expect(() => requireOperationalCommunity({})).not.toThrow();
   expect(() => requireActiveCommunity({})).not.toThrow();
+});
+
+test("lifecycle generation matching treats legacy absence as generation zero, never a wildcard", () => {
+  expect(
+    requireMatchingCommunityLifecycleGeneration({
+      community: {},
+      expectedGeneration: undefined,
+      errorCode: "community_checkout_lifecycle_stale",
+    }),
+  ).toBe(0);
+  expect(() =>
+    requireMatchingCommunityLifecycleGeneration({
+      community: { lifecycleGeneration: 1 },
+      expectedGeneration: undefined,
+      errorCode: "community_checkout_lifecycle_stale",
+    }),
+  ).toThrow("community_checkout_lifecycle_stale");
+  expect(() =>
+    requireMatchingCommunityLifecycleGeneration({
+      community: { lifecycleGeneration: 1 },
+      expectedGeneration: "1",
+      errorCode: "community_checkout_lifecycle_stale",
+    }),
+  ).toThrow("community_lifecycle_generation_invalid");
 });
 
 test("sunsetting remains operational but rejects newly initiated work", () => {

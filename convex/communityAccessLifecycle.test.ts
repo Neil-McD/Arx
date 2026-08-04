@@ -429,6 +429,24 @@ test("checkout lifecycle generation closes stale and sunsetting claims", async (
       },
     );
 
+  await t.run(async (ctx) => {
+    await ctx.db.insert("purchaseClaims", {
+      claimToken: "claim-lifecycle-legacy-generationless",
+      communityId: fixture.paidCommunityId,
+      pricePointId,
+      ownerUserId: fixture.memberId,
+      status: "pending",
+      expiresAt: nowMs + 60_000,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+  await expect(
+    asMember.mutation(api.communityCommerce.redeemPurchaseClaim, {
+      token: "claim-lifecycle-legacy-generationless",
+    }),
+  ).rejects.toThrow("community_checkout_lifecycle_stale");
+
   await expect(createCheckout(4, "stale")).rejects.toThrow(
     "community_checkout_lifecycle_stale",
   );

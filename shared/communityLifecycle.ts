@@ -34,11 +34,10 @@ export function normalizeCommunityLifecycleStatus(
 
 export function normalizeCommunityLifecycleGeneration(value: unknown): number {
   if (value === undefined) return DEFAULT_COMMUNITY_LIFECYCLE_GENERATION;
-  const generation = Number(value);
-  if (!Number.isSafeInteger(generation) || generation < 0) {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new Error("community_lifecycle_generation_invalid");
   }
-  return generation;
+  return value;
 }
 
 export function communityIsArchived(
@@ -52,12 +51,14 @@ export function communityIsArchived(
 export function communityIsOperational(
   community: CommunityLifecycleLike | null | undefined,
 ): boolean {
+  if (!community) return false;
   return !communityIsArchived(community);
 }
 
 export function communityAcceptsNewOperations(
   community: CommunityLifecycleLike | null | undefined,
 ): boolean {
+  if (!community) return false;
   return (
     normalizeCommunityLifecycleStatus(community?.lifecycleStatus) === "active"
   );

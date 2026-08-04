@@ -23,6 +23,10 @@ visibility, subscription status, UI routing, or the dormant
 `communityArchiveDocuments` knowledge table.
 Explicit malformed lifecycle values fail closed rather than normalizing to an
 active community.
+Every newly created community writes explicit `active` and generation `0`;
+field absence is compatibility for pre-foundation rows only. A missing
+generation on a legacy checkout or claim means generation `0`, never a
+wildcard that can survive an archive/restore generation change.
 
 ## Authority boundary
 

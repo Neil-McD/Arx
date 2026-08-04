@@ -31,12 +31,18 @@ for (const marker of [
 
 assert.match(sharedLifecycle, /DEFAULT_COMMUNITY_LIFECYCLE_STATUS[^]*"active"/);
 assert.match(sharedLifecycle, /DEFAULT_COMMUNITY_LIFECYCLE_GENERATION = 0/);
+assert.match(
+  sharedLifecycle,
+  /typeof value !== "number"[^]*Number\.isSafeInteger\(value\)/,
+  "lifecycle generation must reject coercible non-number values",
+);
 assert.match(sharedLifecycle, /communityIsOperational/);
 assert.match(sharedLifecycle, /communityAcceptsNewOperations/);
 assert.match(sharedLifecycle, /PLATFORM_HOME_COMMUNITY_SLUG = "polynet"/);
 
 assert.match(lifecycleCore, /requireOperationalCommunity/);
 assert.match(lifecycleCore, /requireActiveCommunity/);
+assert.match(lifecycleCore, /requireMatchingCommunityLifecycleGeneration/);
 assert.match(lifecycleCore, /requireCommunityOwnerAnyLifecycle/);
 assert.match(lifecycleCore, /assertCommunityMayBeArchived/);
 
@@ -65,6 +71,11 @@ assert.match(
   lifecycleApi,
   /export const deleteCommunity[^]*?requireCommunityOwnerAnyLifecycle[^]*?COMMUNITY_DELETION_QUARANTINE_CODE/,
   "deletion must remain quarantined across lifecycle states",
+);
+assert.match(
+  lifecycleApi,
+  /ctx\.db\.insert\("communities"[^]*?lifecycleStatus: DEFAULT_COMMUNITY_LIFECYCLE_STATUS[^]*?lifecycleGeneration: DEFAULT_COMMUNITY_LIFECYCLE_GENERATION/,
+  "every new community must begin with explicit canonical lifecycle state",
 );
 
 assert.match(platformHome, /PLATFORM_HOME_COMMUNITY_SLUG/);

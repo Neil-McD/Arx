@@ -46,6 +46,10 @@ import { resolveAdditionalManagedCommunityAdmission } from "./founderInferenceCo
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 import { ensureGeneralChannel } from "./communityChannelCore";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
+import {
+  DEFAULT_COMMUNITY_LIFECYCLE_GENERATION,
+  DEFAULT_COMMUNITY_LIFECYCLE_STATUS,
+} from "../shared/communityLifecycle";
 
 const COMMUNITY_DELETION_QUARANTINE_CODE =
   "community_delete_lifecycle_migration_blocked" as const;
@@ -555,6 +559,8 @@ export const createCommunity = mutation({
       bannerZoom: normalizeBannerZoom(args.bannerZoom),
       brandingRevision: nowMs,
       visibility: requestedVisibility,
+      lifecycleStatus: DEFAULT_COMMUNITY_LIFECYCLE_STATUS,
+      lifecycleGeneration: DEFAULT_COMMUNITY_LIFECYCLE_GENERATION,
       inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
       entryPolicy,
       activeMemberCount: 1,

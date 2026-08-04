@@ -11,8 +11,8 @@ import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import {
-  normalizeCommunityLifecycleGeneration,
   requireActiveCommunity,
+  requireMatchingCommunityLifecycleGeneration,
 } from "./communityLifecycleCore";
 
 export type CommunityLike = {
@@ -447,13 +447,11 @@ export async function redeemClaimRow(args: {
     };
   }
   requireActiveCommunity(community);
-  if (
-    args.claim.communityLifecycleGeneration !== undefined &&
-    normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
-      normalizeCommunityLifecycleGeneration(args.claim.communityLifecycleGeneration)
-  ) {
-    throw new Error("community_checkout_lifecycle_stale");
-  }
+  requireMatchingCommunityLifecycleGeneration({
+    community,
+    expectedGeneration: args.claim.communityLifecycleGeneration,
+    errorCode: "community_checkout_lifecycle_stale",
+  });
   await requireCommunityUserNotBlocked({
     ctx: args.ctx,
     communityId: args.claim.communityId,

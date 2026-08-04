@@ -44,6 +44,7 @@ import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
 import {
   normalizeCommunityLifecycleGeneration,
   requireActiveCommunity,
+  requireMatchingCommunityLifecycleGeneration,
 } from "./communityLifecycleCore";
 
 type CommunityCheckoutSessionRow = {
@@ -596,12 +597,11 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     requireActiveCommunity(community);
-    if (
-      normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
-      normalizeCommunityLifecycleGeneration(args.communityLifecycleGeneration)
-    ) {
-      throw new Error("community_checkout_lifecycle_stale");
-    }
+    requireMatchingCommunityLifecycleGeneration({
+      community,
+      expectedGeneration: args.communityLifecycleGeneration,
+      errorCode: "community_checkout_lifecycle_stale",
+    });
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
       mode: "community_join",
@@ -704,13 +704,11 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
     const community = (await ctx.db.get(row.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
     requireActiveCommunity(community);
-    if (
-      row.communityLifecycleGeneration !== undefined &&
-      normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
-        normalizeCommunityLifecycleGeneration(row.communityLifecycleGeneration)
-    ) {
-      throw new Error("community_checkout_lifecycle_stale");
-    }
+    requireMatchingCommunityLifecycleGeneration({
+      community,
+      expectedGeneration: row.communityLifecycleGeneration,
+      errorCode: "community_checkout_lifecycle_stale",
+    });
     const providerAccountId = normalizeStripeObjectId(
       args.providerAccountId,
       "provider_account_id_required",
@@ -1181,10 +1179,12 @@ export const finalizeCheckoutSession = query({
       if (community) {
         try {
           requireActiveCommunity(community);
-          lifecycleIsCurrent =
-            session.communityLifecycleGeneration === undefined ||
-            normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) ===
-              normalizeCommunityLifecycleGeneration(session.communityLifecycleGeneration);
+          requireMatchingCommunityLifecycleGeneration({
+            community,
+            expectedGeneration: session.communityLifecycleGeneration,
+            errorCode: "community_checkout_lifecycle_stale",
+          });
+          lifecycleIsCurrent = true;
         } catch {
           lifecycleIsCurrent = false;
         }

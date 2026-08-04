@@ -2,6 +2,7 @@ import {
   communityAcceptsNewOperations,
   communityIsLifecycleProtected,
   communityIsOperational,
+  normalizeCommunityLifecycleGeneration,
   resolveCommunityNewOperationsErrorCode,
   type CommunityLifecycleLike,
 } from "../shared/communityLifecycle";
@@ -41,6 +42,23 @@ export function requireActiveCommunity<
     );
   }
   return community;
+}
+
+export function requireMatchingCommunityLifecycleGeneration(args: {
+  community: CommunityLifecycleLike;
+  expectedGeneration: unknown;
+  errorCode: string;
+}): number {
+  const currentGeneration = normalizeCommunityLifecycleGeneration(
+    args.community.lifecycleGeneration,
+  );
+  const expectedGeneration = normalizeCommunityLifecycleGeneration(
+    args.expectedGeneration,
+  );
+  if (currentGeneration !== expectedGeneration) {
+    throw new Error(args.errorCode);
+  }
+  return currentGeneration;
 }
 
 export function assertCommunityMayBeArchived(
