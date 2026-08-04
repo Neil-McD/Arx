@@ -210,7 +210,7 @@ export async function createCommunitySubscriptionForMembership(args: {
   membershipId: any;
   userId: any;
   pricePointId: any;
-  source?: "stripe" | "external_sync";
+  source: "stripe" | "external_sync";
   providerAccountId?: string | null;
   providerSubscriptionId?: string | null;
   providerCustomerId?: string | null;
@@ -220,7 +220,7 @@ export async function createCommunitySubscriptionForMembership(args: {
   cancelAtPeriodEnd?: boolean | null;
   nowMs: number;
 }): Promise<void> {
-  const source = args.source ?? "stripe";
+  const source = args.source;
   const status = args.status ?? "active";
   const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd ?? status === "cancel_at_period_end");
   const endedAt = status === "canceled" || status === "ended" ? args.nowMs : undefined;

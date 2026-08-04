@@ -225,6 +225,7 @@ import type * as skillPackages from "../skillPackages.js";
 import type * as stripeConnectAccountCore from "../stripeConnectAccountCore.js";
 import type * as stripeCore from "../stripeCore.js";
 import type * as stripeCustomers from "../stripeCustomers.js";
+import type * as stripeSubscriptionEffectCore from "../stripeSubscriptionEffectCore.js";
 import type * as thirdPartyMcpCompatibility from "../thirdPartyMcpCompatibility.js";
 import type * as thirdPartyMcpRetirement from "../thirdPartyMcpRetirement.js";
 import type * as threads from "../threads.js";
@@ -468,6 +469,7 @@ declare const fullApi: ApiFromModules<{
   stripeConnectAccountCore: typeof stripeConnectAccountCore;
   stripeCore: typeof stripeCore;
   stripeCustomers: typeof stripeCustomers;
+  stripeSubscriptionEffectCore: typeof stripeSubscriptionEffectCore;
   thirdPartyMcpCompatibility: typeof thirdPartyMcpCompatibility;
   thirdPartyMcpRetirement: typeof thirdPartyMcpRetirement;
   threads: typeof threads;

@@ -444,14 +444,20 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const removeCommunityMember = action\(' \
   "removeCommunityMember is action-backed"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'stripe\.subscriptions\.cancel\(subscriptionId\)' \
-  "remove member cancels Stripe subscription"
+  'planConnectedStripeSubscriptionCancellations\(subscriptionRows\)[\s\S]*?cancelPreparedStripeSubscriptionEffects' \
+  "remove member plans one canonical account-scoped subscription effect set"
+require_multiline_match "$COMMUNITY_ADMIN_FILE" \
+  'applyStripeSubscriptionEffect\(\{[\s\S]*?kind: "connected",[\s\S]*?providerAccountId: effect\.provider_account_id,[\s\S]*?intent: "cancel_now"' \
+  "remove member executes canonical connected-account cancellation effects"
+require_no_match "$COMMUNITY_ADMIN_FILE" \
+  'cancelStripeSubscriptionIfActive|provider_subscription_ids' \
+  "retired unscoped Stripe cancellation helper and DTO remain deleted"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'await ctx\.db\.patch\(membership\._id as any, \{\s*active: false,\s*revokedAt: nowMs,\s*revokedReason:' \
   "remove member preserves revoked membership row"
 if ! awk '
   /export const revokeCommunityMemberInternal = internalMutation\(/ { in_block = 1 }
-  /async function cancelStripeSubscriptionIfActive/ { in_block = 0 }
+  /async function cancelPreparedStripeSubscriptionEffects/ { in_block = 0 }
   in_block { print }
 ' "$COMMUNITY_ADMIN_FILE" | guard_rg_assert_absent \
   "revokeCommunityMemberInternal deletion of paid membership audit rows" \

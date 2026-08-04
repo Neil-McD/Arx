@@ -163,7 +163,7 @@ export type CommunitySubscriptionLike = {
   userId: any;
   membershipId: any;
   pricePointId: any;
-  source?: "stripe" | "external_sync";
+  source: "stripe" | "external_sync";
   status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
   providerSubscriptionId?: string;
   providerAccountId?: string;

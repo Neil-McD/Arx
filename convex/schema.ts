@@ -1428,7 +1428,7 @@ export default defineSchema({
     userId: v.id("users"),
     membershipId: v.id("communityMemberships"),
     pricePointId: v.id("communityPricePoints"),
-    source: v.optional(v.union(v.literal("stripe"), v.literal("external_sync"))),
+    source: v.union(v.literal("stripe"), v.literal("external_sync")),
     status: v.union(
       v.literal("active"),
       v.literal("past_due"),

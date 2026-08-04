@@ -70,6 +70,21 @@ kernel creates only `requested` operations. No current public or web caller can
 invoke it, and no worker may mark an operation `succeeded` until the later
 provider-cancellation slice proves every required billing side effect.
 
+## Subscription effect foundation
+
+Stripe subscription effects use one provider identity: subscription ID plus
+its explicit account scope. Community-member subscriptions are always scoped
+to the persisted connected account; founder platform subscriptions remain
+explicitly platform scoped. Retrieval and mutation use the same scope.
+
+The effect primitive classifies provider outcomes as terminal, retryable,
+indeterminate, or blocked. A missing Stripe object is terminal only after a
+lookup in the exact persisted account scope. Remove and ban now use this
+primitive before local membership revocation, deduplicate exact provider
+identities, and fail closed for incomplete Stripe identity or unsupported
+active external subscriptions. This foundation does not yet execute an archive
+operation or authorize a public archive command.
+
 ## Migration
 
 The internal audit and backfill are bounded, cursor-paginated, idempotent, and
@@ -86,7 +101,7 @@ explicit `active` lane through the lifecycle index.
 
 - Public archive and restore commands.
 - Operation claiming, retry execution, and provider work receipts.
-- Stripe cancellation or checkout expiration.
+- Archive-worker Stripe cancellation or checkout expiration.
 - Background worker, scheduled-job, and email containment.
 - Archive and restore UI.
 - Paid-community sunsetting execution.
