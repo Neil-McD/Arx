@@ -192,19 +192,20 @@ test("each channel owns one manager-controlled live pinned root", async () => {
     communityId: fixture.communityId,
     name: "Other",
   });
-  const { firstRootId, secondRootId, otherRootId, hiddenRootId, privateRootId } = await t.run(async (ctx) => {
+  const { firstRootId, secondRootId, otherRootId, hiddenRootId, privateRootId, systemRootId } = await t.run(async (ctx) => {
     const insertRoot = async (
       channelId: any,
       key: string,
       createdAt: number,
       status: "live" | "hidden" = "live",
       visibilityScope: "community" | "private" = "community",
+      actorType: "human" | "system" = "human",
     ) =>
       await ctx.db.insert("communityInteractionRoots", {
         communityId: fixture.communityId,
         channelId,
-        actorType: "human",
-        actorUserId: fixture.ownerId,
+        actorType,
+        ...(actorType === "human" ? { actorUserId: fixture.ownerId } : {}),
         kind: "discussion",
         status,
         visibilityScope,
@@ -221,6 +222,14 @@ test("each channel owns one manager-controlled live pinned root", async () => {
       otherRootId: await insertRoot(otherChannel.id, "cross-channel", 1_750_000_000_300),
       hiddenRootId: await insertRoot(channel.id, "hidden", 1_750_000_000_400, "hidden"),
       privateRootId: await insertRoot(channel.id, "private", 1_750_000_000_500, "live", "private"),
+      systemRootId: await insertRoot(
+        channel.id,
+        "system",
+        1_750_000_000_550,
+        "live",
+        "community",
+        "system",
+      ),
     };
   });
 
@@ -245,7 +254,7 @@ test("each channel owns one manager-controlled live pinned root", async () => {
       rootId: otherRootId,
     }),
   ).rejects.toThrow("community_channel_pin_target_invalid");
-  for (const rootId of [hiddenRootId, privateRootId]) {
+  for (const rootId of [hiddenRootId, privateRootId, systemRootId]) {
     await expect(
       asOwner.mutation(api.communityChannels.setCommunityChannelPinnedRoot, {
         communityId: fixture.communityId,

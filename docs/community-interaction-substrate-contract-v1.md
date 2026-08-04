@@ -149,7 +149,27 @@ authorized channels, keeps General on the legacy-compatible `/chat` route, and
 uses `/chat/:channelSlug` for an explicitly selected custom channel.
 
 Public Channels V1 does not add an All aggregation, channel ACLs, private
-channels, pinning, reordering, restore, permanent deletion, or policy settings.
+channels, restore, permanent deletion, or policy settings. It does add two
+manager-controlled channel presentation operations without creating a second
+interaction substrate:
+
+- Every active channel may point to at most one live root in that same channel.
+  The channel owns the pointer; the root does not own pin state. Pin, replace,
+  and unpin are owner/admin operations, write moderation evidence, and fail
+  closed for foreign, hidden, deleted, non-channel, or wrong-channel roots.
+  Tombstoning the root or archiving its channel clears the pointer and records
+  the automatic unpin reason. Legacy unchanneled community/public roots may be
+  pinned only through the temporary General migration lane.
+- General remains fixed at position zero. An owner/admin may reorder the exact
+  current set of active custom-channel ids; missing, duplicate, foreign, stale,
+  archived, or General ids are rejected. The server writes contiguous custom
+  positions beginning at one, and concurrent valid reorders resolve through
+  the database transaction order rather than a second client-side authority.
+
+The web projection reads a pinned root through the same canonical root bundle
+and renders it with the same root presentation used by the chronological feed.
+The pinned wrapper may add only pinned context and manager controls; it must not
+maintain a condensed or divergent message renderer.
 
 The public community funnel's messages-today metadata aggregates all active
 all-member channels. It includes only live `community`/`public` rows plus the

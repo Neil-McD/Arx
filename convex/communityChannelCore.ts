@@ -568,6 +568,7 @@ export async function reorderActiveCommunityChannels(args: {
 
 type PinnableCommunityInteractionRoot = ChannelAddressableInteractionLike & {
   status: "live" | "hidden" | "deleted";
+  actorType: "human" | "personal_agent" | "community_agent" | "system";
 };
 
 async function insertChannelPinModerationEvent(args: {
@@ -616,6 +617,7 @@ export async function setActiveCommunityChannelPinnedRoot(args: {
     if (
       !root ||
       root.status !== "live" ||
+      root.actorType === "system" ||
       !interactionIsChannelAddressable(root) ||
       normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
       !interactionBelongsToChannel(root, channel)

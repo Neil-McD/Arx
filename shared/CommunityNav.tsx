@@ -231,7 +231,11 @@ export const CommunityNav = memo(function CommunityNav({
   useEffect(() => {
     setIsAddChannelOpen(false);
     setChannelName("");
+    setDraggingChannelId(null);
+    setDropTargetChannelId(null);
+    setReorderControlsChannelId(null);
     clearCreateChannelError?.();
+    clearReorderChannelsError?.();
   }, [activeCommunity?.slug]);
 
   useEffect(() => {

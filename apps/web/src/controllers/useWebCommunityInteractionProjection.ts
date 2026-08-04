@@ -590,11 +590,16 @@ export function useWebCommunityInteractionProjection<
               activeCommunityIdRef.current !== activeCommunityId ||
               activeChannelIdRef.current !== activeChannelId
             ) return;
+            lastSubscribedPinnedRootRef.current = null;
+            setPinnedRoot(null);
             setPinnedRootError(formatPinnedRootError(subscriptionError));
           },
         });
       } catch (subscriptionError) {
         if (!cancelled) {
+          lastSubscribedPinnedRootRef.current = null;
+          setPinnedRoot(null);
+          setPinnedRootError(formatPinnedRootError(subscriptionError));
           setError(formatProjectionError(subscriptionError));
           setIsLoadingRoots(false);
         }

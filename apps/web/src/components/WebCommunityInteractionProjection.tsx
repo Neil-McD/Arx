@@ -387,6 +387,16 @@ export function CommunityInteractionContextPanelSurface(
   return <StableCommunityInteractionContextPanelSurface {...pickCommunityContextProjection(props)} />;
 }
 
+export function resolveSelectedCommunityInteractionRoot(
+  roots: CommunityInteractionRootBundle[],
+  pinnedRoot: CommunityInteractionRootBundle | null | undefined,
+  selectedRootId: string | null,
+): CommunityInteractionRootBundle | null {
+  if (!selectedRootId) return null;
+  return roots.find((bundle) => bundle.root.id === selectedRootId)
+    ?? (pinnedRoot?.root.id === selectedRootId ? pinnedRoot : null);
+}
+
 
 export function WebCommunityInteractionProjection(props: WebCommunityInteractionProjectionProps) {
   const mainRef = useRef<HTMLDivElement | null>(null);
@@ -694,9 +704,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     repliesLoadedOnce.current = true;
   }, [props.replies]);
 
-  const selectedRoot = props.selectedRootId
-    ? props.roots.find((bundle) => bundle.root.id === props.selectedRootId) ?? null
-    : null;
+  const selectedRoot = resolveSelectedCommunityInteractionRoot(
+    props.roots,
+    props.pinnedRoot,
+    props.selectedRootId,
+  );
   const selectedRootLabel = selectedRoot ? actorLabel(selectedRoot.root, props.displayName) : "";
   const selectedRootText = selectedRoot
     ? stripSharedAttachmentSummary(
@@ -728,33 +740,44 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         ) : null}
         {props.pinnedRoot ? (
           <div className="community-channel-pinned-root" role="note" aria-label="Pinned post">
-            <button
-              type="button"
-              className="community-channel-pinned-root-open"
-              onClick={() => props.onSelectRoot(props.pinnedRoot!.root.id)}
-              title="Open pinned post"
-            >
+            <div className="community-channel-pinned-root-header">
               <Pin size={15} aria-hidden="true" />
-              <span className="community-channel-pinned-root-copy">
-                <strong>Pinned</strong>
-                <span>{bundleText(
-                  props.pinnedRoot.content_blocks,
-                  props.pinnedRoot.root.content_summary,
-                )}</span>
-              </span>
-            </button>
-            {props.canManagePinnedRoot && props.onSetPinnedRoot ? (
-              <button
-                type="button"
-                className="community-channel-pinned-root-unpin"
-                onClick={() => props.onSetPinnedRoot?.(null)}
-                disabled={props.isUpdatingPinnedRoot}
-                aria-label="Unpin from channel"
-                title="Unpin from channel"
-              >
-                <PinOff size={15} aria-hidden="true" />
-              </button>
-            ) : null}
+              <strong>Pinned</strong>
+              {props.canManagePinnedRoot && props.onSetPinnedRoot ? (
+                <button
+                  type="button"
+                  className="community-channel-pinned-root-unpin"
+                  onClick={() => props.onSetPinnedRoot?.(null)}
+                  disabled={props.isUpdatingPinnedRoot}
+                  aria-label="Unpin from channel"
+                  title="Unpin from channel"
+                >
+                  <PinOff size={15} aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+            <CommunityInteractionFeedList
+              {...props}
+              key={props.pinnedRoot.root.id}
+              roots={[props.pinnedRoot]}
+              selectedRootId={props.selectedRootId}
+              chatLastSeenAt={null}
+              error={null}
+              isLoadingRoots={false}
+              firstRootBodyExpansion={undefined}
+              canManagePinnedRoot={false}
+              onSetPinnedRoot={undefined}
+              onEditMessage={undefined}
+              onDeleteMessage={undefined}
+              density="full"
+              showDayDividers={false}
+              editing={null}
+              editText={editText}
+              onStartEdit={startEdit}
+              onEditTextChange={setEditText}
+              onSaveEdit={saveEdit}
+              onCancelEdit={cancelEdit}
+            />
           </div>
         ) : null}
         {props.pinnedRootError ? (

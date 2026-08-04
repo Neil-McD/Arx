@@ -836,6 +836,7 @@ export function InteractionAttachments(props: {
 export function CommunityInteractionFeedList(
   props: WebCommunityInteractionProjectionProps & {
     density: "full" | "compact";
+    showDayDividers?: boolean;
     editing: { type: "root" | "reply"; id: string } | null;
     editText: string;
     onStartEdit: (type: "root" | "reply", id: string, body: string) => void;
@@ -903,6 +904,7 @@ export function CommunityInteractionFeedList(
               {segments.map((segment) => {
                 const dividerBefore = segment.key === firstUnreadSegmentKey ? unreadDivider : null;
                 if (segment.type === "day") {
+                  if (props.showDayDividers === false) return null;
                   return (
                     <Fragment key={segment.key}>
                       {dividerBefore}

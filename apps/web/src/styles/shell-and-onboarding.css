@@ -630,9 +630,6 @@ body {
 
 .community-channel-modal-actions button.is-danger {
   color: var(--accent-danger, #ef6a72);
-}
-
-.community-channel-modal-actions button.is-danger {
   border-color: color-mix(in srgb, var(--accent-danger, #ef6a72) 48%, transparent);
   background: color-mix(in srgb, var(--accent-danger, #ef6a72) 12%, transparent);
 }

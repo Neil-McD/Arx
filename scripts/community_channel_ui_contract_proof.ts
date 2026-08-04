@@ -39,6 +39,9 @@ const nav = read(navPath);
   "application/x-polynet-channel-id",
   "Move up",
   "Move down",
+  "setDraggingChannelId(null)",
+  "setDropTargetChannelId(null)",
+  "setReorderControlsChannelId(null)",
 ].forEach((required) => assertIncludes(navPath, nav, required));
 assertNotMatches(
   navPath,
@@ -134,6 +137,7 @@ const channelCore = read(channelCorePath);
   "setActiveCommunityChannelPinnedRoot",
   "community_channel_order_stale",
   "community_channel_pin_target_invalid",
+  'root.actorType === "system"',
 ].forEach((required) => assertIncludes(channelCorePath, channelCore, required));
 
 const appPath = "apps/web/src/App.tsx";
@@ -178,6 +182,7 @@ const interactionController = read(interactionControllerPath);
   "setCloudCommunityChannelPinnedRoot",
   "lastSubscribedPinnedRootRef",
   "pinMutationBoundaryRef",
+  "setPinnedRoot(null)",
 ].forEach((required) => assertIncludes(interactionControllerPath, interactionController, required));
 
 const pinnedProjectionPath = "apps/web/src/components/WebCommunityInteractionProjection.tsx";
@@ -187,7 +192,15 @@ const pinnedProjection = read(pinnedProjectionPath);
   "canManagePinnedRoot",
   "onSetPinnedRoot",
   "Pinned",
+  "resolveSelectedCommunityInteractionRoot",
+  "roots={[props.pinnedRoot]}",
+  "showDayDividers={false}",
 ].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
+assertNotMatches(
+  pinnedProjectionPath,
+  pinnedProjection,
+  /community-channel-pinned-root-(?:open|copy)/,
+);
 
 const interactionFeedPath = "apps/web/src/components/communityInteractionFeed.tsx";
 const interactionFeed = read(interactionFeedPath);
@@ -196,6 +209,14 @@ const interactionFeed = read(interactionFeedPath);
   "Unpin from channel",
   "props.canManagePinnedRoot",
 ].forEach((required) => assertIncludes(interactionFeedPath, interactionFeed, required));
+
+const interactionContractPath = "docs/community-interaction-substrate-contract-v1.md";
+const interactionContract = read(interactionContractPath);
+[
+  "Every active channel may point to at most one live root",
+  "General remains fixed at position zero",
+  "same root presentation used by the chronological feed",
+].forEach((required) => assertIncludes(interactionContractPath, interactionContract, required));
 
 const schemaPath = "convex/schema.ts";
 const schema = read(schemaPath);
