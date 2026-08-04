@@ -3,6 +3,7 @@ import {
   communityIsLifecycleProtected,
   communityIsOperational,
   normalizeCommunityLifecycleGeneration,
+  normalizeCommunityLifecycleStatus,
   resolveCommunityNewOperationsErrorCode,
   type CommunityLifecycleLike,
 } from "../shared/communityLifecycle";
@@ -22,6 +23,56 @@ type CommunityLifecycleOwnerRow = CommunityLifecycleLike & {
   _id: any;
   ownerId: any;
 };
+
+export type CommunityArchiveBeginPlan =
+  | {
+      mode: "create";
+      previousGeneration: number;
+      lifecycleGeneration: number;
+    }
+  | {
+      mode: "reuse";
+      lifecycleGeneration: number;
+    };
+
+export function resolveCommunityArchiveBeginPlan(args: {
+  community: CommunityLifecycleLike;
+  expectedGeneration: unknown;
+}): CommunityArchiveBeginPlan {
+  assertCommunityMayBeArchived(args.community);
+  const status = normalizeCommunityLifecycleStatus(
+    args.community.lifecycleStatus,
+  );
+  const currentGeneration = normalizeCommunityLifecycleGeneration(
+    args.community.lifecycleGeneration,
+  );
+
+  if (status === "archived") {
+    throw new Error("community_already_archived");
+  }
+  if (status === "sunsetting") {
+    return {
+      mode: "reuse",
+      lifecycleGeneration: currentGeneration,
+    };
+  }
+
+  const expectedGeneration = normalizeCommunityLifecycleGeneration(
+    args.expectedGeneration,
+  );
+  if (expectedGeneration !== currentGeneration) {
+    throw new Error("community_archive_generation_stale");
+  }
+  const lifecycleGeneration = currentGeneration + 1;
+  if (!Number.isSafeInteger(lifecycleGeneration)) {
+    throw new Error("community_lifecycle_generation_exhausted");
+  }
+  return {
+    mode: "create",
+    previousGeneration: currentGeneration,
+    lifecycleGeneration,
+  };
+}
 
 export function requireOperationalCommunity<
   TCommunity extends CommunityLifecycleLike,

@@ -2,11 +2,11 @@
 
 ## Scope
 
-This contract introduces the compatibility and authority foundation for
-community archival. It does not expose an archive or restore command and does
-not perform provider billing operations. It does contain synchronous entry,
-acquisition, and active-shell projections so lifecycle state cannot be bypassed
-by cached clients or direct function calls.
+This contract introduces the compatibility, authority, and durable-operation
+foundation for community archival. It does not expose a public archive or
+restore command and does not perform provider billing operations. It does
+contain synchronous entry, acquisition, and active-shell projections so
+lifecycle state cannot be bypassed by cached clients or direct function calls.
 
 ## Canonical state
 
@@ -55,6 +55,21 @@ content. A direct web route renders only a terminal lifecycle message.
 The quarantined community deletion path remains owner-authorized across
 lifecycle states and always returns its existing quarantine error.
 
+## Archive operation kernel
+
+An archive request is represented by one durable
+`communityLifecycleOperations` row for a community lifecycle generation. The
+internal begin transition is atomic: it verifies owner authority, protects the
+platform-home community, increments the lifecycle generation, changes the
+community from `active` to `sunsetting`, and inserts the operation receipt in
+the same transaction. A retry against the resulting `sunsetting` generation
+returns the existing receipt; a missing or conflicting receipt fails closed.
+
+The operation row is orchestration authority, not provider proof. The initial
+kernel creates only `requested` operations. No current public or web caller can
+invoke it, and no worker may mark an operation `succeeded` until the later
+provider-cancellation slice proves every required billing side effect.
+
 ## Migration
 
 The internal audit and backfill are bounded, cursor-paginated, idempotent, and
@@ -69,8 +84,8 @@ explicit `active` lane through the lifecycle index.
 
 ## Deferred
 
-- Public archive and restore mutations.
-- Lifecycle operation receipts and retry orchestration.
+- Public archive and restore commands.
+- Operation claiming, retry execution, and provider work receipts.
 - Stripe cancellation or checkout expiration.
 - Background worker, scheduled-job, and email containment.
 - Archive and restore UI.

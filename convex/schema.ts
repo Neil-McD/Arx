@@ -1205,6 +1205,35 @@ export default defineSchema({
     .index("by_lifecycle_updatedAt", ["lifecycleStatus", "updatedAt"])
     .index("by_lifecycle_visibility_updatedAt", ["lifecycleStatus", "visibility", "updatedAt"]),
 
+  communityLifecycleOperations: defineTable({
+    communityId: v.id("communities"),
+    lifecycleGeneration: v.number(),
+    kind: v.literal("archive"),
+    state: v.union(
+      v.literal("requested"),
+      v.literal("processing"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+    ),
+    requestedByUserId: v.id("users"),
+    attemptCount: v.number(),
+    nextAttemptAt: v.number(),
+    lastAttemptAt: v.optional(v.number()),
+    leaseId: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_generation_kind", [
+      "communityId",
+      "lifecycleGeneration",
+      "kind",
+    ])
+    .index("by_state_nextAttemptAt", ["state", "nextAttemptAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
   // Canonical public conversation containers. Every active channel has the
   // same all-member read/post policy in the first multi-channel slice.
   communityChannels: defineTable({

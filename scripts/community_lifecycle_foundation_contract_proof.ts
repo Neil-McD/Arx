@@ -109,7 +109,7 @@ for (const marker of [
 }
 assert.doesNotMatch(migration, /\.collect\(\)/);
 assert.doesNotMatch(migration, /updatedAt\s*:/);
-assert.match(contract, /does not expose an archive or restore command/);
+assert.match(contract, /does not expose a public archive or[\s\S]*restore command/);
 assert.match(contract, /absent `lifecycleStatus` is `active`/);
 assert.match(
   contract,
