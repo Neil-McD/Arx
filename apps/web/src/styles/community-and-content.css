@@ -2516,13 +2516,14 @@
 }
 
 .community-interaction-projection {
+  --community-chat-surface: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
   position: relative;
   flex: 1;
   min-height: 0;
   min-width: 0;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
+  background: var(--community-chat-surface);
 }
 
 .community-interaction-projection.has-drawer {
@@ -3522,6 +3523,7 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
+  border-bottom: 3px solid var(--community-chat-surface);
   background: color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%);
 }
 

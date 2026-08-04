@@ -171,6 +171,8 @@ and renders it with the chronological feed's canonical content primitives. The
 pinned wrapper is a bounded teaser, not a second message renderer: it may clamp
 long body text when needed to keep real attachments or link previews visible,
 hide nested feed actions, and add one open-post action plus manager controls.
+The teaser ends with a narrow chat-canvas-colored separation band rather than a
+standard divider border.
 The teaser itself is non-interactive and opens the authorized root-by-id thread;
 reactions, links, attachments, and other message actions remain fully available
 in that thread. Short text-only pins retain their natural height.

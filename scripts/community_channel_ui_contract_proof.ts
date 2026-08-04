@@ -378,7 +378,12 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(26dvh, 280px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-interaction-projection\s*\{[\s\S]*?--community-chat-surface:\s*color-mix\(in srgb, var\(--bg-workspace\) 94%, var\(--bg-card\) 6%\);[\s\S]*?background:\s*var\(--community-chat-surface\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(26dvh, 280px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?border-bottom:\s*3px solid var\(--community-chat-surface\);[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
 );
 assertMatches(
   interactionStylesPath,
@@ -446,11 +451,6 @@ assertMatches(
   interactionStylesPath,
   interactionStyles,
   /\.community-channel-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--border-default\);/,
-);
-assertNotMatches(
-  interactionStylesPath,
-  interactionStyles,
-  /\.community-channel-pinned-root\s*\{[^}]*border(?:-bottom)?:/,
 );
 assertMatches(
   interactionStylesPath,
