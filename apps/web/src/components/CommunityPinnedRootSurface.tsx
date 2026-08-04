@@ -48,6 +48,19 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
       scrollHeight: viewport.scrollHeight,
       clientHeight: viewport.clientHeight,
     });
+    const clippedBodies = viewport.querySelectorAll<HTMLElement>(
+      ".community-interaction-body",
+    );
+    for (const body of clippedBodies) {
+      const bodyOverflow = resolveCommunityPinnedRootOverflowState({
+        scrollHeight: body.scrollHeight,
+        clientHeight: body.clientHeight,
+      });
+      body.toggleAttribute(
+        "data-community-pinned-body-overflow",
+        bodyOverflow.overflowing,
+      );
+    }
     setOverflowState((current) =>
       current.overflowing === next.overflowing ? current : next,
     );
@@ -63,7 +76,16 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
     observer.observe(viewport);
     const content = viewport.firstElementChild;
     if (content instanceof HTMLElement) observer.observe(content);
-    return () => observer.disconnect();
+    const bodies = viewport.querySelectorAll<HTMLElement>(
+      ".community-interaction-body",
+    );
+    for (const body of bodies) observer.observe(body);
+    return () => {
+      observer.disconnect();
+      for (const body of bodies) {
+        body.removeAttribute("data-community-pinned-body-overflow");
+      }
+    };
   }, [props.children, measureOverflow]);
 
   return (

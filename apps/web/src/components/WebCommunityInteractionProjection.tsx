@@ -762,7 +762,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               {...props}
               key={props.pinnedRoot.root.id}
               roots={[props.pinnedRoot]}
-              selectedRootId={props.selectedRootId}
+              selectedRootId={null}
               chatLastSeenAt={null}
               error={null}
               isLoadingRoots={false}

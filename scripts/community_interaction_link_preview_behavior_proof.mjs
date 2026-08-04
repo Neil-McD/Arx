@@ -413,6 +413,11 @@ assert.match(
   "compact website cards should use bounded favicon candidates, a non-broken fallback, and two-line metadata",
 );
 assert.match(
+  previewComponent,
+  /function usePreviewMediaFallback[\s\S]*failedMediaUrl[\s\S]*usableMediaUrl[\s\S]*onMediaError[\s\S]*function VideoLinkPreview[\s\S]*onError=\{onMediaError\}[\s\S]*function GenericLinkPreview[\s\S]*if \(!usableMediaUrl\)[\s\S]*is-compact-link[\s\S]*onError=\{onMediaError\}/,
+  "failed rich-preview images should fall back without leaving a broken reserved media slot",
+);
+assert.match(
   previewCss,
   /\.community-interaction-embed\.is-social-post\s*\{[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*padding:\s*12px 14px 14px;[\s\S]*border-color:\s*var\(--community-social-embed-stroke\);[\s\S]*background:\s*var\(--community-social-embed-surface\);[\s\S]*\.community-interaction-embed-social-avatar\s*\{[\s\S]*width:\s*32px;[\s\S]*background:\s*var\(--community-social-embed-avatar-surface\);[\s\S]*\.community-interaction-embed-social-body\s*\{[\s\S]*color:\s*var\(--community-social-embed-text\);[\s\S]*font-size:\s*14px;[\s\S]*-webkit-line-clamp:\s*5;/,
   "X previews should use a compact identity-and-text card whose first-party shell is theme-aware",

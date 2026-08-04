@@ -228,6 +228,8 @@ const pinnedProjection = read(pinnedProjectionPath);
   "resolveSelectedCommunityInteractionRoot",
   "communityInteractionRootHasRichContent",
   "roots={[props.pinnedRoot]}",
+  "selected={props.pinnedRoot.root.id === props.selectedRootId}",
+  "selectedRootId={null}",
   "showDayDividers={false}",
   "onOpen={() => props.onSelectRoot",
 ].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
@@ -260,6 +262,7 @@ const pinnedSurface = read(pinnedSurfacePath);
   'aria-hidden="true"',
   "scrollHeight",
   "clientHeight",
+  "data-community-pinned-body-overflow",
   "<Pin size={15}",
   "<PinOff size={15}",
 ].forEach((required) => assertIncludes(pinnedSurfacePath, pinnedSurface, required));
@@ -411,6 +414,11 @@ assertMatches(
   interactionStylesPath,
   interactionStyles,
   /\.community-channel-pinned-root-pin\.is-action\s*\{[\s\S]*?cursor:\s*pointer;[\s\S]*?pointer-events:\s*auto;/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root\.has-rich-content[\s\S]*?\.community-interaction-body\[data-community-pinned-body-overflow\][\s\S]*?-webkit-mask-image:\s*linear-gradient\([\s\S]*?mask-image:\s*linear-gradient\(/,
 );
 assertMatches(
   interactionStylesPath,

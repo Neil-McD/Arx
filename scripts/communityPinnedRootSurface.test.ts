@@ -16,4 +16,11 @@ describe("community pinned root surface overflow", () => {
       clientHeight: 300,
     })).toEqual({ overflowing: true });
   });
+
+  it("ignores one-pixel layout rounding at either cutoff boundary", () => {
+    expect(resolveCommunityPinnedRootOverflowState({
+      scrollHeight: 221,
+      clientHeight: 220,
+    })).toEqual({ overflowing: false });
+  });
 });

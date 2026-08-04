@@ -3545,6 +3545,22 @@
   overflow: hidden;
 }
 
+.community-channel-pinned-root.has-rich-content
+  .community-interaction-body[data-community-pinned-body-overflow] {
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - 20px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0,
+    #000 calc(100% - 20px),
+    transparent 100%
+  );
+}
+
 .community-channel-pinned-root-preview-open {
   position: absolute;
   z-index: 2;

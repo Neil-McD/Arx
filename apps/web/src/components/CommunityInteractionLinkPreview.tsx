@@ -42,6 +42,19 @@ function approvedHttpsUrl(raw: string | null): string | null {
   }
 }
 
+function usePreviewMediaFallback(mediaUrl: string | null): {
+  usableMediaUrl: string | null;
+  onMediaError: () => void;
+} {
+  const [failedMediaUrl, setFailedMediaUrl] = useState<string | null>(null);
+  return {
+    usableMediaUrl: mediaUrl && mediaUrl !== failedMediaUrl ? mediaUrl : null,
+    onMediaError: () => {
+      if (mediaUrl) setFailedMediaUrl(mediaUrl);
+    },
+  };
+}
+
 function approvedVideoUrl(raw: string, sourceRaw: string): string | null {
   try {
     const approvedVideo = approvedHttpsUrl(raw);
@@ -164,6 +177,7 @@ function VideoLinkPreview(props: {
   videoUrl: string;
 }) {
   const [active, setActive] = useState(false);
+  const { usableMediaUrl, onMediaError } = usePreviewMediaFallback(props.mediaUrl);
   const title = props.embed.title || "Shared video";
   const provider = providerLabel(props.embed);
   return (
@@ -196,13 +210,14 @@ function VideoLinkPreview(props: {
             aria-label={`Play ${title}`}
             onClick={() => setActive(true)}
           >
-            {props.mediaUrl ? (
+            {usableMediaUrl ? (
               <img
                 className="community-interaction-embed-media"
-                src={props.mediaUrl}
+                src={usableMediaUrl}
                 alt=""
                 loading="lazy"
                 referrerPolicy="no-referrer"
+                onError={onMediaError}
               />
             ) : (
               <span className="community-interaction-embed-media is-empty" aria-hidden="true" />
@@ -298,7 +313,8 @@ function GenericLinkPreview(props: {
 }) {
   const provider = providerLabel(props.embed);
   const title = props.embed.title || provider || "Open link";
-  if (!props.mediaUrl) {
+  const { usableMediaUrl, onMediaError } = usePreviewMediaFallback(props.mediaUrl);
+  if (!usableMediaUrl) {
     const description = props.embed.description?.trim() || null;
     const showProviderInMeta = Boolean(provider && provider !== title);
     return (
@@ -347,10 +363,11 @@ function GenericLinkPreview(props: {
       </div>
       <img
         className="community-interaction-embed-media"
-        src={props.mediaUrl}
+        src={usableMediaUrl}
         alt={props.embed.image_alt || ""}
         loading="lazy"
         referrerPolicy="no-referrer"
+        onError={onMediaError}
       />
     </a>
   );
