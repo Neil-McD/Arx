@@ -83,6 +83,17 @@ export function requireOperationalCommunity<
   return community;
 }
 
+export async function requireOperationalCommunityById<
+  TCommunity extends CommunityLifecycleLike = CommunityLifecycleLike,
+>(args: {
+  ctx: { db: { get: (id: any) => Promise<unknown> } };
+  communityId: any;
+}): Promise<TCommunity> {
+  const community = (await args.ctx.db.get(args.communityId)) as TCommunity | null;
+  if (!community) throw new Error("community_not_found");
+  return requireOperationalCommunity(community);
+}
+
 export function requireActiveCommunity<
   TCommunity extends CommunityLifecycleLike,
 >(community: TCommunity): TCommunity {

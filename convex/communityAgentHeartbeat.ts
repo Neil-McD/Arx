@@ -3,6 +3,10 @@ import { internalAction, internalMutation, internalQuery } from "./_generated/se
 import { v } from "convex/values";
 import { normalizeIdValue } from "./communityCore";
 import {
+  communityIsOperational,
+  requireOperationalCommunityById,
+} from "./communityLifecycleCore";
+import {
   buildCommunitySourceTraceRevision,
   measureCommunityCompilerEvidenceForCommunity,
 } from "./communityCompilerEvidenceCore";
@@ -99,6 +103,13 @@ async function readCommunityAgentControlGate(args: {
   communityId: any;
   nowMs: number;
 }) {
+  const community = await args.ctx.db.get(args.communityId);
+  if (!community) {
+    return { cyclesToday: 0, reason: "community_not_found" };
+  }
+  if (!communityIsOperational(community)) {
+    return { cyclesToday: 0, reason: "community_archived" };
+  }
   const dayStartMs = new Date(new Date(args.nowMs).toISOString().slice(0, 10)).getTime();
   const [config, stewardRunsToday] = await Promise.all([
     args.ctx.db
@@ -138,8 +149,7 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const community = await ctx.db.get(args.communityId);
-    if (!community) throw new Error("community_agent_heartbeat_community_not_found");
+    await requireOperationalCommunityById({ ctx, communityId: args.communityId });
     const nowMs = args.nowMs ?? Date.now();
     const heartbeatId = boundedText(args.heartbeatId, 200) || buildHeartbeatId(args.communityId, nowMs);
     const runAfterMs = clampDelayMs(args.runAfterMs);
@@ -313,6 +323,22 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
   handler: async (ctx, args) => {
     const heartbeatId = boundedText(args.heartbeatId, 200) || buildHeartbeatId(args.communityId, Date.now());
     const modelId = boundedText(args.modelId, 128) || undefined;
+    const operationalAssessment = (await ctx.runQuery(
+      internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal,
+      { communityId: args.communityId },
+    )) as Record<string, any>;
+    if (operationalAssessment.reason === "community_archived") {
+      return {
+        ok: true,
+        skipped: true,
+        run: null,
+        stop_reason: "community_archived",
+        tool_step_count: 0,
+        applied_change_request_ids: [],
+        wake_reason: "community_archived",
+        wake_evidence: null,
+      };
+    }
     await ctx.runMutation(
       internalRefs.communityCompilerEvidence.drainSelfAuthoredPendingSourceTracesInternal,
       {
@@ -453,7 +479,20 @@ export const listCommunityMemorySweepTargetsInternal = internalQuery({
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(1000, Math.floor(Number(args.limit ?? 500))));
-    const rows = (await ctx.db.query("communities" as any).take(limit)) as Array<Record<string, any>>;
+    const lifecycleRows = await Promise.all(
+      ([undefined, "active", "sunsetting"] as const).map((lifecycleStatus) =>
+        ctx.db
+          .query("communities" as any)
+          .withIndex("by_lifecycle_updatedAt", (q: any) => q.eq("lifecycleStatus", lifecycleStatus))
+          .order("desc")
+          .take(limit) as Promise<Array<Record<string, any>>>,
+      ),
+    );
+    const rows = Array.from(
+      new Map(lifecycleRows.flat().map((row) => [normalizeIdValue(row._id), row])).values(),
+    )
+      .sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))
+      .slice(0, limit);
     return rows.map((row) => ({
       communityId: normalizeIdValue(row._id),
     }));

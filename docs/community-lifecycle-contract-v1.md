@@ -6,7 +6,9 @@ This contract introduces the compatibility, authority, and durable-operation
 foundation for community archival. It does not expose a public archive or
 restore command and does not perform provider billing operations. It does
 contain synchronous entry, acquisition, and active-shell projections so
-lifecycle state cannot be bypassed by cached clients or direct function calls.
+lifecycle state cannot be bypassed by cached clients or direct function calls,
+and it contains background external-effect admission so archived communities
+cannot begin new inference, embed refresh, or community email delivery.
 
 ## Canonical state
 
@@ -96,6 +98,24 @@ status before Stripe proves that outcome. Existing founder subscriptions remain
 eligible for paid-through lifecycle updates; only a new stale checkout is
 quarantined.
 
+## Operational containment
+
+`communityLifecycleCore` is also the canonical background-work authority.
+Legacy missing lifecycle status, `active`, and `sunsetting` remain operational;
+`archived` fails closed. Cognition writes, heartbeat enqueue and execution,
+compiler handoff claims, community-agent funding admission, serve-request
+execution, and external embed enrichment all recheck this authority at their
+last responsible boundary. Scheduled work created before archival therefore
+cannot start a new provider effect after archival.
+
+Community-scoped outbox rows carry `communityId`. Digest, event reminder,
+mention, access-granted, and billing-issue enqueue paths propagate that scope.
+The outbox rechecks lifecycle during enqueue, claim, and immediately before
+provider delivery; archived jobs become terminally `suppressed`. Generic
+account and direct-message email remains unscoped and unaffected. Operational
+cron scans use bounded lifecycle-index lanes and retain the missing-status
+compatibility lane until migration is complete.
+
 ## Migration
 
 The internal audit and backfill are bounded, cursor-paginated, idempotent, and
@@ -114,6 +134,5 @@ explicit `active` lane through the lifecycle index.
 - Operation claiming, retry execution, and provider work receipts.
 - Archive-worker bulk Stripe cancellation and expiration for provider objects
   that predate the archive request.
-- Background worker, scheduled-job, and email containment.
 - Archive and restore UI.
 - Paid-community sunsetting execution.

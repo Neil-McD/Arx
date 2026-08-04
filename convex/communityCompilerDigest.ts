@@ -16,7 +16,7 @@ import {
   buildCommunityMemoryDigestVersionKey,
   buildCommunityMemoryWorkKey,
 } from "./communityMemoryWorkKey";
-import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
+import { requireOperationalCommunityById } from "./communityLifecycleCore";
 
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -184,7 +184,7 @@ async function runCommunityCompilerDigestPassCore(
   ctx: any,
   args: { communityId: any; triggeredByUserId?: any; requireTrigger?: boolean },
 ) {
-    await requireLiveCommunityForCognitionWrite(ctx, args.communityId);
+    await requireOperationalCommunityById({ ctx, communityId: args.communityId });
     const userId = args.triggeredByUserId ?? undefined;
     const nowMs = Date.now();
     const windowStartedAtMs = nowMs - COMMUNITY_COMPILER_DIGEST_WINDOW_MS;

@@ -32,7 +32,7 @@ import { renderCommunityAgentSkills } from "../shared/communityAgentSkills";
 import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRuntimeBoundary";
 import { normalizeIdValue, toIsoString } from "./communityCore";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
-import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
+import { requireOperationalCommunityById } from "./communityLifecycleCore";
 import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
 import {
   beginCommunityInferenceFundingSession,
@@ -447,6 +447,7 @@ export const resolveCommunityAgentRunContextInternal = internalQuery({
     communityId: v.id("communities"),
   },
   handler: async (ctx, args): Promise<CommunityAgentResolvedContext> => {
+    await requireOperationalCommunityById({ ctx, communityId: args.communityId });
     const canonicalContext = await readCanonicalCommunityAgentContext(ctx, args.communityId);
     if (!canonicalContext) throw new Error("community_agent_runtime_community_not_found");
     const sponsorUserId = canonicalContext.ownerUserId;
@@ -519,8 +520,10 @@ export const createCommunityAgentRunInternal = internalMutation({
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<CommunityAgentCreateRunResult> => {
-    const community = (await ctx.db.get(args.communityId)) as Record<string, any> | null;
-    if (!community) throw new Error("community_agent_runtime_community_not_found");
+    const community = await requireOperationalCommunityById<Record<string, any>>({
+      ctx,
+      communityId: args.communityId,
+    });
     if (normalizeIdValue(community.ownerId) !== normalizeIdValue(args.sponsorUserId)) {
       throw new Error("community_agent_runtime_sponsor_must_be_owner");
     }
@@ -697,7 +700,7 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
     ),
   },
   handler: async (ctx, args) => {
-    await requireLiveCommunityForCognitionWrite(ctx, args.communityId);
+    await requireOperationalCommunityById({ ctx, communityId: args.communityId });
     const nowMs = Date.now();
     for (const event of args.events) {
       const seq = Math.max(0, Math.floor(event.seq));

@@ -59,8 +59,8 @@ assert.doesNotMatch(
 }
 assert.match(
   heartbeat,
-  /listCommunityMemorySweepTargetsInternal[\s\S]*query\("communities" as any\)\.take\(limit\)/,
-  "only the platform sweep target lister should enumerate communities, and it must be bounded",
+  /listCommunityMemorySweepTargetsInternal[\s\S]*\[undefined, "active", "sunsetting"\][\s\S]*by_lifecycle_updatedAt[\s\S]*\.take\(limit\)/,
+  "only the platform sweep target lister should enumerate bounded operational lifecycle lanes",
 );
 
 assert.match(
@@ -70,8 +70,13 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /const community = await ctx\.db\.get\(args\.communityId\)[\s\S]*community_agent_heartbeat_community_not_found/,
-  "heartbeat enqueue should fail closed when the single target community is missing",
+  /enqueueCommunityAgentHeartbeatInternal[\s\S]*requireOperationalCommunityById\(\{ ctx, communityId: args\.communityId \}\)/,
+  "heartbeat enqueue should fail closed through the canonical operational lifecycle guard",
+);
+assert.match(
+  heartbeat,
+  /readCommunityAgentControlGate[\s\S]*communityIsOperational\(community\)[\s\S]*community_archived/,
+  "heartbeat planning and execution should refuse archived communities",
 );
 assert.match(
   heartbeat,

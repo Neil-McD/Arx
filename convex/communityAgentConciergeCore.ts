@@ -3,6 +3,7 @@ import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
+import { communityIsOperational } from "./communityLifecycleCore";
 
 const internalRefs = internal as any;
 
@@ -17,6 +18,7 @@ export type ServeRequestIntakeReason =
   | "source_not_human"
   | "requester_missing"
   | "requester_access_missing"
+  | "community_archived"
   | "agent_disabled"
   | "owner_funding_choice_required"
   | "owner_credential_missing"
@@ -270,6 +272,20 @@ export async function intakeCommunityAgentMention(args: {
       mention: args.mention,
       intakeReason: "invalid_agent",
       skipReason: "Only the canonical community agent can be served by Concierge intake.",
+      nowMs: args.nowMs,
+    });
+    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+  }
+
+  const community = await args.ctx.db.get(args.mention.communityId);
+  if (!community || !communityIsOperational(community)) {
+    const skipped = await skipMention({
+      ctx: args.ctx,
+      mention: args.mention,
+      intakeReason: community ? "community_archived" : "source_missing",
+      skipReason: community
+        ? "The community is archived."
+        : "The mentioned community no longer exists.",
       nowMs: args.nowMs,
     });
     return { mention_id: normalizeIdValue(args.mention._id), ...skipped };

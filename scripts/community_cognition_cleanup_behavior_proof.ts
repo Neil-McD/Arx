@@ -10,7 +10,7 @@ import {
   inspectDeletedCommunityCognitionCore,
   type CommunityCognitionCleanupPhase,
 } from "../convex/communityCognitionCleanupCore.ts";
-import { requireLiveCommunityForCognitionWrite } from "../convex/communityCognitionLifecycle.ts";
+import { requireOperationalCommunityById } from "../convex/communityLifecycleCore.ts";
 
 type Row = {
   _id: string;
@@ -123,10 +123,16 @@ assert.equal(boundCommunityCognitionCleanupLimit(undefined), 100);
 assert.equal(boundCommunityCognitionCleanupLimit(0), 1);
 assert.equal(boundCommunityCognitionCleanupLimit(10_000), COMMUNITY_COGNITION_CLEANUP_MAX_BATCH_LIMIT);
 
-await requireLiveCommunityForCognitionWrite({ db: db as any }, liveCommunityId);
+await requireOperationalCommunityById({
+  ctx: { db: db as any },
+  communityId: liveCommunityId,
+});
 await assert.rejects(
-  requireLiveCommunityForCognitionWrite({ db: db as any }, targetCommunityId),
-  /community_cognition_write_community_not_found/,
+  requireOperationalCommunityById({
+    ctx: { db: db as any },
+    communityId: targetCommunityId,
+  }),
+  /community_not_found/,
   "cognition writes must refuse a deleted community",
 );
 await assert.rejects(
@@ -412,7 +418,7 @@ for (const [file, expectedCount] of [
   ["../convex/communityEvidenceAudit.ts", 1],
 ] as const) {
   const source = readFileSync(new URL(file, import.meta.url), "utf8");
-  const count = source.match(/requireLiveCommunityForCognitionWrite\(/g)?.length ?? 0;
+  const count = source.match(/requireOperationalCommunityById\(/g)?.length ?? 0;
   assert.ok(
     count >= expectedCount,
     `${file} must guard its cognition write seams`,

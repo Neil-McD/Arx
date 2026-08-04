@@ -848,6 +848,7 @@ export default defineSchema({
 
   emailOutbox: defineTable({
     kind: v.string(),
+    communityId: v.optional(v.id("communities")),
     recipientUserId: v.optional(v.id("users")),
     recipientEmail: v.string(),
     templateKey: v.string(),
@@ -871,6 +872,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_status_scheduledAt", ["status", "scheduledAt"])
+    .index("by_community_status_scheduledAt", ["communityId", "status", "scheduledAt"])
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_recipientUserId", ["recipientUserId"])
     .index("by_providerMessageId", ["providerMessageId"]),

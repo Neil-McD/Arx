@@ -20,6 +20,7 @@ import {
   requireFounderInferencePricingFromEnv,
 } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
+import { communityIsOperational } from "./communityLifecycleCore";
 
 export type FounderInferenceGrantRow = {
   _id: any;
@@ -114,8 +115,10 @@ export async function resolveCommunityInferenceFundingAdmission(
   const community = (await ctx.db.get(communityId as any)) as {
     ownerId?: any;
     inferenceFundingPolicy: "legacy_byok_allowed" | "managed_required";
+    lifecycleStatus?: "active" | "sunsetting" | "archived";
   } | null;
   if (!community?.ownerId) return { ok: false, code: "community_not_found" };
+  if (!communityIsOperational(community)) return { ok: false, code: "community_archived" };
 
   if (await hasPlatformOwnerComplimentaryAccess(ctx, community.ownerId)) {
     return {

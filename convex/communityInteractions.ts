@@ -70,6 +70,7 @@ import {
   interactionXStatusIdentity,
   type XPostContext,
 } from "../shared/interactionEmbedPreviewContract";
+import { communityIsOperational } from "./communityLifecycleCore";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -3434,7 +3435,10 @@ export const getInteractionEmbedForEnrichment = internalQuery({
   handler: async (ctx, args) => {
     const embed = (await ctx.db.get(args.embedId as any)) as EmbedRow | null;
     if (!embed) return null;
+    const community = (await ctx.db.get(embed.communityId)) as Record<string, any> | null;
+    if (!community || !communityIsOperational(community)) return null;
     return {
+      communityId: embed.communityId,
       embedKind: embed.embedKind,
       status: embed.status,
       sourceUrl: embed.sourceUrl ?? embed.normalizedSourceUrl ?? null,

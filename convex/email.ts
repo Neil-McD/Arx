@@ -6,6 +6,7 @@ import {
   type EmailTemplateKey,
   sendRenderedEmail,
 } from "./emailCore";
+import { communityIsOperational } from "./communityLifecycleCore";
 
 const EMAIL_TEMPLATE_VALIDATOR = v.union(
   ...EMAIL_TEMPLATE_KEYS.map((value) => v.literal(value)),
@@ -151,6 +152,7 @@ async function findExistingDedupeRow(ctx: any, dedupeKey: string) {
 export const enqueueEmailJobInternal = internalMutation({
   args: {
     kind: v.string(),
+    communityId: v.optional(v.id("communities")),
     recipientUserId: v.optional(v.id("users")),
     recipientEmail: v.optional(v.string()),
     templateKey: EMAIL_TEMPLATE_VALIDATOR,
@@ -161,10 +163,31 @@ export const enqueueEmailJobInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const community = args.communityId ? await ctx.db.get(args.communityId) : null;
+    const communitySuppressionReason = args.communityId
+      ? community && communityIsOperational(community)
+        ? null
+        : community
+          ? "community_archived"
+          : "community_not_found"
+      : null;
     const dedupeKey = readString(args.dedupeKey) || null;
     if (dedupeKey) {
       const existing = await findExistingDedupeRow(ctx, dedupeKey);
       if (existing && ["pending", "sending", "sent"].includes(existing.status)) {
+        if (communitySuppressionReason && existing.status !== "sent") {
+          await ctx.db.patch(existing._id, {
+            status: "suppressed",
+            failureReason: communitySuppressionReason,
+            updatedAt: nowMs,
+          });
+          return {
+            ok: true,
+            deduped: true,
+            outboxId: existing._id,
+            status: "suppressed" as const,
+          };
+        }
         return {
           ok: true,
           deduped: true,
@@ -185,7 +208,7 @@ export const enqueueEmailJobInternal = internalMutation({
 
     const templateKey = args.templateKey as EmailTemplateKey;
     let recipientEmail: string;
-    let suppressionReason: string | null = null;
+    let suppressionReason: string | null = communitySuppressionReason;
     if (recipientUserId) {
       const deliveryState = await getUserEmailDeliveryState(ctx, recipientUserId);
       if (deliveryState.verifiedEmail) {
@@ -213,6 +236,7 @@ export const enqueueEmailJobInternal = internalMutation({
 
     const outboxId = await ctx.db.insert("emailOutbox", {
       kind: readString(args.kind) || templateKey,
+      communityId: args.communityId,
       recipientUserId: recipientUserId ?? undefined,
       recipientEmail,
       templateKey,
@@ -251,15 +275,28 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
       if (rows.length >= limit) break;
       if (isStaleSendingRow(row, nowMs)) rows.push(row);
     }
+    const claimedRows = [];
     for (const row of rows) {
+      if (row.communityId) {
+        const community = await ctx.db.get(row.communityId);
+        if (!community || !communityIsOperational(community)) {
+          await ctx.db.patch(row._id, {
+            status: "suppressed",
+            failureReason: community ? "community_archived" : "community_not_found",
+            updatedAt: nowMs,
+          });
+          continue;
+        }
+      }
       await ctx.db.patch(row._id, {
         status: "sending",
         attemptCount: Number(row.attemptCount ?? 0) + 1,
         lastAttemptAt: nowMs,
         updatedAt: nowMs,
       });
+      claimedRows.push(row);
     }
-    return rows.map((row) => ({
+    return claimedRows.map((row) => ({
       _id: row._id,
       kind: row.kind,
       recipientEmail: row.recipientEmail,
@@ -268,6 +305,31 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
       dedupeKey: row.dedupeKey ?? null,
       attemptCount: Number(row.attemptCount ?? 0) + 1,
     }));
+  },
+});
+
+export const admitEmailJobForDeliveryInternal = internalMutation({
+  args: {
+    outboxId: v.id("emailOutbox"),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.outboxId);
+    if (!row || row.status !== "sending") {
+      return { admitted: false, reason: "email_job_not_sending" };
+    }
+    if (!row.communityId) return { admitted: true, reason: null };
+    const community = await ctx.db.get(row.communityId);
+    if (community && communityIsOperational(community)) {
+      return { admitted: true, reason: null };
+    }
+    const reason = community ? "community_archived" : "community_not_found";
+    await ctx.db.patch(row._id, {
+      status: "suppressed",
+      failureReason: reason,
+      updatedAt: args.nowMs ?? Date.now(),
+    });
+    return { admitted: false, reason };
   },
 });
 
@@ -373,7 +435,16 @@ export const processPendingEmailOutboxInternal = internalAction({
 
     let sent = 0;
     let failed = 0;
+    let suppressed = 0;
     for (const job of claimed) {
+      const admission = await ctx.runMutation(
+        (internal as any).email.admitEmailJobForDeliveryInternal,
+        { outboxId: job._id, nowMs: Date.now() },
+      );
+      if (!admission?.admitted) {
+        suppressed += 1;
+        continue;
+      }
       try {
         const response = await sendRenderedEmail({
           to: job.recipientEmail,
@@ -403,6 +474,7 @@ export const processPendingEmailOutboxInternal = internalAction({
       claimed: claimed.length,
       sent,
       failed,
+      suppressed,
     };
   },
 });
