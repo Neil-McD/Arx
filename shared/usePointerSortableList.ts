@@ -25,10 +25,14 @@ type DragSession = {
 
 type DragVisualState = {
   draggedId: string;
-  startIndex: number;
   projectedIndex: number;
   deltaY: number;
   active: boolean;
+};
+
+type InlineUserSelectOwner = {
+  previousValue: string;
+  released: boolean;
 };
 
 type PointerSortableBindings = {
@@ -42,7 +46,35 @@ function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
-function computeProjectedIndex(session: DragSession, deltaY: number): number {
+export function claimInlineUserSelect(style: Pick<CSSStyleDeclaration, "userSelect">): InlineUserSelectOwner {
+  const owner = {
+    previousValue: style.userSelect,
+    released: false,
+  };
+  style.userSelect = "none";
+  return owner;
+}
+
+export function releaseInlineUserSelect(
+  style: Pick<CSSStyleDeclaration, "userSelect">,
+  owner: InlineUserSelectOwner | null,
+): void {
+  if (!owner || owner.released) return;
+  owner.released = true;
+  if (style.userSelect === "none") {
+    style.userSelect = owner.previousValue;
+  }
+}
+
+export function shouldCommitPointerSort(
+  commit: boolean,
+  session: Pick<DragSession, "hasMoved" | "startIndex">,
+  visual: Pick<DragVisualState, "projectedIndex"> | null,
+): boolean {
+  return commit && session.hasMoved && Boolean(visual && visual.projectedIndex !== session.startIndex);
+}
+
+export function computeProjectedIndex(session: DragSession, deltaY: number): number {
   const draggedCenter = (session.centersById.get(session.draggedId) ?? 0) + deltaY;
   const movingDown = deltaY >= 0;
   let index = 0;
@@ -56,7 +88,7 @@ function computeProjectedIndex(session: DragSession, deltaY: number): number {
   return index;
 }
 
-function computeAutoScrollStep(container: HTMLElement, pointerClientY: number): number {
+export function computeAutoScrollStep(container: HTMLElement, pointerClientY: number): number {
   if (container.scrollHeight <= container.clientHeight + 1) return 0;
   const rect = container.getBoundingClientRect();
   const pointerY = clamp(pointerClientY, rect.top, rect.bottom);
@@ -73,16 +105,18 @@ function computeAutoScrollStep(container: HTMLElement, pointerClientY: number): 
   }
 
   if (step < 0) {
+    if (container.scrollTop <= 0) return 0;
     return Math.max(step, -container.scrollTop);
   }
   if (step > 0) {
     const maxDown = container.scrollHeight - container.clientHeight - container.scrollTop;
+    if (maxDown <= 0) return 0;
     return Math.min(step, maxDown);
   }
   return 0;
 }
 
-function computeSiblingShift(session: DragSession, id: string, projectedIndex: number): number {
+export function computeSiblingShift(session: DragSession, id: string, projectedIndex: number): number {
   const ids = session.idsSnapshot;
   const draggedIndex = session.startIndex;
   const itemIndex = ids.indexOf(id);
@@ -108,6 +142,7 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
   const itemElementsRef = useRef<Map<string, HTMLElement>>(new Map());
   const dragSessionRef = useRef<DragSession | null>(null);
   const dragVisualRef = useRef<DragVisualState | null>(null);
+  const userSelectOwnerRef = useRef<InlineUserSelectOwner | null>(null);
   const onMoveToIndexRef = useRef(onMoveToIndex);
   const suppressNextClickRef = useRef(false);
   const [dragVisual, setDragVisual] = useState<DragVisualState | null>(null);
@@ -115,13 +150,21 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
   onMoveToIndexRef.current = onMoveToIndex;
   dragVisualRef.current = dragVisual;
 
+  const resetDragSession = useCallback((updateVisualState: boolean) => {
+    releaseInlineUserSelect(document.body.style, userSelectOwnerRef.current);
+    userSelectOwnerRef.current = null;
+    dragSessionRef.current = null;
+    dragVisualRef.current = null;
+    if (updateVisualState) setDragVisual(null);
+  }, []);
+
   const finishDrag = useCallback(
     (commit: boolean) => {
       const session = dragSessionRef.current;
       const visual = dragVisualRef.current;
       if (!session) return;
 
-      if (commit && session.hasMoved && visual && visual.projectedIndex !== session.startIndex) {
+      if (visual && shouldCommitPointerSort(commit, session, visual)) {
         onMoveToIndexRef.current(session.draggedId, visual.projectedIndex);
       }
 
@@ -129,11 +172,9 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
         suppressNextClickRef.current = true;
       }
 
-      document.body.style.userSelect = "";
-      dragSessionRef.current = null;
-      setDragVisual(null);
+      resetDragSession(true);
     },
-    [],
+    [resetDragSession],
   );
 
   useEffect(() => {
@@ -149,7 +190,7 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
         const initialDeltaY = clamp(rawDeltaY, session.baseMinDeltaY, session.baseMaxDeltaY);
         if (Math.abs(initialDeltaY) < DRAG_START_THRESHOLD_PX) return;
         session.hasMoved = true;
-        document.body.style.userSelect = "none";
+        userSelectOwnerRef.current = claimInlineUserSelect(document.body.style);
       }
 
       // Scroll the sortable list when dragging near its top or bottom edge.
@@ -213,8 +254,9 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
       window.removeEventListener("pointercancel", handlePointerCancel);
       window.removeEventListener("blur", handleWindowBlur);
       window.removeEventListener("keydown", handleEscape);
+      resetDragSession(false);
     };
-  }, [finishDrag]);
+  }, [finishDrag, resetDragSession]);
 
   const setContainerElement = useCallback((element: HTMLElement | null) => {
     containerRef.current = element;
@@ -273,7 +315,6 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
 
       setDragVisual({
         draggedId: id,
-        startIndex,
         projectedIndex: startIndex,
         deltaY: 0,
         active: false,

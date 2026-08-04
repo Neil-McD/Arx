@@ -614,6 +614,10 @@ body {
   opacity: 0.35;
 }
 
+.community-channel-row:hover .community-channel-reorder-trigger:disabled {
+  opacity: 0.35;
+}
+
 .community-channel-reorder-controls {
   position: absolute;
   top: calc(100% + 3px);

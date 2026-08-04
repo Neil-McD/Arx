@@ -347,7 +347,7 @@ export const CommunityNav = memo(function CommunityNav({
               key={channel.id || channel.slug}
               ref={sortableBindings?.ref}
               style={sortableBindings?.style}
-              className={`community-channel-row${isSelected ? " active" : ""}${draggingChannelId === channel.id ? " is-dragging" : ""}${sortableBindings ? " reorder-enabled" : ""}`}
+              className={`community-channel-row${draggingChannelId === channel.id ? " is-dragging" : ""}${sortableBindings ? " reorder-enabled" : ""}`}
             >
               <button
                 className={isSelected ? "nav-item community-channel-item active" : "nav-item community-channel-item"}

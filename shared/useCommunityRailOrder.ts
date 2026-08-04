@@ -71,20 +71,6 @@ function normalizeOrder(orderIds: string[], availableIds: string[]): string[] {
   return next;
 }
 
-function moveIdBefore(orderIds: string[], draggedId: string, targetId: string): string[] {
-  if (draggedId === targetId) return orderIds;
-  const fromIndex = orderIds.indexOf(draggedId);
-  const targetIndex = orderIds.indexOf(targetId);
-  if (fromIndex < 0 || targetIndex < 0) return orderIds;
-
-  const next = orderIds.slice();
-  next.splice(fromIndex, 1);
-  const insertIndex = next.indexOf(targetId);
-  if (insertIndex < 0) return orderIds;
-  next.splice(insertIndex, 0, draggedId);
-  return next;
-}
-
 function moveIdToIndex(orderIds: string[], draggedId: string, targetIndexInput: number): string[] {
   const fromIndex = orderIds.indexOf(draggedId);
   if (fromIndex < 0) return orderIds;
@@ -136,19 +122,6 @@ export function useCommunityRailOrder<TCommunity extends CommunityLike>(
       .sort((left, right) => (orderIndexById.get(left.id) ?? Number.MAX_SAFE_INTEGER) - (orderIndexById.get(right.id) ?? Number.MAX_SAFE_INTEGER));
   }, [communities, orderIds]);
 
-  const moveCommunityBefore = useCallback(
-    (draggedId: string, targetId: string) => {
-      const dragged = draggedId.trim();
-      const target = targetId.trim();
-      if (!dragged || !target || dragged === target) return;
-      setOrderIds((previous) => {
-        const normalized = normalizeOrder(previous, availableIds);
-        return moveIdBefore(normalized, dragged, target);
-      });
-    },
-    [availableIds],
-  );
-
   const moveCommunityToIndex = useCallback(
     (draggedId: string, targetIndex: number) => {
       const dragged = draggedId.trim();
@@ -163,7 +136,6 @@ export function useCommunityRailOrder<TCommunity extends CommunityLike>(
 
   return {
     orderedCommunities,
-    moveCommunityBefore,
     moveCommunityToIndex,
   };
 }

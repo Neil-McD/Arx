@@ -56,6 +56,9 @@ const pointerSortablePath = "shared/usePointerSortableList.ts";
 const pointerSortable = read(pointerSortablePath);
 [
   "DRAG_START_THRESHOLD_PX",
+  "claimInlineUserSelect",
+  "releaseInlineUserSelect",
+  "shouldCommitPointerSort",
   "computeProjectedIndex",
   "computeSiblingShift",
   "computeAutoScrollStep",
@@ -65,9 +68,15 @@ const pointerSortable = read(pointerSortablePath);
   "lastSortableElement",
 ].forEach((required) => assertIncludes(pointerSortablePath, pointerSortable, required));
 assertNotMatches(pointerSortablePath, pointerSortable, /dragActive/);
+assertNotMatches(pointerSortablePath, pointerSortable, /document\.body\.style\.userSelect\s*=\s*""/);
+assertNotMatches(pointerSortablePath, pointerSortable, /type DragVisualState\s*=\s*{[^}]*startIndex:/);
 if (existsSync(resolve(root, "shared/useRailPointerReorder.ts"))) {
   throw new Error("legacy rail-only pointer reorder primitive must be deleted");
 }
+
+const railOrderPath = "shared/useCommunityRailOrder.ts";
+const railOrder = read(railOrderPath);
+assertNotMatches(railOrderPath, railOrder, /moveIdBefore|moveCommunityBefore/);
 
 const headerPath = "apps/web/src/components/WebCommunityChannelHeader.tsx";
 const header = read(headerPath);
