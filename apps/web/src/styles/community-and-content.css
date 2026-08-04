@@ -3518,7 +3518,7 @@
   position: relative;
   flex: 0 0 auto;
   min-width: 0;
-  max-block-size: min(30dvh, 320px);
+  max-block-size: min(26dvh, 280px);
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   overflow: hidden;
@@ -3645,7 +3645,7 @@
 
 @media (max-width: 700px) {
   .community-channel-pinned-root {
-    max-block-size: min(28dvh, 250px);
+    max-block-size: min(24dvh, 220px);
   }
 
   .community-channel-pinned-root-footer {
