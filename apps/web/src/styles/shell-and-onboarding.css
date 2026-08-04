@@ -525,20 +525,24 @@ body {
   position: relative;
 }
 
-.community-channel-row.is-dragging {
-  opacity: 0.5;
+.community-channel-row.reorder-enabled {
+  will-change: transform;
 }
 
-.community-channel-row.is-drop-target::after {
-  content: "";
-  position: absolute;
-  right: 8px;
-  bottom: -1px;
-  left: 8px;
-  height: 2px;
-  border-radius: 999px;
-  background: var(--accent);
-  pointer-events: none;
+.community-channel-row.reorder-enabled .community-channel-item {
+  cursor: grab;
+  touch-action: none;
+}
+
+.community-channel-row.is-dragging {
+  z-index: 4;
+  opacity: 0.92;
+}
+
+.community-channel-row.is-dragging .community-channel-item {
+  cursor: grabbing;
+  background: var(--surface-card-hover);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.16);
 }
 
 .community-channel-row:has(.community-channel-reorder) .community-channel-item {
@@ -572,6 +576,7 @@ body {
 
 .community-channel-reorder-trigger {
   opacity: 0;
+  touch-action: none;
   transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
 }
 

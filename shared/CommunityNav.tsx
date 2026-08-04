@@ -1,7 +1,8 @@
-import { memo, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { memo, useEffect, useRef, useState, type FormEvent } from "react";
 import { Check, ChevronDown, ChevronUp, GripVertical, Hash, Plus, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
+import { usePointerSortableList } from "./usePointerSortableList";
 
 type CommunityNavCommunityLike = {
   slug?: string | null;
@@ -61,6 +62,21 @@ function moveChannelId(
   const next = ids.slice();
   const [moved] = next.splice(fromIndex, 1);
   next.splice(toIndex, 0, moved);
+  return next;
+}
+
+function moveChannelIdToIndex(
+  ids: string[],
+  channelId: string,
+  targetIndexInput: number,
+): string[] | null {
+  const fromIndex = ids.indexOf(channelId);
+  if (fromIndex < 0) return null;
+  const targetIndex = Math.max(0, Math.min(ids.length - 1, targetIndexInput));
+  if (fromIndex === targetIndex) return null;
+  const next = ids.slice();
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(targetIndex, 0, moved);
   return next;
 }
 
@@ -145,8 +161,6 @@ export const CommunityNav = memo(function CommunityNav({
 }: CommunityNavProps) {
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
   const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
-  const [draggingChannelId, setDraggingChannelId] = useState<string | null>(null);
-  const [dropTargetChannelId, setDropTargetChannelId] = useState<string | null>(null);
   const [reorderControlsChannelId, setReorderControlsChannelId] = useState<string | null>(null);
   const [channelName, setChannelName] = useState("");
   const copyResetTimeoutRef = useRef<number | null>(null);
@@ -175,21 +189,21 @@ export const CommunityNav = memo(function CommunityNav({
     clearReorderChannelsError?.();
     void onReorderChannels(orderedIds);
   };
-  const handleChannelDrop = (event: DragEvent<HTMLDivElement>, targetChannelId: string) => {
-    event.preventDefault();
-    const draggedChannelId =
-      draggingChannelId || event.dataTransfer.getData("application/x-polynet-channel-id");
-    setDraggingChannelId(null);
-    setDropTargetChannelId(null);
-    if (!draggedChannelId || draggedChannelId === targetChannelId) return;
-    const fromIndex = reorderableChannelIds.indexOf(draggedChannelId);
-    const toIndex = reorderableChannelIds.indexOf(targetChannelId);
-    if (fromIndex < 0 || toIndex < 0) return;
-    const nextIds = reorderableChannelIds.slice();
-    const [moved] = nextIds.splice(fromIndex, 1);
-    nextIds.splice(toIndex, 0, moved);
-    commitChannelOrder(nextIds);
-  };
+  const {
+    setContainerElement: setChannelListElement,
+    getItemBindings: getChannelItemBindings,
+    draggingId: draggingChannelId,
+  } = usePointerSortableList({
+    itemIds: reorderableChannelIds,
+    enabled: canReorderChannels && !isReorderingChannels,
+    onMoveToIndex: (draggedChannelId, targetIndex) => {
+      commitChannelOrder(moveChannelIdToIndex(
+        reorderableChannelIds,
+        draggedChannelId,
+        targetIndex,
+      ));
+    },
+  });
   const restoreModalTriggerFocus = (
     target: HTMLElement | null,
     fallback: HTMLElement | null = null,
@@ -231,8 +245,6 @@ export const CommunityNav = memo(function CommunityNav({
   useEffect(() => {
     setIsAddChannelOpen(false);
     setChannelName("");
-    setDraggingChannelId(null);
-    setDropTargetChannelId(null);
     setReorderControlsChannelId(null);
     clearCreateChannelError?.();
     clearReorderChannelsError?.();
@@ -312,7 +324,11 @@ export const CommunityNav = memo(function CommunityNav({
           aria-hidden
         />
       </div>
-      <div className="community-channel-list" aria-label="Channels">
+      <div
+        className="community-channel-list"
+        aria-label="Channels"
+        ref={setChannelListElement}
+      >
         {showChannelLoadingSkeleton ? (
           <div className="community-channel-loading" aria-label="Loading channels">
             <div className="community-channel-loading-row web-skeleton-row" />
@@ -323,26 +339,21 @@ export const CommunityNav = memo(function CommunityNav({
             communityTab === "chat" &&
             (selectedChannelSlug ?? "general") === channel.slug;
           const indicator = channelIndicators[channel.slug];
+          const sortableBindings = canReorderChannels && !channel.is_general
+            ? getChannelItemBindings(channel.id)
+            : null;
           return (
             <div
               key={channel.id || channel.slug}
-              className={`community-channel-row${isSelected ? " active" : ""}${draggingChannelId === channel.id ? " is-dragging" : ""}${dropTargetChannelId === channel.id ? " is-drop-target" : ""}`}
-              onDragOver={(event) => {
-                if (!canReorderChannels || channel.is_general || !draggingChannelId) return;
-                event.preventDefault();
-                event.dataTransfer.dropEffect = "move";
-                setDropTargetChannelId(channel.id);
-              }}
-              onDragLeave={() => {
-                setDropTargetChannelId((current) => current === channel.id ? null : current);
-              }}
-              onDrop={(event) => {
-                if (!channel.is_general) handleChannelDrop(event, channel.id);
-              }}
+              ref={sortableBindings?.ref}
+              style={sortableBindings?.style}
+              className={`community-channel-row${isSelected ? " active" : ""}${draggingChannelId === channel.id ? " is-dragging" : ""}${sortableBindings ? " reorder-enabled" : ""}`}
             >
               <button
                 className={isSelected ? "nav-item community-channel-item active" : "nav-item community-channel-item"}
                 type="button"
+                onPointerDown={sortableBindings?.onPointerDown}
+                onClickCapture={sortableBindings?.onClickCapture}
                 onClick={() => {
                   if (onSelectChannel) onSelectChannel(channel);
                   else onSelectTab("chat");
@@ -362,11 +373,12 @@ export const CommunityNav = memo(function CommunityNav({
                   <button
                     type="button"
                     className="community-channel-reorder-trigger"
-                    draggable={!isReorderingChannels}
                     disabled={isReorderingChannels}
                     aria-label={`Reorder ${channel.name}`}
                     aria-expanded={reorderControlsChannelId === channel.id}
-                    title="Drag to reorder or open move controls"
+                    title="Drag channel or open move controls"
+                    onPointerDown={sortableBindings?.onPointerDown}
+                    onClickCapture={sortableBindings?.onClickCapture}
                     onClick={(event) => {
                       event.stopPropagation();
                       setReorderControlsChannelId((current) => current === channel.id ? null : channel.id);
@@ -379,21 +391,6 @@ export const CommunityNav = memo(function CommunityNav({
                         channel.id,
                         event.key === "ArrowUp" ? -1 : 1,
                       ));
-                    }}
-                    onDragStart={(event) => {
-                      if (isReorderingChannels) {
-                        event.preventDefault();
-                        return;
-                      }
-                      clearReorderChannelsError?.();
-                      setDraggingChannelId(channel.id);
-                      event.dataTransfer.effectAllowed = "move";
-                      event.dataTransfer.setData("application/x-polynet-channel-id", channel.id);
-                      event.dataTransfer.setData("text/plain", channel.id);
-                    }}
-                    onDragEnd={() => {
-                      setDraggingChannelId(null);
-                      setDropTargetChannelId(null);
                     }}
                   >
                     <GripVertical size={15} aria-hidden="true" />

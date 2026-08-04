@@ -4,7 +4,7 @@ const DRAG_START_THRESHOLD_PX = 4;
 const AUTO_SCROLL_EDGE_PX = 32;
 const AUTO_SCROLL_MAX_STEP_PX = 16;
 
-type UseRailPointerReorderArgs = {
+type UsePointerSortableListArgs = {
   itemIds: string[];
   enabled: boolean;
   onMoveToIndex: (draggedId: string, targetIndex: number) => void;
@@ -31,7 +31,7 @@ type DragVisualState = {
   active: boolean;
 };
 
-type RailPointerBindings = {
+type PointerSortableBindings = {
   ref: (element: HTMLElement | null) => void;
   onPointerDown: (event: PointerEvent<HTMLElement>) => void;
   onClickCapture: (event: MouseEvent<HTMLElement>) => void;
@@ -102,7 +102,7 @@ function computeSiblingShift(session: DragSession, id: string, projectedIndex: n
   return 0;
 }
 
-export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
+export function usePointerSortableList(args: UsePointerSortableListArgs) {
   const { itemIds, enabled, onMoveToIndex } = args;
   const containerRef = useRef<HTMLElement | null>(null);
   const itemElementsRef = useRef<Map<string, HTMLElement>>(new Map());
@@ -156,7 +156,7 @@ export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
         document.body.style.userSelect = "none";
       }
 
-      // Scroll the rail list when dragging near the top/bottom edges.
+      // Scroll the sortable list when dragging near its top or bottom edge.
       const autoScrollStep = computeAutoScrollStep(container, event.clientY);
       if (autoScrollStep !== 0) {
         container.scrollTop += autoScrollStep;
@@ -246,7 +246,6 @@ export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
       const startIndex = idsSnapshot.indexOf(id);
       if (startIndex < 0) return;
 
-      const containerRect = container.getBoundingClientRect();
       const draggedRect = draggedElement.getBoundingClientRect();
       const centersById = new Map<string, number>();
 
@@ -257,6 +256,12 @@ export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
         centersById.set(itemId, rect.top + rect.height / 2);
       }
 
+      const firstSortableElement = itemElementsRef.current.get(idsSnapshot[0] ?? "");
+      const lastSortableElement = itemElementsRef.current.get(idsSnapshot.at(-1) ?? "");
+      if (!firstSortableElement || !lastSortableElement) return;
+      const firstSortableRect = firstSortableElement.getBoundingClientRect();
+      const lastSortableRect = lastSortableElement.getBoundingClientRect();
+
       dragSessionRef.current = {
         pointerId: event.pointerId,
         draggedId: id,
@@ -265,8 +270,8 @@ export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
         centersById,
         startClientY: event.clientY,
         startScrollTop: container.scrollTop,
-        baseMinDeltaY: containerRect.top - draggedRect.top,
-        baseMaxDeltaY: containerRect.bottom - draggedRect.bottom,
+        baseMinDeltaY: firstSortableRect.top - draggedRect.top,
+        baseMaxDeltaY: lastSortableRect.bottom - draggedRect.bottom,
         hasMoved: false,
       };
 
@@ -292,7 +297,7 @@ export function useRailPointerReorder(args: UseRailPointerReorderArgs) {
   }, []);
 
   const getItemBindings = useCallback(
-    (id: string): RailPointerBindings => {
+    (id: string): PointerSortableBindings => {
       const isDraggingThisItem = dragVisual?.active && dragVisual.draggedId === id;
       let style: CSSProperties | undefined;
       if (dragVisual?.active) {

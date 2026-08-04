@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = process.cwd();
@@ -35,12 +35,13 @@ const nav = read(navPath);
   "MODAL_FOCUSABLE_SELECTOR",
   "trapModalFocus",
   "onReorderChannels",
+  "usePointerSortableList",
+  "getChannelItemBindings",
   "community-channel-reorder-trigger",
-  "application/x-polynet-channel-id",
+  "onPointerDown={sortableBindings?.onPointerDown}",
+  "onClickCapture={sortableBindings?.onClickCapture}",
   "Move up",
   "Move down",
-  "setDraggingChannelId(null)",
-  "setDropTargetChannelId(null)",
   "setReorderControlsChannelId(null)",
 ].forEach((required) => assertIncludes(navPath, nav, required));
 assertNotMatches(
@@ -49,6 +50,23 @@ assertNotMatches(
   /channels\.length\s*>\s*0[\s\S]*name:\s*"General"/,
 );
 assertNotMatches(navPath, nav, /community-channel-menu-trigger|Rename channel|Delete channel/);
+assertNotMatches(navPath, nav, /DragEvent|dataTransfer|draggable=|onDragStart|onDragOver|onDrop/);
+
+const pointerSortablePath = "shared/usePointerSortableList.ts";
+const pointerSortable = read(pointerSortablePath);
+[
+  "DRAG_START_THRESHOLD_PX",
+  "computeProjectedIndex",
+  "computeSiblingShift",
+  "computeAutoScrollStep",
+  "pointercancel",
+  "suppressNextClickRef",
+  "firstSortableElement",
+  "lastSortableElement",
+].forEach((required) => assertIncludes(pointerSortablePath, pointerSortable, required));
+if (existsSync(resolve(root, "shared/useRailPointerReorder.ts"))) {
+  throw new Error("legacy rail-only pointer reorder primitive must be deleted");
+}
 
 const headerPath = "apps/web/src/components/WebCommunityChannelHeader.tsx";
 const header = read(headerPath);

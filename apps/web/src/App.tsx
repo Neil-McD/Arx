@@ -140,7 +140,7 @@ import {
   readBannerFileAsWideDataUrlWithinLimit,
 } from "../../../shared/imageTransforms";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
-import { useRailPointerReorder } from "../../../shared/useRailPointerReorder";
+import { usePointerSortableList } from "../../../shared/usePointerSortableList";
 import { useWebCommunityAccessController } from "../../../shared/useWebCommunityAccessController";
 import { useWebDiscoverController } from "../../../shared/useWebDiscoverController";
 import { useWebToastController } from "../../../shared/useWebToastController";
@@ -1830,7 +1830,7 @@ export default function App() {
   const hasCommunityRailMiddleContent = railCommunities.length > 0;
   const communityRailIds = useMemo(() => railCommunities.map((community) => community.id), [railCommunities]);
   const { setContainerElement: setCommunityRailListElement, getItemBindings: getCommunityRailItemBindings, draggingId: draggingCommunityId } =
-    useRailPointerReorder({
+    usePointerSortableList({
       itemIds: communityRailIds,
       enabled: canReorderCommunities,
       onMoveToIndex: handleReorderCommunityRail,
