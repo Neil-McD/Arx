@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
@@ -8,6 +8,7 @@ const channelCore = readFileSync(join(root, "convex/communityChannelCore.ts"), "
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const attachmentBridge = readFileSync(join(root, "convex/communityInteractionAttachmentBridge.ts"), "utf8");
 const legacyAttachments = readFileSync(join(root, "convex/communityInteractionLegacyAttachments.ts"), "utf8");
+const communityFacade = readFileSync(join(root, "convex/community.ts"), "utf8");
 const gateway = readFileSync(join(root, "shared/cloudCommunityInteractionsGateway.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
@@ -32,11 +33,36 @@ function functionBlock(source: string, functionName: string): string {
   return source.slice(start, end);
 }
 
+function listRuntimeSourceFiles(directory: string): string[] {
+  return readdirSync(join(root, directory), { withFileTypes: true }).flatMap((entry) => {
+    const relativePath = join(directory, entry.name);
+    if (entry.isDirectory()) {
+      if (entry.name === "_generated" || relativePath === "shared/contracts") return [];
+      return listRuntimeSourceFiles(relativePath);
+    }
+    return /\.(?:[cm]?[jt]sx?|d\.ts)$/.test(entry.name) ? [relativePath] : [];
+  });
+}
+
 assert.match(
   packageJson,
   /"check:community-interactions-read-model-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_interactions_read_model_contract_proof\.ts"/,
   "package scripts should expose the community interactions read-model proof",
 );
+assert.match(
+  communityFacade,
+  /export const listCommunityInteractionRoots\s*=\s*communityInteractions\.listCommunityInteractionRoots;/,
+  "community facade should retain the cached-client root-query alias without owning a second implementation",
+);
+for (const sourcePath of ["apps", "shared", "convex"]
+  .flatMap(listRuntimeSourceFiles)
+  .filter((sourcePath) => sourcePath !== "convex/community.ts")) {
+  assert.doesNotMatch(
+    readFileSync(join(root, sourcePath), "utf8"),
+    /community:listCommunityInteractionRoots|\(api as any\)\.community\.listCommunityInteractionRoots|\bapi\.community\.listCommunityInteractionRoots/,
+    `${sourcePath} should use communityInteractions:listCommunityInteractionRoots instead of the cached-client alias`,
+  );
+}
 assert.match(
   gateway,
   /\(api as any\)\.communityInteractions\.listCommunityInteractionRoots/,
