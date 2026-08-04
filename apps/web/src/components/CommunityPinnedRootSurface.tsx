@@ -5,7 +5,7 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { ArrowRight, PinOff } from "lucide-react";
+import { ArrowRight, Pin, PinOff } from "lucide-react";
 
 type CommunityPinnedRootSurfaceProps = {
   children: ReactNode;
@@ -98,7 +98,7 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
       {props.canUnpin ? (
         <button
           type="button"
-          className="community-channel-pinned-root-unpin"
+          className="community-channel-pinned-root-pin is-action"
           onClick={props.onUnpin}
           disabled={props.isUnpinning}
           aria-label="Unpin from channel"
@@ -106,7 +106,11 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
         >
           <PinOff size={15} aria-hidden="true" />
         </button>
-      ) : null}
+      ) : (
+        <span className="community-channel-pinned-root-pin" aria-hidden="true">
+          <Pin size={15} />
+        </span>
+      )}
     </section>
   );
 }

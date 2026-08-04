@@ -249,7 +249,8 @@ const pinnedSurface = read(pinnedSurfacePath);
   "community-channel-pinned-root-preview-open",
   "community-channel-pinned-root-fade",
   "community-channel-pinned-root-open",
-  "community-channel-pinned-root-unpin",
+  "community-channel-pinned-root-pin",
+  "community-channel-pinned-root-pin is-action",
   'aria-label="Pinned post"',
   'aria-label="Unpin from channel"',
   "View full post",
@@ -259,7 +260,14 @@ const pinnedSurface = read(pinnedSurfacePath);
   'aria-hidden="true"',
   "scrollHeight",
   "clientHeight",
+  "<Pin size={15}",
+  "<PinOff size={15}",
 ].forEach((required) => assertIncludes(pinnedSurfacePath, pinnedSurface, required));
+assertMatches(
+  pinnedSurfacePath,
+  pinnedSurface,
+  /props\.canUnpin\s*\?\s*\([\s\S]*?<button[\s\S]*?community-channel-pinned-root-pin is-action[\s\S]*?<PinOff[\s\S]*?\)\s*:\s*\([\s\S]*?<span className="community-channel-pinned-root-pin" aria-hidden="true">[\s\S]*?<Pin/,
+);
 assertNotMatches(
   pinnedSurfacePath,
   pinnedSurface,
@@ -397,7 +405,12 @@ assertNotMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root-unpin\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?color:\s*var\(--accent\);/,
+  /\.community-channel-pinned-root-pin\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?color:\s*var\(--accent\);[\s\S]*?pointer-events:\s*none;/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-pin\.is-action\s*\{[\s\S]*?cursor:\s*pointer;[\s\S]*?pointer-events:\s*auto;/,
 );
 assertMatches(
   interactionStylesPath,

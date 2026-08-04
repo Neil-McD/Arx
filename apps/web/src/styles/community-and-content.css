@@ -3556,7 +3556,7 @@
   margin-top: 0;
 }
 
-.community-channel-pinned-root:has(> .community-channel-pinned-root-unpin) .community-interaction-meta-row {
+.community-channel-pinned-root:has(> .community-channel-pinned-root-pin) .community-interaction-meta-row {
   padding-right: 34px;
 }
 
@@ -3609,7 +3609,7 @@
   box-shadow: inset 2px 0 0 var(--accent);
 }
 
-.community-channel-pinned-root-unpin {
+.community-channel-pinned-root-pin {
   position: absolute;
   z-index: 4;
   top: 6px;
@@ -3619,21 +3619,26 @@
   justify-content: center;
   width: 28px;
   height: 28px;
+  color: var(--accent);
+  pointer-events: none;
+}
+
+.community-channel-pinned-root-pin.is-action {
   padding: 0;
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--accent);
   cursor: pointer;
+  pointer-events: auto;
 }
 
-.community-channel-pinned-root-unpin:hover:not(:disabled),
-.community-channel-pinned-root-unpin:focus-visible {
+.community-channel-pinned-root-pin.is-action:hover:not(:disabled),
+.community-channel-pinned-root-pin.is-action:focus-visible {
   background: var(--hover-overlay);
   color: var(--accent);
 }
 
-.community-channel-pinned-root-unpin:disabled {
+.community-channel-pinned-root-pin.is-action:disabled {
   cursor: wait;
   opacity: 0.5;
 }
