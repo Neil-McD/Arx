@@ -7,6 +7,7 @@ import schema from "./schema";
 import {
   authSessionHasCredentialMaterial,
   MAX_AUTH_SESSION_PRUNE_BATCH_SIZE,
+  MAX_AUTH_SESSION_SCRUB_AUDIT_BATCH_SIZE,
   MAX_AUTH_SESSION_SCRUB_BATCH_SIZE,
   normalizeAuthSessionPruneCutoff,
   normalizeAuthSessionPruneLimit,
@@ -69,6 +70,9 @@ test("scrub inputs are bounded and cursors fail closed", () => {
   expect(normalizeAuthSessionScrubLimit(25.9)).toBe(25);
   expect(normalizeAuthSessionScrubLimit(10_000)).toBe(
     MAX_AUTH_SESSION_SCRUB_BATCH_SIZE,
+  );
+  expect(normalizeAuthSessionScrubLimit(10_000, { dryRun: true })).toBe(
+    MAX_AUTH_SESSION_SCRUB_AUDIT_BATCH_SIZE,
   );
   expect(normalizeAuthSessionScrubCursor(undefined)).toBeNull();
   expect(normalizeAuthSessionScrubCursor(null)).toBeNull();

@@ -2,6 +2,7 @@ const DEFAULT_AUTH_SESSION_PRUNE_BATCH_SIZE = 100;
 export const MAX_AUTH_SESSION_PRUNE_BATCH_SIZE = 100;
 const DEFAULT_AUTH_SESSION_SCRUB_BATCH_SIZE = 100;
 export const MAX_AUTH_SESSION_SCRUB_BATCH_SIZE = 100;
+export const MAX_AUTH_SESSION_SCRUB_AUDIT_BATCH_SIZE = 1_000;
 
 function normalizePositiveInteger(value: unknown): number | null {
   const parsed = Number(value);
@@ -21,10 +22,16 @@ export function normalizeAuthSessionPruneCutoff(value: unknown): number {
   return parsed;
 }
 
-export function normalizeAuthSessionScrubLimit(value: unknown): number {
+export function normalizeAuthSessionScrubLimit(
+  value: unknown,
+  options: { dryRun?: boolean } = {},
+): number {
   const parsed = normalizePositiveInteger(value);
   if (parsed === null) return DEFAULT_AUTH_SESSION_SCRUB_BATCH_SIZE;
-  return Math.min(MAX_AUTH_SESSION_SCRUB_BATCH_SIZE, parsed);
+  const maximum = options.dryRun === true
+    ? MAX_AUTH_SESSION_SCRUB_AUDIT_BATCH_SIZE
+    : MAX_AUTH_SESSION_SCRUB_BATCH_SIZE;
+  return Math.min(maximum, parsed);
 }
 
 export function normalizeAuthSessionScrubCursor(value: unknown): string | null {
@@ -95,9 +102,9 @@ export async function scrubRevokedAuthSessionSecretsBatch(args: {
   order: "asc" | "desc";
 }> {
   const cursor = normalizeAuthSessionScrubCursor(args.cursor);
-  const limit = normalizeAuthSessionScrubLimit(args.limit);
-  const order = normalizeAuthSessionScrubOrder(args.order);
   const dryRun = args.dryRun !== false;
+  const limit = normalizeAuthSessionScrubLimit(args.limit, { dryRun });
+  const order = normalizeAuthSessionScrubOrder(args.order);
   const page = await args.ctx.db
     .query("authSessions")
     .withIndex("by_revokedAt", (q: any) => q.gt("revokedAt", 0))

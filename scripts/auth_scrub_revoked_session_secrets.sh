@@ -134,8 +134,12 @@ if ! [[ "$LIMIT" =~ ^[0-9]+$ ]] || [[ "$LIMIT" -le 0 ]]; then
   echo "FAIL: --limit must be a positive integer" >&2
   exit 1
 fi
-if [[ "$LIMIT" -gt 100 ]]; then
-  echo "FAIL: --limit cannot exceed the server maximum of 100" >&2
+if [[ "$EXECUTE" == true && "$LIMIT" -gt 100 ]]; then
+  echo "FAIL: --limit cannot exceed the write maximum of 100" >&2
+  exit 1
+fi
+if [[ "$EXECUTE" != true && "$LIMIT" -gt 1000 ]]; then
+  echo "FAIL: --limit cannot exceed the audit maximum of 1000" >&2
   exit 1
 fi
 if ! [[ "$MAX_BATCHES" =~ ^[0-9]+$ ]] || [[ "$MAX_BATCHES" -le 0 ]]; then

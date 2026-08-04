@@ -20,6 +20,7 @@ assert.match(core, /q\.gt\("revokedAt", 0\)\.lte\("revokedAt", cutoff\)/);
 assert.match(core, /\.take\(limit \+ 1\)/);
 assert.match(core, /MAX_AUTH_SESSION_PRUNE_BATCH_SIZE = 100/);
 assert.match(core, /MAX_AUTH_SESSION_SCRUB_BATCH_SIZE = 100/);
+assert.match(core, /MAX_AUTH_SESSION_SCRUB_AUDIT_BATCH_SIZE = 1_000/);
 assert.match(core, /const dryRun = args\.dryRun !== false/);
 assert.match(core, /auth_session_maintenance_index_contract_invalid/);
 assert.match(core, /auth_session_maintenance_unauthorized/);
