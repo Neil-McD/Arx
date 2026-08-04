@@ -1009,8 +1009,8 @@ assert.match(
 );
 assert.match(
   projection,
-  /CommunityPinnedRootPreview[\s\S]*bundle=\{props\.pinnedRoot\}[\s\S]*onOpen=\{\(\) => props\.onSelectRoot/,
-  "pinned projection should delegate a bounded preview that opens the canonical root",
+  /CommunityPinnedRootSurface[\s\S]*onOpen=\{\(\) => props\.onSelectRoot[\s\S]*CommunityInteractionFeedList[\s\S]*roots=\{\[props\.pinnedRoot\]\}[\s\S]*showDayDividers=\{false\}/,
+  "pinned projection should bound the canonical root renderer and open that same root",
 );
 assert.match(
   projection,

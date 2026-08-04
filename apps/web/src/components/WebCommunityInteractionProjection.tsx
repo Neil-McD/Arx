@@ -188,7 +188,7 @@ import {
   sortedBlocks,
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
-import { CommunityPinnedRootPreview } from "./CommunityPinnedRootPreview";
+import { CommunityPinnedRootSurface } from "./CommunityPinnedRootSurface";
 
 const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
   "activeCommunityName",
@@ -738,19 +738,36 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
           />
         ) : null}
         {props.pinnedRoot ? (
-          <CommunityPinnedRootPreview
-            bundle={props.pinnedRoot}
+          <CommunityPinnedRootSurface
             selected={props.pinnedRoot.root.id === props.selectedRootId}
             canUnpin={Boolean(props.canManagePinnedRoot && props.onSetPinnedRoot)}
             isUnpinning={Boolean(props.isUpdatingPinnedRoot)}
             onUnpin={() => void props.onSetPinnedRoot?.(null)}
             onOpen={() => props.onSelectRoot(props.pinnedRoot!.root.id)}
-            profilesByUserId={props.profilesByUserId}
-            displayName={props.displayName}
-            getAvatarColor={props.getAvatarColor}
-            getInitials={props.getInitials}
-            formatChatTime={props.formatChatTime}
-          />
+            openLabel={`View full pinned post by ${actorLabel(props.pinnedRoot.root, props.displayName)}`}
+          >
+            <CommunityInteractionFeedList
+              {...props}
+              key={props.pinnedRoot.root.id}
+              roots={[props.pinnedRoot]}
+              selectedRootId={props.selectedRootId}
+              chatLastSeenAt={null}
+              error={null}
+              isLoadingRoots={false}
+              firstRootBodyExpansion={undefined}
+              canManagePinnedRoot={false}
+              onSetPinnedRoot={undefined}
+              onEditMessage={undefined}
+              onDeleteMessage={undefined}
+              showDayDividers={false}
+              editing={null}
+              editText={editText}
+              onStartEdit={startEdit}
+              onEditTextChange={setEditText}
+              onSaveEdit={saveEdit}
+              onCancelEdit={cancelEdit}
+            />
+          </CommunityPinnedRootSurface>
         ) : null}
         {props.pinnedRootError ? (
           <div className="community-channel-pinned-root-error" role="status">

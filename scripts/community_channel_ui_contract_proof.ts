@@ -216,11 +216,13 @@ const interactionController = read(interactionControllerPath);
 const pinnedProjectionPath = "apps/web/src/components/WebCommunityInteractionProjection.tsx";
 const pinnedProjection = read(pinnedProjectionPath);
 [
-  "CommunityPinnedRootPreview",
+  "CommunityPinnedRootSurface",
+  "CommunityInteractionFeedList",
   "canManagePinnedRoot",
   "onSetPinnedRoot",
   "resolveSelectedCommunityInteractionRoot",
-  "bundle={props.pinnedRoot}",
+  "roots={[props.pinnedRoot]}",
+  "showDayDividers={false}",
   "onOpen={() => props.onSelectRoot",
 ].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /community-channel-pinned-root-header/);
@@ -233,20 +235,27 @@ assertNotMatches(
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /density=/);
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /showReactions/);
 
-const pinnedPreviewPath = "apps/web/src/components/CommunityPinnedRootPreview.tsx";
-const pinnedPreview = read(pinnedPreviewPath);
+const pinnedSurfacePath = "apps/web/src/components/CommunityPinnedRootSurface.tsx";
+const pinnedSurface = read(pinnedSurfacePath);
 [
   "community-channel-pinned-root",
-  "community-channel-pinned-preview-open",
+  "community-channel-pinned-root-viewport",
+  "community-channel-pinned-root-fade",
+  "community-channel-pinned-root-open",
   "community-channel-pinned-root-unpin",
   'aria-label="Pinned post"',
   'aria-label="Unpin from channel"',
   "View full post",
-  "bundleText",
-  "stripSharedAttachmentSummary",
   "ResizeObserver",
-].forEach((required) => assertIncludes(pinnedPreviewPath, pinnedPreview, required));
-assertNotMatches(pinnedPreviewPath, pinnedPreview, /CommunityInteractionFeedList/);
+  "props.children",
+  "scrollHeight",
+  "clientHeight",
+].forEach((required) => assertIncludes(pinnedSurfacePath, pinnedSurface, required));
+assertNotMatches(
+  pinnedSurfacePath,
+  pinnedSurface,
+  /bundleText|InteractionContent|InteractionAttachments|hiddenContentLabel|Includes .*attachments?|Includes .*link previews?/,
+);
 
 const interactionFeedPath = "apps/web/src/components/communityInteractionFeed.tsx";
 const interactionFeed = read(interactionFeedPath);
@@ -343,7 +352,12 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*clamp\(180px, 28dvh, 280px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(33dvh, 360px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-viewport\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/,
 );
 assertMatches(
   interactionStylesPath,
@@ -353,12 +367,12 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-preview-excerpt\.is-truncated::after\s*\{[\s\S]*?linear-gradient\([\s\S]*?var\(--accent\)/,
+  /\.community-channel-pinned-root-fade\s*\{[\s\S]*?linear-gradient\([\s\S]*?var\(--accent\)/,
 );
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-preview-cta\s*\{[\s\S]*?color:\s*var\(--accent\);/,
+  /\.community-channel-pinned-root-open\s*\{[\s\S]*?color:\s*var\(--accent\);/,
 );
 assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-header/);
 assertNotMatches(
