@@ -106,8 +106,6 @@ const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
 const COMMUNITY_ATTACHMENT_ACCEPT =
   "image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf";
 const COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
-const COMMUNITY_COMPOSER_IDEA_PLACEHOLDER_INTERVAL_MS = 6500;
-const COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY = "(prefers-reduced-motion: reduce)";
 const COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID = "community-onboarding-first-post-description";
 
 function syncMentionComposerHighlightScroll(textarea: HTMLTextAreaElement): void {
@@ -150,18 +148,6 @@ function isCommunityComposerTransferSource(
   refs: Array<MutableRefObject<HTMLTextAreaElement | null>> | undefined,
 ): boolean {
   return Boolean(refs?.some((ref) => ref.current && activeElement === ref.current));
-}
-
-function buildCommunityComposerIdeaPlaceholders(params: {
-  activeCommunityName?: string | null;
-}): string[] {
-  const agentName = String(params.activeCommunityName ?? "").trim();
-  return [
-    "Ask the community a question...",
-    "Share what you are working on...",
-    "Type @ to tag a member...",
-    ...(agentName ? [`Tag @${agentName} to ask the community agent...`] : []),
-  ];
 }
 
 function mentionCandidateKey(candidate: MentionCandidate): string {
@@ -423,13 +409,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const [isDesktopCommunityFocusViewport, setIsDesktopCommunityFocusViewport] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY).matches,
   );
-  const [shouldReduceCommunityComposerPlaceholderMotion, setShouldReduceCommunityComposerPlaceholderMotion] = useState(
-    () =>
-      typeof window === "undefined"
-        ? false
-        : window.matchMedia(COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY).matches,
-  );
-  const [communityComposerIdeaPlaceholderIndex, setCommunityComposerIdeaPlaceholderIndex] = useState(0);
   const [mainMentionQuery, setMainMentionQuery] = useState<string | null>(null);
   const [drawerMentionQuery, setDrawerMentionQuery] = useState<string | null>(null);
   const [remoteMentionSearch, setRemoteMentionSearch] = useState<{
@@ -473,20 +452,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     };
     applyViewport(mediaQuery.matches);
     const listener = (event: MediaQueryListEvent) => applyViewport(event.matches);
-    mediaQuery.addEventListener("change", listener);
-    return () => {
-      mediaQuery.removeEventListener("change", listener);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const mediaQuery = window.matchMedia(COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY);
-    const applyPreference = (matches: boolean) => {
-      setShouldReduceCommunityComposerPlaceholderMotion(matches);
-    };
-    applyPreference(mediaQuery.matches);
-    const listener = (event: MediaQueryListEvent) => applyPreference(event.matches);
     mediaQuery.addEventListener("change", listener);
     return () => {
       mediaQuery.removeEventListener("change", listener);
@@ -635,51 +600,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     onCommunityMessageInputChange,
     onCommunityTypingClear,
     onCommunityTypingSignal,
-  ]);
-
-  const mainComposerIdeaPlaceholders = useMemo(
-    () =>
-      buildCommunityComposerIdeaPlaceholders({
-        activeCommunityName: activeCommunity?.name,
-      }),
-    [activeCommunity?.name],
-  );
-  const canShowMainComposerIdeaPlaceholder = Boolean(
-    hasSession &&
-      activeCommunity &&
-      canUseComposer &&
-      canPostMessages &&
-      !isAuthRecoveringSignedIn &&
-      !isResolvingSelectedCommunity &&
-      communityMessageInput.trim().length === 0 &&
-      !replyingToMessage,
-  );
-  const mainCommunityComposerIdeaPlaceholder =
-    mainComposerIdeaPlaceholders[
-      (shouldReduceCommunityComposerPlaceholderMotion ? 0 : communityComposerIdeaPlaceholderIndex) %
-        Math.max(mainComposerIdeaPlaceholders.length, 1)
-    ] ?? "Message the community...";
-
-  useEffect(() => {
-    setCommunityComposerIdeaPlaceholderIndex(0);
-  }, [activeCommunity?.id, activeCommunity?.name]);
-
-  useEffect(() => {
-    if (
-      !canShowMainComposerIdeaPlaceholder ||
-      shouldReduceCommunityComposerPlaceholderMotion ||
-      mainComposerIdeaPlaceholders.length <= 1
-    ) {
-      return;
-    }
-    const intervalId = window.setInterval(() => {
-      setCommunityComposerIdeaPlaceholderIndex((index) => (index + 1) % mainComposerIdeaPlaceholders.length);
-    }, COMMUNITY_COMPOSER_IDEA_PLACEHOLDER_INTERVAL_MS);
-    return () => window.clearInterval(intervalId);
-  }, [
-    canShowMainComposerIdeaPlaceholder,
-    mainComposerIdeaPlaceholders.length,
-    shouldReduceCommunityComposerPlaceholderMotion,
   ]);
 
   const activeMentionOwner: "main" | "drawer" | null =
@@ -1253,6 +1173,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     );
   };
 
+  const activeCommunityChannelSlug = String(interactionProjection?.activeChannel?.slug ?? "").trim();
+  const activeCommunityComposerPlaceholder = activeCommunityChannelSlug
+    ? `Message #${activeCommunityChannelSlug}`
+    : "Message the community...";
   const mainCommunityComposerPlaceholder = !hasSession
     ? "Sign in to chat..."
     : isAuthRecoveringSignedIn
@@ -1265,9 +1189,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             ? "Finish your profile to chat..."
             : !canPostMessages
               ? "Join this community to chat..."
-              : canShowMainComposerIdeaPlaceholder
-                ? mainCommunityComposerIdeaPlaceholder
-                : "Message the community...";
+              : activeCommunityComposerPlaceholder;
 
   const mainCommunityComposer = (
     <>
@@ -1356,6 +1278,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               chatInputRef.current = node;
             }}
             className="chat-input"
+            aria-label={mainCommunityComposerPlaceholder}
             aria-describedby={
               showOnboardingFirstPostGuide
                 ? COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID

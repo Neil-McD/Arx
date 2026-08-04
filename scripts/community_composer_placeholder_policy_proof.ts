@@ -8,54 +8,34 @@ function read(relativePath: string): string {
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const packageJson = read("package.json");
 
-assert.match(
-  chatPanel,
-  /const COMMUNITY_COMPOSER_IDEA_PLACEHOLDER_INTERVAL_MS = 6500;/,
-  "community composer idea placeholder should rotate slowly",
-);
-assert.match(
-  chatPanel,
-  /const COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY = "\(prefers-reduced-motion: reduce\)";/,
-  "community composer placeholder rotation must respect reduced motion",
-);
-assert.match(
-  chatPanel,
-  /function buildCommunityComposerIdeaPlaceholders\([\s\S]*"Ask the community a question\.\.\."[\s\S]*"Share what you are working on\.\.\."[\s\S]*"Type @ to tag a member\.\.\."[\s\S]*`Tag @\$\{agentName\} to ask the community agent\.\.\.`/,
-  "placeholder ideas must include chat, member tag, and agent tag prompts",
-);
 assert.doesNotMatch(
   chatPanel,
-  /Use @everybody for updates everyone should see/,
-  "main composer idea placeholders must not promote @everybody",
+  /COMMUNITY_COMPOSER_IDEA_PLACEHOLDER_INTERVAL_MS|COMMUNITY_COMPOSER_REDUCED_MOTION_MEDIA_QUERY|buildCommunityComposerIdeaPlaceholders|communityComposerIdeaPlaceholderIndex/,
+  "community composer placeholder must not rotate",
 );
 assert.match(
   chatPanel,
-  /const canShowMainComposerIdeaPlaceholder = Boolean\([\s\S]*hasSession[\s\S]*activeCommunity[\s\S]*canUseComposer[\s\S]*canPostMessages[\s\S]*!isAuthRecoveringSignedIn[\s\S]*!isResolvingSelectedCommunity[\s\S]*communityMessageInput\.trim\(\)\.length === 0[\s\S]*!replyingToMessage/,
-  "placeholder ideas should show only when the main composer is usable, empty, and not replying",
+  /const activeCommunityChannelSlug = String\(interactionProjection\?\.activeChannel\?\.slug \?\? ""\)\.trim\(\);/,
+  "community composer destination must come from the selected channel slug",
 );
 assert.match(
   chatPanel,
-  /useEffect\(\(\) => \{[\s\S]*shouldReduceCommunityComposerPlaceholderMotion[\s\S]*window\.setInterval[\s\S]*setCommunityComposerIdeaPlaceholderIndex[\s\S]*COMMUNITY_COMPOSER_IDEA_PLACEHOLDER_INTERVAL_MS[\s\S]*window\.clearInterval\(intervalId\)/,
-  "placeholder ideas must rotate with cleanup and reduced-motion gating",
+  /const activeCommunityComposerPlaceholder = activeCommunityChannelSlug[\s\S]*`Message #\$\{activeCommunityChannelSlug\}`[\s\S]*: "Message the community\.\.\.";/,
+  "community composer placeholder must identify the selected channel with a safe fallback",
 );
 assert.match(
   chatPanel,
-  /shouldReduceCommunityComposerPlaceholderMotion \? 0 : communityComposerIdeaPlaceholderIndex[\s\S]*\}, \[activeCommunity\?\.id, activeCommunity\?\.name\]\);/,
-  "reduced-motion users should see the first prompt and community prompt changes should reset the cycle",
-);
-assert.match(
-  chatPanel,
-  /const mainCommunityComposerPlaceholder = !hasSession[\s\S]*"Sign in to chat\.\.\."[\s\S]*"Restoring your account\.\.\."[\s\S]*"Loading community\.\.\."[\s\S]*"Select a community to chat\.\.\."[\s\S]*"Finish your profile to chat\.\.\."[\s\S]*"Join this community to chat\.\.\."[\s\S]*mainCommunityComposerIdeaPlaceholder[\s\S]*"Message the community\.\.\.";/,
+  /const mainCommunityComposerPlaceholder = !hasSession[\s\S]*"Sign in to chat\.\.\."[\s\S]*"Restoring your account\.\.\."[\s\S]*"Loading community\.\.\."[\s\S]*"Select a community to chat\.\.\."[\s\S]*"Finish your profile to chat\.\.\."[\s\S]*"Join this community to chat\.\.\."[\s\S]*activeCommunityComposerPlaceholder;/,
   "existing disabled/loading/join placeholders must remain deterministic",
 );
 assert.match(
   chatPanel,
-  /placeholder=\{mainCommunityComposerPlaceholder\}/,
-  "main composer textarea must use the computed placeholder",
+  /aria-label=\{mainCommunityComposerPlaceholder\}[\s\S]*placeholder=\{mainCommunityComposerPlaceholder\}/,
+  "main composer textarea must use the destination copy for its accessible label and placeholder",
 );
 assert.match(
   chatPanel,
-  /const drawerReplyPlaceholder = drawerReplyTarget\?\.sender_id[\s\S]*`Reply to \$\{displayName\(drawerReplyTarget\.sender_id\)\.trim\(\) \|\| "this message"\}\.\.\.`[\s\S]*: "Reply\.\.\.";/,
+  /const drawerReplyPlaceholder = drawerReplyTarget\?\.sender_id[\s\S]*`Reply to \$\{drawerReplyTarget\.reply_author_label\?\.trim\(\) \|\| displayName\(drawerReplyTarget\.sender_id\)\.trim\(\) \|\| "this message"\}\.\.\.`[\s\S]*: "Reply\.\.\.";/,
   "thread reply composer placeholder must include the target display name with a Reply fallback",
 );
 assert.match(
