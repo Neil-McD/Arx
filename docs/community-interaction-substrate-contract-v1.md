@@ -169,7 +169,9 @@ interaction substrate:
 The web projection reads a pinned root through the same canonical root bundle
 and renders it with the same root presentation used by the chronological feed.
 The pinned wrapper may add only pinned context and manager controls; it must not
-maintain a condensed or divergent message renderer.
+maintain a condensed or divergent message renderer. The pinned projection may
+suppress reaction chrome to remain compact; reactions remain canonical and
+fully available on the chronological root and in its thread drawer.
 
 The public community funnel's messages-today metadata aggregates all active
 all-member channels. It includes only live `community`/`public` rows plus the

@@ -1009,8 +1009,8 @@ assert.match(
 );
 assert.match(
   projection,
-  /CommunityInteractionFeedList[\s\S]*density="full"/,
-  "projection shell should delegate main feed rows to the shared full-density interaction feed",
+  /CommunityInteractionFeedList[\s\S]*roots=\{\[props\.pinnedRoot\]\}[\s\S]*showReactions=\{false\}/,
+  "pinned projection should delegate canonical rows while suppressing reaction chrome",
 );
 assert.match(
   projection,
@@ -1034,13 +1034,13 @@ assert.doesNotMatch(
 );
 assert.match(
   feed,
-  /export function CommunityInteractionFeedList[\s\S]*density: "full" \| "compact"[\s\S]*props\.roots[\s\S]*community-interaction-message/,
-  "shared feed renderer should own root row rendering for full and compact projections",
+  /export function CommunityInteractionFeedList[\s\S]*showReactions\?: boolean[\s\S]*props\.roots[\s\S]*community-interaction-message/,
+  "shared feed renderer should own root rows and their optional reaction presentation",
 );
 assert.doesNotMatch(
-  app,
-  /workspaceRecentSignalFeed|<CommunityInteractionFeedList[\s\S]*density="compact"/,
-  "workspace panel should not keep a compact community feed projection after the right rail owns community context",
+  `${app}\n${projection}\n${feed}`,
+  /workspaceRecentSignalFeed|density="(?:full|compact)"|density: "full" \| "compact"/,
+  "workspace residue and the unused interaction-feed density contract should stay deleted",
 );
 
 [

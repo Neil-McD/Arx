@@ -195,12 +195,14 @@ const pinnedProjection = read(pinnedProjectionPath);
   "resolveSelectedCommunityInteractionRoot",
   "roots={[props.pinnedRoot]}",
   "showDayDividers={false}",
+  "showReactions={false}",
 ].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
 assertNotMatches(
   pinnedProjectionPath,
   pinnedProjection,
   /community-channel-pinned-root-(?:open|copy)/,
 );
+assertNotMatches(pinnedProjectionPath, pinnedProjection, /density=/);
 
 const interactionFeedPath = "apps/web/src/components/communityInteractionFeed.tsx";
 const interactionFeed = read(interactionFeedPath);
@@ -216,6 +218,7 @@ const interactionContract = read(interactionContractPath);
   "Every active channel may point to at most one live root",
   "General remains fixed at position zero",
   "same root presentation used by the chronological feed",
+  "suppress reaction chrome to remain compact",
 ].forEach((required) => assertIncludes(interactionContractPath, interactionContract, required));
 
 const schemaPath = "convex/schema.ts";
@@ -275,6 +278,11 @@ assertMatches(
   interactionStylesPath,
   interactionStyles,
   /\.community-channel-header-identity\s*\{[\s\S]*?color:\s*var\(--text-muted\);[\s\S]*?\.community-channel-header-identity h1\s*\{[\s\S]*?font-weight:\s*500;/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
 );
 assertMatches(
   interactionStylesPath,

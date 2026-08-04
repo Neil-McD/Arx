@@ -3521,7 +3521,7 @@
   gap: 2px;
   padding: 6px 6px 8px;
   border-bottom: 1px solid var(--border-default);
-  background: var(--bg-workspace);
+  background: color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%);
 }
 
 .community-channel-pinned-root-header {

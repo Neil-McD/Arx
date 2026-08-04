@@ -238,8 +238,13 @@ export function EditForm(props: {
   );
 }
 
+export function interactionReactionsVisible(showReactions: boolean | undefined): boolean {
+  return showReactions !== false;
+}
+
 export function MessageActions(props: {
   onReact: (emoji: string) => void;
+  showReactions?: boolean;
   onReply?: () => void;
   replyLabel: string;
   onEdit?: () => void;
@@ -249,23 +254,27 @@ export function MessageActions(props: {
 }) {
   return (
     <div className="community-interaction-msg-actions">
-      {QUICK_REACTIONS.map((emoji) => (
-        <button
-          key={emoji}
-          type="button"
-          className="community-interaction-msg-action community-interaction-msg-emoji"
-          onClick={() => props.onReact(emoji)}
-          aria-label={`React with ${emoji}`}
-          title={`React with ${emoji}`}
-        >
-          {emoji}
-        </button>
-      ))}
-      <EmojiPickerButton
-        className="community-interaction-msg-action"
-        label="Add reaction"
-        onPick={props.onReact}
-      />
+      {interactionReactionsVisible(props.showReactions) ? (
+        <>
+          {QUICK_REACTIONS.map((emoji) => (
+            <button
+              key={emoji}
+              type="button"
+              className="community-interaction-msg-action community-interaction-msg-emoji"
+              onClick={() => props.onReact(emoji)}
+              aria-label={`React with ${emoji}`}
+              title={`React with ${emoji}`}
+            >
+              {emoji}
+            </button>
+          ))}
+          <EmojiPickerButton
+            className="community-interaction-msg-action"
+            label="Add reaction"
+            onPick={props.onReact}
+          />
+        </>
+      ) : null}
       {props.onReply ? (
         <button
           type="button"
@@ -835,8 +844,8 @@ export function InteractionAttachments(props: {
 
 export function CommunityInteractionFeedList(
   props: WebCommunityInteractionProjectionProps & {
-    density: "full" | "compact";
     showDayDividers?: boolean;
+    showReactions?: boolean;
     editing: { type: "root" | "reply"; id: string } | null;
     editText: string;
     onStartEdit: (type: "root" | "reply", id: string, body: string) => void;
@@ -858,6 +867,7 @@ export function CommunityInteractionFeedList(
   const setEditText = props.onEditTextChange;
   const saveEdit = props.onSaveEdit;
   const cancelEdit = props.onCancelEdit;
+  const showReactions = interactionReactionsVisible(props.showReactions);
   const segments = groupInteractionFeed(props.roots);
   const unreadBoundary = typeof props.chatLastSeenAt === "number" ? props.chatLastSeenAt : null;
   const firstUnreadRootId = unreadBoundary
@@ -989,7 +999,9 @@ export function CommunityInteractionFeedList(
                             Date.parse(root.last_reply_at) > unreadBoundary,
                         );
                         const hasFooter =
-                          root.reply_count > 0 || root.reaction_summary.length > 0 || threadTypers.length > 0;
+                          root.reply_count > 0 ||
+                          (showReactions && root.reaction_summary.length > 0) ||
+                          threadTypers.length > 0;
                         const isOwnRoot = Boolean(
                           props.currentUserId && root.actor_user_id && root.actor_user_id === props.currentUserId,
                         );
@@ -1005,6 +1017,7 @@ export function CommunityInteractionFeedList(
                             {bundle.pending ? null : (
                               <MessageActions
                                 onReact={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
+                                showReactions={showReactions}
                                 onReply={() => props.onSelectRoot(root.id)}
                                 replyLabel="Reply in thread"
                                 onEdit={
@@ -1101,11 +1114,13 @@ export function CommunityInteractionFeedList(
                             ) : null}
                             {hasFooter ? (
                               <div className="community-interaction-footer">
-                                <ReactionSummary
-                                  rows={root.reaction_summary}
-                                  viewerEmojis={root.viewer_emojis}
-                                  onToggle={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
-                                />
+                                {showReactions ? (
+                                  <ReactionSummary
+                                    rows={root.reaction_summary}
+                                    viewerEmojis={root.viewer_emojis}
+                                    onToggle={(emoji) => props.onToggleReaction?.("root", root.id, emoji)}
+                                  />
+                                ) : null}
                                 {threadTypers.length > 0 ? (
                                   <div className="community-interaction-thread-row">
                                     <ActorAvatar
