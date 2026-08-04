@@ -64,6 +64,7 @@ const pointerSortable = read(pointerSortablePath);
   "firstSortableElement",
   "lastSortableElement",
 ].forEach((required) => assertIncludes(pointerSortablePath, pointerSortable, required));
+assertNotMatches(pointerSortablePath, pointerSortable, /dragActive/);
 if (existsSync(resolve(root, "shared/useRailPointerReorder.ts"))) {
   throw new Error("legacy rail-only pointer reorder primitive must be deleted");
 }

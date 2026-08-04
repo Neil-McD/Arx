@@ -111,7 +111,6 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
   const onMoveToIndexRef = useRef(onMoveToIndex);
   const suppressNextClickRef = useRef(false);
   const [dragVisual, setDragVisual] = useState<DragVisualState | null>(null);
-  const [dragActive, setDragActive] = useState(false);
 
   onMoveToIndexRef.current = onMoveToIndex;
   dragVisualRef.current = dragVisual;
@@ -133,14 +132,11 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
       document.body.style.userSelect = "";
       dragSessionRef.current = null;
       setDragVisual(null);
-      setDragActive(false);
     },
     [],
   );
 
   useEffect(() => {
-    if (!dragActive) return;
-
     const handlePointerMove = (event: globalThis.PointerEvent) => {
       const session = dragSessionRef.current;
       if (!session || event.pointerId !== session.pointerId) return;
@@ -218,7 +214,7 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
       window.removeEventListener("blur", handleWindowBlur);
       window.removeEventListener("keydown", handleEscape);
     };
-  }, [dragActive, finishDrag]);
+  }, [finishDrag]);
 
   const setContainerElement = useCallback((element: HTMLElement | null) => {
     containerRef.current = element;
@@ -282,7 +278,6 @@ export function usePointerSortableList(args: UsePointerSortableListArgs) {
         deltaY: 0,
         active: false,
       });
-      setDragActive(true);
 
       event.preventDefault();
     },
