@@ -26,6 +26,7 @@ import {
   listCloudCommunityInteractionRootsPage,
   subscribeCloudCommunityInteractionReplies,
   subscribeCloudCommunityInteractionRoots,
+  subscribeCloudCommunityChannelInteractionRoot,
   subscribeCloudCommunityChannelPinnedRoot,
   toggleCloudCommunityInteractionReaction,
   type CommunityInteractionAttachment,
@@ -304,6 +305,7 @@ export function useWebCommunityInteractionProjection<
   const [isLoadingRoots, setIsLoadingRoots] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedRootId, setSelectedRootId] = useState<string | null>(null);
+  const [selectedRoot, setSelectedRoot] = useState<CommunityInteractionRootBundle | null>(null);
   const [repliesByRootId, setRepliesByRootId] = useState<
     Record<string, CommunityInteractionReplyBundle[]>
   >({});
@@ -327,6 +329,7 @@ export function useWebCommunityInteractionProjection<
   const dismissedServeIssueIdsRef = useRef<Set<string>>(new Set());
   const sessionRef = useRef<AuthSession | null>(session);
   const lastSubscribedPinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
+  const pinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
   const pinMutationBoundaryRef = useRef<string | null>(null);
 
   sessionRef.current = session;
@@ -335,6 +338,7 @@ export function useWebCommunityInteractionProjection<
   nextBeforeCreatedAtRef.current = nextBeforeCreatedAt;
   isLoadingOlderRootsRef.current = isLoadingOlderRoots;
   pendingRef.current = pending;
+  pinnedRootRef.current = pinnedRoot;
   activeCommunityIdRef.current = activeCommunityId;
   activeChannelIdRef.current = activeChannelId;
 
@@ -366,6 +370,7 @@ export function useWebCommunityInteractionProjection<
     setError(null);
     setIsLoadingRoots(isNextBoundaryLoading);
     setSelectedRootId(null);
+    setSelectedRoot(null);
     setRepliesByRootId({});
     setRepliesErrorByRootId({});
     setLoadingRepliesRootId(null);
@@ -442,9 +447,6 @@ export function useWebCommunityInteractionProjection<
       setRootChangeReason("initial");
       setRoots(page.roots);
       setNextBeforeCreatedAt(page.nextBeforeCreatedAt);
-      setSelectedRootId((current) =>
-        current && page.roots.some((bundle) => bundle.root.id === current) ? current : null,
-      );
     } catch (loadError) {
       if (
         rootsRequestIdRef.current !== requestId
@@ -581,6 +583,11 @@ export function useWebCommunityInteractionProjection<
               activeChannelIdRef.current !== activeChannelId
             ) return;
             lastSubscribedPinnedRootRef.current = nextPinnedRoot;
+            const boundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
+            if (pinMutationBoundaryRef.current === boundary) {
+              setPinnedRootError(null);
+              return;
+            }
             setPinnedRoot(nextPinnedRoot);
             setPinnedRootError(null);
           },
@@ -590,7 +597,8 @@ export function useWebCommunityInteractionProjection<
               activeCommunityIdRef.current !== activeCommunityId ||
               activeChannelIdRef.current !== activeChannelId
             ) return;
-            lastSubscribedPinnedRootRef.current = null;
+            const boundary = `${activeCommunityId}:${activeChannelId ?? "general"}`;
+            if (pinMutationBoundaryRef.current === boundary) return;
             setPinnedRoot(null);
             setPinnedRootError(formatPinnedRootError(subscriptionError));
           },
@@ -666,24 +674,58 @@ export function useWebCommunityInteractionProjection<
   }, [activeCommunityId, canonicalSessionUserId, ensureSession, isCommunityChatActive]);
 
   useEffect(() => {
-    if (!selectedRootId || !canonicalSessionUserId) return;
+    if (!selectedRootId || !canonicalSessionUserId || !activeCommunityId) {
+      setSelectedRoot(null);
+      return;
+    }
     const rootId = selectedRootId;
+    const communityId = activeCommunityId;
+    const channelId = activeChannelId;
     if (!repliesByRootIdRef.current[rootId]) {
       setLoadingRepliesRootId(rootId);
     }
     setRepliesErrorByRootId((current) => ({ ...current, [rootId]: null }));
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
-    let unsubscribe: (() => void) | null = null;
+    let unsubscribeRoot: (() => void) | null = null;
+    let unsubscribeReplies: (() => void) | null = null;
     void (async () => {
       const usableSession = await ensureSession(sessionRef.current);
-      if (!usableSession || cancelled) return;
+      if (!usableSession || cancelled) {
+        if (!cancelled) {
+          setSelectedRoot(null);
+          setSelectedRootId((current) => current === rootId ? null : current);
+        }
+        return;
+      }
       try {
         liveClient = createCloudCommunityChatLiveClient({
           session: usableSession,
           ensureSession,
         });
-        unsubscribe = subscribeCloudCommunityInteractionReplies({
+        unsubscribeRoot = subscribeCloudCommunityChannelInteractionRoot({
+          liveClient,
+          communityId,
+          channelId,
+          rootId,
+          onUpdate: (root) => {
+            if (
+              cancelled ||
+              activeCommunityIdRef.current !== communityId ||
+              activeChannelIdRef.current !== channelId
+            ) return;
+            setSelectedRoot(root);
+            if (!root) {
+              setSelectedRootId((current) => current === rootId ? null : current);
+            }
+          },
+          onError: () => {
+            if (cancelled) return;
+            setSelectedRoot(null);
+            setSelectedRootId((current) => current === rootId ? null : current);
+          },
+        });
+        unsubscribeReplies = subscribeCloudCommunityInteractionReplies({
           liveClient,
           rootId,
           limit: COMMUNITY_INTERACTION_REPLY_LIMIT,
@@ -704,6 +746,8 @@ export function useWebCommunityInteractionProjection<
         });
       } catch (subscriptionError) {
         if (!cancelled) {
+          setSelectedRoot(null);
+          setSelectedRootId((current) => current === rootId ? null : current);
           setRepliesErrorByRootId((current) => ({
             ...current,
             [rootId]: formatProjectionError(subscriptionError),
@@ -714,10 +758,11 @@ export function useWebCommunityInteractionProjection<
     })();
     return () => {
       cancelled = true;
-      unsubscribe?.();
+      unsubscribeRoot?.();
+      unsubscribeReplies?.();
       liveClient?.close();
     };
-  }, [canonicalSessionUserId, ensureSession, selectedRootId]);
+  }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession, selectedRootId]);
 
   const retryPending = useCallback((idempotencyKey: string) => {
     const interaction = pendingRef.current.find((item) => item.idempotencyKey === idempotencyKey);
@@ -763,11 +808,21 @@ export function useWebCommunityInteractionProjection<
   const selectRoot = useCallback((rawRootId: string) => {
     const rootId = String(rawRootId ?? "").trim();
     if (!rootId) return;
-    setSelectedRootId((current) => current === rootId ? null : rootId);
-  }, []);
+    if (selectedRootId === rootId) {
+      setSelectedRootId(null);
+      setSelectedRoot(null);
+      return;
+    }
+    setSelectedRoot(
+      rootsRef.current.find((bundle) => bundle.root.id === rootId)
+        ?? (pinnedRootRef.current?.root.id === rootId ? pinnedRootRef.current : null),
+    );
+    setSelectedRootId(rootId);
+  }, [selectedRootId]);
 
   const closeDrawer = useCallback(() => {
     setSelectedRootId(null);
+    setSelectedRoot(null);
   }, []);
 
   const toggleReaction = useCallback(async (
@@ -816,6 +871,7 @@ export function useWebCommunityInteractionProjection<
     if (!usableSession) return;
     if (targetType === "root" && selectedRootId === targetId) {
       setSelectedRootId(null);
+      setSelectedRoot(null);
     }
     try {
       await deleteCloudCommunityInteractionMessage<AuthSession>({
@@ -871,6 +927,10 @@ export function useWebCommunityInteractionProjection<
         activeCommunityIdRef.current === communityId &&
         activeChannelIdRef.current === channelId
       ) {
+        const subscribedRoot = lastSubscribedPinnedRootRef.current;
+        if ((subscribedRoot?.root.id ?? null) === rootId) {
+          setPinnedRoot(subscribedRoot);
+        }
         setIsUpdatingPinnedRoot(false);
       }
     }
@@ -929,6 +989,7 @@ export function useWebCommunityInteractionProjection<
   const presentedRoots = isPresentationScopedToBoundary ? roots : [];
   const presentedRepliesByRootId = isPresentationScopedToBoundary ? repliesByRootId : {};
   const presentedSelectedRootId = isPresentationScopedToBoundary ? selectedRootId : null;
+  const presentedSelectedRoot = isPresentationScopedToBoundary ? selectedRoot : null;
   const visibleRoots = useMemo(
     () => appendPendingRoots(
       isPresentationScopedToBoundary ? roots : [],
@@ -955,6 +1016,7 @@ export function useWebCommunityInteractionProjection<
     visibleRoots,
     selectedReplies,
     selectedRootId: presentedSelectedRootId,
+    selectedRoot: presentedSelectedRoot,
     pinnedRoot: isPresentationScopedToBoundary ? pinnedRoot : null,
     isUpdatingPinnedRoot,
     pinnedRootError: isPresentationScopedToBoundary ? pinnedRootError : null,

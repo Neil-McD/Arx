@@ -1,7 +1,10 @@
 import { describe, expect, it } from "vitest";
 
 import type { CommunityInteractionRootBundle } from "../shared/cloudCommunityInteractionsGateway";
-import { resolveSelectedCommunityInteractionRoot } from "../apps/web/src/components/WebCommunityInteractionProjection";
+import {
+  communityInteractionRootHasRichContent,
+  resolveSelectedCommunityInteractionRoot,
+} from "../apps/web/src/components/WebCommunityInteractionProjection";
 
 function bundle(id: string, contentSummary: string): CommunityInteractionRootBundle {
   return {
@@ -9,6 +12,8 @@ function bundle(id: string, contentSummary: string): CommunityInteractionRootBun
       id,
       content_summary: contentSummary,
     },
+    attachments: [],
+    embeds: [],
   } as CommunityInteractionRootBundle;
 }
 
@@ -18,6 +23,7 @@ describe("pinned community root selection", () => {
 
     expect(resolveSelectedCommunityInteractionRoot(
       [bundle("loaded-root", "Loaded")],
+      null,
       pinned,
       pinned.root.id,
     )).toBe(pinned);
@@ -27,14 +33,33 @@ describe("pinned community root selection", () => {
     const loaded = bundle("shared-root", "Newest live feed bundle");
     const pinned = bundle("shared-root", "Earlier pin subscription bundle");
 
-    expect(resolveSelectedCommunityInteractionRoot([loaded], pinned, loaded.root.id)).toBe(loaded);
+    expect(resolveSelectedCommunityInteractionRoot([loaded], null, pinned, loaded.root.id)).toBe(loaded);
+  });
+
+  it("keeps an authorized selected root open after it is no longer pinned", () => {
+    const selected = bundle("old-pinned-root", "Authorized root-by-id subscription");
+
+    expect(resolveSelectedCommunityInteractionRoot([], selected, null, selected.root.id)).toBe(selected);
   });
 
   it("fails closed when the selected root is available from neither source", () => {
     expect(resolveSelectedCommunityInteractionRoot(
       [bundle("loaded-root", "Loaded")],
+      null,
       bundle("pinned-root", "Pinned"),
       "missing-root",
     )).toBeNull();
+  });
+
+  it("only clamps body text when the root has real media or a live preview", () => {
+    const textOnly = bundle("text", "Text only");
+    const attachment = bundle("attachment", "Attachment");
+    attachment.attachments = [{ id: "file" }] as CommunityInteractionRootBundle["attachments"];
+    const embed = bundle("embed", "Embed");
+    embed.embeds = [{ status: "ready" }] as CommunityInteractionRootBundle["embeds"];
+
+    expect(communityInteractionRootHasRichContent(textOnly)).toBe(false);
+    expect(communityInteractionRootHasRichContent(attachment)).toBe(true);
+    expect(communityInteractionRootHasRichContent(embed)).toBe(true);
   });
 });

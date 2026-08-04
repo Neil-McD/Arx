@@ -277,6 +277,22 @@ test("each channel owns one manager-controlled live pinned root", async () => {
   ).resolves.toMatchObject({
     pinned_root: { root: { id: String(firstRootId), content_summary: "first-pin" } },
   });
+  await expect(
+    asMember.query(api.communityInteractions.getCommunityChannelInteractionRoot, {
+      communityId: fixture.communityId,
+      channelId: channel.id as any,
+      rootId: firstRootId,
+    }),
+  ).resolves.toMatchObject({
+    root: { root: { id: String(firstRootId), content_summary: "first-pin" } },
+  });
+  await expect(
+    asMember.query(api.communityInteractions.getCommunityChannelInteractionRoot, {
+      communityId: fixture.communityId,
+      channelId: otherChannel.id as any,
+      rootId: firstRootId,
+    }),
+  ).resolves.toEqual({ root: null });
 
   await asAdmin.mutation(api.communityChannels.setCommunityChannelPinnedRoot, {
     communityId: fixture.communityId,
@@ -300,6 +316,15 @@ test("each channel owns one manager-controlled live pinned root", async () => {
       channelId: channel.id as any,
     }),
   ).resolves.toEqual({ pinned_root: null });
+  await expect(
+    asMember.query(api.communityInteractions.getCommunityChannelInteractionRoot, {
+      communityId: fixture.communityId,
+      channelId: channel.id as any,
+      rootId: secondRootId,
+    }),
+  ).resolves.toMatchObject({
+    root: { root: { id: String(secondRootId), content_summary: "second-pin" } },
+  });
   await t.run(async (ctx) => {
     const events = await ctx.db
       .query("communityInteractionModerationEvents")

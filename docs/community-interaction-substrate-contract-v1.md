@@ -167,11 +167,13 @@ interaction substrate:
   the database transaction order rather than a second client-side authority.
 
 The web projection reads a pinned root through the same canonical root bundle
-and renders it with the same root presentation used by the chronological feed.
-The pinned wrapper may add only pinned context and manager controls; it must not
-maintain a condensed or divergent message renderer. Reaction summaries, quick
-reactions, the full picker, and their handlers remain identical between the
-pinned projection and the chronological root.
+and renders it with the chronological feed's canonical content primitives. The
+pinned wrapper is a bounded teaser, not a second message renderer: it may clamp
+long body text when needed to keep real attachments or link previews visible,
+hide nested feed actions, and add one open-post action plus manager controls.
+The teaser itself is non-interactive and opens the authorized root-by-id thread;
+reactions, links, attachments, and other message actions remain fully available
+in that thread. Short text-only pins retain their natural height.
 
 The public community funnel's messages-today metadata aggregates all active
 all-member channels. It includes only live `community`/`public` rows plus the

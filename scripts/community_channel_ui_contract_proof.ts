@@ -191,6 +191,7 @@ const interactionApiPath = "convex/communityInteractions.ts";
 const interactionApi = read(interactionApiPath);
 [
   "getCommunityChannelPinnedRoot",
+  "getCommunityChannelInteractionRoot",
   "clearPinnedRootIfMatches",
   'reason: "root_tombstoned"',
   "pinned_at: null",
@@ -200,41 +201,75 @@ const interactionGatewayPath = "shared/cloudCommunityInteractionsGateway.ts";
 const interactionGateway = read(interactionGatewayPath);
 [
   "subscribeCloudCommunityChannelPinnedRoot",
+  "subscribeCloudCommunityChannelInteractionRoot",
   ".communityInteractions.getCommunityChannelPinnedRoot",
+  ".communityInteractions.getCommunityChannelInteractionRoot",
 ].forEach((required) => assertIncludes(interactionGatewayPath, interactionGateway, required));
 
 const interactionControllerPath = "apps/web/src/controllers/useWebCommunityInteractionProjection.ts";
 const interactionController = read(interactionControllerPath);
 [
   "subscribeCloudCommunityChannelPinnedRoot",
+  "subscribeCloudCommunityChannelInteractionRoot",
   "setCloudCommunityChannelPinnedRoot",
   "lastSubscribedPinnedRootRef",
   "pinMutationBoundaryRef",
+  "setSelectedRoot(root)",
   "setPinnedRoot(null)",
 ].forEach((required) => assertIncludes(interactionControllerPath, interactionController, required));
 
 const pinnedProjectionPath = "apps/web/src/components/WebCommunityInteractionProjection.tsx";
 const pinnedProjection = read(pinnedProjectionPath);
 [
-  "community-channel-pinned-root",
-  "community-channel-pinned-root-unpin",
+  "CommunityPinnedRootSurface",
+  "CommunityInteractionFeedList",
   "canManagePinnedRoot",
   "onSetPinnedRoot",
-  'aria-label="Pinned post"',
-  'aria-label="Unpin from channel"',
   "resolveSelectedCommunityInteractionRoot",
+  "communityInteractionRootHasRichContent",
   "roots={[props.pinnedRoot]}",
   "showDayDividers={false}",
+  "onOpen={() => props.onSelectRoot",
 ].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /community-channel-pinned-root-header/);
 assertNotMatches(pinnedProjectionPath, pinnedProjection, />\s*Pinned\s*</);
 assertNotMatches(
   pinnedProjectionPath,
   pinnedProjection,
-  /community-channel-pinned-root-(?:open|copy)/,
+  /community-channel-pinned-root-copy/,
 );
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /density=/);
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /showReactions/);
+
+const pinnedSurfacePath = "apps/web/src/components/CommunityPinnedRootSurface.tsx";
+const pinnedSurface = read(pinnedSurfacePath);
+[
+  "community-channel-pinned-root",
+  "community-channel-pinned-root-viewport",
+  "community-channel-pinned-root-preview-open",
+  "community-channel-pinned-root-fade",
+  "community-channel-pinned-root-open",
+  "community-channel-pinned-root-unpin",
+  'aria-label="Pinned post"',
+  'aria-label="Unpin from channel"',
+  "View full post",
+  "ResizeObserver",
+  "props.children",
+  "inert",
+  'aria-hidden="true"',
+  "scrollHeight",
+  "clientHeight",
+].forEach((required) => assertIncludes(pinnedSurfacePath, pinnedSurface, required));
+assertNotMatches(
+  pinnedSurfacePath,
+  pinnedSurface,
+  /More below|Scrollable pinned post content|onScroll=|tabIndex=/,
+);
+assertNotMatches(
+  pinnedSurfacePath,
+  pinnedSurface,
+  /bundleText|InteractionContent|InteractionAttachments|hiddenContentLabel|Includes .*attachments?|Includes .*link previews?/,
+);
 
 const interactionFeedPath = "apps/web/src/components/communityInteractionFeed.tsx";
 const interactionFeed = read(interactionFeedPath);
@@ -249,9 +284,10 @@ const interactionContract = read(interactionContractPath);
 [
   "Every active channel may point to at most one live root",
   "General remains fixed at position zero",
-  "same root presentation used by the chronological feed",
-  "Reaction summaries, quick",
-  "the full picker, and their handlers remain identical",
+  "chronological feed's canonical content primitives",
+  "bounded teaser, not a second message renderer",
+  "authorized root-by-id thread",
+  "Short text-only pins retain their natural height",
 ].forEach((required) => assertIncludes(interactionContractPath, interactionContract, required));
 
 const schemaPath = "convex/schema.ts";
@@ -331,18 +367,43 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(30dvh, 320px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-viewport\s*\{[\s\S]*?overflow:\s*hidden;/,
+);
+assertNotMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-viewport\s*\{[^}]*overflow-y:\s*auto|\.community-channel-pinned-root-overflow-label/,
 );
 assertMatches(
   interactionStylesPath,
   interactionStyles,
   /\.community-channel-pinned-root-unpin\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?color:\s*var\(--accent\);/,
 );
-assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-header/);
 assertMatches(
   interactionStylesPath,
   interactionStyles,
+  /\.community-channel-pinned-root-fade\s*\{[\s\S]*?linear-gradient\([\s\S]*?var\(--accent\)/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-open\s*\{[\s\S]*?color:\s*var\(--accent\);/,
+);
+assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-header/);
+assertNotMatches(
+  interactionStylesPath,
+  interactionStyles,
   /\.community-channel-header:has\(\+ \.community-channel-pinned-root\)\s*\{[\s\S]*?border-bottom:\s*0;/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--border-default\);/,
 );
 assertNotMatches(
   interactionStylesPath,
