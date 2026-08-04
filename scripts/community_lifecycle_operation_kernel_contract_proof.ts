@@ -59,6 +59,16 @@ assert.doesNotMatch(
 );
 assert.match(
   operations,
+  /getMyCommunityArchiveOperationStatus = query[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityOwnerAnyLifecycle/,
+  "only the authenticated owner may inspect archive operation status",
+);
+assert.match(
+  operations,
+  /operation_id:[\s\S]*attempt_count:[\s\S]*error_code:[\s\S]*created_at:/,
+  "the owner status projection must expose bounded operation state",
+);
+assert.match(
+  operations,
   /requireCommunityOwnerAnyLifecycle[\s\S]*resolveCommunityArchiveBeginPlan/,
   "owner authority and the canonical transition planner must precede writes",
 );

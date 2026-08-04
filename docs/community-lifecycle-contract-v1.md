@@ -41,6 +41,9 @@ wildcard that can survive an archive/restore generation change.
   or management capabilities for an archived community.
 - Only explicit lifecycle inspection and transition paths may authorize an
   owner across lifecycle states.
+- The public lifecycle-operation inspection query resolves authenticated
+  identity server-side, requires the owner across lifecycle states, and returns
+  only bounded receipt state. It exposes no provider or member identity.
 - The platform-home `polynet` community is lifecycle protected.
 - Membership activation is the canonical new-access boundary. Membership rows
   remain preserved, but no activation or normal access is admitted while the
@@ -79,11 +82,20 @@ contained in `archiving` for explicit operator repair.
 The worker handles one provider effect at a time. It cancels founder platform
 subscriptions in platform scope, community-member subscriptions in their exact
 connected-account scope, and expires or compensates pending checkout sessions.
+Founder and member subscription selection are both bounded indexed reads; the
+worker never collects subscription history to choose the next effect.
 It updates a local subscription or checkout row only after the exact provider
 effect is terminal. A crash after provider mutation is safe: the next lease
 re-reads Stripe and converges. The final transaction rechecks that no active
 subscription or pending checkout remains before changing the community to
 `archived` and the operation to `succeeded`.
+
+Lease ownership and lifecycle authority are separate checks. Effect reads,
+completion, and finalization require both a current lease and the exact
+`archiving` generation. Failure recording requires the current lease but not a
+still-archiving community, so deterministic community deletion or lifecycle
+drift terminates the receipt instead of creating an unreleasable reclaim loop.
+Due operations already carrying that drift are failed before leasing.
 
 ## Subscription effect foundation
 

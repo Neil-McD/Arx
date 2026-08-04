@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { resolveCommunityArchiveBeginPlan } from "./communityLifecycleCore";
 
@@ -230,6 +230,61 @@ test("archive begin is atomic, idempotent, and preserves community data", async 
     expect(operations).toHaveLength(1);
     expect(operations[0]?.updatedAt).toBe(2_000);
   });
+});
+
+test("only the authenticated owner can inspect the latest archive operation", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  await t.mutation(
+    internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
+    {
+      actorUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+      nowMs: 2_000,
+    },
+  );
+
+  const asOwner = t.withIdentity({ subject: "archive-operation-owner" });
+  await expect(
+    asOwner.query(
+      (api as any).communityLifecycleOperations
+        .getMyCommunityArchiveOperationStatus,
+      { communityId: fixture.communityId },
+    ),
+  ).resolves.toMatchObject({
+    community_id: String(fixture.communityId),
+    lifecycle_status: "archiving",
+    lifecycle_generation: 1,
+    operation: {
+      kind: "archive",
+      state: "requested",
+      lifecycle_generation: 1,
+      attempt_count: 0,
+      error_code: null,
+      created_at: 2_000,
+    },
+  });
+
+  for (const subject of [
+    "archive-operation-admin",
+    "archive-operation-outsider",
+  ]) {
+    await expect(
+      t.withIdentity({ subject }).query(
+        (api as any).communityLifecycleOperations
+          .getMyCommunityArchiveOperationStatus,
+        { communityId: fixture.communityId },
+      ),
+    ).rejects.toThrow("community_owner_required");
+  }
+  await expect(
+    t.query(
+      (api as any).communityLifecycleOperations
+        .getMyCommunityArchiveOperationStatus,
+      { communityId: fixture.communityId },
+    ),
+  ).rejects.toThrow("verified_identity_required");
 });
 
 test("archive begin fails closed across authority and lifecycle edge cases", async () => {

@@ -356,6 +356,15 @@ test("expired leases are reclaimed and nonterminal failures back off", async () 
     attemptCount: 2,
   });
   expect(reclaimed[0].leaseId).not.toBe(first.leaseId);
+  await expect(
+    t.mutation(archiveApi.releaseCommunityArchiveOperationInternal, {
+      operationId: first.operationId,
+      leaseId: first.leaseId,
+      nowMs: 122_001,
+      errorCode: "stale_worker",
+      terminal: true,
+    }),
+  ).rejects.toThrow("community_archive_operation_lease_lost");
   await t.mutation(archiveApi.releaseCommunityArchiveOperationInternal, {
     operationId: reclaimed[0].operationId,
     leaseId: reclaimed[0].leaseId,
@@ -373,4 +382,185 @@ test("expired leases are reclaimed and nonterminal failures back off", async () 
     });
     expect(operation?.leaseId).toBeUndefined();
   });
+});
+
+test("claiming terminally reconciles missing or lifecycle-mismatched communities", async () => {
+  for (const mismatch of ["missing", "lifecycle"] as const) {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const operation = await t.mutation(
+      operationApi.beginCommunityArchiveOperationInternal,
+      {
+        actorUserId: fixture.ownerId,
+        communityId: fixture.communityId,
+        expectedGeneration: 0,
+        nowMs: 2_000,
+      },
+    );
+    await t.run(async (ctx) => {
+      if (mismatch === "missing") {
+        await ctx.db.delete(fixture.communityId);
+      } else {
+        await ctx.db.patch(fixture.communityId, {
+          lifecycleStatus: "archived",
+          archivedAt: 2_001,
+          updatedAt: 2_001,
+        });
+      }
+    });
+
+    await expect(
+      t.mutation(archiveApi.claimDueCommunityArchiveOperationsInternal, {
+        nowMs: 2_002,
+        limit: 1,
+      }),
+    ).resolves.toHaveLength(0);
+    await t.run(async (ctx) => {
+      await expect(ctx.db.get(operation.operation_id)).resolves.toMatchObject({
+        state: "failed",
+        errorCode:
+          mismatch === "missing"
+            ? "community_not_found"
+            : "community_archive_lifecycle_mismatch",
+        completedAt: 2_002,
+      });
+    });
+  }
+});
+
+test("a valid lease can record terminal lifecycle drift after claim", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const claim = await beginAndClaim(t, fixture);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.communityId, {
+      lifecycleStatus: "archived",
+      archivedAt: 2_001,
+      updatedAt: 2_001,
+    });
+  });
+
+  await expect(
+    t.query(archiveApi.readNextCommunityArchiveEffectInternal, {
+      operationId: claim.operationId,
+      leaseId: claim.leaseId,
+      nowMs: 2_002,
+    }),
+  ).rejects.toThrow("community_archive_lifecycle_mismatch");
+  await expect(
+    t.mutation(archiveApi.releaseCommunityArchiveOperationInternal, {
+      operationId: claim.operationId,
+      leaseId: claim.leaseId,
+      nowMs: 2_003,
+      errorCode: "community_archive_lifecycle_mismatch",
+      terminal: true,
+    }),
+  ).resolves.toMatchObject({ ok: true, terminal: true });
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(claim.operationId)).resolves.toMatchObject({
+      state: "failed",
+      errorCode: "community_archive_lifecycle_mismatch",
+      completedAt: 2_003,
+    });
+  });
+});
+
+test("the twelfth failed claim exhausts the retry budget while containment remains", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const operation = await t.mutation(
+    operationApi.beginCommunityArchiveOperationInternal,
+    {
+      actorUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+      nowMs: 2_000,
+    },
+  );
+  await t.run(async (ctx) => {
+    await ctx.db.patch(operation.operation_id as any, {
+      attemptCount: 11,
+      nextAttemptAt: 2_001,
+      updatedAt: 2_001,
+    });
+  });
+  const claims = await t.mutation(
+    archiveApi.claimDueCommunityArchiveOperationsInternal,
+    { nowMs: 2_002, limit: 1 },
+  );
+  expect(claims[0]).toMatchObject({ attemptCount: 12 });
+  await expect(
+    t.mutation(archiveApi.releaseCommunityArchiveOperationInternal, {
+      operationId: claims[0].operationId,
+      leaseId: claims[0].leaseId,
+      nowMs: 2_003,
+      errorCode: "stripe_rate_limited",
+      terminal: false,
+    }),
+  ).resolves.toMatchObject({ terminal: true });
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(operation.operation_id as any)).resolves.toMatchObject({
+      state: "failed",
+      attemptCount: 12,
+    });
+    await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
+      lifecycleStatus: "archiving",
+    });
+  });
+});
+
+test("more than ten local effects pause at the bound and resume to completion", async () => {
+  vi.stubEnv("STRIPE_SECRET_KEY", "");
+  vi.stubEnv("ARX_STRIPE_SECRET_KEY", "");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 11; index += 1) {
+      await ctx.db.insert("checkoutSessions", {
+        sessionId: `checkout-bounded-${index}`,
+        mode: "community_join",
+        provider: "stripe",
+        communityId: fixture.communityId,
+        communityLifecycleGeneration: 0,
+        ownerUserId: fixture.memberId,
+        status: "pending",
+        expiresAt: 10_000,
+        createdAt: 1_000 + index,
+        updatedAt: 1_000 + index,
+      });
+    }
+  });
+  const operation = await t.mutation(
+    operationApi.beginCommunityArchiveOperationInternal,
+    {
+      actorUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+      nowMs: 2_000,
+    },
+  );
+  await expect(
+    t.action(archiveApi.processCommunityArchiveOperationsInternal, { limit: 1 }),
+  ).resolves.toMatchObject({ claimed: 1, succeeded: 0, retried: 1, failed: 0 });
+  await t.run(async (ctx) => {
+    const pending = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_community_status", (q) =>
+        q.eq("communityId", fixture.communityId).eq("status", "pending"),
+      )
+      .collect();
+    expect(pending).toHaveLength(1);
+    await ctx.db.patch(operation.operation_id as any, {
+      nextAttemptAt: 0,
+    });
+  });
+  await expect(
+    t.action(archiveApi.processCommunityArchiveOperationsInternal, { limit: 1 }),
+  ).resolves.toMatchObject({ claimed: 1, succeeded: 1, retried: 0, failed: 0 });
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
+      lifecycleStatus: "archived",
+    });
+  });
+  vi.unstubAllEnvs();
 });

@@ -1,7 +1,10 @@
 import { v } from "convex/values";
 
-import { internalMutation } from "./_generated/server";
+import { internalMutation, query } from "./_generated/server";
+import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
+  normalizeCommunityLifecycleGeneration,
+  normalizeCommunityLifecycleStatus,
   requireCommunityOwnerAnyLifecycle,
   resolveCommunityArchiveBeginPlan,
 } from "./communityLifecycleCore";
@@ -164,6 +167,53 @@ function mapArchiveOperationResult(args: {
     lifecycle_generation: args.operation.lifecycleGeneration,
   };
 }
+
+export const getMyCommunityArchiveOperationStatus = query({
+  args: {
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
+    const { community } = await requireCommunityOwnerAnyLifecycle({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const operation = await ctx.db
+      .query("communityLifecycleOperations")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", args.communityId),
+      )
+      .order("desc")
+      .first();
+    return {
+      community_id: String(args.communityId),
+      lifecycle_status: normalizeCommunityLifecycleStatus(
+        community.lifecycleStatus,
+      ),
+      lifecycle_generation: normalizeCommunityLifecycleGeneration(
+        community.lifecycleGeneration,
+      ),
+      operation: operation
+        ? {
+            operation_id: String(operation._id),
+            kind: operation.kind,
+            state: operation.state,
+            lifecycle_generation: operation.lifecycleGeneration,
+            attempt_count: operation.attemptCount,
+            next_attempt_at: operation.nextAttemptAt,
+            last_attempt_at: operation.lastAttemptAt ?? null,
+            completed_at: operation.completedAt ?? null,
+            error_code: operation.errorCode
+              ? String(operation.errorCode).slice(0, 160)
+              : null,
+            created_at: operation.createdAt,
+            updated_at: operation.updatedAt,
+          }
+        : null,
+    };
+  },
+});
 
 export const beginCommunityArchiveOperationInternal = internalMutation({
   args: {

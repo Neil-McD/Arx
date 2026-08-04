@@ -30,10 +30,6 @@ const ACTIVE_SUBSCRIPTION_STATUSES = [
   "past_due",
   "cancel_at_period_end",
 ] as const;
-const ACTIVE_SUBSCRIPTION_STATUS_SET = new Set<string>(
-  ACTIVE_SUBSCRIPTION_STATUSES,
-);
-
 type ArchiveOperationClaim = {
   operationId: any;
   communityId: any;
@@ -90,7 +86,7 @@ export function communityArchiveRetryDelayMs(attemptCount: number): number {
   );
 }
 
-async function requireClaimedOperation(args: {
+async function requireOwnedArchiveLease(args: {
   ctx: any;
   operationId: any;
   leaseId: string;
@@ -108,6 +104,16 @@ async function requireClaimedOperation(args: {
   ) {
     throw new Error("community_archive_operation_lease_lost");
   }
+  return operation;
+}
+
+async function requireArchivingCommunityForOperation(args: {
+  ctx: any;
+  operationId: any;
+  leaseId: string;
+  nowMs: number;
+}) {
+  const operation = await requireOwnedArchiveLease(args);
   const community = await args.ctx.db.get(operation.communityId);
   if (!community) throw new Error("community_not_found");
   if (
@@ -117,6 +123,22 @@ async function requireClaimedOperation(args: {
     throw new Error("community_archive_lifecycle_mismatch");
   }
   return { operation, community };
+}
+
+async function firstFounderSubscriptionByStatus(args: {
+  ctx: any;
+  communityId: any;
+}) {
+  for (const status of ACTIVE_SUBSCRIPTION_STATUSES) {
+    const row = await args.ctx.db
+      .query("founderSubscriptions")
+      .withIndex("by_community_status_providerSubscriptionId", (q: any) =>
+        q.eq("communityId", args.communityId).eq("status", status),
+      )
+      .first();
+    if (row) return row;
+  }
+  return null;
 }
 
 async function firstSubscriptionByStatus(args: {
@@ -158,6 +180,25 @@ export const claimDueCommunityArchiveOperationsInternal = internalMutation({
       : [];
     const claims: ArchiveOperationClaim[] = [];
     for (const operation of [...expired, ...requested]) {
+      const community = await ctx.db.get(operation.communityId);
+      const lifecycleMismatch = !community
+        ? "community_not_found"
+        : community.lifecycleStatus !== "archiving" ||
+            community.lifecycleGeneration !== operation.lifecycleGeneration
+          ? "community_archive_lifecycle_mismatch"
+          : null;
+      if (lifecycleMismatch) {
+        await ctx.db.patch(operation._id, {
+          state: "failed",
+          nextAttemptAt: args.nowMs,
+          leaseId: undefined,
+          leaseExpiresAt: undefined,
+          errorCode: lifecycleMismatch,
+          completedAt: args.nowMs,
+          updatedAt: args.nowMs,
+        });
+        continue;
+      }
       const attemptCount = operation.attemptCount + 1;
       const leaseId = `${String(operation._id)}:${attemptCount}:${args.nowMs}`;
       await ctx.db.patch(operation._id, {
@@ -189,14 +230,14 @@ export const readNextCommunityArchiveEffectInternal = internalQuery({
   },
   handler: async (ctx, args): Promise<ArchiveEffect> => {
     assertTimestamp(args.nowMs);
-    const { operation } = await requireClaimedOperation({ ctx, ...args });
-    const founderRows = await ctx.db
-      .query("founderSubscriptions")
-      .withIndex("by_community", (q) => q.eq("communityId", operation.communityId))
-      .collect();
-    const founder = founderRows.find((row) =>
-      ACTIVE_SUBSCRIPTION_STATUS_SET.has(row.status),
-    );
+    const { operation } = await requireArchivingCommunityForOperation({
+      ctx,
+      ...args,
+    });
+    const founder = await firstFounderSubscriptionByStatus({
+      ctx,
+      communityId: operation.communityId,
+    });
     if (founder) {
       const providerSubscriptionId = String(
         founder.providerSubscriptionId ?? "",
@@ -310,7 +351,10 @@ export const completeCommunityArchiveEffectInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     assertTimestamp(args.nowMs);
-    const { operation } = await requireClaimedOperation({ ctx, ...args });
+    const { operation } = await requireArchivingCommunityForOperation({
+      ctx,
+      ...args,
+    });
     const row = (await ctx.db.get(args.rowId as any)) as any;
     if (!row || String(row.communityId ?? "") !== String(operation.communityId)) {
       throw new Error("community_archive_effect_row_mismatch");
@@ -373,7 +417,7 @@ export const releaseCommunityArchiveOperationInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     assertTimestamp(args.nowMs);
-    const { operation } = await requireClaimedOperation({ ctx, ...args });
+    const operation = await requireOwnedArchiveLease({ ctx, ...args });
     const terminal = args.terminal ||
       operation.attemptCount >= ARCHIVE_OPERATION_MAX_ATTEMPTS;
     await ctx.db.patch(operation._id, terminal
@@ -407,17 +451,15 @@ export const finalizeCommunityArchiveOperationInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     assertTimestamp(args.nowMs);
-    const { operation, community } = await requireClaimedOperation({
+    const { operation, community } = await requireArchivingCommunityForOperation({
       ctx,
       ...args,
     });
-    const founderRows = await ctx.db
-      .query("founderSubscriptions")
-      .withIndex("by_community", (q) => q.eq("communityId", operation.communityId))
-      .collect();
-    if (
-      founderRows.some((row) => ACTIVE_SUBSCRIPTION_STATUS_SET.has(row.status))
-    ) {
+    const founder = await firstFounderSubscriptionByStatus({
+      ctx,
+      communityId: operation.communityId,
+    });
+    if (founder) {
       throw new Error("community_archive_effects_remaining");
     }
     for (const status of ACTIVE_SUBSCRIPTION_STATUSES) {
@@ -615,6 +657,9 @@ export const processCommunityArchiveOperationsInternal = internalAction({
           .toLowerCase()
           .replace(/[^a-z0-9_:-]+/g, "_")
           .slice(0, 160) || "community_archive_worker_failed";
+        const terminal =
+          errorCode === "community_not_found" ||
+          errorCode === "community_archive_lifecycle_mismatch";
         try {
           const released = (await ctx.runMutation(
             (internal as any).communityLifecycleArchiveWorker
@@ -624,7 +669,7 @@ export const processCommunityArchiveOperationsInternal = internalAction({
               leaseId: claim.leaseId,
               nowMs: Date.now(),
               errorCode,
-              terminal: false,
+              terminal,
             },
           )) as { terminal: boolean };
           results.push({

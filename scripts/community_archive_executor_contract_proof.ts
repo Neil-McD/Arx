@@ -18,6 +18,9 @@ for (const marker of [
   "ARCHIVE_OPERATION_MAX_EFFECTS_PER_CLAIM",
   "ARCHIVE_OPERATION_MAX_ATTEMPTS",
   "communityArchiveRetryDelayMs",
+  "requireOwnedArchiveLease",
+  "requireArchivingCommunityForOperation",
+  "firstFounderSubscriptionByStatus",
   "compensateStaleStripeCheckout",
   "applyStripeSubscriptionEffect",
   'intent: "cancel_now"',
@@ -26,6 +29,27 @@ for (const marker of [
 ]) {
   assert.ok(worker.includes(marker), `archive executor must include ${marker}`);
 }
+
+assert.match(
+  worker,
+  /firstFounderSubscriptionByStatus[\s\S]*by_community_status_providerSubscriptionId[\s\S]*\.first\(\)/,
+  "founder subscription selection must be bounded by the lifecycle/status index",
+);
+assert.doesNotMatch(
+  worker,
+  /query\("founderSubscriptions"\)[\s\S]{0,240}\.collect\(\)/,
+  "the archive worker must not collect founder subscription history",
+);
+assert.match(
+  worker,
+  /releaseCommunityArchiveOperationInternal[\s\S]*requireOwnedArchiveLease/,
+  "failure recording must remain possible after lifecycle drift",
+);
+assert.match(
+  worker,
+  /community_archive_lifecycle_mismatch[\s\S]*state: "failed"/,
+  "deterministic lifecycle drift must terminate before leasing",
+);
 
 assert.match(
   operations,
