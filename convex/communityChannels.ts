@@ -8,7 +8,9 @@ import {
   createActiveCommunityChannel,
   getGeneralChannel,
   listReadableCommunityChannels,
+  reorderActiveCommunityChannels,
   renameActiveCommunityChannel,
+  setActiveCommunityChannelPinnedRoot,
 } from "./communityChannelCore";
 import {
   normalizeIdValue,
@@ -112,6 +114,60 @@ export const renameCommunityChannel = mutation({
   },
 });
 
+export const reorderCommunityChannels = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    orderedChannelIds: v.array(v.id("communityChannels")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    const channels = await reorderActiveCommunityChannels({
+      ctx,
+      communityId: args.communityId,
+      orderedChannelIds: args.orderedChannelIds,
+    });
+    return { channels: channels.map(mapCommunityChannel) };
+  },
+});
+
+export const setCommunityChannelPinnedRoot = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
+    rootId: v.union(v.id("communityInteractionRoots"), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    const channel = await setActiveCommunityChannelPinnedRoot({
+      ctx,
+      communityId: args.communityId,
+      channelId: args.channelId,
+      rootId: args.rootId,
+      actorUserId: userId,
+    });
+    return {
+      channel: mapCommunityChannel(channel),
+      pinned_root_id: channel.pinnedRootId
+        ? normalizeIdValue(channel.pinnedRootId)
+        : null,
+    };
+  },
+});
+
 export const deleteCommunityChannel = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -134,6 +190,7 @@ export const deleteCommunityChannel = mutation({
       ctx,
       communityId: args.communityId,
       channelId: args.channelId,
+      actorUserId: userId,
     });
     return {
       deleted_channel_id: normalizeIdValue(archived._id),

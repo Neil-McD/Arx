@@ -4,6 +4,8 @@ import {
   MessageSquare,
   MoreHorizontal,
   Pencil,
+  Pin,
+  PinOff,
   Sparkles,
   Trash2,
 } from "lucide-react";
@@ -126,7 +128,12 @@ export function stripSharedAttachmentSummary(text: string, hasAttachments: boole
     .trim();
 }
 
-export function OverflowMenu(props: { onEdit?: () => void; onDelete?: () => void }) {
+export function OverflowMenu(props: {
+  onEdit?: () => void;
+  onDelete?: () => void;
+  onPin?: () => void;
+  isPinned?: boolean;
+}) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
@@ -137,7 +144,7 @@ export function OverflowMenu(props: { onEdit?: () => void; onDelete?: () => void
     document.addEventListener("mousedown", onDown);
     return () => document.removeEventListener("mousedown", onDown);
   }, [open]);
-  if (!props.onEdit && !props.onDelete) return null;
+  if (!props.onEdit && !props.onDelete && !props.onPin) return null;
   return (
     <div className="community-interaction-emoji-picker" ref={ref}>
       <button
@@ -151,6 +158,20 @@ export function OverflowMenu(props: { onEdit?: () => void; onDelete?: () => void
       </button>
       {open ? (
         <div className="community-interaction-overflow-menu" role="menu">
+          {props.onPin ? (
+            <button
+              type="button"
+              className="community-interaction-overflow-item"
+              onClick={() => {
+                props.onPin?.();
+                setOpen(false);
+              }}
+            >
+              {props.isPinned
+                ? <><PinOff size={14} aria-hidden="true" /> Unpin from channel</>
+                : <><Pin size={14} aria-hidden="true" /> Pin to channel</>}
+            </button>
+          ) : null}
           {props.onEdit ? (
             <button
               type="button"
@@ -223,6 +244,8 @@ export function MessageActions(props: {
   replyLabel: string;
   onEdit?: () => void;
   onDelete?: () => void;
+  onPin?: () => void;
+  isPinned?: boolean;
 }) {
   return (
     <div className="community-interaction-msg-actions">
@@ -254,7 +277,12 @@ export function MessageActions(props: {
           <MessageSquare size={15} aria-hidden="true" />
         </button>
       ) : null}
-      <OverflowMenu onEdit={props.onEdit} onDelete={props.onDelete} />
+      <OverflowMenu
+        onEdit={props.onEdit}
+        onDelete={props.onDelete}
+        onPin={props.onPin}
+        isPinned={props.isPinned}
+      />
     </div>
   );
 }
@@ -991,6 +1019,14 @@ export function CommunityInteractionFeedList(
                                       }
                                     : undefined
                                 }
+                                onPin={
+                                  props.canManagePinnedRoot && props.onSetPinnedRoot
+                                    ? () => props.onSetPinnedRoot?.(
+                                        props.pinnedRoot?.root.id === root.id ? null : root.id,
+                                      )
+                                    : undefined
+                                }
+                                isPinned={props.pinnedRoot?.root.id === root.id}
                               />
                             )}
                             {root.title ? <div className="community-interaction-title">{root.title}</div> : null}

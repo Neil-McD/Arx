@@ -57,6 +57,10 @@ export function buildWebShellChromeHostProps(params: {
   clearCommunityChannelCreateError: () => void;
   isAtCommunityChannelLimit: boolean;
   maxActiveCommunityChannels: number;
+  handleReorderCommunityChannels: WebShellChromeHostProps["communityShell"]["onReorderCommunityChannels"];
+  isReorderingCommunityChannels: boolean;
+  communityChannelReorderError: string | null;
+  clearCommunityChannelReorderError: () => void;
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
@@ -172,6 +176,10 @@ export function buildWebShellChromeHostProps(params: {
       clearCommunityChannelCreateError: params.clearCommunityChannelCreateError,
       isAtCommunityChannelLimit: params.isAtCommunityChannelLimit,
       maxActiveCommunityChannels: params.maxActiveCommunityChannels,
+      onReorderCommunityChannels: params.handleReorderCommunityChannels,
+      isReorderingCommunityChannels: params.isReorderingCommunityChannels,
+      communityChannelReorderError: params.communityChannelReorderError,
+      clearCommunityChannelReorderError: params.clearCommunityChannelReorderError,
       canViewMembersActiveCommunity: params.canViewMembersActiveCommunity,
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,

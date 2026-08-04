@@ -1,5 +1,5 @@
-import { memo, useEffect, useRef, useState, type FormEvent } from "react";
-import { Check, Hash, Plus, UserPlus, X } from "lucide-react";
+import { memo, useEffect, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { Check, ChevronDown, ChevronUp, GripVertical, Hash, Plus, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 
@@ -17,6 +17,7 @@ type CommunityNavChannel = {
   slug: string;
   name: string;
   is_general: boolean;
+  position: number;
 };
 
 type CommunityNavProps = {
@@ -43,7 +44,25 @@ type CommunityNavProps = {
   clearCreateChannelError?: () => void;
   isAtChannelLimit?: boolean;
   maxActiveChannels?: number;
+  onReorderChannels?: (orderedChannelIds: string[]) => Promise<boolean> | boolean;
+  isReorderingChannels?: boolean;
+  reorderChannelsError?: string | null;
+  clearReorderChannelsError?: () => void;
 };
+
+function moveChannelId(
+  ids: string[],
+  channelId: string,
+  direction: -1 | 1,
+): string[] | null {
+  const fromIndex = ids.indexOf(channelId);
+  const toIndex = fromIndex + direction;
+  if (fromIndex < 0 || toIndex < 0 || toIndex >= ids.length) return null;
+  const next = ids.slice();
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+}
 
 const MODAL_FOCUSABLE_SELECTOR = [
   "a[href]",
@@ -119,9 +138,16 @@ export const CommunityNav = memo(function CommunityNav({
   clearCreateChannelError,
   isAtChannelLimit = false,
   maxActiveChannels = 10,
+  onReorderChannels,
+  isReorderingChannels = false,
+  reorderChannelsError = null,
+  clearReorderChannelsError,
 }: CommunityNavProps) {
   const [didCopyJoinLink, setDidCopyJoinLink] = useState(false);
   const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
+  const [draggingChannelId, setDraggingChannelId] = useState<string | null>(null);
+  const [dropTargetChannelId, setDropTargetChannelId] = useState<string | null>(null);
+  const [reorderControlsChannelId, setReorderControlsChannelId] = useState<string | null>(null);
   const [channelName, setChannelName] = useState("");
   const copyResetTimeoutRef = useRef<number | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
@@ -138,6 +164,32 @@ export const CommunityNav = memo(function CommunityNav({
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
   const showChannelLoadingSkeleton =
     isLoadingAccess || (isLoadingChannels && channels.every((channel) => !channel.id));
+  const reorderableChannelIds = channels
+    .filter((channel) => !channel.is_general && Boolean(channel.id))
+    .map((channel) => channel.id);
+  const canReorderChannels = Boolean(
+    canManageMembersActiveCommunity && onReorderChannels && reorderableChannelIds.length > 1,
+  );
+  const commitChannelOrder = (orderedIds: string[] | null) => {
+    if (!orderedIds || !onReorderChannels || isReorderingChannels) return;
+    clearReorderChannelsError?.();
+    void onReorderChannels(orderedIds);
+  };
+  const handleChannelDrop = (event: DragEvent<HTMLDivElement>, targetChannelId: string) => {
+    event.preventDefault();
+    const draggedChannelId =
+      draggingChannelId || event.dataTransfer.getData("application/x-polynet-channel-id");
+    setDraggingChannelId(null);
+    setDropTargetChannelId(null);
+    if (!draggedChannelId || draggedChannelId === targetChannelId) return;
+    const fromIndex = reorderableChannelIds.indexOf(draggedChannelId);
+    const toIndex = reorderableChannelIds.indexOf(targetChannelId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const nextIds = reorderableChannelIds.slice();
+    const [moved] = nextIds.splice(fromIndex, 1);
+    nextIds.splice(toIndex, 0, moved);
+    commitChannelOrder(nextIds);
+  };
   const restoreModalTriggerFocus = (
     target: HTMLElement | null,
     fallback: HTMLElement | null = null,
@@ -270,7 +322,19 @@ export const CommunityNav = memo(function CommunityNav({
           return (
             <div
               key={channel.id || channel.slug}
-              className={`community-channel-row${isSelected ? " active" : ""}`}
+              className={`community-channel-row${isSelected ? " active" : ""}${draggingChannelId === channel.id ? " is-dragging" : ""}${dropTargetChannelId === channel.id ? " is-drop-target" : ""}`}
+              onDragOver={(event) => {
+                if (!canReorderChannels || channel.is_general || !draggingChannelId) return;
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+                setDropTargetChannelId(channel.id);
+              }}
+              onDragLeave={() => {
+                setDropTargetChannelId((current) => current === channel.id ? null : current);
+              }}
+              onDrop={(event) => {
+                if (!channel.is_general) handleChannelDrop(event, channel.id);
+              }}
             >
               <button
                 className={isSelected ? "nav-item community-channel-item active" : "nav-item community-channel-item"}
@@ -289,9 +353,79 @@ export const CommunityNav = memo(function CommunityNav({
                   <span className={`nav-item-dot${indicator.mentions ? " is-mention" : ""}`} aria-hidden="true" />
                 ) : null}
               </button>
+              {canReorderChannels && !channel.is_general ? (
+                <div className="community-channel-reorder">
+                  <button
+                    type="button"
+                    className="community-channel-reorder-trigger"
+                    draggable={!isReorderingChannels}
+                    disabled={isReorderingChannels}
+                    aria-label={`Reorder ${channel.name}`}
+                    aria-expanded={reorderControlsChannelId === channel.id}
+                    title="Drag to reorder or open move controls"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      setReorderControlsChannelId((current) => current === channel.id ? null : channel.id);
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+                      event.preventDefault();
+                      commitChannelOrder(moveChannelId(
+                        reorderableChannelIds,
+                        channel.id,
+                        event.key === "ArrowUp" ? -1 : 1,
+                      ));
+                    }}
+                    onDragStart={(event) => {
+                      if (isReorderingChannels) {
+                        event.preventDefault();
+                        return;
+                      }
+                      clearReorderChannelsError?.();
+                      setDraggingChannelId(channel.id);
+                      event.dataTransfer.effectAllowed = "move";
+                      event.dataTransfer.setData("application/x-polynet-channel-id", channel.id);
+                      event.dataTransfer.setData("text/plain", channel.id);
+                    }}
+                    onDragEnd={() => {
+                      setDraggingChannelId(null);
+                      setDropTargetChannelId(null);
+                    }}
+                  >
+                    <GripVertical size={15} aria-hidden="true" />
+                  </button>
+                  {reorderControlsChannelId === channel.id ? (
+                    <div className="community-channel-reorder-controls" aria-label={`Move ${channel.name}`}>
+                      <button
+                        type="button"
+                        disabled={reorderableChannelIds[0] === channel.id || isReorderingChannels}
+                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, -1))}
+                        aria-label={`Move ${channel.name} up`}
+                        title="Move up"
+                      >
+                        <ChevronUp size={14} aria-hidden="true" />
+                      </button>
+                      <button
+                        type="button"
+                        disabled={reorderableChannelIds.at(-1) === channel.id || isReorderingChannels}
+                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, 1))}
+                        aria-label={`Move ${channel.name} down`}
+                        title="Move down"
+                      >
+                        <ChevronDown size={14} aria-hidden="true" />
+                      </button>
+                    </div>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
           );
         })}
+        {reorderChannelsError ? (
+          <div className="community-channel-reorder-error" role="status">
+            {reorderChannelsError}
+          </div>
+        ) : null}
         {!showChannelLoadingSkeleton && canManageMembersActiveCommunity && onCreateChannel ? (
           <button
             ref={addChannelTriggerRef}

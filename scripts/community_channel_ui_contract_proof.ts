@@ -34,6 +34,11 @@ const nav = read(navPath);
   "community-channel-loading-row web-skeleton-row",
   "MODAL_FOCUSABLE_SELECTOR",
   "trapModalFocus",
+  "onReorderChannels",
+  "community-channel-reorder-trigger",
+  "application/x-polynet-channel-id",
+  "Move up",
+  "Move down",
 ].forEach((required) => assertIncludes(navPath, nav, required));
 assertNotMatches(
   navPath,
@@ -67,6 +72,8 @@ const gateway = read(gatewayPath);
   '"communityChannels:createCommunityChannel"',
   '"communityChannels:renameCommunityChannel"',
   '"communityChannels:deleteCommunityChannel"',
+  '"communityChannels:reorderCommunityChannels"',
+  '"communityChannels:setCommunityChannelPinnedRoot"',
   "authSubject",
 ].forEach((required) => assertIncludes(gatewayPath, gateway, required));
 
@@ -86,6 +93,9 @@ const channelController = read(channelControllerPath);
   "manageInFlightChannelIdRef",
   "onChannelDeleted",
   "resolveWebCommunityChannelDeleteCompletion(paramsRef, communityId)",
+  "reorderCloudCommunityChannels",
+  "lastSubscribedChannelsRef",
+  "reorderInFlightCommunityIdRef",
 ].forEach((required) => assertIncludes(channelControllerPath, channelController, required));
 assertNotMatches(
   channelControllerPath,
@@ -107,6 +117,8 @@ const channelApi = read(channelApiPath);
   "requireCommunityManager",
   "renameActiveCommunityChannel",
   "archiveActiveCommunityChannel",
+  "reorderCommunityChannels",
+  "setCommunityChannelPinnedRoot",
 ].forEach((required) => assertIncludes(channelApiPath, channelApi, required));
 
 const channelCorePath = "convex/communityChannelCore.ts";
@@ -118,6 +130,10 @@ const channelCore = read(channelCorePath);
   "archiveActiveCommunityChannel",
   'status: "archived"',
   'if (channel.status === "archived") return channel',
+  "reorderActiveCommunityChannels",
+  "setActiveCommunityChannelPinnedRoot",
+  "community_channel_order_stale",
+  "community_channel_pin_target_invalid",
 ].forEach((required) => assertIncludes(channelCorePath, channelCore, required));
 
 const appPath = "apps/web/src/App.tsx";
@@ -134,7 +150,65 @@ const app = read(appPath);
   "canManageMembersActiveCommunity &&\n          Boolean(activeCommunityChannel)",
   "onRenameChannel: handleRenameCommunityChannel",
   "onDeleteChannel: handleDeleteCommunityChannel",
+  "handleReorderCommunityChannels",
+  "pinnedRoot: isActiveCommunityChannelReady",
+  "onSetPinnedRoot: handleSetPinnedCommunityInteractionRoot",
 ].forEach((required) => assertIncludes(appPath, app, required));
+
+const interactionApiPath = "convex/communityInteractions.ts";
+const interactionApi = read(interactionApiPath);
+[
+  "getCommunityChannelPinnedRoot",
+  "clearPinnedRootIfMatches",
+  'reason: "root_tombstoned"',
+  "pinned_at: null",
+].forEach((required) => assertIncludes(interactionApiPath, interactionApi, required));
+
+const interactionGatewayPath = "shared/cloudCommunityInteractionsGateway.ts";
+const interactionGateway = read(interactionGatewayPath);
+[
+  "subscribeCloudCommunityChannelPinnedRoot",
+  ".communityInteractions.getCommunityChannelPinnedRoot",
+].forEach((required) => assertIncludes(interactionGatewayPath, interactionGateway, required));
+
+const interactionControllerPath = "apps/web/src/controllers/useWebCommunityInteractionProjection.ts";
+const interactionController = read(interactionControllerPath);
+[
+  "subscribeCloudCommunityChannelPinnedRoot",
+  "setCloudCommunityChannelPinnedRoot",
+  "lastSubscribedPinnedRootRef",
+  "pinMutationBoundaryRef",
+].forEach((required) => assertIncludes(interactionControllerPath, interactionController, required));
+
+const pinnedProjectionPath = "apps/web/src/components/WebCommunityInteractionProjection.tsx";
+const pinnedProjection = read(pinnedProjectionPath);
+[
+  "community-channel-pinned-root",
+  "canManagePinnedRoot",
+  "onSetPinnedRoot",
+  "Pinned",
+].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
+
+const interactionFeedPath = "apps/web/src/components/communityInteractionFeed.tsx";
+const interactionFeed = read(interactionFeedPath);
+[
+  "Pin to channel",
+  "Unpin from channel",
+  "props.canManagePinnedRoot",
+].forEach((required) => assertIncludes(interactionFeedPath, interactionFeed, required));
+
+const schemaPath = "convex/schema.ts";
+const schema = read(schemaPath);
+assertMatches(
+  schemaPath,
+  schema,
+  /communityChannels: defineTable\(\{[\s\S]*pinnedRootId: v\.optional\(v\.id\("communityInteractionRoots"\)\)/,
+);
+assertNotMatches(
+  schemaPath,
+  schema,
+  /communityInteractionRoots: defineTable\(\{[\s\S]*?pinnedAt: v\.optional\(v\.number\(\)\)/,
+);
 assertNotMatches(
   appPath,
   app,

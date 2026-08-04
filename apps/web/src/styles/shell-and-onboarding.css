@@ -525,6 +525,109 @@ body {
   position: relative;
 }
 
+.community-channel-row.is-dragging {
+  opacity: 0.5;
+}
+
+.community-channel-row.is-drop-target::after {
+  content: "";
+  position: absolute;
+  right: 8px;
+  bottom: -1px;
+  left: 8px;
+  height: 2px;
+  border-radius: 999px;
+  background: var(--accent);
+  pointer-events: none;
+}
+
+.community-channel-row:has(.community-channel-reorder) .community-channel-item {
+  padding-right: 34px;
+}
+
+.community-channel-reorder {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  z-index: 3;
+  display: flex;
+  align-items: center;
+  transform: translateY(-50%);
+}
+
+.community-channel-reorder-trigger,
+.community-channel-reorder-controls button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  cursor: grab;
+}
+
+.community-channel-reorder-trigger {
+  opacity: 0;
+  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+}
+
+.community-channel-row:hover .community-channel-reorder-trigger,
+.community-channel-reorder-trigger:focus-visible,
+.community-channel-reorder-trigger[aria-expanded="true"] {
+  opacity: 1;
+}
+
+.community-channel-reorder-trigger:hover:not(:disabled),
+.community-channel-reorder-trigger:focus-visible,
+.community-channel-reorder-controls button:hover:not(:disabled),
+.community-channel-reorder-controls button:focus-visible {
+  background: var(--hover-overlay);
+  color: var(--text-primary);
+}
+
+.community-channel-reorder-trigger:active {
+  cursor: grabbing;
+}
+
+.community-channel-reorder-trigger:disabled,
+.community-channel-reorder-controls button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.community-channel-reorder-controls {
+  position: absolute;
+  top: calc(100% + 3px);
+  right: 0;
+  display: flex;
+  padding: 3px;
+  border: 1px solid var(--border-default);
+  border-radius: 8px;
+  background: var(--surface-panel);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.24);
+}
+
+.community-channel-reorder-controls button {
+  cursor: pointer;
+}
+
+.community-channel-reorder-error {
+  padding: 4px 8px 6px;
+  color: var(--accent-danger, #ef6a72);
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+@media (hover: none) {
+  .community-channel-reorder-trigger {
+    opacity: 1;
+  }
+}
+
 .community-channel-modal-actions button.is-danger {
   color: var(--accent-danger, #ef6a72);
 }

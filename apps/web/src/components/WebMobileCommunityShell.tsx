@@ -59,6 +59,10 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
           clearCreateChannelError={communityShell.clearCommunityChannelCreateError}
           isAtChannelLimit={communityShell.isAtCommunityChannelLimit}
           maxActiveChannels={communityShell.maxActiveCommunityChannels}
+          onReorderChannels={communityShell.onReorderCommunityChannels}
+          isReorderingChannels={communityShell.isReorderingCommunityChannels}
+          reorderChannelsError={communityShell.communityChannelReorderError}
+          clearReorderChannelsError={communityShell.clearCommunityChannelReorderError}
           canViewMembersActiveCommunity={communityShell.canViewMembersActiveCommunity}
           canViewActiveCommunitySettings={communityShell.canViewActiveCommunitySettings}
           canManageMembersActiveCommunity={communityShell.canManageMembersActiveCommunity}

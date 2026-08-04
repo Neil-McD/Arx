@@ -3,6 +3,8 @@ import {
   MessageCircle,
   MessageSquare,
   Pencil,
+  Pin,
+  PinOff,
   Trash2,
 } from "lucide-react";
 import {
@@ -64,6 +66,11 @@ export type WebCommunityInteractionProjectionProps = {
   onClearManageChannelError?: () => void;
   onRenameChannel?: (channelId: string, name: string) => Promise<unknown>;
   onDeleteChannel?: (channel: WebCommunityChannelHeaderChannel) => Promise<boolean>;
+  pinnedRoot?: CommunityInteractionRootBundle | null;
+  isUpdatingPinnedRoot?: boolean;
+  pinnedRootError?: string | null;
+  canManagePinnedRoot?: boolean;
+  onSetPinnedRoot?: (rootId: string | null) => Promise<boolean> | boolean;
   roots: CommunityInteractionRootBundle[];
   selectedRootId: string | null;
   mobileThreadPage?: boolean;
@@ -718,6 +725,42 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             onRenameChannel={props.onRenameChannel}
             onDeleteChannel={props.onDeleteChannel}
           />
+        ) : null}
+        {props.pinnedRoot ? (
+          <div className="community-channel-pinned-root" role="note" aria-label="Pinned post">
+            <button
+              type="button"
+              className="community-channel-pinned-root-open"
+              onClick={() => props.onSelectRoot(props.pinnedRoot!.root.id)}
+              title="Open pinned post"
+            >
+              <Pin size={15} aria-hidden="true" />
+              <span className="community-channel-pinned-root-copy">
+                <strong>Pinned</strong>
+                <span>{bundleText(
+                  props.pinnedRoot.content_blocks,
+                  props.pinnedRoot.root.content_summary,
+                )}</span>
+              </span>
+            </button>
+            {props.canManagePinnedRoot && props.onSetPinnedRoot ? (
+              <button
+                type="button"
+                className="community-channel-pinned-root-unpin"
+                onClick={() => props.onSetPinnedRoot?.(null)}
+                disabled={props.isUpdatingPinnedRoot}
+                aria-label="Unpin from channel"
+                title="Unpin from channel"
+              >
+                <PinOff size={15} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+        {props.pinnedRootError ? (
+          <div className="community-channel-pinned-root-error" role="status">
+            {props.pinnedRootError}
+          </div>
         ) : null}
         <div
           className="community-interaction-feed-scroll"

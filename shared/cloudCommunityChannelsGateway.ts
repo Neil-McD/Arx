@@ -79,6 +79,38 @@ export async function deleteCloudCommunityChannel<SessionT>(
   }) as { deleted_channel_id: string; deleted_channel_slug: string };
 }
 
+export async function reorderCloudCommunityChannels<SessionT>(
+  params: CloudCommunityChannelsGatewayParams<SessionT> & {
+    communityId: string;
+    orderedChannelIds: string[];
+  },
+): Promise<CloudCommunityChannel[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const result = await client.mutation("communityChannels:reorderCommunityChannels" as any, {
+    authSubject,
+    communityId: params.communityId,
+    orderedChannelIds: params.orderedChannelIds,
+  }) as { channels?: CloudCommunityChannel[] };
+  return Array.isArray(result?.channels) ? result.channels : [];
+}
+
+export async function setCloudCommunityChannelPinnedRoot<SessionT>(
+  params: CloudCommunityChannelsGatewayParams<SessionT> & {
+    communityId: string;
+    channelId?: string | null;
+    rootId: string | null;
+  },
+): Promise<{ pinned_root_id: string | null }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const result = await client.mutation("communityChannels:setCommunityChannelPinnedRoot" as any, {
+    authSubject,
+    communityId: params.communityId,
+    ...(params.channelId ? { channelId: params.channelId } : null),
+    rootId: params.rootId,
+  }) as { pinned_root_id?: string | null };
+  return { pinned_root_id: String(result?.pinned_root_id ?? "").trim() || null };
+}
+
 export function subscribeCloudCommunityChannels(params: {
   liveClient: CloudCommunityChatLiveClient;
   communityId: string;

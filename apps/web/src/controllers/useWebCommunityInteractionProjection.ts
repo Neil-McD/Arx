@@ -1,4 +1,7 @@
 import {
+  setCloudCommunityChannelPinnedRoot,
+} from "../../../../shared/cloudCommunityChannelsGateway";
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -23,6 +26,7 @@ import {
   listCloudCommunityInteractionRootsPage,
   subscribeCloudCommunityInteractionReplies,
   subscribeCloudCommunityInteractionRoots,
+  subscribeCloudCommunityChannelPinnedRoot,
   toggleCloudCommunityInteractionReaction,
   type CommunityInteractionAttachment,
   type CommunityInteractionPendingStatus,
@@ -91,6 +95,21 @@ function formatProjectionError(error: unknown): string {
     return "Finish your profile to view community threads.";
   }
   return message.trim() || "Failed to load community threads.";
+}
+
+function formatPinnedRootError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  const normalized = message.trim().toLowerCase();
+  if (normalized.includes("community_channel_pin_target_invalid")) {
+    return "This post can no longer be pinned in this channel.";
+  }
+  if (normalized.includes("community_channel_pin_invalid")) {
+    return "The pinned post is no longer available.";
+  }
+  if (normalized.includes("community_forbidden")) {
+    return "Only community managers can pin posts.";
+  }
+  return formatProjectionError(error);
 }
 
 function storedIdempotencyKey(rawKey: string, kind: "root" | "reply"): string {
@@ -291,6 +310,9 @@ export function useWebCommunityInteractionProjection<
   const [repliesErrorByRootId, setRepliesErrorByRootId] =
     useState<Record<string, string | null>>({});
   const [loadingRepliesRootId, setLoadingRepliesRootId] = useState<string | null>(null);
+  const [pinnedRoot, setPinnedRoot] = useState<CommunityInteractionRootBundle | null>(null);
+  const [isUpdatingPinnedRoot, setIsUpdatingPinnedRoot] = useState(false);
+  const [pinnedRootError, setPinnedRootError] = useState<string | null>(null);
 
   const rootsRef = useRef<CommunityInteractionRootBundle[]>([]);
   const repliesByRootIdRef = useRef<Record<string, CommunityInteractionReplyBundle[]>>({});
@@ -304,6 +326,8 @@ export function useWebCommunityInteractionProjection<
   const repliesRequestIdRef = useRef<Record<string, number>>({});
   const dismissedServeIssueIdsRef = useRef<Set<string>>(new Set());
   const sessionRef = useRef<AuthSession | null>(session);
+  const lastSubscribedPinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
+  const pinMutationBoundaryRef = useRef<string | null>(null);
 
   sessionRef.current = session;
   rootsRef.current = roots;
@@ -345,6 +369,11 @@ export function useWebCommunityInteractionProjection<
     setRepliesByRootId({});
     setRepliesErrorByRootId({});
     setLoadingRepliesRootId(null);
+    lastSubscribedPinnedRootRef.current = null;
+    pinMutationBoundaryRef.current = null;
+    setPinnedRoot(null);
+    setIsUpdatingPinnedRoot(false);
+    setPinnedRootError(null);
   }, []);
 
   const loadReplies = useCallback(async (
@@ -497,6 +526,8 @@ export function useWebCommunityInteractionProjection<
     let cancelled = false;
     let liveClient: CloudCommunityChatLiveClient | null = null;
     let unsubscribe: (() => void) | null = null;
+    let unsubscribePinnedRoot: (() => void) | null = null;
+    setPinnedRootError(null);
     void (async () => {
       const usableSession = await ensureSession(sessionRef.current);
       if (!usableSession || cancelled) return;
@@ -539,6 +570,29 @@ export function useWebCommunityInteractionProjection<
             setIsLoadingRoots(false);
           },
         });
+        unsubscribePinnedRoot = subscribeCloudCommunityChannelPinnedRoot({
+          liveClient,
+          communityId: activeCommunityId,
+          channelId: activeChannelId,
+          onUpdate: (nextPinnedRoot) => {
+            if (
+              cancelled ||
+              activeCommunityIdRef.current !== activeCommunityId ||
+              activeChannelIdRef.current !== activeChannelId
+            ) return;
+            lastSubscribedPinnedRootRef.current = nextPinnedRoot;
+            setPinnedRoot(nextPinnedRoot);
+            setPinnedRootError(null);
+          },
+          onError: (subscriptionError) => {
+            if (
+              cancelled ||
+              activeCommunityIdRef.current !== activeCommunityId ||
+              activeChannelIdRef.current !== activeChannelId
+            ) return;
+            setPinnedRootError(formatPinnedRootError(subscriptionError));
+          },
+        });
       } catch (subscriptionError) {
         if (!cancelled) {
           setError(formatProjectionError(subscriptionError));
@@ -549,6 +603,7 @@ export function useWebCommunityInteractionProjection<
     return () => {
       cancelled = true;
       unsubscribe?.();
+      unsubscribePinnedRoot?.();
       liveClient?.close();
     };
   }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession]);
@@ -768,6 +823,54 @@ export function useWebCommunityInteractionProjection<
     }
   }, [ensureSession, selectedRootId]);
 
+  const setPinnedRootId = useCallback(async (rootIdRaw: string | null): Promise<boolean> => {
+    const communityId = String(activeCommunityIdRef.current ?? "").trim();
+    const channelId = activeChannelIdRef.current;
+    const boundary = communityId
+      ? `${communityId}:${channelId ?? "general"}`
+      : null;
+    const rootId = String(rootIdRaw ?? "").trim() || null;
+    if (!boundary || pinMutationBoundaryRef.current) return false;
+    const usableSession = await ensureSession(sessionRef.current);
+    if (!usableSession) return false;
+
+    pinMutationBoundaryRef.current = boundary;
+    setIsUpdatingPinnedRoot(true);
+    setPinnedRootError(null);
+    const optimisticPinnedRoot = rootId
+      ? rootsRef.current.find((bundle) => bundle.root.id === rootId) ?? null
+      : null;
+    if (!rootId || optimisticPinnedRoot) setPinnedRoot(optimisticPinnedRoot);
+    try {
+      await setCloudCommunityChannelPinnedRoot<AuthSession>({
+        session: usableSession,
+        communityId,
+        channelId,
+        rootId,
+      });
+      return true;
+    } catch (pinError) {
+      if (
+        activeCommunityIdRef.current === communityId &&
+        activeChannelIdRef.current === channelId
+      ) {
+        setPinnedRoot(lastSubscribedPinnedRootRef.current);
+        setPinnedRootError(formatPinnedRootError(pinError));
+      }
+      return false;
+    } finally {
+      if (pinMutationBoundaryRef.current === boundary) {
+        pinMutationBoundaryRef.current = null;
+      }
+      if (
+        activeCommunityIdRef.current === communityId &&
+        activeChannelIdRef.current === channelId
+      ) {
+        setIsUpdatingPinnedRoot(false);
+      }
+    }
+  }, [ensureSession]);
+
   const normalizedSessionUserId = String(canonicalSessionUserId ?? "").trim();
   const requestedBoundary =
     session &&
@@ -847,6 +950,9 @@ export function useWebCommunityInteractionProjection<
     visibleRoots,
     selectedReplies,
     selectedRootId: presentedSelectedRootId,
+    pinnedRoot: isPresentationScopedToBoundary ? pinnedRoot : null,
+    isUpdatingPinnedRoot,
+    pinnedRootError: isPresentationScopedToBoundary ? pinnedRootError : null,
     isLoadingRoots:
       !requestedBoundary || !isPresentationScopedToBoundary || isLoadingRoots,
     isLoadingSelectedReplies:
@@ -866,6 +972,7 @@ export function useWebCommunityInteractionProjection<
     toggleReaction,
     editMessage,
     deleteMessage,
+    setPinnedRootId,
     retryPending,
     discardPending,
     insertOptimistic,

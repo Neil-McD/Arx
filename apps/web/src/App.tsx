@@ -549,6 +549,10 @@ export default function App() {
     clearManageChannelError: clearCommunityChannelManageError,
     renameChannel: handleRenameCommunityChannel,
     deleteChannel: handleDeleteCommunityChannel,
+    reorderChannels: handleReorderCommunityChannels,
+    isReorderingChannels: isReorderingCommunityChannels,
+    reorderChannelsError: communityChannelReorderError,
+    clearReorderChannelsError: clearCommunityChannelReorderError,
   } = communityChannels;
   const activeChannelCommunityId = isActiveCommunityChannelReady
     ? activeCommunityId
@@ -580,6 +584,9 @@ export default function App() {
     visibleRoots: visibleCommunityInteractionRoots,
     selectedReplies: selectedCommunityInteractionReplies,
     selectedRootId: selectedCommunityInteractionRootId,
+    pinnedRoot: pinnedCommunityInteractionRoot,
+    isUpdatingPinnedRoot: isUpdatingPinnedCommunityInteractionRoot,
+    pinnedRootError: pinnedCommunityInteractionRootError,
     isLoadingRoots: isLoadingCommunityInteractions,
     isLoadingSelectedReplies: isLoadingCommunityInteractionReplies,
     error: communityInteractionError,
@@ -596,6 +603,7 @@ export default function App() {
     toggleReaction: handleToggleCommunityInteractionReaction,
     editMessage: handleEditCommunityInteractionMessage,
     deleteMessage: handleDeleteCommunityInteractionMessage,
+    setPinnedRootId: handleSetPinnedCommunityInteractionRoot,
     retryPending: handleRetryPendingCanonicalInteraction,
     discardPending: handleDiscardPendingCanonicalInteraction,
     dismissServeIssue: handleDismissCommunityAgentServeIssue,
@@ -2371,6 +2379,16 @@ export default function App() {
         onClearManageChannelError: clearCommunityChannelManageError,
         onRenameChannel: handleRenameCommunityChannel,
         onDeleteChannel: handleDeleteCommunityChannel,
+        pinnedRoot: isActiveCommunityChannelReady
+          ? pinnedCommunityInteractionRoot
+          : null,
+        isUpdatingPinnedRoot: isUpdatingPinnedCommunityInteractionRoot,
+        pinnedRootError: isActiveCommunityChannelReady
+          ? pinnedCommunityInteractionRootError
+          : null,
+        canManagePinnedRoot:
+          canManageMembersActiveCommunity && Boolean(activeCommunityChannel),
+        onSetPinnedRoot: handleSetPinnedCommunityInteractionRoot,
         onMobileReadingModeChange: mobileChromeScrollTrackingEnabled
           ? setMobileChromeReadingMode
           : undefined,
@@ -2948,7 +2966,7 @@ export default function App() {
       ? { chat: false, ai_feed: false, resources: false, events: false, mentions: false }
       : communityTabIndicators,
     communityChannels: isVisitorCommunitySurface
-      ? [{ id: "", slug: "general", name: "General", is_general: true }]
+      ? [{ id: "", slug: "general", name: "General", is_general: true, position: 0 }]
       : activeCommunityChannels,
     isLoadingCommunityChannels:
       !isVisitorCommunitySurface && isLoadingActiveCommunityChannels,
@@ -2978,6 +2996,12 @@ export default function App() {
     clearCommunityChannelCreateError,
     isAtCommunityChannelLimit,
     maxActiveCommunityChannels,
+    handleReorderCommunityChannels: isVisitorCommunitySurface
+      ? () => Promise.resolve(false)
+      : handleReorderCommunityChannels,
+    isReorderingCommunityChannels,
+    communityChannelReorderError,
+    clearCommunityChannelReorderError,
     canViewMembersActiveCommunity: !isVisitorCommunitySurface && canViewMembersActiveCommunity,
     canViewActiveCommunitySettings: !isVisitorCommunitySurface && canViewActiveCommunitySettings,
     canManageMembersActiveCommunity: !isVisitorCommunitySurface && canManageMembersActiveCommunity,

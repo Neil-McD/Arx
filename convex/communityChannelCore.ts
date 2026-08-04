@@ -16,6 +16,7 @@ export type CommunityChannelLike = {
   postingPolicy: "members";
   status: "active" | "archived";
   position: number;
+  pinnedRootId?: any;
   createdByUserId?: any;
   createdAt: number;
   updatedAt: number;
@@ -504,10 +505,193 @@ export async function renameActiveCommunityChannel(args: {
   });
 }
 
+export async function reorderActiveCommunityChannels(args: {
+  ctx: { db: any };
+  communityId: any;
+  orderedChannelIds: any[];
+  nowMs?: number;
+}): Promise<CommunityChannelLike[]> {
+  await ensureGeneralChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    nowMs: args.nowMs,
+  });
+  const activeChannels = await listActiveCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  const general = activeChannels.find(
+    (channel) => channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE,
+  );
+  if (!general) throw new Error("community_general_channel_missing");
+
+  const customChannels = activeChannels.filter(
+    (channel) => channel.systemRole !== GENERAL_CHANNEL_SYSTEM_ROLE,
+  );
+  const requestedIds = args.orderedChannelIds.map(normalizeIdValue);
+  const requestedIdSet = new Set(requestedIds);
+  const existingIds = new Set(customChannels.map((channel) => normalizeIdValue(channel._id)));
+
+  if (requestedIds.includes(normalizeIdValue(general._id))) {
+    throw new Error("community_general_channel_immutable");
+  }
+  if (requestedIds.length !== requestedIdSet.size) {
+    throw new Error("community_channel_order_duplicate_id");
+  }
+  if (requestedIds.length !== existingIds.size) {
+    throw new Error("community_channel_order_stale");
+  }
+  for (const channelId of requestedIds) {
+    if (!existingIds.has(channelId)) {
+      throw new Error("community_channel_unavailable");
+    }
+  }
+
+  const nowMs = args.nowMs ?? Date.now();
+  await Promise.all(
+    requestedIds.map((channelId, index) => {
+      const channel = customChannels.find(
+        (candidate) => normalizeIdValue(candidate._id) === channelId,
+      );
+      if (!channel) throw new Error("community_channel_unavailable");
+      const position = index + 1;
+      return channel.position === position
+        ? Promise.resolve()
+        : args.ctx.db.patch(channel._id, { position, updatedAt: nowMs });
+    }),
+  );
+  return await listActiveCommunityChannels({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+}
+
+type PinnableCommunityInteractionRoot = ChannelAddressableInteractionLike & {
+  status: "live" | "hidden" | "deleted";
+};
+
+async function insertChannelPinModerationEvent(args: {
+  ctx: { db: any };
+  communityId: any;
+  rootId: any;
+  eventType: "pin" | "unpin";
+  actorUserId?: any;
+  reason?: string;
+  nowMs: number;
+}): Promise<void> {
+  await args.ctx.db.insert("communityInteractionModerationEvents" as any, {
+    communityId: args.communityId,
+    targetType: "root",
+    rootId: args.rootId,
+    eventType: args.eventType,
+    actorType: args.actorUserId ? "human" : "system",
+    ...(args.actorUserId ? { actorUserId: args.actorUserId } : {}),
+    ...(args.reason ? { reason: args.reason } : {}),
+    createdAt: args.nowMs,
+  });
+}
+
+export async function setActiveCommunityChannelPinnedRoot(args: {
+  ctx: { db: any };
+  communityId: any;
+  channelId?: any;
+  rootId: any | null;
+  actorUserId: any;
+  nowMs?: number;
+}): Promise<CommunityChannelLike> {
+  const nowMs = args.nowMs ?? Date.now();
+  const channel = await resolveRequestedCommunityChannel({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    channelId: args.channelId,
+    ensureGeneralForWrite: true,
+    nowMs,
+  });
+  const nextRootId = args.rootId ? normalizeIdValue(args.rootId) : "";
+  const previousRootId = normalizeIdValue(channel.pinnedRootId);
+  if (nextRootId === previousRootId) return channel;
+
+  if (args.rootId) {
+    const root = (await args.ctx.db.get(args.rootId)) as PinnableCommunityInteractionRoot | null;
+    if (
+      !root ||
+      root.status !== "live" ||
+      !interactionIsChannelAddressable(root) ||
+      normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
+      !interactionBelongsToChannel(root, channel)
+    ) {
+      throw new Error("community_channel_pin_target_invalid");
+    }
+  }
+
+  await args.ctx.db.patch(channel._id, {
+    pinnedRootId: args.rootId ?? undefined,
+    updatedAt: nowMs,
+  });
+  if (previousRootId) {
+    await insertChannelPinModerationEvent({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      rootId: channel.pinnedRootId,
+      eventType: "unpin",
+      actorUserId: args.actorUserId,
+      nowMs,
+    });
+  }
+  if (args.rootId) {
+    await insertChannelPinModerationEvent({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      rootId: args.rootId,
+      eventType: "pin",
+      actorUserId: args.actorUserId,
+      nowMs,
+    });
+  }
+  return {
+    ...channel,
+    pinnedRootId: args.rootId ?? undefined,
+    updatedAt: nowMs,
+  };
+}
+
+export async function clearPinnedRootIfMatches(args: {
+  ctx: { db: any };
+  root: ChannelAddressableInteractionLike;
+  actorUserId?: any;
+  reason: string;
+  nowMs: number;
+}): Promise<void> {
+  const channel = args.root.channelId
+    ? ((await args.ctx.db.get(args.root.channelId)) as CommunityChannelLike | null)
+    : await getGeneralChannel(args.ctx, args.root.communityId);
+  if (
+    !channel ||
+    normalizeIdValue(channel.communityId) !== normalizeIdValue(args.root.communityId) ||
+    normalizeIdValue(channel.pinnedRootId) !== normalizeIdValue(args.root._id)
+  ) {
+    return;
+  }
+  await args.ctx.db.patch(channel._id, {
+    pinnedRootId: undefined,
+    updatedAt: args.nowMs,
+  });
+  await insertChannelPinModerationEvent({
+    ctx: args.ctx,
+    communityId: args.root.communityId,
+    rootId: args.root._id,
+    eventType: "unpin",
+    actorUserId: args.actorUserId,
+    reason: args.reason,
+    nowMs: args.nowMs,
+  });
+}
+
 export async function archiveActiveCommunityChannel(args: {
   ctx: { db: any };
   communityId: any;
   channelId: any;
+  actorUserId?: any;
   nowMs?: number;
 }): Promise<CommunityChannelLike> {
   const channel = await requireCustomCommunityChannelLineage(args);
@@ -515,9 +699,26 @@ export async function archiveActiveCommunityChannel(args: {
   const updatedAt = args.nowMs ?? Date.now();
   await args.ctx.db.patch(channel._id, {
     status: "archived",
+    pinnedRootId: undefined,
     updatedAt,
   });
-  return { ...channel, status: "archived", updatedAt };
+  if (channel.pinnedRootId) {
+    await insertChannelPinModerationEvent({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      rootId: channel.pinnedRootId,
+      eventType: "unpin",
+      actorUserId: args.actorUserId,
+      reason: "channel_archived",
+      nowMs: updatedAt,
+    });
+  }
+  return {
+    ...channel,
+    status: "archived",
+    pinnedRootId: undefined,
+    updatedAt,
+  };
 }
 
 export async function requireChannelForAddressableRoot(args: {

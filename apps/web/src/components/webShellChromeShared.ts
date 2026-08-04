@@ -62,6 +62,7 @@ export type WebCommunityShellProps = {
     slug: string;
     name: string;
     is_general: boolean;
+    position: number;
   }>;
   isLoadingCommunityChannels: boolean;
   selectedCommunityChannelSlug: string;
@@ -71,6 +72,7 @@ export type WebCommunityShellProps = {
     slug: string;
     name: string;
     is_general: boolean;
+    position: number;
   }) => void;
   onCreateCommunityChannel: (name: string) => Promise<unknown>;
   isCreatingCommunityChannel: boolean;
@@ -78,6 +80,10 @@ export type WebCommunityShellProps = {
   clearCommunityChannelCreateError: () => void;
   isAtCommunityChannelLimit: boolean;
   maxActiveCommunityChannels: number;
+  onReorderCommunityChannels: (orderedChannelIds: string[]) => Promise<boolean> | boolean;
+  isReorderingCommunityChannels: boolean;
+  communityChannelReorderError: string | null;
+  clearCommunityChannelReorderError: () => void;
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;

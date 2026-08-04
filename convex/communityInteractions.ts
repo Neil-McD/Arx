@@ -54,6 +54,7 @@ import {
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import {
   ensureGeneralChannel,
+  clearPinnedRootIfMatches,
   ensureReplyChannelMatchesRoot,
   interactionBelongsToChannel,
   listChannelReadableRows,
@@ -92,7 +93,6 @@ type InteractionRootRow = {
   reactionSummary: Array<{ emoji: string; count: number }>;
   idempotencyKey: string;
   lastReplyAt?: number;
-  pinnedAt?: number;
   lockedAt?: number;
   hiddenAt?: number;
   deletedAt?: number;
@@ -868,7 +868,9 @@ async function mapRootBundle(
       last_reply_at: typeof root.lastReplyAt === "number" ? toIsoString(root.lastReplyAt) : null,
       last_reply_actor_user_id:
         lastReplyPublicId ?? (lastReply?.actorUserId ? normalizeIdValue(lastReply.actorUserId) : null),
-      pinned_at: typeof root.pinnedAt === "number" ? toIsoString(root.pinnedAt) : null,
+      // Cached clients still accept this shape. Current pin authority lives on
+      // the channel and is read through getCommunityChannelPinnedRoot.
+      pinned_at: null,
       locked_at: typeof root.lockedAt === "number" ? toIsoString(root.lockedAt) : null,
       legacy_thread_id: legacyLink?.threadId ? normalizeIdValue(legacyLink.threadId) : null,
       legacy_message_id: legacyLink?.messageId ? normalizeIdValue(legacyLink.messageId) : null,
@@ -2642,6 +2644,49 @@ export const listCommunityInteractionRoots = query({
   },
 });
 
+export const getCommunityChannelPinnedRoot = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveRequestedCommunityChannel({
+      ctx,
+      communityId: args.communityId,
+      channelId: args.channelId,
+    });
+    if (!channel.pinnedRootId) return { pinned_root: null };
+    const root = (await ctx.db.get(channel.pinnedRootId)) as InteractionRootRow | null;
+    if (
+      !root ||
+      root.status !== "live" ||
+      (root.visibilityScope !== "community" && root.visibilityScope !== "public") ||
+      normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
+      !interactionBelongsToChannel(root, channel)
+    ) {
+      throw new Error("community_channel_pin_invalid");
+    }
+    const viewerMap = await loadViewerReactionMapForTargets(ctx, userId, "root", [root._id]);
+    return {
+      pinned_root: await mapRootBundle(
+        ctx,
+        root,
+        false,
+        new Map<string, string | null>(),
+        viewerMap.get(normalizeIdValue(root._id)) ?? [],
+      ),
+    };
+  },
+});
+
 export const listCommunityInteractionReplies = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -2980,6 +3025,15 @@ async function tombstoneCommunityInteractionTargetCore(args: {
     deletedAt: args.nowMs,
     updatedAt: args.nowMs,
   });
+  if (args.targetType === "root") {
+    await clearPinnedRootIfMatches({
+      ctx: args.ctx,
+      root: args.target as InteractionRootRow,
+      actorUserId: args.actorUserId,
+      reason: "root_tombstoned",
+      nowMs: args.nowMs,
+    });
+  }
   await suppressPendingMentionsForDeletedInteractionTarget({
     ctx: args.ctx,
     targetType: args.targetType,

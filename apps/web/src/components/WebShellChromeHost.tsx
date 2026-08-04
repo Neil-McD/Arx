@@ -68,6 +68,10 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           clearCreateChannelError={props.communityShell.clearCommunityChannelCreateError}
           isAtChannelLimit={props.communityShell.isAtCommunityChannelLimit}
           maxActiveChannels={props.communityShell.maxActiveCommunityChannels}
+          onReorderChannels={props.communityShell.onReorderCommunityChannels}
+          isReorderingChannels={props.communityShell.isReorderingCommunityChannels}
+          reorderChannelsError={props.communityShell.communityChannelReorderError}
+          clearReorderChannelsError={props.communityShell.clearCommunityChannelReorderError}
           canViewMembersActiveCommunity={props.communityShell.canViewMembersActiveCommunity}
           canViewActiveCommunitySettings={props.communityShell.canViewActiveCommunitySettings}
           canManageMembersActiveCommunity={props.communityShell.canManageMembersActiveCommunity}

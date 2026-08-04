@@ -2,10 +2,21 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { CloudCommunityChannel } from "../shared/cloudCommunityChannelsGateway";
 import {
+  buildOptimisticWebCommunityChannelOrder,
   resolveWebCommunityChannelSelection,
   resolveWebCommunityChannelDeleteCompletion,
   shouldResetWebCommunityChannelPresentation,
 } from "../apps/web/src/controllers/useWebCommunityChannelsController";
+
+const engineering: CloudCommunityChannel = {
+  id: "engineering-id",
+  community_id: "community-id",
+  system_role: null,
+  is_general: false,
+  slug: "engineering",
+  name: "Engineering",
+  position: 2,
+};
 
 const general: CloudCommunityChannel = {
   id: "general-id",
@@ -117,6 +128,39 @@ describe("community channel presentation continuity", () => {
       nextCommunityId: "community-id",
       hasSession: false,
     })).toBe(true);
+  });
+});
+
+describe("community channel optimistic order", () => {
+  it("keeps General fixed while assigning contiguous custom positions", () => {
+    expect(buildOptimisticWebCommunityChannelOrder(
+      "community-id",
+      [general, product, engineering],
+      [engineering.id, product.id],
+    )).toEqual([
+      general,
+      { ...engineering, position: 1 },
+      { ...product, position: 2 },
+    ]);
+  });
+
+  it("rejects duplicate, missing, and foreign channel ids", () => {
+    const channels = [general, product, engineering];
+    expect(buildOptimisticWebCommunityChannelOrder(
+      "community-id",
+      channels,
+      [product.id, product.id],
+    )).toBeNull();
+    expect(buildOptimisticWebCommunityChannelOrder(
+      "community-id",
+      channels,
+      [product.id],
+    )).toBeNull();
+    expect(buildOptimisticWebCommunityChannelOrder(
+      "community-id",
+      channels,
+      [product.id, "foreign-id"],
+    )).toBeNull();
   });
 });
 
