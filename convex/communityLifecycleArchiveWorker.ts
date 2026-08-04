@@ -588,7 +588,12 @@ async function processClaim(args: {
 
 export const processCommunityArchiveOperationsInternal = internalAction({
   args: { limit: v.optional(v.number()) },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<{
+    claimed: number;
+    succeeded: number;
+    retried: number;
+    failed: number;
+  }> => {
     const limit = args.limit ?? 3;
     assertLimit(limit);
     const claims = (await ctx.runMutation(
@@ -596,7 +601,9 @@ export const processCommunityArchiveOperationsInternal = internalAction({
         .claimDueCommunityArchiveOperationsInternal,
       { nowMs: Date.now(), limit },
     )) as ArchiveOperationClaim[];
-    const results = [];
+    const results: Array<{
+      state: "succeeded" | "retry" | "bounded" | "failed";
+    }> = [];
     for (const claim of claims) {
       try {
         results.push(await processClaim({ ctx, claim }));
@@ -609,7 +616,7 @@ export const processCommunityArchiveOperationsInternal = internalAction({
           .replace(/[^a-z0-9_:-]+/g, "_")
           .slice(0, 160) || "community_archive_worker_failed";
         try {
-          const released = await ctx.runMutation(
+          const released = (await ctx.runMutation(
             (internal as any).communityLifecycleArchiveWorker
               .releaseCommunityArchiveOperationInternal,
             {
@@ -619,7 +626,7 @@ export const processCommunityArchiveOperationsInternal = internalAction({
               errorCode,
               terminal: false,
             },
-          );
+          )) as { terminal: boolean };
           results.push({
             state: released.terminal ? "failed" as const : "retry" as const,
           });

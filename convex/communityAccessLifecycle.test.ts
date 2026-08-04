@@ -308,7 +308,7 @@ test("archiving closes acquisition while archived communities leave every active
   );
   expect(
     discoverWhileArchiving.communities.some(
-      (community) => community.slug === "access-lifecycle-approval",
+      (community: any) => community.slug === "access-lifecycle-approval",
     ),
   ).toBe(false);
 
@@ -333,7 +333,7 @@ test("archiving closes acquisition while archived communities leave every active
   );
   expect(
     memberArchivingShell.some(
-      (row) => row.community_id === String(fixture.openCommunityId),
+      (row: any) => row.community_id === String(fixture.openCommunityId),
     ),
   ).toBe(false);
 
@@ -360,12 +360,12 @@ test("archiving closes acquisition while archived communities leave every active
   );
   expect(
     memberArchivedShell.some(
-      (row) => row.community_id === String(fixture.openCommunityId),
+      (row: any) => row.community_id === String(fixture.openCommunityId),
     ),
   ).toBe(false);
   expect(
     ownerArchivedShell.some(
-      (row) => row.community_id === String(fixture.openCommunityId),
+      (row: any) => row.community_id === String(fixture.openCommunityId),
     ),
   ).toBe(false);
   const semanticDirectory = await asMember.query(
@@ -379,7 +379,7 @@ test("archiving closes acquisition while archived communities leave every active
   if (semanticDirectory.ok) {
     expect(
       semanticDirectory.communities.some(
-        (community) => community.slug === "access-lifecycle-open",
+        (community: any) => community.slug === "access-lifecycle-open",
       ),
     ).toBe(false);
   }

@@ -292,8 +292,8 @@ test("concurrent archive requests converge on one lifecycle operation", async ()
       args,
     ),
   ]);
-  expect(new Set(results.map((result) => result.operation_id)).size).toBe(1);
-  expect(results.filter((result) => result.idempotent === false)).toHaveLength(1);
+  expect(new Set(results.map((result: any) => result.operation_id)).size).toBe(1);
+  expect(results.filter((result: any) => result.idempotent === false)).toHaveLength(1);
   await t.run(async (ctx) => {
     const operations = await ctx.db
       .query("communityLifecycleOperations")
