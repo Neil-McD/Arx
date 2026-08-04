@@ -83,6 +83,9 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
       <div
         ref={viewportRef}
         className="community-channel-pinned-root-viewport"
+        role={overflowState.overflowing ? "region" : undefined}
+        aria-label={overflowState.overflowing ? "Scrollable pinned post content" : undefined}
+        tabIndex={overflowState.overflowing ? 0 : undefined}
         onScroll={measureOverflow}
       >
         {props.children}

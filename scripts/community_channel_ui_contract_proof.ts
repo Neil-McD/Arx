@@ -250,6 +250,8 @@ const pinnedSurface = read(pinnedSurfacePath);
   "props.children",
   "scrollHeight",
   "clientHeight",
+  'aria-label={overflowState.overflowing ? "Scrollable pinned post content" : undefined}',
+  "tabIndex={overflowState.overflowing ? 0 : undefined}",
 ].forEach((required) => assertIncludes(pinnedSurfacePath, pinnedSurface, required));
 assertNotMatches(
   pinnedSurfacePath,
