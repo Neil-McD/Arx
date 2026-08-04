@@ -367,7 +367,12 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(30dvh, 320px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(26dvh, 280px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /@media\s*\(max-width:\s*700px\)\s*\{[\s\S]*?\.community-channel-pinned-root\s*\{[\s\S]*?max-block-size:\s*min\(24dvh, 220px\);/,
 );
 assertMatches(
   interactionStylesPath,
