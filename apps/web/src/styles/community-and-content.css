@@ -3531,6 +3531,23 @@
   overflow: hidden;
 }
 
+.community-channel-pinned-root-viewport .community-interaction-msg-actions,
+.community-channel-pinned-root-viewport .community-interaction-footer {
+  display: none;
+}
+
+.community-channel-pinned-root.has-rich-content .community-interaction-body {
+  max-height: 4.5em;
+  overflow: hidden;
+}
+
+.community-channel-pinned-root-preview-open {
+  position: absolute;
+  z-index: 2;
+  inset: 0 0 35px;
+  cursor: pointer;
+}
+
 .community-channel-pinned-root-viewport > .community-interaction-feed {
   margin-top: 0;
 }
@@ -3556,7 +3573,7 @@
 
 .community-channel-pinned-root-footer {
   position: relative;
-  z-index: 2;
+  z-index: 3;
   min-width: 0;
   min-height: 35px;
   display: flex;
@@ -3599,7 +3616,7 @@
 
 .community-channel-pinned-root-unpin {
   position: absolute;
-  z-index: 2;
+  z-index: 4;
   top: 6px;
   right: 6px;
   display: inline-flex;

@@ -9,6 +9,7 @@ import { ArrowRight, PinOff } from "lucide-react";
 
 type CommunityPinnedRootSurfaceProps = {
   children: ReactNode;
+  hasRichContent: boolean;
   selected: boolean;
   canUnpin: boolean;
   isUnpinning: boolean;
@@ -55,6 +56,7 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
+    viewport.setAttribute("inert", "");
     measureOverflow();
     if (typeof ResizeObserver === "undefined") return;
     const observer = new ResizeObserver(measureOverflow);
@@ -66,16 +68,22 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
 
   return (
     <section
-      className={`community-channel-pinned-root${props.selected ? " is-selected" : ""}`}
+      className={`community-channel-pinned-root${props.hasRichContent ? " has-rich-content" : ""}${props.selected ? " is-selected" : ""}`}
       role="note"
       aria-label="Pinned post"
     >
       <div
         ref={viewportRef}
         className="community-channel-pinned-root-viewport"
+        aria-hidden="true"
       >
         {props.children}
       </div>
+      <div
+        className="community-channel-pinned-root-preview-open"
+        aria-hidden="true"
+        onClick={props.onOpen}
+      />
       {overflowState.overflowing ? (
         <div className="community-channel-pinned-root-fade" aria-hidden="true" />
       ) : null}

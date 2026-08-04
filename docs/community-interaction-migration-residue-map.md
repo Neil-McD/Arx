@@ -16,6 +16,8 @@ This map is the deletion queue for the community chat substrate migration. It se
 | R-003 | Legacy chat to interaction mapping table | `KEEP TEMPORARILY` | `communityInteractionLegacyChatLinks`, `convex/communityInteractionLegacyBridge.ts` | Delete after historical chat rows are fully backfilled and no UI or adapter needs legacy-to-canonical id mapping. |
 | R-004 | Legacy attachment hydration fallback in canonical read bundles | `BLOCKED BY PARITY` | `convex/communityInteractionAttachmentBridge.ts`, `convex/communityInteractionLegacyAttachments.ts`, `apps/web/src/components/communityInteractionFeed.tsx` | Delete after historical attachment backfill and projection rendering are canonical-only. |
 | R-007 | Legacy chat backfill API | `KEEP TEMPORARILY` | `convex/communityInteractionBackfill.ts` | Delete after historical `communityChatMessages` are migrated and audited. |
+| R-008 | Null `pinned_at` compatibility field in mapped root bundles | `KEEP TEMPORARILY` | `convex/communityInteractions.ts`, `shared/cloudCommunityInteractionsGateway.ts` | Delete after the cached-client compatibility window closes and no shipped client expects the field. Channel `pinnedRootId` remains the only pin authority. |
+| R-009 | Temporary unchanneled General migration lane | `KEEP TEMPORARILY` | `convex/communityChannelBackfill.ts`, `convex/communityChannelAudit.ts`, `convex/communityInteractions.ts` | Delete only after two consecutive production audits report zero readable unchanneled roots/replies and the backfill is complete. |
 
 ## Removed Residue
 
@@ -50,4 +52,5 @@ This map is the deletion queue for the community chat substrate migration. It se
 ## Next Deletion Order
 
 1. Backfill historical legacy attachments into canonical attachment rows.
-2. Delete legacy chat reads and backfill/admin tools after data migration is audited.
+2. Backfill and audit the temporary unchanneled General lane until two consecutive production audits report zero drift.
+3. Delete legacy chat reads and backfill/admin tools after data migration is audited.

@@ -191,6 +191,7 @@ const interactionApiPath = "convex/communityInteractions.ts";
 const interactionApi = read(interactionApiPath);
 [
   "getCommunityChannelPinnedRoot",
+  "getCommunityChannelInteractionRoot",
   "clearPinnedRootIfMatches",
   'reason: "root_tombstoned"',
   "pinned_at: null",
@@ -200,16 +201,20 @@ const interactionGatewayPath = "shared/cloudCommunityInteractionsGateway.ts";
 const interactionGateway = read(interactionGatewayPath);
 [
   "subscribeCloudCommunityChannelPinnedRoot",
+  "subscribeCloudCommunityChannelInteractionRoot",
   ".communityInteractions.getCommunityChannelPinnedRoot",
+  ".communityInteractions.getCommunityChannelInteractionRoot",
 ].forEach((required) => assertIncludes(interactionGatewayPath, interactionGateway, required));
 
 const interactionControllerPath = "apps/web/src/controllers/useWebCommunityInteractionProjection.ts";
 const interactionController = read(interactionControllerPath);
 [
   "subscribeCloudCommunityChannelPinnedRoot",
+  "subscribeCloudCommunityChannelInteractionRoot",
   "setCloudCommunityChannelPinnedRoot",
   "lastSubscribedPinnedRootRef",
   "pinMutationBoundaryRef",
+  "setSelectedRoot(root)",
   "setPinnedRoot(null)",
 ].forEach((required) => assertIncludes(interactionControllerPath, interactionController, required));
 
@@ -221,6 +226,7 @@ const pinnedProjection = read(pinnedProjectionPath);
   "canManagePinnedRoot",
   "onSetPinnedRoot",
   "resolveSelectedCommunityInteractionRoot",
+  "communityInteractionRootHasRichContent",
   "roots={[props.pinnedRoot]}",
   "showDayDividers={false}",
   "onOpen={() => props.onSelectRoot",
@@ -240,6 +246,7 @@ const pinnedSurface = read(pinnedSurfacePath);
 [
   "community-channel-pinned-root",
   "community-channel-pinned-root-viewport",
+  "community-channel-pinned-root-preview-open",
   "community-channel-pinned-root-fade",
   "community-channel-pinned-root-open",
   "community-channel-pinned-root-unpin",
@@ -248,6 +255,8 @@ const pinnedSurface = read(pinnedSurfacePath);
   "View full post",
   "ResizeObserver",
   "props.children",
+  "inert",
+  'aria-hidden="true"',
   "scrollHeight",
   "clientHeight",
 ].forEach((required) => assertIncludes(pinnedSurfacePath, pinnedSurface, required));
@@ -275,9 +284,10 @@ const interactionContract = read(interactionContractPath);
 [
   "Every active channel may point to at most one live root",
   "General remains fixed at position zero",
-  "same root presentation used by the chronological feed",
-  "Reaction summaries, quick",
-  "the full picker, and their handlers remain identical",
+  "chronological feed's canonical content primitives",
+  "bounded teaser, not a second message renderer",
+  "authorized root-by-id thread",
+  "Short text-only pins retain their natural height",
 ].forEach((required) => assertIncludes(interactionContractPath, interactionContract, required));
 
 const schemaPath = "convex/schema.ts";

@@ -584,6 +584,7 @@ export default function App() {
     visibleRoots: visibleCommunityInteractionRoots,
     selectedReplies: selectedCommunityInteractionReplies,
     selectedRootId: selectedCommunityInteractionRootId,
+    selectedRoot: selectedCommunityInteractionRoot,
     pinnedRoot: pinnedCommunityInteractionRoot,
     isUpdatingPinnedRoot: isUpdatingPinnedCommunityInteractionRoot,
     pinnedRootError: pinnedCommunityInteractionRootError,
@@ -2397,6 +2398,9 @@ export default function App() {
           : [],
         selectedRootId: isActiveCommunityChannelReady
           ? selectedCommunityInteractionRootId
+          : null,
+        selectedRoot: isActiveCommunityChannelReady
+          ? selectedCommunityInteractionRoot
           : null,
         replies: isActiveCommunityChannelReady
           ? selectedCommunityInteractionReplies

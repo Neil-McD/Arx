@@ -65,6 +65,7 @@ export type WebCommunityInteractionProjectionProps = {
   onRenameChannel?: (channelId: string, name: string) => Promise<unknown>;
   onDeleteChannel?: (channel: WebCommunityChannelHeaderChannel) => Promise<boolean>;
   pinnedRoot?: CommunityInteractionRootBundle | null;
+  selectedRoot?: CommunityInteractionRootBundle | null;
   isUpdatingPinnedRoot?: boolean;
   pinnedRootError?: string | null;
   canManagePinnedRoot?: boolean;
@@ -388,12 +389,21 @@ export function CommunityInteractionContextPanelSurface(
 
 export function resolveSelectedCommunityInteractionRoot(
   roots: CommunityInteractionRootBundle[],
+  selectedRoot: CommunityInteractionRootBundle | null | undefined,
   pinnedRoot: CommunityInteractionRootBundle | null | undefined,
   selectedRootId: string | null,
 ): CommunityInteractionRootBundle | null {
   if (!selectedRootId) return null;
   return roots.find((bundle) => bundle.root.id === selectedRootId)
+    ?? (selectedRoot?.root.id === selectedRootId ? selectedRoot : null)
     ?? (pinnedRoot?.root.id === selectedRootId ? pinnedRoot : null);
+}
+
+export function communityInteractionRootHasRichContent(
+  bundle: CommunityInteractionRootBundle,
+): boolean {
+  return bundle.attachments.length > 0
+    || bundle.embeds.some((embed) => embed.status === "ready" || embed.status === "pending");
 }
 
 
@@ -705,6 +715,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
   const selectedRoot = resolveSelectedCommunityInteractionRoot(
     props.roots,
+    props.selectedRoot,
     props.pinnedRoot,
     props.selectedRootId,
   );
@@ -739,6 +750,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         ) : null}
         {props.pinnedRoot ? (
           <CommunityPinnedRootSurface
+            hasRichContent={communityInteractionRootHasRichContent(props.pinnedRoot)}
             selected={props.pinnedRoot.root.id === props.selectedRootId}
             canUnpin={Boolean(props.canManagePinnedRoot && props.onSetPinnedRoot)}
             isUnpinning={Boolean(props.isUpdatingPinnedRoot)}

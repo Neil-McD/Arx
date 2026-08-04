@@ -1040,7 +1040,17 @@ assert.match(
 assert.doesNotMatch(
   `${projection}\n${feed}`,
   /showReactions|interactionReactionsVisible/,
-  "pinned roots must not have a reaction-suppression escape hatch",
+  "the shared feed renderer should not grow a second pinned-only rendering API",
+);
+assert.match(
+  baseCss,
+  /\.community-channel-pinned-root-viewport \.community-interaction-msg-actions,[\s\S]*?\.community-channel-pinned-root-viewport \.community-interaction-footer\s*\{[\s\S]*?display:\s*none;/,
+  "the bounded teaser should suppress nested feed actions while the full thread keeps them canonical",
+);
+assert.match(
+  projection,
+  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*embed\.status === "ready"[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
+  "rich pinned roots should preserve real attachment and preview visibility without clamping text-only pins",
 );
 assert.doesNotMatch(
   `${app}\n${projection}\n${feed}`,

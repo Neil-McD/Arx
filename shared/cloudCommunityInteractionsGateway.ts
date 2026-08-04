@@ -431,6 +431,38 @@ export function subscribeCloudCommunityChannelPinnedRoot(params: {
   return watch.onUpdate(publish);
 }
 
+export function subscribeCloudCommunityChannelInteractionRoot(params: {
+  liveClient: CloudCommunityChatLiveClient;
+  communityId: string;
+  channelId?: string | null;
+  rootId: string;
+  onUpdate: (root: CommunityInteractionRootBundle | null) => void;
+  onError?: (error: unknown) => void;
+}): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    (api as any).communityInteractions.getCommunityChannelInteractionRoot,
+    {
+      authSubject: params.liveClient.authSubject,
+      communityId: params.communityId as any,
+      ...(params.channelId ? { channelId: params.channelId as any } : null),
+      rootId: params.rootId as any,
+    } as any,
+  );
+  const publish = () => {
+    try {
+      const result = watch.localQueryResult() as {
+        root?: CommunityInteractionRootBundle | null;
+      } | undefined;
+      if (typeof result === "undefined") return;
+      params.onUpdate(result?.root ?? null);
+    } catch (error) {
+      params.onError?.(error);
+    }
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
+
 export function subscribeCloudCommunityInteractionReplies(params: {
   liveClient: CloudCommunityChatLiveClient;
   rootId: string;

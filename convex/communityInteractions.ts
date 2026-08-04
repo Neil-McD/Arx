@@ -60,6 +60,7 @@ import {
   listChannelReadableRows,
   requireChannelForAddressableRoot,
   resolveRequestedCommunityChannel,
+  type CommunityChannelLike,
 } from "./communityChannelCore";
 import {
   INTERACTION_EMBED_REFRESH_LEASE_MS,
@@ -530,6 +531,19 @@ function assertCommunityReadableRoot(root: InteractionRootRow): void {
   if (root.status !== "live" || !interactionVisibilityIsCommunityReadable(root.visibilityScope)) {
     throw new Error("interaction_root_not_readable");
   }
+}
+
+function isReadableRootInCommunityChannel(args: {
+  root: InteractionRootRow;
+  communityId: any;
+  channel: CommunityChannelLike;
+}): boolean {
+  return (
+    args.root.status === "live" &&
+    interactionVisibilityIsCommunityReadable(args.root.visibilityScope) &&
+    normalizeIdValue(args.root.communityId) === normalizeIdValue(args.communityId) &&
+    interactionBelongsToChannel(args.root, args.channel)
+  );
 }
 
 function assertCommunityReadableReply(reply: InteractionReplyRow): void {
@@ -2665,18 +2679,49 @@ export const getCommunityChannelPinnedRoot = query({
     });
     if (!channel.pinnedRootId) return { pinned_root: null };
     const root = (await ctx.db.get(channel.pinnedRootId)) as InteractionRootRow | null;
-    if (
-      !root ||
-      root.status !== "live" ||
-      (root.visibilityScope !== "community" && root.visibilityScope !== "public") ||
-      normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
-      !interactionBelongsToChannel(root, channel)
-    ) {
+    if (!root || !isReadableRootInCommunityChannel({ root, communityId: args.communityId, channel })) {
       throw new Error("community_channel_pin_invalid");
     }
     const viewerMap = await loadViewerReactionMapForTargets(ctx, userId, "root", [root._id]);
     return {
       pinned_root: await mapRootBundle(
+        ctx,
+        root,
+        false,
+        new Map<string, string | null>(),
+        viewerMap.get(normalizeIdValue(root._id)) ?? [],
+      ),
+    };
+  },
+});
+
+export const getCommunityChannelInteractionRoot = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
+    rootId: v.id("communityInteractionRoots"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveRequestedCommunityChannel({
+      ctx,
+      communityId: args.communityId,
+      channelId: args.channelId,
+    });
+    const root = (await ctx.db.get(args.rootId)) as InteractionRootRow | null;
+    if (!root || !isReadableRootInCommunityChannel({ root, communityId: args.communityId, channel })) {
+      return { root: null };
+    }
+    const viewerMap = await loadViewerReactionMapForTargets(ctx, userId, "root", [root._id]);
+    return {
+      root: await mapRootBundle(
         ctx,
         root,
         false,
