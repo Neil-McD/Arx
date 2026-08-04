@@ -3519,41 +3519,27 @@
 }
 
 .community-channel-pinned-root {
+  position: relative;
   flex: 0 0 auto;
   min-width: 0;
   display: grid;
-  gap: 2px;
   padding: 6px 6px 8px;
   background: color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%);
-}
-
-.community-channel-pinned-root-header {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  padding: 0 6px 2px 12px;
-  color: var(--text-muted);
-}
-
-.community-channel-pinned-root-header > svg {
-  flex: 0 0 auto;
-  color: var(--accent);
-}
-
-.community-channel-pinned-root-header strong {
-  color: var(--text-primary);
-  font-size: 11px;
-  font-weight: 650;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
 }
 
 .community-channel-pinned-root > .community-interaction-feed {
   margin-top: 0;
 }
 
+.community-channel-pinned-root:has(> .community-channel-pinned-root-unpin) .community-interaction-meta-row {
+  padding-right: 34px;
+}
+
 .community-channel-pinned-root-unpin {
-  margin-left: auto;
+  position: absolute;
+  z-index: 2;
+  top: 6px;
+  right: 6px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -3563,14 +3549,14 @@
   border: 0;
   border-radius: 7px;
   background: transparent;
-  color: var(--text-muted);
+  color: var(--accent);
   cursor: pointer;
 }
 
 .community-channel-pinned-root-unpin:hover:not(:disabled),
 .community-channel-pinned-root-unpin:focus-visible {
   background: var(--hover-overlay);
-  color: var(--text-primary);
+  color: var(--accent);
 }
 
 .community-channel-pinned-root-unpin:disabled {

@@ -3,7 +3,6 @@ import {
   MessageCircle,
   MessageSquare,
   Pencil,
-  Pin,
   PinOff,
   Trash2,
 } from "lucide-react";
@@ -740,22 +739,18 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         ) : null}
         {props.pinnedRoot ? (
           <div className="community-channel-pinned-root" role="note" aria-label="Pinned post">
-            <div className="community-channel-pinned-root-header">
-              <Pin size={15} aria-hidden="true" />
-              <strong>Pinned</strong>
-              {props.canManagePinnedRoot && props.onSetPinnedRoot ? (
-                <button
-                  type="button"
-                  className="community-channel-pinned-root-unpin"
-                  onClick={() => props.onSetPinnedRoot?.(null)}
-                  disabled={props.isUpdatingPinnedRoot}
-                  aria-label="Unpin from channel"
-                  title="Unpin from channel"
-                >
-                  <PinOff size={15} aria-hidden="true" />
-                </button>
-              ) : null}
-            </div>
+            {props.canManagePinnedRoot && props.onSetPinnedRoot ? (
+              <button
+                type="button"
+                className="community-channel-pinned-root-unpin"
+                onClick={() => props.onSetPinnedRoot?.(null)}
+                disabled={props.isUpdatingPinnedRoot}
+                aria-label="Unpin from channel"
+                title="Unpin from channel"
+              >
+                <PinOff size={15} aria-hidden="true" />
+              </button>
+            ) : null}
             <CommunityInteractionFeedList
               {...props}
               key={props.pinnedRoot.root.id}
