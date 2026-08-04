@@ -10,8 +10,9 @@ import {
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import { PLATFORM_HOME_COMMUNITY_SLUG } from "../shared/communityLifecycle";
+import { communityIsOperational } from "./communityLifecycleCore";
 
-const PLATFORM_HOME_COMMUNITY_SLUG = "polynet";
 const PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE = "platform_home_autojoin_opt_out";
 
 export type PlatformHomeAutojoinOptOutKind = "left" | "removed";
@@ -163,6 +164,9 @@ export async function ensurePlatformHomeCommunityMembership(args: {
   }
 
   const communityId = String(community._id);
+  if (!communityIsOperational(community)) {
+    return { status: "disabled", communityId };
+  }
   if (String(community.ownerId) === String(args.userId)) {
     return { status: "owner", communityId };
   }

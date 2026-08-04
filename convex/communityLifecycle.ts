@@ -17,6 +17,7 @@ import {
   normalizeVisibility,
   requireCommunityManager,
   requireCommunityOwner,
+  requireCommunityOwnerAnyLifecycle,
   resolveCommunityEntryPolicy,
   resolveCommunityBrandingFields,
   buildCommunityVisualIdentity,
@@ -1042,7 +1043,7 @@ export const deleteCommunity = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityOwner({
+    await requireCommunityOwnerAnyLifecycle({
       ctx,
       communityId: args.communityId,
       userId,

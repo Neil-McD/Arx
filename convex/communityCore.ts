@@ -8,6 +8,13 @@ import {
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility";
 import type { CommunityVisualIdentity } from "../shared/communityVisualIdentity";
+import {
+  communityIsOperational,
+  normalizeCommunityLifecycleGeneration,
+  normalizeCommunityLifecycleStatus,
+  requireCommunityOwnerAnyLifecycle,
+  requireOperationalCommunity,
+} from "./communityLifecycleCore";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -29,6 +36,13 @@ export type CommunityLike = {
   bannerZoom?: number;
   brandingRevision?: number;
   visibility: "published" | "unlisted";
+  lifecycleStatus?: "active" | "sunsetting" | "archived";
+  lifecycleGeneration?: number;
+  archiveRequestedAt?: number;
+  archiveEffectiveAt?: number;
+  archivedAt?: number;
+  archiveRequestedByUserId?: any;
+  restoredAt?: number;
   entryPolicy?: CommunityEntryPolicy;
   activeMemberCount?: number;
   createdAt: number;
@@ -37,7 +51,7 @@ export type CommunityLike = {
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityAccessRelation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
-export type CommunityPrimaryCta = "open_community" | "join" | "checkout";
+export type CommunityPrimaryCta = "open_community" | "join" | "checkout" | null;
 
 export type CommunityMembershipLike = {
   _id: any;
@@ -1175,6 +1189,15 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   membership: CommunityMembershipLike | null;
   userId: any;
 }): Promise<CommunityMembershipEntitlementState> {
+  if (!communityIsOperational(args.community)) {
+    return {
+      isEntitled: false,
+      accessSource:
+        normalizeMembershipAccessSource(args.membership?.accessSource) || null,
+      subscriptionStatus: null,
+      subscriptionCurrentPeriodEndAt: null,
+    };
+  }
   if (args.community.ownerId === args.userId) {
     return {
       isEntitled: true,
@@ -1239,6 +1262,7 @@ export async function requireCommunityChatAccess(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  requireOperationalCommunity(community);
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,
@@ -1264,6 +1288,13 @@ export async function resolveCommunityAccessBundle(args: {
   membership: CommunityMembershipLike | null;
   userId: any;
 }) {
+  const lifecycleStatus = normalizeCommunityLifecycleStatus(
+    args.community.lifecycleStatus,
+  );
+  const lifecycleGeneration = normalizeCommunityLifecycleGeneration(
+    args.community.lifecycleGeneration,
+  );
+  const isOperational = communityIsOperational(args.community);
   const role = normalizeCommunityRoleForOutput(args.membership?.role);
   const isOwner = args.community.ownerId === args.userId;
   const isBlocked = !isOwner
@@ -1280,12 +1311,12 @@ export async function resolveCommunityAccessBundle(args: {
     membership: args.membership,
     userId: args.userId,
   });
-  const isEntitled = !isBlocked && entitlement.isEntitled;
+  const isEntitled = isOperational && !isBlocked && entitlement.isEntitled;
   const isAdmin = !isOwner && isEntitled && role === "admin";
   const isModerator = !isOwner && isEntitled && role === "moderator";
   let joinRequestStatus: string | null = null;
   let joinRequestReapplyAt: number | null = null;
-  if (!isEntitled) {
+  if (isOperational && !isEntitled) {
     const joinRequestRows = (await args.ctx.db
       .query("communityJoinRequests")
       .withIndex("by_community_user", (q: any) =>
@@ -1314,20 +1345,24 @@ export async function resolveCommunityAccessBundle(args: {
   const canReadChat = isEntitled;
   const canPostChat = isEntitled;
   const canView = !isBlocked;
-  const canManageMembers = isOwner || isAdmin;
-  const canManageResources = isOwner || isAdmin;
-  const canModerateContent = isOwner || isAdmin || isModerator;
-  const canReviewJoinRequests = isOwner || isAdmin || isModerator;
-  const canManagePricing = isOwner || isAdmin;
-  const canManageBranding = isOwner;
-  const canManagePublishing = isOwner;
-  const canManagePayouts = isOwner;
+  const canManageMembers = isOperational && (isOwner || isAdmin);
+  const canManageResources = isOperational && (isOwner || isAdmin);
+  const canModerateContent =
+    isOperational && (isOwner || isAdmin || isModerator);
+  const canReviewJoinRequests =
+    isOperational && (isOwner || isAdmin || isModerator);
+  const canManagePricing = isOperational && (isOwner || isAdmin);
+  const canManageBranding = isOperational && isOwner;
+  const canManagePublishing = isOperational && isOwner;
+  const canManagePayouts = isOperational && isOwner;
   const canPostMessage = isEntitled;
-  const primaryCta: CommunityPrimaryCta = isEntitled
-    ? "open_community"
-    : entryPolicy === "paid_subscription"
-      ? "checkout"
-      : "join";
+  const primaryCta: CommunityPrimaryCta = !isOperational
+    ? null
+    : isEntitled
+      ? "open_community"
+      : entryPolicy === "paid_subscription"
+        ? "checkout"
+        : "join";
 
   return {
     community_id: String(args.community._id),
@@ -1335,6 +1370,8 @@ export async function resolveCommunityAccessBundle(args: {
     relation,
     entry_policy: entryPolicy,
     visibility: args.community.visibility,
+    lifecycle_status: lifecycleStatus,
+    lifecycle_generation: lifecycleGeneration,
     join_request_status: joinRequestStatus,
     join_request_reapply_at: joinRequestReapplyAt !== null ? toIsoString(joinRequestReapplyAt) : null,
     primary_cta: primaryCta,
@@ -1381,6 +1418,7 @@ export async function requireCommunityManager(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  requireOperationalCommunity(community);
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,
@@ -1406,12 +1444,14 @@ export async function requireCommunityOwner(args: {
   communityId: any;
   userId: any;
 }): Promise<{ community: CommunityLike }> {
-  const { community } = await getCommunityAndMembership(args);
-  if (String(community.ownerId) !== String(args.userId)) {
-    throw new Error("community_owner_required");
-  }
+  const { community } = await requireCommunityOwnerAnyLifecycle<CommunityLike>(
+    args,
+  );
+  requireOperationalCommunity(community);
   return { community };
 }
+
+export { requireCommunityOwnerAnyLifecycle } from "./communityLifecycleCore";
 
 export async function requireCommunityModerator(args: {
   ctx: any;
@@ -1419,6 +1459,7 @@ export async function requireCommunityModerator(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  requireOperationalCommunity(community);
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,

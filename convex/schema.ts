@@ -1167,6 +1167,21 @@ export default defineSchema({
       }),
     ),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
+    // Additive lifecycle compatibility fields. Missing values normalize to
+    // active/generation 0 until the bounded backfill reaches zero drift.
+    lifecycleStatus: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("sunsetting"),
+        v.literal("archived"),
+      ),
+    ),
+    lifecycleGeneration: v.optional(v.number()),
+    archiveRequestedAt: v.optional(v.number()),
+    archiveEffectiveAt: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    archiveRequestedByUserId: v.optional(v.id("users")),
+    restoredAt: v.optional(v.number()),
     inferenceFundingPolicy: v.union(
       v.literal("legacy_byok_allowed"),
       v.literal("managed_required"),
@@ -1182,8 +1197,11 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_createdAt", ["ownerId", "createdAt"])
+    .index("by_owner_lifecycle_createdAt", ["ownerId", "lifecycleStatus", "createdAt"])
     .index("by_slug", ["slug"])
-    .index("by_visibility_updatedAt", ["visibility", "updatedAt"]),
+    .index("by_visibility_updatedAt", ["visibility", "updatedAt"])
+    .index("by_lifecycle_updatedAt", ["lifecycleStatus", "updatedAt"])
+    .index("by_lifecycle_visibility_updatedAt", ["lifecycleStatus", "visibility", "updatedAt"]),
 
   // Canonical public conversation containers. Every active channel has the
   // same all-member read/post policy in the first multi-channel slice.

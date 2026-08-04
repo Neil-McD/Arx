@@ -128,13 +128,13 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     communityCore,
-    "const canManageMembers = isOwner || isAdmin;",
-    "member management capability policy",
+    "const canManageMembers = isOperational && (isOwner || isAdmin);",
+    "member management capability policy must also require operational lifecycle",
   );
   assertIncludes(
     communityCore,
-    "const canManageResources = isOwner || isAdmin;",
-    "resource management excludes moderators",
+    "const canManageResources = isOperational && (isOwner || isAdmin);",
+    "resource management excludes moderators and archived communities",
   );
   assertIncludes(
     communityResources,

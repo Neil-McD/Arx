@@ -380,8 +380,8 @@ assert.doesNotMatch(
 );
 assert.match(
   deleteCommunityBlock,
-  /await resolveUserIdForAuthenticatedRequest\(\{[\s\S]*?\}\);[\s\S]*?await requireCommunityOwner\(\{[\s\S]*?userId,[\s\S]*?\}\);[\s\S]*?throw new ConvexError\(\{/,
-  "community deletion must authenticate the actor and prove ownership before returning the quarantine error",
+  /await resolveUserIdForAuthenticatedRequest\(\{[\s\S]*?\}\);[\s\S]*?await requireCommunityOwnerAnyLifecycle\(\{[\s\S]*?userId,[\s\S]*?\}\);[\s\S]*?throw new ConvexError\(\{/,
+  "community deletion must authenticate the actor and prove ownership across lifecycle states before returning the quarantine error",
 );
 assert.equal(
   lifecycle.match(/community_delete_lifecycle_migration_blocked/g)?.length,
