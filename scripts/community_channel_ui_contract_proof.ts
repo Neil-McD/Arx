@@ -250,9 +250,12 @@ const pinnedSurface = read(pinnedSurfacePath);
   "props.children",
   "scrollHeight",
   "clientHeight",
-  'aria-label={overflowState.overflowing ? "Scrollable pinned post content" : undefined}',
-  "tabIndex={overflowState.overflowing ? 0 : undefined}",
 ].forEach((required) => assertIncludes(pinnedSurfacePath, pinnedSurface, required));
+assertNotMatches(
+  pinnedSurfacePath,
+  pinnedSurface,
+  /More below|Scrollable pinned post content|onScroll=|tabIndex=/,
+);
 assertNotMatches(
   pinnedSurfacePath,
   pinnedSurface,
@@ -354,12 +357,17 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(33dvh, 360px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(30dvh, 320px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
 );
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root-viewport\s*\{[\s\S]*?overflow-y:\s*auto;[\s\S]*?overscroll-behavior:\s*contain;/,
+  /\.community-channel-pinned-root-viewport\s*\{[\s\S]*?overflow:\s*hidden;/,
+);
+assertNotMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-viewport\s*\{[^}]*overflow-y:\s*auto|\.community-channel-pinned-root-overflow-label/,
 );
 assertMatches(
   interactionStylesPath,

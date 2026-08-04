@@ -19,25 +19,18 @@ type CommunityPinnedRootSurfaceProps = {
 
 export type CommunityPinnedRootOverflowState = {
   overflowing: boolean;
-  atEnd: boolean;
 };
 
 const INITIAL_OVERFLOW_STATE: CommunityPinnedRootOverflowState = {
   overflowing: false,
-  atEnd: true,
 };
 
 export function resolveCommunityPinnedRootOverflowState(metrics: {
   scrollHeight: number;
   clientHeight: number;
-  scrollTop: number;
 }): CommunityPinnedRootOverflowState {
-  const overflowing = metrics.scrollHeight > metrics.clientHeight + 1;
   return {
-    overflowing,
-    atEnd:
-      !overflowing ||
-      metrics.scrollTop + metrics.clientHeight >= metrics.scrollHeight - 1,
+    overflowing: metrics.scrollHeight > metrics.clientHeight + 1,
   };
 }
 
@@ -53,12 +46,9 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
     const next = resolveCommunityPinnedRootOverflowState({
       scrollHeight: viewport.scrollHeight,
       clientHeight: viewport.clientHeight,
-      scrollTop: viewport.scrollTop,
     });
     setOverflowState((current) =>
-      current.overflowing === next.overflowing && current.atEnd === next.atEnd
-        ? current
-        : next,
+      current.overflowing === next.overflowing ? current : next,
     );
   }, []);
 
@@ -83,20 +73,13 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
       <div
         ref={viewportRef}
         className="community-channel-pinned-root-viewport"
-        role={overflowState.overflowing ? "region" : undefined}
-        aria-label={overflowState.overflowing ? "Scrollable pinned post content" : undefined}
-        tabIndex={overflowState.overflowing ? 0 : undefined}
-        onScroll={measureOverflow}
       >
         {props.children}
       </div>
-      {overflowState.overflowing && !overflowState.atEnd ? (
+      {overflowState.overflowing ? (
         <div className="community-channel-pinned-root-fade" aria-hidden="true" />
       ) : null}
       <div className="community-channel-pinned-root-footer">
-        {overflowState.overflowing && !overflowState.atEnd ? (
-          <span className="community-channel-pinned-root-overflow-label">More below</span>
-        ) : <span aria-hidden="true" />}
         <button
           type="button"
           className="community-channel-pinned-root-open"

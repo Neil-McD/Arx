@@ -7,23 +7,13 @@ describe("community pinned root surface overflow", () => {
     expect(resolveCommunityPinnedRootOverflowState({
       scrollHeight: 220,
       clientHeight: 220,
-      scrollTop: 0,
-    })).toEqual({ overflowing: false, atEnd: true });
+    })).toEqual({ overflowing: false });
   });
 
-  it("shows that a bounded pinned post has more content below", () => {
+  it("marks a bounded pinned post for a visual cutoff", () => {
     expect(resolveCommunityPinnedRootOverflowState({
       scrollHeight: 620,
       clientHeight: 300,
-      scrollTop: 0,
-    })).toEqual({ overflowing: true, atEnd: false });
-  });
-
-  it("clears the fade when the pinned viewport reaches the end", () => {
-    expect(resolveCommunityPinnedRootOverflowState({
-      scrollHeight: 620,
-      clientHeight: 300,
-      scrollTop: 320,
-    })).toEqual({ overflowing: true, atEnd: true });
+    })).toEqual({ overflowing: true });
   });
 });
