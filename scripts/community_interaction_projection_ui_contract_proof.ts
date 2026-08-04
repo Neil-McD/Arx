@@ -1009,8 +1009,8 @@ assert.match(
 );
 assert.match(
   projection,
-  /CommunityInteractionFeedList[\s\S]*roots=\{\[props\.pinnedRoot\]\}[\s\S]*showReactions=\{false\}/,
-  "pinned projection should delegate canonical rows while suppressing reaction chrome",
+  /CommunityInteractionFeedList[\s\S]*roots=\{\[props\.pinnedRoot\]\}[\s\S]*showDayDividers=\{false\}/,
+  "pinned projection should delegate the canonical root row",
 );
 assert.match(
   projection,
@@ -1034,8 +1034,13 @@ assert.doesNotMatch(
 );
 assert.match(
   feed,
-  /export function CommunityInteractionFeedList[\s\S]*showReactions\?: boolean[\s\S]*props\.roots[\s\S]*community-interaction-message/,
-  "shared feed renderer should own root rows and their optional reaction presentation",
+  /export function CommunityInteractionFeedList[\s\S]*props\.roots[\s\S]*MessageActions[\s\S]*ReactionSummary/,
+  "shared feed renderer should own root rows and their canonical reaction presentation",
+);
+assert.doesNotMatch(
+  `${projection}\n${feed}`,
+  /showReactions|interactionReactionsVisible/,
+  "pinned roots must not have a reaction-suppression escape hatch",
 );
 assert.doesNotMatch(
   `${app}\n${projection}\n${feed}`,

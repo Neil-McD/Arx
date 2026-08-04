@@ -765,7 +765,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               error={null}
               isLoadingRoots={false}
               firstRootBodyExpansion={undefined}
-              showReactions={false}
               canManagePinnedRoot={false}
               onSetPinnedRoot={undefined}
               onEditMessage={undefined}

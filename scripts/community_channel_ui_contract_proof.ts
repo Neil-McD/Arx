@@ -223,7 +223,6 @@ const pinnedProjection = read(pinnedProjectionPath);
   "resolveSelectedCommunityInteractionRoot",
   "roots={[props.pinnedRoot]}",
   "showDayDividers={false}",
-  "showReactions={false}",
 ].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
 assertNotMatches(
   pinnedProjectionPath,
@@ -231,6 +230,7 @@ assertNotMatches(
   /community-channel-pinned-root-(?:open|copy)/,
 );
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /density=/);
+assertNotMatches(pinnedProjectionPath, pinnedProjection, /showReactions/);
 
 const interactionFeedPath = "apps/web/src/components/communityInteractionFeed.tsx";
 const interactionFeed = read(interactionFeedPath);
@@ -246,7 +246,8 @@ const interactionContract = read(interactionContractPath);
   "Every active channel may point to at most one live root",
   "General remains fixed at position zero",
   "same root presentation used by the chronological feed",
-  "suppress reaction chrome to remain compact",
+  "Reaction summaries, quick",
+  "the full picker, and their handlers remain identical",
 ].forEach((required) => assertIncludes(interactionContractPath, interactionContract, required));
 
 const schemaPath = "convex/schema.ts";
