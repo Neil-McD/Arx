@@ -87,16 +87,14 @@ export function CommunityPinnedRootSurface(props: CommunityPinnedRootSurfaceProp
       {overflowState.overflowing ? (
         <div className="community-channel-pinned-root-fade" aria-hidden="true" />
       ) : null}
-      <div className="community-channel-pinned-root-footer">
-        <button
-          type="button"
-          className="community-channel-pinned-root-open"
-          onClick={props.onOpen}
-          aria-label={props.openLabel}
-        >
-          View full post <ArrowRight size={13} aria-hidden="true" />
-        </button>
-      </div>
+      <button
+        type="button"
+        className="community-channel-pinned-root-open"
+        onClick={props.onOpen}
+        aria-label={props.openLabel}
+      >
+        View full post <ArrowRight size={13} aria-hidden="true" />
+      </button>
       {props.canUnpin ? (
         <button
           type="button"

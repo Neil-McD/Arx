@@ -263,7 +263,7 @@ const pinnedSurface = read(pinnedSurfacePath);
 assertNotMatches(
   pinnedSurfacePath,
   pinnedSurface,
-  /More below|Scrollable pinned post content|onScroll=|tabIndex=/,
+  /More below|Scrollable pinned post content|onScroll=|tabIndex=|community-channel-pinned-root-footer/,
 );
 assertNotMatches(
   pinnedSurfacePath,
@@ -367,7 +367,7 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(26dvh, 280px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(26dvh, 280px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
 );
 assertMatches(
   interactionStylesPath,
@@ -402,13 +402,19 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root-fade\s*\{[\s\S]*?linear-gradient\([\s\S]*?var\(--accent\)/,
+  /\.community-channel-pinned-root-fade\s*\{[\s\S]*?bottom:\s*0;[\s\S]*?linear-gradient\([\s\S]*?var\(--accent\)/,
 );
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root-open\s*\{[\s\S]*?color:\s*var\(--accent\);/,
+  /\.community-channel-pinned-root-preview-open\s*\{[\s\S]*?inset:\s*0;/,
 );
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-open\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*18px;[\s\S]*?bottom:\s*10px;[\s\S]*?color:\s*var\(--accent\);/,
+);
+assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-footer/);
 assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-header/);
 assertNotMatches(
   interactionStylesPath,
