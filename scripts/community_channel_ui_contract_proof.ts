@@ -306,6 +306,16 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
+  /\.community-channel-header:has\(\+ \.community-channel-pinned-root\)\s*\{[\s\S]*?border-bottom:\s*0;/,
+);
+assertNotMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root\s*\{[^}]*border(?:-bottom)?:/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
   /\.community-channel-header-menu-trigger\s*\{[\s\S]*?color:\s*var\(--text-muted\);/,
 );
 

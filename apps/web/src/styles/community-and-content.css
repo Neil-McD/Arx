@@ -3389,6 +3389,10 @@
   background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
 }
 
+.community-channel-header:has(+ .community-channel-pinned-root) {
+  border-bottom: 0;
+}
+
 .community-channel-header-identity {
   min-width: 0;
   display: flex;
@@ -3520,7 +3524,6 @@
   display: grid;
   gap: 2px;
   padding: 6px 6px 8px;
-  border-bottom: 1px solid var(--border-default);
   background: color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%);
 }
 
