@@ -216,25 +216,37 @@ const interactionController = read(interactionControllerPath);
 const pinnedProjectionPath = "apps/web/src/components/WebCommunityInteractionProjection.tsx";
 const pinnedProjection = read(pinnedProjectionPath);
 [
-  "community-channel-pinned-root",
-  "community-channel-pinned-root-unpin",
+  "CommunityPinnedRootPreview",
   "canManagePinnedRoot",
   "onSetPinnedRoot",
-  'aria-label="Pinned post"',
-  'aria-label="Unpin from channel"',
   "resolveSelectedCommunityInteractionRoot",
-  "roots={[props.pinnedRoot]}",
-  "showDayDividers={false}",
+  "bundle={props.pinnedRoot}",
+  "onOpen={() => props.onSelectRoot",
 ].forEach((required) => assertIncludes(pinnedProjectionPath, pinnedProjection, required));
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /community-channel-pinned-root-header/);
 assertNotMatches(pinnedProjectionPath, pinnedProjection, />\s*Pinned\s*</);
 assertNotMatches(
   pinnedProjectionPath,
   pinnedProjection,
-  /community-channel-pinned-root-(?:open|copy)/,
+  /community-channel-pinned-root-copy/,
 );
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /density=/);
 assertNotMatches(pinnedProjectionPath, pinnedProjection, /showReactions/);
+
+const pinnedPreviewPath = "apps/web/src/components/CommunityPinnedRootPreview.tsx";
+const pinnedPreview = read(pinnedPreviewPath);
+[
+  "community-channel-pinned-root",
+  "community-channel-pinned-preview-open",
+  "community-channel-pinned-root-unpin",
+  'aria-label="Pinned post"',
+  'aria-label="Unpin from channel"',
+  "View full post",
+  "bundleText",
+  "stripSharedAttachmentSummary",
+  "ResizeObserver",
+].forEach((required) => assertIncludes(pinnedPreviewPath, pinnedPreview, required));
+assertNotMatches(pinnedPreviewPath, pinnedPreview, /CommunityInteractionFeedList/);
 
 const interactionFeedPath = "apps/web/src/components/communityInteractionFeed.tsx";
 const interactionFeed = read(interactionFeedPath);
@@ -331,18 +343,33 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*clamp\(180px, 28dvh, 280px\);[\s\S]*?overflow:\s*hidden;[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
 );
 assertMatches(
   interactionStylesPath,
   interactionStyles,
   /\.community-channel-pinned-root-unpin\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?color:\s*var\(--accent\);/,
 );
-assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-header/);
 assertMatches(
   interactionStylesPath,
   interactionStyles,
+  /\.community-channel-pinned-preview-excerpt\.is-truncated::after\s*\{[\s\S]*?linear-gradient\([\s\S]*?var\(--accent\)/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-preview-cta\s*\{[\s\S]*?color:\s*var\(--accent\);/,
+);
+assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-header/);
+assertNotMatches(
+  interactionStylesPath,
+  interactionStyles,
   /\.community-channel-header:has\(\+ \.community-channel-pinned-root\)\s*\{[\s\S]*?border-bottom:\s*0;/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--border-default\);/,
 );
 assertNotMatches(
   interactionStylesPath,
