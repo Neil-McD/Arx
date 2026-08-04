@@ -22,7 +22,7 @@ export type CommunityLike = {
   name: string;
   oneLiner?: string;
   entryPolicy?: "open" | "approval" | "paid_subscription";
-  lifecycleStatus?: "active" | "sunsetting" | "archived";
+  lifecycleStatus?: "active" | "archiving" | "archived";
   lifecycleGeneration?: number;
 };
 

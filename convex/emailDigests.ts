@@ -25,7 +25,7 @@ type CommunityRow = {
   slug: string;
   name: string;
   visibility: "published" | "unlisted";
-  lifecycleStatus?: "active" | "sunsetting" | "archived";
+  lifecycleStatus?: "active" | "archiving" | "archived";
   updatedAt: number;
 };
 
@@ -186,7 +186,7 @@ async function listDigestCommunities(ctx: any, args: {
     return community && communityIsOperational(community) ? [community] : [];
   }
   const lifecycleRows = await Promise.all(
-    ([undefined, "active", "sunsetting"] as const).flatMap((lifecycleStatus) =>
+    ([undefined, "active"] as const).flatMap((lifecycleStatus) =>
       (["published", "unlisted"] as const).map((visibility) =>
         ctx.db
           .query("communities")

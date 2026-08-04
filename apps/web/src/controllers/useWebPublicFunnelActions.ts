@@ -405,7 +405,7 @@ export function useWebPublicFunnelActions<
           if (payload?.reason === "community_archived") {
             throw new Error("Community archived.");
           }
-          if (payload?.reason === "community_sunsetting") {
+          if (payload?.reason === "community_archiving") {
             throw new Error("This community is no longer accepting new members.");
           }
           throw new Error("Community not found.");

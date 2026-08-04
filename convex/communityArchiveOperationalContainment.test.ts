@@ -32,7 +32,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
     });
     const insertCommunity = async (
       slug: string,
-      lifecycleStatus?: "active" | "sunsetting" | "archived",
+      lifecycleStatus?: "active" | "archiving" | "archived",
     ) => await ctx.db.insert("communities", {
       ownerId,
       slug,
@@ -50,26 +50,29 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       ownerId,
       legacyId: await insertCommunity("archive-containment-legacy"),
       activeId: await insertCommunity("archive-containment-active", "active"),
-      sunsettingId: await insertCommunity("archive-containment-sunsetting", "sunsetting"),
+      archivingId: await insertCommunity("archive-containment-archiving", "archiving"),
       archivedId: await insertCommunity("archive-containment-archived", "archived"),
     };
   });
 }
 
-test("one canonical lifecycle resolver admits legacy, active, and sunsetting but rejects archived", async () => {
+test("one canonical lifecycle resolver admits only legacy-active and active communities", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
-  for (const communityId of [fixture.legacyId, fixture.activeId, fixture.sunsettingId]) {
+  for (const communityId of [fixture.legacyId, fixture.activeId]) {
     await expect(t.run(async (ctx) =>
       await requireOperationalCommunityById({ ctx, communityId }),
     )).resolves.toMatchObject({ _id: communityId });
   }
   await expect(t.run(async (ctx) =>
+    await requireOperationalCommunityById({ ctx, communityId: fixture.archivingId }),
+  )).rejects.toThrow("community_archiving");
+  await expect(t.run(async (ctx) =>
     await requireOperationalCommunityById({ ctx, communityId: fixture.archivedId }),
   )).rejects.toThrow("community_archived");
 });
 
-test("archived communities are absent from memory sweeps and inference funding admission", async () => {
+test("archiving and archived communities are absent from memory sweeps and inference funding admission", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const targets = await t.query(
@@ -80,15 +83,15 @@ test("archived communities are absent from memory sweeps and inference funding a
   expect(targetIds).toEqual(expect.arrayContaining([
     String(fixture.legacyId),
     String(fixture.activeId),
-    String(fixture.sunsettingId),
   ]));
+  expect(targetIds).not.toContain(String(fixture.archivingId));
   expect(targetIds).not.toContain(String(fixture.archivedId));
   await expect(t.run(async (ctx) =>
     await resolveCommunityInferenceFundingAdmission(ctx, fixture.archivedId),
   )).resolves.toEqual({ ok: false, code: "community_archived" });
 });
 
-test("community email admission suppresses archived work but preserves sunsetting and generic email", async () => {
+test("community email admission suppresses archiving and archived work but preserves generic email", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const archived = await t.mutation(internal.email.enqueueEmailJobInternal, {
@@ -102,17 +105,17 @@ test("community email admission suppresses archived work but preserves sunsettin
   });
   expect(archived.status).toBe("suppressed");
 
-  const sunsetting = await t.mutation(internal.email.enqueueEmailJobInternal, {
+  const archiving = await t.mutation(internal.email.enqueueEmailJobInternal, {
     kind: "weekly_member_digest",
-    communityId: fixture.sunsettingId,
+    communityId: fixture.archivingId,
     recipientUserId: fixture.ownerId,
     templateKey: "weekly_member_digest",
     payload: {},
-    dedupeKey: "archive-containment-email-sunsetting",
+    dedupeKey: "archive-containment-email-archiving",
     scheduledAt: NOW_MS + 60_000,
     nowMs: NOW_MS,
   });
-  expect(sunsetting.status).toBe("pending");
+  expect(archiving.status).toBe("suppressed");
 
   const generic = await t.mutation(internal.email.enqueueEmailJobInternal, {
     kind: "billing_issue",
@@ -156,11 +159,11 @@ test("queued community email is suppressed at claim and immediately before deliv
   });
 
   await t.run(async (ctx) => {
-    await ctx.db.patch(fixture.sunsettingId, { lifecycleStatus: "active", updatedAt: NOW_MS + 3 });
+    await ctx.db.patch(fixture.archivingId, { lifecycleStatus: "active", updatedAt: NOW_MS + 3 });
   });
   const deliveryRace = await t.mutation(internal.email.enqueueEmailJobInternal, {
     kind: "mention_notification",
-    communityId: fixture.sunsettingId,
+    communityId: fixture.archivingId,
     recipientUserId: fixture.ownerId,
     templateKey: "mention_notification",
     payload: {},
@@ -173,7 +176,7 @@ test("queued community email is suppressed at claim and immediately before deliv
   });
   expect(deliveryClaim.map((row: { _id: unknown }) => String(row._id))).toContain(String(deliveryRace.outboxId));
   await t.run(async (ctx) => {
-    await ctx.db.patch(fixture.sunsettingId, { lifecycleStatus: "archived", updatedAt: NOW_MS + 4 });
+    await ctx.db.patch(fixture.archivingId, { lifecycleStatus: "archived", updatedAt: NOW_MS + 4 });
   });
   const admission = await t.mutation(internal.email.admitEmailJobForDeliveryInternal, {
     outboxId: deliveryRace.outboxId,

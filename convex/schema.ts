@@ -184,6 +184,11 @@ export default defineSchema({
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
     .index("by_community", ["communityId"])
+    .index("by_community_status_providerSubscriptionId", [
+      "communityId",
+      "status",
+      "providerSubscriptionId",
+    ])
     .index("by_provider_subscription", ["providerSubscriptionId"]),
 
   founderUsageCycles: defineTable({
@@ -595,6 +600,13 @@ export default defineSchema({
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
     .index("by_mode_status", ["mode", "status"])
+    .index("by_community_status_mode_providerAccount_checkout", [
+      "communityId",
+      "status",
+      "mode",
+      "providerAccountId",
+      "providerCheckoutSessionId",
+    ])
     .index("by_community_status", ["communityId", "status"]),
 
   userStripeCustomers: defineTable({
@@ -1176,7 +1188,7 @@ export default defineSchema({
     lifecycleStatus: v.optional(
       v.union(
         v.literal("active"),
-        v.literal("sunsetting"),
+        v.literal("archiving"),
         v.literal("archived"),
       ),
     ),
@@ -1234,6 +1246,7 @@ export default defineSchema({
       "kind",
     ])
     .index("by_state_nextAttemptAt", ["state", "nextAttemptAt"])
+    .index("by_state_leaseExpiresAt", ["state", "leaseExpiresAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   // Canonical public conversation containers. Every active channel has the
@@ -1455,6 +1468,18 @@ export default defineSchema({
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
     .index("by_providerAccount_subscription", ["providerAccountId", "providerSubscriptionId"])
     .index("by_status", ["status"])
+    .index("by_community_status_source_providerAccountId", [
+      "communityId",
+      "status",
+      "source",
+      "providerAccountId",
+    ])
+    .index("by_community_status_source_providerSubscriptionId", [
+      "communityId",
+      "status",
+      "source",
+      "providerSubscriptionId",
+    ])
     .index("by_community_status", ["communityId", "status"]),
 
   communityApplicationFeeRefunds: defineTable({

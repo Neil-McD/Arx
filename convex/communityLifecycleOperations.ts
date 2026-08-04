@@ -6,6 +6,133 @@ import {
   resolveCommunityArchiveBeginPlan,
 } from "./communityLifecycleCore";
 
+const ACTIVE_SUBSCRIPTION_STATUSES = [
+  "active",
+  "past_due",
+  "cancel_at_period_end",
+] as const;
+
+async function assertCommunityArchiveBillingPreflight(args: {
+  ctx: any;
+  communityId: any;
+}) {
+  for (const status of ACTIVE_SUBSCRIPTION_STATUSES) {
+    const external = await args.ctx.db
+      .query("communitySubscriptions")
+      .withIndex("by_community_status_source_providerAccountId", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("status", status)
+          .eq("source", "external_sync"),
+      )
+      .first();
+    if (external) {
+      throw new Error(
+        "community_archive_billing_preflight_blocked:external_subscription_cancellation_unsupported",
+      );
+    }
+    for (const missingValue of [undefined, ""] as const) {
+      const missingAccount = await args.ctx.db
+        .query("communitySubscriptions")
+        .withIndex(
+          "by_community_status_source_providerAccountId",
+          (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("status", status)
+              .eq("source", "stripe")
+              .eq("providerAccountId", missingValue),
+        )
+        .first();
+      const missingSubscription = await args.ctx.db
+        .query("communitySubscriptions")
+        .withIndex(
+          "by_community_status_source_providerSubscriptionId",
+          (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("status", status)
+              .eq("source", "stripe")
+              .eq("providerSubscriptionId", missingValue),
+        )
+        .first();
+      if (missingAccount || missingSubscription) {
+        throw new Error(
+          "community_archive_billing_preflight_blocked:stripe_subscription_identity_incomplete",
+        );
+      }
+    }
+    const founderMissingSubscription = await args.ctx.db
+      .query("founderSubscriptions")
+      .withIndex("by_community_status_providerSubscriptionId", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("status", status)
+          .eq("providerSubscriptionId", ""),
+      )
+      .first();
+    if (founderMissingSubscription) {
+      throw new Error(
+        "community_archive_billing_preflight_blocked:stripe_subscription_identity_incomplete",
+      );
+    }
+  }
+
+  const malformedJoinCheckout = await Promise.all(
+    ([undefined, ""] as const).map((providerAccountId) =>
+      args.ctx.db
+        .query("checkoutSessions")
+        .withIndex(
+          "by_community_status_mode_providerAccount_checkout",
+          (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("status", "pending")
+              .eq("mode", "community_join")
+              .eq("providerAccountId", providerAccountId)
+              .gt("providerCheckoutSessionId", ""),
+        )
+        .first(),
+    ),
+  );
+  const malformedFounderCheckout = await args.ctx.db
+    .query("checkoutSessions")
+    .withIndex(
+      "by_community_status_mode_providerAccount_checkout",
+      (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("status", "pending")
+          .eq("mode", "founder_subscription")
+          .gt("providerAccountId", ""),
+    )
+    .first();
+  const unsupportedCheckout = await Promise.all(
+    (["premium_subscription", "workspace_credit_topup"] as const).map((mode) =>
+      args.ctx.db
+        .query("checkoutSessions")
+        .withIndex(
+          "by_community_status_mode_providerAccount_checkout",
+          (q: any) =>
+            q
+              .eq("communityId", args.communityId)
+              .eq("status", "pending")
+              .eq("mode", mode),
+        )
+        .first(),
+    ),
+  );
+  if (
+    malformedJoinCheckout.some(Boolean) ||
+    malformedFounderCheckout ||
+    unsupportedCheckout.some(Boolean)
+  ) {
+    throw new Error(
+      "community_archive_billing_preflight_blocked:checkout_identity_incomplete",
+    );
+  }
+}
+
 async function getArchiveOperation(args: {
   ctx: any;
   communityId: any;
@@ -33,7 +160,7 @@ function mapArchiveOperationResult(args: {
     community_id: String(args.communityId),
     operation_id: String(args.operation._id),
     operation_state: args.operation.state,
-    lifecycle_status: "sunsetting" as const,
+    lifecycle_status: "archiving" as const,
     lifecycle_generation: args.operation.lifecycleGeneration,
   };
 }
@@ -78,6 +205,11 @@ export const beginCommunityArchiveOperationInternal = internalMutation({
       });
     }
 
+    await assertCommunityArchiveBillingPreflight({
+      ctx,
+      communityId: args.communityId,
+    });
+
     const conflict = await getArchiveOperation({
       ctx,
       communityId: args.communityId,
@@ -99,7 +231,7 @@ export const beginCommunityArchiveOperationInternal = internalMutation({
       updatedAt: args.nowMs,
     });
     await ctx.db.patch(args.communityId, {
-      lifecycleStatus: "sunsetting",
+      lifecycleStatus: "archiving",
       lifecycleGeneration: plan.lifecycleGeneration,
       archiveRequestedAt: args.nowMs,
       archiveEffectiveAt: undefined,

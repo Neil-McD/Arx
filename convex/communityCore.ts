@@ -36,7 +36,7 @@ export type CommunityLike = {
   bannerZoom?: number;
   brandingRevision?: number;
   visibility: "published" | "unlisted";
-  lifecycleStatus?: "active" | "sunsetting" | "archived";
+  lifecycleStatus?: "active" | "archiving" | "archived";
   lifecycleGeneration?: number;
   archiveRequestedAt?: number;
   archiveEffectiveAt?: number;

@@ -32,7 +32,10 @@ import {
 } from "../shared/communityAgentDockContract";
 import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRuntimeBoundary";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
-import { communityIsOperational } from "./communityLifecycleCore";
+import {
+  communityIsOperational,
+  resolveCommunityNewOperationsErrorCode,
+} from "./communityLifecycleCore";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import {
   ensureReplyChannelMatchesRoot,
@@ -534,7 +537,17 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       return { ok: false as const, errorCode: "community_not_found", errorMessage: "Community not found." };
     }
     if (!communityIsOperational(community)) {
-      return { ok: false as const, errorCode: "community_archived", errorMessage: "Community is archived." };
+      const errorCode =
+        resolveCommunityNewOperationsErrorCode(community) ??
+        "community_archived";
+      return {
+        ok: false as const,
+        errorCode,
+        errorMessage:
+          errorCode === "community_archiving"
+            ? "Community is archiving."
+            : "Community is archived.",
+      };
     }
 
     const canonicalContext = await readCanonicalCommunityAgentContext(ctx, request.communityId);

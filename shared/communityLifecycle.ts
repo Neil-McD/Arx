@@ -1,6 +1,6 @@
 export const COMMUNITY_LIFECYCLE_STATUSES = [
   "active",
-  "sunsetting",
+  "archiving",
   "archived",
 ] as const;
 
@@ -8,7 +8,7 @@ export type CommunityLifecycleStatus =
   (typeof COMMUNITY_LIFECYCLE_STATUSES)[number];
 
 export type CommunityNewOperationsErrorCode =
-  | "community_sunsetting"
+  | "community_archiving"
   | "community_archived";
 
 export const DEFAULT_COMMUNITY_LIFECYCLE_STATUS: CommunityLifecycleStatus =
@@ -26,7 +26,7 @@ export function normalizeCommunityLifecycleStatus(
   value: unknown,
 ): CommunityLifecycleStatus {
   if (value === undefined) return DEFAULT_COMMUNITY_LIFECYCLE_STATUS;
-  if (value === "active" || value === "sunsetting" || value === "archived") {
+  if (value === "active" || value === "archiving" || value === "archived") {
     return value;
   }
   throw new Error("community_lifecycle_status_invalid");
@@ -52,7 +52,9 @@ export function communityIsOperational(
   community: CommunityLifecycleLike | null | undefined,
 ): boolean {
   if (!community) return false;
-  return !communityIsArchived(community);
+  return (
+    normalizeCommunityLifecycleStatus(community.lifecycleStatus) === "active"
+  );
 }
 
 export function communityAcceptsNewOperations(
@@ -69,7 +71,7 @@ export function resolveCommunityNewOperationsErrorCode(
 ): CommunityNewOperationsErrorCode | null {
   const status = normalizeCommunityLifecycleStatus(community?.lifecycleStatus);
   if (status === "active") return null;
-  return status === "archived" ? "community_archived" : "community_sunsetting";
+  return status === "archived" ? "community_archived" : "community_archiving";
 }
 
 export function communityIsLifecycleProtected(

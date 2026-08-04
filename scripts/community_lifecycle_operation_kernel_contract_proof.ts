@@ -20,6 +20,7 @@ for (const marker of [
   "nextAttemptAt: v.number()",
   'index("by_community_generation_kind"',
   'index("by_state_nextAttemptAt"',
+  'index("by_state_leaseExpiresAt"',
   'index("by_community_createdAt"',
 ]) {
   assert.ok(schema.includes(marker), `operation schema must include ${marker}`);
@@ -32,8 +33,8 @@ assert.match(
 );
 assert.match(
   lifecycleCore,
-  /status === "sunsetting"[\s\S]*mode: "reuse"/,
-  "sunsetting retries must converge on the current operation generation",
+  /status === "archiving"[\s\S]*mode: "reuse"/,
+  "archiving retries must converge on the current operation generation",
 );
 assert.match(
   lifecycleCore,
@@ -69,23 +70,21 @@ assert.match(
 assert.match(
   operations,
   /mode === "reuse"[\s\S]*community_archive_operation_missing[\s\S]*idempotent: true/,
-  "retries must return exactly one existing receipt and fail closed on orphaned sunsetting state",
+  "retries must return exactly one existing receipt and fail closed on orphaned archiving state",
 );
 assert.match(
   operations,
-  /ctx\.db\.insert\("communityLifecycleOperations"[\s\S]*ctx\.db\.patch\(args\.communityId[\s\S]*lifecycleStatus: "sunsetting"[\s\S]*lifecycleGeneration: plan\.lifecycleGeneration/,
+  /ctx\.db\.insert\("communityLifecycleOperations"[\s\S]*ctx\.db\.patch\(args\.communityId[\s\S]*lifecycleStatus: "archiving"[\s\S]*lifecycleGeneration: plan\.lifecycleGeneration/,
   "receipt creation and the lifecycle transition must share one Convex transaction",
 );
 assert.doesNotMatch(
   operations,
-  /Stripe|getStripeClient|subscriptions\.|scheduler\.|fetch\(/,
+  /getStripeClient|subscriptions\.(retrieve|cancel|update)|scheduler\.|fetch\(/,
   "the operation kernel must contain no provider or background side effects",
 );
 for (const forbiddenTable of [
   "communityMemberships",
   "communityPricePoints",
-  "communitySubscriptions",
-  "founderSubscriptions",
   "communityChannels",
   "communityInteractionRoots",
 ]) {
@@ -97,7 +96,7 @@ for (const forbiddenTable of [
 
 assert.match(contract, /does not expose a public archive or[\s\S]*restore command/);
 assert.match(contract, /one durable[\s\S]*`communityLifecycleOperations` row/);
-assert.match(contract, /No current public or web caller can[\s\S]*invoke it/);
-assert.match(contract, /no worker may mark an operation `succeeded`/);
+assert.match(contract, /no builder-facing command or UI/);
+assert.match(contract, /final transaction rechecks that no active[\s\S]*subscription or pending checkout remains/);
 
 console.log("community_lifecycle_operation_kernel_contract_proof: ok");

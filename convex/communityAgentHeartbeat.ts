@@ -5,6 +5,7 @@ import { normalizeIdValue } from "./communityCore";
 import {
   communityIsOperational,
   requireOperationalCommunityById,
+  resolveCommunityNewOperationsErrorCode,
 } from "./communityLifecycleCore";
 import {
   buildCommunitySourceTraceRevision,
@@ -108,7 +109,12 @@ async function readCommunityAgentControlGate(args: {
     return { cyclesToday: 0, reason: "community_not_found" };
   }
   if (!communityIsOperational(community)) {
-    return { cyclesToday: 0, reason: "community_archived" };
+    return {
+      cyclesToday: 0,
+      reason:
+        resolveCommunityNewOperationsErrorCode(community) ??
+        "community_lifecycle_status_invalid",
+    };
   }
   const dayStartMs = new Date(new Date(args.nowMs).toISOString().slice(0, 10)).getTime();
   const [config, stewardRunsToday] = await Promise.all([
@@ -327,15 +333,19 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
       internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal,
       { communityId: args.communityId },
     )) as Record<string, any>;
-    if (operationalAssessment.reason === "community_archived") {
+    if (
+      operationalAssessment.reason === "community_archiving" ||
+      operationalAssessment.reason === "community_archived"
+    ) {
+      const stopReason = operationalAssessment.reason;
       return {
         ok: true,
         skipped: true,
         run: null,
-        stop_reason: "community_archived",
+        stop_reason: stopReason,
         tool_step_count: 0,
         applied_change_request_ids: [],
-        wake_reason: "community_archived",
+        wake_reason: stopReason,
         wake_evidence: null,
       };
     }
@@ -480,7 +490,7 @@ export const listCommunityMemorySweepTargetsInternal = internalQuery({
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(1000, Math.floor(Number(args.limit ?? 500))));
     const lifecycleRows = await Promise.all(
-      ([undefined, "active", "sunsetting"] as const).map((lifecycleStatus) =>
+      ([undefined, "active"] as const).map((lifecycleStatus) =>
         ctx.db
           .query("communities" as any)
           .withIndex("by_lifecycle_updatedAt", (q: any) => q.eq("lifecycleStatus", lifecycleStatus))

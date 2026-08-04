@@ -259,7 +259,7 @@ test("unfunded managed communities remain public while AI funding fails closed",
   ).resolves.toMatchObject({ ok: true });
 });
 
-test("sunsetting closes acquisition while archived communities leave every active projection", async () => {
+test("archiving closes acquisition while archived communities leave every active projection", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
@@ -280,7 +280,7 @@ test("sunsetting closes acquisition while archived communities leave every activ
       .unique();
     if (!request) throw new Error("fixture_join_request_missing");
     await ctx.db.patch(fixture.approvalCommunityId, {
-      lifecycleStatus: "sunsetting",
+      lifecycleStatus: "archiving",
       lifecycleGeneration: 1,
     });
     return request._id;
@@ -290,24 +290,24 @@ test("sunsetting closes acquisition while archived communities leave every activ
     asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
       communitySlug: "access-lifecycle-approval",
     }),
-  ).rejects.toThrow("community_sunsetting");
+  ).rejects.toThrow("community_archiving");
   await expect(
     asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, {
       requestId,
     }),
-  ).rejects.toThrow("community_sunsetting");
+  ).rejects.toThrow("community_archiving");
   await expect(
     t.query(api.communityPublic.resolvePublicFunnelBySlug, {
       communitySlug: "access-lifecycle-approval",
     }),
-  ).resolves.toEqual({ ok: false, reason: "community_sunsetting" });
+  ).resolves.toEqual({ ok: false, reason: "community_archiving" });
 
-  const discoverWhileSunsetting = await t.query(
+  const discoverWhileArchiving = await t.query(
     api.communityPublic.listPublicDiscoverCommunities,
     {},
   );
   expect(
-    discoverWhileSunsetting.communities.some(
+    discoverWhileArchiving.communities.some(
       (community) => community.slug === "access-lifecycle-approval",
     ),
   ).toBe(false);
@@ -317,7 +317,7 @@ test("sunsetting closes acquisition while archived communities leave every activ
   });
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.openCommunityId, {
-      lifecycleStatus: "sunsetting",
+      lifecycleStatus: "archiving",
       lifecycleGeneration: 1,
     });
   });
@@ -327,15 +327,15 @@ test("sunsetting closes acquisition while archived communities leave every activ
     }),
   ).resolves.toMatchObject({ outcome: "joined" });
 
-  const memberSunsettingShell = await asMember.query(
+  const memberArchivingShell = await asMember.query(
     api.communityAdmin.listCommunityMemberships,
     { selectMode: "minimal" },
   );
   expect(
-    memberSunsettingShell.some(
+    memberArchivingShell.some(
       (row) => row.community_id === String(fixture.openCommunityId),
     ),
-  ).toBe(true);
+  ).toBe(false);
 
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.openCommunityId, {
@@ -385,7 +385,7 @@ test("sunsetting closes acquisition while archived communities leave every activ
   }
 });
 
-test("checkout lifecycle generation closes stale and sunsetting claims", async () => {
+test("checkout lifecycle generation closes stale and archiving claims", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
@@ -464,19 +464,19 @@ test("checkout lifecycle generation closes stale and sunsetting claims", async (
       updatedAt: nowMs + 1,
     });
     await ctx.db.patch(fixture.paidCommunityId, {
-      lifecycleStatus: "sunsetting",
+      lifecycleStatus: "archiving",
       lifecycleGeneration: 6,
     });
   });
 
-  await expect(createCheckout(6, "sunsetting")).rejects.toThrow(
-    "community_sunsetting",
+  await expect(createCheckout(6, "archiving")).rejects.toThrow(
+    "community_archiving",
   );
   await expect(
     asMember.mutation(api.communityCommerce.redeemPurchaseClaim, {
       token: "claim-lifecycle-current",
     }),
-  ).rejects.toThrow("community_sunsetting");
+  ).rejects.toThrow("community_archiving");
 });
 
 test("archive races quarantine community checkout identities and claims", async () => {
@@ -525,7 +525,7 @@ test("archive races quarantine community checkout identities and claims", async 
   await createCheckout("webhook");
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.paidCommunityId, {
-      lifecycleStatus: "sunsetting",
+      lifecycleStatus: "archiving",
       lifecycleGeneration: 9,
       updatedAt: nowMs + 1,
     });

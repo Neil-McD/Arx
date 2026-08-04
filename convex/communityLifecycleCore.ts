@@ -50,7 +50,7 @@ export function resolveCommunityArchiveBeginPlan(args: {
   if (status === "archived") {
     throw new Error("community_already_archived");
   }
-  if (status === "sunsetting") {
+  if (status === "archiving") {
     return {
       mode: "reuse",
       lifecycleGeneration: currentGeneration,
@@ -78,7 +78,10 @@ export function requireOperationalCommunity<
   TCommunity extends CommunityLifecycleLike,
 >(community: TCommunity): TCommunity {
   if (!communityIsOperational(community)) {
-    throw new Error("community_archived");
+    throw new Error(
+      resolveCommunityNewOperationsErrorCode(community) ??
+        "community_lifecycle_status_invalid",
+    );
   }
   return community;
 }

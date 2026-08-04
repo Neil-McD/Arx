@@ -47,7 +47,7 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
   },
 ): Promise<{
   ok?: boolean;
-  reason?: "community_archived" | "community_sunsetting";
+  reason?: "community_archived" | "community_archiving";
   community?: TPublicCommunity;
   active_plan?: TPublicPlan | null;
 }> {
@@ -56,7 +56,7 @@ export async function resolveCloudPublicFunnel<SessionT, TPublicCommunity, TPubl
     communitySlug: params.communitySlug,
   })) as {
     ok?: boolean;
-    reason?: "community_archived" | "community_sunsetting";
+    reason?: "community_archived" | "community_archiving";
     community?: TPublicCommunity;
     active_plan?: TPublicPlan | null;
   };

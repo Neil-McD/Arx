@@ -119,10 +119,10 @@ async function createOperationFixture(t: ReturnType<typeof convexTest>) {
     });
     const orphanedSunsettingCommunityId = await ctx.db.insert("communities", {
       ownerId,
-      slug: "orphaned-sunsetting-operation",
-      name: "Orphaned sunsetting",
+      slug: "orphaned-archiving-operation",
+      name: "Orphaned archiving",
       visibility: "unlisted",
-      lifecycleStatus: "sunsetting",
+      lifecycleStatus: "archiving",
       lifecycleGeneration: 3,
       inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
@@ -162,7 +162,7 @@ test("archive begin is atomic, idempotent, and preserves community data", async 
   expect(first).toMatchObject({
     ok: true,
     idempotent: false,
-    lifecycle_status: "sunsetting",
+    lifecycle_status: "archiving",
     lifecycle_generation: 1,
     operation_state: "requested",
   });
@@ -179,7 +179,7 @@ test("archive begin is atomic, idempotent, and preserves community data", async 
       )
       .collect();
     expect(community).toMatchObject({
-      lifecycleStatus: "sunsetting",
+      lifecycleStatus: "archiving",
       lifecycleGeneration: 1,
       archiveRequestedAt: 2_000,
       archiveRequestedByUserId: fixture.ownerId,
@@ -339,5 +339,46 @@ test("archive begin rejects invalid timestamps before writing", async () => {
     const operations = await ctx.db.query("communityLifecycleOperations").collect();
     expect(community?.lifecycleStatus).toBe("active");
     expect(operations).toHaveLength(0);
+  });
+});
+
+test("archive begin preflight blocks unsupported billing before containment", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communitySubscriptions", {
+      communityId: fixture.communityId,
+      userId: fixture.adminId,
+      membershipId: fixture.adminMembershipId,
+      pricePointId: fixture.pricePointId,
+      source: "external_sync",
+      status: "active",
+      cancelAtPeriodEnd: false,
+      createdAt: 1_500,
+      updatedAt: 1_500,
+    });
+  });
+
+  await expect(
+    t.mutation(
+      internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
+      {
+        actorUserId: fixture.ownerId,
+        communityId: fixture.communityId,
+        expectedGeneration: 0,
+        nowMs: 2_000,
+      },
+    ),
+  ).rejects.toThrow(
+    "community_archive_billing_preflight_blocked:external_subscription_cancellation_unsupported",
+  );
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
+      lifecycleStatus: "active",
+      lifecycleGeneration: 0,
+    });
+    await expect(
+      ctx.db.query("communityLifecycleOperations").collect(),
+    ).resolves.toHaveLength(0);
   });
 });

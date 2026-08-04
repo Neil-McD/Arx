@@ -94,32 +94,36 @@ export function normalizeCommunityCapabilityRelation(raw: unknown): CommunityCap
 export function projectCommunityAccessCapabilities(
   access: CommunityCapabilityAccessInput,
 ): CommunityCapabilityFlags {
-  const isArchived = access.lifecycle_status === "archived";
+  const isUnavailable =
+    access.lifecycle_status === "archiving" ||
+    access.lifecycle_status === "archived";
   return {
-    canView: !isArchived && access.can_view === true,
-    canEnterCommunity: !isArchived && access.can_enter_community === true,
-    canReadChat: !isArchived && access.can_read_chat === true,
-    canPostChat: !isArchived && access.can_post_chat === true,
-    canPostMessage: !isArchived && access.can_post_message === true,
-    canManageResources: !isArchived && access.can_manage_resources === true,
-    canModerateContent: !isArchived && access.can_moderate_content === true,
-    canManageMembers: !isArchived && access.can_manage_members === true,
+    canView: !isUnavailable && access.can_view === true,
+    canEnterCommunity: !isUnavailable && access.can_enter_community === true,
+    canReadChat: !isUnavailable && access.can_read_chat === true,
+    canPostChat: !isUnavailable && access.can_post_chat === true,
+    canPostMessage: !isUnavailable && access.can_post_message === true,
+    canManageResources: !isUnavailable && access.can_manage_resources === true,
+    canModerateContent: !isUnavailable && access.can_moderate_content === true,
+    canManageMembers: !isUnavailable && access.can_manage_members === true,
     canReviewJoinRequests:
-      !isArchived && access.can_review_join_requests === true,
-    canManagePricing: !isArchived && access.can_manage_pricing === true,
-    canManageBranding: !isArchived && access.can_manage_branding === true,
-    canManagePublishing: !isArchived && access.can_manage_publishing === true,
-    canManagePayouts: !isArchived && access.can_manage_payouts === true,
+      !isUnavailable && access.can_review_join_requests === true,
+    canManagePricing: !isUnavailable && access.can_manage_pricing === true,
+    canManageBranding: !isUnavailable && access.can_manage_branding === true,
+    canManagePublishing: !isUnavailable && access.can_manage_publishing === true,
+    canManagePayouts: !isUnavailable && access.can_manage_payouts === true,
   };
 }
 
 export function deriveCommunityCapabilityAuthority(
   access: CommunityCapabilityAccessInput,
 ): CommunityCapabilityAuthority {
-  const isArchived = access.lifecycle_status === "archived";
+  const isUnavailable =
+    access.lifecycle_status === "archiving" ||
+    access.lifecycle_status === "archived";
   const relation = normalizeCommunityCapabilityRelation(access.relation);
   const capabilities = projectCommunityAccessCapabilities(access);
-  const availableCapabilities: CommunityCapabilityName[] = isArchived
+  const availableCapabilities: CommunityCapabilityName[] = isUnavailable
     ? []
     : ["community_context"];
   const isEntitled = access.is_entitled === true;
@@ -147,7 +151,7 @@ export function deriveCommunityCapabilityAuthority(
     availableCapabilities.push("community_admin");
   }
   if (
-    !isArchived &&
+    !isUnavailable &&
     (relation === "owner" ||
       capabilities.canManageBranding ||
       capabilities.canManagePublishing ||
@@ -181,7 +185,7 @@ export function deriveCommunityCapabilityAuthority(
       (value, index, list) => list.indexOf(value) === index,
     ),
     unavailableReason:
-      isArchived
+      isUnavailable
         ? "community_access_required"
         : relation === "pending"
         ? "join_request_pending"
@@ -193,6 +197,7 @@ export function deriveCommunityCapabilityAuthority(
 
 export function communityAccessIsOpen(access: CommunityCapabilityAccessInput): boolean {
   return (
+    access.lifecycle_status !== "archiving" &&
     access.lifecycle_status !== "archived" &&
     access.is_entitled === true &&
     (access.can_enter_community === true || access.can_read_chat === true)

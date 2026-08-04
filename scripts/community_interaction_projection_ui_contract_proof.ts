@@ -452,7 +452,7 @@ assert.deepEqual(
 );
 assert.match(
   communityAccessViewModel,
-  /const isArchived = access\?\.lifecycle_status === "archived";[\s\S]*const canEnterCommunity = access\s*\? !isArchived && Boolean\(access\.can_enter_community \?\? access\.can_view\)\s*: false;[\s\S]*canViewMembers: canEnterCommunity,/,
+  /const isUnavailable =[\s\S]*lifecycle_status === "archiving"[\s\S]*lifecycle_status === "archived";[\s\S]*const canEnterCommunity = access\s*\? !isUnavailable && Boolean\(access\.can_enter_community \?\? access\.can_view\)\s*: false;[\s\S]*canViewMembers: canEnterCommunity,/,
   "member-facing community nav visibility should derive from lifecycle-aware community entry access, not admin authority",
 );
 assert.match(

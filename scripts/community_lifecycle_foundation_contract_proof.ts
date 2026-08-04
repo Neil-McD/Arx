@@ -84,16 +84,16 @@ assert.match(sharedTypes, /lifecycle_status\?: CommunityLifecycleStatus/);
 assert.match(sharedTypes, /lifecycle_generation\?: number/);
 assert.match(
   accessViewModel,
-  /const isArchived = access\?\.lifecycle_status === "archived"/,
+  /const isUnavailable =[\s\S]*lifecycle_status === "archiving"[\s\S]*lifecycle_status === "archived"/,
 );
 assert.match(
   capabilityContract,
-  /const isArchived = access\.lifecycle_status === "archived"/,
+  /const isUnavailable =[\s\S]*lifecycle_status === "archiving"[\s\S]*lifecycle_status === "archived"/,
 );
-assert.match(capabilityContract, /availableCapabilities[^]*isArchived[^]*\[\]/);
+assert.match(capabilityContract, /availableCapabilities[^]*isUnavailable[^]*\[\]/);
 assert.match(
   capabilityContract,
-  /communityAccessIsOpen[^]*lifecycle_status !== "archived"/,
+  /communityAccessIsOpen[^]*lifecycle_status !== "archiving"[^]*lifecycle_status !== "archived"/,
 );
 
 for (const marker of [

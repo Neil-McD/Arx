@@ -75,8 +75,8 @@ function main() {
   );
   assert.doesNotMatch(
     listDiscover,
-    /eq\("lifecycleStatus", "(?:sunsetting|archived)"\)/,
-    "Discover must never admit sunsetting or archived communities",
+    /eq\("lifecycleStatus", "(?:archiving|archived)"\)/,
+    "Discover must never admit archiving or archived communities",
   );
   assert.doesNotMatch(
     listDiscover,

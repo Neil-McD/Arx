@@ -43,7 +43,7 @@ test("new-operation epoch admission fails closed for missing or malformed lifecy
   })).toBe(true);
   for (const community of [
     null,
-    { lifecycleStatus: "sunsetting", lifecycleGeneration: 3 },
+    { lifecycleStatus: "archiving", lifecycleGeneration: 3 },
     { lifecycleStatus: "active", lifecycleGeneration: 4 },
     { lifecycleStatus: "invalid", lifecycleGeneration: 3 },
     { lifecycleStatus: "active", lifecycleGeneration: -1 },
@@ -87,10 +87,10 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       ...base,
       slug: "lifecycle-legacy-active",
     });
-    const sunsettingId = await ctx.db.insert("communities", {
+    const archivingId = await ctx.db.insert("communities", {
       ...base,
-      slug: "lifecycle-sunsetting",
-      lifecycleStatus: "sunsetting",
+      slug: "lifecycle-archiving",
+      lifecycleStatus: "archiving",
       lifecycleGeneration: 1,
     });
     const archivedId = await ctx.db.insert("communities", {
@@ -101,7 +101,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       archivedAt: 2_000,
       archiveRequestedByUserId: ownerId,
     });
-    for (const communityId of [legacyActiveId, sunsettingId, archivedId]) {
+    for (const communityId of [legacyActiveId, archivingId, archivedId]) {
       await ctx.db.insert("communityMemberships", {
         communityId,
         userId: memberId,
@@ -114,7 +114,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
         updatedAt: 1_000,
       });
     }
-    return { ownerId, memberId, legacyActiveId, sunsettingId, archivedId };
+    return { ownerId, memberId, legacyActiveId, archivingId, archivedId };
   });
 }
 
@@ -163,11 +163,13 @@ test("lifecycle generation matching treats legacy absence as generation zero, ne
   ).toThrow("community_lifecycle_generation_invalid");
 });
 
-test("sunsetting remains operational but rejects newly initiated work", () => {
-  const community = { lifecycleStatus: "sunsetting" } as const;
-  expect(() => requireOperationalCommunity(community)).not.toThrow();
+test("archiving immediately rejects normal operations and newly initiated work", () => {
+  const community = { lifecycleStatus: "archiving" } as const;
+  expect(() => requireOperationalCommunity(community)).toThrow(
+    "community_archiving",
+  );
   expect(() => requireActiveCommunity(community)).toThrow(
-    "community_sunsetting",
+    "community_archiving",
   );
 });
 
@@ -280,7 +282,7 @@ test("archived status overrides owner and administrator authority", async () => 
   });
 });
 
-test("legacy active and sunsetting communities preserve paid-through access", async () => {
+test("legacy active communities remain accessible while archiving is contained", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
 
@@ -295,10 +297,10 @@ test("legacy active and sunsetting communities preserve paid-through access", as
     await expect(
       requireCommunityChatAccess({
         ctx,
-        communityId: fixture.sunsettingId,
+        communityId: fixture.archivingId,
         userId: fixture.memberId,
       }),
-    ).resolves.toMatchObject({ community: { _id: fixture.sunsettingId } });
+    ).rejects.toThrow("community_archiving");
   });
 });
 
@@ -310,7 +312,7 @@ test("the membership activation kernel permits existing access but blocks new in
     await expect(
       activateCommunityMembershipCore({
         ctx,
-        communityId: fixture.sunsettingId,
+        communityId: fixture.archivingId,
         userId: fixture.memberId,
         accessSource: "free_grant",
         activationReason: "existing_member_refresh",
@@ -329,13 +331,13 @@ test("the membership activation kernel permits existing access but blocks new in
     await expect(
       activateCommunityMembershipCore({
         ctx,
-        communityId: fixture.sunsettingId,
+        communityId: fixture.archivingId,
         userId: newMemberId,
         accessSource: "free_grant",
-        activationReason: "new_sunsetting_member",
+        activationReason: "new_archiving_member",
         nowMs: 3_000,
       }),
-    ).rejects.toThrow("community_sunsetting");
+    ).rejects.toThrow("community_archiving");
     await expect(
       activateCommunityMembershipCore({
         ctx,
@@ -362,7 +364,7 @@ test("the bounded migration is idempotent and does not reorder communities", asy
     scanned: 3,
     counts: {
       active: 1,
-      sunsetting: 1,
+      archiving: 1,
       archived: 1,
       missingStatus: 1,
       missingGeneration: 1,

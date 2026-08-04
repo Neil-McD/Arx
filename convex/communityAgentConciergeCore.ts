@@ -3,7 +3,10 @@ import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
-import { communityIsOperational } from "./communityLifecycleCore";
+import {
+  communityIsOperational,
+  resolveCommunityNewOperationsErrorCode,
+} from "./communityLifecycleCore";
 
 const internalRefs = internal as any;
 
@@ -18,6 +21,7 @@ export type ServeRequestIntakeReason =
   | "source_not_human"
   | "requester_missing"
   | "requester_access_missing"
+  | "community_archiving"
   | "community_archived"
   | "agent_disabled"
   | "owner_funding_choice_required"
@@ -279,12 +283,17 @@ export async function intakeCommunityAgentMention(args: {
 
   const community = await args.ctx.db.get(args.mention.communityId);
   if (!community || !communityIsOperational(community)) {
+    const lifecycleReason = community
+      ? resolveCommunityNewOperationsErrorCode(community) ?? "community_archived"
+      : null;
     const skipped = await skipMention({
       ctx: args.ctx,
       mention: args.mention,
-      intakeReason: community ? "community_archived" : "source_missing",
+      intakeReason: lifecycleReason ?? "source_missing",
       skipReason: community
-        ? "The community is archived."
+        ? lifecycleReason === "community_archiving"
+          ? "The community is archiving."
+          : "The community is archived."
         : "The mentioned community no longer exists.",
       nowMs: args.nowMs,
     });

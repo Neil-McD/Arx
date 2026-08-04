@@ -11,7 +11,7 @@ const MAX_BATCH_SIZE = 100;
 
 type CommunityLifecycleMigrationRow = {
   _id: any;
-  lifecycleStatus?: "active" | "sunsetting" | "archived";
+  lifecycleStatus?: "active" | "archiving" | "archived";
   lifecycleGeneration?: number;
   archiveRequestedAt?: number;
   archiveEffectiveAt?: number;
@@ -72,7 +72,7 @@ export const auditCommunityLifecyclePageInternal = internalQuery({
       .paginate(boundedPaginationOpts(args.paginationOpts));
     const counts = {
       active: 0,
-      sunsetting: 0,
+      archiving: 0,
       archived: 0,
       missingStatus: 0,
       missingGeneration: 0,

@@ -53,6 +53,7 @@ export type CommunityInferenceFundingAdmission =
       ok: false;
       code:
         | "community_not_found"
+        | "community_archiving"
         | "community_archived"
         | "founder_plan_required"
         | "owner_funding_choice_required"

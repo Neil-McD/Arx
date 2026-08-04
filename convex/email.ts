@@ -6,7 +6,10 @@ import {
   type EmailTemplateKey,
   sendRenderedEmail,
 } from "./emailCore";
-import { communityIsOperational } from "./communityLifecycleCore";
+import {
+  communityIsOperational,
+  resolveCommunityNewOperationsErrorCode,
+} from "./communityLifecycleCore";
 
 const EMAIL_TEMPLATE_VALIDATOR = v.union(
   ...EMAIL_TEMPLATE_KEYS.map((value) => v.literal(value)),
@@ -168,7 +171,7 @@ export const enqueueEmailJobInternal = internalMutation({
       ? community && communityIsOperational(community)
         ? null
         : community
-          ? "community_archived"
+          ? resolveCommunityNewOperationsErrorCode(community) ?? "community_archived"
           : "community_not_found"
       : null;
     const dedupeKey = readString(args.dedupeKey) || null;
@@ -282,7 +285,10 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
         if (!community || !communityIsOperational(community)) {
           await ctx.db.patch(row._id, {
             status: "suppressed",
-            failureReason: community ? "community_archived" : "community_not_found",
+            failureReason: community
+              ? resolveCommunityNewOperationsErrorCode(community) ??
+                "community_archived"
+              : "community_not_found",
             updatedAt: nowMs,
           });
           continue;
@@ -323,7 +329,9 @@ export const admitEmailJobForDeliveryInternal = internalMutation({
     if (community && communityIsOperational(community)) {
       return { admitted: true, reason: null };
     }
-    const reason = community ? "community_archived" : "community_not_found";
+    const reason = community
+      ? resolveCommunityNewOperationsErrorCode(community) ?? "community_archived"
+      : "community_not_found";
     await ctx.db.patch(row._id, {
       status: "suppressed",
       failureReason: reason,

@@ -59,7 +59,7 @@ assert.doesNotMatch(
 }
 assert.match(
   heartbeat,
-  /listCommunityMemorySweepTargetsInternal[\s\S]*\[undefined, "active", "sunsetting"\][\s\S]*by_lifecycle_updatedAt[\s\S]*\.take\(limit\)/,
+  /listCommunityMemorySweepTargetsInternal[\s\S]*\[undefined, "active"\][\s\S]*by_lifecycle_updatedAt[\s\S]*\.take\(limit\)/,
   "only the platform sweep target lister should enumerate bounded operational lifecycle lanes",
 );
 
@@ -75,8 +75,8 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /readCommunityAgentControlGate[\s\S]*communityIsOperational\(community\)[\s\S]*community_archived/,
-  "heartbeat planning and execution should refuse archived communities",
+  /readCommunityAgentControlGate[\s\S]*communityIsOperational\(community\)[\s\S]*resolveCommunityNewOperationsErrorCode\(community\)/,
+  "heartbeat planning and execution should refuse archiving and archived communities",
 );
 assert.match(
   heartbeat,

@@ -32,7 +32,7 @@ type CommunityRow = {
   ownerId: any;
   slug: string;
   name: string;
-  lifecycleStatus?: "active" | "sunsetting" | "archived";
+  lifecycleStatus?: "active" | "archiving" | "archived";
 };
 
 type CommunityEventRow = {

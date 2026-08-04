@@ -1762,7 +1762,7 @@ test("archive races quarantine founder checkout without creating funding entitle
     );
     await t.run(async (ctx) => {
       await ctx.db.patch(fixture.communityId, {
-        lifecycleStatus: "sunsetting",
+        lifecycleStatus: "archiving",
         lifecycleGeneration: 5,
         updatedAt: 901_000,
       });
@@ -1801,7 +1801,7 @@ test("archive races quarantine founder checkout without creating funding entitle
       expect(checkout?.communitySubscriptionStatus).not.toBe("canceled");
       const community = await ctx.db.get(fixture.communityId);
       expect(community).toMatchObject({
-        lifecycleStatus: "sunsetting",
+        lifecycleStatus: "archiving",
         lifecycleGeneration: 5,
         inferenceFundingPolicy: "legacy_byok_allowed",
       });

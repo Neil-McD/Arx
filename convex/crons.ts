@@ -3,6 +3,16 @@ import { internal } from "./_generated/api";
 
 const crons = cronJobs();
 
+// Community archive effects are provider-bound and independently retryable.
+// The worker claims only a small leased batch and never scans community data.
+crons.interval(
+  "process community archive operations",
+  { minutes: 1 },
+  (internal as any).communityLifecycleArchiveWorker
+    .processCommunityArchiveOperationsInternal,
+  { limit: 3 },
+);
+
 crons.interval(
   "process pending email outbox",
   { minutes: 5 },
