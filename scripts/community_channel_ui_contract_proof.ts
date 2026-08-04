@@ -379,6 +379,16 @@ assertMatches(
   interactionStyles,
   /\.community-channel-pinned-root-viewport\s*\{[\s\S]*?overflow:\s*hidden;/,
 );
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-viewport \.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?background:\s*transparent;/,
+);
 assertNotMatches(
   interactionStylesPath,
   interactionStyles,

@@ -3536,6 +3536,10 @@
   display: none;
 }
 
+.community-channel-pinned-root-viewport .community-interaction-message.is-self-mentioned {
+  background: transparent;
+}
+
 .community-channel-pinned-root.has-rich-content .community-interaction-body {
   max-height: 4.5em;
   overflow: hidden;
