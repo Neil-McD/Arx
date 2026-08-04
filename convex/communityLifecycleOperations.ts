@@ -179,21 +179,20 @@ export const getMyCommunityArchiveOperationStatus = query({
       communityId: args.communityId,
       userId,
     });
-    const operation = await ctx.db
-      .query("communityLifecycleOperations")
-      .withIndex("by_community_createdAt", (q) =>
-        q.eq("communityId", args.communityId),
-      )
-      .order("desc")
-      .first();
+    const lifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    );
+    const operation = await getArchiveOperation({
+      ctx,
+      communityId: args.communityId,
+      lifecycleGeneration,
+    });
     return {
       community_id: String(args.communityId),
       lifecycle_status: normalizeCommunityLifecycleStatus(
         community.lifecycleStatus,
       ),
-      lifecycle_generation: normalizeCommunityLifecycleGeneration(
-        community.lifecycleGeneration,
-      ),
+      lifecycle_generation: lifecycleGeneration,
       operation: operation
         ? {
             operation_id: String(operation._id),

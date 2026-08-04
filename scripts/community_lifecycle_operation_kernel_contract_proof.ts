@@ -69,6 +69,11 @@ assert.match(
 );
 assert.match(
   operations,
+  /getMyCommunityArchiveOperationStatus = query[\s\S]*normalizeCommunityLifecycleGeneration[\s\S]*getArchiveOperation\([\s\S]*lifecycleGeneration/,
+  "owner status must resolve the archive receipt for the current lifecycle generation",
+);
+assert.match(
+  operations,
   /requireCommunityOwnerAnyLifecycle[\s\S]*resolveCommunityArchiveBeginPlan/,
   "owner authority and the canonical transition planner must precede writes",
 );

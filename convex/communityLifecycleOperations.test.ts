@@ -232,7 +232,7 @@ test("archive begin is atomic, idempotent, and preserves community data", async 
   });
 });
 
-test("only the authenticated owner can inspect the latest archive operation", async () => {
+test("only the authenticated owner can inspect the current archive operation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createOperationFixture(t);
   await t.mutation(
@@ -285,6 +285,43 @@ test("only the authenticated owner can inspect the latest archive operation", as
       { communityId: fixture.communityId },
     ),
   ).rejects.toThrow("verified_identity_required");
+});
+
+test("owner status excludes archive receipts from stale lifecycle generations", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityLifecycleOperations", {
+      communityId: fixture.communityId,
+      lifecycleGeneration: 1,
+      kind: "archive",
+      state: "succeeded",
+      requestedByUserId: fixture.ownerId,
+      attemptCount: 1,
+      nextAttemptAt: 2_000,
+      lastAttemptAt: 2_000,
+      completedAt: 2_000,
+      createdAt: 2_000,
+      updatedAt: 2_000,
+    });
+    await ctx.db.patch(fixture.communityId, {
+      lifecycleStatus: "active",
+      lifecycleGeneration: 2,
+      updatedAt: 3_000,
+    });
+  });
+
+  await expect(
+    t.withIdentity({ subject: "archive-operation-owner" }).query(
+      (api as any).communityLifecycleOperations
+        .getMyCommunityArchiveOperationStatus,
+      { communityId: fixture.communityId },
+    ),
+  ).resolves.toMatchObject({
+    lifecycle_status: "active",
+    lifecycle_generation: 2,
+    operation: null,
+  });
 });
 
 test("archive begin fails closed across authority and lifecycle edge cases", async () => {

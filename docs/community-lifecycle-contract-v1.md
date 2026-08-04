@@ -43,7 +43,9 @@ wildcard that can survive an archive/restore generation change.
   owner across lifecycle states.
 - The public lifecycle-operation inspection query resolves authenticated
   identity server-side, requires the owner across lifecycle states, and returns
-  only bounded receipt state. It exposes no provider or member identity.
+  only bounded receipt state for the community's current lifecycle generation.
+  It exposes no provider or member identity and never surfaces a receipt from a
+  previous lifecycle epoch.
 - The platform-home `polynet` community is lifecycle protected.
 - Membership activation is the canonical new-access boundary. Membership rows
   remain preserved, but no activation or normal access is admitted while the
