@@ -551,12 +551,12 @@ body {
 
 .community-channel-reorder {
   position: absolute;
-  top: 50%;
+  top: 0;
   right: 4px;
+  bottom: 2px;
   z-index: 3;
   display: flex;
   align-items: center;
-  transform: translateY(-50%);
 }
 
 .community-channel-reorder-trigger,
@@ -577,7 +577,7 @@ body {
 .community-channel-reorder-trigger {
   opacity: 0;
   touch-action: none;
-  transition: opacity 120ms ease, background 120ms ease, color 120ms ease;
+  transition: opacity 120ms ease, color 120ms ease;
 }
 
 .community-channel-row:hover .community-channel-reorder-trigger,
@@ -586,8 +586,18 @@ body {
   opacity: 1;
 }
 
-.community-channel-reorder-trigger:hover:not(:disabled),
-.community-channel-reorder-trigger:focus-visible,
+.community-channel-reorder-trigger:hover:not(:disabled) {
+  background: transparent;
+  color: var(--text-primary);
+}
+
+.community-channel-reorder-trigger:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent) 72%, transparent);
+  outline-offset: -2px;
+  background: transparent;
+  color: var(--text-primary);
+}
+
 .community-channel-reorder-controls button:hover:not(:disabled),
 .community-channel-reorder-controls button:focus-visible {
   background: var(--hover-overlay);

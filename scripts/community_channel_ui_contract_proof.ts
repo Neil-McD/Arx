@@ -272,10 +272,26 @@ const interactionProjection = read(interactionProjectionPath);
 );
 
 const shellStylesPath = "apps/web/src/styles/shell-and-onboarding.css";
+const shellStyles = read(shellStylesPath);
 assertMatches(
   shellStylesPath,
-  read(shellStylesPath),
+  shellStyles,
   /\.community-nav\s*\{[\s\S]*?overflow-y:\s*auto;/,
+);
+assertMatches(
+  shellStylesPath,
+  shellStyles,
+  /\.community-channel-reorder\s*\{[\s\S]*?top:\s*0;[\s\S]*?bottom:\s*2px;[\s\S]*?align-items:\s*center;/,
+);
+assertMatches(
+  shellStylesPath,
+  shellStyles,
+  /\.community-channel-reorder-trigger:hover:not\(:disabled\)\s*\{[\s\S]*?background:\s*transparent;/,
+);
+assertNotMatches(
+  shellStylesPath,
+  shellStyles,
+  /\.community-channel-reorder-trigger:hover:not\(:disabled\)[^{]*\{[^}]*background:\s*var\(--hover-overlay\)/,
 );
 
 const interactionStylesPath = "apps/web/src/styles/community-and-content.css";
