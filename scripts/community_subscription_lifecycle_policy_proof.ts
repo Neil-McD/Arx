@@ -400,10 +400,10 @@ function assertSourceAnchors() {
     "export async function requireCommunityUserNotBlocked",
     "central fail-closed block helper exists",
   );
-  assertIncludes(
+  assertMatches(
     httpBilling,
-    'if (event.type === "checkout.session.completed")',
-    "community checkout webhook entrypoint",
+    /if \(\s*event\.type === "checkout\.session\.completed" \|\|\s*event\.type === "checkout\.session\.async_payment_succeeded"\s*\)/,
+    "community immediate and delayed checkout webhook entrypoint",
   );
   assertNotIncludes(
     httpBilling,

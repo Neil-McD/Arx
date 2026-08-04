@@ -479,6 +479,117 @@ test("checkout lifecycle generation closes stale and sunsetting claims", async (
   ).rejects.toThrow("community_sunsetting");
 });
 
+test("archive races quarantine community checkout identities and claims", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const nowMs = 1_750_000_100_000;
+  const pricePointId = await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.paidCommunityId, {
+      lifecycleStatus: "active",
+      lifecycleGeneration: 8,
+    });
+    return await ctx.db.insert("communityPricePoints", {
+      communityId: fixture.paidCommunityId,
+      billingPeriod: "monthly",
+      name: "Archive race plan",
+      amountBaseUnits: 1_000,
+      currency: "usd",
+      currencyDecimals: 2,
+      isCurrent: true,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+  const createCheckout = async (suffix: string) => {
+    await t.mutation(
+      internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal,
+      {
+        sessionId: `archive-race-${suffix}`,
+        communityId: fixture.paidCommunityId,
+        communityLifecycleGeneration: 8,
+        billingPeriod: "monthly",
+        pricePointId,
+        amountBaseUnits: 1_000,
+        currency: "usd",
+        currencyDecimals: 2,
+        providerAccountId: "acct_archive_race",
+        providerPriceId: "price_archive_race",
+        ownerUserId: fixture.memberId,
+        claimToken: `claim-archive-race-${suffix}`,
+        expiresAt: nowMs + 60_000,
+        nowMs,
+      },
+    );
+  };
+  await createCheckout("attach");
+  await createCheckout("webhook");
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.paidCommunityId, {
+      lifecycleStatus: "sunsetting",
+      lifecycleGeneration: 9,
+      updatedAt: nowMs + 1,
+    });
+  });
+
+  await expect(
+    t.mutation(
+      internal.communityCommerce.attachCommunityStripeCheckoutSessionInternal,
+      {
+        sessionId: "archive-race-attach",
+        providerAccountId: "acct_archive_race",
+        providerCheckoutSessionId: "cs_archive_race_attach",
+        providerCustomerId: "cus_archive_race_attach",
+        providerPriceId: "price_archive_race",
+        nowMs: nowMs + 2,
+      },
+    ),
+  ).resolves.toMatchObject({ ok: true, lifecycle_current: false });
+
+  await expect(
+    t.mutation(
+      internal.communityCommerce.syncPendingCommunityCheckoutSubscriptionInternal,
+      {
+        sessionId: "archive-race-webhook",
+        providerAccountId: "acct_archive_race",
+        providerCheckoutSessionId: "cs_archive_race_webhook",
+        providerCustomerId: "cus_archive_race_webhook",
+        providerSubscriptionId: "sub_archive_race_webhook",
+        providerPriceId: "price_archive_race",
+        subscriptionStatus: "active",
+        currentPeriodStartAt: nowMs,
+        currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
+        cancelAtPeriodEnd: false,
+        markComplete: true,
+        nowMs: nowMs + 3,
+      },
+    ),
+  ).resolves.toMatchObject({ ok: true, quarantined: true });
+
+  await t.run(async (ctx) => {
+    for (const suffix of ["attach", "webhook"]) {
+      const checkout = await ctx.db
+        .query("checkoutSessions")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", `archive-race-${suffix}`))
+        .unique();
+      const claim = await ctx.db
+        .query("purchaseClaims")
+        .withIndex("by_claimToken", (q) => q.eq("claimToken", `claim-archive-race-${suffix}`))
+        .unique();
+      expect(checkout).toMatchObject({ status: "expired" });
+      expect(claim).toMatchObject({ status: "expired" });
+    }
+    const webhookCheckout = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", "archive-race-webhook"))
+      .unique();
+    expect(webhookCheckout).toMatchObject({
+      providerCheckoutSessionId: "cs_archive_race_webhook",
+      providerSubscriptionId: "sub_archive_race_webhook",
+    });
+    expect(webhookCheckout?.communitySubscriptionStatus).not.toBe("canceled");
+  });
+});
+
 test("approval join fails closed until manager approval and closes again after revocation", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);

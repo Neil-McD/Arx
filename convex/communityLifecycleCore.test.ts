@@ -7,6 +7,7 @@ import { internal } from "./_generated/api";
 import schema from "./schema";
 import {
   assertCommunityMayBeArchived,
+  communityAcceptsNewOperationsAtGeneration,
   requireActiveCommunity,
   requireCommunityOwnerAnyLifecycle,
   requireMatchingCommunityLifecycleGeneration,
@@ -34,6 +35,25 @@ const modules = import.meta.glob([
   "./communityLifecycleMigration.ts",
   "./_generated/**/*.*s",
 ]);
+
+test("new-operation epoch admission fails closed for missing or malformed lifecycle state", () => {
+  expect(communityAcceptsNewOperationsAtGeneration({
+    community: { lifecycleStatus: "active", lifecycleGeneration: 3 },
+    expectedGeneration: 3,
+  })).toBe(true);
+  for (const community of [
+    null,
+    { lifecycleStatus: "sunsetting", lifecycleGeneration: 3 },
+    { lifecycleStatus: "active", lifecycleGeneration: 4 },
+    { lifecycleStatus: "invalid", lifecycleGeneration: 3 },
+    { lifecycleStatus: "active", lifecycleGeneration: -1 },
+  ]) {
+    expect(communityAcceptsNewOperationsAtGeneration({
+      community: community as any,
+      expectedGeneration: 3,
+    })).toBe(false);
+  }
+});
 
 async function createFixture(t: ReturnType<typeof convexTest>) {
   return await t.run(async (ctx) => {

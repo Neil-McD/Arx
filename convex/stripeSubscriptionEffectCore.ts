@@ -111,12 +111,41 @@ function providerStatusOf(subscription: StripeSubscriptionLike | null | undefine
   return String(subscription?.status ?? "").trim().toLowerCase();
 }
 
-function stripeOptions(identity: StripeSubscriptionIdentity):
+export function stripeProviderOptions(scope: StripeSubscriptionAccountScope):
   | { stripeAccount: string }
   | undefined {
-  return identity.accountScope.kind === "connected"
-    ? { stripeAccount: identity.accountScope.providerAccountId }
+  return scope.kind === "connected"
+    ? { stripeAccount: scope.providerAccountId }
     : undefined;
+}
+
+export type StripeProviderErrorDisposition = {
+  state: "verified_absent" | "retryable" | "indeterminate" | "blocked";
+  errorCode: string;
+};
+
+export function classifyStripeProviderError(args: {
+  error: unknown;
+  mutationAttempted: boolean;
+}): StripeProviderErrorDisposition {
+  const evidence = errorEvidence(args.error);
+  if (evidence.statusCode === 404 || evidence.code === "resource_missing") {
+    return {
+      state: "verified_absent",
+      errorCode: "stripe_object_not_found_in_bound_scope",
+    };
+  }
+  if (args.mutationAttempted) {
+    return { state: "indeterminate", errorCode: evidence.code };
+  }
+  if (
+    evidence.statusCode === 429 ||
+    (evidence.statusCode !== null && evidence.statusCode >= 500) ||
+    evidence.statusCode === null
+  ) {
+    return { state: "retryable", errorCode: evidence.code };
+  }
+  return { state: "blocked", errorCode: evidence.code };
 }
 
 function result(args: {
@@ -145,8 +174,11 @@ function classifyProviderError(args: {
   intent: StripeSubscriptionEffectIntent;
   mutationAttempted: boolean;
 }): StripeSubscriptionEffectResult {
-  const evidence = errorEvidence(args.error);
-  if (evidence.statusCode === 404 || evidence.code === "resource_missing") {
+  const disposition = classifyStripeProviderError({
+    error: args.error,
+    mutationAttempted: args.mutationAttempted,
+  });
+  if (disposition.state === "verified_absent") {
     return result({
       identity: args.identity,
       intent: args.intent,
@@ -154,31 +186,11 @@ function classifyProviderError(args: {
       errorCode: "stripe_subscription_not_found_in_bound_scope",
     });
   }
-  if (args.mutationAttempted) {
-    return result({
-      identity: args.identity,
-      intent: args.intent,
-      state: "indeterminate",
-      errorCode: evidence.code,
-    });
-  }
-  if (
-    evidence.statusCode === 429 ||
-    (evidence.statusCode !== null && evidence.statusCode >= 500) ||
-    evidence.statusCode === null
-  ) {
-    return result({
-      identity: args.identity,
-      intent: args.intent,
-      state: "retryable",
-      errorCode: evidence.code,
-    });
-  }
   return result({
     identity: args.identity,
     intent: args.intent,
-    state: "blocked",
-    errorCode: evidence.code,
+    state: disposition.state,
+    errorCode: disposition.errorCode,
   });
 }
 
@@ -270,7 +282,7 @@ export async function applyStripeSubscriptionEffect(args: {
   identity: StripeSubscriptionIdentity;
   intent: StripeSubscriptionEffectIntent;
 }): Promise<StripeSubscriptionEffectResult> {
-  const options = stripeOptions(args.identity);
+  const options = stripeProviderOptions(args.identity.accountScope);
   let subscription: StripeSubscriptionLike;
   try {
     subscription = await args.stripe.subscriptions.retrieve(

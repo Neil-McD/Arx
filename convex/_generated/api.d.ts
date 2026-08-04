@@ -222,6 +222,7 @@ import type * as runtimeWorkspaceSessionDisposal from "../runtimeWorkspaceSessio
 import type * as settings from "../settings.js";
 import type * as skillCore from "../skillCore.js";
 import type * as skillPackages from "../skillPackages.js";
+import type * as stripeCheckoutEffectCore from "../stripeCheckoutEffectCore.js";
 import type * as stripeConnectAccountCore from "../stripeConnectAccountCore.js";
 import type * as stripeCore from "../stripeCore.js";
 import type * as stripeCustomers from "../stripeCustomers.js";
@@ -466,6 +467,7 @@ declare const fullApi: ApiFromModules<{
   settings: typeof settings;
   skillCore: typeof skillCore;
   skillPackages: typeof skillPackages;
+  stripeCheckoutEffectCore: typeof stripeCheckoutEffectCore;
   stripeConnectAccountCore: typeof stripeConnectAccountCore;
   stripeCore: typeof stripeCore;
   stripeCustomers: typeof stripeCustomers;

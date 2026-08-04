@@ -51,6 +51,7 @@ run_step "Direct-message contract proof" npm run check:direct-messages-contract-
 run_step "Direct-message typing behavior" npm run check:direct-message-typing-presence-behavior
 run_step "Community subscription lifecycle policy proof" npm run check:community-subscription-lifecycle-policy-proof
 run_step "Community lifecycle operation kernel proof" npm run check:community-lifecycle-operation-kernel-proof
+run_step "Community archive checkout race proof" npm run check:community-archive-checkout-race-proof
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
 run_step "Canonical operation surface proof" npm run check:canonical-operation-surface-proof
 run_step "Community semantic repository proof" npm run check:community-semantic-repository-proof

@@ -85,6 +85,17 @@ identities, and fail closed for incomplete Stripe identity or unsupported
 active external subscriptions. This foundation does not yet execute an archive
 operation or authorize a public archive command.
 
+Checkout creation and completion use the same lifecycle epoch boundary. If an
+archive begins after Stripe checkout creation, the provider checkout identity
+is persisted before local quarantine and synchronous compensation. Every
+checkout completion rechecks lifecycle inside the persistence transaction; a
+stale community or founder checkout is expired locally, cannot grant access or
+funding, and its exact-scope provider subscription is canceled idempotently by
+the webhook path. Local quarantine never fabricates a local provider-canceled
+status before Stripe proves that outcome. Existing founder subscriptions remain
+eligible for paid-through lifecycle updates; only a new stale checkout is
+quarantined.
+
 ## Migration
 
 The internal audit and backfill are bounded, cursor-paginated, idempotent, and
@@ -101,7 +112,8 @@ explicit `active` lane through the lifecycle index.
 
 - Public archive and restore commands.
 - Operation claiming, retry execution, and provider work receipts.
-- Archive-worker Stripe cancellation or checkout expiration.
+- Archive-worker bulk Stripe cancellation and expiration for provider objects
+  that predate the archive request.
 - Background worker, scheduled-job, and email containment.
 - Archive and restore UI.
 - Paid-community sunsetting execution.

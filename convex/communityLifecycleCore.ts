@@ -112,6 +112,21 @@ export function requireMatchingCommunityLifecycleGeneration(args: {
   return currentGeneration;
 }
 
+export function communityAcceptsNewOperationsAtGeneration(args: {
+  community: CommunityLifecycleLike | null | undefined;
+  expectedGeneration: unknown;
+}): boolean {
+  if (!args.community) return false;
+  try {
+    if (!communityAcceptsNewOperations(args.community)) return false;
+    return normalizeCommunityLifecycleGeneration(
+      args.community.lifecycleGeneration,
+    ) === normalizeCommunityLifecycleGeneration(args.expectedGeneration);
+  } catch {
+    return false;
+  }
+}
+
 export function assertCommunityMayBeArchived(
   community: CommunityLifecycleLike,
 ): void {

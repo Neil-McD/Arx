@@ -1729,3 +1729,85 @@ test("Stripe founder subscription sync rejects ownership changes before entitlem
     else process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = priorPriceId;
   }
 });
+
+test("archive races quarantine founder checkout without creating funding entitlement", async () => {
+  const priorPriceId = process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
+  process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = "price_founder_archive_race";
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+      const ownerId = await insertUser(ctx, "archive-race", 900_000);
+      const communityId = await insertCommunity(
+        ctx,
+        ownerId,
+        "archive-race",
+        900_000,
+        "legacy_byok_allowed",
+      );
+      await ctx.db.patch(communityId, {
+        lifecycleStatus: "active",
+        lifecycleGeneration: 4,
+      });
+      return { ownerId, communityId };
+    });
+    await t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-archive-race",
+        ownerUserId: fixture.ownerId,
+        communityId: fixture.communityId,
+        expiresAt: 9_000_000,
+        nowMs: 900_000,
+      },
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.communityId, {
+        lifecycleStatus: "sunsetting",
+        lifecycleGeneration: 5,
+        updatedAt: 901_000,
+      });
+    });
+    const result = await t.mutation(
+      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+      {
+        localSessionId: "founder-checkout-archive-race",
+        providerCheckoutSessionId: "cs_founder_archive_race",
+        providerCustomerId: "cus_founder_archive_race",
+        providerSubscriptionId: "sub_founder_archive_race",
+        providerPriceId: "price_unmanaged_stale_archive_race",
+        subscriptionStatus: "active",
+        currentPeriodStartAt: 902_000,
+        currentPeriodEndAt: 3_292_902_000,
+        cancelAtPeriodEnd: false,
+        providerEventCreatedAt: 902_000,
+      },
+    );
+    expect(result).toMatchObject({ ok: true, quarantined: true });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("founderSubscriptions").collect()).toHaveLength(0);
+      expect(await ctx.db.query("founderUsageCycles").collect()).toHaveLength(0);
+      const checkout = await ctx.db
+        .query("checkoutSessions")
+        .withIndex("by_sessionId", (q: any) =>
+          q.eq("sessionId", "founder-checkout-archive-race"),
+        )
+        .unique();
+      expect(checkout).toMatchObject({
+        status: "expired",
+        providerCheckoutSessionId: "cs_founder_archive_race",
+        providerSubscriptionId: "sub_founder_archive_race",
+        providerPriceId: "price_unmanaged_stale_archive_race",
+      });
+      expect(checkout?.communitySubscriptionStatus).not.toBe("canceled");
+      const community = await ctx.db.get(fixture.communityId);
+      expect(community).toMatchObject({
+        lifecycleStatus: "sunsetting",
+        lifecycleGeneration: 5,
+        inferenceFundingPolicy: "legacy_byok_allowed",
+      });
+    });
+  } finally {
+    if (priorPriceId === undefined) delete process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
+    else process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = priorPriceId;
+  }
+});
