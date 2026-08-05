@@ -3523,7 +3523,7 @@
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
-  border-bottom: 3px solid var(--community-chat-surface);
+  border-bottom: 2px solid var(--community-chat-surface);
   background: color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%);
 }
 
