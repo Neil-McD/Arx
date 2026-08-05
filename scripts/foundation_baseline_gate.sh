@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=59
+TOTAL_STEPS=61
 CURRENT_STEP=1
 
 run_step() {
@@ -49,6 +49,8 @@ run_step "Community presence lease proof" npm run check:community-presence-lease
 run_step "Community typing presence proof" npm run check:community-typing-presence-proof
 run_step "Direct-message contract proof" npm run check:direct-messages-contract-proof
 run_step "Direct-message typing behavior" npm run check:direct-message-typing-presence-behavior
+run_step "Community lifecycle foundation proof" npm run check:community-lifecycle-foundation-proof
+run_step "Community lifecycle containment proof" npm run check:community-lifecycle-containment-proof
 run_step "Community subscription lifecycle policy proof" npm run check:community-subscription-lifecycle-policy-proof
 run_step "Community lifecycle operation kernel proof" npm run check:community-lifecycle-operation-kernel-proof
 run_step "Community inactive lifecycle UX proof" npm run check:community-lifecycle-inactive-ux-proof
