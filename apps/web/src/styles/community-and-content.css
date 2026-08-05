@@ -3602,19 +3602,13 @@
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border-default));
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent) 18%, var(--bg-card-solid) 82%);
+  border: 0;
+  background: inherit;
   color: var(--accent);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
   cursor: pointer;
-}
-
-.community-channel-pinned-root-open:hover,
-.community-channel-pinned-root-open:focus-visible {
-  background: color-mix(in srgb, var(--accent) 26%, var(--bg-card-solid) 74%);
 }
 
 .community-channel-pinned-root-open:focus-visible {
