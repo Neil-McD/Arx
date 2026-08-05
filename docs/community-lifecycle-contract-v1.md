@@ -141,7 +141,13 @@ orchestration authority. A bounded internal cron claims due operations with a
 lease, reclaims expired leases, and retries transient or indeterminate provider
 outcomes with bounded exponential backoff. A blocked provider outcome or an
 exhausted retry budget leaves a terminal failed receipt and the community
-contained in `archiving` for explicit operator repair.
+contained in `archiving` for explicit operator repair. Repair uses one
+operator-authorized exact-operation command. It compare-and-sets the inspected
+failed receipt, records the previous terminal evidence in the critical audit
+ledger, resets only orchestration fields, and returns the same operation to the
+canonical worker. It never changes community lifecycle, subscription, checkout,
+membership, or provider state directly. Repeated requests require one bounded
+idempotency key and cannot reopen a newer failure from stale diagnostics.
 
 The worker handles one provider effect at a time. It cancels founder platform
 subscriptions in platform scope, community-member subscriptions in their exact

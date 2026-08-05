@@ -54,8 +54,8 @@ assert.match(
 );
 assert.equal(
   operations.match(/= mutation\(/g)?.length ?? 0,
-  1,
-  "the lifecycle operation module must expose exactly one public mutation",
+  2,
+  "the lifecycle operation module must expose one owner archive command and one operator recovery command",
 );
 assert.doesNotMatch(
   operations,
@@ -66,6 +66,26 @@ assert.match(
   operations,
   /getMyCommunityArchiveOperationStatus = query[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityOwnerAnyLifecycle/,
   "only the authenticated owner may inspect archive operation status",
+);
+assert.match(
+  operations,
+  /getCommunityArchiveOperationForOperator = query[\s\S]*requireOperatorRole\(ctx, args\.authSubject, "operator"\)[\s\S]*ctx\.db\.get\(args\.operationId\)/,
+  "operator diagnosis must be an authorized exact operation lookup",
+);
+assert.match(
+  operations,
+  /requeueFailedCommunityArchiveOperationForOperator = mutation[\s\S]*requireOperatorRole[\s\S]*operation\.state !== "failed"[\s\S]*community\.lifecycleStatus !== "archiving"[\s\S]*recordCriticalAuditEvent[\s\S]*state: "requested"/,
+  "operator recovery must fail closed and only reopen the canonical operation",
+);
+assert.match(
+  operations,
+  /expectedFailureCompletedAt[\s\S]*community_archive_requeue_failure_stale/,
+  "operator recovery must compare-and-set the inspected terminal failure",
+);
+assert.match(
+  operations,
+  /community_archive_requeued:[\s\S]*by_eventKey[\s\S]*community_archive_requeue_idempotency_conflict/,
+  "operator recovery must be idempotent and conflict-safe",
 );
 assert.match(
   operations,

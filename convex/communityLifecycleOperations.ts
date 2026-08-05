@@ -3,18 +3,37 @@ import { paginationOptsValidator } from "convex/server";
 
 import { mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
+import { recordCriticalAuditEvent } from "./criticalAudit";
 import {
   normalizeCommunityLifecycleGeneration,
   normalizeCommunityLifecycleStatus,
   requireCommunityOwnerAnyLifecycle,
   resolveCommunityArchiveBeginPlan,
 } from "./communityLifecycleCore";
+import { requireOperatorRole } from "./operatorAccess";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = [
   "active",
   "past_due",
   "cancel_at_period_end",
 ] as const;
+
+const COMMUNITY_ARCHIVE_REQUEUE_IDEMPOTENCY_KEY_PATTERN =
+  /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/;
+
+function requireSafeNonnegativeInteger(value: number, errorCode: string): void {
+  if (!Number.isSafeInteger(value) || value < 0) {
+    throw new Error(errorCode);
+  }
+}
+
+function normalizeArchiveRequeueIdempotencyKey(value: string): string {
+  const normalized = String(value).trim();
+  if (!COMMUNITY_ARCHIVE_REQUEUE_IDEMPOTENCY_KEY_PATTERN.test(normalized)) {
+    throw new Error("community_archive_requeue_idempotency_key_invalid");
+  }
+  return normalized;
+}
 
 async function assertCommunityArchiveBillingPreflight(args: {
   ctx: any;
@@ -189,6 +208,21 @@ function mapArchiveOperationReceipt(operation: any) {
     : null;
 }
 
+function mapOperatorArchiveOperation(args: {
+  community: any | null;
+  operation: any;
+  idempotent: boolean;
+}) {
+  return {
+    ok: true,
+    idempotent: args.idempotent,
+    community: args.community
+      ? mapCommunityLifecycleIdentity(args.community)
+      : null,
+    operation: mapArchiveOperationReceipt(args.operation),
+  };
+}
+
 function mapCommunityLifecycleIdentity(community: any) {
   return {
     community_id: String(community._id),
@@ -297,6 +331,151 @@ export const listMyInactiveCommunityLifecycleRows = query({
       continue_cursor: page.continueCursor,
       is_done: page.isDone,
     };
+  },
+});
+
+export const getCommunityArchiveOperationForOperator = query({
+  args: {
+    operationId: v.id("communityLifecycleOperations"),
+    authSubject: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await requireOperatorRole(ctx, args.authSubject, "operator");
+    const operation = await ctx.db.get(args.operationId);
+    if (!operation || operation.kind !== "archive") {
+      throw new Error("community_archive_operation_missing");
+    }
+    const community = await ctx.db.get(operation.communityId);
+    return mapOperatorArchiveOperation({
+      community,
+      operation,
+      idempotent: false,
+    });
+  },
+});
+
+export const requeueFailedCommunityArchiveOperationForOperator = mutation({
+  args: {
+    operationId: v.id("communityLifecycleOperations"),
+    expectedGeneration: v.number(),
+    expectedFailureCompletedAt: v.number(),
+    idempotencyKey: v.string(),
+    authSubject: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    const operator = await requireOperatorRole(
+      ctx,
+      args.authSubject,
+      "operator",
+    );
+    requireSafeNonnegativeInteger(
+      args.expectedGeneration,
+      "community_archive_requeue_generation_invalid",
+    );
+    requireSafeNonnegativeInteger(
+      args.expectedFailureCompletedAt,
+      "community_archive_requeue_failure_timestamp_invalid",
+    );
+    const idempotencyKey = normalizeArchiveRequeueIdempotencyKey(
+      args.idempotencyKey,
+    );
+    const operation = await ctx.db.get(args.operationId);
+    if (!operation || operation.kind !== "archive") {
+      throw new Error("community_archive_operation_missing");
+    }
+    if (operation.lifecycleGeneration !== args.expectedGeneration) {
+      throw new Error("community_archive_requeue_generation_stale");
+    }
+
+    const operationId = String(operation._id);
+    const auditEventKey =
+      `community_archive_requeued:${operationId}:${idempotencyKey}`;
+    const existingAudit = await ctx.db
+      .query("criticalAuditEvents")
+      .withIndex("by_eventKey", (q) => q.eq("eventKey", auditEventKey))
+      .first();
+    if (existingAudit) {
+      const metadata = existingAudit.metadata as Record<string, unknown> | undefined;
+      if (
+        existingAudit.eventType !== "community_archive_requeued" ||
+        String(existingAudit.actorUserId ?? "") !== String(operator.dbUserId) ||
+        String(existingAudit.communityId ?? "") !== String(operation.communityId) ||
+        existingAudit.providerObjectId !== operationId ||
+        metadata?.lifecycleGeneration !== args.expectedGeneration ||
+        metadata?.previousFailureCompletedAt !==
+          args.expectedFailureCompletedAt
+      ) {
+        throw new Error("community_archive_requeue_idempotency_conflict");
+      }
+      const community = await ctx.db.get(operation.communityId);
+      const currentOperation = await ctx.db.get(args.operationId);
+      if (!currentOperation) {
+        throw new Error("community_archive_operation_missing");
+      }
+      return mapOperatorArchiveOperation({
+        community,
+        operation: currentOperation,
+        idempotent: true,
+      });
+    }
+
+    if (operation.state !== "failed") {
+      throw new Error("community_archive_operation_not_failed");
+    }
+    if (operation.completedAt !== args.expectedFailureCompletedAt) {
+      throw new Error("community_archive_requeue_failure_stale");
+    }
+    if (operation.leaseId !== undefined || operation.leaseExpiresAt !== undefined) {
+      throw new Error("community_archive_requeue_lease_present");
+    }
+    const community = await ctx.db.get(operation.communityId);
+    if (!community) throw new Error("community_not_found");
+    if (
+      community.lifecycleStatus !== "archiving" ||
+      community.lifecycleGeneration !== operation.lifecycleGeneration
+    ) {
+      throw new Error("community_archive_lifecycle_mismatch");
+    }
+
+    const nowMs = Date.now();
+    await recordCriticalAuditEvent(ctx, {
+      eventKey: auditEventKey,
+      eventType: "community_archive_requeued",
+      severity: "warning",
+      status: "succeeded",
+      actorUserId: operator.dbUserId,
+      communityId: operation.communityId,
+      provider: "polynet",
+      providerObjectId: operationId,
+      metadata: {
+        lifecycleGeneration: operation.lifecycleGeneration,
+        previousAttemptCount: operation.attemptCount,
+        previousLastAttemptAt: operation.lastAttemptAt,
+        previousFailureCompletedAt: operation.completedAt,
+        previousErrorCode: operation.errorCode,
+      },
+      createdAt: nowMs,
+    });
+    await ctx.db.patch(operation._id, {
+      state: "requested",
+      attemptCount: 0,
+      nextAttemptAt: nowMs,
+      lastAttemptAt: undefined,
+      leaseId: undefined,
+      leaseExpiresAt: undefined,
+      errorCode: undefined,
+      completedAt: undefined,
+      updatedAt: nowMs,
+    });
+    const requeuedOperation = await ctx.db.get(operation._id);
+    if (!requeuedOperation) {
+      throw new Error("community_archive_operation_missing");
+    }
+    return mapOperatorArchiveOperation({
+      community,
+      operation: requeuedOperation,
+      idempotent: false,
+    });
   },
 });
 

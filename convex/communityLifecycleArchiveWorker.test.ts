@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { expect, test, vi } from "vitest";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import { communityArchiveRetryDelayMs } from "./communityLifecycleArchiveWorker";
 import { beginCommunityArchiveOperationCore } from "./communityLifecycleOperations";
@@ -35,6 +35,21 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       displayName: "Archive worker member",
       handle: "archive-worker-member",
       normalizedHandle: "archive-worker-member",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    const operatorId = await ctx.db.insert("users", {
+      authSubject: "archive-worker-operator",
+      displayName: "Archive worker operator",
+      handle: "archive-worker-operator",
+      normalizedHandle: "archive-worker-operator",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("operatorRoles", {
+      userId: operatorId,
+      role: "operator",
+      active: true,
       createdAt: 1_000,
       updatedAt: 1_000,
     });
@@ -73,7 +88,14 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: 1_000,
       updatedAt: 1_000,
     });
-    return { ownerId, memberId, communityId, membershipId, pricePointId };
+    return {
+      ownerId,
+      memberId,
+      operatorId,
+      communityId,
+      membershipId,
+      pricePointId,
+    };
   });
 }
 
@@ -576,6 +598,67 @@ test("the twelfth failed claim exhausts the retry budget while containment remai
     });
     await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
       lifecycleStatus: "archiving",
+    });
+  });
+});
+
+test("operator recovery returns the same terminal receipt to the canonical worker", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const claim = await beginAndClaim(t, fixture);
+  await t.mutation(archiveApi.releaseCommunityArchiveOperationInternal, {
+    operationId: claim.operationId,
+    leaseId: claim.leaseId,
+    nowMs: 2_001,
+    errorCode: "community_archive_provider_blocked:test_repaired",
+    terminal: true,
+  });
+
+  const recovered = await t
+    .withIdentity({ subject: "archive-worker-operator" })
+    .mutation(
+      (api as any).communityLifecycleOperations
+        .requeueFailedCommunityArchiveOperationForOperator,
+      {
+        operationId: claim.operationId,
+        expectedGeneration: 1,
+        expectedFailureCompletedAt: 2_001,
+        idempotencyKey: "archive-worker-requeue-0001",
+      },
+    );
+  expect(recovered).toMatchObject({
+    ok: true,
+    idempotent: false,
+    operation: {
+      operation_id: String(claim.operationId),
+      state: "requested",
+      attempt_count: 0,
+    },
+  });
+
+  const nextClaims = await t.mutation(
+    archiveApi.claimDueCommunityArchiveOperationsInternal,
+    { nowMs: recovered.operation.next_attempt_at, limit: 1 },
+  );
+  expect(nextClaims).toHaveLength(1);
+  expect(nextClaims[0]).toMatchObject({
+    operationId: claim.operationId,
+    lifecycleGeneration: 1,
+    attemptCount: 1,
+  });
+  await t.mutation(archiveApi.finalizeCommunityArchiveOperationInternal, {
+    operationId: nextClaims[0].operationId,
+    leaseId: nextClaims[0].leaseId,
+    nowMs: recovered.operation.next_attempt_at + 1,
+  });
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 1,
+    });
+    await expect(ctx.db.get(claim.operationId)).resolves.toMatchObject({
+      state: "succeeded",
+      attemptCount: 1,
     });
   });
 });

@@ -40,6 +40,36 @@ async function createOperationFixture(t: ReturnType<typeof convexTest>) {
       createdAt: 1_000,
       updatedAt: 1_000,
     });
+    const operatorId = await ctx.db.insert("users", {
+      authSubject: "archive-operation-operator",
+      displayName: "Archive operator",
+      handle: "archive-operation-operator",
+      normalizedHandle: "archive-operation-operator",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    const readonlyOperatorId = await ctx.db.insert("users", {
+      authSubject: "archive-operation-readonly",
+      displayName: "Archive readonly operator",
+      handle: "archive-operation-readonly",
+      normalizedHandle: "archive-operation-readonly",
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("operatorRoles", {
+      userId: operatorId,
+      role: "operator",
+      active: true,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    await ctx.db.insert("operatorRoles", {
+      userId: readonlyOperatorId,
+      role: "readonly",
+      active: true,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
     const communityId = await ctx.db.insert("communities", {
       ownerId,
       slug: "archive-operation-fixture",
@@ -135,6 +165,8 @@ async function createOperationFixture(t: ReturnType<typeof convexTest>) {
       ownerId,
       adminId,
       outsiderId,
+      operatorId,
+      readonlyOperatorId,
       communityId,
       adminMembershipId,
       pricePointId,
@@ -158,6 +190,43 @@ async function beginArchiveForTest(
   return await t.run(async (ctx) =>
     await beginCommunityArchiveOperationCore({ ctx, ...args }),
   );
+}
+
+async function failArchiveForTest(
+  t: ReturnType<typeof convexTest>,
+  fixture: Awaited<ReturnType<typeof createOperationFixture>>,
+  overrides: Partial<{
+    completedAt: number;
+    errorCode: string;
+    attemptCount: number;
+  }> = {},
+) {
+  const begun = await beginArchiveForTest(t, {
+    actorUserId: fixture.ownerId,
+    communityId: fixture.communityId,
+    expectedGeneration: 0,
+    nowMs: 2_000,
+  });
+  const completedAt = overrides.completedAt ?? 3_000;
+  await t.run(async (ctx) => {
+    await ctx.db.patch(begun.operation_id as any, {
+      state: "failed",
+      attemptCount: overrides.attemptCount ?? 12,
+      nextAttemptAt: completedAt,
+      lastAttemptAt: completedAt - 100,
+      leaseId: undefined,
+      leaseExpiresAt: undefined,
+      errorCode:
+        overrides.errorCode ?? "community_archive_provider_blocked:test_failure",
+      completedAt,
+      updatedAt: completedAt,
+    });
+  });
+  return {
+    operationId: begun.operation_id as any,
+    lifecycleGeneration: begun.lifecycle_generation,
+    completedAt,
+  };
 }
 
 test("archive begin is atomic, idempotent, and preserves community data", async () => {
@@ -348,6 +417,226 @@ test("only the authenticated owner can inspect the current archive operation", a
       { communityId: fixture.communityId },
     ),
   ).rejects.toThrow("verified_identity_required");
+});
+
+test("an operator can inspect and idempotently requeue one exact terminal archive failure", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  const failed = await failArchiveForTest(t, fixture);
+  const asOperator = t.withIdentity({ subject: "archive-operation-operator" });
+  const inspect = (api as any).communityLifecycleOperations
+    .getCommunityArchiveOperationForOperator;
+  const requeue = (api as any).communityLifecycleOperations
+    .requeueFailedCommunityArchiveOperationForOperator;
+
+  await expect(
+    asOperator.query(inspect, { operationId: failed.operationId }),
+  ).resolves.toMatchObject({
+    ok: true,
+    idempotent: false,
+    community: {
+      community_id: String(fixture.communityId),
+      slug: "archive-operation-fixture",
+      lifecycle_status: "archiving",
+      lifecycle_generation: 1,
+    },
+    operation: {
+      operation_id: String(failed.operationId),
+      state: "failed",
+      lifecycle_generation: 1,
+      attempt_count: 12,
+      completed_at: 3_000,
+      error_code: "community_archive_provider_blocked:test_failure",
+    },
+  });
+
+  for (const subject of [
+    "archive-operation-owner",
+    "archive-operation-admin",
+    "archive-operation-readonly",
+    "archive-operation-outsider",
+  ]) {
+    await expect(
+      t.withIdentity({ subject }).query(inspect, {
+        operationId: failed.operationId,
+      }),
+    ).rejects.toThrow("operator_access_forbidden");
+  }
+
+  const args = {
+    operationId: failed.operationId,
+    expectedGeneration: 1,
+    expectedFailureCompletedAt: 3_000,
+    idempotencyKey: "archive-requeue-0001",
+  };
+  await expect(asOperator.mutation(requeue, args)).resolves.toMatchObject({
+    ok: true,
+    idempotent: false,
+    community: {
+      lifecycle_status: "archiving",
+      lifecycle_generation: 1,
+    },
+    operation: {
+      operation_id: String(failed.operationId),
+      state: "requested",
+      attempt_count: 0,
+      last_attempt_at: null,
+      completed_at: null,
+      error_code: null,
+    },
+  });
+  await expect(asOperator.mutation(requeue, args)).resolves.toMatchObject({
+    ok: true,
+    idempotent: true,
+    operation: {
+      operation_id: String(failed.operationId),
+      state: "requested",
+    },
+  });
+  await expect(
+    asOperator.mutation(requeue, {
+      ...args,
+      expectedFailureCompletedAt: 3_001,
+    }),
+  ).rejects.toThrow("community_archive_requeue_idempotency_conflict");
+
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
+      lifecycleStatus: "archiving",
+      lifecycleGeneration: 1,
+      updatedAt: 2_000,
+    });
+    const operation = await ctx.db.get(failed.operationId);
+    expect(operation).toMatchObject({
+      state: "requested",
+      attemptCount: 0,
+    });
+    for (const field of [
+      "lastAttemptAt",
+      "leaseId",
+      "leaseExpiresAt",
+      "errorCode",
+      "completedAt",
+    ]) {
+      expect(operation).not.toHaveProperty(field);
+    }
+    const audits = await ctx.db
+      .query("criticalAuditEvents")
+      .withIndex("by_type_createdAt", (q) =>
+        q.eq("eventType", "community_archive_requeued"),
+      )
+      .collect();
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      status: "succeeded",
+      severity: "warning",
+      actorUserId: fixture.operatorId,
+      communityId: fixture.communityId,
+      provider: "polynet",
+      providerObjectId: String(failed.operationId),
+      metadata: {
+        lifecycleGeneration: 1,
+        previousAttemptCount: 12,
+        previousLastAttemptAt: 2_900,
+        previousFailureCompletedAt: 3_000,
+        previousErrorCode: "community_archive_provider_blocked:test_failure",
+      },
+    });
+  });
+});
+
+test("archive recovery fails closed on authority, stale evidence, leases, and lifecycle drift", async () => {
+  const requeue = (api as any).communityLifecycleOperations
+    .requeueFailedCommunityArchiveOperationForOperator;
+  const baseArgs = (operationId: any) => ({
+    operationId,
+    expectedGeneration: 1,
+    expectedFailureCompletedAt: 3_000,
+    idempotencyKey: "archive-requeue-edge-0001",
+  });
+
+  {
+    const t = convexTest(schema, modules);
+    const fixture = await createOperationFixture(t);
+    const failed = await failArchiveForTest(t, fixture);
+    await expect(
+      t.withIdentity({ subject: "archive-operation-owner" }).mutation(
+        requeue,
+        baseArgs(failed.operationId),
+      ),
+    ).rejects.toThrow("operator_access_forbidden");
+    await expect(
+      t.withIdentity({ subject: "archive-operation-operator" }).mutation(
+        requeue,
+        { ...baseArgs(failed.operationId), expectedGeneration: 2 },
+      ),
+    ).rejects.toThrow("community_archive_requeue_generation_stale");
+    await expect(
+      t.withIdentity({ subject: "archive-operation-operator" }).mutation(
+        requeue,
+        { ...baseArgs(failed.operationId), expectedFailureCompletedAt: 2_999 },
+      ),
+    ).rejects.toThrow("community_archive_requeue_failure_stale");
+    await expect(
+      t.withIdentity({ subject: "archive-operation-operator" }).mutation(
+        requeue,
+        { ...baseArgs(failed.operationId), idempotencyKey: "too-short" },
+      ),
+    ).rejects.toThrow("community_archive_requeue_idempotency_key_invalid");
+  }
+
+  {
+    const t = convexTest(schema, modules);
+    const fixture = await createOperationFixture(t);
+    const failed = await failArchiveForTest(t, fixture);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(failed.operationId, {
+        leaseId: "stale-but-inconsistent-lease",
+        leaseExpiresAt: 2_500,
+      });
+    });
+    await expect(
+      t.withIdentity({ subject: "archive-operation-operator" }).mutation(
+        requeue,
+        baseArgs(failed.operationId),
+      ),
+    ).rejects.toThrow("community_archive_requeue_lease_present");
+  }
+
+  {
+    const t = convexTest(schema, modules);
+    const fixture = await createOperationFixture(t);
+    const failed = await failArchiveForTest(t, fixture);
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.communityId, {
+        lifecycleStatus: "archived",
+        archivedAt: 3_000,
+      });
+    });
+    await expect(
+      t.withIdentity({ subject: "archive-operation-operator" }).mutation(
+        requeue,
+        baseArgs(failed.operationId),
+      ),
+    ).rejects.toThrow("community_archive_lifecycle_mismatch");
+  }
+
+  {
+    const t = convexTest(schema, modules);
+    const fixture = await createOperationFixture(t);
+    const begun = await beginArchiveForTest(t, {
+      actorUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+      nowMs: 2_000,
+    });
+    await expect(
+      t.withIdentity({ subject: "archive-operation-operator" }).mutation(
+        requeue,
+        baseArgs(begun.operation_id),
+      ),
+    ).rejects.toThrow("community_archive_operation_not_failed");
+  }
 });
 
 test("owner lifecycle management reads expose only inactive identity and current receipt state", async () => {
