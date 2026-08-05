@@ -7,6 +7,7 @@ import {
 } from "./authSession";
 import { readConvexUrl } from "./convexRuntime";
 import { normalizeGatewayNullableString, readGatewayConvexIdMaybe } from "./cloudGateway";
+import { readPersistedDistributionAttribution } from './distributionAttribution';
 
 export type ConvexAuthenticatedClientContext = {
   client: ConvexHttpClient;
@@ -119,6 +120,7 @@ export async function bootstrapConvexAuthenticatedClient(
         authState: "authenticated",
         authSubject,
         email: sessionEmail,
+        distributionAttribution: readPersistedDistributionAttribution() ?? undefined,
       })) as Record<string, unknown>;
     } catch (error) {
       rethrowBootstrapActorError(error);

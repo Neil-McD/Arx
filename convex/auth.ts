@@ -18,6 +18,7 @@ import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
 import {
   hasPlatformOwnerComplimentaryAccess,
 } from "./operatorEntitlementsCore";
+import { enqueueNewPolynetUserIdentify } from './distributionAttribution';
 
 type CanonicalTier = "free" | "architect";
 type EffectiveTier = "anon_free" | "auth_free" | "architect";
@@ -93,6 +94,12 @@ export const bootstrapActor = mutation({
     email: v.optional(v.string()),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
+    distributionAttribution: v.optional(
+      v.object({
+        anonymousId: v.optional(v.string()),
+        clickId: v.optional(v.string()),
+      }),
+    ),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -134,6 +141,14 @@ export const bootstrapActor = mutation({
       }
       const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
       const effectiveTier = resolveEffectiveTier({ authState: args.authState, canonicalTier });
+      const distributionAttribution = continuity.wouldCreateNewUser
+        ? await enqueueNewPolynetUserIdentify({
+            ctx,
+            userId: actor.dbUserId,
+            tracking: args.distributionAttribution,
+            nowMs,
+          })
+        : { enqueued: false, reason: 'existing_user' };
 
       return {
         authState: args.authState,
@@ -147,6 +162,7 @@ export const bootstrapActor = mutation({
         createdAt: actor.createdAt,
         updatedAt: actor.updatedAt,
         continuity,
+        distributionAttribution,
       };
     }
 

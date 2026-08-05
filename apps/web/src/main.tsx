@@ -8,6 +8,9 @@ import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTra
 import { bootConvexProbe } from "../../../shared/convexRuntime";
 import { buildTelemetryRouteLabel } from "../../../shared/routePrivacy";
 import { CommunityVisualIdentityRegistryProvider } from "../../../shared/CommunityVisualIdentityRegistry";
+import { captureDistributionAttributionFromLocation } from '../../../shared/distributionAttribution';
+
+captureDistributionAttributionFromLocation();
 
 type ErrorBoundaryState = {
   error: Error | null;
