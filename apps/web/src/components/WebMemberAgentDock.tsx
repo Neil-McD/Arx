@@ -28,6 +28,7 @@ import {
   parseMessageAttachments,
 } from "../../../../shared/communityMessageParsing";
 import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
+import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import {
   MEMBER_AGENT_IMAGE_ACCEPT,
@@ -53,7 +54,7 @@ import {
 import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
 import { uploadCloudMemberAgentImageFile } from "../../../../shared/cloudThreadsGateway";
 import {
-  describeMemberAgentSurface,
+  buildMemberAgentSurfacePresentation,
   type MemberAgentSurfaceContextV1,
 } from "../../../../shared/memberAgentSurfaceContext";
 import {
@@ -110,6 +111,10 @@ export type WebMemberAgentDockProps = {
   mobileRoot?: boolean;
   communityId: string | null;
   communityName: string | null;
+  communityAvatarUrl: string | null;
+  communityAvatarFocusX?: number | null;
+  communityAvatarFocusY?: number | null;
+  communityAvatarZoom?: number | null;
   surfaceContext: MemberAgentSurfaceContextV1 | null;
   session: AuthSession | null;
   ensureSession: (
@@ -1001,10 +1006,21 @@ function WebMemberAgentDock(props, ref) {
 
   if (!props.isVisible || !props.surfaceContext) return null;
 
-  const surfaceLabel = describeMemberAgentSurface(
+  const presentation = buildMemberAgentSurfacePresentation(
     props.surfaceContext,
     props.communityName,
   );
+  const communityName = String(props.communityName ?? "").trim();
+  const communityAvatarProps = presentation.communityIntelligenceName
+    ? {
+        communityId: props.communityId,
+        name: communityName,
+        imageUrl: props.communityAvatarUrl,
+        focusX: props.communityAvatarFocusX,
+        focusY: props.communityAvatarFocusY,
+        zoom: props.communityAvatarZoom,
+      }
+    : null;
 
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
@@ -1021,28 +1037,36 @@ function WebMemberAgentDock(props, ref) {
           type="button"
           className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
           onClick={() => setIsOpen((open) => !open)}
-          aria-label={isOpen ? "Close your agent" : "Open your agent"}
-          title={isOpen ? "Close your agent" : "Open your agent"}
+          aria-label={isOpen ? presentation.closeLabel : presentation.openLabel}
+          title={isOpen ? presentation.closeLabel : presentation.openLabel}
           aria-expanded={isOpen}
         >
           {isOpen ? <X aria-hidden="true" /> : <Sparkles aria-hidden="true" />}
         </button>
       ) : null}
 
-      <section className="member-agent-dock-panel" aria-label="Your Polynet agent">
+      <section className="member-agent-dock-panel" aria-label={presentation.title}>
         <header className="member-agent-dock-header">
           <div className="member-agent-dock-identity">
-            <span className="member-agent-dock-avatar" aria-hidden="true">
-              <Sparkles />
-            </span>
+            {communityAvatarProps ? (
+              <CommunityAvatar
+                {...communityAvatarProps}
+                className="member-agent-dock-avatar"
+                aria-hidden={true}
+              />
+            ) : (
+              <span className="member-agent-dock-avatar" aria-hidden="true">
+                <Sparkles />
+              </span>
+            )}
             <span>
-              <strong>Your agent</strong>
+              <strong>{presentation.title}</strong>
               <small>
                 {isUploadingAttachments
                   ? "Uploading images"
                   : turnIsActive
                     ? "Working"
-                    : `${surfaceLabel} context`}
+                    : `${presentation.surfaceLabel} context`}
               </small>
             </span>
           </div>
@@ -1082,11 +1106,17 @@ function WebMemberAgentDock(props, ref) {
           !isPreparing &&
           !isStartingNewChat ? (
             <div className="member-agent-dock-empty">
-              <MessageCircle aria-hidden="true" />
+              {communityAvatarProps ? (
+                <CommunityAvatar
+                  {...communityAvatarProps}
+                  className="member-agent-dock-empty-avatar"
+                  aria-hidden={true}
+                />
+              ) : (
+                <MessageCircle aria-hidden="true" />
+              )}
               <p>
-                {props.surfaceContext.kind === "discover"
-                  ? "Ask your agent to help you explore communities."
-                  : `Ask your agent about ${surfaceLabel}.`}
+                {presentation.emptyLabel}
               </p>
             </div>
           ) : null}
@@ -1112,7 +1142,7 @@ function WebMemberAgentDock(props, ref) {
           {isPreparing ? (
             <div className="member-agent-dock-reasoning">
               <LoaderCircle aria-hidden="true" />
-              <span>Opening your agent</span>
+              <span>{presentation.loadingLabel}</span>
             </div>
           ) : null}
 
@@ -1136,7 +1166,7 @@ function WebMemberAgentDock(props, ref) {
               ) : turnIsActive ? (
                 <div className="member-agent-dock-reasoning">
                   <LoaderCircle aria-hidden="true" />
-                  <span>Getting oriented in {surfaceLabel}</span>
+                  <span>Getting oriented in {presentation.surfaceLabel}</span>
                 </div>
               ) : null}
               {shouldRenderStreamedText ? (
@@ -1233,8 +1263,8 @@ function WebMemberAgentDock(props, ref) {
                   event.currentTarget.form?.requestSubmit();
                 }
               }}
-              placeholder={`Message your agent in ${surfaceLabel}`}
-              aria-label="Message your agent"
+              placeholder={presentation.composerLabel}
+              aria-label={presentation.composerLabel}
               aria-describedby={showOnboardingAgentFocus ? onboardingDescriptionId : undefined}
               rows={1}
               maxLength={8000}

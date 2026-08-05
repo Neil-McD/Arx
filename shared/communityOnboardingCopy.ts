@@ -1,10 +1,12 @@
 import type { CommunityOnboardingCopyCue } from "./communityOnboarding";
+import { formatCommunityIntelligenceName } from "./memberAgentSurfaceContext";
 
 export function buildCommunityOnboardingCopy(params: {
   cue: CommunityOnboardingCopyCue;
   communityName: string;
   hasVideo: boolean;
 }): string {
+  const intelligenceName = formatCommunityIntelligenceName(params.communityName) ?? "Community Intelligence";
   if (params.cue === "community_composer") {
     return [
       `Let’s introduce you to ${params.communityName}.`,
@@ -13,13 +15,13 @@ export function buildCommunityOnboardingCopy(params: {
   }
   if (params.cue === "personal_agent_intro") {
     return [
-      "This is your personal agent.",
-      `It already has ${params.communityName} context. Send the focused question below to discover one useful first action in the community.`,
+      `Meet ${intelligenceName}.`,
+      `It understands ${params.communityName} context. Send the focused question below to discover one useful first action in the community.`,
     ].join("\n\n");
   }
   if (params.cue === "personal_agent_review") {
     return [
-      "Your personal agent has answered.",
+      `${intelligenceName} has answered.`,
       "Read its response and keep chatting if you want. When the next move makes sense, continue to the final step.",
     ].join("\n\n");
   }
