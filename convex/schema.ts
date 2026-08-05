@@ -48,6 +48,7 @@ export default defineSchema({
     downstreamViewerId: v.optional(v.string()),
     downstreamLeadEventId: v.optional(v.string()),
     downstreamLeadCreated: v.optional(v.boolean()),
+    downstreamReplayed: v.optional(v.boolean()),
     deliveredAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),

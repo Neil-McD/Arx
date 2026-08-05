@@ -10,6 +10,7 @@ export type DistributionAttributionReceipt = {
   viewerId: string;
   leadEventId: string;
   leadCreated: boolean;
+  replayed: boolean;
 };
 
 export function normalizeDistributionAttributionId(value: unknown): string | undefined {
@@ -56,9 +57,18 @@ export function parseDistributionAttributionReceipt(
   if (typeof row.lead_created !== 'boolean') {
     return { ok: false, errorCode: 'distribution_engineer_receipt_created_invalid' };
   }
+  if (typeof row.replayed !== 'boolean' || row.replayed === row.lead_created) {
+    return { ok: false, errorCode: 'distribution_engineer_receipt_replay_invalid' };
+  }
   return {
     ok: true,
-    receipt: { sourceEventId, viewerId, leadEventId, leadCreated: row.lead_created },
+    receipt: {
+      sourceEventId,
+      viewerId,
+      leadEventId,
+      leadCreated: row.lead_created,
+      replayed: row.replayed,
+    },
   };
 }
 
