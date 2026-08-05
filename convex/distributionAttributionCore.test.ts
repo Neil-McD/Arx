@@ -1,9 +1,13 @@
 import { describe, expect, it } from 'vitest';
 import {
   DISTRIBUTION_ATTRIBUTION_MAX_ATTEMPTS,
+  DISTRIBUTION_ATTRIBUTION_SOURCE_EVENT_PREFIX,
+  createDistributionAttributionSourceEventId,
   distributionAttributionDeliveryKey,
   distributionAttributionRetryDelayMs,
   normalizeDistributionAttributionId,
+  normalizeDistributionAttributionSourceEventId,
+  parseDistributionAttributionReceipt,
   shouldRetryDistributionAttribution,
 } from './distributionAttributionCore';
 
@@ -17,6 +21,46 @@ describe('distribution attribution delivery policy', () => {
       '883c5850-e04d-4c60-9869-024102985541',
     );
     expect(normalizeDistributionAttributionId('lead@example.com')).toBeUndefined();
+  });
+
+  it('creates opaque source events and accepts only exact typed downstream receipts', () => {
+    const sourceEventId = createDistributionAttributionSourceEventId();
+    expect(sourceEventId).toMatch(
+      /^polynet\.user_created\.v1:[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/,
+    );
+    expect(normalizeDistributionAttributionSourceEventId(sourceEventId)).toBe(sourceEventId);
+    expect(normalizeDistributionAttributionSourceEventId(`${DISTRIBUTION_ATTRIBUTION_SOURCE_EVENT_PREFIX}bad`))
+      .toBeUndefined();
+
+    const receipt = {
+      ok: true,
+      source_event_id: sourceEventId,
+      viewer_id: '70711105-1620-426d-938f-9ebf48eaef91',
+      lead_event_id: '87be5160-6fb4-4bf8-8cc4-1426bb55cd76',
+      lead_created: true,
+    };
+    expect(parseDistributionAttributionReceipt(receipt, sourceEventId)).toEqual({
+      ok: true,
+      receipt: {
+        sourceEventId,
+        viewerId: receipt.viewer_id,
+        leadEventId: receipt.lead_event_id,
+        leadCreated: true,
+      },
+    });
+    expect(parseDistributionAttributionReceipt({}, sourceEventId)).toEqual({
+      ok: false,
+      errorCode: 'distribution_engineer_receipt_not_ok',
+    });
+    expect(
+      parseDistributionAttributionReceipt(
+        { ...receipt, source_event_id: createDistributionAttributionSourceEventId() },
+        sourceEventId,
+      ),
+    ).toEqual({
+      ok: false,
+      errorCode: 'distribution_engineer_receipt_source_event_mismatch',
+    });
   });
 
   it('retries only transient failures with a bounded backoff', () => {
