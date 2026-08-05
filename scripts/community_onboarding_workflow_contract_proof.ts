@@ -98,16 +98,22 @@ assert.match(buildCommunityOnboardingCopy({
   communityName: "Polynet",
   hasVideo: false,
 }), /introduce you to Polynet/);
-assert.match(buildCommunityOnboardingCopy({
+assert.equal(buildCommunityOnboardingCopy({
   cue: "personal_agent_intro",
   communityName: "Polynet",
   hasVideo: false,
-}), /personal agent/);
-assert.match(buildCommunityOnboardingCopy({
+}), [
+  "Meet Polynet Intelligence.",
+  "It understands Polynet context. Send the focused question below to discover one useful first action in the community.",
+].join("\n\n"));
+assert.equal(buildCommunityOnboardingCopy({
   cue: "personal_agent_review",
   communityName: "Polynet",
   hasVideo: false,
-}), /has answered/);
+}), [
+  "Polynet Intelligence has answered.",
+  "Read its response and keep chatting if you want. When the next move makes sense, continue to the final step.",
+].join("\n\n"));
 assert.match(buildCommunityOnboardingCopy({
   cue: "mcp_handoff",
   communityName: "Polynet",

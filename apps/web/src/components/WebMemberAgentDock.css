@@ -150,7 +150,8 @@
 }
 
 .member-agent-dock-launcher img,
-.member-agent-dock-avatar img {
+.member-agent-dock-avatar img,
+.member-agent-dock-empty-avatar img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -296,10 +297,21 @@
   height: 22px;
 }
 
+.member-agent-dock-empty-avatar {
+  width: 48px;
+  height: 48px;
+  overflow: hidden;
+  background: var(--surface-card);
+  border: 1px solid var(--stroke-default);
+  border-radius: 12px;
+}
+
 .member-agent-dock-empty p {
   max-width: 240px;
   margin: 0;
-  font-size: 13px;
+  color: var(--text-ink-secondary);
+  font-size: 14px;
+  font-weight: 500;
   line-height: 1.5;
 }
 

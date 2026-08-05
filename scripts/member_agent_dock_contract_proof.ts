@@ -28,7 +28,9 @@ import { buildRuntimeContextManifest } from "../shared/runtimeContextManifest.ts
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import { getFixedRuntimeToolPolicy } from "../shared/runtimeToolPolicy.ts";
 import {
+  buildMemberAgentSurfacePresentation,
   describeMemberAgentSurface,
+  formatCommunityIntelligenceName,
   normalizeMemberAgentSurfaceContext,
   renderMemberAgentSurfaceContextForPrompt,
 } from "../shared/memberAgentSurfaceContext.ts";
@@ -131,6 +133,44 @@ assert.equal(describeMemberAgentSurface(discoverSurface!), "Discover");
 assert.equal(
   describeMemberAgentSurface(communitySurface!, "Distribution Engineering"),
   "Distribution Engineering · Resources",
+);
+assert.deepEqual(
+  buildMemberAgentSurfacePresentation(communitySurface!, "Polynet"),
+  {
+    communityIntelligenceName: "Polynet Intelligence",
+    surfaceLabel: "Polynet · Resources",
+    title: "Polynet Intelligence",
+    openLabel: "Open Polynet Intelligence",
+    closeLabel: "Close Polynet Intelligence",
+    composerLabel: "Message Polynet Intelligence",
+    emptyLabel: "Talk with Polynet Intelligence.",
+    loadingLabel: "Opening Polynet Intelligence",
+  },
+  "one presentation contract must drive every community-facing dock label",
+);
+assert.deepEqual(
+  buildMemberAgentSurfacePresentation(discoverSurface!),
+  {
+    communityIntelligenceName: null,
+    surfaceLabel: "Discover",
+    title: "Your agent",
+    openLabel: "Open your agent",
+    closeLabel: "Close your agent",
+    composerLabel: "Message your agent in Discover",
+    emptyLabel: "Ask your agent to help you explore communities.",
+    loadingLabel: "Opening your agent",
+  },
+  "surfaces without a community lens must not retain stale community branding",
+);
+assert.equal(
+  buildMemberAgentSurfacePresentation(communitySurface!, null).loadingLabel,
+  "Opening your agent",
+  "an unresolved community name must fail back to grammatical generic copy",
+);
+assert.equal(
+  formatCommunityIntelligenceName("Collective Intelligence"),
+  "Collective Intelligence",
+  "community names already ending in Intelligence must not be duplicated",
 );
 assert.match(
   renderMemberAgentSurfaceContextForPrompt(discoverSurface) ?? "",
@@ -777,7 +817,51 @@ assert.match(
   /messages: \[optimisticMessage\]/,
   "the browser must send only the current user message, not authoritative history",
 );
-assert.match(component, /<strong>Your agent<\/strong>/);
+assert.match(
+  app,
+  /communityAvatarUrl:\s*memberAgentDockCommunity\?\.avatar_url\s*\?\?\s*null,[\s\S]*?communityAvatarFocusX:[\s\S]*?avatar_focus_x\s*\?\?\s*null,[\s\S]*?communityAvatarFocusY:[\s\S]*?avatar_focus_y\s*\?\?\s*null,[\s\S]*?communityAvatarZoom:[\s\S]*?avatar_zoom\s*\?\?\s*null,/,
+  "the dock must receive the active community's canonical avatar framing",
+);
+assert.match(
+  component,
+  /buildMemberAgentSurfacePresentation\([\s\S]*?props\.surfaceContext,[\s\S]*?props\.communityName/,
+  "the dock must consume the canonical surface presentation instead of branching on copy locally",
+);
+assert.match(
+  component,
+  /const communityAvatarProps = presentation\.communityIntelligenceName[\s\S]*?communityId: props\.communityId,[\s\S]*?imageUrl: props\.communityAvatarUrl,[\s\S]*?communityAvatarProps \? \([\s\S]*?<CommunityAvatar[\s\S]*?className="member-agent-dock-avatar"[\s\S]*?<strong>\{presentation\.title\}<\/strong>/,
+  "the dock header must use the active community avatar and intelligence name",
+);
+assert.match(
+  component,
+  /className="member-agent-dock-empty-avatar"[\s\S]*?\{presentation\.emptyLabel\}/,
+  "the empty state must invite conversation with the active community intelligence",
+);
+assert.match(
+  component,
+  /placeholder=\{presentation\.composerLabel\}[\s\S]*?aria-label=\{presentation\.composerLabel\}/,
+  "the composer and accessibility label must share the community intelligence identity",
+);
+assert.match(
+  component,
+  /formatInferenceIssue\(inferenceIssue\)[\s\S]*?<span>\{presentation\.loadingLabel\}<\/span>/,
+  "the loading presentation must use the visible community identity",
+);
+assert.doesNotMatch(
+  component,
+  /aria-label="Your Polynet agent"|<strong>Your agent<\/strong>|<span>Opening Your agent<\/span>/,
+  "community-facing chrome must not hard-code the personal-agent identity",
+);
+assert.match(
+  component,
+  /aria-label=\{presentation\.title\}[\s\S]*?\{presentation\.emptyLabel\}[\s\S]*?\{presentation\.loadingLabel\}/,
+  "all visible dock identity must come from the same presentation snapshot",
+);
+assert.match(
+  styles,
+  /\.member-agent-dock-empty-avatar \{[\s\S]*?width: 48px;[\s\S]*?height: 48px;[\s\S]*?border-radius: 12px;/,
+  "the community avatar must be a restrained visual anchor in the empty state",
+);
 assert.match(
   styles,
   /--member-agent-accent: var\(--accent-selection\);[\s\S]*--member-agent-accent-strong: color-mix\([\s\S]*var\(--member-agent-accent\) 82%,[\s\S]*var\(--text-primary\) 18%[\s\S]*--member-agent-accent-soft: color-mix\([\s\S]*var\(--member-agent-accent\) 16%,[\s\S]*transparent[\s\S]*--member-agent-accent-border: color-mix\([\s\S]*var\(--member-agent-accent\) 32%,[\s\S]*transparent/,
