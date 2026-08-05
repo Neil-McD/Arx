@@ -13,6 +13,7 @@ const registry = read("shared/CommunityVisualIdentityRegistry.tsx");
 const accessController = read("shared/useWebCommunityAccessController.ts");
 const discoverController = read("shared/useWebDiscoverController.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const rail = read("apps/web/src/components/WebDesktopCommunityRail.tsx");
 const discoverCard = read("shared/DiscoverCommunityCard.tsx");
 const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
@@ -41,6 +42,7 @@ assert.match(chatPanel, /upsertCommunityVisualIdentities/);
 
 for (const [label, source] of [
   ["rail", rail],
+  ["member agent dock", memberAgentDock],
   ["discover", discoverCard],
   ["profile", profilePanel],
   ["mobile selector", mobileShell],

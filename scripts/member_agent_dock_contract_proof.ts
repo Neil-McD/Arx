@@ -829,13 +829,18 @@ assert.match(
 );
 assert.match(
   component,
-  /const communityAvatarProps = presentation\.communityIntelligenceName[\s\S]*?communityId,[\s\S]*?imageUrl: props\.community\?\.avatar_url,[\s\S]*?communityAvatarProps \? \([\s\S]*?<CommunityAvatar[\s\S]*?className="member-agent-dock-avatar"[\s\S]*?<strong>\{presentation\.title\}<\/strong>/,
-  "the dock header must use the active community avatar and intelligence name",
+  /community: WebCommunityRecord \| null;[\s\S]*?const hasCommunityIntelligence = Boolean\([\s\S]*?presentation\.communityIntelligenceName[\s\S]*?hasCommunityIntelligence \? \([\s\S]*?<CommunityAvatar[\s\S]*?communityId=\{communityId\}[\s\S]*?visualIdentity=\{props\.community\?\.visual_identity\}[\s\S]*?imageUrl=\{props\.community\?\.avatar_url\}[\s\S]*?className="member-agent-dock-community-avatar"[\s\S]*?<strong>\{presentation\.title\}<\/strong>/,
+  "the dock header must use the canonical active-community identity and intelligence name",
 );
 assert.match(
   component,
-  /className="member-agent-dock-empty-avatar"[\s\S]*?\{presentation\.emptyLabel\}/,
-  "the empty state must invite conversation with the active community intelligence",
+  /hasCommunityIntelligence[\s\S]*?\? <Sparkles aria-hidden="true" \/>[\s\S]*?: <MessageCircle aria-hidden="true" \/>[\s\S]*?\{presentation\.emptyLabel\}/,
+  "community empty states must use the intelligence glyph while generic contexts retain the message glyph",
+);
+assert.equal(
+  component.match(/<CommunityAvatar/g)?.length,
+  1,
+  "the dock must render exactly one canonical community avatar",
 );
 assert.match(
   component,
@@ -857,10 +862,22 @@ assert.match(
   /aria-label=\{presentation\.title\}[\s\S]*?\{presentation\.emptyLabel\}[\s\S]*?\{presentation\.loadingLabel\}/,
   "all visible dock identity must come from the same presentation snapshot",
 );
-assert.match(
+assert.doesNotMatch(
   styles,
-  /\.member-agent-dock-empty-avatar \{[\s\S]*?width: 48px;[\s\S]*?height: 48px;[\s\S]*?border-radius: 12px;/,
-  "the community avatar must be a restrained visual anchor in the empty state",
+  /member-agent-dock-empty-avatar|member-agent-dock-launcher img|member-agent-dock-community-avatar img/,
+  "the dock must not retain duplicate-avatar or surface-owned image presentation rules",
+);
+const communityAvatarStyleBlock =
+  styles.match(/\.member-agent-dock-community-avatar \{[\s\S]*?\}/)?.[0] ?? "";
+assert.match(
+  communityAvatarStyleBlock,
+  /width: 32px;[\s\S]*?height: 32px;[\s\S]*?flex: 0 0 32px;/,
+  "the header community avatar rule must own layout only",
+);
+assert.doesNotMatch(
+  communityAvatarStyleBlock,
+  /(?:background|border|border-radius|object-fit|overflow)\s*:/,
+  "the dock must leave community-avatar framing to the canonical shared owner",
 );
 assert.match(
   styles,
