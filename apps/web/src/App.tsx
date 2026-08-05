@@ -435,6 +435,7 @@ export default function App() {
   >({
     toCanonicalCommunityVisibility,
     activeCommunitySlug: selectedActiveCommunitySlug,
+    preserveUnmatchedActiveCommunitySlug: activePage === "community",
     loadingResetKey: canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
     setIsLoadingCommunities,
@@ -1635,7 +1636,11 @@ export default function App() {
         : operatorAccess
           ? "allowed" as const
           : "denied" as const;
-  const { shouldHoldRouteForAccess } =
+  const {
+    projection: routeAccessProjection,
+    inactiveCommunityRoute,
+    shouldHoldRouteForAccess,
+  } =
     useWebRouteAccessBoundaryController<
       AuthSession,
       CommunityRecord,
@@ -1647,6 +1652,7 @@ export default function App() {
       pathname: shellNavigation.readCurrentPathname(),
       authState: authPresentationState,
       communities,
+      activeCommunityAccess,
       session,
       isAuthBootstrapComplete,
       communityPreviewAccessState,
@@ -1657,6 +1663,9 @@ export default function App() {
       resolveAndEnterMemberDestination,
       navigateTo,
     });
+  const isInactiveCommunityRoute =
+    routeAccessProjection.kind === "render_inactive_community" &&
+    Boolean(inactiveCommunityRoute);
 
   useWebPostAuthBillingLifecycle({
     session: session,
@@ -1788,6 +1797,7 @@ export default function App() {
     activePage,
     mobileSettingsView,
     isPublicCommunityFunnel,
+    isInactiveCommunityRoute,
   });
   const {
     isGlobalSettings,
@@ -2569,6 +2579,10 @@ export default function App() {
       onOpenBuilderOffer: (community) => builderOffer.open({ community }),
       onOpenCommunityBilling: () => openGlobalSettings("billing"),
       onOpenCreateCommunity: () => openCreateCommunityModal(),
+      onOpenInactiveCommunity: (slug) => {
+        const path = buildCommunityTabPath(slug, "settings", null, "danger");
+        if (path) navigateTo(path);
+      },
       formatRelativeTime,
     },
     billing: {
@@ -2669,6 +2683,7 @@ export default function App() {
     activePage,
     isPublicCommunityFunnel,
     publicRoute: shellPublicRoute,
+    showInactiveCommunitySurface: isInactiveCommunityRoute,
     holdLandingForAuth: shouldHoldLandingForAuth,
     landingPageProps: {
       onTryFree: () => {
@@ -2813,6 +2828,14 @@ export default function App() {
       },
       secondaryPanelsProps: communitySecondarySurfaceProps,
     },
+    communityLifecycleTerminalProps: inactiveCommunityRoute
+      ? {
+          route: inactiveCommunityRoute,
+          session,
+          ensureSession: ensureUsableAuthSession,
+          onOpenAccountSettings: () => openGlobalSettings("account"),
+        }
+      : null,
     discoverPanelProps: {
       isLoadingDiscover,
       discoverCommunitiesCount: discoverCommunities.length,
@@ -2924,7 +2947,11 @@ export default function App() {
     forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
     showMobileSettingsIndex,
     activePage,
-    activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
+    activeCommunity: isInactiveCommunityRoute
+      ? null
+      : isVisitorCommunitySurface
+        ? visitorShellActiveCommunity
+        : activeCommunity,
     activeCommunityAttentionCount,
     activeCommunityMemberFaces:
       isVisitorCommunitySurface

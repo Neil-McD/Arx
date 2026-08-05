@@ -22,6 +22,8 @@ type ActiveCommunity = {
   visibility: string;
   one_liner: string | null;
   about: string | null;
+  lifecycle_status?: "active" | "archiving" | "archived";
+  lifecycle_generation?: number;
   avatar_url?: string | null;
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
@@ -126,7 +128,27 @@ type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "act
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
   workflows: "Workflows",
+  danger: "Danger",
 };
+
+function CommunityLifecycleSettingsSection({
+  activeCommunity,
+}: {
+  activeCommunity: ActiveCommunity;
+}) {
+  return (
+    <div className="settings-section community-lifecycle-settings-section">
+      <div className="settings-section-title">Community lifecycle</div>
+      <div className="settings-section-desc">
+        This community is active. Archive controls are not available in this build.
+      </div>
+      <div className="community-lifecycle-settings-state">
+        <span>Status</span>
+        <strong>{activeCommunity.lifecycle_status ?? "active"}</strong>
+      </div>
+    </div>
+  );
+}
 
 function CommunitySettingsPaneSwitcher({
   activePane,
@@ -654,11 +676,19 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     actions,
   } = props;
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
-  const ownerSettingsPanes: CommunitySettingsPane[] = [
+  const managerSettingsPanes: CommunitySettingsPane[] = [
     "community",
     "workflows",
   ];
-  const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
+  const ownerSettingsPanes: CommunitySettingsPane[] = [
+    ...managerSettingsPanes,
+    "danger",
+  ];
+  const availableSettingsPanes = canManageCommunitySettings
+    ? isOwnerSettingsLayer
+      ? ownerSettingsPanes
+      : managerSettingsPanes
+    : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
     ? activePane
     : availableSettingsPanes[0] ?? "community";
@@ -673,8 +703,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   const resolvedActiveCommunity = activeCommunity as ActiveCommunity;
 
   useEffect(() => {
-    if (availableSettingsPanes.length > 0 && !availableSettingsPanes.includes(activePane)) {
-      onSelectPane(availableSettingsPanes[0]!, { replace: true });
+    if (!availableSettingsPanes.includes(activePane) && activePane !== "community") {
+      onSelectPane("community", { replace: true });
     }
   }, [activePane, availableSettingsPaneKey, onSelectPane]);
 
@@ -733,7 +763,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
           <div className="create-community-form community-settings-form">
             <CommunitySettingsPaneSwitcher
               activePane={selectedSettingsPane}
-              panes={ownerSettingsPanes}
+              panes={availableSettingsPanes}
               onSelectPane={onSelectPane}
             />
             {selectedSettingsPane === "community" ? (
@@ -793,6 +823,11 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 communityAvatarFocusY={resolvedActiveCommunity.avatar_focus_y}
                 communityAvatarZoom={resolvedActiveCommunity.avatar_zoom}
                 onPreview={props.onPreviewCommunityOnboarding}
+              />
+            ) : null}
+            {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
+              <CommunityLifecycleSettingsSection
+                activeCommunity={resolvedActiveCommunity}
               />
             ) : null}
           </div>

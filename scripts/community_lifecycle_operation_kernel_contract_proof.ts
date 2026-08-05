@@ -69,7 +69,7 @@ assert.match(
 );
 assert.match(
   operations,
-  /getMyCommunityArchiveOperationStatus = query[\s\S]*normalizeCommunityLifecycleGeneration[\s\S]*getArchiveOperation\([\s\S]*lifecycleGeneration/,
+  /mapCommunityLifecycleIdentity[\s\S]*normalizeCommunityLifecycleGeneration[\s\S]*mapCommunityLifecycleManagement[\s\S]*getArchiveOperation\([\s\S]*getMyCommunityArchiveOperationStatus = query[\s\S]*mapCommunityLifecycleManagement/,
   "owner status must resolve the archive receipt for the current lifecycle generation",
 );
 assert.match(
@@ -111,7 +111,8 @@ for (const forbiddenTable of [
 
 assert.match(contract, /does not expose a public archive or[\s\S]*restore command/);
 assert.match(contract, /one durable[\s\S]*`communityLifecycleOperations` row/);
-assert.match(contract, /no builder-facing command or UI/);
+assert.match(contract, /no builder-facing lifecycle mutation/);
+assert.match(contract, /read-only inactive-community lifecycle UX/);
 assert.match(contract, /final transaction rechecks that no active[\s\S]*subscription or pending checkout remains/);
 
 console.log("community_lifecycle_operation_kernel_contract_proof: ok");

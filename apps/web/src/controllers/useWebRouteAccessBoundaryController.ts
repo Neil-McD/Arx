@@ -1,13 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 
 import type { AppPage } from "../../../../shared/appShellNavigation";
-import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
 import type { PublicRoute } from "../../../../shared/webAppRouteState";
 import {
   resolveWebRouteAccessProjection,
   type WebRouteAuthState,
   type WebRouteScopedAccessState,
 } from "../../../../shared/webRouteAccess";
+import { useWebCommunityRouteResolution } from "./useWebCommunityRouteResolution";
 
 type NavigateFn = (
   path: string,
@@ -23,11 +23,7 @@ type CommunityAccessLike = {
   community_id: string;
   can_enter_community?: boolean;
   is_owner: boolean;
-};
-
-type CommunityResolution = {
-  slug: string | null;
-  state: WebRouteScopedAccessState;
+  lifecycle_status?: "active" | "archiving" | "archived";
 };
 
 export function useWebRouteAccessBoundaryController<
@@ -43,6 +39,7 @@ export function useWebRouteAccessBoundaryController<
   session: SessionT | null;
   isAuthBootstrapComplete: boolean;
   communities: TCommunity[];
+  activeCommunityAccess?: TCommunityAccess | null;
   communityPreviewAccessState: WebRouteScopedAccessState;
   operatorAccessState: WebRouteScopedAccessState;
   ensureSession: (session?: SessionT | null) => Promise<SessionT | null>;
@@ -58,126 +55,28 @@ export function useWebRouteAccessBoundaryController<
   }) => Promise<boolean>;
   navigateTo: NavigateFn;
 }) {
-  const [communityResolution, setCommunityResolution] =
-    useState<CommunityResolution>({
-      slug: null,
-      state: "not_applicable",
-    });
   const redirectKeyRef = useRef<string | null>(null);
-
-  const slug = String(params.activeCommunitySlug ?? "").trim();
-  const matchedCommunity =
-    params.publicRoute.kind === "app" && params.activePage === "community"
-      ? params.communities.find(
-          (community) => String(community.slug ?? "").trim() === slug,
-        ) ?? null
-      : null;
-
-  useEffect(() => {
-    if (
-      params.publicRoute.kind !== "app" ||
-      params.activePage !== "community" ||
-      !slug ||
-      !params.isAuthBootstrapComplete ||
-      params.authState !== "signed_in" ||
-      !params.session
-    ) {
-      setCommunityResolution((current) =>
-        current.slug === null && current.state === "not_applicable"
-          ? current
-          : { slug: null, state: "not_applicable" },
-      );
-      return;
-    }
-
-    if (matchedCommunity) {
-      setCommunityResolution((current) =>
-        current.slug === slug && current.state === "allowed"
-          ? current
-          : { slug, state: "allowed" },
-      );
-      return;
-    }
-
-    let cancelled = false;
-    setCommunityResolution({ slug, state: "resolving" });
-    void (async () => {
-      const session = await params.ensureSession(params.session);
-      if (cancelled) return;
-      if (!session) {
-        setCommunityResolution({ slug, state: "denied" });
-        return;
-      }
-      try {
-        const access =
-          await fetchCloudMyCommunityAccessBySlug<SessionT, TCommunityAccess>({
-            session,
-            communitySlug: slug,
-          });
-        if (cancelled) return;
-        if (access?.can_enter_community) {
-          await params.loadCommunities(session);
-          if (cancelled) return;
-          params.syncCommunitySelection({
-            communityId: access.community_id,
-            communitySlug: slug,
-            preserveChannel: true,
-          });
-          setCommunityResolution({ slug, state: "allowed" });
-          return;
-        }
-        setCommunityResolution({ slug, state: "denied" });
-      } catch (error) {
-        if (cancelled) return;
-        console.warn("Failed to resolve joined community route by slug:", error);
-        setCommunityResolution({ slug, state: "denied" });
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    matchedCommunity,
-    params.activePage,
-    params.authState,
-    params.ensureSession,
-    params.isAuthBootstrapComplete,
-    params.loadCommunities,
-    params.publicRoute.kind,
-    params.session,
-    params.syncCommunitySelection,
-    slug,
-  ]);
-
-  const communityAccessState = useMemo<WebRouteScopedAccessState>(() => {
-    if (
-      params.publicRoute.kind !== "app" ||
-      params.activePage !== "community" ||
-      !slug
-    ) {
-      return "not_applicable";
-    }
-    if (params.authState !== "signed_in") return "resolving";
-    if (matchedCommunity) return "allowed";
-    if (communityResolution.slug !== slug) return "resolving";
-    return communityResolution.state;
-  }, [
-    communityResolution,
-    matchedCommunity,
-    params.activePage,
-    params.authState,
-    params.publicRoute.kind,
-    slug,
-  ]);
+  const communityResolution = useWebCommunityRouteResolution({
+    publicRoute: params.publicRoute,
+    activePage: params.activePage,
+    activeCommunitySlug: params.activeCommunitySlug,
+    authState: params.authState,
+    session: params.session,
+    isAuthBootstrapComplete: params.isAuthBootstrapComplete,
+    communities: params.communities,
+    activeCommunityAccess: params.activeCommunityAccess,
+    ensureSession: params.ensureSession,
+    loadCommunities: params.loadCommunities,
+    syncCommunitySelection: params.syncCommunitySelection,
+  });
 
   const projection = resolveWebRouteAccessProjection({
     publicRoute: params.publicRoute,
     activePage: params.activePage,
     pathname: params.pathname,
     authState: params.authState,
-    communitySlug: slug,
-    communityAccessState,
+    communitySlug: communityResolution.slug,
+    communityAccessState: communityResolution.accessState,
     communityPreviewAccessState: params.communityPreviewAccessState,
     operatorAccessState: params.operatorAccessState,
   });
@@ -222,6 +121,7 @@ export function useWebRouteAccessBoundaryController<
 
   return {
     projection,
+    inactiveCommunityRoute: communityResolution.inactiveCommunityRoute,
     shouldHoldRouteForAccess: projection.kind === "hold" ||
       projection.kind === "redirect_landing" ||
       projection.kind === "redirect_member_entry" ||

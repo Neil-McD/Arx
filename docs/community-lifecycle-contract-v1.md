@@ -5,7 +5,8 @@
 This contract introduces the compatibility, authority, and durable-operation
 foundation for community archival. It does not expose a public archive or
 restore command. It contains the internal, leased archive executor and its
-provider billing effects, but exposes no builder-facing command or UI. It does
+provider billing effects, plus read-only inactive-community lifecycle UX, but
+no builder-facing lifecycle mutation. It does
 contain synchronous entry, acquisition, and active-shell projections so
 lifecycle state cannot be bypassed by cached clients or direct function calls,
 and it contains background external-effect admission so archived communities
@@ -44,8 +45,9 @@ wildcard that can survive an archive/restore generation change.
 - The public lifecycle-operation inspection query resolves authenticated
   identity server-side, requires the owner across lifecycle states, and returns
   only bounded receipt state for the community's current lifecycle generation.
-  It exposes no provider or member identity and never surfaces a receipt from a
-  previous lifecycle epoch.
+  The owner detail adds only minimal community identity and exposes no provider,
+  member, or content data. It never surfaces a receipt from a previous lifecycle
+  epoch.
 - The platform-home `polynet` community is lifecycle protected.
 - Membership activation is the canonical new-access boundary. Membership rows
   remain preserved, but no activation or normal access is admitted while the
@@ -62,6 +64,28 @@ content. A direct web route renders only a terminal lifecycle message.
 
 The quarantined community deletion path remains owner-authorized across
 lifecycle states and always returns its existing quarantine error.
+
+## Inactive community UX
+
+Inactive communities are not members of the active community directory. The
+active directory chooses a default only when there is no explicit community
+route; it never rewrites an explicit unknown slug while the route-access owner
+is resolving it.
+
+The route-access boundary resolves lifecycle state from the authenticated
+access projection. `archiving` and `archived` render one terminal lifecycle
+surface in place of the normal community host. The ordinary channel, chat,
+member, resource, memory, and member-agent surfaces are therefore never mounted
+under an inactive lifecycle message. Non-owners receive only the terminal
+status. Owners may additionally read the current-generation bounded operation
+receipt through the lifecycle-management query.
+
+Owner rediscovery is a separate, bounded inactive-community inventory in
+account settings. It reads only the two explicit lifecycle index lanes and does
+not put inactive communities back into the active rail, public discovery, or
+profile community strips. `/c/:slug/settings/danger` is the canonical owner
+lifecycle location. In this foundation it is read-only and carries no archive,
+restore, or delete mutation.
 
 ## Archive operation kernel
 
@@ -157,6 +181,6 @@ explicit `active` lane through the lifecycle index.
 
 ## Deferred
 
-- Archive and restore UI.
+- Builder-authorized archive action and confirmation UI.
 - Public archive and restore authorization.
 - Restore execution and subscription recreation semantics.

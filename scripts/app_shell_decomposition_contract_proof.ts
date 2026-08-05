@@ -237,6 +237,7 @@ const boundedFeatureOwners = [
   "apps/web/src/controllers/useWebCommunityFunnelAboutController.ts",
   "apps/web/src/controllers/useWebCommunityNavigationActions.ts",
   "apps/web/src/controllers/useWebCommunityProfileHydrationController.ts",
+  "apps/web/src/controllers/useWebCommunityRouteResolution.ts",
   "apps/web/src/controllers/useWebCommunityTabAccessGuard.ts",
   "apps/web/src/controllers/useWebCommunityVoiceController.ts",
   "apps/web/src/controllers/useWebDirectMessageDeepLinkLifecycle.ts",

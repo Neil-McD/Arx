@@ -11,6 +11,7 @@ import {
   formatBuilderOfferPrice,
   resolveBuilderOfferPrimaryAction,
 } from "../../../../shared/builderOffer";
+import { WebInactiveCommunityInventory } from "./WebInactiveCommunityInventory";
 
 type SessionLike = {
   user: {
@@ -64,6 +65,7 @@ export type WebAccountSettingsSectionProps = {
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
   onOpenCommunityBilling: () => void;
   onOpenCreateCommunity: () => void;
+  onOpenInactiveCommunity: (slug: string) => void;
   formatRelativeTime: (value: string) => string;
 };
 
@@ -163,6 +165,13 @@ export function WebAccountSettingsSection(
           <div className="key-error">{props.authError}</div>
         ) : null}
       </div>
+
+      {props.session ? (
+        <WebInactiveCommunityInventory
+          session={props.session}
+          onOpenCommunity={props.onOpenInactiveCommunity}
+        />
+      ) : null}
 
       {props.session ? (
         <div className="settings-section builder-account-section">

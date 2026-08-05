@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 
 import { internalMutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
@@ -168,6 +169,62 @@ function mapArchiveOperationResult(args: {
   };
 }
 
+function mapArchiveOperationReceipt(operation: any) {
+  return operation
+    ? {
+        operation_id: String(operation._id),
+        kind: operation.kind,
+        state: operation.state,
+        lifecycle_generation: operation.lifecycleGeneration,
+        attempt_count: operation.attemptCount,
+        next_attempt_at: operation.nextAttemptAt,
+        last_attempt_at: operation.lastAttemptAt ?? null,
+        completed_at: operation.completedAt ?? null,
+        error_code: operation.errorCode
+          ? String(operation.errorCode).slice(0, 160)
+          : null,
+        created_at: operation.createdAt,
+        updated_at: operation.updatedAt,
+      }
+    : null;
+}
+
+function mapCommunityLifecycleIdentity(community: any) {
+  return {
+    community_id: String(community._id),
+    slug: String(community.slug),
+    name: String(community.name),
+    lifecycle_status: normalizeCommunityLifecycleStatus(
+      community.lifecycleStatus,
+    ),
+    lifecycle_generation: normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    ),
+    archive_requested_at: community.archiveRequestedAt ?? null,
+    archive_effective_at:
+      community.archiveEffectiveAt ?? community.archivedAt ?? null,
+    updated_at: Number.isFinite(community.updatedAt)
+      ? community.updatedAt
+      : community._creationTime,
+  };
+}
+
+async function mapCommunityLifecycleManagement(args: {
+  ctx: any;
+  community: any;
+}) {
+  const identity = mapCommunityLifecycleIdentity(args.community);
+  const operation = await getArchiveOperation({
+    ctx: args.ctx,
+    communityId: args.community._id,
+    lifecycleGeneration: identity.lifecycle_generation,
+  });
+  return {
+    ...identity,
+    operation: mapArchiveOperationReceipt(operation),
+  };
+}
+
 export const getMyCommunityArchiveOperationStatus = query({
   args: {
     communityId: v.id("communities"),
@@ -179,37 +236,66 @@ export const getMyCommunityArchiveOperationStatus = query({
       communityId: args.communityId,
       userId,
     });
-    const lifecycleGeneration = normalizeCommunityLifecycleGeneration(
-      community.lifecycleGeneration,
-    );
-    const operation = await getArchiveOperation({
+    return await mapCommunityLifecycleManagement({ ctx, community });
+  },
+});
+
+export const getMyCommunityLifecycleManagementBySlug = query({
+  args: {
+    communitySlug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
+    const slug = String(args.communitySlug).trim().toLowerCase();
+    if (!slug) return null;
+    const community = await ctx.db
+      .query("communities")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+    if (!community) return null;
+    const owned = await requireCommunityOwnerAnyLifecycle({
       ctx,
-      communityId: args.communityId,
-      lifecycleGeneration,
+      communityId: community._id,
+      userId,
     });
+    return await mapCommunityLifecycleManagement({
+      ctx,
+      community: owned.community,
+    });
+  },
+});
+
+export const listMyInactiveCommunityLifecycleRows = query({
+  args: {
+    lifecycleStatus: v.union(
+      v.literal("archiving"),
+      v.literal("archived"),
+    ),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx });
+    const pageSize = Math.max(
+      1,
+      Math.min(50, Math.floor(args.paginationOpts.numItems ?? 25)),
+    );
+    const page = await ctx.db
+      .query("communities")
+      .withIndex("by_owner_lifecycle_createdAt", (q) =>
+        q
+          .eq("ownerId", userId)
+          .eq("lifecycleStatus", args.lifecycleStatus),
+      )
+      .order("desc")
+      .paginate({
+        ...args.paginationOpts,
+        numItems: pageSize,
+        maximumRowsRead: pageSize,
+      });
     return {
-      community_id: String(args.communityId),
-      lifecycle_status: normalizeCommunityLifecycleStatus(
-        community.lifecycleStatus,
-      ),
-      lifecycle_generation: lifecycleGeneration,
-      operation: operation
-        ? {
-            operation_id: String(operation._id),
-            kind: operation.kind,
-            state: operation.state,
-            lifecycle_generation: operation.lifecycleGeneration,
-            attempt_count: operation.attemptCount,
-            next_attempt_at: operation.nextAttemptAt,
-            last_attempt_at: operation.lastAttemptAt ?? null,
-            completed_at: operation.completedAt ?? null,
-            error_code: operation.errorCode
-              ? String(operation.errorCode).slice(0, 160)
-              : null,
-            created_at: operation.createdAt,
-            updated_at: operation.updatedAt,
-          }
-        : null,
+      items: page.page.map(mapCommunityLifecycleIdentity),
+      continue_cursor: page.continueCursor,
+      is_done: page.isDone,
     };
   },
 });

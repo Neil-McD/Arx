@@ -9,6 +9,7 @@ import { WebLandingPage } from "./WebLandingPage";
 import { WebOnboardingPage } from "./WebOnboardingPage";
 import { WebPlatformBridgePage } from "./WebPlatformBridgePage";
 import type { WebOperatorDashboardHostProps } from "./WebOperatorDashboardHost";
+import { WebCommunityLifecycleTerminal } from "./WebCommunityLifecycleTerminal";
 
 const WebOperatorDashboardHost = lazy(() =>
   import("./WebOperatorDashboardHost").then((module) => ({
@@ -20,6 +21,7 @@ export type WebAppMainSurfaceHostProps = {
   activePage: AppPage;
   showPublicCommunityFunnel: boolean;
   showCommunitySurface: boolean;
+  showInactiveCommunitySurface: boolean;
   showDiscoverPanel: boolean;
   showProductDocsPanel: boolean;
   showOperatorDashboard: boolean;
@@ -31,6 +33,7 @@ export type WebAppMainSurfaceHostProps = {
   settingsSurfaceHostProps: ComponentProps<typeof WebSettingsSurfaceHost>;
   publicCommunityFunnelProps: ComponentProps<typeof WebPublicCommunityFunnel>;
   communityHostProps: ComponentProps<typeof WebCommunityHost>;
+  communityLifecycleTerminalProps: ComponentProps<typeof WebCommunityLifecycleTerminal> | null;
   discoverPanelProps: ComponentProps<typeof WebDiscoverPanel>;
   productDocsPanelProps: ComponentProps<typeof WebProductDocsPanel>;
   operatorDashboardProps: WebOperatorDashboardHostProps | null;
@@ -66,6 +69,8 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
         ) : (
           <div className="landing-auth-hold" aria-hidden="true" />
         )
+      ) : props.showInactiveCommunitySurface && props.communityLifecycleTerminalProps ? (
+        <WebCommunityLifecycleTerminal {...props.communityLifecycleTerminalProps} />
       ) : props.showCommunitySurface ? (
         <WebCommunityHost {...props.communityHostProps} />
       ) : (

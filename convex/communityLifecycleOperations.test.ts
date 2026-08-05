@@ -287,6 +287,90 @@ test("only the authenticated owner can inspect the current archive operation", a
   ).rejects.toThrow("verified_identity_required");
 });
 
+test("owner lifecycle management reads expose only inactive identity and current receipt state", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  await t.mutation(
+    internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
+    {
+      actorUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+      nowMs: 2_000,
+    },
+  );
+
+  const asOwner = t.withIdentity({ subject: "archive-operation-owner" });
+  await expect(
+    asOwner.query(
+      (api as any).communityLifecycleOperations
+        .getMyCommunityLifecycleManagementBySlug,
+      { communitySlug: "archive-operation-fixture" },
+    ),
+  ).resolves.toMatchObject({
+    community_id: String(fixture.communityId),
+    slug: "archive-operation-fixture",
+    name: "Archive operation fixture",
+    lifecycle_status: "archiving",
+    lifecycle_generation: 1,
+    archive_requested_at: 2_000,
+    operation: {
+      kind: "archive",
+      state: "requested",
+      lifecycle_generation: 1,
+    },
+  });
+
+  const archivingInventory = await asOwner.query(
+    (api as any).communityLifecycleOperations
+      .listMyInactiveCommunityLifecycleRows,
+    {
+      lifecycleStatus: "archiving",
+      paginationOpts: { cursor: null, numItems: 25 },
+    },
+  );
+  expect(archivingInventory).toMatchObject({
+    continue_cursor: expect.any(String),
+    is_done: true,
+  });
+  expect(archivingInventory.items.map((item: any) => item.slug)).toEqual([
+    "orphaned-archiving-operation",
+    "archive-operation-fixture",
+  ]);
+  const archivedInventory = await asOwner.query(
+    (api as any).communityLifecycleOperations
+      .listMyInactiveCommunityLifecycleRows,
+    {
+      lifecycleStatus: "archived",
+      paginationOpts: { cursor: null, numItems: 25 },
+    },
+  );
+  expect(archivedInventory).toMatchObject({
+    continue_cursor: expect.any(String),
+    is_done: true,
+  });
+  expect(archivedInventory.items.map((item: any) => item.slug)).toEqual([
+    "already-archived-operation",
+  ]);
+  for (const item of [
+    ...archivingInventory.items,
+    ...archivedInventory.items,
+  ]) {
+    expect(item).not.toHaveProperty("operation");
+    expect(item).not.toHaveProperty("owner_id");
+    expect(item).not.toHaveProperty("entry_policy");
+    expect(item).not.toHaveProperty("active_member_count");
+  }
+
+  await expect(
+    t.withIdentity({ subject: "archive-operation-outsider" }).query(
+      (api as any).communityLifecycleOperations
+        .getMyCommunityLifecycleManagementBySlug,
+      { communitySlug: "archive-operation-fixture" },
+    ),
+  ).rejects.toThrow("community_owner_required");
+});
+
 test("owner status excludes archive receipts from stale lifecycle generations", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createOperationFixture(t);

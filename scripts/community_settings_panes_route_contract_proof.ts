@@ -30,14 +30,14 @@ const communitySettingsPaneContract = navigation.slice(
   navigation.indexOf("export type CommunitySettingsPane"),
 );
 
-for (const pane of ["community", "workflows"] as const) {
+for (const pane of ["community", "workflows", "danger"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"danger"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
 );
 assert.doesNotMatch(
@@ -45,15 +45,10 @@ assert.doesNotMatch(
   /"integrations"/,
   "third-party integrations must not remain a community settings pane",
 );
-assert.doesNotMatch(
-  navigation,
-  /"danger"/,
-  "Danger must not remain a community settings pane or parser result",
-);
 assert.equal(
   parseCommunitySettingsPane("danger"),
-  "community",
-  "legacy Danger URLs must fail safely into the canonical Community pane",
+  "danger",
+  "Danger URLs must resolve through the canonical shared pane parser",
 );
 assert.doesNotMatch(
   settingsSection,
@@ -102,7 +97,7 @@ assert.doesNotMatch(
 );
 assert.match(
   navigation,
-  /export function parseCommunitySettingsPane\(value: string \| null \| undefined\): CommunitySettingsPane/,
+  /export function parseCommunitySettingsPane\(\s*value: string \| null \| undefined,?\s*\): CommunitySettingsPane/,
   "community settings pane slugs must parse through one shared helper",
 );
 
@@ -207,7 +202,7 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /onSelectPane\(availableSettingsPanes\[0\]!, \{ replace: true \}\)/,
+  /onSelectPane\("community", \{ replace: true \}\)/,
   "invalid or unauthorized pane fallback must replace the current URL",
 );
 assert.match(
@@ -217,8 +212,13 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /const availableSettingsPanes = canManageCommunitySettings \? ownerSettingsPanes : \[\]/,
-  "community settings panes must be owner/admin-only",
+  /const availableSettingsPanes = canManageCommunitySettings[\s\S]*isOwnerSettingsLayer[\s\S]*ownerSettingsPanes[\s\S]*managerSettingsPanes/,
+  "Danger must be owner-only while Community and Workflows remain manager-accessible",
+);
+assert.match(
+  settingsSection,
+  /selectedSettingsPane === "danger" && isOwnerSettingsLayer[\s\S]*CommunityLifecycleSettingsSection/,
+  "the owner-only Danger pane must remain a read-only lifecycle surface",
 );
 assert.doesNotMatch(
   settingsSection,
@@ -238,7 +238,7 @@ assert.match(
 );
 assert.match(
   accessViewModel,
-  /const canEnterCommunity = access \? Boolean\(access\.can_enter_community \?\? access\.can_view\) : false/,
+  /const canEnterCommunity = access[\s\S]*!isUnavailable && Boolean\(access\.can_enter_community \?\? access\.can_view\)[\s\S]*: false/,
   "community settings visibility must fail closed until current-community access is loaded",
 );
 
