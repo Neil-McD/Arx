@@ -9,7 +9,12 @@ import {
   normalizeCommunityLifecycleStatus,
   requireCommunityOwnerAnyLifecycle,
   resolveCommunityArchiveBeginPlan,
+  resolveCommunityRestorePlan,
 } from "./communityLifecycleCore";
+import {
+  readCommunityOwnerFundingFacts,
+  resolveCommunityImmediateRestoreFundingAuthority,
+} from "./communityOwnerFundingCore";
 import { requireOperatorRole } from "./operatorAccess";
 
 const ACTIVE_SUBSCRIPTION_STATUSES = [
@@ -19,6 +24,8 @@ const ACTIVE_SUBSCRIPTION_STATUSES = [
 ] as const;
 
 const COMMUNITY_ARCHIVE_REQUEUE_IDEMPOTENCY_KEY_PATTERN =
+  /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/;
+const COMMUNITY_RESTORE_IDEMPOTENCY_KEY_PATTERN =
   /^[A-Za-z0-9][A-Za-z0-9._:-]{15,127}$/;
 
 function requireSafeNonnegativeInteger(value: number, errorCode: string): void {
@@ -31,6 +38,14 @@ function normalizeArchiveRequeueIdempotencyKey(value: string): string {
   const normalized = String(value).trim();
   if (!COMMUNITY_ARCHIVE_REQUEUE_IDEMPOTENCY_KEY_PATTERN.test(normalized)) {
     throw new Error("community_archive_requeue_idempotency_key_invalid");
+  }
+  return normalized;
+}
+
+function normalizeCommunityRestoreIdempotencyKey(value: string): string {
+  const normalized = String(value).trim();
+  if (!COMMUNITY_RESTORE_IDEMPOTENCY_KEY_PATTERN.test(normalized)) {
+    throw new Error("community_restore_idempotency_key_invalid");
   }
   return normalized;
 }
@@ -577,6 +592,165 @@ export const requestMyCommunityArchive = mutation({
       actorUserId,
       communityId: args.communityId,
       expectedGeneration: args.expectedGeneration,
+      nowMs: Date.now(),
+    });
+  },
+});
+
+function mapCommunityRestoreResult(args: {
+  communityId: any;
+  lifecycleGeneration: number;
+  restoredAt: number;
+  fundingMode: "platform_operator_grant" | "owner_api_key";
+  idempotent: boolean;
+}) {
+  return {
+    ok: true,
+    idempotent: args.idempotent,
+    community_id: String(args.communityId),
+    lifecycle_status: "active" as const,
+    lifecycle_generation: args.lifecycleGeneration,
+    restored_at: args.restoredAt,
+    funding_mode: args.fundingMode,
+  };
+}
+
+type CommunityRestoreRow = {
+  _id: any;
+  ownerId: any;
+  slug: string;
+  lifecycleStatus?: "active" | "archiving" | "archived";
+  lifecycleGeneration?: number;
+  inferenceFundingPolicy: "legacy_byok_allowed" | "managed_required";
+  archivedAt?: number;
+  restoredAt?: number;
+};
+
+export async function restoreCommunityImmediatelyCore(args: {
+  ctx: any;
+  actorUserId: any;
+  communityId: any;
+  expectedGeneration: number;
+  idempotencyKey: string;
+  nowMs: number;
+}) {
+  requireSafeNonnegativeInteger(
+    args.nowMs,
+    "community_restore_timestamp_invalid",
+  );
+  const idempotencyKey = normalizeCommunityRestoreIdempotencyKey(
+    args.idempotencyKey,
+  );
+  const { community } = await requireCommunityOwnerAnyLifecycle<CommunityRestoreRow>({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.actorUserId,
+  });
+  const communityId = String(args.communityId);
+  const auditEventKey = `community_restored:${communityId}:${idempotencyKey}`;
+  const existingAudit = await args.ctx.db
+    .query("criticalAuditEvents")
+    .withIndex("by_eventKey", (q: any) => q.eq("eventKey", auditEventKey))
+    .first();
+  if (existingAudit) {
+    const metadata = existingAudit.metadata as
+      | Record<string, unknown>
+      | undefined;
+    const lifecycleGeneration = Number(metadata?.lifecycleGeneration);
+    const restoredAt = Number(existingAudit.createdAt);
+    const fundingMode = metadata?.fundingMode;
+    if (
+      existingAudit.eventType !== "community_restored" ||
+      existingAudit.status !== "succeeded" ||
+      String(existingAudit.actorUserId ?? "") !== String(args.actorUserId) ||
+      String(existingAudit.communityId ?? "") !== communityId ||
+      existingAudit.providerObjectId !== communityId ||
+      metadata?.previousGeneration !== args.expectedGeneration ||
+      !Number.isSafeInteger(lifecycleGeneration) ||
+      !Number.isSafeInteger(restoredAt) ||
+      (fundingMode !== "platform_operator_grant" &&
+        fundingMode !== "owner_api_key") ||
+      normalizeCommunityLifecycleStatus(community.lifecycleStatus) !== "active" ||
+      normalizeCommunityLifecycleGeneration(community.lifecycleGeneration) !==
+        lifecycleGeneration ||
+      community.restoredAt !== restoredAt
+    ) {
+      throw new Error("community_restore_idempotency_conflict");
+    }
+    return mapCommunityRestoreResult({
+      communityId: args.communityId,
+      lifecycleGeneration,
+      restoredAt,
+      fundingMode,
+      idempotent: true,
+    });
+  }
+
+  const plan = resolveCommunityRestorePlan({
+    community,
+    expectedGeneration: args.expectedGeneration,
+  });
+  const fundingFacts = await readCommunityOwnerFundingFacts({
+    ctx: args.ctx,
+    community,
+    nowMs: args.nowMs,
+    purpose: "immediate_restore",
+  });
+  const funding = resolveCommunityImmediateRestoreFundingAuthority(
+    fundingFacts,
+  );
+  if (!funding.ok) throw new Error(funding.code);
+
+  await recordCriticalAuditEvent(args.ctx, {
+    eventKey: auditEventKey,
+    eventType: "community_restored",
+    severity: "info",
+    status: "succeeded",
+    actorUserId: args.actorUserId,
+    communityId: args.communityId,
+    provider: "polynet",
+    providerObjectId: communityId,
+    metadata: {
+      previousGeneration: plan.previousGeneration,
+      lifecycleGeneration: plan.lifecycleGeneration,
+      fundingMode: funding.mode,
+      archivedAt: community.archivedAt,
+    },
+    createdAt: args.nowMs,
+  });
+  await args.ctx.db.patch(args.communityId, {
+    lifecycleStatus: "active",
+    lifecycleGeneration: plan.lifecycleGeneration,
+    archiveRequestedAt: undefined,
+    archiveEffectiveAt: undefined,
+    archivedAt: undefined,
+    archiveRequestedByUserId: undefined,
+    restoredAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  return mapCommunityRestoreResult({
+    communityId: args.communityId,
+    lifecycleGeneration: plan.lifecycleGeneration,
+    restoredAt: args.nowMs,
+    fundingMode: funding.mode,
+    idempotent: false,
+  });
+}
+
+export const restoreMyArchivedCommunity = mutation({
+  args: {
+    communityId: v.id("communities"),
+    expectedGeneration: v.number(),
+    idempotencyKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const actorUserId = await resolveUserIdForAuthenticatedRequest({ ctx });
+    return await restoreCommunityImmediatelyCore({
+      ctx,
+      actorUserId,
+      communityId: args.communityId,
+      expectedGeneration: args.expectedGeneration,
+      idempotencyKey: args.idempotencyKey,
       nowMs: Date.now(),
     });
   },

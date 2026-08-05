@@ -5,8 +5,14 @@ import { expect, test } from "vitest";
 
 import { api } from "./_generated/api";
 import schema from "./schema";
-import { resolveCommunityArchiveBeginPlan } from "./communityLifecycleCore";
-import { beginCommunityArchiveOperationCore } from "./communityLifecycleOperations";
+import {
+  resolveCommunityArchiveBeginPlan,
+  resolveCommunityRestorePlan,
+} from "./communityLifecycleCore";
+import {
+  beginCommunityArchiveOperationCore,
+  restoreCommunityImmediatelyCore,
+} from "./communityLifecycleOperations";
 
 const modules = import.meta.glob([
   "./communityLifecycleCore.ts",
@@ -832,6 +838,378 @@ test("archive generation cannot overflow", () => {
       expectedGeneration: Number.MAX_SAFE_INTEGER,
     }),
   ).toThrow("community_lifecycle_generation_exhausted");
+});
+
+test("restore planning requires an exact archived generation and advances the epoch", () => {
+  expect(resolveCommunityRestorePlan({
+    community: {
+      slug: "restore-ready",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 4,
+    },
+    expectedGeneration: 4,
+  })).toEqual({ previousGeneration: 4, lifecycleGeneration: 5 });
+  expect(() => resolveCommunityRestorePlan({
+    community: {
+      slug: "restore-stale",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 4,
+    },
+    expectedGeneration: 3,
+  })).toThrow("community_restore_generation_stale");
+  expect(() => resolveCommunityRestorePlan({
+    community: {
+      slug: "restore-active",
+      lifecycleStatus: "active",
+      lifecycleGeneration: 4,
+    },
+    expectedGeneration: 4,
+  })).toThrow("community_not_archived");
+  expect(() => resolveCommunityRestorePlan({
+    community: {
+      slug: "restore-archiving",
+      lifecycleStatus: "archiving",
+      lifecycleGeneration: 4,
+    },
+    expectedGeneration: 4,
+  })).toThrow("community_archive_in_progress");
+  expect(() => resolveCommunityRestorePlan({
+    community: {
+      slug: "restore-exhausted",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: Number.MAX_SAFE_INTEGER,
+    },
+    expectedGeneration: Number.MAX_SAFE_INTEGER,
+  })).toThrow("community_lifecycle_generation_exhausted");
+  expect(() => resolveCommunityRestorePlan({
+    community: {
+      slug: "polynet",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 1,
+    },
+    expectedGeneration: 1,
+  })).toThrow("community_lifecycle_protected");
+});
+
+test("operator-funded immediate restore is atomic, generation-fenced, and idempotent", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  const membershipState = await t.run(async (ctx) => {
+    await ctx.db.insert("operatorRoles", {
+      userId: fixture.ownerId,
+      role: "owner",
+      active: true,
+      createdAt: 1_600,
+      updatedAt: 1_600,
+    });
+    const freeMembershipId = await ctx.db.insert("communityMemberships", {
+      communityId: fixture.archivedCommunityId,
+      userId: fixture.adminId,
+      role: "member",
+      accessSource: "free_grant",
+      active: true,
+      activationSequence: 1,
+      activatedAt: 1_000,
+      createdAt: 1_000,
+      updatedAt: 1_500,
+    });
+    const paidMembershipId = await ctx.db.insert("communityMemberships", {
+      communityId: fixture.archivedCommunityId,
+      userId: fixture.outsiderId,
+      role: "member",
+      accessSource: "paid_subscription",
+      active: false,
+      activationSequence: 1,
+      activatedAt: 1_000,
+      createdAt: 1_000,
+      updatedAt: 1_500,
+    });
+    return { freeMembershipId, paidMembershipId };
+  });
+  const args = {
+    actorUserId: fixture.ownerId,
+    communityId: fixture.archivedCommunityId,
+    expectedGeneration: 4,
+    idempotencyKey: "restore:test:operator:0001",
+    nowMs: 2_000,
+  };
+  const first = await t.run(async (ctx) =>
+    await restoreCommunityImmediatelyCore({ ctx, ...args }),
+  );
+  expect(first).toEqual({
+    ok: true,
+    idempotent: false,
+    community_id: String(fixture.archivedCommunityId),
+    lifecycle_status: "active",
+    lifecycle_generation: 5,
+    restored_at: 2_000,
+    funding_mode: "platform_operator_grant",
+  });
+  const replay = await t.run(async (ctx) =>
+    await restoreCommunityImmediatelyCore({ ctx, ...args, nowMs: 3_000 }),
+  );
+  expect(replay).toEqual({ ...first, idempotent: true });
+  await t.run(async (ctx) => {
+    const community = await ctx.db.get(fixture.archivedCommunityId);
+    expect(community).toMatchObject({
+      lifecycleStatus: "active",
+      lifecycleGeneration: 5,
+      restoredAt: 2_000,
+      updatedAt: 2_000,
+    });
+    expect(community?.archiveRequestedAt).toBeUndefined();
+    expect(community?.archiveEffectiveAt).toBeUndefined();
+    expect(community?.archivedAt).toBeUndefined();
+    expect(community?.archiveRequestedByUserId).toBeUndefined();
+    expect(await ctx.db.get(membershipState.freeMembershipId)).toMatchObject({
+      active: true,
+      updatedAt: 1_500,
+    });
+    expect(await ctx.db.get(membershipState.paidMembershipId)).toMatchObject({
+      active: false,
+      updatedAt: 1_500,
+    });
+    const audits = await ctx.db
+      .query("criticalAuditEvents")
+      .withIndex("by_type_createdAt", (q) =>
+        q.eq("eventType", "community_restored"),
+      )
+      .collect();
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      status: "succeeded",
+      actorUserId: fixture.ownerId,
+      communityId: fixture.archivedCommunityId,
+      provider: "polynet",
+      providerObjectId: String(fixture.archivedCommunityId),
+      metadata: {
+        previousGeneration: 4,
+        lifecycleGeneration: 5,
+        fundingMode: "platform_operator_grant",
+        archivedAt: 1_500,
+      },
+      createdAt: 2_000,
+    });
+  });
+  await expect(t.run(async (ctx) =>
+    await restoreCommunityImmediatelyCore({
+      ctx,
+      ...args,
+      expectedGeneration: 3,
+      nowMs: 3_000,
+    }),
+  )).rejects.toThrow("community_restore_idempotency_conflict");
+});
+
+test("the public restore command derives authenticated owner authority server-side", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("operatorRoles", {
+      userId: fixture.ownerId,
+      role: "owner",
+      active: true,
+      createdAt: 1_600,
+      updatedAt: 1_600,
+    });
+  });
+  const command = (api as any).communityLifecycleOperations
+    .restoreMyArchivedCommunity;
+  const input = {
+    communityId: fixture.archivedCommunityId,
+    expectedGeneration: 4,
+    idempotencyKey: "restore:test:public:0001",
+  };
+  await expect(t.mutation(command, input)).rejects.toThrow(
+    "verified_identity_required",
+  );
+  await expect(t.withIdentity({
+    subject: "archive-operation-admin",
+  }).mutation(command, input)).rejects.toThrow("community_owner_required");
+  await expect(t.withIdentity({
+    subject: "archive-operation-operator",
+  }).mutation(command, input)).rejects.toThrow("community_owner_required");
+  await expect(t.withIdentity({
+    subject: "archive-operation-owner",
+  }).mutation(command, input)).resolves.toMatchObject({
+    ok: true,
+    idempotent: false,
+    lifecycle_status: "active",
+    lifecycle_generation: 5,
+    funding_mode: "platform_operator_grant",
+  });
+});
+
+test("immediate restore fails closed on authority, lifecycle, and funding ambiguity", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  const restore = (overrides: Partial<{
+    actorUserId: any;
+    communityId: any;
+    expectedGeneration: number;
+    idempotencyKey: string;
+    nowMs: number;
+  }> = {}) => t.run(async (ctx) =>
+    await restoreCommunityImmediatelyCore({
+      ctx,
+      actorUserId: overrides.actorUserId ?? fixture.ownerId,
+      communityId: overrides.communityId ?? fixture.archivedCommunityId,
+      expectedGeneration: overrides.expectedGeneration ?? 4,
+      idempotencyKey:
+        overrides.idempotencyKey ?? "restore:test:denied:0001",
+      nowMs: overrides.nowMs ?? 2_000,
+    }),
+  );
+  await expect(restore({ actorUserId: fixture.adminId })).rejects.toThrow(
+    "community_owner_required",
+  );
+  await expect(restore({ actorUserId: fixture.operatorId })).rejects.toThrow(
+    "community_owner_required",
+  );
+  await expect(restore({
+    communityId: fixture.communityId,
+    expectedGeneration: 0,
+  })).rejects.toThrow("community_not_archived");
+  await expect(restore({
+    communityId: fixture.orphanedSunsettingCommunityId,
+    expectedGeneration: 3,
+  })).rejects.toThrow("community_archive_in_progress");
+  await expect(restore({ expectedGeneration: 3 })).rejects.toThrow(
+    "community_restore_generation_stale",
+  );
+  await expect(restore()).rejects.toThrow("founder_plan_required");
+  await expect(restore({ idempotencyKey: "short" })).rejects.toThrow(
+    "community_restore_idempotency_key_invalid",
+  );
+  await expect(restore({ nowMs: Number.NaN })).rejects.toThrow(
+    "community_restore_timestamp_invalid",
+  );
+});
+
+test("legacy BYOK restores immediately while managed subscription and checkout drift block", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.archivedCommunityId, {
+      inferenceFundingPolicy: "legacy_byok_allowed",
+    });
+    await ctx.db.insert("founderInferenceGrants", {
+      userId: fixture.ownerId,
+      cohortKey: "existing_founder_cutover_v1",
+      status: "active",
+      approvedAt: 1_000,
+      activatedAt: 1_100,
+      createdAt: 1_000,
+      updatedAt: 1_100,
+    });
+    await ctx.db.insert("userProviderConnections", {
+      userId: fixture.ownerId,
+      provider: "openai",
+      authKind: "api_key",
+      encryptedSecretHex: "encrypted",
+      secretIvHex: "iv",
+      secretVersion: 1,
+      keyLastFour: "test",
+      keyFingerprint: "fingerprint",
+      validatedAt: 1_100,
+      createdAt: 1_100,
+      updatedAt: 1_100,
+    });
+  });
+  const restored = await t.run(async (ctx) =>
+    await restoreCommunityImmediatelyCore({
+      ctx,
+      actorUserId: fixture.ownerId,
+      communityId: fixture.archivedCommunityId,
+      expectedGeneration: 4,
+      idempotencyKey: "restore:test:legacy:0001",
+      nowMs: 2_000,
+    }),
+  );
+  expect(restored).toMatchObject({
+    lifecycle_generation: 5,
+    funding_mode: "owner_api_key",
+  });
+
+  const drift = await t.run(async (ctx) => {
+    const pendingCommunityId = await ctx.db.insert("communities", {
+      ownerId: fixture.ownerId,
+      slug: "restore-pending-drift",
+      name: "Restore pending drift",
+      visibility: "unlisted",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 4,
+      archivedAt: 1_500,
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 1,
+      createdAt: 1_000,
+      updatedAt: 1_500,
+    });
+    await ctx.db.insert("checkoutSessions", {
+      sessionId: "restore-pending-drift",
+      mode: "founder_subscription",
+      provider: "stripe",
+      communityId: pendingCommunityId,
+      communityLifecycleGeneration: 4,
+      ownerUserId: fixture.ownerId,
+      status: "pending",
+      expiresAt: 9_000,
+      createdAt: 1_900,
+      updatedAt: 1_900,
+    });
+    const subscriptionCommunityId = await ctx.db.insert("communities", {
+      ownerId: fixture.ownerId,
+      slug: "restore-subscription-drift",
+      name: "Restore subscription drift",
+      visibility: "unlisted",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 7,
+      archivedAt: 1_500,
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 1,
+      createdAt: 1_000,
+      updatedAt: 1_500,
+    });
+    await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: fixture.ownerId,
+      communityId: subscriptionCommunityId,
+      communityLifecycleGeneration: 7,
+      provider: "stripe",
+      providerCustomerId: "cus_restore_drift",
+      providerSubscriptionId: "sub_restore_drift",
+      providerPriceId: "price_founder_79_monthly",
+      status: "active",
+      currentPeriodStartAt: 1_000,
+      currentPeriodEndAt: 9_000,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: 1_000,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    });
+    return { pendingCommunityId, subscriptionCommunityId };
+  });
+  await expect(t.run(async (ctx) =>
+    await restoreCommunityImmediatelyCore({
+      ctx,
+      actorUserId: fixture.ownerId,
+      communityId: drift.pendingCommunityId,
+      expectedGeneration: 4,
+      idempotencyKey: "restore:test:checkout:0001",
+      nowMs: 2_000,
+    }),
+  )).rejects.toThrow("community_restore_checkout_pending");
+  await expect(t.run(async (ctx) =>
+    await restoreCommunityImmediatelyCore({
+      ctx,
+      actorUserId: fixture.ownerId,
+      communityId: drift.subscriptionCommunityId,
+      expectedGeneration: 7,
+      idempotencyKey: "restore:test:subscription:0001",
+      nowMs: 2_000,
+    }),
+  )).rejects.toThrow("community_restore_founder_subscription_conflict");
 });
 
 test("archive begin rejects invalid timestamps before writing", async () => {

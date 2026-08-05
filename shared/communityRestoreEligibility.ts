@@ -33,6 +33,7 @@ function firstAllowedAction(
 export function resolveCommunityRestoreEligibility(args: {
   lifecycleStatus: CommunityLifecycleStatus;
   funding: BuilderFundingProjection;
+  managedFundingConflict?: boolean;
 }): CommunityRestoreEligibility {
   if (args.lifecycleStatus === "active") {
     return {
@@ -45,6 +46,14 @@ export function resolveCommunityRestoreEligibility(args: {
     return {
       state: "archive_in_progress",
       action: null,
+      requires_verified_checkout: false,
+    };
+  }
+
+  if (args.managedFundingConflict === true) {
+    return {
+      state: "funding_attention",
+      action: firstAllowedAction(args.funding, ["manage_builder"]),
       requires_verified_checkout: false,
     };
   }

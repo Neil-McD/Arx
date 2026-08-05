@@ -7,6 +7,8 @@ const eligibility = read("shared/communityRestoreEligibility.ts");
 const funding = read("shared/builderFunding.ts");
 const founderBilling = read("convex/founderBilling.ts");
 const founderPlanCore = read("convex/founderPlanCore.ts");
+const lifecycleOperations = read("convex/communityLifecycleOperations.ts");
+const ownerFunding = read("convex/communityOwnerFundingCore.ts");
 const communityCommerce = read("convex/communityCommerce.ts");
 const communityCore = read("convex/communityCore.ts");
 const archiveWorker = read("convex/communityLifecycleArchiveWorker.ts");
@@ -39,6 +41,11 @@ assert.doesNotMatch(
   /mutation|ctx\.db|runMutation|fetch\(/,
   "restore eligibility must remain a pure read model",
 );
+assert.match(
+  eligibility,
+  /managedFundingConflict === true[\s\S]*state: "funding_attention"/,
+  "managed financial drift must override otherwise-ready presentation funding",
+);
 
 assert.match(
   schema,
@@ -54,6 +61,11 @@ assert.match(
   founderPlanCore,
   /currentRows = rows\.filter[\s\S]*communityLifecycleGeneration === communityLifecycleGeneration[\s\S]*grantingRows = currentRows\.filter/,
   "founder funding reads must ignore historical lifecycle generations",
+);
+assert.match(
+  founderPlanCore,
+  /getPendingFounderSubscriptionCheckoutForGeneration[\s\S]*mode === "founder_subscription"[\s\S]*communityLifecycleGeneration[\s\S]*expiresAt > args\.nowMs/,
+  "one generation-scoped helper must own pending founder checkout selection",
 );
 assert.match(
   founderBilling,
@@ -119,8 +131,13 @@ assert.match(
 );
 assert.match(
   lifecycleContract,
-  /Restore eligibility is derived[\s\S]*grants no mutation authority[\s\S]*independently re-read lifecycle generation/,
+  /Restore eligibility is derived[\s\S]*grants no mutation authority[\s\S]*immediate restore command independently[\s\S]*re-reads lifecycle generation/,
   "the lifecycle contract must distinguish presentation eligibility from restore authority",
+);
+assert.match(
+  lifecycleOperations + ownerFunding,
+  /restoreCommunityImmediatelyCore[\s\S]*resolveCommunityImmediateRestoreFundingAuthority[\s\S]*community_restore_checkout_pending[\s\S]*community_restore_founder_subscription_conflict/,
+  "restore execution must independently reject managed checkout and subscription drift",
 );
 
 console.log("community_restore_eligibility_contract_proof: ok");

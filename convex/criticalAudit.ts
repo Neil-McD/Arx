@@ -10,6 +10,7 @@ export const CRITICAL_AUDIT_EVENT_TYPES = [
   "community_purchase_claim_redeemed",
   "community_operator_retirement_completed",
   "community_archive_requeued",
+  "community_restored",
   "community_subscription_synced",
   "harness_app_source_provenance_backfill",
   "operator_dashboard_accessed",
@@ -103,6 +104,12 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
     "previousLastAttemptAt",
     "previousFailureCompletedAt",
     "previousErrorCode",
+  ],
+  community_restored: [
+    "previousGeneration",
+    "lifecycleGeneration",
+    "fundingMode",
+    "archivedAt",
   ],
   community_subscription_synced: [
     "membershipId",

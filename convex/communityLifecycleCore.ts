@@ -37,6 +37,11 @@ export type CommunityArchiveBeginPlan =
       lifecycleGeneration: number;
     };
 
+export type CommunityRestorePlan = {
+  previousGeneration: number;
+  lifecycleGeneration: number;
+};
+
 export function resolveCommunityArchiveBeginPlan(args: {
   community: CommunityLifecycleLike;
   expectedGeneration: unknown;
@@ -71,6 +76,39 @@ export function resolveCommunityArchiveBeginPlan(args: {
   }
   return {
     mode: "create",
+    previousGeneration: currentGeneration,
+    lifecycleGeneration,
+  };
+}
+
+export function resolveCommunityRestorePlan(args: {
+  community: CommunityLifecycleLike;
+  expectedGeneration: unknown;
+}): CommunityRestorePlan {
+  assertCommunityMayBeArchived(args.community);
+  const status = normalizeCommunityLifecycleStatus(
+    args.community.lifecycleStatus,
+  );
+  if (status === "archiving") {
+    throw new Error("community_archive_in_progress");
+  }
+  if (status !== "archived") {
+    throw new Error("community_not_archived");
+  }
+  const currentGeneration = normalizeCommunityLifecycleGeneration(
+    args.community.lifecycleGeneration,
+  );
+  const expectedGeneration = normalizeCommunityLifecycleGeneration(
+    args.expectedGeneration,
+  );
+  if (expectedGeneration !== currentGeneration) {
+    throw new Error("community_restore_generation_stale");
+  }
+  const lifecycleGeneration = currentGeneration + 1;
+  if (!Number.isSafeInteger(lifecycleGeneration)) {
+    throw new Error("community_lifecycle_generation_exhausted");
+  }
+  return {
     previousGeneration: currentGeneration,
     lifecycleGeneration,
   };

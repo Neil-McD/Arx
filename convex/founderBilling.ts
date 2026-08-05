@@ -23,6 +23,7 @@ import {
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
   getFounderSubscriptionByCommunity,
+  getPendingFounderSubscriptionCheckoutForGeneration,
   getFounderSubscriptionByProviderSubscriptionId,
   syncFounderUsageCycle,
   type FounderSubscriptionRow,
@@ -677,28 +678,17 @@ export const getFounderBillingOverview = query({
           const lifecycleGeneration = normalizeCommunityLifecycleGeneration(
             community.lifecycleGeneration,
           );
-          const [subscription, pendingCheckouts] =
+          const [subscription, pendingCheckout] =
             await Promise.all([
               getFounderSubscriptionByCommunity(ctx, community._id, nowMs),
-              ctx.db
-                .query("checkoutSessions")
-                .withIndex("by_community_status", (q) =>
-                  q.eq("communityId", community._id).eq("status", "pending"),
-                )
-                .collect(),
+              getPendingFounderSubscriptionCheckoutForGeneration({
+                ctx,
+                communityId: community._id,
+                lifecycleGeneration,
+                nowMs,
+              }),
             ]);
           const fundingPolicy = community.inferenceFundingPolicy;
-          const pendingCheckout = pendingCheckouts
-            .filter(
-              (checkout) =>
-                lifecycleStatus === "active" &&
-                checkout.mode === "founder_subscription" &&
-                normalizeCommunityLifecycleGeneration(
-                  checkout.communityLifecycleGeneration,
-                ) === lifecycleGeneration &&
-                checkout.expiresAt > nowMs,
-            )
-            .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
           const fundingProjection = resolveBuilderFundingProjection({
             fundingPolicy,
             operatorComplimentaryAccess: operatorComped,
@@ -716,6 +706,9 @@ export const getFounderBillingOverview = query({
           const restoreEligibility = resolveCommunityRestoreEligibility({
             lifecycleStatus,
             funding: fundingProjection,
+            managedFundingConflict:
+              lifecycleStatus === "archived" &&
+              Boolean(subscription || pendingCheckout),
           });
           const operationalFunding =
             lifecycleStatus === "active" &&

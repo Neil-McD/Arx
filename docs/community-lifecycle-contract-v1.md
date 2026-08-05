@@ -3,8 +3,9 @@
 ## Scope
 
 This contract introduces the compatibility, authority, and durable-operation
-foundation for community archival. It exposes one authenticated owner archive
-command but no restore command. It contains the internal, leased archive
+foundation for community archival and immediate restoration. It exposes one
+authenticated owner archive command and one owner restore command for already
+funded non-managed lanes. It contains the internal, leased archive
 executor and its provider billing effects, plus inactive-community lifecycle UX.
 It does
 contain synchronous entry, acquisition, and active-shell projections so
@@ -101,7 +102,8 @@ account settings. It reads only the two explicit lifecycle index lanes and does
 not put inactive communities back into the active rail, public discovery, or
 profile community strips. `/c/:slug/settings/danger` is the canonical owner
 lifecycle location. It exposes the single owner-authorized archive command and
-carries no restore or delete mutation. Route normalization waits for resolved
+does not yet mount the restore command or any delete mutation. Route
+normalization waits for resolved
 access so an owner deep-link or refresh cannot be downgraded during hydration.
 
 ## Restore eligibility read model
@@ -117,12 +119,38 @@ not yet converged.
 Restore eligibility is derived from the canonical Builder funding projection.
 Operator complimentary funding and an active legacy owner API lane can be
 restore-ready. Managed funding requires a new verified restoration checkout.
-An active, canceling, or generic pending managed state on an archived
+An active, canceling, or current-generation pending managed state on an archived
 community is billing drift requiring attention, never restoration authority.
-This projection grants no mutation authority. A future
-restore command must independently re-read lifecycle generation, owner
+Managed financial records override an otherwise-ready operator or legacy
+projection so the presentation cannot hide billing drift. This projection
+grants no mutation authority. The immediate restore command independently
+re-reads lifecycle generation, owner
 authority, provider state, and verified funding in its transaction before
 changing lifecycle state.
+
+## Immediate restore kernel
+
+Immediate restoration has no external provider effect. It is one atomic Convex
+mutation rather than a worker, cron, operation table, or intermediate
+`restoring` state. The authenticated owner supplies the archived generation and
+a bounded idempotency key. The command protects the platform-home community,
+requires the exact `archived` generation, re-reads canonical owner-funding
+facts, records a critical audit event, changes the community to `active`, and
+increments the lifecycle generation in the same transaction.
+
+Only platform-owner complimentary funding and an active legacy owner API grant
+with a usable OpenAI connection authorize this immediate path. Any
+current-generation founder subscription, ambiguous subscription authority, or
+unexpired founder checkout is managed financial drift and fails closed. A
+managed community without those conflicts still requires a future verified
+restoration checkout; redirect success alone will never authorize restoration.
+
+The generation increment permanently fences all pre-restore durable work.
+Restoration does not recreate subscriptions, reactivate paid memberships,
+revive checkouts, requeue jobs, or send notifications. Free and manual
+membership grants remain preserved; paid memberships deactivated during
+archival remain deactivated. Exact idempotent replay returns the prior result;
+an idempotency-key mismatch or lifecycle drift fails closed.
 
 ## Archive operation kernel
 
@@ -239,5 +267,6 @@ explicit `active` lane through the lifecycle index.
 
 ## Deferred
 
-- Public restore authorization.
-- Restore execution and subscription recreation semantics.
+- Managed restoration checkout and verified webhook completion.
+- Builder-facing restore controls and restoration status UX.
+- Subscription recreation semantics.

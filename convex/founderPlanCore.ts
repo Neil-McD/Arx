@@ -46,6 +46,16 @@ export type FounderUsageCycleRow = {
   updatedAt: number;
 };
 
+export type PendingFounderSubscriptionCheckoutRow = {
+  _id: any;
+  communityId: any;
+  communityLifecycleGeneration?: number;
+  mode: string;
+  status: string;
+  expiresAt: number;
+  createdAt: number;
+};
+
 function normalizedId(value: unknown): string {
   return String(value ?? "").trim();
 }
@@ -105,6 +115,30 @@ export async function getFounderSubscriptionByCommunity(
   if (grantingRows.length > 1) throw new Error("founder_subscription_ambiguous");
   if (grantingRows.length === 1) return grantingRows[0]!;
   return currentRows.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+}
+
+export async function getPendingFounderSubscriptionCheckoutForGeneration(args: {
+  ctx: any;
+  communityId: any;
+  lifecycleGeneration: number;
+  nowMs: number;
+}): Promise<PendingFounderSubscriptionCheckoutRow | null> {
+  const rows = (await args.ctx.db
+    .query("checkoutSessions" as any)
+    .withIndex("by_community_status", (q: any) =>
+      q.eq("communityId", args.communityId).eq("status", "pending"),
+    )
+    .collect()) as PendingFounderSubscriptionCheckoutRow[];
+  return rows
+    .filter(
+      (row) =>
+        row.mode === "founder_subscription" &&
+        normalizeCommunityLifecycleGeneration(
+          row.communityLifecycleGeneration,
+        ) === args.lifecycleGeneration &&
+        row.expiresAt > args.nowMs,
+    )
+    .sort((left, right) => right.createdAt - left.createdAt)[0] ?? null;
 }
 
 export async function syncFounderUsageCycle(args: {

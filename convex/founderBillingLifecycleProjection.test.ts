@@ -225,3 +225,95 @@ test("archived managed communities without funding require verified checkout", a
   ]);
   expect(overview.managed_monthly_total_base_units).toBe(0);
 });
+
+test("archived current-generation checkout drift is visible and blocks restore", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = Date.now();
+  await t.run(async (ctx) => {
+    const ownerId = await insertOwner(ctx, "pending-drift", nowMs);
+    const communityId = await insertCommunity({
+      ctx,
+      ownerId,
+      suffix: "pending-drift-archived",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 5,
+      nowMs,
+    });
+    await ctx.db.insert("checkoutSessions", {
+      sessionId: "billing-lifecycle-pending-drift",
+      mode: "founder_subscription",
+      provider: "stripe",
+      communityId,
+      communityLifecycleGeneration: 5,
+      ownerUserId: ownerId,
+      status: "pending",
+      expiresAt: nowMs + 60_000,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+
+  const overview = await t.withIdentity({
+    subject: "billing-lifecycle-pending-drift",
+  }).query((api as any).founderBilling.getFounderBillingOverview, {});
+  expect(overview.communities).toEqual([
+    expect.objectContaining({
+      lifecycle_status: "archived",
+      funding_state: "checkout_pending",
+      checkout_pending: true,
+      restore_eligibility: {
+        state: "funding_attention",
+        action: null,
+        requires_verified_checkout: false,
+      },
+    }),
+  ]);
+});
+
+test("operator funding never hides archived managed-financial drift", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = Date.now();
+  await t.run(async (ctx) => {
+    const ownerId = await insertOwner(ctx, "operator-drift", nowMs);
+    const communityId = await insertCommunity({
+      ctx,
+      ownerId,
+      suffix: "operator-drift-archived",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 6,
+      nowMs,
+    });
+    await ctx.db.insert("operatorRoles", {
+      userId: ownerId,
+      role: "owner",
+      active: true,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.insert("checkoutSessions", {
+      sessionId: "billing-lifecycle-operator-drift",
+      mode: "founder_subscription",
+      provider: "stripe",
+      communityId,
+      communityLifecycleGeneration: 6,
+      ownerUserId: ownerId,
+      status: "pending",
+      expiresAt: nowMs + 60_000,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+
+  const overview = await t.withIdentity({
+    subject: "billing-lifecycle-operator-drift",
+  }).query((api as any).founderBilling.getFounderBillingOverview, {});
+  expect(overview.communities[0]).toMatchObject({
+    funding_state: "builder_included",
+    checkout_pending: true,
+    restore_eligibility: {
+      state: "funding_attention",
+      action: null,
+      requires_verified_checkout: false,
+    },
+  });
+});

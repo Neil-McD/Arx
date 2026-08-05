@@ -73,6 +73,22 @@ describe("community restore eligibility", () => {
     }
   });
 
+  test("managed financial records override otherwise-ready restore funding", () => {
+    expect(resolveCommunityRestoreEligibility({
+      lifecycleStatus: "archived",
+      funding: funding({
+        lane: "builder_included",
+        state: "builder_included",
+        allowedActions: [],
+      }),
+      managedFundingConflict: true,
+    })).toEqual({
+      state: "funding_attention",
+      action: null,
+      requires_verified_checkout: false,
+    });
+  });
+
   test("managed restoration distinguishes checkout, pending, and payment attention", () => {
     expect(resolveCommunityRestoreEligibility({
       lifecycleStatus: "archived",

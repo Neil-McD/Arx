@@ -6,6 +6,7 @@ const read = (path: string) => readFileSync(path, "utf8");
 const schema = read("convex/schema.ts");
 const lifecycleCore = read("convex/communityLifecycleCore.ts");
 const operations = read("convex/communityLifecycleOperations.ts");
+const ownerFunding = read("convex/communityOwnerFundingCore.ts");
 const contract = read("docs/community-lifecycle-contract-v1.md");
 
 for (const marker of [
@@ -54,13 +55,34 @@ assert.match(
 );
 assert.equal(
   operations.match(/= mutation\(/g)?.length ?? 0,
-  2,
-  "the lifecycle operation module must expose one owner archive command and one operator recovery command",
+  3,
+  "the lifecycle operation module must expose owner archive and restore commands plus one operator recovery command",
 );
 assert.doesNotMatch(
   operations,
   /beginCommunityArchiveOperationInternal|actorUserId: v\.id\("users"\)|nowMs: v\.number\(\)/,
   "the archive command must not retain a duplicate internal endpoint or accept actor and time from clients",
+);
+
+assert.match(
+  lifecycleCore,
+  /resolveCommunityRestorePlan[\s\S]*status !== "archived"[\s\S]*community_restore_generation_stale[\s\S]*currentGeneration \+ 1/,
+  "restore must require the exact archived epoch and advance the generation",
+);
+assert.match(
+  operations,
+  /restoreMyArchivedCommunity = mutation[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*restoreCommunityImmediatelyCore[\s\S]*nowMs: Date\.now\(\)/,
+  "the public restore command must derive actor identity and time server-side",
+);
+assert.match(
+  operations,
+  /restoreCommunityImmediatelyCore[\s\S]*requireCommunityOwnerAnyLifecycle[\s\S]*resolveCommunityRestorePlan[\s\S]*readCommunityOwnerFundingFacts[\s\S]*resolveCommunityImmediateRestoreFundingAuthority[\s\S]*eventType: "community_restored"[\s\S]*lifecycleStatus: "active"[\s\S]*lifecycleGeneration: plan\.lifecycleGeneration/,
+  "restore authority, funding, audit, and lifecycle transition must share one transaction",
+);
+assert.match(
+  ownerFunding,
+  /purpose: "inference" \| "immediate_restore"[\s\S]*subscription\.ambiguous \|\| subscription\.subscription \|\| pendingCheckout[\s\S]*resolveCommunityImmediateRestoreFundingAuthority[\s\S]*community_restore_checkout_pending[\s\S]*community_restore_founder_subscription_conflict/,
+  "restore must reject managed financial drift without widening inference admission",
 );
 assert.match(
   operations,
@@ -134,9 +156,10 @@ for (const forbiddenTable of [
   );
 }
 
-assert.match(contract, /one authenticated owner archive[\s\S]*no restore command/);
+assert.match(contract, /authenticated owner archive command and one owner restore command/);
 assert.match(contract, /one durable[\s\S]*`communityLifecycleOperations` row/);
 assert.match(contract, /single owner-authorized archive command/);
 assert.match(contract, /final transaction rechecks that no active[\s\S]*subscription or pending checkout remains/);
+assert.match(contract, /Immediate restoration has no external provider effect/);
 
 console.log("community_lifecycle_operation_kernel_contract_proof: ok");
