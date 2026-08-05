@@ -3516,6 +3516,7 @@
 }
 
 .community-channel-pinned-root {
+  --community-channel-pinned-surface: color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%);
   position: relative;
   flex: 0 0 auto;
   min-width: 0;
@@ -3524,7 +3525,7 @@
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
   border-bottom: 2px solid var(--community-chat-surface);
-  background: color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%);
+  background: var(--community-channel-pinned-surface);
 }
 
 .community-channel-pinned-root-viewport {
@@ -3589,7 +3590,7 @@
   background: linear-gradient(
     to bottom,
     transparent,
-    color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%) 88%
+    var(--community-channel-pinned-surface) 88%
   );
 }
 
@@ -3604,7 +3605,7 @@
   padding: 4px 8px;
   border: 1px solid transparent;
   border-radius: 10px;
-  background: color-mix(in srgb, var(--accent) 18%, transparent);
+  background: var(--community-channel-pinned-surface);
   backdrop-filter: blur(16px) saturate(130%);
   -webkit-backdrop-filter: blur(16px) saturate(130%);
   color: var(--accent);
