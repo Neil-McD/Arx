@@ -161,6 +161,7 @@ export default defineSchema({
   founderSubscriptions: defineTable({
     ownerUserId: v.id("users"),
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.number(),
     provider: v.literal("stripe"),
     providerCustomerId: v.string(),
     providerSubscriptionId: v.string(),
@@ -576,6 +577,7 @@ export default defineSchema({
       ),
     ),
     cancelAtPeriodEnd: v.optional(v.boolean()),
+    lastProviderEventCreatedAt: v.optional(v.number()),
     communityId: v.optional(v.id("communities")),
     communityLifecycleGeneration: v.optional(v.number()),
     billingPeriod: v.optional(v.string()),
@@ -1441,6 +1443,7 @@ export default defineSchema({
 
   communitySubscriptions: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.number(),
     userId: v.id("users"),
     membershipId: v.id("communityMemberships"),
     pricePointId: v.id("communityPricePoints"),
@@ -1459,6 +1462,7 @@ export default defineSchema({
     currentPeriodEndAt: v.optional(v.number()),
     cancelAtPeriodEnd: v.boolean(),
     endedAt: v.optional(v.number()),
+    lastSourceEventCreatedAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

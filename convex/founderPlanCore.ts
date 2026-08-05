@@ -5,11 +5,13 @@ import {
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
 import type { FounderInferencePricing } from "./founderPlanPricing";
+import { normalizeCommunityLifecycleGeneration } from "./communityLifecycleCore";
 
 export type FounderSubscriptionRow = {
   _id: any;
   ownerUserId: any;
   communityId: any;
+  communityLifecycleGeneration: number;
   provider: "stripe";
   providerCustomerId: string;
   providerSubscriptionId: string;
@@ -81,11 +83,19 @@ export async function getFounderSubscriptionByCommunity(
   communityId: any,
   nowMs: number = Date.now(),
 ): Promise<FounderSubscriptionRow | null> {
+  const community = await ctx.db.get(communityId);
+  if (!community) return null;
+  const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+    community.lifecycleGeneration,
+  );
   const rows = (await ctx.db
     .query("founderSubscriptions" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
     .collect()) as FounderSubscriptionRow[];
-  const grantingRows = rows.filter((row) =>
+  const currentRows = rows.filter(
+    (row) => row.communityLifecycleGeneration === communityLifecycleGeneration,
+  );
+  const grantingRows = currentRows.filter((row) =>
     founderSubscriptionStatusGrantsAccess({
       status: row.status,
       currentPeriodEndAt: row.currentPeriodEndAt,
@@ -94,7 +104,7 @@ export async function getFounderSubscriptionByCommunity(
   );
   if (grantingRows.length > 1) throw new Error("founder_subscription_ambiguous");
   if (grantingRows.length === 1) return grantingRows[0]!;
-  return rows.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
+  return currentRows.slice().sort((a, b) => b.updatedAt - a.updatedAt)[0] ?? null;
 }
 
 export async function syncFounderUsageCycle(args: {

@@ -8,7 +8,12 @@ import {
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
-import { resolveBuilderFundingProjection } from "../shared/builderFunding";
+import {
+  builderFundingProjectionGrantsAccess,
+  resolveBuilderFundingProjection,
+} from "../shared/builderFunding";
+import { resolveCommunityRestoreEligibility } from "../shared/communityRestoreEligibility";
+import { providerSubscriptionEventShouldApply } from "../shared/subscriptionEventOrdering";
 import {
   buildCheckoutSuccessUrl,
   newOpaqueToken,
@@ -35,6 +40,7 @@ import {
 import {
   communityAcceptsNewOperationsAtGeneration,
   normalizeCommunityLifecycleGeneration,
+  normalizeCommunityLifecycleStatus,
   requireActiveCommunity,
   requireMatchingCommunityLifecycleGeneration,
 } from "./communityLifecycleCore";
@@ -367,6 +373,7 @@ async function syncFounderSubscription(args: {
   if (String(community.ownerId) !== String(ownerUserId)) {
     throw new Error("founder_subscription_community_owner_mismatch");
   }
+  const status = normalizeFounderSubscriptionStatus(args.subscriptionStatus);
   if (
     checkout?.providerCustomerId &&
     String(checkout.providerCustomerId) !== providerCustomerId
@@ -384,6 +391,46 @@ async function syncFounderSubscription(args: {
     String(existing.providerCustomerId) !== providerCustomerId
   ) {
     throw new Error("founder_subscription_customer_mismatch");
+  }
+  if (existing && !providerSubscriptionEventShouldApply({
+    incomingCreatedAt: args.providerEventCreatedAt,
+    currentCreatedAt: existing.lastProviderEventCreatedAt,
+    incomingStatus: status,
+    currentStatus: existing.status,
+  })) {
+    return { ok: true, ignored: true, reason: "founder_subscription_event_stale" };
+  }
+  if (
+    existing &&
+    !communityAcceptsNewOperationsAtGeneration({
+      community,
+      expectedGeneration: existing.communityLifecycleGeneration,
+    })
+  ) {
+    if (status === "canceled" || status === "ended") {
+      await args.ctx.db.patch(existing._id, {
+        status: "ended",
+        cancelAtPeriodEnd: false,
+        endedAt: args.providerEventCreatedAt,
+        revokedReason: "provider_subscription_ended",
+        lastProviderEventCreatedAt: args.providerEventCreatedAt,
+        updatedAt: args.providerEventCreatedAt,
+      });
+      return {
+        ok: true,
+        ignored: false,
+        founderSubscriptionId: existing._id,
+        subscriptionStatus: "ended",
+        revokedReason: "provider_subscription_ended",
+      };
+    }
+    return {
+      ok: true,
+      ignored: true,
+      quarantined: true,
+      reason: "founder_subscription_lifecycle_stale",
+      founderSubscriptionId: existing._id,
+    };
   }
   if (
     checkout &&
@@ -415,7 +462,12 @@ async function syncFounderSubscription(args: {
     if (!existing) {
       return { ok: true, ignored: true, reason: "founder_subscription_price_not_managed" };
     }
-    if (args.providerEventCreatedAt < existing.lastProviderEventCreatedAt) {
+    if (!providerSubscriptionEventShouldApply({
+      incomingCreatedAt: args.providerEventCreatedAt,
+      currentCreatedAt: existing.lastProviderEventCreatedAt,
+      incomingStatus: status,
+      currentStatus: existing.status,
+    })) {
       return { ok: true, ignored: true, reason: "founder_subscription_event_stale" };
     }
     await args.ctx.db.patch(existing._id, {
@@ -433,16 +485,12 @@ async function syncFounderSubscription(args: {
       revokedReason: "founder_subscription_price_changed",
     };
   }
-  if (existing && args.providerEventCreatedAt < existing.lastProviderEventCreatedAt) {
-    return { ok: true, ignored: true, reason: "founder_subscription_event_stale" };
-  }
   const cycleStartAt = Math.floor(Number(args.currentPeriodStartAt ?? 0));
   const cycleEndAt = Math.floor(Number(args.currentPeriodEndAt ?? 0));
   if (!(cycleStartAt > 0) || !(cycleEndAt > cycleStartAt)) {
     throw new Error("founder_subscription_cycle_invalid");
   }
   if (!providerCustomerId) throw new Error("founder_subscription_customer_missing");
-  const status = normalizeFounderSubscriptionStatus(args.subscriptionStatus);
   const endedAt = status === "canceled" || status === "ended"
     ? args.providerEventCreatedAt
     : undefined;
@@ -484,6 +532,9 @@ async function syncFounderSubscription(args: {
     const id = await args.ctx.db.insert("founderSubscriptions", {
       ownerUserId,
       communityId,
+      communityLifecycleGeneration: normalizeCommunityLifecycleGeneration(
+        checkout?.communityLifecycleGeneration,
+      ),
       provider: "stripe",
       providerCustomerId,
       providerSubscriptionId,
@@ -620,6 +671,12 @@ export const getFounderBillingOverview = query({
         .slice()
         .sort((a, b) => a.createdAt - b.createdAt)
         .map(async (community) => {
+          const lifecycleStatus = normalizeCommunityLifecycleStatus(
+            community.lifecycleStatus,
+          );
+          const lifecycleGeneration = normalizeCommunityLifecycleGeneration(
+            community.lifecycleGeneration,
+          );
           const [subscription, pendingCheckouts] =
             await Promise.all([
               getFounderSubscriptionByCommunity(ctx, community._id, nowMs),
@@ -634,7 +691,11 @@ export const getFounderBillingOverview = query({
           const pendingCheckout = pendingCheckouts
             .filter(
               (checkout) =>
+                lifecycleStatus === "active" &&
                 checkout.mode === "founder_subscription" &&
+                normalizeCommunityLifecycleGeneration(
+                  checkout.communityLifecycleGeneration,
+                ) === lifecycleGeneration &&
                 checkout.expiresAt > nowMs,
             )
             .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
@@ -652,6 +713,13 @@ export const getFounderBillingOverview = query({
             legacyApiKeyConnected: Boolean(openAiConnection?.encryptedSecretHex),
             nowMs,
           });
+          const restoreEligibility = resolveCommunityRestoreEligibility({
+            lifecycleStatus,
+            funding: fundingProjection,
+          });
+          const operationalFunding =
+            lifecycleStatus === "active" &&
+            builderFundingProjectionGrantsAccess(fundingProjection);
           let status:
             | "operator_comped"
             | "legacy_ready"
@@ -690,10 +758,14 @@ export const getFounderBillingOverview = query({
             community_id: String(community._id),
             community_name: community.name,
             community_slug: community.slug,
+            lifecycle_status: lifecycleStatus,
+            lifecycle_generation: lifecycleGeneration,
             funding_policy: fundingPolicy,
             funding_lane: fundingProjection.lane,
             funding_state: fundingProjection.state,
             allowed_actions: fundingProjection.allowedActions,
+            operational_funding: operationalFunding,
+            restore_eligibility: restoreEligibility,
             funding_mode: operatorComped
               ? "operator_comp"
               : managed
@@ -718,7 +790,11 @@ export const getFounderBillingOverview = query({
       monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
       communities: rows,
       managed_monthly_total_base_units: rows.filter(
-        (row) => row.funding_mode === "managed",
+        (row) =>
+          row.lifecycle_status === "active" &&
+          row.funding_mode === "managed" &&
+          (row.funding_state === "builder_active" ||
+            row.funding_state === "builder_canceling"),
       ).length * POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
     };
   },

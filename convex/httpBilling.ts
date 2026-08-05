@@ -632,7 +632,7 @@ async function syncCommunitySubscriptionFromStripeSubscription(
     subscriptionStatus: subscription.status,
     cancelAtPeriodEnd: (subscription as any)?.cancel_at_period_end,
   });
-  await ctx.runMutation(
+  const result = await ctx.runMutation(
     internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal as any,
     {
       communityId: existingCommunitySubscription.communityId,
@@ -649,11 +649,23 @@ async function syncCommunitySubscriptionFromStripeSubscription(
       currentPeriodEndIso: toIsoStringOrUndefined(cycleEndsAt),
       cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
       preserveRiskRevocation: options?.preserveRiskRevocation === true,
-      nowMs: readStripeEventCreatedAtMs(event),
+      sourceEventCreatedAt: readStripeEventCreatedAtMs(event),
     },
   );
+  if (result?.quarantined === true) {
+    await cancelStaleCheckoutSubscription({
+      providerSubscriptionId,
+      providerAccountId,
+    });
+    return {
+      ...result,
+      ignored: true,
+      reason: "community_subscription_lifecycle_stale",
+    };
+  }
   return {
     ok: true,
+    ...result,
     subscription_status: normalizedCommunityStatus,
     provider_subscription_id: providerSubscriptionId,
     provider_account_id: providerAccountId,
@@ -761,7 +773,7 @@ async function syncCommunitySubscriptionRiskStatus(
   if (!existingCommunitySubscription?.communityId || !existingCommunitySubscription?.userId) {
     return { ok: true, ignored: true, reason: "community_subscription_not_found" };
   }
-  await ctx.runMutation(
+  const result = await ctx.runMutation(
     internal.communityCommerce.syncCommunitySubscriptionLifecycleInternal as any,
     {
       communityId: existingCommunitySubscription.communityId,
@@ -772,11 +784,23 @@ async function syncCommunitySubscriptionRiskStatus(
       providerSubscriptionId,
       status: args.status,
       revokedReason: args.revokedReason,
-      nowMs: readStripeEventCreatedAtMs(event),
+      sourceEventCreatedAt: readStripeEventCreatedAtMs(event),
     },
   );
+  if (result?.quarantined === true) {
+    await cancelStaleCheckoutSubscription({
+      providerSubscriptionId,
+      providerAccountId,
+    });
+    return {
+      ...result,
+      ignored: true,
+      reason: "community_subscription_lifecycle_stale",
+    };
+  }
   return {
     ok: true,
+    ...result,
     provider_subscription_id: providerSubscriptionId,
     provider_account_id: providerAccountId,
     subscription_status: args.status,
@@ -1143,7 +1167,7 @@ export function registerRuntimeBillingRoutes(
                 currentPeriodEndAt: cycleEndsAt,
                 cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
                 markComplete: true,
-                nowMs:
+                providerEventCreatedAt:
                   Number(event.created ?? 0) > 0
                     ? Number(event.created) * 1000
                     : Date.now(),
@@ -1542,7 +1566,7 @@ export function registerRuntimeBillingRoutes(
                   currentPeriodEndAt: cycleEndsAt,
                   cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
                   markComplete: false,
-                  nowMs:
+                  providerEventCreatedAt:
                     Number(event.created ?? 0) > 0
                       ? Number(event.created) * 1000
                       : Date.now(),

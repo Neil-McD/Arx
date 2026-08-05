@@ -291,6 +291,7 @@ test("founders can add unlimited communities sequentially when every existing co
       await ctx.db.insert("founderSubscriptions", {
         ownerUserId: ownerId,
         communityId,
+        communityLifecycleGeneration: 0,
         provider: "stripe",
         providerCustomerId: "cus_unlimited_paid",
         providerSubscriptionId: `sub_unlimited_paid_${index}`,
@@ -1057,6 +1058,7 @@ test("a community-targeted founder subscription meters managed Luna usage", asyn
       const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
         ownerUserId: ownerId,
         communityId,
+        communityLifecycleGeneration: 0,
         provider: "stripe",
         providerCustomerId: "cus_founder_paid",
         providerSubscriptionId: "sub_founder_paid",
@@ -1211,6 +1213,7 @@ test("founder usage authority cannot be unattached or rebound across communities
     const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId: firstCommunityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_binding",
       providerSubscriptionId: "sub_binding",
@@ -1447,6 +1450,7 @@ test("community subscription history selects one granting row and rejects two", 
     await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_history",
       providerSubscriptionId: "sub_history_ended",
@@ -1463,6 +1467,7 @@ test("community subscription history selects one granting row and rejects two", 
     const activeId = await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_history",
       providerSubscriptionId: "sub_history_active",
@@ -1481,6 +1486,7 @@ test("community subscription history selects one granting row and rejects two", 
     await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_history",
       providerSubscriptionId: "sub_history_ambiguous",

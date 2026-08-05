@@ -2,8 +2,17 @@ import { bootstrapGatewayAuthContext } from "./cloudGateway";
 import type {
   BuilderFundingAction,
   BuilderFundingLane,
+  BuilderFundingProjection,
   BuilderFundingState,
 } from "./builderFunding";
+import { builderFundingProjectionGrantsAccess } from "./builderFunding";
+import type { CommunityLifecycleStatus } from "./communityLifecycle";
+import {
+  resolveCommunityRestoreEligibility,
+  type CommunityRestoreAction,
+  type CommunityRestoreEligibility,
+  type CommunityRestoreEligibilityState,
+} from "./communityRestoreEligibility";
 
 export type CloudFounderBillingCommunityStatus =
   | "operator_comped"
@@ -22,10 +31,14 @@ export type CloudFounderBillingCommunity = {
   community_id: string;
   community_name: string;
   community_slug: string;
+  lifecycle_status: CommunityLifecycleStatus;
+  lifecycle_generation: number;
   funding_policy: "legacy_byok_allowed" | "managed_required";
   funding_lane: BuilderFundingLane;
   funding_state: BuilderFundingState;
   allowed_actions: BuilderFundingAction[];
+  operational_funding: boolean;
+  restore_eligibility: CommunityRestoreEligibility;
   funding_mode: "managed" | "legacy_byok" | "operator_comp";
   status: CloudFounderBillingCommunityStatus;
   monthly_price_base_units: number;
@@ -84,6 +97,59 @@ const BUILDER_FUNDING_ACTIONS: BuilderFundingAction[] = [
   "resume_checkout",
   "manage_builder",
 ];
+const COMMUNITY_LIFECYCLE_STATUSES: CommunityLifecycleStatus[] = [
+  "active",
+  "archiving",
+  "archived",
+];
+const COMMUNITY_RESTORE_ELIGIBILITY_STATES: CommunityRestoreEligibilityState[] = [
+  "not_archived",
+  "archive_in_progress",
+  "ready",
+  "checkout_required",
+  "checkout_pending",
+  "funding_attention",
+];
+const COMMUNITY_RESTORE_ACTIONS: Exclude<CommunityRestoreAction, null>[] = [
+  "restore_now",
+  ...BUILDER_FUNDING_ACTIONS,
+];
+
+function coerceRestoreEligibility(args: {
+  value: unknown;
+  lifecycleStatus: CommunityLifecycleStatus;
+  funding: BuilderFundingProjection;
+}): CommunityRestoreEligibility {
+  const fallback = resolveCommunityRestoreEligibility({
+    lifecycleStatus: args.lifecycleStatus,
+    funding: args.funding,
+  });
+  if (!args.value || typeof args.value !== "object") return fallback;
+  const row = args.value as Record<string, unknown>;
+  const state = nullableString(row.state);
+  const action = nullableString(row.action);
+  const requiresVerifiedCheckout = row.requires_verified_checkout;
+  if (
+    !COMMUNITY_RESTORE_ELIGIBILITY_STATES.includes(
+      state as CommunityRestoreEligibilityState,
+    ) ||
+    (action !== null &&
+      !COMMUNITY_RESTORE_ACTIONS.includes(
+        action as Exclude<CommunityRestoreAction, null>,
+      )) ||
+    typeof requiresVerifiedCheckout !== "boolean" ||
+    state !== fallback.state ||
+    action !== fallback.action ||
+    requiresVerifiedCheckout !== fallback.requires_verified_checkout
+  ) {
+    return fallback;
+  }
+  return {
+    state: state as CommunityRestoreEligibilityState,
+    action: action as CommunityRestoreAction,
+    requires_verified_checkout: requiresVerifiedCheckout,
+  };
+}
 
 function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
   if (!value || typeof value !== "object") return null;
@@ -121,16 +187,44 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
           BUILDER_FUNDING_ACTIONS.includes(action as BuilderFundingAction),
       )
     : [];
+  const rawLifecycleStatus = nullableString(row.lifecycle_status);
+  const lifecycleStatus = COMMUNITY_LIFECYCLE_STATUSES.includes(
+    rawLifecycleStatus as CommunityLifecycleStatus,
+  )
+    ? rawLifecycleStatus as CommunityLifecycleStatus
+    : "active";
+  const rawLifecycleGeneration = finiteNumber(row.lifecycle_generation);
+  const lifecycleGeneration =
+    Number.isSafeInteger(rawLifecycleGeneration) && rawLifecycleGeneration >= 0
+      ? rawLifecycleGeneration
+      : 0;
+  const fundingProjection: BuilderFundingProjection = {
+    lane: fundingLane,
+    state: fundingState,
+    allowedActions,
+  };
   return {
     community_id: communityId,
     community_name: nullableString(row.community_name) ?? "Untitled community",
     community_slug: nullableString(row.community_slug) ?? "",
+    lifecycle_status: lifecycleStatus,
+    lifecycle_generation: lifecycleGeneration,
     funding_policy: row.funding_policy === "legacy_byok_allowed"
       ? "legacy_byok_allowed"
       : "managed_required",
     funding_lane: fundingLane,
     funding_state: fundingState,
     allowed_actions: allowedActions,
+    operational_funding:
+      row.operational_funding === true ||
+      (row.operational_funding === undefined &&
+        lifecycleStatus === "active" &&
+        builderFundingProjectionGrantsAccess(fundingProjection)),
+    restore_eligibility: coerceRestoreEligibility({
+      value: row.restore_eligibility,
+      lifecycleStatus,
+      funding: fundingProjection,
+    }),
     funding_mode:
       row.funding_mode === "operator_comp"
         ? "operator_comp"

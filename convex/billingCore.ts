@@ -11,9 +11,11 @@ import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import {
+  normalizeCommunityLifecycleGeneration,
   requireActiveCommunity,
   requireMatchingCommunityLifecycleGeneration,
 } from "./communityLifecycleCore";
+import { providerSubscriptionEventShouldApply } from "../shared/subscriptionEventOrdering";
 
 export type CommunityLike = {
   _id: any;
@@ -207,6 +209,7 @@ export async function ensureCommunityMembership(args: {
 export async function createCommunitySubscriptionForMembership(args: {
   ctx: any;
   communityId: any;
+  communityLifecycleGeneration: number;
   membershipId: any;
   userId: any;
   pricePointId: any;
@@ -218,6 +221,7 @@ export async function createCommunitySubscriptionForMembership(args: {
   currentPeriodEndAt?: number | null;
   status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
   cancelAtPeriodEnd?: boolean | null;
+  sourceEventCreatedAt: number;
   nowMs: number;
 }): Promise<void> {
   const source = args.source;
@@ -225,8 +229,12 @@ export async function createCommunitySubscriptionForMembership(args: {
   const cancelAtPeriodEnd = Boolean(args.cancelAtPeriodEnd ?? status === "cancel_at_period_end");
   const endedAt = status === "canceled" || status === "ended" ? args.nowMs : undefined;
   const providerAccountId = String(args.providerAccountId ?? "").trim();
+  const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
   if (source === "stripe" && !providerAccountId) {
     throw new Error("community_subscription_provider_account_required");
+  }
+  if (source === "stripe" && !providerSubscriptionId) {
+    throw new Error("community_subscription_provider_subscription_required");
   }
   const existingRows = await args.ctx.db
     .query("communitySubscriptions" as any)
@@ -234,17 +242,31 @@ export async function createCommunitySubscriptionForMembership(args: {
     .collect();
   const existing = source === "stripe"
     ? existingRows.find(
-        (row: any) => String(row.providerAccountId ?? "").trim() === providerAccountId,
+        (row: any) =>
+          String(row.providerAccountId ?? "").trim() === providerAccountId &&
+          String(row.providerSubscriptionId ?? "").trim() === providerSubscriptionId,
       ) ?? null
-    : existingRows[0] ?? null;
+    : existingRows.find(
+        (row: any) =>
+          row.source === "external_sync" &&
+          row.communityLifecycleGeneration === args.communityLifecycleGeneration,
+      ) ?? null;
   if (existing) {
+    if (existing.communityLifecycleGeneration !== args.communityLifecycleGeneration) {
+      throw new Error("community_subscription_lifecycle_generation_mismatch");
+    }
+    if (!providerSubscriptionEventShouldApply({
+      incomingCreatedAt: args.sourceEventCreatedAt,
+      currentCreatedAt: existing.lastSourceEventCreatedAt,
+      incomingStatus: status,
+      currentStatus: existing.status,
+    })) return;
     await args.ctx.db.patch(existing._id, {
       source,
       pricePointId: args.pricePointId,
       status,
       providerAccountId: providerAccountId || existing.providerAccountId,
-      providerSubscriptionId:
-        String(args.providerSubscriptionId ?? "").trim() || existing.providerSubscriptionId,
+      providerSubscriptionId: providerSubscriptionId || existing.providerSubscriptionId,
       providerCustomerId:
         String(args.providerCustomerId ?? "").trim() || existing.providerCustomerId,
       currentPeriodStartAt:
@@ -253,6 +275,7 @@ export async function createCommunitySubscriptionForMembership(args: {
         typeof args.currentPeriodEndAt === "number" ? args.currentPeriodEndAt : undefined,
       cancelAtPeriodEnd,
       endedAt,
+      lastSourceEventCreatedAt: args.sourceEventCreatedAt,
       updatedAt: args.nowMs,
     });
     await recordCriticalAuditEventBestEffort(args.ctx, {
@@ -278,13 +301,14 @@ export async function createCommunitySubscriptionForMembership(args: {
   }
   await args.ctx.db.insert("communitySubscriptions" as any, {
     communityId: args.communityId,
+    communityLifecycleGeneration: args.communityLifecycleGeneration,
     userId: args.userId,
     membershipId: args.membershipId,
     pricePointId: args.pricePointId,
     source,
     status,
     providerAccountId: providerAccountId || undefined,
-    providerSubscriptionId: String(args.providerSubscriptionId ?? "").trim() || undefined,
+    providerSubscriptionId: providerSubscriptionId || undefined,
     providerCustomerId: String(args.providerCustomerId ?? "").trim() || undefined,
     currentPeriodStartAt:
       typeof args.currentPeriodStartAt === "number" ? args.currentPeriodStartAt : undefined,
@@ -292,6 +316,7 @@ export async function createCommunitySubscriptionForMembership(args: {
       typeof args.currentPeriodEndAt === "number" ? args.currentPeriodEndAt : undefined,
     cancelAtPeriodEnd,
     endedAt,
+    lastSourceEventCreatedAt: args.sourceEventCreatedAt,
     createdAt: args.nowMs,
     updatedAt: args.nowMs,
   });
@@ -389,6 +414,8 @@ export async function redeemClaimRow(args: {
           | "canceled"
           | "ended";
         cancelAtPeriodEnd?: boolean;
+        lastProviderEventCreatedAt?: number;
+        updatedAt?: number;
       }
     | null = null;
   if (args.claim.sourceSessionId) {
@@ -469,6 +496,9 @@ export async function redeemClaimRow(args: {
     await createCommunitySubscriptionForMembership({
       ctx: args.ctx,
       communityId: args.claim.communityId,
+      communityLifecycleGeneration: normalizeCommunityLifecycleGeneration(
+        community.lifecycleGeneration,
+      ),
       membershipId: membership._id,
       userId: args.userId,
       pricePointId: args.claim.pricePointId,
@@ -482,6 +512,11 @@ export async function redeemClaimRow(args: {
         normalizeCommunitySubscriptionStatus(checkoutSession?.communitySubscriptionStatus ?? "active") ??
         "active",
       cancelAtPeriodEnd: checkoutSession?.cancelAtPeriodEnd ?? false,
+      sourceEventCreatedAt: Number(
+        checkoutSession?.lastProviderEventCreatedAt ??
+        checkoutSession?.updatedAt ??
+        args.nowMs,
+      ),
       nowMs: args.nowMs,
     });
   }

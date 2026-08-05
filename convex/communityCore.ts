@@ -160,6 +160,7 @@ export type CommunityPricePointLike = {
 export type CommunitySubscriptionLike = {
   _id: any;
   communityId: any;
+  communityLifecycleGeneration: number;
   userId: any;
   membershipId: any;
   pricePointId: any;
@@ -172,9 +173,18 @@ export type CommunitySubscriptionLike = {
   currentPeriodEndAt?: number;
   cancelAtPeriodEnd: boolean;
   endedAt?: number;
+  lastSourceEventCreatedAt: number;
   createdAt: number;
   updatedAt: number;
 };
+
+export function communitySubscriptionMatchesCurrentLifecycle(args: {
+  community: CommunityLike;
+  subscription: CommunitySubscriptionLike;
+}): boolean {
+  return args.subscription.communityLifecycleGeneration ===
+    normalizeCommunityLifecycleGeneration(args.community.lifecycleGeneration);
+}
 
 export type CommunityMembershipEntitlementState = {
   isEntitled: boolean;
@@ -1239,6 +1249,7 @@ export async function getCommunityAndMembership(args: {
 async function resolveMostRelevantCommunitySubscription(args: {
   ctx: any;
   membershipId: any;
+  community: CommunityLike;
 }): Promise<CommunitySubscriptionLike | null> {
   const rows = (await args.ctx.db
     .query("communitySubscriptions" as any)
@@ -1246,6 +1257,10 @@ async function resolveMostRelevantCommunitySubscription(args: {
     .collect()) as CommunitySubscriptionLike[];
   return (
     rows
+      .filter((row) => communitySubscriptionMatchesCurrentLifecycle({
+        community: args.community,
+        subscription: row,
+      }))
       .slice()
       .sort((a, b) => {
         const aStatus = normalizeCommunitySubscriptionStatus(a.status);
@@ -1302,6 +1317,7 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   const subscription = await resolveMostRelevantCommunitySubscription({
     ctx: args.ctx,
     membershipId: args.membership!._id,
+    community: args.community,
   });
   const subscriptionStatus = normalizeCommunitySubscriptionStatus(subscription?.status);
   return {

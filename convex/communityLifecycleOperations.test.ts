@@ -572,12 +572,14 @@ test("archive begin preflight blocks unsupported billing before containment", as
   await t.run(async (ctx) => {
     await ctx.db.insert("communitySubscriptions", {
       communityId: fixture.communityId,
+      communityLifecycleGeneration: 0,
       userId: fixture.adminId,
       membershipId: fixture.adminMembershipId,
       pricePointId: fixture.pricePointId,
       source: "external_sync",
       status: "active",
       cancelAtPeriodEnd: false,
+      lastSourceEventCreatedAt: 1_500,
       createdAt: 1_500,
       updatedAt: 1_500,
     });

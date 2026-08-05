@@ -376,6 +376,10 @@ export const completeCommunityArchiveEffectInternal = internalMutation({
         cancelAtPeriodEnd: false,
         endedAt: args.nowMs,
         revokedReason: "community_archived",
+        lastProviderEventCreatedAt: Math.max(
+          Number(row.lastProviderEventCreatedAt ?? 0),
+          args.nowMs,
+        ),
         updatedAt: args.nowMs,
       });
     } else if (args.effectKind === "community_subscription") {
@@ -396,6 +400,10 @@ export const completeCommunityArchiveEffectInternal = internalMutation({
         status: "ended",
         cancelAtPeriodEnd: false,
         endedAt: args.nowMs,
+        lastSourceEventCreatedAt: Math.max(
+          Number(row.lastSourceEventCreatedAt ?? 0),
+          args.nowMs,
+        ),
         updatedAt: args.nowMs,
       });
       await applyCommunitySubscriptionEntitlementToMembership({

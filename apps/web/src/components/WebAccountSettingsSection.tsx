@@ -98,7 +98,10 @@ export function WebAccountSettingsSection(
       setIsSubmittingSignOut(false);
     }
   };
-  const builderAttentionCommunity = props.founderBillingOverview.communities.find((community) =>
+  const activeOwnedCommunities = props.founderBillingOverview.communities.filter(
+    (community) => community.lifecycle_status === "active",
+  );
+  const builderAttentionCommunity = activeOwnedCommunities.find((community) =>
     [
       "builder_required",
       "checkout_pending",
@@ -107,11 +110,17 @@ export function WebAccountSettingsSection(
       "builder_ended",
     ].includes(community.funding_state),
   ) ?? null;
-  const activeBuilderCount = props.founderBillingOverview.communities.filter((community) =>
-    ["builder_active", "builder_canceling", "builder_included"].includes(community.funding_state),
+  const activeBuilderCount = activeOwnedCommunities.filter(
+    (community) =>
+      community.operational_funding &&
+      ["builder_active", "builder_canceling", "builder_included"].includes(
+        community.funding_state,
+      ),
   ).length;
-  const legacyApiCount = props.founderBillingOverview.communities.filter(
-    (community) => community.funding_state === "legacy_api_active",
+  const legacyApiCount = activeOwnedCommunities.filter(
+    (community) =>
+      community.operational_funding &&
+      community.funding_state === "legacy_api_active",
   ).length;
   const builderAttentionAction = builderAttentionCommunity
     ? resolveBuilderOfferPrimaryAction({
@@ -191,6 +200,11 @@ export function WebAccountSettingsSection(
                   <>
                     <strong>No Builder community yet</strong>
                     <span>Create your first community to continue.</span>
+                  </>
+                ) : activeOwnedCommunities.length === 0 ? (
+                  <>
+                    <strong>No active Builder community</strong>
+                    <span>Archived communities are dormant and do not count as active.</span>
                   </>
                 ) : builderAttentionCommunity ? (
                   <>

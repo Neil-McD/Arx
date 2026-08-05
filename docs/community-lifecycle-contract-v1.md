@@ -61,6 +61,17 @@ wildcard that can survive an archive/restore generation change.
   `can_enter_community`.
 - Checkout and purchase-claim rows capture `lifecycleGeneration`; stale
   generations cannot finalize or grant membership.
+- Founder and member subscription rows permanently capture the lifecycle
+  generation of their verified checkout. Subscription history from an older
+  generation can never fund inference, grant membership, or revoke a newer
+  generation's membership.
+- Provider subscription events are monotonic per subscription identity.
+  Out-of-order events are ignored. At an equal provider timestamp, only an
+  idempotent or more restrictive state may apply, so ambiguous access expansion
+  fails closed. An event for an inactive or mismatched
+  lifecycle generation may converge terminal evidence, but it cannot grant
+  access; a granting provider state is quarantined for exact-scope
+  cancellation.
 
 Archived communities are absent from the active shell, public discovery,
 profile community strips, and the authenticated agent/MCP directory. Public
@@ -92,6 +103,26 @@ profile community strips. `/c/:slug/settings/danger` is the canonical owner
 lifecycle location. It exposes the single owner-authorized archive command and
 carries no restore or delete mutation. Route normalization waits for resolved
 access so an owner deep-link or refresh cannot be downgraded during hydration.
+
+## Restore eligibility read model
+
+Founder funding projects lifecycle and payment state as separate facts. Every owned
+community row includes its normalized lifecycle status and generation, whether
+its current funding can operate while the community is active, and a bounded
+restore-eligibility presentation state. An archived community is always
+operationally dormant and never counts toward active Builder summaries, funding
+attention, or managed monthly totals, even if a provider subscription row has
+not yet converged.
+
+Restore eligibility is derived from the canonical Builder funding projection.
+Operator complimentary funding and an active legacy owner API lane can be
+restore-ready. Managed funding requires a new verified restoration checkout.
+An active, canceling, or generic pending managed state on an archived
+community is billing drift requiring attention, never restoration authority.
+This projection grants no mutation authority. A future
+restore command must independently re-read lifecycle generation, owner
+authority, provider state, and verified funding in its transaction before
+changing lifecycle state.
 
 ## Archive operation kernel
 

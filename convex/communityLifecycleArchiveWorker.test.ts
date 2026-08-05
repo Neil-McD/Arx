@@ -175,6 +175,7 @@ test("unexpected provider setup failures are recorded and retried", async () => 
     await ctx.db.insert("founderSubscriptions", {
       ownerUserId: fixture.ownerId,
       communityId: fixture.communityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_retry",
       providerSubscriptionId: "sub_retry",
@@ -238,6 +239,7 @@ test("the worker converges paid-member access while preserving unrelated communi
         founderId: await ctx.db.insert("founderSubscriptions", {
           ownerUserId: fixture.ownerId,
           communityId: fixture.communityId,
+          communityLifecycleGeneration: 0,
           provider: "stripe",
           providerCustomerId: "cus_founder",
           providerSubscriptionId: "sub_founder",
@@ -252,6 +254,7 @@ test("the worker converges paid-member access while preserving unrelated communi
         }),
         memberSubscriptionId: await ctx.db.insert("communitySubscriptions", {
           communityId: fixture.communityId,
+          communityLifecycleGeneration: 0,
           userId: fixture.memberId,
           membershipId: fixture.membershipId,
           pricePointId: fixture.pricePointId,
@@ -260,6 +263,7 @@ test("the worker converges paid-member access while preserving unrelated communi
           providerSubscriptionId: "sub_member",
           providerAccountId: "acct_builder",
           cancelAtPeriodEnd: false,
+          lastSourceEventCreatedAt: 1_000,
           createdAt: 1_000,
           updatedAt: 1_000,
         }),
@@ -385,6 +389,7 @@ test("member-subscription completion fails closed when its membership is missing
   const memberSubscriptionId = await t.run(async (ctx) =>
     await ctx.db.insert("communitySubscriptions", {
       communityId: fixture.communityId,
+      communityLifecycleGeneration: 0,
       userId: fixture.memberId,
       membershipId: fixture.membershipId,
       pricePointId: fixture.pricePointId,
@@ -393,6 +398,7 @@ test("member-subscription completion fails closed when its membership is missing
       providerSubscriptionId: "sub_missing_membership",
       providerAccountId: "acct_builder",
       cancelAtPeriodEnd: false,
+      lastSourceEventCreatedAt: 1_000,
       createdAt: 1_000,
       updatedAt: 1_000,
     }),

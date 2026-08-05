@@ -79,6 +79,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       await ctx.db.insert("founderSubscriptions", {
         ownerUserId: ownerId,
         communityId,
+        communityLifecycleGeneration: 0,
         provider: "stripe",
         providerCustomerId: `cus_access_lifecycle_${index}`,
         providerSubscriptionId: `sub_access_lifecycle_${index}`,
@@ -560,7 +561,7 @@ test("archive races quarantine community checkout identities and claims", async 
         currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
         cancelAtPeriodEnd: false,
         markComplete: true,
-        nowMs: nowMs + 3,
+        providerEventCreatedAt: nowMs + 3,
       },
     ),
   ).resolves.toMatchObject({ ok: true, quarantined: true });
