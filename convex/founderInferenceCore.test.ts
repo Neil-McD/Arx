@@ -291,6 +291,7 @@ test("founders can add unlimited communities sequentially when every existing co
       await ctx.db.insert("founderSubscriptions", {
         ownerUserId: ownerId,
         communityId,
+        communityLifecycleGeneration: 0,
         provider: "stripe",
         providerCustomerId: "cus_unlimited_paid",
         providerSubscriptionId: `sub_unlimited_paid_${index}`,
@@ -1057,6 +1058,7 @@ test("a community-targeted founder subscription meters managed Luna usage", asyn
       const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
         ownerUserId: ownerId,
         communityId,
+        communityLifecycleGeneration: 0,
         provider: "stripe",
         providerCustomerId: "cus_founder_paid",
         providerSubscriptionId: "sub_founder_paid",
@@ -1211,6 +1213,7 @@ test("founder usage authority cannot be unattached or rebound across communities
     const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId: firstCommunityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_binding",
       providerSubscriptionId: "sub_binding",
@@ -1388,6 +1391,42 @@ test("managed policy fails closed and founder checkouts remain independent per c
     sessionId: "founder-checkout-first",
     reused: true,
   });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.firstCommunityId, {
+      lifecycleStatus: "active",
+      lifecycleGeneration: 2,
+      updatedAt: nowMs + 1,
+    });
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-restored-generation",
+        ownerUserId: fixture.ownerId,
+        communityId: fixture.firstCommunityId,
+        expiresAt: nowMs + 60_000,
+        nowMs: nowMs + 1,
+      },
+    ),
+  ).resolves.toMatchObject({
+    sessionId: "founder-checkout-restored-generation",
+    reused: false,
+  });
+  await t.run(async (ctx) => {
+    const stale = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", "founder-checkout-first"))
+      .unique();
+    const current = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) =>
+        q.eq("sessionId", "founder-checkout-restored-generation"),
+      )
+      .unique();
+    expect(stale?.status).toBe("expired");
+    expect(current?.communityLifecycleGeneration).toBe(2);
+  });
   await expect(
     t.mutation(
       (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
@@ -1411,6 +1450,7 @@ test("community subscription history selects one granting row and rejects two", 
     await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_history",
       providerSubscriptionId: "sub_history_ended",
@@ -1427,6 +1467,7 @@ test("community subscription history selects one granting row and rejects two", 
     const activeId = await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_history",
       providerSubscriptionId: "sub_history_active",
@@ -1445,6 +1486,7 @@ test("community subscription history selects one granting row and rejects two", 
     await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId,
+      communityLifecycleGeneration: 0,
       provider: "stripe",
       providerCustomerId: "cus_history",
       providerSubscriptionId: "sub_history_ambiguous",
@@ -1687,6 +1729,88 @@ test("Stripe founder subscription sync rejects ownership changes before entitlem
         )
         .first();
       expect(checkout).toMatchObject({ status: "pending" });
+    });
+  } finally {
+    if (priorPriceId === undefined) delete process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
+    else process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = priorPriceId;
+  }
+});
+
+test("archive races quarantine founder checkout without creating funding entitlement", async () => {
+  const priorPriceId = process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
+  process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = "price_founder_archive_race";
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await t.run(async (ctx) => {
+      const ownerId = await insertUser(ctx, "archive-race", 900_000);
+      const communityId = await insertCommunity(
+        ctx,
+        ownerId,
+        "archive-race",
+        900_000,
+        "legacy_byok_allowed",
+      );
+      await ctx.db.patch(communityId, {
+        lifecycleStatus: "active",
+        lifecycleGeneration: 4,
+      });
+      return { ownerId, communityId };
+    });
+    await t.mutation(
+      (internal as any).founderBilling.createPendingFounderSubscriptionCheckoutInternal,
+      {
+        sessionId: "founder-checkout-archive-race",
+        ownerUserId: fixture.ownerId,
+        communityId: fixture.communityId,
+        expiresAt: 9_000_000,
+        nowMs: 900_000,
+      },
+    );
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.communityId, {
+        lifecycleStatus: "archiving",
+        lifecycleGeneration: 5,
+        updatedAt: 901_000,
+      });
+    });
+    const result = await t.mutation(
+      (internal as any).founderBilling.syncFounderSubscriptionFromStripeInternal,
+      {
+        localSessionId: "founder-checkout-archive-race",
+        providerCheckoutSessionId: "cs_founder_archive_race",
+        providerCustomerId: "cus_founder_archive_race",
+        providerSubscriptionId: "sub_founder_archive_race",
+        providerPriceId: "price_unmanaged_stale_archive_race",
+        subscriptionStatus: "active",
+        currentPeriodStartAt: 902_000,
+        currentPeriodEndAt: 3_292_902_000,
+        cancelAtPeriodEnd: false,
+        providerEventCreatedAt: 902_000,
+      },
+    );
+    expect(result).toMatchObject({ ok: true, quarantined: true });
+    await t.run(async (ctx) => {
+      expect(await ctx.db.query("founderSubscriptions").collect()).toHaveLength(0);
+      expect(await ctx.db.query("founderUsageCycles").collect()).toHaveLength(0);
+      const checkout = await ctx.db
+        .query("checkoutSessions")
+        .withIndex("by_sessionId", (q: any) =>
+          q.eq("sessionId", "founder-checkout-archive-race"),
+        )
+        .unique();
+      expect(checkout).toMatchObject({
+        status: "expired",
+        providerCheckoutSessionId: "cs_founder_archive_race",
+        providerSubscriptionId: "sub_founder_archive_race",
+        providerPriceId: "price_unmanaged_stale_archive_race",
+      });
+      expect(checkout?.communitySubscriptionStatus).not.toBe("canceled");
+      const community = await ctx.db.get(fixture.communityId);
+      expect(community).toMatchObject({
+        lifecycleStatus: "archiving",
+        lifecycleGeneration: 5,
+        inferenceFundingPolicy: "legacy_byok_allowed",
+      });
     });
   } finally {
     if (priorPriceId === undefined) delete process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;

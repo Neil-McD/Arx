@@ -65,8 +65,18 @@ function main() {
   );
   assert.match(
     listDiscover,
-    /\.withIndex\("by_visibility_updatedAt", \(q\) => q\.eq\("visibility", "published"\)\)/,
-    "Discover must list only published communities",
+    /\.withIndex\("by_lifecycle_visibility_updatedAt", \(q\) =>\s*q\.eq\("lifecycleStatus", undefined\)\.eq\("visibility", "published"\)/,
+    "Discover must preserve the pre-backfill published compatibility lane",
+  );
+  assert.match(
+    listDiscover,
+    /\.withIndex\("by_lifecycle_visibility_updatedAt", \(q\) =>\s*q\.eq\("lifecycleStatus", "active"\)\.eq\("visibility", "published"\)/,
+    "Discover must list active published communities through the lifecycle-aware index",
+  );
+  assert.doesNotMatch(
+    listDiscover,
+    /eq\("lifecycleStatus", "(?:archiving|archived)"\)/,
+    "Discover must never admit archiving or archived communities",
   );
   assert.doesNotMatch(
     listDiscover,

@@ -192,6 +192,7 @@ export default defineSchema({
   founderSubscriptions: defineTable({
     ownerUserId: v.id("users"),
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.number(),
     provider: v.literal("stripe"),
     providerCustomerId: v.string(),
     providerSubscriptionId: v.string(),
@@ -215,6 +216,11 @@ export default defineSchema({
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
     .index("by_community", ["communityId"])
+    .index("by_community_status_providerSubscriptionId", [
+      "communityId",
+      "status",
+      "providerSubscriptionId",
+    ])
     .index("by_provider_subscription", ["providerSubscriptionId"]),
 
   founderUsageCycles: defineTable({
@@ -602,7 +608,9 @@ export default defineSchema({
       ),
     ),
     cancelAtPeriodEnd: v.optional(v.boolean()),
+    lastProviderEventCreatedAt: v.optional(v.number()),
     communityId: v.optional(v.id("communities")),
+    communityLifecycleGeneration: v.optional(v.number()),
     billingPeriod: v.optional(v.string()),
     pricePointId: v.optional(v.id("communityPricePoints")),
     amountBaseUnits: v.optional(v.number()),
@@ -625,6 +633,13 @@ export default defineSchema({
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
     .index("by_mode_status", ["mode", "status"])
+    .index("by_community_status_mode_providerAccount_checkout", [
+      "communityId",
+      "status",
+      "mode",
+      "providerAccountId",
+      "providerCheckoutSessionId",
+    ])
     .index("by_community_status", ["communityId", "status"]),
 
   userStripeCustomers: defineTable({
@@ -664,6 +679,7 @@ export default defineSchema({
   purchaseClaims: defineTable({
     claimToken: v.string(),
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     billingPeriod: v.optional(v.string()),
     pricePointId: v.optional(v.id("communityPricePoints")),
     amountBaseUnits: v.optional(v.number()),
@@ -877,6 +893,8 @@ export default defineSchema({
 
   emailOutbox: defineTable({
     kind: v.string(),
+    communityId: v.optional(v.id("communities")),
+    communityLifecycleGeneration: v.optional(v.number()),
     recipientUserId: v.optional(v.id("users")),
     recipientEmail: v.string(),
     templateKey: v.string(),
@@ -900,6 +918,7 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_status_scheduledAt", ["status", "scheduledAt"])
+    .index("by_community_status_scheduledAt", ["communityId", "status", "scheduledAt"])
     .index("by_dedupeKey", ["dedupeKey"])
     .index("by_recipientUserId", ["recipientUserId"])
     .index("by_providerMessageId", ["providerMessageId"]),
@@ -1198,6 +1217,21 @@ export default defineSchema({
       }),
     ),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
+    // Additive lifecycle compatibility fields. Missing values normalize to
+    // active/generation 0 until the bounded backfill reaches zero drift.
+    lifecycleStatus: v.optional(
+      v.union(
+        v.literal("active"),
+        v.literal("archiving"),
+        v.literal("archived"),
+      ),
+    ),
+    lifecycleGeneration: v.optional(v.number()),
+    archiveRequestedAt: v.optional(v.number()),
+    archiveEffectiveAt: v.optional(v.number()),
+    archivedAt: v.optional(v.number()),
+    archiveRequestedByUserId: v.optional(v.id("users")),
+    restoredAt: v.optional(v.number()),
     inferenceFundingPolicy: v.union(
       v.literal("legacy_byok_allowed"),
       v.literal("managed_required"),
@@ -1213,8 +1247,41 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_createdAt", ["ownerId", "createdAt"])
+    .index("by_owner_lifecycle_createdAt", ["ownerId", "lifecycleStatus", "createdAt"])
     .index("by_slug", ["slug"])
-    .index("by_visibility_updatedAt", ["visibility", "updatedAt"]),
+    .index("by_visibility_updatedAt", ["visibility", "updatedAt"])
+    .index("by_lifecycle_updatedAt", ["lifecycleStatus", "updatedAt"])
+    .index("by_lifecycle_visibility_updatedAt", ["lifecycleStatus", "visibility", "updatedAt"]),
+
+  communityLifecycleOperations: defineTable({
+    communityId: v.id("communities"),
+    lifecycleGeneration: v.number(),
+    kind: v.literal("archive"),
+    state: v.union(
+      v.literal("requested"),
+      v.literal("processing"),
+      v.literal("succeeded"),
+      v.literal("failed"),
+    ),
+    requestedByUserId: v.id("users"),
+    attemptCount: v.number(),
+    nextAttemptAt: v.number(),
+    lastAttemptAt: v.optional(v.number()),
+    leaseId: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    errorCode: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_generation_kind", [
+      "communityId",
+      "lifecycleGeneration",
+      "kind",
+    ])
+    .index("by_state_nextAttemptAt", ["state", "nextAttemptAt"])
+    .index("by_state_leaseExpiresAt", ["state", "leaseExpiresAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
 
   // Canonical public conversation containers. Every active channel has the
   // same all-member read/post policy in the first multi-channel slice.
@@ -1407,10 +1474,11 @@ export default defineSchema({
 
   communitySubscriptions: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.number(),
     userId: v.id("users"),
     membershipId: v.id("communityMemberships"),
     pricePointId: v.id("communityPricePoints"),
-    source: v.optional(v.union(v.literal("stripe"), v.literal("external_sync"))),
+    source: v.union(v.literal("stripe"), v.literal("external_sync")),
     status: v.union(
       v.literal("active"),
       v.literal("past_due"),
@@ -1425,6 +1493,7 @@ export default defineSchema({
     currentPeriodEndAt: v.optional(v.number()),
     cancelAtPeriodEnd: v.boolean(),
     endedAt: v.optional(v.number()),
+    lastSourceEventCreatedAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1435,6 +1504,18 @@ export default defineSchema({
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
     .index("by_providerAccount_subscription", ["providerAccountId", "providerSubscriptionId"])
     .index("by_status", ["status"])
+    .index("by_community_status_source_providerAccountId", [
+      "communityId",
+      "status",
+      "source",
+      "providerAccountId",
+    ])
+    .index("by_community_status_source_providerSubscriptionId", [
+      "communityId",
+      "status",
+      "source",
+      "providerSubscriptionId",
+    ])
     .index("by_community_status", ["communityId", "status"]),
 
   communityApplicationFeeRefunds: defineTable({
@@ -1832,6 +1913,7 @@ export default defineSchema({
 
   communityInteractionMentions: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     // Target-derived from the root. Optional only for private dock and
     // rolling-compatible pre-channel mention rows.
     channelId: v.optional(v.id("communityChannels")),
@@ -1882,6 +1964,7 @@ export default defineSchema({
 
   communityMentionBroadcasts: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     // Derived from the source root; optional for pre-channel broadcasts.
     channelId: v.optional(v.id("communityChannels")),
     roleKey: v.string(),
@@ -1929,6 +2012,7 @@ export default defineSchema({
 
   communityAgentServeRequests: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     agentKey: v.string(),
     sourceMentionId: v.id("communityInteractionMentions"),
     sourceRootId: v.optional(v.id("communityInteractionRoots")),
@@ -1951,11 +2035,18 @@ export default defineSchema({
       v.literal("source_not_human"),
       v.literal("requester_missing"),
       v.literal("requester_access_missing"),
+      v.literal("community_archiving"),
+      v.literal("community_archived"),
+      v.literal("community_lifecycle_generation_stale"),
       v.literal("agent_disabled"),
       v.literal("requester_connection_missing"),
+      v.literal("owner_funding_choice_required"),
       v.literal("owner_credential_missing"),
       v.literal("owner_funding_suspended"),
       v.literal("founder_plan_required"),
+      v.literal("founder_subscription_inactive"),
+      v.literal("founder_subscription_ambiguous"),
+      v.literal("founder_subscription_owner_mismatch"),
     ),
     sourceVisibilityScope: v.optional(
       v.union(
@@ -2678,6 +2769,7 @@ export default defineSchema({
 
   communitySourceCrawlJobs: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     createdByUserId: v.id("users"),
     provider: v.union(v.literal("simple"), v.literal("crawl4ai"), v.literal("firecrawl")),
     rootUrl: v.string(),
@@ -3414,6 +3506,7 @@ export default defineSchema({
 
   communityCompilerDigests: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     dedupeKey: v.string(),
     // New compiler output is immutable per canonical work set. Historical
     // daily-upsert rows omit this field and are never claimed as agent work.
@@ -3434,6 +3527,7 @@ export default defineSchema({
       v.union(
         v.literal("settled"),
         v.literal("superseded"),
+        v.literal("community_lifecycle_generation_stale"),
       ),
     ),
     agentAttemptCount: v.optional(v.number()),
@@ -3501,8 +3595,19 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_windowEndedAt", ["communityId", "windowEndedAt"])
     .index("by_community_versionKey", ["communityId", "versionKey"])
+    .index("by_community_generation_versionKey", [
+      "communityId",
+      "communityLifecycleGeneration",
+      "versionKey",
+    ])
     .index("by_community_agentHandoffState_createdAt", [
       "communityId",
+      "agentHandoffState",
+      "createdAt",
+    ])
+    .index("by_community_generation_agentHandoffState_createdAt", [
+      "communityId",
+      "communityLifecycleGeneration",
       "agentHandoffState",
       "createdAt",
     ]),

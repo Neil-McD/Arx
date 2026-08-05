@@ -10,6 +10,7 @@ const schema = read("convex/schema.ts");
 const shared = read("shared/founderInference.ts");
 const founderPlan = read("shared/founderPlan.ts");
 const core = read("convex/founderInferenceCore.ts");
+const ownerFunding = read("convex/communityOwnerFundingCore.ts");
 const planCore = read("convex/founderPlanCore.ts");
 const pricing = read("convex/founderPlanPricing.ts");
 const founderBilling = read("convex/founderBilling.ts");
@@ -80,8 +81,8 @@ assert.doesNotMatch(
   /normalizeCommunityInferenceFundingPolicy|resolveCommunityInferenceFundingPolicy/,
 );
 assert.match(
-  core,
-  /community\.inferenceFundingPolicy !== COMMUNITY_FUNDING_POLICY_LEGACY_BYOK[\s\S]*founder_plan_required/,
+  ownerFunding,
+  /facts\.fundingPolicy !== COMMUNITY_FUNDING_POLICY_LEGACY_BYOK[\s\S]*founder_plan_required/,
 );
 assert.doesNotMatch(founderBilling, /setCommunityFundingPolicyInternal/);
 assert.match(
@@ -119,11 +120,11 @@ assert.match(lifecycle, /inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGE
 assert.doesNotMatch(core, /existingFounderInferenceCohortIsInitialized|legacy_requester_chatgpt/);
 assert.doesNotMatch(core, /communityFounderFundingAllowsPublicAccess|requireCommunityFounderFundingForPublish/);
 assert.doesNotMatch(communityPublic, /founderInference|FounderFunding|community_founder_funding|community_not_available/);
-assert.match(core, /return \{ ok: false, code: "founder_plan_required" \}/);
-assert.match(core, /grant\.status === "approved"[\s\S]*owner_funding_choice_required/);
-assert.match(core, /grant\.status === "suspended"[\s\S]*owner_funding_suspended/);
-assert.match(core, /mode: "owner_api_key"[\s\S]*payerUserId: community\.ownerId/);
-assert.match(core, /mode: "platform_subscription"[\s\S]*subscriptionId: attachedSubscription\._id/);
+assert.match(ownerFunding, /return \{ ok: false, code: "founder_plan_required" \}/);
+assert.match(ownerFunding, /legacyGrant\.status === "approved"[\s\S]*owner_funding_choice_required/);
+assert.match(ownerFunding, /legacyGrant\.status === "suspended"[\s\S]*owner_funding_suspended/);
+assert.match(ownerFunding, /mode: "owner_api_key"[\s\S]*payerUserId: facts\.ownerUserId/);
+assert.match(ownerFunding, /mode: "platform_subscription"[\s\S]*subscriptionId: facts\.subscription\._id/);
 assert.match(planCore, /reserveFounderUsage/);
 assert.match(planCore, /nextReserved \+ cycle\.settledCostMicros > cycle\.includedCostMicros/);
 assert.match(planCore, /founder_subscription_community_missing/);

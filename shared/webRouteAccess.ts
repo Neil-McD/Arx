@@ -13,6 +13,7 @@ export type WebRouteScopedAccessState =
   | "not_applicable"
   | "resolving"
   | "allowed"
+  | "inactive"
   | "denied";
 
 export type WebRouteAccessRequirement =
@@ -27,6 +28,11 @@ export type WebRouteAccessRequirement =
 export type WebRouteAccessProjection =
   | { kind: "render_public"; requirement: WebRouteAccessRequirement }
   | { kind: "render_authenticated"; requirement: WebRouteAccessRequirement }
+  | {
+      kind: "render_inactive_community";
+      requirement: "community";
+      communitySlug: string;
+    }
   | { kind: "hold"; requirement: WebRouteAccessRequirement }
   | {
       kind: "redirect_landing";
@@ -135,6 +141,13 @@ export function resolveWebRouteAccessProjection(params: {
     const accessState = params.communityAccessState ?? "resolving";
     if (accessState === "allowed") {
       return { kind: "render_authenticated", requirement };
+    }
+    if (accessState === "inactive") {
+      return {
+        kind: "render_inactive_community",
+        requirement,
+        communitySlug,
+      };
     }
     if (accessState === "denied" && communitySlug) {
       return {

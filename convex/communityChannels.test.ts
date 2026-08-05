@@ -579,7 +579,7 @@ test("managers rename and soft-delete custom channels while General stays immuta
   const catalog = await asOwner.query(api.communityChannels.listCommunityChannels, {
     communityId: fixture.communityId,
   });
-  const general = catalog.channels.find((channel) => channel.is_general);
+  const general = catalog.channels.find((channel: any) => channel.is_general);
   if (!general) throw new Error("general_channel_missing");
 
   await expect(
@@ -718,7 +718,7 @@ test("managers rename and soft-delete custom channels while General stays immuta
   const afterDelete = await asOwner.query(api.communityChannels.listCommunityChannels, {
     communityId: fixture.communityId,
   });
-  expect(afterDelete.channels.map((channel) => channel.id)).not.toContain(created.id);
+  expect(afterDelete.channels.map((channel: any) => channel.id)).not.toContain(created.id);
   await t.run(async (ctx) => {
     expect(await ctx.db.get(created.id as any)).toMatchObject({
       status: "archived",

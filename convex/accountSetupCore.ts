@@ -11,6 +11,7 @@ import {
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
 import { founderSubscriptionStatusGrantsAccess } from "../shared/founderPlan";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
+import { normalizeCommunityLifecycleGeneration } from "./communityLifecycleCore";
 
 export type AccountSetupUserRow = {
   _id: any;
@@ -121,16 +122,26 @@ export async function loadAccountSetupStatusForUser(
   user: AccountSetupUserRow,
   detail: AccountSetupProfileDetailRow | null,
 ): Promise<AccountSetupStatus> {
-  const [providerConnections, legalAcceptances, founderSubscriptions, operatorComped] = await Promise.all([
+  const [providerConnections, legalAcceptances, founderSubscriptions, ownedCommunities, operatorComped] = await Promise.all([
     ctx.db.query("userProviderConnections").withIndex("by_user", (q: any) => q.eq("userId", user._id)).collect(),
     listPlatformLegalAcceptancesForUser(ctx, user._id),
     ctx.db
       .query("founderSubscriptions")
       .withIndex("by_owner", (q: any) => q.eq("ownerUserId", user._id))
       .collect(),
+    ctx.db
+      .query("communities")
+      .withIndex("by_owner", (q: any) => q.eq("ownerId", user._id))
+      .collect(),
     hasPlatformOwnerComplimentaryAccess(ctx, user._id),
   ]);
   const nowMs = Date.now();
+  const currentGenerationByCommunityId = new Map(
+    ownedCommunities.map((community: any) => [
+      String(community._id),
+      normalizeCommunityLifecycleGeneration(community.lifecycleGeneration),
+    ]),
+  );
   return buildAccountSetupStatusForRows({
     user,
     detail,
@@ -139,6 +150,8 @@ export async function loadAccountSetupStatusForUser(
     hasManagedInference:
       operatorComped ||
       founderSubscriptions.some((row: any) =>
+        row.communityLifecycleGeneration ===
+          currentGenerationByCommunityId.get(String(row.communityId)) &&
         founderSubscriptionStatusGrantsAccess({
           status: row.status,
           currentPeriodEndAt: row.currentPeriodEndAt,

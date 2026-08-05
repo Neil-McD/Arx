@@ -43,6 +43,7 @@ import {
   getUniqueUserProfileDetailByUserId,
 } from "./profileCore";
 import { resolveViewerProfileRelationship } from "./profileRelationshipCore";
+import { communityIsOperational } from "./communityLifecycleCore";
 import {
   listMemberSemanticDirectory,
   resolveMemberSemanticProfile,
@@ -235,6 +236,10 @@ export async function listAccessibleCommunityDirectoryPage(args: {
         numItems: limit,
       });
     for (const community of ownedPage.page as CommunityLike[]) {
+      if (!communityIsOperational(community)) {
+        skippedIncomplete += 1;
+        continue;
+      }
       const projected = await projectAccessibleCommunityDirectorySummary({
         ctx: args.ctx,
         userId,
@@ -293,6 +298,10 @@ export async function listAccessibleCommunityDirectoryPage(args: {
       row.communityId,
     )) as CommunityLike | null;
     if (!community || String(community.ownerId) === String(userId)) {
+      skippedIncomplete += 1;
+      continue;
+    }
+    if (!communityIsOperational(community)) {
       skippedIncomplete += 1;
       continue;
     }

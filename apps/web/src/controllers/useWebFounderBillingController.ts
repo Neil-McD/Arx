@@ -168,6 +168,7 @@ export function useWebFounderBillingController(params: {
     error,
     fundingAttentionCommunities: overview.communities.filter(
       (community) =>
+        community.lifecycle_status === "active" &&
         community.funding_mode === "managed" &&
         [
           "builder_required",

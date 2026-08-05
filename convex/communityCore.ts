@@ -8,6 +8,13 @@ import {
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility";
 import type { CommunityVisualIdentity } from "../shared/communityVisualIdentity";
+import {
+  communityIsOperational,
+  normalizeCommunityLifecycleGeneration,
+  normalizeCommunityLifecycleStatus,
+  requireCommunityOwnerAnyLifecycle,
+  requireOperationalCommunity,
+} from "./communityLifecycleCore";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -29,6 +36,13 @@ export type CommunityLike = {
   bannerZoom?: number;
   brandingRevision?: number;
   visibility: "published" | "unlisted";
+  lifecycleStatus?: "active" | "archiving" | "archived";
+  lifecycleGeneration?: number;
+  archiveRequestedAt?: number;
+  archiveEffectiveAt?: number;
+  archivedAt?: number;
+  archiveRequestedByUserId?: any;
+  restoredAt?: number;
   entryPolicy?: CommunityEntryPolicy;
   activeMemberCount?: number;
   createdAt: number;
@@ -37,7 +51,7 @@ export type CommunityLike = {
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityAccessRelation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
-export type CommunityPrimaryCta = "open_community" | "join" | "checkout";
+export type CommunityPrimaryCta = "open_community" | "join" | "checkout" | null;
 
 export type CommunityMembershipLike = {
   _id: any;
@@ -146,10 +160,11 @@ export type CommunityPricePointLike = {
 export type CommunitySubscriptionLike = {
   _id: any;
   communityId: any;
+  communityLifecycleGeneration: number;
   userId: any;
   membershipId: any;
   pricePointId: any;
-  source?: "stripe" | "external_sync";
+  source: "stripe" | "external_sync";
   status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
   providerSubscriptionId?: string;
   providerAccountId?: string;
@@ -158,9 +173,18 @@ export type CommunitySubscriptionLike = {
   currentPeriodEndAt?: number;
   cancelAtPeriodEnd: boolean;
   endedAt?: number;
+  lastSourceEventCreatedAt: number;
   createdAt: number;
   updatedAt: number;
 };
+
+export function communitySubscriptionMatchesCurrentLifecycle(args: {
+  community: CommunityLike;
+  subscription: CommunitySubscriptionLike;
+}): boolean {
+  return args.subscription.communityLifecycleGeneration ===
+    normalizeCommunityLifecycleGeneration(args.community.lifecycleGeneration);
+}
 
 export type CommunityMembershipEntitlementState = {
   isEntitled: boolean;
@@ -958,6 +982,81 @@ export function communitySubscriptionStatusGrantsAccess(
   return status === "active" || status === "past_due" || status === "cancel_at_period_end";
 }
 
+const COMMUNITY_SUBSCRIPTION_RISK_REVOCATION_REASONS = new Set([
+  "subscription_refunded",
+  "subscription_dispute_opened",
+  "subscription_dispute_lost",
+]);
+
+export async function applyCommunitySubscriptionEntitlementToMembership(args: {
+  ctx: any;
+  communityId: any;
+  membership: CommunityMembershipLike;
+  userId: any;
+  pricePointId: any;
+  status: CommunitySubscriptionLike["status"];
+  revokedReason?: string | null;
+  preserveRiskRevocation?: boolean;
+  nowMs: number;
+}): Promise<CommunityMembershipLike> {
+  if (
+    String(args.membership.communityId) !== String(args.communityId) ||
+    String(args.membership.userId) !== String(args.userId)
+  ) {
+    throw new Error("community_subscription_membership_mismatch");
+  }
+  if (
+    String(args.membership.accessSource ?? "").trim().toLowerCase() !==
+    "paid_subscription"
+  ) {
+    throw new Error("community_membership_not_subscription");
+  }
+
+  const grantsAccess = communitySubscriptionStatusGrantsAccess(args.status);
+  const revokedReason = String(args.revokedReason ?? "").trim().slice(0, 160);
+  const existingRevokedReason = String(
+    args.membership.revokedReason ?? "",
+  ).trim();
+  const shouldPreserveRiskRevocation =
+    grantsAccess &&
+    args.preserveRiskRevocation === true &&
+    args.membership.active === false &&
+    COMMUNITY_SUBSCRIPTION_RISK_REVOCATION_REASONS.has(
+      existingRevokedReason,
+    );
+  const updatedMembership = {
+    ...args.membership,
+    pricePointId: args.pricePointId,
+    active: shouldPreserveRiskRevocation ? false : grantsAccess,
+    revokedAt: shouldPreserveRiskRevocation
+      ? args.membership.revokedAt ?? args.nowMs
+      : grantsAccess
+        ? undefined
+        : args.nowMs,
+    revokedReason: shouldPreserveRiskRevocation
+      ? existingRevokedReason
+      : grantsAccess
+        ? undefined
+        : revokedReason || `subscription_${args.status}`,
+    updatedAt: args.nowMs,
+  } as CommunityMembershipLike;
+
+  await args.ctx.db.patch(args.membership._id, {
+    pricePointId: updatedMembership.pricePointId,
+    active: updatedMembership.active,
+    revokedAt: updatedMembership.revokedAt,
+    revokedReason: updatedMembership.revokedReason,
+    updatedAt: updatedMembership.updatedAt,
+  });
+  await adjustCommunityActiveMemberCountForMembershipTransition({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    before: args.membership,
+    after: updatedMembership,
+  });
+  return updatedMembership;
+}
+
 function communityAccessSourceIsDurable(
   source: ReturnType<typeof normalizeMembershipAccessSource>,
 ): boolean {
@@ -1150,6 +1249,7 @@ export async function getCommunityAndMembership(args: {
 async function resolveMostRelevantCommunitySubscription(args: {
   ctx: any;
   membershipId: any;
+  community: CommunityLike;
 }): Promise<CommunitySubscriptionLike | null> {
   const rows = (await args.ctx.db
     .query("communitySubscriptions" as any)
@@ -1157,6 +1257,10 @@ async function resolveMostRelevantCommunitySubscription(args: {
     .collect()) as CommunitySubscriptionLike[];
   return (
     rows
+      .filter((row) => communitySubscriptionMatchesCurrentLifecycle({
+        community: args.community,
+        subscription: row,
+      }))
       .slice()
       .sort((a, b) => {
         const aStatus = normalizeCommunitySubscriptionStatus(a.status);
@@ -1175,6 +1279,15 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   membership: CommunityMembershipLike | null;
   userId: any;
 }): Promise<CommunityMembershipEntitlementState> {
+  if (!communityIsOperational(args.community)) {
+    return {
+      isEntitled: false,
+      accessSource:
+        normalizeMembershipAccessSource(args.membership?.accessSource) || null,
+      subscriptionStatus: null,
+      subscriptionCurrentPeriodEndAt: null,
+    };
+  }
   if (args.community.ownerId === args.userId) {
     return {
       isEntitled: true,
@@ -1204,6 +1317,7 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   const subscription = await resolveMostRelevantCommunitySubscription({
     ctx: args.ctx,
     membershipId: args.membership!._id,
+    community: args.community,
   });
   const subscriptionStatus = normalizeCommunitySubscriptionStatus(subscription?.status);
   return {
@@ -1239,6 +1353,7 @@ export async function requireCommunityChatAccess(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  requireOperationalCommunity(community);
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,
@@ -1264,6 +1379,13 @@ export async function resolveCommunityAccessBundle(args: {
   membership: CommunityMembershipLike | null;
   userId: any;
 }) {
+  const lifecycleStatus = normalizeCommunityLifecycleStatus(
+    args.community.lifecycleStatus,
+  );
+  const lifecycleGeneration = normalizeCommunityLifecycleGeneration(
+    args.community.lifecycleGeneration,
+  );
+  const isOperational = communityIsOperational(args.community);
   const role = normalizeCommunityRoleForOutput(args.membership?.role);
   const isOwner = args.community.ownerId === args.userId;
   const isBlocked = !isOwner
@@ -1280,12 +1402,12 @@ export async function resolveCommunityAccessBundle(args: {
     membership: args.membership,
     userId: args.userId,
   });
-  const isEntitled = !isBlocked && entitlement.isEntitled;
+  const isEntitled = isOperational && !isBlocked && entitlement.isEntitled;
   const isAdmin = !isOwner && isEntitled && role === "admin";
   const isModerator = !isOwner && isEntitled && role === "moderator";
   let joinRequestStatus: string | null = null;
   let joinRequestReapplyAt: number | null = null;
-  if (!isEntitled) {
+  if (isOperational && !isEntitled) {
     const joinRequestRows = (await args.ctx.db
       .query("communityJoinRequests")
       .withIndex("by_community_user", (q: any) =>
@@ -1314,20 +1436,24 @@ export async function resolveCommunityAccessBundle(args: {
   const canReadChat = isEntitled;
   const canPostChat = isEntitled;
   const canView = !isBlocked;
-  const canManageMembers = isOwner || isAdmin;
-  const canManageResources = isOwner || isAdmin;
-  const canModerateContent = isOwner || isAdmin || isModerator;
-  const canReviewJoinRequests = isOwner || isAdmin || isModerator;
-  const canManagePricing = isOwner || isAdmin;
-  const canManageBranding = isOwner;
-  const canManagePublishing = isOwner;
-  const canManagePayouts = isOwner;
+  const canManageMembers = isOperational && (isOwner || isAdmin);
+  const canManageResources = isOperational && (isOwner || isAdmin);
+  const canModerateContent =
+    isOperational && (isOwner || isAdmin || isModerator);
+  const canReviewJoinRequests =
+    isOperational && (isOwner || isAdmin || isModerator);
+  const canManagePricing = isOperational && (isOwner || isAdmin);
+  const canManageBranding = isOperational && isOwner;
+  const canManagePublishing = isOperational && isOwner;
+  const canManagePayouts = isOperational && isOwner;
   const canPostMessage = isEntitled;
-  const primaryCta: CommunityPrimaryCta = isEntitled
-    ? "open_community"
-    : entryPolicy === "paid_subscription"
-      ? "checkout"
-      : "join";
+  const primaryCta: CommunityPrimaryCta = !isOperational
+    ? null
+    : isEntitled
+      ? "open_community"
+      : entryPolicy === "paid_subscription"
+        ? "checkout"
+        : "join";
 
   return {
     community_id: String(args.community._id),
@@ -1335,6 +1461,8 @@ export async function resolveCommunityAccessBundle(args: {
     relation,
     entry_policy: entryPolicy,
     visibility: args.community.visibility,
+    lifecycle_status: lifecycleStatus,
+    lifecycle_generation: lifecycleGeneration,
     join_request_status: joinRequestStatus,
     join_request_reapply_at: joinRequestReapplyAt !== null ? toIsoString(joinRequestReapplyAt) : null,
     primary_cta: primaryCta,
@@ -1381,6 +1509,7 @@ export async function requireCommunityManager(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  requireOperationalCommunity(community);
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,
@@ -1406,12 +1535,14 @@ export async function requireCommunityOwner(args: {
   communityId: any;
   userId: any;
 }): Promise<{ community: CommunityLike }> {
-  const { community } = await getCommunityAndMembership(args);
-  if (String(community.ownerId) !== String(args.userId)) {
-    throw new Error("community_owner_required");
-  }
+  const { community } = await requireCommunityOwnerAnyLifecycle<CommunityLike>(
+    args,
+  );
+  requireOperationalCommunity(community);
   return { community };
 }
+
+export { requireCommunityOwnerAnyLifecycle } from "./communityLifecycleCore";
 
 export async function requireCommunityModerator(args: {
   ctx: any;
@@ -1419,6 +1550,7 @@ export async function requireCommunityModerator(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  requireOperationalCommunity(community);
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,

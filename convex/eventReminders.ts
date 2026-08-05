@@ -9,6 +9,7 @@ import {
 } from "../shared/communityEventTime";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
+import { communityIsOperational } from "./communityLifecycleCore";
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const DEFAULT_LOOKAHEAD_MS = 20 * 60 * 1000;
@@ -31,6 +32,7 @@ type CommunityRow = {
   ownerId: any;
   slug: string;
   name: string;
+  lifecycleStatus?: "active" | "archiving" | "archived";
 };
 
 type CommunityEventRow = {
@@ -148,7 +150,7 @@ export const buildEventReminderBatchesInternal = internalQuery({
       if (occurrenceStarts.length === 0) continue;
 
       const community = (await ctx.db.get(event.communityId)) as CommunityRow | null;
-      if (!community) continue;
+      if (!community || !communityIsOperational(community)) continue;
       const communitySlug = String(community.slug ?? "").trim();
       if (!communitySlug) continue;
       const recipientUserIds = await listActiveCommunityRecipientUserIds(ctx, {
@@ -215,6 +217,7 @@ export const enqueueEventReminderEmailsInternal = internalAction({
           (internal as any).email.enqueueEmailJobInternal,
           {
             kind: "event_reminder_24h",
+            communityId: batch.communityId,
             recipientUserId: userId,
             templateKey: "event_reminder",
             payload,

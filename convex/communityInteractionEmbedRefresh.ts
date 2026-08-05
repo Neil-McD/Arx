@@ -6,6 +6,7 @@ import {
   INTERACTION_EMBED_RESOLVER_VERSION,
   interactionXStatusIdentity,
 } from "../shared/interactionEmbedPreviewContract";
+import { communityIsOperational } from "./communityLifecycleCore";
 
 const DEFAULT_REFRESH_BATCH_SIZE = 50;
 const MAX_REFRESH_BATCH_SIZE = 100;
@@ -65,6 +66,8 @@ export const scheduleDueInteractionEmbedPreviewRefresh = internalMutation({
             embed.embedKind !== "link" ||
             !refreshableSourceMatchesProvider(embed.sourceUrl ?? embed.normalizedSourceUrl, provider)
           ) continue;
+          const community = await ctx.db.get(embed.communityId);
+          if (!community || !communityIsOperational(community)) continue;
           const dueByVersion =
             embed.resolverVersion !== INTERACTION_EMBED_RESOLVER_VERSION &&
             typeof embed.nextRefreshAt !== "number";

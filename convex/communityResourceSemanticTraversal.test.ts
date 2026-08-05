@@ -1027,7 +1027,7 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     throw new Error("semantic_member_directory_result_missing");
   }
   expect(
-    new Set(memberDirectory.result.entries.map((entry) => entry.path)),
+    new Set(memberDirectory.result.entries.map((entry: any) => entry.path)),
   ).toEqual(
     new Set([
       "/members/semantic-owner.md",

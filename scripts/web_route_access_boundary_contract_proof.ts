@@ -87,6 +87,20 @@ assert.deepEqual(
 assert.deepEqual(
   project({
     activePage: "community",
+    pathname: "/c/archived/settings/danger",
+    authState: "signed_in",
+    communitySlug: "archived",
+    communityAccessState: "inactive",
+  }),
+  {
+    kind: "render_inactive_community",
+    requirement: "community",
+    communitySlug: "archived",
+  },
+);
+assert.deepEqual(
+  project({
+    activePage: "community",
     pathname: "/community",
     authState: "signed_in",
     communityAccessState: "resolving",
@@ -214,6 +228,9 @@ const app = read("apps/web/src/App.tsx");
 const boundary = read(
   "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts",
 );
+const communityResolution = read(
+  "apps/web/src/controllers/useWebCommunityRouteResolution.ts",
+);
 const onboarding = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
@@ -243,7 +260,15 @@ assert.match(
   "the composition root must hold before rendering unauthorized chrome",
 );
 assert.match(boundary, /params\.navigateTo\(destination, \{ replace: true \}\)/);
-assert.match(boundary, /setCommunityResolution\(\{ slug, state: "denied" \}\)/);
+assert.match(
+  communityResolution,
+  /setResolution\(\{ slug, state: "denied", inactiveRoute: null \}\)/,
+);
+assert.match(
+  communityResolution,
+  /communityLifecycleIsInactive\(access\?\.lifecycle_status\)[\s\S]*state: "inactive"/,
+  "inactive community routes must project terminal lifecycle state instead of redirecting or mounting content",
+);
 assert.doesNotMatch(
   onboarding,
   /activePage !== "onboarding"[\s\S]{0,240}requireSignIn/,

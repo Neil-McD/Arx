@@ -8,6 +8,10 @@ import {
   mentionBroadcastAllowsEmail,
 } from "./communityMentionBroadcasts";
 import { readCommunityChatReadState } from "./communityReadCursorCore";
+import {
+  normalizeCommunityLifecycleGeneration,
+  resolveCommunityWorkAdmissionErrorCode,
+} from "./communityLifecycleCore";
 
 // M2b: the mention email ping. In-app attention (the accent dot) is the
 // primary signal; email is the fallback for people who are not around. A
@@ -87,6 +91,8 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       .take(100)) as Array<Record<string, any>>;
     const jobs: Array<{
       mentionId: string;
+      communityId: string;
+      communityLifecycleGeneration: number;
       recipientUserId: string;
       suppressed: boolean;
       collapsed: boolean;
@@ -100,6 +106,10 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
     const suppressOnlyJob = (mention: Record<string, any>) => {
       jobs.push({
         mentionId: normalizeIdValue(mention._id),
+        communityId: normalizeIdValue(mention.communityId),
+        communityLifecycleGeneration: normalizeCommunityLifecycleGeneration(
+          mention.communityLifecycleGeneration,
+        ),
         recipientUserId: normalizeIdValue(mention.mentionedUserId),
         suppressed: true,
         collapsed: false,
@@ -112,6 +122,10 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
     const readOnlyJob = (mention: Record<string, any>) => {
       jobs.push({
         mentionId: normalizeIdValue(mention._id),
+        communityId: normalizeIdValue(mention.communityId),
+        communityLifecycleGeneration: normalizeCommunityLifecycleGeneration(
+          mention.communityLifecycleGeneration,
+        ),
         recipientUserId: normalizeIdValue(mention.mentionedUserId),
         suppressed: false,
         collapsed: false,
@@ -172,6 +186,10 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       if (mention.emailEligible === false) {
         jobs.push({
           mentionId: normalizeIdValue(mention._id),
+          communityId: normalizeIdValue(mention.communityId),
+          communityLifecycleGeneration: normalizeCommunityLifecycleGeneration(
+            mention.communityLifecycleGeneration,
+          ),
           recipientUserId: normalizeIdValue(mention.mentionedUserId),
           suppressed: false,
           collapsed: false,
@@ -223,6 +241,10 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
         .withIndex("by_user", (q: any) => q.eq("userId", mention.mentionedUserId))
         .first()) as Record<string, any> | null;
       const suppressed =
+        Boolean(resolveCommunityWorkAdmissionErrorCode({
+          community,
+          expectedGeneration: mention.communityLifecycleGeneration,
+        })) ||
         !communityMembershipRowIsActive(membership as any) ||
         preferences?.mentionEmailsEnabled === false;
       const recipientKey = normalizeIdValue(mention.mentionedUserId);
@@ -263,6 +285,10 @@ export const listPendingMentionEmailJobsInternal = internalQuery({
       const slug = boundedText(community.slug, 200);
       jobs.push({
         mentionId: normalizeIdValue(mention._id),
+        communityId: normalizeIdValue(mention.communityId),
+        communityLifecycleGeneration: normalizeCommunityLifecycleGeneration(
+          mention.communityLifecycleGeneration,
+        ),
         recipientUserId: recipientKey,
         suppressed,
         collapsed,
@@ -309,6 +335,8 @@ export const processPendingMentionEmailsInternal = internalAction({
   handler: async (ctx) => {
     const jobs = (await ctx.runQuery(internalRefs.communityMentionEmails.listPendingMentionEmailJobsInternal, {})) as Array<{
       mentionId: string;
+      communityId: string;
+      communityLifecycleGeneration: number;
       recipientUserId: string;
       suppressed: boolean;
       collapsed: boolean;
@@ -351,8 +379,10 @@ export const processPendingMentionEmailsInternal = internalAction({
         updates.push({ mentionId: job.mentionId, notifyState: "sent" });
         continue;
       }
-      await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
+      const enqueueResult = await ctx.runMutation(internalRefs.email.enqueueEmailJobInternal, {
         kind: "mention_notification",
+        communityId: job.communityId,
+        communityLifecycleGeneration: job.communityLifecycleGeneration,
         recipientUserId: job.recipientUserId,
         templateKey: "mention_notification",
         payload: {
@@ -363,6 +393,11 @@ export const processPendingMentionEmailsInternal = internalAction({
         },
         dedupeKey: `mention_notification:${job.mentionId}`,
       });
+      if (enqueueResult?.status === "suppressed") {
+        suppressed += 1;
+        updates.push({ mentionId: job.mentionId, notifyState: "suppressed" });
+        continue;
+      }
       enqueued += 1;
       updates.push({ mentionId: job.mentionId, notifyState: "sent" });
     }

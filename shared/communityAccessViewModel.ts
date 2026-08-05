@@ -46,31 +46,44 @@ export type CommunityActionGuards = {
 export function deriveCommunityAccessCapabilities(
   access: CommunityAccess | null | undefined,
 ): CommunityAccessCapabilities {
+  const isUnavailable =
+    access?.lifecycle_status === "archiving" ||
+    access?.lifecycle_status === "archived";
   const isOwner = Boolean(access?.is_owner);
-  const canManageMembers = Boolean(access?.can_manage_members);
+  const canManageMembers = !isUnavailable && Boolean(access?.can_manage_members);
   const effectiveRole = String(access?.effective_role ?? "").trim().toLowerCase();
   const isAdmin = effectiveRole === "admin";
   const isModerator = effectiveRole === "moderator";
-  const canEnterCommunity = access ? Boolean(access.can_enter_community ?? access.can_view) : false;
-  const canManageResources = Boolean(access?.can_manage_resources) && (isOwner || isAdmin);
+  const canEnterCommunity = access
+    ? !isUnavailable && Boolean(access.can_enter_community ?? access.can_view)
+    : false;
+  const canManageResources =
+    !isUnavailable && Boolean(access?.can_manage_resources) && (isOwner || isAdmin);
   const canModerateContent = Boolean(
-    access?.can_moderate_content ?? (isOwner || isAdmin || isModerator),
+    !isUnavailable &&
+      (access?.can_moderate_content ?? (isOwner || isAdmin || isModerator)),
   );
   return {
     canViewCommunity: canEnterCommunity,
     isOwner,
-    isVisitor: access?.relation === "visitor",
+    isVisitor: !isUnavailable && access?.relation === "visitor",
     canViewMembers: canEnterCommunity,
     canViewSettings: canEnterCommunity,
-    canPostMessages: Boolean(access?.can_post_chat ?? access?.can_post_message),
+    canPostMessages:
+      !isUnavailable && Boolean(access?.can_post_chat ?? access?.can_post_message),
     canManageResources,
     canModerateContent,
     canManageMembers,
-    canReviewJoinRequests: Boolean(access?.can_review_join_requests),
-    canManagePricing: Boolean(access?.can_manage_pricing ?? canManageMembers),
-    canManageBranding: Boolean(access?.can_manage_branding ?? isOwner),
-    canManagePublishing: Boolean(access?.can_manage_publishing ?? isOwner),
-    canManagePayouts: Boolean(access?.can_manage_payouts ?? isOwner),
+    canReviewJoinRequests:
+      !isUnavailable && Boolean(access?.can_review_join_requests),
+    canManagePricing:
+      !isUnavailable && Boolean(access?.can_manage_pricing ?? canManageMembers),
+    canManageBranding:
+      !isUnavailable && Boolean(access?.can_manage_branding ?? isOwner),
+    canManagePublishing:
+      !isUnavailable && Boolean(access?.can_manage_publishing ?? isOwner),
+    canManagePayouts:
+      !isUnavailable && Boolean(access?.can_manage_payouts ?? isOwner),
     canViewAnalytics: canManageMembers,
   };
 }

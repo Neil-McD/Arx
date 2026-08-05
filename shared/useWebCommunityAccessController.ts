@@ -24,6 +24,7 @@ type UseWebCommunityAccessControllerArgs<SessionT, CommunityRecordT, UserProfile
   ) => "published" | "unlisted";
 
   activeCommunitySlug: string | null;
+  preserveUnmatchedActiveCommunitySlug?: boolean;
   loadingResetKey?: string | null;
   setIsLoadingCommunities: Dispatch<SetStateAction<boolean>>;
   setHasResolvedCommunities: Dispatch<SetStateAction<boolean>>;
@@ -105,9 +106,10 @@ export function useWebCommunityAccessController<
         if (nextCommunitySlug) latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });
         return;
       }
-      if (!list.some((item) => String(item.slug ?? "").trim() === latest.activeCommunitySlug) && list.length > 0) {
+      if (!list.some((item) => String(item.slug ?? "").trim() === latest.activeCommunitySlug)) {
+        if (latest.preserveUnmatchedActiveCommunitySlug) return;
         const nextCommunitySlug = String(list[0]?.slug ?? "").trim() || null;
-        if (nextCommunitySlug) latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });
+        latest.applyCommunityShellState({ communitySlug: nextCommunitySlug });
       }
     } catch (error) {
       if (isCurrentRequest()) {

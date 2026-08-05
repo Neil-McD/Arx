@@ -32,6 +32,11 @@ import {
 } from "../shared/communityAgentDockContract";
 import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRuntimeBoundary";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
+import {
+  communityIsOperational,
+  resolveCommunityWorkAdmissionErrorCode,
+  resolveCommunityNewOperationsErrorCode,
+} from "./communityLifecycleCore";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import {
   ensureReplyChannelMatchesRoot,
@@ -74,6 +79,7 @@ type VisibilityScope = "private" | "admin" | "community" | "public";
 type ServeRequestRow = {
   _id: any;
   communityId: any;
+  communityLifecycleGeneration?: number;
   agentKey: string;
   sourceMentionId: any;
   sourceRootId?: any;
@@ -86,6 +92,9 @@ type ServeRequestRow = {
   responseVisibilityScope?: VisibilityScope;
   responseReplyId?: any;
   attempt?: number;
+  skipReason?: string;
+  errorCode?: string;
+  errorMessage?: string;
   createdAt: number;
   updatedAt: number;
 };
@@ -413,6 +422,27 @@ async function failServeRequest(ctx: any, request: ServeRequestRow, code: string
   });
 }
 
+async function suppressServeRequestOutsideLifecycleEpoch(
+  ctx: any,
+  request: ServeRequestRow,
+  nowMs: number,
+): Promise<string | null> {
+  const community = await ctx.db.get(request.communityId as any);
+  const reason = resolveCommunityWorkAdmissionErrorCode({
+    community,
+    expectedGeneration: request.communityLifecycleGeneration,
+  });
+  if (!reason) return null;
+  await ctx.db.patch(request._id as any, {
+    status: "skipped",
+    skipReason: boundedText(reason, ERROR_CODE_MAX_CHARS),
+    errorCode: boundedText(reason, ERROR_CODE_MAX_CHARS),
+    errorMessage: "Serve request belongs to an inactive or stale community lifecycle epoch.",
+    updatedAt: nowMs,
+  });
+  return reason;
+}
+
 export const claimNextCommunityAgentServeRequestInternal = internalMutation({
   args: {
     requestId: v.optional(v.id("communityAgentServeRequests")),
@@ -448,6 +478,12 @@ export const claimNextCommunityAgentServeRequestInternal = internalMutation({
           "Queued community-agent serve request failed invariant checks.",
           nowMs,
         );
+        return {
+          ok: true,
+          requestId: null,
+        };
+      }
+      if (await suppressServeRequestOutsideLifecycleEpoch(ctx, request, nowMs)) {
         return {
           ok: true,
           requestId: null,
@@ -497,6 +533,9 @@ export const claimNextCommunityAgentServeRequestInternal = internalMutation({
         );
         continue;
       }
+      if (await suppressServeRequestOutsideLifecycleEpoch(ctx, request, nowMs)) {
+        continue;
+      }
       const attempt = nextCommunityAgentServeAttempt(request.attempt);
       await ctx.db.patch(request._id as any, {
         status: "running",
@@ -526,6 +565,35 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
     }
     if (!serveRequestIsClaimable(request)) {
       return { ok: false as const, errorCode: "serve_request_invalid", errorMessage: "Serve request failed invariant checks." };
+    }
+
+    const community = (await ctx.db.get(request.communityId)) as Record<string, any> | null;
+    if (!community) {
+      return { ok: false as const, errorCode: "community_not_found", errorMessage: "Community not found." };
+    }
+    if (!communityIsOperational(community)) {
+      const errorCode =
+        resolveCommunityNewOperationsErrorCode(community) ??
+        "community_archived";
+      return {
+        ok: false as const,
+        errorCode,
+        errorMessage:
+          errorCode === "community_archiving"
+            ? "Community is archiving."
+            : "Community is archived.",
+      };
+    }
+    const lifecycleAdmissionError = resolveCommunityWorkAdmissionErrorCode({
+      community,
+      expectedGeneration: request.communityLifecycleGeneration,
+    });
+    if (lifecycleAdmissionError) {
+      return {
+        ok: false as const,
+        errorCode: lifecycleAdmissionError,
+        errorMessage: "Serve request belongs to a stale community lifecycle epoch.",
+      };
     }
 
     const canonicalContext = await readCanonicalCommunityAgentContext(ctx, request.communityId);
@@ -726,6 +794,24 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
         outcomeCode: "provider_completed",
         nowMs,
       });
+    }
+
+    const community = (await ctx.db.get(
+      request.communityId as any,
+    )) as Record<string, any> | null;
+    const lifecycleAdmissionError = resolveCommunityWorkAdmissionErrorCode({
+      community,
+      expectedGeneration: request.communityLifecycleGeneration,
+    });
+    if (lifecycleAdmissionError) {
+      await failServeRequest(
+        ctx,
+        request,
+        lifecycleAdmissionError,
+        "Serve request belongs to an inactive or stale community lifecycle epoch.",
+        nowMs,
+      );
+      return { ok: false, errorCode: lifecycleAdmissionError };
     }
 
     try {

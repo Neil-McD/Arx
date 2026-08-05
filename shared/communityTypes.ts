@@ -1,6 +1,7 @@
 import type { AccountSetupStatus } from "./accountSetup";
 import type { SocialProfileLinks } from "./socialProfileLinks";
 import type { CommunityVisualIdentity } from "./communityVisualIdentity";
+import type { CommunityLifecycleStatus } from "./communityLifecycle";
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityBillingPeriod = "monthly" | "annual";
@@ -53,6 +54,8 @@ export type CommunityShellCommunity = {
   banner_zoom?: number | null;
   branding_revision?: number | null;
   visual_identity?: CommunityVisualIdentity | null;
+  lifecycle_status?: CommunityLifecycleStatus;
+  lifecycle_generation?: number;
 };
 
 export type PublicPlanSummary = {
@@ -287,9 +290,11 @@ export type CommunityAccess = {
   relation?: "visitor" | "pending" | "member" | "moderator" | "admin" | "owner" | null;
   entry_policy?: CommunityEntryPolicy | null;
   visibility?: "published" | "unlisted";
+  lifecycle_status?: CommunityLifecycleStatus;
+  lifecycle_generation?: number;
   join_request_status?: string | null;
   join_request_reapply_at?: string | null;
-  primary_cta?: "open_community" | "join" | "checkout";
+  primary_cta?: "open_community" | "join" | "checkout" | null;
   is_owner: boolean;
   is_entitled: boolean;
   access_source?: "free_grant" | "manual_grant" | "paid_subscription" | null;

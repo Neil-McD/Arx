@@ -26,7 +26,7 @@ import {
   requireCommunityEvidenceCitationsActiveCore,
 } from "./communityEvidenceCitations";
 import { communityEvidenceSurfaceValidator } from "./communityEvidenceAudit";
-import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
+import { requireOperationalCommunityById } from "./communityLifecycleCore";
 import { isCommunityMemoryWorkKey } from "./communityMemoryWorkKey";
 import {
   COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION,
@@ -34,6 +34,7 @@ import {
   type CommunityEvidenceSurface,
   type CommunityMemoryRetrievalReceiptVersion,
 } from "../shared/communityEvidenceContract";
+import { communityAcceptsNewOperations } from "./communityLifecycleCore";
 
 type ActorType = "member" | "admin" | "agent" | "compiler" | "system";
 type VisibilityScope = "private" | "admin" | "community" | "public";
@@ -2002,7 +2003,7 @@ export async function upsertCommunitySourceTrace(args: {
   allowExistingUpdate?: boolean;
   nowMs: number;
 }): Promise<ReturnType<typeof mapTraceRow>> {
-  await requireLiveCommunityForCognitionWrite(args.ctx, args.communityId);
+  await requireOperationalCommunityById({ ctx: args.ctx, communityId: args.communityId });
   if (args.channelId) {
     if (args.sourceType !== "interaction") {
       throw new Error("community_source_trace_channel_source_type_invalid");
@@ -2273,7 +2274,7 @@ export async function createOrReuseTrustedCommunityIntelligenceChangeRequest(arg
   changeRequest: ReturnType<typeof mapChangeRequestRow>;
   reusedExisting: boolean;
 }> {
-  await requireLiveCommunityForCognitionWrite(args.ctx, args.communityId);
+  await requireOperationalCommunityById({ ctx: args.ctx, communityId: args.communityId });
   const workKey = String(args.workKey ?? "").trim() || undefined;
   if (workKey && !isCommunityMemoryWorkKey(workKey)) {
     throw new Error("community_intelligence_work_key_invalid");
@@ -3182,7 +3183,7 @@ export async function applyTrustedCommunityIntelligenceChangeRequestCore(args: {
   nowMs?: number;
 }): Promise<ReturnType<typeof mapChangeRequestRow>> {
   const changeRequest = await getChangeRequestOrThrow(args.ctx, args.changeRequestId);
-  await requireLiveCommunityForCognitionWrite(args.ctx, changeRequest.communityId);
+  await requireOperationalCommunityById({ ctx: args.ctx, communityId: changeRequest.communityId });
   const payload = payloadObject(changeRequest.requestedPayload);
   const autonomousCompilerMemory = args.applicationMode === "autonomous_compiler_memory";
   if (autonomousCompilerMemory) {
@@ -3886,6 +3887,9 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
       .withIndex("by_slug", (q: any) => q.eq("slug", slug))
       .first();
     if (!community) return { ok: false as const };
+    if (!communityAcceptsNewOperations(community)) {
+      return { ok: false as const };
+    }
 
     const [nodeResult, resourceResult] = await Promise.all([
       readPolynetOverviewNodes({

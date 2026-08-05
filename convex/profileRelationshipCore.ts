@@ -7,6 +7,7 @@ import {
   type CommunityMembershipLike,
 } from "./communityCore";
 import type { CommunityAvatarSummary, ProfileCommunityContext } from "../shared/communityTypes";
+import { communityIsOperational } from "./communityLifecycleCore";
 
 const MAX_PROFILE_RELATIONSHIP_OWNED_ROWS = 24;
 const MAX_PROFILE_RELATIONSHIP_MEMBERSHIP_ROWS = 96;
@@ -54,11 +55,12 @@ async function listOwnedCommunitiesByOwnerId(
   ctx: any,
   ownerId: any,
 ): Promise<CommunityLike[]> {
-  return (await ctx.db
+  const rows = (await ctx.db
     .query("communities")
     .withIndex("by_owner_createdAt", (q: any) => q.eq("ownerId", ownerId))
     .order("desc")
     .take(MAX_PROFILE_RELATIONSHIP_OWNED_ROWS)) as CommunityLike[];
+  return rows.filter((community) => communityIsOperational(community));
 }
 
 async function mapCommunityAvatarSummary(
@@ -149,7 +151,9 @@ async function resolveViewerRelationshipCommunityBundle(
   for (const communityId of mutualCommunityIds) {
     if (candidateMutualCommunities.length >= MAX_PROFILE_RELATIONSHIP_MUTUAL_ROWS) break;
     const community = (await args.ctx.db.get(communityId)) as CommunityLike | null;
-    if (community) candidateMutualCommunities.push(community);
+    if (community && communityIsOperational(community)) {
+      candidateMutualCommunities.push(community);
+    }
   }
   candidateMutualCommunities.sort((left, right) => left.name.localeCompare(right.name));
 

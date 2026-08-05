@@ -3,7 +3,9 @@ import { WebCommunityInteractionBootstrap } from "./WebCommunityInteractionBoots
 
 export function WebAppMainSurfaceFallback(props: WebAppMainSurfaceHostProps) {
   const isCommunitySurface =
-    !props.showPublicCommunityFunnel && props.activePage === "community";
+    !props.showPublicCommunityFunnel &&
+    !props.showInactiveCommunitySurface &&
+    props.activePage === "community";
 
   return (
     <main

@@ -24,7 +24,7 @@ import {
   toIsoString,
 } from "./billingCore";
 import {
-  adjustCommunityActiveMemberCountForMembershipTransition,
+  applyCommunitySubscriptionEntitlementToMembership,
   communitySubscriptionStatusGrantsAccess,
   communityUserIsBlocked,
   normalizeCommunitySubscriptionStatus,
@@ -41,12 +41,26 @@ import {
 } from "./stripeConnectAccountCore";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
 import { requireCommunityProviderAccountMatch } from "./communityCommerceCore";
+import { providerSubscriptionEventShouldApply } from "../shared/subscriptionEventOrdering";
+import {
+  communityAcceptsNewOperationsAtGeneration,
+  normalizeCommunityLifecycleGeneration,
+  requireActiveCommunity,
+  requireMatchingCommunityLifecycleGeneration,
+} from "./communityLifecycleCore";
+import {
+  compensateStaleStripeCheckout,
+  normalizeStripeCheckoutSessionIdentity,
+  stripeCheckoutCompensationIsTerminal,
+  type StripeCheckoutCompensationClient,
+} from "./stripeCheckoutEffectCore";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
   sessionId: string;
   mode: string;
   communityId?: any;
+  communityLifecycleGeneration?: number;
   billingPeriod?: string;
   pricePointId?: any;
   amountBaseUnits?: number;
@@ -68,9 +82,57 @@ type CommunityCheckoutSessionRow = {
   currentPeriodEndAt?: number;
   communitySubscriptionStatus?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
   cancelAtPeriodEnd?: boolean;
+  lastProviderEventCreatedAt?: number;
   createdAt: number;
   updatedAt: number;
 };
+
+async function quarantineCommunityCheckoutRow(args: {
+  ctx: any;
+  row: CommunityCheckoutSessionRow;
+  providerAccountId: string;
+  providerCheckoutSessionId?: unknown;
+  providerCustomerId?: unknown;
+  providerSubscriptionId?: unknown;
+  providerPriceId?: unknown;
+  nowMs: number;
+}) {
+  const providerCheckoutSessionId = String(args.providerCheckoutSessionId ?? "").trim();
+  const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
+  await args.ctx.db.patch(args.row._id, {
+    provider: "stripe",
+    providerAccountId: args.providerAccountId,
+    providerCheckoutSessionId:
+      providerCheckoutSessionId || args.row.providerCheckoutSessionId,
+    providerCustomerId:
+      String(args.providerCustomerId ?? "").trim() || args.row.providerCustomerId,
+    providerSubscriptionId:
+      providerSubscriptionId || args.row.providerSubscriptionId,
+    providerPriceId:
+      String(args.providerPriceId ?? "").trim() || args.row.providerPriceId,
+    cancelAtPeriodEnd: false,
+    status: "expired",
+    updatedAt: args.nowMs,
+  });
+  if (args.row.claimToken) {
+    const claim = await args.ctx.db
+      .query("purchaseClaims")
+      .withIndex("by_claimToken", (q: any) => q.eq("claimToken", args.row.claimToken))
+      .first();
+    if (claim?.status === "pending") {
+      await args.ctx.db.patch(claim._id, {
+        status: "expired",
+        updatedAt: args.nowMs,
+      });
+    }
+  }
+  return {
+    ok: true,
+    quarantined: true,
+    provider_checkout_session_id: providerCheckoutSessionId || args.row.providerCheckoutSessionId || null,
+    provider_subscription_id: providerSubscriptionId || args.row.providerSubscriptionId || null,
+  };
+}
 
 function normalizeStripeObjectId(raw: unknown, code: string): string {
   const value = String(raw ?? "").trim();
@@ -235,14 +297,22 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
     revokedReason: v.optional(v.string()),
     preserveRiskRevocation: v.optional(v.boolean()),
-    nowMs: v.optional(v.number()),
+    sourceEventCreatedAt: v.number(),
   },
   handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
+    const sourceEventCreatedAt = args.sourceEventCreatedAt;
+    if (!Number.isFinite(sourceEventCreatedAt) || sourceEventCreatedAt <= 0) {
+      throw new Error("community_subscription_event_timestamp_invalid");
+    }
+    const nowMs = Date.now();
     const source = args.source;
     const providerAccountId = String(args.providerAccountId ?? "").trim();
+    const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
     if (source === "stripe" && !providerAccountId) {
       throw new Error("community_subscription_provider_account_required");
+    }
+    if (source === "stripe" && !providerSubscriptionId) {
+      throw new Error("community_subscription_provider_subscription_required");
     }
     const status = normalizeCommunitySubscriptionStatus(args.status);
     if (!status) throw new Error("community_subscription_status_invalid");
@@ -264,8 +334,12 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     const current =
       currentRows
         .filter((row) =>
-          source !== "stripe" ||
-          String(row.providerAccountId ?? "").trim() === providerAccountId
+          source === "stripe"
+            ? String(row.providerAccountId ?? "").trim() === providerAccountId &&
+              String(row.providerSubscriptionId ?? "").trim() === providerSubscriptionId
+            : row.source === "external_sync" &&
+              row.communityLifecycleGeneration ===
+                normalizeCommunityLifecycleGeneration(community.lifecycleGeneration)
         )
         .slice()
         .sort((a, b) => {
@@ -278,9 +352,32 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
           if (aMatch !== bMatch) return aMatch ? -1 : 1;
           return Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0);
         })[0] ?? null;
+    if (current && !providerSubscriptionEventShouldApply({
+      incomingCreatedAt: sourceEventCreatedAt,
+      currentCreatedAt: Number(current.lastSourceEventCreatedAt ?? 0),
+      incomingStatus: status,
+      currentStatus: normalizeCommunitySubscriptionStatus(current.status),
+    })) {
+      return {
+        ok: true,
+        ignored: true,
+        reason: "community_subscription_event_stale",
+        community_id: String(args.communityId),
+        user_id: String(args.userId),
+      };
+    }
     const currentSource = String(current?.source ?? "")
       .trim()
       .toLowerCase();
+    if (source === "stripe" && !current) {
+      return {
+        ok: true,
+        ignored: true,
+        reason: "community_subscription_not_found",
+        community_id: String(args.communityId),
+        user_id: String(args.userId),
+      };
+    }
     if (
       currentSource &&
       currentSource !== "stripe" &&
@@ -307,6 +404,49 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       currentProviderAccountId !== providerAccountId
     ) {
       throw new Error("community_subscription_provider_account_mismatch");
+    }
+    const communityLifecycleGeneration = current
+      ? Number(current.communityLifecycleGeneration)
+      : normalizeCommunityLifecycleGeneration(community.lifecycleGeneration);
+    const lifecycleCurrent = communityAcceptsNewOperationsAtGeneration({
+      community,
+      expectedGeneration: communityLifecycleGeneration,
+    });
+    if (current && !lifecycleCurrent) {
+      if (status === "canceled" || status === "ended") {
+        await ctx.db.patch(current._id, {
+          status: "ended",
+          cancelAtPeriodEnd: false,
+          endedAt: sourceEventCreatedAt,
+          lastSourceEventCreatedAt: sourceEventCreatedAt,
+          updatedAt: nowMs,
+        });
+        return {
+          ok: true,
+          ignored: false,
+          community_id: String(args.communityId),
+          user_id: String(args.userId),
+          subscription_status: "ended",
+        };
+      }
+      return {
+        ok: true,
+        ignored: true,
+        quarantined: true,
+        reason: "community_subscription_lifecycle_stale",
+        community_id: String(args.communityId),
+        user_id: String(args.userId),
+      };
+    }
+    if (!current && !lifecycleCurrent) {
+      return {
+        ok: true,
+        ignored: true,
+        quarantined: true,
+        reason: "community_subscription_lifecycle_stale",
+        community_id: String(args.communityId),
+        user_id: String(args.userId),
+      };
     }
     const previousStatus = String(current?.status ?? "")
       .trim()
@@ -338,10 +478,10 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
         : Boolean(args.cancelAtPeriodEnd ?? current?.cancelAtPeriodEnd);
     const endedAt =
       status === "canceled" || status === "ended"
-        ? nowMs
+        ? sourceEventCreatedAt
         : undefined;
     const nextProviderSubscriptionId =
-      String(args.providerSubscriptionId ?? "").trim() ||
+      providerSubscriptionId ||
       String(current?.providerSubscriptionId ?? "").trim() ||
       undefined;
     const nextProviderCustomerId =
@@ -366,6 +506,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
           : current?.currentPeriodEndAt,
       cancelAtPeriodEnd,
       endedAt,
+      lastSourceEventCreatedAt: sourceEventCreatedAt,
       updatedAt: nowMs,
     };
 
@@ -374,6 +515,7 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     } else {
       await ctx.db.insert("communitySubscriptions" as any, {
         communityId: args.communityId,
+        communityLifecycleGeneration,
         userId: args.userId,
         membershipId: membership._id,
         createdAt: nowMs,
@@ -381,44 +523,16 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       });
     }
 
-    const grantsAccess = communitySubscriptionStatusGrantsAccess(status);
-    const revokedReason = String(args.revokedReason ?? "")
-      .trim()
-      .slice(0, 160);
-    const existingRevokedReason = String(membership.revokedReason ?? "").trim();
-    const shouldPreserveRiskRevocation =
-      grantsAccess &&
-      args.preserveRiskRevocation === true &&
-      membership.active === false &&
-      (
-        existingRevokedReason === "subscription_refunded" ||
-        existingRevokedReason === "subscription_dispute_opened" ||
-        existingRevokedReason === "subscription_dispute_lost"
-      );
-    const updatedMembership = {
-      ...membership,
-      pricePointId,
-      active: shouldPreserveRiskRevocation ? false : grantsAccess,
-      revokedAt: shouldPreserveRiskRevocation
-        ? membership.revokedAt ?? nowMs
-        : grantsAccess ? undefined : nowMs,
-      revokedReason: shouldPreserveRiskRevocation
-        ? existingRevokedReason
-        : grantsAccess ? undefined : revokedReason || `subscription_${status}`,
-      updatedAt: nowMs,
-    } as CommunityMembershipLike;
-    await ctx.db.patch(membership._id, {
-      pricePointId,
-      active: updatedMembership.active,
-      revokedAt: updatedMembership.revokedAt,
-      revokedReason: updatedMembership.revokedReason,
-      updatedAt: nowMs,
-    });
-    await adjustCommunityActiveMemberCountForMembershipTransition({
+    await applyCommunitySubscriptionEntitlementToMembership({
       ctx,
       communityId: args.communityId,
-      before: membership,
-      after: updatedMembership,
+      membership,
+      userId: args.userId,
+      pricePointId,
+      status,
+      revokedReason: args.revokedReason,
+      preserveRiskRevocation: args.preserveRiskRevocation,
+      nowMs,
     });
 
     if (status === "past_due" && previousStatus !== "past_due") {
@@ -461,6 +575,10 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
       .withIndex("by_slug", (q: any) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
+    requireActiveCommunity(community);
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    );
     const entryPolicy = resolveCommunityEntryPolicy(community as any);
     if (entryPolicy !== "paid_subscription") {
       throw new Error("paid_plan_required");
@@ -484,6 +602,7 @@ export const resolvePublicCommunityCheckoutConfigInternal = internalQuery({
     }
     return {
       communityId: community._id,
+      communityLifecycleGeneration,
       communitySlug: community.slug,
       communityName: community.name,
       billingPeriod,
@@ -568,6 +687,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
   args: {
     sessionId: v.string(),
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.number(),
     billingPeriod: v.string(),
     pricePointId: v.id("communityPricePoints"),
     amountBaseUnits: v.number(),
@@ -582,10 +702,19 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
+    if (!community) throw new Error("community_not_found");
+    requireActiveCommunity(community);
+    requireMatchingCommunityLifecycleGeneration({
+      community,
+      expectedGeneration: args.communityLifecycleGeneration,
+      errorCode: "community_checkout_lifecycle_stale",
+    });
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
       mode: "community_join",
       communityId: args.communityId,
+      communityLifecycleGeneration: args.communityLifecycleGeneration,
       billingPeriod: args.billingPeriod,
       pricePointId: args.pricePointId,
       amountBaseUnits: args.amountBaseUnits,
@@ -627,6 +756,7 @@ export const createPendingPublicCommunityCheckoutSessionInternal = internalMutat
     await ctx.db.insert("purchaseClaims", {
       claimToken: args.claimToken,
       communityId: args.communityId,
+      communityLifecycleGeneration: args.communityLifecycleGeneration,
       billingPeriod: args.billingPeriod,
       pricePointId: args.pricePointId,
       amountBaseUnits: args.amountBaseUnits,
@@ -678,6 +808,13 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
       .first()) as CommunityCheckoutSessionRow | null;
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
+    if (!row.communityId) throw new Error("community_checkout_session_invalid");
+    const community = (await ctx.db.get(row.communityId)) as CommunityLike | null;
+    if (!community) throw new Error("community_not_found");
+    const lifecycleCurrent = communityAcceptsNewOperationsAtGeneration({
+      community,
+      expectedGeneration: row.communityLifecycleGeneration,
+    });
     const providerAccountId = normalizeStripeObjectId(
       args.providerAccountId,
       "provider_account_id_required",
@@ -688,16 +825,29 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
       missingCode: "provider_account_id_required",
       mismatchCode: "community_checkout_provider_account_mismatch",
     });
-    await ctx.db.patch(row._id, {
-      provider: "stripe",
-      providerAccountId,
-      providerCheckoutSessionId: String(args.providerCheckoutSessionId ?? "").trim() || undefined,
-      providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
-      providerSubscriptionId:
-        String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
-      providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
-      updatedAt: nowMs,
-    });
+    if (lifecycleCurrent) {
+      await ctx.db.patch(row._id, {
+        provider: "stripe",
+        providerAccountId,
+        providerCheckoutSessionId: String(args.providerCheckoutSessionId ?? "").trim() || undefined,
+        providerCustomerId: String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
+        providerSubscriptionId:
+          String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
+        providerPriceId: String(args.providerPriceId ?? "").trim() || row.providerPriceId,
+        updatedAt: nowMs,
+      });
+    } else {
+      await quarantineCommunityCheckoutRow({
+        ctx,
+        row,
+        providerAccountId,
+        providerCheckoutSessionId: args.providerCheckoutSessionId,
+        providerCustomerId: args.providerCustomerId,
+        providerSubscriptionId: args.providerSubscriptionId,
+        providerPriceId: args.providerPriceId,
+        nowMs,
+      });
+    }
     await recordCriticalAuditEventBestEffort(ctx, {
       eventKey: `community_checkout_attached_to_stripe:${args.sessionId}`,
       eventType: "community_checkout_attached_to_stripe",
@@ -709,6 +859,7 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
       provider: "stripe",
       providerObjectId: args.providerCheckoutSessionId,
       metadata: {
+        lifecycleCurrent,
         providerCustomerId: args.providerCustomerId ?? null,
         providerAccountId,
         providerSubscriptionId: args.providerSubscriptionId ?? null,
@@ -716,8 +867,32 @@ export const attachCommunityStripeCheckoutSessionInternal = internalMutation({
       },
       createdAt: nowMs,
     });
+    return {
+      ok: true,
+      lifecycle_current: lifecycleCurrent,
+      provider_checkout_session_id: String(args.providerCheckoutSessionId ?? "").trim(),
+    };
   },
 });
+
+async function compensateCommunityCheckout(args: {
+  providerAccountId: string;
+  providerCheckoutSessionId: string;
+}): Promise<void> {
+  const result = await compensateStaleStripeCheckout({
+    stripe: getStripeClient() as unknown as StripeCheckoutCompensationClient,
+    identity: normalizeStripeCheckoutSessionIdentity({
+      accountScope: "connected",
+      providerAccountId: args.providerAccountId,
+      providerCheckoutSessionId: args.providerCheckoutSessionId,
+    }),
+  });
+  if (!stripeCheckoutCompensationIsTerminal(result)) {
+    throw new Error(
+      `community_checkout_compensation_${result.state}:${result.errorCode ?? "unknown"}`,
+    );
+  }
+}
 
 export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation({
   args: {
@@ -735,16 +910,35 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
     currentPeriodEndAt: v.optional(v.union(v.number(), v.null())),
     cancelAtPeriodEnd: v.optional(v.union(v.boolean(), v.null())),
     markComplete: v.optional(v.boolean()),
-    nowMs: v.optional(v.number()),
+    providerEventCreatedAt: v.number(),
   },
   handler: async (ctx, args) => {
-    const nowMs = args.nowMs ?? Date.now();
+    if (!Number.isFinite(args.providerEventCreatedAt) || args.providerEventCreatedAt <= 0) {
+      throw new Error("community_subscription_event_timestamp_invalid");
+    }
+    const nowMs = Date.now();
     const row = (await ctx.db
       .query("checkoutSessions")
       .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
       .first()) as CommunityCheckoutSessionRow | null;
     if (!row) throw new Error("community_checkout_session_not_found");
     if (row.mode !== "community_join") throw new Error("community_checkout_session_invalid");
+    const incomingSubscriptionStatus = normalizeStripeCommunitySubscriptionStatus({
+      subscriptionStatus: args.subscriptionStatus,
+      cancelAtPeriodEnd: args.cancelAtPeriodEnd,
+    });
+    if (!providerSubscriptionEventShouldApply({
+      incomingCreatedAt: args.providerEventCreatedAt,
+      currentCreatedAt: Number(row.lastProviderEventCreatedAt ?? 0),
+      incomingStatus: incomingSubscriptionStatus,
+      currentStatus: row.communitySubscriptionStatus ?? null,
+    })) {
+      return {
+        ok: true,
+        ignored: true,
+        reason: "community_checkout_subscription_event_stale",
+      };
+    }
     const providerAccountId = normalizeStripeObjectId(
       args.providerAccountId,
       "provider_account_id_required",
@@ -755,10 +949,25 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       missingCode: "provider_account_id_required",
       mismatchCode: "community_checkout_provider_account_mismatch",
     });
-    const communitySubscriptionStatus = normalizeStripeCommunitySubscriptionStatus({
-      subscriptionStatus: args.subscriptionStatus,
-      cancelAtPeriodEnd: args.cancelAtPeriodEnd,
-    });
+    const community = row.communityId
+      ? (await ctx.db.get(row.communityId)) as CommunityLike | null
+      : null;
+    if (!communityAcceptsNewOperationsAtGeneration({
+      community,
+      expectedGeneration: row.communityLifecycleGeneration,
+    })) {
+      return await quarantineCommunityCheckoutRow({
+        ctx,
+        row,
+        providerAccountId,
+        providerCheckoutSessionId: args.providerCheckoutSessionId,
+        providerCustomerId: args.providerCustomerId,
+        providerSubscriptionId: args.providerSubscriptionId,
+        providerPriceId: args.providerPriceId,
+        nowMs,
+      });
+    }
+    const communitySubscriptionStatus = incomingSubscriptionStatus;
     await ctx.db.patch(row._id, {
       provider: "stripe",
       providerAccountId,
@@ -778,6 +987,7 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
           : row.currentPeriodEndAt,
       communitySubscriptionStatus,
       cancelAtPeriodEnd: Boolean(args.cancelAtPeriodEnd ?? communitySubscriptionStatus === "cancel_at_period_end"),
+      lastProviderEventCreatedAt: args.providerEventCreatedAt,
       status: args.markComplete ? "complete" : row.status,
       updatedAt: nowMs,
     });
@@ -802,6 +1012,7 @@ export const syncPendingCommunityCheckoutSubscriptionInternal = internalMutation
       },
       createdAt: nowMs,
     });
+    return { ok: true, quarantined: false };
   },
 });
 
@@ -849,6 +1060,7 @@ export const getCommunityJoinCheckoutSessionInternal = internalQuery({
       currentPeriodEndAt: row.currentPeriodEndAt ?? null,
       communitySubscriptionStatus: row.communitySubscriptionStatus ?? null,
       cancelAtPeriodEnd: row.cancelAtPeriodEnd ?? false,
+      lastProviderEventCreatedAt: row.lastProviderEventCreatedAt ?? null,
       status: row.status,
       expiresAt: row.expiresAt,
     };
@@ -908,6 +1120,7 @@ export const startPublicCommunityCheckout = action({
       },
     )) as {
       communityId: any;
+      communityLifecycleGeneration: number;
       communitySlug: string;
       communityName: string;
       billingPeriod: "monthly" | "annual";
@@ -1007,6 +1220,7 @@ export const startPublicCommunityCheckout = action({
       {
         sessionId,
         communityId: checkoutConfig.communityId,
+        communityLifecycleGeneration: checkoutConfig.communityLifecycleGeneration,
         billingPeriod,
         pricePointId: checkoutConfig.pricePointId,
         amountBaseUnits: checkoutConfig.amountBaseUnits,
@@ -1021,6 +1235,7 @@ export const startPublicCommunityCheckout = action({
       },
     );
 
+    let providerCheckoutSessionId: string | null = null;
     try {
       const stripe = getStripeClient();
       const checkoutSession: any = await stripe.checkout.sessions.create({
@@ -1039,6 +1254,7 @@ export const startPublicCommunityCheckout = action({
           local_session_id: sessionId,
           claim_token: claimToken,
           community_id: String(checkoutConfig.communityId),
+          community_lifecycle_generation: String(checkoutConfig.communityLifecycleGeneration),
           community_slug: checkoutConfig.communitySlug,
           community_price_point_id: String(checkoutConfig.pricePointId),
           billing_period: billingPeriod,
@@ -1049,6 +1265,7 @@ export const startPublicCommunityCheckout = action({
             local_session_id: sessionId,
             claim_token: claimToken,
             community_id: String(checkoutConfig.communityId),
+            community_lifecycle_generation: String(checkoutConfig.communityLifecycleGeneration),
             community_slug: checkoutConfig.communitySlug,
             community_price_point_id: String(checkoutConfig.pricePointId),
             billing_period: billingPeriod,
@@ -1058,9 +1275,10 @@ export const startPublicCommunityCheckout = action({
         stripeAccount: checkoutConfig.providerAccountId,
         idempotencyKey: `community-checkout:${checkoutConfig.providerAccountId}:${sessionId}`,
       });
+      providerCheckoutSessionId = String(checkoutSession.id ?? "").trim() || null;
       const checkoutUrl: string = String(checkoutSession.url ?? "").trim();
       if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
-      await ctx.runMutation(
+      const attached = (await ctx.runMutation(
         internal.communityCommerce.attachCommunityStripeCheckoutSessionInternal as any,
         {
           sessionId,
@@ -1073,13 +1291,27 @@ export const startPublicCommunityCheckout = action({
           providerPriceId,
           nowMs: Date.now(),
         },
-      );
+      )) as { lifecycle_current?: boolean } | null;
+      if (attached?.lifecycle_current !== true) {
+        throw new Error("community_checkout_lifecycle_stale");
+      }
       return {
         ok: true,
         session_id: sessionId,
         checkout_url: checkoutUrl,
       };
     } catch (error) {
+      let compensationError: unknown = null;
+      if (providerCheckoutSessionId) {
+        try {
+          await compensateCommunityCheckout({
+            providerAccountId: checkoutConfig.providerAccountId,
+            providerCheckoutSessionId,
+          });
+        } catch (caught) {
+          compensationError = caught;
+        }
+      }
       await ctx.runMutation(
         internal.communityCommerce.expirePublicCommunityCheckoutSessionInternal as any,
         {
@@ -1087,6 +1319,7 @@ export const startPublicCommunityCheckout = action({
           nowMs: Date.now(),
         },
       );
+      if (compensationError) throw compensationError;
       throw error;
     }
   },
@@ -1137,6 +1370,30 @@ export const finalizeCheckoutSession = query({
         status: "forbidden",
         message: "checkout_session_forbidden",
       };
+    }
+    if (session.mode === "community_join" && session.communityId) {
+      const community = (await ctx.db.get(session.communityId)) as CommunityLike | null;
+      let lifecycleIsCurrent = false;
+      if (community) {
+        try {
+          requireActiveCommunity(community);
+          requireMatchingCommunityLifecycleGeneration({
+            community,
+            expectedGeneration: session.communityLifecycleGeneration,
+            errorCode: "community_checkout_lifecycle_stale",
+          });
+          lifecycleIsCurrent = true;
+        } catch {
+          lifecycleIsCurrent = false;
+        }
+      }
+      if (!lifecycleIsCurrent) {
+        return {
+          ok: false,
+          status: "expired",
+          message: "community_checkout_lifecycle_stale",
+        };
+      }
     }
     if (session.expiresAt <= nowMs || session.status === "expired") {
       return {

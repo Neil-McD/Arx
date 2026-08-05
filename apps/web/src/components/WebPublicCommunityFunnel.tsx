@@ -308,6 +308,20 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     );
   }
 
+  if (!publicCommunity && publicCommunityError) {
+    return (
+      <div className="public-funnel-page">
+        <section className="public-funnel-state-card" role="status">
+          <div className="public-funnel-state-kicker">Community</div>
+          <h1 className="public-funnel-state-title">{publicCommunityError}</h1>
+          <p className="public-funnel-state-copy">
+            This community is not available for new access.
+          </p>
+        </section>
+      </div>
+    );
+  }
+
   return (
     <WebCommunityVisitorSurface
       title={communityName}

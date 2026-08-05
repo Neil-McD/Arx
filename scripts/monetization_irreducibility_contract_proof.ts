@@ -12,6 +12,7 @@ const builderFunding = read("shared/builderFunding.ts");
 const founderPlanCore = read("convex/founderPlanCore.ts");
 const founderBilling = read("convex/founderBilling.ts");
 const founderInference = read("convex/founderInferenceCore.ts");
+const ownerFunding = read("convex/communityOwnerFundingCore.ts");
 const founderInferenceApi = read("convex/founderInference.ts");
 const communityLifecycle = read("convex/communityLifecycle.ts");
 const communityCommerce = read("convex/communityCommerce.ts");
@@ -99,7 +100,7 @@ assert.doesNotMatch(
   founderBilling,
   /getCurrentFounderPlanStatus|getFounderSubscriptionByProviderSubscriptionIdInternal/,
 );
-assert.match(founderInference, /owner_funding_choice_required/);
+assert.match(ownerFunding, /owner_funding_choice_required/);
 assert.match(founderInference, /founder_usage_cycle_community_mismatch/);
 assert.doesNotMatch(founderInference, /legacy_requester_chatgpt/);
 assert.match(

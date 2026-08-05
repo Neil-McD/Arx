@@ -162,7 +162,7 @@ export function useWebPublicFunnelActions<
 
       if (accessResult.status === "fulfilled") {
         const access = accessResult.value;
-        if (access && (access.can_enter_community || access.is_owner) && access.community_id) {
+        if (access?.can_enter_community && access.community_id) {
           clearPendingPublicJoin();
           const current = argsRef.current;
           current.setPublicCommunityAccess(access);
@@ -401,7 +401,15 @@ export function useWebPublicFunnelActions<
         const payload = await resolveCloudPublicFunnel<AuthSession, PublicCommunityT, PublicPlanT>({
           communitySlug: requestedSlug,
         });
-        if (!payload?.community?.slug) throw new Error("Community not found.");
+        if (payload?.ok !== true || !payload.community?.slug) {
+          if (payload?.reason === "community_archived") {
+            throw new Error("Community archived.");
+          }
+          if (payload?.reason === "community_archiving") {
+            throw new Error("This community is no longer accepting new members.");
+          }
+          throw new Error("Community not found.");
+        }
 
         const revealImageUrls = [
           payload.community.avatar_url ?? null,
@@ -494,7 +502,7 @@ export function useWebPublicFunnelActions<
                 current.getCurrentPublicCommunitySlug() !== resolvedSlug ||
                 resolveAuthSubject(current.getSession()) !== accessSubject
               ) return;
-              hasEnterAccess = Boolean(access && (access.can_enter_community || access.is_owner));
+              hasEnterAccess = Boolean(access?.can_enter_community);
               current.setPublicCommunityAccess(access);
               if (hasEnterAccess) {
                 current.setMyPublicCommunityJoinRequest(null);
@@ -539,6 +547,8 @@ export function useWebPublicFunnelActions<
             : error instanceof Error
               ? error.message
               : "Failed to load community.";
+        current.setPublicCommunity(null);
+        current.setPublicCommunityPlans([]);
         current.setPublicCommunityError(message);
         current.setIsLoadingPublicCommunity(false);
         const currentSubject = resolveAuthSubject(current.getSession());

@@ -45,10 +45,24 @@ import {
   upsertPlatformHomeCommunityAutojoinOptOut,
 } from "./platformHomeCommunity";
 import { getStripeClient } from "./stripeCore";
+import {
+  applyStripeSubscriptionEffect,
+  planConnectedStripeSubscriptionCancellations,
+  stripeSubscriptionEffectIsTerminal,
+  type StripeSubscriptionCancellationBlocker,
+  type StripeSubscriptionEffectClient,
+} from "./stripeSubscriptionEffectCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
+import {
+  communityIsOperational,
+  communityAcceptsNewOperations,
+  normalizeCommunityLifecycleGeneration,
+  normalizeCommunityLifecycleStatus,
+  requireActiveCommunity,
+} from "./communityLifecycleCore";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -124,6 +138,13 @@ const ACTIVE_RECURRING_SUBSCRIPTION_STATUSES = new Set([
   "past_due",
   "cancel_at_period_end",
 ]);
+
+type PreparedStripeSubscriptionEffect = {
+  provider_account_id: string;
+  provider_subscription_id: string;
+};
+
+type PreparedSubscriptionEffectBlocker = StripeSubscriptionCancellationBlocker;
 
 const COMMUNITY_ADMIN_MEMBERS_DEFAULT_PAGE_SIZE = 25;
 const COMMUNITY_ADMIN_MEMBERS_MAX_PAGE_SIZE = 100;
@@ -705,6 +726,7 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
   nowMs: number;
   grantReason: string;
 }): Promise<{ grantedMembership: boolean }> {
+  requireActiveCommunity(args.community);
   const existingMembershipRows = (await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) =>
@@ -855,6 +877,12 @@ export const listCommunityMemberships = query({
         id: String(community._id),
         slug: community.slug,
         name: community.name,
+        lifecycle_status: normalizeCommunityLifecycleStatus(
+          community.lifecycleStatus,
+        ),
+        lifecycle_generation: normalizeCommunityLifecycleGeneration(
+          community.lifecycleGeneration,
+        ),
         owner_id:
           (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ??
           String(community.ownerId),
@@ -891,6 +919,7 @@ export const listCommunityMemberships = query({
       communities: Record<string, unknown>;
     }> = [];
     for (const community of ownedCommunities
+      .filter((community) => communityIsOperational(community))
       .slice()
       .sort((a, b) => a.createdAt - b.createdAt)) {
       out.push({
@@ -905,6 +934,7 @@ export const listCommunityMemberships = query({
         row.communityId,
       )) as CommunityLike | null;
       if (!community) continue;
+      if (!communityIsOperational(community)) continue;
       if (String(community.ownerId) === String(row.userId)) continue;
       const entitlement = await resolveCommunityMembershipEntitlementState({
         ctx,
@@ -1460,14 +1490,16 @@ export const prepareCommunityMemberRemovalInternal = internalQuery({
       return {
         ok: true,
         noop: true,
-        provider_subscription_ids: [],
+        stripe_subscription_effects: [],
+        subscription_effect_blockers: [],
       };
     }
     if (String(membership.communityId) !== String(args.communityId)) {
       return {
         ok: true,
         noop: true,
-        provider_subscription_ids: [],
+        stripe_subscription_effects: [],
+        subscription_effect_blockers: [],
       };
     }
     if (String(community.ownerId) === String(membership.userId)) {
@@ -1482,15 +1514,19 @@ export const prepareCommunityMemberRemovalInternal = internalQuery({
       ctx,
       membershipId: membership._id,
     });
-    const providerSubscriptionIds = subscriptionRows
-      .map((row) => String(row.providerSubscriptionId ?? "").trim())
-      .filter((value, index, list) => value.length > 0 && list.indexOf(value) === index);
+    const cancellationPlan = planConnectedStripeSubscriptionCancellations(subscriptionRows);
     return {
       ok: true,
       noop: false,
       community_slug: community.slug,
       target_user_id: membership.userId,
-      provider_subscription_ids: providerSubscriptionIds,
+      stripe_subscription_effects: cancellationPlan.identities.map((identity) => ({
+        provider_account_id: identity.accountScope.kind === "connected"
+          ? identity.accountScope.providerAccountId
+          : "",
+        provider_subscription_id: identity.providerSubscriptionId,
+      })),
+      subscription_effect_blockers: cancellationPlan.blockers,
     };
   },
 });
@@ -1627,20 +1663,32 @@ export const revokeCommunityMemberInternal = internalMutation({
   },
 });
 
-async function cancelStripeSubscriptionIfActive(providerSubscriptionId: string): Promise<void> {
-  const subscriptionId = providerSubscriptionId.trim();
-  if (!subscriptionId) return;
-  const stripe = getStripeClient();
-  let subscription: Awaited<ReturnType<typeof stripe.subscriptions.retrieve>>;
-  try {
-    subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  } catch (error: any) {
-    if (error?.statusCode === 404 || error?.code === "resource_missing") return;
-    throw error;
+async function cancelPreparedStripeSubscriptionEffects(args: {
+  effects: PreparedStripeSubscriptionEffect[];
+}): Promise<{ canceledCount: number }> {
+  if (args.effects.length === 0) return { canceledCount: 0 };
+  const stripe = getStripeClient() as unknown as StripeSubscriptionEffectClient;
+  let canceledCount = 0;
+  for (const effect of args.effects) {
+    const outcome = await applyStripeSubscriptionEffect({
+      stripe,
+      identity: {
+        accountScope: {
+          kind: "connected",
+          providerAccountId: effect.provider_account_id,
+        },
+        providerSubscriptionId: effect.provider_subscription_id,
+      },
+      intent: "cancel_now",
+    });
+    if (!stripeSubscriptionEffectIsTerminal(outcome)) {
+      throw new Error(
+        `community_subscription_cancellation_${outcome.state}:${outcome.errorCode ?? "unknown"}`,
+      );
+    }
+    if (outcome.state === "canceled") canceledCount += 1;
   }
-  const status = String((subscription as any)?.status ?? "").trim().toLowerCase();
-  if (!status || status === "canceled") return;
-  await stripe.subscriptions.cancel(subscriptionId);
+  return { canceledCount };
 }
 
 export const removeCommunityMember = action({
@@ -1661,18 +1709,22 @@ export const removeCommunityMember = action({
       },
     )) as {
       noop?: boolean;
-      provider_subscription_ids?: string[];
+      stripe_subscription_effects?: PreparedStripeSubscriptionEffect[];
+      subscription_effect_blockers?: PreparedSubscriptionEffectBlocker[];
     } | null;
     if (prepared?.noop) return { ok: true, stripe_canceled_count: 0 };
 
-    const providerSubscriptionIds = Array.isArray(prepared?.provider_subscription_ids)
-      ? prepared.provider_subscription_ids
+    const blockers = Array.isArray(prepared?.subscription_effect_blockers)
+      ? prepared.subscription_effect_blockers
       : [];
-    let stripeCanceledCount = 0;
-    for (const providerSubscriptionId of providerSubscriptionIds) {
-      await cancelStripeSubscriptionIfActive(providerSubscriptionId);
-      stripeCanceledCount += 1;
+    if (blockers.length > 0) {
+      throw new Error(`community_subscription_cancellation_blocked:${blockers[0]?.reason ?? "unknown"}`);
     }
+    const stripeEffects = Array.isArray(prepared?.stripe_subscription_effects)
+      ? prepared.stripe_subscription_effects
+      : [];
+    const { canceledCount: stripeCanceledCount } =
+      await cancelPreparedStripeSubscriptionEffects({ effects: stripeEffects });
 
     await ctx.runMutation(
       internal.communityAdmin.revokeCommunityMemberInternal as any,
@@ -1681,7 +1733,7 @@ export const removeCommunityMember = action({
         authSubject: args.authSubject ?? undefined,
         communityId: args.communityId,
         targetMembershipId: args.targetMembershipId,
-        revokedReason: providerSubscriptionIds.length > 0
+        revokedReason: stripeEffects.length > 0
           ? "removed_by_manager_stripe_canceled"
           : "removed_by_manager",
         nowMs: Date.now(),
@@ -1714,18 +1766,22 @@ export const banCommunityMember = action({
     )) as {
       noop?: boolean;
       target_user_id?: any;
-      provider_subscription_ids?: string[];
+      stripe_subscription_effects?: PreparedStripeSubscriptionEffect[];
+      subscription_effect_blockers?: PreparedSubscriptionEffectBlocker[];
     } | null;
     if (prepared?.noop || !prepared?.target_user_id) return { ok: true, stripe_canceled_count: 0 };
 
-    const providerSubscriptionIds = Array.isArray(prepared?.provider_subscription_ids)
-      ? prepared.provider_subscription_ids
+    const blockers = Array.isArray(prepared?.subscription_effect_blockers)
+      ? prepared.subscription_effect_blockers
       : [];
-    let stripeCanceledCount = 0;
-    for (const providerSubscriptionId of providerSubscriptionIds) {
-      await cancelStripeSubscriptionIfActive(providerSubscriptionId);
-      stripeCanceledCount += 1;
+    if (blockers.length > 0) {
+      throw new Error(`community_subscription_cancellation_blocked:${blockers[0]?.reason ?? "unknown"}`);
     }
+    const stripeEffects = Array.isArray(prepared?.stripe_subscription_effects)
+      ? prepared.stripe_subscription_effects
+      : [];
+    const { canceledCount: stripeCanceledCount } =
+      await cancelPreparedStripeSubscriptionEffects({ effects: stripeEffects });
 
     const nowMs = Date.now();
     await ctx.runMutation(
@@ -1735,7 +1791,7 @@ export const banCommunityMember = action({
         authSubject: args.authSubject ?? undefined,
         communityId: args.communityId,
         targetMembershipId: args.targetMembershipId,
-        revokedReason: providerSubscriptionIds.length > 0
+        revokedReason: stripeEffects.length > 0
           ? "banned_by_manager_stripe_canceled"
           : "banned_by_manager",
         nowMs,
@@ -2003,6 +2059,12 @@ export const approvePendingJoinRequestsForOpenAccessInternal = internalMutation(
       handler: async () => {
         const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
         if (!community) throw new Error("community_not_found");
+        if (!communityAcceptsNewOperations(community)) {
+          return {
+            approved_pending_request_count: 0,
+            pending_request_overflow: false,
+          };
+        }
         if (resolveCommunityEntryPolicy(community) !== "open") {
           return {
             approved_pending_request_count: 0,

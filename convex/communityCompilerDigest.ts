@@ -16,7 +16,10 @@ import {
   buildCommunityMemoryDigestVersionKey,
   buildCommunityMemoryWorkKey,
 } from "./communityMemoryWorkKey";
-import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
+import {
+  normalizeCommunityLifecycleGeneration,
+  requireOperationalCommunityById,
+} from "./communityLifecycleCore";
 
 const COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS = 30;
 const COMMUNITY_COMPILER_DIGEST_WINDOW_MS = COMMUNITY_COMPILER_DIGEST_WINDOW_DAYS * 24 * 60 * 60 * 1000;
@@ -49,13 +52,17 @@ type DigestItem = {
 type CompilerDigestRow = {
   _id: any;
   communityId: any;
+  communityLifecycleGeneration?: number;
   dedupeKey: string;
   versionKey?: string;
   agentHandoffState?: "pending" | "running" | "handled";
   agentClaimId?: string;
   agentClaimedAt?: number;
   agentHandledAt?: number;
-  agentTerminalReason?: "settled" | "superseded";
+  agentTerminalReason?:
+    | "settled"
+    | "superseded"
+    | "community_lifecycle_generation_stale";
   agentAttemptCount?: number;
   windowStartedAt: number;
   windowEndedAt: number;
@@ -126,6 +133,9 @@ function mapDigestRow(row: CompilerDigestRow) {
   return {
     id: normalizeIdValue(row._id),
     community_id: normalizeIdValue(row.communityId),
+    community_lifecycle_generation: normalizeCommunityLifecycleGeneration(
+      row.communityLifecycleGeneration,
+    ),
     dedupe_key: row.dedupeKey,
     version_key: row.versionKey ?? null,
     agent_handoff_state: row.agentHandoffState ?? null,
@@ -184,7 +194,13 @@ async function runCommunityCompilerDigestPassCore(
   ctx: any,
   args: { communityId: any; triggeredByUserId?: any; requireTrigger?: boolean },
 ) {
-    await requireLiveCommunityForCognitionWrite(ctx, args.communityId);
+    const community = await requireOperationalCommunityById<Record<string, any>>({
+      ctx,
+      communityId: args.communityId,
+    });
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    );
     const userId = args.triggeredByUserId ?? undefined;
     const nowMs = Date.now();
     const windowStartedAtMs = nowMs - COMMUNITY_COMPILER_DIGEST_WINDOW_MS;
@@ -287,6 +303,7 @@ async function runCommunityCompilerDigestPassCore(
     const dedupeKey = `community_compiler_digest:v2:${versionKey}`;
     const payload = {
       communityId: args.communityId,
+      communityLifecycleGeneration,
       dedupeKey,
       versionKey,
       windowStartedAt: windowStartedAtMs,
@@ -298,12 +315,26 @@ async function runCommunityCompilerDigestPassCore(
       updatedAt: nowMs,
     };
 
-    const existing = (await ctx.db
+    let existing = (await ctx.db
       .query("communityCompilerDigests" as any)
-      .withIndex("by_community_versionKey", (q: any) =>
-        q.eq("communityId", args.communityId).eq("versionKey", versionKey),
+      .withIndex("by_community_generation_versionKey", (q: any) =>
+        q
+          .eq("communityId", args.communityId)
+          .eq("communityLifecycleGeneration", communityLifecycleGeneration)
+          .eq("versionKey", versionKey),
       )
       .first()) as CompilerDigestRow | null;
+    if (!existing && communityLifecycleGeneration === 0) {
+      const legacyRows = (await ctx.db
+        .query("communityCompilerDigests" as any)
+        .withIndex("by_community_versionKey", (q: any) =>
+          q.eq("communityId", args.communityId).eq("versionKey", versionKey),
+        )
+        .take(20)) as CompilerDigestRow[];
+      existing = legacyRows.find(
+        (row) => row.communityLifecycleGeneration === undefined,
+      ) ?? null;
+    }
     const digestId = existing?._id ?? await ctx.db.insert("communityCompilerDigests" as any, {
       ...payload,
       agentHandoffState: sortedItems.length > 0 ? "pending" as const : "handled" as const,

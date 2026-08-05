@@ -15,7 +15,7 @@ import {
   resolveCommunityInteractionEvidenceSource,
   type CommunityInteractionEvidenceRow,
 } from "./communityInteractionEvidenceCore";
-import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
+import { requireOperationalCommunityById } from "./communityLifecycleCore";
 import { normalizeOptionalText, truncateText } from "./communityText";
 
 export type ArchiveSourceType = "chat" | "interaction" | "ai_feed" | "resource";
@@ -365,7 +365,7 @@ async function upsertArchiveDoc(ctx: { db: any }, nextDoc: Omit<
   "_id" | "embeddingStatus" | "embedding" | "embeddingError" | "embeddingModel" | "embeddingDimensions" | "embeddingUpdatedAt"
 > | null): Promise<void> {
   if (!nextDoc) return;
-  await requireLiveCommunityForCognitionWrite(ctx, nextDoc.communityId);
+  await requireOperationalCommunityById({ ctx, communityId: nextDoc.communityId });
   const existing = await getExistingArchiveDoc(ctx, {
     communityId: nextDoc.communityId,
     sourceType: nextDoc.sourceType,

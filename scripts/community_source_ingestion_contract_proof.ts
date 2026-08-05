@@ -305,8 +305,13 @@ assert.match(
 );
 assert.match(
   resources,
-  /processCommunitySourceCrawlJobInternal = internalAction\(\{[\s\S]*status: "crawling"[\s\S]*crawlSourceRootWithConfiguredProvider[\s\S]*status: "saving_sources"[\s\S]*saveCommunitySourceCrawlPagesInternal[\s\S]*sourceResourceIds\.length === 0[\s\S]*community_source_crawl_no_usable_sources[\s\S]*status: "ready"[\s\S]*status: "failed"/,
-  "source crawl jobs should move through crawling, saving, ready, and failed states and fail when no usable source rows exist",
+  /claimCommunitySourceCrawlJobInternal = internalMutation\(\{[\s\S]*resolveCommunityWorkAdmissionErrorCode[\s\S]*status: "failed"[\s\S]*status: "crawling"/,
+  "source crawl jobs should atomically claim only work from the active lifecycle generation",
+);
+assert.match(
+  resources,
+  /processCommunitySourceCrawlJobInternal = internalAction\(\{[\s\S]*claimCommunitySourceCrawlJobInternal[\s\S]*crawlSourceRootWithConfiguredProvider[\s\S]*status: "saving_sources"[\s\S]*saveCommunitySourceCrawlPagesInternal[\s\S]*sourceResourceIds\.length === 0[\s\S]*community_source_crawl_no_usable_sources[\s\S]*status: "ready"[\s\S]*status: "failed"/,
+  "claimed source crawl jobs should move through saving, ready, and failed states and fail when no usable source rows exist",
 );
 assert.match(
   resources,

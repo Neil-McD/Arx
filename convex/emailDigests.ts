@@ -3,6 +3,7 @@ import { internalAction, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import { listActiveCommunityRecipientUserIds } from "./communityRecipientCore";
+import { communityIsOperational } from "./communityLifecycleCore";
 import {
   type CommunityResourceModuleLike,
   communityResourceIsLiveModulePage,
@@ -24,6 +25,7 @@ type CommunityRow = {
   slug: string;
   name: string;
   visibility: "published" | "unlisted";
+  lifecycleStatus?: "active" | "archiving" | "archived";
   updatedAt: number;
 };
 
@@ -181,19 +183,24 @@ async function listDigestCommunities(ctx: any, args: {
 }): Promise<CommunityRow[]> {
   if (args.communityId) {
     const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
-    return community ? [community] : [];
+    return community && communityIsOperational(community) ? [community] : [];
   }
-  const published = (await ctx.db
-    .query("communities")
-    .withIndex("by_visibility_updatedAt", (q: any) => q.eq("visibility", "published"))
-    .order("desc")
-    .take(args.limit)) as CommunityRow[];
-  const unlisted = (await ctx.db
-    .query("communities")
-    .withIndex("by_visibility_updatedAt", (q: any) => q.eq("visibility", "unlisted"))
-    .order("desc")
-    .take(args.limit)) as CommunityRow[];
-  return [...published, ...unlisted]
+  const lifecycleRows = await Promise.all(
+    ([undefined, "active"] as const).flatMap((lifecycleStatus) =>
+      (["published", "unlisted"] as const).map((visibility) =>
+        ctx.db
+          .query("communities")
+          .withIndex("by_lifecycle_visibility_updatedAt", (q: any) =>
+            q.eq("lifecycleStatus", lifecycleStatus).eq("visibility", visibility),
+          )
+          .order("desc")
+          .take(args.limit) as Promise<CommunityRow[]>,
+      ),
+    ),
+  );
+  return Array.from(
+    new Map(lifecycleRows.flat().map((row) => [String(row._id), row])).values(),
+  )
     .sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))
     .slice(0, args.limit * 2);
 }
@@ -484,6 +491,7 @@ export const enqueueWeeklyCommunityDigestsInternal = internalAction({
           (internal as any).email.enqueueEmailJobInternal,
           {
             kind: "weekly_member_digest",
+            communityId: batch.communityId,
             recipientUserId: userId,
             templateKey: "weekly_member_digest",
             payload,

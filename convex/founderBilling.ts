@@ -8,7 +8,12 @@ import {
   type FounderSubscriptionStatus,
 } from "../shared/founderPlan";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
-import { resolveBuilderFundingProjection } from "../shared/builderFunding";
+import {
+  builderFundingProjectionGrantsAccess,
+  resolveBuilderFundingProjection,
+} from "../shared/builderFunding";
+import { resolveCommunityRestoreEligibility } from "../shared/communityRestoreEligibility";
+import { providerSubscriptionEventShouldApply } from "../shared/subscriptionEventOrdering";
 import {
   buildCheckoutSuccessUrl,
   newOpaqueToken,
@@ -18,6 +23,7 @@ import {
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
   getFounderSubscriptionByCommunity,
+  getPendingFounderSubscriptionCheckoutForGeneration,
   getFounderSubscriptionByProviderSubscriptionId,
   syncFounderUsageCycle,
   type FounderSubscriptionRow,
@@ -32,6 +38,19 @@ import {
   attachStripeCustomerToUser,
   ensureStripeCustomerForUser,
 } from "./stripeCustomers";
+import {
+  communityAcceptsNewOperationsAtGeneration,
+  normalizeCommunityLifecycleGeneration,
+  normalizeCommunityLifecycleStatus,
+  requireActiveCommunity,
+  requireMatchingCommunityLifecycleGeneration,
+} from "./communityLifecycleCore";
+import {
+  compensateStaleStripeCheckout,
+  normalizeStripeCheckoutSessionIdentity,
+  stripeCheckoutCompensationIsTerminal,
+  type StripeCheckoutCompensationClient,
+} from "./stripeCheckoutEffectCore";
 
 const FOUNDER_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -98,6 +117,10 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
     if (!community || String(community.ownerId) !== String(args.ownerUserId)) {
       throw new Error("founder_subscription_community_forbidden");
     }
+    requireActiveCommunity(community);
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    );
     const existingSubscription = await getFounderSubscriptionByCommunity(
       ctx,
       args.communityId,
@@ -116,9 +139,32 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
         q.eq("communityId", args.communityId).eq("status", "pending"),
       )
       .collect();
-    const activePending = existing.filter(
-      (row) => row.mode === "founder_subscription" && row.expiresAt > args.nowMs,
-    );
+    const activePending: typeof existing = [];
+    for (const row of existing) {
+      if (row.mode !== "founder_subscription") continue;
+      let generationIsCurrent = false;
+      try {
+        requireMatchingCommunityLifecycleGeneration({
+          community,
+          expectedGeneration: row.communityLifecycleGeneration,
+          errorCode: "founder_subscription_checkout_lifecycle_stale",
+        });
+        generationIsCurrent = true;
+      } catch (error) {
+        if (
+          !(error instanceof Error) ||
+          error.message !== "founder_subscription_checkout_lifecycle_stale"
+        ) {
+          throw error;
+        }
+        generationIsCurrent = false;
+      }
+      if (row.expiresAt > args.nowMs && generationIsCurrent) {
+        activePending.push(row);
+      } else {
+        await ctx.db.patch(row._id, { status: "expired", updatedAt: args.nowMs });
+      }
+    }
     if (activePending.length > 1) {
       throw new Error("founder_subscription_checkout_ambiguous");
     }
@@ -131,17 +177,13 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
         reused: true,
       };
     }
-    for (const row of existing) {
-      if (row.mode === "founder_subscription" && row.expiresAt <= args.nowMs) {
-        await ctx.db.patch(row._id, { status: "expired", updatedAt: args.nowMs });
-      }
-    }
     await ctx.db.insert("checkoutSessions", {
       sessionId: args.sessionId,
       mode: "founder_subscription",
       provider: "stripe",
       ownerUserId: args.ownerUserId,
       communityId: args.communityId,
+      communityLifecycleGeneration,
       billingPeriod: "monthly",
       amountBaseUnits: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
       currency: "usd",
@@ -182,24 +224,103 @@ export const attachFounderStripeCheckoutSessionInternal = internalMutation({
     ) {
       throw new Error("founder_subscription_checkout_invalid");
     }
+    const community = await ctx.db.get(row.communityId);
+    if (!community) throw new Error("community_not_found");
+    const lifecycleCurrent = communityAcceptsNewOperationsAtGeneration({
+      community,
+      expectedGeneration: row.communityLifecycleGeneration,
+    });
     if (args.providerPriceId !== readFounderStripePriceId()) {
       throw new Error("founder_subscription_price_mismatch");
     }
-    await attachStripeCustomerToUser({
-      ctx,
-      userId: row.ownerUserId,
-      providerCustomerId: args.providerCustomerId,
-      nowMs: args.nowMs,
-    });
+    if (lifecycleCurrent) {
+      await attachStripeCustomerToUser({
+        ctx,
+        userId: row.ownerUserId,
+        providerCustomerId: args.providerCustomerId,
+        nowMs: args.nowMs,
+      });
+    }
     await ctx.db.patch(row._id, {
       providerCheckoutSessionId: args.providerCheckoutSessionId,
       providerCustomerId: normalizeOptionalString(args.providerCustomerId),
       providerSubscriptionId: normalizeOptionalString(args.providerSubscriptionId),
       providerPriceId: args.providerPriceId,
+      status: lifecycleCurrent ? row.status : "expired",
       updatedAt: args.nowMs,
     });
+    return {
+      ok: true,
+      lifecycle_current: lifecycleCurrent,
+      provider_checkout_session_id: args.providerCheckoutSessionId,
+    };
   },
 });
+
+export const expireFounderSubscriptionCheckoutInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const row = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", args.sessionId))
+      .first();
+    if (!row || row.mode !== "founder_subscription") return { ok: true, noop: true };
+    await ctx.db.patch(row._id, { status: "expired", updatedAt: args.nowMs });
+    return { ok: true, noop: false };
+  },
+});
+
+async function compensateFounderCheckout(providerCheckoutSessionId: string): Promise<void> {
+  const result = await compensateStaleStripeCheckout({
+    stripe: getStripeClient() as unknown as StripeCheckoutCompensationClient,
+    identity: normalizeStripeCheckoutSessionIdentity({
+      accountScope: "platform",
+      providerCheckoutSessionId,
+    }),
+  });
+  if (!stripeCheckoutCompensationIsTerminal(result)) {
+    throw new Error(
+      `founder_checkout_compensation_${result.state}:${result.errorCode ?? "unknown"}`,
+    );
+  }
+}
+
+async function quarantineFounderCheckoutRow(args: {
+  ctx: any;
+  checkout: any;
+  providerCheckoutSessionId?: unknown;
+  providerCustomerId?: unknown;
+  providerSubscriptionId?: unknown;
+  providerPriceId?: unknown;
+  nowMs: number;
+}) {
+  const providerCheckoutSessionId = normalizeOptionalString(args.providerCheckoutSessionId);
+  const providerCustomerId = normalizeOptionalString(args.providerCustomerId);
+  const providerSubscriptionId = normalizeOptionalString(args.providerSubscriptionId);
+  const providerPriceId = normalizeOptionalString(args.providerPriceId);
+  await args.ctx.db.patch(args.checkout._id, {
+    providerCheckoutSessionId:
+      providerCheckoutSessionId ?? args.checkout.providerCheckoutSessionId,
+    providerCustomerId: providerCustomerId ?? args.checkout.providerCustomerId,
+    providerSubscriptionId:
+      providerSubscriptionId ?? args.checkout.providerSubscriptionId,
+    providerPriceId: providerPriceId ?? args.checkout.providerPriceId,
+    cancelAtPeriodEnd: false,
+    status: "expired",
+    updatedAt: args.nowMs,
+  });
+  return {
+    ok: true,
+    quarantined: true,
+    provider_checkout_session_id:
+      providerCheckoutSessionId ?? args.checkout.providerCheckoutSessionId ?? null,
+    provider_subscription_id:
+      providerSubscriptionId ?? args.checkout.providerSubscriptionId ?? null,
+  };
+}
 
 async function syncFounderSubscription(args: {
   ctx: any;
@@ -231,36 +352,6 @@ async function syncFounderSubscription(args: {
     args.ctx,
     providerSubscriptionId,
   );
-  const expectedPriceId = String(
-    existing?.providerPriceId ??
-    checkout?.providerPriceId ??
-    readFounderStripePriceIdOptional(),
-  ).trim();
-  if (!expectedPriceId) {
-    return { ok: true, ignored: true, reason: "founder_subscription_price_not_configured" };
-  }
-  if (providerPriceId !== expectedPriceId) {
-    if (!existing) {
-      return { ok: true, ignored: true, reason: "founder_subscription_price_not_managed" };
-    }
-    if (args.providerEventCreatedAt < existing.lastProviderEventCreatedAt) {
-      return { ok: true, ignored: true, reason: "founder_subscription_event_stale" };
-    }
-    await args.ctx.db.patch(existing._id, {
-      status: "ended",
-      endedAt: args.providerEventCreatedAt,
-      revokedReason: "founder_subscription_price_changed",
-      lastProviderEventCreatedAt: args.providerEventCreatedAt,
-      updatedAt: args.providerEventCreatedAt,
-    });
-    return {
-      ok: true,
-      ignored: false,
-      founderSubscriptionId: existing._id,
-      subscriptionStatus: "ended",
-      revokedReason: "founder_subscription_price_changed",
-    };
-  }
   if (!checkout && !existing) {
     return { ok: true, ignored: true, reason: "founder_subscription_not_local" };
   }
@@ -283,6 +374,7 @@ async function syncFounderSubscription(args: {
   if (String(community.ownerId) !== String(ownerUserId)) {
     throw new Error("founder_subscription_community_owner_mismatch");
   }
+  const status = normalizeFounderSubscriptionStatus(args.subscriptionStatus);
   if (
     checkout?.providerCustomerId &&
     String(checkout.providerCustomerId) !== providerCustomerId
@@ -301,8 +393,98 @@ async function syncFounderSubscription(args: {
   ) {
     throw new Error("founder_subscription_customer_mismatch");
   }
-  if (existing && args.providerEventCreatedAt < existing.lastProviderEventCreatedAt) {
+  if (existing && !providerSubscriptionEventShouldApply({
+    incomingCreatedAt: args.providerEventCreatedAt,
+    currentCreatedAt: existing.lastProviderEventCreatedAt,
+    incomingStatus: status,
+    currentStatus: existing.status,
+  })) {
     return { ok: true, ignored: true, reason: "founder_subscription_event_stale" };
+  }
+  if (
+    existing &&
+    !communityAcceptsNewOperationsAtGeneration({
+      community,
+      expectedGeneration: existing.communityLifecycleGeneration,
+    })
+  ) {
+    if (status === "canceled" || status === "ended") {
+      await args.ctx.db.patch(existing._id, {
+        status: "ended",
+        cancelAtPeriodEnd: false,
+        endedAt: args.providerEventCreatedAt,
+        revokedReason: "provider_subscription_ended",
+        lastProviderEventCreatedAt: args.providerEventCreatedAt,
+        updatedAt: args.providerEventCreatedAt,
+      });
+      return {
+        ok: true,
+        ignored: false,
+        founderSubscriptionId: existing._id,
+        subscriptionStatus: "ended",
+        revokedReason: "provider_subscription_ended",
+      };
+    }
+    return {
+      ok: true,
+      ignored: true,
+      quarantined: true,
+      reason: "founder_subscription_lifecycle_stale",
+      founderSubscriptionId: existing._id,
+    };
+  }
+  if (
+    checkout &&
+    !existing &&
+    !communityAcceptsNewOperationsAtGeneration({
+      community,
+      expectedGeneration: checkout.communityLifecycleGeneration,
+    })
+  ) {
+    return await quarantineFounderCheckoutRow({
+      ctx: args.ctx,
+      checkout,
+      providerCheckoutSessionId: args.providerCheckoutSessionId,
+      providerCustomerId,
+      providerSubscriptionId,
+      providerPriceId,
+      nowMs: args.providerEventCreatedAt,
+    });
+  }
+  const expectedPriceId = String(
+    existing?.providerPriceId ??
+    checkout?.providerPriceId ??
+    readFounderStripePriceIdOptional(),
+  ).trim();
+  if (!expectedPriceId) {
+    return { ok: true, ignored: true, reason: "founder_subscription_price_not_configured" };
+  }
+  if (providerPriceId !== expectedPriceId) {
+    if (!existing) {
+      return { ok: true, ignored: true, reason: "founder_subscription_price_not_managed" };
+    }
+    if (!providerSubscriptionEventShouldApply({
+      incomingCreatedAt: args.providerEventCreatedAt,
+      currentCreatedAt: existing.lastProviderEventCreatedAt,
+      incomingStatus: status,
+      currentStatus: existing.status,
+    })) {
+      return { ok: true, ignored: true, reason: "founder_subscription_event_stale" };
+    }
+    await args.ctx.db.patch(existing._id, {
+      status: "ended",
+      endedAt: args.providerEventCreatedAt,
+      revokedReason: "founder_subscription_price_changed",
+      lastProviderEventCreatedAt: args.providerEventCreatedAt,
+      updatedAt: args.providerEventCreatedAt,
+    });
+    return {
+      ok: true,
+      ignored: false,
+      founderSubscriptionId: existing._id,
+      subscriptionStatus: "ended",
+      revokedReason: "founder_subscription_price_changed",
+    };
   }
   const cycleStartAt = Math.floor(Number(args.currentPeriodStartAt ?? 0));
   const cycleEndAt = Math.floor(Number(args.currentPeriodEndAt ?? 0));
@@ -310,7 +492,6 @@ async function syncFounderSubscription(args: {
     throw new Error("founder_subscription_cycle_invalid");
   }
   if (!providerCustomerId) throw new Error("founder_subscription_customer_missing");
-  const status = normalizeFounderSubscriptionStatus(args.subscriptionStatus);
   const endedAt = status === "canceled" || status === "ended"
     ? args.providerEventCreatedAt
     : undefined;
@@ -352,6 +533,9 @@ async function syncFounderSubscription(args: {
     const id = await args.ctx.db.insert("founderSubscriptions", {
       ownerUserId,
       communityId,
+      communityLifecycleGeneration: normalizeCommunityLifecycleGeneration(
+        checkout?.communityLifecycleGeneration,
+      ),
       provider: "stripe",
       providerCustomerId,
       providerSubscriptionId,
@@ -488,24 +672,23 @@ export const getFounderBillingOverview = query({
         .slice()
         .sort((a, b) => a.createdAt - b.createdAt)
         .map(async (community) => {
-          const [subscription, pendingCheckouts] =
+          const lifecycleStatus = normalizeCommunityLifecycleStatus(
+            community.lifecycleStatus,
+          );
+          const lifecycleGeneration = normalizeCommunityLifecycleGeneration(
+            community.lifecycleGeneration,
+          );
+          const [subscription, pendingCheckout] =
             await Promise.all([
               getFounderSubscriptionByCommunity(ctx, community._id, nowMs),
-              ctx.db
-                .query("checkoutSessions")
-                .withIndex("by_community_status", (q) =>
-                  q.eq("communityId", community._id).eq("status", "pending"),
-                )
-                .collect(),
+              getPendingFounderSubscriptionCheckoutForGeneration({
+                ctx,
+                communityId: community._id,
+                lifecycleGeneration,
+                nowMs,
+              }),
             ]);
           const fundingPolicy = community.inferenceFundingPolicy;
-          const pendingCheckout = pendingCheckouts
-            .filter(
-              (checkout) =>
-                checkout.mode === "founder_subscription" &&
-                checkout.expiresAt > nowMs,
-            )
-            .sort((a, b) => b.createdAt - a.createdAt)[0] ?? null;
           const fundingProjection = resolveBuilderFundingProjection({
             fundingPolicy,
             operatorComplimentaryAccess: operatorComped,
@@ -520,6 +703,16 @@ export const getFounderBillingOverview = query({
             legacyApiKeyConnected: Boolean(openAiConnection?.encryptedSecretHex),
             nowMs,
           });
+          const restoreEligibility = resolveCommunityRestoreEligibility({
+            lifecycleStatus,
+            funding: fundingProjection,
+            managedFundingConflict:
+              lifecycleStatus === "archived" &&
+              Boolean(subscription || pendingCheckout),
+          });
+          const operationalFunding =
+            lifecycleStatus === "active" &&
+            builderFundingProjectionGrantsAccess(fundingProjection);
           let status:
             | "operator_comped"
             | "legacy_ready"
@@ -558,10 +751,14 @@ export const getFounderBillingOverview = query({
             community_id: String(community._id),
             community_name: community.name,
             community_slug: community.slug,
+            lifecycle_status: lifecycleStatus,
+            lifecycle_generation: lifecycleGeneration,
             funding_policy: fundingPolicy,
             funding_lane: fundingProjection.lane,
             funding_state: fundingProjection.state,
             allowed_actions: fundingProjection.allowedActions,
+            operational_funding: operationalFunding,
+            restore_eligibility: restoreEligibility,
             funding_mode: operatorComped
               ? "operator_comp"
               : managed
@@ -586,7 +783,11 @@ export const getFounderBillingOverview = query({
       monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
       communities: rows,
       managed_monthly_total_base_units: rows.filter(
-        (row) => row.funding_mode === "managed",
+        (row) =>
+          row.lifecycle_status === "active" &&
+          row.funding_mode === "managed" &&
+          (row.funding_state === "builder_active" ||
+            row.funding_state === "builder_canceling"),
       ).length * POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
     };
   },
@@ -718,50 +919,81 @@ export const startFounderSubscriptionCheckout = action({
       const existingCheckout: any = await getStripeClient().checkout.sessions.retrieve(
         prepared.providerCheckoutSessionId,
       );
+      const attached = (await ctx.runMutation(
+        (internal as any).founderBilling.attachFounderStripeCheckoutSessionInternal,
+        {
+          sessionId,
+          providerCheckoutSessionId: prepared.providerCheckoutSessionId,
+          providerCustomerId:
+            typeof existingCheckout.customer === "string" ? existingCheckout.customer : null,
+          providerSubscriptionId:
+            typeof existingCheckout.subscription === "string" ? existingCheckout.subscription : null,
+          providerPriceId,
+          nowMs: Date.now(),
+        },
+      )) as { lifecycle_current?: boolean } | null;
+      if (attached?.lifecycle_current !== true) {
+        await compensateFounderCheckout(prepared.providerCheckoutSessionId);
+        throw new Error("founder_subscription_checkout_lifecycle_stale");
+      }
       const existingCheckoutUrl = String(existingCheckout?.url ?? "").trim();
       if (!existingCheckoutUrl) throw new Error("stripe_checkout_url_missing");
       return { ok: true, session_id: sessionId, checkout_url: existingCheckoutUrl };
     }
-    const checkoutSession: any = await getStripeClient().checkout.sessions.create({
-      mode: "subscription",
-      customer: providerCustomerId,
-      success_url: buildCheckoutSuccessUrl(successUrl, sessionId),
-      cancel_url: cancelUrl,
-      expires_at: Math.floor(prepared.expiresAt / 1000),
-      client_reference_id: sessionId,
-      line_items: [{ price: providerPriceId, quantity: 1 }],
-      metadata: {
-        local_session_id: sessionId,
-        checkout_mode: "founder_subscription",
-        user_id: String(actor.dbUserId),
-        community_id: String(args.communityId),
-      },
-      subscription_data: {
+    let providerCheckoutSessionId: string | null = null;
+    try {
+      const checkoutSession: any = await getStripeClient().checkout.sessions.create({
+        mode: "subscription",
+        customer: providerCustomerId,
+        success_url: buildCheckoutSuccessUrl(successUrl, sessionId),
+        cancel_url: cancelUrl,
+        expires_at: Math.floor(prepared.expiresAt / 1000),
+        client_reference_id: sessionId,
+        line_items: [{ price: providerPriceId, quantity: 1 }],
         metadata: {
           local_session_id: sessionId,
           checkout_mode: "founder_subscription",
           user_id: String(actor.dbUserId),
           community_id: String(args.communityId),
         },
-      },
-    }, {
-      idempotencyKey: `founder-subscription-checkout:${sessionId}`,
-    });
-    const checkoutUrl = String(checkoutSession.url ?? "").trim();
-    if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
-    await ctx.runMutation(
-      (internal as any).founderBilling.attachFounderStripeCheckoutSessionInternal,
-      {
-        sessionId,
-        providerCheckoutSessionId: checkoutSession.id,
-        providerCustomerId:
-          typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
-        providerSubscriptionId:
-          typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
-        providerPriceId,
-        nowMs: Date.now(),
-      },
-    );
-    return { ok: true, session_id: sessionId, checkout_url: checkoutUrl };
+      }, {
+        idempotencyKey: `founder-subscription-checkout:${sessionId}`,
+      });
+      providerCheckoutSessionId = String(checkoutSession.id ?? "").trim() || null;
+      const checkoutUrl = String(checkoutSession.url ?? "").trim();
+      if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
+      const attached = (await ctx.runMutation(
+        (internal as any).founderBilling.attachFounderStripeCheckoutSessionInternal,
+        {
+          sessionId,
+          providerCheckoutSessionId: checkoutSession.id,
+          providerCustomerId:
+            typeof checkoutSession.customer === "string" ? checkoutSession.customer : null,
+          providerSubscriptionId:
+            typeof checkoutSession.subscription === "string" ? checkoutSession.subscription : null,
+          providerPriceId,
+          nowMs: Date.now(),
+        },
+      )) as { lifecycle_current?: boolean } | null;
+      if (attached?.lifecycle_current !== true) {
+        throw new Error("founder_subscription_checkout_lifecycle_stale");
+      }
+      return { ok: true, session_id: sessionId, checkout_url: checkoutUrl };
+    } catch (error) {
+      let compensationError: unknown = null;
+      if (providerCheckoutSessionId) {
+        try {
+          await compensateFounderCheckout(providerCheckoutSessionId);
+        } catch (caught) {
+          compensationError = caught;
+        }
+      }
+      await ctx.runMutation(
+        (internal as any).founderBilling.expireFounderSubscriptionCheckoutInternal,
+        { sessionId, nowMs: Date.now() },
+      );
+      if (compensationError) throw compensationError;
+      throw error;
+    }
   },
 });

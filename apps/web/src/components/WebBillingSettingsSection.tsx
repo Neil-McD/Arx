@@ -59,6 +59,12 @@ function runFundingAction(params: {
 }
 
 function communityFundingStateLabel(community: CloudFounderBillingCommunity): string {
+  if (community.lifecycle_status === "archived") {
+    return "Community archived";
+  }
+  if (community.lifecycle_status === "archiving") {
+    return "Archiving community";
+  }
   if (community.funding_mode === "operator_comp") {
     return "Operator access included";
   }
@@ -113,13 +119,16 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                 });
                 const isActing = props.founderBillingActionCommunityId === community.community_id;
                 const isOperatorComped = community.funding_mode === "operator_comp";
+                const canManageFunding = community.lifecycle_status === "active";
                 return (
                   <div className="builder-community-row" key={community.community_id}>
                     <div className="builder-community-copy">
                       <span>{community.community_name}</span>
                       <strong>{communityFundingStateLabel(community)}</strong>
                       <small>
-                        {community.funding_lane === "builder_included"
+                        {community.lifecycle_status !== "active"
+                          ? "Dormant while inactive. Restore readiness is evaluated separately."
+                          : community.funding_lane === "builder_included"
                           ? "Polynet-hosted community AI is included."
                           : community.funding_lane === "legacy_choice" && community.funding_state === "legacy_api_active"
                             ? "Community AI is funded by your connected API key."
@@ -127,7 +136,7 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                       </small>
                     </div>
                     <div className="builder-community-actions">
-                      {isOperatorComped ? null : secondaryAction ? (
+                      {!canManageFunding || isOperatorComped ? null : secondaryAction ? (
                         <button
                           className="secondary"
                           type="button"
@@ -145,7 +154,7 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                           })}
                         </button>
                       ) : null}
-                      {isOperatorComped ? null : primaryAction ? (
+                      {!canManageFunding || isOperatorComped ? null : primaryAction ? (
                         <button
                           type="button"
                           className={primaryAction === "manage_builder" ? "secondary" : undefined}

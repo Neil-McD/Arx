@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { executePlatformOperation } from "./platformOperationExecutor";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import schema from "./schema";
@@ -12,6 +12,7 @@ const modules = import.meta.glob([
   "./communityPublic.ts",
   "./communityAdmin.ts",
   "./communityCapabilityContext.ts",
+  "./communityCommerce.ts",
   "./email.ts",
   "./_generated/**/*.*s",
 ]);
@@ -78,6 +79,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       await ctx.db.insert("founderSubscriptions", {
         ownerUserId: ownerId,
         communityId,
+        communityLifecycleGeneration: 0,
         provider: "stripe",
         providerCustomerId: `cus_access_lifecycle_${index}`,
         providerSubscriptionId: `sub_access_lifecycle_${index}`,
@@ -256,6 +258,337 @@ test("unfunded managed communities remain public while AI funding fails closed",
       communitySlug: "access-lifecycle-open",
     }),
   ).resolves.toMatchObject({ ok: true });
+});
+
+test("archiving closes acquisition while archived communities leave every active projection", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+
+  await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+    communitySlug: "access-lifecycle-approval",
+  });
+  const requestId = await t.run(async (ctx) => {
+    const request = await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.memberId),
+      )
+      .unique();
+    if (!request) throw new Error("fixture_join_request_missing");
+    await ctx.db.patch(fixture.approvalCommunityId, {
+      lifecycleStatus: "archiving",
+      lifecycleGeneration: 1,
+    });
+    return request._id;
+  });
+
+  await expect(
+    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: "access-lifecycle-approval",
+    }),
+  ).rejects.toThrow("community_archiving");
+  await expect(
+    asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, {
+      requestId,
+    }),
+  ).rejects.toThrow("community_archiving");
+  await expect(
+    t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+      communitySlug: "access-lifecycle-approval",
+    }),
+  ).resolves.toEqual({ ok: false, reason: "community_archiving" });
+
+  const discoverWhileArchiving = await t.query(
+    api.communityPublic.listPublicDiscoverCommunities,
+    {},
+  );
+  expect(
+    discoverWhileArchiving.communities.some(
+      (community: any) => community.slug === "access-lifecycle-approval",
+    ),
+  ).toBe(false);
+
+  await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+    communitySlug: "access-lifecycle-open",
+  });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.openCommunityId, {
+      lifecycleStatus: "archiving",
+      lifecycleGeneration: 1,
+    });
+  });
+  await expect(
+    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toMatchObject({ outcome: "joined" });
+
+  const memberArchivingShell = await asMember.query(
+    api.communityAdmin.listCommunityMemberships,
+    { selectMode: "minimal" },
+  );
+  expect(
+    memberArchivingShell.some(
+      (row: any) => row.community_id === String(fixture.openCommunityId),
+    ),
+  ).toBe(false);
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.openCommunityId, {
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 2,
+      archivedAt: Date.now(),
+      archiveRequestedByUserId: fixture.ownerId,
+    });
+  });
+  await expect(
+    t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toEqual({ ok: false, reason: "community_archived" });
+  const memberArchivedShell = await asMember.query(
+    api.communityAdmin.listCommunityMemberships,
+    { selectMode: "minimal" },
+  );
+  const ownerArchivedShell = await asOwner.query(
+    api.communityAdmin.listCommunityMemberships,
+    { selectMode: "minimal" },
+  );
+  expect(
+    memberArchivedShell.some(
+      (row: any) => row.community_id === String(fixture.openCommunityId),
+    ),
+  ).toBe(false);
+  expect(
+    ownerArchivedShell.some(
+      (row: any) => row.community_id === String(fixture.openCommunityId),
+    ),
+  ).toBe(false);
+  const semanticDirectory = await asMember.query(
+    internal.communityCapabilityContext.listAccessibleCommunityDirectoryPageInternal,
+    {
+      authSubject: MEMBER_SUBJECT,
+      limit: 10,
+    },
+  );
+  expect(semanticDirectory.ok).toBe(true);
+  if (semanticDirectory.ok) {
+    expect(
+      semanticDirectory.communities.some(
+        (community: any) => community.slug === "access-lifecycle-open",
+      ),
+    ).toBe(false);
+  }
+});
+
+test("checkout lifecycle generation closes stale and archiving claims", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+  const nowMs = Date.now();
+  const pricePointId = await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.paidCommunityId, {
+      lifecycleStatus: "active",
+      lifecycleGeneration: 5,
+    });
+    return await ctx.db.insert("communityPricePoints", {
+      communityId: fixture.paidCommunityId,
+      billingPeriod: "monthly",
+      name: "Paid access",
+      amountBaseUnits: 1_000,
+      currency: "usd",
+      currencyDecimals: 2,
+      isCurrent: true,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+
+  const createCheckout = (generation: number, suffix: string) =>
+    t.mutation(
+      internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal,
+      {
+        sessionId: `lifecycle-checkout-${suffix}`,
+        communityId: fixture.paidCommunityId,
+        communityLifecycleGeneration: generation,
+        billingPeriod: "monthly",
+        pricePointId,
+        amountBaseUnits: 1_000,
+        currency: "usd",
+        currencyDecimals: 2,
+        providerAccountId: "acct_lifecycle",
+        providerPriceId: "price_lifecycle",
+        ownerUserId: fixture.memberId,
+        claimToken: `claim-lifecycle-${suffix}`,
+        expiresAt: nowMs + 60_000,
+        nowMs,
+      },
+    );
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("purchaseClaims", {
+      claimToken: "claim-lifecycle-legacy-generationless",
+      communityId: fixture.paidCommunityId,
+      pricePointId,
+      ownerUserId: fixture.memberId,
+      status: "pending",
+      expiresAt: nowMs + 60_000,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+  await expect(
+    asMember.mutation(api.communityCommerce.redeemPurchaseClaim, {
+      token: "claim-lifecycle-legacy-generationless",
+    }),
+  ).rejects.toThrow("community_checkout_lifecycle_stale");
+
+  await expect(createCheckout(4, "stale")).rejects.toThrow(
+    "community_checkout_lifecycle_stale",
+  );
+  await expect(createCheckout(5, "current")).resolves.toBeNull();
+
+  await t.run(async (ctx) => {
+    const session = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", "lifecycle-checkout-current"))
+      .unique();
+    if (!session) throw new Error("fixture_checkout_missing");
+    await ctx.db.patch(session._id, {
+      status: "complete",
+      communitySubscriptionStatus: "active",
+      updatedAt: nowMs + 1,
+    });
+    await ctx.db.patch(fixture.paidCommunityId, {
+      lifecycleStatus: "archiving",
+      lifecycleGeneration: 6,
+    });
+  });
+
+  await expect(createCheckout(6, "archiving")).rejects.toThrow(
+    "community_archiving",
+  );
+  await expect(
+    asMember.mutation(api.communityCommerce.redeemPurchaseClaim, {
+      token: "claim-lifecycle-current",
+    }),
+  ).rejects.toThrow("community_archiving");
+});
+
+test("archive races quarantine community checkout identities and claims", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const nowMs = 1_750_000_100_000;
+  const pricePointId = await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.paidCommunityId, {
+      lifecycleStatus: "active",
+      lifecycleGeneration: 8,
+    });
+    return await ctx.db.insert("communityPricePoints", {
+      communityId: fixture.paidCommunityId,
+      billingPeriod: "monthly",
+      name: "Archive race plan",
+      amountBaseUnits: 1_000,
+      currency: "usd",
+      currencyDecimals: 2,
+      isCurrent: true,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+  });
+  const createCheckout = async (suffix: string) => {
+    await t.mutation(
+      internal.communityCommerce.createPendingPublicCommunityCheckoutSessionInternal,
+      {
+        sessionId: `archive-race-${suffix}`,
+        communityId: fixture.paidCommunityId,
+        communityLifecycleGeneration: 8,
+        billingPeriod: "monthly",
+        pricePointId,
+        amountBaseUnits: 1_000,
+        currency: "usd",
+        currencyDecimals: 2,
+        providerAccountId: "acct_archive_race",
+        providerPriceId: "price_archive_race",
+        ownerUserId: fixture.memberId,
+        claimToken: `claim-archive-race-${suffix}`,
+        expiresAt: nowMs + 60_000,
+        nowMs,
+      },
+    );
+  };
+  await createCheckout("attach");
+  await createCheckout("webhook");
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.paidCommunityId, {
+      lifecycleStatus: "archiving",
+      lifecycleGeneration: 9,
+      updatedAt: nowMs + 1,
+    });
+  });
+
+  await expect(
+    t.mutation(
+      internal.communityCommerce.attachCommunityStripeCheckoutSessionInternal,
+      {
+        sessionId: "archive-race-attach",
+        providerAccountId: "acct_archive_race",
+        providerCheckoutSessionId: "cs_archive_race_attach",
+        providerCustomerId: "cus_archive_race_attach",
+        providerPriceId: "price_archive_race",
+        nowMs: nowMs + 2,
+      },
+    ),
+  ).resolves.toMatchObject({ ok: true, lifecycle_current: false });
+
+  await expect(
+    t.mutation(
+      internal.communityCommerce.syncPendingCommunityCheckoutSubscriptionInternal,
+      {
+        sessionId: "archive-race-webhook",
+        providerAccountId: "acct_archive_race",
+        providerCheckoutSessionId: "cs_archive_race_webhook",
+        providerCustomerId: "cus_archive_race_webhook",
+        providerSubscriptionId: "sub_archive_race_webhook",
+        providerPriceId: "price_archive_race",
+        subscriptionStatus: "active",
+        currentPeriodStartAt: nowMs,
+        currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
+        cancelAtPeriodEnd: false,
+        markComplete: true,
+        providerEventCreatedAt: nowMs + 3,
+      },
+    ),
+  ).resolves.toMatchObject({ ok: true, quarantined: true });
+
+  await t.run(async (ctx) => {
+    for (const suffix of ["attach", "webhook"]) {
+      const checkout = await ctx.db
+        .query("checkoutSessions")
+        .withIndex("by_sessionId", (q) => q.eq("sessionId", `archive-race-${suffix}`))
+        .unique();
+      const claim = await ctx.db
+        .query("purchaseClaims")
+        .withIndex("by_claimToken", (q) => q.eq("claimToken", `claim-archive-race-${suffix}`))
+        .unique();
+      expect(checkout).toMatchObject({ status: "expired" });
+      expect(claim).toMatchObject({ status: "expired" });
+    }
+    const webhookCheckout = await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q) => q.eq("sessionId", "archive-race-webhook"))
+      .unique();
+    expect(webhookCheckout).toMatchObject({
+      providerCheckoutSessionId: "cs_archive_race_webhook",
+      providerSubscriptionId: "sub_archive_race_webhook",
+    });
+    expect(webhookCheckout?.communitySubscriptionStatus).not.toBe("canceled");
+  });
 });
 
 test("approval join fails closed until manager approval and closes again after revocation", async () => {

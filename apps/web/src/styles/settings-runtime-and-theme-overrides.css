@@ -6260,6 +6260,122 @@ button.message-citation-chip:hover {
   gap: 14px;
 }
 
+.inactive-community-inventory {
+  gap: 14px;
+}
+
+.inactive-community-inventory-status {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-height: 36px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.inactive-community-inventory-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.inactive-community-inventory-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  width: 100%;
+  min-height: 52px;
+  padding: 10px 0;
+  border: 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: 0;
+  background: transparent;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+}
+
+.inactive-community-inventory-row:last-child {
+  border-bottom: 0;
+}
+
+.inactive-community-inventory-row:hover {
+  color: var(--accent-primary);
+}
+
+.inactive-community-inventory-row > span:first-child {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.inactive-community-inventory-row strong,
+.inactive-community-inventory-row small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.inactive-community-inventory-row small,
+.inactive-community-inventory-state {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.community-lifecycle-settings-state {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 40px;
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+.community-lifecycle-settings-state strong {
+  color: var(--text-primary);
+  text-transform: capitalize;
+}
+
+.archive-community-btn {
+  align-self: flex-start;
+  width: auto;
+  min-width: 180px;
+  margin-top: 12px;
+}
+
+.community-archive-confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.community-archive-confirmation > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.community-archive-confirmation-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.community-archive-confirmation-actions .archive-community-btn {
+  margin-top: 0;
+}
+
+.community-archive-error {
+  margin-top: 12px;
+}
+
 @keyframes builder-offer-enter {
   from {
     opacity: 0;
@@ -10937,6 +11053,10 @@ button.message-citation-chip:hover {
 }
 
 :root[data-theme-family="light"] .settings-section {
+  border-bottom-color: var(--border-default);
+}
+
+:root[data-theme-family="light"] .inactive-community-inventory-row {
   border-bottom-color: var(--border-default);
 }
 

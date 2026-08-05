@@ -57,6 +57,7 @@ export async function enqueueCommunityAccessGrantedEmailInternal(params: {
       (internal as any).email.enqueueEmailJobInternal,
       {
         kind: "community_access_granted",
+        communityId: params.communityId,
         recipientUserId: params.userId,
         templateKey: "community_access_granted",
         payload: {
@@ -96,6 +97,7 @@ export async function enqueueCommunityBillingIssueEmailInternal(params: {
       (internal as any).email.enqueueEmailJobInternal,
       {
         kind: "billing_issue",
+        communityId: params.communityId,
         recipientUserId: params.userId,
         templateKey: "billing_issue",
         payload: {

@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const entitlement = read("convex/operatorEntitlementsCore.ts");
 const admission = read("convex/founderInferenceCore.ts");
+const ownerFunding = read("convex/communityOwnerFundingCore.ts");
 const receipts = read("convex/founderInference.ts");
 const runtime = read("convex/founderInferenceRuntime.ts");
 const worker = read("convex/communityAgentServeWorker.ts");
@@ -29,8 +30,8 @@ assert.doesNotMatch(
   "operator complimentary access must not depend on a hard-coded person or email",
 );
 assert.match(
-  admission,
-  /hasPlatformOwnerComplimentaryAccess\(ctx, community\.ownerId\)[\s\S]*mode: "platform_operator_grant"[\s\S]*getFounderSubscriptionByCommunity/,
+  ownerFunding,
+  /hasPlatformOwnerComplimentaryAccess\([\s\S]*args\.community\.ownerId[\s\S]*if \(operatorComplimentaryAccess\)[\s\S]*purpose === "inference"[\s\S]*readSubscription\(\)[\s\S]*operatorComplimentaryAccess\)[\s\S]*mode: "platform_operator_grant"/,
   "operator admission must precede paid and legacy founder funding",
 );
 assert.match(

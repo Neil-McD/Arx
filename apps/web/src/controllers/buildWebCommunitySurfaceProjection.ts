@@ -50,6 +50,8 @@ type BuildWebCommunitySurfaceProjectionParams = {
     WebCommunitySecondaryPanelsProps["settings"]["startStripeConnectOnboarding"];
   isStartingStripeConnectOnboarding:
     WebCommunitySecondaryPanelsProps["settings"]["isStartingStripeConnectOnboarding"];
+  communityArchiveLifecycle:
+    WebCommunitySecondaryPanelsProps["settings"]["lifecycle"];
   settingsState: WebCommunitySecondaryPanelsProps["settings"]["state"];
   settingsActions: WebCommunitySecondaryPanelsProps["settings"]["actions"];
   setIsCommunityAvatarFocusModalOpen:
@@ -173,6 +175,7 @@ export function buildWebCommunitySurfaceProjection(
       accountCommerceError: params.accountCommerceError,
       startStripeConnectOnboarding: params.startStripeConnectOnboarding,
       isStartingStripeConnectOnboarding: params.isStartingStripeConnectOnboarding,
+      lifecycle: params.communityArchiveLifecycle,
       state: params.settingsState,
       actions: params.settingsActions,
       setIsCommunityAvatarFocusModalOpen:

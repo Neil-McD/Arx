@@ -23,6 +23,7 @@ export function buildWebShellProjection(params: {
   activePage: AppPage;
   mobileSettingsView: MobileSettingsView;
   isPublicCommunityFunnel: boolean;
+  isInactiveCommunityRoute?: boolean;
 }): WebShellProjection {
   const isAppRoute = params.publicRouteKind === "app";
   const isGlobalSettings = isAppRoute && params.activePage === "settings";
@@ -66,6 +67,7 @@ export function buildWebShellProjection(params: {
   const showDesktopCommunityNav =
     (isAppRoute &&
       params.activePage === "community" &&
+      !params.isInactiveCommunityRoute &&
       !showMobileAppShell &&
       !showMobilePublicFunnel) ||
     showDesktopPublicFunnelNav;
@@ -80,6 +82,8 @@ export function buildWebShellProjection(params: {
     (isGlobalSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
   const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
     ? "community"
+    : params.isInactiveCommunityRoute
+      ? "discover"
     : params.activePage === "discover" ||
         params.activePage === "operator" ||
         params.activePage === "docs"

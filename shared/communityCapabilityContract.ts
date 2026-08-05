@@ -59,6 +59,7 @@ export type CommunityCapabilityAccessInput = Partial<
   Pick<
     CommunityAccess,
     | "relation"
+    | "lifecycle_status"
     | "is_entitled"
     | "can_view"
     | "can_enter_community"
@@ -93,29 +94,38 @@ export function normalizeCommunityCapabilityRelation(raw: unknown): CommunityCap
 export function projectCommunityAccessCapabilities(
   access: CommunityCapabilityAccessInput,
 ): CommunityCapabilityFlags {
+  const isUnavailable =
+    access.lifecycle_status === "archiving" ||
+    access.lifecycle_status === "archived";
   return {
-    canView: access.can_view === true,
-    canEnterCommunity: access.can_enter_community === true,
-    canReadChat: access.can_read_chat === true,
-    canPostChat: access.can_post_chat === true,
-    canPostMessage: access.can_post_message === true,
-    canManageResources: access.can_manage_resources === true,
-    canModerateContent: access.can_moderate_content === true,
-    canManageMembers: access.can_manage_members === true,
-    canReviewJoinRequests: access.can_review_join_requests === true,
-    canManagePricing: access.can_manage_pricing === true,
-    canManageBranding: access.can_manage_branding === true,
-    canManagePublishing: access.can_manage_publishing === true,
-    canManagePayouts: access.can_manage_payouts === true,
+    canView: !isUnavailable && access.can_view === true,
+    canEnterCommunity: !isUnavailable && access.can_enter_community === true,
+    canReadChat: !isUnavailable && access.can_read_chat === true,
+    canPostChat: !isUnavailable && access.can_post_chat === true,
+    canPostMessage: !isUnavailable && access.can_post_message === true,
+    canManageResources: !isUnavailable && access.can_manage_resources === true,
+    canModerateContent: !isUnavailable && access.can_moderate_content === true,
+    canManageMembers: !isUnavailable && access.can_manage_members === true,
+    canReviewJoinRequests:
+      !isUnavailable && access.can_review_join_requests === true,
+    canManagePricing: !isUnavailable && access.can_manage_pricing === true,
+    canManageBranding: !isUnavailable && access.can_manage_branding === true,
+    canManagePublishing: !isUnavailable && access.can_manage_publishing === true,
+    canManagePayouts: !isUnavailable && access.can_manage_payouts === true,
   };
 }
 
 export function deriveCommunityCapabilityAuthority(
   access: CommunityCapabilityAccessInput,
 ): CommunityCapabilityAuthority {
+  const isUnavailable =
+    access.lifecycle_status === "archiving" ||
+    access.lifecycle_status === "archived";
   const relation = normalizeCommunityCapabilityRelation(access.relation);
   const capabilities = projectCommunityAccessCapabilities(access);
-  const availableCapabilities: CommunityCapabilityName[] = ["community_context"];
+  const availableCapabilities: CommunityCapabilityName[] = isUnavailable
+    ? []
+    : ["community_context"];
   const isEntitled = access.is_entitled === true;
 
   if (isEntitled && (capabilities.canEnterCommunity || capabilities.canReadChat)) {
@@ -141,10 +151,11 @@ export function deriveCommunityCapabilityAuthority(
     availableCapabilities.push("community_admin");
   }
   if (
-    relation === "owner" ||
-    capabilities.canManageBranding ||
-    capabilities.canManagePublishing ||
-    capabilities.canManagePayouts
+    !isUnavailable &&
+    (relation === "owner" ||
+      capabilities.canManageBranding ||
+      capabilities.canManagePublishing ||
+      capabilities.canManagePayouts)
   ) {
     availableCapabilities.push("owner_controls");
   }
@@ -174,7 +185,9 @@ export function deriveCommunityCapabilityAuthority(
       (value, index, list) => list.indexOf(value) === index,
     ),
     unavailableReason:
-      relation === "pending"
+      isUnavailable
+        ? "community_access_required"
+        : relation === "pending"
         ? "join_request_pending"
         : relation === "no_access"
           ? "community_access_required"
@@ -184,6 +197,8 @@ export function deriveCommunityCapabilityAuthority(
 
 export function communityAccessIsOpen(access: CommunityCapabilityAccessInput): boolean {
   return (
+    access.lifecycle_status !== "archiving" &&
+    access.lifecycle_status !== "archived" &&
     access.is_entitled === true &&
     (access.can_enter_community === true || access.can_read_chat === true)
   );

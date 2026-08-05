@@ -53,6 +53,28 @@ assert.equal(hasCommunityCapability(ownerAuthority, "join_request_review"), true
 assert.equal(hasCommunityCapability(ownerAuthority, "community_admin"), true);
 assert.equal(hasCommunityCapability(ownerAuthority, "owner_controls"), true);
 
+const archivedOwnerAuthority = deriveCommunityCapabilityAuthority({
+  lifecycle_status: "archived",
+  relation: "owner",
+  is_entitled: true,
+  can_view: true,
+  can_enter_community: true,
+  can_read_chat: true,
+  can_manage_resources: true,
+  can_manage_members: true,
+  can_manage_branding: true,
+});
+assert.deepEqual(archivedOwnerAuthority.availableCapabilities, []);
+assert.equal(hasCommunityCapability(archivedOwnerAuthority, "owner_controls"), false);
+assert.equal(
+  communityAccessIsOpen({
+    lifecycle_status: "archived",
+    is_entitled: true,
+    can_enter_community: true,
+  }),
+  false,
+);
+
 const pendingAuthority = deriveCommunityCapabilityAuthority({ relation: "pending" });
 assert.deepEqual(pendingAuthority.availableCapabilities, ["community_context"]);
 assert.equal(pendingAuthority.unavailableReason, "join_request_pending");
@@ -217,6 +239,17 @@ assert.deepEqual(
 assert.deepEqual(
   resolve({ membershipRow: { ...membership(), communityId: "community_other" } }),
   { ok: false, code: "community_access_unavailable" },
+);
+assert.deepEqual(
+  resolve({
+    membershipRow: null,
+    accessRow: access({
+      lifecycle_status: "archived",
+      relation: "owner",
+      is_owner: true,
+    }),
+  }),
+  { ok: false, code: "community_access_closed" },
 );
 const renamedCommunity = { ...community, slug: "polynet-next" };
 assert.equal(resolve({ communityRow: renamedCommunity, slug: "polynet-next" }).ok, true);

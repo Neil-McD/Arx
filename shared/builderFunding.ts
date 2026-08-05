@@ -52,6 +52,17 @@ export type BuilderFundingProjectionInput = {
   nowMs: number;
 };
 
+export function builderFundingProjectionGrantsAccess(
+  projection: BuilderFundingProjection,
+): boolean {
+  return (
+    projection.state === "legacy_api_active" ||
+    projection.state === "builder_active" ||
+    projection.state === "builder_canceling" ||
+    projection.state === "builder_included"
+  );
+}
+
 function resolveBuilderSubscriptionProjection(
   subscription: NonNullable<BuilderFundingProjectionInput["subscription"]>,
   nowMs: number,

@@ -37,7 +37,19 @@ const cleanup = read("convex/communityCognitionCleanupCore.ts");
 const recentContext = read("convex/communityRecentContext.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const httpMcp = read("convex/httpMcp.ts");
-const mcp = read("shared/polynetMcp.ts");
+const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
+const capabilityContext = read("convex/communityCapabilityContext.ts");
+const lifecycleCore = read("convex/communityLifecycleCore.ts");
+const email = read("convex/email.ts");
+const concierge = read("convex/communityAgentConciergeCore.ts");
+const serveWorker = read("convex/communityAgentServeWorker.ts");
+const compilerDigest = read("convex/communityCompilerDigest.ts");
+const heartbeat = read("convex/communityAgentHeartbeat.ts");
+const communityAgentRuntime = read("convex/communityAgentRuntime.ts");
+const interactions = read("convex/communityInteractions.ts");
+const mentionBroadcasts = read("convex/communityMentionBroadcasts.ts");
+const mentionEmails = read("convex/communityMentionEmails.ts");
+const communityResources = read("convex/communityResources.ts");
 
 for (const source of [communityMaintenance, adminGateway]) {
   assert.doesNotMatch(source, /requestCommunityArchiveBackfill|backfillCommunityArchiveInternal/);
@@ -51,10 +63,85 @@ assert.match(cleanup, /table: "communityArchiveDocuments"/);
 assert.match(communityMaintenance, /purgeOrphanedCommunityUserArtifactsInternal/);
 assert.match(recentContext, /readCommunityRecentContextInternal = internalQuery/);
 assert.match(runtimeAgentLoop, /communityRecentContext\.readCommunityRecentContextInternal/);
-assert.match(httpMcp, /communityRecentContext\.readCommunityRecentContextInternal/);
-assert.doesNotMatch(runtimeAgentLoop, /communityArchive\.searchCommunityKnowledgeInternal/);
-assert.doesNotMatch(httpMcp, /communityArchive\.searchCommunityKnowledgeInternal/);
-assert.match(httpMcp, /archive_context: \[\]/);
-assert.match(mcp, /required: \["community", "query", "recent_context", "archive_context"\]/);
+assert.match(httpMcp, /import \{ executePolynetCanonicalTool \} from "\.\/polynetCanonicalExecutor\.ts"/);
+assert.match(httpMcp, /await executePolynetCanonicalTool\(/);
+assert.match(
+  canonicalExecutor,
+  /communityCapabilityContext[\s\S]*resolveCommunityCapabilityContextInternal/,
+);
+assert.match(capabilityContext, /communityIsOperational\(community\)/);
+for (const source of [runtimeAgentLoop, httpMcp, canonicalExecutor]) {
+  assert.doesNotMatch(
+    source,
+    /communityArchive\.searchCommunityKnowledgeInternal|communityArchiveDocuments/,
+  );
+}
+
+assert.match(
+  lifecycleCore,
+  /resolveCommunityWorkAdmissionErrorCode[\s\S]*COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR/,
+);
+for (const table of [
+  "emailOutbox",
+  "communityInteractionMentions",
+  "communityMentionBroadcasts",
+  "communityAgentServeRequests",
+  "communityCompilerDigests",
+  "communitySourceCrawlJobs",
+]) {
+  assert.match(
+    schema,
+    new RegExp(`${table}: defineTable\\(\\{[\\s\\S]*?communityLifecycleGeneration: v\\.optional\\(v\\.number\\(\\)\\)`),
+    `${table} must retain lifecycle-generation provenance`,
+  );
+}
+assert.match(
+  email,
+  /communityLifecycleGeneration[\s\S]*resolveCommunityWorkAdmissionErrorCode[\s\S]*status: "suppressed"/,
+);
+assert.match(
+  concierge,
+  /status === "queued"[\s\S]*communityLifecycleGeneration === undefined[\s\S]*normalizeCommunityLifecycleGeneration/,
+);
+assert.match(
+  serveWorker,
+  /suppressServeRequestOutsideLifecycleEpoch[\s\S]*resolveCommunityWorkAdmissionErrorCode[\s\S]*status: "skipped"/,
+);
+assert.match(
+  compilerDigest,
+  /communityLifecycleGeneration[\s\S]*normalizeCommunityLifecycleGeneration[\s\S]*communityCompilerDigests/,
+);
+assert.match(
+  heartbeat,
+  /communityLifecycleGeneration[\s\S]*ctx\.scheduler\.runAfter[\s\S]*communityLifecycleGeneration[\s\S]*COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR/,
+);
+assert.match(
+  communityAgentRuntime,
+  /resolveCommunityAgentRunContextInternal[\s\S]*requireMatchingCommunityLifecycleGeneration[\s\S]*createCommunityAgentRunInternal[\s\S]*requireMatchingCommunityLifecycleGeneration/,
+);
+assert.match(
+  interactions,
+  /communityInteractionMentions[\s\S]*communityLifecycleGeneration/,
+);
+assert.match(
+  mentionBroadcasts,
+  /communityMentionBroadcasts[\s\S]*communityLifecycleGeneration[\s\S]*resolveCommunityWorkAdmissionErrorCode/,
+);
+assert.match(
+  mentionEmails,
+  /mention\.communityLifecycleGeneration[\s\S]*communityLifecycleGeneration: job\.communityLifecycleGeneration/,
+);
+assert.match(
+  communityResources,
+  /createCommunitySourceCrawlJobInternal[\s\S]*communityLifecycleGeneration[\s\S]*claimCommunitySourceCrawlJobInternal[\s\S]*resolveCommunityWorkAdmissionErrorCode/,
+);
+assert.match(
+  communityResources,
+  /saveCommunitySourceCrawlPagesInternal[\s\S]*resolveCommunityWorkAdmissionErrorCode/,
+);
+assert.match(
+  communityResources,
+  /processCommunitySourceCrawlJobInternal[\s\S]*claimCommunitySourceCrawlJobInternal[\s\S]*crawlSourceRootWithConfiguredProvider/,
+);
 
 console.log("community_archive_runtime_severance_contract_proof: ok");

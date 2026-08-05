@@ -8,6 +8,7 @@ import {
   type CommunityPricePointLike,
   type CommunitySubscriptionLike,
   communityMembershipRowIsActive,
+  communitySubscriptionMatchesCurrentLifecycle,
   communitySubscriptionStatusGrantsAccess,
   normalizeCommunitySubscriptionStatus,
   normalizeMembershipAccessSource,
@@ -111,6 +112,12 @@ export const listCommunityAccessStateAuditFindingsInternal = internalQuery({
         .query("communitySubscriptions" as any)
         .withIndex("by_community_user", (q: any) => q.eq("communityId", community._id))
         .collect()) as CommunitySubscriptionLike[];
+      const currentSubscriptions = subscriptions.filter((subscription) =>
+        communitySubscriptionMatchesCurrentLifecycle({
+          community,
+          subscription,
+        }),
+      );
 
       if (entryPolicy === "paid_subscription" && pricePoints.length === 0) {
         pushFinding(findings, community, {
@@ -152,7 +159,7 @@ export const listCommunityAccessStateAuditFindingsInternal = internalQuery({
         if (entryPolicy === "paid_subscription" && String(community.ownerId) !== userId) {
           if (accessSource === "paid_subscription") {
             const relevantSubscription = pickMostRelevantSubscription(
-              subscriptions.filter((row) => String(row.membershipId) === String(membership._id)),
+              currentSubscriptions.filter((row) => String(row.membershipId) === String(membership._id)),
             );
             if (!statusGrantsAccess(relevantSubscription)) {
               pushFinding(findings, community, {

@@ -137,14 +137,14 @@ test("attention and acknowledgements remain independent per channel", async () =
   );
   expect(afterCustom[0]?.chat).toBe(true);
   expect(
-    afterCustom[0]?.channels.find((row) => row.channel_slug === "custom")?.chat,
+    afterCustom[0]?.channels.find((row: any) => row.channel_slug === "custom")?.chat,
   ).toBe(false);
   expect(
-    afterCustom[0]?.channels.find((row) => row.channel_slug === "custom")
+    afterCustom[0]?.channels.find((row: any) => row.channel_slug === "custom")
       ?.mentions,
   ).toBe(false);
   expect(
-    afterCustom[0]?.channels.find((row) => row.channel_slug === "general")?.chat,
+    afterCustom[0]?.channels.find((row: any) => row.channel_slug === "general")?.chat,
   ).toBe(true);
 
   await asMember.mutation(

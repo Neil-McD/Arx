@@ -3,6 +3,10 @@ import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
+import {
+  normalizeCommunityLifecycleGeneration,
+  resolveCommunityWorkAdmissionErrorCode,
+} from "./communityLifecycleCore";
 
 const internalRefs = internal as any;
 
@@ -17,6 +21,9 @@ export type ServeRequestIntakeReason =
   | "source_not_human"
   | "requester_missing"
   | "requester_access_missing"
+  | "community_archiving"
+  | "community_archived"
+  | "community_lifecycle_generation_stale"
   | "agent_disabled"
   | "owner_funding_choice_required"
   | "owner_credential_missing"
@@ -29,6 +36,7 @@ export type ServeRequestIntakeReason =
 export type ConciergeMentionRow = {
   _id: any;
   communityId: any;
+  communityLifecycleGeneration?: number;
   rootId?: any;
   replyId?: any;
   mentionKind: string;
@@ -128,6 +136,7 @@ async function insertServeRequest(args: {
   requesterUserId?: any;
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
+  communityLifecycleGeneration?: number;
   skipReason?: string;
   nowMs: number;
 }): Promise<any> {
@@ -139,9 +148,13 @@ async function insertServeRequest(args: {
     if (!args.sourceVisibilityScope || !args.responseVisibilityScope) {
       throw new Error("community_agent_serve_request_visibility_required");
     }
+    if (args.communityLifecycleGeneration === undefined) {
+      throw new Error("community_agent_serve_request_lifecycle_generation_required");
+    }
   }
   return await args.ctx.db.insert("communityAgentServeRequests" as any, {
     communityId: args.mention.communityId,
+    communityLifecycleGeneration: args.communityLifecycleGeneration,
     agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
     sourceMentionId: args.mention._id,
     ...(args.sourceRootId ? { sourceRootId: args.sourceRootId } : {}),
@@ -270,6 +283,30 @@ export async function intakeCommunityAgentMention(args: {
       mention: args.mention,
       intakeReason: "invalid_agent",
       skipReason: "Only the canonical community agent can be served by Concierge intake.",
+      nowMs: args.nowMs,
+    });
+    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+  }
+
+  const community = await args.ctx.db.get(args.mention.communityId);
+  const lifecycleReason = resolveCommunityWorkAdmissionErrorCode({
+    community,
+    expectedGeneration: args.mention.communityLifecycleGeneration,
+  });
+  if (lifecycleReason) {
+    const skipped = await skipMention({
+      ctx: args.ctx,
+      mention: args.mention,
+      intakeReason: lifecycleReason === "community_not_found"
+        ? "source_missing"
+        : lifecycleReason as Exclude<ServeRequestIntakeReason, "accepted">,
+      skipReason: community
+        ? lifecycleReason === "community_archiving"
+          ? "The community is archiving."
+          : lifecycleReason === "community_archived"
+            ? "The community is archived."
+            : "The mention belongs to a stale community lifecycle epoch."
+        : "The mentioned community no longer exists.",
       nowMs: args.nowMs,
     });
     return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
@@ -409,6 +446,9 @@ export async function intakeCommunityAgentMention(args: {
     requesterUserId: source.requesterUserId,
     sourceVisibilityScope: source.visibilityScope,
     responseVisibilityScope: source.visibilityScope,
+    communityLifecycleGeneration: normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    ),
     nowMs: args.nowMs,
   });
   await settleMentionFromServeRequest({

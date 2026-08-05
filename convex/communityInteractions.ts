@@ -70,6 +70,11 @@ import {
   interactionXStatusIdentity,
   type XPostContext,
 } from "../shared/interactionEmbedPreviewContract";
+import {
+  communityIsOperational,
+  normalizeCommunityLifecycleGeneration,
+  requireOperationalCommunityById,
+} from "./communityLifecycleCore";
 
 type InteractionActorType = "human" | "personal_agent" | "community_agent" | "system";
 type InteractionRootKind = "discussion" | "announcement" | "question" | "resource_share" | "agent_signal";
@@ -183,6 +188,7 @@ type EmbedRow = {
 type MentionRow = {
   _id: any;
   communityId: any;
+  communityLifecycleGeneration?: number;
   channelId?: any;
   rootId?: any;
   replyId?: any;
@@ -962,6 +968,7 @@ async function insertContentBlocksForTarget(args: {
   const contentBlockIds: string[] = [];
   const embedIds: string[] = [];
   const mentionIds: string[] = [];
+  let communityLifecycleGeneration: number | undefined;
   if (Boolean(args.rootId) === Boolean(args.replyId)) {
     throw new Error("interaction_content_target_required");
   }
@@ -1002,8 +1009,18 @@ async function insertContentBlocksForTarget(args: {
       embedIds.push(normalizeIdValue(embedId));
     }
     if (block.blockType === "mention") {
+      if (communityLifecycleGeneration === undefined) {
+        const community = await requireOperationalCommunityById<Record<string, any>>({
+          ctx: args.ctx,
+          communityId: args.communityId,
+        });
+        communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+          community.lifecycleGeneration,
+        );
+      }
       const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
         communityId: args.communityId,
+        communityLifecycleGeneration,
         ...(args.channelId ? { channelId: args.channelId } : {}),
         ...(args.rootId ? { rootId: args.rootId } : {}),
         ...(args.replyId ? { replyId: args.replyId } : {}),
@@ -1693,6 +1710,13 @@ async function insertCommunityInteractionMentionRows(args: {
   actorUserId: any;
   nowMs: number;
 }): Promise<void> {
+  const community = await requireOperationalCommunityById<Record<string, any>>({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+    community.lifecycleGeneration,
+  );
   const orderedMentionSpecs = args.mentionedUserIds
     .slice()
     .sort((left, right) => (left.kind === "role" ? -1 : 0) - (right.kind === "role" ? -1 : 0));
@@ -1708,6 +1732,7 @@ async function insertCommunityInteractionMentionRows(args: {
   for (const spec of orderedMentionSpecs) {
     const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
       communityId: args.communityId,
+      communityLifecycleGeneration,
       channelId: args.channelId,
       ...(args.rootId ? { rootId: args.rootId } : {}),
       ...(args.replyId ? { replyId: args.replyId } : {}),
@@ -1738,6 +1763,7 @@ async function insertCommunityInteractionMentionRows(args: {
           mention: {
             _id: mentionId,
             communityId: args.communityId,
+            communityLifecycleGeneration,
             ...(args.rootId ? { rootId: args.rootId } : {}),
             ...(args.replyId ? { replyId: args.replyId } : {}),
             mentionKind: spec.kind,
@@ -2364,7 +2390,14 @@ export const sendCommunityAgentDockMessage = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const { community } = await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    );
     await requireProfileSetupCompleteForUser(ctx, userId);
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
@@ -2456,6 +2489,7 @@ export const sendCommunityAgentDockMessage = mutation({
     if (!mention) {
       const mentionId = await ctx.db.insert("communityInteractionMentions" as any, {
         communityId: args.communityId,
+        communityLifecycleGeneration,
         replyId: reply._id,
         mentionKind: "community_agent",
         mentionedAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
@@ -3434,7 +3468,10 @@ export const getInteractionEmbedForEnrichment = internalQuery({
   handler: async (ctx, args) => {
     const embed = (await ctx.db.get(args.embedId as any)) as EmbedRow | null;
     if (!embed) return null;
+    const community = (await ctx.db.get(embed.communityId)) as Record<string, any> | null;
+    if (!community || !communityIsOperational(community)) return null;
     return {
+      communityId: embed.communityId,
       embedKind: embed.embedKind,
       status: embed.status,
       sourceUrl: embed.sourceUrl ?? embed.normalizedSourceUrl ?? null,

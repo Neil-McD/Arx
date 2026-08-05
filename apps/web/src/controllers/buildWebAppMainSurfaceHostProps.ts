@@ -4,6 +4,7 @@ import type { WebAppMainSurfaceHostProps } from "../components/WebAppMainSurface
 export function buildWebAppMainSurfaceHostProps(params: {
   activePage: WebAppMainSurfaceHostProps["activePage"];
   isPublicCommunityFunnel: boolean;
+  showInactiveCommunitySurface: boolean;
   publicRoute: PublicRoute;
   landingPageProps: WebAppMainSurfaceHostProps["landingPageProps"];
   onboardingPageProps: WebAppMainSurfaceHostProps["onboardingPageProps"];
@@ -13,6 +14,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
   settingsSurfaceHostProps: WebAppMainSurfaceHostProps["settingsSurfaceHostProps"];
   publicCommunityFunnelProps: WebAppMainSurfaceHostProps["publicCommunityFunnelProps"];
   communityHostProps: WebAppMainSurfaceHostProps["communityHostProps"];
+  communityLifecycleTerminalProps: WebAppMainSurfaceHostProps["communityLifecycleTerminalProps"];
   discoverPanelProps: WebAppMainSurfaceHostProps["discoverPanelProps"];
   productDocsPanelProps: WebAppMainSurfaceHostProps["productDocsPanelProps"];
   operatorDashboardProps: WebAppMainSurfaceHostProps["operatorDashboardProps"];
@@ -21,7 +23,10 @@ export function buildWebAppMainSurfaceHostProps(params: {
     activePage: params.activePage,
     showPublicCommunityFunnel: params.isPublicCommunityFunnel,
     showCommunitySurface:
-      params.publicRoute.kind === "app" && params.activePage === "community",
+      params.publicRoute.kind === "app" &&
+      params.activePage === "community" &&
+      !params.showInactiveCommunitySurface,
+    showInactiveCommunitySurface: params.showInactiveCommunitySurface,
     showDiscoverPanel:
       params.publicRoute.kind === "app" && params.activePage === "discover",
     showProductDocsPanel:
@@ -38,6 +43,7 @@ export function buildWebAppMainSurfaceHostProps(params: {
     settingsSurfaceHostProps: params.settingsSurfaceHostProps,
     publicCommunityFunnelProps: params.publicCommunityFunnelProps,
     communityHostProps: params.communityHostProps,
+    communityLifecycleTerminalProps: params.communityLifecycleTerminalProps,
     discoverPanelProps: params.discoverPanelProps,
     productDocsPanelProps: params.productDocsPanelProps,
     operatorDashboardProps: params.operatorDashboardProps,
