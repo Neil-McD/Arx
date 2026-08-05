@@ -19,6 +19,10 @@ import {
   type StripeSubscriptionAccountScope,
   type StripeSubscriptionEffectClient,
 } from "./stripeSubscriptionEffectCore";
+import {
+  applyCommunitySubscriptionEntitlementToMembership,
+  type CommunityMembershipLike,
+} from "./communityCore";
 
 const ARCHIVE_OPERATION_LEASE_MS = 2 * 60 * 1000;
 const ARCHIVE_OPERATION_MAX_ATTEMPTS = 12;
@@ -382,11 +386,27 @@ export const completeCommunityArchiveEffectInternal = internalMutation({
       ) {
         throw new Error("community_archive_effect_row_mismatch");
       }
+      const membership = (await ctx.db.get(
+        row.membershipId,
+      )) as CommunityMembershipLike | null;
+      if (!membership) {
+        throw new Error("community_subscription_membership_missing");
+      }
       await ctx.db.patch(row._id, {
         status: "ended",
         cancelAtPeriodEnd: false,
         endedAt: args.nowMs,
         updatedAt: args.nowMs,
+      });
+      await applyCommunitySubscriptionEntitlementToMembership({
+        ctx,
+        communityId: operation.communityId,
+        membership,
+        userId: row.userId,
+        pricePointId: row.pricePointId,
+        status: "ended",
+        revokedReason: "community_archived",
+        nowMs: args.nowMs,
       });
     } else {
       if (

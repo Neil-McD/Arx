@@ -972,6 +972,81 @@ export function communitySubscriptionStatusGrantsAccess(
   return status === "active" || status === "past_due" || status === "cancel_at_period_end";
 }
 
+const COMMUNITY_SUBSCRIPTION_RISK_REVOCATION_REASONS = new Set([
+  "subscription_refunded",
+  "subscription_dispute_opened",
+  "subscription_dispute_lost",
+]);
+
+export async function applyCommunitySubscriptionEntitlementToMembership(args: {
+  ctx: any;
+  communityId: any;
+  membership: CommunityMembershipLike;
+  userId: any;
+  pricePointId: any;
+  status: CommunitySubscriptionLike["status"];
+  revokedReason?: string | null;
+  preserveRiskRevocation?: boolean;
+  nowMs: number;
+}): Promise<CommunityMembershipLike> {
+  if (
+    String(args.membership.communityId) !== String(args.communityId) ||
+    String(args.membership.userId) !== String(args.userId)
+  ) {
+    throw new Error("community_subscription_membership_mismatch");
+  }
+  if (
+    String(args.membership.accessSource ?? "").trim().toLowerCase() !==
+    "paid_subscription"
+  ) {
+    throw new Error("community_membership_not_subscription");
+  }
+
+  const grantsAccess = communitySubscriptionStatusGrantsAccess(args.status);
+  const revokedReason = String(args.revokedReason ?? "").trim().slice(0, 160);
+  const existingRevokedReason = String(
+    args.membership.revokedReason ?? "",
+  ).trim();
+  const shouldPreserveRiskRevocation =
+    grantsAccess &&
+    args.preserveRiskRevocation === true &&
+    args.membership.active === false &&
+    COMMUNITY_SUBSCRIPTION_RISK_REVOCATION_REASONS.has(
+      existingRevokedReason,
+    );
+  const updatedMembership = {
+    ...args.membership,
+    pricePointId: args.pricePointId,
+    active: shouldPreserveRiskRevocation ? false : grantsAccess,
+    revokedAt: shouldPreserveRiskRevocation
+      ? args.membership.revokedAt ?? args.nowMs
+      : grantsAccess
+        ? undefined
+        : args.nowMs,
+    revokedReason: shouldPreserveRiskRevocation
+      ? existingRevokedReason
+      : grantsAccess
+        ? undefined
+        : revokedReason || `subscription_${args.status}`,
+    updatedAt: args.nowMs,
+  } as CommunityMembershipLike;
+
+  await args.ctx.db.patch(args.membership._id, {
+    pricePointId: updatedMembership.pricePointId,
+    active: updatedMembership.active,
+    revokedAt: updatedMembership.revokedAt,
+    revokedReason: updatedMembership.revokedReason,
+    updatedAt: updatedMembership.updatedAt,
+  });
+  await adjustCommunityActiveMemberCountForMembershipTransition({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    before: args.membership,
+    after: updatedMembership,
+  });
+  return updatedMembership;
+}
+
 function communityAccessSourceIsDurable(
   source: ReturnType<typeof normalizeMembershipAccessSource>,
 ): boolean {

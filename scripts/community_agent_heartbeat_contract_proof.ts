@@ -70,7 +70,7 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /enqueueCommunityAgentHeartbeatInternal[\s\S]*requireOperationalCommunityById\(\{ ctx, communityId: args\.communityId \}\)/,
+  /enqueueCommunityAgentHeartbeatInternal[\s\S]*requireOperationalCommunityById(?:<Record<string, any>>)?\(\{[\s\S]*ctx,[\s\S]*communityId: args\.communityId/,
   "heartbeat enqueue should fail closed through the canonical operational lifecycle guard",
 );
 assert.match(
@@ -101,7 +101,7 @@ assert.match(
 );
 assert.match(
   heartbeat,
-  /assessCommunityAgentCycleInternal = internalQuery[\s\S]*by_community_agentHandoffState_createdAt[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
+  /assessCommunityAgentCycleInternal = internalQuery[\s\S]*listCurrentGenerationHandoffs[\s\S]*measureCommunityCompilerEvidenceForCommunity/,
   "one planner should join durable digest handoff work with compiler evidence",
 );
 assert.match(

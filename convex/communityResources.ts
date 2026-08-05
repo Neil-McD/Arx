@@ -66,6 +66,10 @@ import {
 } from "../shared/communityResourceDirectory";
 import { resolveExactCommunityResourceEvidenceSelector } from "./communityResourceEvidenceCore";
 import {
+  normalizeCommunityLifecycleGeneration,
+  resolveCommunityWorkAdmissionErrorCode,
+} from "./communityLifecycleCore";
+import {
   buildCommunityResourceEvidenceRef,
   deriveCommunityResourceLineageEnvelope,
   parseCommunityResourceEvidenceRef,
@@ -243,6 +247,7 @@ type SourceIntegrationReturnContextKind = "community_launch_knowledge" | null;
 type CommunitySourceCrawlJobLike = {
   _id?: unknown;
   communityId: unknown;
+  communityLifecycleGeneration?: number;
   createdByUserId: unknown;
   provider: CommunitySourceCrawlerProvider;
   rootUrl: string;
@@ -9160,9 +9165,19 @@ export const createCommunitySourceCrawlJobInternal = internalMutation({
       communityId: args.communityId,
       userId: args.userId,
     });
+    const community = await ctx.db.get(args.communityId);
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      (community as { lifecycleGeneration?: unknown } | null)?.lifecycleGeneration,
+    );
+    const admissionError = resolveCommunityWorkAdmissionErrorCode({
+      community: community as any,
+      expectedGeneration: communityLifecycleGeneration,
+    });
+    if (admissionError) throw new Error(admissionError);
     const nowMs = Date.now();
     const id = await ctx.db.insert("communitySourceCrawlJobs" as any, {
       communityId: args.communityId,
+      communityLifecycleGeneration,
       createdByUserId: args.userId,
       provider: args.provider,
       rootUrl: requireSafeSourceIngestionUrl(args.rootUrl),
@@ -9189,6 +9204,49 @@ export const createCommunitySourceCrawlJobInternal = internalMutation({
     const row = (await ctx.db.get(id as any)) as CommunitySourceCrawlJobLike | null;
     if (!row) throw new Error("community_source_crawl_job_create_failed");
     return mapCommunitySourceCrawlJob(row);
+  },
+});
+
+export const claimCommunitySourceCrawlJobInternal = internalMutation({
+  args: {
+    crawlJobId: v.string(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const existing = (await ctx.db.get(args.crawlJobId as any)) as CommunitySourceCrawlJobLike | null;
+    if (!existing) return null;
+    if (existing.status !== "queued") {
+      return {
+        admitted: false,
+        reason: existing.status === "ready" || existing.status === "failed"
+          ? `community_source_crawl_job_${existing.status}`
+          : "community_source_crawl_job_in_progress",
+        job: existing,
+      };
+    }
+    const community = await ctx.db.get(existing.communityId as any);
+    const admissionError = resolveCommunityWorkAdmissionErrorCode({
+      community: community as any,
+      expectedGeneration: existing.communityLifecycleGeneration,
+    });
+    if (admissionError) {
+      await ctx.db.patch(existing._id as any, {
+        status: "failed",
+        error: admissionError,
+        completedAt: args.nowMs,
+        updatedAt: args.nowMs,
+      });
+      const failed = (await ctx.db.get(existing._id as any)) as CommunitySourceCrawlJobLike | null;
+      return { admitted: false, reason: admissionError, job: failed };
+    }
+    await ctx.db.patch(existing._id as any, {
+      status: "crawling",
+      error: undefined,
+      startedAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    const claimed = (await ctx.db.get(existing._id as any)) as CommunitySourceCrawlJobLike | null;
+    return { admitted: true, reason: null, job: claimed };
   },
 });
 
@@ -9490,6 +9548,12 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
     if (!job || normalizeIdValue(job.communityId) !== normalizeIdValue(args.communityId)) {
       throw new Error("community_source_crawl_job_not_found");
     }
+    const community = await ctx.db.get(job.communityId as any);
+    const admissionError = resolveCommunityWorkAdmissionErrorCode({
+      community: community as any,
+      expectedGeneration: job.communityLifecycleGeneration,
+    });
+    if (admissionError) throw new Error(admissionError);
     const nowMs = Date.now();
     const existingSources = (await ctx.db
       .query("communityResources" as any)
@@ -9673,15 +9737,26 @@ export const processCommunitySourceCrawlJobInternal = internalAction({
         job: mapCommunitySourceCrawlJob(job),
       };
     }
-    await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
-      crawlJobId: args.crawlJobId,
-      status: "crawling",
-      error: null,
-      startedAt: Date.now(),
-    });
+    const claim = (await ctx.runMutation(
+      (internal as any).communityResources.claimCommunitySourceCrawlJobInternal,
+      { crawlJobId: args.crawlJobId, nowMs: Date.now() },
+    )) as {
+      admitted?: boolean;
+      reason?: string | null;
+      job?: CommunitySourceCrawlJobLike | null;
+    } | null;
+    if (!claim?.admitted || !claim.job) {
+      return {
+        ok: false,
+        kind: "community_source_crawl_job_not_admitted",
+        job: claim?.job ? mapCommunitySourceCrawlJob(claim.job) : null,
+        error: claim?.reason ?? "community_source_crawl_job_not_found",
+      };
+    }
+    const claimedJob = claim.job;
     try {
       const crawl = await crawlSourceRootWithConfiguredProvider({
-        rootUrl: job.rootUrl,
+        rootUrl: claimedJob.rootUrl,
       });
       await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
         crawlJobId: args.crawlJobId,
@@ -9695,9 +9770,9 @@ export const processCommunitySourceCrawlJobInternal = internalAction({
         (internal as any).communityResources.saveCommunitySourceCrawlPagesInternal,
         {
           crawlJobId: args.crawlJobId,
-          communityId: job.communityId,
-          userId: job.createdByUserId,
-          rootUrl: job.rootUrl,
+          communityId: claimedJob.communityId,
+          userId: claimedJob.createdByUserId,
+          rootUrl: claimedJob.rootUrl,
           provider: crawl.provider,
           pages: crawl.pages,
         },
@@ -9814,11 +9889,13 @@ export const crawlWebRoot: any = action({
     const crawlJobId = String(job?.id ?? "").trim();
     if (!crawlJobId) throw new Error("community_source_crawl_job_create_failed");
     try {
-      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
-        crawlJobId,
-        status: "crawling",
-        startedAt: Date.now(),
-      });
+      const claim = await ctx.runMutation(
+        (internal as any).communityResources.claimCommunitySourceCrawlJobInternal,
+        { crawlJobId, nowMs: Date.now() },
+      );
+      if (!claim?.admitted) {
+        throw new Error(claim?.reason ?? "community_source_crawl_job_not_admitted");
+      }
       const crawl = await crawlSourceRootWithConfiguredProvider({
         rootUrl,
       });

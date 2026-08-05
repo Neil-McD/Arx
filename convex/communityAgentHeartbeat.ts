@@ -4,6 +4,8 @@ import { v } from "convex/values";
 import { normalizeIdValue } from "./communityCore";
 import {
   communityIsOperational,
+  COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR,
+  normalizeCommunityLifecycleGeneration,
   requireOperationalCommunityById,
   resolveCommunityNewOperationsErrorCode,
 } from "./communityLifecycleCore";
@@ -37,6 +39,15 @@ function clampToolSteps(raw: unknown): number | undefined {
 
 function buildHeartbeatId(communityId: unknown, nowMs: number): string {
   return `community:${normalizeIdValue(communityId)}:${nowMs}`;
+}
+
+function heartbeatLifecycleStopReason(value: unknown): string | null {
+  const reason = boundedText(value, 120);
+  return reason === "community_archiving" ||
+    reason === "community_archived" ||
+    reason === COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR
+    ? reason
+    : null;
 }
 
 function wakeEvidenceFromMeasurement(
@@ -106,11 +117,15 @@ async function readCommunityAgentControlGate(args: {
 }) {
   const community = await args.ctx.db.get(args.communityId);
   if (!community) {
-    return { cyclesToday: 0, reason: "community_not_found" };
+    return { cyclesToday: 0, lifecycleGeneration: 0, reason: "community_not_found" };
   }
+  const lifecycleGeneration = normalizeCommunityLifecycleGeneration(
+    community.lifecycleGeneration,
+  );
   if (!communityIsOperational(community)) {
     return {
       cyclesToday: 0,
+      lifecycleGeneration,
       reason:
         resolveCommunityNewOperationsErrorCode(community) ??
         "community_lifecycle_status_invalid",
@@ -137,12 +152,83 @@ async function readCommunityAgentControlGate(args: {
   const cyclesToday = stewardRunsToday.length;
   return {
     cyclesToday,
+    lifecycleGeneration,
     reason: config?.agentEnabled === false
       ? "agent_disabled"
       : cyclesToday >= COMMUNITY_AGENT_CYCLES_PER_DAY_CAP
         ? "daily_cycle_cap_reached"
         : null,
   };
+}
+
+async function listCurrentGenerationHandoffs(args: {
+  ctx: any;
+  communityId: any;
+  lifecycleGeneration: number;
+  state: "pending" | "running";
+  limit: number;
+}): Promise<Array<Record<string, any>>> {
+  const currentRows = (await args.ctx.db
+    .query("communityCompilerDigests" as any)
+    .withIndex("by_community_generation_agentHandoffState_createdAt", (q: any) =>
+      q
+        .eq("communityId", args.communityId)
+        .eq("communityLifecycleGeneration", args.lifecycleGeneration)
+        .eq("agentHandoffState", args.state),
+    )
+    .order("asc")
+    .take(args.limit)) as Array<Record<string, any>>;
+  if (args.lifecycleGeneration !== 0 || currentRows.length >= args.limit) {
+    return currentRows;
+  }
+  const legacyRows = (await args.ctx.db
+    .query("communityCompilerDigests" as any)
+    .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
+      q.eq("communityId", args.communityId).eq("agentHandoffState", args.state),
+    )
+    .order("asc")
+    .take(args.limit)) as Array<Record<string, any>>;
+  return Array.from(
+    new Map(
+      [...currentRows, ...legacyRows.filter((row) => row.communityLifecycleGeneration === undefined)]
+        .map((row) => [normalizeIdValue(row._id), row]),
+    ).values(),
+  )
+    .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))
+    .slice(0, args.limit);
+}
+
+async function terminalizeStaleGenerationHandoffs(args: {
+  ctx: any;
+  communityId: any;
+  lifecycleGeneration: number;
+  nowMs: number;
+}): Promise<void> {
+  for (const state of ["pending", "running"] as const) {
+    const rows = (await args.ctx.db
+      .query("communityCompilerDigests" as any)
+      .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
+        q.eq("communityId", args.communityId).eq("agentHandoffState", state),
+      )
+      .order("asc")
+      .take(20)) as Array<Record<string, any>>;
+    for (const row of rows) {
+      if (
+        normalizeCommunityLifecycleGeneration(row.communityLifecycleGeneration) ===
+        args.lifecycleGeneration
+      ) {
+        continue;
+      }
+      await args.ctx.db.patch(row._id as any, {
+        agentHandoffState: "handled" as const,
+        agentClaimId: undefined,
+        agentClaimedAt: undefined,
+        agentHandledAt: args.nowMs,
+        agentTerminalReason: COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR,
+        updatedAt: args.nowMs,
+      });
+    }
+  }
 }
 
 export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
@@ -155,7 +241,13 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    await requireOperationalCommunityById({ ctx, communityId: args.communityId });
+    const community = await requireOperationalCommunityById<Record<string, any>>({
+      ctx,
+      communityId: args.communityId,
+    });
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      community.lifecycleGeneration,
+    );
     const nowMs = args.nowMs ?? Date.now();
     const heartbeatId = boundedText(args.heartbeatId, 200) || buildHeartbeatId(args.communityId, nowMs);
     const runAfterMs = clampDelayMs(args.runAfterMs);
@@ -164,6 +256,7 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
       internalRefs.communityAgentHeartbeat.runCommunityAgentHeartbeatInternal,
       {
         communityId: args.communityId,
+        communityLifecycleGeneration,
         heartbeatId,
         modelId: boundedText(args.modelId, 128) || undefined,
         maxToolSteps: clampToolSteps(args.maxToolSteps),
@@ -173,6 +266,7 @@ export const enqueueCommunityAgentHeartbeatInternal = internalMutation({
       ok: true,
       community_id: normalizeIdValue(args.communityId),
       heartbeat_id: heartbeatId,
+      community_lifecycle_generation: communityLifecycleGeneration,
       scheduled_after_ms: runAfterMs,
     };
   },
@@ -196,13 +290,19 @@ export const claimCommunityCompilerDigestHandoffInternal = internalMutation({
     if (controlGate.reason) {
       return { claimed: false, reason: controlGate.reason, digest_id: null };
     }
-    const runningRows = (await ctx.db
-      .query("communityCompilerDigests" as any)
-      .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("agentHandoffState", "running"),
-      )
-      .order("asc")
-      .take(20)) as Array<Record<string, any>>;
+    await terminalizeStaleGenerationHandoffs({
+      ctx,
+      communityId: args.communityId,
+      lifecycleGeneration: controlGate.lifecycleGeneration,
+      nowMs,
+    });
+    const runningRows = await listCurrentGenerationHandoffs({
+      ctx,
+      communityId: args.communityId,
+      lifecycleGeneration: controlGate.lifecycleGeneration,
+      state: "running",
+      limit: 20,
+    });
     const freshRunning = runningRows.find(
       (row) => Number(row.agentClaimedAt ?? 0) >= nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS,
     );
@@ -213,13 +313,13 @@ export const claimCommunityCompilerDigestHandoffInternal = internalMutation({
         digest_id: normalizeIdValue(freshRunning._id),
       };
     }
-    const pendingRows = (await ctx.db
-      .query("communityCompilerDigests" as any)
-      .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
-        q.eq("communityId", args.communityId).eq("agentHandoffState", "pending"),
-      )
-      .order("asc")
-      .take(20)) as Array<Record<string, any>>;
+    const pendingRows = await listCurrentGenerationHandoffs({
+      ctx,
+      communityId: args.communityId,
+      lifecycleGeneration: controlGate.lifecycleGeneration,
+      state: "pending",
+      limit: 20,
+    });
     const staleRunning = runningRows.find(
       (row) => Number(row.agentClaimedAt ?? 0) < nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS,
     ) ?? null;
@@ -227,6 +327,20 @@ export const claimCommunityCompilerDigestHandoffInternal = internalMutation({
       .filter((row): row is Record<string, any> => Boolean(row))
       .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0));
     for (const digest of candidates) {
+      if (
+        normalizeCommunityLifecycleGeneration(digest.communityLifecycleGeneration) !==
+        controlGate.lifecycleGeneration
+      ) {
+        await ctx.db.patch(digest._id as any, {
+          agentHandoffState: "handled" as const,
+          agentClaimId: undefined,
+          agentClaimedAt: undefined,
+          agentHandledAt: nowMs,
+          agentTerminalReason: COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR,
+          updatedAt: nowMs,
+        });
+        continue;
+      }
       const workState = await classifyCommunityCompilerDigestWork(ctx, args.communityId, digest);
       if (workState !== "claimable") {
         await ctx.db.patch(digest._id as any, {
@@ -322,6 +436,7 @@ export const settleCommunityCompilerDigestHandoffInternal = internalMutation({
 export const runCommunityAgentHeartbeatInternal = internalAction({
   args: {
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     heartbeatId: v.optional(v.string()),
     modelId: v.optional(v.string()),
     maxToolSteps: v.optional(v.number()),
@@ -329,15 +444,18 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
   handler: async (ctx, args) => {
     const heartbeatId = boundedText(args.heartbeatId, 200) || buildHeartbeatId(args.communityId, Date.now());
     const modelId = boundedText(args.modelId, 128) || undefined;
+    const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+      args.communityLifecycleGeneration,
+    );
     const operationalAssessment = (await ctx.runQuery(
       internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal,
-      { communityId: args.communityId },
+      { communityId: args.communityId, communityLifecycleGeneration },
     )) as Record<string, any>;
-    if (
-      operationalAssessment.reason === "community_archiving" ||
-      operationalAssessment.reason === "community_archived"
-    ) {
-      const stopReason = operationalAssessment.reason;
+    const initialLifecycleStopReason = heartbeatLifecycleStopReason(
+      operationalAssessment.reason,
+    );
+    if (initialLifecycleStopReason) {
+      const stopReason = initialLifecycleStopReason;
       return {
         ok: true,
         skipped: true,
@@ -357,8 +475,23 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
     );
     const assessment = (await ctx.runQuery(
       internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal,
-      { communityId: args.communityId },
+      { communityId: args.communityId, communityLifecycleGeneration },
     )) as Record<string, any>;
+    const finalLifecycleStopReason = heartbeatLifecycleStopReason(
+      assessment.reason,
+    );
+    if (finalLifecycleStopReason) {
+      return {
+        ok: true,
+        skipped: true,
+        run: null,
+        stop_reason: finalLifecycleStopReason,
+        tool_step_count: 0,
+        applied_change_request_ids: [],
+        wake_reason: finalLifecycleStopReason,
+        wake_evidence: null,
+      };
+    }
     const compilerEvidence = assessment.compiler_evidence ?? {};
     const initialWakeEvidence = {
       ...wakeEvidenceFromMeasurement(compilerEvidence, {
@@ -429,6 +562,7 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
         internalRefs.communityAgentRuntime.runCommunityAgentCycleInternal,
         {
           communityId: args.communityId,
+          communityLifecycleGeneration,
           triggerType: "heartbeat",
           heartbeatId,
           modelId,
@@ -515,19 +649,29 @@ export const listCommunityMemorySweepTargetsInternal = internalQuery({
 export const assessCommunityAgentCycleInternal = internalQuery({
   args: {
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    const expectedLifecycleGeneration =
+      args.communityLifecycleGeneration === undefined
+        ? undefined
+        : normalizeCommunityLifecycleGeneration(args.communityLifecycleGeneration);
     const controlGate = await readCommunityAgentControlGate({
       ctx,
       communityId: args.communityId,
       nowMs,
     });
-    if (controlGate.reason) {
+    const controlReason = controlGate.reason ??
+      (expectedLifecycleGeneration !== undefined &&
+      controlGate.lifecycleGeneration !== expectedLifecycleGeneration
+        ? COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR
+        : null);
+    if (controlReason) {
       return {
         enqueue: false,
-        reason: controlGate.reason,
+        reason: controlReason,
         cycles_today: controlGate.cyclesToday,
         has_pending_handoff: false,
         pending_handoff_id: null,
@@ -546,27 +690,28 @@ export const assessCommunityAgentCycleInternal = internalQuery({
         },
       };
     }
-    const [pendingHandoff, runningHandoffs, compilerEvidenceResult] = await Promise.all([
-      ctx.db
-        .query("communityCompilerDigests" as any)
-        .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
-          q.eq("communityId", args.communityId).eq("agentHandoffState", "pending"),
-        )
-        .order("asc")
-        .first() as Promise<Record<string, any> | null>,
-      ctx.db
-        .query("communityCompilerDigests" as any)
-        .withIndex("by_community_agentHandoffState_createdAt", (q: any) =>
-          q.eq("communityId", args.communityId).eq("agentHandoffState", "running"),
-        )
-        .order("asc")
-        .take(20) as Promise<Array<Record<string, any>>>,
+    const [pendingHandoffs, runningHandoffs, compilerEvidenceResult] = await Promise.all([
+      listCurrentGenerationHandoffs({
+        ctx,
+        communityId: args.communityId,
+        lifecycleGeneration: controlGate.lifecycleGeneration,
+        state: "pending",
+        limit: 20,
+      }),
+      listCurrentGenerationHandoffs({
+        ctx,
+        communityId: args.communityId,
+        lifecycleGeneration: controlGate.lifecycleGeneration,
+        state: "running",
+        limit: 20,
+      }),
       measureCommunityCompilerEvidenceForCommunity({
         ctx,
         communityId: args.communityId,
         nowMs,
       }),
     ]);
+    const pendingHandoff = pendingHandoffs[0] ?? null;
     const compilerEvidence = compilerEvidenceResult.measurement;
     const freshRunningHandoff = runningHandoffs.find(
       (row) => Number(row.agentClaimedAt ?? 0) >= nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS,

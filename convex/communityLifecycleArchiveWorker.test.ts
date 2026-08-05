@@ -208,51 +208,75 @@ test("unexpected provider setup failures are recorded and retried", async () => 
   vi.unstubAllEnvs();
 });
 
-test("the worker exposes one exact-scope effect at a time and preserves community data", async () => {
+test("the worker converges paid-member access while preserving unrelated community data", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
-  const { founderId, memberSubscriptionId, checkoutId } = await t.run(async (ctx) => ({
-    founderId: await ctx.db.insert("founderSubscriptions", {
-      ownerUserId: fixture.ownerId,
-      communityId: fixture.communityId,
-      provider: "stripe",
-      providerCustomerId: "cus_founder",
-      providerSubscriptionId: "sub_founder",
-      providerPriceId: "price_founder",
-      status: "active",
-      currentPeriodStartAt: 1_000,
-      currentPeriodEndAt: 10_000,
-      cancelAtPeriodEnd: false,
-      lastProviderEventCreatedAt: 1_000,
-      createdAt: 1_000,
-      updatedAt: 1_000,
-    }),
-    memberSubscriptionId: await ctx.db.insert("communitySubscriptions", {
-      communityId: fixture.communityId,
-      userId: fixture.memberId,
-      membershipId: fixture.membershipId,
-      pricePointId: fixture.pricePointId,
-      source: "stripe",
-      status: "active",
-      providerSubscriptionId: "sub_member",
-      providerAccountId: "acct_builder",
-      cancelAtPeriodEnd: false,
-      createdAt: 1_000,
-      updatedAt: 1_000,
-    }),
-    checkoutId: await ctx.db.insert("checkoutSessions", {
-      sessionId: "checkout-local-only",
-      mode: "community_join",
-      provider: "stripe",
-      communityId: fixture.communityId,
-      communityLifecycleGeneration: 0,
-      ownerUserId: fixture.memberId,
-      status: "pending",
-      expiresAt: 10_000,
-      createdAt: 1_000,
-      updatedAt: 1_000,
-    }),
-  }));
+  const { founderId, memberSubscriptionId, checkoutId, manualMembershipId } =
+    await t.run(async (ctx) => {
+      const manualMemberId = await ctx.db.insert("users", {
+        authSubject: "archive-worker-manual-member",
+        displayName: "Archive worker manual member",
+        handle: "archive-worker-manual-member",
+        normalizedHandle: "archive-worker-manual-member",
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      });
+      const manualMembershipId = await ctx.db.insert("communityMemberships", {
+        communityId: fixture.communityId,
+        userId: manualMemberId,
+        role: "member",
+        accessSource: "manual_grant",
+        active: true,
+        activationSequence: 1,
+        activatedAt: 1_000,
+        createdAt: 1_000,
+        updatedAt: 1_000,
+      });
+      await ctx.db.patch(fixture.communityId, { activeMemberCount: 3 });
+      return {
+        manualMembershipId,
+        founderId: await ctx.db.insert("founderSubscriptions", {
+          ownerUserId: fixture.ownerId,
+          communityId: fixture.communityId,
+          provider: "stripe",
+          providerCustomerId: "cus_founder",
+          providerSubscriptionId: "sub_founder",
+          providerPriceId: "price_founder",
+          status: "active",
+          currentPeriodStartAt: 1_000,
+          currentPeriodEndAt: 10_000,
+          cancelAtPeriodEnd: false,
+          lastProviderEventCreatedAt: 1_000,
+          createdAt: 1_000,
+          updatedAt: 1_000,
+        }),
+        memberSubscriptionId: await ctx.db.insert("communitySubscriptions", {
+          communityId: fixture.communityId,
+          userId: fixture.memberId,
+          membershipId: fixture.membershipId,
+          pricePointId: fixture.pricePointId,
+          source: "stripe",
+          status: "active",
+          providerSubscriptionId: "sub_member",
+          providerAccountId: "acct_builder",
+          cancelAtPeriodEnd: false,
+          createdAt: 1_000,
+          updatedAt: 1_000,
+        }),
+        checkoutId: await ctx.db.insert("checkoutSessions", {
+          sessionId: "checkout-local-only",
+          mode: "community_join",
+          provider: "stripe",
+          communityId: fixture.communityId,
+          communityLifecycleGeneration: 0,
+          ownerUserId: fixture.memberId,
+          status: "pending",
+          expiresAt: 10_000,
+          createdAt: 1_000,
+          updatedAt: 1_000,
+        }),
+      };
+    });
   const claim = await beginAndClaim(t, fixture);
   const next = async (nowMs: number) => await t.query(
     archiveApi.readNextCommunityArchiveEffectInternal,
@@ -308,6 +332,13 @@ test("the worker exposes one exact-scope effect at a time and preserves communit
     "sub_member",
     "acct_builder",
   );
+  await complete(
+    "community_subscription",
+    String(memberSubscriptionId),
+    2_005,
+    "sub_member",
+    "acct_builder",
+  );
   await expect(next(2_006)).resolves.toMatchObject({
     kind: "checkout",
     rowId: checkoutId,
@@ -335,7 +366,59 @@ test("the worker exposes one exact-scope effect at a time and preserves communit
       status: "expired",
     });
     await expect(ctx.db.get(fixture.membershipId)).resolves.toMatchObject({
+      active: false,
+      revokedAt: 2_005,
+      revokedReason: "community_archived",
+    });
+    await expect(ctx.db.get(manualMembershipId)).resolves.toMatchObject({
       active: true,
+    });
+    await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
+      activeMemberCount: 2,
+    });
+  });
+});
+
+test("member-subscription completion fails closed when its membership is missing", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const memberSubscriptionId = await t.run(async (ctx) =>
+    await ctx.db.insert("communitySubscriptions", {
+      communityId: fixture.communityId,
+      userId: fixture.memberId,
+      membershipId: fixture.membershipId,
+      pricePointId: fixture.pricePointId,
+      source: "stripe",
+      status: "active",
+      providerSubscriptionId: "sub_missing_membership",
+      providerAccountId: "acct_builder",
+      cancelAtPeriodEnd: false,
+      createdAt: 1_000,
+      updatedAt: 1_000,
+    }),
+  );
+  const claim = await beginAndClaim(t, fixture);
+  await t.run(async (ctx) => {
+    await ctx.db.delete(fixture.membershipId);
+  });
+
+  await expect(
+    t.mutation(archiveApi.completeCommunityArchiveEffectInternal, {
+      operationId: claim.operationId,
+      leaseId: claim.leaseId,
+      effectKind: "community_subscription",
+      rowId: String(memberSubscriptionId),
+      nowMs: 2_005,
+      providerObjectId: "sub_missing_membership",
+      providerAccountId: "acct_builder",
+    }),
+  ).rejects.toThrow("community_subscription_membership_missing");
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(memberSubscriptionId)).resolves.toMatchObject({
+      status: "active",
+    });
+    await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
+      lifecycleStatus: "archiving",
     });
   });
 });

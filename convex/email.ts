@@ -7,8 +7,8 @@ import {
   sendRenderedEmail,
 } from "./emailCore";
 import {
-  communityIsOperational,
-  resolveCommunityNewOperationsErrorCode,
+  normalizeCommunityLifecycleGeneration,
+  resolveCommunityWorkAdmissionErrorCode,
 } from "./communityLifecycleCore";
 
 const EMAIL_TEMPLATE_VALIDATOR = v.union(
@@ -156,6 +156,7 @@ export const enqueueEmailJobInternal = internalMutation({
   args: {
     kind: v.string(),
     communityId: v.optional(v.id("communities")),
+    communityLifecycleGeneration: v.optional(v.number()),
     recipientUserId: v.optional(v.id("users")),
     recipientEmail: v.optional(v.string()),
     templateKey: EMAIL_TEMPLATE_VALIDATOR,
@@ -167,21 +168,32 @@ export const enqueueEmailJobInternal = internalMutation({
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
     const community = args.communityId ? await ctx.db.get(args.communityId) : null;
+    const communityLifecycleGeneration = args.communityLifecycleGeneration !== undefined
+      ? normalizeCommunityLifecycleGeneration(args.communityLifecycleGeneration)
+      : community
+        ? normalizeCommunityLifecycleGeneration(community.lifecycleGeneration)
+        : undefined;
     const communitySuppressionReason = args.communityId
-      ? community && communityIsOperational(community)
-        ? null
-        : community
-          ? resolveCommunityNewOperationsErrorCode(community) ?? "community_archived"
-          : "community_not_found"
+      ? resolveCommunityWorkAdmissionErrorCode({
+          community,
+          expectedGeneration: communityLifecycleGeneration,
+        })
       : null;
     const dedupeKey = readString(args.dedupeKey) || null;
     if (dedupeKey) {
       const existing = await findExistingDedupeRow(ctx, dedupeKey);
       if (existing && ["pending", "sending", "sent"].includes(existing.status)) {
-        if (communitySuppressionReason && existing.status !== "sent") {
+        const existingAdmissionError =
+          existing.status !== "sent" && args.communityId
+            ? resolveCommunityWorkAdmissionErrorCode({
+                community,
+                expectedGeneration: existing.communityLifecycleGeneration,
+              })
+            : null;
+        if ((communitySuppressionReason || existingAdmissionError) && existing.status !== "sent") {
           await ctx.db.patch(existing._id, {
             status: "suppressed",
-            failureReason: communitySuppressionReason,
+            failureReason: communitySuppressionReason ?? existingAdmissionError ?? undefined,
             updatedAt: nowMs,
           });
           return {
@@ -240,6 +252,7 @@ export const enqueueEmailJobInternal = internalMutation({
     const outboxId = await ctx.db.insert("emailOutbox", {
       kind: readString(args.kind) || templateKey,
       communityId: args.communityId,
+      communityLifecycleGeneration,
       recipientUserId: recipientUserId ?? undefined,
       recipientEmail,
       templateKey,
@@ -282,13 +295,14 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
     for (const row of rows) {
       if (row.communityId) {
         const community = await ctx.db.get(row.communityId);
-        if (!community || !communityIsOperational(community)) {
+        const admissionError = resolveCommunityWorkAdmissionErrorCode({
+          community,
+          expectedGeneration: row.communityLifecycleGeneration,
+        });
+        if (admissionError) {
           await ctx.db.patch(row._id, {
             status: "suppressed",
-            failureReason: community
-              ? resolveCommunityNewOperationsErrorCode(community) ??
-                "community_archived"
-              : "community_not_found",
+            failureReason: admissionError,
             updatedAt: nowMs,
           });
           continue;
@@ -326,12 +340,14 @@ export const admitEmailJobForDeliveryInternal = internalMutation({
     }
     if (!row.communityId) return { admitted: true, reason: null };
     const community = await ctx.db.get(row.communityId);
-    if (community && communityIsOperational(community)) {
+    const admissionError = resolveCommunityWorkAdmissionErrorCode({
+      community,
+      expectedGeneration: row.communityLifecycleGeneration,
+    });
+    if (!admissionError) {
       return { admitted: true, reason: null };
     }
-    const reason = community
-      ? resolveCommunityNewOperationsErrorCode(community) ?? "community_archived"
-      : "community_not_found";
+    const reason = admissionError;
     await ctx.db.patch(row._id, {
       status: "suppressed",
       failureReason: reason,

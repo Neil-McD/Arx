@@ -354,8 +354,11 @@ require_multiline_match "$BILLING_CORE_FILE" \
   'ensureCommunityMembership[\s\S]*activateCommunityMembershipCore' \
   "paid membership creation maintains active member count"
 require_multiline_match "$COMMUNITY_COMMERCE_FILE" \
-  'syncCommunitySubscriptionLifecycleInternal[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
-  "subscription status changes maintain active member count"
+  'syncCommunitySubscriptionLifecycleInternal[\s\S]*applyCommunitySubscriptionEntitlementToMembership' \
+  "subscription status changes use the canonical membership transition"
+require_multiline_match "$COMMUNITY_CORE_FILE" \
+  'applyCommunitySubscriptionEntitlementToMembership[\s\S]*adjustCommunityActiveMemberCountForMembershipTransition' \
+  "canonical subscription membership transitions maintain active member count"
 require_multiline_match "$PLATFORM_HOME_COMMUNITY_FILE" \
   'ensurePlatformHomeCommunityMembership[\s\S]*activateCommunityMembershipCore' \
   "platform autojoin maintains active member count"

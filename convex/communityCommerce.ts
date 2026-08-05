@@ -24,7 +24,7 @@ import {
   toIsoString,
 } from "./billingCore";
 import {
-  adjustCommunityActiveMemberCountForMembershipTransition,
+  applyCommunitySubscriptionEntitlementToMembership,
   communitySubscriptionStatusGrantsAccess,
   communityUserIsBlocked,
   normalizeCommunitySubscriptionStatus,
@@ -441,44 +441,16 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       });
     }
 
-    const grantsAccess = communitySubscriptionStatusGrantsAccess(status);
-    const revokedReason = String(args.revokedReason ?? "")
-      .trim()
-      .slice(0, 160);
-    const existingRevokedReason = String(membership.revokedReason ?? "").trim();
-    const shouldPreserveRiskRevocation =
-      grantsAccess &&
-      args.preserveRiskRevocation === true &&
-      membership.active === false &&
-      (
-        existingRevokedReason === "subscription_refunded" ||
-        existingRevokedReason === "subscription_dispute_opened" ||
-        existingRevokedReason === "subscription_dispute_lost"
-      );
-    const updatedMembership = {
-      ...membership,
-      pricePointId,
-      active: shouldPreserveRiskRevocation ? false : grantsAccess,
-      revokedAt: shouldPreserveRiskRevocation
-        ? membership.revokedAt ?? nowMs
-        : grantsAccess ? undefined : nowMs,
-      revokedReason: shouldPreserveRiskRevocation
-        ? existingRevokedReason
-        : grantsAccess ? undefined : revokedReason || `subscription_${status}`,
-      updatedAt: nowMs,
-    } as CommunityMembershipLike;
-    await ctx.db.patch(membership._id, {
-      pricePointId,
-      active: updatedMembership.active,
-      revokedAt: updatedMembership.revokedAt,
-      revokedReason: updatedMembership.revokedReason,
-      updatedAt: nowMs,
-    });
-    await adjustCommunityActiveMemberCountForMembershipTransition({
+    await applyCommunitySubscriptionEntitlementToMembership({
       ctx,
       communityId: args.communityId,
-      before: membership,
-      after: updatedMembership,
+      membership,
+      userId: args.userId,
+      pricePointId,
+      status,
+      revokedReason: args.revokedReason,
+      preserveRiskRevocation: args.preserveRiskRevocation,
+      nowMs,
     });
 
     if (status === "past_due" && previousStatus !== "past_due") {

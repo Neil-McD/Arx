@@ -12,6 +12,7 @@ import {
   requireCommunityOwnerAnyLifecycle,
   requireMatchingCommunityLifecycleGeneration,
   requireOperationalCommunity,
+  resolveCommunityWorkAdmissionErrorCode,
 } from "./communityLifecycleCore";
 import {
   requireCommunityChatAccess,
@@ -53,6 +54,25 @@ test("new-operation epoch admission fails closed for missing or malformed lifecy
       expectedGeneration: 3,
     })).toBe(false);
   }
+});
+
+test("durable work admission reports one deterministic lifecycle or epoch reason", () => {
+  expect(resolveCommunityWorkAdmissionErrorCode({
+    community: { lifecycleStatus: "active", lifecycleGeneration: 3 },
+    expectedGeneration: 3,
+  })).toBeNull();
+  expect(resolveCommunityWorkAdmissionErrorCode({
+    community: { lifecycleStatus: "active", lifecycleGeneration: 3 },
+    expectedGeneration: 2,
+  })).toBe("community_lifecycle_generation_stale");
+  expect(resolveCommunityWorkAdmissionErrorCode({
+    community: { lifecycleStatus: "archived", lifecycleGeneration: 3 },
+    expectedGeneration: 3,
+  })).toBe("community_archived");
+  expect(resolveCommunityWorkAdmissionErrorCode({
+    community: null,
+    expectedGeneration: 0,
+  })).toBe("community_not_found");
 });
 
 async function createFixture(t: ReturnType<typeof convexTest>) {

@@ -10,6 +10,11 @@ import {
 } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { readCommunityChatReadState } from "./communityReadCursorCore";
+import {
+  normalizeCommunityLifecycleGeneration,
+  requireOperationalCommunityById,
+  resolveCommunityWorkAdmissionErrorCode,
+} from "./communityLifecycleCore";
 
 export const EVERYBODY_MENTION_ROLE_KEY = "everybody";
 const EVERYBODY_MENTION_TOKEN_ALIASES = ["everybody", "everyone"] as const;
@@ -30,6 +35,7 @@ type BroadcastCleanupState = "queued" | "complete";
 type BroadcastRow = {
   _id: any;
   communityId: any;
+  communityLifecycleGeneration?: number;
   channelId?: any;
   roleKey: string;
   actorUserId: any;
@@ -298,8 +304,16 @@ export async function scheduleEverybodyMentionBroadcast(args: {
     communityId: args.communityId,
     nowMs: args.nowMs,
   });
+  const community = await requireOperationalCommunityById<Record<string, any>>({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  const communityLifecycleGeneration = normalizeCommunityLifecycleGeneration(
+    community.lifecycleGeneration,
+  );
   const broadcastId = await args.ctx.db.insert("communityMentionBroadcasts" as any, {
     communityId: args.communityId,
+    communityLifecycleGeneration,
     channelId: args.channelId,
     roleKey: EVERYBODY_MENTION_ROLE_KEY,
     actorUserId: args.actorUserId,
@@ -411,6 +425,7 @@ async function attachBroadcastToExistingMention(args: {
   }
   await args.ctx.db.patch(args.mention._id, {
     sourceBroadcastId: args.broadcast._id,
+    communityLifecycleGeneration: args.broadcast.communityLifecycleGeneration,
     ...(args.broadcast.channelId && !args.mention.channelId
       ? { channelId: args.broadcast.channelId }
       : {}),
@@ -461,6 +476,7 @@ async function processBroadcastRecipient(args: {
   });
   await args.ctx.db.insert("communityInteractionMentions" as any, {
     communityId: args.broadcast.communityId,
+    communityLifecycleGeneration: args.broadcast.communityLifecycleGeneration,
     ...(args.broadcast.channelId
       ? { channelId: args.broadcast.channelId }
       : {}),
@@ -674,6 +690,19 @@ async function processOneBroadcastBatch(args: {
   const community = (await args.ctx.db.get(args.broadcast.communityId)) as CommunityLike | null;
   if (!community) {
     await cancelBroadcast(args.ctx, args.broadcast, args.nowMs, "community_missing");
+    return { processed: true, complete: true };
+  }
+  const lifecycleAdmissionError = resolveCommunityWorkAdmissionErrorCode({
+    community,
+    expectedGeneration: args.broadcast.communityLifecycleGeneration,
+  });
+  if (lifecycleAdmissionError) {
+    await cancelBroadcast(
+      args.ctx,
+      args.broadcast,
+      args.nowMs,
+      lifecycleAdmissionError,
+    );
     return { processed: true, complete: true };
   }
 

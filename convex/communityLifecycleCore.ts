@@ -1,5 +1,6 @@
 import {
   communityAcceptsNewOperations,
+  COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR,
   communityIsLifecycleProtected,
   communityIsOperational,
   normalizeCommunityLifecycleGeneration,
@@ -10,6 +11,7 @@ import {
 
 export {
   communityAcceptsNewOperations,
+  COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR,
   communityIsArchived,
   communityIsLifecycleProtected,
   communityIsOperational,
@@ -138,6 +140,26 @@ export function communityAcceptsNewOperationsAtGeneration(args: {
     ) === normalizeCommunityLifecycleGeneration(args.expectedGeneration);
   } catch {
     return false;
+  }
+}
+
+export function resolveCommunityWorkAdmissionErrorCode(args: {
+  community: CommunityLifecycleLike | null | undefined;
+  expectedGeneration: unknown;
+}): string | null {
+  if (!args.community) return "community_not_found";
+  try {
+    const lifecycleError = resolveCommunityNewOperationsErrorCode(args.community);
+    if (lifecycleError) return lifecycleError;
+    return normalizeCommunityLifecycleGeneration(
+      args.community.lifecycleGeneration,
+    ) === normalizeCommunityLifecycleGeneration(args.expectedGeneration)
+      ? null
+      : COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR;
+  } catch (error) {
+    return error instanceof Error
+      ? error.message
+      : "community_lifecycle_status_invalid";
   }
 }
 

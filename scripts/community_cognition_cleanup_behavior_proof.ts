@@ -418,7 +418,9 @@ for (const [file, expectedCount] of [
   ["../convex/communityEvidenceAudit.ts", 1],
 ] as const) {
   const source = readFileSync(new URL(file, import.meta.url), "utf8");
-  const count = source.match(/requireOperationalCommunityById\(/g)?.length ?? 0;
+  const count = source.match(
+    /requireOperationalCommunityById(?:<[^\n]+>)?\(/g,
+  )?.length ?? 0;
   assert.ok(
     count >= expectedCount,
     `${file} must guard its cognition write seams`,

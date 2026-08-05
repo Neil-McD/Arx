@@ -861,6 +861,7 @@ export default defineSchema({
   emailOutbox: defineTable({
     kind: v.string(),
     communityId: v.optional(v.id("communities")),
+    communityLifecycleGeneration: v.optional(v.number()),
     recipientUserId: v.optional(v.id("users")),
     recipientEmail: v.string(),
     templateKey: v.string(),
@@ -1877,6 +1878,7 @@ export default defineSchema({
 
   communityInteractionMentions: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     // Target-derived from the root. Optional only for private dock and
     // rolling-compatible pre-channel mention rows.
     channelId: v.optional(v.id("communityChannels")),
@@ -1927,6 +1929,7 @@ export default defineSchema({
 
   communityMentionBroadcasts: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     // Derived from the source root; optional for pre-channel broadcasts.
     channelId: v.optional(v.id("communityChannels")),
     roleKey: v.string(),
@@ -1974,6 +1977,7 @@ export default defineSchema({
 
   communityAgentServeRequests: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     agentKey: v.string(),
     sourceMentionId: v.id("communityInteractionMentions"),
     sourceRootId: v.optional(v.id("communityInteractionRoots")),
@@ -1996,11 +2000,18 @@ export default defineSchema({
       v.literal("source_not_human"),
       v.literal("requester_missing"),
       v.literal("requester_access_missing"),
+      v.literal("community_archiving"),
+      v.literal("community_archived"),
+      v.literal("community_lifecycle_generation_stale"),
       v.literal("agent_disabled"),
       v.literal("requester_connection_missing"),
+      v.literal("owner_funding_choice_required"),
       v.literal("owner_credential_missing"),
       v.literal("owner_funding_suspended"),
       v.literal("founder_plan_required"),
+      v.literal("founder_subscription_inactive"),
+      v.literal("founder_subscription_ambiguous"),
+      v.literal("founder_subscription_owner_mismatch"),
     ),
     sourceVisibilityScope: v.optional(
       v.union(
@@ -2723,6 +2734,7 @@ export default defineSchema({
 
   communitySourceCrawlJobs: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     createdByUserId: v.id("users"),
     provider: v.union(v.literal("simple"), v.literal("crawl4ai"), v.literal("firecrawl")),
     rootUrl: v.string(),
@@ -3459,6 +3471,7 @@ export default defineSchema({
 
   communityCompilerDigests: defineTable({
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     dedupeKey: v.string(),
     // New compiler output is immutable per canonical work set. Historical
     // daily-upsert rows omit this field and are never claimed as agent work.
@@ -3479,6 +3492,7 @@ export default defineSchema({
       v.union(
         v.literal("settled"),
         v.literal("superseded"),
+        v.literal("community_lifecycle_generation_stale"),
       ),
     ),
     agentAttemptCount: v.optional(v.number()),
@@ -3546,8 +3560,19 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_windowEndedAt", ["communityId", "windowEndedAt"])
     .index("by_community_versionKey", ["communityId", "versionKey"])
+    .index("by_community_generation_versionKey", [
+      "communityId",
+      "communityLifecycleGeneration",
+      "versionKey",
+    ])
     .index("by_community_agentHandoffState_createdAt", [
       "communityId",
+      "agentHandoffState",
+      "createdAt",
+    ])
+    .index("by_community_generation_agentHandoffState_createdAt", [
+      "communityId",
+      "communityLifecycleGeneration",
       "agentHandoffState",
       "createdAt",
     ]),

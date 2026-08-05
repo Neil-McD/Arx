@@ -10,6 +10,11 @@ import schema from "./schema";
 
 const modules = import.meta.glob([
   "./communityAgentHeartbeat.ts",
+  "./communityAgentConcierge.ts",
+  "./communityAgentRuntime.ts",
+  "./communityAgentServeWorker.ts",
+  "./communityMentionBroadcasts.ts",
+  "./communityResources.ts",
   "./communityInteractionEmbedRefresh.ts",
   "./communityInteractions.ts",
   "./email.ts",
@@ -183,6 +188,316 @@ test("queued community email is suppressed at claim and immediately before deliv
     nowMs: NOW_MS + 4,
   });
   expect(admission).toEqual({ admitted: false, reason: "community_archived" });
+});
+
+test("restoring active status cannot resurrect durable work from an older lifecycle generation", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+
+  const oldEmail = await t.mutation(internal.email.enqueueEmailJobInternal, {
+    kind: "mention_notification",
+    communityId: fixture.activeId,
+    recipientUserId: fixture.ownerId,
+    templateKey: "mention_notification",
+    payload: {},
+    dedupeKey: "archive-containment-email-old-epoch",
+    nowMs: NOW_MS,
+  });
+  const {
+    staleServeRequestId,
+    staleDigestId,
+    staleAgentMentionId,
+    staleBroadcastId,
+    staleSourceCrawlJobId,
+  } = await t.run(async (ctx) => {
+    const rootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.activeId,
+      actorType: "human",
+      actorUserId: fixture.ownerId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Lifecycle epoch fence",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: "archive-containment-serve-old-epoch",
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    });
+    const mentionId = await ctx.db.insert("communityInteractionMentions", {
+      communityId: fixture.activeId,
+      rootId,
+      mentionKind: "community_agent",
+      mentionedAgentKey: "community_agent",
+      notifyState: "sent",
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    });
+    const staleServeRequestId = await ctx.db.insert("communityAgentServeRequests", {
+      communityId: fixture.activeId,
+      communityLifecycleGeneration: 1,
+      agentKey: "community_agent",
+      sourceMentionId: mentionId,
+      sourceRootId: rootId,
+      requesterUserId: fixture.ownerId,
+      sponsorUserId: fixture.ownerId,
+      status: "queued",
+      intakeReason: "accepted",
+      sourceVisibilityScope: "community",
+      responseVisibilityScope: "community",
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    });
+    const staleAgentMentionId = await ctx.db.insert("communityInteractionMentions", {
+      communityId: fixture.activeId,
+      communityLifecycleGeneration: 1,
+      rootId,
+      mentionKind: "community_agent",
+      mentionedAgentKey: "community_agent",
+      notifyState: "pending",
+      createdAt: NOW_MS + 1,
+      updatedAt: NOW_MS + 1,
+    });
+    const broadcastSourceMentionId = await ctx.db.insert("communityInteractionMentions", {
+      communityId: fixture.activeId,
+      communityLifecycleGeneration: 1,
+      rootId,
+      mentionKind: "role",
+      mentionedRoleKey: "everybody",
+      notifyState: "pending",
+      createdAt: NOW_MS + 2,
+      updatedAt: NOW_MS + 2,
+    });
+    await ctx.db.insert("communityInteractionContentBlocks", {
+      communityId: fixture.activeId,
+      rootId,
+      blockOrder: 0,
+      blockType: "markdown_text",
+      text: "@everybody lifecycle epoch fence",
+      createdAt: NOW_MS + 2,
+      updatedAt: NOW_MS + 2,
+    });
+    const staleBroadcastId = await ctx.db.insert("communityMentionBroadcasts", {
+      communityId: fixture.activeId,
+      communityLifecycleGeneration: 1,
+      roleKey: "everybody",
+      actorUserId: fixture.ownerId,
+      sourceRootId: rootId,
+      sourceMentionId: broadcastSourceMentionId,
+      sourceCreatedAt: NOW_MS + 2,
+      emailMode: "in_app_and_email",
+      status: "queued",
+      ownerProcessed: false,
+      processedCount: 0,
+      recipientCount: 0,
+      skippedCount: 0,
+      createdAt: NOW_MS + 2,
+      updatedAt: NOW_MS + 2,
+    });
+    const staleDigestId = await ctx.db.insert("communityCompilerDigests", {
+      communityId: fixture.activeId,
+      communityLifecycleGeneration: 1,
+      dedupeKey: "archive-containment-digest-old-epoch",
+      versionKey: "archive-containment-digest-old-epoch",
+      agentHandoffState: "pending",
+      agentAttemptCount: 0,
+      windowStartedAt: NOW_MS - 1_000,
+      windowEndedAt: NOW_MS,
+      summary: "Stale lifecycle digest",
+      itemCount: 0,
+      items: [],
+      signalCounts: {
+        chat: 0,
+        aiFeed: 0,
+        resources: 0,
+        events: 0,
+        sourceTraces: 0,
+        outcomes: 0,
+        newMembers: 0,
+        activeMembers: 0,
+        postingMembers: 0,
+        aiFeedReactingMembers: 0,
+      },
+      createdByActorType: "compiler",
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    });
+    const staleSourceCrawlJobId = await ctx.db.insert("communitySourceCrawlJobs", {
+      communityId: fixture.activeId,
+      communityLifecycleGeneration: 1,
+      createdByUserId: fixture.ownerId,
+      provider: "simple",
+      rootUrl: "https://example.com/stale-source",
+      status: "queued",
+      maxPages: 1,
+      maxDepth: 0,
+      pageCount: 0,
+      readyPageCount: 0,
+      failedPageCount: 0,
+      savedSourceCount: 0,
+      skippedSourceCount: 0,
+      sourceResourceIds: [],
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    });
+    await ctx.db.patch(fixture.activeId, {
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 2,
+      updatedAt: NOW_MS + 1,
+    });
+    await ctx.db.patch(fixture.activeId, {
+      lifecycleStatus: "active",
+      lifecycleGeneration: 3,
+      updatedAt: NOW_MS + 2,
+    });
+    return {
+      staleServeRequestId,
+      staleDigestId,
+      staleAgentMentionId,
+      staleBroadcastId,
+      staleSourceCrawlJobId,
+    };
+  });
+
+  const claimedEmails = await t.mutation(internal.email.claimDueEmailOutboxBatchInternal, {
+    limit: 10,
+    nowMs: NOW_MS + 3,
+  });
+  expect(claimedEmails).toHaveLength(0);
+  await expect(t.run(async (ctx) => await ctx.db.get(oldEmail.outboxId))).resolves.toMatchObject({
+    status: "suppressed",
+    failureReason: "community_lifecycle_generation_stale",
+    communityLifecycleGeneration: 1,
+  });
+
+  const serveClaim = await t.mutation(
+    internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
+    { requestId: staleServeRequestId, nowMs: NOW_MS + 3 },
+  );
+  expect(serveClaim.requestId).toBeNull();
+  await expect(t.run(async (ctx) => await ctx.db.get(staleServeRequestId))).resolves.toMatchObject({
+    status: "skipped",
+    skipReason: "community_lifecycle_generation_stale",
+  });
+
+  const repairedMentions = await t.mutation(
+    internal.communityAgentConcierge.consumePendingCommunityAgentMentionsInternal,
+    { limit: 10, nowMs: NOW_MS + 3 },
+  );
+  expect(repairedMentions.counts.community_lifecycle_generation_stale).toBe(1);
+  await expect(t.run(async (ctx) => await ctx.db.get(staleAgentMentionId))).resolves.toMatchObject({
+    notifyState: "suppressed",
+  });
+
+  await t.mutation(
+    internal.communityMentionBroadcasts.processQueuedCommunityMentionBroadcastsInternal,
+    { broadcastId: staleBroadcastId, limit: 1, nowMs: NOW_MS + 3 },
+  );
+  await expect(t.run(async (ctx) => await ctx.db.get(staleBroadcastId))).resolves.toMatchObject({
+    status: "canceled",
+    errorCode: "community_lifecycle_generation_stale",
+  });
+
+  const digestClaim = await t.mutation(
+    internal.communityAgentHeartbeat.claimCommunityCompilerDigestHandoffInternal,
+    {
+      communityId: fixture.activeId,
+      claimId: "archive-containment-stale-digest-claim",
+      nowMs: NOW_MS + 3,
+    },
+  );
+  expect(digestClaim).toMatchObject({ claimed: false, reason: "no_pending_compiler_handoff" });
+  await expect(t.run(async (ctx) => await ctx.db.get(staleDigestId))).resolves.toMatchObject({
+    agentHandoffState: "handled",
+    agentTerminalReason: "community_lifecycle_generation_stale",
+  });
+
+  const sourceCrawlClaim = await t.mutation(
+    internal.communityResources.claimCommunitySourceCrawlJobInternal,
+    { crawlJobId: String(staleSourceCrawlJobId), nowMs: NOW_MS + 3 },
+  );
+  expect(sourceCrawlClaim).toMatchObject({
+    admitted: false,
+    reason: "community_lifecycle_generation_stale",
+  });
+  await expect(t.run(async (ctx) => await ctx.db.get(staleSourceCrawlJobId))).resolves.toMatchObject({
+    status: "failed",
+    error: "community_lifecycle_generation_stale",
+  });
+
+  const currentSourceCrawlJobId = await t.run(async (ctx) =>
+    await ctx.db.insert("communitySourceCrawlJobs", {
+      communityId: fixture.activeId,
+      communityLifecycleGeneration: 3,
+      createdByUserId: fixture.ownerId,
+      provider: "simple",
+      rootUrl: "https://example.com/current-source",
+      status: "queued",
+      maxPages: 1,
+      maxDepth: 0,
+      pageCount: 0,
+      readyPageCount: 0,
+      failedPageCount: 0,
+      savedSourceCount: 0,
+      skippedSourceCount: 0,
+      sourceResourceIds: [],
+      createdAt: NOW_MS + 3,
+      updatedAt: NOW_MS + 3,
+    }),
+  );
+  await expect(t.mutation(
+    internal.communityResources.claimCommunitySourceCrawlJobInternal,
+    { crawlJobId: String(currentSourceCrawlJobId), nowMs: NOW_MS + 4 },
+  )).resolves.toMatchObject({ admitted: true, reason: null });
+  await expect(t.mutation(
+    internal.communityResources.claimCommunitySourceCrawlJobInternal,
+    { crawlJobId: String(currentSourceCrawlJobId), nowMs: NOW_MS + 5 },
+  )).resolves.toMatchObject({
+    admitted: false,
+    reason: "community_source_crawl_job_in_progress",
+  });
+
+  await expect(t.query(internal.communityAgentHeartbeat.assessCommunityAgentCycleInternal, {
+    communityId: fixture.activeId,
+    communityLifecycleGeneration: 1,
+    nowMs: NOW_MS + 3,
+  })).resolves.toMatchObject({
+    enqueue: false,
+    reason: "community_lifecycle_generation_stale",
+  });
+  await expect(t.query(internal.communityAgentRuntime.resolveCommunityAgentRunContextInternal, {
+    communityId: fixture.activeId,
+    communityLifecycleGeneration: 1,
+  })).rejects.toThrow("community_lifecycle_generation_stale");
+
+  const staleSourceEmail = await t.mutation(internal.email.enqueueEmailJobInternal, {
+    kind: "mention_notification",
+    communityId: fixture.activeId,
+    communityLifecycleGeneration: 1,
+    recipientUserId: fixture.ownerId,
+    templateKey: "mention_notification",
+    payload: {},
+    dedupeKey: "archive-containment-email-stale-source-epoch",
+    nowMs: NOW_MS + 3,
+  });
+  expect(staleSourceEmail.status).toBe("suppressed");
+
+  const currentEmail = await t.mutation(internal.email.enqueueEmailJobInternal, {
+    kind: "mention_notification",
+    communityId: fixture.activeId,
+    recipientUserId: fixture.ownerId,
+    templateKey: "mention_notification",
+    payload: {},
+    dedupeKey: "archive-containment-email-current-epoch",
+    nowMs: NOW_MS + 4,
+  });
+  const currentClaim = await t.mutation(internal.email.claimDueEmailOutboxBatchInternal, {
+    limit: 10,
+    nowMs: NOW_MS + 4,
+  });
+  expect(currentClaim.map((row: { _id: unknown }) => String(row._id))).toContain(
+    String(currentEmail.outboxId),
+  );
 });
 
 test("embed refresh scheduling and enrichment exclude archived communities", async () => {

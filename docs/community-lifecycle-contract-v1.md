@@ -52,6 +52,11 @@ wildcard that can survive an archive/restore generation change.
 - Membership activation is the canonical new-access boundary. Membership rows
   remain preserved, but no activation or normal access is admitted while the
   community is `archiving` or `archived`.
+- When archival terminally ends a paid-member subscription, the same local
+  transaction deactivates that subscription-backed membership and recomputes
+  the canonical active-member count. Free and manual grants remain preserved
+  and active; no former paid member is silently re-entitled by later lifecycle
+  restoration.
 - Ownership is relationship metadata, never a substitute for
   `can_enter_community`.
 - Checkout and purchase-claim rows capture `lifecycleGeneration`; stale
@@ -110,6 +115,9 @@ contained in `archiving` for explicit operator repair.
 The worker handles one provider effect at a time. It cancels founder platform
 subscriptions in platform scope, community-member subscriptions in their exact
 connected-account scope, and expires or compensates pending checkout sessions.
+The member-subscription completion path uses the same canonical membership
+entitlement transition as ordinary subscription synchronization, so the
+subscription row, membership row, and active-member count cannot drift.
 Founder and member subscription selection are both bounded indexed reads; the
 worker never collects subscription history to choose the next effect.
 It updates a local subscription or checkout row only after the exact provider
@@ -155,19 +163,30 @@ independently quarantined.
 
 `communityLifecycleCore` is also the canonical background-work authority.
 Only legacy missing lifecycle status and explicit `active` remain operational;
-`archiving` and `archived` fail closed. Cognition writes, heartbeat enqueue and execution,
-compiler handoff claims, community-agent funding admission, serve-request
-execution, and external embed enrichment all recheck this authority at their
-last responsible boundary. Scheduled work created before archival therefore
-cannot start a new provider effect after the archive transition.
+`archiving` and `archived` fail closed. Durable work capable of starting an
+external effect also captures the lifecycle generation at admission. Mention
+rows and everybody broadcasts preserve the source epoch so a repair drain
+cannot manufacture a fresh email or serve request from pre-archive content.
+Email jobs, community-agent serve requests, compiler handoffs, scheduled
+heartbeats, and community source crawl jobs likewise must match both active
+status and the current generation at claim or execution. Source-crawl saves
+repeat the exact check before writing resources. A missing work generation is
+compatibility generation `0`, not a wildcard. Stale work becomes terminally
+suppressed, skipped, canceled, superseded, or failed and cannot become eligible
+merely because a later restore returns the community to `active`.
+Community-agent runtime context and run creation repeat the exact generation
+check before inference admission. External embed enrichment remains state-gated
+because it is recomputed maintenance rather than durable user or agent work that
+should cross a lifecycle epoch.
 
 Community-scoped outbox rows carry `communityId`. Digest, event reminder,
 mention, access-granted, and billing-issue enqueue paths propagate that scope.
-The outbox rechecks lifecycle during enqueue, claim, and immediately before
-provider delivery; archiving and archived jobs become terminally `suppressed`. Generic
-account and direct-message email remains unscoped and unaffected. Operational
-cron scans use bounded lifecycle-index lanes and retain the missing-status
-compatibility lane until migration is complete.
+The outbox rechecks lifecycle status and generation during enqueue, claim, and
+immediately before provider delivery; inactive or stale-generation jobs become
+terminally `suppressed`. Generic account and direct-message email remains
+unscoped and unaffected. Operational cron scans use bounded lifecycle-index
+lanes and retain the missing-status compatibility lane until migration is
+complete.
 
 ## Migration
 

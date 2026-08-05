@@ -382,6 +382,9 @@ function assertSourceAnchors() {
   const httpBilling = readText(new URL("../convex/httpBilling.ts", import.meta.url));
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
+  const communityLifecycleArchiveWorker = readText(
+    new URL("../convex/communityLifecycleArchiveWorker.ts", import.meta.url),
+  );
   const communityPublic = readText(new URL("../convex/communityPublic.ts", import.meta.url));
   const schema = readText(new URL("../convex/schema.ts", import.meta.url));
 
@@ -526,9 +529,24 @@ function assertSourceAnchors() {
     "provider subscription id is preferred for lifecycle row matching",
   );
   assertIncludes(
+    communityCore,
+    "export async function applyCommunitySubscriptionEntitlementToMembership",
+    "one canonical subscription-backed membership transition exists",
+  );
+  assertIncludes(
+    communityCommerce,
+    "await applyCommunitySubscriptionEntitlementToMembership({",
+    "ordinary subscription sync uses the canonical membership transition",
+  );
+  assertIncludes(
+    communityLifecycleArchiveWorker,
+    "await applyCommunitySubscriptionEntitlementToMembership({",
+    "archive completion uses the canonical membership transition",
+  );
+  assertNotIncludes(
     communityCommerce,
     "await ctx.db.patch(membership._id, {",
-    "subscription sync patches membership access state",
+    "ordinary subscription sync does not retain a duplicate membership patch",
   );
   assertIncludes(
     billingCore,

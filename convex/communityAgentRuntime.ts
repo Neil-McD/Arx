@@ -32,7 +32,10 @@ import { renderCommunityAgentSkills } from "../shared/communityAgentSkills";
 import { buildCommunityAgentIdentityPrompt } from "../shared/communityAgentRuntimeBoundary";
 import { normalizeIdValue, toIsoString } from "./communityCore";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
-import { requireOperationalCommunityById } from "./communityLifecycleCore";
+import {
+  requireMatchingCommunityLifecycleGeneration,
+  requireOperationalCommunityById,
+} from "./communityLifecycleCore";
 import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
 import {
   beginCommunityInferenceFundingSession,
@@ -445,9 +448,20 @@ function mapRun(row: Record<string, any>): CommunityAgentRunView {
 export const resolveCommunityAgentRunContextInternal = internalQuery({
   args: {
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<CommunityAgentResolvedContext> => {
-    await requireOperationalCommunityById({ ctx, communityId: args.communityId });
+    const community = await requireOperationalCommunityById<Record<string, any>>({
+      ctx,
+      communityId: args.communityId,
+    });
+    if (args.communityLifecycleGeneration !== undefined) {
+      requireMatchingCommunityLifecycleGeneration({
+        community,
+        expectedGeneration: args.communityLifecycleGeneration,
+        errorCode: "community_lifecycle_generation_stale",
+      });
+    }
     const canonicalContext = await readCanonicalCommunityAgentContext(ctx, args.communityId);
     if (!canonicalContext) throw new Error("community_agent_runtime_community_not_found");
     const sponsorUserId = canonicalContext.ownerUserId;
@@ -506,6 +520,7 @@ export const summarizeCommunityDirectoryStateInternal = internalQuery({
 export const createCommunityAgentRunInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     triggerType: v.union(
       v.literal("manual_internal"),
       v.literal("heartbeat"),
@@ -524,6 +539,13 @@ export const createCommunityAgentRunInternal = internalMutation({
       ctx,
       communityId: args.communityId,
     });
+    if (args.communityLifecycleGeneration !== undefined) {
+      requireMatchingCommunityLifecycleGeneration({
+        community,
+        expectedGeneration: args.communityLifecycleGeneration,
+        errorCode: "community_lifecycle_generation_stale",
+      });
+    }
     if (normalizeIdValue(community.ownerId) !== normalizeIdValue(args.sponsorUserId)) {
       throw new Error("community_agent_runtime_sponsor_must_be_owner");
     }
@@ -734,6 +756,7 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
 export const runCommunityAgentLoopInternal = internalAction({
   args: {
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     triggerType: v.optional(
       v.union(
         v.literal("manual_internal"),
@@ -758,6 +781,7 @@ export const runCommunityAgentLoopInternal = internalAction({
     const triggerType = normalizeTriggerType(args.triggerType);
     const resolved = (await ctx.runQuery(internalRefs.communityAgentRuntime.resolveCommunityAgentRunContextInternal as any, {
       communityId: args.communityId,
+      communityLifecycleGeneration: args.communityLifecycleGeneration,
     })) as CommunityAgentResolvedContext;
     const funding = await resolveCommunityInferenceFundingForAction(ctx, args.communityId);
     if (funding.ok === false) {
@@ -815,6 +839,7 @@ export const runCommunityAgentLoopInternal = internalAction({
     }
     const createdRun = (await ctx.runMutation(internalRefs.communityAgentRuntime.createCommunityAgentRunInternal as any, {
       communityId: args.communityId,
+      communityLifecycleGeneration: args.communityLifecycleGeneration,
       triggerType,
       sponsorUserId: resolved.sponsorUserId,
       modelId,
@@ -1166,6 +1191,7 @@ export const runCommunityAgentLoopInternal = internalAction({
 export const runCommunityAgentCycleInternal = internalAction({
   args: {
     communityId: v.id("communities"),
+    communityLifecycleGeneration: v.optional(v.number()),
     triggerType: v.optional(
       v.union(
         v.literal("manual_internal"),
@@ -1197,6 +1223,7 @@ export const runCommunityAgentCycleInternal = internalAction({
     for (const roleKey of COMMUNITY_AGENT_CYCLE_ROLES) {
       const result = (await ctx.runAction(internalRefs.communityAgentRuntime.runCommunityAgentLoopInternal as any, {
         communityId: args.communityId,
+        communityLifecycleGeneration: args.communityLifecycleGeneration,
         triggerType: args.triggerType,
         heartbeatId: cycleId,
         modelId: args.modelId,

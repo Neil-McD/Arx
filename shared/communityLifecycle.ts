@@ -14,6 +14,8 @@ export type CommunityNewOperationsErrorCode =
 export const DEFAULT_COMMUNITY_LIFECYCLE_STATUS: CommunityLifecycleStatus =
   "active";
 export const DEFAULT_COMMUNITY_LIFECYCLE_GENERATION = 0;
+export const COMMUNITY_LIFECYCLE_GENERATION_STALE_ERROR =
+  "community_lifecycle_generation_stale" as const;
 export const PLATFORM_HOME_COMMUNITY_SLUG = "polynet";
 
 export type CommunityLifecycleLike = {
