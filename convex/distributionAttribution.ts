@@ -4,9 +4,12 @@ import { v } from 'convex/values';
 import {
   DISTRIBUTION_ATTRIBUTION_LEASE_MS,
   DISTRIBUTION_ATTRIBUTION_MAX_ATTEMPTS,
+  DISTRIBUTION_ATTRIBUTION_SOURCE_SYSTEM,
+  createDistributionAttributionSourceEventId,
   distributionAttributionDeliveryKey,
   distributionAttributionRetryDelayMs,
   normalizeDistributionAttributionId,
+  parseDistributionAttributionReceipt,
   shouldRetryDistributionAttribution,
 } from './distributionAttributionCore';
 
@@ -42,6 +45,7 @@ export async function enqueueNewPolynetUserIdentify(args: {
   const deliveryId = await args.ctx.db.insert('distributionAttributionDeliveries', {
     userId: args.userId,
     deliveryKey,
+    sourceEventId: createDistributionAttributionSourceEventId(),
     anonymousId,
     clickId,
     status: 'pending',
@@ -63,13 +67,24 @@ export const claimDeliveryInternal = internalMutation({
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.deliveryId);
     if (!row) return { status: 'missing' as const };
-    if (row.status === 'delivered' || row.status === 'failed') return { status: row.status };
+    if (row.status === 'delivered' || row.status === 'needs_attention') return { status: row.status };
     if (
       row.status === 'delivering' &&
       typeof row.leaseExpiresAt === 'number' &&
       row.leaseExpiresAt > args.nowMs
     ) {
       return { status: 'busy' as const };
+    }
+    if (row.attemptCount >= DISTRIBUTION_ATTRIBUTION_MAX_ATTEMPTS) {
+      await ctx.db.patch(row._id, {
+        status: 'needs_attention',
+        attemptToken: undefined,
+        leaseExpiresAt: undefined,
+        nextAttemptAt: undefined,
+        lastErrorCode: 'distribution_engineer_attempts_exhausted',
+        updatedAt: args.nowMs,
+      });
+      return { status: 'needs_attention' as const };
     }
     const attemptCount = row.attemptCount + 1;
     const attemptToken = crypto.randomUUID();
@@ -95,6 +110,7 @@ export const readDeliveryInputInternal = internalQuery({
       ? {
           email: user.email,
           emailVerified: typeof user.emailVerifiedAt === 'number',
+          sourceEventId: row.sourceEventId,
           anonymousId: row.anonymousId,
           clickId: row.clickId,
         }
@@ -107,14 +123,28 @@ export const completeDeliveryInternal = internalMutation({
     deliveryId: v.id('distributionAttributionDeliveries'),
     attemptToken: v.string(),
     responseStatus: v.number(),
+    sourceEventId: v.string(),
+    downstreamViewerId: v.string(),
+    downstreamLeadEventId: v.string(),
+    downstreamLeadCreated: v.boolean(),
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.deliveryId);
-    if (!row || row.attemptToken !== args.attemptToken) return { ok: false };
+    if (
+      !row ||
+      row.status !== 'delivering' ||
+      row.attemptToken !== args.attemptToken ||
+      row.sourceEventId !== args.sourceEventId
+    ) {
+      return { ok: false };
+    }
     await ctx.db.patch(row._id, {
       status: 'delivered',
       responseStatus: args.responseStatus,
+      downstreamViewerId: args.downstreamViewerId,
+      downstreamLeadEventId: args.downstreamLeadEventId,
+      downstreamLeadCreated: args.downstreamLeadCreated,
       deliveredAt: args.nowMs,
       attemptToken: undefined,
       leaseExpiresAt: undefined,
@@ -125,7 +155,7 @@ export const completeDeliveryInternal = internalMutation({
   },
 });
 
-export const failDeliveryInternal = internalMutation({
+export const recordDeliveryFailureInternal = internalMutation({
   args: {
     deliveryId: v.id('distributionAttributionDeliveries'),
     attemptToken: v.string(),
@@ -142,7 +172,7 @@ export const failDeliveryInternal = internalMutation({
       ? args.nowMs + distributionAttributionRetryDelayMs(row.attemptCount)
       : undefined;
     await ctx.db.patch(row._id, {
-      status: retry ? 'pending' : 'failed',
+      status: retry ? 'pending' : 'needs_attention',
       responseStatus: args.responseStatus,
       lastErrorCode: args.errorCode.slice(0, 120),
       nextAttemptAt,
@@ -158,6 +188,30 @@ export const failDeliveryInternal = internalMutation({
       );
     }
     return { ok: true, retry, nextAttemptAt: nextAttemptAt ?? null };
+  },
+});
+
+export const resumeDeliveryInternal = internalMutation({
+  args: { deliveryId: v.id('distributionAttributionDeliveries'), nowMs: v.number() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.deliveryId);
+    if (!row) return { status: 'missing' as const };
+    if (row.status !== 'needs_attention') return { status: row.status };
+    await ctx.db.patch(row._id, {
+      status: 'pending',
+      attemptCount: 0,
+      resumeCount: (row.resumeCount ?? 0) + 1,
+      attemptToken: undefined,
+      leaseExpiresAt: undefined,
+      nextAttemptAt: args.nowMs,
+      updatedAt: args.nowMs,
+    });
+    await ctx.scheduler.runAfter(
+      0,
+      (internal as any).distributionAttribution.deliverIdentifyInternal,
+      { deliveryId: row._id },
+    );
+    return { status: 'pending' as const };
   },
 });
 
@@ -209,7 +263,7 @@ export const deliverIdentifyInternal: any = internalAction({
       { deliveryId: args.deliveryId, attemptToken: claim.attemptToken },
     );
     if (!input || !input.emailVerified) {
-      return ctx.runMutation((internal as any).distributionAttribution.failDeliveryInternal, {
+      return ctx.runMutation((internal as any).distributionAttribution.recordDeliveryFailureInternal, {
         deliveryId: args.deliveryId,
         attemptToken: claim.attemptToken,
         errorCode: input ? 'verified_email_pending' : 'user_email_missing',
@@ -222,7 +276,7 @@ export const deliverIdentifyInternal: any = internalAction({
     const accountId = readEnv('DISTRIBUTION_ENGINEER_ACCOUNT_ID');
     const credential = readEnv('DISTRIBUTION_ENGINEER_FUNNEL_WEBHOOK_KEY');
     if (!endpoint || !accountId || !credential) {
-      return ctx.runMutation((internal as any).distributionAttribution.failDeliveryInternal, {
+      return ctx.runMutation((internal as any).distributionAttribution.recordDeliveryFailureInternal, {
         deliveryId: args.deliveryId,
         attemptToken: claim.attemptToken,
         errorCode: 'distribution_engineer_unconfigured',
@@ -245,6 +299,8 @@ export const deliverIdentifyInternal: any = internalAction({
         },
         body: JSON.stringify({
           account_id: accountId,
+          source_system: DISTRIBUTION_ATTRIBUTION_SOURCE_SYSTEM,
+          source_event_id: input.sourceEventId,
           email: input.email,
           ...(input.anonymousId ? { de_aid: input.anonymousId } : null),
           ...(input.clickId ? { de_cid: input.clickId } : null),
@@ -252,14 +308,48 @@ export const deliverIdentifyInternal: any = internalAction({
       });
       responseStatus = response.status;
       if (response.ok) {
+        let payload: unknown;
+        try {
+          payload = await response.json();
+        } catch {
+          return ctx.runMutation(
+            (internal as any).distributionAttribution.recordDeliveryFailureInternal,
+            {
+              deliveryId: args.deliveryId,
+              attemptToken: claim.attemptToken,
+              responseStatus: response.status,
+              errorCode: 'distribution_engineer_receipt_invalid_json',
+              retryable: false,
+              nowMs: Date.now(),
+            },
+          );
+        }
+        const parsed = parseDistributionAttributionReceipt(payload, input.sourceEventId);
+        if (!parsed.ok) {
+          return ctx.runMutation(
+            (internal as any).distributionAttribution.recordDeliveryFailureInternal,
+            {
+              deliveryId: args.deliveryId,
+              attemptToken: claim.attemptToken,
+              responseStatus: response.status,
+              errorCode: parsed.errorCode,
+              retryable: false,
+              nowMs: Date.now(),
+            },
+          );
+        }
         return ctx.runMutation((internal as any).distributionAttribution.completeDeliveryInternal, {
           deliveryId: args.deliveryId,
           attemptToken: claim.attemptToken,
           responseStatus: response.status,
+          sourceEventId: parsed.receipt.sourceEventId,
+          downstreamViewerId: parsed.receipt.viewerId,
+          downstreamLeadEventId: parsed.receipt.leadEventId,
+          downstreamLeadCreated: parsed.receipt.leadCreated,
           nowMs: Date.now(),
         });
       }
-      return ctx.runMutation((internal as any).distributionAttribution.failDeliveryInternal, {
+      return ctx.runMutation((internal as any).distributionAttribution.recordDeliveryFailureInternal, {
         deliveryId: args.deliveryId,
         attemptToken: claim.attemptToken,
         responseStatus: response.status,
@@ -272,12 +362,15 @@ export const deliverIdentifyInternal: any = internalAction({
         deliveryId: String(args.deliveryId),
         error: safeError(error),
       });
-      return ctx.runMutation((internal as any).distributionAttribution.failDeliveryInternal, {
+      const errorCode = safeError(error) || 'distribution_engineer_request_failed';
+      return ctx.runMutation((internal as any).distributionAttribution.recordDeliveryFailureInternal, {
         deliveryId: args.deliveryId,
         attemptToken: claim.attemptToken,
         ...(responseStatus === null ? null : { responseStatus }),
-        errorCode: safeError(error) || 'distribution_engineer_request_failed',
-        retryable: shouldRetryDistributionAttribution(responseStatus),
+        errorCode,
+        retryable:
+          errorCode !== 'distribution_engineer_endpoint_unsafe' &&
+          shouldRetryDistributionAttribution(responseStatus),
         nowMs: Date.now(),
       });
     }
