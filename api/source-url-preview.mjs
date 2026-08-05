@@ -291,7 +291,6 @@ function extractFirstParagraphText(html) {
 function openGraphFallback(openGraph, sourceUrl) {
   const provider = providerRuleForSourceUrl(sourceUrl)?.provider ?? null;
   const suppressDescription = provider === "loom";
-  const suppressImage = provider === "loom" || provider === "x";
   return {
     preview_kind: "link",
     preview_provider: null,
@@ -303,8 +302,8 @@ function openGraphFallback(openGraph, sourceUrl) {
     preview_author_avatar: null,
     preview_title: normalizedText(openGraph?.og_title, 300),
     preview_description: suppressDescription ? null : normalizedText(openGraph?.og_description, 600),
-    preview_image: suppressImage ? null : safeHttpUrl(openGraph?.og_image),
-    preview_image_alt: suppressImage ? null : normalizedText(openGraph?.og_image_alt, 300),
+    preview_image: null,
+    preview_image_alt: null,
     preview_video_url: null,
     preview_resolver_version: INTERACTION_PREVIEW_RESOLVER_VERSION,
   };
@@ -369,7 +368,8 @@ export function normalizeInteractionOEmbedPreview({ sourceUrl, openGraph, oEmbed
       preview_author_name: normalizedText(oEmbed.author_name, 160),
       preview_title: title,
       preview_description: null,
-      preview_image: safeHttpUrl(oEmbed.thumbnail_url) ?? fallback.preview_image,
+      preview_image: safeHttpUrl(oEmbed.thumbnail_url) ?? safeHttpUrl(openGraph?.og_image),
+      preview_image_alt: normalizedText(openGraph?.og_image_alt, 300),
       preview_video_url: videoUrl,
     };
   }

@@ -310,8 +310,8 @@ assert.match(
 );
 assert.match(
   linkPreview,
-  /const href = approvedHttpsUrl[\s\S]*const mediaUrl = approvedHttpsUrl/,
-  "the browser should fail closed on corrupted legacy source or media URLs",
+  /const href = approvedHttpsUrl[\s\S]*const videoUrl = props\.embed\.video_url \? approvedVideoUrl[\s\S]*props\.embed\.preview_kind === "video"[\s\S]*const thumbnailUrl = approvedHttpsUrl\(props\.embed\.image_url\)/,
+  "the browser should validate thumbnail URLs only inside the approved video path",
 );
 assert.match(
   linkPreview,

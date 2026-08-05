@@ -39,6 +39,10 @@ const socialPreviewComponent = previewComponent.slice(
   previewComponent.indexOf("function SocialPostLinkPreview"),
   previewComponent.indexOf("function GenericLinkPreview"),
 );
+const genericPreviewComponent = previewComponent.slice(
+  previewComponent.indexOf("function GenericLinkPreview"),
+  previewComponent.indexOf("export function CommunityInteractionLinkPreview"),
+);
 
 const loomSourceUrl = "https://www.loom.com/share/29f6556e6f6849609b0225fbbc6224ff";
 assert.deepEqual(
@@ -344,12 +348,12 @@ assert.deepEqual(
     preview_author_avatar: null,
     preview_title: "Article title",
     preview_description: "Article description",
-    preview_image: "https://news.example.com/hero.jpg",
-    preview_image_alt: "Article hero",
+    preview_image: null,
+    preview_image_alt: null,
     preview_video_url: null,
     preview_resolver_version: 4,
   },
-  "ordinary pages should retain a stable Open Graph fallback",
+  "ordinary pages should keep compact metadata without persisting ephemeral Open Graph images",
 );
 
 const readyXEmbed = {
@@ -404,8 +408,13 @@ assert.deepEqual(
 
 assert.match(
   previewCss,
-  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-compact-height:\s*64px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*\.community-interaction-embed-summary,[\s\S]*\.community-interaction-embed\.is-link\.has-media[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);[\s\S]*\.community-interaction-embed\.is-compact-link\s*\{[\s\S]*min-height:\s*var\(--community-interaction-embed-compact-height\);[\s\S]*grid-template-columns:\s*24px minmax\(0,\s*1fr\);/,
-  "video and media previews should retain their rich row while no-media website cards use a compact favicon row",
+  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*--community-interaction-embed-compact-height:\s*64px;[\s\S]*--community-interaction-embed-media-width:\s*140px;[\s\S]*\.community-interaction-embed-summary\s*\{[\s\S]*grid-template-columns:\s*minmax\(0,\s*1fr\) var\(--community-interaction-embed-media-width\);[\s\S]*\.community-interaction-embed\.is-compact-link\s*\{[\s\S]*min-height:\s*var\(--community-interaction-embed-compact-height\);[\s\S]*grid-template-columns:\s*24px minmax\(0,\s*1fr\);/,
+  "video previews should retain their rich row while every generic website card uses a compact favicon row",
+);
+assert.doesNotMatch(
+  previewCss,
+  /\.community-interaction-embed\.is-link\.has-media/,
+  "generic website media styling should remain deleted",
 );
 assert.match(
   previewComponent,
@@ -414,8 +423,23 @@ assert.match(
 );
 assert.match(
   previewComponent,
-  /function usePreviewMediaFallback[\s\S]*failedMediaUrl[\s\S]*usableMediaUrl[\s\S]*onMediaError[\s\S]*function VideoLinkPreview[\s\S]*onError=\{onMediaError\}[\s\S]*function GenericLinkPreview[\s\S]*if \(!usableMediaUrl\)[\s\S]*is-compact-link[\s\S]*onError=\{onMediaError\}/,
-  "failed rich-preview images should fall back without leaving a broken reserved media slot",
+  /function useVideoThumbnailFallback[\s\S]*failedThumbnailUrl[\s\S]*usableThumbnailUrl[\s\S]*onThumbnailError[\s\S]*function VideoLinkPreview[\s\S]*onError=\{onThumbnailError\}/,
+  "thumbnail failure state should be scoped exclusively to explicit video previews",
+);
+assert.doesNotMatch(
+  genericPreviewComponent,
+  /has-media|community-interaction-embed-media|mediaUrl|usableMediaUrl|onMediaError|onError=/,
+  "generic website cards should have no asynchronous media-density branch",
+);
+assert.match(
+  interactionFunctions,
+  /image_url:\s*row\.previewKind === "video" \? row\.imageUrl \?\? null : null,[\s\S]*image_alt:\s*row\.previewKind === "video" \? row\.imageAlt \?\? null : null,[\s\S]*video_url:\s*row\.previewKind === "video" \? row\.videoUrl \?\? null : null,/,
+  "cloud projection should suppress stale generic media metadata from existing rows",
+);
+assert.match(
+  interactionFunctions,
+  /const resolvedPreviewKind = args\.previewKind \?\? "link";[\s\S]*imageUrl:\s*resolvedPreviewKind === "video"[\s\S]*imageAlt:\s*resolvedPreviewKind === "video"[\s\S]*imageUrl:[\s\S]*previewKind === "video"[\s\S]*sanitizeEmbedImageUrl/,
+  "cloud enrichment should retain image metadata only for explicit video previews",
 );
 assert.match(
   previewCss,

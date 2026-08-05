@@ -42,15 +42,16 @@ function approvedHttpsUrl(raw: string | null): string | null {
   }
 }
 
-function usePreviewMediaFallback(mediaUrl: string | null): {
-  usableMediaUrl: string | null;
-  onMediaError: () => void;
+function useVideoThumbnailFallback(thumbnailUrl: string | null): {
+  usableThumbnailUrl: string | null;
+  onThumbnailError: () => void;
 } {
-  const [failedMediaUrl, setFailedMediaUrl] = useState<string | null>(null);
+  const [failedThumbnailUrl, setFailedThumbnailUrl] = useState<string | null>(null);
   return {
-    usableMediaUrl: mediaUrl && mediaUrl !== failedMediaUrl ? mediaUrl : null,
-    onMediaError: () => {
-      if (mediaUrl) setFailedMediaUrl(mediaUrl);
+    usableThumbnailUrl:
+      thumbnailUrl && thumbnailUrl !== failedThumbnailUrl ? thumbnailUrl : null,
+    onThumbnailError: () => {
+      if (thumbnailUrl) setFailedThumbnailUrl(thumbnailUrl);
     },
   };
 }
@@ -173,11 +174,13 @@ function VideoPreviewMetadata(props: { href: string; provider: string; title: st
 function VideoLinkPreview(props: {
   embed: CommunityInteractionEmbed;
   href: string;
-  mediaUrl: string | null;
+  thumbnailUrl: string | null;
   videoUrl: string;
 }) {
   const [active, setActive] = useState(false);
-  const { usableMediaUrl, onMediaError } = usePreviewMediaFallback(props.mediaUrl);
+  const { usableThumbnailUrl, onThumbnailError } = useVideoThumbnailFallback(
+    props.thumbnailUrl,
+  );
   const title = props.embed.title || "Shared video";
   const provider = providerLabel(props.embed);
   return (
@@ -210,14 +213,14 @@ function VideoLinkPreview(props: {
             aria-label={`Play ${title}`}
             onClick={() => setActive(true)}
           >
-            {usableMediaUrl ? (
+            {usableThumbnailUrl ? (
               <img
                 className="community-interaction-embed-media"
-                src={usableMediaUrl}
+                src={usableThumbnailUrl}
                 alt=""
                 loading="lazy"
                 referrerPolicy="no-referrer"
-                onError={onMediaError}
+                onError={onThumbnailError}
               />
             ) : (
               <span className="community-interaction-embed-media is-empty" aria-hidden="true" />
@@ -306,69 +309,37 @@ function GenericLinkFavicon(props: { href: string }) {
   );
 }
 
-function GenericLinkPreview(props: {
-  embed: CommunityInteractionEmbed;
-  href: string;
-  mediaUrl: string | null;
-}) {
+function GenericLinkPreview(props: { embed: CommunityInteractionEmbed; href: string }) {
   const provider = providerLabel(props.embed);
   const title = props.embed.title || provider || "Open link";
-  const { usableMediaUrl, onMediaError } = usePreviewMediaFallback(props.mediaUrl);
-  if (!usableMediaUrl) {
-    const description = props.embed.description?.trim() || null;
-    const showProviderInMeta = Boolean(provider && provider !== title);
-    return (
-      <a
-        className="community-interaction-embed is-link is-compact-link"
-        data-preview-kind="link"
-        data-preview-density="compact"
-        href={props.href}
-        target="_blank"
-        rel="noreferrer noopener"
-        aria-label={`${title} (opens in a new tab)`}
-        onClick={(event) => event.stopPropagation()}
-      >
-        <GenericLinkFavicon key={props.href} href={props.href} />
-        <span className="community-interaction-embed-compact-copy">
-          <span className="community-interaction-embed-title">{title}</span>
-          {showProviderInMeta || description ? (
-            <span className="community-interaction-embed-compact-meta">
-              {showProviderInMeta ? (
-                <span className="community-interaction-embed-provider">{provider}</span>
-              ) : null}
-              {showProviderInMeta && description ? <span aria-hidden="true">·</span> : null}
-              {description ? <span className="community-interaction-embed-desc">{description}</span> : null}
-            </span>
-          ) : null}
-        </span>
-      </a>
-    );
-  }
+  const description = props.embed.description?.trim() || null;
+  const showProviderInMeta = Boolean(provider && provider !== title);
   return (
     <a
-      className="community-interaction-embed is-link has-media"
+      className="community-interaction-embed is-link is-compact-link"
       data-preview-kind="link"
+      data-preview-density="compact"
       href={props.href}
       target="_blank"
       rel="noreferrer noopener"
       aria-label={`${title} (opens in a new tab)`}
       onClick={(event) => event.stopPropagation()}
     >
-      <div className="community-interaction-embed-text">
-        {provider ? <span className="community-interaction-embed-provider">{provider}</span> : null}
-        {props.embed.title ? <span className="community-interaction-embed-title">{props.embed.title}</span> : null}
-        {props.embed.description ? (
-          <span className="community-interaction-embed-desc">{props.embed.description}</span>
+      <GenericLinkFavicon key={props.href} href={props.href} />
+      <span className="community-interaction-embed-compact-copy">
+        <span className="community-interaction-embed-title">{title}</span>
+        {showProviderInMeta || description ? (
+          <span className="community-interaction-embed-compact-meta">
+            {showProviderInMeta ? (
+              <span className="community-interaction-embed-provider">{provider}</span>
+            ) : null}
+            {showProviderInMeta && description ? <span aria-hidden="true">·</span> : null}
+            {description ? (
+              <span className="community-interaction-embed-desc">{description}</span>
+            ) : null}
+          </span>
         ) : null}
-      </div>
-      <img
-        className="community-interaction-embed-media"
-        src={usableMediaUrl}
-        alt={props.embed.image_alt || ""}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-        onError={onMediaError}
-      />
+      </span>
     </a>
   );
 }
@@ -376,10 +347,17 @@ function GenericLinkPreview(props: {
 export function CommunityInteractionLinkPreview(props: { embed: CommunityInteractionEmbed }) {
   const href = approvedHttpsUrl(props.embed.source_url || props.embed.normalized_source_url);
   if (!href) return null;
-  const mediaUrl = approvedHttpsUrl(props.embed.image_url);
   const videoUrl = props.embed.video_url ? approvedVideoUrl(props.embed.video_url, href) : null;
   if (props.embed.preview_kind === "video" && videoUrl) {
-    return <VideoLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} videoUrl={videoUrl} />;
+    const thumbnailUrl = approvedHttpsUrl(props.embed.image_url);
+    return (
+      <VideoLinkPreview
+        embed={props.embed}
+        href={href}
+        thumbnailUrl={thumbnailUrl}
+        videoUrl={videoUrl}
+      />
+    );
   }
   const xIdentity = interactionXStatusIdentity(href);
   if (
@@ -392,5 +370,5 @@ export function CommunityInteractionLinkPreview(props: { embed: CommunityInterac
   ) {
     return <SocialPostLinkPreview embed={props.embed} href={href} />;
   }
-  return <GenericLinkPreview embed={props.embed} href={href} mediaUrl={mediaUrl} />;
+  return <GenericLinkPreview embed={props.embed} href={href} />;
 }

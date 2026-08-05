@@ -524,7 +524,9 @@ Rules:
 - oEmbed contributes normalized fields only (`video`, `social_post`, or `link` plus bounded author, title, body, provenance, media, and approved player URL); raw provider HTML and scripts are never persisted or rendered
 - content-specific oEmbed fields win over platform-level Open Graph marketing fields; unsupported providers and failed or malformed oEmbed responses fall back to the existing Open Graph link card
 - known Loom and X marketing descriptions or artwork are suppressed when content-specific resolution is unavailable, leaving a compact non-promotional fallback instead of recreating the original ad-like card
-- returned preview image URLs must pass the same shared community source URL policy or be omitted
+- only validated `video` previews may retain a preview image URL; generic link and
+  social-post projections omit image metadata even when upstream Open Graph data
+  contains it
 - an X-styled `social_post` requires the broker, cloud, and browser to independently validate an exact HTTPS `x.com` or `twitter.com/{handle}/status/{numericId}` source and the same provider post id; any mismatch degrades to the generic link card
 - X social metadata is a bounded snapshot containing only author identity, post text, post id, publication time, and optional `reply` or `quote` context; attached media, engagement metrics, action chrome, provider HTML, and provider JavaScript are excluded
 - X post text and identity strip direction-control and C0 control characters at broker and cloud boundaries while preserving ordinary RTL text; the browser renders them with automatic direction and plaintext Unicode isolation
@@ -544,7 +546,11 @@ Rules:
 - exact consecutive standalone duplicates collapse at presentation time without mutating stored message text
 - tracking-only URL differences are ignored for exact standalone replacement, while content-bearing parameters such as video start time remain significant
 - approved video players are click-to-activate, sandboxed, and retain a direct provider link; the browser revalidates stored source, media, and player URLs before rendering; preview images send no referrer; social previews render normalized identity, provenance, and text without loading attached media or third-party widget JavaScript
-- generic link previews without media render as compact website rows; their decorative favicon may try only the validated source origin and one bounded parent-domain fallback, sends no referrer, and degrades to a neutral first-party icon without changing the visible hostname or link target
+- generic link previews always render as compact website rows from first paint and
+  never select their density from third-party image load state; their decorative
+  favicon may try only the validated source origin and one bounded parent-domain
+  fallback, sends no referrer, and degrades to a neutral first-party icon without
+  changing the visible hostname or link target
 - preview refresh batches clamp operator input to at most 100 rows, query the provider/status/next-refresh index, lease rows before scheduling, and run only internal work
 - default dark and Polynet dark share one semantic chat-link treatment while their surface tokens continue to theme embed cards
 

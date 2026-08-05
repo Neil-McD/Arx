@@ -802,9 +802,9 @@ function mapEmbed(row: EmbedRow) {
     post_context: row.postContext ?? null,
     title: row.title ?? null,
     description: row.description ?? null,
-    image_url: row.imageUrl ?? null,
-    image_alt: row.imageAlt ?? null,
-    video_url: row.videoUrl ?? null,
+    image_url: row.previewKind === "video" ? row.imageUrl ?? null : null,
+    image_alt: row.previewKind === "video" ? row.imageAlt ?? null : null,
+    video_url: row.previewKind === "video" ? row.videoUrl ?? null : null,
     resolver_version: typeof row.resolverVersion === "number" ? row.resolverVersion : null,
     fetched_at: typeof row.fetchedAt === "number" ? toIsoString(row.fetchedAt) : null,
     error: row.error ?? null,
@@ -3517,9 +3517,10 @@ export const applyInteractionEmbedEnrichment = internalMutation({
       });
       return;
     }
+    const resolvedPreviewKind = args.previewKind ?? "link";
     await ctx.db.patch(args.embedId as any, {
       status: "ready",
-      previewKind: args.previewKind ?? "link",
+      previewKind: resolvedPreviewKind,
       authorName: args.authorName ?? undefined,
       authorHandle: args.authorHandle ?? undefined,
       authorAvatarUrl: args.authorAvatarUrl ?? undefined,
@@ -3529,9 +3530,9 @@ export const applyInteractionEmbedEnrichment = internalMutation({
       postContext: args.postContext ?? undefined,
       title: args.title ?? undefined,
       description: args.description ?? undefined,
-      imageUrl: args.imageUrl ?? undefined,
-      imageAlt: args.imageAlt ?? undefined,
-      videoUrl: args.videoUrl ?? undefined,
+      imageUrl: resolvedPreviewKind === "video" ? args.imageUrl ?? undefined : undefined,
+      imageAlt: resolvedPreviewKind === "video" ? args.imageAlt ?? undefined : undefined,
+      videoUrl: resolvedPreviewKind === "video" ? args.videoUrl ?? undefined : undefined,
       provider: args.provider ?? undefined,
       resolverVersion: args.resolverVersion ?? undefined,
       error: undefined,
@@ -3635,8 +3636,17 @@ async function fetchEmbedPreview(
     postContext,
     title: boundedEmbedString(payload.preview_title ?? payload.og_title ?? payload.title, MAX_EMBED_TITLE_CHARS),
     description: previewKind === "social_post" ? socialDescription : genericDescription,
-    imageUrl: previewKind === "social_post" ? null : sanitizeEmbedImageUrl(payload.preview_image ?? payload.og_image),
-    imageAlt: boundedEmbedString(payload.preview_image_alt ?? payload.og_image_alt, MAX_EMBED_IMAGE_ALT_CHARS),
+    imageUrl:
+      previewKind === "video"
+        ? sanitizeEmbedImageUrl(payload.preview_image ?? payload.og_image)
+        : null,
+    imageAlt:
+      previewKind === "video"
+        ? boundedEmbedString(
+            payload.preview_image_alt ?? payload.og_image_alt,
+            MAX_EMBED_IMAGE_ALT_CHARS,
+          )
+        : null,
     videoUrl: previewKind === "video" ? videoUrl : null,
     resolverVersion:
       Number(payload.preview_resolver_version) === INTERACTION_EMBED_RESOLVER_VERSION
