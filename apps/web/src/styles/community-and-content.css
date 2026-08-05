@@ -3519,7 +3519,7 @@
   position: relative;
   flex: 0 0 auto;
   min-width: 0;
-  max-block-size: min(26dvh, 264px);
+  max-block-size: min(24dvh, 252px);
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
@@ -3602,8 +3602,11 @@
   align-items: center;
   gap: 4px;
   padding: 4px 8px;
-  border: 0;
-  background: inherit;
+  border: 1px solid transparent;
+  border-radius: 10px;
+  background: var(--web-floating-chrome-surface);
+  backdrop-filter: blur(16px) saturate(130%);
+  -webkit-backdrop-filter: blur(16px) saturate(130%);
   color: var(--accent);
   font: inherit;
   font-size: 12px;
@@ -3656,7 +3659,7 @@
 
 @media (max-width: 700px) {
   .community-channel-pinned-root {
-    max-block-size: min(24dvh, 208px);
+    max-block-size: min(22dvh, 196px);
   }
 }
 
