@@ -3,10 +3,10 @@
 ## Scope
 
 This contract introduces the compatibility, authority, and durable-operation
-foundation for community archival. It does not expose a public archive or
-restore command. It contains the internal, leased archive executor and its
-provider billing effects, plus read-only inactive-community lifecycle UX, but
-no builder-facing lifecycle mutation. It does
+foundation for community archival. It exposes one authenticated owner archive
+command but no restore command. It contains the internal, leased archive
+executor and its provider billing effects, plus inactive-community lifecycle UX.
+It does
 contain synchronous entry, acquisition, and active-shell projections so
 lifecycle state cannot be bypassed by cached clients or direct function calls,
 and it contains background external-effect admission so archived communities
@@ -84,14 +84,16 @@ Owner rediscovery is a separate, bounded inactive-community inventory in
 account settings. It reads only the two explicit lifecycle index lanes and does
 not put inactive communities back into the active rail, public discovery, or
 profile community strips. `/c/:slug/settings/danger` is the canonical owner
-lifecycle location. In this foundation it is read-only and carries no archive,
-restore, or delete mutation.
+lifecycle location. It exposes the single owner-authorized archive command and
+carries no restore or delete mutation. Route normalization waits for resolved
+access so an owner deep-link or refresh cannot be downgraded during hydration.
 
 ## Archive operation kernel
 
 An archive request is represented by one durable
 `communityLifecycleOperations` row for a community lifecycle generation. The
-internal begin transition is atomic: it verifies owner authority, protects the
+begin transition is atomic: the public command derives authenticated identity
+and time server-side, verifies owner authority, protects the
 platform-home community, increments the lifecycle generation, changes the
 community from `active` to `archiving`, and inserts the operation receipt in
 the same transaction. A retry against the resulting `archiving` generation
@@ -136,7 +138,7 @@ lookup in the exact persisted account scope. Remove and ban now use this
 primitive before local membership revocation, deduplicate exact provider
 identities, and fail closed for incomplete Stripe identity or unsupported
 active external subscriptions. The internal archive executor uses this
-primitive; it still does not authorize a public archive command.
+primitive; only the lifecycle operation command authorizes archival.
 
 Checkout creation and completion use the same lifecycle epoch boundary. If an
 archive begins after Stripe checkout creation, the provider checkout identity
@@ -181,6 +183,5 @@ explicit `active` lane through the lifecycle index.
 
 ## Deferred
 
-- Builder-authorized archive action and confirmation UI.
-- Public archive and restore authorization.
+- Public restore authorization.
 - Restore execution and subscription recreation semantics.

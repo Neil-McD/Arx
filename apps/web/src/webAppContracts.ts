@@ -4,6 +4,7 @@ import type {
 } from "../../../shared/communityTypes";
 import type { NavSnapshotBase } from "../../../shared/navSnapshot";
 import type { CommunityVisualIdentity } from "../../../shared/communityVisualIdentity";
+import type { CommunityLifecycleStatus } from "../../../shared/communityLifecycle";
 
 export type WebCommunityRecord = {
   id: string;
@@ -23,6 +24,8 @@ export type WebCommunityRecord = {
   banner_zoom?: number | null;
   visibility: string;
   entry_policy?: "open" | "approval" | "paid_subscription" | null;
+  lifecycle_status?: CommunityLifecycleStatus;
+  lifecycle_generation?: number;
   owner_id: string;
   created_at: string;
   updated_at: string;

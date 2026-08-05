@@ -1,4 +1,5 @@
 import type {
+  CommunityArchiveCommandResult,
   CommunityLifecycleManagementRow,
   InactiveCommunityLifecyclePage,
 } from "./communityLifecycleManagement";
@@ -51,4 +52,19 @@ export async function listCloudMyInactiveCommunityLifecycleRows<SessionT>(
         : null,
     is_done: payload.is_done === true,
   };
+}
+
+export async function requestCloudMyCommunityArchive<SessionT>(params: {
+  session: SessionT;
+  communityId: string;
+  expectedGeneration: number;
+}): Promise<CommunityArchiveCommandResult> {
+  const { client } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation(
+    "communityLifecycleOperations:requestMyCommunityArchive" as any,
+    {
+      communityId: params.communityId as any,
+      expectedGeneration: params.expectedGeneration,
+    },
+  ) as CommunityArchiveCommandResult;
 }

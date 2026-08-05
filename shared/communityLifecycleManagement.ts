@@ -45,6 +45,16 @@ export type InactiveCommunityLifecyclePage = {
   is_done: boolean;
 };
 
+export type CommunityArchiveCommandResult = {
+  ok: true;
+  idempotent: boolean;
+  community_id: string;
+  operation_id: string;
+  operation_state: CommunityArchiveOperationState;
+  lifecycle_status: "archiving";
+  lifecycle_generation: number;
+};
+
 export function communityLifecycleIsInactive(
   status: CommunityLifecycleStatus | null | undefined,
 ): status is "archiving" | "archived" {

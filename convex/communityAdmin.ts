@@ -59,6 +59,8 @@ import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import {
   communityIsOperational,
   communityAcceptsNewOperations,
+  normalizeCommunityLifecycleGeneration,
+  normalizeCommunityLifecycleStatus,
   requireActiveCommunity,
 } from "./communityLifecycleCore";
 
@@ -875,6 +877,12 @@ export const listCommunityMemberships = query({
         id: String(community._id),
         slug: community.slug,
         name: community.name,
+        lifecycle_status: normalizeCommunityLifecycleStatus(
+          community.lifecycleStatus,
+        ),
+        lifecycle_generation: normalizeCommunityLifecycleGeneration(
+          community.lifecycleGeneration,
+        ),
         owner_id:
           (await resolvePublicUserId(ctx, community.ownerId, userIdCache)) ??
           String(community.ownerId),

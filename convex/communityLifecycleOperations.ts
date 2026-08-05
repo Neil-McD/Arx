@@ -1,7 +1,7 @@
 import { v } from "convex/values";
 import { paginationOptsValidator } from "convex/server";
 
-import { internalMutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 import {
   normalizeCommunityLifecycleGeneration,
@@ -300,61 +300,62 @@ export const listMyInactiveCommunityLifecycleRows = query({
   },
 });
 
-export const beginCommunityArchiveOperationInternal = internalMutation({
-  args: {
-    actorUserId: v.id("users"),
-    communityId: v.id("communities"),
-    expectedGeneration: v.number(),
-    nowMs: v.number(),
-  },
-  handler: async (ctx, args) => {
-    if (!Number.isSafeInteger(args.nowMs) || args.nowMs < 0) {
-      throw new Error("community_archive_timestamp_invalid");
-    }
-    const { community } = await requireCommunityOwnerAnyLifecycle({
-      ctx,
-      communityId: args.communityId,
-      userId: args.actorUserId,
-    });
-    const plan = resolveCommunityArchiveBeginPlan({
-      community,
-      expectedGeneration: args.expectedGeneration,
-    });
+export async function beginCommunityArchiveOperationCore(args: {
+  ctx: any;
+  actorUserId: any;
+  communityId: any;
+  expectedGeneration: number;
+  nowMs: number;
+}) {
+  if (!Number.isSafeInteger(args.nowMs) || args.nowMs < 0) {
+    throw new Error("community_archive_timestamp_invalid");
+  }
+  const { community } = await requireCommunityOwnerAnyLifecycle({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.actorUserId,
+  });
+  const plan = resolveCommunityArchiveBeginPlan({
+    community,
+    expectedGeneration: args.expectedGeneration,
+  });
 
-    if (plan.mode === "reuse") {
-      const existing = await getArchiveOperation({
-        ctx,
-        communityId: args.communityId,
-        lifecycleGeneration: plan.lifecycleGeneration,
-      });
-      if (!existing) {
-        throw new Error("community_archive_operation_missing");
-      }
-      if (String(existing.requestedByUserId) !== String(args.actorUserId)) {
-        throw new Error("community_archive_operation_owner_mismatch");
-      }
-      return mapArchiveOperationResult({
-        communityId: args.communityId,
-        operation: existing,
-        idempotent: true,
-      });
-    }
-
-    await assertCommunityArchiveBillingPreflight({
-      ctx,
-      communityId: args.communityId,
-    });
-
-    const conflict = await getArchiveOperation({
-      ctx,
+  if (plan.mode === "reuse") {
+    const existing = await getArchiveOperation({
+      ctx: args.ctx,
       communityId: args.communityId,
       lifecycleGeneration: plan.lifecycleGeneration,
     });
-    if (conflict) {
-      throw new Error("community_archive_operation_conflict");
+    if (!existing) {
+      throw new Error("community_archive_operation_missing");
     }
+    if (String(existing.requestedByUserId) !== String(args.actorUserId)) {
+      throw new Error("community_archive_operation_owner_mismatch");
+    }
+    return mapArchiveOperationResult({
+      communityId: args.communityId,
+      operation: existing,
+      idempotent: true,
+    });
+  }
 
-    const operationId = await ctx.db.insert("communityLifecycleOperations", {
+  await assertCommunityArchiveBillingPreflight({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+
+  const conflict = await getArchiveOperation({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    lifecycleGeneration: plan.lifecycleGeneration,
+  });
+  if (conflict) {
+    throw new Error("community_archive_operation_conflict");
+  }
+
+  const operationId = await args.ctx.db.insert(
+    "communityLifecycleOperations",
+    {
       communityId: args.communityId,
       lifecycleGeneration: plan.lifecycleGeneration,
       kind: "archive",
@@ -364,23 +365,40 @@ export const beginCommunityArchiveOperationInternal = internalMutation({
       nextAttemptAt: args.nowMs,
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
-    });
-    await ctx.db.patch(args.communityId, {
-      lifecycleStatus: "archiving",
-      lifecycleGeneration: plan.lifecycleGeneration,
-      archiveRequestedAt: args.nowMs,
-      archiveEffectiveAt: undefined,
-      archivedAt: undefined,
-      archiveRequestedByUserId: args.actorUserId,
-      restoredAt: undefined,
-      updatedAt: args.nowMs,
-    });
-    const operation = await ctx.db.get(operationId);
-    if (!operation) throw new Error("community_archive_operation_create_failed");
-    return mapArchiveOperationResult({
+    },
+  );
+  await args.ctx.db.patch(args.communityId, {
+    lifecycleStatus: "archiving",
+    lifecycleGeneration: plan.lifecycleGeneration,
+    archiveRequestedAt: args.nowMs,
+    archiveEffectiveAt: undefined,
+    archivedAt: undefined,
+    archiveRequestedByUserId: args.actorUserId,
+    restoredAt: undefined,
+    updatedAt: args.nowMs,
+  });
+  const operation = await args.ctx.db.get(operationId);
+  if (!operation) throw new Error("community_archive_operation_create_failed");
+  return mapArchiveOperationResult({
+    communityId: args.communityId,
+    operation,
+    idempotent: false,
+  });
+}
+
+export const requestMyCommunityArchive = mutation({
+  args: {
+    communityId: v.id("communities"),
+    expectedGeneration: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const actorUserId = await resolveUserIdForAuthenticatedRequest({ ctx });
+    return await beginCommunityArchiveOperationCore({
+      ctx,
+      actorUserId,
       communityId: args.communityId,
-      operation,
-      idempotent: false,
+      expectedGeneration: args.expectedGeneration,
+      nowMs: Date.now(),
     });
   },
 });

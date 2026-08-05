@@ -54,6 +54,12 @@ type WebCommunitySettingsSectionProps = {
     country?: string | null;
   }) => Promise<void> | void;
   isStartingStripeConnectOnboarding: boolean;
+  lifecycle: {
+    isRequesting: boolean;
+    error: string | null;
+    clearError: () => void;
+    requestArchive: () => Promise<unknown>;
+  };
   state: {
     isSettingsBannerDragOver: boolean;
     isProcessingCommunitySettingsBanner: boolean;
@@ -133,19 +139,98 @@ const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
 
 function CommunityLifecycleSettingsSection({
   activeCommunity,
+  lifecycle,
 }: {
   activeCommunity: ActiveCommunity;
+  lifecycle: WebCommunitySettingsSectionProps["lifecycle"];
 }) {
+  const [isConfirmingArchive, setIsConfirmingArchive] = useState(false);
+  const [confirmationName, setConfirmationName] = useState("");
+  const canConfirm =
+    confirmationName === activeCommunity.name &&
+    !lifecycle.isRequesting;
+
+  useEffect(() => {
+    setIsConfirmingArchive(false);
+    setConfirmationName("");
+    lifecycle.clearError();
+  }, [activeCommunity.id]);
+
   return (
     <div className="settings-section community-lifecycle-settings-section">
       <div className="settings-section-title">Community lifecycle</div>
       <div className="settings-section-desc">
-        This community is active. Archive controls are not available in this build.
+        Archiving immediately closes this community, stops its usage and billing
+        activity, and preserves its content. Restoration is not available yet.
       </div>
       <div className="community-lifecycle-settings-state">
         <span>Status</span>
         <strong>{activeCommunity.lifecycle_status ?? "active"}</strong>
       </div>
+      {!isConfirmingArchive ? (
+        <button
+          type="button"
+          className="danger archive-community-btn"
+          disabled={lifecycle.isRequesting}
+          onClick={() => {
+            lifecycle.clearError();
+            setConfirmationName("");
+            setIsConfirmingArchive(true);
+          }}
+        >
+          Archive community
+        </button>
+      ) : (
+        <div className="community-archive-confirmation">
+          <strong>Archive {activeCommunity.name}?</strong>
+          <p>
+            Members lose access immediately and active subscriptions and pending
+            checkouts are canceled. This does not delete community content.
+          </p>
+          <label className="create-community-field">
+            <span>Type {activeCommunity.name} to confirm</span>
+            <input
+              type="text"
+              value={confirmationName}
+              autoComplete="off"
+              disabled={lifecycle.isRequesting}
+              onChange={(event) => {
+                setConfirmationName(event.target.value);
+                lifecycle.clearError();
+              }}
+            />
+          </label>
+          <div className="community-archive-confirmation-actions">
+            <button
+              type="button"
+              className="secondary"
+              disabled={lifecycle.isRequesting}
+              onClick={() => {
+                lifecycle.clearError();
+                setConfirmationName("");
+                setIsConfirmingArchive(false);
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="danger archive-community-btn"
+              disabled={!canConfirm}
+              onClick={() => void lifecycle.requestArchive()}
+            >
+              {lifecycle.isRequesting
+                ? "Starting archive…"
+                : "Archive community"}
+            </button>
+          </div>
+        </div>
+      )}
+      {lifecycle.error ? (
+        <div className="auth-error community-archive-error">
+          {lifecycle.error}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -672,6 +757,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     accountCommerceError,
     startStripeConnectOnboarding,
     isStartingStripeConnectOnboarding,
+    lifecycle,
     state,
     actions,
   } = props;
@@ -703,10 +789,16 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
   const resolvedActiveCommunity = activeCommunity as ActiveCommunity;
 
   useEffect(() => {
+    if (accessPresentationState !== "allowed") return;
     if (!availableSettingsPanes.includes(activePane) && activePane !== "community") {
       onSelectPane("community", { replace: true });
     }
-  }, [activePane, availableSettingsPaneKey, onSelectPane]);
+  }, [
+    accessPresentationState,
+    activePane,
+    availableSettingsPaneKey,
+    onSelectPane,
+  ]);
 
   useEffect(() => {
     if (!state.communitySettingsAvatarUrl && state.isCommunityAvatarFocusModalOpen) {
@@ -828,6 +920,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
             {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
               <CommunityLifecycleSettingsSection
                 activeCommunity={resolvedActiveCommunity}
+                lifecycle={lifecycle}
               />
             ) : null}
           </div>

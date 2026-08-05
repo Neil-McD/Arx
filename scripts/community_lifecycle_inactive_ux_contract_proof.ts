@@ -23,6 +23,9 @@ const inventory = read(
 const settings = read(
   "apps/web/src/components/WebCommunitySettingsSection.tsx",
 );
+const archiveController = read(
+  "apps/web/src/controllers/useWebCommunityArchiveController.ts",
+);
 
 assert.match(
   operations,
@@ -37,17 +40,22 @@ assert.match(
 assert.doesNotMatch(
   operations.slice(
     operations.indexOf("export const getMyCommunityLifecycleManagementBySlug"),
-    operations.indexOf("export const beginCommunityArchiveOperationInternal"),
+    operations.indexOf("export async function beginCommunityArchiveOperationCore"),
   ),
   /communitySubscriptions|founderSubscriptions|communityMemberships|communityInteractionRoots/,
   "lifecycle read models must not expose provider, member, or content surfaces",
 );
 assert.match(gateway, /communityLifecycleOperations:getMyCommunityLifecycleManagementBySlug/);
 assert.match(gateway, /communityLifecycleOperations:listMyInactiveCommunityLifecycleRows/);
-assert.doesNotMatch(
+assert.match(
   gateway,
-  /\.mutation\(/,
-  "the browser lifecycle gateway must remain read-only in this slice",
+  /requestCloudMyCommunityArchive[\s\S]*\.mutation\([\s\S]*communityLifecycleOperations:requestMyCommunityArchive/,
+  "the browser lifecycle gateway must expose exactly the canonical owner archive command",
+);
+assert.equal(
+  gateway.match(/\.mutation\(/g)?.length ?? 0,
+  1,
+  "the browser lifecycle gateway must expose exactly one mutation path",
 );
 
 assert.match(
@@ -88,11 +96,37 @@ assert.match(
   /INACTIVE_LIFECYCLE_STATUSES[\s\S]*"archiving"[\s\S]*"archived"[\s\S]*continue_cursor[\s\S]*Load more/,
   "owner inventory must page both inactive lifecycle lanes without a fixed result ceiling",
 );
-assert.match(settings, /Archive controls are not available in this build/);
+assert.match(settings, /Archive community/);
+assert.match(settings, /Restoration is not available yet/);
+assert.match(
+  settings,
+  /confirmationName === activeCommunity\.name[\s\S]*disabled=\{!canConfirm\}/,
+  "archive confirmation must require the exact active community name",
+);
 assert.doesNotMatch(
-  [terminal, inventory, settings].join("\n"),
-  /beginCommunityArchiveOperation|deleteCommunity|restoreCommunity|\.mutation\(/,
-  "inactive UX must not smuggle in archive, restore, or deletion authority",
+  settings,
+  /requestCloudMyCommunityArchive|\.mutation\(/,
+  "the settings component must not own cloud mutation authority",
+);
+assert.match(
+  archiveController,
+  /isRequestingRef\.current[\s\S]*requestCloudMyCommunityArchive[\s\S]*expectedGeneration[\s\S]*Promise\.allSettled[\s\S]*reloadCommunityAccess[\s\S]*reloadCommunities/,
+  "one bounded controller must suppress duplicate submission and refresh canonical projections",
+);
+assert.match(
+  settings,
+  /accessPresentationState !== "allowed"[\s\S]*onSelectPane\("community", \{ replace: true \}\)/,
+  "Danger route normalization must wait for resolved access",
+);
+assert.doesNotMatch(
+  [terminal, inventory].join("\n"),
+  /requestMyCommunityArchive|deleteCommunity|restoreCommunity|\.mutation\(/,
+  "terminal and inventory projections must not own lifecycle mutations",
+);
+assert.doesNotMatch(
+  settings,
+  /deleteCommunity|restoreCommunity/,
+  "Danger settings must not expose delete or restore authority",
 );
 
 console.log("community_lifecycle_inactive_ux_contract_proof: ok");

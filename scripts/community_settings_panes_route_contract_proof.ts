@@ -202,8 +202,8 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /onSelectPane\("community", \{ replace: true \}\)/,
-  "invalid or unauthorized pane fallback must replace the current URL",
+  /if \(accessPresentationState !== "allowed"\) return;[\s\S]*onSelectPane\("community", \{ replace: true \}\)/,
+  "invalid or unauthorized pane fallback must wait for resolved access before replacing the current URL",
 );
 assert.match(
   settingsSection,

@@ -49,13 +49,18 @@ assert.match(
 
 assert.match(
   operations,
-  /export const beginCommunityArchiveOperationInternal = internalMutation/,
-  "the initial archive command must remain internal-only",
+  /export const requestMyCommunityArchive = mutation[\s\S]*resolveUserIdForAuthenticatedRequest[\s\S]*beginCommunityArchiveOperationCore[\s\S]*nowMs: Date\.now\(\)/,
+  "one public archive command must derive actor identity and time server-side",
+);
+assert.equal(
+  operations.match(/= mutation\(/g)?.length ?? 0,
+  1,
+  "the lifecycle operation module must expose exactly one public mutation",
 );
 assert.doesNotMatch(
   operations,
-  /\bmutation\s*\(/,
-  "the operation kernel must not expose a public mutation",
+  /beginCommunityArchiveOperationInternal|actorUserId: v\.id\("users"\)|nowMs: v\.number\(\)/,
+  "the archive command must not retain a duplicate internal endpoint or accept actor and time from clients",
 );
 assert.match(
   operations,
@@ -79,8 +84,8 @@ assert.match(
 );
 assert.match(
   operations,
-  /Number\.isSafeInteger\(args\.nowMs\)[\s\S]*community_archive_timestamp_invalid[\s\S]*requireCommunityOwnerAnyLifecycle/,
-  "untrusted operation timestamps must fail before authority checks or writes",
+  /beginCommunityArchiveOperationCore[\s\S]*Number\.isSafeInteger\(args\.nowMs\)[\s\S]*community_archive_timestamp_invalid[\s\S]*requireCommunityOwnerAnyLifecycle/,
+  "the canonical operation core must validate its server-owned timestamp before writes",
 );
 assert.match(
   operations,
@@ -89,7 +94,7 @@ assert.match(
 );
 assert.match(
   operations,
-  /ctx\.db\.insert\("communityLifecycleOperations"[\s\S]*ctx\.db\.patch\(args\.communityId[\s\S]*lifecycleStatus: "archiving"[\s\S]*lifecycleGeneration: plan\.lifecycleGeneration/,
+  /args\.ctx\.db\.insert\([\s\S]*"communityLifecycleOperations"[\s\S]*args\.ctx\.db\.patch\(args\.communityId[\s\S]*lifecycleStatus: "archiving"[\s\S]*lifecycleGeneration: plan\.lifecycleGeneration/,
   "receipt creation and the lifecycle transition must share one Convex transaction",
 );
 assert.doesNotMatch(
@@ -109,10 +114,9 @@ for (const forbiddenTable of [
   );
 }
 
-assert.match(contract, /does not expose a public archive or[\s\S]*restore command/);
+assert.match(contract, /one authenticated owner archive[\s\S]*no restore command/);
 assert.match(contract, /one durable[\s\S]*`communityLifecycleOperations` row/);
-assert.match(contract, /no builder-facing lifecycle mutation/);
-assert.match(contract, /read-only inactive-community lifecycle UX/);
+assert.match(contract, /single owner-authorized archive command/);
 assert.match(contract, /final transaction rechecks that no active[\s\S]*subscription or pending checkout remains/);
 
 console.log("community_lifecycle_operation_kernel_contract_proof: ok");

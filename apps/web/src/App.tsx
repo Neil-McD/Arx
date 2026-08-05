@@ -177,6 +177,7 @@ import { useWebCommunityPolynetController } from "./controllers/useWebCommunityP
 import { useWebPostAuthBillingLifecycle } from "./controllers/useWebPostAuthBillingLifecycle";
 import { useWebPostAuthStripeConnectLifecycle } from "./controllers/useWebPostAuthStripeConnectLifecycle";
 import { useWebCommunityRouteController } from "./controllers/useWebCommunityRouteController";
+import { useWebCommunityArchiveController } from "./controllers/useWebCommunityArchiveController";
 import { useWebRouteAccessBoundaryController } from "./controllers/useWebRouteAccessBoundaryController";
 import { useWebSelectedCommunityController } from "./controllers/useWebSelectedCommunityController";
 import { useWebPublicCommunityRouteController } from "./controllers/useWebPublicCommunityRouteController";
@@ -1133,6 +1134,13 @@ export default function App() {
     handleLeaveCommunity,
     handleSaveCommunitySettings,
   } = communitySettingsController;
+  const communityArchive = useWebCommunityArchiveController({
+    activeCommunity,
+    session,
+    ensureSession: ensureUsableAuthSession,
+    reloadCommunities: loadCommunities,
+    reloadCommunityAccess: reloadActiveCommunityAccess,
+  });
   const {
     loadCommunityJoinRequests,
     handleApproveCommunityJoinRequest,
@@ -2083,6 +2091,7 @@ export default function App() {
       accountCommerceError,
       startStripeConnectOnboarding,
       isStartingStripeConnectOnboarding,
+      communityArchiveLifecycle: communityArchive,
       settingsState: {
         isSettingsBannerDragOver,
         isProcessingCommunitySettingsBanner,

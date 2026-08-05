@@ -6339,6 +6339,43 @@ button.message-citation-chip:hover {
   text-transform: capitalize;
 }
 
+.archive-community-btn {
+  align-self: flex-start;
+  width: auto;
+  min-width: 180px;
+  margin-top: 12px;
+}
+
+.community-archive-confirmation {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.community-archive-confirmation > p {
+  margin: 0;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.community-archive-confirmation-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.community-archive-confirmation-actions .archive-community-btn {
+  margin-top: 0;
+}
+
+.community-archive-error {
+  margin-top: 12px;
+}
+
 @keyframes builder-offer-enter {
   from {
     opacity: 0;

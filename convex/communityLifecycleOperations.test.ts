@@ -3,9 +3,10 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { api, internal } from "./_generated/api";
+import { api } from "./_generated/api";
 import schema from "./schema";
 import { resolveCommunityArchiveBeginPlan } from "./communityLifecycleCore";
+import { beginCommunityArchiveOperationCore } from "./communityLifecycleOperations";
 
 const modules = import.meta.glob([
   "./communityLifecycleCore.ts",
@@ -145,6 +146,20 @@ async function createOperationFixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
+async function beginArchiveForTest(
+  t: ReturnType<typeof convexTest>,
+  args: {
+    actorUserId: any;
+    communityId: any;
+    expectedGeneration: number;
+    nowMs: number;
+  },
+) {
+  return await t.run(async (ctx) =>
+    await beginCommunityArchiveOperationCore({ ctx, ...args }),
+  );
+}
+
 test("archive begin is atomic, idempotent, and preserves community data", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createOperationFixture(t);
@@ -155,10 +170,7 @@ test("archive begin is atomic, idempotent, and preserves community data", async 
     nowMs: 2_000,
   };
 
-  const first = await t.mutation(
-    internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-    args,
-  );
+  const first = await beginArchiveForTest(t, args);
   expect(first).toMatchObject({
     ok: true,
     idempotent: false,
@@ -208,10 +220,7 @@ test("archive begin is atomic, idempotent, and preserves community data", async 
     });
   });
 
-  const replay = await t.mutation(
-    internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-    { ...args, nowMs: 2_500 },
-  );
+  const replay = await beginArchiveForTest(t, { ...args, nowMs: 2_500 });
   expect(replay).toMatchObject({
     ok: true,
     idempotent: true,
@@ -232,18 +241,72 @@ test("archive begin is atomic, idempotent, and preserves community data", async 
   });
 });
 
+test("the public archive command derives authenticated owner authority server-side", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createOperationFixture(t);
+  const command = (api as any).communityLifecycleOperations
+    .requestMyCommunityArchive;
+
+  await expect(
+    t.mutation(command, {
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+    }),
+  ).rejects.toThrow("verified_identity_required");
+  for (const subject of [
+    "archive-operation-admin",
+    "archive-operation-outsider",
+  ]) {
+    await expect(
+      t.withIdentity({ subject }).mutation(command, {
+        communityId: fixture.communityId,
+        expectedGeneration: 0,
+      }),
+    ).rejects.toThrow("community_owner_required");
+  }
+
+  const result = await t
+    .withIdentity({ subject: "archive-operation-owner" })
+    .mutation(command, {
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+    });
+  expect(result).toMatchObject({
+    ok: true,
+    idempotent: false,
+    lifecycle_status: "archiving",
+    lifecycle_generation: 1,
+    operation_state: "requested",
+  });
+  await expect(
+    t.withIdentity({ subject: "archive-operation-owner" }).mutation(command, {
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+    }),
+  ).resolves.toMatchObject({
+    ok: true,
+    idempotent: true,
+    operation_id: result.operation_id,
+    lifecycle_generation: 1,
+  });
+  await t.run(async (ctx) => {
+    await expect(ctx.db.get(fixture.communityId)).resolves.toMatchObject({
+      lifecycleStatus: "archiving",
+      lifecycleGeneration: 1,
+      archiveRequestedByUserId: fixture.ownerId,
+    });
+  });
+});
+
 test("only the authenticated owner can inspect the current archive operation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createOperationFixture(t);
-  await t.mutation(
-    internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-    {
-      actorUserId: fixture.ownerId,
-      communityId: fixture.communityId,
-      expectedGeneration: 0,
-      nowMs: 2_000,
-    },
-  );
+  await beginArchiveForTest(t, {
+    actorUserId: fixture.ownerId,
+    communityId: fixture.communityId,
+    expectedGeneration: 0,
+    nowMs: 2_000,
+  });
 
   const asOwner = t.withIdentity({ subject: "archive-operation-owner" });
   await expect(
@@ -290,15 +353,12 @@ test("only the authenticated owner can inspect the current archive operation", a
 test("owner lifecycle management reads expose only inactive identity and current receipt state", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createOperationFixture(t);
-  await t.mutation(
-    internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-    {
-      actorUserId: fixture.ownerId,
-      communityId: fixture.communityId,
-      expectedGeneration: 0,
-      nowMs: 2_000,
-    },
-  );
+  await beginArchiveForTest(t, {
+    actorUserId: fixture.ownerId,
+    communityId: fixture.communityId,
+    expectedGeneration: 0,
+    nowMs: 2_000,
+  });
 
   const asOwner = t.withIdentity({ subject: "archive-operation-owner" });
   await expect(
@@ -416,15 +476,12 @@ test("archive begin fails closed across authority and lifecycle edge cases", asy
     communityId: typeof fixture.communityId;
     expectedGeneration: number;
   }> = {}) =>
-    t.mutation(
-      internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-      {
-        actorUserId: overrides.actorUserId ?? fixture.ownerId,
-        communityId: overrides.communityId ?? fixture.communityId,
-        expectedGeneration: overrides.expectedGeneration ?? 0,
-        nowMs: 2_000,
-      },
-    );
+    beginArchiveForTest(t, {
+      actorUserId: overrides.actorUserId ?? fixture.ownerId,
+      communityId: overrides.communityId ?? fixture.communityId,
+      expectedGeneration: overrides.expectedGeneration ?? 0,
+      nowMs: 2_000,
+    });
 
   await expect(begin({ actorUserId: fixture.adminId })).rejects.toThrow(
     "community_owner_required",
@@ -459,14 +516,8 @@ test("concurrent archive requests converge on one lifecycle operation", async ()
     nowMs: 2_000,
   };
   const results = await Promise.all([
-    t.mutation(
-      internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-      args,
-    ),
-    t.mutation(
-      internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-      args,
-    ),
+    beginArchiveForTest(t, args),
+    beginArchiveForTest(t, args),
   ]);
   expect(new Set(results.map((result: any) => result.operation_id)).size).toBe(1);
   expect(results.filter((result: any) => result.idempotent === false)).toHaveLength(1);
@@ -499,15 +550,12 @@ test("archive begin rejects invalid timestamps before writing", async () => {
   const fixture = await createOperationFixture(t);
 
   await expect(
-    t.mutation(
-      internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-      {
-        actorUserId: fixture.ownerId,
-        communityId: fixture.communityId,
-        expectedGeneration: 0,
-        nowMs: Number.NaN,
-      },
-    ),
+    beginArchiveForTest(t, {
+      actorUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+      nowMs: Number.NaN,
+    }),
   ).rejects.toThrow("community_archive_timestamp_invalid");
 
   await t.run(async (ctx) => {
@@ -536,15 +584,12 @@ test("archive begin preflight blocks unsupported billing before containment", as
   });
 
   await expect(
-    t.mutation(
-      internal.communityLifecycleOperations.beginCommunityArchiveOperationInternal,
-      {
-        actorUserId: fixture.ownerId,
-        communityId: fixture.communityId,
-        expectedGeneration: 0,
-        nowMs: 2_000,
-      },
-    ),
+    beginArchiveForTest(t, {
+      actorUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+      nowMs: 2_000,
+    }),
   ).rejects.toThrow(
     "community_archive_billing_preflight_blocked:external_subscription_cancellation_unsupported",
   );

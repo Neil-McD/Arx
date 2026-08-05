@@ -6,6 +6,7 @@ import { expect, test, vi } from "vitest";
 import { internal } from "./_generated/api";
 import schema from "./schema";
 import { communityArchiveRetryDelayMs } from "./communityLifecycleArchiveWorker";
+import { beginCommunityArchiveOperationCore } from "./communityLifecycleOperations";
 
 const modules = import.meta.glob([
   "./communityLifecycleCore.ts",
@@ -18,7 +19,6 @@ const modules = import.meta.glob([
 ]);
 
 const archiveApi = (internal as any).communityLifecycleArchiveWorker;
-const operationApi = (internal as any).communityLifecycleOperations;
 
 async function createFixture(t: ReturnType<typeof convexTest>) {
   return await t.run(async (ctx) => {
@@ -77,19 +77,27 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
+async function beginArchiveForWorkerTest(
+  t: ReturnType<typeof convexTest>,
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  nowMs = 2_000,
+) {
+  return await t.run(async (ctx) =>
+    await beginCommunityArchiveOperationCore({
+      ctx,
+      actorUserId: fixture.ownerId,
+      communityId: fixture.communityId,
+      expectedGeneration: 0,
+      nowMs,
+    }),
+  );
+}
+
 async function beginAndClaim(
   t: ReturnType<typeof convexTest>,
   fixture: Awaited<ReturnType<typeof createFixture>>,
 ) {
-  const operation = await t.mutation(
-    operationApi.beginCommunityArchiveOperationInternal,
-    {
-      actorUserId: fixture.ownerId,
-      communityId: fixture.communityId,
-      expectedGeneration: 0,
-      nowMs: 2_000,
-    },
-  );
+  const operation = await beginArchiveForWorkerTest(t, fixture);
   const claims = await t.mutation(
     archiveApi.claimDueCommunityArchiveOperationsInternal,
     { nowMs: 2_000, limit: 1 },
@@ -146,12 +154,7 @@ test("the bounded action completes a no-billing archive without Stripe configura
   vi.stubEnv("ARX_STRIPE_SECRET_KEY", "");
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
-  await t.mutation(operationApi.beginCommunityArchiveOperationInternal, {
-    actorUserId: fixture.ownerId,
-    communityId: fixture.communityId,
-    expectedGeneration: 0,
-    nowMs: 2_000,
-  });
+  await beginArchiveForWorkerTest(t, fixture);
   await expect(
     t.action(archiveApi.processCommunityArchiveOperationsInternal, { limit: 1 }),
   ).resolves.toMatchObject({ claimed: 1, succeeded: 1, retried: 0, failed: 0 });
@@ -185,12 +188,7 @@ test("unexpected provider setup failures are recorded and retried", async () => 
       updatedAt: 1_000,
     });
   });
-  await t.mutation(operationApi.beginCommunityArchiveOperationInternal, {
-    actorUserId: fixture.ownerId,
-    communityId: fixture.communityId,
-    expectedGeneration: 0,
-    nowMs: 2_000,
-  });
+  await beginArchiveForWorkerTest(t, fixture);
   await expect(
     t.action(archiveApi.processCommunityArchiveOperationsInternal, { limit: 1 }),
   ).resolves.toMatchObject({ claimed: 1, succeeded: 0, retried: 1, failed: 0 });
@@ -388,15 +386,7 @@ test("claiming terminally reconciles missing or lifecycle-mismatched communities
   for (const mismatch of ["missing", "lifecycle"] as const) {
     const t = convexTest(schema, modules);
     const fixture = await createFixture(t);
-    const operation = await t.mutation(
-      operationApi.beginCommunityArchiveOperationInternal,
-      {
-        actorUserId: fixture.ownerId,
-        communityId: fixture.communityId,
-        expectedGeneration: 0,
-        nowMs: 2_000,
-      },
-    );
+    const operation = await beginArchiveForWorkerTest(t, fixture);
     await t.run(async (ctx) => {
       if (mismatch === "missing") {
         await ctx.db.delete(fixture.communityId);
@@ -416,7 +406,7 @@ test("claiming terminally reconciles missing or lifecycle-mismatched communities
       }),
     ).resolves.toHaveLength(0);
     await t.run(async (ctx) => {
-      await expect(ctx.db.get(operation.operation_id)).resolves.toMatchObject({
+      await expect(ctx.db.get(operation.operation_id as any)).resolves.toMatchObject({
         state: "failed",
         errorCode:
           mismatch === "missing"
@@ -468,15 +458,7 @@ test("a valid lease can record terminal lifecycle drift after claim", async () =
 test("the twelfth failed claim exhausts the retry budget while containment remains", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
-  const operation = await t.mutation(
-    operationApi.beginCommunityArchiveOperationInternal,
-    {
-      actorUserId: fixture.ownerId,
-      communityId: fixture.communityId,
-      expectedGeneration: 0,
-      nowMs: 2_000,
-    },
-  );
+  const operation = await beginArchiveForWorkerTest(t, fixture);
   await t.run(async (ctx) => {
     await ctx.db.patch(operation.operation_id as any, {
       attemptCount: 11,
@@ -530,15 +512,7 @@ test("more than ten local effects pause at the bound and resume to completion", 
       });
     }
   });
-  const operation = await t.mutation(
-    operationApi.beginCommunityArchiveOperationInternal,
-    {
-      actorUserId: fixture.ownerId,
-      communityId: fixture.communityId,
-      expectedGeneration: 0,
-      nowMs: 2_000,
-    },
-  );
+  const operation = await beginArchiveForWorkerTest(t, fixture);
   await expect(
     t.action(archiveApi.processCommunityArchiveOperationsInternal, { limit: 1 }),
   ).resolves.toMatchObject({ claimed: 1, succeeded: 0, retried: 1, failed: 0 });
