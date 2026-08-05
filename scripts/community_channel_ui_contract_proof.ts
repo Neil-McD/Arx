@@ -383,12 +383,12 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(26dvh, 280px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?border-bottom:\s*2px solid var\(--community-chat-surface\);[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(26dvh, 264px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?border-bottom:\s*2px solid var\(--community-chat-surface\);[\s\S]*?background:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);/,
 );
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /@media\s*\(max-width:\s*700px\)\s*\{[\s\S]*?\.community-channel-pinned-root\s*\{[\s\S]*?max-block-size:\s*min\(24dvh, 220px\);/,
+  /@media\s*\(max-width:\s*700px\)\s*\{[\s\S]*?\.community-channel-pinned-root\s*\{[\s\S]*?max-block-size:\s*min\(24dvh, 208px\);/,
 );
 assertMatches(
   interactionStylesPath,
@@ -438,7 +438,7 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root-open\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*18px;[\s\S]*?bottom:\s*10px;[\s\S]*?color:\s*var\(--accent\);/,
+  /\.community-channel-pinned-root-open\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*18px;[\s\S]*?bottom:\s*10px;[\s\S]*?padding:\s*4px 8px;[\s\S]*?border:\s*1px solid color-mix\(in srgb, var\(--accent\) 42%, var\(--border-default\)\);[\s\S]*?border-radius:\s*999px;[\s\S]*?background:\s*color-mix\(in srgb, var\(--accent\) 18%, var\(--bg-card-solid\) 82%\);[\s\S]*?color:\s*var\(--accent\);/,
 );
 assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-footer/);
 assertNotMatches(interactionStylesPath, interactionStyles, /\.community-channel-pinned-root-header/);
