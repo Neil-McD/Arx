@@ -799,7 +799,7 @@ assert.match(
 );
 assert.match(
   component,
-  /surfaceContext\.kind === "community" \? props\.communityId : null/,
+  /surfaceContext\.kind === "community" \? communityId : null/,
   "Discover and generic platform pages must clear the active community lens",
 );
 assert.doesNotMatch(
@@ -819,17 +819,17 @@ assert.match(
 );
 assert.match(
   app,
-  /communityAvatarUrl:\s*memberAgentDockCommunity\?\.avatar_url\s*\?\?\s*null,[\s\S]*?communityAvatarFocusX:[\s\S]*?avatar_focus_x\s*\?\?\s*null,[\s\S]*?communityAvatarFocusY:[\s\S]*?avatar_focus_y\s*\?\?\s*null,[\s\S]*?communityAvatarZoom:[\s\S]*?avatar_zoom\s*\?\?\s*null,/,
-  "the dock must receive the active community's canonical avatar framing",
+  /community:\s*memberAgentDockCommunity,/,
+  "the dock must receive one canonical active-community identity object",
 );
 assert.match(
   component,
-  /buildMemberAgentSurfacePresentation\([\s\S]*?props\.surfaceContext,[\s\S]*?props\.communityName/,
+  /buildMemberAgentSurfacePresentation\([\s\S]*?props\.surfaceContext,[\s\S]*?communityName/,
   "the dock must consume the canonical surface presentation instead of branching on copy locally",
 );
 assert.match(
   component,
-  /const communityAvatarProps = presentation\.communityIntelligenceName[\s\S]*?communityId: props\.communityId,[\s\S]*?imageUrl: props\.communityAvatarUrl,[\s\S]*?communityAvatarProps \? \([\s\S]*?<CommunityAvatar[\s\S]*?className="member-agent-dock-avatar"[\s\S]*?<strong>\{presentation\.title\}<\/strong>/,
+  /const communityAvatarProps = presentation\.communityIntelligenceName[\s\S]*?communityId,[\s\S]*?imageUrl: props\.community\?\.avatar_url,[\s\S]*?communityAvatarProps \? \([\s\S]*?<CommunityAvatar[\s\S]*?className="member-agent-dock-avatar"[\s\S]*?<strong>\{presentation\.title\}<\/strong>/,
   "the dock header must use the active community avatar and intelligence name",
 );
 assert.match(
@@ -1013,7 +1013,7 @@ assert.match(
 );
 assert.match(
   app,
-  /<WebAppCompositionRoot[\s\S]*memberAgentDockProps=\{\{[\s\S]*isVisible: isMemberAgentDockVisible[\s\S]*communityId: memberAgentDockCommunity\?\.id \?\? null[\s\S]*surfaceContext: memberAgentSurfaceContext/,
+  /<WebAppCompositionRoot[\s\S]*memberAgentDockProps=\{\{[\s\S]*isVisible: isMemberAgentDockVisible[\s\S]*community: memberAgentDockCommunity[\s\S]*surfaceContext: memberAgentSurfaceContext/,
   "the app shell must pass the canonical surface context through the decomposed composition root",
 );
 assert.match(

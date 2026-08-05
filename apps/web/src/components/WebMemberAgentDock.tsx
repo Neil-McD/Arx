@@ -109,12 +109,14 @@ export type WebMemberAgentDockProps = {
   mobileShellActive?: boolean;
   onRequestOpen?: () => void;
   mobileRoot?: boolean;
-  communityId: string | null;
-  communityName: string | null;
-  communityAvatarUrl: string | null;
-  communityAvatarFocusX?: number | null;
-  communityAvatarFocusY?: number | null;
-  communityAvatarZoom?: number | null;
+  community: {
+    id: string;
+    name: string;
+    avatar_url?: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+  } | null;
   surfaceContext: MemberAgentSurfaceContextV1 | null;
   session: AuthSession | null;
   ensureSession: (
@@ -183,6 +185,8 @@ function formatInferenceIssue(issue: InferenceIssueModalState | null): string | 
 
 export const WebMemberAgentDock = forwardRef<WebMemberAgentDockHandle, WebMemberAgentDockProps>(
 function WebMemberAgentDock(props, ref) {
+  const communityId = props.community?.id ?? null;
+  const communityName = String(props.community?.name ?? "").trim();
   const onboarding = useWebCommunityOnboarding();
   const [isOpen, setIsOpen] = useState(false);
   const isOpenSurface = props.mobileShellActive
@@ -221,7 +225,7 @@ function WebMemberAgentDock(props, ref) {
   const activeThreadContextRef = useRef<ActiveThreadContext | null>(null);
   const surfaceKey = JSON.stringify([
     props.surfaceContext,
-    props.communityId,
+    communityId,
   ]);
   const agentScopeRef = useRef<AgentScope>({
     userId: props.session?.user.id ?? null,
@@ -469,7 +473,7 @@ function WebMemberAgentDock(props, ref) {
         if (!usableSession || cancelled || !isCurrentScope(scope)) return;
         const thread = await ensureCloudMemberAgentGlobalChannel({
           session: usableSession,
-          initialCommunityId: props.communityId,
+          initialCommunityId: communityId,
         });
         if (cancelled || !isCurrentScope(scope)) return;
         activeThreadKeyRef.current = thread.thread_key;
@@ -495,7 +499,7 @@ function WebMemberAgentDock(props, ref) {
   }, [
     isConversationSurfaceActive,
     loadMessages,
-    props.communityId,
+    communityId,
     props.ensureSession,
     props.isVisible,
     props.session,
@@ -512,9 +516,9 @@ function WebMemberAgentDock(props, ref) {
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
   const showOnboardingAgentFocus = Boolean(
-    props.communityId &&
-    props.communityName &&
-    onboardingSession?.community_id === props.communityId &&
+    communityId &&
+    communityName &&
+    onboardingSession?.community_id === communityId &&
     !onboarding?.firstPostAcknowledgementPending &&
     (
       shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
@@ -552,7 +556,7 @@ function WebMemberAgentDock(props, ref) {
       !showOnboardingAgentFocus ||
       !shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
       !onboardingSession ||
-      !props.communityName ||
+      !communityName ||
       onboardingSeededSessionIdsRef.current.has(onboardingSession.id)
     ) {
       return;
@@ -564,11 +568,11 @@ function WebMemberAgentDock(props, ref) {
         return current;
       }
       const seededPrompt =
-        `What is one useful first action I should take in ${props.communityName}?`;
+        `What is one useful first action I should take in ${communityName}?`;
       draftTextRef.current = seededPrompt;
       return seededPrompt;
     });
-  }, [onboardingSession, props.communityName, showOnboardingAgentFocus]);
+  }, [communityName, onboardingSession, showOnboardingAgentFocus]);
 
   useEffect(() => {
     if (
@@ -701,7 +705,7 @@ function WebMemberAgentDock(props, ref) {
       if (!usableSession || !isCurrentScope(scope)) return;
       const thread = await startNewCloudMemberAgentGlobalEpisode({
         session: usableSession,
-        initialCommunityId: props.communityId,
+        initialCommunityId: communityId,
         expectedActiveEpisodeId: expectedEpisodeId,
       });
       if (!isCurrentScope(scope)) return;
@@ -713,7 +717,7 @@ function WebMemberAgentDock(props, ref) {
         try {
           const current = await ensureCloudMemberAgentGlobalChannel({
             session: usableSession,
-            initialCommunityId: props.communityId,
+            initialCommunityId: communityId,
           });
           if (!isCurrentScope(scope)) return;
           if (current.episode_id !== expectedEpisodeId) {
@@ -805,7 +809,7 @@ function WebMemberAgentDock(props, ref) {
       return;
     }
     const desiredCommunityId =
-      surfaceContext.kind === "community" ? props.communityId : null;
+      surfaceContext.kind === "community" ? communityId : null;
     if (surfaceContext.kind === "community" && !desiredCommunityId) {
       setLocalError("This community context is still loading. Try again.");
       return;
@@ -1008,17 +1012,16 @@ function WebMemberAgentDock(props, ref) {
 
   const presentation = buildMemberAgentSurfacePresentation(
     props.surfaceContext,
-    props.communityName,
+    communityName,
   );
-  const communityName = String(props.communityName ?? "").trim();
   const communityAvatarProps = presentation.communityIntelligenceName
     ? {
-        communityId: props.communityId,
+        communityId,
         name: communityName,
-        imageUrl: props.communityAvatarUrl,
-        focusX: props.communityAvatarFocusX,
-        focusY: props.communityAvatarFocusY,
-        zoom: props.communityAvatarZoom,
+        imageUrl: props.community?.avatar_url,
+        focusX: props.community?.avatar_focus_x,
+        focusY: props.community?.avatar_focus_y,
+        zoom: props.community?.avatar_zoom,
       }
     : null;
 
