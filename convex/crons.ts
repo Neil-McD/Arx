@@ -12,6 +12,13 @@ crons.interval(
   },
 );
 
+crons.interval(
+  "recover distribution attribution deliveries",
+  { minutes: 5 },
+  (internal as any).distributionAttribution.recoverDueDeliveriesInternal,
+  { limit: 25 },
+);
+
 crons.daily(
   "enqueue weekly community digests",
   {

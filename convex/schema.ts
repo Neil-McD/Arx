@@ -26,6 +26,32 @@ export default defineSchema({
     .index("by_normalizedEmail", ["normalizedEmail"])
     .index("by_normalizedHandle", ["normalizedHandle"]),
 
+  distributionAttributionDeliveries: defineTable({
+    userId: v.id('users'),
+    deliveryKey: v.string(),
+    anonymousId: v.optional(v.string()),
+    clickId: v.optional(v.string()),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('delivering'),
+      v.literal('delivered'),
+      v.literal('failed'),
+    ),
+    attemptCount: v.number(),
+    attemptToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    nextAttemptAt: v.optional(v.number()),
+    responseStatus: v.optional(v.number()),
+    lastErrorCode: v.optional(v.string()),
+    deliveredAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index('by_delivery_key', ['deliveryKey'])
+    .index('by_user', ['userId'])
+    .index('by_status_next_attempt_at', ['status', 'nextAttemptAt'])
+    .index('by_status_lease_expires_at', ['status', 'leaseExpiresAt']),
+
   authSessions: defineTable({
     sessionId: v.string(),
     authSubject: v.string(),
