@@ -3519,7 +3519,7 @@
   position: relative;
   flex: 0 0 auto;
   min-width: 0;
-  max-block-size: min(26dvh, 280px);
+  max-block-size: min(26dvh, 264px);
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
@@ -3601,9 +3601,10 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  padding: 0;
-  border: 0;
-  background: transparent;
+  padding: 4px 8px;
+  border: 1px solid color-mix(in srgb, var(--accent) 42%, var(--border-default));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 18%, var(--bg-card-solid) 82%);
   color: var(--accent);
   font: inherit;
   font-size: 12px;
@@ -3613,14 +3614,12 @@
 
 .community-channel-pinned-root-open:hover,
 .community-channel-pinned-root-open:focus-visible {
-  text-decoration: underline;
-  text-underline-offset: 2px;
+  background: color-mix(in srgb, var(--accent) 26%, var(--bg-card-solid) 74%);
 }
 
 .community-channel-pinned-root-open:focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 5px;
 }
 
 .community-channel-pinned-root.is-selected {
@@ -3663,7 +3662,7 @@
 
 @media (max-width: 700px) {
   .community-channel-pinned-root {
-    max-block-size: min(24dvh, 220px);
+    max-block-size: min(24dvh, 208px);
   }
 }
 
