@@ -114,7 +114,10 @@ describe('distribution attribution admission', () => {
       });
       return { deliveryId };
     });
-    vi.stubEnv('DISTRIBUTION_ENGINEER_IDENTIFY_URL', 'https://distribution.engineer/api/identify');
+    vi.stubEnv(
+      'DISTRIBUTION_ENGINEER_IDENTIFY_URL',
+      'https://distribution.engineer/api/integrations/polynet/identify',
+    );
     vi.stubEnv('DISTRIBUTION_ENGINEER_ACCOUNT_ID', 'account-1');
     vi.stubEnv('DISTRIBUTION_ENGINEER_FUNNEL_WEBHOOK_KEY', 'server-secret');
     const fetchMock = vi.fn().mockResolvedValue(
@@ -124,6 +127,7 @@ describe('distribution attribution admission', () => {
         viewer_id: VIEWER_ID,
         lead_event_id: LEAD_EVENT_ID,
         lead_created: true,
+        replayed: false,
       }),
     );
     vi.stubGlobal('fetch', fetchMock);
@@ -133,7 +137,7 @@ describe('distribution attribution admission', () => {
     });
 
     expect(fetchMock).toHaveBeenCalledWith(
-      new URL('https://distribution.engineer/api/identify'),
+      new URL('https://distribution.engineer/api/integrations/polynet/identify'),
       expect.objectContaining({
         method: 'POST',
         headers: {
@@ -144,6 +148,7 @@ describe('distribution attribution admission', () => {
           account_id: 'account-1',
           source_system: 'polynet',
           source_event_id: SOURCE_EVENT_ID,
+          occurred_at: new Date(1).toISOString(),
           email: 'lead@example.com',
           de_aid: AID,
           de_cid: CID,
@@ -158,6 +163,7 @@ describe('distribution attribution admission', () => {
       downstreamViewerId: VIEWER_ID,
       downstreamLeadEventId: LEAD_EVENT_ID,
       downstreamLeadCreated: true,
+      downstreamReplayed: false,
     });
   });
 

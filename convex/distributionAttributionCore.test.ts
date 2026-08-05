@@ -38,6 +38,7 @@ describe('distribution attribution delivery policy', () => {
       viewer_id: '70711105-1620-426d-938f-9ebf48eaef91',
       lead_event_id: '87be5160-6fb4-4bf8-8cc4-1426bb55cd76',
       lead_created: true,
+      replayed: false,
     };
     expect(parseDistributionAttributionReceipt(receipt, sourceEventId)).toEqual({
       ok: true,
@@ -46,6 +47,7 @@ describe('distribution attribution delivery policy', () => {
         viewerId: receipt.viewer_id,
         leadEventId: receipt.lead_event_id,
         leadCreated: true,
+        replayed: false,
       },
     });
     expect(parseDistributionAttributionReceipt({}, sourceEventId)).toEqual({
@@ -60,6 +62,10 @@ describe('distribution attribution delivery policy', () => {
     ).toEqual({
       ok: false,
       errorCode: 'distribution_engineer_receipt_source_event_mismatch',
+    });
+    expect(parseDistributionAttributionReceipt({ ...receipt, replayed: true }, sourceEventId)).toEqual({
+      ok: false,
+      errorCode: 'distribution_engineer_receipt_replay_invalid',
     });
   });
 

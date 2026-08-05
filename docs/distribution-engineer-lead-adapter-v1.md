@@ -17,7 +17,7 @@ Distribution Engineer redirect
       -> authenticated bootstrap creates a genuinely new Polynet user
         -> one operational delivery row and opaque source event are admitted
           -> verified canonical user email is read server-side
-            -> server POSTs to Distribution Engineer /api/identify
+            -> server POSTs to Distribution Engineer /api/integrations/polynet/identify
               -> Distribution Engineer writes canonical viewer and Lead evidence
                 -> Polynet persists their typed public receipt IDs
 ```
@@ -52,11 +52,13 @@ The strict success response is:
   "source_event_id": "polynet.user_created.v1:<uuid>",
   "viewer_id": "<public viewer uuid>",
   "lead_event_id": "<public Lead event uuid>",
-  "lead_created": true
+  "lead_created": true,
+  "replayed": false
 }
 ```
 
-A replay returns the same viewer and Lead event IDs with `lead_created: false`.
+A replay returns the same viewer and Lead event IDs with `lead_created: false`
+and `replayed: true`.
 An HTTP 2xx without this exact typed receipt is not delivery success.
 
 ## Reliability Contract
@@ -72,7 +74,7 @@ the Polynet user transaction.
 ## Required Production Configuration
 
 ```text
-DISTRIBUTION_ENGINEER_IDENTIFY_URL=https://www.distribution.engineer/api/identify
+DISTRIBUTION_ENGINEER_IDENTIFY_URL=https://www.distribution.engineer/api/integrations/polynet/identify
 DISTRIBUTION_ENGINEER_ACCOUNT_ID=<workspace account UUID>
 DISTRIBUTION_ENGINEER_FUNNEL_WEBHOOK_KEY=<rotated bearer credential>
 ```

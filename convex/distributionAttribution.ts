@@ -111,6 +111,7 @@ export const readDeliveryInputInternal = internalQuery({
           email: user.email,
           emailVerified: typeof user.emailVerifiedAt === 'number',
           sourceEventId: row.sourceEventId,
+          occurredAt: row.createdAt,
           anonymousId: row.anonymousId,
           clickId: row.clickId,
         }
@@ -127,6 +128,7 @@ export const completeDeliveryInternal = internalMutation({
     downstreamViewerId: v.string(),
     downstreamLeadEventId: v.string(),
     downstreamLeadCreated: v.boolean(),
+    downstreamReplayed: v.boolean(),
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
@@ -145,6 +147,7 @@ export const completeDeliveryInternal = internalMutation({
       downstreamViewerId: args.downstreamViewerId,
       downstreamLeadEventId: args.downstreamLeadEventId,
       downstreamLeadCreated: args.downstreamLeadCreated,
+      downstreamReplayed: args.downstreamReplayed,
       deliveredAt: args.nowMs,
       attemptToken: undefined,
       leaseExpiresAt: undefined,
@@ -301,6 +304,7 @@ export const deliverIdentifyInternal: any = internalAction({
           account_id: accountId,
           source_system: DISTRIBUTION_ATTRIBUTION_SOURCE_SYSTEM,
           source_event_id: input.sourceEventId,
+          occurred_at: new Date(input.occurredAt).toISOString(),
           email: input.email,
           ...(input.anonymousId ? { de_aid: input.anonymousId } : null),
           ...(input.clickId ? { de_cid: input.clickId } : null),
@@ -346,6 +350,7 @@ export const deliverIdentifyInternal: any = internalAction({
           downstreamViewerId: parsed.receipt.viewerId,
           downstreamLeadEventId: parsed.receipt.leadEventId,
           downstreamLeadCreated: parsed.receipt.leadCreated,
+          downstreamReplayed: parsed.receipt.replayed,
           nowMs: Date.now(),
         });
       }
