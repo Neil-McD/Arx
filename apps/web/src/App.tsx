@@ -3126,15 +3126,7 @@ export default function App() {
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",
         onRequestOpen: () => setMobileRootPage("agent"),
-        communityId: memberAgentDockCommunity?.id ?? null,
-        communityName: memberAgentDockCommunity?.name ?? null,
-        communityAvatarUrl: memberAgentDockCommunity?.avatar_url ?? null,
-        communityAvatarFocusX:
-          memberAgentDockCommunity?.avatar_focus_x ?? null,
-        communityAvatarFocusY:
-          memberAgentDockCommunity?.avatar_focus_y ?? null,
-        communityAvatarZoom:
-          memberAgentDockCommunity?.avatar_zoom ?? null,
+        community: memberAgentDockCommunity,
         surfaceContext: memberAgentSurfaceContext,
         session,
         ensureSession: ensureUsableAuthSession,
