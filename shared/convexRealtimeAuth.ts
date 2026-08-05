@@ -160,8 +160,10 @@ export class AuthenticatedConvexRealtimePool {
   }) {
     this.createClient = options?.createClient ?? createAuthenticatedConvexRealtimeClient;
     this.closeLingerMs = Math.max(0, options?.closeLingerMs ?? SHARED_REALTIME_CLOSE_LINGER_MS);
-    this.scheduleClose = options?.scheduleClose ?? setTimeout;
-    this.cancelClose = options?.cancelClose ?? clearTimeout;
+    this.scheduleClose = options?.scheduleClose
+      ?? ((callback, delayMs) => setTimeout(callback, delayMs));
+    this.cancelClose = options?.cancelClose
+      ?? ((timer) => clearTimeout(timer));
   }
 
   acquire<SessionT>(params: {
