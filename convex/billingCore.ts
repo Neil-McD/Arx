@@ -10,6 +10,10 @@ import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import {
+  communityIsActive,
+  communityLifecycleGenerationMatches,
+} from "../shared/communityLifecycle";
 
 export type CommunityLike = {
   _id: any;
@@ -18,6 +22,8 @@ export type CommunityLike = {
   name: string;
   oneLiner?: string;
   entryPolicy?: "open" | "approval" | "paid_subscription";
+  lifecycleStatus?: "active" | "archived";
+  lifecycleGeneration?: number;
 };
 
 export type CommunityPricePointLike = {
@@ -367,6 +373,7 @@ export async function redeemClaimRow(args: {
   let checkoutSession:
     | {
         mode?: string;
+        communityId?: any;
         claimToken?: string;
         status?: string;
         expiresAt?: number;
@@ -382,6 +389,7 @@ export async function redeemClaimRow(args: {
           | "canceled"
           | "ended";
         cancelAtPeriodEnd?: boolean;
+        communityLifecycleGeneration?: number;
       }
     | null = null;
   if (args.claim.sourceSessionId) {
@@ -404,6 +412,13 @@ export async function redeemClaimRow(args: {
       };
     }
     if (String(checkoutSession.claimToken ?? "").trim() !== args.claim.claimToken) {
+      return {
+        communityId: null,
+        accessGranted: false,
+        grantMarker: null,
+      };
+    }
+    if (String(checkoutSession.communityId ?? "") !== String(args.claim.communityId)) {
       return {
         communityId: null,
         accessGranted: false,
@@ -433,6 +448,19 @@ export async function redeemClaimRow(args: {
   }
   const community = (await args.ctx.db.get(args.claim.communityId)) as CommunityLike | null;
   if (!community) {
+    return {
+      communityId: null,
+      accessGranted: false,
+      grantMarker: null,
+    };
+  }
+  if (
+    !communityIsActive(community) ||
+    !communityLifecycleGenerationMatches(
+      community,
+      checkoutSession?.communityLifecycleGeneration,
+    )
+  ) {
     return {
       communityId: null,
       accessGranted: false,

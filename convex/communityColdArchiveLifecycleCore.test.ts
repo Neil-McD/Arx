@@ -4,6 +4,7 @@ import {
   COMMUNITY_LIFECYCLE_STATUSES,
   archiveCommunityLifecycle,
   communityIsActive,
+  communityLifecycleGenerationMatches,
   normalizeCommunityLifecycle,
   restoreCommunityLifecycle,
 } from "../shared/communityLifecycle";
@@ -19,6 +20,18 @@ describe("cold archive community lifecycle kernel", () => {
       generation: 0,
     });
     expect(communityIsActive({})).toBe(true);
+    expect(communityLifecycleGenerationMatches({}, undefined)).toBe(true);
+    expect(communityLifecycleGenerationMatches({}, 0)).toBe(true);
+  });
+
+  test("matches only the exact economic generation", () => {
+    const community = {
+      lifecycleStatus: "active" as const,
+      lifecycleGeneration: 2,
+    };
+    expect(communityLifecycleGenerationMatches(community, 2)).toBe(true);
+    expect(communityLifecycleGenerationMatches(community, 0)).toBe(false);
+    expect(communityLifecycleGenerationMatches(community, undefined)).toBe(false);
   });
 
   test("normalizes explicit active and archived rows", () => {

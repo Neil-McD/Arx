@@ -32,6 +32,11 @@ import {
   attachStripeCustomerToUser,
   ensureStripeCustomerForUser,
 } from "./stripeCustomers";
+import {
+  communityIsActive,
+  communityLifecycleGenerationMatches,
+  normalizeCommunityLifecycle,
+} from "../shared/communityLifecycle";
 
 const FOUNDER_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -98,6 +103,8 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
     if (!community || String(community.ownerId) !== String(args.ownerUserId)) {
       throw new Error("founder_subscription_community_forbidden");
     }
+    const lifecycle = normalizeCommunityLifecycle(community);
+    if (lifecycle.status !== "active") throw new Error("community_archived");
     const existingSubscription = await getFounderSubscriptionByCommunity(
       ctx,
       args.communityId,
@@ -117,7 +124,13 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
       )
       .collect();
     const activePending = existing.filter(
-      (row) => row.mode === "founder_subscription" && row.expiresAt > args.nowMs,
+      (row) =>
+        row.mode === "founder_subscription" &&
+        row.expiresAt > args.nowMs &&
+        communityLifecycleGenerationMatches(
+          community,
+          row.communityLifecycleGeneration,
+        ),
     );
     if (activePending.length > 1) {
       throw new Error("founder_subscription_checkout_ambiguous");
@@ -132,7 +145,16 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
       };
     }
     for (const row of existing) {
-      if (row.mode === "founder_subscription" && row.expiresAt <= args.nowMs) {
+      if (
+        row.mode === "founder_subscription" &&
+        (
+          row.expiresAt <= args.nowMs ||
+          !communityLifecycleGenerationMatches(
+            community,
+            row.communityLifecycleGeneration,
+          )
+        )
+      ) {
         await ctx.db.patch(row._id, { status: "expired", updatedAt: args.nowMs });
       }
     }
@@ -142,6 +164,7 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
       provider: "stripe",
       ownerUserId: args.ownerUserId,
       communityId: args.communityId,
+      communityLifecycleGeneration: lifecycle.generation,
       billingPeriod: "monthly",
       amountBaseUnits: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
       currency: "usd",
@@ -181,6 +204,19 @@ export const attachFounderStripeCheckoutSessionInternal = internalMutation({
       !row.communityId
     ) {
       throw new Error("founder_subscription_checkout_invalid");
+    }
+    const community = await ctx.db.get(row.communityId);
+    if (!community || String(community.ownerId) !== String(row.ownerUserId)) {
+      throw new Error("founder_subscription_community_forbidden");
+    }
+    if (!communityIsActive(community)) throw new Error("community_archived");
+    if (
+      !communityLifecycleGenerationMatches(
+        community,
+        row.communityLifecycleGeneration,
+      )
+    ) {
+      throw new Error("community_lifecycle_generation_mismatch");
     }
     if (args.providerPriceId !== readFounderStripePriceId()) {
       throw new Error("founder_subscription_price_mismatch");
@@ -231,6 +267,21 @@ async function syncFounderSubscription(args: {
     args.ctx,
     providerSubscriptionId,
   );
+  if (checkout) {
+    const checkoutCommunity = checkout.communityId
+      ? await args.ctx.db.get(checkout.communityId)
+      : null;
+    if (
+      !checkoutCommunity ||
+      !communityIsActive(checkoutCommunity) ||
+      !communityLifecycleGenerationMatches(
+        checkoutCommunity,
+        checkout.communityLifecycleGeneration,
+      )
+    ) {
+      checkout = null;
+    }
+  }
   const expectedPriceId = String(
     existing?.providerPriceId ??
     checkout?.providerPriceId ??

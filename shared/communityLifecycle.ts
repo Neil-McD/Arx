@@ -50,6 +50,16 @@ export function communityIsActive(fields: CommunityLifecycleFields): boolean {
   return normalizeCommunityLifecycle(fields).status === "active";
 }
 
+export function communityLifecycleGenerationMatches(
+  fields: CommunityLifecycleFields,
+  expectedGeneration: unknown,
+): boolean {
+  return (
+    normalizeCommunityLifecycle(fields).generation ===
+    normalizeCommunityLifecycleGeneration(expectedGeneration)
+  );
+}
+
 function nextCommunityLifecycleGeneration(current: number): number {
   if (current >= Number.MAX_SAFE_INTEGER) {
     throw new Error("community_lifecycle_generation_exhausted");
