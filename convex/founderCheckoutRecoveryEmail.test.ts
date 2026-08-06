@@ -36,7 +36,7 @@ test("paid checkout recovery is durably enqueued with an idempotent key", async 
     dedupeKey: "founder_checkout_recovery:founder_checkout_123",
     payload: {
       actionUrl:
-        "https://polynet.test/?founder_checkout=recover&session_id=founder_checkout_123",
+        "https://polynet.test/settings/billing?founder_checkout=recover&session_id=founder_checkout_123",
     },
   });
 });

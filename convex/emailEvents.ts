@@ -118,7 +118,10 @@ export async function enqueueFounderCheckoutRecoveryEmailInternal(params: {
   sessionId: string;
   nowMs: number;
 }) {
-  const actionUrl = new URL("/", buildAppUrl("/"));
+  // Use a stable authenticated route. The app root can resolve against a
+  // stale or archived last-active community before recovery gets a chance to
+  // claim the receipt.
+  const actionUrl = new URL("/settings/billing", buildAppUrl("/"));
   actionUrl.searchParams.set("founder_checkout", "recover");
   actionUrl.searchParams.set("session_id", params.sessionId);
   // This email is the durable recovery path for an anonymous paid checkout.

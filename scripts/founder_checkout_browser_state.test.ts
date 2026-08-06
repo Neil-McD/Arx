@@ -116,8 +116,8 @@ describe("founder checkout browser state", () => {
 
   it("keeps the Stripe checkout placeholder literal", () => {
     expect(buildFounderCheckoutReturnUrls("https://polynet.test/path")).toEqual({
-      successUrl: "https://polynet.test/?founder_checkout=success&session_id={CHECKOUT_SESSION_ID}",
-      cancelUrl: "https://polynet.test/?founder_checkout=canceled&session_id={CHECKOUT_SESSION_ID}",
+      successUrl: "https://polynet.test/settings/billing?founder_checkout=success&session_id={CHECKOUT_SESSION_ID}",
+      cancelUrl: "https://polynet.test/settings/billing?founder_checkout=canceled&session_id={CHECKOUT_SESSION_ID}",
     });
   });
 });

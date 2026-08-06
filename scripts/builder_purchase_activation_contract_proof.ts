@@ -17,8 +17,8 @@ const billingController = read("apps/web/src/controllers/useWebFounderBillingCon
 
 assert.match(browserState, /polynet_pending_founder_checkout_v1/);
 assert.match(browserState, /PENDING_FOUNDER_CHECKOUT_TTL_MS/);
-assert.match(browserState, /founder_checkout=success&session_id=\{CHECKOUT_SESSION_ID\}/);
-assert.match(browserState, /founder_checkout=canceled&session_id=\{CHECKOUT_SESSION_ID\}/);
+assert.match(browserState, /\/settings\/billing\?founder_checkout=success&session_id=\{CHECKOUT_SESSION_ID\}/);
+assert.match(browserState, /\/settings\/billing\?founder_checkout=canceled&session_id=\{CHECKOUT_SESSION_ID\}/);
 assert.match(browserState, /pendingFounderCheckoutMatchesSession/);
 assert.match(browserState, /runWithFounderCheckoutStartLock/);
 assert.doesNotMatch(browserState, /arx_pending_purchase_claim_token/);

@@ -209,7 +209,7 @@ export function buildFounderCheckoutReturnUrls(origin: string): {
 } {
   const normalizedOrigin = new URL(origin).origin;
   return {
-    successUrl: `${normalizedOrigin}/?founder_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
-    cancelUrl: `${normalizedOrigin}/?founder_checkout=canceled&session_id={CHECKOUT_SESSION_ID}`,
+    successUrl: `${normalizedOrigin}/settings/billing?founder_checkout=success&session_id={CHECKOUT_SESSION_ID}`,
+    cancelUrl: `${normalizedOrigin}/settings/billing?founder_checkout=canceled&session_id={CHECKOUT_SESSION_ID}`,
   };
 }
