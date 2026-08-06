@@ -2598,6 +2598,7 @@ export default function App() {
       openFounderBillingPortal: founderBilling.openPortal,
       refreshFounderBilling: founderBilling.refresh,
       retryCommunityArchive: founderBilling.retryArchiveCleanup,
+      restoreOperatorCommunity: founderBilling.restoreOperatorCommunity,
       onOpenBuilderOffer: (community) => builderOffer.open({ community }),
       onOpenLegacyFunding: () => openGlobalSettings("account"),
       onOpenCreateCommunity: () => openCreateCommunityModal(),

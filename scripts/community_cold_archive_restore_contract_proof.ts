@@ -28,6 +28,11 @@ assert.match(
   "restoration eligibility must require the exact archive generation cleanup receipt",
 );
 assert.match(
+  archive,
+  /restoreOperatorCommunity = mutation[\s\S]*community_restore_forbidden[\s\S]*hasPlatformOwnerComplimentaryAccess[\s\S]*community_restore_operator_required[\s\S]*community_restore_lifecycle_generation_conflict[\s\S]*requireCompletedCommunityArchiveBillingCleanup[\s\S]*restoreCommunityLifecycle\(community\)[\s\S]*eventType: "community_restored"/,
+  "operator restoration must be owner-only, generation-bound, cleanup-gated, and audited",
+);
+assert.match(
   founderBilling,
   /createPendingFounderSubscriptionCheckoutInternal[\s\S]*requireFounderCheckoutLifecycle\(ctx, community\)[\s\S]*mode: "founder_subscription"[\s\S]*communityLifecycleGeneration: lifecycle\.generation/,
   "archived restoration must reuse the existing generation-bound founder subscription checkout",
@@ -63,9 +68,19 @@ assert.match(
   "archive and blocked-cleanup retry must reuse the canonical archive command",
 );
 assert.match(
+  communityGateway,
+  /restoreOperatorCloudCommunity[\s\S]*communityColdArchive:restoreOperatorCommunity[\s\S]*lifecycleGeneration/,
+  "operator restoration must use one authenticated community gateway command",
+);
+assert.match(
   billingUi,
-  /archiveCleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*archiveCleanupStatus === "complete"[\s\S]*Restore community/,
-  "global Billing must own pending, blocked, and restorable archived presentation",
+  /archiveCleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*archiveCleanupStatus === "complete"[\s\S]*isOperatorComped[\s\S]*restoreOperatorCommunity[\s\S]*Restore community[\s\S]*onOpenBuilderOffer/,
+  "global Billing must separate direct operator restoration from paid builder restoration",
+);
+assert.match(
+  billingController,
+  /restoreOperatorCommunity = useCallback[\s\S]*restoreOperatorCloudCommunity[\s\S]*refresh\(usableSession\)[\s\S]*onCommunityReadyRef/,
+  "operator restoration must refresh both billing and the active community projection",
 );
 assert.match(
   billingController,

@@ -81,6 +81,21 @@ async function createArchivedFixture(
   });
 }
 
+async function grantOperatorOwner(
+  t: ReturnType<typeof convexTest>,
+  userId: any,
+) {
+  await t.run(async (ctx) => {
+    await ctx.db.insert("operatorRoles", {
+      userId,
+      role: "owner",
+      active: true,
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    });
+  });
+}
+
 async function prepareAndAttachRestoreCheckout(
   t: ReturnType<typeof convexTest>,
   fixture: Awaited<ReturnType<typeof createArchivedFixture>>,
@@ -314,4 +329,152 @@ test.sequential("a stale archived generation cannot be restored", async () => {
   } finally {
     restoreEnv();
   }
+});
+
+test.sequential("operator owner restoration is direct and idempotent", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createArchivedFixture(t, "operator");
+  await grantOperatorOwner(t, fixture.ownerId);
+  const asOwner = t.withIdentity({ subject: "restore-owner-operator" });
+
+  const restored = await asOwner.mutation(
+    (api as any).communityColdArchive.restoreOperatorCommunity,
+    {
+      communityId: fixture.communityId,
+      lifecycleGeneration: 1,
+    },
+  );
+  expect(restored).toMatchObject({
+    ok: true,
+    changed: true,
+    lifecycle_status: "active",
+    lifecycle_generation: 2,
+  });
+
+  const replay = await asOwner.mutation(
+    (api as any).communityColdArchive.restoreOperatorCommunity,
+    {
+      communityId: fixture.communityId,
+      lifecycleGeneration: 1,
+    },
+  );
+  expect(replay).toMatchObject({
+    ok: true,
+    changed: false,
+    lifecycle_status: "active",
+    lifecycle_generation: 2,
+  });
+
+  const state = await t.run(async (ctx) => ({
+    community: await ctx.db.get(fixture.communityId),
+    audits: await ctx.db
+      .query("criticalAuditEvents")
+      .withIndex("by_type_createdAt", (q) =>
+        q.eq("eventType", "community_restored"),
+      )
+      .collect(),
+  }));
+  expect(state.community).toMatchObject({
+    lifecycleStatus: "active",
+    lifecycleGeneration: 2,
+    inferenceFundingPolicy: "managed_required",
+  });
+  expect(state.audits).toHaveLength(1);
+  expect(state.audits[0]).toMatchObject({
+    actorUserId: fixture.ownerId,
+    communityId: fixture.communityId,
+    provider: "polynet",
+    metadata: { lifecycleGeneration: 2 },
+  });
+});
+
+test.sequential("direct restoration fails closed outside the operator owner lane", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createArchivedFixture(t, "operator-auth");
+  const asOwner = t.withIdentity({ subject: "restore-owner-operator-auth" });
+
+  await expect(
+    asOwner.mutation(
+      (api as any).communityColdArchive.restoreOperatorCommunity,
+      {
+        communityId: fixture.communityId,
+        lifecycleGeneration: 1,
+      },
+    ),
+  ).rejects.toThrow("community_restore_operator_required");
+
+  const other = await t.run(async (ctx) => {
+    return await ctx.db.insert("users", {
+      authSubject: "restore-other-operator-auth",
+      displayName: "Other operator",
+      handle: "restore-other-operator-auth",
+      normalizedHandle: "restore-other-operator-auth",
+      createdAt: NOW_MS,
+      updatedAt: NOW_MS,
+    });
+  });
+  await grantOperatorOwner(t, other);
+  const asOther = t.withIdentity({ subject: "restore-other-operator-auth" });
+  await expect(
+    asOther.mutation(
+      (api as any).communityColdArchive.restoreOperatorCommunity,
+      {
+        communityId: fixture.communityId,
+        lifecycleGeneration: 1,
+      },
+    ),
+  ).rejects.toThrow("community_restore_forbidden");
+});
+
+test.sequential("operator restoration requires current completed cleanup", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createArchivedFixture(t, "operator-cleanup", "pending");
+  await grantOperatorOwner(t, fixture.ownerId);
+  const asOwner = t.withIdentity({ subject: "restore-owner-operator-cleanup" });
+
+  await expect(
+    asOwner.mutation(
+      (api as any).communityColdArchive.restoreOperatorCommunity,
+      {
+        communityId: fixture.communityId,
+        lifecycleGeneration: 1,
+      },
+    ),
+  ).rejects.toThrow("community_restore_billing_cleanup_incomplete");
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.archiveJobId, {
+      status: "complete",
+      completedAt: NOW_MS + 1,
+      updatedAt: NOW_MS + 1,
+    });
+  });
+  await expect(
+    asOwner.mutation(
+      (api as any).communityColdArchive.restoreOperatorCommunity,
+      {
+        communityId: fixture.communityId,
+        lifecycleGeneration: 2,
+      },
+    ),
+  ).rejects.toThrow("community_restore_lifecycle_generation_conflict");
+});
+
+test.sequential("platform home cannot enter operator restoration", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createArchivedFixture(t, "operator-home");
+  await grantOperatorOwner(t, fixture.ownerId);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.communityId, { slug: "polynet" });
+  });
+  const asOwner = t.withIdentity({ subject: "restore-owner-operator-home" });
+  await expect(
+    asOwner.mutation(
+      (api as any).communityColdArchive.restoreOperatorCommunity,
+      {
+        communityId: fixture.communityId,
+        lifecycleGeneration: 1,
+      },
+    ),
+  ).rejects.toThrow("community_restore_platform_home_forbidden");
 });

@@ -29,6 +29,10 @@ export type WebBillingSettingsSectionProps = {
   openFounderBillingPortal: (communityId: string) => Promise<void> | void;
   refreshFounderBilling: () => Promise<unknown> | void;
   retryCommunityArchive: (communityId: string) => Promise<void> | void;
+  restoreOperatorCommunity: (
+    communityId: string,
+    lifecycleGeneration: number,
+  ) => Promise<void> | void;
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
   onOpenLegacyFunding: () => void;
   onOpenCreateCommunity: () => void;
@@ -146,7 +150,7 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                     </div>
                     <div className="builder-community-actions">
                       {isArchived ? (
-                        isOperatorComped ? null : archiveCleanupStatus === "blocked" ? (
+                        archiveCleanupStatus === "blocked" ? (
                           <button
                             className="secondary"
                             type="button"
@@ -156,15 +160,28 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                             {isActing ? "Retrying…" : "Retry cleanup"}
                           </button>
                         ) : archiveCleanupStatus === "complete" ? (
-                          <button
-                            type="button"
-                            disabled={isActing}
-                            onClick={() => props.onOpenBuilderOffer(community)}
-                          >
-                            {isActing
-                              ? "Opening…"
-                              : `Restore community — ${formatBuilderOfferPrice(community.monthly_price_base_units)}`}
-                          </button>
+                          isOperatorComped ? (
+                            <button
+                              type="button"
+                              disabled={isActing}
+                              onClick={() => void props.restoreOperatorCommunity(
+                                community.community_id,
+                                community.lifecycle_generation,
+                              )}
+                            >
+                              {isActing ? "Restoring…" : "Restore community"}
+                            </button>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={isActing}
+                              onClick={() => props.onOpenBuilderOffer(community)}
+                            >
+                              {isActing
+                                ? "Opening…"
+                                : `Restore community — ${formatBuilderOfferPrice(community.monthly_price_base_units)}`}
+                            </button>
+                          )
                         ) : (
                           <button className="secondary" type="button" disabled>
                             Finishing archive…

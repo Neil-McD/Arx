@@ -8,7 +8,10 @@ import {
 } from "../../../../shared/cloudFounderBillingGateway";
 import type { AuthSession } from "../auth";
 import { scrubCurrentRouteSearchParams } from "../webAppRuntime";
-import { archiveCloudCommunity } from "../../../../shared/cloudCommunityAdminGateway";
+import {
+  archiveCloudCommunity,
+  restoreOperatorCloudCommunity,
+} from "../../../../shared/cloudCommunityAdminGateway";
 
 function messageForError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
@@ -32,6 +35,15 @@ function messageForError(error: unknown): string {
   }
   if (message.includes("community_archive_forbidden")) {
     return "Only the community owner can manage this archive.";
+  }
+  if (message.includes("community_restore_forbidden")) {
+    return "Only the community owner can restore this community.";
+  }
+  if (message.includes("community_restore_operator_required")) {
+    return "This direct restore path is available only to the Polynet operator.";
+  }
+  if (message.includes("community_restore_lifecycle_generation_conflict")) {
+    return "This community changed while you were restoring it. Refresh and try again.";
   }
   return message.trim() || "Community billing is temporarily unavailable.";
 }
@@ -210,6 +222,31 @@ export function useWebFounderBillingController(params: {
     }
   }, [params.session, watchArchiveCleanup]);
 
+  const restoreOperatorCommunity = useCallback(async (
+    communityId: string,
+    lifecycleGeneration: number,
+  ): Promise<void> => {
+    const usableSession = await ensureSessionRef.current(params.session);
+    if (!usableSession) return;
+    setActionCommunityId(communityId);
+    setError(null);
+    try {
+      await restoreOperatorCloudCommunity({
+        session: usableSession,
+        communityId,
+        lifecycleGeneration,
+      });
+      await Promise.all([
+        refresh(usableSession),
+        onCommunityReadyRef.current?.(communityId, usableSession),
+      ]);
+    } catch (restoreError) {
+      setError(messageForError(restoreError));
+    } finally {
+      setActionCommunityId(null);
+    }
+  }, [params.session, refresh]);
+
   const startCheckoutAfterCommunityCreated = useCallback(async (
     communityId: string,
   ): Promise<void> => {
@@ -250,6 +287,7 @@ export function useWebFounderBillingController(params: {
     startCheckoutAfterCommunityCreated,
     openPortal,
     retryArchiveCleanup,
+    restoreOperatorCommunity,
     watchArchiveCleanup,
   };
 }

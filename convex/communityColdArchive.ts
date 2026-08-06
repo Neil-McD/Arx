@@ -12,9 +12,11 @@ import {
   archiveCommunityLifecycle,
   communityLifecycleGenerationMatches,
   normalizeCommunityLifecycle,
+  restoreCommunityLifecycle,
 } from "../shared/communityLifecycle";
 import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import { recordCriticalAuditEvent } from "./criticalAudit";
+import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { isPlatformHomeCommunity } from "./platformHomeCommunity";
 import {
   cancelStripeSubscriptionIfActive,
@@ -213,6 +215,79 @@ export const archiveCommunity = mutation({
       lifecycle_status: transition.next.status,
       lifecycle_generation: transition.next.generation,
       billing_cleanup_status: job?.status ?? "pending",
+    };
+  },
+});
+
+export const restoreOperatorCommunity = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    lifecycleGeneration: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const actorUserId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const community = await ctx.db.get(args.communityId);
+    if (!community || String(community.ownerId) !== String(actorUserId)) {
+      throw new Error("community_restore_forbidden");
+    }
+    if (!(await hasPlatformOwnerComplimentaryAccess(ctx, actorUserId))) {
+      throw new Error("community_restore_operator_required");
+    }
+    if (isPlatformHomeCommunity({ communitySlug: community.slug })) {
+      throw new Error("community_restore_platform_home_forbidden");
+    }
+
+    const lifecycle = normalizeCommunityLifecycle(community);
+    if (lifecycle.status === "active") {
+      return {
+        ok: true,
+        changed: false,
+        community_id: String(args.communityId),
+        lifecycle_status: lifecycle.status,
+        lifecycle_generation: lifecycle.generation,
+      };
+    }
+    if (lifecycle.generation !== args.lifecycleGeneration) {
+      throw new Error("community_restore_lifecycle_generation_conflict");
+    }
+    await requireCompletedCommunityArchiveBillingCleanup(
+      ctx,
+      args.communityId,
+      lifecycle.generation,
+    );
+
+    const transition = restoreCommunityLifecycle(community);
+    if (!transition.changed) {
+      throw new Error("community_restore_lifecycle_conflict");
+    }
+    const nowMs = Date.now();
+    await ctx.db.patch(args.communityId, {
+      lifecycleStatus: transition.next.status,
+      lifecycleGeneration: transition.next.generation,
+      updatedAt: nowMs,
+    });
+    await recordCriticalAuditEvent(ctx, {
+      eventKey: `community_restored:${String(args.communityId)}:${transition.next.generation}`,
+      eventType: "community_restored",
+      status: "succeeded",
+      actorUserId,
+      communityId: args.communityId,
+      provider: "polynet",
+      metadata: { lifecycleGeneration: transition.next.generation },
+      createdAt: nowMs,
+    });
+    return {
+      ok: true,
+      changed: true,
+      community_id: String(args.communityId),
+      lifecycle_status: transition.next.status,
+      lifecycle_generation: transition.next.generation,
     };
   },
 });

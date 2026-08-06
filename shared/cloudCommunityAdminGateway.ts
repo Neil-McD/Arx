@@ -1829,6 +1829,28 @@ export async function archiveCloudCommunity<SessionT>(
   }) as CloudCommunityArchiveResult;
 }
 
+export type CloudCommunityRestoreResult = {
+  ok: boolean;
+  changed: boolean;
+  community_id: string;
+  lifecycle_status: "active";
+  lifecycle_generation: number;
+};
+
+export async function restoreOperatorCloudCommunity<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    lifecycleGeneration: number;
+  },
+): Promise<CloudCommunityRestoreResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation("communityColdArchive:restoreOperatorCommunity" as any, {
+    authSubject,
+    communityId: params.communityId,
+    lifecycleGeneration: params.lifecycleGeneration,
+  }) as CloudCommunityRestoreResult;
+}
+
 export async function setCloudCommunityFreeAccessMode<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
