@@ -1166,6 +1166,10 @@ export default defineSchema({
     ownerId: v.id("users"),
     slug: v.string(),
     name: v.string(),
+    lifecycleStatus: v.optional(
+      v.union(v.literal("active"), v.literal("archived")),
+    ),
+    lifecycleGeneration: v.optional(v.number()),
     oneLiner: v.optional(v.string()),
     about: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),

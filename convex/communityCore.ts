@@ -8,6 +8,7 @@ import {
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility";
 import type { CommunityVisualIdentity } from "../shared/communityVisualIdentity";
+import type { CommunityLifecycleStatus } from "../shared/communityLifecycle";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -15,6 +16,8 @@ export type CommunityLike = {
   ownerId: any;
   slug: string;
   name: string;
+  lifecycleStatus?: CommunityLifecycleStatus;
+  lifecycleGeneration?: number;
   oneLiner?: string;
   about?: string;
   avatarUrl?: string;

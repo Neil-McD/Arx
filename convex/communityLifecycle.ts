@@ -541,6 +541,8 @@ export const createCommunity = mutation({
       ownerId,
       slug,
       name,
+      lifecycleStatus: "active",
+      lifecycleGeneration: 0,
       oneLiner,
       avatarUrl,
       avatarStorageId,
