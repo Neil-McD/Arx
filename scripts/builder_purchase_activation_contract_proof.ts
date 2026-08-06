@@ -37,6 +37,11 @@ assert.match(activation, /community\.subscription_id === founderSubscriptionId/)
 assert.match(activation, /subscription\.subscription_id === founderSubscriptionId[\s\S]*subscription\.grants_setup/);
 assert.doesNotMatch(activation, /candidates\[0\]|unassigned_subscriptions\[0\]/);
 assert.match(activation, /params\.accountSetupStatus\.completed/);
+assert.match(
+  activation,
+  /if \(!params\.isAuthBootstrapComplete\) return;[\s\S]*if \(!params\.session\)/,
+);
+assert.match(app, /useWebBuilderPurchaseActivationController\(\{[\s\S]*isAuthBootstrapComplete,/);
 assert.match(activation, /reason: "activate_builder_purchase"/);
 assert.match(activation, /runWithFounderCheckoutStartLock[\s\S]*readPendingFounderCheckout\(\)[\s\S]*resolveFounderCheckoutStartReceipt\(existing\)/);
 assert.match(activation, /checkoutReturn\.kind === "canceled"[\s\S]*pendingFounderCheckoutMatchesSession/);
@@ -44,7 +49,10 @@ assert.match(authResume, /reason: "activate_builder_purchase"/);
 
 assert.match(landing, /onStartBuilderPurchase/);
 assert.match(app, /onStartBuilderPurchase:[\s\S]*builderPurchaseActivation\.startPurchase\(\)/);
-assert.match(app, /const openNewCommunityPurchaseFlow:[\s\S]*builderPurchaseActivation\.startPurchase\(\)/);
+assert.match(
+  app,
+  /const openNewCommunityPurchaseFlow\s*=\s*builderPurchaseActivation\.openCommunityPurchaseFlow/,
+);
 assert.match(app, /onOpenCreateCommunity: \(\) => openNewCommunityPurchaseFlow\(\)/);
 assert.match(app, /openCommunityCreateFlow: openNewCommunityPurchaseFlow/);
 assert.doesNotMatch(app, /createBlockingFundingCommunity/);

@@ -53,6 +53,7 @@ function formatActivationError(error: unknown): string {
 
 export function useWebBuilderPurchaseActivationController(params: {
   session: AuthSession | null;
+  isAuthBootstrapComplete: boolean;
   ensureSession: (session?: AuthSession | null) => Promise<AuthSession | null>;
   accountSetupStatus: AccountSetupStatus | null;
   requireSignIn: (intent?: { reason: string; payload: Record<string, unknown> }) => void;
@@ -143,6 +144,7 @@ export function useWebBuilderPurchaseActivationController(params: {
   }, [clearPollTimeout, params.onAttachedCommunityReady]);
 
   const resumePendingPurchase = useCallback(async (): Promise<void> => {
+    if (!params.isAuthBootstrapComplete) return;
     if (inFlightRef.current) return;
     const pending = readPendingFounderCheckout();
     if (!pending) {
@@ -251,6 +253,7 @@ export function useWebBuilderPurchaseActivationController(params: {
     clearPollTimeout,
     params.accountSetupStatus,
     params.ensureSession,
+    params.isAuthBootstrapComplete,
     params.navigateTo,
     params.requireSignIn,
     params.session,

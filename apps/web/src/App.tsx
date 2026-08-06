@@ -1525,6 +1525,7 @@ export default function App() {
   };
   const builderPurchaseActivation = useWebBuilderPurchaseActivationController({
     session,
+    isAuthBootstrapComplete,
     ensureSession: ensureUsableAuthSession,
     accountSetupStatus: effectiveAccountSetupStatus,
     requireSignIn,
