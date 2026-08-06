@@ -80,6 +80,11 @@ export function useWebBuilderPurchaseActivationController(params: {
     Boolean(readPendingFounderCheckout()),
   );
   const [resumeNonce, setResumeNonce] = useState(0);
+  const initialCheckoutReturnRef = useRef(
+    parseFounderCheckoutReturn(
+      typeof window === "undefined" ? "" : window.location.search,
+    ),
+  );
   const inFlightRef = useRef(false);
   const pollAttemptRef = useRef(0);
   const pollTimeoutRef = useRef<number | null>(null);
@@ -356,7 +361,11 @@ export function useWebBuilderPurchaseActivationController(params: {
   }, [clearPollTimeout]);
 
   useEffect(() => {
-    const checkoutReturn = parseFounderCheckoutReturn(window.location.search);
+    // Capture the checkout return during render. Earlier shell effects may
+    // canonicalize the signed-in route before this effect runs, but they must
+    // not be allowed to erase a paid recovery receipt.
+    const checkoutReturn = initialCheckoutReturnRef.current;
+    initialCheckoutReturnRef.current = null;
     if (!checkoutReturn) return;
     if (checkoutReturn.kind === "canceled") {
       const existing = readPendingFounderCheckout();

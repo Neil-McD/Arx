@@ -56,6 +56,7 @@ import type * as communityApplicationFeeRefundCore from "../communityApplication
 import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
 import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
 import type * as communityAttention from "../communityAttention.js";
+import type * as communityBuilderAccessCore from "../communityBuilderAccessCore.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChannelAudit from "../communityChannelAudit.js";
 import type * as communityChannelBackfill from "../communityChannelBackfill.js";
@@ -141,6 +142,7 @@ import type * as errorLogging from "../errorLogging.js";
 import type * as eventReminders from "../eventReminders.js";
 import type * as fallbackHtmlSearchTransport from "../fallbackHtmlSearchTransport.js";
 import type * as founderBilling from "../founderBilling.js";
+import type * as founderCheckoutReceiptCore from "../founderCheckoutReceiptCore.js";
 import type * as founderInference from "../founderInference.js";
 import type * as founderInferenceCore from "../founderInferenceCore.js";
 import type * as founderInferenceMigration from "../founderInferenceMigration.js";
@@ -300,6 +302,7 @@ declare const fullApi: ApiFromModules<{
   communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
   communityArchiveDocuments: typeof communityArchiveDocuments;
   communityAttention: typeof communityAttention;
+  communityBuilderAccessCore: typeof communityBuilderAccessCore;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChannelAudit: typeof communityChannelAudit;
   communityChannelBackfill: typeof communityChannelBackfill;
@@ -385,6 +388,7 @@ declare const fullApi: ApiFromModules<{
   eventReminders: typeof eventReminders;
   fallbackHtmlSearchTransport: typeof fallbackHtmlSearchTransport;
   founderBilling: typeof founderBilling;
+  founderCheckoutReceiptCore: typeof founderCheckoutReceiptCore;
   founderInference: typeof founderInference;
   founderInferenceCore: typeof founderInferenceCore;
   founderInferenceMigration: typeof founderInferenceMigration;

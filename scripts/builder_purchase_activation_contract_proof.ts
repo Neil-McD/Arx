@@ -43,6 +43,10 @@ assert.match(
 );
 assert.match(app, /useWebBuilderPurchaseActivationController\(\{[\s\S]*isAuthBootstrapComplete,/);
 assert.match(activation, /reason: "activate_builder_purchase"/);
+assert.match(
+  activation,
+  /initialCheckoutReturnRef = useRef\([\s\S]*parseFounderCheckoutReturn\([\s\S]*window\.location\.search[\s\S]*const checkoutReturn = initialCheckoutReturnRef\.current/,
+);
 assert.match(activation, /runWithFounderCheckoutStartLock[\s\S]*readPendingFounderCheckout\(\)[\s\S]*resolveFounderCheckoutStartReceipt\(existing\)/);
 assert.match(activation, /checkoutReturn\.kind === "canceled"[\s\S]*pendingFounderCheckoutMatchesSession/);
 assert.match(authResume, /reason: "activate_builder_purchase"/);
