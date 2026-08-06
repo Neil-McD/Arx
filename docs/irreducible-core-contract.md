@@ -12,7 +12,7 @@ These surfaces are non-negotiable for MVP and must not be deleted during reducti
 3. Member personal-agent harness under explicit community context.
 4. Separate community-owned agent, cognition, AI feed, and community research.
 5. Official Polynet MCP and canonical semantic operation seam.
-6. Founder inference funding through the $79 managed-community plan or an explicitly grandfathered BYOK grant.
+6. Hosted community inference through the $79 Builder plan or canonical operator grant.
 7. Voice UX.
 8. Community monetization rails (including Stripe Connect Express onboarding).
 
@@ -35,8 +35,8 @@ Core AI-agent paths:
 
 ## Inference and Auth (Must Keep)
 
-- Platform-funded inference for managed communities.
-- Explicitly grandfathered founder BYOK inference where the owner has selected and activated that option.
+- Platform-hosted inference for communities with active Builder or canonical operator authority.
+- Historical founder credentials grant no community-inference authority.
 - Community-scoped agent tooling remains available to authenticated users with
   sufficient entitlement and quota.
 - Public and private edge routing contracts remain explicit.

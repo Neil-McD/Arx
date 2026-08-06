@@ -192,7 +192,8 @@ export default defineSchema({
 
   founderSubscriptions: defineTable({
     ownerUserId: v.id("users"),
-    communityId: v.id("communities"),
+    communityId: v.optional(v.id("communities")),
+    attachedAt: v.optional(v.number()),
     provider: v.literal("stripe"),
     providerCustomerId: v.string(),
     providerSubscriptionId: v.string(),
@@ -209,6 +210,10 @@ export default defineSchema({
     cancelAtPeriodEnd: v.boolean(),
     endedAt: v.optional(v.number()),
     revokedReason: v.optional(v.string()),
+    riskAccessState: v.optional(
+      v.union(v.literal("clear"), v.literal("revoked")),
+    ),
+    riskStateChangedAt: v.optional(v.number()),
     lastProviderEventCreatedAt: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -273,6 +278,7 @@ export default defineSchema({
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     usageCycleId: v.optional(v.id("founderUsageCycles")),
     surface: v.union(
+      v.literal("member_agent_dock"),
       v.literal("community_agent_mention"),
       v.literal("community_autonomous_cognition"),
       v.literal("community_setup_generation"),
@@ -634,6 +640,16 @@ export default defineSchema({
     ownerUserId: v.optional(v.id("users")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     claimToken: v.optional(v.string()),
+    claimTokenHash: v.optional(v.string()),
+    checkoutAttemptKeyHash: v.optional(v.string()),
+    recoveryEmailHash: v.optional(v.string()),
+    recoveryEmailHashVersion: v.optional(v.literal("hmac_sha256_v1")),
+    founderRiskState: v.optional(
+      v.union(v.literal("clear"), v.literal("revoked")),
+    ),
+    founderRiskStateChangedAt: v.optional(v.number()),
+    founderRiskRevokedReason: v.optional(v.string()),
+    lastProviderEventCreatedAt: v.optional(v.number()),
     status: v.union(v.literal("pending"), v.literal("complete"), v.literal("expired")),
     expiresAt: v.number(),
     createdAt: v.number(),
@@ -642,6 +658,7 @@ export default defineSchema({
     .index("by_sessionId", ["sessionId"])
     .index("by_providerCheckoutSessionId", ["providerCheckoutSessionId"])
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
+    .index("by_mode_attempt_key", ["mode", "checkoutAttemptKeyHash"])
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
     .index("by_mode_status", ["mode", "status"])
@@ -1191,6 +1208,9 @@ export default defineSchema({
       v.union(v.literal("active"), v.literal("archived")),
     ),
     lifecycleGeneration: v.optional(v.number()),
+    builderAccessMode: v.optional(
+      v.union(v.literal("grandfathered"), v.literal("subscription_required")),
+    ),
     oneLiner: v.optional(v.string()),
     about: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),

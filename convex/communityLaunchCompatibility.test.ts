@@ -394,10 +394,21 @@ test("managed communities can publish while AI funding remains fail closed", asy
   await expect(publish()).resolves.toMatchObject({ visibility: "published" });
 });
 
-test("a publish-ready first community may be created as published before managed AI is funded", async () => {
+test("a publish-ready first community consumes its verified Builder subscription", async () => {
+  const priorEnv = {
+    price: process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID,
+    input: process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS,
+    output: process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS,
+    reservation: process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS,
+  };
+  process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = "price_founder_79";
+  process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = "1000000";
+  process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = "2000000";
+  process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = "1000000";
+  try {
   const t = convexTest(schema, modules);
-  const nowMs = 1_750_000_100_000;
-  await t.run(async (ctx) => {
+  const nowMs = Date.now();
+  const fixture = await t.run(async (ctx) => {
     const userId = await ctx.db.insert("users", {
       authSubject: "community-launch-first-owner",
       displayName: "First community owner",
@@ -423,20 +434,48 @@ test("a publish-ready first community may be created as published before managed
         createdAt: nowMs,
       });
     }
-    await ctx.db.insert("userProviderConnections", {
-      userId,
-      provider: "openai",
-      authKind: "api_key",
-      encryptedSecretHex: "encrypted-first-community-key",
-      secretIvHex: "first-community-iv",
-      secretVersion: 1,
-      validatedAt: nowMs,
+    const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: userId,
+      provider: "stripe",
+      providerCustomerId: "cus_first_community",
+      providerSubscriptionId: "sub_first_community",
+      providerPriceId: "price_founder_79",
+      status: "active",
+      currentPeriodStartAt: nowMs,
+      currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: nowMs,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    return userId;
+    const wrongPriceSubscriptionId = await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: userId,
+      provider: "stripe",
+      providerCustomerId: "cus_wrong_builder_price",
+      providerSubscriptionId: "sub_wrong_builder_price",
+      providerPriceId: "price_not_the_builder_offer",
+      status: "active",
+      currentPeriodStartAt: nowMs,
+      currentPeriodEndAt: nowMs + 30 * 24 * 60 * 60 * 1_000,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { founderSubscriptionId, userId, wrongPriceSubscriptionId };
   });
   const asOwner = t.withIdentity({ subject: "community-launch-first-owner" });
+
+  await expect(asOwner.mutation(api.communityLifecycle.createCommunity, {
+    name: "Unfunded community",
+    slug: "unfunded-community",
+  })).rejects.toThrow("community_funding_required_before_create");
+
+  await expect(asOwner.mutation(api.communityLifecycle.createCommunity, {
+    name: "Wrong price community",
+    slug: "wrong-price-community",
+    founderSubscriptionId: fixture.wrongPriceSubscriptionId,
+  })).rejects.toThrow("founder_subscription_price_mismatch");
 
   const created = await asOwner.mutation(api.communityLifecycle.createCommunity, {
     name: "Published before AI funding",
@@ -446,6 +485,7 @@ test("a publish-ready first community may be created as published before managed
     bannerUrl: "https://example.com/community-banner.png",
     visibility: "published",
     entryPolicy: "approval",
+    founderSubscriptionId: fixture.founderSubscriptionId,
   });
   expect(created).toMatchObject({
     owner_id: "community-launch-first-owner",
@@ -453,14 +493,41 @@ test("a publish-ready first community may be created as published before managed
     visibility: "published",
   });
 
-  await expect(
-    t.run(async (ctx) => {
+  await expect(t.run(async (ctx) => {
       const community = await ctx.db
         .query("communities")
         .withIndex("by_slug", (q) => q.eq("slug", "published-before-ai-funding"))
         .first();
       if (!community) throw new Error("created_community_missing");
+      expect(community).toMatchObject({
+        builderAccessMode: "subscription_required",
+      });
+      const subscription = await ctx.db.get(fixture.founderSubscriptionId);
+      expect(subscription).toMatchObject({
+        communityId: community._id,
+        attachedAt: expect.any(Number),
+      });
+      expect(await ctx.db.query("founderUsageCycles").collect()).toHaveLength(1);
       return await resolveCommunityInferenceFundingAdmission(ctx, community._id);
-    }),
-  ).resolves.toEqual({ ok: false, code: "founder_plan_required" });
+    })).resolves.toMatchObject({
+      ok: true,
+      mode: "platform_subscription",
+      subscriptionId: fixture.founderSubscriptionId,
+    });
+
+  await expect(asOwner.mutation(api.communityLifecycle.createCommunity, {
+    name: "Duplicate subscription community",
+    slug: "duplicate-subscription-community",
+    founderSubscriptionId: fixture.founderSubscriptionId,
+  })).rejects.toThrow("founder_subscription_already_attached");
+  } finally {
+    if (priorEnv.price === undefined) delete process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID;
+    else process.env.POLYNET_FOUNDER_STRIPE_PRICE_ID = priorEnv.price;
+    if (priorEnv.input === undefined) delete process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS;
+    else process.env.POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.input;
+    if (priorEnv.output === undefined) delete process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS;
+    else process.env.POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS = priorEnv.output;
+    if (priorEnv.reservation === undefined) delete process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS;
+    else process.env.POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS = priorEnv.reservation;
+  }
 });

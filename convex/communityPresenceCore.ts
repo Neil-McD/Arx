@@ -16,6 +16,7 @@ import {
   resolvePublicUserId,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { resolveCommunityBuilderAccess } from "./communityBuilderAccessCore";
 
 export {
   COMMUNITY_PRESENCE_FACE_LIMIT,
@@ -131,6 +132,13 @@ export async function resolveCommunityPresenceAuthorization(args: {
   community: CommunityLike;
   userId: any;
 }): Promise<{ authorized: boolean; membership: CommunityMembershipLike | null }> {
+  const builderAccess = await resolveCommunityBuilderAccess({
+    ctx: args.ctx,
+    community: args.community,
+  });
+  if (!builderAccess.operational) {
+    return { authorized: false, membership: null };
+  }
   if (String(args.community.ownerId) === String(args.userId)) {
     return { authorized: true, membership: null };
   }

@@ -60,8 +60,6 @@ export function formatAccountSetupStep(value: OperatorAccountSetupUserRecord["se
   switch (value) {
     case "identity":
       return "Profile";
-    case "inference":
-      return "Inference";
     case "complete":
       return "Complete";
     default:
@@ -79,8 +77,6 @@ export function formatAccountSetupMissing(value: OperatorAccountSetupUserRecord[
       return "Avatar";
     case "platform_legal":
       return "Platform legal";
-    case "inference_provider":
-      return "Inference";
     default:
       return value;
   }

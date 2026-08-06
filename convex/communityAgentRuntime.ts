@@ -1,7 +1,6 @@
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
-import { runChatgptNativeToolCompletion } from "./httpChatgpt";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import {
   buildCommunityAgentFunctionTools,
@@ -951,7 +950,6 @@ export const runCommunityAgentLoopInternal = internalAction({
       { kind: "system_prompt", content: String(messages[0]?.content ?? "") },
       { kind: "wake_context", content: String(messages[1]?.content ?? "") },
     ]);
-    let reasoningBuffer = "";
     try {
       const result = await runNativeRuntimeKernel<CommunityAgentToolName>({
         messages,
@@ -963,46 +961,22 @@ export const runCommunityAgentLoopInternal = internalAction({
           maxRepeatedIdenticalCalls: 2,
         },
         runCompletion: async (kernelMessages) => {
-          const completion = fundingSession
-            ? await runOpenAiNativeToolCompletion({
-                modelId: fundingSession.modelId,
-                messages: kernelMessages,
-                maxTokens: 1600,
-                tools: buildCommunityAgentFunctionTools(roleDefinition?.toolNames),
-                apiKeyOverride: fundingSession.apiKeyOverride,
-                parallelToolCalls: false,
-              })
-            : await runChatgptNativeToolCompletion({
-                ctx,
-                userId: normalizeIdValue(resolved.sponsorUserId),
-                modelId,
-                messages: kernelMessages,
-                maxTokens: 1600,
-                // Authority by absence: only this role's tool schemas are sent.
-                tools: buildCommunityAgentFunctionTools(roleDefinition?.toolNames),
-                parallelToolCalls: false,
-                reasoningEffort: roleDefinition?.reasoningEffort,
-                // Background steward: patience is free. Transient provider failures
-                // retry with backoff instead of killing the whole cognition pass.
-                retryPolicy: { maxAttempts: 4, backoffBaseMs: 500 },
-                // Carry reasoning forward across tool steps so the model resumes its
-                // chain of thought instead of re-deriving it (coherence + tokens).
-                carryReasoningItems: true,
-                onReasoningSummaryTextDelta: ({ delta }) => {
-                  reasoningBuffer += delta;
-                },
-              });
-          if (fundingSession && completion.ok !== false) {
+          if (!fundingSession) throw new Error("community_inference_funding_session_missing");
+          const completion = await runOpenAiNativeToolCompletion({
+            modelId: fundingSession.modelId,
+            messages: kernelMessages,
+            maxTokens: 1600,
+            // Authority by absence: only this role's tool schemas are sent.
+            tools: buildCommunityAgentFunctionTools(roleDefinition?.toolNames),
+            parallelToolCalls: false,
+          });
+          if (completion.ok !== false) {
             if (completion.promptTokens === null || completion.completionTokens === null) {
               aggregateUsageComplete = false;
             } else {
               aggregatePromptTokens += Math.max(0, Math.floor(Number(completion.promptTokens)));
               aggregateCompletionTokens += Math.max(0, Math.floor(Number(completion.completionTokens)));
             }
-          }
-          if (reasoningBuffer.trim()) {
-            await emitRunEvents([{ kind: "reasoning", content: reasoningBuffer.trim() }]);
-            reasoningBuffer = "";
           }
           return coerceCommunityAgentCompletion(completion);
         },

@@ -5,7 +5,6 @@ import {
   builderFundingStateLabel,
   formatBuilderOfferPrice,
   resolveBuilderOfferPrimaryAction,
-  resolveBuilderOfferSecondaryAction,
 } from "../../../../shared/builderOffer";
 import type {
   CloudFounderBillingCommunity,
@@ -29,12 +28,11 @@ export type WebBillingSettingsSectionProps = {
   openFounderBillingPortal: (communityId: string) => Promise<void> | void;
   refreshFounderBilling: () => Promise<unknown> | void;
   retryCommunityArchive: (communityId: string) => Promise<void> | void;
-  restoreOperatorCommunity: (
+  restoreCommunityWithoutPayment: (
     communityId: string,
     lifecycleGeneration: number,
   ) => Promise<void> | void;
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
-  onOpenLegacyFunding: () => void;
   onOpenCreateCommunity: () => void;
   pendingPurchaseClaims: PendingPurchaseClaim[];
   isLoadingPendingPurchases: boolean;
@@ -49,7 +47,6 @@ function runFundingAction(params: {
   action: BuilderFundingAction;
   community: CloudFounderBillingCommunity;
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
-  onOpenLegacyFunding: () => void;
   openFounderBillingPortal: (communityId: string) => Promise<void> | void;
 }) {
   if (params.action === "buy_builder" || params.action === "resume_checkout") {
@@ -60,7 +57,6 @@ function runFundingAction(params: {
     void params.openFounderBillingPortal(params.community.community_id);
     return;
   }
-  params.onOpenLegacyFunding();
 }
 
 function communityFundingStateLabel(community: CloudFounderBillingCommunity): string {
@@ -121,12 +117,10 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                   state: community.funding_state,
                   allowedActions: community.allowed_actions,
                 });
-                const secondaryAction = resolveBuilderOfferSecondaryAction({
-                  primaryAction,
-                  allowedActions: community.allowed_actions,
-                });
                 const isActing = props.founderBillingActionCommunityId === community.community_id;
                 const isOperatorComped = community.funding_mode === "operator_comp";
+                const canRestoreWithoutPayment =
+                  isOperatorComped || community.builder_access_mode === "grandfathered";
                 const isArchived = community.lifecycle_status === "archived";
                 const archiveCleanupStatus = community.archive_billing_cleanup_status;
                 return (
@@ -143,9 +137,7 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                               : "Stopping payments and freezing community access."
                           : community.funding_lane === "builder_included"
                           ? "Polynet-hosted community AI is included."
-                          : community.funding_lane === "legacy_choice" && community.funding_state === "legacy_api_active"
-                            ? "Community AI is funded by your connected API key."
-                            : `${formatBuilderOfferPrice(community.monthly_price_base_units)} · Polynet-hosted community AI`}
+                          : `${formatBuilderOfferPrice(community.monthly_price_base_units)} · Polynet-hosted community AI`}
                       </small>
                     </div>
                     <div className="builder-community-actions">
@@ -160,11 +152,11 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                             {isActing ? "Retrying…" : "Retry cleanup"}
                           </button>
                         ) : archiveCleanupStatus === "complete" ? (
-                          isOperatorComped ? (
+                          canRestoreWithoutPayment ? (
                             <button
                               type="button"
                               disabled={isActing}
-                              onClick={() => void props.restoreOperatorCommunity(
+                              onClick={() => void props.restoreCommunityWithoutPayment(
                                 community.community_id,
                                 community.lifecycle_generation,
                               )}
@@ -187,23 +179,6 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                             Finishing archive…
                           </button>
                         )
-                      ) : isOperatorComped ? null : secondaryAction ? (
-                        <button
-                          className="secondary"
-                          type="button"
-                          onClick={() => runFundingAction({
-                            action: secondaryAction,
-                            community,
-                            onOpenBuilderOffer: props.onOpenBuilderOffer,
-                            onOpenLegacyFunding: props.onOpenLegacyFunding,
-                            openFounderBillingPortal: props.openFounderBillingPortal,
-                          })}
-                        >
-                          {builderFundingActionLabel({
-                            action: secondaryAction,
-                            state: community.funding_state,
-                          })}
-                        </button>
                       ) : null}
                       {isArchived || isOperatorComped ? null : primaryAction ? (
                         <button
@@ -214,7 +189,6 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                             action: primaryAction,
                             community,
                             onOpenBuilderOffer: props.onOpenBuilderOffer,
-                            onOpenLegacyFunding: props.onOpenLegacyFunding,
                             openFounderBillingPortal: props.openFounderBillingPortal,
                           })}
                         >

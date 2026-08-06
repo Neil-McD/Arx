@@ -1785,6 +1785,7 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
     bannerFocusX?: number | null;
     bannerFocusY?: number | null;
     bannerZoom?: number | null;
+    founderSubscriptionId?: string | null;
   },
 ): Promise<TCommunity | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -1804,6 +1805,7 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
     bannerFocusX: params.bannerFocusX ?? 0.5,
     bannerFocusY: params.bannerFocusY ?? 0.5,
     bannerZoom: params.bannerZoom ?? 1,
+    founderSubscriptionId: params.founderSubscriptionId ?? undefined,
   });
   return firstGatewayRow<TCommunity>(payload);
 }
@@ -1835,16 +1837,17 @@ export type CloudCommunityRestoreResult = {
   community_id: string;
   lifecycle_status: "active";
   lifecycle_generation: number;
+  restoration_authority?: "grandfathered" | "operator_comp";
 };
 
-export async function restoreOperatorCloudCommunity<SessionT>(
+export async function restoreCloudCommunityWithoutPayment<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
     lifecycleGeneration: number;
   },
 ): Promise<CloudCommunityRestoreResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return await client.mutation("communityColdArchive:restoreOperatorCommunity" as any, {
+  return await client.mutation("communityColdArchive:restoreCommunityWithoutPayment" as any, {
     authSubject,
     communityId: params.communityId,
     lifecycleGeneration: params.lifecycleGeneration,

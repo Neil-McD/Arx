@@ -13,6 +13,7 @@ import {
   isAccountSetupStatusIdentityComplete,
   type AccountSetupStatus,
 } from "../../../../shared/accountSetup";
+import { readPendingFounderCheckout } from "../../../../shared/founderCheckoutBrowserState";
 import { resolveAuthSubject } from "../../../../shared/authSession";
 import type { UserProfileDetail } from "../../../../shared/communityTypes";
 import { formatProfileMutationError } from "../../../../shared/profileMutationErrors";
@@ -421,6 +422,7 @@ export function useWebOnboardingProfileController(params: {
     ) {
       return;
     }
+    if (readPendingFounderCheckout()) return;
     void routeTryPolynetFree(params.session);
   }, [
     params.activePage,

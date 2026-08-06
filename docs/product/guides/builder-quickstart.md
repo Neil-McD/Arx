@@ -3,7 +3,7 @@ id: product.guide.builder_quickstart
 title: Builder Quickstart
 audience: builder, llm
 status: alpha-current
-last_verified: 2026-08-02
+last_verified: 2026-08-06
 ---
 
 # Builder Quickstart
@@ -14,7 +14,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Each managed community uses its own $79 monthly Builder subscription to run Polynet-hosted AI. Frozen legacy-eligible communities may instead use the owner's API key, and the canonical platform operator receives included Builder funding. Every new community is Builder-only. There is no account-wide Builder entitlement, personal Premium plan, or paid tool tier.
+Each community uses its own $79 monthly Builder subscription for Polynet-hosted AI. Existing grandfathered communities may keep operating without Builder, but hosted AI remains unavailable until Builder is active. The canonical platform operator receives included Builder funding. There is no account-wide Builder entitlement, community BYOK option, personal Premium plan, or paid tool tier.
 
 ## Before You Start
 
@@ -30,8 +30,8 @@ If those answers are vague, more settings will not fix the product.
 ## Core Steps
 
 1. Open the Builder offer from Create Community, Billing, or Account.
-2. Name the community and start its $79 monthly Builder checkout. Polynet creates the unlisted draft immediately before checkout.
-3. Define the community purpose and public profile.
+2. Complete the $79 monthly Builder checkout.
+3. Finish account setup, then name the funded community and define its purpose and public profile.
 4. Configure the community agent.
 5. Add resources that represent durable community knowledge.
 6. Attach skills where repeatable agent behavior is needed.
@@ -82,14 +82,14 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Existing approved founders can continue managing their frozen legacy-eligible communities through owner API funding or choose Builder per community.
+- Existing founders can continue managing grandfathered communities without Builder; hosted AI requires Builder per community.
 - Each managed community requires its own verified $79 monthly funding subscription to run Polynet-hosted AI.
 - A paying builder may own an unlimited number of communities. There is no
   account-level numeric cap, but every existing community must have current
-  funding before the next unlisted checkout draft can be created.
-- Create Community presents the Builder offer before asking only for the community name and optional URL. Its single primary action creates the unlisted managed draft and continues directly to Builder checkout.
+  funding for every newly created community.
+- Create Community presents the Builder offer and completes checkout before asking for the community name and optional URL. Verified payment authority is consumed exactly once when the community is created.
 - Create Community, Billing, and Account project the same per-community Builder offer and converge on the same checkout and entitlement system. They are entry surfaces, not separate products or billing state.
-- An unpaid managed community can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its community-funded AI remains disabled.
+- A grandfathered community can remain configured, published, listed in Discover, accept public joins, and collect paid-member revenue without Builder. Only its community-funded AI remains disabled.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.

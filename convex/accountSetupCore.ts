@@ -9,8 +9,6 @@ import {
   listPlatformLegalAcceptancesForUser,
 } from "./legalAcceptances";
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
-import { founderSubscriptionStatusGrantsAccess } from "../shared/founderPlan";
-import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 
 export type AccountSetupUserRow = {
   _id: any;
@@ -40,11 +38,6 @@ export type AccountSetupProfileDetailRow = {
   updatedAt: number;
 };
 
-export type AccountSetupProviderConnectionRow = {
-  userId: any;
-  provider?: string;
-};
-
 export type AccountSetupLegalAcceptanceRow = {
   userId?: any;
   documentKey?: string;
@@ -54,14 +47,10 @@ export type AccountSetupLegalAcceptanceRow = {
 export function buildAccountSetupStatusForRows(params: {
   user: AccountSetupUserRow;
   detail: AccountSetupProfileDetailRow | null;
-  providerConnections: AccountSetupProviderConnectionRow[];
   legalAcceptances?: AccountSetupLegalAcceptanceRow[];
-  hasManagedInference?: boolean;
 }): AccountSetupStatus {
-  const hasInferenceProvider = params.providerConnections.some(
-    (row) => row?.provider === "chatgpt" || row?.provider === "openai",
-  ) || params.hasManagedInference === true;
-  // Account setup requires first-party profile evidence, not auth/provider display fallbacks.
+  // Account setup requires first-party identity and legal evidence. Community
+  // inference is community-owned and never a member-provided setup dependency.
   return buildAccountSetupStatus({
     displayName: params.detail?.displayName ?? null,
     handle: params.user.handle ?? null,
@@ -69,7 +58,6 @@ export function buildAccountSetupStatusForRows(params: {
     avatarStorageId: params.detail?.avatarStorageId ? String(params.detail.avatarStorageId) : null,
     hasAcceptedPlatformLegal: hasAcceptedCurrentPlatformLegalFromRows(params.legalAcceptances ?? []),
     bio: params.detail?.bio ?? null,
-    hasInferenceProvider,
   });
 }
 
@@ -121,29 +109,10 @@ export async function loadAccountSetupStatusForUser(
   user: AccountSetupUserRow,
   detail: AccountSetupProfileDetailRow | null,
 ): Promise<AccountSetupStatus> {
-  const [providerConnections, legalAcceptances, founderSubscriptions, operatorComped] = await Promise.all([
-    ctx.db.query("userProviderConnections").withIndex("by_user", (q: any) => q.eq("userId", user._id)).collect(),
-    listPlatformLegalAcceptancesForUser(ctx, user._id),
-    ctx.db
-      .query("founderSubscriptions")
-      .withIndex("by_owner", (q: any) => q.eq("ownerUserId", user._id))
-      .collect(),
-    hasPlatformOwnerComplimentaryAccess(ctx, user._id),
-  ]);
-  const nowMs = Date.now();
+  const legalAcceptances = await listPlatformLegalAcceptancesForUser(ctx, user._id);
   return buildAccountSetupStatusForRows({
     user,
     detail,
-    providerConnections,
     legalAcceptances,
-    hasManagedInference:
-      operatorComped ||
-      founderSubscriptions.some((row: any) =>
-        founderSubscriptionStatusGrantsAccess({
-          status: row.status,
-          currentPeriodEndAt: row.currentPeriodEndAt,
-          nowMs,
-        }),
-      ),
   });
 }

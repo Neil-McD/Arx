@@ -172,7 +172,7 @@ function hasSequencedAssistantText(events: ThreadStreamingRuntimeEvent[]): boole
 function formatInferenceIssue(issue: InferenceIssueModalState | null): string | null {
   if (!issue) return null;
   if (issue.reason === "provider_connection_required") {
-    return "Connect or reconnect ChatGPT or your OpenAI account, then try again.";
+    return "Community AI is unavailable for this turn. Ask the community owner to check Builder billing.";
   }
   return issue.message?.trim() || "Your agent could not complete this turn. Try again.";
 }
@@ -949,7 +949,7 @@ function WebMemberAgentDock(props, ref) {
         invocationSurface: "member_agent_dock",
         surfaceContext,
         suppressOnboardingProgress: onboarding?.mode === "preview",
-        requestedFundingSource: "auto",
+        requestedFundingSource: "platform",
         requestedAgenticTools: true,
         replyToId: messageId,
         messages: [optimisticMessage],

@@ -10,6 +10,37 @@ export const POLYNET_FOUNDER_PLAN_MODEL_ID = COMMUNITY_OWNER_FUNDED_MODEL_ID;
 export const POLYNET_FOUNDER_PLAN_PRICING_VERSION = "founder_plan_luna_v1";
 export const POLYNET_COMMUNITY_PLATFORM_FEE_BPS = 290;
 
+export const COMMUNITY_BUILDER_ACCESS_GRANDFATHERED = "grandfathered" as const;
+export const COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED =
+  "subscription_required" as const;
+
+export type CommunityBuilderAccessMode =
+  | typeof COMMUNITY_BUILDER_ACCESS_GRANDFATHERED
+  | typeof COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED;
+
+export function parseCommunityBuilderAccessMode(
+  value: unknown,
+): CommunityBuilderAccessMode | null {
+  if (value === undefined || value === null) {
+    return COMMUNITY_BUILDER_ACCESS_GRANDFATHERED;
+  }
+  if (
+    value === COMMUNITY_BUILDER_ACCESS_GRANDFATHERED ||
+    value === COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED
+  ) {
+    return value;
+  }
+  return null;
+}
+
+export function normalizeCommunityBuilderAccessMode(
+  value: unknown,
+): CommunityBuilderAccessMode {
+  const parsed = parseCommunityBuilderAccessMode(value);
+  if (!parsed) throw new Error("community_builder_access_mode_invalid");
+  return parsed;
+}
+
 export type FounderSubscriptionStatus =
   | "active"
   | "past_due"

@@ -50,6 +50,7 @@ import { activateCommunityMembershipCore } from "./communityMembershipLifecycle"
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
+import { requireCommunityBuilderAccess } from "./communityBuilderAccessCore";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -271,6 +272,7 @@ async function resolveCommunityAdminMembersContext(args: {
     communityId: args.communityId,
     userId,
   });
+  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
   const viewerEntitlement = await resolveCommunityMembershipEntitlementState({
     ctx: args.ctx,
     community,

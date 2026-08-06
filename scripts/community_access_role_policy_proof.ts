@@ -118,23 +118,23 @@ function assertSourceAnchors() {
   );
   assertIncludes(
     communityCore,
-    "const isAdmin = !isOwner && isEntitled && role === \"admin\";",
-    "admin powers depend on entitlement",
+    "const isAdmin = !isOwner && isMembershipEntitled && role === \"admin\";",
+    "admin relation depends on membership entitlement",
   );
   assertIncludes(
     communityCore,
-    "const isModerator = !isOwner && isEntitled && role === \"moderator\";",
-    "moderator powers depend on entitlement",
+    "const isModerator = !isOwner && isMembershipEntitled && role === \"moderator\";",
+    "moderator relation depends on membership entitlement",
   );
   assertIncludes(
     communityCore,
-    "const canManageMembers = isOwner || isAdmin;",
-    "member management capability policy",
+    "const canManageMembers = builderAccess.operational && (isOwner || isAdmin);",
+    "member management requires both role and operational Builder access",
   );
   assertIncludes(
     communityCore,
-    "const canManageResources = isOwner || isAdmin;",
-    "resource management excludes moderators",
+    "const canManageResources = builderAccess.operational && (isOwner || isAdmin);",
+    "resource management excludes moderators and fails closed without Builder access",
   );
   assertIncludes(
     communityResources,

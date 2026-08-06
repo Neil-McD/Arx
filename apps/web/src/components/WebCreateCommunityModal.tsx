@@ -1,4 +1,3 @@
-import { formatBuilderOfferPrice } from "../../../../shared/builderOffer";
 import { WebBuilderOfferSummary } from "./WebBuilderOfferSummary";
 
 type WebCreateCommunityModalProps = {
@@ -77,7 +76,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
             {props.isCreatingCommunity
               ? "Creating community…"
               : props.hasSession
-                ? `Get Builder — ${formatBuilderOfferPrice()}`
+                ? "Create community"
                 : "Sign in to continue"}
           </button>
         </div>

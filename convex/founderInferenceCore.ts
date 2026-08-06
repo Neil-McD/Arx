@@ -1,7 +1,5 @@
 import {
-  COMMUNITY_FUNDING_POLICY_LEGACY_BYOK,
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
-  EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
   type CommunityInferenceFundingAdmission,
   type CommunityInferenceSurface,
 } from "../shared/founderInference";
@@ -21,19 +19,6 @@ import {
 } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 import { communityIsActive } from "../shared/communityLifecycle";
-
-export type FounderInferenceGrantRow = {
-  _id: any;
-  userId: any;
-  cohortKey: string;
-  status: "approved" | "active" | "suspended";
-  activationAcceptanceId?: any;
-  approvedAt: number;
-  activatedAt?: number;
-  suspendedAt?: number;
-  createdAt: number;
-  updatedAt: number;
-};
 
 export type FounderInferenceReceiptRow = {
   _id: any;
@@ -71,46 +56,10 @@ function normalizedId(value: unknown): string {
   return String(value ?? "").trim();
 }
 
-export async function getExistingFounderInferenceGrant(
-  ctx: any,
-  userId: any,
-): Promise<FounderInferenceGrantRow | null> {
-  return (await ctx.db
-    .query("founderInferenceGrants" as any)
-    .withIndex("by_user_cohort", (q: any) =>
-      q.eq("userId", userId).eq("cohortKey", EXISTING_FOUNDER_INFERENCE_COHORT_KEY),
-    )
-    .first()) as FounderInferenceGrantRow | null;
-}
-
-export async function suspendActiveFounderInferenceGrantForCredentialChange(args: {
-  ctx: any;
-  userId: any;
-  nowMs: number;
-}): Promise<boolean> {
-  const grant = await getExistingFounderInferenceGrant(args.ctx, args.userId);
-  if (!grant || grant.status !== "active") return false;
-  await args.ctx.db.patch(grant._id as any, {
-    status: "suspended",
-    suspendedAt: args.nowMs,
-    updatedAt: args.nowMs,
-  });
-  return true;
-}
-
-async function ownerHasUsableOpenAiKey(ctx: any, ownerUserId: any): Promise<boolean> {
-  const row = (await ctx.db
-    .query("userProviderConnections" as any)
-    .withIndex("by_user_provider", (q: any) =>
-      q.eq("userId", ownerUserId).eq("provider", "openai"),
-    )
-    .first()) as Record<string, unknown> | null;
-  return Boolean(String(row?.encryptedSecretHex ?? "").trim());
-}
-
 export async function resolveCommunityInferenceFundingAdmission(
   ctx: any,
   communityId: any,
+  nowMs: number = Date.now(),
 ): Promise<CommunityInferenceFundingAdmission> {
   const community = (await ctx.db.get(communityId as any)) as {
     ownerId?: any;
@@ -138,7 +87,7 @@ export async function resolveCommunityInferenceFundingAdmission(
     attachedSubscription = await getFounderSubscriptionByCommunity(
       ctx,
       communityId,
-      Date.now(),
+      nowMs,
     );
   } catch (error) {
     if (error instanceof Error && error.message === "founder_subscription_ambiguous") {
@@ -150,7 +99,7 @@ export async function resolveCommunityInferenceFundingAdmission(
     if (!founderSubscriptionStatusGrantsAccess({
       status: attachedSubscription.status,
       currentPeriodEndAt: attachedSubscription.currentPeriodEndAt,
-      nowMs: Date.now(),
+      nowMs,
     })) {
       return { ok: false, code: "founder_subscription_inactive" };
     }
@@ -167,29 +116,7 @@ export async function resolveCommunityInferenceFundingAdmission(
     };
   }
 
-  if (community.inferenceFundingPolicy !== COMMUNITY_FUNDING_POLICY_LEGACY_BYOK) {
-    return { ok: false, code: "founder_plan_required" };
-  }
-
-  const grant = await getExistingFounderInferenceGrant(ctx, community.ownerId);
-  if (!grant) return { ok: false, code: "founder_plan_required" };
-  if (grant.status === "approved") {
-    return { ok: false, code: "owner_funding_choice_required" };
-  }
-  if (grant.status === "suspended") {
-    return { ok: false, code: "owner_funding_suspended" };
-  }
-  if (!(await ownerHasUsableOpenAiKey(ctx, community.ownerId))) {
-    return { ok: false, code: "owner_credential_missing" };
-  }
-  return {
-    ok: true,
-    mode: "owner_api_key",
-    transitional: false,
-    payerUserId: community.ownerId,
-    grantId: grant._id,
-    modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
-  };
+  return { ok: false, code: "founder_plan_required" };
 }
 
 export type AdditionalManagedCommunityAdmission =
@@ -207,8 +134,8 @@ export type AdditionalManagedCommunityAdmission =
  * Community ownership has no account-level cap. A founder may create the next
  * managed community only after every existing community has current funding.
  * This permits unlimited paid communities while preventing stacked unpaid
- * drafts. Operator and legacy BYOK communities pass through the same canonical
- * funding admission used by inference.
+ * drafts. Operator and hosted Builder communities pass through the same
+ * canonical funding admission used by inference.
  */
 export async function resolveAdditionalManagedCommunityAdmission(
   ctx: any,

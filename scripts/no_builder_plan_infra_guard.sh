@@ -25,7 +25,6 @@ FORBIDDEN_PATTERNS=(
   'getLatestBuilderBillingCustomerForOwnerInternal'
   'syncBuilderMonthlyCreditsInternal'
   'getActiveBuilderCreditProvisioningWindowInternal'
-  'builder_checkout'
   'builder_subscription_synced'
   'builder_entitlement_granted'
   'builder_entitlement_revoked'
@@ -126,8 +125,6 @@ ACCOUNT_NAMING_FORBIDDEN_PATTERNS=(
   'BuilderConnect'
   'setDevBuilderTier'
   'loadBuilderBillingStatus'
-  'builder billing'
-  'Builder billing'
   'builder connect'
   'Builder connect'
   'builder commerce'
@@ -189,4 +186,4 @@ if [[ "$failed" -ne 0 ]]; then
   exit 1
 fi
 
-echo "PASS: no legacy Builder plan infrastructure references found."
+echo "PASS: no legacy account-tier Builder plan infrastructure references found."

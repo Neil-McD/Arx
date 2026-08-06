@@ -20,6 +20,12 @@ function readEnv(name: string): string {
   }
 }
 
+export function requireFounderStripePriceIdFromEnv(): string {
+  const priceId = readEnv("POLYNET_FOUNDER_STRIPE_PRICE_ID");
+  if (!priceId) throw new Error("founder_stripe_price_id_missing");
+  return priceId;
+}
+
 function positiveSafeInteger(raw: unknown): number | null {
   const parsed = Number(raw);
   if (!Number.isSafeInteger(parsed) || parsed <= 0) return null;

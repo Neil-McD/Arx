@@ -11,10 +11,6 @@ const interactionProjection = readFileSync(
   join(root, "apps/web/src/controllers/useWebCommunityInteractionProjection.ts"),
   "utf8",
 );
-const providerConnections = readFileSync(
-  join(root, "apps/web/src/controllers/useWebProviderConnectionsController.ts"),
-  "utf8",
-);
 const projection = readFileSync(join(root, "apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts"), "utf8");
 const chatPanel = readFileSync(join(root, "apps/web/src/components/WebCommunityChatPanel.tsx"), "utf8");
 const css = [
@@ -79,15 +75,15 @@ assert.match(
   /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId[\s\S]*userId/,
   "serve issue lookup should fail closed on current community chat access",
 );
-assert.match(
+assert.doesNotMatch(
   concierge,
-  /userHasChatgptConnection[\s\S]*query\("userProviderConnections" as any\)[\s\S]*withIndex\("by_user_provider"[\s\S]*q\.eq\("userId", userId\)\.eq\("provider", "chatgpt"\)[\s\S]*encryptedSecretHex/,
-  "serve issue lookup should check the requester's current ChatGPT connection",
+  /userProviderConnections|userHasChatgptConnection|encryptedSecretHex/,
+  "community-agent availability must not depend on a member-owned provider connection",
 );
 assert.match(
   issueQuery,
-  /issueCode === "requester_connection_missing"[\s\S]*await userHasChatgptConnection\(ctx, userId\)[\s\S]*return null/,
-  "serve issue lookup should hide only historical requester-connection issues after the requester connects ChatGPT",
+  /if \(issueCode === "requester_connection_missing"\) return null/,
+  "historical requester-connection issues should be ignored without reviving BYOK authority",
 );
 assert.match(
   issueQuery,
@@ -96,8 +92,8 @@ assert.match(
 );
 assert.match(
   issueQuery,
-  /row\.agentKey !== CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*row\.status !== "skipped" && row\.status !== "error"[\s\S]*requester_connection_missing[\s\S]*owner_credential_missing/,
-  "serve issue lookup should surface only canonical requester or owner funding issues",
+  /row\.agentKey !== CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*row\.status !== "skipped" && row\.status !== "error"[\s\S]*requester_connection_missing[\s\S]*founder_plan_required/,
+  "serve issue lookup should inspect only canonical historical or hosted-funding issues",
 );
 assert.match(
   concierge,
@@ -111,8 +107,8 @@ assert.match(
 );
 assert.match(
   issueQuery,
-  /reason: "provider_connection_required"[\s\S]*cta: "connect_chatgpt"[\s\S]*Connect ChatGPT to use the community agent/,
-  "serve issue lookup should return a narrow ChatGPT connection issue payload",
+  /reason: "community_owner_action_required"[\s\S]*cta: null[\s\S]*community owner needs to update inference settings/,
+  "serve issue lookup should return only a community-owner hosted-funding issue",
 );
 assert.doesNotMatch(
   issueQuery,
@@ -122,8 +118,8 @@ assert.doesNotMatch(
 
 assert.match(
   gateway,
-  /export type CloudCommunityAgentServeIssue[\s\S]*"provider_connection_required" \| "community_owner_action_required"[\s\S]*"connect_chatgpt" \| null/,
-  "gateway should expose member-connect and owner-action issue types",
+  /export type CloudCommunityAgentServeIssue[\s\S]*reason: "community_owner_action_required"[\s\S]*cta: null/,
+  "gateway should expose only the hosted-funding owner-action issue",
 );
 assert.match(
   gateway,
@@ -162,25 +158,24 @@ assert.match(
   "App composition must pass an explicit active-community-chat scope into the interaction owner",
 );
 assert.match(
-  providerConnections,
-  /handleConnectCommunityAgentServeProvider[\s\S]*providerConnectionUi\.handleConnectChatgpt\(\)/,
-  "the provider connections controller notice action should open the existing ChatGPT connection flow",
-);
-
-assert.match(
   projection,
-  /communityAgentServeIssue: WebCommunityChatPanelProps\["communityAgentServeIssue"\][\s\S]*onDismissCommunityAgentServeIssue[\s\S]*onConnectCommunityAgentServeProvider/,
+  /communityAgentServeIssue: WebCommunityChatPanelProps\["communityAgentServeIssue"\][\s\S]*onDismissCommunityAgentServeIssue/,
   "community surface projection should pass serve issue props through to chat",
 );
 assert.match(
   chatPanel,
-  /communityAgentServeIssue: CloudCommunityAgentServeIssue \| null[\s\S]*onDismissCommunityAgentServeIssue[\s\S]*onConnectCommunityAgentServeProvider/,
-  "chat panel should receive the private serve issue and notice actions",
+  /communityAgentServeIssue: CloudCommunityAgentServeIssue \| null[\s\S]*onDismissCommunityAgentServeIssue/,
+  "chat panel should receive the private serve issue and dismiss action",
 );
 assert.match(
   chatPanel,
-  /community-agent-serve-notice[\s\S]*Community AI is temporarily unavailable[\s\S]*needsMemberConnection[\s\S]*onConnectCommunityAgentServeProvider[\s\S]*onDismissCommunityAgentServeIssue/,
-  "chat panel should render member-connect or owner-action notices without leaking owner details",
+  /community-agent-serve-notice[\s\S]*Community AI is temporarily unavailable[\s\S]*onDismissCommunityAgentServeIssue/,
+  "chat panel should render the hosted-funding owner-action notice without leaking owner details",
+);
+assert.doesNotMatch(
+  `${gateway}\n${projection}\n${chatPanel}`,
+  /connect_chatgpt|onConnectCommunityAgentServeProvider|needsMemberConnection/,
+  "community AI notices must never route members to personal inference",
 );
 const noticeBlock = localConstBlock(chatPanel, "renderCommunityAgentServeNotice");
 assert.doesNotMatch(

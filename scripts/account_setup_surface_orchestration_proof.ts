@@ -23,7 +23,7 @@ const communityEntryBridgeController = read(
 const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
 const bridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
 
-for (const group of ["identity", "inference", "submission"]) {
+for (const group of ["identity", "submission"]) {
   assert.match(
     model,
     new RegExp(`\\b${group}: \\{`),
@@ -35,8 +35,6 @@ for (const field of [
   "isCheckingHandleAvailability",
   "onSocialLinkChange",
   "onAvatarUpload",
-  "chatgpt",
-  "openai",
   "isSaving",
   "error",
 ]) {
@@ -65,8 +63,13 @@ assert.match(
 );
 assert.match(
   controller,
-  /displayName: profile\.profileName[\s\S]*chatgpt: \{[\s\S]*openai: \{[\s\S]*submission: \{/,
-  "surface controller must project profile, provider, and submission state into one model",
+  /displayName: profile\.profileName[\s\S]*submission: \{/,
+  "surface controller must project profile and submission state into one model",
+);
+assert.doesNotMatch(
+  `${model}\n${controller}`,
+  /chatgpt|openai|apiKey|provider/i,
+  "account setup must never ask a person to bring inference",
 );
 assert.doesNotMatch(
   controller,
@@ -98,8 +101,8 @@ for (const surface of [onboarding, bridge]) {
   );
   assert.match(
     surface,
-    /const \{ identity, inference, submission \} = props\.setup;/,
-    "each account-setup presentation must read the model through its three explicit groups",
+    /const \{ identity, submission \} = props\.setup;/,
+    "each account-setup presentation must read the irreducible identity and submission groups",
   );
   assert.doesNotMatch(
     surface,

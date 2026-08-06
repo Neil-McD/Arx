@@ -179,6 +179,19 @@ export function buildCheckoutSuccessUrl(successUrlRaw: unknown, sessionId: strin
   return parsed.toString();
 }
 
+export function buildCheckoutCancelUrl(cancelUrlRaw: unknown, sessionId: string): string {
+  const cancelUrl = requireCanonicalCheckoutReturnUrl(
+    cancelUrlRaw,
+    "checkout_cancel_url_invalid",
+  );
+  if (cancelUrl.includes("{CHECKOUT_SESSION_ID}")) {
+    return cancelUrl.replaceAll("{CHECKOUT_SESSION_ID}", sessionId);
+  }
+  const parsed = new URL(cancelUrl);
+  parsed.searchParams.set("session_id", sessionId);
+  return parsed.toString();
+}
+
 export async function ensureCommunityMembership(args: {
   ctx: any;
   community: CommunityLike;

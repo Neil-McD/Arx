@@ -5,9 +5,7 @@ import {
   beginChatgptConnect,
   beginChatgptManualConnect,
   completeCloudChatgptConnect,
-  connectCloudOpenAiApiKey,
   disconnectCloudChatgpt,
-  disconnectCloudOpenAiApiKey,
   pollCloudChatgptConnect,
   type CloudChatgptConnectionStatus,
   type CloudOpenAiConnectionStatus,
@@ -63,13 +61,6 @@ export type UseWebProviderConnectionUiControllerResult = {
   chatgptDeviceUserCode: string | null;
   chatgptConnectionError: string | null;
   chatgptConnectionSuccess: string | null;
-  openAiApiKeyDraft: string;
-  setOpenAiApiKeyDraft: (value: string) => void;
-  isSavingOpenAiConnection: boolean;
-  openAiConnectionError: string | null;
-  openAiConnectionSuccess: string | null;
-  handleConnectOpenAi: () => Promise<void>;
-  handleDisconnectOpenAi: () => Promise<void>;
   handleConnectChatgpt: () => void;
   handleDisconnectChatgpt: () => Promise<void>;
   modalHostProps: ProviderConnectionModalHostProps;
@@ -101,10 +92,6 @@ export function useWebProviderConnectionUiController<TSession>(
   const [isCompletingChatgptConnection, setIsCompletingChatgptConnection] = useState(false);
   const [chatgptConnectionError, setChatgptConnectionError] = useState<string | null>(null);
   const [chatgptConnectionSuccess, setChatgptConnectionSuccess] = useState<string | null>(null);
-  const [openAiApiKeyDraft, setOpenAiApiKeyDraft] = useState("");
-  const [isSavingOpenAiConnection, setIsSavingOpenAiConnection] = useState(false);
-  const [openAiConnectionError, setOpenAiConnectionError] = useState<string | null>(null);
-  const [openAiConnectionSuccess, setOpenAiConnectionSuccess] = useState<string | null>(null);
   const chatgptConnectPollTimeoutRef = useRef<number | null>(null);
 
   const resetChatgptConnectFlowState = useCallback((): void => {
@@ -128,10 +115,6 @@ export function useWebProviderConnectionUiController<TSession>(
     setIsChatgptConnectModalOpen(false);
     setChatgptConnectionError(null);
     setChatgptConnectionSuccess(null);
-    setOpenAiApiKeyDraft("");
-    setIsSavingOpenAiConnection(false);
-    setOpenAiConnectionError(null);
-    setOpenAiConnectionSuccess(null);
   }, [resetChatgptConnectFlowState]);
 
   useEffect(() => {
@@ -140,66 +123,16 @@ export function useWebProviderConnectionUiController<TSession>(
   }, [resetProviderConnectionUiState, session]);
 
   const ensureProviderSession = useCallback(
-    async (provider: "chatgpt" | "openai" = "chatgpt"): Promise<TSession | null> => {
+    async (): Promise<TSession | null> => {
       const usableSession = await ensureSession(getSession());
       if (!usableSession) {
-        requireSignIn({ reason: "connect_provider", payload: { provider } });
+        requireSignIn({ reason: "connect_provider", payload: { provider: "chatgpt" } });
         return null;
       }
       return usableSession;
     },
     [ensureSession, getSession, requireSignIn],
   );
-
-  const handleConnectOpenAi = useCallback(async (): Promise<void> => {
-    const session = await ensureProviderSession("openai");
-    if (!session) return;
-    const apiKey = openAiApiKeyDraft.trim();
-    if (!apiKey) {
-      setOpenAiConnectionError("Paste an OpenAI API key first.");
-      return;
-    }
-    setIsSavingOpenAiConnection(true);
-    setOpenAiConnectionError(null);
-    setOpenAiConnectionSuccess(null);
-    try {
-      const result = await connectCloudOpenAiApiKey({
-        session,
-        apiKey,
-      });
-      onConnectionsUpdated(result);
-      setOpenAiApiKeyDraft("");
-      setOpenAiConnectionSuccess("OpenAI API key connected.");
-    } catch (error) {
-      setOpenAiConnectionError(
-        formatProviderConnectionErrorMessage(error, "Failed to connect OpenAI API key."),
-      );
-    } finally {
-      setIsSavingOpenAiConnection(false);
-    }
-  }, [ensureProviderSession, onConnectionsUpdated, openAiApiKeyDraft]);
-
-  const handleDisconnectOpenAi = useCallback(async (): Promise<void> => {
-    const session = await ensureProviderSession("openai");
-    if (!session) return;
-    setIsSavingOpenAiConnection(true);
-    setOpenAiConnectionError(null);
-    setOpenAiConnectionSuccess(null);
-    try {
-      const result = await disconnectCloudOpenAiApiKey({
-        session,
-      });
-      onConnectionsUpdated(result);
-      setOpenAiApiKeyDraft("");
-      setOpenAiConnectionSuccess("OpenAI API key disconnected.");
-    } catch (error) {
-      setOpenAiConnectionError(
-        formatProviderConnectionErrorMessage(error, "Failed to disconnect OpenAI API key."),
-      );
-    } finally {
-      setIsSavingOpenAiConnection(false);
-    }
-  }, [ensureProviderSession, onConnectionsUpdated]);
 
   const handleConnectChatgpt = useCallback((): void => {
     if (!getSession()) {
@@ -401,7 +334,6 @@ export function useWebProviderConnectionUiController<TSession>(
 
   const applyProviderConnectionLoadError = useCallback((message: string | null): void => {
     setChatgptConnectionError(message);
-    setOpenAiConnectionError(message);
   }, []);
 
   return {
@@ -413,13 +345,6 @@ export function useWebProviderConnectionUiController<TSession>(
     chatgptDeviceUserCode,
     chatgptConnectionError,
     chatgptConnectionSuccess,
-    openAiApiKeyDraft,
-    setOpenAiApiKeyDraft,
-    isSavingOpenAiConnection,
-    openAiConnectionError,
-    openAiConnectionSuccess,
-    handleConnectOpenAi,
-    handleDisconnectOpenAi,
     handleConnectChatgpt,
     handleDisconnectChatgpt,
     modalHostProps: {

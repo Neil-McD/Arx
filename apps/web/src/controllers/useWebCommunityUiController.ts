@@ -24,6 +24,7 @@ type UseWebCommunityUiControllerParams<
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onAccountSetupRequired?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
+  getFounderSubscriptionId?: () => string | null;
   createUnauthenticatedErrorMessage: string;
 };
 
@@ -79,6 +80,7 @@ export function useWebCommunityUiController<
     onCreateUnauthenticated: params.onCreateUnauthenticated,
     onAccountSetupRequired: params.onAccountSetupRequired,
     onCommunityCreated: params.onCommunityCreated,
+    getFounderSubscriptionId: params.getFounderSubscriptionId,
     createCommunityName,
     createCommunitySlug,
     createCommunitySlugEdited,

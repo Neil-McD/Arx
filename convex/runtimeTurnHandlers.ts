@@ -104,6 +104,13 @@ import {
 } from "../shared/workspaceCredits";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
+import {
+  beginCommunityInferenceFundingSession,
+  failCommunityInferenceFundingSession,
+  providerFailureIsKnownPreSpend,
+  settleCommunityInferenceFundingSession,
+  type CommunityInferenceFundingSession,
+} from "./founderInferenceRuntime";
 
 export type {
   SseResponseEvent,
@@ -567,6 +574,7 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeExecutionMode: resolvedRuntimeExecutionMode,
       invocationSurface,
       memberAgentSurfaceContext,
+      communityInferenceAdmission,
     } = resolved.value;
     const runId =
       String(input.idempotency_key ?? "").trim() ||
@@ -1236,6 +1244,60 @@ export async function handleRuntimeTurnRequest(args: {
       } catch {
         return null;
       }
+    };
+    const beginMemberAgentFundingSession = async (): Promise<CommunityInferenceFundingSession | null> => {
+      if (invocationSurface !== "member_agent_dock") return null;
+      if (!runtimeCommunityId || !communityInferenceAdmission?.ok) {
+        throw new Error("member_agent_community_funding_authority_missing");
+      }
+      return await beginCommunityInferenceFundingSession({
+        ctx,
+        communityId: runtimeCommunityId,
+        actorUserId: actor.dbUserId,
+        surface: "member_agent_dock",
+        receiptKey: `member_agent_dock:${runId}`,
+        sourceRunId: `runtime:${runId}`,
+        admission: communityInferenceAdmission,
+      });
+    };
+    const finalizeMemberAgentFundingForLoopResult = async (params: {
+      session: CommunityInferenceFundingSession | null;
+      result: {
+        ok: boolean;
+        code?: string;
+        promptTokens: number | null;
+        completionTokens: number | null;
+      };
+    }): Promise<void> => {
+      if (!params.session) return;
+      const usageComplete =
+        params.result.promptTokens !== null &&
+        params.result.completionTokens !== null;
+      const promptTokens = Math.max(0, Math.floor(params.result.promptTokens ?? 0));
+      const completionTokens = Math.max(0, Math.floor(params.result.completionTokens ?? 0));
+      if (params.result.ok) {
+        await settleCommunityInferenceFundingSession({
+          ctx,
+          session: params.session,
+          promptTokens,
+          completionTokens,
+          usageComplete,
+          outcomeCode: "member_agent_completed",
+        });
+        return;
+      }
+      const failureCode = String(params.result.code ?? "member_agent_inference_failed").trim();
+      await failCommunityInferenceFundingSession({
+        ctx,
+        session: params.session,
+        promptTokens,
+        completionTokens,
+        usageComplete,
+        failureCode,
+        disposition: providerFailureIsKnownPreSpend(failureCode)
+          ? "failed"
+          : "indeterminate",
+      });
     };
     const polynetToolSurface = isolatePolynetHarnessToolNames({
       allowedToolNames,
@@ -2412,7 +2474,9 @@ export async function handleRuntimeTurnRequest(args: {
           });
           runtimeTurnStage = "agent_loop";
           let loopResult;
+          let memberAgentFundingSession: CommunityInferenceFundingSession | null = null;
           try {
+            memberAgentFundingSession = await beginMemberAgentFundingSession();
             loopResult = await executeChatToolsAgentLoop({
               ctx,
               req,
@@ -2456,6 +2520,21 @@ export async function handleRuntimeTurnRequest(args: {
             });
             await appendContextIntegrityCheckBestEffortForRun();
           } catch (error) {
+            if (memberAgentFundingSession) {
+              try {
+                await failCommunityInferenceFundingSession({
+                  ctx,
+                  session: memberAgentFundingSession,
+                  promptTokens: 0,
+                  completionTokens: 0,
+                  usageComplete: false,
+                  failureCode: "member_agent_loop_unhandled",
+                  disposition: "indeterminate",
+                });
+              } catch {
+                // Preserve the original runtime failure; the receipt remains fail-closed.
+              }
+            }
             if (isRuntimeRunCancelledError(error)) {
               await persistPartialAssistantMessageBestEffort({
                 content: streamedContent,
@@ -2489,6 +2568,30 @@ export async function handleRuntimeTurnRequest(args: {
               event: "error",
               data: {
                 error: message || "Agent loop failed unexpectedly.",
+              },
+            });
+            return;
+          }
+          try {
+            await finalizeMemberAgentFundingForLoopResult({
+              session: memberAgentFundingSession,
+              result: loopResult,
+            });
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: "community_inference_settlement_failed",
+              errorCode: "community_inference_settlement_failed",
+              errorMessage: message || "Community inference accounting could not be finalized.",
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: "community_inference_settlement_failed",
+                error: "Community AI could not finalize this turn.",
+                message: "Community AI could not finalize this turn.",
+                status: 503,
               },
             });
             return;
@@ -2709,7 +2812,9 @@ export async function handleRuntimeTurnRequest(args: {
       }
       runtimeTurnStage = "agent_loop";
       let loopResult;
+      let memberAgentFundingSession: CommunityInferenceFundingSession | null = null;
       try {
+        memberAgentFundingSession = await beginMemberAgentFundingSession();
         loopResult = await executeChatToolsAgentLoop({
           ctx,
           req,
@@ -2756,6 +2861,21 @@ export async function handleRuntimeTurnRequest(args: {
         });
         await appendContextIntegrityCheckBestEffortForRun();
       } catch (error) {
+        if (memberAgentFundingSession) {
+          try {
+            await failCommunityInferenceFundingSession({
+              ctx,
+              session: memberAgentFundingSession,
+              promptTokens: 0,
+              completionTokens: 0,
+              usageComplete: false,
+              failureCode: "member_agent_loop_unhandled",
+              disposition: "indeterminate",
+            });
+          } catch {
+            // Preserve the original runtime failure; the receipt remains fail-closed.
+          }
+        }
         if (isRuntimeRunCancelledError(error)) {
           await persistPartialAssistantMessageBestEffort({
             content,
@@ -2792,6 +2912,27 @@ export async function handleRuntimeTurnRequest(args: {
           code: "agent_loop_unhandled",
           error: "agent_loop_unhandled",
           message: message || "Agent loop failed unexpectedly.",
+          run_id: runId,
+        });
+      }
+      try {
+        await finalizeMemberAgentFundingForLoopResult({
+          session: memberAgentFundingSession,
+          result: loopResult,
+        });
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: "community_inference_settlement_failed",
+          errorCode: "community_inference_settlement_failed",
+          errorMessage: message || "Community inference accounting could not be finalized.",
+        });
+        return runtimeJsonResponse(503, {
+          ok: false,
+          code: "community_inference_settlement_failed",
+          error: "community_inference_settlement_failed",
+          message: "Community AI could not finalize this turn.",
           run_id: runId,
         });
       }

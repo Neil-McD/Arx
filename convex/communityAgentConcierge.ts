@@ -40,16 +40,6 @@ function coerceTimestampMs(raw: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-async function userHasChatgptConnection(ctx: any, userId: any): Promise<boolean> {
-  const row = (await ctx.db
-    .query("userProviderConnections" as any)
-    .withIndex("by_user_provider", (q: any) =>
-      q.eq("userId", userId).eq("provider", "chatgpt"),
-    )
-    .first()) as Record<string, any> | null;
-  return Boolean(row?.encryptedSecretHex);
-}
-
 export const getMyLatestCommunityAgentServeIssue = query({
   args: {
     userId: v.optional(v.id("users")),
@@ -82,9 +72,6 @@ export const getMyLatestCommunityAgentServeIssue = query({
       const issueCode = row.status === "skipped" ? row.intakeReason : row.errorCode;
       if (
         issueCode !== "requester_connection_missing" &&
-        issueCode !== "owner_credential_missing" &&
-        issueCode !== "owner_credential_unreadable" &&
-        issueCode !== "owner_funding_suspended" &&
         issueCode !== "founder_plan_required" &&
         issueCode !== "founder_subscription_inactive" &&
         issueCode !== "founder_subscription_ambiguous" &&
@@ -103,18 +90,7 @@ export const getMyLatestCommunityAgentServeIssue = query({
 
     if (!issue) return null;
     const issueCode = issue.status === "skipped" ? issue.intakeReason : issue.errorCode;
-    if (issueCode === "requester_connection_missing") {
-      if (await userHasChatgptConnection(ctx, userId)) return null;
-      const createdAt = coerceTimestampMs(issue.createdAt, nowMs);
-      return {
-        id: normalizeIdValue(issue._id),
-        community_id: normalizeIdValue(args.communityId),
-        reason: "provider_connection_required",
-        cta: "connect_chatgpt",
-        message: "Connect ChatGPT to use the community agent.",
-        created_at: new Date(createdAt).toISOString(),
-      };
-    }
+    if (issueCode === "requester_connection_missing") return null;
     const funding = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
     const usageIssue =
       issueCode === "founder_usage_exhausted" ||
@@ -124,10 +100,7 @@ export const getMyLatestCommunityAgentServeIssue = query({
       issueCode === "founder_inference_pricing_misconfigured";
     if (
       !usageIssue &&
-      funding.ok &&
-      (funding.mode === "owner_api_key" ||
-        funding.mode === "platform_subscription" ||
-        funding.mode === "platform_operator_grant")
+      funding.ok
     ) return null;
     const createdAt = coerceTimestampMs(issue.createdAt, nowMs);
     return {

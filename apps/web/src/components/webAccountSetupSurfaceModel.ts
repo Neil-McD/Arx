@@ -22,25 +22,6 @@ export type WebAccountSetupSurfaceModel = {
     onSocialLinkChange: (kind: SocialProfileKind, value: string) => void;
     onAvatarUpload: (file: File | null) => Promise<void> | void;
   };
-  inference: {
-    chatgpt: {
-      connected: boolean;
-      status: string;
-      isConnecting: boolean;
-      isPolling: boolean;
-      onConnect: () => void;
-    };
-    openai: {
-      connected: boolean;
-      status: string;
-      apiKeyDraft: string;
-      setApiKeyDraft: (value: string) => void;
-      isSaving: boolean;
-      error: string | null;
-      success: string | null;
-      onConnect: () => Promise<void> | void;
-    };
-  };
   submission: {
     isSaving: boolean;
     error: string | null;

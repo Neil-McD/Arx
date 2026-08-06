@@ -10,6 +10,7 @@ import {
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
 import {
   resolveActiveCapabilityFamiliesFromEntitlements,
+  resolveEntitledCapabilityFamiliesForGate,
   resolveHarnessProfileFromActiveCapabilities,
   type CapabilityFamily,
 } from "../shared/canonicalGateEngine";
@@ -52,6 +53,11 @@ import {
   type MemberAgentSurfaceContextV1,
 } from "../shared/memberAgentSurfaceContext";
 import type { NativeToolInputContentPart } from "../shared/nativeToolProtocol";
+import {
+  COMMUNITY_OWNER_FUNDED_MODEL_ID,
+  COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT,
+  type CommunityInferenceFundingAdmission,
+} from "../shared/founderInference";
 
 export type RuntimeCapabilityFamily = CapabilityFamily;
 
@@ -142,6 +148,7 @@ export type RuntimeTurnResolution = {
   runtimeExecutionMode: "agentic" | "chat";
   invocationSurface: RuntimeInvocationSurface;
   memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null;
+  communityInferenceAdmission: CommunityInferenceFundingAdmission | null;
 };
 
 function resolveRequestedAgenticTools(raw: unknown): boolean {
@@ -371,6 +378,20 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
+  if (
+    invocationSurface === "member_agent_dock" &&
+    memberAgentSurfaceContext?.kind !== "community"
+  ) {
+    return {
+      ok: false,
+      response: fail(403, {
+        ok: false,
+        code: "member_agent_community_context_required",
+        error: "member_agent_community_context_required",
+        message: "Community AI is available from inside a joined community.",
+      }),
+    };
+  }
 
   setStage("messages");
   let conversationMessages: Array<{
@@ -440,8 +461,14 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   setStage("gate");
   const publicMap = loadPublicModelMap();
   const platformMap = loadPlatformModelMap();
-  const requestedModelId = String(input.model_id ?? "").trim() || DEFAULT_ACTIVE_MODEL_ID;
-  if (hasMemberAgentImageInput && !supportsModelImageInput(requestedModelId)) {
+  const isCommunityMemberAgentTurn = invocationSurface === "member_agent_dock";
+  const requestedModelId = isCommunityMemberAgentTurn
+    ? COMMUNITY_OWNER_FUNDED_MODEL_ID
+    : String(input.model_id ?? "").trim() || DEFAULT_ACTIVE_MODEL_ID;
+  const requestedModelSupportsImageInput = isCommunityMemberAgentTurn
+    ? COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT
+    : supportsModelImageInput(requestedModelId);
+  if (hasMemberAgentImageInput && !requestedModelSupportsImageInput) {
     return {
       ok: false,
       response: fail(400, {
@@ -453,8 +480,11 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
   const publicRef = publicMap[requestedModelId];
-  const requestedRuntimeEngine = normalizeRuntimeEngine(input.runtime_engine);
+  const requestedRuntimeEngine = isCommunityMemberAgentTurn
+    ? "polynet"
+    : normalizeRuntimeEngine(input.runtime_engine);
   if (
+    !isCommunityMemberAgentTurn &&
     input.runtime_engine !== undefined &&
     input.runtime_engine !== null &&
     String(input.runtime_engine).trim().length > 0 &&
@@ -481,47 +511,9 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  const requestedAgenticTools = resolveRequestedAgenticTools(
-    input.requested_agentic_tools,
-  );
-  const requestedFundingSource = parseRequestedFundingSource(
-    input.requested_funding_source,
-    publicRef ? "demo_public" : "platform",
-  );
-  const [hasUserKeyConnection, hasUserChatgptConnection] = await Promise.all([
-    hasOpenAiConnectionForUser({
-      ctx,
-      userId: actor.dbUserId,
-    }),
-    hasChatgptConnectionForUser({
-      ctx,
-      userId: actor.dbUserId,
-    }),
-  ]);
-  const gateDecision = await resolveGateDecisionForAuthenticatedActor({
-    ctx,
-    authSubject: actor.authSubject,
-    surface: normalizeSurface(input.surface, "web"),
-    requestedFundingSource,
-    hasUserKeyConnection,
-    hasUserChatgptConnection,
-  });
-  if (!gateDecision.allowed) {
-    return {
-      ok: false,
-      response: gateDeniedResponse(
-        (_req, status, payload) => fail(status, payload as Record<string, unknown>),
-        req,
-        {
-          decision: gateDecision,
-          requestedModelId,
-        },
-      ),
-    };
-  }
-
-  setStage("provider_connection");
-  const lane = mapGateLaneToRuntimeLane({ lane: gateDecision.lane });
+  const requestedAgenticTools = isCommunityMemberAgentTurn
+    ? true
+    : resolveRequestedAgenticTools(input.requested_agentic_tools);
   const fallbackPublicRef = Object.values(publicMap).find(
     (value) => typeof value === "string" && value.trim().length > 0,
   );
@@ -530,63 +522,114 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     platformMap[DEFAULT_ACTIVE_MODEL_ID] ||
     platformMap["gpt-5.5"] ||
     requestedModelId;
-  const modelRef =
-    lane === "public"
-      ? publicRef || fallbackPublicRef || requestedModelId
-      : platformMap[requestedModelId] || fallbackPlatformRef;
   const maxTokens = normalizeMaxTokens(input.max_tokens, 2048);
   const stream = input.stream !== false;
-  const inferenceSource: "free" | "platform" | "user_key" | "chatgpt" =
-    gateDecision.fundingSource === "user_key"
+  let lane: "public" | "platform" | "chatgpt";
+  let modelRef: string;
+  let inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+  let entitledCapabilityFamilies: RuntimeCapabilityFamily[];
+  let providerApiKeyOverride: string | null = null;
+  if (isCommunityMemberAgentTurn) {
+    lane = "platform";
+    modelRef = `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`;
+    inferenceSource = "platform";
+    entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
+      authState: "authenticated",
+    }) as RuntimeCapabilityFamily[];
+  } else {
+    const requestedFundingSource = parseRequestedFundingSource(
+      input.requested_funding_source,
+      publicRef ? "demo_public" : "platform",
+    );
+    const [hasUserKeyConnection, hasUserChatgptConnection] = await Promise.all([
+      hasOpenAiConnectionForUser({
+        ctx,
+        userId: actor.dbUserId,
+      }),
+      hasChatgptConnectionForUser({
+        ctx,
+        userId: actor.dbUserId,
+      }),
+    ]);
+    const gateDecision = await resolveGateDecisionForAuthenticatedActor({
+      ctx,
+      authSubject: actor.authSubject,
+      surface: normalizeSurface(input.surface, "web"),
+      requestedFundingSource,
+      hasUserKeyConnection,
+      hasUserChatgptConnection,
+    });
+    if (!gateDecision.allowed) {
+      return {
+        ok: false,
+        response: gateDeniedResponse(
+          (_req, status, payload) => fail(status, payload as Record<string, unknown>),
+          req,
+          {
+            decision: gateDecision,
+            requestedModelId,
+          },
+        ),
+      };
+    }
+    setStage("provider_connection");
+    lane = mapGateLaneToRuntimeLane({ lane: gateDecision.lane });
+    modelRef = lane === "public"
+      ? publicRef || fallbackPublicRef || requestedModelId
+      : platformMap[requestedModelId] || fallbackPlatformRef;
+    inferenceSource = gateDecision.fundingSource === "user_key"
       ? "user_key"
       : gateDecision.fundingSource === "user_chatgpt"
         ? "chatgpt"
         : lane === "public"
           ? "free"
           : "platform";
-  let providerApiKeyOverride: string | null = null;
-  if (gateDecision.fundingSource === "user_key") {
-    const connectionRow = (await ctx.runQuery(
-      internal.providerConnections.getOpenAiConnectionForUserInternal as any,
-      {
-        userId: actor.dbUserId,
-      },
-    )) as { encryptedSecretHex?: unknown; secretIvHex?: unknown } | null;
-    if (!connectionRow?.encryptedSecretHex || !connectionRow?.secretIvHex) {
-      return {
-        ok: false,
-        response: fail(403, {
+    entitledCapabilityFamilies = gateDecision.entitledCapabilityFamilies;
+    if (gateDecision.fundingSource !== "user_key") {
+      providerApiKeyOverride = null;
+    } else {
+      const connectionRow = (await ctx.runQuery(
+        internal.providerConnections.getOpenAiConnectionForUserInternal as any,
+        {
+          userId: actor.dbUserId,
+        },
+      )) as { encryptedSecretHex?: unknown; secretIvHex?: unknown } | null;
+      if (!connectionRow?.encryptedSecretHex || !connectionRow?.secretIvHex) {
+        return {
           ok: false,
-          code: "provider_connection_required",
-          error: "provider_connection_required",
-          message: "Connect a provider to use this model.",
-          gate_code: "provider_connection_required",
-          cta: "connect_provider",
-          lane: gateDecision.lane,
-          model_id: requestedModelId,
-        }),
-      };
-    }
-    try {
-      providerApiKeyOverride = await decryptStoredSecret({
-        encryptedSecretHex: String(connectionRow.encryptedSecretHex),
-        secretIvHex: String(connectionRow.secretIvHex),
-      });
-    } catch {
-      return {
-        ok: false,
-        response: fail(503, {
+          response: fail(403, {
+            ok: false,
+            code: "provider_connection_required",
+            error: "provider_connection_required",
+            message: "Connect a provider to use this model.",
+            gate_code: "provider_connection_required",
+            cta: "connect_provider",
+            lane: gateDecision.lane,
+            model_id: requestedModelId,
+          }),
+        };
+      }
+      try {
+        providerApiKeyOverride = await decryptStoredSecret({
+          encryptedSecretHex: String(connectionRow.encryptedSecretHex),
+          secretIvHex: String(connectionRow.secretIvHex),
+        });
+      } catch {
+        return {
           ok: false,
-          code: "provider_connection_unavailable",
-          error: "provider_connection_unavailable",
-          message:
-            "Stored provider credentials are unavailable. Reconnect your provider and retry.",
-          gate_code: "provider_connection_required",
-          cta: "connect_provider",
-          lane: gateDecision.lane,
-          model_id: requestedModelId,
-        }),
-      };
+          response: fail(503, {
+            ok: false,
+            code: "provider_connection_unavailable",
+            error: "provider_connection_unavailable",
+            message:
+              "Stored provider credentials are unavailable. Reconnect your provider and retry.",
+            gate_code: "provider_connection_required",
+            cta: "connect_provider",
+            lane: gateDecision.lane,
+            model_id: requestedModelId,
+          }),
+        };
+      }
     }
   }
 
@@ -692,11 +735,45 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     }
   }
 
+  let communityInferenceAdmission: CommunityInferenceFundingAdmission | null = null;
+  if (isCommunityMemberAgentTurn) {
+    if (!runtimeCommunityId) {
+      return {
+        ok: false,
+        response: fail(403, {
+          ok: false,
+          code: "member_agent_community_context_required",
+          error: "member_agent_community_context_required",
+          message: "Community AI is available from inside a joined community.",
+        }),
+      };
+    }
+    setStage("community_inference_funding");
+    const admission = (await ctx.runQuery(
+      internal.founderInference.resolveCommunityInferenceFundingAdmissionInternal as any,
+      { communityId: runtimeCommunityId },
+    )) as CommunityInferenceFundingAdmission;
+    if (admission.ok === false) {
+      return {
+        ok: false,
+        response: fail(403, {
+          ok: false,
+          code: "community_ai_unavailable",
+          error: "community_ai_unavailable",
+          message: "Community AI is currently unavailable. The community owner can restore it from Billing.",
+          funding_code: admission.code,
+          community_id: runtimeCommunityId,
+        }),
+      };
+    }
+    communityInferenceAdmission = admission;
+  }
+
   const runtimeProjectId = String(ownedThread.projectId ?? "").trim() || null;
   const resolvedRuntimeCapabilityFamilies = restrictCapabilityFamiliesForInvocationSurface({
     invocationSurface,
     capabilityFamilies: resolveActiveCapabilityFamiliesFromEntitlements({
-      entitledCapabilityFamilies: gateDecision.entitledCapabilityFamilies,
+      entitledCapabilityFamilies,
       hasProjectContext: Boolean(runtimeProjectId),
       hasCommunityContext: Boolean(runtimeCommunityId),
     }) as RuntimeCapabilityFamily[],
@@ -766,6 +843,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeExecutionMode,
       invocationSurface,
       memberAgentSurfaceContext,
+      communityInferenceAdmission,
     },
   };
 }

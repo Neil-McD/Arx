@@ -6,12 +6,9 @@ const nowMs = 100_000;
 
 function resolve(overrides: Partial<Parameters<typeof resolveBuilderFundingProjection>[0]> = {}) {
   return resolveBuilderFundingProjection({
-    fundingPolicy: "managed_required",
     operatorComplimentaryAccess: false,
     checkoutPending: false,
     subscription: null,
-    legacyGrantStatus: null,
-    legacyApiKeyConnected: false,
     nowMs,
     ...overrides,
   });
@@ -96,49 +93,6 @@ describe("Builder funding projection", () => {
       lane: "builder",
       state: "builder_ended",
       allowedActions: ["buy_builder"],
-    });
-  });
-
-  test("frozen legacy communities can choose owner API or Builder", () => {
-    expect(resolve({ fundingPolicy: "legacy_byok_allowed", legacyGrantStatus: "approved" })).toEqual({
-      lane: "legacy_choice",
-      state: "legacy_api_available",
-      allowedActions: ["activate_owner_api", "buy_builder"],
-    });
-  });
-
-  test("active legacy API remains manageable while Builder stays available", () => {
-    expect(resolve({
-      fundingPolicy: "legacy_byok_allowed",
-      legacyGrantStatus: "active",
-      legacyApiKeyConnected: true,
-    })).toEqual({
-      lane: "legacy_choice",
-      state: "legacy_api_active",
-      allowedActions: ["manage_owner_api", "buy_builder"],
-    });
-  });
-
-  test("suspended legacy API can be reactivated or replaced by Builder", () => {
-    expect(resolve({
-      fundingPolicy: "legacy_byok_allowed",
-      legacyGrantStatus: "suspended",
-    })).toEqual({
-      lane: "legacy_choice",
-      state: "legacy_api_suspended",
-      allowedActions: ["activate_owner_api", "buy_builder"],
-    });
-  });
-
-  test("a legacy checkout does not erase the API choice before verified payment", () => {
-    expect(resolve({
-      fundingPolicy: "legacy_byok_allowed",
-      legacyGrantStatus: "approved",
-      checkoutPending: true,
-    })).toEqual({
-      lane: "legacy_choice",
-      state: "checkout_pending",
-      allowedActions: ["activate_owner_api", "resume_checkout"],
     });
   });
 });

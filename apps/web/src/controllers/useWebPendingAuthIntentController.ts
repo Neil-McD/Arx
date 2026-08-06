@@ -32,7 +32,6 @@ export function useWebPendingAuthIntentController(params: {
     options?: { replace?: boolean },
   ) => void;
   connectChatgpt: () => void;
-  openAccountSettings: () => void;
   showToast: (message: string) => void;
   openCreateCommunity: (
     draft: CreateCommunityIntentDraft | null,
@@ -46,6 +45,7 @@ export function useWebPendingAuthIntentController(params: {
     navigate: boolean;
     silentNoop: boolean;
   }) => Promise<unknown>;
+  resumeBuilderPurchase: () => Promise<unknown> | void;
   routeTryPolynetFree: (session: AuthSession) => unknown;
 }) {
   const resumePendingAuthIntent = useCallback((): void => {
@@ -70,9 +70,8 @@ export function useWebPendingAuthIntentController(params: {
           return;
         }
         if (payload.provider === "openai") {
-          params.openAccountSettings();
           params.showToast(
-            "Paste your OpenAI API key in Account settings.",
+            "Personal API-key connections are no longer supported.",
           );
           return;
         }
@@ -96,6 +95,9 @@ export function useWebPendingAuthIntentController(params: {
           silentNoop: payload.silent_noop,
         });
       },
+      activate_builder_purchase: () => {
+        void params.resumeBuilderPurchase();
+      },
       try_polynet_free: () => {
         void params.routeTryPolynetFree(params.session as AuthSession);
       },
@@ -104,10 +106,10 @@ export function useWebPendingAuthIntentController(params: {
     params.connectChatgpt,
     params.joinPublicCommunity,
     params.navigateTo,
-    params.openAccountSettings,
     params.openCreateCommunity,
     params.redeemPendingPurchases,
     params.redeemPurchaseClaim,
+    params.resumeBuilderPurchase,
     params.resolveAndEnterMemberDestination,
     params.routeTryPolynetFree,
     params.session,

@@ -12,6 +12,11 @@ import {
   communityIsActive,
   type CommunityLifecycleStatus,
 } from "../shared/communityLifecycle";
+import type { CommunityBuilderAccessMode } from "../shared/founderPlan";
+import {
+  requireCommunityBuilderAccess,
+  resolveCommunityBuilderAccess,
+} from "./communityBuilderAccessCore";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -21,6 +26,7 @@ export type CommunityLike = {
   name: string;
   lifecycleStatus?: CommunityLifecycleStatus;
   lifecycleGeneration?: number;
+  builderAccessMode?: CommunityBuilderAccessMode;
   oneLiner?: string;
   about?: string;
   avatarUrl?: string;
@@ -43,7 +49,12 @@ export type CommunityLike = {
 
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityAccessRelation = "visitor" | "pending" | "member" | "moderator" | "admin" | "owner";
-export type CommunityPrimaryCta = "open_community" | "join" | "checkout";
+export type CommunityPrimaryCta =
+  | "open_community"
+  | "join"
+  | "checkout"
+  | "manage_billing"
+  | "unavailable";
 
 export type CommunityMembershipLike = {
   _id: any;
@@ -1255,6 +1266,7 @@ export async function requireCommunityChatAccess(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,
@@ -1281,6 +1293,10 @@ export async function resolveCommunityAccessBundle(args: {
   userId: any;
 }) {
   requireActiveCommunity(args.community);
+  const builderAccess = await resolveCommunityBuilderAccess({
+    ctx: args.ctx,
+    community: args.community,
+  });
   const role = normalizeCommunityRoleForOutput(args.membership?.role);
   const isOwner = args.community.ownerId === args.userId;
   const isBlocked = !isOwner
@@ -1297,9 +1313,10 @@ export async function resolveCommunityAccessBundle(args: {
     membership: args.membership,
     userId: args.userId,
   });
-  const isEntitled = !isBlocked && entitlement.isEntitled;
-  const isAdmin = !isOwner && isEntitled && role === "admin";
-  const isModerator = !isOwner && isEntitled && role === "moderator";
+  const isMembershipEntitled = !isBlocked && entitlement.isEntitled;
+  const isEntitled = isMembershipEntitled && builderAccess.operational;
+  const isAdmin = !isOwner && isMembershipEntitled && role === "admin";
+  const isModerator = !isOwner && isMembershipEntitled && role === "moderator";
   let joinRequestStatus: string | null = null;
   let joinRequestReapplyAt: number | null = null;
   if (!isEntitled) {
@@ -1330,21 +1347,27 @@ export async function resolveCommunityAccessBundle(args: {
   const canEnterCommunity = isEntitled;
   const canReadChat = isEntitled;
   const canPostChat = isEntitled;
-  const canView = !isBlocked;
-  const canManageMembers = isOwner || isAdmin;
-  const canManageResources = isOwner || isAdmin;
-  const canModerateContent = isOwner || isAdmin || isModerator;
-  const canReviewJoinRequests = isOwner || isAdmin || isModerator;
-  const canManagePricing = isOwner || isAdmin;
-  const canManageBranding = isOwner;
-  const canManagePublishing = isOwner;
-  const canManagePayouts = isOwner;
+  const canView = !isBlocked && builderAccess.operational;
+  const canManageMembers = builderAccess.operational && (isOwner || isAdmin);
+  const canManageResources = builderAccess.operational && (isOwner || isAdmin);
+  const canModerateContent =
+    builderAccess.operational && (isOwner || isAdmin || isModerator);
+  const canReviewJoinRequests =
+    builderAccess.operational && (isOwner || isAdmin || isModerator);
+  const canManagePricing = builderAccess.operational && (isOwner || isAdmin);
+  const canManageBranding = builderAccess.operational && isOwner;
+  const canManagePublishing = builderAccess.operational && isOwner;
+  const canManagePayouts = builderAccess.operational && isOwner;
   const canPostMessage = isEntitled;
-  const primaryCta: CommunityPrimaryCta = isEntitled
-    ? "open_community"
-    : entryPolicy === "paid_subscription"
-      ? "checkout"
-      : "join";
+  const primaryCta: CommunityPrimaryCta = !builderAccess.operational
+    ? isOwner
+      ? "manage_billing"
+      : "unavailable"
+    : isEntitled
+      ? "open_community"
+      : entryPolicy === "paid_subscription"
+        ? "checkout"
+        : "join";
 
   return {
     community_id: String(args.community._id),
@@ -1357,9 +1380,15 @@ export async function resolveCommunityAccessBundle(args: {
     primary_cta: primaryCta,
     is_owner: isOwner,
     is_entitled: isEntitled,
+    membership_entitled: isMembershipEntitled,
     is_blocked: isBlocked,
     access_source: entitlement.accessSource,
     subscription_status: entitlement.subscriptionStatus,
+    community_availability: builderAccess.operational
+      ? "available"
+      : "temporarily_unavailable",
+    billing_recovery_action:
+      isOwner && !builderAccess.operational ? "manage_billing" : null,
     entitlement_role: isOwner ? "owner" : role || null,
     entitlement_ends_at:
       typeof entitlement.subscriptionCurrentPeriodEndAt === "number"
@@ -1398,6 +1427,7 @@ export async function requireCommunityManager(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,
@@ -1424,6 +1454,7 @@ export async function requireCommunityOwner(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community } = await getCommunityAndMembership(args);
+  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
   if (String(community.ownerId) !== String(args.userId)) {
     throw new Error("community_owner_required");
   }
@@ -1436,6 +1467,7 @@ export async function requireCommunityModerator(args: {
   userId: any;
 }): Promise<{ community: CommunityLike }> {
   const { community, membership } = await getCommunityAndMembership(args);
+  await requireCommunityBuilderAccess({ ctx: args.ctx, community });
   if (String(community.ownerId) !== String(args.userId)) {
     await requireCommunityUserNotBlocked({
       ctx: args.ctx,

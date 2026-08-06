@@ -108,8 +108,8 @@ assert.doesNotMatch(
 
 assert.match(
   createModal,
-  /WebBuilderOfferSummary[\s\S]*Community name[\s\S]*Customize community URL[\s\S]*Get Builder/,
-  "community creation should remain one offer-first identity form",
+  /WebBuilderOfferSummary[\s\S]*Community name[\s\S]*Customize community URL[\s\S]*Create community/,
+  "community creation should remain one post-payment identity form",
 );
 assert.match(
   webCreateController,
@@ -129,13 +129,13 @@ assert.match(
 assert.match(
   pendingAuthIntent,
   /create_community: \(payload\) => \{[\s\S]*params\.openCreateCommunity\(payload\.draft\)/,
-  "post-auth community creation should resume through the canonical create modal",
+  "post-auth community creation should resume through the canonical purchase entry",
 );
-const createFlowBindings = app.match(/openCommunityCreateFlow: openCreateCommunityModal/g) ?? [];
+const createFlowBindings = app.match(/openCommunityCreateFlow: openNewCommunityPurchaseFlow/g) ?? [];
 assert.equal(
   createFlowBindings.length,
   2,
-  "desktop and mobile creation CTAs should both bind to the canonical create modal",
+  "desktop and mobile creation CTAs should both bind to the canonical purchase entry",
 );
 
 assert.match(settings, /WebCommunitySettingsSection/, "community settings must remain available");

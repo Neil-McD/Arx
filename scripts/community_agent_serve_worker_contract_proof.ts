@@ -59,9 +59,10 @@ assert.match(
 );
 assert.match(
   readBlock,
-  /resolveCommunityInferenceFundingAdmission[\s\S]*owner_funding_choice_required[\s\S]*activate an OpenAI API key or fund this community at \$79\/month/,
-  "serve context should fail closed until the owner chooses BYOK or the founder plan",
+  /resolveCommunityInferenceFundingAdmission[\s\S]*founder_subscription_inactive[\s\S]*founder_plan_required/,
+  "serve context should fail closed until hosted community funding is current",
 );
+assert.doesNotMatch(readBlock, /OpenAI API key|owner_credential|owner_funding_choice/);
 assert.doesNotMatch(readBlock, /legacy_requester_chatgpt|requesterHasChatgptConnection/);
 assert.match(
   readBlock,
@@ -99,9 +100,10 @@ assert.match(
 
 assert.match(
   actionBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*context\.funding\.mode === "owner_api_key"[\s\S]*context\.funding\.mode === "platform_subscription"[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID[\s\S]*context\.funding\.mode === "owner_api_key" \? ownerApiKey : undefined[\s\S]*runChatgptNativeToolCompletion\(\{[\s\S]*userId: normalizeIdValue\(context\.request\.sponsorUserId\)/,
-  "serve action should use fixed Luna for owner-key or paid managed funding while retaining the bounded requester transition",
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*claimCommunityInferenceReceiptInternal[\s\S]*expectedFounderSubscriptionId[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID/,
+  "serve action should use fixed Luna only after hosted community funding is claimed",
 );
+assert.doesNotMatch(actionBlock, /owner_api_key|ownerApiKey|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(
   worker,
   /executeConciergeTool[\s\S]*executeRetrievalHarnessTool\(\{[\s\S]*userId: normalizeIdValue\(args\.context\.request\.sponsorUserId\)[\s\S]*authSubject: normalizeIdValue\(args\.context\.request\.authSubject\)[\s\S]*communityId: normalizeIdValue\(args\.context\.request\.communityId\)[\s\S]*toolName: args\.toolName/,

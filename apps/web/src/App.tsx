@@ -51,8 +51,8 @@ import {
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionsController } from "./controllers/useWebProviderConnectionsController";
-import { useWebFounderInferenceController } from "./controllers/useWebFounderInferenceController";
 import { useWebFounderBillingController } from "./controllers/useWebFounderBillingController";
+import { useWebBuilderPurchaseActivationController } from "./controllers/useWebBuilderPurchaseActivationController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
 import { useWebCommunityDirectoryState } from "./controllers/useWebCommunityDirectoryState";
@@ -189,7 +189,7 @@ import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebAppCompositionRoot } from "./components/WebAppCompositionRoot";
 import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
-import { buildWebGlobalOverlayHostProps, shouldOpenFounderInferencePrompt } from "./controllers/buildWebGlobalOverlayHostProps";
+import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
 import { buildWebAppMainSurfaceHostProps } from "./controllers/buildWebAppMainSurfaceHostProps";
 import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeHostProps";
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
@@ -245,6 +245,8 @@ export default function App() {
       beginBrowserSignedOutState();
       return Promise.resolve();
     });
+  const pendingBuilderSubscriptionIdRef = useRef<string | null>(null);
+  const completeBuilderPurchaseActivationRef = useRef<() => void>(() => undefined);
   const accountGraphLifecycle = useWebAccountGraphLifecycle();
   const {
     session,
@@ -957,12 +959,7 @@ export default function App() {
     applyCommunityShellState,
   });
   const {
-    chatgptConnection,
-    openAiConnection,
-    isLoadingProviderConnections: isLoadingChatgptConnection,
     providerConnectionUi,
-    hasPendingChatgptAuth,
-    handleConnectCommunityAgentServeProvider,
   } = useWebProviderConnectionsController({
     session,
     getSession: () => sessionRef.current ?? session,
@@ -971,22 +968,17 @@ export default function App() {
     refreshAccountSetupStatus,
     resetSignedOutAccountSetup: resetOnboardingProfileState,
   });
-  const founderInference = useWebFounderInferenceController({
-    session,
-    ensureSession: ensureUsableAuthSession,
-    providerConnectionUpdatedAt: openAiConnection.updated_at,
-  });
+  const operatorComplimentaryAccess =
+    accountCommerceStatus?.operator_complimentary_access === true;
   const founderBilling = useWebFounderBillingController({
     session,
     ensureSession: ensureUsableAuthSession,
-    operatorComplimentaryAccess:
-      accountCommerceStatus?.operator_complimentary_access === true,
+    operatorComplimentaryAccess,
     onCommunityReady: (_communityId, readySession) => loadCommunities(readySession),
   });
   const builderOffer = useWebBuilderOfferController({
     startCheckout: founderBilling.startCheckout,
     openPortal: founderBilling.openPortal,
-    openLegacyFunding: () => openGlobalSettings("account"),
   });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,
@@ -1512,38 +1504,59 @@ export default function App() {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
     onAccountSetupRequired: openProfileSetup,
+    getFounderSubscriptionId: () => pendingBuilderSubscriptionIdRef.current,
     onCommunityCreated: (community) => {
+      pendingBuilderSubscriptionIdRef.current = null;
+      completeBuilderPurchaseActivationRef.current();
       setCommunities((prev) => [community, ...prev]);
       void enterJoinedCommunity({
         communityId: community.id,
         communitySlug: community.slug,
       });
-      void founderBilling.startCheckoutAfterCommunityCreated(community.id);
     },
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
   });
-  const createBlockingFundingCommunity = founderBilling.fundingAttentionCommunities[0] ?? null;
-  const openCreateCommunityModal: typeof communityUi.openCreateCommunityModal = (draft = null) => {
-    if (createBlockingFundingCommunity) {
-      builderOffer.open({
-        community: createBlockingFundingCommunity,
-      });
+  const openFundedCreateCommunityModal: typeof communityUi.openCreateCommunityModal = (draft = null) => {
+    if (!operatorComplimentaryAccess && !pendingBuilderSubscriptionIdRef.current) {
+      showAppToastMessage("Complete Builder checkout before creating your community.");
       return;
     }
     communityUi.openCreateCommunityModal(draft);
   };
+  const builderPurchaseActivation = useWebBuilderPurchaseActivationController({
+    session,
+    ensureSession: ensureUsableAuthSession,
+    accountSetupStatus: effectiveAccountSetupStatus,
+    requireSignIn,
+    navigateTo,
+    openCreateCommunity: openFundedCreateCommunityModal,
+    operatorComplimentaryAccess,
+    hasLoadedAccountCommerceStatus: Boolean(accountCommerceStatus),
+    loadAccountCommerceStatus,
+    hasPreparedSubscription: () => Boolean(pendingBuilderSubscriptionIdRef.current),
+    onSubscriptionReady: (founderSubscriptionId) => {
+      pendingBuilderSubscriptionIdRef.current = founderSubscriptionId;
+    },
+    onAttachedCommunityReady: ({ communityId, communitySlug }) =>
+      enterJoinedCommunity({ communityId, communitySlug }),
+    showToast: showAppToastMessage,
+  });
+  completeBuilderPurchaseActivationRef.current =
+    builderPurchaseActivation.completePurchaseActivation;
+  const openNewCommunityPurchaseFlow =
+    builderPurchaseActivation.openCommunityPurchaseFlow;
   const { resumePendingAuthIntent } =
     useWebPendingAuthIntentController({
       session,
       resolveAndEnterMemberDestination,
       navigateTo,
       connectChatgpt: providerConnectionUi.handleConnectChatgpt,
-      openAccountSettings: () => openGlobalSettings("account"),
       showToast: showAppToastMessage,
-      openCreateCommunity: openCreateCommunityModal,
+      openCreateCommunity: openNewCommunityPurchaseFlow,
       redeemPurchaseClaim,
       joinPublicCommunity,
       redeemPendingPurchases,
+      resumeBuilderPurchase: builderPurchaseActivation.resumePendingPurchase,
       routeTryPolynetFree,
     });
   accountGraphLifecycle.actionsRef.current = {
@@ -1750,10 +1763,6 @@ export default function App() {
     session,
     getSession: () => sessionRef.current ?? session,
     profile: profileUi,
-    chatgptConnection,
-    openAiConnection,
-    isLoadingProviderConnections: isLoadingChatgptConnection,
-    provider: providerConnectionUi,
     isSaving: isSavingOnboarding,
     error: onboardingError,
     onAvatarUpload: handleProfileAvatarUpload,
@@ -1966,7 +1975,7 @@ export default function App() {
       openDirectMessages: handleOpenDirectMessages,
       closeDirectMessages: handleCloseDirectMessages,
       closeThreadPage: handleCloseCommunityInteractionDrawer,
-      openCommunityCreateFlow: openCreateCommunityModal,
+      openCommunityCreateFlow: openNewCommunityPurchaseFlow,
     });
   const isCommunityOnboardingPreviewMode =
     publicRoute.kind === "app" &&
@@ -2335,7 +2344,6 @@ export default function App() {
       setCommunityMessageMentions,
       communityAgentServeIssue,
       onDismissCommunityAgentServeIssue: handleDismissCommunityAgentServeIssue,
-      onConnectCommunityAgentServeProvider: handleConnectCommunityAgentServeProvider,
       isSendingCommunityMessage,
       communityChatError,
       fileInputRef: communityFileInputRef,
@@ -2550,44 +2558,11 @@ export default function App() {
       authError,
       requireSignIn,
       handleSignOut,
-      isLoadingChatgptConnection,
-      chatgptConnection,
-      isConnectingChatgpt: providerConnectionUi.isConnectingChatgpt,
-      isPollingChatgptConnection:
-        providerConnectionUi.isPollingChatgptConnection,
-      isLoadingOpenAiConnection: isLoadingChatgptConnection,
-      openAiConnection,
-      hasPendingChatgptAuth,
-      handleConnectChatgpt: providerConnectionUi.handleConnectChatgpt,
-      handleDisconnectChatgpt:
-        providerConnectionUi.handleDisconnectChatgpt,
-      chatgptDeviceUserCode: providerConnectionUi.chatgptDeviceUserCode,
-      chatgptConnectionError:
-        providerConnectionUi.chatgptConnectionError,
-      chatgptConnectionSuccess:
-        providerConnectionUi.chatgptConnectionSuccess,
-      openAiApiKeyDraft: providerConnectionUi.openAiApiKeyDraft,
-      setOpenAiApiKeyDraft: providerConnectionUi.setOpenAiApiKeyDraft,
-      isSavingOpenAiConnection:
-        providerConnectionUi.isSavingOpenAiConnection,
-      openAiConnectionError: providerConnectionUi.openAiConnectionError,
-      openAiConnectionSuccess: providerConnectionUi.openAiConnectionSuccess,
-      handleConnectOpenAi: providerConnectionUi.handleConnectOpenAi,
-      handleDisconnectOpenAi:
-        providerConnectionUi.handleDisconnectOpenAi,
-      founderInferenceStatus: founderInference.status,
-      isLoadingFounderInference: founderInference.isLoading,
-      isSavingFounderInference: founderInference.isSaving,
-      founderInferenceError: founderInference.error,
-      founderInferenceSuccess: founderInference.success,
-      handleActivateFounderInference: founderInference.activate,
-      handleSuspendFounderInference: founderInference.suspend,
       founderBillingOverview: founderBilling.overview,
       isLoadingFounderBilling: founderBilling.isLoading,
       onOpenBuilderOffer: (community) => builderOffer.open({ community }),
       onOpenCommunityBilling: () => openGlobalSettings("billing"),
-      onOpenCreateCommunity: () => openCreateCommunityModal(),
-      formatRelativeTime,
+      onOpenCreateCommunity: () => openNewCommunityPurchaseFlow(),
     },
     billing: {
       session,
@@ -2598,10 +2573,9 @@ export default function App() {
       openFounderBillingPortal: founderBilling.openPortal,
       refreshFounderBilling: founderBilling.refresh,
       retryCommunityArchive: founderBilling.retryArchiveCleanup,
-      restoreOperatorCommunity: founderBilling.restoreOperatorCommunity,
+      restoreCommunityWithoutPayment: founderBilling.restoreCommunityWithoutPayment,
       onOpenBuilderOffer: (community) => builderOffer.open({ community }),
-      onOpenLegacyFunding: () => openGlobalSettings("account"),
-      onOpenCreateCommunity: () => openCreateCommunityModal(),
+      onOpenCreateCommunity: () => openNewCommunityPurchaseFlow(),
       pendingPurchaseClaims,
       isLoadingPendingPurchases,
       isRedeemingPendingPurchases,
@@ -2662,13 +2636,6 @@ export default function App() {
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
     providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
     communityModalHostProps: communityUi.modalHostProps,
-    founderInferencePromptProps: {
-      isOpen: shouldOpenFounderInferencePrompt({ session, founderInference, founderBilling }),
-      communities: founderInference.status.communities,
-      keyConnected: founderInference.status.key_connected,
-      onContinue: () => { founderInference.dismissActivationPrompt(); openGlobalSettings("account"); },
-      onClose: founderInference.dismissActivationPrompt,
-    },
     builderOfferProps: {
       community: builderOffer.community,
       isSubmitting:
@@ -2691,9 +2658,11 @@ export default function App() {
     publicRoute: shellPublicRoute,
     holdLandingForAuth: shouldHoldLandingForAuth,
     landingPageProps: {
-      onTryFree: () => {
-        void routeTryPolynetFree();
+      onStartBuilderPurchase: () => {
+        void builderPurchaseActivation.startPurchase();
       },
+      builderPurchaseStatus: builderPurchaseActivation.status,
+      builderPurchaseError: builderPurchaseActivation.error,
     },
     onboardingPageProps: {
       accountSetupStatus: effectiveAccountSetupStatus,
@@ -2714,7 +2683,8 @@ export default function App() {
         profileUi.setProfileAvatarZoom(1);
       },
       onNextProfile: saveOnboardingProfile,
-      onFinishOnboarding: finishOnboarding,
+      onFinishOnboarding: () =>
+        finishOnboarding({ navigate: !builderPurchaseActivation.hasPendingPurchase }),
       onClose: closeProfileSetup,
     },
     platformBridgePageProps: {
@@ -2881,8 +2851,6 @@ export default function App() {
   } = useWebMemberAgentSurfaceController({
     activePage,
     communityTab,
-    settingsPage,
-    activeOperatorTab,
     activeCommunity,
     isAuthenticated: Boolean(session),
     publicRouteKind: publicRoute.kind,
@@ -3061,7 +3029,7 @@ export default function App() {
       ? () => navigateTo("/discover")
       : handleOpenDiscover,
     openMobileCreateCommunity,
-    openCommunityCreateFlow: openCreateCommunityModal,
+    openCommunityCreateFlow: openNewCommunityPurchaseFlow,
     communities,
     railCommunities,
     communityRailAttentionById,

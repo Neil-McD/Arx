@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import { shouldOpenFounderInferencePrompt } from "../apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts";
 
 const root = process.cwd();
 const read = (path: string) => readFileSync(join(root, path), "utf8");
@@ -33,8 +32,6 @@ const settings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const billingSettings = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
-const inferenceController = read("apps/web/src/controllers/useWebFounderInferenceController.ts");
-const inferencePrompt = read("apps/web/src/components/WebFounderInferencePrompt.tsx");
 const globalOverlayHost = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
 const globalOverlayPropsBuilder = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 const createController = read("shared/useCommunityCreateController.ts");
@@ -44,14 +41,17 @@ const legal = read("docs/legal/community-owner-inference-funding-v2.md");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
 const billingContract = read("docs/product/reference/billing-entitlements.md");
 const packageJson = read("package.json");
+const admissionResolver = core.slice(
+  core.indexOf("export async function resolveCommunityInferenceFundingAdmission"),
+  core.indexOf("export type AdditionalManagedCommunityAdmission"),
+);
 
 assert.match(packageJson, /"check:founder-inference-proof"/);
-assert.match(shared, /EXISTING_FOUNDER_INFERENCE_COHORT_KEY = "existing_founder_cutover_v1"/);
 assert.match(shared, /COMMUNITY_OWNER_FUNDED_MODEL_ID = "gpt-5\.6-luna"/);
-assert.match(shared, /COMMUNITY_OWNER_INFERENCE_TERMS_VERSION = "community_owner_inference_funding_v2"/);
+assert.doesNotMatch(shared, /LEGACY_BYOK|OWNER_INFERENCE_TERMS|FounderInferenceGrantStatus/);
 assert.match(
   shared,
-  /COMMUNITY_INFERENCE_SURFACES = \[[\s\S]*"community_agent_mention"[\s\S]*"community_autonomous_cognition"[\s\S]*"community_setup_generation"/,
+  /COMMUNITY_INFERENCE_SURFACES = \[[\s\S]*"member_agent_dock"[\s\S]*"community_agent_mention"[\s\S]*"community_autonomous_cognition"[\s\S]*"community_setup_generation"/,
 );
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS = 7_900/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000/);
@@ -61,10 +61,9 @@ const founderFundingSchema = schema.slice(
   schema.indexOf("founderSubscriptions: defineTable"),
   schema.indexOf("communityInferenceReceipts: defineTable"),
 );
-assert.match(founderFundingSchema, /founderSubscriptions: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)/);
+assert.match(founderFundingSchema, /founderSubscriptions: defineTable\(\{[\s\S]*communityId: v\.optional\(v\.id\("communities"\)\)/);
 assert.match(founderFundingSchema, /founderUsageCycles: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)/);
-assert.doesNotMatch(founderFundingSchema, /communityId: v\.optional/);
-assert.doesNotMatch(planCore, /communityId\?:/);
+assert.match(planCore, /communityId\?:/);
 
 assert.match(
   schema,
@@ -79,10 +78,8 @@ assert.doesNotMatch(
   core,
   /normalizeCommunityInferenceFundingPolicy|resolveCommunityInferenceFundingPolicy/,
 );
-assert.match(
-  core,
-  /community\.inferenceFundingPolicy !== COMMUNITY_FUNDING_POLICY_LEGACY_BYOK[\s\S]*founder_plan_required/,
-);
+assert.match(admissionResolver, /return \{ ok: false, code: "founder_plan_required" \}/);
+assert.doesNotMatch(admissionResolver, /userProviderConnections|founderInferenceGrants|owner_api_key/);
 assert.doesNotMatch(founderBilling, /setCommunityFundingPolicyInternal/);
 assert.match(
   schema,
@@ -94,7 +91,7 @@ const receiptSchema = schema.slice(
 );
 assert.match(
   receiptSchema,
-  /surface: v\.union\([\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
+  /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
 );
 assert.doesNotMatch(receiptSchema, /apiKey|encryptedSecret|prompt:|response:|toolOutput|costDollars/);
 
@@ -120,9 +117,8 @@ assert.doesNotMatch(core, /existingFounderInferenceCohortIsInitialized|legacy_re
 assert.doesNotMatch(core, /communityFounderFundingAllowsPublicAccess|requireCommunityFounderFundingForPublish/);
 assert.doesNotMatch(communityPublic, /founderInference|FounderFunding|community_founder_funding|community_not_available/);
 assert.match(core, /return \{ ok: false, code: "founder_plan_required" \}/);
-assert.match(core, /grant\.status === "approved"[\s\S]*owner_funding_choice_required/);
-assert.match(core, /grant\.status === "suspended"[\s\S]*owner_funding_suspended/);
-assert.match(core, /mode: "owner_api_key"[\s\S]*payerUserId: community\.ownerId/);
+assert.doesNotMatch(shared, /mode: "owner_api_key"/);
+assert.doesNotMatch(admissionResolver, /owner_funding_choice_required|owner_funding_suspended|owner_credential_missing/);
 assert.match(core, /mode: "platform_subscription"[\s\S]*subscriptionId: attachedSubscription\._id/);
 assert.match(planCore, /reserveFounderUsage/);
 assert.match(planCore, /nextReserved \+ cycle\.settledCostMicros > cycle\.includedCostMicros/);
@@ -171,21 +167,18 @@ assert.match(envExample, /POLYNET_FOUNDER_STRIPE_PRICE_ID=/);
 assert.match(envExample, /POLYNET_LUNA_INPUT_COST_MICROS_PER_MILLION_TOKENS=200000/);
 assert.match(envExample, /POLYNET_LUNA_OUTPUT_COST_MICROS_PER_MILLION_TOKENS=1200000/);
 assert.match(envExample, /POLYNET_FOUNDER_MAX_RUN_RESERVATION_COST_MICROS=1000000/);
-assert.match(accountSetup, /founderSubscriptions[\s\S]*hasManagedInference/);
-assert.match(accountSetup, /founderSubscriptionStatusGrantsAccess/);
+assert.doesNotMatch(accountSetup, /founderSubscriptions[\s\S]*hasManagedInference/);
+assert.doesNotMatch(accountSetup, /founderSubscriptionStatusGrantsAccess/);
 
-assert.match(backend, /activateFounderInference = action/);
-assert.match(backend, /acceptedTerms: v\.boolean\(\)/);
-assert.match(backend, /acceptedTermsVersion: v\.string\(\)/);
-assert.match(backend, /founder_inference_terms_acceptance_required/);
-assert.match(backend, /prepareFounderInferenceActivationInternal = internalMutation/);
-assert.match(
+assert.doesNotMatch(
   backend,
-  /const activation = \(await ctx\.runMutation\([\s\S]*prepareFounderInferenceActivationInternal[\s\S]*const probe = await runOpenAiNativeToolCompletion/,
+  /export const (?:prepareFounderInferenceActivationInternal|completeFounderInferenceActivationInternal)\b/,
 );
-assert.match(backend, /decryptStoredSecret\(connection\)/);
-assert.match(backend, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID[\s\S]*maxTokens: 16[\s\S]*apiKeyOverride: apiKey/);
-assert.match(backend, /COMMUNITY_OWNER_INFERENCE_TERMS_VERSION/);
+assert.match(backend, /FOUNDER_INFERENCE_BYOK_RETIRED = "founder_inference_byok_retired"/);
+assert.match(backend, /getCurrentFounderInferenceStatus = query/);
+assert.match(backend, /activateFounderInference = action/);
+assert.match(backend, /suspendFounderInference = mutation/);
+assert.doesNotMatch(backend, /decryptStoredSecret|apiKeyOverride|userProviderConnections/);
 assert.match(backend, /claimCommunityInferenceReceiptInternal = internalMutation/);
 assert.match(backend, /surface: communityInferenceSurfaceValidator/);
 assert.match(backend, /surface: args\.surface/);
@@ -194,10 +187,11 @@ assert.match(backend, /COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE/);
 assert.match(backend, /COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE/);
 
 assert.match(intake, /resolveCommunityInferenceFundingAdmission/);
-assert.match(intake, /owner_funding_choice_required[\s\S]*activate an OpenAI API key or fund this community at \$79\/month/);
-assert.doesNotMatch(intake + worker + core, /legacy_requester_chatgpt|requesterHasChatgptConnection/);
-assert.match(worker, /const directOpenAiFunded =[\s\S]*context\.funding\.mode === "platform_subscription"/);
-assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID[\s\S]*context\.funding\.mode === "owner_api_key" \? ownerApiKey : undefined/);
+assert.doesNotMatch(intake, /connect an OpenAI API key|activate an OpenAI API key/);
+assert.doesNotMatch(intake + worker + admissionResolver, /legacy_requester_chatgpt|requesterHasChatgptConnection|owner_api_key/);
+assert.match(worker, /const receiptKey = communityAgentMentionReceiptKey\(requestId\)/);
+assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID/);
+assert.doesNotMatch(worker, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(worker, /aggregatePromptTokens \+=/);
 assert.match(worker, /claimCommunityInferenceReceiptInternal/);
 assert.match(worker, /surface: "community_agent_mention"/);
@@ -214,23 +208,22 @@ assert.match(fundingRuntime, /surface: args\.surface/);
 assert.match(fundingRuntime, /COMMUNITY_OWNER_FUNDED_MODEL_ID/);
 assert.match(fundingRuntime, /markCommunityInferenceProviderStartedInternal/);
 assert.match(fundingRuntime, /settleCommunityInferenceReceiptInternal/);
+assert.doesNotMatch(fundingRuntime, /owner_api_key|userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|apiKeyOverride/);
 assert.match(autonomousRuntime, /resolveCommunityInferenceFundingForAction\(ctx, args\.communityId\)/);
 assert.match(autonomousRuntime, /surface: "community_autonomous_cognition"/);
 assert.match(autonomousRuntime, /receiptKey: `community_autonomous_cognition:\$\{runId\}`/);
 assert.match(autonomousRuntime, /modelId: fundingSession\.modelId/);
-assert.match(autonomousRuntime, /apiKeyOverride: fundingSession\.apiKeyOverride/);
+assert.doesNotMatch(autonomousRuntime, /runChatgptNativeToolCompletion|fundingSession\.apiKeyOverride/);
 assert.match(autonomousRuntime, /settleCommunityInferenceFundingSession/);
 assert.match(wikiArchitect, /surface: "community_setup_generation"/g);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:wiki_architect:\$\{requestId\}`/);
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:resource_writer:\$\{requestId\}`/);
 assert.match(wikiArchitect, /modelIdOverride: fundingSession\.modelId/g);
-assert.match(wikiArchitect, /apiKeyOverride: fundingSession\.apiKeyOverride/g);
+assert.doesNotMatch(wikiArchitect, /fundingSession\.apiKeyOverride/);
 assert.match(communityAdminGateway, /runCommunityWikiArchitectProposal[\s\S]*requestId: crypto\.randomUUID\(\)/);
 assert.match(communityAdminGateway, /draftCommunityResourceContentFromSources[\s\S]*requestId: crypto\.randomUUID\(\)/);
 
-assert.match(settings, /Legacy API funding/);
-assert.match(settings, /legacy-eligible communities/);
-assert.match(settings, /Activate for eligible communities/);
+assert.doesNotMatch(settings, /Legacy API funding|legacy-eligible|Activate for eligible|Personal AI connection|API key/i);
 assert.doesNotMatch(settings, /GPT 5\.6|\bLuna\b/i);
 assert.match(billingSettings, /Builder/);
 assert.match(billingSettings, /Polynet-hosted community AI/);
@@ -247,79 +240,35 @@ assert.doesNotMatch(
 assert.match(billingController, /founder_community/);
 assert.match(billingController, /scrubCurrentRouteSearchParams/);
 assert.match(billingController, /fundingAttentionCommunities/);
-assert.match(billingController, /startCheckoutAfterCommunityCreated[\s\S]*await refresh\(\);[\s\S]*await startCheckout\(communityId\)/);
+assert.doesNotMatch(billingController, /startCheckoutAfterCommunityCreated/);
 assert.equal(existsSync(join(root, "apps/web/src/components/WebFounderFundingPrompt.tsx")), false);
 assert.doesNotMatch(billingController, /isFundingPromptDismissed|dismissFundingPrompt/);
-assert.match(inferencePrompt, /Connect your OpenAI API key/);
-assert.match(inferencePrompt, /Your key powers AI for your existing communities/);
-assert.match(inferencePrompt, /Activate community AI/);
-assert.match(inferencePrompt, /Connect API key/);
-assert.match(inferencePrompt, /Not now/);
-assert.doesNotMatch(inferencePrompt, /\$79/);
-assert.match(inferenceController, /isActivationPromptDismissed/);
-assert.match(inferenceController, /dismissActivationPrompt/);
-assert.doesNotMatch(inferenceController, /GPT 5\.6|\bLuna\b|model_id/i);
-assert.match(globalOverlayHost, /WebFounderInferencePrompt/);
-assert.doesNotMatch(globalOverlayHost, /WebFounderFundingPrompt|founderFundingPromptProps/);
-assert.match(
-  globalOverlayPropsBuilder,
-  /fundingAttentionCommunities\.length === 0[\s\S]*status\.status === "approved"/,
-);
-assert.match(webApp, /shouldOpenFounderInferencePrompt\(\{ session, founderInference, founderBilling \}\)/);
-assert.match(webApp, /founderInference\.dismissActivationPrompt\(\);[\s\S]*openGlobalSettings\("account"\)/);
-const activationPromptReady = {
-  session: { user: { id: "founder" } },
-  founderInference: {
-    isLoading: false,
-    isActivationPromptDismissed: false,
-    status: { eligible: true, status: "approved", communities: [{ id: "legacy" }] },
-  },
-  founderBilling: {
-    isLoading: false,
-    overview: { communities: [{ id: "legacy" }] },
-    fundingAttentionCommunities: [],
-  },
-};
-assert.equal(shouldOpenFounderInferencePrompt(activationPromptReady), true);
-assert.equal(shouldOpenFounderInferencePrompt({
-  ...activationPromptReady,
-  founderBilling: { ...activationPromptReady.founderBilling, fundingAttentionCommunities: [{}] },
-}), false);
-assert.equal(shouldOpenFounderInferencePrompt({
-  ...activationPromptReady,
-  founderInference: {
-    ...activationPromptReady.founderInference,
-    status: { ...activationPromptReady.founderInference.status, status: "active" },
-  },
-}), false);
-assert.equal(shouldOpenFounderInferencePrompt({
-  ...activationPromptReady,
-  founderInference: { ...activationPromptReady.founderInference, isActivationPromptDismissed: true },
-}), false);
-assert.equal(shouldOpenFounderInferencePrompt({
-  ...activationPromptReady,
-  founderBilling: { ...activationPromptReady.founderBilling, overview: { communities: [] } },
-}), false);
+assert.equal(existsSync(join(root, "apps/web/src/components/WebFounderInferencePrompt.tsx")), false);
+assert.equal(existsSync(join(root, "apps/web/src/controllers/useWebFounderInferenceController.ts")), false);
+assert.equal(existsSync(join(root, "shared/cloudFounderInferenceGateway.ts")), false);
+assert.doesNotMatch(globalOverlayHost, /FounderInference|founderInference/);
+assert.doesNotMatch(globalOverlayPropsBuilder, /FounderInference|founderInference/);
+assert.doesNotMatch(webApp, /FounderInference|founderInference/);
 assert.match(createController, /visibility: "unlisted"/);
 assert.doesNotMatch(createModal, /option value="published"/);
-assert.match(createModal, /Get Builder/);
-assert.match(webApp, /founderBilling\.startCheckoutAfterCommunityCreated\(community\.id\)/);
+assert.match(createModal, /Create community/);
+assert.doesNotMatch(webApp, /startCheckoutAfterCommunityCreated/);
 assert.match(legal, /does not transfer the founder's administrative permissions to a member/);
 assert.match(legal, /Receipts do not contain the API key, prompts, responses, or tool output/);
 assert.match(
   cognitionContract,
-  /Direct Concierge chat, autonomous cognition, and AI-assisted setup generation are community-founder-funded/,
+  /The member agent under an authorized community lens, direct Concierge chat,[\s\S]*autonomous cognition, and AI-assisted setup generation are[\s\S]*community-founder-funded/,
 );
 assert.match(billingContract, /\$79 USD monthly for Builder on each managed community/);
-assert.match(billingContract, /Community visibility, public access, and member commerce remain independent from Builder funding/);
-assert.match(billingContract, /exactly three funding lanes/);
-assert.match(billingContract, /frozen legacy-eligible community/);
-assert.match(billingContract, /Every other community, including every newly created community, uses Builder/);
-assert.match(billingContract, /only AI execution fails closed/);
-assert.match(billingContract, /Each \$79 monthly cycle includes up to \$20 in raw GPT 5\.6 Luna model cost/);
-assert.match(billingContract, /Stripe webhook state, not the redirect, is authoritative/);
+assert.match(billingContract, /Visibility, membership, roles, paid-member commerce, Builder payment, AI allowance, and lifecycle remain separate canonical facts/);
+assert.match(billingContract, /Existing grandfathered communities retain ordinary platform operation without Builder/);
+assert.match(billingContract, /Newly created non-operator communities are subscription-required/);
+assert.match(billingContract, /Grandfathering grants platform operation, not hosted AI/);
+assert.match(billingContract, /Funding suspension does not mutate or delete the community/);
+assert.match(billingContract, /Each `\$79` monthly cycle includes up to `\$20` in raw GPT 5\.6 Luna model cost/);
+assert.match(billingContract, /Redirects are UX only; verified provider\/webhook state is authoritative/);
 assert.match(billingContract, /2\.9% application fee/);
-assert.match(billingContract, /transitional requester-ChatGPT lane is retired/);
+assert.match(billingContract, /Community BYOK and requester ChatGPT are retired as authority/);
 assert.doesNotMatch(
   cognitionContract,
   /member_concierge`[\s\S]{0,300}requester-funded through the requester's provider connection/,

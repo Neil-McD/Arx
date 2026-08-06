@@ -191,10 +191,10 @@ assert.ok(
   providerSessionIndex > fundingAdmissionIndex,
   "community runtime should admit canonical founder funding before opening a provider session",
 );
-assert.match(
+assert.doesNotMatch(
   fundingRuntime,
-  /admission\.mode === "owner_api_key"[\s\S]*getOpenAiConnectionForUserInternal[\s\S]*admission\.payerUserId/,
-  "only exact legacy BYOK admission should load an owner OpenAI credential",
+  /owner_api_key|getOpenAiConnectionForUserInternal|decryptStoredSecret|apiKeyOverride/,
+  "community runtime funding must never load an owner credential",
 );
 assert.match(
   runtime,
@@ -248,7 +248,7 @@ assert.match(
 );
 assert.match(
   docs,
-  /Memory is founder-funded[\s\S]*canonical founder-funding admission[\s\S]*Exact legacy BYOK[\s\S]*managed subscription[\s\S]*operator grant/,
+  /Memory is founder-funded[\s\S]*canonical founder-funding admission[\s\S]*active attached Builder[\s\S]*subscription or the operator grant/,
   "docs should describe every canonical autonomous-cognition funding lane",
 );
 

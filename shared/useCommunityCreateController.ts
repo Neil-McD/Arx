@@ -26,6 +26,7 @@ type UseCommunityCreateControllerArgs<
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onAccountSetupRequired?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
+  getFounderSubscriptionId?: () => string | null;
   createCommunityName: string;
   createCommunitySlug: string;
   createCommunitySlugEdited: boolean;
@@ -167,6 +168,7 @@ export function useCommunityCreateController<
         oneLiner: null,
         bannerStorageId: null,
         bannerUrl: null,
+        founderSubscriptionId: current.getFounderSubscriptionId?.() ?? null,
       });
       if (!community?.id) {
         current.setCreateCommunityError("Failed to create community.");

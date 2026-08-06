@@ -1,55 +1,27 @@
-import { internal } from "./_generated/api";
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  COMMUNITY_FUNDING_POLICY_LEGACY_BYOK,
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
   COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE,
   COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE,
-  COMMUNITY_OWNER_INFERENCE_TERMS_KEY,
-  COMMUNITY_OWNER_INFERENCE_TERMS_VERSION,
-  EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
   type CommunityInferenceFundingAdmission,
 } from "../shared/founderInference";
-import { resolveUserIdForAuthenticatedRequest } from "./communityCore";
 import {
-  getExistingFounderInferenceGrant,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
-import {
-  getFounderSubscriptionByCommunity,
-  releaseFounderUsageReservation,
-  reserveFounderUsage,
-} from "./founderPlanCore";
-import { decryptStoredSecret } from "./providerConnections";
-import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
+import { releaseFounderUsageReservation, reserveFounderUsage } from "./founderPlanCore";
 import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
-import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
-import { communityIsActive } from "../shared/communityLifecycle";
 
-const internalRefs = internal as any;
 const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const communityInferenceSurfaceValidator = v.union(
+  v.literal("member_agent_dock"),
   v.literal("community_agent_mention"),
   v.literal("community_autonomous_cognition"),
   v.literal("community_setup_generation"),
 );
-
-type OpenAiConnectionRow = {
-  _id: any;
-  userId: any;
-  provider: string;
-  encryptedSecretHex: string;
-  secretIvHex: string;
-  secretVersion: number;
-  keyLastFour?: string;
-  keyFingerprint?: string;
-  validatedAt: number;
-  updatedAt: number;
-};
 
 function normalizedId(value: unknown): string {
   return String(value ?? "").trim();
@@ -59,191 +31,23 @@ function boundedCode(value: unknown, fallback: string): string {
   return String(value ?? "").trim().slice(0, 120) || fallback;
 }
 
-function fundingAuthorityMatches(args: {
-  admission: CommunityInferenceFundingAdmission;
-  expectedFundingMode: FounderInferenceReceiptRow["fundingMode"];
-  expectedPayerUserId: unknown;
-  expectedFounderGrantId?: unknown;
-  expectedFounderSubscriptionId?: unknown;
-}): boolean {
-  const { admission } = args;
-  if (
-    admission.ok === false ||
-    admission.mode !== args.expectedFundingMode ||
-    normalizedId(admission.payerUserId) !== normalizedId(args.expectedPayerUserId)
-  ) {
-    return false;
-  }
-  if (admission.mode === "owner_api_key") {
-    return normalizedId(admission.grantId) === normalizedId(args.expectedFounderGrantId);
-  }
-  if (admission.mode === "platform_subscription") {
-    return normalizedId(admission.subscriptionId) ===
-      normalizedId(args.expectedFounderSubscriptionId);
-  }
-  return !args.expectedFounderGrantId && !args.expectedFounderSubscriptionId;
-}
+const FOUNDER_INFERENCE_BYOK_RETIRED = "founder_inference_byok_retired";
 
-async function getOpenAiConnection(ctx: any, userId: any): Promise<OpenAiConnectionRow | null> {
-  return (await ctx.db
-    .query("userProviderConnections" as any)
-    .withIndex("by_user_provider", (q: any) =>
-      q.eq("userId", userId).eq("provider", "openai"),
-    )
-    .first()) as OpenAiConnectionRow | null;
-}
-
+// Cached-client compatibility only. These public names preserve the previous
+// web bundle's wire contract during the rolling Builder cutover. They expose
+// no credential, grant, billing, or community authority.
 export const getCurrentFounderInferenceStatus = query({
-  args: {
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    if (await hasPlatformOwnerComplimentaryAccess(ctx, userId)) {
-      return {
-        eligible: false,
-        cohort_key: null,
-        status: null,
-        key_connected: false,
-        key_last_four: null,
-        activated_at: null,
-        suspended_at: null,
-        communities: [],
-      };
-    }
-    const grant = await getExistingFounderInferenceGrant(ctx, userId);
-    if (!grant) {
-      return {
-        eligible: false,
-        cohort_key: null,
-        status: null,
-        key_connected: false,
-        key_last_four: null,
-        communities: [],
-      };
-    }
-    const [connection, communities] = await Promise.all([
-      getOpenAiConnection(ctx, userId),
-      ctx.db
-        .query("communities" as any)
-        .withIndex("by_owner", (q: any) => q.eq("ownerId", userId))
-        .collect(),
-    ]);
-    const legacyCommunities = (
-      await Promise.all(
-        communities.filter((community) => communityIsActive(community)).map(async (community) => {
-          const subscription = await getFounderSubscriptionByCommunity(
-            ctx,
-            community._id,
-            Date.now(),
-          );
-          return !subscription &&
-            community.inferenceFundingPolicy === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK
-            ? community
-            : null;
-        }),
-      )
-    ).filter(Boolean) as Array<Record<string, unknown>>;
-    return {
-      eligible: legacyCommunities.length > 0,
-      cohort_key: grant.cohortKey,
-      status: grant.status,
-      key_connected: Boolean(connection?.encryptedSecretHex),
-      key_last_four: String(connection?.keyLastFour ?? "").trim() || null,
-      activated_at: grant.activatedAt ? new Date(grant.activatedAt).toISOString() : null,
-      suspended_at: grant.suspendedAt ? new Date(grant.suspendedAt).toISOString() : null,
-      communities: legacyCommunities
-        .slice()
-        .sort((a, b) => Number(a.createdAt ?? 0) - Number(b.createdAt ?? 0))
-        .map((community) => ({
-          id: normalizedId(community._id),
-          name: String(community.name ?? "Untitled community").trim() || "Untitled community",
-          slug: String(community.slug ?? "").trim(),
-        })),
-    };
-  },
-});
-
-export const prepareFounderInferenceActivationInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    nowMs: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const [grant, connection] = await Promise.all([
-      getExistingFounderInferenceGrant(ctx, args.userId),
-      getOpenAiConnection(ctx, args.userId),
-    ]);
-    if (!grant) throw new Error("founder_inference_grant_required");
-    if (!connection?.encryptedSecretHex) throw new Error("owner_credential_missing");
-    if (!String(connection.keyFingerprint ?? "").trim()) {
-      throw new Error("owner_credential_fingerprint_missing");
-    }
-
-    let acceptance = await ctx.db
-      .query("legalAcceptances" as any)
-      .withIndex("by_user_document_version", (q: any) =>
-        q
-          .eq("userId", args.userId)
-          .eq("documentKey", COMMUNITY_OWNER_INFERENCE_TERMS_KEY)
-          .eq("documentVersion", COMMUNITY_OWNER_INFERENCE_TERMS_VERSION),
-      )
-      .first();
-    if (!acceptance) {
-      const acceptanceId = await ctx.db.insert("legalAcceptances" as any, {
-        userId: args.userId,
-        documentKey: COMMUNITY_OWNER_INFERENCE_TERMS_KEY,
-        documentVersion: COMMUNITY_OWNER_INFERENCE_TERMS_VERSION,
-        acceptedAt: args.nowMs,
-        source: "founder_inference_settings_activation",
-        createdAt: args.nowMs,
-      });
-      acceptance = await ctx.db.get(acceptanceId as any);
-    }
-    return { grant, connection, acceptanceId: acceptance?._id };
-  },
-});
-
-export const completeFounderInferenceActivationInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    expectedKeyFingerprint: v.string(),
-    nowMs: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const grant = await getExistingFounderInferenceGrant(ctx, args.userId);
-    if (!grant) throw new Error("founder_inference_grant_required");
-    const connection = await getOpenAiConnection(ctx, args.userId);
-    if (!connection?.encryptedSecretHex) throw new Error("owner_credential_missing");
-    if (
-      String(connection.keyFingerprint ?? "").trim() !==
-      String(args.expectedKeyFingerprint ?? "").trim()
-    ) {
-      throw new Error("owner_credential_changed_during_activation");
-    }
-
-    const acceptance = await ctx.db
-      .query("legalAcceptances" as any)
-      .withIndex("by_user_document_version", (q: any) =>
-        q
-          .eq("userId", args.userId)
-          .eq("documentKey", COMMUNITY_OWNER_INFERENCE_TERMS_KEY)
-          .eq("documentVersion", COMMUNITY_OWNER_INFERENCE_TERMS_VERSION),
-      )
-      .first();
-    if (!acceptance) throw new Error("founder_inference_terms_acceptance_missing");
-    await ctx.db.patch(grant._id as any, {
-      status: "active",
-      activationAcceptanceId: acceptance?._id,
-      activatedAt: args.nowMs,
-      suspendedAt: undefined,
-      updatedAt: args.nowMs,
-    });
-    return { ok: true, status: "active", model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID };
-  },
+  args: { authSubject: v.optional(v.string()) },
+  handler: async () => ({
+    eligible: false,
+    cohort_key: null,
+    status: null,
+    key_connected: false,
+    key_last_four: null,
+    activated_at: null,
+    suspended_at: null,
+    communities: [],
+  }),
 });
 
 export const activateFounderInference = action({
@@ -252,77 +56,45 @@ export const activateFounderInference = action({
     acceptedTerms: v.boolean(),
     acceptedTermsVersion: v.string(),
   },
-  handler: async (ctx, args): Promise<unknown> => {
-    if (
-      args.acceptedTerms !== true ||
-      String(args.acceptedTermsVersion ?? "").trim() !== COMMUNITY_OWNER_INFERENCE_TERMS_VERSION
-    ) {
-      throw new Error("founder_inference_terms_acceptance_required");
-    }
-    const actor = (await ctx.runQuery(internalRefs.authActor.resolveAuthenticatedActorInternal, {
-      authSubject: args.authSubject ?? undefined,
-    })) as { dbUserId?: unknown } | null;
-    if (!actor?.dbUserId) throw new Error("authenticated_user_required");
-    const userId = actor.dbUserId;
-    const activation = (await ctx.runMutation(
-      internalRefs.founderInference.prepareFounderInferenceActivationInternal,
-      { userId, nowMs: Date.now() },
-    )) as { grant?: unknown; connection?: OpenAiConnectionRow | null } | null;
-    if (!activation?.grant) throw new Error("founder_inference_grant_required");
-    const connection = activation.connection;
-    if (!connection?.encryptedSecretHex) throw new Error("owner_credential_missing");
-    const keyFingerprint = String(connection.keyFingerprint ?? "").trim();
-    if (!keyFingerprint) throw new Error("owner_credential_fingerprint_missing");
-
-    const apiKey = await decryptStoredSecret(connection);
-    const probe = await runOpenAiNativeToolCompletion({
-      modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
-      messages: [
-        { role: "system", content: "Return exactly READY." },
-        { role: "user", content: "Confirm this model is available." },
-      ],
-      maxTokens: 16,
-      tools: [],
-      toolChoice: "none",
-      parallelToolCalls: false,
-      apiKeyOverride: apiKey,
-    });
-    if (probe.ok === false) {
-      throw new Error(boundedCode(probe.code, "founder_inference_probe_failed"));
-    }
-    if (probe.type !== "assistant" || !String(probe.assistantText ?? "").trim()) {
-      throw new Error("founder_inference_probe_empty");
-    }
-    await ctx.runMutation(
-      internalRefs.founderInference.completeFounderInferenceActivationInternal,
-      {
-        userId,
-        expectedKeyFingerprint: keyFingerprint,
-        nowMs: Date.now(),
-      },
-    );
-    return { ok: true, status: "active" };
+  handler: async () => {
+    throw new Error(FOUNDER_INFERENCE_BYOK_RETIRED);
   },
 });
 
 export const suspendFounderInference = mutation({
   args: { authSubject: v.optional(v.string()) },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const grant = await getExistingFounderInferenceGrant(ctx, userId);
-    if (!grant) throw new Error("founder_inference_grant_required");
-    const nowMs = Date.now();
-    await ctx.db.patch(grant._id as any, {
-      status: "suspended",
-      suspendedAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return { ok: true, status: "suspended" };
-  },
+  handler: async () => ({
+    ok: true,
+    status: "retired" as const,
+    reason: FOUNDER_INFERENCE_BYOK_RETIRED,
+  }),
 });
+
+function fundingAuthorityMatches(args: {
+  admission: CommunityInferenceFundingAdmission;
+  expectedFundingMode: FounderInferenceReceiptRow["fundingMode"];
+  expectedPayerUserId: unknown;
+  expectedFounderGrantId?: unknown;
+  expectedFounderSubscriptionId?: unknown;
+}): boolean {
+  const { admission } = args;
+  // Kept in the validator for one compatibility release so stale clients fail
+  // closed instead of crashing on an unknown argument. Owner credentials can
+  // no longer authorize new or resumed community inference.
+  if (args.expectedFundingMode === "owner_api_key") return false;
+  if (
+    admission.ok === false ||
+    admission.mode !== args.expectedFundingMode ||
+    normalizedId(admission.payerUserId) !== normalizedId(args.expectedPayerUserId)
+  ) {
+    return false;
+  }
+  if (admission.mode === "platform_subscription") {
+    return normalizedId(admission.subscriptionId) ===
+      normalizedId(args.expectedFounderSubscriptionId);
+  }
+  return !args.expectedFounderGrantId && !args.expectedFounderSubscriptionId;
+}
 
 export const resolveCommunityInferenceFundingAdmissionInternal = internalQuery({
   args: {
@@ -355,7 +127,11 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     const claimToken = String(args.claimToken ?? "").trim();
     if (!receiptKey || !claimToken) throw new Error("founder_inference_receipt_claim_required");
 
-    const admission = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
+    const admission = await resolveCommunityInferenceFundingAdmission(
+      ctx,
+      args.communityId,
+      args.nowMs,
+    );
     const authorityMatches = fundingAuthorityMatches({
       admission,
       expectedFundingMode: args.expectedFundingMode,
@@ -509,7 +285,11 @@ export const markCommunityInferenceProviderStartedInternal = internalMutation({
     if (!receipt || receipt.status !== "authorized" || receipt.claimToken !== args.claimToken) {
       return { ok: false, errorCode: "founder_inference_receipt_claim_invalid" };
     }
-    const admission = await resolveCommunityInferenceFundingAdmission(ctx, receipt.communityId);
+    const admission = await resolveCommunityInferenceFundingAdmission(
+      ctx,
+      receipt.communityId,
+      args.nowMs,
+    );
     const authorityMatches = fundingAuthorityMatches({
       admission,
       expectedFundingMode: receipt.fundingMode,

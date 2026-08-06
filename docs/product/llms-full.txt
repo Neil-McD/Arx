@@ -817,7 +817,7 @@ Launch a community intelligence system that members can join, use, and pay for w
 
 The first version should be simple: one clear community, one useful agent, one believable access model, and enough shared knowledge for members to get value quickly.
 
-Each managed community uses its own $79 monthly Builder subscription to run Polynet-hosted AI. Frozen legacy-eligible communities may instead use the owner's API key, and the canonical platform operator receives included Builder funding. Every new community is Builder-only. There is no account-wide Builder entitlement, personal Premium plan, or paid tool tier.
+Each community uses its own $79 monthly Builder subscription for Polynet-hosted AI. Existing grandfathered communities may keep operating without Builder, but hosted AI remains unavailable until Builder is active. The canonical platform operator receives included Builder funding. There is no account-wide Builder entitlement, community BYOK option, personal Premium plan, or paid tool tier.
 
 ## Before You Start
 
@@ -833,8 +833,8 @@ If those answers are vague, more settings will not fix the product.
 ## Core Steps
 
 1. Open the Builder offer from Create Community, Billing, or Account.
-2. Name the community and start its $79 monthly Builder checkout. Polynet creates the unlisted draft immediately before checkout.
-3. Define the community purpose and public profile.
+2. Complete the $79 monthly Builder checkout.
+3. Finish account setup, then name the funded community and define its purpose and public profile.
 4. Configure the community agent.
 5. Add resources that represent durable community knowledge.
 6. Attach skills where repeatable agent behavior is needed.
@@ -885,14 +885,14 @@ The cash path is simple: configure the community, define the paid access model, 
 - Membership and entitlement are backend authority.
 - Paid community access requires verified backend entitlement.
 - Builder payouts depend on payout provider readiness.
-- Existing approved founders can continue managing their frozen legacy-eligible communities through owner API funding or choose Builder per community.
+- Existing founders can continue managing grandfathered communities without Builder; hosted AI requires Builder per community.
 - Each managed community requires its own verified $79 monthly funding subscription to run Polynet-hosted AI.
 - A paying builder may own an unlimited number of communities. There is no
   account-level numeric cap, but every existing community must have current
-  funding before the next unlisted checkout draft can be created.
-- Create Community presents the Builder offer before asking only for the community name and optional URL. Its single primary action creates the unlisted managed draft and continues directly to Builder checkout.
+  funding for every newly created community.
+- Create Community presents the Builder offer and completes checkout before asking for the community name and optional URL. Verified payment authority is consumed exactly once when the community is created.
 - Create Community, Billing, and Account project the same per-community Builder offer and converge on the same checkout and entitlement system. They are entry surfaces, not separate products or billing state.
-- An unpaid managed community can be configured, published, listed in Discover, accept public joins, and collect paid-member revenue. Only its community-funded AI remains disabled.
+- A grandfathered community can remain configured, published, listed in Discover, accept public joins, and collect paid-member revenue without Builder. Only its community-funded AI remains disabled.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.
 - Owner/admin manage resources and most operational settings.
@@ -1938,96 +1938,100 @@ Polynet has two live money rails:
 1. A builder pays $79 USD monthly for Builder on each managed community.
 2. Polynet keeps a 2.9% application fee from paid-member community revenue.
 
-There is no personal Premium plan, commercial Free-versus-Premium tier, tool-credit purchase, top-up, auto-recharge, or card-backed tool-usage collection. Authenticated tool access is one product surface. Polynet absorbs tool/provider cost while retaining rate limits, provider quotas, and auditable cost evidence.
+Builder is not an account-wide tier. One subscription belongs to one community. Visibility, membership, roles, paid-member commerce, Builder payment, AI allowance, and lifecycle remain separate canonical facts.
 
-## Builder Funding
+## Lifecycle And Builder Authority
 
-One active Builder subscription authorizes Polynet-hosted inference for exactly one attached managed community. Community visibility, public access, and member commerce remain independent from Builder funding. Stripe webhook state, not the redirect, is authoritative.
+Community operation is resolved in this order:
 
-There are three customer-facing projections of this one offer:
+1. Lifecycle: archived communities are unavailable regardless of payment, grandfathering, membership, or operator status.
+2. Commercial compatibility: missing legacy `builderAccessMode` means `grandfathered`; malformed values fail closed.
+3. Funding: an active `subscription_required` community needs the operator grant or one correctly attached, paid-through Builder subscription.
+4. Membership and role: only after the community is operational do membership and role determine what a user may do.
 
-1. **Create Community** explains Builder first, asks only for the community name and optional URL, creates the unlisted checkout draft, and starts checkout.
-2. **Billing** shows each owned community's canonical funding state and the one valid next action: buy, resume checkout, fix payment, manage the subscription, or use the frozen legacy API lane where eligible.
-3. **Account** summarizes Builder per community and sends the builder into the same offer or Billing action. It does not invent an account-wide commercial entitlement.
+Existing grandfathered communities retain ordinary platform operation without Builder. Hosted AI for those communities still requires Builder. Newly created non-operator communities are subscription-required: Builder authorizes both ordinary platform operation and hosted AI for that attached community.
 
-All three projections converge on the same checkout action, verified webhook state, community funding projection, and entitlement checks. No surface may infer access from its own local UI state.
+Funding suspension does not mutate or delete the community, memberships, visibility, content, or history. A subscription-required community without current funding is removed from Discover and rejects private entry, public joins, and new paid-member checkout. Its direct funnel may remain visible with a neutral unavailable state and an owner billing-recovery action.
 
-A founder may own an unlimited number of communities. There is no account-level
-numeric limit and no account-wide bundle: each managed community needs its own
-current $79 subscription and its own allowance. The first community can be
-created as the checkout draft. A builder can create each next community only
-after every existing owned community has current canonical funding. Exact active
-legacy BYOK and the operator grant satisfy that funding check for their eligible
-communities; an unfunded draft blocks another draft.
+## Payment-First Builder Sequence
 
-Each $79 monthly cycle includes up to $20 in raw GPT 5.6 Luna model cost for that community. Before supported managed inference begins, Polynet reserves a bounded worst-case amount from the community's current allowance and settles it to calculated token cost after provider usage is known. Missing pricing evidence, ambiguous cycle state, inactive payment state, or exhausted allowance fails closed.
+The canonical new-builder sequence is:
 
-The same funding kernel covers direct community-agent mentions, autonomous community cognition, and AI-assisted community setup. If funding is missing or inactive, only AI execution fails closed. Publishing, Discover visibility, public funnels, public joins, and paid-member checkout continue under their own visibility, access, and commerce rules. The payer never receives extra member permissions or tool authority.
+1. The public landing page or internal Create Community surface starts anonymous Stripe checkout before authentication or community creation.
+2. The verified Stripe webhook creates durable paid receipt evidence. Redirect success is progress UI only.
+3. The buyer authenticates and claims the receipt through the browser secret or verified checkout-email recovery.
+4. The user completes display name, handle, avatar, current Terms, and current Privacy acceptance. Provider credentials are not account setup.
+5. Community creation atomically consumes one owned active unassigned subscription, creates the unlisted subscription-required community, attaches the subscription, and opens its usage cycle.
 
-There are exactly three funding lanes, resolved per community rather than as an account tier:
+An unassigned subscription grants setup, not access to any existing community. The same subscription cannot be attached twice. Replays are idempotent and cross-user attachment fails closed.
 
-- A frozen legacy-eligible community may use the owner's encrypted API key or switch that community to Builder. Eligibility requires both the exact founder grant and the stored `legacy_byok_allowed` community policy; it never expands based on the current date. The transitional requester-ChatGPT lane is retired.
-- One active canonical `operatorRoles.owner` row grants the platform operator included Builder funding. It creates no simulated Stripe state and bypasses neither community authorization, rate limits, usage receipts, nor provider-cost accounting.
-  The operator grant has no artificial numeric community cap.
-- Every other community, including every newly created community, uses Builder. There is no general BYOK enrollment path.
+## Archive And Restoration
+
+Archive is a lifecycle action, not a billing status. It immediately freezes ordinary runtime access and starts durable asynchronous billing cleanup. Cleanup completion is required before any restoration but grants no access by itself.
+
+- A grandfathered owner may restore the archived community without payment after cleanup. The community returns with its ordinary grandfathered access; hosted AI remains off unless Builder is separately current.
+- A subscription-required community restores only from verified active `$79` payment bound to the current archived lifecycle generation.
+- The canonical operator may restore an operator-owned community after cleanup without simulated Stripe state.
+- Every restoration increments `lifecycleGeneration`. Checkout and webhook evidence from an earlier generation cannot restore or mutate the newer generation.
+
+## Hosted AI
+
+Each `$79` monthly cycle includes up to `$20` in raw GPT 5.6 Luna model cost for that community. Before managed inference begins, Polynet reserves a bounded worst-case amount and settles to calculated token cost after provider usage is known. Missing pricing, ambiguous cycle state, inactive payment, or exhausted allowance fails closed.
+
+The same funding kernel covers the member agent under a server-validated community lens, direct community-agent mentions, autonomous community cognition, and AI-assisted setup. Members never provide community inference credentials. Community BYOK and requester ChatGPT are retired as authority; historical rows remain audit or migration evidence only.
+
+The canonical operator grant derives only from one active `operatorRoles.owner` row. It creates no fake Stripe state and bypasses neither authorization, rate limits, usage receipts, nor provider-cost accounting.
 
 ## Paid-Member Community Revenue
 
-Paid-member commerce remains independent from Builder funding:
+Paid-member pricing and payouts are independent from AI funding, but checkout requires an operational community:
 
-1. The community owner completes Stripe Connect payout onboarding.
-2. The builder configures `paid_subscription` entry policy and an active price point.
-3. A member enters through the canonical community funnel and completes a `community_join` checkout on the builder's connected account.
+1. The owner completes Stripe Connect payout onboarding.
+2. The builder configures `paid_subscription` entry and an active price point.
+3. A member enters through the canonical community funnel and completes `community_join` checkout on the builder's connected account.
 4. Provider/webhook verification creates the purchase claim, subscription lifecycle, membership, and access truth.
-5. The connected account owns the member customer, product, price, charge, processor fee, subscription, and payout. Polynet keeps only its 2.9% application fee.
+5. The connected account owns the customer, subscription, charge, processor fee, and payout. Polynet keeps its 2.9% application fee.
 
-Stripe processing fees are separate from Polynet's 2.9%. The fee is the same whether community inference is funded by $79 managed funding, grandfathered BYOK, the operator grant, or is currently unfunded.
+Stripe processing fees are separate from Polynet's 2.9% application fee. A grandfathered community can collect member revenue while hosted AI is off. An archived or commercially suspended subscription-required community cannot start new member checkout. Full refunds revoke paid access; partial refunds retain access unless subscription state says otherwise. Each successful refund reverses the cumulative proportional share of Polynet's application fee idempotently.
 
-Full refunds revoke paid access; partial refunds retain access unless subscription state says otherwise. Opened disputes suspend access. Each successful partial or full refund reverses the cumulative proportional share of Polynet's application fee through an idempotent provider-scoped ledger. Pending, failed, and canceled refunds reverse no fee.
+## Legal Acceptance
 
-Platform-account events use `STRIPE_WEBHOOK_SECRET`. Connected-account member-commerce events use `STRIPE_CONNECT_WEBHOOK_SECRET`. Provider account identity and live/test mode must match local commerce records before state can change.
-
-## Provider Cost and Historical Finance
-
-Successful tool and infrastructure use records vendor, cost category, measured quantity, raw provider cost, evidence source, and whether evidence is exact or estimated. This is cost accounting, not a user credit ledger and not an entitlement.
-
-Historical tool-credit balances, top-up checkout rows, reservations, collections, and settlement evidence remain readable for liability reconciliation. They cannot be newly created, purchased, recharged, collected, or used to authorize product access. Fail-closed endpoint shells may remain only where the cached-production-client contract requires the old function name.
+Terms v3 is the current commercial contract. Terms v1 and v2 acceptances remain immutable historical evidence but do not satisfy current acceptance because v3 materially changes the Builder and restoration boundary. New and returning users must accept the current Terms through the canonical account/setup bridge before protected platform use.
 
 ## Rules
 
 1. Redirects are UX only; verified provider/webhook state is authoritative.
-2. Checkout finalization is idempotent.
-3. Builder funding, visibility, member access, management authority, and payout readiness are separate truths.
-4. One $79 subscription attaches to one managed community and authorizes its hosted AI allowance.
-5. Community ownership has no numeric cap, but every existing community must be currently funded before another checkout draft can be created.
-6. Paid-member revenue always uses the 2.9% application fee.
-7. Connect payouts and proportional application-fee refunds remain active.
-8. Legacy BYOK requires both exact founder-grant and community-policy evidence.
-9. The operator grant derives only from one active canonical owner role.
-10. Provider-cost records and usage receipts remain active even when Polynet absorbs cost.
-11. Historical retired financial rows are audit evidence only and grant no access.
+2. Archive always wins over commercial and access state.
+3. Missing legacy Builder mode is grandfathered; malformed mode fails closed.
+4. One `$79` subscription attaches to one managed community.
+5. Grandfathering grants platform operation, not hosted AI.
+6. Builder funding never widens member permissions.
+7. Restoration is cleanup-gated, generation-fenced, and idempotent.
+8. Paid-member revenue always uses the 2.9% application fee.
+9. Community BYOK and requester ChatGPT authorize no community AI execution.
+10. Historical financial and legal evidence remains auditable.
 
 ## Common Mistakes
 
 - treating a successful redirect as entitlement
-- selling an unattached Builder subscription
-- treating $79 as an account-wide community bundle
-- restoring an account-level community cap or allowing stacked unpaid drafts
-- letting Builder funding hide, unpublish, or disable ordinary community commerce
-- letting Builder funding widen member permissions
-- changing the 2.9% fee based on community inference funding
-- configuring only the platform webhook and expecting Connect commerce to converge
-- revoking access after a refund without reversing the proportional application fee
-- restoring requester ChatGPT, Premium, tool credits, top-ups, card collection, or auto-recharge
-- deleting historical financial evidence before reconciliation
-- hard-coding the operator email or simulating a paid subscription for the operator
+- checking payment before lifecycle
+- making grandfathered platform access depend on AI funding
+- allowing payment or operator status to bypass archive
+- treating an unassigned subscription as community access
+- storing a second `suspended` flag instead of resolving current truth
+- mutating membership or visibility when Builder funding lapses
+- restoring an archived community before billing cleanup completes
+- allowing a stale checkout generation to restore a community
+- letting frontend state reconstruct backend authority
+- reviving community BYOK because historical credential rows still exist
 
 ## Related Concepts
 
-- `entitlement`
-- `access-model`
-- `role`
 - `community`
+- `community-lifecycle`
+- `builder-access-mode`
+- `entitlement`
+- `membership`
 - `funnel`
 
 # Security And Privacy

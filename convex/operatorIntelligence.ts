@@ -96,7 +96,6 @@ const AUTH_AVAILABILITY_RECENT_WINDOW_MS = 24 * 60 * 60 * 1000;
 const ACCOUNT_SETUP_SOURCE_TABLES = [
   "users",
   "userProfileDetails",
-  "userProviderConnections",
   "legalAcceptances",
   "communities",
   "communityMemberships",
@@ -170,23 +169,20 @@ function buildEmptyMissingCounts(): Record<AccountSetupMissing, number> {
 }
 
 async function buildOperatorAccountSetupRecords(ctx: any, nowMs: number) {
-  const [users, details, providerConnections, legalAcceptances, memberships, communities] = await Promise.all([
+  const [users, details, legalAcceptances, memberships, communities] = await Promise.all([
     ctx.db.query("users").collect(),
     ctx.db.query("userProfileDetails").collect(),
-    ctx.db.query("userProviderConnections").collect(),
     ctx.db.query("legalAcceptances").collect(),
     ctx.db.query("communityMemberships").collect(),
     ctx.db.query("communities").collect(),
   ]);
   const accountUsers = users.filter(isAccountUserRow);
   const detailsByUser = new Map<string, any>();
-  const providersByUser = new Map<string, any[]>();
   const legalAcceptancesByUser = new Map<string, any[]>();
   const ownedCommunitiesByUser = new Map<string, number>();
   const joinedCommunitiesByUser = new Map<string, number>();
 
   for (const row of details) detailsByUser.set(String(row.userId), row);
-  for (const row of providerConnections) pushByUserId(providersByUser, row);
   for (const row of legalAcceptances) pushByUserId(legalAcceptancesByUser, row);
   for (const row of communities) incrementStringCount(ownedCommunitiesByUser, row.ownerId);
   for (const row of memberships) {
@@ -199,7 +195,6 @@ async function buildOperatorAccountSetupRecords(ctx: any, nowMs: number) {
     const setup = buildAccountSetupStatusForRows({
       user,
       detail: detailsByUser.get(userId) ?? null,
-      providerConnections: providersByUser.get(userId) ?? [],
       legalAcceptances: legalAcceptancesByUser.get(userId) ?? [],
     });
     return {
@@ -1732,7 +1727,6 @@ export const getOperatorAccountSetupSnapshotInternal = internalQuery({
     currentStep: v.optional(
       v.union(
         v.literal("identity"),
-        v.literal("inference"),
         v.literal("complete"),
       ),
     ),

@@ -9,7 +9,8 @@ import type { FounderInferencePricing } from "./founderPlanPricing";
 export type FounderSubscriptionRow = {
   _id: any;
   ownerUserId: any;
-  communityId: any;
+  communityId?: any;
+  attachedAt?: number;
   provider: "stripe";
   providerCustomerId: string;
   providerSubscriptionId: string;
@@ -20,6 +21,8 @@ export type FounderSubscriptionRow = {
   cancelAtPeriodEnd: boolean;
   endedAt?: number;
   revokedReason?: string;
+  riskAccessState?: "clear" | "revoked";
+  riskStateChangedAt?: number;
   lastProviderEventCreatedAt: number;
   createdAt: number;
   updatedAt: number;

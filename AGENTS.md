@@ -42,9 +42,10 @@ This file is the execution contract for agents working in this repository.
 - Paid-member community commerce through Stripe Connect with one 2.9% Polynet
   application fee, connected-account payouts, and proportional fee reversals
   for successful refunds.
-- Exact legacy-founder BYOK activation and role-backed platform-owner
-  complimentary funding. There is no personal paid plan or commercial account
-  tier.
+- Grandfathered operation for existing communities and role-backed
+  platform-owner complimentary funding. Grandfathering preserves the
+  community, not hosted AI. There is no personal paid plan or commercial
+  account tier.
 - Provider-cost evidence, usage receipts, and rate/provider-quota enforcement.
 - Community-scoped AI agent interactions embedded in community surfaces.
 - Official Polynet MCP access for external agent harnesses.
@@ -70,8 +71,8 @@ This file is the execution contract for agents working in this repository.
 - Extra inference-gating complexity beyond minimal tier limits.
 - Personal Premium subscriptions, personal tool credits or top-ups, card-backed
   usage collection, auto-recharge, and Free-versus-Premium capability gates.
-- Transitional requester-ChatGPT community funding. An eligible legacy founder
-  must activate BYOK or fund each managed community at $79 monthly.
+- Community BYOK and requester-ChatGPT funding. Historical credential and grant
+  records are migration or audit evidence only and authorize no community AI.
 - Nice-to-have platform expansions not directly improving creator setup + member participation.
 
 ---
@@ -122,17 +123,17 @@ If a cleanup touches any of the above, require explicit human confirmation.
 - Access decisions are entitlement-driven and evaluated per request.
 - Each active $79 founder subscription authorizes exactly one attached managed
   community and carries a $20 raw Luna-cost allowance for that community.
-- Community creation has no numeric owner limit. The first community may be
-  created as an unlisted checkout draft; each next community is admitted only
-  when every existing owned community has current canonical funding through its
-  own subscription, an exact active legacy BYOK grant, or the operator grant.
+- Community creation has no numeric owner limit. A non-operator pays first;
+  verified checkout authority is attached while creating the community. Each
+  community requires its own subscription; the operator grant is the only
+  complimentary creation authority.
 - Every paid-member community charge uses the same 2.9% application fee,
   independent of founder funding mode. Stripe processing fees remain separate.
 - Stripe Connect onboarding, connected-account subscription lifecycle, payouts,
   disputes, and proportional application-fee refunds remain active for MVP.
 - Platform-owner complimentary funding derives only from one active canonical
-  `operatorRoles.owner` row. Legacy BYOK derives only from the bounded founder
-  grant plus a legacy-eligible community policy.
+  `operatorRoles.owner` row. Historical BYOK grants, funding-policy rows, and
+  user credentials grant no community AI authority.
 - Personal Premium, tool-balance purchases, auto-recharge, and card-backed tool
   collection are retired. Historical financial rows remain canonical audit and
   reconciliation evidence until explicitly migrated; they grant no access.

@@ -1,5 +1,5 @@
 import { useEffect, useState, type DragEvent } from "react";
-import { Check, CircleUserRound, PlugZap, X } from "lucide-react";
+import { Check, CircleUserRound, X } from "lucide-react";
 import {
   formatAccountSetupMissingGuidance,
   type AccountSetupStatus,
@@ -48,16 +48,10 @@ export type PlatformLegalAcceptanceDraft = {
 
 const STEP_LABELS: Record<OnboardingStep, string> = {
   identity: "Profile",
-  inference: "Inference",
 };
 
-function normalizeStep(step: AccountSetupStep | null | undefined): OnboardingStep {
-  if (step === "inference") return step;
+function normalizeStep(_step: AccountSetupStep | null | undefined): OnboardingStep {
   return "identity";
-}
-
-function stepIndex(step: OnboardingStep): number {
-  return ["identity", "inference"].indexOf(step);
 }
 
 function stepIsComplete(status: AccountSetupStatus | null, step: OnboardingStep): boolean {
@@ -68,8 +62,6 @@ function StepIcon(props: { step: OnboardingStep }) {
   switch (props.step) {
     case "identity":
       return <CircleUserRound size={15} strokeWidth={2} aria-hidden="true" />;
-    case "inference":
-      return <PlugZap size={15} strokeWidth={2} aria-hidden="true" />;
   }
 }
 
@@ -96,45 +88,22 @@ function formatHandleAvailability(
   });
 }
 
-function formatProviderStatus(
-  connected: boolean,
-  selected: boolean,
-  busy: boolean,
-): { kind: "connected" | "selected" | "busy" | "idle"; label: string } {
-  if (connected) return { kind: "connected", label: "Connected" };
-  if (busy) return { kind: "busy", label: "Working" };
-  if (selected) return { kind: "selected", label: "Selected" };
-  return { kind: "idle", label: "Not connected" };
-}
-
 export function WebOnboardingPage(props: WebOnboardingPageProps) {
-  const { identity, inference, submission } = props.setup;
-  const { chatgpt, openai } = inference;
+  const { identity, submission } = props.setup;
   const [step, setStep] = useState<OnboardingStep>(() =>
     normalizeStep(props.accountSetupStatus?.current_step),
   );
   const [hasConfirmedPlatformLegal, setHasConfirmedPlatformLegal] = useState(false);
   const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentEntry | null>(null);
   const [setupGuidance, setSetupGuidance] = useState<string | null>(null);
-  const [providerChoice, setProviderChoice] = useState<"chatgpt" | "openai" | null>(() =>
-    openai.connected ? "openai" : chatgpt.connected ? "chatgpt" : null,
-  );
-
-  useEffect(() => {
-    if (openai.connected) setProviderChoice("openai");
-    else if (chatgpt.connected) setProviderChoice("chatgpt");
-  }, [chatgpt.connected, openai.connected]);
-
   const progress = props.accountSetupStatus?.percent ?? 0;
   const progressCircumference = 2 * Math.PI * 17;
   const progressDashOffset = progressCircumference - (progress / 100) * progressCircumference;
-  const hasInferenceProvider = chatgpt.connected || openai.connected;
-
   useEffect(() => {
-    if (props.accountSetupStatus?.completed || hasInferenceProvider) {
+    if (props.accountSetupStatus?.completed) {
       setSetupGuidance(null);
     }
-  }, [hasInferenceProvider, props.accountSetupStatus?.completed]);
+  }, [props.accountSetupStatus?.completed]);
   const normalizedHandle = normalizeProfileHandle(identity.handle);
   const handleAvailabilityMatches =
     identity.handleAvailability?.normalized_handle === normalizedHandle;
@@ -154,20 +123,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
     identity.handleAvailability,
     identity.isCheckingHandleAvailability,
   );
-  const showOpenAiKeyEntry = providerChoice === "openai" || openai.connected;
-  const chatgptSelected = providerChoice === "chatgpt";
-  const openAiSelected = providerChoice === "openai";
-  const chatgptProviderStatus = formatProviderStatus(
-    chatgpt.connected,
-    chatgptSelected,
-    chatgpt.isConnecting || chatgpt.isPolling,
-  );
-  const openAiProviderStatus = formatProviderStatus(
-    openai.connected,
-    openAiSelected,
-    openai.isSaving,
-  );
-  const stepOrder: OnboardingStep[] = ["identity", "inference"];
+  const stepOrder: OnboardingStep[] = ["identity"];
   const setupRequirementMessage =
     submission.error && props.accountSetupStatus && !props.accountSetupStatus.completed
       ? formatAccountSetupMissingGuidance(props.accountSetupStatus)
@@ -189,20 +145,15 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
           : null,
       );
       if (ok) {
-        setStep("inference");
+        await props.onFinishOnboarding();
       }
       return;
-    }
-    if (step === "inference") {
-      if (!hasInferenceProvider) return;
-      await props.onFinishOnboarding();
     }
   };
 
   const nextDisabled =
     submission.isSaving ||
-    (step === "identity" && !profileReady) ||
-    (step === "inference" && !hasInferenceProvider);
+    (step === "identity" && !profileReady);
 
   const handleClose = () => {
     props.onClose?.();
@@ -401,91 +352,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
             </div>
           ) : null}
 
-          {step === "inference" ? (
-            <div className="polynet-onboarding-provider-grid">
-              <div
-                className={`polynet-onboarding-provider-option recommended${chatgptSelected ? " selected" : ""}${chatgpt.connected ? " connected" : ""}`}
-              >
-                <div className="polynet-onboarding-provider-copy">
-                  <div className="polynet-onboarding-provider-topline">
-                    <span className="polynet-onboarding-provider-label recommended">ChatGPT Plus/Pro</span>
-                    <span className="polynet-onboarding-provider-recommended">Recommended</span>
-                  </div>
-                  <strong>Use ChatGPT</strong>
-                  <p>Use your Plus or Pro plan limits through your connected ChatGPT account.</p>
-                  <small className={`polynet-onboarding-provider-connection ${chatgptProviderStatus.kind}`}>
-                    {chatgpt.connected ? chatgpt.status : chatgptProviderStatus.label}
-                  </small>
-                </div>
-                <button
-                  className="platform-save-button platform-save-button--compact"
-                  type="button"
-                  onClick={() => {
-                    setProviderChoice("chatgpt");
-                    chatgpt.onConnect();
-                  }}
-                  disabled={chatgpt.isConnecting}
-                >
-                  {chatgpt.isConnecting
-                    ? "Starting..."
-                    : chatgpt.isPolling
-                      ? "Continue auth"
-                      : chatgpt.connected
-                        ? "Manage"
-                        : "Connect ChatGPT"}
-                </button>
-              </div>
-              <div
-                className={`polynet-onboarding-provider-option${openAiSelected ? " selected" : ""}${openai.connected ? " connected" : ""}${showOpenAiKeyEntry ? " has-key-entry" : ""}`}
-              >
-                <div className="polynet-onboarding-provider-copy">
-                  <div className="polynet-onboarding-provider-topline">
-                    <span className="polynet-onboarding-provider-label">OpenAI API</span>
-                    <span className={`polynet-onboarding-provider-status ${openAiProviderStatus.kind}`}>
-                      {openAiProviderStatus.label}
-                    </span>
-                  </div>
-                  <strong>Use an API key</strong>
-                  <p>Use a key from your OpenAI account and bill usage directly through OpenAI.</p>
-                  {openai.connected ? <small>{openai.status}</small> : null}
-                </div>
-                {!showOpenAiKeyEntry ? (
-                  <button
-                    className="platform-save-button platform-save-button--compact"
-                    type="button"
-                    onClick={() => setProviderChoice("openai")}
-                  >
-                    Use API key
-                  </button>
-                ) : (
-                  <div className="polynet-onboarding-provider-key">
-                    <input
-                      className="provider-connection-input"
-                      type="password"
-                      value={openai.apiKeyDraft}
-                      onChange={(event) => openai.setApiKeyDraft(event.target.value)}
-                      placeholder="Paste OpenAI API key"
-                      autoComplete="off"
-                      disabled={openai.isSaving}
-                    />
-                    <button
-                      className="platform-save-button platform-save-button--compact"
-                      type="button"
-                      onClick={() => {
-                        void openai.onConnect();
-                      }}
-                      disabled={openai.isSaving || openai.apiKeyDraft.trim().length === 0}
-                    >
-                      {openai.isSaving ? "Saving..." : openai.connected ? "Update key" : "Connect key"}
-                    </button>
-                  </div>
-                )}
-                {openai.error ? <p className="polynet-onboarding-error">{openai.error}</p> : null}
-                {openai.success ? <p className="polynet-onboarding-success">{openai.success}</p> : null}
-              </div>
-            </div>
-          ) : null}
-
           {displayedStatusMessage ? (
             <p
               className={
@@ -500,16 +366,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
 
           <div className="polynet-onboarding-profile-footer">
             <div className="polynet-onboarding-footer-actions">
-              {stepIndex(step) > 0 ? (
-                <button
-                  type="button"
-                  className="polynet-onboarding-back"
-                  disabled={submission.isSaving}
-                  onClick={() => setStep(stepOrder[Math.max(0, stepIndex(step) - 1)])}
-                >
-                  Back
-                </button>
-              ) : null}
               <button
                 type="button"
                 className="polynet-onboarding-next"
@@ -518,9 +374,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
               >
                 {submission.isSaving
                   ? "Saving..."
-                  : step === "inference"
-                    ? "Finish"
-                    : "Next"}
+                  : "Finish setup"}
               </button>
             </div>
           </div>

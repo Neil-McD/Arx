@@ -408,7 +408,7 @@ assert.match(
 );
 assert.match(
   landingPage,
-  /import \{ ConversionLanding \} from "\.\/polynetLanding\/ConversionLanding";[\s\S]*import "\.\/polynetLanding\/ConversionLanding\.css";[\s\S]*return <ConversionLanding onJoin=\{props\.onTryFree\} \/>;/,
+  /import \{ ConversionLanding \} from "\.\/polynetLanding\/ConversionLanding";[\s\S]*import "\.\/polynetLanding\/ConversionLanding\.css";[\s\S]*<ConversionLanding onJoin=\{props\.onStartBuilderPurchase\} \/>/,
   "the public entry surface must remain owned by ConversionLanding and its dedicated stylesheet",
 );
 for (const retiredLeaf of [

@@ -7,7 +7,6 @@ import {
   builderFundingActionLabel,
   builderFundingStateLabel,
   resolveBuilderOfferPrimaryAction,
-  resolveBuilderOfferSecondaryAction,
 } from "../shared/builderOffer.ts";
 
 const root = resolve(import.meta.dirname, "..");
@@ -22,6 +21,9 @@ const account = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const offerModal = read("apps/web/src/components/WebBuilderOfferModal.tsx");
 const offerSummary = read("apps/web/src/components/WebBuilderOfferSummary.tsx");
 const offerController = read("apps/web/src/controllers/useWebBuilderOfferController.ts");
+const purchaseActivationController = read(
+  "apps/web/src/controllers/useWebBuilderPurchaseActivationController.ts",
+);
 const founderBillingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
 
@@ -33,20 +35,13 @@ assert.match(POLYNET_BUILDER_OFFER.headline, /community/i);
 
 assert.equal(builderFundingStateLabel("builder_required"), "Builder not active");
 assert.equal(builderFundingStateLabel("builder_past_due"), "Payment needs attention");
-assert.equal(builderFundingStateLabel("legacy_api_active"), "Funded with your API key");
+assert.equal(builderFundingStateLabel("builder_included"), "Builder included");
 assert.equal(
   resolveBuilderOfferPrimaryAction({
-    state: "legacy_api_active",
-    allowedActions: ["manage_owner_api", "buy_builder"],
+    state: "builder_required",
+    allowedActions: ["buy_builder"],
   }),
   "buy_builder",
-);
-assert.equal(
-  resolveBuilderOfferSecondaryAction({
-    primaryAction: "buy_builder",
-    allowedActions: ["manage_owner_api", "buy_builder"],
-  }),
-  "manage_owner_api",
 );
 assert.equal(
   builderFundingActionLabel({
@@ -64,7 +59,7 @@ for (const forbidden of [/GPT 5\.6/i, /\bLuna\b/i, /\$20\b/, /credits?/i, /token
 assert.match(createModal, /WebBuilderOfferSummary/);
 assert.match(createModal, /Community name/);
 assert.match(createModal, /Customize community URL/);
-assert.match(createModal, /Get Builder/);
+assert.match(createModal, /Create community/);
 assert.doesNotMatch(createModal, /banner|avatar|one-liner|Upload/i);
 assert.match(
   createController,
@@ -79,8 +74,7 @@ for (const surface of [billing, account]) {
 assert.match(billing, /Member purchase recovery/);
 assert.doesNotMatch(billing, /Switch to managed|Managed plan|required managed/i);
 assert.match(account, /Builder is attached to communities, not your account/);
-assert.match(account, /Legacy API funding/);
-assert.match(account, /Personal AI connection/);
+assert.doesNotMatch(account, /Legacy API funding|Personal AI connection|API key/i);
 assert.doesNotMatch(account, /Free account|Paid account|account tier/i);
 
 assert.match(offerModal, /WebBuilderOfferSummary/);
@@ -92,12 +86,23 @@ assert.match(offerSummary, /POLYNET_BUILDER_OFFER\.benefits\.map/);
 assert.match(offerController, /startCheckout\(community\.community_id\)/);
 assert.match(offerController, /openPortal\(community\.community_id\)/);
 assert.match(app, /useWebBuilderOfferController\(\{[\s\S]*startCheckout: founderBilling\.startCheckout/);
-assert.match(app, /founderBilling\.startCheckoutAfterCommunityCreated\(community\.id\)/);
-assert.match(app, /createBlockingFundingCommunity[\s\S]*builderOffer\.open\(\{/);
+assert.doesNotMatch(app, /startCheckoutAfterCommunityCreated/);
+assert.match(app, /builderPurchaseActivation\.startPurchase\(\)/);
+assert.match(createController, /founderSubscriptionId: current\.getFounderSubscriptionId\?\.\(\) \?\? null/);
+assert.match(app, /openFundedCreateCommunityModal[\s\S]*pendingBuilderSubscriptionIdRef\.current/);
+assert.match(
+  app,
+  /openNewCommunityPurchaseFlow\s*=\s*builderPurchaseActivation\.openCommunityPurchaseFlow/,
+);
+assert.match(
+  purchaseActivationController,
+  /openCommunityPurchaseFlow[\s\S]*operatorComplimentaryAccess[\s\S]*loadAccountCommerceStatus[\s\S]*startPurchase\(\)/,
+);
+assert.doesNotMatch(app, /createBlockingFundingCommunity/);
 assert.equal(
   (app.match(/builderOffer\.open\(\{ community/g) ?? []).length,
   2,
-  "Billing and Account must call the same Builder offer controller",
+  "Billing and Account must call the same existing-community Builder offer controller",
 );
 assert.doesNotMatch(offerController, /entrySurface|setEntrySurface/);
 

@@ -41,10 +41,22 @@ import {
   canReceiveCommunityRevenue,
   type StripeConnectRevenueDestinationLike,
 } from "./stripeConnectAccountCore";
-import { resolveAdditionalManagedCommunityAdmission } from "./founderInferenceCore";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 import { ensureGeneralChannel } from "./communityChannelCore";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
+import {
+  COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED,
+  founderSubscriptionStatusGrantsAccess,
+} from "../shared/founderPlan";
+import {
+  syncFounderUsageCycle,
+  type FounderSubscriptionRow,
+} from "./founderPlanCore";
+import {
+  requireFounderInferencePricingFromEnv,
+  requireFounderStripePriceIdFromEnv,
+} from "./founderPlanPricing";
+import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
 
 const COMMUNITY_DELETION_QUARANTINE_CODE =
   "community_delete_lifecycle_migration_blocked" as const;
@@ -491,6 +503,7 @@ export const createCommunity = mutation({
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
     entryPolicy: v.optional(v.string()),
+    founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
   },
   handler: async (ctx, args) => {
     const ownerId = await resolveUserIdForAuthenticatedRequest({
@@ -500,12 +513,39 @@ export const createCommunity = mutation({
     });
     await requireAccountSetupCompleteForUser(ctx, ownerId);
     const nowMs = Date.now();
-    const additionalCommunityAdmission =
-      await resolveAdditionalManagedCommunityAdmission(ctx, ownerId);
-    if (!additionalCommunityAdmission.ok) {
-      throw new Error(
-        `community_funding_required_before_create:${additionalCommunityAdmission.code}`,
-      );
+    const operatorComped = await hasPlatformOwnerComplimentaryAccess(ctx, ownerId);
+    let founderSubscription: FounderSubscriptionRow | null = null;
+    if (!operatorComped) {
+      if (!args.founderSubscriptionId) {
+        throw new Error("community_funding_required_before_create");
+      }
+      founderSubscription = (await ctx.db.get(
+        args.founderSubscriptionId,
+      )) as FounderSubscriptionRow | null;
+      if (
+        !founderSubscription ||
+        String(founderSubscription.ownerUserId) !== String(ownerId)
+      ) {
+        throw new Error("founder_subscription_forbidden");
+      }
+      if (founderSubscription.communityId) {
+        throw new Error("founder_subscription_already_attached");
+      }
+      if (founderSubscription.riskAccessState === "revoked") {
+        throw new Error("founder_subscription_risk_revoked");
+      }
+      if (
+        founderSubscription.providerPriceId !== requireFounderStripePriceIdFromEnv()
+      ) {
+        throw new Error("founder_subscription_price_mismatch");
+      }
+      if (!founderSubscriptionStatusGrantsAccess({
+        status: founderSubscription.status,
+        currentPeriodEndAt: founderSubscription.currentPeriodEndAt,
+        nowMs,
+      })) {
+        throw new Error("founder_subscription_inactive");
+      }
     }
     const slug = normalizeSlug(args.slug);
     const existing = await ctx.db
@@ -543,6 +583,7 @@ export const createCommunity = mutation({
       name,
       lifecycleStatus: "active",
       lifecycleGeneration: 0,
+      builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED,
       oneLiner,
       avatarUrl,
       avatarStorageId,
@@ -562,6 +603,26 @@ export const createCommunity = mutation({
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    if (founderSubscription) {
+      await ctx.db.patch(founderSubscription._id, {
+        communityId,
+        attachedAt: nowMs,
+        updatedAt: nowMs,
+      });
+      await syncFounderUsageCycle({
+        ctx,
+        subscription: {
+          ...founderSubscription,
+          communityId,
+          attachedAt: nowMs,
+          updatedAt: nowMs,
+        },
+        cycleStartAt: founderSubscription.currentPeriodStartAt,
+        cycleEndAt: founderSubscription.currentPeriodEndAt,
+        pricing: requireFounderInferencePricingFromEnv(),
+        nowMs,
+      });
+    }
     await ensureCommunityPresenceBaseline({
       ctx,
       communityId,

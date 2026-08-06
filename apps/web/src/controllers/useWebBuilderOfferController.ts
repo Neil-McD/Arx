@@ -5,7 +5,6 @@ import type { CloudFounderBillingCommunity } from "../../../../shared/cloudFound
 export function useWebBuilderOfferController(params: {
   startCheckout: (communityId: string) => Promise<void>;
   openPortal: (communityId: string) => Promise<void>;
-  openLegacyFunding: () => void;
 }) {
   const [community, setCommunity] = useState<CloudFounderBillingCommunity | null>(null);
 
@@ -29,9 +28,7 @@ export function useWebBuilderOfferController(params: {
       await params.openPortal(community.community_id);
       return;
     }
-    close();
-    params.openLegacyFunding();
-  }, [close, community, params]);
+  }, [community, params]);
 
   return {
     community,

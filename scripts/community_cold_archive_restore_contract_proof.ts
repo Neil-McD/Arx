@@ -29,8 +29,13 @@ assert.match(
 );
 assert.match(
   archive,
-  /restoreOperatorCommunity = mutation[\s\S]*community_restore_forbidden[\s\S]*hasPlatformOwnerComplimentaryAccess[\s\S]*community_restore_operator_required[\s\S]*community_restore_lifecycle_generation_conflict[\s\S]*requireCompletedCommunityArchiveBillingCleanup[\s\S]*restoreCommunityLifecycle\(community\)[\s\S]*eventType: "community_restored"/,
-  "operator restoration must be owner-only, generation-bound, cleanup-gated, and audited",
+  /restoreCommunityWithoutPaymentHandler[\s\S]*community_restore_forbidden[\s\S]*parseCommunityBuilderAccessMode[\s\S]*COMMUNITY_BUILDER_ACCESS_GRANDFATHERED[\s\S]*community_restore_payment_required[\s\S]*community_restore_lifecycle_generation_conflict[\s\S]*requireCompletedCommunityArchiveBillingCleanup[\s\S]*restoreCommunityLifecycle\(community\)[\s\S]*eventType: "community_restored"/,
+  "non-payment restoration must be owner-only, grandfather-or-operator authorized, generation-bound, cleanup-gated, and audited",
+);
+assert.match(
+  archive,
+  /restoreCommunityWithoutPayment = mutation[\s\S]*handler: restoreCommunityWithoutPaymentHandler[\s\S]*restoreOperatorCommunity = mutation[\s\S]*handler: restoreCommunityWithoutPaymentHandler/,
+  "canonical and cached-client restore entrypoints must converge on one authority handler",
 );
 assert.match(
   founderBilling,
@@ -69,13 +74,13 @@ assert.match(
 );
 assert.match(
   communityGateway,
-  /restoreOperatorCloudCommunity[\s\S]*communityColdArchive:restoreOperatorCommunity[\s\S]*lifecycleGeneration/,
-  "operator restoration must use one authenticated community gateway command",
+  /restoreCloudCommunityWithoutPayment[\s\S]*communityColdArchive:restoreCommunityWithoutPayment[\s\S]*lifecycleGeneration/,
+  "grandfathered and operator restoration must use one authenticated community gateway command",
 );
 assert.match(
   billingUi,
-  /archiveCleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*archiveCleanupStatus === "complete"[\s\S]*isOperatorComped[\s\S]*restoreOperatorCommunity[\s\S]*Restore community[\s\S]*onOpenBuilderOffer/,
-  "global Billing must separate direct operator restoration from paid builder restoration",
+  /canRestoreWithoutPayment[\s\S]*isOperatorComped[\s\S]*builder_access_mode === "grandfathered"[\s\S]*archiveCleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*archiveCleanupStatus === "complete"[\s\S]*restoreCommunityWithoutPayment[\s\S]*Restore community[\s\S]*onOpenBuilderOffer/,
+  "global Billing must separate free grandfathered or operator restoration from paid subscription-required restoration",
 );
 assert.match(
   billingUi,
@@ -84,8 +89,8 @@ assert.match(
 );
 assert.match(
   billingController,
-  /restoreOperatorCommunity = useCallback[\s\S]*restoreOperatorCloudCommunity[\s\S]*refresh\(usableSession\)[\s\S]*onCommunityReadyRef/,
-  "operator restoration must refresh both billing and the active community projection",
+  /restoreCommunityWithoutPayment = useCallback[\s\S]*restoreCloudCommunityWithoutPayment[\s\S]*refresh\(usableSession\)[\s\S]*onCommunityReadyRef/,
+  "non-payment restoration must refresh both billing and the active community projection",
 );
 assert.match(
   billingController,

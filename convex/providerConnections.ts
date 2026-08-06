@@ -2,7 +2,6 @@ import { action, internalMutation, internalQuery, query } from "./_generated/ser
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
 import { resolveUserIdForAuthenticatedRequest } from "./authActor";
-import { suspendActiveFounderInferenceGrantForCredentialChange } from "./founderInferenceCore";
 
 export type ProviderConnectionProvider = "openrouter" | "openai" | "chatgpt";
 export type ProviderConnectionAuthKind = "api_key" | "oauth_tokens";
@@ -786,11 +785,6 @@ export const upsertOpenAiConnectionInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const existing = await getProviderConnectionRow(ctx, args.userId, "openai");
-    const credentialChanged = Boolean(
-      existing &&
-      String(existing.keyFingerprint ?? "").trim() !== String(args.keyFingerprint ?? "").trim(),
-    );
-
     const patch = {
       provider: "openai" as const,
       authKind: "api_key" as const,
@@ -816,13 +810,6 @@ export const upsertOpenAiConnectionInternal = internalMutation({
     }
 
     await ctx.db.patch(existing._id as any, patch);
-    if (credentialChanged) {
-      await suspendActiveFounderInferenceGrantForCredentialChange({
-        ctx,
-        userId: args.userId,
-        nowMs: args.nowMs,
-      });
-    }
     return { id: existing._id };
   },
 });
@@ -894,11 +881,6 @@ export const deleteOpenAiConnectionInternal = internalMutation({
     const existing = await getProviderConnectionRow(ctx, args.userId, "openai");
     if (!existing) return { deleted: false };
     await ctx.db.delete(existing._id as any);
-    await suspendActiveFounderInferenceGrantForCredentialChange({
-      ctx,
-      userId: args.userId,
-      nowMs: Date.now(),
-    });
     return { deleted: true };
   },
 });

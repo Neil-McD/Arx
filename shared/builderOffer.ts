@@ -42,12 +42,6 @@ export function formatBuilderOfferPrice(
 
 export function builderFundingStateLabel(state: BuilderFundingState): string {
   switch (state) {
-    case "legacy_api_available":
-      return "Choose community AI funding";
-    case "legacy_api_active":
-      return "Funded with your API key";
-    case "legacy_api_suspended":
-      return "API funding needs attention";
     case "builder_required":
       return "Builder not active";
     case "checkout_pending":
@@ -80,21 +74,7 @@ export function resolveBuilderOfferPrimaryAction(params: {
   }
   if (allowed.has("buy_builder")) return "buy_builder";
   if (allowed.has("manage_builder")) return "manage_builder";
-  if (allowed.has("activate_owner_api")) return "activate_owner_api";
-  if (allowed.has("manage_owner_api")) return "manage_owner_api";
   return null;
-}
-
-export function resolveBuilderOfferSecondaryAction(params: {
-  primaryAction: BuilderFundingAction | null;
-  allowedActions: BuilderFundingAction[];
-}): BuilderFundingAction | null {
-  const legacyAction = params.allowedActions.includes("manage_owner_api")
-    ? "manage_owner_api"
-    : params.allowedActions.includes("activate_owner_api")
-      ? "activate_owner_api"
-      : null;
-  return legacyAction === params.primaryAction ? null : legacyAction;
 }
 
 export function builderFundingActionLabel(params: {
@@ -105,18 +85,12 @@ export function builderFundingActionLabel(params: {
   const price = params.includePrice ? ` — ${formatBuilderOfferPrice()}` : "";
   switch (params.action) {
     case "buy_builder":
-      return params.state.startsWith("legacy_")
-        ? `Switch to Builder${price}`
-        : `Get Builder${price}`;
+      return `Get Builder${price}`;
     case "resume_checkout":
       return "Resume checkout";
     case "manage_builder":
       return params.state === "builder_past_due" || params.state === "builder_inactive"
         ? "Fix payment"
         : "Manage subscription";
-    case "activate_owner_api":
-      return "Use my API key";
-    case "manage_owner_api":
-      return "Manage API key";
   }
 }

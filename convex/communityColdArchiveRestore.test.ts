@@ -44,6 +44,8 @@ async function createArchivedFixture(
   t: ReturnType<typeof convexTest>,
   suffix: string,
   cleanupStatus: "pending" | "complete" | "blocked" = "complete",
+  builderAccessMode: "grandfathered" | "subscription_required" | null =
+    "subscription_required",
 ) {
   return await t.run(async (ctx) => {
     const ownerId = await ctx.db.insert("users", {
@@ -60,6 +62,7 @@ async function createArchivedFixture(
       name: "Restore community",
       lifecycleStatus: "archived",
       lifecycleGeneration: 1,
+      ...(builderAccessMode ? { builderAccessMode } : {}),
       visibility: "unlisted",
       inferenceFundingPolicy: "managed_required",
       entryPolicy: "approval",
@@ -388,7 +391,54 @@ test.sequential("operator owner restoration is direct and idempotent", async () 
   });
 });
 
-test.sequential("direct restoration fails closed outside the operator owner lane", async () => {
+test.sequential("grandfathered owner restoration is free after cleanup and does not create AI funding", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createArchivedFixture(
+    t,
+    "grandfathered",
+    "complete",
+    null,
+  );
+  const asOwner = t.withIdentity({ subject: "restore-owner-grandfathered" });
+
+  const overview = await asOwner.query(
+    (api as any).founderBilling.getFounderBillingOverview,
+    {},
+  );
+  expect(overview.communities[0]).toMatchObject({
+    lifecycle_status: "archived",
+    builder_access_mode: "grandfathered",
+    archive_billing_cleanup_status: "complete",
+    allowed_actions: [],
+  });
+
+  const restored = await asOwner.mutation(
+    (api as any).communityColdArchive.restoreCommunityWithoutPayment,
+    {
+      communityId: fixture.communityId,
+      lifecycleGeneration: 1,
+    },
+  );
+  expect(restored).toMatchObject({
+    ok: true,
+    changed: true,
+    lifecycle_status: "active",
+    lifecycle_generation: 2,
+    restoration_authority: "grandfathered",
+  });
+
+  const state = await t.run(async (ctx) => ({
+    community: await ctx.db.get(fixture.communityId),
+    subscriptions: await ctx.db.query("founderSubscriptions").collect(),
+  }));
+  expect(state.community).toMatchObject({
+    lifecycleStatus: "active",
+    lifecycleGeneration: 2,
+  });
+  expect(state.subscriptions).toHaveLength(0);
+});
+
+test.sequential("direct restoration requires payment for subscription-required communities", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createArchivedFixture(t, "operator-auth");
   const asOwner = t.withIdentity({ subject: "restore-owner-operator-auth" });
@@ -401,7 +451,7 @@ test.sequential("direct restoration fails closed outside the operator owner lane
         lifecycleGeneration: 1,
       },
     ),
-  ).rejects.toThrow("community_restore_operator_required");
+  ).rejects.toThrow("community_restore_payment_required");
 
   const other = await t.run(async (ctx) => {
     return await ctx.db.insert("users", {

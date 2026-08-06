@@ -99,10 +99,14 @@ assert.match(
 );
 assert.match(
   conciergeCore,
-  /owner_funding_choice_required[\s\S]*activate an OpenAI API key or fund this community at \$79\/month/,
-  "Concierge intake should fail closed until the owner chooses BYOK or the founder plan",
+  /resolveCommunityInferenceFundingAdmission[\s\S]*funding\.code === "founder_plan_required"[\s\S]*community requires an active founder plan/,
+  "Concierge intake should fail closed unless hosted community inference is funded",
 );
-assert.doesNotMatch(conciergeCore, /legacy_requester_chatgpt|requesterHasChatgptConnection/);
+assert.doesNotMatch(
+  conciergeCore,
+  /legacy_requester_chatgpt|requesterHasChatgptConnection|owner_funding_choice_required|owner_credential_missing|owner_funding_suspended/,
+  "Concierge intake must not expose requester or owner BYOK states",
+);
 assert.doesNotMatch(
   concierge + conciergeCore,
   /runChatgptNativeToolCompletion|runOpenAiNativeToolCompletion|runNativeRuntimeKernel|createCommunityAgentRunInternal|runCommunityAgentCycleInternal/,
@@ -140,8 +144,13 @@ assert.match(
 );
 assert.match(
   docs,
-  /birth-time intake[\s\S]*repair drain[\s\S]*No LLM, no reply, no memory write[\s\S]*sponsorUserId == requesterUserId[\s\S]*active existing-founder grant[\s\S]*communityAgentServeRequests/,
+  /birth-time intake[\s\S]*repair drain[\s\S]*No LLM, no reply, no memory write[\s\S]*sponsorUserId == requesterUserId[\s\S]*communityAgentServeRequests/,
   "architecture docs should describe birth-time Concierge intake plus repair drain",
+);
+assert.match(
+  docs,
+  /An active founder subscription attached to the community[\s\S]*canonical operator grant[\s\S]*never falls back to a stored credential/,
+  "architecture docs should describe hosted-only Concierge funding authority",
 );
 
 console.log("community_agent_concierge_intake_contract_proof: ok");

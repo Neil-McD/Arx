@@ -4,22 +4,13 @@ import {
   checkCloudProfileHandleAvailability,
   type CloudProfileHandleAvailability,
 } from "../../../../shared/cloudProfilesGateway";
-import type {
-  CloudChatgptConnectionStatus,
-  CloudOpenAiConnectionStatus,
-} from "../../../../shared/cloudProviderConnectionsGateway";
 import type { WebAccountSetupSurfaceModel } from "../components/webAccountSetupSurfaceModel";
 import type { UseWebProfileSettingsUiControllerResult } from "./useWebProfileSettingsUiController";
-import type { UseWebProviderConnectionUiControllerResult } from "./useWebProviderConnectionUiController";
 
 type UseWebAccountSetupSurfaceControllerParams<TSession> = {
   session: TSession | null;
   getSession: () => TSession | null;
   profile: UseWebProfileSettingsUiControllerResult;
-  chatgptConnection: CloudChatgptConnectionStatus;
-  openAiConnection: CloudOpenAiConnectionStatus;
-  isLoadingProviderConnections: boolean;
-  provider: UseWebProviderConnectionUiControllerResult;
   isSaving: boolean;
   error: string | null;
   onAvatarUpload: (file: File | null) => Promise<void> | void;
@@ -35,10 +26,6 @@ export function useWebAccountSetupSurfaceController<TSession>(
   const {
     session,
     profile,
-    chatgptConnection,
-    openAiConnection,
-    isLoadingProviderConnections,
-    provider,
     isSaving,
     error,
     onAvatarUpload,
@@ -97,19 +84,6 @@ export function useWebAccountSetupSurfaceController<TSession>(
     };
   }, [profile.profileHandle, session]);
 
-  const chatgptStatus = isLoadingProviderConnections
-    ? "Checking..."
-    : chatgptConnection.connected
-      ? chatgptConnection.email
-        ? `Connected as ${chatgptConnection.email}`
-        : "Connected"
-      : "Not connected";
-  const openAiStatus = isLoadingProviderConnections
-    ? "Checking..."
-    : openAiConnection.connected
-      ? `Connected${openAiConnection.key_last_four ? ` · key ending ${openAiConnection.key_last_four}` : ""}`
-      : "Not connected";
-
   return {
     model: {
       identity: {
@@ -128,27 +102,6 @@ export function useWebAccountSetupSurfaceController<TSession>(
         onBioChange: profile.setProfileBio,
         onSocialLinkChange: profile.setProfileSocialLink,
         onAvatarUpload,
-      },
-      inference: {
-        chatgpt: {
-          connected: chatgptConnection.connected,
-          status: chatgptStatus,
-          isConnecting: provider.isConnectingChatgpt,
-          isPolling: provider.isPollingChatgptConnection,
-          onConnect: () => {
-            void provider.handleConnectChatgpt();
-          },
-        },
-        openai: {
-          connected: openAiConnection.connected,
-          status: openAiStatus,
-          apiKeyDraft: provider.openAiApiKeyDraft,
-          setApiKeyDraft: provider.setOpenAiApiKeyDraft,
-          isSaving: provider.isSavingOpenAiConnection,
-          error: provider.openAiConnectionError,
-          success: provider.openAiConnectionSuccess,
-          onConnect: provider.handleConnectOpenAi,
-        },
       },
       submission: {
         isSaving,

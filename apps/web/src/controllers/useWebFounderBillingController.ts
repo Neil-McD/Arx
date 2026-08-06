@@ -10,7 +10,7 @@ import type { AuthSession } from "../auth";
 import { scrubCurrentRouteSearchParams } from "../webAppRuntime";
 import {
   archiveCloudCommunity,
-  restoreOperatorCloudCommunity,
+  restoreCloudCommunityWithoutPayment,
 } from "../../../../shared/cloudCommunityAdminGateway";
 
 function messageForError(error: unknown): string {
@@ -39,8 +39,11 @@ function messageForError(error: unknown): string {
   if (message.includes("community_restore_forbidden")) {
     return "Only the community owner can restore this community.";
   }
-  if (message.includes("community_restore_operator_required")) {
-    return "This direct restore path is available only to the Polynet operator.";
+  if (message.includes("community_restore_payment_required")) {
+    return "This community requires an active Builder subscription before restoration.";
+  }
+  if (message.includes("community_restore_access_mode_invalid")) {
+    return "This community's Builder access needs operator repair before restoration.";
   }
   if (message.includes("community_restore_lifecycle_generation_conflict")) {
     return "This community changed while you were restoring it. Refresh and try again.";
@@ -222,7 +225,7 @@ export function useWebFounderBillingController(params: {
     }
   }, [params.session, watchArchiveCleanup]);
 
-  const restoreOperatorCommunity = useCallback(async (
+  const restoreCommunityWithoutPayment = useCallback(async (
     communityId: string,
     lifecycleGeneration: number,
   ): Promise<void> => {
@@ -231,7 +234,7 @@ export function useWebFounderBillingController(params: {
     setActionCommunityId(communityId);
     setError(null);
     try {
-      await restoreOperatorCloudCommunity({
+      await restoreCloudCommunityWithoutPayment({
         session: usableSession,
         communityId,
         lifecycleGeneration,
@@ -246,24 +249,6 @@ export function useWebFounderBillingController(params: {
       setActionCommunityId(null);
     }
   }, [params.session, refresh]);
-
-  const startCheckoutAfterCommunityCreated = useCallback(async (
-    communityId: string,
-  ): Promise<void> => {
-    if (params.operatorComplimentaryAccess) {
-      await refresh();
-      return;
-    }
-    const next = await refresh();
-    if (
-      next?.communities.some(
-        (community) =>
-          community.community_id === communityId &&
-          community.funding_mode === "operator_comp",
-      )
-    ) return;
-    await startCheckout(communityId);
-  }, [params.operatorComplimentaryAccess, refresh, startCheckout]);
 
   return {
     overview,
@@ -284,10 +269,9 @@ export function useWebFounderBillingController(params: {
     ),
     refresh,
     startCheckout,
-    startCheckoutAfterCommunityCreated,
     openPortal,
     retryArchiveCleanup,
-    restoreOperatorCommunity,
+    restoreCommunityWithoutPayment,
     watchArchiveCleanup,
   };
 }

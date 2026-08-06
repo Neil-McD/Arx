@@ -1342,7 +1342,6 @@ export const runCommunityWikiArchitectProposal: any = action({
 
     const completion = await runWikiArchitectModel({
       input: context as Record<string, unknown>,
-      apiKeyOverride: fundingSession.apiKeyOverride,
       modelIdOverride: fundingSession.modelId,
     });
     if (!completion.ok) {
@@ -2021,7 +2020,6 @@ export const draftCommunityResourceContentFromSources: any = action({
               body_md: candidate.source_body_md,
             },
           },
-          apiKeyOverride: fundingSession.apiKeyOverride,
           modelIdOverride: fundingSession.modelId,
         });
         if (!completion.ok) {

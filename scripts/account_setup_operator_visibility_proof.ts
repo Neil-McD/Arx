@@ -32,7 +32,7 @@ assert.match(
 for (const table of [
   "users",
   "userProfileDetails",
-  "userProviderConnections",
+  "legalAcceptances",
   "communities",
   "communityMemberships",
 ]) {
@@ -110,28 +110,25 @@ const existingWithoutProfileDetail = buildAccountSetupStatus({
   handle: "existing",
   avatarUrl: "https://example.com/avatar.png",
   hasAcceptedPlatformLegal: true,
-  hasInferenceProvider: true,
 });
 assert.equal(existingWithoutProfileDetail.current_step, "complete");
 assert.equal(existingWithoutProfileDetail.completed, true);
 
-const missingProvider = buildAccountSetupStatus({
+const identityCompleteWithoutProvider = buildAccountSetupStatus({
   displayName: "Ready Profile",
   handle: "ready",
   avatarUrl: "https://example.com/avatar.png",
   bio: "Creator.",
   hasAcceptedPlatformLegal: true,
-  hasInferenceProvider: false,
 });
-assert.equal(missingProvider.current_step, "inference");
-assert.deepEqual(missingProvider.missing, ["inference_provider"]);
+assert.equal(identityCompleteWithoutProvider.current_step, "complete");
+assert.deepEqual(identityCompleteWithoutProvider.missing, []);
 
 const complete = buildAccountSetupStatus({
   displayName: "Complete",
   handle: "complete",
   avatarUrl: "https://example.com/avatar.png",
   hasAcceptedPlatformLegal: true,
-  hasInferenceProvider: true,
 });
 assert.equal(complete.current_step, "complete");
 assert.equal(complete.completed, true);
@@ -141,7 +138,6 @@ const missingLegal = buildAccountSetupStatus({
   displayName: "Legal Missing",
   handle: "legal-missing",
   avatarUrl: "https://example.com/avatar.png",
-  hasInferenceProvider: true,
 });
 assert.equal(missingLegal.current_step, "identity");
 assert.deepEqual(missingLegal.missing, ["platform_legal"]);

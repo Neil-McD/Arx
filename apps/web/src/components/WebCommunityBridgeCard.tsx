@@ -1,10 +1,10 @@
 /* The guest-pass gate card's SECOND state: after auth (and payment, when paid),
-   the same card position asks for everything Polynet needs — identity and
-   inference on one page — then hands the member to the community guide.
+   the same card position asks for the member's identity and legal acceptance,
+   then hands the member to the community guide.
    The CTA is never disabled: an attempt with gaps lights the missing fields
    up and they clear live as each one is fixed. */
 import { useRef, useState } from "react";
-import { Camera, Check } from "lucide-react";
+import { Camera } from "lucide-react";
 import { validateProfileHandle } from "../../../../shared/profileHandle";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -39,7 +39,7 @@ export type WebCommunityBridgeCardProps = {
   onEnter: (legalAcceptance: PlatformLegalAcceptanceDraft | null) => Promise<boolean> | boolean;
 };
 
-type BridgeMissing = "photo" | "name" | "handle" | "AI" | "terms";
+type BridgeMissing = "photo" | "name" | "handle" | "terms";
 
 function formatBridgeHandleHint(
   handle: string,
@@ -71,18 +71,14 @@ function formatBridgeHandleHint(
 }
 
 export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
-  const { identity, inference, submission } = props.setup;
-  const { chatgpt, openai } = inference;
+  const { identity, submission } = props.setup;
   const [attempted, setAttempted] = useState(false);
   const [hasConfirmedLegal, setHasConfirmedLegal] = useState(false);
-  const [showKeyEntry, setShowKeyEntry] = useState(false);
   const [activeLegalDocument, setActiveLegalDocument] = useState<LegalDocumentEntry | null>(null);
   const avatarInputRef = useRef<HTMLInputElement | null>(null);
   const identityRef = useRef<HTMLDivElement | null>(null);
-  const aiRef = useRef<HTMLDivElement | null>(null);
   const legalRef = useRef<HTMLLabelElement | null>(null);
 
-  const hasInferenceProvider = chatgpt.connected || openai.connected;
   const handleHint = formatBridgeHandleHint(
     identity.handle,
     identity.handleAvailability,
@@ -93,7 +89,6 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
   if (!identity.avatarUrl?.trim()) missing.push("photo");
   if (!identity.displayName.trim()) missing.push("name");
   if (!handleHint.ok) missing.push("handle");
-  if (!hasInferenceProvider) missing.push("AI");
   if (!hasConfirmedLegal) missing.push("terms");
 
   const lit = (field: BridgeMissing) => attempted && missing.includes(field);
@@ -102,8 +97,7 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
     if (submission.isSaving) return;
     if (missing.length > 0) {
       setAttempted(true);
-      const target =
-        missing[0] === "AI" ? aiRef.current : missing[0] === "terms" ? legalRef.current : identityRef.current;
+      const target = missing[0] === "terms" ? legalRef.current : identityRef.current;
       target?.scrollIntoView({ behavior: "smooth", block: "center" });
       return;
     }
@@ -228,76 +222,6 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
         </div>
       </div>
 
-      <div className="cvs-bridge-section" ref={aiRef}>
-        <div className="cvs-bridge-label">
-          <span>Your AI</span>
-          <i />
-        </div>
-        <p className="cvs-bridge-aicopy">
-          {isPlatform
-            ? "Polynet runs on your AI — you bring the model, it powers everything you do here."
-            : `${props.communityName} onboards you through your agent — connect the AI that powers it.`}
-        </p>
-        <div className="cvs-bridge-tiles">
-          <button
-            type="button"
-            className={`cvs-bridge-tile${chatgpt.connected ? " selected" : ""}${lit("AI") ? " cvs-bridge-miss" : ""}`}
-            onClick={chatgpt.onConnect}
-            disabled={chatgpt.isConnecting || chatgpt.isPolling}
-          >
-            {chatgpt.connected ? (
-              <span className="cvs-bridge-tile-check" aria-hidden="true">
-                <Check size={10} strokeWidth={3.2} />
-              </span>
-            ) : null}
-            <span className="cvs-bridge-tile-name">
-              {chatgpt.connected
-                ? "ChatGPT connected"
-                : chatgpt.isConnecting || chatgpt.isPolling
-                  ? "Connecting..."
-                  : "Connect ChatGPT"}
-            </span>
-            <span className="cvs-bridge-tile-sub">Use your Plus or Pro plan limits</span>
-          </button>
-          <button
-            type="button"
-            className={`cvs-bridge-tile${openai.connected ? " selected" : ""}${lit("AI") ? " cvs-bridge-miss" : ""}`}
-            onClick={() => setShowKeyEntry((value) => !value)}
-          >
-            {openai.connected ? (
-              <span className="cvs-bridge-tile-check" aria-hidden="true">
-                <Check size={10} strokeWidth={3.2} />
-              </span>
-            ) : null}
-            <span className="cvs-bridge-tile-name">
-              {openai.connected ? "API key saved" : "OpenAI API key"}
-            </span>
-            <span className="cvs-bridge-tile-sub">Use a key from your OpenAI account</span>
-          </button>
-        </div>
-        {showKeyEntry || openai.connected ? (
-          <div className="cvs-bridge-keyrow">
-            <input
-              value={openai.apiKeyDraft}
-              placeholder="sk-..."
-              autoComplete="off"
-              onChange={(event) => openai.setApiKeyDraft(event.target.value)}
-            />
-            <button
-              type="button"
-              onClick={() => {
-                void openai.onConnect();
-              }}
-              disabled={openai.isSaving || openai.apiKeyDraft.trim().length === 0}
-            >
-              {openai.isSaving ? "Saving..." : openai.connected ? "Update key" : "Save"}
-            </button>
-          </div>
-        ) : null}
-        {openai.error ? <p className="cvs-bridge-error">{openai.error}</p> : null}
-        {openai.success ? <p className="cvs-bridge-success">{openai.success}</p> : null}
-      </div>
-
       <label className={`cvs-bridge-legal${lit("terms") ? " cvs-bridge-miss-text" : ""}`} ref={legalRef}>
         <input
           type="checkbox"
@@ -344,7 +268,7 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
             : ""}
       </div>
       <div className="cvs-bridge-trust">
-        Communities see your profile card — never your keys or your billing.
+        Communities see your profile card — never your billing information.
       </div>
 
       {activeLegalDocument ? (

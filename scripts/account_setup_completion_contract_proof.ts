@@ -42,12 +42,10 @@ assert.match(profileHandle, /\^\[a-z0-9\]/, "profile handles must use a constrai
 
 for (const marker of [
   '"identity"',
-  '"inference"',
   '"display_name"',
   '"handle"',
   '"avatar"',
   '"platform_legal"',
-  '"inference_provider"',
 ]) {
   assert.ok(accountSetup.includes(marker), `account setup model missing ${marker}`);
 }
@@ -56,7 +54,7 @@ assert.doesNotMatch(accountSetup, /"agent_name"/, "agent naming must not gate ac
 assert.match(accountSetup, /export function buildAccountSetupStatus/, "setup completion must be derived by one helper");
 assert.doesNotMatch(accountSetup, /getFirstIncompleteAccountSetupStep/, "step-routing helper was deleted with the step wizard — must not return");
 assert.match(accountSetup, /export function formatAccountSetupMissingGuidance/, "setup model must expose precise missing-setup guidance");
-assert.match(accountSetup, /Connect ChatGPT or an OpenAI API key to finish account setup\./, "inference-only setup guidance must name the exact missing requirement");
+assert.doesNotMatch(accountSetup, /inference_provider|Connect ChatGPT|OpenAI API key/, "inference must not gate account setup");
 assert.doesNotMatch(accountSetup, /"direction"/, "account setup must not include a direction step");
 assert.match(accountSetup, /validateProfileHandle\(input\.handle\)\.ok/, "profile setup handle completion must use the canonical validator");
 assert.match(accountSetup, /missing\.push\("handle"\)/, "profile setup must require handle");
@@ -89,7 +87,7 @@ assert.doesNotMatch(accountSetupCore, /displayName: params\.user\.displayName/, 
 assert.doesNotMatch(accountSetupCore, /avatarUrl: params\.user\.avatarUrl/, "auth-seeded avatar must not complete account setup");
 assert.doesNotMatch(convexAuthenticatedClient, /resolveAuthSessionDisplayName|resolveAuthSessionAvatarUrl/, "Convex bootstrap must not send provider profile metadata");
 assert.doesNotMatch(authBootstrap, /args\.identity\.displayName|args\.identity\.avatarUrl/, "auth bootstrap must not seed provider profile metadata");
-assert.match(accountSetupCore, /query\("userProviderConnections"\)/, "inference completion must derive from provider connections");
+assert.doesNotMatch(accountSetupCore, /userProviderConnections|founderSubscriptions|hasManagedInference/, "account setup must be independent of inference funding");
 assert.doesNotMatch(accountSetupCore, /userMemorySettings/, "agent naming must not participate in account setup derivation");
 assert.match(profiles, /account_setup: await loadAccountSetupStatusForUser/, "onboarding profile responses must include setup status");
 assert.match(profiles, /recordCurrentPlatformLegalAcceptance/, "profile onboarding must record platform legal acceptance server-side");
@@ -123,22 +121,20 @@ assert.match(onboardingPage, /Terms of Service[\s\S]*Privacy &amp; AI Data Polic
 assert.match(onboardingPage, /platformLegalReady[\s\S]*?profileReady[\s\S]*?platformLegalReady/, "onboarding profile step must require platform legal acceptance before Next");
 assert.match(onboardingPage, /WebPlatformLegalReaderModal/, "onboarding legal documents must render through the shared reader modal");
 assert.match(legalReaderModal, /polynet-onboarding-legal-reader message-text/, "the shared legal reader must render documents in the scrollable modal reader");
-assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v2"/, "current account setup must present Terms v2");
-assert.match(legalRegistry, /HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1"/, "Terms v1 must remain explicitly historical");
-assert.match(legalAcceptances, /TERMS_OF_SERVICE_ACCEPTANCE_VERSIONS/, "existing Terms v1 acceptance must remain setup-compatible");
+assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v3"/, "current account setup must present Terms v3");
+assert.match(legalRegistry, /HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v2"/, "Terms v2 must remain explicitly historical");
+assert.match(legalRegistry, /LEGACY_TERMS_OF_SERVICE_VERSION = "terms_of_service_v1"/, "Terms v1 must remain explicitly historical");
+assert.match(legalAcceptances, /row\.documentVersion === document\.version/, "material Terms v3 must require exact current-version acceptance");
 assert.match(legalAcceptances, /args\.termsVersion !== TERMS_OF_SERVICE_DOCUMENT\.version/, "new setup acceptance must require the current Terms version");
-assert.match(legalContent, /terms-of-service-v2\.md\?raw/, "the legal reader must project current Terms v2");
+assert.match(legalContent, /terms-of-service-v3\.md\?raw/, "the legal reader must project current Terms v3");
+assert.doesNotMatch(legalContent, /terms-of-service-v2\.md\?raw/, "the legal reader must not project historical Terms v2 as current");
 assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/, "the legal reader must not project historical Terms v1 as current");
-assert.match(onboardingPage, /chatgpt\.onConnect/, "onboarding inference step must reuse ChatGPT provider flow");
-assert.match(onboardingPage, /openai\.onConnect/, "onboarding inference step must reuse OpenAI provider flow");
-assert.match(onboardingPage, /Use your Plus or Pro plan limits/, "onboarding inference choice should clearly name ChatGPT plan limits");
-assert.match(onboardingPage, /Recommended/, "onboarding inference choice should mark ChatGPT as recommended");
-assert.match(onboardingPage, /Use a key from your OpenAI account/, "onboarding inference choice should clearly name the API key path");
-assert.match(onboardingPage, /onFinishOnboarding/, "onboarding inference step must finish setup directly");
+assert.doesNotMatch(onboardingPage, /chatgpt\.onConnect|openai\.onConnect|OpenAI API key|Connect ChatGPT/, "onboarding must not ask members to bring inference");
+assert.match(onboardingPage, /await props\.onFinishOnboarding\(\)/, "identity completion must finish onboarding directly");
 assert.doesNotMatch(onboardingPage, /Direction|onBuildCommunity|onDiscoverCommunity|polynet-onboarding-direction/, "onboarding must not expose a direction step");
 assert.doesNotMatch(onboardingPage, /onSaveAgent|agentNameDraft|agentSoulDraft|polynet-onboarding-agent/, "onboarding must not expose an agent step");
 assert.doesNotMatch(onboardingPage, /WebAgentPersonalityPicker/, "onboarding must not render the personality picker");
-assert.match(onboardingPage, /if \(step === "inference"\) \{\s*if \(!hasInferenceProvider\) return;\s*await props\.onFinishOnboarding\(\);/, "inference must be the final step and finish onboarding directly");
+assert.doesNotMatch(onboardingPage, /step === "inference"|hasInferenceProvider/, "inference must not remain an onboarding step");
 assert.match(onboardingPage, /formatAccountSetupMissingGuidance\(props\.accountSetupStatus\)/, "onboarding must format guidance from the canonical setup status");
 assert.match(onboardingPage, /polynet-onboarding-guidance/, "onboarding setup blockers should render as guidance, not red server errors");
 assert.match(

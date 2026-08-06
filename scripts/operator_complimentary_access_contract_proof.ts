@@ -50,12 +50,12 @@ assert.match(
 );
 assert.match(
   runtime,
-  /fundingMode: "owner_api_key" \| "platform_subscription" \| "platform_operator_grant"/,
+  /fundingMode: "platform_subscription" \| "platform_operator_grant"/,
   "the shared inference runtime must admit the operator funding mode",
 );
 assert.match(
   worker,
-  /directOpenAiFunded =[\s\S]*context\.funding\.mode === "platform_operator_grant"[\s\S]*runOpenAiNativeToolCompletion/,
+  /expectedFundingMode: context\.funding\.mode[\s\S]*runOpenAiNativeToolCompletion/,
   "operator-funded community turns must use the bounded platform OpenAI path",
 );
 assert.match(
@@ -70,7 +70,7 @@ assert.match(
 );
 assert.match(
   billingGateway,
-  /funding_mode: "managed" \| "legacy_byok" \| "operator_comp"/,
+  /funding_mode: "managed" \| "operator_comp"/,
   "the billing gateway must preserve the operator funding projection",
 );
 assert.match(
@@ -78,10 +78,10 @@ assert.match(
   /Operator access included[\s\S]*isOperatorComped \? null/,
   "the billing UI must explain operator access without showing a checkout action",
 );
-assert.match(
+assert.doesNotMatch(
   billingController,
-  /startCheckoutAfterCommunityCreated[\s\S]*params\.operatorComplimentaryAccess[\s\S]*return;[\s\S]*community\.funding_mode === "operator_comp"[\s\S]*return;[\s\S]*await startCheckout\(communityId\)/,
-  "new operator-owned communities must not redirect into founder checkout",
+  /startCheckoutAfterCommunityCreated/,
+  "community creation must never use create-before-checkout redirect logic",
 );
 assert.match(
   premiumBilling,

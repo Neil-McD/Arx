@@ -1,7 +1,6 @@
 import {
   PLATFORM_LEGAL_DOCUMENTS,
   PRIVACY_AI_DATA_POLICY_DOCUMENT,
-  TERMS_OF_SERVICE_ACCEPTANCE_VERSIONS,
   TERMS_OF_SERVICE_DOCUMENT,
 } from "../shared/legalDocuments";
 import { ConvexError } from "convex/values";
@@ -23,11 +22,9 @@ function hasLegalAcceptance(
   rows: LegalAcceptanceRow[],
   document: (typeof PLATFORM_LEGAL_DOCUMENTS)[number],
 ): boolean {
-  const acceptedVersions = document.key === TERMS_OF_SERVICE_DOCUMENT.key
-    ? new Set<string>(TERMS_OF_SERVICE_ACCEPTANCE_VERSIONS)
-    : new Set<string>([document.version]);
   return rows.some((row) =>
-    row.documentKey === document.key && acceptedVersions.has(String(row.documentVersion ?? ""))
+    row.documentKey === document.key &&
+    row.documentVersion === document.version
   );
 }
 

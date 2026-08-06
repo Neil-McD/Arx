@@ -53,6 +53,10 @@ import {
   listAllActiveChannelReadableRows,
 } from "./communityChannelCore";
 import { communityIsActive } from "../shared/communityLifecycle";
+import {
+  requireCommunityBuilderAccess,
+  resolveCommunityBuilderAccess,
+} from "./communityBuilderAccessCore";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -363,6 +367,10 @@ export const resolvePublicFunnelBySlug = query({
     const funnel = await resolveCommunityFunnelConfigByCommunityId(ctx, community._id);
     const owner = community.ownerId ? await ctx.db.get(community.ownerId) : null;
     const host = owner ? await resolvePublicProfileFaceFields(ctx, owner._id) : null;
+    const builderAccess = await resolveCommunityBuilderAccess({
+      ctx,
+      community,
+    });
 
     return {
       ok: true,
@@ -383,6 +391,9 @@ export const resolvePublicFunnelBySlug = query({
         banner_zoom: branding.banner_zoom,
         visibility: community.visibility,
         entry_policy: entryPolicy,
+        availability: builderAccess.operational
+          ? "available"
+          : "temporarily_unavailable",
         created_at: toIsoString(community.createdAt),
         updated_at: toIsoString(community.updatedAt),
         funnel,
@@ -588,12 +599,14 @@ export const listPublicDiscoverCommunities = query({
       .order("desc")
       .take(200)) as CommunityLike[];
 
-    const activePublished = published
-      .filter((community) => communityIsActive(community))
-      .slice(0, limit);
-
     const communities = (await Promise.all(
-      activePublished.map(async (community) => {
+      published.map(async (community) => {
+        if (!communityIsActive(community)) return null;
+        const builderAccess = await resolveCommunityBuilderAccess({
+          ctx,
+          community,
+        });
+        if (!builderAccess.operational) return null;
         const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
         const branding = await resolveCommunityBrandingFields(ctx, community);
         const entryPolicy = resolveCommunityEntryPolicy(community);
@@ -620,7 +633,7 @@ export const listPublicDiscoverCommunities = query({
           active_plan: pickPreferredActivePlan(mappedPlans),
         };
       }),
-    ));
+    )).filter((community) => community !== null).slice(0, limit);
 
     return {
       ok: true,
@@ -716,6 +729,11 @@ async function joinPublicCommunityInternal(args: {
   if (!communityIsActive(args.community)) {
     throw new Error("community_archived");
   }
+  await requireCommunityBuilderAccess({
+    ctx: args.ctx,
+    community: args.community,
+    nowMs: args.nowMs,
+  });
   await requireCommunityUserNotBlocked({
     ctx: args.ctx,
     communityId: args.community._id,

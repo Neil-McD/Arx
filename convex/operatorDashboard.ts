@@ -9,7 +9,6 @@ const operatorSeverity = v.optional(v.union(v.literal("info"), v.literal("warnin
 const accountSetupStep = v.optional(
   v.union(
     v.literal("identity"),
-    v.literal("inference"),
     v.literal("complete"),
   ),
 );

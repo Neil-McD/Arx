@@ -3,6 +3,7 @@ import { Resend } from "resend";
 export const EMAIL_TEMPLATE_KEYS = [
   "community_access_granted",
   "billing_issue",
+  "founder_checkout_recovery",
   "weekly_member_digest",
   "weekly_founder_digest",
   "event_reminder",
@@ -245,6 +246,14 @@ export function renderEmailTemplate(params: {
         "Billing needs attention",
         "There is a billing issue that needs your attention.",
         "Fix billing",
+      );
+    case "founder_checkout_recovery":
+      return renderTransactionalTemplate(
+        "Finish setting up your Polynet community",
+        payload,
+        "Your Builder payment is confirmed",
+        "Sign in with this email to finish your account and launch your community.",
+        "Continue setup",
       );
     case "weekly_member_digest": {
       const renderedItems = renderDigestItems(items);

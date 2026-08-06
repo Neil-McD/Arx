@@ -4,16 +4,14 @@ import {
   type CommunityInferenceFundingAdmission,
   type CommunityInferenceSurface,
 } from "../shared/founderInference";
-import { decryptStoredSecret } from "./providerConnections";
 
 const internalRefs = internal as any;
 
 export type CommunityInferenceFundingSession = {
   receiptKey: string;
   claimToken: string;
-  fundingMode: "owner_api_key" | "platform_subscription" | "platform_operator_grant";
+  fundingMode: "platform_subscription" | "platform_operator_grant";
   modelId: typeof COMMUNITY_OWNER_FUNDED_MODEL_ID;
-  apiKeyOverride: string | null;
 };
 
 function boundedCode(value: unknown, fallback: string): string {
@@ -39,7 +37,7 @@ export async function resolveCommunityInferenceFundingForAction(
   ) as CommunityInferenceFundingAdmission;
 }
 
-export async function beginCommunityInferenceFundingSession(args: {
+export async function claimCommunityInferenceFundingSession(args: {
   ctx: any;
   communityId: unknown;
   actorUserId: unknown;
@@ -62,8 +60,6 @@ export async function beginCommunityInferenceFundingSession(args: {
       actorUserId: args.actorUserId,
       expectedPayerUserId: args.admission.payerUserId,
       expectedFundingMode: args.admission.mode,
-      expectedFounderGrantId:
-        args.admission.mode === "owner_api_key" ? args.admission.grantId : undefined,
       expectedFounderSubscriptionId:
         args.admission.mode === "platform_subscription" ? args.admission.subscriptionId : undefined,
       surface: args.surface,
@@ -75,55 +71,46 @@ export async function beginCommunityInferenceFundingSession(args: {
     throw new Error(boundedCode(claim?.errorCode, "founder_inference_receipt_unavailable"));
   }
 
-  let apiKeyOverride: string | null = null;
-  if (args.admission.mode === "owner_api_key") {
-    try {
-      const connection = await args.ctx.runQuery(
-        internalRefs.providerConnections.getOpenAiConnectionForUserInternal,
-        { userId: args.admission.payerUserId },
-      );
-      if (!connection?.encryptedSecretHex) throw new Error("owner_credential_missing");
-      apiKeyOverride = await decryptStoredSecret(connection);
-    } catch (error) {
-      const failureCode = error instanceof Error && error.message === "owner_credential_missing"
-        ? "owner_credential_missing"
-        : "owner_credential_unreadable";
-      await args.ctx.runMutation(
-        internalRefs.founderInference.finalizeCommunityInferenceFailureInternal,
-        {
-          receiptKey,
-          claimToken,
-          promptTokens: 0,
-          completionTokens: 0,
-          usageComplete: true,
-          failureCode,
-          disposition: "failed",
-          nowMs: Date.now(),
-        },
-      );
-      throw new Error(failureCode);
-    }
-  }
+  return {
+    receiptKey,
+    claimToken,
+    fundingMode: args.admission.mode,
+    modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
+  };
+}
 
+export async function markCommunityInferenceFundingSessionProviderStarted(args: {
+  ctx: any;
+  session: CommunityInferenceFundingSession;
+}): Promise<void> {
   const providerStart = await args.ctx.runMutation(
     internalRefs.founderInference.markCommunityInferenceProviderStartedInternal,
     {
-      receiptKey,
-      claimToken,
+      receiptKey: args.session.receiptKey,
+      claimToken: args.session.claimToken,
       nowMs: Date.now(),
     },
   );
   if (!providerStart?.ok) {
     throw new Error(boundedCode(providerStart?.errorCode, "funding_authority_changed"));
   }
+}
 
-  return {
-    receiptKey,
-    claimToken,
-    fundingMode: args.admission.mode,
-    modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
-    apiKeyOverride,
-  };
+export async function beginCommunityInferenceFundingSession(args: {
+  ctx: any;
+  communityId: unknown;
+  actorUserId: unknown;
+  surface: CommunityInferenceSurface;
+  receiptKey: string;
+  sourceRunId: string;
+  admission: CommunityInferenceFundingAdmission;
+}): Promise<CommunityInferenceFundingSession> {
+  const session = await claimCommunityInferenceFundingSession(args);
+  await markCommunityInferenceFundingSessionProviderStarted({
+    ctx: args.ctx,
+    session,
+  });
+  return session;
 }
 
 export async function settleCommunityInferenceFundingSession(args: {
@@ -134,7 +121,7 @@ export async function settleCommunityInferenceFundingSession(args: {
   usageComplete: boolean;
   outcomeCode: string;
 }): Promise<void> {
-  await args.ctx.runMutation(
+  const result = await args.ctx.runMutation(
     internalRefs.founderInference.settleCommunityInferenceReceiptInternal,
     {
       receiptKey: args.session.receiptKey,
@@ -146,6 +133,9 @@ export async function settleCommunityInferenceFundingSession(args: {
       nowMs: Date.now(),
     },
   );
+  if (!result || result.status !== "settled") {
+    throw new Error("community_inference_receipt_not_settled");
+  }
 }
 
 export async function failCommunityInferenceFundingSession(args: {
@@ -157,7 +147,7 @@ export async function failCommunityInferenceFundingSession(args: {
   failureCode: string;
   disposition: "failed" | "indeterminate";
 }): Promise<void> {
-  await args.ctx.runMutation(
+  const result = await args.ctx.runMutation(
     internalRefs.founderInference.finalizeCommunityInferenceFailureInternal,
     {
       receiptKey: args.session.receiptKey,
@@ -170,4 +160,7 @@ export async function failCommunityInferenceFundingSession(args: {
       nowMs: Date.now(),
     },
   );
+  if (!result?.ok) {
+    throw new Error(boundedCode(result?.errorCode, "community_inference_receipt_not_finalized"));
+  }
 }

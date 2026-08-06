@@ -3,8 +3,6 @@ import { useEffect, useRef } from "react";
 import type {
   AppPage,
   CommunityTab,
-  OperatorTab,
-  SettingsPage,
 } from "../../../../shared/appShellNavigation";
 import type {
   MemberAgentSurfaceContextV1,
@@ -14,8 +12,6 @@ import type { WebCommunityRecord } from "../webAppContracts";
 export function useWebMemberAgentSurfaceController(params: {
   activePage: AppPage;
   communityTab: CommunityTab;
-  settingsPage: SettingsPage;
-  activeOperatorTab: OperatorTab;
   activeCommunity: WebCommunityRecord | null;
   isAuthenticated: boolean;
   publicRouteKind: string;
@@ -30,47 +26,24 @@ export function useWebMemberAgentSurfaceController(params: {
       ? params.activeCommunity
       : null;
   const surfaceContext: MemberAgentSurfaceContextV1 | null =
-    params.activePage === "community" && community?.slug
+    params.activePage === "community" && community?.id && community.slug
       ? {
           version: 1,
           kind: "community",
           community_slug: community.slug,
           section: params.communityTab,
         }
-      : params.activePage === "discover"
-        ? {
-            version: 1,
-            kind: "discover",
-            section: "communities",
-          }
-        : params.activePage === "settings" ||
-            params.activePage === "docs" ||
-            params.activePage === "operator"
-          ? {
-              version: 1,
-              kind: "platform",
-              page: params.activePage,
-              section:
-                params.activePage === "settings"
-                  ? params.settingsPage
-                  : params.activePage === "operator"
-                    ? params.activeOperatorTab
-                    : null,
-            }
-          : null;
+      : null;
   const isVisible =
     params.isAuthenticated &&
     params.publicRouteKind === "app" &&
-    params.activePage !== "landing" &&
-    params.activePage !== "onboarding" &&
+    params.activePage === "community" &&
     params.hasResolvedCommunities &&
     Boolean(surfaceContext) &&
     !params.isDirectMessagesOpen &&
     !params.isOnboardingModalOpen;
   const voiceScopeKey =
-    `${params.activePage}:${params.communityTab}:${
-      community?.id ?? "platform"
-    }`;
+    `${params.activePage}:${params.communityTab}:${community?.id ?? "none"}`;
   const previousVoiceScopeKeyRef = useRef(voiceScopeKey);
 
   useEffect(() => {

@@ -18,9 +18,6 @@ export type ServeRequestIntakeReason =
   | "requester_missing"
   | "requester_access_missing"
   | "agent_disabled"
-  | "owner_funding_choice_required"
-  | "owner_credential_missing"
-  | "owner_funding_suspended"
   | "founder_plan_required"
   | "founder_subscription_inactive"
   | "founder_subscription_ambiguous"
@@ -384,14 +381,8 @@ export async function intakeCommunityAgentMention(args: {
       requesterUserId: source.requesterUserId,
       sourceVisibilityScope: source.visibilityScope,
       responseVisibilityScope: source.visibilityScope,
-      skipReason: funding.code === "owner_credential_missing"
-        ? "The community owner must connect an OpenAI API key."
-        : funding.code === "owner_funding_choice_required"
-          ? "The community owner must activate an OpenAI API key or fund this community at $79/month."
-        : funding.code === "owner_funding_suspended"
-          ? "Community inference funding is suspended."
-          : funding.code === "founder_subscription_inactive"
-            ? "The community founder subscription is inactive."
+      skipReason: funding.code === "founder_subscription_inactive"
+          ? "The community founder subscription is inactive."
           : funding.code === "founder_plan_required"
             ? "The community requires an active founder plan."
             : "Community inference funding could not be resolved.",

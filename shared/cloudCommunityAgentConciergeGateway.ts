@@ -9,8 +9,8 @@ type CloudCommunityAgentConciergeGatewayParams<SessionT> = {
 export type CloudCommunityAgentServeIssue = {
   id: string;
   community_id: string;
-  reason: "provider_connection_required" | "community_owner_action_required";
-  cta: "connect_chatgpt" | null;
+  reason: "community_owner_action_required";
+  cta: null;
   message: string;
   created_at: string;
 };
@@ -31,9 +31,8 @@ function coerceCommunityAgentServeIssue(payload: unknown): CloudCommunityAgentSe
   if (
     !id ||
     !communityId ||
-    (reason !== "provider_connection_required" && reason !== "community_owner_action_required") ||
-    (reason === "provider_connection_required" && cta !== "connect_chatgpt") ||
-    (reason === "community_owner_action_required" && cta !== null) ||
+    reason !== "community_owner_action_required" ||
+    cta !== null ||
     !createdAt
   ) {
     return null;
@@ -42,12 +41,8 @@ function coerceCommunityAgentServeIssue(payload: unknown): CloudCommunityAgentSe
     id,
     community_id: communityId,
     reason,
-    cta: reason === "provider_connection_required" ? "connect_chatgpt" : null,
-    message: coerceNullableString(row.message) ?? (
-      reason === "provider_connection_required"
-        ? "Connect ChatGPT to use the community agent."
-        : "Community AI is temporarily unavailable."
-    ),
+    cta: null,
+    message: coerceNullableString(row.message) ?? "Community AI is temporarily unavailable.",
     created_at: createdAt,
   };
 }

@@ -1,7 +1,8 @@
 import { internalMutation } from "./_generated/server";
 import { v } from "convex/values";
-import { EXISTING_FOUNDER_INFERENCE_COHORT_KEY } from "../shared/founderInference";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
+
+const EXISTING_FOUNDER_INFERENCE_COHORT_KEY = "existing_founder_cutover_v1";
 
 function normalizedId(value: unknown): string {
   return String(value ?? "").trim();

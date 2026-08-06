@@ -616,6 +616,11 @@ assert.match(
 );
 assert.match(
   resolution,
+  /memberAgentSurfaceContext\?\.kind !== "community"[\s\S]*member_agent_community_context_required/,
+  "the runtime must reject member-agent execution without an explicit community surface",
+);
+assert.match(
+  resolution,
   /surfaceCommunitySlug[\s\S]*runtimeCommunitySlug === surfaceCommunitySlug[\s\S]*runtimeCommunityId === null[\s\S]*member_agent_surface_lens_mismatch/,
   "the server must reject a page snapshot that disagrees with the canonical thread lens",
 );
@@ -632,6 +637,29 @@ assert.match(
   resolution,
   /restrictCapabilityFamiliesForInvocationSurface[\s\S]*restrictToolNamesForInvocationSurface/,
   "the server must constrain capabilities and tools instead of trusting the web client",
+);
+const memberAgentGateBranch = resolution.match(
+  /if \(isCommunityMemberAgentTurn\) \{([\s\S]*?)\n  \} else \{/,
+)?.[1] ?? "";
+assert.match(
+  memberAgentGateBranch,
+  /lane = "platform"[\s\S]*modelRef = `openai\/\$\{COMMUNITY_OWNER_FUNDED_MODEL_ID\}`[\s\S]*inferenceSource = "platform"/,
+  "the member dock must use the platform-hosted community model lane",
+);
+assert.doesNotMatch(
+  memberAgentGateBranch,
+  /hasOpenAiConnectionForUser|hasChatgptConnectionForUser|getOpenAiConnectionForUserInternal|decryptStoredSecret/,
+  "member-agent admission must not depend on member provider credentials",
+);
+assert.match(
+  resolution,
+  /\} else \{[\s\S]*hasOpenAiConnectionForUser[\s\S]*hasChatgptConnectionForUser[\s\S]*getOpenAiConnectionForUserInternal/,
+  "the protected non-dock runtime must retain its existing provider-connection path",
+);
+assert.match(
+  resolution,
+  /resolveRuntimeCommunityPromptContextInternal[\s\S]*member_agent_surface_lens_mismatch[\s\S]*resolveCommunityInferenceFundingAdmissionInternal[\s\S]*community_ai_unavailable/,
+  "membership, lens, and community funding authority must be resolved server-side in that order",
 );
 assert.match(
   resolution,
@@ -800,7 +828,12 @@ assert.match(
 assert.match(
   component,
   /surfaceContext\.kind === "community" \? communityId : null/,
-  "Discover and generic platform pages must clear the active community lens",
+  "the client must derive the runtime lens only from an explicit community surface",
+);
+assert.match(
+  component,
+  /requestedFundingSource: "platform"/,
+  "the dock must request the hosted platform lane rather than automatic member funding",
 );
 assert.doesNotMatch(
   component,
@@ -1015,8 +1048,13 @@ assert.doesNotMatch(
 );
 assert.match(
   memberAgentSurfaceController,
-  /kind: "community"[\s\S]*section: params\.communityTab[\s\S]*kind: "discover"[\s\S]*section: "communities"[\s\S]*kind: "platform"/,
-  "the decomposed surface controller must project community, Discover, and generic platform pages explicitly",
+  /params\.activePage === "community" && community\?\.id && community\.slug[\s\S]*kind: "community"[\s\S]*section: params\.communityTab[\s\S]*: null/,
+  "the surface controller must project only a concrete community context",
+);
+assert.doesNotMatch(
+  memberAgentSurfaceController,
+  /kind: "discover"|kind: "platform"/,
+  "Discover, settings, docs, and operator pages must not expose an unfunded global dock",
 );
 assert.doesNotMatch(
   app,
@@ -1025,8 +1063,22 @@ assert.doesNotMatch(
 );
 assert.match(
   memberAgentSurfaceController,
-  /const isVisible =[\s\S]*params\.isAuthenticated[\s\S]*params\.publicRouteKind === "app"[\s\S]*params\.activePage !== "landing"[\s\S]*params\.activePage !== "onboarding"[\s\S]*params\.hasResolvedCommunities[\s\S]*Boolean\(surfaceContext\)[\s\S]*!params\.isDirectMessagesOpen[\s\S]*!params\.isOnboardingModalOpen/,
-  "the operating panel must span authenticated app pages but stay out of acquisition and blocking overlays",
+  /const isVisible =[\s\S]*params\.isAuthenticated[\s\S]*params\.publicRouteKind === "app"[\s\S]*params\.activePage === "community"[\s\S]*params\.hasResolvedCommunities[\s\S]*Boolean\(surfaceContext\)[\s\S]*!params\.isDirectMessagesOpen[\s\S]*!params\.isOnboardingModalOpen/,
+  "the dock must appear only inside an authenticated resolved community surface",
+);
+
+const firstRuntimeReplayLookup = runtimeHandlers.indexOf("lookupExistingRuntimeReplay");
+const firstMemberFundingBegin = runtimeHandlers.indexOf("beginMemberAgentFundingSession()");
+assert.ok(firstRuntimeReplayLookup >= 0 && firstMemberFundingBegin > firstRuntimeReplayLookup);
+assert.match(
+  runtimeHandlers,
+  /surface: "member_agent_dock"[\s\S]*receiptKey: `member_agent_dock:\$\{runId\}`[\s\S]*settleCommunityInferenceFundingSession[\s\S]*failCommunityInferenceFundingSession/,
+  "member turns must reuse the canonical idempotent community inference receipt lifecycle",
+);
+assert.match(
+  runtimeHandlers,
+  /community_inference_settlement_failed/,
+  "the response must fail closed when hosted-inference accounting cannot finalize",
 );
 assert.match(
   app,
@@ -1142,7 +1194,7 @@ assert.match(
 );
 assert.match(
   cognitionContract,
-  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*one stable private channel per member across Polynet[\s\S]*changing communities changes the lens for subsequent turns[\s\S]*Start fresh conversation[\s\S]*community deletion makes that community unavailable as a future lens[\s\S]*retained legacy per-community episodes are read-only recall artifacts[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
+  /member_agent_dock[\s\S]*belongs to the signed-in member, not the community[\s\S]*exposed only inside an authenticated community surface[\s\S]*one stable private channel per member across Polynet[\s\S]*changing communities changes the lens for subsequent turns[\s\S]*Start fresh conversation[\s\S]*community deletion makes that community unavailable as a future lens[\s\S]*retained legacy per-community episodes are read-only recall artifacts[\s\S]*member_concierge[\s\S]*direct community-agent mention/,
 );
 
 const canonicalContext = buildMemberAgentConversationContext({

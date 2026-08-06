@@ -19,13 +19,12 @@ import {
   formatUsdAmount,
 } from "./workspaceRightPanelOperatorShared";
 
-const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "inference", "complete"] as const;
+const OPERATOR_ACCOUNT_SETUP_STEP_ORDER = ["identity", "complete"] as const;
 const OPERATOR_ACCOUNT_SETUP_MISSING_ORDER = [
   "display_name",
   "handle",
   "avatar",
   "platform_legal",
-  "inference_provider",
 ] as const;
 
 export function OperatorBusinessPanelView(props: {

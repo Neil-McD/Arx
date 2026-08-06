@@ -22,14 +22,18 @@ personal agent runtime under the active community lens.
 
 1. `member_agent_dock`
    - belongs to the signed-in member, not the community
+   - is exposed only inside an authenticated community surface; Discover,
+     settings, docs, onboarding, and operator pages have no member-agent dock
    - uses one stable private channel per member across Polynet; the channel points to one active hidden conversation episode backed by the existing thread/message runtime
-   - every turn carries a bounded current-surface snapshot; community pages identify their exact section, Discover carries no community lens, and generic platform pages remain explicit instead of silently falling back to Polynet
-   - the active episode thread holds the optional server-validated community lens; changing communities changes the lens for subsequent turns without changing the agent, channel, episode, or prior messages, while entering Discover clears the lens before the next turn
+   - every turn carries a bounded community-surface snapshot identifying the exact section
+   - the active episode thread holds the required server-validated community lens; changing communities changes the lens for subsequent turns without changing the agent, channel, episode, or prior messages
    - the server rejects community surface snapshots that do not match the thread's validated lens; page context guides relevance but never grants authority
    - every runtime run captures immutable surface context plus community-lens id and context-version provenance before execution
    - `Start fresh conversation` closes the active episode and atomically moves the channel to a fresh episode without deleting or exposing a picker for prior transcripts
    - community deletion makes that community unavailable as a future lens but does not close the member's global channel or episodes
-   - requester-funded and server-bound to an authorized community lens
+   - platform-hosted through the community's active Builder subscription or
+     canonical operator grant and server-bound to an authorized community lens;
+     members never supply inference credentials
    - the server constructs bounded conversation history from persisted messages through the exact user message that started the turn; browser-supplied history is never authoritative
    - prior episodes are never injected automatically; the dock can list bounded episode metadata and read one bounded private transcript only through member-owned recall tools
    - recall spans the member's global episodes and retained legacy per-community episodes, returns lens provenance with user and assistant text, fails closed across members, and requires transcript evidence before the agent claims prior conversational memory
@@ -46,11 +50,8 @@ The community-owned runtime surfaces are:
 
 1. `member_concierge`
    - entered from a direct community-agent mention
-   - funded by the current community owner's OpenAI key only after an exact eligible
-     existing founder activates BYOK, or by an active $79 founder subscription
-     attached to that community; approved-but-inactive founders must choose one of
-     those funding modes, while the active platform-owner role receives the same
-     platform-funded path without a subscription
+   - funded only by an active $79 Builder subscription attached to that community,
+     or by the active platform-owner grant without a subscription
    - revalidates community access and source visibility for every turn
    - receives the same canonical five Polynet repository tools as the personal
      harness and official MCP
@@ -1750,7 +1751,10 @@ Rules:
 
 - This slice is intake only: No LLM, no reply, no memory write.
 - A queued serve request must have `sponsorUserId == requesterUserId`; this is the member tool-authority principal, not the payer.
-- An active existing-founder grant resolves the current community owner as payer and requires that owner's OpenAI API key. An active founder subscription permanently attached to the community resolves that owner as payer and the subscription as the server-side Luna funding authority. Approved-but-not-yet-activated founders must choose eligible BYOK or the $79 plan. An attached inactive subscription fails closed and never falls back to a founder key.
+- An active founder subscription attached to the community resolves the current
+  owner as payer and the subscription as the server-side Luna funding authority.
+  The canonical operator grant is the only non-Stripe authority. An attached
+  inactive subscription fails closed and never falls back to a stored credential.
 - `communityInteractionMentions.notifyState` is only the narrow drain marker for agent mentions:
   - `pending` = intake has not processed this mention
   - `sent` = intake accepted it into `communityAgentServeRequests`
@@ -1760,7 +1764,9 @@ Rules:
 - Fresh `community_agent` mentions are born into intake immediately after the mention row is inserted.
 - The bounded cron consumes only leftover pending canonical `community_agent` mentions as a repair drain, not as the primary product path.
 - `sourceMentionId` is the idempotency key; retries must lookup before insert.
-- Accepted requests require a live human-authored source interaction, current requester chat access, enabled community agent config, and either active owner funding or the temporary approved-founder requester connection.
+- Accepted requests require a live human-authored source interaction, current
+  requester chat access, enabled community agent config, and active community
+  hosted-inference authority.
 - Source and response visibility scopes are captured at intake so the future response path cannot guess or widen the boundary.
 - Skipped requests are recorded with machine-readable `intakeReason`; no tokens are spent for skipped intake.
 - Unexpected birth-time intake errors must not fail the chat write; the mention remains pending for the repair drain.
@@ -1788,13 +1794,13 @@ Rules:
   outcomes, or community-agent runs.
 - The worker keeps three identities separate: requester/sponsor for access and tools,
   canonical community agent for the response identity, and current community owner
-  for payment and credential. `sponsorUserId` must equal `requesterUserId`; the owner
+  for payment authority. `sponsorUserId` must equal `requesterUserId`; the owner
   must never become the tool principal. There is no member fallback after canonical
   community funding is active.
-- Existing-founder owner-funded turns use fixed `gpt-5.6-luna` through the owner's
-  encrypted OpenAI API key. Paid-founder turns use the same fixed model through
-  Polynet's server-side OpenAI credential only after an attached subscription and
-  open usage cycle are verified. The global model default remains independent.
+- Paid and operator-funded turns use fixed `gpt-5.6-luna` through Polynet's
+  server-side OpenAI credential only after current funding authority is verified.
+  Paid turns also require an attached subscription and open usage cycle. The global
+  model default remains independent.
 - Each funded request claims one idempotent `communityInferenceReceipts` row. The
   receipt records actor, payer, funding mode, grant or subscription, community,
   model, bounded token usage, and outcome but never the key, prompt, response, or
@@ -1981,17 +1987,17 @@ Two payment lanes, split by what the spend produces:
 
 - Memory is founder-funded. The directory is the community's compounding
   asset and the founder owns that asset, so cycle inference runs through the
-  community's canonical founder-funding admission. Exact legacy BYOK, an active
-  attached managed subscription, or the operator grant may fund a cycle. It is
+  community's canonical founder-funding admission. An active attached Builder
+  subscription or the operator grant may fund a cycle. It is
   capped at two cycles per day and retains the owner off-switch
   (`communityAgentConfigs.agentEnabled`).
-- Direct Concierge chat, autonomous cognition, and AI-assisted setup generation are community-founder-funded. An approved existing founder
-  supplies the OpenAI key after activation; a new founder supplies a verified $79
-  monthly subscription attached to exactly one community; the active platform owner
-  role is complimentary. Polynet supplies the server-side OpenAI key for paid and
-  operator-funded communities. All paths use GPT 5.6 Luna while the requesting member remains
-  the permission and tool principal. Approved-but-inactive existing founders must
-  choose eligible BYOK or the $79 managed plan. Payment
+- The member agent under an authorized community lens, direct Concierge chat,
+  autonomous cognition, and AI-assisted setup generation are
+  community-founder-funded. A verified $79 monthly subscription attaches to exactly
+  one community; the active platform-owner role is complimentary. Polynet supplies
+  the server-side OpenAI key for both paid and operator-funded communities. All paths
+  use GPT 5.6 Luna while the requesting member remains the permission and tool
+  principal. Payment
   identity never widens retrieval or tool authority. All three surfaces resolve the
   same funding admission and settle through the same privacy-bounded receipt kernel.
   Operator-funded receipts preserve rate limits and calculated raw provider cost but
@@ -2078,9 +2084,10 @@ fixture must instead invoke `runCommunityAgentHeartbeatInternal` and cross the
 same provider, prompt, tool, lease, settlement, and retry boundaries as an
 ordinary founder-funded cognition pass.
 
-The fixture is staging-only and requires an explicit connected sponsor. It may
-create a disposable community owned by that sponsor, but it must never copy,
-return, replace, or delete the sponsor's provider credentials. Its evidence set
+The fixture is staging-only and requires an explicit sponsor with hosted
+community-inference authority. It may create a disposable community owned by
+that sponsor, but it must never copy, return, replace, or delete provider
+credentials. Its evidence set
 is one 14-message episode containing one durable rule, one exact duplicate of
 existing memory, one hostile low-signal instruction, and eleven low-signal
 acknowledgements. A passing run must:
@@ -2098,7 +2105,7 @@ acknowledgements. A passing run must:
 - leave all fourteen source traces terminal, every `workKey` unique, and the
   compiler measurement at zero pending work after the second heartbeat
 - delete every disposable fixture row while preserving the sponsor user and
-  ChatGPT connection
+  canonical billing evidence
 
 The acceptance action must not call compiler digest, claim, filesystem write,
 or handoff settlement mutations directly. A real provider trace is evidence

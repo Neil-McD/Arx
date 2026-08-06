@@ -1,4 +1,5 @@
 import { bootstrapGatewayAuthContext } from "./cloudGateway";
+import { createConvexClient } from "./convexAuthenticatedClient";
 import type {
   BuilderFundingAction,
   BuilderFundingLane,
@@ -7,9 +8,6 @@ import type {
 
 export type CloudFounderBillingCommunityStatus =
   | "operator_comped"
-  | "legacy_ready"
-  | "legacy_active"
-  | "legacy_suspended"
   | "managed_required"
   | "managed_checkout_pending"
   | "archived"
@@ -25,12 +23,12 @@ export type CloudFounderBillingCommunity = {
   community_slug: string;
   lifecycle_status: "active" | "archived";
   lifecycle_generation: number;
+  builder_access_mode: "grandfathered" | "subscription_required" | "invalid";
   archive_billing_cleanup_status: "pending" | "complete" | "blocked" | null;
-  funding_policy: "legacy_byok_allowed" | "managed_required";
   funding_lane: BuilderFundingLane;
   funding_state: BuilderFundingState;
   allowed_actions: BuilderFundingAction[];
-  funding_mode: "managed" | "legacy_byok" | "operator_comp";
+  funding_mode: "managed" | "operator_comp";
   status: CloudFounderBillingCommunityStatus;
   monthly_price_base_units: number;
   platform_fee_bps: number;
@@ -44,12 +42,24 @@ export type CloudFounderBillingCommunity = {
 export type CloudFounderBillingOverview = {
   monthly_price_base_units: number;
   communities: CloudFounderBillingCommunity[];
+  unassigned_subscriptions: CloudFounderBillingUnassignedSubscription[];
   managed_monthly_total_base_units: number;
+};
+
+export type CloudFounderBillingUnassignedSubscription = {
+  subscription_id: string;
+  status: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended";
+  grants_setup: boolean;
+  monthly_price_base_units: number;
+  current_period_start_at: string;
+  current_period_end_at: string;
+  cancel_at_period_end: boolean;
 };
 
 export const EMPTY_FOUNDER_BILLING_OVERVIEW: CloudFounderBillingOverview = {
   monthly_price_base_units: 7_900,
   communities: [],
+  unassigned_subscriptions: [],
   managed_monthly_total_base_units: 0,
 };
 
@@ -64,14 +74,10 @@ function finiteNumber(value: unknown, fallback = 0): number {
 }
 
 const BUILDER_FUNDING_LANES: BuilderFundingLane[] = [
-  "legacy_choice",
   "builder_included",
   "builder",
 ];
 const BUILDER_FUNDING_STATES: BuilderFundingState[] = [
-  "legacy_api_available",
-  "legacy_api_active",
-  "legacy_api_suspended",
   "builder_required",
   "checkout_pending",
   "builder_active",
@@ -82,8 +88,6 @@ const BUILDER_FUNDING_STATES: BuilderFundingState[] = [
   "builder_included",
 ];
 const BUILDER_FUNDING_ACTIONS: BuilderFundingAction[] = [
-  "activate_owner_api",
-  "manage_owner_api",
   "buy_builder",
   "resume_checkout",
   "manage_builder",
@@ -97,9 +101,6 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
   const rawStatus = nullableString(row.status);
   const allowedStatuses: CloudFounderBillingCommunityStatus[] = [
     "operator_comped",
-    "legacy_ready",
-    "legacy_active",
-    "legacy_suspended",
     "managed_required",
     "managed_checkout_pending",
     "archived",
@@ -132,24 +133,24 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
     community_slug: nullableString(row.community_slug) ?? "",
     lifecycle_status: row.lifecycle_status === "archived" ? "archived" : "active",
     lifecycle_generation: Math.max(0, Math.floor(finiteNumber(row.lifecycle_generation))),
+    builder_access_mode:
+      row.builder_access_mode === "grandfathered" ||
+      row.builder_access_mode === "subscription_required"
+        ? row.builder_access_mode
+        : "invalid",
     archive_billing_cleanup_status:
       row.archive_billing_cleanup_status === "pending" ||
       row.archive_billing_cleanup_status === "complete" ||
       row.archive_billing_cleanup_status === "blocked"
         ? row.archive_billing_cleanup_status
         : null,
-    funding_policy: row.funding_policy === "legacy_byok_allowed"
-      ? "legacy_byok_allowed"
-      : "managed_required",
     funding_lane: fundingLane,
     funding_state: fundingState,
     allowed_actions: allowedActions,
     funding_mode:
       row.funding_mode === "operator_comp"
         ? "operator_comp"
-        : row.funding_mode === "legacy_byok"
-          ? "legacy_byok"
-          : "managed",
+        : "managed",
     status,
     monthly_price_base_units: finiteNumber(row.monthly_price_base_units, 7_900),
     platform_fee_bps: finiteNumber(row.platform_fee_bps),
@@ -170,6 +171,28 @@ function coerceOverview(payload: unknown): CloudFounderBillingOverview {
       ? row.communities.flatMap((community) => {
           const normalized = coerceCommunity(community);
           return normalized ? [normalized] : [];
+        })
+      : [],
+    unassigned_subscriptions: Array.isArray(row.unassigned_subscriptions)
+      ? row.unassigned_subscriptions.flatMap((value) => {
+          if (!value || typeof value !== "object") return [];
+          const subscription = value as Record<string, unknown>;
+          const subscriptionId = nullableString(subscription.subscription_id);
+          const status = nullableString(subscription.status);
+          if (
+            !subscriptionId ||
+            !status ||
+            !["active", "past_due", "cancel_at_period_end", "canceled", "ended"].includes(status)
+          ) return [];
+          return [{
+            subscription_id: subscriptionId,
+            status: status as CloudFounderBillingUnassignedSubscription["status"],
+            grants_setup: subscription.grants_setup === true,
+            monthly_price_base_units: finiteNumber(subscription.monthly_price_base_units, 7_900),
+            current_period_start_at: nullableString(subscription.current_period_start_at) ?? "",
+            current_period_end_at: nullableString(subscription.current_period_end_at) ?? "",
+            cancel_at_period_end: subscription.cancel_at_period_end === true,
+          }];
         })
       : [],
     managed_monthly_total_base_units: finiteNumber(
@@ -206,15 +229,100 @@ export async function startCloudFounderSubscriptionCheckout<SessionT>(params: {
   return { checkout_url: checkoutUrl };
 }
 
+export async function startCloudPublicBuilderCheckout(params: {
+  checkoutAttemptId: string;
+  claimToken: string;
+  successUrl: string;
+  cancelUrl: string;
+}): Promise<{ checkout_url: string; session_id: string }> {
+  const client = createConvexClient();
+  const payload = await client.action("founderBilling:startPublicBuilderCheckout" as any, {
+    checkoutAttemptId: params.checkoutAttemptId,
+    claimToken: params.claimToken,
+    successUrl: params.successUrl,
+    cancelUrl: params.cancelUrl,
+  }) as { checkout_url?: unknown; session_id?: unknown } | null;
+  const checkoutUrl = nullableString(payload?.checkout_url);
+  const sessionId = nullableString(payload?.session_id);
+  if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
+  if (!sessionId) throw new Error("founder_checkout_session_id_missing");
+  return { checkout_url: checkoutUrl, session_id: sessionId };
+}
+
+export async function loadCloudFounderCheckoutReceiptStatus(params: {
+  sessionId: string;
+  claimToken: string;
+}): Promise<{
+  status: "pending_payment" | "paid_unclaimed" | "claimed" | "revoked" | "expired";
+  verified_at?: string;
+  expires_at?: string;
+}> {
+  const client = createConvexClient();
+  const payload = await client.action("founderBilling:getFounderCheckoutReceiptStatus" as any, {
+    sessionId: params.sessionId,
+    claimToken: params.claimToken,
+  }) as Record<string, unknown> | null;
+  const status = nullableString(payload?.status);
+  if (
+    !status ||
+    !["pending_payment", "paid_unclaimed", "claimed", "revoked", "expired"].includes(status)
+  ) {
+    throw new Error("founder_checkout_receipt_status_invalid");
+  }
+  return {
+    status: status as "pending_payment" | "paid_unclaimed" | "claimed" | "revoked" | "expired",
+    verified_at: nullableString(payload?.verified_at) ?? undefined,
+    expires_at: nullableString(payload?.expires_at) ?? undefined,
+  };
+}
+
+export async function claimCloudFounderCheckoutReceipt<SessionT>(params: {
+  session: SessionT;
+  sessionId: string;
+  claimToken: string;
+}): Promise<{ founder_subscription_id: string; already_claimed: boolean }> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
+  const payload = await client.mutation("founderBilling:claimFounderCheckoutReceipt" as any, {
+    authSubject,
+    sessionId: params.sessionId,
+    claimToken: params.claimToken,
+  }) as Record<string, unknown> | null;
+  const founderSubscriptionId = nullableString(payload?.founder_subscription_id);
+  if (!founderSubscriptionId) throw new Error("founder_checkout_claim_failed");
+  return {
+    founder_subscription_id: founderSubscriptionId,
+    already_claimed: payload?.already_claimed === true,
+  };
+}
+
+export async function claimCloudFounderCheckoutReceiptByVerifiedEmail<SessionT>(params: {
+  session: SessionT;
+  sessionId: string;
+}): Promise<{ founder_subscription_id: string; already_claimed: boolean }> {
+  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
+  const payload = await client.mutation(
+    "founderBilling:claimFounderCheckoutReceiptByVerifiedEmail" as any,
+    { authSubject, sessionId: params.sessionId },
+  ) as Record<string, unknown> | null;
+  const founderSubscriptionId = nullableString(payload?.founder_subscription_id);
+  if (!founderSubscriptionId) throw new Error("founder_checkout_claim_failed");
+  return {
+    founder_subscription_id: founderSubscriptionId,
+    already_claimed: payload?.already_claimed === true,
+  };
+}
+
 export async function startCloudFounderBillingPortal<SessionT>(params: {
   session: SessionT;
-  communityId: string;
+  communityId?: string | null;
+  founderSubscriptionId?: string | null;
   returnUrl: string;
 }): Promise<{ portal_url: string }> {
   const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
   const payload = await client.action("founderBilling:startFounderBillingPortal" as any, {
     authSubject,
-    communityId: params.communityId,
+    communityId: params.communityId || undefined,
+    founderSubscriptionId: params.founderSubscriptionId || undefined,
     returnUrl: params.returnUrl,
   }) as { portal_url?: unknown } | null;
   const portalUrl = nullableString(payload?.portal_url);

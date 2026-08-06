@@ -1,91 +1,81 @@
 # Auth + Money + Access Matrix (Canonical Contract)
 
 Status: active
-Last verified: 2026-08-02
-Scope: canonical web runtime, founder funding, paid-member commerce, and provider-cost evidence
+Last verified: 2026-08-06
+Scope: community lifecycle, Builder funding, paid-member commerce, and provider-cost evidence
 
 ## 0) First Principles
 
-The product has one authenticated capability surface and two payment rails:
+Polynet has two money rails:
 
-1. `$79 / month / managed community`, with `$20` raw GPT 5.6 Luna cost included for that community.
-2. `2.9%` Polynet application fee on paid-member community revenue.
+1. `$79 / month / community` for Builder platform operation and Polynet-hosted community AI.
+2. A `2.9%` Polynet application fee on paid-member community revenue.
 
-There is no personal Premium plan, paid account tier, tool balance product, top-up, auto-recharge, or card-backed tool collection.
-An authenticated founder may own an unlimited number of communities. Unlimited
-means no account-level numeric cap, not free bundled communities.
+Lifecycle, Builder access, membership, visibility, member commerce, and AI allowance are separate facts. One backend resolver composes them. Frontend state and redirects are never authority.
 
 ## 1) Authority Matrix
 
-| Question | Canonical authority | Explicit non-authority |
-|---|---|---|
-| May this user access the product? | authenticated user/session | Premium/account-tier label |
-| May this user enter a community? | membership, entry policy, purchase claim, subscription lifecycle | founder funding, role alone, redirect |
-| May this user manage a community? | community owner/admin role | paid-member entitlement |
-| May this founder create another community? | every existing owned community has current canonical funding | account tier, numeric community cap |
-| May this community publish and accept members? | publish readiness, visibility, entry policy, and membership or purchase state | founder AI funding |
-| May this managed community run Polynet-hosted AI? | active attached $79 subscription and current allowance | visibility, unattached checkout, requester ChatGPT |
-| May this legacy community run AI? | exact founder grant + `legacy_byok_allowed` + active owner API key | Partner evidence, unactivated founder status |
-| Is the platform operator complimentary? | one active canonical `operatorRoles.owner` row | email allowlist, fake Stripe state |
-| May a builder collect member revenue? | ready Stripe Connect account + active price/entry policy | platform founder subscription |
-| What does Polynet earn on member revenue? | 2.9% application fee | funding mode or account tier |
-| What did a tool/provider cost? | provider-cost entry + usage receipt/evidence | user credit balance |
+| Community state | Ordinary platform | Hosted AI | Restore authority |
+|---|---:|---:|---|
+| Active grandfathered, no Builder | yes | no | not applicable |
+| Active grandfathered, active attached Builder | yes | yes | not applicable |
+| Archived grandfathered | no | no | owner, after archive cleanup, without payment |
+| Active subscription-required, paid-through Builder | yes | yes | not applicable |
+| Active subscription-required, missing, expired, past-due, refunded, or disputed Builder | no | no | billing recovery |
+| Archived subscription-required | no | no | verified paid Builder fulfillment after archive cleanup |
+| Active operator-owned | yes | yes | not applicable |
+| Archived operator-owned | no | no | operator, after archive cleanup, without simulated payment |
 
-## 2) Founder Funding
+Archive is the outer authority boundary and always wins over payment, grandfathering, membership, role, and operator status.
 
-- A new community carries `managed_required` AI funding policy; the canonical create flow starts unlisted, but funding never controls visibility.
-- Checkout is community-targeted; one verified subscription attaches to one community.
-- The first community may be created without prior funding. Each next community
-  may be created only after every existing owned community is funded by its own
-  active subscription, exact eligible active BYOK, or the operator grant. This
-  prevents stacked unpaid drafts without imposing an ownership cap.
-- Each active cycle has a $20 raw Luna-cost allowance with atomic reservation and settlement.
-- Without current founder-funding admission, only managed AI execution fails closed. Publishing, public funnels, Discover, public joins, and paid-member checkout use independent community and commerce authority.
-- The operator grant enters the same funding kernel without Stripe state or allowance debit, but still records calculated raw cost.
-- An eligible legacy founder must activate BYOK or select $79 managed funding. There is no requester-ChatGPT compatibility lane.
+## 2) Stored Truth And Resolution
 
-## 3) Capability and Cost Rules
+- `communities.lifecycleStatus` and `lifecycleGeneration` are canonical lifecycle truth. A missing legacy lifecycle value normalizes to active generation zero; malformed values fail closed.
+- `communities.builderAccessMode` is the durable commercial compatibility boundary. A missing legacy value normalizes to `grandfathered`; malformed values fail closed for operator repair.
+- `founderSubscriptions` is provider-backed payment evidence. A subscription authorizes a subscription-required community only when it is attached to that exact community and owner, has a granting status, and remains inside its paid-through period.
+- `operatorRoles.owner` is the only complimentary Builder authority. No email allowlist or fake subscription is valid.
+- Membership, roles, visibility, price points, and Stripe Connect readiness remain separate stored truths.
+- Funding loss never deletes or rewrites community data, membership, visibility, or history.
+- An archived generation can be restored only after its billing-cleanup job completes. Restoration increments the generation, so old checkout and webhook events cannot revive later state.
 
-- Authenticated users receive the same protected capability families.
-- Community tools require a server-validated community lens.
-- Project workspace tools require project context and centralized project/provider admission.
-- Rate limits, provider quotas, safety boundaries, and approval gates still apply.
-- Successful web, crawl, voice, Daytona, Codex, Blaxel, and storage usage records platform-absorbed provider cost.
-- A provider-cost record is operational/financial evidence. It is not an entitlement or customer charge.
+## 3) Founder Funding
+
+- Existing production communities are grandfathered for ordinary platform operation. They require Builder for Polynet-hosted AI.
+- Every newly created non-operator community is subscription-required and must consume one verified active Builder subscription.
+- Each active Builder cycle includes up to `$20` raw GPT 5.6 Luna model cost for that community.
+- `active` and `cancel_at_period_end` grant only through the paid-through timestamp. `past_due`, `canceled`, `ended`, expired, revoked, ambiguous, or malformed state fails closed.
+- Archived grandfathered communities restore free after cleanup and return without AI unless Builder is separately active.
+- Archived subscription-required communities restore only from verified active payment for the current archived generation.
+- Community BYOK and requester ChatGPT are not authority for community AI. Historical records are audit or migration evidence only.
 
 ## 4) Paid-Member Commerce
 
-- `paid_subscription` communities use active price points and `community_join` checkout.
+- `paid_subscription` communities use current price points and `community_join` checkout.
 - Stripe Connect owns member customers, subscriptions, charges, processing fees, and payouts.
 - Polynet's application fee is always 290 basis points.
-- Platform and Connect webhook secrets are separate.
-- Full refunds and opened disputes revoke or suspend access through backend lifecycle state.
-- Successful refunds reverse the cumulative proportional application fee idempotently.
+- Member checkout requires an operational community. A grandfathered community may collect member revenue without hosted AI; a suspended subscription-required or archived community may not start checkout.
+- Full refunds and opened disputes revoke or suspend member access through backend lifecycle state. Successful refunds reverse the cumulative proportional application fee idempotently.
 
-## 5) Historical Financial State
+## 5) Canonical Files
 
-Historical tool-credit balances, top-ups, reservations, settlements, and card-collection rows are retained for audit and reconciliation only. New product creation, purchase, auto-recharge, collection, reservation, and settlement paths are retired. Cached-client compatibility shells fail closed and cannot read or write product or financial state unless the endpoint is explicitly an operator diagnostic.
-
-## 6) Canonical Files
-
-- Founder constants: `shared/founderPlan.ts`
-- Founder checkout and status: `convex/founderBilling.ts`
-- Founder funding kernel: `convex/founderInferenceCore.ts`
+- Builder constants and compatibility class: `shared/founderPlan.ts`
+- Community lifecycle: `shared/communityLifecycle.ts`
+- Composed operational authority: `convex/communityBuilderAccessCore.ts`
+- Archive and restoration: `convex/communityColdArchive.ts`
+- Builder payment lifecycle: `convex/founderBilling.ts`
+- Community access projection: `convex/communityCore.ts`
 - Member commerce: `convex/communityCommerce.ts`
-- Stripe webhook convergence and fee refunds: `convex/httpBilling.ts`
-- Connect onboarding: `convex/creatorCommerce.ts`
-- Application fee: `shared/accountCommerce.ts`
-- Provider-cost accounting: `convex/platformToolCostAccounting.ts`, `convex/workspaceCredits.ts`
-- Capability gate: `shared/canonicalGateEngine.ts`
+- Legal version authority: `shared/legalDocuments.ts`, `convex/legalAcceptances.ts`
 
-## 7) Drift Gate
+## 6) Drift Gate
 
-Any money or entitlement change must update this matrix and the billing reference together, regenerate product docs, and prove:
+Any lifecycle, money, or entitlement change must update this matrix and the billing reference together and prove:
 
-- exactly one $79 founder plan attached per managed community
-- exactly one $20 raw Luna allowance per attached billing cycle
-- unlimited paid communities with no numeric owner cap and no stacked unpaid drafts
-- exactly one 2.9% paid-member application fee
-- Connect payouts and proportional fee refunds remain intact
-- no active Premium, requester-ChatGPT, tool-credit, top-up, auto-recharge, or card-collection path
-- provider-cost and historical financial evidence remain auditable
+- archive always wins
+- missing legacy Builder mode is grandfathered while malformed mode fails closed
+- one qualifying subscription attaches to one subscription-required community
+- grandfathered platform access is independent from hosted AI funding
+- restore authority is generation-fenced and cleanup-gated
+- payment redirects grant nothing
+- exactly one 2.9% paid-member application fee remains
+- historical financial and legal evidence remains auditable

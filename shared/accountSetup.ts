@@ -1,22 +1,20 @@
 import { validateProfileHandle } from "./profileHandle.ts";
 
-export type AccountSetupStep = "identity" | "inference" | "complete";
+export type AccountSetupStep = "identity" | "complete";
 
 export type AccountSetupMissing =
   | "display_name"
   | "handle"
   | "avatar"
-  | "platform_legal"
-  | "inference_provider";
+  | "platform_legal";
 
-export const ACCOUNT_SETUP_STEPS: AccountSetupStep[] = ["identity", "inference", "complete"];
+export const ACCOUNT_SETUP_STEPS: AccountSetupStep[] = ["identity", "complete"];
 
 export const ACCOUNT_SETUP_MISSING_FIELDS: AccountSetupMissing[] = [
   "display_name",
   "handle",
   "avatar",
   "platform_legal",
-  "inference_provider",
 ];
 
 export type AccountSetupStepStatus = {
@@ -44,7 +42,6 @@ export type AccountSetupStatusInput = {
   avatarStorageId?: string | null;
   hasAcceptedPlatformLegal?: boolean | null;
   bio?: string | null;
-  hasInferenceProvider?: boolean | null;
 };
 
 function hasText(value: unknown): boolean {
@@ -95,15 +92,7 @@ function buildStepStatus(
 
 export function buildAccountSetupStatus(input: AccountSetupStatusInput): AccountSetupStatus {
   const identityMissing = getAccountSetupIdentityMissingFields(input);
-
-  const inferenceMissing: AccountSetupMissing[] = input.hasInferenceProvider
-    ? []
-    : ["inference_provider"];
-
-  const steps = [
-    buildStepStatus("identity", identityMissing, 4),
-    buildStepStatus("inference", inferenceMissing, 1),
-  ];
+  const steps = [buildStepStatus("identity", identityMissing, 4)];
   const missing = steps.flatMap((step) => step.missing);
   const totalItems = steps.reduce((sum, step) => sum + step.total_items, 0);
   const completedItems = totalItems - missing.length;
@@ -123,22 +112,16 @@ export function buildAccountSetupStatus(input: AccountSetupStatusInput): Account
 export function formatAccountSetupMissingGuidance(status: AccountSetupStatus | null | undefined): string {
   if (!status || status.completed || status.missing.length === 0) return "Account setup is complete.";
 
-  if (status.missing.length === 1 && status.missing[0] === "inference_provider") {
-    return "Connect ChatGPT or an OpenAI API key to finish account setup.";
-  }
-
   if (status.missing.length === 1 && status.missing[0] === "platform_legal") {
     return "Agree to the Terms of Service and acknowledge the Privacy & AI Data Policy to finish account setup.";
   }
 
   const incompleteSteps = status.steps
     .filter((step) => !step.completed)
-    .map((step) => (step.step === "identity" ? "profile" : "inference"));
+    .map(() => "profile");
 
   if (incompleteSteps.length === 1) {
-    const step = incompleteSteps[0];
-    if (step === "profile") return "Finish your profile to continue.";
-    return "Connect an inference provider to finish account setup.";
+    return "Finish your profile to continue.";
   }
 
   return `Finish ${formatList(incompleteSteps)} setup to continue.`;

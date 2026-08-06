@@ -1,22 +1,11 @@
 import {
-  COMMUNITY_FUNDING_POLICY_LEGACY_BYOK,
-  type CommunityInferenceFundingPolicy,
-  type FounderInferenceGrantStatus,
-} from "./founderInference";
-import {
   founderSubscriptionStatusGrantsAccess,
   type FounderSubscriptionStatus,
 } from "./founderPlan";
 
-export type BuilderFundingLane =
-  | "legacy_choice"
-  | "builder_included"
-  | "builder";
+export type BuilderFundingLane = "builder_included" | "builder";
 
 export type BuilderFundingState =
-  | "legacy_api_available"
-  | "legacy_api_active"
-  | "legacy_api_suspended"
   | "builder_required"
   | "checkout_pending"
   | "builder_active"
@@ -27,8 +16,6 @@ export type BuilderFundingState =
   | "builder_included";
 
 export type BuilderFundingAction =
-  | "activate_owner_api"
-  | "manage_owner_api"
   | "buy_builder"
   | "resume_checkout"
   | "manage_builder";
@@ -40,15 +27,12 @@ export type BuilderFundingProjection = {
 };
 
 export type BuilderFundingProjectionInput = {
-  fundingPolicy: CommunityInferenceFundingPolicy;
   operatorComplimentaryAccess: boolean;
   checkoutPending: boolean;
   subscription: {
     status: FounderSubscriptionStatus;
     currentPeriodEndAt?: number | null;
   } | null;
-  legacyGrantStatus: FounderInferenceGrantStatus | null;
-  legacyApiKeyConnected: boolean;
   nowMs: number;
 };
 
@@ -110,42 +94,17 @@ export function resolveBuilderFundingProjection(
     return resolveBuilderSubscriptionProjection(input.subscription, input.nowMs);
   }
 
-  const legacyChoice = input.fundingPolicy === COMMUNITY_FUNDING_POLICY_LEGACY_BYOK;
   if (input.checkoutPending) {
     return {
-      lane: legacyChoice ? "legacy_choice" : "builder",
-      state: "checkout_pending",
-      allowedActions: legacyChoice
-        ? ["activate_owner_api", "resume_checkout"]
-        : ["resume_checkout"],
-    };
-  }
-
-  if (!legacyChoice) {
-    return {
       lane: "builder",
-      state: "builder_required",
-      allowedActions: ["buy_builder"],
+      state: "checkout_pending",
+      allowedActions: ["resume_checkout"],
     };
   }
 
-  if (input.legacyGrantStatus === "active" && input.legacyApiKeyConnected) {
-    return {
-      lane: "legacy_choice",
-      state: "legacy_api_active",
-      allowedActions: ["manage_owner_api", "buy_builder"],
-    };
-  }
-  if (input.legacyGrantStatus === "suspended") {
-    return {
-      lane: "legacy_choice",
-      state: "legacy_api_suspended",
-      allowedActions: ["activate_owner_api", "buy_builder"],
-    };
-  }
   return {
-    lane: "legacy_choice",
-    state: "legacy_api_available",
-    allowedActions: ["activate_owner_api", "buy_builder"],
+    lane: "builder",
+    state: "builder_required",
+    allowedActions: ["buy_builder"],
   };
 }

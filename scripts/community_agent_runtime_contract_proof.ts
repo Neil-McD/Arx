@@ -67,7 +67,13 @@ assert.match(
 );
 assert.match(runtime, /runNativeRuntimeKernel<CommunityAgentToolName>/);
 assert.match(runtime, /parallelToolCalls: false/);
-assert.match(runtime, /carryReasoningItems: true/);
+assert.match(runtime, /beginCommunityInferenceFundingSession/);
+assert.match(runtime, /runOpenAiNativeToolCompletion/);
+assert.doesNotMatch(
+  runtime,
+  /runChatgptNativeToolCompletion|apiKeyOverride|carryReasoningItems/,
+  "community cognition must execute through hosted funding without user-provider state",
+);
 assert.match(runtime, /recordCommunityAgentRunEventsInternal/);
 assert.match(
   runtime,
