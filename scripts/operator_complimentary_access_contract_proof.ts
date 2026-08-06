@@ -11,6 +11,7 @@ const receipts = read("convex/founderInference.ts");
 const runtime = read("convex/founderInferenceRuntime.ts");
 const worker = read("convex/communityAgentServeWorker.ts");
 const billing = read("convex/founderBilling.ts");
+const builderFunding = read("shared/builderFunding.ts");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const billingUi = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
@@ -59,9 +60,14 @@ assert.match(
   "operator-funded community turns must use the bounded platform OpenAI path",
 );
 assert.match(
+  builderFunding,
+  /if \(input\.subscription\)[\s\S]*resolveBuilderSubscriptionProjection[\s\S]*if \(input\.operatorComplimentaryAccess\)[\s\S]*lane: "builder_included"/,
+  "an attached subscription must remain authoritative before operator complimentary access",
+);
+assert.match(
   billing,
-  /status = "operator_comped"[\s\S]*funding_mode: operatorComped[\s\S]*"operator_comp"/,
-  "founder billing must project explicit complimentary operator access",
+  /resolveBuilderFundingProjection\(\{[\s\S]*operatorComplimentaryAccess: operatorComped[\s\S]*subscription: subscription[\s\S]*funding_mode: subscription[\s\S]*"managed"[\s\S]*operatorComped[\s\S]*"operator_comp"/,
+  "founder billing must preserve paid-subscription precedence and explicit operator access",
 );
 assert.match(
   billing,

@@ -1,652 +1,278 @@
-/* Conversion landing page composed by WebLandingPage.tsx.
-   One CTA (onJoin) repeated; pink is reserved for the community AI. */
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useState } from "react";
+
+import {
+  PRIVACY_AI_DATA_POLICY_ENTRY,
+  TERMS_OF_SERVICE_ENTRY,
+  type LegalDocumentEntry,
+} from "../../docs/legalDocumentsContent";
+import { WebPlatformLegalReaderModal } from "../WebPlatformLegalReaderModal";
 
 type JoinProps = { onJoin: () => void };
 
-function prefersReducedMotion(): boolean {
+function PersonNode(props: { x: number; y: number }) {
   return (
-    typeof window !== "undefined" &&
-    typeof window.matchMedia === "function" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    <g transform={`translate(${props.x} ${props.y})`}>
+      <circle className="diagram-node" r="17" />
+      <circle className="diagram-node" cy="-4" r="4" />
+      <path className="diagram-line" d="M-8 9 C-5 1 5 1 8 9" />
+    </g>
   );
 }
 
-function scrollToId(id: string) {
-  const target = document.getElementById(id);
-  if (!target) return;
-  target.scrollIntoView({ behavior: prefersReducedMotion() ? "auto" : "smooth", block: "start" });
-}
-
-/* Types out `text` when `active` flips true; instant under reduced motion. */
-function useTyped(text: string, speedMs: number, active: boolean, onDone?: () => void) {
-  const [count, setCount] = useState(0);
-  const doneRef = useRef(onDone);
-  doneRef.current = onDone;
-  useEffect(() => {
-    if (!active) return;
-    if (prefersReducedMotion()) {
-      setCount(text.length);
-      const t = setTimeout(() => doneRef.current?.(), 300);
-      return () => clearTimeout(t);
-    }
-    let i = 0;
-    const iv = setInterval(() => {
-      i += 1;
-      setCount(i);
-      if (i >= text.length) {
-        clearInterval(iv);
-        doneRef.current?.();
-      }
-    }, speedMs);
-    return () => clearInterval(iv);
-  }, [text, speedMs, active]);
-  return { shown: text.slice(0, count), done: count >= text.length };
-}
-
-function Caret() {
-  return <span className="caret" aria-hidden="true" />;
-}
-
-/* --- demo scenes ------------------------------------------------------- */
-
-const SCENE_CAPTIONS: Array<{ strong: string; rest: string }> = [
-  { strong: "Answers with community context", rest: " — grounded in shared resources and past learnings." },
-  { strong: "Useful knowledge compounds", rest: " — what works becomes reusable community intelligence." },
-  { strong: "The right context finds each member", rest: " — without digging through old conversations." },
-];
-
-const Q_TEXT = "How should I price my first paid cohort? ~400 on the waitlist.";
-const A_TEXT =
-  "Start at $149 and cap cohort one at ~200 — that keeps delivery focused while validating demand. A member documented a similar launch in the community. Want the playbook?";
-const WELCOME_TEXT = "Here's the community context for planning your first launch:";
-
-type SceneProps = { onDone: () => void };
-
-function SceneAnswer(props: SceneProps & { onAnswered: () => void }) {
-  const [phase, setPhase] = useState<"q" | "wait" | "a" | "end">("q");
-  const [reacted, setReacted] = useState(false);
-  const q = useTyped(Q_TEXT, 16, phase === "q", () => setPhase("wait"));
-  const answeredRef = useRef(props.onAnswered);
-  answeredRef.current = props.onAnswered;
-  useEffect(() => {
-    if (phase !== "wait") return;
-    const t = setTimeout(() => setPhase("a"), 400);
-    return () => clearTimeout(t);
-  }, [phase]);
-  const a = useTyped(A_TEXT, 11, phase === "a" || phase === "end", () => {
-    setPhase("end");
-    answeredRef.current();
-  });
-  const doneRef = useRef(props.onDone);
-  doneRef.current = props.onDone;
-  useEffect(() => {
-    if (phase !== "end") return;
-    const t1 = setTimeout(() => setReacted(true), 500);
-    const t2 = setTimeout(() => doneRef.current(), 2800);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, [phase]);
-  return (
+function Brain(props: { compact?: boolean } = {}) {
+  const brain = (
     <>
-      <div className="msg">
-        <div className="av" />
-        <div className="body">
-          <div className="nm">
-            Member <span className="time">2:47 AM</span>
-          </div>
-          <div className="tx">
-            {q.shown}
-            {!q.done && <Caret />}
-          </div>
-        </div>
-      </div>
-      <div className="msg ai">
-        <div className="av ai" />
-        <div className="body">
-          <div className="nm">
-            Community AI <span>using community knowledge</span>
-          </div>
-          <div className="tx">
-            {a.shown}
-            {(phase === "a" || phase === "wait") && !a.done && <Caret />}
-          </div>
-          <div className={`sources${phase === "end" ? " on" : ""}`}>
-            <span>◆ Pricing playbook</span>
-            <span>▤ Member launch recap</span>
-          </div>
-        </div>
-      </div>
-      <div className={`react${reacted ? " on" : ""}`}>🔥 Member reacted</div>
+      <path
+        className="brain-outline"
+        d="M46 25 C38 18 28 22 28 31 C21 34 20 43 25 49 C20 56 24 66 34 67 C37 75 46 73 46 65 Z"
+      />
+      <path
+        className="brain-outline"
+        d="M46 25 C54 18 64 22 64 31 C71 34 72 43 67 49 C72 56 68 66 58 67 C55 75 46 73 46 65 Z"
+      />
+      <path className="brain-fold" d="M46 36 C40 31 34 34 35 41 M27 49 C34 46 39 51 36 57" />
+      <path className="brain-fold brain-fold-2" d="M46 56 C41 52 37 57 39 64 M46 45 C41 43 39 46 39 50" />
+      <path className="brain-fold brain-fold-3" d="M46 36 C52 31 58 34 57 41 M65 49 C58 46 53 51 56 57" />
+      <path className="brain-fold brain-fold-2" d="M46 56 C51 52 55 57 53 64 M46 45 C51 43 53 46 53 50" />
     </>
   );
+  return props.compact ? <g transform="scale(0.565)">{brain}</g> : brain;
 }
 
-function SceneMemory(props: SceneProps & { onSaved: () => void }) {
-  const [saved, setSaved] = useState(false);
-  const savedRef = useRef(props.onSaved);
-  savedRef.current = props.onSaved;
-  const doneRef = useRef(props.onDone);
-  doneRef.current = props.onDone;
-  useEffect(() => {
-    const t1 = setTimeout(() => {
-      setSaved(true);
-      savedRef.current();
-    }, 700);
-    const t2 = setTimeout(() => doneRef.current(), 3500);
-    return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
-    };
-  }, []);
+function BuildCommunityVisual() {
   return (
-    <div className="msg ai">
-      <div className="av ai" />
-      <div className="body">
-        <div className="nm">Community AI</div>
-        <div className="tx">…so price the first cohort at $149 and cap it at 200.</div>
-        <div className={`savecard${saved ? " on" : ""}`}>
-          <span className="ic">◆</span>
-          <span className="l">
-            Added to <b>Cohort pricing playbook</b>
-            <em>Available to the community</em>
-          </span>
-        </div>
-      </div>
-    </div>
+    <svg viewBox="0 0 360 240" role="img" aria-labelledby="community-visual-title">
+      <title id="community-visual-title">Information moving through a founder-led community</title>
+      <circle className="diagram-orbit" cx="180" cy="120" r="92" />
+      <path className="diagram-line" d="M180 28 L180 120 L258 74 M180 120 L258 166 M180 120 L180 212 M180 120 L102 166 M180 120 L102 74" />
+      <path className="diagram-line" d="M180 28 L258 74 L258 166 L180 212 L102 166 L102 74 Z" />
+      <g transform="translate(180 120)">
+        <circle className="diagram-node" r="24" />
+        <circle className="diagram-node-accent" cy="-6" r="6" />
+        <path className="diagram-line-accent" d="M-11 13 C-8 1 8 1 11 13" />
+      </g>
+      <PersonNode x={180} y={28} />
+      <PersonNode x={258} y={74} />
+      <PersonNode x={258} y={166} />
+      <PersonNode x={180} y={212} />
+      <PersonNode x={102} y={166} />
+      <PersonNode x={102} y={74} />
+      <circle className="diagram-particle" r="3.2">
+        <animateMotion dur="5.2s" repeatCount="indefinite" path="M180 28 L180 120 L258 166" />
+      </circle>
+      <circle className="diagram-particle" r="3.2">
+        <animateMotion dur="5.2s" begin="-1.8s" repeatCount="indefinite" path="M102 74 L180 120 L258 74" />
+      </circle>
+      <circle className="diagram-particle" r="3.2">
+        <animateMotion dur="5.2s" begin="-3.6s" repeatCount="indefinite" path="M102 166 L180 120 L180 212" />
+      </circle>
+    </svg>
   );
 }
 
-const ONBOARD_STEPS = [
-  "Cohort pricing playbook",
-  "Member launch recap",
-  "Offer workshop notes",
-];
-
-function SceneOnboard(props: SceneProps) {
-  const [typingDone, setTypingDone] = useState(false);
-  const [ticked, setTicked] = useState(0);
-  const w = useTyped(WELCOME_TEXT, 13, true, () => setTypingDone(true));
-  const doneRef = useRef(props.onDone);
-  doneRef.current = props.onDone;
-  useEffect(() => {
-    if (!typingDone) return;
-    const timers = ONBOARD_STEPS.map((_, i) =>
-      setTimeout(() => setTicked((n) => Math.max(n, i + 1)), 300 + i * 500),
-    );
-    const done = setTimeout(() => doneRef.current(), 3400);
-    return () => {
-      timers.forEach(clearTimeout);
-      clearTimeout(done);
-    };
-  }, [typingDone]);
+function TrainAiVisual() {
   return (
-    <div className="msg ai">
-      <div className="av ai" />
-      <div className="body">
-        <div className="nm">Community AI</div>
-        <div className="tx">
-          {w.shown}
-          {!w.done && <Caret />}
-        </div>
-        <div className="steps">
-          {ONBOARD_STEPS.map((label, i) => (
-            <div className={`st${ticked > i ? " done" : ""}`} key={label}>
-              <span className="c">✓</span> {label}
-            </div>
-          ))}
-        </div>
-      </div>
-    </div>
+    <svg viewBox="0 0 360 240" role="img" aria-labelledby="knowledge-visual-title">
+      <title id="knowledge-visual-title">Founder-owned material flowing into an AI that becomes more knowledgeable</title>
+      <g transform="translate(42 120)">
+        <circle className="diagram-node" r="20" />
+        <circle className="diagram-node-accent" cy="-5" r="5" />
+        <path className="diagram-line-accent" d="M-9 11 C-6 1 6 1 9 11" />
+      </g>
+      <g transform="translate(86 30)">
+        <path className="diagram-boundary" d="M0 0 H42 V50 H0 Z M29 0 V13 H42" />
+        <path className="diagram-line" d="M9 25 H32 M9 35 H28" />
+      </g>
+      <g transform="translate(81 96)">
+        <path className="diagram-boundary" d="M0 0 H50 V36 H19 L9 46 V36 H0 Z" />
+        <circle className="diagram-node-accent" cx="15" cy="18" r="2.3" />
+        <circle className="diagram-node-accent" cx="25" cy="18" r="2.3" />
+        <circle className="diagram-node-accent" cx="35" cy="18" r="2.3" />
+      </g>
+      <g transform="translate(86 166)">
+        <rect className="diagram-boundary" width="44" height="34" rx="5" />
+        <path className="diagram-line-accent" d="M18 8 L31 17 L18 26 Z" />
+      </g>
+      <path className="diagram-line" d="M62 112 C73 91 78 76 86 55 M62 120 H81 M62 128 C74 149 79 166 86 183" />
+      <path className="diagram-line" d="M128 55 C178 55 187 94 230 108 M131 114 H230 M130 183 C177 183 187 145 230 132" />
+      <g transform="translate(230 76)">
+        <rect className="diagram-ai" width="92" height="92" rx="24" />
+        <Brain />
+      </g>
+      <circle className="diagram-particle" r="3.2">
+        <animateMotion dur="4.8s" repeatCount="indefinite" path="M128 55 C178 55 187 94 230 108" />
+      </circle>
+      <circle className="diagram-particle" r="3.2">
+        <animateMotion dur="4.8s" begin="-1.6s" repeatCount="indefinite" path="M131 114 H230" />
+      </circle>
+      <circle className="diagram-particle" r="3.2">
+        <animateMotion dur="4.8s" begin="-3.2s" repeatCount="indefinite" path="M130 183 C177 183 187 145 230 132" />
+      </circle>
+    </svg>
   );
 }
 
-function DemoWindow() {
-  const [scene, setScene] = useState(0);
-  const [run, setRun] = useState(0);
-  const [playbooks, setPlaybooks] = useState(14);
-  const [answers, setAnswers] = useState(128);
-  const advance = useCallback(() => setScene((s) => (s + 1) % 3), []);
-  const jump = useCallback((i: number) => {
-    setScene(i);
-    setRun((r) => r + 1);
-  }, []);
-  const caption = SCENE_CAPTIONS[scene];
-  const onboardBoost = scene === 2;
+function ServeAtScaleVisual() {
   return (
-    <>
-      <div className="product" id="demo">
-        <div className="pbar">
-          <span className="dots">
-            <i />
-            <i />
-            <i />
-          </span>
-          <span className="addr">polynet.ai / your-community</span>
-          <span className="live">
-            <i /> Demo · AI online
-          </span>
-        </div>
-        <div className="app">
-          <div className="nav-col">
-            <div className="wtitle">
-              <span className="g" />
-              <b>Your Community</b>
-            </div>
-            <div className="it on">
-              <span className="b" /> General
-            </div>
-            <div className="it">
-              <span className="b" /> AI Feed
-            </div>
-            <div className="it">
-              <span className="b" /> Resources
-            </div>
-            <div className="it">
-              <span className="b" /> Events
-            </div>
-            <div className="it">
-              <span className="b" /> Members
-            </div>
-          </div>
-          <div className="chat-col">
-            {scene === 0 && (
-              <SceneAnswer
-                key={`s0-${run}`}
-                onDone={advance}
-                onAnswered={() => setAnswers((n) => n + 1)}
-              />
-            )}
-            {scene === 1 && (
-              <SceneMemory
-                key={`s1-${run}`}
-                onDone={advance}
-                onSaved={() => setPlaybooks((n) => n + 1)}
-              />
-            )}
-            {scene === 2 && <SceneOnboard key={`s2-${run}`} onDone={advance} />}
-          </div>
-          <div className="mem-col">
-            <div className="h">Online · {onboardBoost ? 7 : 6}</div>
-            <div className="mrow">
-              <span className="on-dot" /> You
-            </div>
-            <div className="mrow">
-              <span className="a" /> Moderator
-            </div>
-            <div className="mrow">
-              <span className="a" /> Member
-            </div>
-            <div className={`mrow newjoin${onboardBoost ? " on" : ""}`}>
-              <span className="on-dot" /> New member · joined
-            </div>
-            <div className="h gap">Memory</div>
-            <div className="mrow tick">◆ {playbooks} playbooks</div>
-            <div className="mrow">▤ {answers} answers saved</div>
-          </div>
-        </div>
-      </div>
-      <div className="scene-cap">
-        <b>{caption.strong}</b>
-        {caption.rest}
-      </div>
-      <div className="scene-dots">
-        {SCENE_CAPTIONS.map((c, i) => (
-          <button
-            type="button"
-            key={c.strong}
-            className={scene === i ? "on" : ""}
-            aria-label={`Play scene ${i + 1}`}
-            onClick={() => jump(i)}
-          />
-        ))}
-      </div>
-    </>
+    <svg viewBox="0 0 360 240" role="img" aria-labelledby="scale-visual-title">
+      <title id="scale-visual-title">A trained AI sending useful information to every community member</title>
+      <circle className="diagram-orbit" cx="180" cy="120" r="92" />
+      <path className="diagram-line" d="M180 120 L180 28 M180 120 L258 74 M180 120 L258 166 M180 120 L180 212 M180 120 L102 166 M180 120 L102 74" />
+      <g transform="translate(154 94)">
+        <rect className="diagram-ai" width="52" height="52" rx="14" />
+        <Brain compact />
+      </g>
+      <circle className="diagram-signal" cx="180" cy="28" r="21" />
+      <circle className="diagram-signal diagram-signal-2" cx="258" cy="166" r="21" />
+      <circle className="diagram-signal diagram-signal-3" cx="102" cy="166" r="21" />
+      <PersonNode x={180} y={28} />
+      <PersonNode x={258} y={74} />
+      <PersonNode x={258} y={166} />
+      <PersonNode x={180} y={212} />
+      <PersonNode x={102} y={166} />
+      <PersonNode x={102} y={74} />
+      {[
+        ["0s", "M180 120 L180 28"],
+        ["-0.9s", "M180 120 L258 74"],
+        ["-1.8s", "M180 120 L258 166"],
+        ["-2.7s", "M180 120 L180 212"],
+        ["-3.6s", "M180 120 L102 166"],
+        ["-4.5s", "M180 120 L102 74"],
+      ].map(([begin, path]) => (
+        <circle className="diagram-particle" r="3.2" key={path}>
+          <animateMotion dur="5.4s" begin={begin} repeatCount="indefinite" path={path} />
+        </circle>
+      ))}
+    </svg>
   );
 }
 
-/* --- page sections ------------------------------------------------------ */
-
-function LandingNav({ onJoin }: JoinProps) {
-  return (
-    <nav className="pn-nav">
-      <div className="wrap in">
-        <a href="/" className="lockup" onClick={(e) => e.preventDefault()}>
-          <img src="/landing-polynet/logo.png" alt="Polynet" />
-          <span className="name">
-            Polynet<b>.</b>
-          </span>
-        </a>
-        <div className="links">
-          <a
-            href="#why"
-            onClick={(e) => {
-              e.preventDefault();
-              scrollToId("why");
-            }}
-          >
-            Why Polynet
-          </a>
-          <a
-            href="#compare"
-            onClick={(e) => {
-              e.preventDefault();
-              scrollToId("compare");
-            }}
-          >
-            The difference
-          </a>
-          <a
-            href="#pricing"
-            onClick={(e) => {
-              e.preventDefault();
-              scrollToId("pricing");
-            }}
-          >
-            Pricing
-          </a>
-        </div>
-        <button type="button" className="btn btn-primary" onClick={onJoin}>
-          Create your community <span className="arrow">→</span>
-        </button>
-      </div>
-    </nav>
-  );
-}
-
-function Hero({ onJoin }: JoinProps) {
-  return (
-    <header className="hero">
-      <div className="glowbg" />
-      <div className="wrap">
-        <div className="inner">
-          <div className="pill">
-            <b>Early access</b> · Collective intelligence for communities
-          </div>
-          <h1>Build a community that gets smarter every day.</h1>
-          <p className="sub">
-            Polynet brings your members, knowledge, and community AI into one living system — so
-            useful context compounds instead of disappearing in chat.
-          </p>
-          <div className="cta">
-            <button type="button" className="btn btn-primary btn-lg" onClick={onJoin}>
-              Create your community <span className="arrow">→</span>
-            </button>
-            <a
-              className="btn btn-ghost btn-lg"
-              href="#demo"
-              onClick={(e) => {
-                e.preventDefault();
-                scrollToId("demo");
-              }}
-            >
-              Watch it work ↓
-            </a>
-          </div>
-          <div className="micro">
-            <b>One simple plan</b> · $79/month per community
-          </div>
-        </div>
-        <DemoWindow />
-      </div>
-    </header>
-  );
-}
-
-function ProofLine() {
-  return (
-    <div className="proof">
-      <div className="wrap in">
-        <i>“I built Polynet because my best answers kept dying in the scroll.”</i> —{" "}
-        <b>Neil, founder</b> &nbsp;·&nbsp; Early access — communities onboarding now
-      </div>
-    </div>
-  );
-}
-
-function Benefits() {
-  return (
-    <section className="blk" id="why">
-      <div className="wrap">
-        <div className="shead">
-          <div className="eyebrow">Why Polynet</div>
-          <h2>Stop being the bottleneck. Let your community’s knowledge compound.</h2>
-        </div>
-        <div className="bens">
-          <div className="ben">
-            <h3>Preserve what works</h3>
-            <p>Useful answers, resources, and outcomes become durable community knowledge.</p>
-          </div>
-          <div className="ben">
-            <h3>Put knowledge to work</h3>
-            <p>The community AI uses relevant context to help members move forward.</p>
-          </div>
-          <div className="ben">
-            <h3>Stay the expert, not the help desk</h3>
-            <p>Give members access to the community’s intelligence without repeating yourself.</p>
-          </div>
-        </div>
-        <p className="personas-line">
-          Built for <b>coaches, consultants, course creators, YouTubers, streamers, and vibe coders</b>{" "}
-          — anyone who teaches what they know.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-const COMPARISON_ROWS: Array<{ label: string; conventional: string; polynet: string }> = [
-  { label: "Conversations", conventional: "Organized in feeds", polynet: "Become reusable context" },
-  { label: "Knowledge", conventional: "Stored in posts and files", polynet: "Available to members and agents" },
-  { label: "AI", conventional: "An add-on for admins", polynet: "A community participant" },
-  { label: "Value over time", conventional: "More content to search", polynet: "A community that learns" },
-  { label: "Commerce", conventional: "Paid memberships", polynet: "Memberships plus collective intelligence" },
-];
-
-function Comparison({ onJoin }: JoinProps) {
-  return (
-    <section className="blk tight" id="compare">
-      <div className="wrap">
-        <div className="shead">
-          <div className="eyebrow">The difference</div>
-          <h2>Community software gives people a place to talk. Polynet helps them think together.</h2>
-        </div>
-        <div className="cmp">
-          <div className="row h">
-            <div>&nbsp;</div>
-            <div className="them">Community software</div>
-            <div className="us">Polynet</div>
-          </div>
-          {COMPARISON_ROWS.map((row) => (
-            <div className="row" key={row.label}>
-              <div className="lbl">{row.label}</div>
-              <div className="them">{row.conventional}</div>
-              <div className="us">{row.polynet}</div>
-            </div>
-          ))}
-        </div>
-        <div className="midcta">
-          <button type="button" className="btn btn-primary" onClick={onJoin}>
-            Create your community <span className="arrow">→</span>
-          </button>
-          <span>$79/month per community</span>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function HowItWorks() {
-  return (
-    <section className="blk tight">
-      <div className="wrap">
-        <div className="shead">
-          <div className="eyebrow">How it works</div>
-          <h2>Turn participation into shared intelligence.</h2>
-        </div>
-        <div className="howline">
-          <div className="hs">
-            <div className="num">01</div>
-            <h3>Create your community</h3>
-            <p>Define its purpose, access, and member experience.</p>
-          </div>
-          <div className="hs">
-            <div className="num">02</div>
-            <h3>Add shared knowledge</h3>
-            <p>Bring resources, expertise, and useful community context.</p>
-          </div>
-          <div className="hs">
-            <div className="num">03</div>
-            <h3>Let intelligence compound</h3>
-            <p>Members and agents reuse what the community learns.</p>
-          </div>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-const INCLUDED_FEATURES = [
-  "Your hosted community and member space",
-  "A dedicated community AI",
-  "Polynet-hosted inference",
-  "Shared knowledge, resources, and memory",
-  "Posts, chat, and voice",
-  "Member access and community invitations",
-  "Paid memberships and automated payouts",
-  "Connections to external AI tools",
-];
-
-function PricingOffer({ onJoin }: JoinProps) {
-  return (
-    <section className="blk tight" id="pricing">
-      <div className="wrap">
-        <div className="shead">
-          <div className="eyebrow">Pricing</div>
-          <h2>One plan. One intelligent community.</h2>
-        </div>
-        <div className="offer">
-          <div className="offer-price">
-            <div className="stage">Polynet community</div>
-            <div className="amt">
-              $79 <span>/month</span>
-            </div>
-            <p>Per community. Create as many communities as you want; each is billed separately.</p>
-            <button type="button" className="btn btn-primary" onClick={onJoin}>
-              Create your community <span className="arrow">→</span>
-            </button>
-          </div>
-          <div className="offer-includes">
-            <div className="stage">Included</div>
-            <ul>
-              {INCLUDED_FEATURES.map((feature) => (
-                <li key={feature}>{feature}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-        <p className="price-micro">
-          Polynet keeps a 2.9% platform fee from paid-member revenue. Stripe processing fees apply
-          separately.
-        </p>
-      </div>
-    </section>
-  );
-}
-
-const FAQ_ITEMS: Array<{ q: string; a: string }> = [
+const STEPS = [
   {
-    q: "Do I need to be technical?",
-    a: "No. Polynet hosts the community AI and inference for you. You can build the community, add resources, and invite members without managing AI infrastructure.",
+    number: "01",
+    title: "Build your community",
+    description: "Bring your people, conversations, and resources into one shared place.",
+    visual: <BuildCommunityVisual />,
   },
   {
-    q: "Do I pay per account or per community?",
-    a: "Per community. Each community is $79 per month. You can create as many communities as you want, and each is billed separately.",
+    number: "02",
+    title: "Train your AI",
+    description: "Seed it with your content, calls, and best answers so it learns how you think.",
+    visual: <TrainAiVisual />,
   },
   {
-    q: "What is Polynet-hosted inference?",
-    a: "Your community AI runs on Polynet. You do not need to connect or manage a separate AI provider for your hosted community.",
+    number: "03",
+    title: "Serve at scale",
+    description: "Give every member an agent grounded in your knowledge, available whenever they need it.",
+    visual: <ServeAtScaleVisual />,
+  },
+] as const;
+
+const PROBLEMS = [
+  {
+    title: "A platform people actually want to use",
+    description: "Simple enough to feel effortless. Flexible enough to feel alive. AI is built into the community from the beginning—not added as another disconnected tool.",
   },
   {
-    q: "Can I charge members for access?",
-    a: "Yes. Polynet supports paid memberships and automated payouts. Polynet keeps a 2.9% platform fee from paid-member revenue, and Stripe processing fees apply separately.",
+    title: "Grow without becoming the support team",
+    description: "Train your AI on your content, frameworks, and best answers. Members get help immediately, while you stop answering the same questions repeatedly.",
   },
   {
-    q: "What makes Polynet different from community software?",
-    a: "Polynet is built around collective intelligence. Community knowledge can be used by members and agents instead of remaining trapped in feeds, files, and old conversations.",
+    title: "Your AI gets smarter as your community grows",
+    description: "You provide the foundation. Useful answers, conversations, and outcomes become easier to find and reuse—without constantly creating, organizing, and updating more content.",
   },
-];
+] as const;
 
-function Faq() {
+function Brand() {
   return (
-    <section className="blk tight">
-      <div className="wrap">
-        <div className="shead">
-          <div className="eyebrow">Questions</div>
-          <h2>The things everyone asks.</h2>
-        </div>
-        <div className="faq">
-          {FAQ_ITEMS.map((item) => (
-            <details key={item.q}>
-              <summary>{item.q}</summary>
-              <div className="a">{item.a}</div>
-            </details>
-          ))}
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function CloseCta({ onJoin }: JoinProps) {
-  return (
-    <section className="close">
-      <div className="wrap">
-        <div className="note">One plan · $79/month per community</div>
-        <h2>Build the community that learns with its members.</h2>
-        <div className="cta">
-          <button type="button" className="btn btn-primary btn-lg" onClick={onJoin}>
-            Create your community <span className="arrow">→</span>
-          </button>
-        </div>
-      </div>
-    </section>
-  );
-}
-
-function LandingFooter() {
-  return (
-    <footer>
-      <div className="wrap in">
-        <span className="lockup">
-          <img src="/landing-polynet/logo.png" alt="" />
-          <span className="name">
-            Polynet<b>.</b>
-          </span>
-        </span>
-        <span className="lg">© Polynet 2026 · The collective intelligence platform for communities</span>
-      </div>
-    </footer>
+    <a className="brand" href="/" aria-label="Polynet home">
+      <img src="/landing-polynet/logo.png" alt="" />
+      <span>Polynet<span>.</span></span>
+    </a>
   );
 }
 
 export function ConversionLanding({ onJoin }: JoinProps) {
+  const [activeLegalDocument, setActiveLegalDocument] =
+    useState<LegalDocumentEntry | null>(null);
+
   return (
     <div className="pn-landing">
-      <LandingNav onJoin={onJoin} />
-      <main>
-        <Hero onJoin={onJoin} />
-        <ProofLine />
-        <Benefits />
-        <Comparison onJoin={onJoin} />
-        <HowItWorks />
-        <PricingOffer onJoin={onJoin} />
-        <Faq />
-        <CloseCta onJoin={onJoin} />
-      </main>
-      <LandingFooter />
+      <div className="page">
+        <Brand />
+        <main>
+          <div className="intro">
+            <h1>Build a community that gets smarter every day.</h1>
+            <p className="subhead">Polynet turns your members’ conversations, resources, and outcomes into shared intelligence that compounds.</p>
+          </div>
+
+          <video className="vsl" controls preload="metadata" playsInline aria-label="Polynet video sales letter" />
+
+          <div className="conversion">
+            <button className="cta" type="button" onClick={onJoin}>Create your community — $79/month</button>
+            <p className="microcopy">$79/month per community · Polynet-hosted AI included · No technical setup</p>
+          </div>
+
+          <section className="mechanism" aria-label="What Polynet Builder helps you do">
+            <p className="mechanism-title">How Polynet works</p>
+            <div className="mechanism-grid">
+              {STEPS.map((step) => (
+                <article className="mechanism-step" key={step.number}>
+                  <div className="mechanism-copy">
+                    <span className="mechanism-label">{step.number}</span>
+                    <h2>{step.title}</h2>
+                  </div>
+                  <div className="mechanism-visual">{step.visual}</div>
+                  <p className="mechanism-description">{step.description}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="problems" aria-labelledby="problems-title">
+            <div className="problems-intro">
+              <p className="problems-kicker">Built to compound</p>
+              <h2 id="problems-title">Your community should get easier to run as it grows.</h2>
+              <p className="problems-lead">Most platforms create more administration, more repeated questions, and more content to maintain. Polynet turns growth into leverage.</p>
+            </div>
+            <div className="problem-list">
+              {PROBLEMS.map((problem, index) => (
+                <article className="problem" key={problem.title}>
+                  <span className="problem-index">{String(index + 1).padStart(2, "0")}</span>
+                  <h3>{problem.title}</h3>
+                  <p>{problem.description}</p>
+                </article>
+              ))}
+            </div>
+          </section>
+
+          <section className="closing" aria-labelledby="closing-title">
+            <h2 id="closing-title">Build your community. Train your AI. Serve at scale.</h2>
+            <p className="closing-copy">Give your members a better home—and an agent grounded in how you think.</p>
+            <button className="cta" type="button" onClick={onJoin}>Create your community — $79/month</button>
+            <p className="closing-meta">$79/month per community · Polynet-hosted AI included · No technical setup</p>
+            <p className="closing-terms">Paid memberships carry a 2.9% Polynet platform fee. Stripe processing fees are separate.</p>
+          </section>
+        </main>
+
+        <footer className="footer">
+          <div className="footer-identity">
+            <Brand />
+            <span>© 2026 Polynet</span>
+          </div>
+          <nav className="footer-links" aria-label="Footer navigation">
+            <a href="/login">Sign in</a>
+            <button type="button" onClick={() => setActiveLegalDocument(PRIVACY_AI_DATA_POLICY_ENTRY)}>Privacy</button>
+            <button type="button" onClick={() => setActiveLegalDocument(TERMS_OF_SERVICE_ENTRY)}>Terms</button>
+          </nav>
+        </footer>
+      </div>
+      {activeLegalDocument ? (
+        <WebPlatformLegalReaderModal
+          document={activeLegalDocument}
+          onClose={() => setActiveLegalDocument(null)}
+        />
+      ) : null}
     </div>
   );
 }

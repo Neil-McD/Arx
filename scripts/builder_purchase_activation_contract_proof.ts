@@ -5,6 +5,8 @@ const read = (path: string): string => readFileSync(path, "utf8");
 
 const app = read("apps/web/src/App.tsx");
 const landing = read("apps/web/src/components/WebLandingPage.tsx");
+const conversionLanding = read("apps/web/src/components/polynetLanding/ConversionLanding.tsx");
+const conversionLandingCss = read("apps/web/src/components/polynetLanding/ConversionLanding.css");
 const activation = read("apps/web/src/controllers/useWebBuilderPurchaseActivationController.ts");
 const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
 const bridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
@@ -53,6 +55,41 @@ assert.match(authResume, /reason: "activate_builder_purchase"/);
 
 assert.match(landing, /onStartBuilderPurchase/);
 assert.match(app, /onStartBuilderPurchase:[\s\S]*builderPurchaseActivation\.startPurchase\(\)/);
+for (const approvedFunnelMarker of [
+  "Build a community that gets smarter every day.",
+  "How Polynet works",
+  "Build your community",
+  "Train your AI",
+  "Serve at scale",
+  "Your community should get easier to run as it grows.",
+  "Your AI gets smarter as your community grows",
+  "Build your community. Train your AI. Serve at scale.",
+  "$79/month per community",
+  "Polynet-hosted AI included",
+  "2.9% Polynet platform fee",
+  "Stripe processing fees are separate.",
+]) {
+  assert.ok(
+    conversionLanding.includes(approvedFunnelMarker),
+    `approved public funnel missing: ${approvedFunnelMarker}`,
+  );
+}
+assert.equal(
+  (conversionLanding.match(/onClick=\{onJoin\}/g) ?? []).length,
+  2,
+  "the approved funnel must have exactly two canonical purchase CTAs",
+);
+assert.doesNotMatch(conversionLanding, /purchase-dialog|data-purchase|FAQ_ITEMS|Comparison|PricingOffer/);
+assert.match(conversionLanding, /WebPlatformLegalReaderModal/);
+assert.match(conversionLanding, /PRIVACY_AI_DATA_POLICY_ENTRY/);
+assert.match(conversionLanding, /TERMS_OF_SERVICE_ENTRY/);
+assert.doesNotMatch(conversionLanding, /href="\/(?:privacy|terms)"/);
+assert.match(conversionLandingCss, /\.pn-landing \.page/);
+assert.match(conversionLandingCss, /@media \(prefers-reduced-motion: reduce\)/);
+assert.doesNotMatch(
+  conversionLandingCss,
+  /^(?:\.page|\.brand|main|h1|\.cta|\.mechanism|\.problems|\.closing|\.footer)\s*\{/m,
+);
 assert.match(
   app,
   /const openNewCommunityPurchaseFlow\s*=\s*builderPurchaseActivation\.openCommunityPurchaseFlow/,
