@@ -15,6 +15,7 @@ COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
 COMMUNITY_MEMBERSHIP_LIFECYCLE_FILE="convex/communityMembershipLifecycle.ts"
 COMMUNITY_PUBLIC_FILE="convex/communityPublic.ts"
 COMMUNITY_COMMERCE_FILE="convex/communityCommerce.ts"
+STRIPE_SUBSCRIPTION_CANCELLATION_FILE="convex/stripeSubscriptionCancellation.ts"
 BILLING_CORE_FILE="convex/billingCore.ts"
 PLATFORM_HOME_COMMUNITY_FILE="convex/platformHomeCommunity.ts"
 SCHEMA_FILE="convex/schema.ts"
@@ -444,14 +445,17 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const removeCommunityMember = action\(' \
   "removeCommunityMember is action-backed"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
-  'stripe\.subscriptions\.cancel\(subscriptionId\)' \
-  "remove member cancels Stripe subscription"
+  'cancelStripeSubscriptionIfActive\(\{[\s\S]*?providerSubscriptionId: target\.provider_subscription_id,[\s\S]*?providerAccountId: target\.provider_account_id' \
+  "remove member uses canonical account-scoped Stripe cancellation"
+require_multiline_match "$STRIPE_SUBSCRIPTION_CANCELLATION_FILE" \
+  'stripe\.subscriptions\.cancel\(subscriptionId, \{\}, options\)' \
+  "canonical cancellation reaches Stripe with request scope"
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'await ctx\.db\.patch\(membership\._id as any, \{\s*active: false,\s*revokedAt: nowMs,\s*revokedReason:' \
   "remove member preserves revoked membership row"
 if ! awk '
   /export const revokeCommunityMemberInternal = internalMutation\(/ { in_block = 1 }
-  /async function cancelStripeSubscriptionIfActive/ { in_block = 0 }
+  /export const removeCommunityMember = action\(/ { in_block = 0 }
   in_block { print }
 ' "$COMMUNITY_ADMIN_FILE" | guard_rg_assert_absent \
   "revokeCommunityMemberInternal deletion of paid membership audit rows" \

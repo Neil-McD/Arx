@@ -6,6 +6,9 @@ export const CRITICAL_AUDIT_EVENT_TYPES = [
   "account_delete_completed",
   "community_checkout_attached_to_stripe",
   "community_checkout_created",
+  "community_archived",
+  "community_archive_billing_cleanup_completed",
+  "community_archive_billing_cleanup_failed",
   "community_purchase_claim_created",
   "community_purchase_claim_redeemed",
   "community_operator_retirement_completed",
@@ -75,6 +78,16 @@ const CRITICAL_AUDIT_METADATA_BLOCKED_KEY_PARTS = [
 const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
   account_delete_blocked: ["reason"],
   account_delete_completed: [],
+  community_archived: ["lifecycleGeneration"],
+  community_archive_billing_cleanup_completed: [
+    "lifecycleGeneration",
+    "attemptCount",
+  ],
+  community_archive_billing_cleanup_failed: [
+    "lifecycleGeneration",
+    "attemptCount",
+    "errorCode",
+  ],
   community_checkout_created: [
     "billingPeriod",
     "pricePointId",

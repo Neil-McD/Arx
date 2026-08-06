@@ -20,6 +20,7 @@ import {
 import type { MemberAccountContextLike } from "../shared/memberContextMarkdown";
 import { communityMembershipRowIsActive } from "./communityCore";
 import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 export type MemberFactRow = MemberFactLike & {
   _id: any;
@@ -313,16 +314,21 @@ export async function loadMemberAccountContext(
   const activeMemberships = (membershipRows as any[]).filter((row) =>
     communityMembershipRowIsActive(row),
   );
-  const memberships = await Promise.all(
+  const memberships = (await Promise.all(
     activeMemberships.map(async (row) => {
       const community = await ctx.db.get(row.communityId);
+      if (!community || !communityIsActive(community)) return null;
       return {
         communityName: String(community?.name ?? "Community"),
         role: String(row.role ?? "member"),
         accessSource: String(row.accessSource ?? "unknown"),
       };
     }),
-  );
+  )).filter((row): row is {
+    communityName: string;
+    role: string;
+    accessSource: string;
+  } => row !== null);
 
   const socialLinks = Object.values((detail?.socialLinks ?? {}) as Record<string, unknown>)
     .map((link) => String(link ?? "").trim())
@@ -335,7 +341,9 @@ export async function loadMemberAccountContext(
     inferenceProvider: hasChatgpt ? "chatgpt" : hasOpenAi ? "openai" : null,
     socialLinks,
     memberships,
-    ownedCommunities: (ownedRows as any[]).map((row) => ({ name: String(row.name ?? "Community") })),
+    ownedCommunities: (ownedRows as any[])
+      .filter((row) => communityIsActive(row))
+      .map((row) => ({ name: String(row.name ?? "Community") })),
   };
 }
 

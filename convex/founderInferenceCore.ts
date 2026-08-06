@@ -214,10 +214,15 @@ export async function resolveAdditionalManagedCommunityAdmission(
   ctx: any,
   ownerUserId: any,
 ): Promise<AdditionalManagedCommunityAdmission> {
-  const communities = (await ctx.db
+  const communities = ((await ctx.db
     .query("communities" as any)
     .withIndex("by_owner", (q: any) => q.eq("ownerId", ownerUserId))
-    .collect()) as Array<{ _id: any; createdAt?: unknown }>;
+    .collect()) as Array<{
+      _id: any;
+      createdAt?: unknown;
+      lifecycleStatus?: "active" | "archived";
+      lifecycleGeneration?: number;
+    }>).filter((community) => communityIsActive(community));
   communities.sort((left, right) =>
     Number(left.createdAt ?? 0) - Number(right.createdAt ?? 0));
   for (const community of communities) {

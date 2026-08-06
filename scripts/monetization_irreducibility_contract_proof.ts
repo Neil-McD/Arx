@@ -77,7 +77,11 @@ assert.match(founderBilling, /POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS/);
 assert.match(founderBilling, /resolveBuilderFundingProjection/);
 assert.match(founderBilling, /funding_lane: fundingProjection\.lane/);
 assert.match(founderBilling, /funding_state: fundingProjection\.state/);
-assert.match(founderBilling, /allowed_actions: fundingProjection\.allowedActions/);
+assert.match(
+  founderBilling,
+  /allowed_actions:\s*lifecycle\.status === "active"\s*\? fundingProjection\.allowedActions\s*:\s*\[\]/,
+  "archived communities must expose no funding action while active communities retain the canonical projection",
+);
 assert.match(founderBillingGateway, /BuilderFundingLane/);
 assert.match(founderBillingGateway, /BuilderFundingState/);
 assert.match(founderBillingGateway, /BuilderFundingAction/);

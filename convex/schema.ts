@@ -218,6 +218,24 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_provider_subscription", ["providerSubscriptionId"]),
 
+  communityArchiveBillingJobs: defineTable({
+    communityId: v.id("communities"),
+    lifecycleGeneration: v.number(),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("complete"),
+      v.literal("blocked"),
+    ),
+    attemptCount: v.number(),
+    nextAttemptAt: v.number(),
+    lastErrorCode: v.optional(v.string()),
+    completedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_generation", ["communityId", "lifecycleGeneration"])
+    .index("by_status_nextAttemptAt", ["status", "nextAttemptAt"]),
+
   founderUsageCycles: defineTable({
     founderSubscriptionId: v.id("founderSubscriptions"),
     communityId: v.id("communities"),

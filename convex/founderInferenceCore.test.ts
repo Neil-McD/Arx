@@ -310,6 +310,28 @@ test("founders can add unlimited communities sequentially when every existing co
   });
 });
 
+test("archived communities do not block creation or count as funded active communities", async () => {
+  const t = convexTest(schema, modules);
+  await t.run(async (ctx) => {
+    const nowMs = Date.now();
+    const ownerId = await insertUser(ctx, "archived-admission-owner", nowMs);
+    const communityId = await insertCommunity(
+      ctx,
+      ownerId,
+      "archived-admission",
+      nowMs,
+    );
+    await ctx.db.patch(communityId, {
+      inferenceFundingPolicy: "managed_required",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 1,
+    });
+    await expect(
+      resolveAdditionalManagedCommunityAdmission(ctx, ownerId),
+    ).resolves.toEqual({ ok: true, fundedCommunityCount: 0 });
+  });
+});
+
 test("the canonical operator owner has unlimited complimentary communities", async () => {
   const t = convexTest(schema, modules);
   await t.run(async (ctx) => {

@@ -44,7 +44,7 @@ import {
   isPlatformHomeCommunity,
   upsertPlatformHomeCommunityAutojoinOptOut,
 } from "./platformHomeCommunity";
-import { getStripeClient } from "./stripeCore";
+import { cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
@@ -1462,14 +1462,14 @@ export const prepareCommunityMemberRemovalInternal = internalQuery({
       return {
         ok: true,
         noop: true,
-        provider_subscription_ids: [],
+        provider_subscription_targets: [],
       };
     }
     if (String(membership.communityId) !== String(args.communityId)) {
       return {
         ok: true,
         noop: true,
-        provider_subscription_ids: [],
+        provider_subscription_targets: [],
       };
     }
     if (String(community.ownerId) === String(membership.userId)) {
@@ -1484,15 +1484,29 @@ export const prepareCommunityMemberRemovalInternal = internalQuery({
       ctx,
       membershipId: membership._id,
     });
-    const providerSubscriptionIds = subscriptionRows
-      .map((row) => String(row.providerSubscriptionId ?? "").trim())
-      .filter((value, index, list) => value.length > 0 && list.indexOf(value) === index);
+    const providerSubscriptionTargets = Array.from(
+      new Map(
+        subscriptionRows
+          .map((row) => ({
+            provider_subscription_id: String(row.providerSubscriptionId ?? "").trim(),
+            provider_account_id: String(row.providerAccountId ?? "").trim() || null,
+          }))
+          .filter((target) => target.provider_subscription_id)
+          .map((target) => [
+            `${target.provider_account_id ?? "platform"}:${target.provider_subscription_id}`,
+            target,
+          ]),
+      ).values(),
+    );
+    if (providerSubscriptionTargets.some((target) => !target.provider_account_id)) {
+      throw new Error("community_subscription_provider_account_missing");
+    }
     return {
       ok: true,
       noop: false,
       community_slug: community.slug,
       target_user_id: membership.userId,
-      provider_subscription_ids: providerSubscriptionIds,
+      provider_subscription_targets: providerSubscriptionTargets,
     };
   },
 });
@@ -1629,22 +1643,6 @@ export const revokeCommunityMemberInternal = internalMutation({
   },
 });
 
-async function cancelStripeSubscriptionIfActive(providerSubscriptionId: string): Promise<void> {
-  const subscriptionId = providerSubscriptionId.trim();
-  if (!subscriptionId) return;
-  const stripe = getStripeClient();
-  let subscription: Awaited<ReturnType<typeof stripe.subscriptions.retrieve>>;
-  try {
-    subscription = await stripe.subscriptions.retrieve(subscriptionId);
-  } catch (error: any) {
-    if (error?.statusCode === 404 || error?.code === "resource_missing") return;
-    throw error;
-  }
-  const status = String((subscription as any)?.status ?? "").trim().toLowerCase();
-  if (!status || status === "canceled") return;
-  await stripe.subscriptions.cancel(subscriptionId);
-}
-
 export const removeCommunityMember = action({
   args: {
     userId: v.optional(v.id("users")),
@@ -1663,16 +1661,22 @@ export const removeCommunityMember = action({
       },
     )) as {
       noop?: boolean;
-      provider_subscription_ids?: string[];
+      provider_subscription_targets?: Array<{
+        provider_subscription_id: string;
+        provider_account_id: string | null;
+      }>;
     } | null;
     if (prepared?.noop) return { ok: true, stripe_canceled_count: 0 };
 
-    const providerSubscriptionIds = Array.isArray(prepared?.provider_subscription_ids)
-      ? prepared.provider_subscription_ids
+    const providerSubscriptionTargets = Array.isArray(prepared?.provider_subscription_targets)
+      ? prepared.provider_subscription_targets
       : [];
     let stripeCanceledCount = 0;
-    for (const providerSubscriptionId of providerSubscriptionIds) {
-      await cancelStripeSubscriptionIfActive(providerSubscriptionId);
+    for (const target of providerSubscriptionTargets) {
+      await cancelStripeSubscriptionIfActive({
+        providerSubscriptionId: target.provider_subscription_id,
+        providerAccountId: target.provider_account_id,
+      });
       stripeCanceledCount += 1;
     }
 
@@ -1683,7 +1687,7 @@ export const removeCommunityMember = action({
         authSubject: args.authSubject ?? undefined,
         communityId: args.communityId,
         targetMembershipId: args.targetMembershipId,
-        revokedReason: providerSubscriptionIds.length > 0
+        revokedReason: providerSubscriptionTargets.length > 0
           ? "removed_by_manager_stripe_canceled"
           : "removed_by_manager",
         nowMs: Date.now(),
@@ -1716,16 +1720,22 @@ export const banCommunityMember = action({
     )) as {
       noop?: boolean;
       target_user_id?: any;
-      provider_subscription_ids?: string[];
+      provider_subscription_targets?: Array<{
+        provider_subscription_id: string;
+        provider_account_id: string | null;
+      }>;
     } | null;
     if (prepared?.noop || !prepared?.target_user_id) return { ok: true, stripe_canceled_count: 0 };
 
-    const providerSubscriptionIds = Array.isArray(prepared?.provider_subscription_ids)
-      ? prepared.provider_subscription_ids
+    const providerSubscriptionTargets = Array.isArray(prepared?.provider_subscription_targets)
+      ? prepared.provider_subscription_targets
       : [];
     let stripeCanceledCount = 0;
-    for (const providerSubscriptionId of providerSubscriptionIds) {
-      await cancelStripeSubscriptionIfActive(providerSubscriptionId);
+    for (const target of providerSubscriptionTargets) {
+      await cancelStripeSubscriptionIfActive({
+        providerSubscriptionId: target.provider_subscription_id,
+        providerAccountId: target.provider_account_id,
+      });
       stripeCanceledCount += 1;
     }
 
@@ -1737,7 +1747,7 @@ export const banCommunityMember = action({
         authSubject: args.authSubject ?? undefined,
         communityId: args.communityId,
         targetMembershipId: args.targetMembershipId,
-        revokedReason: providerSubscriptionIds.length > 0
+        revokedReason: providerSubscriptionTargets.length > 0
           ? "banned_by_manager_stripe_canceled"
           : "banned_by_manager",
         nowMs,

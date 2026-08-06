@@ -19,6 +19,14 @@ crons.interval(
   { limit: 25 },
 );
 
+crons.interval(
+  "recover archived community billing cleanup",
+  { minutes: 5 },
+  (internal as any).communityColdArchive
+    .scheduleDueCommunityArchiveBillingJobsInternal,
+  { limit: 3 },
+);
+
 crons.daily(
   "enqueue weekly community digests",
   {

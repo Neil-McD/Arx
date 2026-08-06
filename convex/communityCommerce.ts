@@ -46,6 +46,10 @@ import {
   communityLifecycleGenerationMatches,
   normalizeCommunityLifecycle,
 } from "../shared/communityLifecycle";
+import {
+  cancelStripeSubscriptionIfActive,
+  expireStripeCheckoutSessionIfOpen,
+} from "./stripeSubscriptionCancellation";
 
 type CommunityCheckoutSessionRow = {
   _id: any;
@@ -254,6 +258,19 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
     if (!status) throw new Error("community_subscription_status_invalid");
     const community = (await ctx.db.get(args.communityId)) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
+    // Archive freezes membership state. Provider webhooks remain valid billing
+    // evidence, but they cannot reactivate or revoke the frozen product model.
+    // The archive billing worker owns the terminal local subscription write.
+    if (!communityIsActive(community)) {
+      return {
+        ok: true,
+        ignored: true,
+        reason: "community_archived",
+        community_id: String(args.communityId),
+        user_id: String(args.userId),
+        subscription_status: "ended",
+      };
+    }
     const membership = (await ctx.db
       .query("communityMemberships")
       .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
@@ -875,6 +892,40 @@ export const expirePublicCommunityCheckoutSessionInternal = internalMutation({
   },
 });
 
+export const recordStalePublicCommunityCheckoutSessionInternal = internalMutation({
+  args: {
+    sessionId: v.string(),
+    providerAccountId: v.string(),
+    providerCheckoutSessionId: v.string(),
+    providerCustomerId: v.optional(v.union(v.string(), v.null())),
+    providerSubscriptionId: v.optional(v.union(v.string(), v.null())),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const row = (await ctx.db
+      .query("checkoutSessions")
+      .withIndex("by_sessionId", (q: any) => q.eq("sessionId", args.sessionId))
+      .first()) as CommunityCheckoutSessionRow | null;
+    if (!row || row.mode !== "community_join" || row.status !== "pending") return;
+    requireCommunityProviderAccountMatch({
+      expectedProviderAccountId: row.providerAccountId,
+      actualProviderAccountId: args.providerAccountId,
+      missingCode: "provider_account_id_required",
+      mismatchCode: "community_checkout_provider_account_mismatch",
+    });
+    await ctx.db.patch(row._id, {
+      provider: "stripe",
+      providerAccountId: args.providerAccountId,
+      providerCheckoutSessionId: args.providerCheckoutSessionId,
+      providerCustomerId:
+        String(args.providerCustomerId ?? "").trim() || row.providerCustomerId,
+      providerSubscriptionId:
+        String(args.providerSubscriptionId ?? "").trim() || row.providerSubscriptionId,
+      updatedAt: args.nowMs ?? Date.now(),
+    });
+  },
+});
+
 export const getCommunityJoinCheckoutSessionInternal = internalQuery({
   args: {
     sessionId: v.string(),
@@ -1074,6 +1125,7 @@ export const startPublicCommunityCheckout = action({
       },
     );
 
+    let createdCheckoutSession: any = null;
     try {
       const stripe = getStripeClient();
       const checkoutSession: any = await stripe.checkout.sessions.create({
@@ -1111,6 +1163,7 @@ export const startPublicCommunityCheckout = action({
         stripeAccount: checkoutConfig.providerAccountId,
         idempotencyKey: `community-checkout:${checkoutConfig.providerAccountId}:${sessionId}`,
       });
+      createdCheckoutSession = checkoutSession;
       const checkoutUrl: string = String(checkoutSession.url ?? "").trim();
       if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
       await ctx.runMutation(
@@ -1133,13 +1186,66 @@ export const startPublicCommunityCheckout = action({
         checkout_url: checkoutUrl,
       };
     } catch (error) {
-      await ctx.runMutation(
-        internal.communityCommerce.expirePublicCommunityCheckoutSessionInternal as any,
-        {
-          sessionId,
-          nowMs: Date.now(),
-        },
-      );
+      let providerCleanupComplete = !createdCheckoutSession?.id;
+      if (createdCheckoutSession?.id) {
+        try {
+          await ctx.runMutation(
+            internal.communityCommerce.recordStalePublicCommunityCheckoutSessionInternal as any,
+            {
+              sessionId,
+              providerAccountId: checkoutConfig.providerAccountId,
+              providerCheckoutSessionId: createdCheckoutSession.id,
+              providerCustomerId:
+                typeof createdCheckoutSession.customer === "string"
+                  ? createdCheckoutSession.customer
+                  : null,
+              providerSubscriptionId:
+                typeof createdCheckoutSession.subscription === "string"
+                  ? createdCheckoutSession.subscription
+                  : null,
+              nowMs: Date.now(),
+            },
+          );
+        } catch (persistenceError) {
+          console.error("stale_community_checkout_persistence_failed", {
+            sessionId,
+            error:
+              persistenceError instanceof Error
+                ? persistenceError.message
+                : String(persistenceError),
+          });
+        }
+        try {
+          const expired = await expireStripeCheckoutSessionIfOpen({
+            providerCheckoutSessionId: createdCheckoutSession.id,
+            providerAccountId: checkoutConfig.providerAccountId,
+          });
+          if (expired.providerSubscriptionId) {
+            await cancelStripeSubscriptionIfActive({
+              providerSubscriptionId: expired.providerSubscriptionId,
+              providerAccountId: checkoutConfig.providerAccountId,
+            });
+          }
+          providerCleanupComplete = true;
+        } catch (cleanupError) {
+          console.error("stale_community_checkout_cleanup_failed", {
+            sessionId,
+            error:
+              cleanupError instanceof Error
+                ? cleanupError.message
+                : String(cleanupError),
+          });
+        }
+      }
+      if (providerCleanupComplete) {
+        await ctx.runMutation(
+          internal.communityCommerce.expirePublicCommunityCheckoutSessionInternal as any,
+          {
+            sessionId,
+            nowMs: Date.now(),
+          },
+        );
+      }
       throw error;
     }
   },

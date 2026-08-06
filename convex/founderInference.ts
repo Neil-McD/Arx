@@ -27,6 +27,7 @@ import { decryptStoredSecret } from "./providerConnections";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 const internalRefs = internal as any;
 const RECEIPT_LEASE_MS = 10 * 60_000;
@@ -133,7 +134,7 @@ export const getCurrentFounderInferenceStatus = query({
     ]);
     const legacyCommunities = (
       await Promise.all(
-        communities.map(async (community) => {
+        communities.filter((community) => communityIsActive(community)).map(async (community) => {
           const subscription = await getFounderSubscriptionByCommunity(
             ctx,
             community._id,

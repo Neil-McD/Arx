@@ -12,6 +12,7 @@ export type CloudFounderBillingCommunityStatus =
   | "legacy_suspended"
   | "managed_required"
   | "managed_checkout_pending"
+  | "archived"
   | "active"
   | "past_due"
   | "cancel_at_period_end"
@@ -22,6 +23,9 @@ export type CloudFounderBillingCommunity = {
   community_id: string;
   community_name: string;
   community_slug: string;
+  lifecycle_status: "active" | "archived";
+  lifecycle_generation: number;
+  archive_billing_cleanup_status: "pending" | "complete" | "blocked" | null;
   funding_policy: "legacy_byok_allowed" | "managed_required";
   funding_lane: BuilderFundingLane;
   funding_state: BuilderFundingState;
@@ -98,6 +102,7 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
     "legacy_suspended",
     "managed_required",
     "managed_checkout_pending",
+    "archived",
     "active",
     "past_due",
     "cancel_at_period_end",
@@ -125,6 +130,14 @@ function coerceCommunity(value: unknown): CloudFounderBillingCommunity | null {
     community_id: communityId,
     community_name: nullableString(row.community_name) ?? "Untitled community",
     community_slug: nullableString(row.community_slug) ?? "",
+    lifecycle_status: row.lifecycle_status === "archived" ? "archived" : "active",
+    lifecycle_generation: Math.max(0, Math.floor(finiteNumber(row.lifecycle_generation))),
+    archive_billing_cleanup_status:
+      row.archive_billing_cleanup_status === "pending" ||
+      row.archive_billing_cleanup_status === "complete" ||
+      row.archive_billing_cleanup_status === "blocked"
+        ? row.archive_billing_cleanup_status
+        : null,
     funding_policy: row.funding_policy === "legacy_byok_allowed"
       ? "legacy_byok_allowed"
       : "managed_required",
