@@ -1131,8 +1131,6 @@ export const getFounderBillingOverview = query({
             | FounderSubscriptionStatus;
           if (lifecycle.status === "archived") {
             status = "archived";
-          } else if (operatorComped) {
-            status = "operator_comped";
           } else if (
             subscription &&
             founderSubscriptionStatusGrantsAccess({
@@ -1146,6 +1144,8 @@ export const getFounderBillingOverview = query({
             status = "managed_checkout_pending";
           } else if (subscription) {
             status = subscription.status;
+          } else if (operatorComped) {
+            status = "operator_comped";
           } else {
             status = "managed_required";
           }
@@ -1170,9 +1170,11 @@ export const getFounderBillingOverview = query({
                     builderAccessMode === "subscription_required"
                   ? ["buy_builder" as const]
                   : [],
-            funding_mode: operatorComped
-              ? "operator_comp"
-              : "managed",
+            funding_mode: subscription
+              ? "managed"
+              : operatorComped
+                ? "operator_comp"
+                : "managed",
             status,
             monthly_price_base_units: POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS,
             platform_fee_bps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,

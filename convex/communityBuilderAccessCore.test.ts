@@ -301,3 +301,45 @@ test("one active canonical operator owner grants active subscription-required ac
     reason: "operator_comp",
   });
 });
+
+test("an attached subscription outranks operator comp and fails closed when inactive", async () => {
+  const active = await createFixture({
+    accessMode: "subscription_required",
+    operator: true,
+  });
+  await attachSubscription({ ...active, status: "active", suffix: "operator-active" });
+  await expect(
+    active.t.run(async (ctx) =>
+      await resolveCommunityBuilderAccess({
+        ctx,
+        community: active.community,
+        nowMs: NOW_MS,
+      }),
+    ),
+  ).resolves.toMatchObject({
+    operational: true,
+    source: "founder_subscription",
+    reason: "active_subscription",
+    subscriptionStatus: "active",
+  });
+
+  const ended = await createFixture({
+    accessMode: "subscription_required",
+    operator: true,
+  });
+  await attachSubscription({ ...ended, status: "ended", suffix: "operator-ended" });
+  await expect(
+    ended.t.run(async (ctx) =>
+      await resolveCommunityBuilderAccess({
+        ctx,
+        community: ended.community,
+        nowMs: NOW_MS,
+      }),
+    ),
+  ).resolves.toMatchObject({
+    operational: false,
+    source: "none",
+    reason: "subscription_inactive",
+    subscriptionStatus: "ended",
+  });
+});

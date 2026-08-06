@@ -77,21 +77,18 @@ function resolveBuilderSubscriptionProjection(
 export function resolveBuilderFundingProjection(
   input: BuilderFundingProjectionInput,
 ): BuilderFundingProjection {
+  // An attached subscription is an explicit funding lane. It must remain
+  // visible and authoritative even when its owner also has operator access.
+  if (input.subscription) {
+    return resolveBuilderSubscriptionProjection(input.subscription, input.nowMs);
+  }
+
   if (input.operatorComplimentaryAccess) {
     return {
       lane: "builder_included",
       state: "builder_included",
-      allowedActions:
-        input.subscription &&
-        input.subscription.status !== "canceled" &&
-        input.subscription.status !== "ended"
-          ? ["manage_builder"]
-          : [],
+      allowedActions: [],
     };
-  }
-
-  if (input.subscription) {
-    return resolveBuilderSubscriptionProjection(input.subscription, input.nowMs);
   }
 
   if (input.checkoutPending) {

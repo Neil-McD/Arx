@@ -135,25 +135,6 @@ export async function resolveCommunityBuilderAccess(args: {
     };
   }
 
-  if (
-    await hasPlatformOwnerComplimentaryAccess(
-      args.ctx,
-      args.community.ownerId,
-    )
-  ) {
-    return {
-      accessMode: parsedAccessMode,
-      lifecycleStatus: lifecycle.status,
-      lifecycleGeneration: lifecycle.generation,
-      operational: true,
-      source: "operator_comp",
-      reason: "operator_comp",
-      subscriptionId: null,
-      subscriptionStatus: null,
-      currentPeriodEndAt: null,
-    };
-  }
-
   let subscription: FounderSubscriptionRow | null;
   try {
     subscription = await getFounderSubscriptionByCommunity(
@@ -176,6 +157,24 @@ export async function resolveCommunityBuilderAccess(args: {
   }
 
   if (!subscription) {
+    if (
+      await hasPlatformOwnerComplimentaryAccess(
+        args.ctx,
+        args.community.ownerId,
+      )
+    ) {
+      return {
+        accessMode: parsedAccessMode,
+        lifecycleStatus: lifecycle.status,
+        lifecycleGeneration: lifecycle.generation,
+        operational: true,
+        source: "operator_comp",
+        reason: "operator_comp",
+        subscriptionId: null,
+        subscriptionStatus: null,
+        currentPeriodEndAt: null,
+      };
+    }
     return deniedDecision({
       community: args.community,
       accessMode: parsedAccessMode,

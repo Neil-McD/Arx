@@ -23,25 +23,25 @@ describe("Builder funding projection", () => {
     });
   });
 
-  test("an existing paid subscription remains manageable even after Builder becomes included", () => {
+  test("an attached paid subscription outranks operator-included Builder", () => {
     expect(resolve({
       operatorComplimentaryAccess: true,
       subscription: { status: "active", currentPeriodEndAt: nowMs + 1 },
     })).toEqual({
-      lane: "builder_included",
-      state: "builder_included",
+      lane: "builder",
+      state: "builder_active",
       allowedActions: ["manage_builder"],
     });
   });
 
-  test("included Builder does not advertise management for an ended subscription", () => {
+  test("an ended attached subscription does not silently fall back to operator comp", () => {
     expect(resolve({
       operatorComplimentaryAccess: true,
       subscription: { status: "ended", currentPeriodEndAt: nowMs - 1 },
     })).toEqual({
-      lane: "builder_included",
-      state: "builder_included",
-      allowedActions: [],
+      lane: "builder",
+      state: "builder_ended",
+      allowedActions: ["buy_builder"],
     });
   });
 
