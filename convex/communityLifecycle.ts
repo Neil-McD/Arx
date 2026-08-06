@@ -515,10 +515,7 @@ export const createCommunity = mutation({
     const nowMs = Date.now();
     const operatorComped = await hasPlatformOwnerComplimentaryAccess(ctx, ownerId);
     let founderSubscription: FounderSubscriptionRow | null = null;
-    if (!operatorComped) {
-      if (!args.founderSubscriptionId) {
-        throw new Error("community_funding_required_before_create");
-      }
+    if (args.founderSubscriptionId) {
       founderSubscription = (await ctx.db.get(
         args.founderSubscriptionId,
       )) as FounderSubscriptionRow | null;
@@ -546,6 +543,8 @@ export const createCommunity = mutation({
       })) {
         throw new Error("founder_subscription_inactive");
       }
+    } else if (!operatorComped) {
+      throw new Error("community_funding_required_before_create");
     }
     const slug = normalizeSlug(args.slug);
     const existing = await ctx.db

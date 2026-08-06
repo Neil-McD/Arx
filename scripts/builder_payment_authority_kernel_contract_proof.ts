@@ -49,6 +49,10 @@ assert.match(founderRecovery, /Propagate enqueue failures so Stripe retries/);
 assert.doesNotMatch(founderRecovery, /email_enqueue_failed|skipped: true/);
 
 assert.match(lifecycle, /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)/);
+assert.match(
+  lifecycle,
+  /if \(args\.founderSubscriptionId\) \{[\s\S]*founderSubscription = \(await ctx\.db\.get\([\s\S]*\}\s*else if \(!operatorComped\) \{[\s\S]*community_funding_required_before_create/,
+);
 assert.match(lifecycle, /community_funding_required_before_create/);
 assert.match(lifecycle, /founder_subscription_already_attached/);
 assert.match(lifecycle, /founder_subscription_risk_revoked/);
