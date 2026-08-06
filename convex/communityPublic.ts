@@ -52,6 +52,7 @@ import {
 import {
   listAllActiveChannelReadableRows,
 } from "./communityChannelCore";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -353,7 +354,7 @@ export const resolvePublicFunnelBySlug = query({
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
-    if (!community) return { ok: false };
+    if (!community || !communityIsActive(community)) return { ok: false };
 
     const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
     const activePlan = pickPreferredActivePlan(mappedPlans);
@@ -401,7 +402,7 @@ export const resolvePublicFunnelStatsBySlug = query({
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
-    if (!community) return { ok: false };
+    if (!community || !communityIsActive(community)) return { ok: false };
 
     const activityCounts = await resolvePublicCommunityActivityCounts(ctx, community._id);
     return {
@@ -429,7 +430,7 @@ export const resolvePublicCommunityAccessBySlug = query({
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
-    if (!community) return { ok: false as const };
+    if (!community || !communityIsActive(community)) return { ok: false as const };
 
     let userId: any = null;
     try {
@@ -478,7 +479,7 @@ export const recordPublicFunnelVisitBySlug = mutation({
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
-    if (!community) return { ok: false };
+    if (!community || !communityIsActive(community)) return { ok: false };
 
     let userId: any = undefined;
     const authSubject = String(args.authSubject ?? "").trim();
@@ -585,10 +586,14 @@ export const listPublicDiscoverCommunities = query({
       .query("communities")
       .withIndex("by_visibility_updatedAt", (q) => q.eq("visibility", "published"))
       .order("desc")
-      .take(limit)) as CommunityLike[];
+      .take(200)) as CommunityLike[];
+
+    const activePublished = published
+      .filter((community) => communityIsActive(community))
+      .slice(0, limit);
 
     const communities = (await Promise.all(
-      published.map(async (community) => {
+      activePublished.map(async (community) => {
         const mappedPlans = await listCurrentCommunitySellablePlans(ctx, community._id);
         const branding = await resolveCommunityBrandingFields(ctx, community);
         const entryPolicy = resolveCommunityEntryPolicy(community);
@@ -642,7 +647,7 @@ export const getMyJoinRequestBySlug = query({
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
-    if (!community) return null;
+    if (!community || !communityIsActive(community)) return null;
     const rows = (await ctx.db
       .query("communityJoinRequests")
       .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))
@@ -708,6 +713,9 @@ async function joinPublicCommunityInternal(args: {
   community_id: string;
   reapply_at?: string | null;
 }> {
+  if (!communityIsActive(args.community)) {
+    throw new Error("community_archived");
+  }
   await requireCommunityUserNotBlocked({
     ctx: args.ctx,
     communityId: args.community._id,
@@ -952,6 +960,7 @@ export const cancelMyJoinRequestBySlug = mutation({
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
     if (!community) throw new Error("community_not_found");
+    if (!communityIsActive(community)) throw new Error("community_archived");
 
     const joinRequestRows = (await ctx.db
       .query("communityJoinRequests")

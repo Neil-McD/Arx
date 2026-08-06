@@ -6,12 +6,15 @@ import { afterEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import { executePlatformOperation } from "./platformOperationExecutor";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
+import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import schema from "./schema";
 
 const modules = import.meta.glob([
   "./communityPublic.ts",
   "./communityAdmin.ts",
+  "./communityAccessQueries.ts",
   "./communityCapabilityContext.ts",
+  "./communityIntelligenceDirectory.ts",
   "./email.ts",
   "./_generated/**/*.*s",
 ]);
@@ -256,6 +259,154 @@ test("unfunded managed communities remain public while AI funding fails closed",
       communitySlug: "access-lifecycle-open",
     }),
   ).resolves.toMatchObject({ ok: true });
+});
+
+test("archived communities are frozen across ordinary access and public projections", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+
+  await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+    communitySlug: "access-lifecycle-open",
+  });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.openCommunityId, {
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 1,
+    });
+  });
+
+  for (const actor of [asOwner, asMember]) {
+    const rail = await actor.query(api.communityAdmin.listCommunityMemberships, {
+      selectMode: "minimal",
+    });
+    expect(rail).not.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          community_id: String(fixture.openCommunityId),
+        }),
+      ]),
+    );
+    await expect(
+      actor.query(api.communityAccessQueries.getMyCommunityAccess, {
+        communityId: fixture.openCommunityId,
+      }),
+    ).rejects.toThrow("community_archived");
+  }
+
+  await expect(
+    asMember.query(api.communityAccessQueries.getMyCommunityAccessBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toBeNull();
+  await expect(
+    asMember.query(api.communityPublic.getCommunityPresenceSummary, {
+      communityId: fixture.openCommunityId,
+    }),
+  ).rejects.toThrow("community_archived");
+  await expect(
+    executeSemanticList({
+      actor: asMember,
+      userId: fixture.memberId,
+      communityId: fixture.openCommunityId,
+    }),
+  ).resolves.toEqual({
+    ok: false,
+    code: "semantic_not_found",
+    message: "Semantic path not found or not accessible.",
+  });
+
+  await expect(
+    t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toEqual({ ok: false });
+  await expect(
+    t.query(api.communityPublic.resolvePublicFunnelStatsBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toEqual({ ok: false });
+  await expect(
+    asMember.query(api.communityPublic.resolvePublicCommunityAccessBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toEqual({ ok: false });
+  await expect(
+    t.query(
+      api.communityIntelligenceDirectory.resolvePublicCommunityMemoryOverviewBySlug,
+      { communitySlug: "access-lifecycle-open" },
+    ),
+  ).resolves.toEqual({ ok: false });
+  await expect(
+    t.mutation(api.communityPublic.recordPublicFunnelVisitBySlug, {
+      communitySlug: "access-lifecycle-open",
+      visitorKey: "archived-community-visitor",
+    }),
+  ).resolves.toEqual({ ok: false });
+  await expect(
+    asMember.query(api.communityPublic.getMyJoinRequestBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).resolves.toBeNull();
+
+  const discover = await t.query(
+    api.communityPublic.listPublicDiscoverCommunities,
+    {},
+  );
+  expect(discover.communities).not.toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ slug: "access-lifecycle-open" }),
+    ]),
+  );
+  await expect(
+    asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).rejects.toThrow("community_archived");
+  await expect(
+    asMember.mutation(api.communityPublic.cancelMyJoinRequestBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).rejects.toThrow("community_archived");
+});
+
+test("archived platform home cannot autojoin or reactivate a membership", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const result = await t.run(async (ctx) => {
+    const communityId = await ctx.db.insert("communities", {
+      ownerId: fixture.ownerId,
+      slug: "polynet",
+      name: "Archived platform home",
+      visibility: "published",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 1,
+      activeMemberCount: 1,
+      createdAt: 1_750_000_000_100,
+      updatedAt: 1_750_000_000_100,
+    });
+    const outcome = await ensurePlatformHomeCommunityMembership({
+      ctx,
+      userId: fixture.memberId,
+      nowMs: 1_750_000_000_200,
+    });
+    const memberships = await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) =>
+        q.eq("communityId", communityId).eq("userId", fixture.memberId),
+      )
+      .collect();
+    return { outcome, memberships };
+  });
+
+  expect(result).toEqual({
+    outcome: { status: "disabled", communityId: null },
+    memberships: [],
+  });
 });
 
 test("approval join fails closed until manager approval and closes again after revocation", async () => {

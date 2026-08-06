@@ -1,5 +1,6 @@
 import { query } from "./_generated/server";
 import { v } from "convex/values";
+import { communityIsActive } from "../shared/communityLifecycle";
 import {
   type CommunityLike,
   type CommunityMembershipLike,
@@ -55,7 +56,7 @@ export const getMyCommunityAccessBySlug = query({
       .query("communities")
       .withIndex("by_slug", (q) => q.eq("slug", slug))
       .first()) as CommunityLike | null;
-    if (!community) return null;
+    if (!community || !communityIsActive(community)) return null;
     const membershipRows = (await ctx.db
       .query("communityMemberships")
       .withIndex("by_community_user", (q) => q.eq("communityId", community._id).eq("userId", userId))

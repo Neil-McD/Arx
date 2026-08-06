@@ -49,6 +49,7 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -891,6 +892,7 @@ export const listCommunityMemberships = query({
       communities: Record<string, unknown>;
     }> = [];
     for (const community of ownedCommunities
+      .filter((row) => communityIsActive(row))
       .slice()
       .sort((a, b) => a.createdAt - b.createdAt)) {
       out.push({
@@ -904,7 +906,7 @@ export const listCommunityMemberships = query({
       const community = (await ctx.db.get(
         row.communityId,
       )) as CommunityLike | null;
-      if (!community) continue;
+      if (!community || !communityIsActive(community)) continue;
       if (String(community.ownerId) === String(row.userId)) continue;
       const entitlement = await resolveCommunityMembershipEntitlementState({
         ctx,

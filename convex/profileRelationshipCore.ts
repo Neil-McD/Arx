@@ -7,6 +7,7 @@ import {
   type CommunityMembershipLike,
 } from "./communityCore";
 import type { CommunityAvatarSummary, ProfileCommunityContext } from "../shared/communityTypes";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 const MAX_PROFILE_RELATIONSHIP_OWNED_ROWS = 24;
 const MAX_PROFILE_RELATIONSHIP_MEMBERSHIP_ROWS = 96;
@@ -54,11 +55,12 @@ async function listOwnedCommunitiesByOwnerId(
   ctx: any,
   ownerId: any,
 ): Promise<CommunityLike[]> {
-  return (await ctx.db
+  const communities = (await ctx.db
     .query("communities")
     .withIndex("by_owner_createdAt", (q: any) => q.eq("ownerId", ownerId))
     .order("desc")
     .take(MAX_PROFILE_RELATIONSHIP_OWNED_ROWS)) as CommunityLike[];
+  return communities.filter((community) => communityIsActive(community));
 }
 
 async function mapCommunityAvatarSummary(

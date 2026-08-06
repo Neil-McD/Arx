@@ -26,7 +26,7 @@ assert.match(
 );
 assert.match(
   core,
-  /import type \{ CommunityLifecycleStatus \} from "\.\.\/shared\/communityLifecycle"/,
+  /import \{[\s\S]*type CommunityLifecycleStatus,[\s\S]*\} from "\.\.\/shared\/communityLifecycle"/,
 );
 assert.match(core, /lifecycleStatus\?: CommunityLifecycleStatus/);
 assert.match(core, /lifecycleGeneration\?: number/);

@@ -483,11 +483,16 @@ export async function executePlatformOperation(args: {
           : payload.result,
       };
     } catch (error) {
+      const communityAccessClosed =
+        error instanceof Error && error.message === "community_archived";
       return {
         ok: false,
-        code: "community_semantic_read_failed",
-        message:
-          error instanceof Error && error.message
+        code: communityAccessClosed
+          ? "semantic_not_found"
+          : "community_semantic_read_failed",
+        message: communityAccessClosed
+          ? "Semantic path not found or not accessible."
+          : error instanceof Error && error.message
             ? error.message
             : "Community semantic read failed.",
       };

@@ -8,7 +8,10 @@ import {
   communityResourceModuleIsMemberLive,
 } from "../shared/communityResourceVisibility";
 import type { CommunityVisualIdentity } from "../shared/communityVisualIdentity";
-import type { CommunityLifecycleStatus } from "../shared/communityLifecycle";
+import {
+  communityIsActive,
+  type CommunityLifecycleStatus,
+} from "../shared/communityLifecycle";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -1132,6 +1135,15 @@ export async function mapCommunityResourceModuleRow(
   };
 }
 
+export function requireActiveCommunity(
+  community: CommunityLike,
+): CommunityLike {
+  if (!communityIsActive(community)) {
+    throw new Error("community_archived");
+  }
+  return community;
+}
+
 export async function getCommunityAndMembership(args: {
   ctx: any;
   communityId: any;
@@ -1142,6 +1154,7 @@ export async function getCommunityAndMembership(args: {
 }> {
   const community = (await args.ctx.db.get(args.communityId)) as CommunityLike | null;
   if (!community) throw new Error("community_not_found");
+  requireActiveCommunity(community);
   const membershipRows = (await args.ctx.db
     .query("communityMemberships")
     .withIndex("by_community_user", (q: any) => q.eq("communityId", args.communityId).eq("userId", args.userId))
@@ -1267,6 +1280,7 @@ export async function resolveCommunityAccessBundle(args: {
   membership: CommunityMembershipLike | null;
   userId: any;
 }) {
+  requireActiveCommunity(args.community);
   const role = normalizeCommunityRoleForOutput(args.membership?.role);
   const isOwner = args.community.ownerId === args.userId;
   const isBlocked = !isOwner

@@ -1,5 +1,6 @@
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
+import { communityIsActive } from "../shared/communityLifecycle";
 import { hashBusinessVisitorKey } from "./businessAnalyticsCore";
 import { resolveAuthenticatedSubject } from "./authIdentity";
 
@@ -66,7 +67,7 @@ export const recordBusinessPageVisit = mutation({
         .query("communities")
         .withIndex("by_slug", (q: any) => q.eq("slug", slug))
         .first();
-      if (!community) {
+      if (!community || !communityIsActive(community)) {
         return { ok: false, reason: "community_not_found" };
       }
       communityId = community._id;

@@ -34,6 +34,7 @@ import {
   type CommunityEvidenceSurface,
   type CommunityMemoryRetrievalReceiptVersion,
 } from "../shared/communityEvidenceContract";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 type ActorType = "member" | "admin" | "agent" | "compiler" | "system";
 type VisibilityScope = "private" | "admin" | "community" | "public";
@@ -3885,7 +3886,9 @@ export const resolvePublicCommunityMemoryOverviewBySlug = query({
       .query("communities")
       .withIndex("by_slug", (q: any) => q.eq("slug", slug))
       .first();
-    if (!community) return { ok: false as const };
+    if (!community || !communityIsActive(community)) {
+      return { ok: false as const };
+    }
 
     const [nodeResult, resourceResult] = await Promise.all([
       readPolynetOverviewNodes({

@@ -1,0 +1,116 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+const read = (path: string) => readFileSync(path, "utf8");
+const core = read("convex/communityCore.ts");
+const admin = read("convex/communityAdmin.ts");
+const access = read("convex/communityAccessQueries.ts");
+const publicCommunity = read("convex/communityPublic.ts");
+const publicMemory = read("convex/communityIntelligenceDirectory.ts");
+const profiles = read("convex/profileRelationshipCore.ts");
+const analytics = read("convex/businessAnalytics.ts");
+const platformOperationExecutor = read("convex/platformOperationExecutor.ts");
+const platformHome = read("convex/platformHomeCommunity.ts");
+
+assert.match(
+  core,
+  /export function requireActiveCommunity\([\s\S]*communityIsActive\(community\)[\s\S]*throw new Error\("community_archived"\)/,
+  "one canonical ordinary-access guard must own the archived error",
+);
+assert.match(
+  core,
+  /export async function getCommunityAndMembership[\s\S]*requireActiveCommunity\(community\)[\s\S]*query\("communityMemberships"\)/,
+  "ordinary access must reject archived communities before membership work",
+);
+assert.match(
+  core,
+  /export async function resolveCommunityAccessBundle[\s\S]*requireActiveCommunity\(args\.community\)/,
+  "direct access-bundle callers must share the same lifecycle guard",
+);
+
+assert.match(
+  admin,
+  /ownedCommunities[\s\S]*filter\(\(row\) => communityIsActive\(row\)\)/,
+  "the ordinary owner rail must omit archived communities",
+);
+assert.match(
+  admin,
+  /if \(!community \|\| !communityIsActive\(community\)\) continue/,
+  "the ordinary member rail must omit archived communities",
+);
+assert.match(
+  access,
+  /if \(!community \|\| !communityIsActive\(community\)\) return null/,
+  "slug access resolution must treat archived communities as absent",
+);
+
+for (const projection of [
+  "resolvePublicFunnelBySlug",
+  "resolvePublicFunnelStatsBySlug",
+  "resolvePublicCommunityAccessBySlug",
+  "recordPublicFunnelVisitBySlug",
+  "getMyJoinRequestBySlug",
+]) {
+  const start = publicCommunity.indexOf(`export const ${projection}`);
+  assert.notEqual(start, -1, `${projection} must exist`);
+  const next = publicCommunity.indexOf("\nexport const ", start + 1);
+  const block = publicCommunity.slice(start, next === -1 ? undefined : next);
+  assert.match(
+    block,
+    /communityIsActive\(community\)/,
+    `${projection} must omit archived communities`,
+  );
+}
+assert.match(
+  publicCommunity,
+  /const activePublished = published[\s\S]*filter\(\(community\) => communityIsActive\(community\)\)[\s\S]*slice\(0, limit\)/,
+  "Discover must remain bounded while omitting archived communities",
+);
+assert.match(
+  publicCommunity,
+  /async function joinPublicCommunityInternal[\s\S]*throw new Error\("community_archived"\)/,
+  "both public join selectors must converge on one archived-state mutation guard",
+);
+assert.match(
+  publicMemory,
+  /resolvePublicCommunityMemoryOverviewBySlug[\s\S]*!communityIsActive\(community\)/,
+  "the public memory projection must omit archived communities",
+);
+assert.match(
+  profiles,
+  /listOwnedCommunitiesByOwnerId[\s\S]*filter\(\(community\) => communityIsActive\(community\)\)/,
+  "ordinary profile community projections must omit archived communities",
+);
+assert.match(
+  analytics,
+  /pathKind === "community_funnel"[\s\S]*!communityIsActive\(community\)/,
+  "archived funnel visits must not produce analytics writes",
+);
+assert.match(
+  platformOperationExecutor,
+  /error\.message === "community_archived"[\s\S]*"semantic_not_found"[\s\S]*"Semantic path not found or not accessible\."/,
+  "external semantic access must not disclose archived-community lifecycle state",
+);
+assert.match(
+  platformHome,
+  /if \(!communityIsActive\(community\)\) \{[\s\S]*status: "disabled", communityId: null/,
+  "platform-home autojoin must stop before membership writes for archived communities",
+);
+
+for (const path of [
+  "convex/communityChat.ts",
+  "convex/communityInteractions.ts",
+  "convex/communityResources.ts",
+  "convex/communityEvents.ts",
+  "convex/communityAgent.ts",
+  "convex/runtimeSkillResolution.ts",
+]) {
+  const source = read(path);
+  assert.doesNotMatch(
+    source,
+    /communityIsActive|lifecycleStatus|community_archived/,
+    `${path} must inherit lifecycle policy instead of creating a parallel branch`,
+  );
+}
+
+console.log("community cold archive access freeze contract proof passed");

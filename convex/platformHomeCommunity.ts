@@ -10,6 +10,7 @@ import {
   resolveCommunityEntryPolicy,
 } from "./communityCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import { communityIsActive } from "../shared/communityLifecycle";
 
 const PLATFORM_HOME_COMMUNITY_SLUG = "polynet";
 const PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE = "platform_home_autojoin_opt_out";
@@ -160,6 +161,9 @@ export async function ensurePlatformHomeCommunityMembership(args: {
     .first()) as CommunityLike | null;
   if (!community) {
     return { status: "missing", communityId: null };
+  }
+  if (!communityIsActive(community)) {
+    return { status: "disabled", communityId: null };
   }
 
   const communityId = String(community._id);

@@ -7,6 +7,7 @@ function read(path: string): string {
 
 const communityPublic = read("convex/communityPublic.ts");
 const communityCore = read("convex/communityCore.ts");
+const communityChannelCore = read("convex/communityChannelCore.ts");
 const appSource = read("apps/web/src/App.tsx");
 const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
 const visitorChrome = read("apps/web/src/components/CommunityVisitorChrome.tsx");
@@ -97,8 +98,13 @@ assert.doesNotMatch(
 );
 assert.match(
   activityCounts,
-  /eq\("status", "live"\)/,
-  "messages-today must count only live interactions — hidden and deleted rows are not truths",
+  /resolvePublicCommunityInteractionActivityCounts/,
+  "messages-today must delegate to the canonical active-channel interaction reader",
+);
+assert.match(
+  communityChannelCore,
+  /async function listReadableRowsForChannelIds[\s\S]*eq\("status", "live"\)/,
+  "the canonical active-channel interaction reader must exclude hidden and deleted rows",
 );
 assert.match(
   activityCounts,
