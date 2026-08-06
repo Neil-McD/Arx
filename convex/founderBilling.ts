@@ -36,11 +36,14 @@ import {
   communityIsActive,
   communityLifecycleGenerationMatches,
   normalizeCommunityLifecycle,
+  restoreCommunityLifecycle,
 } from "../shared/communityLifecycle";
 import {
   cancelStripeSubscriptionIfActive,
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
+import { requireCompletedCommunityArchiveBillingCleanup } from "./communityColdArchive";
+import { recordCriticalAuditEvent } from "./criticalAudit";
 
 const FOUNDER_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
 
@@ -66,6 +69,21 @@ function normalizeFounderSubscriptionStatus(value: unknown): FounderSubscription
     subscriptionStatus: value,
     cancelAtPeriodEnd: value === "cancel_at_period_end",
   });
+}
+
+async function requireFounderCheckoutLifecycle(
+  ctx: any,
+  community: any,
+) {
+  const lifecycle = normalizeCommunityLifecycle(community);
+  if (lifecycle.status === "archived") {
+    await requireCompletedCommunityArchiveBillingCleanup(
+      ctx,
+      community._id,
+      lifecycle.generation,
+    );
+  }
+  return lifecycle;
 }
 
 async function verifyFounderStripePrice(): Promise<string> {
@@ -107,8 +125,7 @@ export const createPendingFounderSubscriptionCheckoutInternal = internalMutation
     if (!community || String(community.ownerId) !== String(args.ownerUserId)) {
       throw new Error("founder_subscription_community_forbidden");
     }
-    const lifecycle = normalizeCommunityLifecycle(community);
-    if (lifecycle.status !== "active") throw new Error("community_archived");
+    const lifecycle = await requireFounderCheckoutLifecycle(ctx, community);
     const existingSubscription = await getFounderSubscriptionByCommunity(
       ctx,
       args.communityId,
@@ -213,7 +230,7 @@ export const attachFounderStripeCheckoutSessionInternal = internalMutation({
     if (!community || String(community.ownerId) !== String(row.ownerUserId)) {
       throw new Error("founder_subscription_community_forbidden");
     }
-    if (!communityIsActive(community)) throw new Error("community_archived");
+    await requireFounderCheckoutLifecycle(ctx, community);
     if (
       !communityLifecycleGenerationMatches(
         community,
@@ -306,6 +323,7 @@ async function syncFounderSubscription(args: {
   currentPeriodStartAt?: number | null;
   currentPeriodEndAt?: number | null;
   cancelAtPeriodEnd?: boolean;
+  verifiedCheckoutPayment?: boolean;
   providerEventCreatedAt: number;
 }) {
   const providerSubscriptionId = String(args.providerSubscriptionId ?? "").trim();
@@ -321,6 +339,7 @@ async function syncFounderSubscription(args: {
         .first()
     : null;
   if (checkout?.mode !== "founder_subscription") checkout = null;
+  let restoresArchivedCommunity = false;
   const existing = await getFounderSubscriptionByProviderSubscriptionId(
     args.ctx,
     providerSubscriptionId,
@@ -331,13 +350,24 @@ async function syncFounderSubscription(args: {
       : null;
     if (
       !checkoutCommunity ||
-      !communityIsActive(checkoutCommunity) ||
       !communityLifecycleGenerationMatches(
         checkoutCommunity,
         checkout.communityLifecycleGeneration,
       )
     ) {
       checkout = null;
+    } else if (!communityIsActive(checkoutCommunity)) {
+      if (args.verifiedCheckoutPayment !== true) {
+        checkout = null;
+      } else {
+        const lifecycle = normalizeCommunityLifecycle(checkoutCommunity);
+        await requireCompletedCommunityArchiveBillingCleanup(
+          args.ctx,
+          checkoutCommunity._id,
+          lifecycle.generation,
+        );
+        restoresArchivedCommunity = true;
+      }
     }
   }
   const expectedPriceId = String(
@@ -392,10 +422,10 @@ async function syncFounderSubscription(args: {
   if (String(community.ownerId) !== String(ownerUserId)) {
     throw new Error("founder_subscription_community_owner_mismatch");
   }
-  // The archive worker owns the terminal billing write. A delayed or
-  // out-of-order provider event must never reopen an archived community's
-  // founder subscription or usage cycle.
-  if (!communityIsActive(community)) {
+  // Only a payment-authoritative checkout event for this exact archived
+  // generation may cross the lifecycle boundary. Ordinary subscription
+  // webhooks remain billing evidence and cannot restore product access.
+  if (!communityIsActive(community) && !restoresArchivedCommunity) {
     return { ok: true, ignored: true, reason: "community_archived" };
   }
   if (
@@ -426,6 +456,20 @@ async function syncFounderSubscription(args: {
   }
   if (!providerCustomerId) throw new Error("founder_subscription_customer_missing");
   const status = normalizeFounderSubscriptionStatus(args.subscriptionStatus);
+  if (
+    restoresArchivedCommunity &&
+    !founderSubscriptionStatusGrantsAccess({
+      status,
+      currentPeriodEndAt: cycleEndAt,
+      nowMs: args.providerEventCreatedAt,
+    })
+  ) {
+    return {
+      ok: true,
+      ignored: true,
+      reason: "community_restore_subscription_inactive",
+    };
+  }
   const endedAt = status === "canceled" || status === "ended"
     ? args.providerEventCreatedAt
     : undefined;
@@ -507,10 +551,37 @@ async function syncFounderSubscription(args: {
       updatedAt: args.providerEventCreatedAt,
     });
   }
-  await args.ctx.db.patch(communityId, {
-    inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
-    updatedAt: args.providerEventCreatedAt,
-  });
+  let restoredLifecycleGeneration: number | null = null;
+  if (restoresArchivedCommunity) {
+    const transition = restoreCommunityLifecycle(community);
+    if (!transition.changed) {
+      throw new Error("community_restore_lifecycle_conflict");
+    }
+    restoredLifecycleGeneration = transition.next.generation;
+    await args.ctx.db.patch(communityId, {
+      lifecycleStatus: transition.next.status,
+      lifecycleGeneration: transition.next.generation,
+      inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
+      updatedAt: args.providerEventCreatedAt,
+    });
+    await recordCriticalAuditEvent(args.ctx, {
+      eventKey: `community_restored:${String(communityId)}:${transition.next.generation}`,
+      eventType: "community_restored",
+      status: "succeeded",
+      actorUserId: ownerUserId,
+      communityId,
+      checkoutSessionId: checkout?.sessionId ?? null,
+      provider: "stripe",
+      providerObjectId: providerSubscriptionId,
+      metadata: { lifecycleGeneration: transition.next.generation },
+      createdAt: args.providerEventCreatedAt,
+    });
+  } else {
+    await args.ctx.db.patch(communityId, {
+      inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
+      updatedAt: args.providerEventCreatedAt,
+    });
+  }
   return {
     ok: true,
     ignored: false,
@@ -519,6 +590,8 @@ async function syncFounderSubscription(args: {
     ownerUserId,
     communityId,
     subscriptionStatus: status,
+    communityRestored: restoresArchivedCommunity,
+    lifecycleGeneration: restoredLifecycleGeneration,
   };
 }
 
@@ -533,6 +606,7 @@ export const syncFounderSubscriptionFromStripeInternal = internalMutation({
     currentPeriodStartAt: v.optional(v.union(v.number(), v.null())),
     currentPeriodEndAt: v.optional(v.union(v.number(), v.null())),
     cancelAtPeriodEnd: v.optional(v.boolean()),
+    verifiedCheckoutPayment: v.optional(v.boolean()),
     providerEventCreatedAt: v.number(),
   },
   handler: async (ctx, args) => await syncFounderSubscription({ ctx, ...args }),

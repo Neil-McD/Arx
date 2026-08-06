@@ -9,6 +9,7 @@ export const CRITICAL_AUDIT_EVENT_TYPES = [
   "community_archived",
   "community_archive_billing_cleanup_completed",
   "community_archive_billing_cleanup_failed",
+  "community_restored",
   "community_purchase_claim_created",
   "community_purchase_claim_redeemed",
   "community_operator_retirement_completed",
@@ -88,6 +89,7 @@ const CRITICAL_AUDIT_METADATA_ALLOWLIST: Record<string, readonly string[]> = {
     "attemptCount",
     "errorCode",
   ],
+  community_restored: ["lifecycleGeneration"],
   community_checkout_created: [
     "billingPeriod",
     "pricePointId",

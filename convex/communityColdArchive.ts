@@ -27,7 +27,7 @@ const ARCHIVE_BILLING_RECOVERY_LEASE_MS = 5 * 60 * 1000;
 const ARCHIVE_BILLING_MAX_RETRY_DELAY_MS = 60 * 60 * 1000;
 const ARCHIVE_CHECKOUT_SETTLE_GRACE_MS = 5 * 60 * 1000;
 
-type ArchiveBillingJobRow = {
+export type ArchiveBillingJobRow = {
   _id: Id<"communityArchiveBillingJobs">;
   communityId: Id<"communities">;
   lifecycleGeneration: number;
@@ -68,7 +68,7 @@ function normalizeArchiveBillingErrorCode(error: unknown): string {
     : "community_archive_billing_cleanup_failed";
 }
 
-async function getUniqueArchiveBillingJob(
+export async function getUniqueArchiveBillingJob(
   ctx: any,
   communityId: any,
   lifecycleGeneration: number,
@@ -83,6 +83,22 @@ async function getUniqueArchiveBillingJob(
     .take(2)) as ArchiveBillingJobRow[];
   if (rows.length > 1) throw new Error("community_archive_billing_job_ambiguous");
   return rows[0] ?? null;
+}
+
+export async function requireCompletedCommunityArchiveBillingCleanup(
+  ctx: any,
+  communityId: any,
+  lifecycleGeneration: number,
+): Promise<ArchiveBillingJobRow> {
+  const job = await getUniqueArchiveBillingJob(
+    ctx,
+    communityId,
+    lifecycleGeneration,
+  );
+  if (!job || job.status !== "complete") {
+    throw new Error("community_restore_billing_cleanup_incomplete");
+  }
+  return job;
 }
 
 async function scheduleArchiveBillingWorker(

@@ -987,6 +987,7 @@ export function registerRuntimeBillingRoutes(
                   currentPeriodStartAt: cycleStartedAt,
                   currentPeriodEndAt: cycleEndsAt,
                   cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
+                  verifiedCheckoutPayment: true,
                   providerEventCreatedAt: eventCreatedAt,
                 },
               );
