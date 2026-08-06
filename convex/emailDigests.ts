@@ -17,8 +17,13 @@ import {
   stableWeeklyDigestDay,
   type WeeklyDigestActivityCounts,
 } from "../shared/weeklyDigestCore";
+import {
+  communityIsActive,
+  normalizeCommunityLifecycle,
+  type CommunityLifecycleFields,
+} from "../shared/communityLifecycle";
 
-type CommunityRow = {
+type CommunityRow = CommunityLifecycleFields & {
   _id: any;
   ownerId: any;
   slug: string;
@@ -83,6 +88,7 @@ type DigestItemCandidate = {
 
 type DigestBatch = {
   communityId: string;
+  communityLifecycleGeneration: number;
   communityName: string;
   communitySlug: string;
   periodStartDay: string;
@@ -181,7 +187,7 @@ async function listDigestCommunities(ctx: any, args: {
 }): Promise<CommunityRow[]> {
   if (args.communityId) {
     const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
-    return community ? [community] : [];
+    return community && communityIsActive(community) ? [community] : [];
   }
   const published = (await ctx.db
     .query("communities")
@@ -194,6 +200,7 @@ async function listDigestCommunities(ctx: any, args: {
     .order("desc")
     .take(args.limit)) as CommunityRow[];
   return [...published, ...unlisted]
+    .filter((community) => communityIsActive(community))
     .sort((a, b) => Number(b.updatedAt ?? 0) - Number(a.updatedAt ?? 0))
     .slice(0, args.limit * 2);
 }
@@ -423,6 +430,7 @@ export const buildWeeklyCommunityDigestBatchesInternal = internalQuery({
 
       batches.push({
         communityId,
+        communityLifecycleGeneration: normalizeCommunityLifecycle(community).generation,
         communityName: String(community.name ?? communitySlug).trim() || "your community",
         communitySlug,
         periodStartDay: period.periodStartDay,
@@ -484,6 +492,8 @@ export const enqueueWeeklyCommunityDigestsInternal = internalAction({
           (internal as any).email.enqueueEmailJobInternal,
           {
             kind: "weekly_member_digest",
+            communityId: batch.communityId,
+            communityLifecycleGeneration: batch.communityLifecycleGeneration,
             recipientUserId: userId,
             templateKey: "weekly_member_digest",
             payload,

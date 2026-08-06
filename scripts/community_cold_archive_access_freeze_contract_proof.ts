@@ -11,6 +11,11 @@ const profiles = read("convex/profileRelationshipCore.ts");
 const analytics = read("convex/businessAnalytics.ts");
 const platformOperationExecutor = read("convex/platformOperationExecutor.ts");
 const platformHome = read("convex/platformHomeCommunity.ts");
+const cognitionLifecycle = read("convex/communityCognitionLifecycle.ts");
+const founderInference = read("convex/founderInferenceCore.ts");
+const emailDigests = read("convex/emailDigests.ts");
+const email = read("convex/email.ts");
+const schema = read("convex/schema.ts");
 
 assert.match(
   core,
@@ -95,6 +100,46 @@ assert.match(
   platformHome,
   /if \(!communityIsActive\(community\)\) \{[\s\S]*status: "disabled", communityId: null/,
   "platform-home autojoin must stop before membership writes for archived communities",
+);
+assert.match(
+  cognitionLifecycle,
+  /communityIsActive\(community as Record<string, unknown>\)[\s\S]*throw new Error\("community_archived"\)/,
+  "one canonical cognition-write guard must freeze archived communities",
+);
+assert.match(
+  founderInference,
+  /if \(!communityIsActive\(community\)\) \{[\s\S]*code: "community_not_found"[\s\S]*hasPlatformOwnerComplimentaryAccess/,
+  "archived communities must fail compute admission before entitlement work",
+);
+assert.match(
+  emailDigests,
+  /return community && communityIsActive\(community\) \? \[community\] : \[\]/,
+  "explicit digest generation must omit archived communities",
+);
+assert.match(
+  emailDigests,
+  /enqueueEmailJobInternal[\s\S]*communityId: batch\.communityId,[\s\S]*communityLifecycleGeneration: batch\.communityLifecycleGeneration/,
+  "weekly digest jobs must carry their lifecycle generation to the outbox boundary",
+);
+assert.match(
+  email,
+  /enqueueEmailJobInternal[\s\S]*communityLifecycleGenerationMatches\([\s\S]*args\.communityLifecycleGeneration[\s\S]*reason: "community_inactive"/,
+  "email enqueue must transactionally reject stale community generations",
+);
+assert.match(
+  schema,
+  /emailOutbox: defineTable\(\{[\s\S]*communityId: v\.optional\(v\.id\("communities"\)\),[\s\S]*communityLifecycleGeneration: v\.optional\(v\.number\(\)\)/,
+  "community-bound outbox rows must persist the lifecycle generation",
+);
+assert.match(
+  email,
+  /claimDueEmailOutboxBatchInternal[\s\S]*communityLifecycleGenerationMatches\([\s\S]*row\.communityLifecycleGeneration[\s\S]*failureReason: "community_inactive"/,
+  "queued community email must be suppressed if archive wins before delivery",
+);
+assert.match(
+  emailDigests,
+  /return \[\.\.\.published, \.\.\.unlisted\][\s\S]*\.filter\(\(community\) => communityIsActive\(community\)\)[\s\S]*\.sort/,
+  "batched digest generation must omit archived communities before activity reads",
 );
 
 for (const path of [

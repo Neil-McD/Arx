@@ -276,6 +276,9 @@ test("archived communities are frozen across ordinary access and public projecti
       lifecycleStatus: "archived",
       lifecycleGeneration: 1,
     });
+    await expect(
+      resolveCommunityInferenceFundingAdmission(ctx, fixture.openCommunityId),
+    ).resolves.toEqual({ ok: false, code: "community_not_found" });
   });
 
   for (const actor of [asOwner, asMember]) {

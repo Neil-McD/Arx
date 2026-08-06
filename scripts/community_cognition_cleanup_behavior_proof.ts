@@ -22,8 +22,8 @@ class FakeDb {
   private communities = new Map<string, Record<string, unknown>>();
   private tables = new Map<string, Row[]>();
 
-  addCommunity(id: string) {
-    this.communities.set(id, { _id: id });
+  addCommunity(id: string, fields: Record<string, unknown> = {}) {
+    this.communities.set(id, { _id: id, ...fields });
   }
 
   addRow(table: string, row: Row) {
@@ -79,9 +79,14 @@ class FakeDb {
 const targetCommunityId = "community_deleted";
 const controlCommunityId = "community_control";
 const liveCommunityId = "community_live";
+const archivedCommunityId = "community_archived";
 const db = new FakeDb();
 db.addCommunity(controlCommunityId);
 db.addCommunity(liveCommunityId);
+db.addCommunity(archivedCommunityId, {
+  lifecycleStatus: "archived",
+  lifecycleGeneration: 1,
+});
 
 for (const definition of COMMUNITY_COGNITION_CLEANUP_PHASES) {
   const rowCount = definition.phase === "source_traces" ? 205 : 1;
@@ -124,6 +129,11 @@ assert.equal(boundCommunityCognitionCleanupLimit(0), 1);
 assert.equal(boundCommunityCognitionCleanupLimit(10_000), COMMUNITY_COGNITION_CLEANUP_MAX_BATCH_LIMIT);
 
 await requireLiveCommunityForCognitionWrite({ db: db as any }, liveCommunityId);
+await assert.rejects(
+  requireLiveCommunityForCognitionWrite({ db: db as any }, archivedCommunityId),
+  /community_archived/,
+  "cognition writes must refuse an archived community",
+);
 await assert.rejects(
   requireLiveCommunityForCognitionWrite({ db: db as any }, targetCommunityId),
   /community_cognition_write_community_not_found/,

@@ -6,6 +6,10 @@ import {
   type EmailTemplateKey,
   sendRenderedEmail,
 } from "./emailCore";
+import {
+  communityIsActive,
+  communityLifecycleGenerationMatches,
+} from "../shared/communityLifecycle";
 
 const EMAIL_TEMPLATE_VALIDATOR = v.union(
   ...EMAIL_TEMPLATE_KEYS.map((value) => v.literal(value)),
@@ -151,6 +155,8 @@ async function findExistingDedupeRow(ctx: any, dedupeKey: string) {
 export const enqueueEmailJobInternal = internalMutation({
   args: {
     kind: v.string(),
+    communityId: v.optional(v.id("communities")),
+    communityLifecycleGeneration: v.optional(v.number()),
     recipientUserId: v.optional(v.id("users")),
     recipientEmail: v.optional(v.string()),
     templateKey: EMAIL_TEMPLATE_VALIDATOR,
@@ -161,6 +167,27 @@ export const enqueueEmailJobInternal = internalMutation({
   },
   handler: async (ctx, args) => {
     const nowMs = args.nowMs ?? Date.now();
+    if (Boolean(args.communityId) !== (args.communityLifecycleGeneration !== undefined)) {
+      throw new Error("email_community_lifecycle_scope_invalid");
+    }
+    if (args.communityId) {
+      const community = await ctx.db.get(args.communityId);
+      if (
+        !community ||
+        !communityIsActive(community) ||
+        !communityLifecycleGenerationMatches(
+          community,
+          args.communityLifecycleGeneration,
+        )
+      ) {
+        return {
+          ok: true,
+          deduped: false,
+          status: "suppressed" as const,
+          reason: "community_inactive",
+        };
+      }
+    }
     const dedupeKey = readString(args.dedupeKey) || null;
     if (dedupeKey) {
       const existing = await findExistingDedupeRow(ctx, dedupeKey);
@@ -213,6 +240,8 @@ export const enqueueEmailJobInternal = internalMutation({
 
     const outboxId = await ctx.db.insert("emailOutbox", {
       kind: readString(args.kind) || templateKey,
+      communityId: args.communityId,
+      communityLifecycleGeneration: args.communityLifecycleGeneration,
       recipientUserId: recipientUserId ?? undefined,
       recipientEmail,
       templateKey,
@@ -251,15 +280,35 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
       if (rows.length >= limit) break;
       if (isStaleSendingRow(row, nowMs)) rows.push(row);
     }
+    const claimedRows = [];
     for (const row of rows) {
+      if (row.communityId) {
+        const community = await ctx.db.get(row.communityId);
+        if (
+          !community ||
+          !communityIsActive(community) ||
+          !communityLifecycleGenerationMatches(
+            community,
+            row.communityLifecycleGeneration,
+          )
+        ) {
+          await ctx.db.patch(row._id, {
+            status: "suppressed",
+            failureReason: "community_inactive",
+            updatedAt: nowMs,
+          });
+          continue;
+        }
+      }
       await ctx.db.patch(row._id, {
         status: "sending",
         attemptCount: Number(row.attemptCount ?? 0) + 1,
         lastAttemptAt: nowMs,
         updatedAt: nowMs,
       });
+      claimedRows.push(row);
     }
-    return rows.map((row) => ({
+    return claimedRows.map((row) => ({
       _id: row._id,
       kind: row.kind,
       recipientEmail: row.recipientEmail,

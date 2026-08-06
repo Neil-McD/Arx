@@ -879,6 +879,8 @@ export default defineSchema({
 
   emailOutbox: defineTable({
     kind: v.string(),
+    communityId: v.optional(v.id("communities")),
+    communityLifecycleGeneration: v.optional(v.number()),
     recipientUserId: v.optional(v.id("users")),
     recipientEmail: v.string(),
     templateKey: v.string(),
