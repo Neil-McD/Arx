@@ -10,6 +10,12 @@ const archive = read("convex/communityColdArchive.ts");
 const founderBilling = read("convex/founderBilling.ts");
 const httpBilling = read("convex/httpBilling.ts");
 const criticalAudit = read("convex/criticalAudit.ts");
+const settingsUi = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
+const billingUi = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
+const communityGateway = read("shared/cloudCommunityAdminGateway.ts");
+const accountUi = read("apps/web/src/components/WebAccountSettingsSection.tsx");
+const app = read("apps/web/src/App.tsx");
 
 assert.match(
   lifecycle,
@@ -40,6 +46,51 @@ assert.match(
   criticalAudit,
   /"community_restored"[\s\S]*community_restored: \["lifecycleGeneration"\]/,
   "successful restoration must leave one bounded critical audit receipt",
+);
+assert.match(
+  founderBilling,
+  /allowed_actions:[\s\S]*lifecycle\.status === "active"[\s\S]*archiveJob\?\.status === "complete"[\s\S]*\["buy_builder" as const\]/,
+  "the server billing projection must expose restoration only after cleanup completes",
+);
+assert.match(
+  settingsUi,
+  /CommunityDangerSettingsSection[\s\S]*Archive freezes this community[\s\S]*handleArchiveCommunity/,
+  "active owners must receive one explicit archive confirmation surface",
+);
+assert.match(
+  communityGateway,
+  /archiveCloudCommunity[\s\S]*communityColdArchive:archiveCommunity/,
+  "archive and blocked-cleanup retry must reuse the canonical archive command",
+);
+assert.match(
+  billingUi,
+  /archiveCleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*archiveCleanupStatus === "complete"[\s\S]*Restore community/,
+  "global Billing must own pending, blocked, and restorable archived presentation",
+);
+assert.match(
+  billingController,
+  /row\?\.lifecycle_status === "archived"[\s\S]*row\?\.lifecycle_status === "active"[\s\S]*onCommunityReady/,
+  "checkout return polling must keep archived communities frozen until the server restores them",
+);
+assert.match(
+  billingController,
+  /if \(!next\) \{[\s\S]*window\.setTimeout\(\(\) => void poll\(\), 1_500\);[\s\S]*return;/,
+  "transient billing refresh failures must retry rather than falsely completing restoration",
+);
+assert.match(
+  billingController,
+  /fundingAttentionCommunities:[\s\S]*community\.lifecycle_status === "active"[\s\S]*community\.funding_mode === "managed"/,
+  "archived communities must not block active Builder admission or creation",
+);
+assert.match(
+  accountUi,
+  /const activeCommunities[\s\S]*community\.lifecycle_status === "active"[\s\S]*Restore archived communities from Billing/,
+  "Account summaries must route archived management to Billing without calling it active funding debt",
+);
+assert.match(
+  app,
+  /onCommunityArchived:[\s\S]*filter\(\(community\) => community\.id !== archivedId\)[\s\S]*openGlobalSettings\("billing"\)[\s\S]*watchArchiveCleanup/,
+  "successful archive must leave the active shell and converge on global Billing",
 );
 
 const verifiedAuthorityUses = [

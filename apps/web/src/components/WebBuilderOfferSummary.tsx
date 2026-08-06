@@ -6,6 +6,7 @@ import {
 type WebBuilderOfferSummaryProps = {
   communityName?: string | null;
   compact?: boolean;
+  purpose?: "activate" | "restore";
 };
 
 export function WebBuilderOfferSummary(props: WebBuilderOfferSummaryProps) {
@@ -16,11 +17,17 @@ export function WebBuilderOfferSummary(props: WebBuilderOfferSummaryProps) {
         <span>One community</span>
       </div>
       <h2>
-        {props.communityName
+        {props.communityName && props.purpose === "restore"
+          ? `Restore ${props.communityName}`
+          : props.communityName
           ? `Activate Builder for ${props.communityName}`
           : POLYNET_BUILDER_OFFER.headline}
       </h2>
-      <p>{POLYNET_BUILDER_OFFER.description}</p>
+      <p>
+        {props.purpose === "restore"
+          ? "Builder restores this community, its member experience, and its preserved content."
+          : POLYNET_BUILDER_OFFER.description}
+      </p>
       <div className="builder-offer-benefits">
         {POLYNET_BUILDER_OFFER.benefits.map((benefit) => (
           <div className="builder-offer-benefit" key={benefit.title}>

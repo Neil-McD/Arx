@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob([
@@ -143,6 +143,44 @@ test.sequential("restoration requires completed archive billing cleanup", async 
         ),
       ).rejects.toThrow("community_restore_billing_cleanup_incomplete");
     }
+  } finally {
+    restoreEnv();
+  }
+});
+
+test.sequential("billing exposes restore only after archive cleanup completes", async () => {
+  const restoreEnv = installFounderPricingEnv();
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createArchivedFixture(t, "overview", "pending");
+    const asOwner = t.withIdentity({ subject: "restore-owner-overview" });
+
+    const pending = await asOwner.query(
+      (api as any).founderBilling.getFounderBillingOverview,
+      {},
+    );
+    expect(pending.communities[0]).toMatchObject({
+      lifecycle_status: "archived",
+      archive_billing_cleanup_status: "pending",
+      allowed_actions: [],
+    });
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.archiveJobId, {
+        status: "complete",
+        completedAt: NOW_MS + 1,
+        updatedAt: NOW_MS + 1,
+      });
+    });
+    const complete = await asOwner.query(
+      (api as any).founderBilling.getFounderBillingOverview,
+      {},
+    );
+    expect(complete.communities[0]).toMatchObject({
+      lifecycle_status: "archived",
+      archive_billing_cleanup_status: "complete",
+      allowed_actions: ["buy_builder"],
+    });
   } finally {
     restoreEnv();
   }

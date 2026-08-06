@@ -1808,6 +1808,27 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
   return firstGatewayRow<TCommunity>(payload);
 }
 
+export type CloudCommunityArchiveResult = {
+  ok: boolean;
+  changed: boolean;
+  community_id: string;
+  lifecycle_status: "archived";
+  lifecycle_generation: number;
+  billing_cleanup_status: "pending" | "complete" | "blocked";
+};
+
+export async function archiveCloudCommunity<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudCommunityArchiveResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation("communityColdArchive:archiveCommunity" as any, {
+    authSubject,
+    communityId: params.communityId,
+  }) as CloudCommunityArchiveResult;
+}
+
 export async function setCloudCommunityFreeAccessMode<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;

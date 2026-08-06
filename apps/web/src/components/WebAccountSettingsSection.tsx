@@ -96,7 +96,12 @@ export function WebAccountSettingsSection(
       setIsSubmittingSignOut(false);
     }
   };
-  const builderAttentionCommunity = props.founderBillingOverview.communities.find((community) =>
+  const activeCommunities = props.founderBillingOverview.communities.filter(
+    (community) => community.lifecycle_status === "active",
+  );
+  const archivedCommunityCount =
+    props.founderBillingOverview.communities.length - activeCommunities.length;
+  const builderAttentionCommunity = activeCommunities.find((community) =>
     [
       "builder_required",
       "checkout_pending",
@@ -105,10 +110,10 @@ export function WebAccountSettingsSection(
       "builder_ended",
     ].includes(community.funding_state),
   ) ?? null;
-  const activeBuilderCount = props.founderBillingOverview.communities.filter((community) =>
+  const activeBuilderCount = activeCommunities.filter((community) =>
     ["builder_active", "builder_canceling", "builder_included"].includes(community.funding_state),
   ).length;
-  const legacyApiCount = props.founderBillingOverview.communities.filter(
+  const legacyApiCount = activeCommunities.filter(
     (community) => community.funding_state === "legacy_api_active",
   ).length;
   const builderAttentionAction = builderAttentionCommunity
@@ -182,6 +187,13 @@ export function WebAccountSettingsSection(
                   <>
                     <strong>No Builder community yet</strong>
                     <span>Create your first community to continue.</span>
+                  </>
+                ) : activeCommunities.length === 0 && archivedCommunityCount > 0 ? (
+                  <>
+                    <strong>
+                      {`${archivedCommunityCount} archived ${archivedCommunityCount === 1 ? "community" : "communities"}`}
+                    </strong>
+                    <span>Restore archived communities from Billing.</span>
                   </>
                 ) : builderAttentionCommunity ? (
                   <>

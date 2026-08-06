@@ -79,8 +79,8 @@ assert.match(founderBilling, /funding_lane: fundingProjection\.lane/);
 assert.match(founderBilling, /funding_state: fundingProjection\.state/);
 assert.match(
   founderBilling,
-  /allowed_actions:\s*lifecycle\.status === "active"\s*\? fundingProjection\.allowedActions\s*:\s*\[\]/,
-  "archived communities must expose no funding action while active communities retain the canonical projection",
+  /allowed_actions:\s*lifecycle\.status === "active"\s*\? fundingProjection\.allowedActions\s*:\s*archiveJob\?\.status === "complete" && !operatorComped\s*\? \["buy_builder" as const\]\s*:\s*\[\]/,
+  "archived communities must fail closed until cleanup completes, then expose only the canonical Builder purchase action",
 );
 assert.match(founderBillingGateway, /BuilderFundingLane/);
 assert.match(founderBillingGateway, /BuilderFundingState/);

@@ -981,6 +981,7 @@ export default function App() {
     ensureSession: ensureUsableAuthSession,
     operatorComplimentaryAccess:
       accountCommerceStatus?.operator_complimentary_access === true,
+    onCommunityReady: (_communityId, readySession) => loadCommunities(readySession),
   });
   const builderOffer = useWebBuilderOfferController({
     startCheckout: founderBilling.startCheckout,
@@ -1117,6 +1118,17 @@ export default function App() {
       setCommunities((current) =>
         current.filter((community) => community.id !== leavingId));
     },
+    onCommunityArchived: (archivedId) => {
+      setCommunities((current) =>
+        current.filter((community) => community.id !== archivedId));
+      applyCommunityShellState({
+        communityId: null,
+        communitySlug: null,
+        communityTab: "chat",
+      });
+      openGlobalSettings("billing");
+      void founderBilling.watchArchiveCleanup(archivedId);
+    },
     session,
     settingsUi: communitySettingsUi,
     setCommunities,
@@ -1131,6 +1143,9 @@ export default function App() {
     handleToggleCommunityMute,
     handleLeaveCommunity,
     handleSaveCommunitySettings,
+    handleArchiveCommunity,
+    isArchivingCommunity,
+    communityArchiveError,
   } = communitySettingsController;
   const {
     loadCommunityJoinRequests,
@@ -2103,6 +2118,8 @@ export default function App() {
         isLoadingCommunityMemberSettings,
         isLeavingCommunity,
         communityMemberSettingsError,
+        isArchivingCommunity,
+        communityArchiveError,
       },
       settingsActions: {
         setIsSettingsBannerDragOver,
@@ -2133,6 +2150,7 @@ export default function App() {
         handleSaveCommunitySettings,
         handleToggleCommunityMute,
         handleLeaveCommunity,
+        handleArchiveCommunity,
       },
       setIsCommunityAvatarFocusModalOpen,
       setIsCommunityBannerFocusModalOpen,
@@ -2579,6 +2597,7 @@ export default function App() {
       founderBillingError: founderBilling.error,
       openFounderBillingPortal: founderBilling.openPortal,
       refreshFounderBilling: founderBilling.refresh,
+      retryCommunityArchive: founderBilling.retryArchiveCleanup,
       onOpenBuilderOffer: (community) => builderOffer.open({ community }),
       onOpenLegacyFunding: () => openGlobalSettings("account"),
       onOpenCreateCommunity: () => openCreateCommunityModal(),

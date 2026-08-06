@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import type { AuthSession } from "../auth";
 import { isValidCommunitySlug, slugifyCommunityName } from "../../../../shared/communitySlug";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
@@ -11,6 +12,10 @@ import {
   coerceCommunityVisualIdentity,
   type CommunityVisualIdentity,
 } from "../../../../shared/communityVisualIdentity";
+import {
+  archiveCloudCommunity,
+  type CloudCommunityArchiveResult,
+} from "../../../../shared/cloudCommunityAdminGateway";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -29,6 +34,10 @@ export function useWebCommunitySettingsController(params: {
     communitySlug: string,
   ) => void;
   onLeaveCommunity: (communityId: string) => void;
+  onCommunityArchived: (
+    communityId: string,
+    result: CloudCommunityArchiveResult,
+  ) => void;
   session: AuthSession | null;
   settingsUi: ReturnType<typeof useWebCommunitySettingsUiController>;
   setCommunities: (
@@ -37,6 +46,13 @@ export function useWebCommunitySettingsController(params: {
   onVisualIdentitySaved?: (identity: CommunityVisualIdentity) => void;
 }) {
   const { adminUi, settingsUi } = params;
+  const [isArchivingCommunity, setIsArchivingCommunity] = useState(false);
+  const [communityArchiveError, setCommunityArchiveError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setIsArchivingCommunity(false);
+    setCommunityArchiveError(null);
+  }, [params.activeCommunityId]);
   const { syncCommunitySettingsSelection } =
     useCommunitySettingsFormController<WebCommunityRecord>({
       slugifyCommunityName,
@@ -190,6 +206,30 @@ export function useWebCommunitySettingsController(params: {
     },
   });
 
+  const handleArchiveCommunity = async (): Promise<void> => {
+    const communityId = String(params.activeCommunityId ?? "").trim();
+    if (!communityId || isArchivingCommunity) return;
+    const session = await params.ensureSession(params.session ?? undefined);
+    if (!session) return;
+    setIsArchivingCommunity(true);
+    setCommunityArchiveError(null);
+    try {
+      const result = await archiveCloudCommunity({ session, communityId });
+      params.onCommunityArchived(communityId, result);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error ?? "");
+      setCommunityArchiveError(
+        message.includes("community_archive_platform_home_forbidden")
+          ? "The Polynet home community cannot be archived."
+          : message.includes("community_archive_forbidden")
+            ? "Only the community owner can archive this community."
+            : message.trim() || "This community could not be archived.",
+      );
+    } finally {
+      setIsArchivingCommunity(false);
+    }
+  };
+
   return {
     syncCommunitySettingsSelection,
     loadCommunityMemberSettings,
@@ -197,5 +237,8 @@ export function useWebCommunitySettingsController(params: {
     handleToggleCommunityMute: governance.handleToggleCommunityMute,
     handleLeaveCommunity: governance.handleLeaveCommunity,
     handleSaveCommunitySettings: governance.handleSaveCommunitySettings,
+    handleArchiveCommunity,
+    isArchivingCommunity,
+    communityArchiveError,
   };
 }

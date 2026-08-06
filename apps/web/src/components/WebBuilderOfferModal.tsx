@@ -1,6 +1,7 @@
 import type { BuilderFundingAction } from "../../../../shared/builderFunding";
 import {
   builderFundingActionLabel,
+  formatBuilderOfferPrice,
   resolveBuilderOfferPrimaryAction,
 } from "../../../../shared/builderOffer";
 import type { CloudFounderBillingCommunity } from "../../../../shared/cloudFounderBillingGateway";
@@ -35,7 +36,10 @@ export function WebBuilderOfferModal(props: WebBuilderOfferModalProps) {
           ×
         </button>
         <div id="builder-offer-title">
-          <WebBuilderOfferSummary communityName={props.community.community_name} />
+          <WebBuilderOfferSummary
+            communityName={props.community.community_name}
+            purpose={props.community.lifecycle_status === "archived" ? "restore" : "activate"}
+          />
         </div>
         {props.error ? <div className="auth-error builder-offer-error">{props.error}</div> : null}
         <div className="builder-offer-actions">
@@ -47,6 +51,8 @@ export function WebBuilderOfferModal(props: WebBuilderOfferModalProps) {
           >
             {props.isSubmitting
               ? "Opening…"
+              : props.community.lifecycle_status === "archived"
+                ? `Restore community — ${formatBuilderOfferPrice(props.community.monthly_price_base_units)}`
               : builderFundingActionLabel({
                   action: primaryAction,
                   state: props.community.funding_state,

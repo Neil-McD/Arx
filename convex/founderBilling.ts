@@ -783,7 +783,9 @@ export const getFounderBillingOverview = query({
             allowed_actions:
               lifecycle.status === "active"
                 ? fundingProjection.allowedActions
-                : [],
+                : archiveJob?.status === "complete" && !operatorComped
+                  ? ["buy_builder" as const]
+                  : [],
             funding_mode: operatorComped
               ? "operator_comp"
               : managed

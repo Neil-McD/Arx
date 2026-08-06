@@ -23,6 +23,9 @@ const modalHost = read("apps/web/src/components/WebCommunityModalHost.tsx");
 const communityUiController = read(
   "apps/web/src/controllers/useWebCommunityUiController.ts",
 );
+const communitySettingsController = read(
+  "apps/web/src/controllers/useWebCommunitySettingsController.ts",
+);
 const communityGateway = read("shared/cloudCommunityAdminGateway.ts");
 const accessViewModel = read("shared/communityAccessViewModel.ts");
 const communitySettingsPaneContract = navigation.slice(
@@ -30,14 +33,14 @@ const communitySettingsPaneContract = navigation.slice(
   navigation.indexOf("export type CommunitySettingsPane"),
 );
 
-for (const pane of ["community", "workflows"] as const) {
+for (const pane of ["community", "workflows", "danger"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"danger"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
 );
 assert.doesNotMatch(
@@ -45,20 +48,25 @@ assert.doesNotMatch(
   /"integrations"/,
   "third-party integrations must not remain a community settings pane",
 );
-assert.doesNotMatch(
-  navigation,
-  /"danger"/,
-  "Danger must not remain a community settings pane or parser result",
-);
 assert.equal(
   parseCommunitySettingsPane("danger"),
-  "community",
-  "legacy Danger URLs must fail safely into the canonical Community pane",
+  "danger",
+  "the owner archive pane must survive refresh and popstate",
 );
 assert.doesNotMatch(
   settingsSection,
-  /CommunityDangerZoneSection|Delete community|openDeleteCommunityModal|canDeleteCommunity/,
-  "community settings must not advertise or wire quarantined deletion",
+  /Delete community|openDeleteCommunityModal|canDeleteCommunity/,
+  "the archive pane must not resurrect quarantined deletion",
+);
+assert.match(
+  settingsSection,
+  /selectedSettingsPane === "danger" && isOwnerSettingsLayer[\s\S]*CommunityDangerSettingsSection/,
+  "Danger must be an owner-only archive surface",
+);
+assert.match(
+  settingsSection,
+  /Archive freezes this community[\s\S]*Restoring it later[\s\S]*\$79\/month/,
+  "the archive confirmation must state the frozen and paid-restoration consequences",
 );
 assert.doesNotMatch(
   modalHost,
@@ -79,6 +87,16 @@ assert.doesNotMatch(
   communityGateway,
   /client\.mutation\("communityLifecycle:deleteCommunity"/,
   "the current community browser gateway must not call the quarantined mutation",
+);
+assert.match(
+  communityGateway,
+  /archiveCloudCommunity[\s\S]*communityColdArchive:archiveCommunity[\s\S]*authSubject[\s\S]*communityId/,
+  "the browser must use one authenticated gateway to the canonical archive command",
+);
+assert.match(
+  communitySettingsController,
+  /handleArchiveCommunity[\s\S]*archiveCloudCommunity\([\s\S]*params\.onCommunityArchived/,
+  "the settings controller must delegate lifecycle authority before leaving the shell",
 );
 assert.equal(
   existsSync("apps/web/src/components/WebDeleteCommunityModal.tsx"),
@@ -102,7 +120,7 @@ assert.doesNotMatch(
 );
 assert.match(
   navigation,
-  /export function parseCommunitySettingsPane\(value: string \| null \| undefined\): CommunitySettingsPane/,
+  /export function parseCommunitySettingsPane\(\s*value: string \| null \| undefined,?\s*\): CommunitySettingsPane/,
   "community settings pane slugs must parse through one shared helper",
 );
 
@@ -217,8 +235,8 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /const availableSettingsPanes = canManageCommunitySettings \? ownerSettingsPanes : \[\]/,
-  "community settings panes must be owner/admin-only",
+  /const availableSettingsPanes: CommunitySettingsPane\[\] = canManageCommunitySettings[\s\S]*isOwnerSettingsLayer[\s\S]*managerSettingsPanes, "danger" as const[\s\S]*managerSettingsPanes/,
+  "admins may manage ordinary settings while only owners receive Danger",
 );
 assert.doesNotMatch(
   settingsSection,

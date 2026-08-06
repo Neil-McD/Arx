@@ -82,6 +82,8 @@ type WebCommunitySettingsSectionProps = {
     isLoadingCommunityMemberSettings: boolean;
     isLeavingCommunity: boolean;
     communityMemberSettingsError: string | null;
+    isArchivingCommunity: boolean;
+    communityArchiveError: string | null;
   };
   actions: {
     setIsSettingsBannerDragOver: (value: boolean) => void;
@@ -118,6 +120,7 @@ type WebCommunitySettingsSectionProps = {
     handleSaveCommunitySettings: () => Promise<void> | void;
     handleToggleCommunityMute: (value: boolean) => Promise<void> | void;
     handleLeaveCommunity: () => Promise<void> | void;
+    handleArchiveCommunity: () => Promise<void> | void;
   };
 };
 
@@ -126,6 +129,7 @@ type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "act
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "Community",
   workflows: "Workflows",
+  danger: "Danger",
 };
 
 function CommunitySettingsPaneSwitcher({
@@ -163,6 +167,61 @@ function CommunitySettingsPaneSwitcher({
           {COMMUNITY_SETTINGS_PANE_LABELS[pane]}
         </button>
       ))}
+    </div>
+  );
+}
+
+function CommunityDangerSettingsSection({
+  activeCommunity,
+  state,
+  actions,
+}: SharedSettingsProps & { activeCommunity: ActiveCommunity }) {
+  const [isConfirmingArchive, setIsConfirmingArchive] = useState(false);
+
+  useEffect(() => {
+    setIsConfirmingArchive(false);
+  }, [activeCommunity.id]);
+
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Archive community</div>
+      <div className="settings-section-desc">
+        Archive freezes this community, removes member access, and stops its active
+        subscriptions. Its content and settings are preserved. Restoring it later
+        requires Builder at $79/month.
+      </div>
+      {state.communityArchiveError ? (
+        <div className="auth-error">{state.communityArchiveError}</div>
+      ) : null}
+      {isConfirmingArchive ? (
+        <div className="auth-actions">
+          <button
+            className="secondary"
+            type="button"
+            disabled={state.isArchivingCommunity}
+            onClick={() => setIsConfirmingArchive(false)}
+          >
+            Cancel
+          </button>
+          <button
+            className="danger"
+            type="button"
+            disabled={state.isArchivingCommunity}
+            onClick={() => void actions.handleArchiveCommunity()}
+          >
+            {state.isArchivingCommunity ? "Archiving…" : "Confirm archive"}
+          </button>
+        </div>
+      ) : (
+        <button
+          className="danger"
+          type="button"
+          disabled={state.isArchivingCommunity}
+          onClick={() => setIsConfirmingArchive(true)}
+        >
+          Archive community
+        </button>
+      )}
     </div>
   );
 }
@@ -654,11 +713,12 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     actions,
   } = props;
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
-  const ownerSettingsPanes: CommunitySettingsPane[] = [
-    "community",
-    "workflows",
-  ];
-  const availableSettingsPanes = canManageCommunitySettings ? ownerSettingsPanes : [];
+  const managerSettingsPanes: CommunitySettingsPane[] = ["community", "workflows"];
+  const availableSettingsPanes: CommunitySettingsPane[] = canManageCommunitySettings
+    ? isOwnerSettingsLayer
+      ? [...managerSettingsPanes, "danger" as const]
+      : managerSettingsPanes
+    : [];
   const selectedSettingsPane = availableSettingsPanes.includes(activePane)
     ? activePane
     : availableSettingsPanes[0] ?? "community";
@@ -733,7 +793,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
           <div className="create-community-form community-settings-form">
             <CommunitySettingsPaneSwitcher
               activePane={selectedSettingsPane}
-              panes={ownerSettingsPanes}
+              panes={availableSettingsPanes}
               onSelectPane={onSelectPane}
             />
             {selectedSettingsPane === "community" ? (
@@ -793,6 +853,13 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 communityAvatarFocusY={resolvedActiveCommunity.avatar_focus_y}
                 communityAvatarZoom={resolvedActiveCommunity.avatar_zoom}
                 onPreview={props.onPreviewCommunityOnboarding}
+              />
+            ) : null}
+            {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
+              <CommunityDangerSettingsSection
+                activeCommunity={resolvedActiveCommunity}
+                state={state}
+                actions={actions}
               />
             ) : null}
           </div>

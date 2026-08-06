@@ -28,6 +28,7 @@ export type WebBillingSettingsSectionProps = {
   founderBillingError: string | null;
   openFounderBillingPortal: (communityId: string) => Promise<void> | void;
   refreshFounderBilling: () => Promise<unknown> | void;
+  retryCommunityArchive: (communityId: string) => Promise<void> | void;
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
   onOpenLegacyFunding: () => void;
   onOpenCreateCommunity: () => void;
@@ -59,6 +60,15 @@ function runFundingAction(params: {
 }
 
 function communityFundingStateLabel(community: CloudFounderBillingCommunity): string {
+  if (community.lifecycle_status === "archived") {
+    if (community.archive_billing_cleanup_status === "blocked") {
+      return "Archive cleanup needs attention";
+    }
+    if (community.archive_billing_cleanup_status !== "complete") {
+      return "Finishing archive";
+    }
+    return "Community archived";
+  }
   if (community.funding_mode === "operator_comp") {
     return "Operator access included";
   }
@@ -113,13 +123,21 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                 });
                 const isActing = props.founderBillingActionCommunityId === community.community_id;
                 const isOperatorComped = community.funding_mode === "operator_comp";
+                const isArchived = community.lifecycle_status === "archived";
+                const archiveCleanupStatus = community.archive_billing_cleanup_status;
                 return (
                   <div className="builder-community-row" key={community.community_id}>
                     <div className="builder-community-copy">
                       <span>{community.community_name}</span>
                       <strong>{communityFundingStateLabel(community)}</strong>
                       <small>
-                        {community.funding_lane === "builder_included"
+                        {isArchived
+                          ? archiveCleanupStatus === "complete"
+                            ? "Content and settings are preserved while this community is frozen."
+                            : archiveCleanupStatus === "blocked"
+                              ? "Payments remain stopped. Retry the cleanup before restoring."
+                              : "Stopping payments and freezing community access."
+                          : community.funding_lane === "builder_included"
                           ? "Polynet-hosted community AI is included."
                           : community.funding_lane === "legacy_choice" && community.funding_state === "legacy_api_active"
                             ? "Community AI is funded by your connected API key."
@@ -127,7 +145,32 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                       </small>
                     </div>
                     <div className="builder-community-actions">
-                      {isOperatorComped ? null : secondaryAction ? (
+                      {isArchived ? (
+                        isOperatorComped ? null : archiveCleanupStatus === "blocked" ? (
+                          <button
+                            className="secondary"
+                            type="button"
+                            disabled={isActing}
+                            onClick={() => void props.retryCommunityArchive(community.community_id)}
+                          >
+                            {isActing ? "Retrying…" : "Retry cleanup"}
+                          </button>
+                        ) : archiveCleanupStatus === "complete" ? (
+                          <button
+                            type="button"
+                            disabled={isActing}
+                            onClick={() => props.onOpenBuilderOffer(community)}
+                          >
+                            {isActing
+                              ? "Opening…"
+                              : `Restore community — ${formatBuilderOfferPrice(community.monthly_price_base_units)}`}
+                          </button>
+                        ) : (
+                          <button className="secondary" type="button" disabled>
+                            Finishing archive…
+                          </button>
+                        )
+                      ) : isOperatorComped ? null : secondaryAction ? (
                         <button
                           className="secondary"
                           type="button"
