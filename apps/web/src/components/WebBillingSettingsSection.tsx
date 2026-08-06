@@ -205,7 +205,7 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
                           })}
                         </button>
                       ) : null}
-                      {isOperatorComped ? null : primaryAction ? (
+                      {isArchived || isOperatorComped ? null : primaryAction ? (
                         <button
                           type="button"
                           className={primaryAction === "manage_builder" ? "secondary" : undefined}

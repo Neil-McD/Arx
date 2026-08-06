@@ -17,6 +17,16 @@ assert.match(realtimeAuth, /const key = `\$\{convexUrl\}::\$\{authSubject\}`/);
 assert.match(realtimeAuth, /entry\.refCount \+= 1/);
 assert.match(realtimeAuth, /if \(previousRuntimeToken !== runtimeToken\)/);
 assert.match(realtimeAuth, /SHARED_REALTIME_CLOSE_LINGER_MS = 1_500/);
+assert.match(
+  realtimeAuth,
+  /\(\(callback, delayMs\) => setTimeout\(callback, delayMs\)\)/,
+  "the default scheduler must preserve the browser timer receiver",
+);
+assert.match(
+  realtimeAuth,
+  /\(\(timer\) => clearTimeout\(timer\)\)/,
+  "the default canceller must preserve the browser timer receiver",
+);
 assert.match(realtimeAuth, /closeForSubject\(authSubjectInput: string\)/);
 
 for (const [label, gateway] of [

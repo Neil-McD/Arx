@@ -78,6 +78,11 @@ assert.match(
   "global Billing must separate direct operator restoration from paid builder restoration",
 );
 assert.match(
+  billingUi,
+  /isArchived \|\| isOperatorComped \? null : primaryAction/,
+  "an archived community must not render the generic Builder action beside its restore action",
+);
+assert.match(
   billingController,
   /restoreOperatorCommunity = useCallback[\s\S]*restoreOperatorCloudCommunity[\s\S]*refresh\(usableSession\)[\s\S]*onCommunityReadyRef/,
   "operator restoration must refresh both billing and the active community projection",

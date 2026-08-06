@@ -170,4 +170,45 @@ describe("authenticated Convex realtime pool", () => {
     harness.runTimer(1);
     expect(harness.created[1]?.closeCalls).toBe(1);
   });
+
+  it("does not bind browser timer functions to the pool instance", () => {
+    const priorSetTimeout = globalThis.setTimeout;
+    const priorClearTimeout = globalThis.clearTimeout;
+    const scheduleReceivers: unknown[] = [];
+    const cancelReceivers: unknown[] = [];
+    try {
+      globalThis.setTimeout = function browserSetTimeout(this: unknown) {
+        scheduleReceivers.push(this);
+        return 1 as unknown as ReturnType<typeof setTimeout>;
+      } as typeof setTimeout;
+      globalThis.clearTimeout = function browserClearTimeout(this: unknown) {
+        cancelReceivers.push(this);
+      } as typeof clearTimeout;
+
+      const pool = new AuthenticatedConvexRealtimePool({
+        createClient: () => ({
+          client: {} as ConvexReactClient,
+          reauthenticate: () => {},
+          close: () => {},
+        }),
+      });
+      const first = pool.acquire({
+        convexUrl: "https://example.convex.cloud",
+        session: session("user-1", "token-a"),
+      });
+      first.close();
+      const second = pool.acquire({
+        convexUrl: "https://example.convex.cloud",
+        session: session("user-1", "token-a"),
+      });
+      second.close();
+      pool.closeForSubject("user-1");
+
+      expect(scheduleReceivers).toEqual([undefined, undefined]);
+      expect(cancelReceivers).toEqual([undefined, undefined]);
+    } finally {
+      globalThis.setTimeout = priorSetTimeout;
+      globalThis.clearTimeout = priorClearTimeout;
+    }
+  });
 });
