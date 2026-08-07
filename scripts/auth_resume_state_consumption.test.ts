@@ -66,4 +66,21 @@ describe("auth resume state consumption", () => {
       payload: { community_id: null, community_slug: "polynet" },
     });
   });
+
+  test("replacing the same intent in the same millisecond remains race-safe", () => {
+    storeAuthResumeState(
+      { intent: { reason: "resume_builder_checkout", payload: {} } },
+      3_000,
+    );
+    const older = readAuthResumeState(3_000);
+    expect(older?.created_at_ms).toBe(3_000);
+
+    storeAuthResumeState(
+      { intent: { reason: "resume_builder_checkout", payload: {} } },
+      3_000,
+    );
+
+    expect(consumeAuthResumeStateIfCurrent(older!, 3_000)).toBe(false);
+    expect(readAuthResumeState(3_000)?.created_at_ms).toBe(3_001);
+  });
 });

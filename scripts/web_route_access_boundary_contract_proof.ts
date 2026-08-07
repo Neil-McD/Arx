@@ -20,6 +20,7 @@ function project(params: {
   communityAccessState?: WebRouteScopedAccessState;
   communityPreviewAccessState?: WebRouteScopedAccessState;
   operatorAccessState?: WebRouteScopedAccessState;
+  accountSetupAccessState?: WebRouteScopedAccessState;
 }) {
   return resolveWebRouteAccessProjection({
     publicRoute: params.publicRoute ?? { kind: "app" },
@@ -30,6 +31,7 @@ function project(params: {
     communityAccessState: params.communityAccessState,
     communityPreviewAccessState: params.communityPreviewAccessState,
     operatorAccessState: params.operatorAccessState,
+    accountSetupAccessState: params.accountSetupAccessState,
   });
 }
 
@@ -52,7 +54,6 @@ for (const [activePage, pathname] of [
   ["discover", "/discover"],
   ["docs", "/docs"],
   ["settings", "/settings/billing"],
-  ["onboarding", "/onboarding"],
 ] as const) {
   assert.deepEqual(project({ activePage, pathname }), {
     kind: "redirect_landing",
@@ -71,6 +72,38 @@ for (const [activePage, pathname] of [
     { kind: "render_authenticated", requirement: "authenticated" },
   );
 }
+
+assert.deepEqual(project({ activePage: "onboarding", pathname: "/onboarding" }), {
+  kind: "redirect_landing",
+  requirement: "account_setup",
+});
+assert.deepEqual(
+  project({
+    activePage: "onboarding",
+    pathname: "/onboarding",
+    authState: "signed_in",
+    accountSetupAccessState: "denied",
+  }),
+  { kind: "render_authenticated", requirement: "account_setup" },
+);
+assert.deepEqual(
+  project({
+    activePage: "settings",
+    pathname: "/settings/billing",
+    authState: "signed_in",
+    accountSetupAccessState: "resolving",
+  }),
+  { kind: "hold", requirement: "authenticated" },
+);
+assert.deepEqual(
+  project({
+    activePage: "settings",
+    pathname: "/settings/billing",
+    authState: "signed_in",
+    accountSetupAccessState: "denied",
+  }),
+  { kind: "redirect_account_setup", requirement: "authenticated" },
+);
 
 assert.deepEqual(
   project({

@@ -18,6 +18,7 @@ export type WebRouteScopedAccessState =
 export type WebRouteAccessRequirement =
   | "public"
   | "member_entry"
+  | "account_setup"
   | "authenticated"
   | "community"
   | "community_preview"
@@ -34,6 +35,10 @@ export type WebRouteAccessProjection =
     }
   | {
       kind: "redirect_member_entry";
+      requirement: WebRouteAccessRequirement;
+    }
+  | {
+      kind: "redirect_account_setup";
       requirement: WebRouteAccessRequirement;
     }
   | {
@@ -57,6 +62,7 @@ export function classifyWebRouteAccessRequirement(params: {
     return "legacy_entry";
   }
   if (params.activePage === "landing") return "member_entry";
+  if (params.activePage === "onboarding") return "account_setup";
   if (params.activePage === "community") return "community";
   if (params.activePage === "operator") return "operator";
   return "authenticated";
@@ -71,6 +77,7 @@ export function resolveWebRouteAccessProjection(params: {
   communityAccessState?: WebRouteScopedAccessState;
   communityPreviewAccessState?: WebRouteScopedAccessState;
   operatorAccessState?: WebRouteScopedAccessState;
+  accountSetupAccessState?: WebRouteScopedAccessState;
 }): WebRouteAccessProjection {
   const requirement = classifyWebRouteAccessRequirement(params);
   const communitySlug = String(
@@ -110,6 +117,18 @@ export function resolveWebRouteAccessProjection(params: {
       };
     }
     return { kind: "redirect_landing", requirement };
+  }
+
+  if (requirement === "account_setup") {
+    return { kind: "render_authenticated", requirement };
+  }
+
+  const accountSetupAccessState = params.accountSetupAccessState ?? "allowed";
+  if (accountSetupAccessState === "resolving") {
+    return { kind: "hold", requirement };
+  }
+  if (accountSetupAccessState === "denied") {
+    return { kind: "redirect_account_setup", requirement };
   }
 
   if (requirement === "community_preview") {

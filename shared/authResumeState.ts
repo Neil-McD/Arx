@@ -172,11 +172,13 @@ export function storeAuthResumeState(
   const intent = normalizePendingAuthIntent(params.intent.reason, params.intent.payload);
   if (!intent) return;
   try {
+    const current = readAuthResumeState(nowMs);
+    const createdAtMs = Math.max(nowMs, (current?.created_at_ms ?? 0) + 1);
     localStorage.setItem(
       AUTH_RESUME_STATE_STORAGE_KEY,
       JSON.stringify({
         v: 1,
-        created_at_ms: nowMs,
+        created_at_ms: createdAtMs,
         intent,
       } satisfies AuthResumeState),
     );

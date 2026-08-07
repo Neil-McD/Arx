@@ -1669,6 +1669,14 @@ export default function App() {
         : operatorAccess
           ? "allowed" as const
           : "denied" as const;
+  const accountSetupRouteAccessState =
+    !session
+      ? "not_applicable" as const
+      : !isAccountSetupResolved
+        ? "resolving" as const
+        : effectiveAccountSetupStatus?.completed
+          ? "allowed" as const
+          : "denied" as const;
   const { shouldHoldRouteForAccess } =
     useWebRouteAccessBoundaryController<
       AuthSession,
@@ -1685,6 +1693,7 @@ export default function App() {
       isAuthBootstrapComplete,
       communityPreviewAccessState,
       operatorAccessState: operatorRouteAccessState,
+      accountSetupAccessState: accountSetupRouteAccessState,
       ensureSession: ensureUsableAuthSession,
       loadCommunities,
       syncCommunitySelection,
