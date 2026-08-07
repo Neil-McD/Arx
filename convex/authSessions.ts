@@ -27,6 +27,7 @@ type StoredAuthSessionV1 = {
   user: {
     id: string;
     email: string | null;
+    emailVerified: boolean;
     displayName: string | null;
     avatarUrl: string | null;
   };
@@ -149,6 +150,18 @@ function readObjectString(record: Record<string, unknown>, keys: readonly string
   return null;
 }
 
+function readObjectBoolean(record: Record<string, unknown>, keys: readonly string[]): boolean {
+  for (const key of keys) {
+    const value = record[key];
+    if (typeof value === "boolean") return value;
+    if (typeof value !== "string") continue;
+    const normalized = value.trim().toLowerCase();
+    if (normalized === "true" || normalized === "1") return true;
+    if (normalized === "false" || normalized === "0") return false;
+  }
+  return false;
+}
+
 function readEpochSeconds(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value) && value > 0) {
     return Math.floor(value);
@@ -215,6 +228,12 @@ function decodeUserFromIdentityToken(token: string): StoredAuthSessionV1["user"]
   return {
     id,
     email: readString(record.email),
+    emailVerified: readObjectBoolean(record, [
+      "email_verified",
+      "emailVerified",
+      "verified_email",
+      "verifiedEmail",
+    ]),
     displayName: coerceDisplayNameFromRecord(record),
     avatarUrl: coerceAvatarUrlFromRecord(record),
   };
@@ -228,6 +247,12 @@ function coerceUser(value: unknown): StoredAuthSessionV1["user"] | null {
   return {
     id,
     email: readString(record.email),
+    emailVerified: readObjectBoolean(record, [
+      "email_verified",
+      "emailVerified",
+      "verified_email",
+      "verifiedEmail",
+    ]),
     displayName: coerceDisplayNameFromRecord(record),
     avatarUrl: coerceAvatarUrlFromRecord(record),
   };
@@ -508,6 +533,7 @@ function toPublicSession(stored: StoredAuthSessionV1) {
     user: {
       id: stored.user.id,
       ...(stored.user.email ? { email: stored.user.email } : null),
+      email_verified: stored.user.emailVerified,
       ...(stored.user.displayName ? { displayName: stored.user.displayName } : null),
       ...(stored.user.avatarUrl ? { avatarUrl: stored.user.avatarUrl } : null),
     },
@@ -615,6 +641,7 @@ export const createAuthSessionInternal = internalMutation({
     refreshToken: v.string(),
     accessTokenExpiresAt: v.optional(v.number()),
     email: v.optional(v.string()),
+    emailVerified: v.optional(v.boolean()),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     externalUserId: v.string(),
@@ -633,6 +660,7 @@ export const createAuthSessionInternal = internalMutation({
         user: {
           id: args.externalUserId,
           email: normalizeString(args.email) || null,
+          emailVerified: args.emailVerified === true,
           displayName: normalizeString(args.displayName) || null,
           avatarUrl: normalizeString(args.avatarUrl) || null,
         },
@@ -933,6 +961,7 @@ export const finalizeAuthSessionRefreshInternal = internalMutation({
     refreshToken: v.string(),
     accessTokenExpiresAt: v.optional(v.number()),
     email: v.optional(v.string()),
+    emailVerified: v.optional(v.boolean()),
     displayName: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),
     externalUserId: v.string(),
@@ -972,6 +1001,7 @@ export const finalizeAuthSessionRefreshInternal = internalMutation({
         user: {
           id: args.externalUserId,
           email: normalizeString(args.email) || null,
+          emailVerified: args.emailVerified === true,
           displayName: normalizeString(args.displayName) || null,
           avatarUrl: normalizeString(args.avatarUrl) || null,
         },
@@ -1272,6 +1302,7 @@ async function refreshAuthSessionWithServerLease(
           : null),
         externalUserId: refreshed.user.id,
         ...(refreshed.user.email ? { email: refreshed.user.email } : null),
+        emailVerified: refreshed.user.emailVerified,
         ...(refreshed.user.displayName
           ? { displayName: refreshed.user.displayName }
           : null),

@@ -2,25 +2,21 @@ import { useEffect } from "react";
 import { recordCloudBusinessPageVisit } from "../../../../shared/cloudBusinessAnalyticsGateway";
 import { ConversionLanding } from "./polynetLanding/ConversionLanding";
 import "./polynetLanding/ConversionLanding.css";
-import type { BuilderPurchaseActivationStatus } from "../controllers/useWebBuilderPurchaseActivationController";
+import type { PublicBuilderCheckoutStatus } from "../controllers/useWebPublicBuilderCheckoutController";
 
 type WebLandingPageProps = {
   onStartBuilderPurchase: () => void;
-  builderPurchaseStatus: BuilderPurchaseActivationStatus;
+  builderPurchaseStatus: PublicBuilderCheckoutStatus;
   builderPurchaseError: string | null;
 };
 
 function activationMessage(
-  status: BuilderPurchaseActivationStatus,
+  status: PublicBuilderCheckoutStatus,
   error: string | null,
 ): string | null {
   if (status === "starting_checkout") return "Opening secure checkout…";
-  if (status === "confirming_payment") return "Confirming your payment…";
-  if (status === "authentication_required") return "Payment confirmed. Opening sign in…";
-  if (status === "claiming") return "Activating your Builder subscription…";
-  if (status === "ready_to_create") return "Builder is active. Create your community.";
   if (status === "canceled") return "Checkout canceled. You can restart whenever you’re ready.";
-  if (status === "error") return error ?? "Builder activation needs attention.";
+  if (status === "error") return error ?? "Builder checkout needs attention.";
   return null;
 }
 

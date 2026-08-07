@@ -26,7 +26,7 @@ import {
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
-import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
+import { normalizeEmailForVerification } from "./workosEmailVerification";
 
 function readEnv(name: string): string {
   try {
@@ -249,13 +249,11 @@ const requireAuthenticatedActor: RequireAuthenticatedActor = async (
           emailVerified: true,
           emailVerificationSource: existingActor?.emailVerificationSource ?? "oauth_provider",
         }
-      : await resolveTrustedEmailVerification({
-          authSubject,
-          email,
-          identityEmail: email,
-          identityEmailVerified: emailVerified,
-          identityEmailVerificationSource: emailVerificationSource,
-        });
+      : {
+          emailVerified: Boolean(email && emailVerified),
+          emailVerificationSource:
+            email && emailVerified ? emailVerificationSource ?? "oauth_provider" : null,
+        };
   const actor = (await ctx.runMutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal as any, {
     authSubject,
     ...(email ? { email } : null),

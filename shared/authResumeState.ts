@@ -36,10 +36,6 @@ export type PendingAuthIntent =
       payload: { navigate: boolean; silent_noop: boolean };
     }
   | {
-      reason: "activate_builder_purchase";
-      payload: { session_id: string };
-    }
-  | {
       reason: "try_polynet_free";
       payload: Record<string, never>;
     };
@@ -112,12 +108,6 @@ function normalizePendingAuthIntent(
     if (typeof navigate !== "boolean") return null;
     if (typeof silent_noop !== "boolean") return null;
     return { reason, payload: { navigate, silent_noop } };
-  }
-
-  if (reason === "activate_builder_purchase") {
-    const session_id = typeof payload.session_id === "string" ? payload.session_id.trim() : "";
-    if (!session_id) return null;
-    return { reason, payload: { session_id } };
   }
 
   if (reason === "try_polynet_free") {

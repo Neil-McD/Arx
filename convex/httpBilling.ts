@@ -994,8 +994,7 @@ export function registerRuntimeBillingRoutes(
               }
               const subscription = await getStripeClient().subscriptions.retrieve(subscriptionId);
               const isAnonymousBuilderCheckout =
-                !founderCheckoutSession.ownerUserId &&
-                Boolean(founderCheckoutSession.claimTokenHash);
+                !founderCheckoutSession.ownerUserId;
               const recoveryEmail = isAnonymousBuilderCheckout
                 ? await readFounderCheckoutRecoveryEmail(session)
                 : null;
@@ -1026,6 +1025,7 @@ export function registerRuntimeBillingRoutes(
                   cancelAtPeriodEnd: Boolean((subscription as any)?.cancel_at_period_end),
                   verifiedCheckoutPayment: true,
                   providerEventCreatedAt: eventCreatedAt,
+                  recoveryEmail,
                   recoveryEmailHash,
                   recoveryEmailHashVersion: recoveryEmailHash
                     ? FOUNDER_CHECKOUT_RECOVERY_EMAIL_HASH_VERSION

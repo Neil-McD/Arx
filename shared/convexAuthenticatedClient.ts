@@ -126,15 +126,6 @@ export async function bootstrapConvexAuthenticatedClient(
       rethrowBootstrapActorError(error);
     }
 
-    try {
-      await client.action("auth:syncAuthenticatedEmailVerification" as any, {
-        authSubject,
-        ...(sessionEmail ? { email: sessionEmail } : null),
-      });
-    } catch (error) {
-      console.warn("convex_email_verification_sync_failed", error);
-    }
-
     const actorAuthSubject = String(actor?.authSubject ?? "").trim();
     if (actorAuthSubject && actorAuthSubject !== authSubject) {
       throw new Error("convex_auth_subject_mismatch");

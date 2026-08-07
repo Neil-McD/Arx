@@ -229,87 +229,15 @@ export async function startCloudFounderSubscriptionCheckout<SessionT>(params: {
   return { checkout_url: checkoutUrl };
 }
 
-export async function startCloudPublicBuilderCheckout(params: {
-  checkoutAttemptId: string;
-  claimToken: string;
-  successUrl: string;
-  cancelUrl: string;
-}): Promise<{ checkout_url: string; session_id: string }> {
+export async function startCloudPublicBuilderCheckout(): Promise<{ checkout_url: string }> {
   const client = createConvexClient();
-  const payload = await client.action("founderBilling:startPublicBuilderCheckout" as any, {
-    checkoutAttemptId: params.checkoutAttemptId,
-    claimToken: params.claimToken,
-    successUrl: params.successUrl,
-    cancelUrl: params.cancelUrl,
-  }) as { checkout_url?: unknown; session_id?: unknown } | null;
+  const payload = await client.action(
+    "founderBilling:startPublicBuilderCheckout" as any,
+    {},
+  ) as { checkout_url?: unknown } | null;
   const checkoutUrl = nullableString(payload?.checkout_url);
-  const sessionId = nullableString(payload?.session_id);
   if (!checkoutUrl) throw new Error("stripe_checkout_url_missing");
-  if (!sessionId) throw new Error("founder_checkout_session_id_missing");
-  return { checkout_url: checkoutUrl, session_id: sessionId };
-}
-
-export async function loadCloudFounderCheckoutReceiptStatus(params: {
-  sessionId: string;
-  claimToken: string;
-}): Promise<{
-  status: "pending_payment" | "paid_unclaimed" | "claimed" | "revoked" | "expired";
-  verified_at?: string;
-  expires_at?: string;
-}> {
-  const client = createConvexClient();
-  const payload = await client.action("founderBilling:getFounderCheckoutReceiptStatus" as any, {
-    sessionId: params.sessionId,
-    claimToken: params.claimToken,
-  }) as Record<string, unknown> | null;
-  const status = nullableString(payload?.status);
-  if (
-    !status ||
-    !["pending_payment", "paid_unclaimed", "claimed", "revoked", "expired"].includes(status)
-  ) {
-    throw new Error("founder_checkout_receipt_status_invalid");
-  }
-  return {
-    status: status as "pending_payment" | "paid_unclaimed" | "claimed" | "revoked" | "expired",
-    verified_at: nullableString(payload?.verified_at) ?? undefined,
-    expires_at: nullableString(payload?.expires_at) ?? undefined,
-  };
-}
-
-export async function claimCloudFounderCheckoutReceipt<SessionT>(params: {
-  session: SessionT;
-  sessionId: string;
-  claimToken: string;
-}): Promise<{ founder_subscription_id: string; already_claimed: boolean }> {
-  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  const payload = await client.mutation("founderBilling:claimFounderCheckoutReceipt" as any, {
-    authSubject,
-    sessionId: params.sessionId,
-    claimToken: params.claimToken,
-  }) as Record<string, unknown> | null;
-  const founderSubscriptionId = nullableString(payload?.founder_subscription_id);
-  if (!founderSubscriptionId) throw new Error("founder_checkout_claim_failed");
-  return {
-    founder_subscription_id: founderSubscriptionId,
-    already_claimed: payload?.already_claimed === true,
-  };
-}
-
-export async function claimCloudFounderCheckoutReceiptByVerifiedEmail<SessionT>(params: {
-  session: SessionT;
-  sessionId: string;
-}): Promise<{ founder_subscription_id: string; already_claimed: boolean }> {
-  const { client, authSubject } = await bootstrapGatewayAuthContext(params.session);
-  const payload = await client.mutation(
-    "founderBilling:claimFounderCheckoutReceiptByVerifiedEmail" as any,
-    { authSubject, sessionId: params.sessionId },
-  ) as Record<string, unknown> | null;
-  const founderSubscriptionId = nullableString(payload?.founder_subscription_id);
-  if (!founderSubscriptionId) throw new Error("founder_checkout_claim_failed");
-  return {
-    founder_subscription_id: founderSubscriptionId,
-    already_claimed: payload?.already_claimed === true,
-  };
+  return { checkout_url: checkoutUrl };
 }
 
 export async function startCloudFounderBillingPortal<SessionT>(params: {

@@ -52,7 +52,7 @@ import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCom
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebProviderConnectionsController } from "./controllers/useWebProviderConnectionsController";
 import { useWebFounderBillingController } from "./controllers/useWebFounderBillingController";
-import { useWebBuilderPurchaseActivationController } from "./controllers/useWebBuilderPurchaseActivationController";
+import { useWebPublicBuilderCheckoutController } from "./controllers/useWebPublicBuilderCheckoutController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
 import { useWebCommunityDirectoryState } from "./controllers/useWebCommunityDirectoryState";
@@ -245,8 +245,7 @@ export default function App() {
       beginBrowserSignedOutState();
       return Promise.resolve();
     });
-  const pendingBuilderSubscriptionIdRef = useRef<string | null>(null);
-  const completeBuilderPurchaseActivationRef = useRef<() => void>(() => undefined);
+  const availableBuilderSubscriptionIdRef = useRef<string | null>(null);
   const accountGraphLifecycle = useWebAccountGraphLifecycle();
   const {
     session,
@@ -976,6 +975,10 @@ export default function App() {
     operatorComplimentaryAccess,
     onCommunityReady: (_communityId, readySession) => loadCommunities(readySession),
   });
+  availableBuilderSubscriptionIdRef.current =
+    founderBilling.overview.unassigned_subscriptions.find(
+      (subscription) => subscription.grants_setup,
+    )?.subscription_id ?? null;
   const builderOffer = useWebBuilderOfferController({
     startCheckout: founderBilling.startCheckout,
     openPortal: founderBilling.openPortal,
@@ -1504,11 +1507,11 @@ export default function App() {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
     onAccountSetupRequired: openProfileSetup,
-    getFounderSubscriptionId: () => pendingBuilderSubscriptionIdRef.current,
+    getFounderSubscriptionId: () => availableBuilderSubscriptionIdRef.current,
     onCommunityCreated: (community) => {
-      pendingBuilderSubscriptionIdRef.current = null;
-      completeBuilderPurchaseActivationRef.current();
+      availableBuilderSubscriptionIdRef.current = null;
       setCommunities((prev) => [community, ...prev]);
+      void founderBilling.refresh(sessionRef.current);
       void enterJoinedCommunity({
         communityId: community.id,
         communitySlug: community.slug,
@@ -1517,35 +1520,48 @@ export default function App() {
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
   });
   const openFundedCreateCommunityModal: typeof communityUi.openCreateCommunityModal = (draft = null) => {
-    if (!operatorComplimentaryAccess && !pendingBuilderSubscriptionIdRef.current) {
+    if (!operatorComplimentaryAccess && !availableBuilderSubscriptionIdRef.current) {
       showAppToastMessage("Complete Builder checkout before creating your community.");
       return;
     }
     communityUi.openCreateCommunityModal(draft);
   };
-  const builderPurchaseActivation = useWebBuilderPurchaseActivationController({
+  const preparePaidBuilderCommunityCreation = async (): Promise<void> => {
+    const activeSession = sessionRef.current;
+    if (!activeSession) return;
+    const latestAccountSetupStatus = await refreshAccountSetupStatus(activeSession);
+    if (!latestAccountSetupStatus?.completed) {
+      navigateTo("/onboarding");
+      return;
+    }
+    for (let attempt = 0; attempt < 8; attempt += 1) {
+      const overview = await founderBilling.refresh(activeSession);
+      const subscription = overview?.unassigned_subscriptions.find(
+        (candidate) => candidate.grants_setup,
+      );
+      if (subscription) {
+        availableBuilderSubscriptionIdRef.current = subscription.subscription_id;
+        openFundedCreateCommunityModal(null);
+        return;
+      }
+      await new Promise<void>((resolve) => window.setTimeout(resolve, 750));
+    }
+    navigateTo("/settings/billing");
+    showAppToastMessage("Payment is still being verified. Your Builder access will appear here automatically.");
+  };
+  const publicBuilderCheckout = useWebPublicBuilderCheckoutController({
     session,
     isAuthBootstrapComplete,
-    ensureSession: ensureUsableAuthSession,
-    accountSetupStatus: effectiveAccountSetupStatus,
     requireSignIn,
-    navigateTo,
-    openCreateCommunity: openFundedCreateCommunityModal,
-    operatorComplimentaryAccess,
-    hasLoadedAccountCommerceStatus: Boolean(accountCommerceStatus),
-    loadAccountCommerceStatus,
-    hasPreparedSubscription: () => Boolean(pendingBuilderSubscriptionIdRef.current),
-    onSubscriptionReady: (founderSubscriptionId) => {
-      pendingBuilderSubscriptionIdRef.current = founderSubscriptionId;
-    },
-    onAttachedCommunityReady: ({ communityId, communitySlug }) =>
-      enterJoinedCommunity({ communityId, communitySlug }),
-    showToast: showAppToastMessage,
+    onAuthenticatedReturn: preparePaidBuilderCommunityCreation,
   });
-  completeBuilderPurchaseActivationRef.current =
-    builderPurchaseActivation.completePurchaseActivation;
-  const openNewCommunityPurchaseFlow =
-    builderPurchaseActivation.openCommunityPurchaseFlow;
+  const openNewCommunityPurchaseFlow: typeof communityUi.openCreateCommunityModal = (draft = null) => {
+    if (operatorComplimentaryAccess || availableBuilderSubscriptionIdRef.current) {
+      openFundedCreateCommunityModal(draft);
+      return;
+    }
+    void publicBuilderCheckout.startPurchase();
+  };
   const { resumePendingAuthIntent } =
     useWebPendingAuthIntentController({
       session,
@@ -1557,7 +1573,6 @@ export default function App() {
       redeemPurchaseClaim,
       joinPublicCommunity,
       redeemPendingPurchases,
-      resumeBuilderPurchase: builderPurchaseActivation.resumePendingPurchase,
       routeTryPolynetFree,
     });
   accountGraphLifecycle.actionsRef.current = {
@@ -2660,10 +2675,10 @@ export default function App() {
     holdLandingForAuth: shouldHoldLandingForAuth,
     landingPageProps: {
       onStartBuilderPurchase: () => {
-        void builderPurchaseActivation.startPurchase();
+        void publicBuilderCheckout.startPurchase();
       },
-      builderPurchaseStatus: builderPurchaseActivation.status,
-      builderPurchaseError: builderPurchaseActivation.error,
+      builderPurchaseStatus: publicBuilderCheckout.status,
+      builderPurchaseError: publicBuilderCheckout.error,
     },
     onboardingPageProps: {
       accountSetupStatus: effectiveAccountSetupStatus,
@@ -2684,8 +2699,10 @@ export default function App() {
         profileUi.setProfileAvatarZoom(1);
       },
       onNextProfile: saveOnboardingProfile,
-      onFinishOnboarding: () =>
-        finishOnboarding({ navigate: !builderPurchaseActivation.hasPendingPurchase }),
+      onFinishOnboarding: async () => {
+        const completed = await finishOnboarding({ navigate: false });
+        if (completed) await preparePaidBuilderCommunityCreation();
+      },
       onClose: closeProfileSetup,
     },
     platformBridgePageProps: {

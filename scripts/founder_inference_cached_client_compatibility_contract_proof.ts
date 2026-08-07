@@ -42,19 +42,12 @@ assert.doesNotMatch(
   /export const (?:prepareFounderInferenceActivationInternal|completeFounderInferenceActivationInternal)\b/,
   "retired activation internals must not return",
 );
-for (const builderOperation of [
-  "startPublicBuilderCheckout",
-  "getFounderCheckoutReceiptStatus",
-  "claimFounderCheckoutReceipt",
-  "claimFounderCheckoutReceiptByVerifiedEmail",
-]) {
-  assert.match(
-    billing,
-    new RegExp(`export const ${builderOperation}\\b`),
-    `candidate backend missing ${builderOperation}`,
-  );
-}
+assert.match(billing, /export const startPublicBuilderCheckout\b/);
+assert.doesNotMatch(
+  billing,
+  /export const (?:getFounderCheckoutReceiptStatus|claimFounderCheckoutReceipt|claimFounderCheckoutReceiptByVerifiedEmail)\b/,
+);
 
 console.log(
-  "PASS: cached founder clients fail safely while canonical Builder checkout RPCs remain available.",
+  "PASS: cached founder clients fail safely while the canonical Builder checkout RPC remains available.",
 );

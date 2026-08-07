@@ -1,7 +1,7 @@
 import { internal } from "./_generated/api";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { normalizeStoredState } from "./authSessions";
-import { normalizeEmailForVerification, resolveTrustedEmailVerification } from "./workosEmailVerification";
+import { normalizeEmailForVerification } from "./workosEmailVerification";
 
 type HttpRouteMethod = "GET" | "POST" | "DELETE" | "OPTIONS" | "PUT" | "PATCH";
 
@@ -70,6 +70,7 @@ function toPublicSession(stored: {
   user: {
     id: string;
     email?: string | null;
+    emailVerified?: boolean;
     displayName?: string | null;
     avatarUrl?: string | null;
   };
@@ -81,6 +82,7 @@ function toPublicSession(stored: {
     user: {
       id: stored.user.id,
       ...(stored.user.email ? { email: stored.user.email } : null),
+      email_verified: stored.user.emailVerified === true,
       ...(stored.user.displayName ? { displayName: stored.user.displayName } : null),
       ...(stored.user.avatarUrl ? { avatarUrl: stored.user.avatarUrl } : null),
     },
@@ -262,11 +264,31 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
       }
 
       const authSubject = verified.identity.authSubject;
+      if (stored.user.id !== authSubject) {
+        return jsonResponse(req, 401, {
+          ok: false,
+          code: "auth_subject_mismatch",
+          error: "auth_subject_mismatch",
+          message: "Authenticated identity does not match the session user.",
+        });
+      }
+      const storedEmail = normalizeEmailForVerification(stored.user.email);
+      const identityEmail = normalizeEmailForVerification(verified.identity.email);
+      if (storedEmail && identityEmail && storedEmail !== identityEmail) {
+        return jsonResponse(req, 401, {
+          ok: false,
+          code: "auth_email_mismatch",
+          error: "auth_email_mismatch",
+          message: "Authenticated email does not match the session user.",
+        });
+      }
       const normalizedStored = {
         ...stored,
         user: {
           id: authSubject,
           email: verified.identity.email ?? stored.user.email ?? null,
+          emailVerified:
+            stored.user.emailVerified === true || verified.identity.emailVerified === true,
           displayName: verified.identity.displayName ?? stored.user.displayName ?? null,
           avatarUrl: verified.identity.avatarUrl ?? stored.user.avatarUrl ?? null,
         },
@@ -275,27 +297,33 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
       const identityEmailMatchesStored =
         Boolean(verified.identity.email) &&
         normalizeEmailForVerification(verified.identity.email) === normalizedStoredEmail;
-      const emailVerification = await resolveTrustedEmailVerification({
-        authSubject,
-        email: normalizedStored.user.email,
-        identityEmail: verified.identity.email,
-        identityEmailVerified: identityEmailMatchesStored ? verified.identity.emailVerified : false,
-        identityEmailVerificationSource: identityEmailMatchesStored
-          ? verified.identity.emailVerificationSource
-          : null,
-      });
+      const emailVerified = Boolean(
+        normalizedStored.user.email &&
+        normalizedStored.user.emailVerified &&
+        (!verified.identity.email || identityEmailMatchesStored),
+      );
 
       const actor = await ctx.runMutation(internal.authActor.ensureAuthenticatedActorByExplicitSubjectInternal as any, {
         authSubject,
         ...(normalizedStored.user.email ? { email: normalizedStored.user.email } : null),
-        emailVerified: emailVerification.emailVerified,
-        ...(emailVerification.emailVerificationSource
-          ? { emailVerificationSource: emailVerification.emailVerificationSource }
-          : null),
+        emailVerified,
+        ...(emailVerified ? { emailVerificationSource: "oauth_provider" as const } : null),
         ...(normalizedStored.user.displayName ? { displayName: normalizedStored.user.displayName } : null),
         ...(normalizedStored.user.avatarUrl ? { avatarUrl: normalizedStored.user.avatarUrl } : null),
         nowMs: Date.now(),
       });
+
+      if (emailVerified && normalizedStored.user.email) {
+        await ctx.scheduler.runAfter(
+          0,
+          (internal as any).founderBilling.reconcilePaidBuilderPurchasesForOwnerInternal,
+          {
+            ownerUserId: actor.dbUserId,
+            verifiedEmail: normalizedStored.user.email,
+            nowMs: Date.now(),
+          },
+        );
+      }
 
       const sessionId = buildSessionId();
       await ctx.runMutation(internal.authSessions.createAuthSessionInternal as any, {
@@ -309,6 +337,7 @@ export function registerRuntimeAuthBridgeRoutes(args: RegisterRuntimeAuthBridgeR
           ? { accessTokenExpiresAt: normalizedStored.accessTokenExpiresAt }
           : null),
         ...(normalizedStored.user.email ? { email: normalizedStored.user.email } : null),
+        emailVerified,
         ...(normalizedStored.user.displayName ? { displayName: normalizedStored.user.displayName } : null),
         ...(normalizedStored.user.avatarUrl ? { avatarUrl: normalizedStored.user.avatarUrl } : null),
         externalUserId: normalizedStored.user.id,

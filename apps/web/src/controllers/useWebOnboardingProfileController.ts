@@ -13,7 +13,6 @@ import {
   isAccountSetupStatusIdentityComplete,
   type AccountSetupStatus,
 } from "../../../../shared/accountSetup";
-import { readPendingFounderCheckout } from "../../../../shared/founderCheckoutBrowserState";
 import { resolveAuthSubject } from "../../../../shared/authSession";
 import type { UserProfileDetail } from "../../../../shared/communityTypes";
 import { formatProfileMutationError } from "../../../../shared/profileMutationErrors";
@@ -418,11 +417,11 @@ export function useWebOnboardingProfileController(params: {
       !params.session ||
       params.publicRouteKind !== "app" ||
       params.activePage !== "landing" ||
-      !isRootAppRoutePath(window.location.pathname || "/")
+      !isRootAppRoutePath(window.location.pathname || "/") ||
+      new URLSearchParams(window.location.search).has("builder_checkout")
     ) {
       return;
     }
-    if (readPendingFounderCheckout()) return;
     void routeTryPolynetFree(params.session);
   }, [
     params.activePage,
@@ -430,35 +429,6 @@ export function useWebOnboardingProfileController(params: {
     params.publicRouteKind,
     params.session,
     routeTryPolynetFree,
-  ]);
-
-  useEffect(() => {
-    if (params.activePage !== "onboarding" || !params.session) return;
-    let cancelled = false;
-    void (async () => {
-      const row =
-        cloudProfile ?? (await loadProfileForOnboarding(params.session!));
-      if (cancelled || !row?.account_setup?.completed) return;
-      const userId = resolveAuthSubject(params.session);
-      if (!userId || onboardingRedirectUserIdRef.current === userId) return;
-      onboardingRedirectUserIdRef.current = userId;
-      setIsOnboardingModalOpen(false);
-      const entered = await actionsRef.current.enterDefaultDestination({
-        session: params.session!,
-        replace: true,
-      });
-      if (!cancelled && !entered) {
-        setOnboardingError("We could not open your community. Try again.");
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    cloudProfile,
-    loadProfileForOnboarding,
-    params.activePage,
-    params.session,
   ]);
 
   useEffect(() => {

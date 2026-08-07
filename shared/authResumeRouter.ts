@@ -16,9 +16,6 @@ type PendingAuthIntentHandlers = {
   redeem_pending_purchases: (
     payload: Extract<PendingAuthIntent, { reason: "redeem_pending_purchases" }>["payload"],
   ) => void;
-  activate_builder_purchase: (
-    payload: Extract<PendingAuthIntent, { reason: "activate_builder_purchase" }>["payload"],
-  ) => void;
   try_polynet_free: (
     payload: Extract<PendingAuthIntent, { reason: "try_polynet_free" }>["payload"],
   ) => void;
@@ -46,9 +43,6 @@ export function routePendingAuthIntent(intent: PendingAuthIntent, handlers: Pend
       return;
     case "redeem_pending_purchases":
       handlers.redeem_pending_purchases(intent.payload);
-      return;
-    case "activate_builder_purchase":
-      handlers.activate_builder_purchase(intent.payload);
       return;
     case "try_polynet_free":
       handlers.try_polynet_free(intent.payload);

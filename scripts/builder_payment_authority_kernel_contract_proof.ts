@@ -12,11 +12,13 @@ const emailEvents = read("convex/emailEvents.ts");
 const lifecycle = read("convex/communityLifecycle.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
+const authBridge = read("convex/httpAuthBridge.ts");
+const app = read("apps/web/src/App.tsx");
+const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
+const onboardingController = read("apps/web/src/controllers/useWebOnboardingProfileController.ts");
 
 assert.match(schema, /founderSubscriptions: defineTable\(\{[\s\S]*communityId: v\.optional\(v\.id\("communities"\)\)/);
-assert.match(schema, /claimTokenHash: v\.optional\(v\.string\(\)\)/);
-assert.match(schema, /checkoutAttemptKeyHash: v\.optional\(v\.string\(\)\)/);
-assert.match(schema, /\.index\("by_mode_attempt_key", \["mode", "checkoutAttemptKeyHash"\]\)/);
+assert.match(schema, /\.index\("by_mode_recovery_email", \["mode", "recoveryEmailHash"\]\)/);
 
 const existingCheckoutStart = billing.indexOf(
   "export const startFounderSubscriptionCheckout = action",
@@ -28,16 +30,18 @@ assert.match(existingCheckout, /authSubject: v\.optional\(v\.string\(\)\)/);
 assert.match(existingCheckout, /communityId: v\.id\("communities"\)/);
 
 const publicCheckout = billing.slice(publicCheckoutStart);
-assert.match(publicCheckout, /checkoutAttemptId: v\.string\(\)/);
-assert.match(publicCheckout, /claimToken: v\.string\(\)/);
+assert.match(publicCheckout, /args: \{\}/);
 assert.match(publicCheckout, /createPendingPublicBuilderCheckoutInternal/);
-assert.match(publicCheckout, /cancel_url: buildCheckoutCancelUrl\(cancelUrl, prepared\.sessionId\)/);
-assert.match(publicCheckout, /claimFounderCheckoutReceiptByVerifiedEmail/);
+assert.match(publicCheckout, /readCanonicalPublicAppOrigin\(\)/);
+assert.match(publicCheckout, /success_url: successUrl/);
+assert.match(publicCheckout, /reconcilePaidBuilderPurchasesForOwnerInternal/);
 assert.match(billing, /receiptStatus: grantsAccess \? "paid_unclaimed" : "revoked"/);
-assert.doesNotMatch(billing, /claimToken:\s*args\.claimToken/);
+assert.doesNotMatch(billing, /claimTokenHash|checkoutAttemptKeyHash|hashFounderCheckoutClaimToken|hashFounderCheckoutAttemptId/);
+assert.doesNotMatch(billing, /export const getFounderCheckoutReceiptStatus/);
 
 assert.match(webhook, /readStripePaymentReady\(session\.payment_status\)/);
 assert.match(webhook, /recoveryEmailHash/);
+assert.match(webhook, /recoveryEmail,/);
 assert.match(webhook, /enqueueFounderCheckoutRecoveryEmailInternal/);
 const founderRecoveryStart = emailEvents.indexOf(
   "export async function enqueueFounderCheckoutRecoveryEmailInternal",
@@ -62,6 +66,22 @@ assert.match(lifecycle, /ctx\.db\.patch\(founderSubscription\._id,[\s\S]*communi
 assert.match(lifecycle, /syncFounderUsageCycle\(/);
 assert.match(gateway, /founderSubscriptionId: params\.founderSubscriptionId \?\? undefined/);
 assert.match(billingGateway, /startCloudPublicBuilderCheckout/);
-assert.match(billingGateway, /claimCloudFounderCheckoutReceiptByVerifiedEmail/);
+assert.doesNotMatch(billingGateway, /claimCloudFounderCheckoutReceipt|loadCloudFounderCheckoutReceiptStatus/);
+assert.match(
+  authBridge,
+  /emailVerified[\s\S]*reconcilePaidBuilderPurchasesForOwnerInternal/,
+);
+assert.match(
+  routeLifecycle,
+  /url\.searchParams\.has\("builder_checkout"\)/,
+);
+assert.match(
+  onboardingController,
+  /new URLSearchParams\(window\.location\.search\)\.has\("builder_checkout"\)/,
+);
+assert.match(
+  app,
+  /latestAccountSetupStatus = await refreshAccountSetupStatus\(activeSession\)[\s\S]*if \(!latestAccountSetupStatus\?\.completed\)/,
+);
 
-console.log("PASS: verified payment creates one recoverable subscription that community creation atomically consumes.");
+console.log("PASS: verified payment and verified identity reconcile server-side into one consumable subscription.");

@@ -320,8 +320,10 @@ function buildUserPatch(args: {
     patch.authSubject = nextAuthSubject;
   }
 
-  const emailChanged = args.email !== args.existing.email;
+  const hasEmailUpdate = args.email !== undefined && args.normalizedEmail !== undefined;
+  const emailChanged = hasEmailUpdate && args.email !== args.existing.email;
   const normalizedEmailChanged =
+    hasEmailUpdate &&
     normalizeStoredEmail(args.normalizedEmail) !== normalizeStoredEmail(args.existing.normalizedEmail ?? args.existing.email);
 
   if (emailChanged) patch.email = args.email;

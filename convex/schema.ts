@@ -640,8 +640,6 @@ export default defineSchema({
     ownerUserId: v.optional(v.id("users")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     claimToken: v.optional(v.string()),
-    claimTokenHash: v.optional(v.string()),
-    checkoutAttemptKeyHash: v.optional(v.string()),
     recoveryEmailHash: v.optional(v.string()),
     recoveryEmailHashVersion: v.optional(v.literal("hmac_sha256_v1")),
     founderRiskState: v.optional(
@@ -658,7 +656,7 @@ export default defineSchema({
     .index("by_sessionId", ["sessionId"])
     .index("by_providerCheckoutSessionId", ["providerCheckoutSessionId"])
     .index("by_providerSubscriptionId", ["providerSubscriptionId"])
-    .index("by_mode_attempt_key", ["mode", "checkoutAttemptKeyHash"])
+    .index("by_mode_recovery_email", ["mode", "recoveryEmailHash"])
     .index("by_owner", ["ownerUserId"])
     .index("by_owner_status", ["ownerUserId", "status"])
     .index("by_mode_status", ["mode", "status"])

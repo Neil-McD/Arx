@@ -21,8 +21,8 @@ const account = read("apps/web/src/components/WebAccountSettingsSection.tsx");
 const offerModal = read("apps/web/src/components/WebBuilderOfferModal.tsx");
 const offerSummary = read("apps/web/src/components/WebBuilderOfferSummary.tsx");
 const offerController = read("apps/web/src/controllers/useWebBuilderOfferController.ts");
-const purchaseActivationController = read(
-  "apps/web/src/controllers/useWebBuilderPurchaseActivationController.ts",
+const publicCheckoutController = read(
+  "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
 );
 const founderBillingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
@@ -87,17 +87,18 @@ assert.match(offerController, /startCheckout\(community\.community_id\)/);
 assert.match(offerController, /openPortal\(community\.community_id\)/);
 assert.match(app, /useWebBuilderOfferController\(\{[\s\S]*startCheckout: founderBilling\.startCheckout/);
 assert.doesNotMatch(app, /startCheckoutAfterCommunityCreated/);
-assert.match(app, /builderPurchaseActivation\.startPurchase\(\)/);
+assert.match(app, /publicBuilderCheckout\.startPurchase\(\)/);
 assert.match(createController, /founderSubscriptionId: current\.getFounderSubscriptionId\?\.\(\) \?\? null/);
-assert.match(app, /openFundedCreateCommunityModal[\s\S]*pendingBuilderSubscriptionIdRef\.current/);
+assert.match(app, /openFundedCreateCommunityModal[\s\S]*availableBuilderSubscriptionIdRef\.current/);
 assert.match(
   app,
-  /openNewCommunityPurchaseFlow\s*=\s*builderPurchaseActivation\.openCommunityPurchaseFlow/,
+  /openNewCommunityPurchaseFlow[\s\S]*publicBuilderCheckout\.startPurchase\(\)/,
 );
 assert.match(
-  purchaseActivationController,
-  /openCommunityPurchaseFlow[\s\S]*operatorComplimentaryAccess[\s\S]*loadAccountCommerceStatus[\s\S]*startPurchase\(\)/,
+  publicCheckoutController,
+  /startCloudPublicBuilderCheckout\(\)[\s\S]*window\.location\.assign/,
 );
+assert.doesNotMatch(app, /claimFounderCheckoutReceipt|founderCheckoutBrowserState/);
 assert.doesNotMatch(app, /createBlockingFundingCommunity/);
 assert.equal(
   (app.match(/builderOffer\.open\(\{ community/g) ?? []).length,
