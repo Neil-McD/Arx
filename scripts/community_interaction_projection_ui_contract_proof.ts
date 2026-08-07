@@ -991,6 +991,11 @@ assert.match(
 );
 assert.match(
   interactionController,
+  /function optimisticLinkEmbeds[\s\S]*extractCommunityInteractionLinkSources[\s\S]*maybeSafeCommunitySourceUrl[\s\S]*status: "pending"[\s\S]*embeds: optimisticLinkEmbeds\(pending\.text, pending\.idempotencyKey\)/,
+  "optimistic roots and replies should project the same safe pending link cards as canonical bundles",
+);
+assert.match(
+  interactionController,
   /function appendPendingReplies[\s\S]*new Set\(replies\.map\(\(bundle\) => bundle\.reply\.idempotency_key\)\)[\s\S]*storedIdempotencyKey\(item\.idempotencyKey, "reply"\)/,
   "pending reply overlays should dedupe against visible canonical replies by stored idempotency key",
 );

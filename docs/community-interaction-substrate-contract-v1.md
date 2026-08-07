@@ -540,6 +540,7 @@ Rules:
 - redacted and unavailable embeds are never revived by the refresh queue
 - renderers treat link blocks as derived preview metadata when canonical `markdown_text` already contains the URL; they must not append the URL a second time
 - pending, ready, and failed generic link embeds render the same compact card shell; enrichment may improve metadata but never controls whether the card exists
+- optimistic composer roots and replies use the same bounded URL extractor and source-safety policy as canonical writes, so an eligible generic link starts as the compact pending card instead of briefly rendering as plain text
 - renderers show at most one rich preview per message; additional links remain visible in canonical message text
 - a visible generic link card replaces its matching exact standalone URL line at that authored position in pending, ready, or failed state; it must not move surrounding copy or remove the same URL when it appears inside prose
 - previews without an exact standalone URL match retain the trailing position after canonical attachments, preserving inline-link, workspace-reference, and attachment ordering

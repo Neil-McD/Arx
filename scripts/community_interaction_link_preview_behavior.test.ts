@@ -5,6 +5,8 @@ import { describe, expect, it } from "vitest";
 
 import { CommunityInteractionLinkPreview } from "../apps/web/src/components/CommunityInteractionLinkPreview";
 import type { CommunityInteractionEmbed } from "../shared/cloudCommunityInteractionsGateway";
+import { extractCommunityInteractionLinkSources } from "../shared/communityInteractionLinkExtraction";
+import { maybeSafeCommunitySourceUrl } from "../convex/communitySourceUrlPolicy";
 
 const requireFromWeb = createRequire(
   new URL("../apps/web/package.json", import.meta.url),
@@ -47,6 +49,14 @@ function embed(
 }
 
 describe("CommunityInteractionLinkPreview", () => {
+  it("shares the canonical safe URL extraction rule with optimistic messages", () => {
+    const normalize = (rawUrl: string) => maybeSafeCommunitySourceUrl(rawUrl, 2_048);
+    expect(extractCommunityInteractionLinkSources(
+      "Join https://Example.com/room). Again https://example.com/room and https://localhost/private",
+      normalize,
+    )).toEqual(["https://example.com/room"]);
+  });
+
   it.each(["pending", "failed"] as const)(
     "renders the compact generic shell while enrichment is %s",
     (status) => {

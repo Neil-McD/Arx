@@ -348,8 +348,8 @@ assert.match(
 
 assert.match(
   interactions,
-  /function normalizeUrl\(raw: unknown\)[\s\S]*requireSafeCommunitySourceUrl\(raw, MAX_INTERACTION_URL_CHARS\)/,
-  "link block normalization should require shared safe source URL policy",
+  /function extractLinkBlocksFromText\(text: string\)[\s\S]*extractCommunityInteractionLinkSources\([\s\S]*requireSafeCommunitySourceUrl\(rawUrl, MAX_INTERACTION_URL_CHARS\)/,
+  "link block normalization should share extraction with optimistic messages and require the safe source URL policy",
 );
 
 const fetchEmbedPreview = interactions.slice(

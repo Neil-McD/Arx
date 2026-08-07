@@ -33,6 +33,7 @@ import {
   requireSafeCommunitySourceFetcherEndpoint,
   requireSafeCommunitySourceUrl,
 } from "./communitySourceUrlPolicy";
+import { extractCommunityInteractionLinkSources } from "../shared/communityInteractionLinkExtraction";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { intakeCommunityAgentMention } from "./communityAgentConciergeCore";
 import {
@@ -410,38 +411,26 @@ function legacyChatContentBlocks(message: CommunityChatMessageLike): NormalizedC
   return [{ blockType: "markdown_text", text: extractLegacyChatMessageText(message) }];
 }
 
-function normalizeUrl(raw: unknown): { sourceUrl: string; normalizedSourceUrl: string } {
-  const url = requireSafeCommunitySourceUrl(raw, MAX_INTERACTION_URL_CHARS);
-  return {
-    sourceUrl: url,
-    normalizedSourceUrl: url.slice(0, MAX_INTERACTION_URL_CHARS),
-  };
-}
-
 const MAX_AUTO_LINK_BLOCKS = 2;
 
 // Detect http(s) URLs in composer text and turn them into link blocks (which auto-create pending
 // embeds). Deduped by normalized URL, capped, invalid URLs skipped.
 function extractLinkBlocksFromText(text: string): NormalizedContentBlock[] {
-  const matches = text.match(/\bhttps?:\/\/[^\s<>()]+/gi);
-  if (!matches) return [];
-  const out: NormalizedContentBlock[] = [];
-  const seen = new Set<string>();
-  for (const raw of matches) {
-    if (out.length >= MAX_AUTO_LINK_BLOCKS) break;
-    // Strip trailing punctuation that commonly clings to a URL in prose.
-    const trimmed = raw.replace(/[.,;:!?)\]}'"]+$/, "");
-    let normalized: { sourceUrl: string; normalizedSourceUrl: string };
-    try {
-      normalized = normalizeUrl(trimmed);
-    } catch {
-      continue;
-    }
-    if (seen.has(normalized.normalizedSourceUrl)) continue;
-    seen.add(normalized.normalizedSourceUrl);
-    out.push({ blockType: "link", url: normalized.sourceUrl, normalizedSourceUrl: normalized.normalizedSourceUrl });
-  }
-  return out;
+  return extractCommunityInteractionLinkSources(
+    text,
+    (rawUrl) => {
+      try {
+        return requireSafeCommunitySourceUrl(rawUrl, MAX_INTERACTION_URL_CHARS);
+      } catch {
+        return null;
+      }
+    },
+    MAX_AUTO_LINK_BLOCKS,
+  ).map((url) => ({
+    blockType: "link" as const,
+    url,
+    normalizedSourceUrl: url.slice(0, MAX_INTERACTION_URL_CHARS),
+  }));
 }
 
 function contentSummary(blocks: NormalizedContentBlock[]): string {
