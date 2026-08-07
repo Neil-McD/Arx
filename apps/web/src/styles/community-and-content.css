@@ -3844,7 +3844,91 @@
    visitor funnel intentionally reuses the interaction projection without the
    member root class, so these rules cannot leak into .cvs-chat. */
 .community-member-chat .community-interaction-feed-scroll {
+  --community-feed-reading-measure: 70ch;
   padding-bottom: calc(var(--mobile-community-composer-height, 0px) + 18px);
+}
+
+/* The member feed is the long-form reading surface. Keep its prose calm and
+   bounded without changing the pinned teaser, visitor preview, or thread
+   drawer, which intentionally reuse the projection at denser scales. */
+.community-member-chat .community-interaction-feed-scroll > .community-interaction-feed {
+  gap: 6px;
+}
+
+.community-member-chat .community-interaction-feed-scroll .community-interaction-group {
+  padding: 9px 12px 7px;
+}
+
+.community-member-chat .community-interaction-feed-scroll .community-interaction-group-body {
+  gap: 3px;
+}
+
+.community-member-chat
+  .community-interaction-feed-scroll
+  .community-interaction-message
+  + .community-interaction-message {
+  margin-top: 5px;
+}
+
+.community-member-chat .community-interaction-feed-scroll .community-interaction-meta-row {
+  color: var(--text-secondary);
+}
+
+.community-member-chat .community-interaction-feed-scroll .community-interaction-title {
+  max-width: min(100%, 68ch);
+  margin-top: 2px;
+  font-size: 17px;
+  font-weight: 650;
+  line-height: 1.35;
+}
+
+.community-member-chat .community-interaction-feed-scroll .community-interaction-body {
+  max-width: min(100%, var(--community-feed-reading-measure));
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.community-member-chat
+  .community-interaction-feed-scroll
+  .community-interaction-chat-markdown
+  .chat-md-heading-1 {
+  font-size: 1.22em;
+}
+
+.community-member-chat
+  .community-interaction-feed-scroll
+  .community-interaction-chat-markdown
+  .chat-md-heading-2 {
+  font-size: 1.12em;
+}
+
+.community-member-chat
+  .community-interaction-feed-scroll
+  .community-interaction-chat-markdown
+  .chat-md-heading-3 {
+  font-size: 1.05em;
+}
+
+.community-member-chat .community-interaction-feed-scroll .community-interaction-footer {
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  column-gap: 8px;
+  row-gap: 6px;
+  color: var(--text-secondary);
+}
+
+.community-member-chat .community-interaction-feed-scroll .community-interaction-kind,
+.community-member-chat .community-interaction-feed-scroll .community-interaction-thread-time,
+.community-member-chat .community-interaction-feed-scroll .community-interaction-edited,
+.community-member-chat .community-interaction-feed-scroll .community-interaction-day span,
+.community-member-chat .community-interaction-feed-scroll .community-interaction-system {
+  color: var(--text-secondary);
+}
+
+.community-member-chat .community-interaction-feed-scroll .community-interaction-kind,
+.community-member-chat .community-interaction-feed-scroll .community-interaction-day span {
+  font-size: 12px;
 }
 
 .community-member-chat .community-interaction-main-composer {

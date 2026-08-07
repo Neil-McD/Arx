@@ -1120,6 +1120,16 @@ assert.match(
 );
 assert.match(
   baseCss,
+  /\.community-member-chat \.community-interaction-feed-scroll\s*\{[\s\S]*--community-feed-reading-measure:\s*70ch;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-title\s*\{[\s\S]*max-width:\s*min\(100%,\s*68ch\);[\s\S]*font-size:\s*17px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-body\s*\{[\s\S]*max-width:\s*min\(100%,\s*var\(--community-feed-reading-measure\)\);[\s\S]*font-size:\s*16px;[\s\S]*line-height:\s*1\.55;/,
+  "the member feed should provide a readable prose measure and clear title-to-body hierarchy without changing shared projection density",
+);
+assert.match(
+  baseCss,
+  /\.community-member-chat \.community-interaction-feed-scroll > \.community-interaction-feed\s*\{[\s\S]*gap:\s*6px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-group-body\s*\{[\s\S]*gap:\s*3px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-meta-row\s*\{[\s\S]*color:\s*var\(--text-secondary\);[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-footer\s*\{[\s\S]*flex-direction:\s*row;[\s\S]*flex-wrap:\s*wrap;/,
+  "the member feed should separate interaction groups while keeping metadata and root actions legible and attached",
+);
+assert.match(
+  baseCss,
   /--chat-link:\s*var\(--accent-cyan\);[\s\S]*--chat-link-hover:[\s\S]*\.chat-link:visited\s*\{[\s\S]*color:\s*var\(--chat-link\);[\s\S]*\.chat-link:focus-visible\s*\{/,
   "both dark-family themes should inherit one accessible semantic treatment for chat links",
 );
