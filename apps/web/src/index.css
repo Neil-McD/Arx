@@ -1533,8 +1533,8 @@
   );
 }
 
-:root[data-theme="light"] .app-shell.community-layout:has(.community-member-chat),
-:root[data-theme="light"] .community-member-chat {
+:root[data-theme-family="light"] .app-shell.community-layout:has(.community-member-chat),
+:root[data-theme-family="light"] .community-member-chat {
   --community-text-author: #171719;
   --community-text-body: #303037;
   --community-text-ui: #5f5d68;
