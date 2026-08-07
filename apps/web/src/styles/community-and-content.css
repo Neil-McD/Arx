@@ -6317,7 +6317,7 @@
   margin-top: 0;
 }
 
-/* Explicit rgba: var(--border-subtle) is undefined and resolves invisible. */
+/* Divider lines inherit the theme-aware day-label color. */
 .community-dm-day {
   display: flex;
   align-items: center;
@@ -6333,7 +6333,7 @@
   content: "";
   flex: 1;
   height: 1px;
-  background: rgba(255, 255, 255, 0.22);
+  background: currentColor;
 }
 
 .community-dm-panel-message.is-cluster-end {
