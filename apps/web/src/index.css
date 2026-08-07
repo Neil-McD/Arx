@@ -135,6 +135,7 @@
   --bg-panel: #efefeb;
   --surface-panel: #efefeb;
   --surface-nav: #efefeb;
+  --community-shell-stroke: var(--stroke-divider-accent);
 }
 
 /* Web: keep topbar content aligned with the left rail. */
