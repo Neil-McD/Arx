@@ -46,7 +46,7 @@ The root graph pins:
 - `tar@7.5.21`
 
 The web graph pins `brace-expansion@5.0.9`. The regenerated locks resolve
-`postcss@8.5.23` and `dompurify@3.4.12` while retaining the accepted provider
+`postcss@8.5.23` and `dompurify@3.4.13` while retaining the accepted provider
 SDK versions.
 
 ## Compatibility interlock
