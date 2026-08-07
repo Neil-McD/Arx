@@ -5938,24 +5938,24 @@ button.message-citation-chip:hover {
   margin-top: 2px;
 }
 
-.settings-panel button.settings-primary-action,
-.settings-panel button.settings-primary-action:hover:not(:disabled),
-.settings-panel button.settings-primary-action:focus-visible {
+button.settings-primary-action,
+button.settings-primary-action:hover:not(:disabled),
+button.settings-primary-action:focus-visible {
   border-color: var(--bg-button);
   background: var(--bg-button);
   color: var(--bg-button-text);
 }
 
-.settings-panel button.settings-primary-action:hover:not(:disabled) {
+button.settings-primary-action:hover:not(:disabled) {
   filter: brightness(0.94);
   transform: translateY(-1px);
 }
 
-.settings-panel button.settings-primary-action:active:not(:disabled) {
+button.settings-primary-action:active:not(:disabled) {
   transform: translateY(0);
 }
 
-.settings-panel button.settings-primary-action svg {
+button.settings-primary-action svg {
   stroke: currentColor;
 }
 
