@@ -2534,10 +2534,6 @@
   grid-template-columns: minmax(0, 1fr) clamp(300px, 22vw, 380px);
 }
 
-.community-member-chat .community-interaction-projection.has-context-panel {
-  grid-template-columns: minmax(0, 1fr) clamp(280px, 18vw, 320px);
-}
-
 .community-context-panel {
   display: flex;
   flex-direction: column;
@@ -3175,12 +3171,7 @@
 }
 
 .community-context-member.is-offline {
-  opacity: 1;
-}
-
-.community-context-member.is-offline .community-context-member-avatar {
-  opacity: 0.56;
-  filter: grayscale(0.35);
+  opacity: 0.5;
 }
 
 .community-context-member-avatar {
@@ -3853,139 +3844,7 @@
    visitor funnel intentionally reuses the interaction projection without the
    member root class, so these rules cannot leak into .cvs-chat. */
 .community-member-chat .community-interaction-feed-scroll {
-  --community-feed-reading-measure: 640px;
   padding-bottom: calc(var(--mobile-community-composer-height, 0px) + 18px);
-}
-
-.community-member-chat .community-interaction-projection {
-  --community-chat-surface: var(
-    --community-content-surface,
-    color-mix(in srgb, var(--bg-workspace) 62%, var(--bg-card) 38%)
-  );
-}
-
-.community-member-chat .community-context-panel {
-  background: var(
-    --community-side-surface,
-    color-mix(in srgb, var(--bg-workspace) 78%, var(--bg-panel) 22%)
-  );
-}
-
-.community-member-chat .community-channel-header {
-  background: var(--community-chat-surface);
-}
-
-/* The member feed is the long-form reading surface. Keep its prose calm and
-   bounded without changing the pinned teaser, visitor preview, or thread
-   drawer, which intentionally reuse the projection at denser scales. */
-.community-member-chat .community-interaction-feed-scroll > .community-interaction-feed {
-  gap: 0;
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-group {
-  margin-block: 8px;
-  padding: 0 12px;
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-group-body {
-  gap: 0;
-}
-
-.community-member-chat
-  .community-interaction-feed-scroll
-  .community-interaction-message
-  + .community-interaction-message {
-  margin-top: 8px;
-  padding-top: 8px;
-  border-top: 1px solid color-mix(in srgb, var(--border-muted) 48%, transparent);
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-meta-row {
-  color: var(--community-text-meta, var(--text-secondary));
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-author {
-  color: var(--community-text-author, var(--text-primary));
-  font-weight: 650;
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-title {
-  max-width: min(100%, var(--community-feed-reading-measure));
-  margin-top: 2px;
-  color: var(--community-text-author, var(--text-primary));
-  font-size: 17px;
-  font-weight: 650;
-  line-height: 1.35;
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-body {
-  max-width: min(100%, var(--community-feed-reading-measure));
-  color: var(--community-text-body, var(--text-primary));
-  font-size: 16px;
-  line-height: 1.55;
-}
-
-.community-member-chat
-  .community-interaction-feed-scroll
-  .community-interaction-chat-markdown
-  .chat-md-heading-1 {
-  font-size: 1.22em;
-}
-
-.community-member-chat
-  .community-interaction-feed-scroll
-  .community-interaction-chat-markdown
-  .chat-md-heading-2 {
-  font-size: 1.12em;
-}
-
-.community-member-chat
-  .community-interaction-feed-scroll
-  .community-interaction-chat-markdown
-  .chat-md-heading-3 {
-  font-size: 1.05em;
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-footer {
-  margin-top: 5px;
-  flex-direction: row;
-  align-items: center;
-  flex-wrap: wrap;
-  column-gap: 8px;
-  row-gap: 6px;
-  color: var(--community-text-ui, var(--text-secondary));
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-kind,
-.community-member-chat .community-interaction-feed-scroll .community-interaction-thread-time,
-.community-member-chat .community-interaction-feed-scroll .community-interaction-edited,
-.community-member-chat .community-interaction-feed-scroll .community-interaction-day span,
-.community-member-chat .community-interaction-feed-scroll .community-interaction-system {
-  color: var(--community-text-meta, var(--text-secondary));
-}
-
-.community-member-chat .community-interaction-feed-scroll .community-interaction-kind,
-.community-member-chat .community-interaction-feed-scroll .community-interaction-day span {
-  font-size: 12px;
-}
-
-.community-member-chat .community-context-rail-name {
-  color: var(--community-text-author, var(--text-primary));
-}
-
-.community-member-chat .community-context-section,
-.community-member-chat .community-context-members-footer,
-.community-member-chat .community-context-members-status,
-.community-member-chat .community-context-member-activity {
-  color: var(--community-text-meta, var(--text-muted));
-}
-
-.community-member-chat .community-context-member-name {
-  color: var(--community-text-ui, var(--text-secondary));
-}
-
-.community-member-chat .community-context-member.is-offline .community-context-member-name {
-  color: var(--community-text-meta, var(--text-muted));
 }
 
 .community-member-chat .community-interaction-main-composer {

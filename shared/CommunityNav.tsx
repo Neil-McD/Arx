@@ -352,7 +352,6 @@ export const CommunityNav = memo(function CommunityNav({
               <button
                 className={isSelected ? "nav-item community-channel-item active" : "nav-item community-channel-item"}
                 type="button"
-                aria-current={isSelected ? "page" : undefined}
                 onPointerDown={sortableBindings?.onPointerDown}
                 onClickCapture={sortableBindings?.onClickCapture}
                 onClick={() => {
