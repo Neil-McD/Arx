@@ -126,7 +126,7 @@
   --surface-nav: #17171a;
 }
 
-:root[data-theme="light"] {
+:root[data-theme-family="light"] {
   --bg-app: #e4e4e0;
   --surface-app: #e4e4e0;
   --surface-rail: #e4e4e0;
