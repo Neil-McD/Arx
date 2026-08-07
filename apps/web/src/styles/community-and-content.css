@@ -3905,7 +3905,6 @@
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
   --community-composer-control-size: 36px;
   --community-composer-input-size: 24px;
-  border-radius: var(--composer-radius);
   background: var(--composer-surface);
   border-color: var(--composer-border);
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.22);
@@ -3918,10 +3917,12 @@
 }
 
 .community-member-chat .community-interaction-main-composer .chat-input-bar {
+  border-radius: var(--radius-sm);
   padding: 12px 14px 10px;
 }
 
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
+  border-radius: var(--composer-radius);
   padding: 12px 14px 10px;
 }
 
