@@ -269,8 +269,9 @@ assert.equal(
   "--bg-card-hover: #ECECEA;",
   "--surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);",
   "--text-primary: #171719;",
+  "--text-secondary: #52515A;",
   "--text-muted: #6B6974;",
-  "--text-faint: #6B6974;",
+  "--text-faint: #726F78;",
   "--border-strong: rgba(23, 23, 25, 0.22);",
   "--border-default: rgba(23, 23, 25, 0.1);",
   "--divider-accent: rgba(23, 23, 25, 0.22);",
@@ -593,9 +594,9 @@ assert.match(
 
 const accessiblePairs = [
   ["Primary ink on canvas", "#171719", "#F8F8F4"],
-  ["Secondary ink on canvas", "#6B6974", "#F8F8F4"],
+  ["Secondary ink on canvas", "#52515A", "#F8F8F4"],
   ["Muted ink on canvas", "#6B6974", "#F8F8F4"],
-  ["Faint ink on canvas", "#6B6974", "#F8F8F4"],
+  ["Faint ink on canvas", "#726F78", "#F8F8F4"],
   ["Selection ink on card", "#171719", "#FFFFFF"],
   ["White on control ink", "#FFFFFF", "#171719"],
   ["Intelligence blue on card", "#2F55FF", "#FFFFFF"],

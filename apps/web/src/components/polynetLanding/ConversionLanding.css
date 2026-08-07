@@ -88,6 +88,8 @@
 
 .pn-landing .vsl {
   display: block;
+  position: relative;
+  overflow: hidden;
   width: min(var(--content-media), 100%);
   aspect-ratio: 16 / 9;
   margin: 36px auto 0;
@@ -99,7 +101,14 @@
     0 20px 70px -46px rgba(0, 0, 0, 0.94);
 }
 
-.pn-landing .vsl:focus-visible,
+.pn-landing .vsl iframe {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+}
+
+.pn-landing .vsl iframe:focus-visible,
 .pn-landing .cta:focus-visible,
 .pn-landing .footer a:focus-visible,
 .pn-landing .footer button:focus-visible {
