@@ -91,7 +91,10 @@ assert.match(purchaseModal, /Buy Builder/);
 assert.match(purchaseModal, /operator_included/);
 assert.match(purchaseModal, /paid_setup/);
 assert.match(offerSummary, /POLYNET_BUILDER_OFFER\.benefits\.map/);
-assert.match(settingsStyles, /button\.settings-primary-action[\s\S]*background: var\(--bg-button\)/);
+assert.match(
+  settingsStyles,
+  /button\.settings-primary-action[\s\S]*border: 1px solid var\(--bg-button\)[\s\S]*background: var\(--bg-button\)[\s\S]*padding: 10px 16px/,
+);
 assert.match(
   settingsStyles,
   /\.settings-panel button[^\n]+:not\(\.settings-primary-action\)/,
