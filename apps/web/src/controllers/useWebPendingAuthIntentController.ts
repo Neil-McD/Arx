@@ -1,7 +1,7 @@
-import { useCallback } from "react";
+import { useCallback, useRef } from "react";
 
 import {
-  clearAuthResumeState,
+  consumeAuthResumeStateIfCurrent,
   readAuthResumeState,
   storeAuthResumeState,
 } from "../../../../shared/authResumeState";
@@ -35,64 +35,71 @@ export function useWebPendingAuthIntentController(params: {
   openCreateCommunity: (
     draft: CreateCommunityIntentDraft | null,
   ) => void;
-  redeemPurchaseClaim: (token: string) => Promise<unknown>;
+  redeemPurchaseClaim: (token: string) => Promise<boolean>;
   joinPublicCommunity: (value: {
     communityId?: string;
     communitySlug?: string;
-  }) => Promise<unknown>;
+  }) => Promise<boolean>;
   redeemPendingPurchases: (value: {
     navigate: boolean;
     silentNoop: boolean;
-  }) => Promise<unknown>;
-  resumeBuilderCheckout: () => Promise<unknown>;
-  routeTryPolynetFree: (session: AuthSession) => unknown;
+  }) => Promise<number>;
+  resumeBuilderCheckout: () => Promise<boolean>;
+  routeTryPolynetFree: (
+    session: AuthSession,
+  ) => Promise<"entered" | "onboarding" | "unavailable" | "unauthenticated">;
 }) {
-  const resumePendingAuthIntent = useCallback((): void => {
-    if (!params.session) return;
-    const intent = readAuthResumeState()?.intent;
-    if (!intent) return;
-    clearAuthResumeState();
-    routePendingAuthIntent(intent, {
-      select_model: () => undefined,
-      open_workspace_draft: () => {
-        void params
-          .resolveAndEnterMemberDestination({ replace: true })
-          .then((entered) => {
-            if (!entered) {
-              params.navigateTo("/discover", { replace: true });
-            }
-          });
-      },
-      connect_provider: () => {
-        params.showToast(
-          "Personal AI connections are no longer supported. Community AI is provided by the community.",
-        );
-      },
-      create_community: (payload) => {
-        params.openCreateCommunity(payload.draft);
-      },
-      redeem_purchase_claim: (payload) => {
-        void params.redeemPurchaseClaim(payload.token);
-      },
-      join_public_community: (payload) => {
-        void params.joinPublicCommunity({
-          communityId: payload.community_id ?? undefined,
-          communitySlug: payload.community_slug ?? undefined,
-        });
-      },
-      redeem_pending_purchases: (payload) => {
-        void params.redeemPendingPurchases({
-          navigate: payload.navigate,
-          silentNoop: payload.silent_noop,
-        });
-      },
-      resume_builder_checkout: () => {
-        void params.resumeBuilderCheckout();
-      },
-      try_polynet_free: () => {
-        void params.routeTryPolynetFree(params.session as AuthSession);
-      },
-    });
+  const resumeInFlightRef = useRef(false);
+
+  const resumePendingAuthIntent = useCallback(async (): Promise<boolean> => {
+    if (!params.session || resumeInFlightRef.current) return false;
+    const resumeState = readAuthResumeState();
+    if (!resumeState) return false;
+    resumeInFlightRef.current = true;
+    try {
+      const handled = await routePendingAuthIntent(resumeState.intent, {
+        select_model: () => true,
+        open_workspace_draft: async () => {
+          const entered = await params.resolveAndEnterMemberDestination({ replace: true });
+          if (!entered) {
+            params.navigateTo("/discover", { replace: true });
+          }
+          return true;
+        },
+        connect_provider: () => {
+          params.showToast(
+            "Personal AI connections are no longer supported. Community AI is provided by the community.",
+          );
+          return true;
+        },
+        create_community: (payload) => {
+          params.openCreateCommunity(payload.draft);
+          return true;
+        },
+        redeem_purchase_claim: (payload) => params.redeemPurchaseClaim(payload.token),
+        join_public_community: (payload) =>
+          params.joinPublicCommunity({
+            communityId: payload.community_id ?? undefined,
+            communitySlug: payload.community_slug ?? undefined,
+          }),
+        redeem_pending_purchases: async (payload) =>
+          (await params.redeemPendingPurchases({
+            navigate: payload.navigate,
+            silentNoop: payload.silent_noop,
+          })) >= 0,
+        resume_builder_checkout: () => params.resumeBuilderCheckout(),
+        try_polynet_free: async () => {
+          const outcome = await params.routeTryPolynetFree(params.session as AuthSession);
+          return outcome === "entered" || outcome === "onboarding";
+        },
+      });
+      if (handled) consumeAuthResumeStateIfCurrent(resumeState);
+      return handled;
+    } catch {
+      return false;
+    } finally {
+      resumeInFlightRef.current = false;
+    }
   }, [
     params.joinPublicCommunity,
     params.navigateTo,

@@ -7,6 +7,7 @@ import {
 import { scrubCurrentRouteSearchParams } from "../webAppRuntime";
 import type { AuthSession } from "../auth";
 import type { AccountSetupResolution } from "../../../../shared/accountSetup";
+import { storeAuthResumeState } from "../../../../shared/authResumeState";
 
 export type PublicBuilderCheckoutStatus =
   | "idle"
@@ -55,31 +56,37 @@ export function useWebPublicBuilderCheckoutController(
   const paramsRef = useRef(params);
   paramsRef.current = params;
 
-  const prepareCommunityCreation = useCallback(async (): Promise<void> => {
-    if (returnInFlightRef.current) return;
+  const prepareCommunityCreation = useCallback(async (): Promise<boolean> => {
+    if (returnInFlightRef.current) return false;
     returnInFlightRef.current = true;
     try {
       const current = paramsRef.current;
       const activeSession = current.getSession() ?? current.session;
-      if (!activeSession) return;
+      if (!activeSession) return false;
 
       const accountSetupResolution =
         await current.refreshAccountSetupStatus(activeSession);
       if (accountSetupResolution.status === "unavailable") {
         current.showToast(accountSetupResolution.error);
-        return;
+        return false;
       }
       if (accountSetupResolution.status === "unauthenticated") {
         current.requireSignIn({
           reason: "resume_builder_checkout",
           payload: {},
         });
-        return;
+        return false;
       }
       scrubCurrentRouteSearchParams(["builder_checkout"]);
       if (!accountSetupResolution.accountSetup.completed) {
+        storeAuthResumeState({
+          intent: {
+            reason: "resume_builder_checkout",
+            payload: {},
+          },
+        });
         current.navigateTo("/onboarding");
-        return;
+        return true;
       }
 
       for (let attempt = 0; attempt < 8; attempt += 1) {
@@ -92,7 +99,7 @@ export function useWebPublicBuilderCheckoutController(
             subscription.subscription_id,
           );
           current.openFundedCreateCommunity();
-          return;
+          return true;
         }
         await new Promise<void>((resolve) => window.setTimeout(resolve, 750));
       }
@@ -101,6 +108,7 @@ export function useWebPublicBuilderCheckoutController(
       current.showToast(
         "Payment is still being verified. Your Builder access will appear here automatically.",
       );
+      return true;
     } finally {
       returnInFlightRef.current = false;
     }

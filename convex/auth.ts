@@ -11,7 +11,6 @@ import {
   normalizeEmailForVerification,
 } from "./workosEmailVerification";
 import { POLYNET_COMMUNITY_PLATFORM_FEE_BPS } from "../shared/founderPlan";
-import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
 import { canReceiveCommunityRevenue } from "./stripeConnectAccountCore";
 import {
   hasPlatformOwnerComplimentaryAccess,
@@ -131,22 +130,6 @@ export const bootstrapActor = mutation({
             nowMs,
           },
         );
-      }
-      try {
-        const homeMembership = await ensurePlatformHomeCommunityMembership({
-          ctx,
-          userId: actor.dbUserId,
-          nowMs,
-        });
-        if (homeMembership.status === "missing") {
-          console.warn("platform_home_community_missing");
-        } else if (homeMembership.status === "not_open") {
-          console.warn("platform_home_community_not_open", {
-            communityId: homeMembership.communityId,
-          });
-        }
-      } catch (error) {
-        console.error("platform_home_community_membership_ensure_failed", error);
       }
       const canonicalTier = await getCanonicalTierByUserIdInternal(ctx as never, actor.dbUserId, nowMs);
       const effectiveTier = resolveEffectiveTier({ authState: args.authState, canonicalTier });

@@ -8,7 +8,7 @@ export type CheckoutFinalizeStatus = "idle" | "loading" | "pending" | "succeeded
 type UseCheckoutFinalizeControllerArgs = {
   checkoutSuccessSessionId: string | null;
   getSession: () => AuthSession | null;
-  redeemPurchaseClaim: (token: string) => Promise<void>;
+  redeemPurchaseClaim: (token: string) => Promise<unknown>;
   persistClaimToken: (token: string) => void;
   setCheckoutStatus: Dispatch<SetStateAction<CheckoutFinalizeStatus>>;
   setCheckoutError: Dispatch<SetStateAction<string | null>>;

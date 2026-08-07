@@ -185,10 +185,18 @@ export function storeAuthResumeState(
   }
 }
 
-export function clearAuthResumeState(): void {
+export function consumeAuthResumeStateIfCurrent(
+  expected: AuthResumeState,
+  nowMs = Date.now(),
+): boolean {
+  const current = readAuthResumeState(nowMs);
+  if (!current) return false;
+  if (current.created_at_ms !== expected.created_at_ms) return false;
+  if (JSON.stringify(current.intent) !== JSON.stringify(expected.intent)) return false;
   try {
     localStorage.removeItem(AUTH_RESUME_STATE_STORAGE_KEY);
+    return true;
   } catch {
-    // ignore
+    return false;
   }
 }

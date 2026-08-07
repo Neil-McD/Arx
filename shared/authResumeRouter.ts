@@ -1,57 +1,51 @@
 import type { PendingAuthIntent } from "./authResumeState";
 
 type PendingAuthIntentHandlers = {
-  select_model: (payload: Extract<PendingAuthIntent, { reason: "select_model" }>["payload"]) => void;
+  select_model: (payload: Extract<PendingAuthIntent, { reason: "select_model" }>["payload"]) => boolean | Promise<boolean>;
   open_workspace_draft: (
     payload: Extract<PendingAuthIntent, { reason: "open_workspace_draft" }>["payload"],
-  ) => void;
-  connect_provider: (payload: Extract<PendingAuthIntent, { reason: "connect_provider" }>["payload"]) => void;
-  create_community: (payload: Extract<PendingAuthIntent, { reason: "create_community" }>["payload"]) => void;
+  ) => boolean | Promise<boolean>;
+  connect_provider: (payload: Extract<PendingAuthIntent, { reason: "connect_provider" }>["payload"]) => boolean | Promise<boolean>;
+  create_community: (payload: Extract<PendingAuthIntent, { reason: "create_community" }>["payload"]) => boolean | Promise<boolean>;
   redeem_purchase_claim: (
     payload: Extract<PendingAuthIntent, { reason: "redeem_purchase_claim" }>["payload"],
-  ) => void;
+  ) => boolean | Promise<boolean>;
   join_public_community: (
     payload: Extract<PendingAuthIntent, { reason: "join_public_community" }>["payload"],
-  ) => void;
+  ) => boolean | Promise<boolean>;
   redeem_pending_purchases: (
     payload: Extract<PendingAuthIntent, { reason: "redeem_pending_purchases" }>["payload"],
-  ) => void;
+  ) => boolean | Promise<boolean>;
   resume_builder_checkout: (
     payload: Extract<PendingAuthIntent, { reason: "resume_builder_checkout" }>["payload"],
-  ) => void;
+  ) => boolean | Promise<boolean>;
   try_polynet_free: (
     payload: Extract<PendingAuthIntent, { reason: "try_polynet_free" }>["payload"],
-  ) => void;
+  ) => boolean | Promise<boolean>;
 };
 
-export function routePendingAuthIntent(intent: PendingAuthIntent, handlers: PendingAuthIntentHandlers): void {
+export function routePendingAuthIntent(
+  intent: PendingAuthIntent,
+  handlers: PendingAuthIntentHandlers,
+): boolean | Promise<boolean> {
   switch (intent.reason) {
     case "select_model":
-      handlers.select_model(intent.payload);
-      return;
+      return handlers.select_model(intent.payload);
     case "open_workspace_draft":
-      handlers.open_workspace_draft(intent.payload);
-      return;
+      return handlers.open_workspace_draft(intent.payload);
     case "connect_provider":
-      handlers.connect_provider(intent.payload);
-      return;
+      return handlers.connect_provider(intent.payload);
     case "create_community":
-      handlers.create_community(intent.payload);
-      return;
+      return handlers.create_community(intent.payload);
     case "redeem_purchase_claim":
-      handlers.redeem_purchase_claim(intent.payload);
-      return;
+      return handlers.redeem_purchase_claim(intent.payload);
     case "join_public_community":
-      handlers.join_public_community(intent.payload);
-      return;
+      return handlers.join_public_community(intent.payload);
     case "redeem_pending_purchases":
-      handlers.redeem_pending_purchases(intent.payload);
-      return;
+      return handlers.redeem_pending_purchases(intent.payload);
     case "resume_builder_checkout":
-      handlers.resume_builder_checkout(intent.payload);
-      return;
+      return handlers.resume_builder_checkout(intent.payload);
     case "try_polynet_free":
-      handlers.try_polynet_free(intent.payload);
-      return;
+      return handlers.try_polynet_free(intent.payload);
   }
 }

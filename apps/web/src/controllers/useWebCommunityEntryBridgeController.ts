@@ -1,4 +1,4 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 import type { AccountSetupStatus } from "../../../../shared/accountSetup";
 import type { CloudMemberEntryDestination } from "../../../../shared/cloudMemberEntryDestinationGateway";
@@ -23,8 +23,19 @@ type PublicCommunitySummary = {
   name: string;
 } | null;
 
+export function resolveCommunityEntrySetupAction(args: {
+  publicRouteKind: string;
+  isAccountSetupResolved: boolean;
+  accountSetupStatus: AccountSetupStatus | null;
+}): "wait" | "setup" | "enter" {
+  if (args.publicRouteKind !== "community_funnel") return "enter";
+  if (!args.isAccountSetupResolved) return "wait";
+  return args.accountSetupStatus?.completed ? "enter" : "setup";
+}
+
 export function useWebCommunityEntryBridgeController(params: {
   publicRouteKind: string;
+  isAccountSetupResolved: boolean;
   accountSetupStatus: AccountSetupStatus | null;
   activeCommunity: CommunitySummary;
   activeCommunityId: string | null;
@@ -55,26 +66,36 @@ export function useWebCommunityEntryBridgeController(params: {
     null,
   );
 
+  const buildPendingEntry = useCallback(
+    (entry: Entry): Entry => {
+      const communityName =
+        String(entry.communityName ?? "").trim() ||
+        (params.activeCommunity?.id === entry.communityId
+          ? params.activeCommunity.name
+          : "") ||
+        (params.publicCommunityAccessId === entry.communityId
+          ? params.publicCommunity?.name ?? ""
+          : "");
+      return {
+        ...entry,
+        communityName: communityName || null,
+      };
+    },
+    [
+      params.activeCommunity,
+      params.publicCommunity,
+      params.publicCommunityAccessId,
+    ],
+  );
+
   const enterCommunity = useCallback(
     (entry: Entry): void => {
-      if (
-        params.publicRouteKind === "community_funnel" &&
-        params.accountSetupStatus &&
-        !params.accountSetupStatus.completed
-      ) {
-        const communityName =
-          String(entry.communityName ?? "").trim() ||
-          (params.activeCommunity?.id === entry.communityId
-            ? params.activeCommunity.name
-            : "") ||
-          (params.publicCommunityAccessId === entry.communityId
-            ? params.publicCommunity?.name ?? ""
-            : "");
-        setBridgePendingEntry({
-          ...entry,
-          communityName: communityName || null,
-        });
-        setIsBridgeGateOpen(true);
+      const setupAction = resolveCommunityEntrySetupAction(params);
+      if (setupAction !== "enter") {
+        setBridgePendingEntry(buildPendingEntry(entry));
+        if (setupAction === "setup") {
+          setIsBridgeGateOpen(true);
+        }
         return;
       }
       void params.resolveAndEnter({
@@ -83,8 +104,39 @@ export function useWebCommunityEntryBridgeController(params: {
         replace: true,
       });
     },
-    [params],
+    [buildPendingEntry, params],
   );
+
+  useEffect(() => {
+    if (params.publicRouteKind !== "community_funnel") {
+      setIsBridgeGateOpen(false);
+      setBridgePendingEntry(null);
+      return;
+    }
+    if (!bridgePendingEntry) return;
+
+    const setupAction = resolveCommunityEntrySetupAction(params);
+    if (setupAction === "wait") return;
+    if (setupAction === "setup") {
+      setIsBridgeGateOpen(true);
+      return;
+    }
+
+    const entry = bridgePendingEntry;
+    setBridgePendingEntry(null);
+    setIsBridgeGateOpen(false);
+    void params.resolveAndEnter({
+      communityId: entry.communityId,
+      communitySlug: entry.communitySlug,
+      replace: true,
+    });
+  }, [
+    bridgePendingEntry,
+    params.accountSetupStatus,
+    params.isAccountSetupResolved,
+    params.publicRouteKind,
+    params.resolveAndEnter,
+  ]);
 
   const completePlatformBridge = useCallback(
     async (legalAcceptance: LegalAcceptance): Promise<boolean> => {
