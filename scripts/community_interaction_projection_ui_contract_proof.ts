@@ -621,8 +621,8 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /ref=\{canRequestMoreMembers \? loadMoreSentinelRef : undefined\}[\s\S]*\{membersFooterLabel\}/,
-  "context panel footer should become the load-more sentinel when the visible member directory can page",
+  /ref=\{props\.membersHasMore \? loadMoreSentinelRef : undefined\}[\s\S]*\{membersFooterLabel\}/,
+  "context panel footer should be the load-more sentinel while additional member pages exist",
 );
 assert.match(
   directoryController,
@@ -1141,8 +1141,13 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.app-shell\.community-layout:has\(\.community-member-chat\) \.community-nav \.nav-item\.active\s*\{[\s\S]*var\(--accent-selection\) 26%[\s\S]*box-shadow:\s*inset 3px 0 0 var\(--accent-selection\);/,
-  "the active community destination should be identifiable by a strong accent surface and edge",
+  /\.app-shell\.community-layout:has\(\.community-member-chat\) \.community-nav \.nav-item:not\(\.active\)\s*\{[\s\S]*color:\s*var\(--community-text-ui\);[\s\S]*\.nav-item:not\(\.active\) \.nav-icon\s*\{[\s\S]*color:\s*var\(--community-text-meta\);/,
+  "member chat text roles should refine inactive navigation without replacing the canonical selected state",
+);
+assert.doesNotMatch(
+  indexCss,
+  /\.app-shell\.community-layout:has\(\.community-member-chat\) \.community-nav \.nav-item\.active\s*\{/,
+  "member chat should inherit the product-wide selected channel treatment instead of adding a louder override",
 );
 assert.match(
   indexCss,
@@ -1161,13 +1166,18 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /offlineMembersExpanded, setOfflineMembersExpanded\] = useState\(false\)[\s\S]*aria-expanded=\{offlineMembersExpanded\}[\s\S]*aria-controls=\{offlineMembersRegionId\}[\s\S]*offlineMembersExpanded \? \([\s\S]*offlineMembers\.map/,
-  "offline members should default to one accessible disclosure row instead of a fully expanded roster",
+  /<div className="community-context-section">Offline — \{offlineCountLabel\}<\/div>[\s\S]*offlineMembers\.map/,
+  "offline members should remain visible in the member directory without an extra disclosure step",
 );
 assert.match(
   contextPanel,
-  /const canRequestMoreMembers = Boolean\([\s\S]*props\.membersHasMore && \(!hasResolvedPresence \|\| offlineMembersExpanded\)[\s\S]*if \(!canRequestMoreMembers\) return;/,
-  "a collapsed offline roster should not auto-page the hidden directory",
+  /if \(!props\.membersHasMore\) return;[\s\S]*ref=\{props\.membersHasMore \? loadMoreSentinelRef : undefined\}/,
+  "the always-visible member directory should continue paging while additional members exist",
+);
+assert.doesNotMatch(
+  contextPanel,
+  /offlineMembersExpanded|community-context-offline-toggle|offlineMembersRegionId/,
+  "the desktop member directory should not hide offline members behind local disclosure state",
 );
 assert.match(
   baseCss,

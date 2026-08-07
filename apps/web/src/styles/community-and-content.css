@@ -2895,47 +2895,6 @@
   margin-top: 14px;
 }
 
-.community-context-offline {
-  margin-top: 14px;
-}
-
-.community-context-offline-toggle {
-  width: 100%;
-  min-height: 28px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 4px 8px;
-  border: 0;
-  border-radius: 7px;
-  background: transparent;
-  font-family: inherit;
-  text-align: left;
-  cursor: pointer;
-  transition: background 120ms ease, color 120ms ease;
-}
-
-.community-context-offline-toggle:hover,
-.community-context-offline-toggle:focus-visible {
-  background: var(--hover-overlay);
-  color: var(--text-secondary);
-  outline: none;
-}
-
-.community-context-offline-toggle svg {
-  flex: 0 0 auto;
-  transition: transform 120ms ease;
-}
-
-.community-context-offline-toggle.is-open svg {
-  transform: rotate(180deg);
-}
-
-.community-context-offline-list {
-  margin-top: 4px;
-}
-
 .community-context-members-total {
   display: flex;
   align-items: center;

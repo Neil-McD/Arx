@@ -1550,28 +1550,12 @@
   background: var(--community-side-surface);
 }
 
-.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-item {
+.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-item:not(.active) {
   color: var(--community-text-ui);
 }
 
-.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-icon {
+.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-item:not(.active) .nav-icon {
   color: var(--community-text-meta);
-}
-
-.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-item.active {
-  border-color: color-mix(in srgb, var(--accent-selection) 58%, var(--stroke-default));
-  background: color-mix(
-    in srgb,
-    var(--accent-selection) 26%,
-    var(--community-side-surface) 74%
-  );
-  box-shadow: inset 3px 0 0 var(--accent-selection);
-  color: var(--community-text-author);
-  font-weight: 600;
-}
-
-.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-item.active .nav-icon {
-  color: var(--community-text-author);
 }
 
 /* Tighter windows: keep the nav from spilling its labels as it approaches the floor. */
