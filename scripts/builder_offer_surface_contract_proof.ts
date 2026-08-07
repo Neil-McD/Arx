@@ -97,8 +97,8 @@ assert.match(
 );
 assert.match(
   settingsStyles,
-  /\.settings-panel button[^\n]+:not\(\.settings-primary-action\)/,
-  "legacy settings button defaults must not override canonical primary actions",
+  /\.settings-panel button[^\n]+:not\(\.settings-primary-action\):not\(\.danger\)/,
+  "legacy settings button defaults must not override canonical primary or danger actions",
 );
 
 assert.match(offerController, /startCheckout\(community\.community_id\)/);
