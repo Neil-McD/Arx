@@ -47,43 +47,48 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     <WebDesktopShellHeader {...props.desktopHeader} />
   );
 
-  const shellSidePanels = (
-    <>
-      <WebDesktopCommunityRail communityShell={props.communityShell} />
-      <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
-
-      {props.communityShell.showDesktopCommunityNav ? (
-        <CommunityNav
-          activeCommunity={props.communityShell.activeCommunity}
-          communityTab={props.communityShell.communityTab}
-          tabIndicators={props.communityShell.communityTabIndicators}
-          channels={props.communityShell.communityChannels}
-          isLoadingChannels={props.communityShell.isLoadingCommunityChannels}
-          selectedChannelSlug={props.communityShell.selectedCommunityChannelSlug}
-          channelIndicators={props.communityShell.communityChannelIndicators}
-          onSelectChannel={props.communityShell.onSelectCommunityChannel}
-          onCreateChannel={props.communityShell.onCreateCommunityChannel}
-          isCreatingChannel={props.communityShell.isCreatingCommunityChannel}
-          createChannelError={props.communityShell.communityChannelCreateError}
-          clearCreateChannelError={props.communityShell.clearCommunityChannelCreateError}
-          isAtChannelLimit={props.communityShell.isAtCommunityChannelLimit}
-          maxActiveChannels={props.communityShell.maxActiveCommunityChannels}
-          onReorderChannels={props.communityShell.onReorderCommunityChannels}
-          isReorderingChannels={props.communityShell.isReorderingCommunityChannels}
-          reorderChannelsError={props.communityShell.communityChannelReorderError}
-          clearReorderChannelsError={props.communityShell.clearCommunityChannelReorderError}
-          canViewMembersActiveCommunity={props.communityShell.canViewMembersActiveCommunity}
-          canViewActiveCommunitySettings={props.communityShell.canViewActiveCommunitySettings}
-          canManageMembersActiveCommunity={props.communityShell.canManageMembersActiveCommunity}
-          canViewActiveCommunityAnalytics={props.communityShell.canViewActiveCommunityAnalytics}
-          isLoadingAccess={props.communityShell.isLoadingCommunityAccess}
-          lockedTabs={props.communityShell.lockedCommunityNavTabs ?? undefined}
-          onCopyCommunityJoinLink={props.communityShell.onCopyCommunityJoinLink}
-          onSelectTab={props.communityShell.onSelectCommunityTab}
-        />
-      ) : null}
-    </>
-  );
+  const desktopCommunityNav = props.communityShell.showDesktopCommunityNav ? (
+    <CommunityNav
+      activeCommunity={props.communityShell.activeCommunity}
+      communityTab={props.communityShell.communityTab}
+      tabIndicators={props.communityShell.communityTabIndicators}
+      channels={props.communityShell.communityChannels}
+      isLoadingChannels={props.communityShell.isLoadingCommunityChannels}
+      selectedChannelSlug={props.communityShell.selectedCommunityChannelSlug}
+      channelIndicators={props.communityShell.communityChannelIndicators}
+      onSelectChannel={props.communityShell.onSelectCommunityChannel}
+      onCreateChannel={props.communityShell.onCreateCommunityChannel}
+      isCreatingChannel={props.communityShell.isCreatingCommunityChannel}
+      createChannelError={props.communityShell.communityChannelCreateError}
+      clearCreateChannelError={
+        props.communityShell.clearCommunityChannelCreateError
+      }
+      isAtChannelLimit={props.communityShell.isAtCommunityChannelLimit}
+      maxActiveChannels={props.communityShell.maxActiveCommunityChannels}
+      onReorderChannels={props.communityShell.onReorderCommunityChannels}
+      isReorderingChannels={props.communityShell.isReorderingCommunityChannels}
+      reorderChannelsError={props.communityShell.communityChannelReorderError}
+      clearReorderChannelsError={
+        props.communityShell.clearCommunityChannelReorderError
+      }
+      canViewMembersActiveCommunity={
+        props.communityShell.canViewMembersActiveCommunity
+      }
+      canViewActiveCommunitySettings={
+        props.communityShell.canViewActiveCommunitySettings
+      }
+      canManageMembersActiveCommunity={
+        props.communityShell.canManageMembersActiveCommunity
+      }
+      canViewActiveCommunityAnalytics={
+        props.communityShell.canViewActiveCommunityAnalytics
+      }
+      isLoadingAccess={props.communityShell.isLoadingCommunityAccess}
+      lockedTabs={props.communityShell.lockedCommunityNavTabs ?? undefined}
+      onCopyCommunityJoinLink={props.communityShell.onCopyCommunityJoinLink}
+      onSelectTab={props.communityShell.onSelectCommunityTab}
+    />
+  ) : null;
 
   const { rootClassName, shellClassName } = buildWebShellChromeClassNames({
     showMobileAppShell: props.showMobileAppShell,
@@ -109,8 +114,17 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       <WebMobileCommunityShell communityShell={props.communityShell} />
 
       <div className={shellClassName}>
-        {shellSidePanels}
-        {isMobileDedicatedRoot ? null : props.mainSurface}
+        <WebDesktopCommunityRail communityShell={props.communityShell} />
+        <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
+
+        {desktopCommunityNav ? (
+          <div className="community-shell-surface">
+            {desktopCommunityNav}
+            {isMobileDedicatedRoot ? null : props.mainSurface}
+          </div>
+        ) : isMobileDedicatedRoot ? null : (
+          props.mainSurface
+        )}
       </div>
 
       {props.globalOverlays}
