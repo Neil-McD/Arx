@@ -45,6 +45,7 @@ export function useWebRouteAccessBoundaryController<
   communities: TCommunity[];
   communityPreviewAccessState: WebRouteScopedAccessState;
   operatorAccessState: WebRouteScopedAccessState;
+  accountSetupAccessState: WebRouteScopedAccessState;
   ensureSession: (session?: SessionT | null) => Promise<SessionT | null>;
   loadCommunities: (session: SessionT) => Promise<void>;
   syncCommunitySelection: (options: {
@@ -180,12 +181,14 @@ export function useWebRouteAccessBoundaryController<
     communityAccessState,
     communityPreviewAccessState: params.communityPreviewAccessState,
     operatorAccessState: params.operatorAccessState,
+    accountSetupAccessState: params.accountSetupAccessState,
   });
 
   useEffect(() => {
     if (
       projection.kind !== "redirect_landing" &&
       projection.kind !== "redirect_member_entry" &&
+      projection.kind !== "redirect_account_setup" &&
       projection.kind !== "redirect_community_funnel"
     ) {
       redirectKeyRef.current = null;
@@ -194,6 +197,8 @@ export function useWebRouteAccessBoundaryController<
     const destination =
       projection.kind === "redirect_community_funnel"
         ? `/c/${encodeURIComponent(projection.communitySlug)}`
+        : projection.kind === "redirect_account_setup"
+          ? "/onboarding"
         : projection.kind === "redirect_member_entry"
           ? "member-entry"
         : "/";
@@ -225,6 +230,7 @@ export function useWebRouteAccessBoundaryController<
     shouldHoldRouteForAccess: projection.kind === "hold" ||
       projection.kind === "redirect_landing" ||
       projection.kind === "redirect_member_entry" ||
+      projection.kind === "redirect_account_setup" ||
       projection.kind === "redirect_community_funnel",
   };
 }

@@ -503,11 +503,6 @@ export default function App() {
   shellNavigation.memberEntryActionsRef.current = {
     resolveAndEnter: resolveAndEnterMemberDestination,
   };
-  onboardingProfile.actionsRef.current = {
-    navigateTo,
-    enterDefaultDestination: resolveAndEnterMemberDestination,
-  };
-
   const communityChannels = useWebCommunityChannelsController({
     activeCommunityId,
     requestedChannelSlug: communityChannelSlug,
@@ -1407,6 +1402,8 @@ export default function App() {
     getSession: () => sessionRef.current,
     getCurrentPublicCommunitySlug: () => publicCommunityUi.publicCommunity?.slug ?? null,
     ensureSession: ensureUsableAuthSession,
+    resolveAccountSetupStatus: refreshAccountSetupStatus,
+    onAccountSetupRequired: () => navigateTo("/onboarding"),
     ...sessionArg,
     requireSignIn,
     loadCommunities,
@@ -1562,6 +1559,11 @@ export default function App() {
       resumeBuilderCheckout: publicBuilderCheckout.prepareCommunityCreation,
       routeTryPolynetFree,
     });
+  onboardingProfile.actionsRef.current = {
+    navigateTo,
+    enterDefaultDestination: resolveAndEnterMemberDestination,
+    resumePendingAuthIntent,
+  };
   accountGraphLifecycle.actionsRef.current = {
     loadBilling: loadAccountCommerceStatus,
     loadCommunities,
@@ -1620,6 +1622,7 @@ export default function App() {
   });
   const communityEntryBridge = useWebCommunityEntryBridgeController({
     publicRouteKind: shellPublicRoute.kind,
+    isAccountSetupResolved,
     accountSetupStatus: effectiveAccountSetupStatus,
     activeCommunity,
     activeCommunityId,
@@ -1666,6 +1669,14 @@ export default function App() {
         : operatorAccess
           ? "allowed" as const
           : "denied" as const;
+  const accountSetupRouteAccessState =
+    !session
+      ? "not_applicable" as const
+      : !isAccountSetupResolved
+        ? "resolving" as const
+        : effectiveAccountSetupStatus?.completed
+          ? "allowed" as const
+          : "denied" as const;
   const { shouldHoldRouteForAccess } =
     useWebRouteAccessBoundaryController<
       AuthSession,
@@ -1682,6 +1693,7 @@ export default function App() {
       isAuthBootstrapComplete,
       communityPreviewAccessState,
       operatorAccessState: operatorRouteAccessState,
+      accountSetupAccessState: accountSetupRouteAccessState,
       ensureSession: ensureUsableAuthSession,
       loadCommunities,
       syncCommunitySelection,

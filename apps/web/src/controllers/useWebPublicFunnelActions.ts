@@ -1,7 +1,11 @@
 import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import {
   classifyPublicCommunityJoinError, clearPendingPublicJoin, getErrorMessage, joinPublicCommunityRpc, storePendingPublicJoin, } from "../../../../shared/pay_first";
-import type { PendingAuthIntentInput } from "../../../../shared/authResumeState";
+import {
+  storeAuthResumeState,
+  type PendingAuthIntentInput,
+} from "../../../../shared/authResumeState";
+import type { AccountSetupResolution } from "../../../../shared/accountSetup";
 import { resolveAuthSubject } from "../../../../shared/authSession";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
 
@@ -47,6 +51,10 @@ type UseWebPublicFunnelActionsArgs<
   getCurrentPublicCommunitySlug: () => string | null;
   session: AuthSession | null;
   ensureSession?: (session: AuthSession | null) => Promise<AuthSession | null>;
+  resolveAccountSetupStatus: (
+    session: AuthSession,
+  ) => Promise<AccountSetupResolution>;
+  onAccountSetupRequired: () => void;
   requireSignIn: (intentInput: PendingAuthIntentInput) => void;
   loadCommunities: (session: AuthSession) => Promise<void>;
   openCommunityWorkspace: (opts: { communityId: string; communitySlug?: string | null }) => void;
@@ -239,10 +247,10 @@ export function useWebPublicFunnelActions<
   );
 
   const joinPublicCommunity = useCallback(
-    async (opts: { communityId?: string; communitySlug?: string | null }): Promise<void> => {
+    async (opts: { communityId?: string; communitySlug?: string | null }): Promise<boolean> => {
       const trimmedId = (opts.communityId ?? "").trim();
       const trimmedSlug = (opts.communitySlug ?? "").trim();
-      if (!trimmedId && !trimmedSlug) return;
+      if (!trimmedId && !trimmedSlug) return false;
 
       const current = argsRef.current;
       const rawSession = current.getSession();
@@ -256,7 +264,38 @@ export function useWebPublicFunnelActions<
             community_slug: trimmedSlug || null,
           },
         });
-        return;
+        return false;
+      }
+
+      const accountSetup = await current.resolveAccountSetupStatus(session);
+      if (accountSetup.status === "unauthenticated") {
+        storePendingPublicJoin(trimmedSlug || trimmedId);
+        current.requireSignIn({
+          reason: "join_public_community",
+          payload: {
+            community_id: trimmedId || null,
+            community_slug: trimmedSlug || null,
+          },
+        });
+        return false;
+      }
+      if (accountSetup.status === "unavailable") {
+        current.setPublicJoinError(accountSetup.error);
+        return false;
+      }
+      if (!accountSetup.accountSetup.completed) {
+        storePendingPublicJoin(trimmedSlug || trimmedId);
+        storeAuthResumeState({
+          intent: {
+            reason: "join_public_community",
+            payload: {
+              community_id: trimmedId || null,
+              community_slug: trimmedSlug || null,
+            },
+          },
+        });
+        current.onAccountSetupRequired();
+        return false;
       }
 
       current.setIsJoiningPublicCommunity(true);
@@ -275,7 +314,7 @@ export function useWebPublicFunnelActions<
             communitySlug: trimmedSlug || null,
           });
           await current.loadCommunities(session);
-          return;
+          return true;
         }
         if (joinResult.outcome === "approval_pending") {
           applyApprovalJoinState({
@@ -287,7 +326,7 @@ export function useWebPublicFunnelActions<
             communityId: joinResult.community_id ?? null,
             communitySlug: trimmedSlug || null,
           });
-          return;
+          return true;
         }
         if (joinResult.outcome === "approval_denied") {
           applyApprovalJoinState({
@@ -296,7 +335,7 @@ export function useWebPublicFunnelActions<
             communitySlug: trimmedSlug || null,
             reapplyAt: joinResult.reapply_at ?? null,
           });
-          return;
+          return true;
         }
         if (joinResult.outcome === "paid_plan_required") {
           current.setPublicJoinError("This community now requires a paid plan. Select a plan to continue.");
@@ -308,8 +347,9 @@ export function useWebPublicFunnelActions<
                 } as PublicCommunityT)
               : prev,
           );
-          return;
+          return true;
         }
+        return false;
       } catch (error) {
         const message = getErrorMessage(error, "Failed to join community.");
         const kind = classifyPublicCommunityJoinError(error);
@@ -320,7 +360,7 @@ export function useWebPublicFunnelActions<
             communityId: trimmedId || null,
             communitySlug: trimmedSlug || null,
           });
-          return;
+          return true;
         }
         if (kind === "paid_plan_required") {
           clearPendingPublicJoin();
@@ -333,16 +373,17 @@ export function useWebPublicFunnelActions<
                 } as PublicCommunityT)
               : prev,
           );
-          return;
+          return true;
         }
         if (trimmedSlug) {
           const reconciled = await reconcileJoinOutcomeBySlug(trimmedSlug, session);
           if (reconciled !== "none") {
-            return;
+            return true;
           }
         }
         clearPendingPublicJoin();
         current.setPublicJoinError(message);
+        return false;
       } finally {
         current.setIsJoiningPublicCommunity(false);
       }

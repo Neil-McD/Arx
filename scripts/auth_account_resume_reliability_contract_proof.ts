@@ -14,6 +14,10 @@ function sliceBetween(source: string, start: string, end: string): string {
 }
 
 const accountSetup = read("shared/accountSetup.ts");
+const authResumeState = read("shared/authResumeState.ts");
+const pendingAuthIntentController = read(
+  "apps/web/src/controllers/useWebPendingAuthIntentController.ts",
+);
 const authController = read(
   "apps/web/src/controllers/useWebAppAuthController.ts",
 );
@@ -22,6 +26,9 @@ const onboardingController = read(
 );
 const builderCheckoutController = read(
   "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
+);
+const publicFunnelActions = read(
+  "apps/web/src/controllers/useWebPublicFunnelActions.ts",
 );
 const chatController = read(
   "apps/web/src/controllers/useWebCommunityChatController.ts",
@@ -104,6 +111,26 @@ assert.match(
   /refreshAccountSetupStatus[\s\S]*Promise<AccountSetupResolution>/,
   "account setup refresh must return an explicit resolution",
 );
+assert.doesNotMatch(
+  onboardingController,
+  /accountSetupResolutionState|isLoadingAccountSetupStatus/,
+  "account setup must not retain write-only resolution or loading state",
+);
+assert.match(
+  authResumeState,
+  /consumeAuthResumeStateIfCurrent[\s\S]*current\.created_at_ms !== expected\.created_at_ms[\s\S]*current\.intent[\s\S]*removeItem/,
+  "auth resume consumption must compare the current stored intent before clearing it",
+);
+assert.match(
+  pendingAuthIntentController,
+  /const handled = await routePendingAuthIntent\(resumeState\.intent[\s\S]*if \(handled\) consumeAuthResumeStateIfCurrent\(resumeState\)/,
+  "pending auth intent must be consumed only after its continuation reports success",
+);
+assert.doesNotMatch(
+  pendingAuthIntentController,
+  /clearAuthResumeState\(\)[\s\S]*routePendingAuthIntent/,
+  "pending auth intent must not be cleared before dispatch",
+);
 assert.match(
   onboardingController,
   /isAccountSetupResolved =\s*!params\.session \|\| Boolean\(effectiveAccountSetupStatus\)/,
@@ -160,6 +187,21 @@ assert.match(
   builderCheckoutController,
   /params\.resumeEpoch/,
   "paid Builder recovery must retry when the installed app resumes",
+);
+assert.match(
+  builderCheckoutController,
+  /!accountSetupResolution\.accountSetup\.completed[\s\S]*reason: "resume_builder_checkout"[\s\S]*navigateTo\("\/onboarding"\)/,
+  "paid Builder recovery must survive account setup before continuing",
+);
+assert.match(
+  publicFunnelActions,
+  /resolveAccountSetupStatus\(session\)[\s\S]*!accountSetup\.accountSetup\.completed[\s\S]*reason: "join_public_community"[\s\S]*onAccountSetupRequired\(\)/,
+  "free and approval joins must preserve their destination while account setup runs",
+);
+assert.match(
+  onboardingController,
+  /readAuthResumeState\(\)[\s\S]*resumePendingAuthIntent\(\)[\s\S]*if \(resumed\) return true/,
+  "completed onboarding must resume the preserved commercial or community intent",
 );
 assert.doesNotMatch(
   builderCheckoutController,

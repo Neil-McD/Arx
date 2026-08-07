@@ -3,6 +3,7 @@ import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { normalizeSlug, requireCommunityChatAccess } from "./communityCore";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
+import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
 
 function normalizeText(value: unknown): string {
   return String(value ?? "").trim();
@@ -32,6 +33,8 @@ export const resolveMemberEntryDestinationInternal = internalMutation({
     nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<MemberEntryDestination> => {
+    await requireAccountSetupCompleteForUser(ctx, args.userId);
+
     const requestedSlugRaw = normalizeText(args.communitySlug);
     const requestedSlug = requestedSlugRaw ? normalizeSlug(requestedSlugRaw) : "";
     let targetCommunityId = args.communityId ?? null;

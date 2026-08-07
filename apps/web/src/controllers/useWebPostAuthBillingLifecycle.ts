@@ -33,11 +33,11 @@ export function useWebPostAuthBillingLifecycle<
   setAccountCommerceError: Dispatch<SetStateAction<string | null>>;
   setIsLoadingAccountCommerce: Dispatch<SetStateAction<boolean>>;
   getAuthUid: (session: TSession) => string | null;
-  redeemPurchaseClaim: (token: string) => Promise<void>;
+  redeemPurchaseClaim: (token: string) => Promise<unknown>;
   redeemPendingPurchases: (args: { navigate: boolean; silentNoop: boolean }) => Promise<number>;
   loadPendingPurchaseClaims: (session: TSession) => Promise<void>;
   loadAccountCommerceStatus: (session: TSession) => Promise<TBillingStatus | null>;
-  joinPublicCommunity: (args: { communitySlug: string | null; communityId?: string }) => Promise<void>;
+  joinPublicCommunity: (args: { communitySlug: string | null; communityId?: string }) => Promise<unknown>;
 }) {
   const lastAutoRedeemPendingPurchasesUserIdRef = useRef<string | null>(null);
   const autoRedeemPendingPurchasesAttemptRef = useRef(0);

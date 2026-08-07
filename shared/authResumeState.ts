@@ -172,11 +172,13 @@ export function storeAuthResumeState(
   const intent = normalizePendingAuthIntent(params.intent.reason, params.intent.payload);
   if (!intent) return;
   try {
+    const current = readAuthResumeState(nowMs);
+    const createdAtMs = Math.max(nowMs, (current?.created_at_ms ?? 0) + 1);
     localStorage.setItem(
       AUTH_RESUME_STATE_STORAGE_KEY,
       JSON.stringify({
         v: 1,
-        created_at_ms: nowMs,
+        created_at_ms: createdAtMs,
         intent,
       } satisfies AuthResumeState),
     );
@@ -185,10 +187,18 @@ export function storeAuthResumeState(
   }
 }
 
-export function clearAuthResumeState(): void {
+export function consumeAuthResumeStateIfCurrent(
+  expected: AuthResumeState,
+  nowMs = Date.now(),
+): boolean {
+  const current = readAuthResumeState(nowMs);
+  if (!current) return false;
+  if (current.created_at_ms !== expected.created_at_ms) return false;
+  if (JSON.stringify(current.intent) !== JSON.stringify(expected.intent)) return false;
   try {
     localStorage.removeItem(AUTH_RESUME_STATE_STORAGE_KEY);
+    return true;
   } catch {
-    // ignore
+    return false;
   }
 }

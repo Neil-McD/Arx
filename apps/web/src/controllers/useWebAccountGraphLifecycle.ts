@@ -14,7 +14,7 @@ type AccountGraphActions = {
   loadSelfProfile: (session: AuthSession) => Promise<unknown>;
   onSignedOut: (reason: SignedOutReason) => Promise<void> | void;
   resetSessionState: () => Promise<void>;
-  resumePendingAuthIntent: () => void;
+  resumePendingAuthIntent: () => void | Promise<unknown>;
   shouldTreatCommunitiesAsCritical: () => boolean;
 };
 
@@ -228,7 +228,7 @@ export function useWebAccountGraphLifecycle() {
   }, [runInstrumentedLoad]);
 
   const onDidJustSignIn = useCallback(() => {
-    actionsRef.current.resumePendingAuthIntent();
+    void actionsRef.current.resumePendingAuthIntent();
   }, []);
 
   const onSessionLost = useCallback(

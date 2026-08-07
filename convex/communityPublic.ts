@@ -57,6 +57,7 @@ import {
   requireCommunityBuilderAccess,
   resolveCommunityBuilderAccess,
 } from "./communityBuilderAccessCore";
+import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
@@ -726,6 +727,8 @@ async function joinPublicCommunityInternal(args: {
   community_id: string;
   reapply_at?: string | null;
 }> {
+  await requireAccountSetupCompleteForUser(args.ctx, args.userId);
+
   if (!communityIsActive(args.community)) {
     throw new Error("community_archived");
   }
