@@ -1506,6 +1506,72 @@
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
     grid-template-columns: var(--web-rail-width, 72px) clamp(168px, 20vw, 420px) minmax(0, 1fr);
   }
+
+  .app-shell.community-layout.with-community-rail.sessions-compact.no-right:has(.community-member-chat) {
+    grid-template-columns: var(--web-rail-width, 72px) clamp(168px, 20vw, 260px) minmax(0, 1fr);
+  }
+}
+
+/* Member chat is a reading workspace: a quiet surface ladder, a bounded nav,
+   and one unmistakable selection treatment. Visitor and non-chat community
+   surfaces intentionally retain their existing projection. */
+.app-shell.community-layout:has(.community-member-chat),
+.community-member-chat {
+  --community-text-author: #f4f4f5;
+  --community-text-body: #d4d4d8;
+  --community-text-ui: #a1a1aa;
+  --community-text-meta: #8b8b95;
+  --community-side-surface: color-mix(
+    in srgb,
+    var(--bg-workspace) 78%,
+    var(--bg-panel) 22%
+  );
+  --community-content-surface: color-mix(
+    in srgb,
+    var(--bg-workspace) 62%,
+    var(--bg-card) 38%
+  );
+}
+
+:root[data-theme="light"] .app-shell.community-layout:has(.community-member-chat),
+:root[data-theme="light"] .community-member-chat {
+  --community-text-author: #171719;
+  --community-text-body: #303037;
+  --community-text-ui: #5f5d68;
+  --community-text-meta: #686670;
+}
+
+.app-shell.community-layout:has(.community-member-chat) .rail {
+  border-right: 1px solid var(--stroke-muted);
+}
+
+.app-shell.community-layout:has(.community-member-chat) .community-nav {
+  border-right-color: var(--stroke-default);
+  background: var(--community-side-surface);
+}
+
+.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-item {
+  color: var(--community-text-ui);
+}
+
+.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-icon {
+  color: var(--community-text-meta);
+}
+
+.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-item.active {
+  border-color: color-mix(in srgb, var(--accent-selection) 58%, var(--stroke-default));
+  background: color-mix(
+    in srgb,
+    var(--accent-selection) 26%,
+    var(--community-side-surface) 74%
+  );
+  box-shadow: inset 3px 0 0 var(--accent-selection);
+  color: var(--community-text-author);
+  font-weight: 600;
+}
+
+.app-shell.community-layout:has(.community-member-chat) .community-nav .nav-item.active .nav-icon {
+  color: var(--community-text-author);
 }
 
 /* Tighter windows: keep the nav from spilling its labels as it approaches the floor. */

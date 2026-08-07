@@ -72,6 +72,7 @@ const communityDirectoryPageQuery = communityDirectory.slice(
 const communityPublic = read("convex/communityPublic.ts");
 const communityAdmin = read("convex/communityAdmin.ts");
 const interactions = read("convex/communityInteractions.ts");
+const indexCss = read("apps/web/src/index.css");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const contextFaceCss = sectionBetween(
   baseCss,
@@ -620,8 +621,8 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /ref=\{props\.membersHasMore \? loadMoreSentinelRef : undefined\}[\s\S]*\{membersFooterLabel\}/,
-  "context panel footer should be the load-more sentinel while additional member pages exist",
+  /ref=\{canRequestMoreMembers \? loadMoreSentinelRef : undefined\}[\s\S]*\{membersFooterLabel\}/,
+  "context panel footer should become the load-more sentinel when the visible member directory can page",
 );
 assert.match(
   directoryController,
@@ -1120,13 +1121,53 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-feed-scroll\s*\{[\s\S]*--community-feed-reading-measure:\s*70ch;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-title\s*\{[\s\S]*max-width:\s*min\(100%,\s*68ch\);[\s\S]*font-size:\s*17px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-body\s*\{[\s\S]*max-width:\s*min\(100%,\s*var\(--community-feed-reading-measure\)\);[\s\S]*font-size:\s*16px;[\s\S]*line-height:\s*1\.55;/,
+  /\.community-member-chat \.community-interaction-feed-scroll\s*\{[\s\S]*--community-feed-reading-measure:\s*640px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-title\s*\{[\s\S]*max-width:\s*min\(100%,\s*var\(--community-feed-reading-measure\)\);[\s\S]*font-size:\s*17px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-body\s*\{[\s\S]*max-width:\s*min\(100%,\s*var\(--community-feed-reading-measure\)\);[\s\S]*font-size:\s*16px;[\s\S]*line-height:\s*1\.55;/,
   "the member feed should provide a readable prose measure and clear title-to-body hierarchy without changing shared projection density",
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-feed-scroll > \.community-interaction-feed\s*\{[\s\S]*gap:\s*6px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-group-body\s*\{[\s\S]*gap:\s*3px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-meta-row\s*\{[\s\S]*color:\s*var\(--text-secondary\);[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-footer\s*\{[\s\S]*flex-direction:\s*row;[\s\S]*flex-wrap:\s*wrap;/,
+  /\.community-member-chat \.community-interaction-feed-scroll > \.community-interaction-feed\s*\{[\s\S]*gap:\s*0;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-group\s*\{[\s\S]*margin-block:\s*8px;[\s\S]*\.community-interaction-message[\s\S]*\+ \.community-interaction-message\s*\{[\s\S]*margin-top:\s*8px;[\s\S]*border-top:\s*1px solid[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-footer\s*\{[\s\S]*margin-top:\s*5px;[\s\S]*flex-direction:\s*row;[\s\S]*flex-wrap:\s*wrap;/,
   "the member feed should separate interaction groups while keeping metadata and root actions legible and attached",
+);
+assert.match(
+  indexCss,
+  /--community-text-author:\s*#f4f4f5;[\s\S]*--community-text-body:\s*#d4d4d8;[\s\S]*--community-text-ui:\s*#a1a1aa;[\s\S]*--community-text-meta:\s*#8b8b95;/,
+  "member chat should expose a deliberate four-level dark-theme text ladder",
+);
+assert.match(
+  baseCss,
+  /\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-author\s*\{[\s\S]*var\(--community-text-author[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-body\s*\{[\s\S]*var\(--community-text-body/,
+  "member feed author and body copy should consume distinct semantic text roles",
+);
+assert.match(
+  indexCss,
+  /\.app-shell\.community-layout:has\(\.community-member-chat\) \.community-nav \.nav-item\.active\s*\{[\s\S]*var\(--accent-selection\) 26%[\s\S]*box-shadow:\s*inset 3px 0 0 var\(--accent-selection\);/,
+  "the active community destination should be identifiable by a strong accent surface and edge",
+);
+assert.match(
+  indexCss,
+  /\.app-shell\.community-layout\.with-community-rail\.sessions-compact\.no-right:has\(\.community-member-chat\)\s*\{[\s\S]*grid-template-columns:\s*var\(--web-rail-width,\s*72px\) clamp\(168px,\s*20vw,\s*260px\)/,
+  "desktop community navigation should stop expanding at 260px",
+);
+assert.match(
+  baseCss,
+  /\.community-member-chat \.community-interaction-projection\.has-context-panel\s*\{[\s\S]*clamp\(280px,\s*18vw,\s*320px\)/,
+  "desktop member chat should keep the context panel within a useful bounded width",
+);
+assert.match(
+  communityNav,
+  /aria-current=\{isSelected \? "page" : undefined\}/,
+  "the selected channel should expose its current-page state to assistive technology",
+);
+assert.match(
+  contextPanel,
+  /offlineMembersExpanded, setOfflineMembersExpanded\] = useState\(false\)[\s\S]*aria-expanded=\{offlineMembersExpanded\}[\s\S]*aria-controls=\{offlineMembersRegionId\}[\s\S]*offlineMembersExpanded \? \([\s\S]*offlineMembers\.map/,
+  "offline members should default to one accessible disclosure row instead of a fully expanded roster",
+);
+assert.match(
+  contextPanel,
+  /const canRequestMoreMembers = Boolean\([\s\S]*props\.membersHasMore && \(!hasResolvedPresence \|\| offlineMembersExpanded\)[\s\S]*if \(!canRequestMoreMembers\) return;/,
+  "a collapsed offline roster should not auto-page the hidden directory",
 );
 assert.match(
   baseCss,
