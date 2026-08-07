@@ -116,7 +116,7 @@ export function useWebPublicBuilderCheckoutController(
     if (!params.session) {
       scrubCurrentRouteSearchParams(["builder_checkout"]);
       paramsRef.current.requireSignIn({
-        reason: "try_polynet_free",
+        reason: "resume_builder_checkout",
         payload: {},
       });
       return;

@@ -1549,6 +1549,7 @@ export default function App() {
       redeemPurchaseClaim,
       joinPublicCommunity,
       redeemPendingPurchases,
+      resumeBuilderCheckout: publicBuilderCheckout.prepareCommunityCreation,
       routeTryPolynetFree,
     });
   accountGraphLifecycle.actionsRef.current = {

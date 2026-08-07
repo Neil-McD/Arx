@@ -17,6 +17,9 @@ const app = read("apps/web/src/App.tsx");
 const publicBuilderCheckoutController = read(
   "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
 );
+const pendingAuthIntent = read(
+  "apps/web/src/controllers/useWebPendingAuthIntentController.ts",
+);
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const onboardingController = read("apps/web/src/controllers/useWebOnboardingProfileController.ts");
 
@@ -89,6 +92,14 @@ assert.match(
 assert.match(
   publicBuilderCheckoutController,
   /returnInFlightRef\.current[\s\S]*overview\?\.unassigned_subscriptions\.find[\s\S]*current\.openFundedCreateCommunity\(\)/,
+);
+assert.match(
+  publicBuilderCheckoutController,
+  /builder_checkout[\s\S]*reason: "resume_builder_checkout"/,
+);
+assert.match(
+  pendingAuthIntent,
+  /resume_builder_checkout[\s\S]*params\.resumeBuilderCheckout\(\)/,
 );
 assert.match(
   publicBuilderCheckoutController,

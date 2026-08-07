@@ -44,6 +44,7 @@ export function useWebPendingAuthIntentController(params: {
     navigate: boolean;
     silentNoop: boolean;
   }) => Promise<unknown>;
+  resumeBuilderCheckout: () => Promise<unknown>;
   routeTryPolynetFree: (session: AuthSession) => unknown;
 }) {
   const resumePendingAuthIntent = useCallback((): void => {
@@ -85,6 +86,9 @@ export function useWebPendingAuthIntentController(params: {
           silentNoop: payload.silent_noop,
         });
       },
+      resume_builder_checkout: () => {
+        void params.resumeBuilderCheckout();
+      },
       try_polynet_free: () => {
         void params.routeTryPolynetFree(params.session as AuthSession);
       },
@@ -96,6 +100,7 @@ export function useWebPendingAuthIntentController(params: {
     params.redeemPendingPurchases,
     params.redeemPurchaseClaim,
     params.resolveAndEnterMemberDestination,
+    params.resumeBuilderCheckout,
     params.routeTryPolynetFree,
     params.session,
     params.showToast,
