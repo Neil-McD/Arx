@@ -293,6 +293,9 @@ export function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
   return (
     <div className="community-interaction-embeds">
       {visible.map((embed) => {
+        if (embed.embed_kind === "link") {
+          return <CommunityInteractionLinkPreview key={embed.id} embed={embed} />;
+        }
         if (embed.status === "pending") {
           return (
             <div

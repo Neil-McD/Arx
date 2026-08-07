@@ -18,6 +18,7 @@ import type {
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
+import { selectRichInteractionEmbeds } from "../../../../shared/communityInteractionLinkPresentation";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import {
   CommunityContextPanel,
@@ -403,7 +404,7 @@ export function communityInteractionRootHasRichContent(
   bundle: CommunityInteractionRootBundle,
 ): boolean {
   return bundle.attachments.length > 0
-    || bundle.embeds.some((embed) => embed.status === "ready" || embed.status === "pending");
+    || selectRichInteractionEmbeds(bundle.embeds).length > 0;
 }
 
 

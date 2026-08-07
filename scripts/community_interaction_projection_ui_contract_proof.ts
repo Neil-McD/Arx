@@ -105,6 +105,11 @@ const pendingFirstLinkEmbed = {
   ...readyFirstLinkEmbed,
   status: "pending",
 };
+const failedHttpLinkEmbed = {
+  ...failedFirstLinkEmbed,
+  source_url: "http://example.com/first",
+  normalized_source_url: "http://example.com/first",
+};
 const publicCommunityStatsMapper = sectionBetween(
   communityPublic,
   "function mapPublicCommunityStats",
@@ -295,8 +300,8 @@ assert.match(
 );
 assert.match(
   feed,
-  /selectRichInteractionEmbeds[\s\S]*export function EmbedCards[\s\S]*const visible = selectRichInteractionEmbeds\(props\.embeds\)[\s\S]*embed\.status === "pending"[\s\S]*embed\.status !== "ready"\) return null;[\s\S]*<CommunityInteractionLinkPreview[^>]*embed=\{embed\}/,
-  "interaction embeds should use the shared single-preview policy before rendering pending skeletons or ready cards",
+  /selectRichInteractionEmbeds[\s\S]*export function EmbedCards[\s\S]*const visible = selectRichInteractionEmbeds\(props\.embeds\)[\s\S]*embed\.embed_kind === "link"[\s\S]*<CommunityInteractionLinkPreview[^>]*embed=\{embed\}/,
+  "generic link embeds should use the shared single-preview policy and one deterministic card component in every visible status",
 );
 assert.doesNotMatch(
   feed,
@@ -358,6 +363,11 @@ assert.equal(
   1,
   "a message should render at most one rich embed",
 );
+assert.equal(
+  selectRichInteractionEmbeds([failedFirstLinkEmbed]).length,
+  1,
+  "a failed generic preview should retain one compact fallback card",
+);
 assert.deepEqual(
   interactionPresentationForEmbeds("Shared https://example.com/first for context", [readyFirstLinkEmbed]),
   {
@@ -415,18 +425,26 @@ assert.deepEqual(
     [failedFirstLinkEmbed],
   ),
   {
-    bodySegments: [{ type: "text", text: "https://example.com/first" }],
+    bodySegments: [{ type: "embed", embed: failedFirstLinkEmbed }],
     trailingEmbeds: [],
   },
-  "failed previews should preserve one standalone URL fallback",
+  "failed previews should preserve one compact in-flow card without duplicating the standalone URL",
 );
 assert.deepEqual(
   interactionPresentationForEmbeds("https://example.com/first", [pendingFirstLinkEmbed]),
   {
-    bodySegments: [{ type: "text", text: "https://example.com/first" }],
-    trailingEmbeds: [pendingFirstLinkEmbed],
+    bodySegments: [{ type: "embed", embed: pendingFirstLinkEmbed }],
+    trailingEmbeds: [],
   },
-  "pending previews should preserve the source link and existing trailing skeleton placement",
+  "pending previews should render the same compact in-flow card used after enrichment",
+);
+assert.deepEqual(
+  interactionPresentationForEmbeds("http://example.com/first", [failedHttpLinkEmbed]),
+  {
+    bodySegments: [{ type: "text", text: "http://example.com/first" }],
+    trailingEmbeds: [],
+  },
+  "an embed that cannot render as an approved HTTPS card must not remove the authored URL",
 );
 assert.deepEqual(
   interactionPresentationForEmbeds("```txt\nhttps://example.com/first\n```", [readyFirstLinkEmbed]),
@@ -1049,7 +1067,7 @@ assert.match(
 );
 assert.match(
   projection,
-  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*embed\.status === "ready"[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
+  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*selectRichInteractionEmbeds\(bundle\.embeds\)\.length > 0[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
   "rich pinned roots should preserve real attachment and preview visibility without clamping text-only pins",
 );
 assert.doesNotMatch(
@@ -1143,8 +1161,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Async Link Embed Enrichment Slice[\s\S]*link blocks as derived preview metadata[\s\S]*must not append the URL a second time[\s\S]*failed preview embeds render no fallback card/,
-  "interaction contract should prohibit duplicate link text and failed-preview fallback cards",
+  /Current Async Link Embed Enrichment Slice[\s\S]*link blocks as derived preview metadata[\s\S]*must not append the URL a second time[\s\S]*pending, ready, and failed generic link embeds render the same compact card shell/,
+  "interaction contract should require deterministic generic link cards without duplicate URL text",
 );
 
 console.log("community interaction projection UI contract proof passed");

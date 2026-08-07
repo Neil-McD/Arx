@@ -51,15 +51,28 @@ describe("pinned community root selection", () => {
     )).toBeNull();
   });
 
-  it("only clamps body text when the root has real media or a live preview", () => {
+  it("only clamps body text when the root has real media or a renderable preview", () => {
     const textOnly = bundle("text", "Text only");
     const attachment = bundle("attachment", "Attachment");
     attachment.attachments = [{ id: "file" }] as CommunityInteractionRootBundle["attachments"];
     const embed = bundle("embed", "Embed");
-    embed.embeds = [{ status: "ready" }] as CommunityInteractionRootBundle["embeds"];
+    embed.embeds = [{
+      embed_kind: "link",
+      status: "ready",
+      source_url: "https://example.com/article",
+      normalized_source_url: "https://example.com/article",
+    }] as CommunityInteractionRootBundle["embeds"];
+    const failedEmbed = bundle("failed-embed", "Failed embed");
+    failedEmbed.embeds = [{
+      embed_kind: "link",
+      status: "failed",
+      source_url: "https://example.com/article",
+      normalized_source_url: "https://example.com/article",
+    }] as CommunityInteractionRootBundle["embeds"];
 
     expect(communityInteractionRootHasRichContent(textOnly)).toBe(false);
     expect(communityInteractionRootHasRichContent(attachment)).toBe(true);
     expect(communityInteractionRootHasRichContent(embed)).toBe(true);
+    expect(communityInteractionRootHasRichContent(failedEmbed)).toBe(true);
   });
 });

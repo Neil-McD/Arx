@@ -405,8 +405,8 @@ assert.match(
 );
 assert.match(
   interactionEmbedRefresh,
-  /const MAX_REFRESH_BATCH_SIZE = 100[\s\S]*scheduleDueInteractionEmbedPreviewRefresh = internalMutation\(\{[\s\S]*Math\.max\(1, Math\.min\(requestedLimit, MAX_REFRESH_BATCH_SIZE\)\)[\s\S]*withIndex\("by_provider_status_nextRefreshAt"[\s\S]*dueByVersion[\s\S]*dueByTime[\s\S]*INTERACTION_EMBED_REFRESH_LEASE_MS[\s\S]*refresh: status !== "pending"/,
-  "the canonical preview refresh queue should be internal, indexed, batch-capped, leased, version-aware, and able to repair missed pending work",
+  /const MAX_REFRESH_BATCH_SIZE = 100[\s\S]*scheduleDueInteractionEmbedPreviewRefresh = internalMutation\(\{[\s\S]*Math\.max\(1, Math\.min\(requestedLimit, MAX_REFRESH_BATCH_SIZE\)\)[\s\S]*withIndex\("by_status_nextRefreshAt"[\s\S]*status", "failed"[\s\S]*refresh: true[\s\S]*withIndex\("by_provider_status_nextRefreshAt"[\s\S]*dueByVersion[\s\S]*dueByTime[\s\S]*INTERACTION_EMBED_REFRESH_LEASE_MS/,
+  "the canonical preview refresh queue should repair failed generic links before running bounded provider freshness work",
 );
 assert.match(
   interactionEmbedRefresh,

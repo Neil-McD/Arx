@@ -47,6 +47,31 @@ function embed(
 }
 
 describe("CommunityInteractionLinkPreview", () => {
+  it.each(["pending", "failed"] as const)(
+    "renders the compact generic shell while enrichment is %s",
+    (status) => {
+      const url = "https://us05web.zoom.us/j/89423453054";
+      const markup = renderToStaticMarkup(
+        createElement(CommunityInteractionLinkPreview, {
+          embed: embed({
+            status,
+            source_url: url,
+            normalized_source_url: url,
+            provider: "us05web.zoom.us",
+            preview_kind: null,
+            title: null,
+            description: null,
+          }),
+        }),
+      );
+
+      expect(markup).toContain('data-preview-kind="link"');
+      expect(markup).toContain('data-preview-density="compact"');
+      expect(markup).toContain("us05web.zoom.us");
+      expect(markup).not.toContain("web-skeleton-pill");
+    },
+  );
+
   it("renders a generic website compactly from first paint even when stale image metadata exists", () => {
     const staleThumbnail = "https://storage.googleapis.com/expired-descript-thumbnail.jpg";
     const markup = renderToStaticMarkup(

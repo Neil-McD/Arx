@@ -539,10 +539,10 @@ Rules:
 - explicit X source `401`, `403`, `404`, or `410` responses mark the embed unavailable, clear impersonable derived identity/body fields, and leave the canonical authored URL as the fallback
 - redacted and unavailable embeds are never revived by the refresh queue
 - renderers treat link blocks as derived preview metadata when canonical `markdown_text` already contains the URL; they must not append the URL a second time
-- failed preview embeds render no fallback card when the canonical message text already preserves the clickable URL
+- pending, ready, and failed generic link embeds render the same compact card shell; enrichment may improve metadata but never controls whether the card exists
 - renderers show at most one rich preview per message; additional links remain visible in canonical message text
-- a ready rich preview replaces its matching exact standalone URL line at that authored position; it must not move surrounding copy or remove the same URL when it appears inside prose
-- previews without an exact ready standalone URL match retain the trailing position after canonical attachments, preserving pending, inline-link, workspace-reference, and attachment ordering
+- a visible generic link card replaces its matching exact standalone URL line at that authored position in pending, ready, or failed state; it must not move surrounding copy or remove the same URL when it appears inside prose
+- previews without an exact standalone URL match retain the trailing position after canonical attachments, preserving inline-link, workspace-reference, and attachment ordering
 - exact consecutive standalone duplicates collapse at presentation time without mutating stored message text
 - tracking-only URL differences are ignored for exact standalone replacement, while content-bearing parameters such as video start time remain significant
 - approved video players are click-to-activate, sandboxed, and retain a direct provider link; the browser revalidates stored source, media, and player URLs before rendering; preview images send no referrer; social previews render normalized identity, provenance, and text without loading attached media or third-party widget JavaScript
@@ -551,7 +551,7 @@ Rules:
   favicon may try only the validated source origin and one bounded parent-domain
   fallback, sends no referrer, and degrades to a neutral first-party icon without
   changing the visible hostname or link target
-- preview refresh batches clamp operator input to at most 100 rows, query the provider/status/next-refresh index, lease rows before scheduling, and run only internal work
+- preview refresh batches clamp operator input to at most 100 rows, recover due failed HTTPS links through the status/next-refresh index, retain provider-specific freshness work through the provider/status/next-refresh index, lease rows before scheduling, and run only internal work
 - default dark and Polynet dark share one semantic chat-link treatment while their surface tokens continue to theme embed cards
 
 Bounded chat formatting rules:

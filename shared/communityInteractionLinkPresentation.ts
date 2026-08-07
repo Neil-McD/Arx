@@ -72,7 +72,8 @@ function trailingBareHttpUrl(line: string): { prefix: string; url: string } | nu
 }
 
 function embedUrlKey(embed: CommunityInteractionLinkEmbedLike): string | null {
-  return canonicalHttpUrl(embed.normalized_source_url ?? embed.source_url);
+  const canonical = canonicalHttpUrl(embed.normalized_source_url ?? embed.source_url);
+  return canonical?.startsWith("https://") ? canonical : null;
 }
 
 export function selectRichInteractionEmbeds<T extends CommunityInteractionLinkEmbedLike>(
@@ -81,8 +82,15 @@ export function selectRichInteractionEmbeds<T extends CommunityInteractionLinkEm
   return embeds
     .filter(
       (embed) =>
-        (embed.status === "pending" || embed.status === "ready") &&
-        (embed.embed_kind === "link" || embed.embed_kind === "workspace_ref"),
+        (
+          embed.embed_kind === "link" &&
+          embedUrlKey(embed) !== null &&
+          (embed.status === "pending" || embed.status === "ready" || embed.status === "failed")
+        ) ||
+        (
+          embed.embed_kind === "workspace_ref" &&
+          (embed.status === "pending" || embed.status === "ready")
+        ),
     )
     .slice(0, MAX_RICH_INTERACTION_EMBEDS);
 }
@@ -100,8 +108,8 @@ export function interactionPresentationForEmbeds<T extends CommunityInteractionL
     };
   }
 
-  const readyVisibleLinkUrl =
-    visibleEmbed?.embed_kind === "link" && visibleEmbed.status === "ready"
+  const visibleLinkUrl =
+    visibleEmbed?.embed_kind === "link"
       ? embedUrlKey(visibleEmbed)
       : null;
 
@@ -146,7 +154,7 @@ export function interactionPresentationForEmbeds<T extends CommunityInteractionL
     previousStandaloneUrl = isStandaloneUrl ? trailingBareUrl.url : null;
     if (isConsecutiveDuplicate) continue;
 
-    if (!visibleEmbedPlaced && readyVisibleLinkUrl === trailingBareUrl.url && visibleEmbed) {
+    if (!visibleEmbedPlaced && visibleLinkUrl === trailingBareUrl.url && visibleEmbed) {
       if (trailingBareUrl.prefix) textLines.push(trailingBareUrl.prefix);
       flushText();
       bodySegments.push({ type: "embed", embed: visibleEmbed });

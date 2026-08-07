@@ -1797,6 +1797,7 @@ export default defineSchema({
     .index("by_root", ["rootId"])
     .index("by_reply", ["replyId"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_status_nextRefreshAt", ["status", "nextRefreshAt"])
     .index("by_provider_status_nextRefreshAt", ["provider", "status", "nextRefreshAt"])
     .index("by_community_normalizedSourceUrl", ["communityId", "normalizedSourceUrl"])
     .index("by_community_workspaceRef", ["communityId", "workspaceRefKind", "workspaceRefId"]),
