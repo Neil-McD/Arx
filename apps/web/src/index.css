@@ -127,14 +127,14 @@
 }
 
 :root[data-theme="light"] {
-  --bg-app: #ececea;
-  --surface-app: #ececea;
-  --surface-rail: #ececea;
-  --bg-workspace: #f8f8f4;
-  --surface-workspace: #f8f8f4;
-  --bg-panel: #f0f0ee;
-  --surface-panel: #f0f0ee;
-  --surface-nav: #f0f0ee;
+  --bg-app: #e4e4e0;
+  --surface-app: #e4e4e0;
+  --surface-rail: #e4e4e0;
+  --bg-workspace: #fafaf7;
+  --surface-workspace: #fafaf7;
+  --bg-panel: #efefeb;
+  --surface-panel: #efefeb;
+  --surface-nav: #efefeb;
 }
 
 /* Web: keep topbar content aligned with the left rail. */
