@@ -27,6 +27,7 @@ const publicCheckoutController = read(
 );
 const founderBillingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
+const settingsStyles = read("apps/web/src/styles/settings-runtime-and-theme-overrides.css");
 
 assert.equal(POLYNET_BUILDER_OFFER.name, "Builder");
 assert.equal(POLYNET_BUILDER_OFFER.priceBaseUnits, 7_900);
@@ -90,6 +91,12 @@ assert.match(purchaseModal, /Buy Builder/);
 assert.match(purchaseModal, /operator_included/);
 assert.match(purchaseModal, /paid_setup/);
 assert.match(offerSummary, /POLYNET_BUILDER_OFFER\.benefits\.map/);
+assert.match(settingsStyles, /button\.settings-primary-action[\s\S]*background: var\(--bg-button\)/);
+assert.match(
+  settingsStyles,
+  /\.settings-panel button[^\n]+:not\(\.settings-primary-action\)/,
+  "legacy settings button defaults must not override canonical primary actions",
+);
 
 assert.match(offerController, /startCheckout\(community\.community_id\)/);
 assert.match(offerController, /openPortal\(community\.community_id\)/);
