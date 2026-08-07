@@ -32,6 +32,7 @@ type UseWebCommunityVoiceControllerParams = {
   canPostMessagesActiveCommunity: boolean;
   requireSignIn: () => void;
   showAppToastMessage: (message: string) => void;
+  isProfileSetupResolved: boolean;
   isProfileSetupComplete: boolean;
   openProfileSetup: () => void;
   setCommunityMessageInput: Dispatch<SetStateAction<string>>;
@@ -69,6 +70,12 @@ export function useWebCommunityVoiceController(
       target: WebCommunityVoiceTranscriptTarget | null,
       owner: WebCommunityVoiceButtonOwner,
     ) => {
+      if (!params.isProfileSetupResolved) {
+        params.showAppToastMessage(
+          "We are still verifying your account. Try again in a moment.",
+        );
+        return;
+      }
       if (!params.isProfileSetupComplete) {
         params.openProfileSetup();
         return;
@@ -91,6 +98,7 @@ export function useWebCommunityVoiceController(
     },
     [
       buttonOwner,
+      params.isProfileSetupResolved,
       params.isProfileSetupComplete,
       params.openProfileSetup,
       params.showAppToastMessage,

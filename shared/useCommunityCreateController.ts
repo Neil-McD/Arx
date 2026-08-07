@@ -21,10 +21,12 @@ type UseCommunityCreateControllerArgs<
 > = {
   session: SessionT | null;
   ensureSession?: EnsureSessionFn<SessionT>;
+  isAccountSetupResolved: boolean;
   isAccountSetupComplete: boolean;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onAccountSetupRequired?: () => void;
+  onAccountSetupUnavailable?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
   getFounderSubscriptionId?: () => string | null;
   createCommunityName: string;
@@ -90,6 +92,10 @@ export function useCommunityCreateController<
 
   const openCreateCommunityModal = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
     const current = argsRef.current;
+    if (current.session && !current.isAccountSetupResolved) {
+      current.onAccountSetupUnavailable?.();
+      return;
+    }
     if (current.session && !current.isAccountSetupComplete) {
       current.onAccountSetupRequired?.();
       return;
@@ -136,6 +142,12 @@ export function useCommunityCreateController<
       } else {
         current.setCreateCommunityError(current.createUnauthenticatedErrorMessage);
       }
+      return;
+    }
+    if (!current.isAccountSetupResolved) {
+      current.setCreateCommunityError(
+        "We are still verifying your account. Try again in a moment.",
+      );
       return;
     }
     if (!current.isAccountSetupComplete) {
@@ -192,6 +204,12 @@ export function useCommunityCreateController<
       if (!draft) return;
       closeCreateCommunityModal();
       await current.onPrimaryUnauthenticated(draft);
+      return;
+    }
+    if (!current.isAccountSetupResolved) {
+      current.setCreateCommunityError(
+        "We are still verifying your account. Try again in a moment.",
+      );
       return;
     }
     if (!current.isAccountSetupComplete) {

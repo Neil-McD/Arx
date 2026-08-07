@@ -96,7 +96,7 @@ assert.match(
 );
 assert.match(
   onboardingProfileController,
-  /routeTryPolynetFree[\s\S]*account_setup\?\.completed[\s\S]*enterDefaultDestination/,
+  /routeTryPolynetFree[\s\S]*const setup = row\?\.account_setup \?\? null[\s\S]*setup\.completed[\s\S]*enterDefaultDestination/,
   "completed generic accounts must resolve the canonical community destination",
 );
 assert.match(

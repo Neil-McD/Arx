@@ -11,6 +11,7 @@ import {
 import {
   formatAccountSetupMissingGuidance,
   isAccountSetupStatusIdentityComplete,
+  type AccountSetupResolution,
   type AccountSetupStatus,
 } from "../../../../shared/accountSetup";
 import { resolveAuthSubject } from "../../../../shared/authSession";
@@ -55,6 +56,7 @@ export function useWebOnboardingProfileController(params: {
   activePage: AppPage;
   publicRouteKind: string;
   isAuthBootstrapComplete: boolean;
+  resumeEpoch: number;
 }) {
   const initialProfileDraft = useMemo<ProfileDraft>(
     () => readProfileDraftForUser(params.profileStorageUserId),
@@ -65,6 +67,8 @@ export function useWebOnboardingProfileController(params: {
     useState<AccountSetupStatus | null>(null);
   const [isLoadingAccountSetupStatus, setIsLoadingAccountSetupStatus] =
     useState(false);
+  const [accountSetupResolutionState, setAccountSetupResolutionState] =
+    useState<"idle" | "loading" | "resolved" | "failed">("idle");
   const [hasLoadedOnboardingProfile, setHasLoadedOnboardingProfile] =
     useState(false);
   const [isOnboardingModalOpen, setIsOnboardingModalOpen] = useState(false);
@@ -89,6 +93,8 @@ export function useWebOnboardingProfileController(params: {
 
   const effectiveAccountSetupStatus =
     accountSetupStatus ?? cloudProfile?.account_setup ?? null;
+  const isAccountSetupResolved =
+    !params.session || Boolean(effectiveAccountSetupStatus);
   const isProfileSetupCompleteForPublicActions =
     !params.session ||
     Boolean(
@@ -101,7 +107,10 @@ export function useWebOnboardingProfileController(params: {
   const applySavedProfile = useCallback(
     (saved: UserProfileDetail): void => {
       setCloudProfile(saved);
-      if (saved.account_setup) setAccountSetupStatus(saved.account_setup);
+      if (saved.account_setup) {
+        setAccountSetupStatus(saved.account_setup);
+        setAccountSetupResolutionState("resolved");
+      }
       setHasLoadedOnboardingProfile(true);
       profile.setProfileName(saved.display_name ?? "");
       profile.setProfileHandle(saved.handle ?? "");
@@ -131,22 +140,43 @@ export function useWebOnboardingProfileController(params: {
     async (
       nextSession: AuthSession | null =
         getSessionRef.current() ?? params.session,
-    ) => {
+    ): Promise<AccountSetupResolution> => {
       if (!nextSession) {
         setAccountSetupStatus(null);
-        return null;
+        setAccountSetupResolutionState("idle");
+        return { status: "unauthenticated" };
       }
       const usableSession = await params.ensureSession(nextSession);
-      if (!usableSession) return null;
+      if (!usableSession) {
+        const error = "We could not verify your account yet. Try again.";
+        setAccountSetupResolutionState("failed");
+        setOnboardingError(error);
+        return { status: "unavailable", error };
+      }
       setIsLoadingAccountSetupStatus(true);
+      setAccountSetupResolutionState("loading");
       try {
         const status = await loadCloudAccountSetupStatus<AuthSession>({
           session: usableSession,
         });
+        if (!status) {
+          const error = "We could not verify your account setup yet. Try again.";
+          setAccountSetupResolutionState("failed");
+          setOnboardingError(error);
+          return { status: "unavailable", error };
+        }
         setAccountSetupStatus(status);
-        return status;
-      } catch {
-        return null;
+        setAccountSetupResolutionState("resolved");
+        setOnboardingError(null);
+        return { status: "resolved", accountSetup: status };
+      } catch (cause) {
+        const error = formatProfileMutationError(
+          cause,
+          "We could not verify your account setup yet. Try again.",
+        );
+        setAccountSetupResolutionState("failed");
+        setOnboardingError(error);
+        return { status: "unavailable", error };
       } finally {
         setIsLoadingAccountSetupStatus(false);
       }
@@ -158,20 +188,46 @@ export function useWebOnboardingProfileController(params: {
     async (activeSession: AuthSession): Promise<UserProfileDetail | null> => {
       const userId = resolveAuthSubject(activeSession);
       if (!userId) return null;
-      const row = await resolveCloudOnboardingProfileDetail<
-        AuthSession,
-        UserProfileDetail
-      >({
-        session: activeSession,
-        userId,
-      });
-      setHasLoadedOnboardingProfile(true);
-      if (row) {
-        setCloudProfile(row);
-        if (row.account_setup) setAccountSetupStatus(row.account_setup);
-        profile.applyLoadedProfileToLocal(row);
+      setIsLoadingAccountSetupStatus(true);
+      setAccountSetupResolutionState("loading");
+      try {
+        const row = await resolveCloudOnboardingProfileDetail<
+          AuthSession,
+          UserProfileDetail
+        >({
+          session: activeSession,
+          userId,
+        });
+        if (resolveAuthSubject(getSessionRef.current()) !== userId) return row;
+        setHasLoadedOnboardingProfile(true);
+        if (row?.account_setup) {
+          setCloudProfile(row);
+          setAccountSetupStatus(row.account_setup);
+          setAccountSetupResolutionState("resolved");
+          setOnboardingError(null);
+          profile.applyLoadedProfileToLocal(row);
+          return row;
+        }
+        const error = "We could not verify your account setup yet. Try again.";
+        setAccountSetupResolutionState("failed");
+        setOnboardingError(error);
+        return row;
+      } catch (cause) {
+        if (resolveAuthSubject(getSessionRef.current()) === userId) {
+          setAccountSetupResolutionState("failed");
+          setOnboardingError(
+            formatProfileMutationError(
+              cause,
+              "We could not verify your account setup yet. Try again.",
+            ),
+          );
+        }
+        throw cause;
+      } finally {
+        if (resolveAuthSubject(getSessionRef.current()) === userId) {
+          setIsLoadingAccountSetupStatus(false);
+        }
       }
-      return row;
     },
     [profile],
   );
@@ -301,8 +357,16 @@ export function useWebOnboardingProfileController(params: {
         const latestSetup = await loadCloudAccountSetupStatus<AuthSession>({
           session: activeSession,
         });
-        if (latestSetup) setAccountSetupStatus(latestSetup);
-        if (!latestSetup?.completed) {
+        if (!latestSetup) {
+          setAccountSetupResolutionState("failed");
+          setOnboardingError(
+            "We could not verify your account setup yet. Try again.",
+          );
+          return false;
+        }
+        setAccountSetupStatus(latestSetup);
+        setAccountSetupResolutionState("resolved");
+        if (!latestSetup.completed) {
           setOnboardingError(formatAccountSetupMissingGuidance(latestSetup));
           if (shouldNavigate) setIsOnboardingModalOpen(true);
           return false;
@@ -364,14 +428,16 @@ export function useWebOnboardingProfileController(params: {
     async (
       nextSession: AuthSession | null =
         getSessionRef.current() ?? params.session,
-    ): Promise<void> => {
+    ): Promise<"entered" | "onboarding" | "unavailable" | "unauthenticated"> => {
       if (!nextSession) {
         params.requireSignIn({ reason: "try_polynet_free", payload: {} });
-        return;
+        return "unauthenticated";
       }
       try {
         const row = await loadProfileForOnboarding(nextSession);
-        if (row?.account_setup?.completed) {
+        const setup = row?.account_setup ?? null;
+        if (!setup) return "unavailable";
+        if (setup.completed) {
           setIsOnboardingModalOpen(false);
           const entered =
             await actionsRef.current.enterDefaultDestination({
@@ -381,13 +447,16 @@ export function useWebOnboardingProfileController(params: {
           if (!entered) {
             setOnboardingError("We could not open your community. Try again.");
             actionsRef.current.navigateTo("/discover", { replace: true });
+            return "unavailable";
           }
-          return;
+          return "entered";
         }
+        actionsRef.current.navigateTo("/onboarding");
+        return "onboarding";
       } catch {
-        // Unknown setup state is resolved by the canonical platform bridge.
+        // A failed lookup is not evidence that account setup is incomplete.
+        return "unavailable";
       }
-      actionsRef.current.navigateTo("/onboarding");
     },
     [
       loadProfileForOnboarding,
@@ -400,6 +469,7 @@ export function useWebOnboardingProfileController(params: {
     setCloudProfile(null);
     setAccountSetupStatus(null);
     setIsLoadingAccountSetupStatus(false);
+    setAccountSetupResolutionState("idle");
     setHasLoadedOnboardingProfile(false);
     setIsOnboardingModalOpen(false);
     setIsSavingOnboarding(false);
@@ -426,11 +496,19 @@ export function useWebOnboardingProfileController(params: {
       return;
     }
     onboardingHydrationUserIdRef.current = authSubject;
-    void routeTryPolynetFree(params.session);
+    void routeTryPolynetFree(params.session).then((result) => {
+      if (
+        result === "unavailable" &&
+        onboardingHydrationUserIdRef.current === authSubject
+      ) {
+        onboardingHydrationUserIdRef.current = null;
+      }
+    });
   }, [
     params.activePage,
     params.isAuthBootstrapComplete,
     params.publicRouteKind,
+    params.resumeEpoch,
     params.session,
     routeTryPolynetFree,
   ]);
@@ -451,6 +529,7 @@ export function useWebOnboardingProfileController(params: {
     params.activePage,
     params.isAuthBootstrapComplete,
     params.publicRouteKind,
+    params.resumeEpoch,
     params.session,
     routeTryPolynetFree,
   ]);
@@ -492,7 +571,7 @@ export function useWebOnboardingProfileController(params: {
     ) {
       return;
     }
-    void loadProfileForOnboarding(params.session);
+    void loadProfileForOnboarding(params.session).catch(() => undefined);
   }, [
     cloudProfile,
     hasLoadedOnboardingProfile,
@@ -513,6 +592,8 @@ export function useWebOnboardingProfileController(params: {
       setAccountSetupStatus,
       isLoadingAccountSetupStatus,
       setIsLoadingAccountSetupStatus,
+      accountSetupResolutionState,
+      isAccountSetupResolved,
       effectiveAccountSetupStatus,
       isProfileSetupCompleteForPublicActions,
       isAccountSetupCompleteForBuilderActions,
@@ -535,12 +616,14 @@ export function useWebOnboardingProfileController(params: {
     }),
     [
       accountSetupStatus,
+      accountSetupResolutionState,
       closeProfileSetup,
       cloudProfile,
       effectiveAccountSetupStatus,
       finishOnboarding,
       hasLoadedOnboardingProfile,
       isAccountSetupCompleteForBuilderActions,
+      isAccountSetupResolved,
       isLoadingAccountSetupStatus,
       isOnboardingModalOpen,
       isProfileSetupCompleteForPublicActions,
