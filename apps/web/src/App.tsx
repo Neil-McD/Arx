@@ -50,7 +50,6 @@ import {
 } from "./controllers/useWebCommunityAdministrationState";
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
-import { useWebProviderConnectionsController } from "./controllers/useWebProviderConnectionsController";
 import { useWebFounderBillingController } from "./controllers/useWebFounderBillingController";
 import { useWebPublicBuilderCheckoutController } from "./controllers/useWebPublicBuilderCheckoutController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
@@ -957,16 +956,6 @@ export default function App() {
     setActiveView,
     applyCommunityShellState,
   });
-  const {
-    providerConnectionUi,
-  } = useWebProviderConnectionsController({
-    session,
-    getSession: () => sessionRef.current ?? session,
-    ensureSession: ensureUsableAuthSession,
-    requireSignIn,
-    refreshAccountSetupStatus,
-    resetSignedOutAccountSetup: resetOnboardingProfileState,
-  });
   const operatorComplimentaryAccess =
     accountCommerceStatus?.operator_complimentary_access === true;
   const founderBilling = useWebFounderBillingController({
@@ -1555,7 +1544,6 @@ export default function App() {
       session,
       resolveAndEnterMemberDestination,
       navigateTo,
-      connectChatgpt: providerConnectionUi.handleConnectChatgpt,
       showToast: showAppToastMessage,
       openCreateCommunity: openNewCommunityPurchaseFlow,
       redeemPurchaseClaim,
@@ -2638,7 +2626,6 @@ export default function App() {
   }
 
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
-    providerConnectionModalHostProps: providerConnectionUi.modalHostProps,
     communityModalHostProps: communityUi.modalHostProps,
     builderOfferProps: {
       community: builderOffer.community,

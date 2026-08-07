@@ -19,7 +19,6 @@ const accountSetup = read("convex/accountSetupCore.ts");
 const envExample = read(".env.example");
 const backend = read("convex/founderInference.ts");
 const fundingRuntime = read("convex/founderInferenceRuntime.ts");
-const migration = read("convex/founderInferenceMigration.ts");
 const lifecycle = read("convex/communityLifecycle.ts");
 const communityPublic = read("convex/communityPublic.ts");
 const intake = read("convex/communityAgentConciergeCore.ts");
@@ -37,7 +36,8 @@ const globalOverlayPropsBuilder = read("apps/web/src/controllers/buildWebGlobalO
 const createController = read("shared/useCommunityCreateController.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
 const webApp = read("apps/web/src/App.tsx");
-const legal = read("docs/legal/community-owner-inference-funding-v2.md");
+const historicalLegal = read("docs/legal/community-owner-inference-funding-v2.md");
+const activeLegal = read("docs/legal/terms-of-service-v3.md");
 const cognitionContract = read("docs/community-agent-cognition-contract-v1.md");
 const billingContract = read("docs/product/reference/billing-entitlements.md");
 const packageJson = read("package.json");
@@ -65,14 +65,8 @@ assert.match(founderFundingSchema, /founderSubscriptions: defineTable\(\{[\s\S]*
 assert.match(founderFundingSchema, /founderUsageCycles: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)/);
 assert.match(planCore, /communityId\?:/);
 
-assert.match(
-  schema,
-  /founderInferenceGrants: defineTable\(\{[\s\S]*userId: v\.id\("users"\)[\s\S]*cohortKey: v\.string\(\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("active"\)[\s\S]*v\.literal\("suspended"\)[\s\S]*\.index\("by_user_cohort", \["userId", "cohortKey"\]\)/,
-);
-assert.match(
-  schema,
-  /inferenceFundingPolicy: v\.union\([\s\S]*legacy_byok_allowed[\s\S]*managed_required/,
-);
+assert.doesNotMatch(schema, /founderInferenceGrants: defineTable/);
+assert.match(schema, /inferenceFundingPolicy: v\.literal\("managed_required"\)/);
 assert.doesNotMatch(schema, /inferenceFundingPolicy: v\.optional/);
 assert.doesNotMatch(
   core,
@@ -81,31 +75,26 @@ assert.doesNotMatch(
 assert.match(admissionResolver, /return \{ ok: false, code: "founder_plan_required" \}/);
 assert.doesNotMatch(admissionResolver, /userProviderConnections|founderInferenceGrants|owner_api_key/);
 assert.doesNotMatch(founderBilling, /setCommunityFundingPolicyInternal/);
-assert.match(
-  schema,
-  /communityInferenceReceipts: defineTable\(\{[\s\S]*receiptKey: v\.string\(\)[\s\S]*actorUserId: v\.id\("users"\)[\s\S]*payerUserId: v\.id\("users"\)[\s\S]*fundingMode: v\.union[\s\S]*founderGrantId: v\.optional\(v\.id\("founderInferenceGrants"\)\)[\s\S]*founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)[\s\S]*v\.literal\("authorized"\)[\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("indeterminate"\)[\s\S]*\.index\("by_receipt_key", \["receiptKey"\]\)/,
-);
 const receiptSchema = schema.slice(
   schema.indexOf("communityInferenceReceipts: defineTable"),
   schema.indexOf("workspaceCreditBalances: defineTable"),
 );
+assert.match(receiptSchema, /fundingMode: v\.union\([\s\S]*platform_subscription[\s\S]*platform_operator_grant/);
+assert.match(receiptSchema, /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)/);
+assert.match(receiptSchema, /v\.literal\("authorized"\)[\s\S]*v\.literal\("settled"\)[\s\S]*v\.literal\("indeterminate"\)/);
+assert.match(receiptSchema, /\.index\("by_receipt_key", \["receiptKey"\]\)/);
+assert.doesNotMatch(receiptSchema, /owner_api_key|founderGrantId|founderInferenceGrants/);
 assert.match(
   receiptSchema,
   /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
 );
 assert.doesNotMatch(receiptSchema, /apiKey|encryptedSecret|prompt:|response:|toolOutput|costDollars/);
 
-assert.doesNotMatch(migration, /initializeExistingFounderInferenceCohortInternal/);
-assert.doesNotMatch(migration, /communityInferencePolicies/);
-assert.doesNotMatch(migration, /EXPECTED_EXISTING_FOUNDER_COUNT|EXPECTED_LEGACY_POLICY_COUNT/);
-assert.match(migration, /transitionExistingFounderToManagedInternal/);
-assert.match(migration, /founder_transition_community_set_mismatch/);
-assert.match(migration, /inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED/);
-assert.doesNotMatch(migration, /alreadyTransitioned[\s\S]{0,300}community\.visibility/);
-assert.doesNotMatch(migration, /inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,[\s\S]{0,160}visibility:/);
-assert.match(migration, /next_visibility: String\(community\.visibility\)/);
-assert.match(migration, /await ctx\.db\.delete\(grant\._id\)/);
-assert.doesNotMatch(migration, /legacyProgramGrants|sourcePartnerRecordId/);
+assert.equal(existsSync(join(root, "convex/founderInferenceMigration.ts")), false);
+assert.doesNotMatch(
+  schema + core + backend,
+  /founderInferenceGrants|founderGrantId|owner_api_key|legacy_byok_allowed/,
+);
 
 assert.doesNotMatch(lifecycle, /requireExistingFounderCommunityCreationEligibility/);
 assert.doesNotMatch(lifecycle, /community_founder_funding_required_to_publish|requireCommunityFounderFundingForPublish/);
@@ -253,8 +242,12 @@ assert.match(createController, /visibility: "unlisted"/);
 assert.doesNotMatch(createModal, /option value="published"/);
 assert.match(createModal, /Create community/);
 assert.doesNotMatch(webApp, /startCheckoutAfterCommunityCreated/);
-assert.match(legal, /does not transfer the founder's administrative permissions to a member/);
-assert.match(legal, /Receipts do not contain the API key, prompts, responses, or tool output/);
+assert.match(historicalLegal, /status: superseded/);
+assert.match(historicalLegal, /superseded_by: terms_of_service_v3/);
+assert.match(historicalLegal, /Historical acceptance evidence only/);
+assert.match(activeLegal, /status: active/);
+assert.match(activeLegal, /Builder for \$79 USD per month for each attached community/);
+assert.match(activeLegal, /Polynet-hosted AI for a grandfathered community still requires one current Builder subscription/);
 assert.match(
   cognitionContract,
   /The member agent under an authorized community lens, direct Concierge chat,[\s\S]*autonomous cognition, and AI-assisted setup generation are[\s\S]*community-founder-funded/,

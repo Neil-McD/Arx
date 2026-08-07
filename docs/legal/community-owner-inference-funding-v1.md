@@ -2,9 +2,13 @@
 title: Community Owner Inference Funding Terms
 version: community_owner_inference_funding_v1
 effective_date: 2026-08-01
+status: superseded
+superseded_by: terms_of_service_v3
 ---
 
 # Community Owner Inference Funding Terms
+
+> Historical acceptance evidence only. This retired program can no longer be activated. Current Builder and hosted-AI terms are governed by Polynet Terms of Service v3.
 
 These terms apply only to an approved existing Polynet community founder who activates community-owner-funded inference.
 

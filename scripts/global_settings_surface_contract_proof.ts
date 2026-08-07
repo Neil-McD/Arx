@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   buildAppRoutePath,
   readAppRouteFromLocation,
@@ -103,9 +103,6 @@ const shellNavigation = read(
 );
 const skillsModel = read("apps/web/src/controllers/useWebSkillsModel.ts");
 const settingsPanels = read("apps/web/src/components/WebSettingsPanels.tsx");
-const providerConnections = read(
-  "apps/web/src/controllers/useWebProviderConnectionsController.ts",
-);
 const onboardingProfile = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
@@ -157,15 +154,15 @@ assert.doesNotMatch(
   /WebPersonalAccountSettingsSection|WebPersonalSkillsAccountSection|personalAccount|personalMemory|dataExport/,
   "Account must not compose retired personal-agent, export, memory, or skills surfaces",
 );
-assert.match(
-  providerConnections,
-  /const refreshAccountSetupStatusRef = useRef\([\s\S]*refreshAccountSetupStatusRef\.current = params\.refreshAccountSetupStatus/,
-  "provider refresh must read the latest setup callback without depending on its render identity",
+assert.equal(
+  existsSync("apps/web/src/controllers/useWebProviderConnectionsController.ts"),
+  false,
+  "global settings must not initialize the retired personal-provider lifecycle",
 );
-assert.match(
-  providerConnections,
-  /useEffect\(\(\) => \{[\s\S]*refreshAccountSetupStatusRef\.current\(usableSession\)[\s\S]*\}, \[\s*loadProviderConnections,\s*params\.session,\s*\]\);/,
-  "provider status loading must rerun only when the authenticated session changes",
+assert.doesNotMatch(
+  app,
+  /useWebProviderConnectionsController|providerConnectionUi|connectChatgpt/,
+  "App must not retain personal-provider orchestration",
 );
 assert.match(
   onboardingProfile,

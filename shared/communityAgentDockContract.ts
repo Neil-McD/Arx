@@ -38,7 +38,10 @@ export function projectCommunityAgentDockPublicIssue(input: {
   const reason = String(input.intakeReason ?? "").trim();
   const errorCode = String(input.errorCode ?? "").trim();
   if (reason === "requester_connection_missing" || errorCode === "requester_connection_missing") {
-    return { code: "connection_required", message: "Connect ChatGPT in Settings to use this agent." };
+    return {
+      code: "agent_unavailable",
+      message: "Community AI is temporarily unavailable.",
+    };
   }
   if (reason === "agent_disabled" || errorCode === "agent_disabled") {
     return { code: "agent_unavailable", message: "This community agent is currently unavailable." };

@@ -22,9 +22,6 @@ const shellChromeHost = read(
 const shellChromeHostPropsBuilder = read(
   "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
 );
-const providerConnectionsController = read(
-  "apps/web/src/controllers/useWebProviderConnectionsController.ts",
-);
 const entryStyles = read("apps/web/src/index.css");
 const globalStyles = read("apps/web/src/base.css");
 const featureStyles = [
@@ -39,95 +36,23 @@ assert.match(
   "package scripts must expose the App shell decomposition contract",
 );
 
-function assertProviderConnectionsLifecycleStable(source: string): void {
-  for (const refName of [
-    "ensureSessionRef",
-    "refreshAccountSetupStatusRef",
-    "resetSignedOutAccountSetupRef",
-  ] as const) {
-    assert.match(
-      source,
-      new RegExp(`const ${refName} = useRef\\(`),
-      `${refName} must isolate changing callback identity from the provider lifecycle`,
-    );
-    assert.match(
-      source,
-      new RegExp(`${refName}\\.current = params\\.`),
-      `${refName} must stay current without becoming an effect dependency`,
-    );
-  }
-
-  assert.match(
-    source,
-    /const handleConnectionsUpdated = useCallback\([\s\S]*?\n\s*\[\],\n\s*\);/,
-    "provider connection updates must retain a stable callback identity",
-  );
-
-  const lifecycleEffect = source.match(
-    /useEffect\(\(\) => \{([\s\S]*?)\n\s*\}, \[([\s\S]*?)\]\);/,
-  );
-  assert.ok(
-    lifecycleEffect,
-    "provider connections must retain one explicit session lifecycle effect",
-  );
-
-  const effectBody = lifecycleEffect[1];
-  const effectDependencies = lifecycleEffect[2]
-    .split(",")
-    .map((dependency) => dependency.trim())
-    .filter(Boolean);
-
-  assert.match(
-    effectBody,
-    /ensureSessionRef\.current\(params\.session\)/,
-    "provider lifecycle must resolve sessions through the stable ref",
-  );
-  assert.match(
-    effectBody,
-    /refreshAccountSetupStatusRef\.current\(usableSession\)/,
-    "provider lifecycle must refresh account setup through the stable ref",
-  );
-  assert.match(
-    effectBody,
-    /resetSignedOutAccountSetupRef\.current\(\)/,
-    "provider lifecycle must reset signed-out setup through the stable ref",
-  );
-  assert.doesNotMatch(
-    effectBody,
-    /params\.(?:ensureSession|refreshAccountSetupStatus|resetSignedOutAccountSetup|getSession)\b/,
-    "changing callback props must not directly participate in the provider lifecycle effect",
-  );
-  assert.deepEqual(
-    effectDependencies,
-    ["loadProviderConnections", "params.session"],
-    "provider lifecycle must rerun only for the stable loader or a replaced session",
+for (const retiredProviderSurface of [
+  "apps/web/src/controllers/useWebProviderConnectionsController.ts",
+  "apps/web/src/controllers/useWebProviderConnectionUiController.ts",
+  "apps/web/src/components/WebProviderConnectionModalHost.tsx",
+  "apps/web/src/components/WebChatgptConnectModal.tsx",
+  "shared/cloudProviderConnectionsGateway.ts",
+] as const) {
+  assert.equal(
+    existsSync(retiredProviderSurface),
+    false,
+    `${retiredProviderSurface} must stay deleted from the current web product`,
   );
 }
-
-assertProviderConnectionsLifecycleStable(providerConnectionsController);
-
-const unstableProviderLifecycleFixture = providerConnectionsController
-  .replace(
-    "ensureSessionRef.current(params.session)",
-    "params.ensureSession(params.session)",
-  )
-  .replace(
-    "refreshAccountSetupStatusRef.current(usableSession)",
-    "params.refreshAccountSetupStatus(usableSession)",
-  )
-  .replace(
-    "    params.session,\n  ]);",
-    "    params.session,\n    params.ensureSession,\n    params.refreshAccountSetupStatus,\n  ]);",
-  );
-assert.notEqual(
-  unstableProviderLifecycleFixture,
-  providerConnectionsController,
-  "the regression fixture must model the historical unstable dependency shape",
-);
-assert.throws(
-  () => assertProviderConnectionsLifecycleStable(unstableProviderLifecycleFixture),
-  /stable ref|must not directly participate|rerun only/,
-  "the shell contract must reject the July 30 provider refresh loop pattern",
+assert.doesNotMatch(
+  app,
+  /useWebProviderConnectionsController|providerConnectionUi|connectChatgpt/,
+  "the app shell must not restore personal ChatGPT connection orchestration",
 );
 
 assert.ok(
@@ -246,7 +171,6 @@ const boundedFeatureOwners = [
   "apps/web/src/controllers/useWebMemberAgentSurfaceController.ts",
   "apps/web/src/controllers/useWebMobileChromeReadingModeLifecycle.ts",
   "apps/web/src/controllers/useWebPendingAuthIntentController.ts",
-  "apps/web/src/controllers/useWebProviderConnectionsController.ts",
   "apps/web/src/controllers/useWebPublicFunnelEntryController.ts",
   "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts",
   "apps/web/src/controllers/useWebShellActionController.ts",
@@ -282,10 +206,6 @@ for (const [ownerPath, requiredMarkers] of [
   [
     "apps/web/src/controllers/useWebShellNavigationController.ts",
     ["useWebPathRouteLifecycle", "navigateTo", "pushNavSnapshot"],
-  ],
-  [
-    "apps/web/src/controllers/useWebProviderConnectionsController.ts",
-    ["useState", "useEffect", "loadCloudProviderConnections"],
   ],
   [
     "apps/web/src/controllers/useWebCommunityVoiceController.ts",

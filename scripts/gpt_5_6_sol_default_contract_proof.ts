@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import {
   DEFAULT_ACTIVE_MODEL_ID,
   DEFAULT_ACTIVE_MODEL_LABEL,
@@ -16,7 +16,6 @@ const modelCatalog = read("shared/modelCatalog.ts");
 const inferenceConfig = read("convex/httpInferenceConfig.ts");
 const runtimeResolution = read("convex/runtimeTurnResolution.ts");
 const providerProbes = read("convex/providerConnectionProbes.ts");
-const providerGateway = read("shared/cloudProviderConnectionsGateway.ts");
 const daytonaPolicy = read("shared/daytonaCodexRuntimePolicy.ts");
 const app = read("apps/web/src/App.tsx");
 
@@ -65,10 +64,10 @@ assert.match(
   /normalizeString\(args\.modelId\) \|\| DEFAULT_ACTIVE_MODEL_ID/,
   "ChatGPT connection probes must default to Sol",
 );
-assert.match(
-  providerGateway,
-  /normalizeGatewayNullableString\(payload\?\.model_id\) \|\| DEFAULT_ACTIVE_MODEL_ID/,
-  "provider status must report the canonical model when a response omits it",
+assert.equal(
+  existsSync("shared/cloudProviderConnectionsGateway.ts"),
+  false,
+  "the retired personal-provider web gateway must stay deleted",
 );
 assert.match(
   daytonaPolicy,

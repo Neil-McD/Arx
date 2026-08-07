@@ -31,7 +31,6 @@ export function useWebPendingAuthIntentController(params: {
     path: string,
     options?: { replace?: boolean },
   ) => void;
-  connectChatgpt: () => void;
   showToast: (message: string) => void;
   openCreateCommunity: (
     draft: CreateCommunityIntentDraft | null,
@@ -63,18 +62,10 @@ export function useWebPendingAuthIntentController(params: {
             }
           });
       },
-      connect_provider: (payload) => {
-        if (payload.provider === "chatgpt") {
-          params.connectChatgpt();
-          return;
-        }
-        if (payload.provider === "openai") {
-          params.showToast(
-            "Personal API-key connections are no longer supported.",
-          );
-          return;
-        }
-        params.showToast("Provider connection is not available.");
+      connect_provider: () => {
+        params.showToast(
+          "Personal AI connections are no longer supported. Community AI is provided by the community.",
+        );
       },
       create_community: (payload) => {
         params.openCreateCommunity(payload.draft);
@@ -99,7 +90,6 @@ export function useWebPendingAuthIntentController(params: {
       },
     });
   }, [
-    params.connectChatgpt,
     params.joinPublicCommunity,
     params.navigateTo,
     params.openCreateCommunity,

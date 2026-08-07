@@ -74,14 +74,9 @@ function fundingAuthorityMatches(args: {
   admission: CommunityInferenceFundingAdmission;
   expectedFundingMode: FounderInferenceReceiptRow["fundingMode"];
   expectedPayerUserId: unknown;
-  expectedFounderGrantId?: unknown;
   expectedFounderSubscriptionId?: unknown;
 }): boolean {
   const { admission } = args;
-  // Kept in the validator for one compatibility release so stale clients fail
-  // closed instead of crashing on an unknown argument. Owner credentials can
-  // no longer authorize new or resumed community inference.
-  if (args.expectedFundingMode === "owner_api_key") return false;
   if (
     admission.ok === false ||
     admission.mode !== args.expectedFundingMode ||
@@ -93,7 +88,7 @@ function fundingAuthorityMatches(args: {
     return normalizedId(admission.subscriptionId) ===
       normalizedId(args.expectedFounderSubscriptionId);
   }
-  return !args.expectedFounderGrantId && !args.expectedFounderSubscriptionId;
+  return !args.expectedFounderSubscriptionId;
 }
 
 export const resolveCommunityInferenceFundingAdmissionInternal = internalQuery({
@@ -112,11 +107,9 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     actorUserId: v.id("users"),
     expectedPayerUserId: v.id("users"),
     expectedFundingMode: v.union(
-      v.literal("owner_api_key"),
       v.literal("platform_subscription"),
       v.literal("platform_operator_grant"),
     ),
-    expectedFounderGrantId: v.optional(v.id("founderInferenceGrants")),
     expectedFounderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     surface: communityInferenceSurfaceValidator,
     claimToken: v.string(),
@@ -136,7 +129,6 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       admission,
       expectedFundingMode: args.expectedFundingMode,
       expectedPayerUserId: args.expectedPayerUserId,
-      expectedFounderGrantId: args.expectedFounderGrantId,
       expectedFounderSubscriptionId: args.expectedFounderSubscriptionId,
     });
     if (!authorityMatches) {
@@ -229,7 +221,6 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       actorUserId: args.actorUserId,
       payerUserId: args.expectedPayerUserId,
       fundingMode: args.expectedFundingMode,
-      founderGrantId: args.expectedFounderGrantId,
       founderSubscriptionId: args.expectedFounderSubscriptionId,
       usageCycleId,
       surface: args.surface,
@@ -294,7 +285,6 @@ export const markCommunityInferenceProviderStartedInternal = internalMutation({
       admission,
       expectedFundingMode: receipt.fundingMode,
       expectedPayerUserId: receipt.payerUserId,
-      expectedFounderGrantId: receipt.founderGrantId,
       expectedFounderSubscriptionId: receipt.founderSubscriptionId,
     });
     if (!authorityMatches) {

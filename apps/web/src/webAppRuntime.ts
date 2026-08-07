@@ -5,8 +5,6 @@ import {
 
 export const COMMUNITY_RAIL_ORDER_STORAGE_KEY_PREFIX =
   "polynet-community-rail-order:web";
-export const CHATGPT_SECURITY_SETTINGS_URL =
-  "https://chatgpt.com/#settings/Security";
 export const WEB_IMAGE_DATA_URL_CHAR_LIMIT = 600_000;
 
 export function isTransportRefreshError(error: unknown): boolean {

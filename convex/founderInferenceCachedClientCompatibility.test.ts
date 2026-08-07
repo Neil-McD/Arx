@@ -35,7 +35,6 @@ test("cached activation fails explicitly without creating authority", async () =
     acceptedTermsVersion: "community_owner_inference_funding_v2",
   })).rejects.toThrow("founder_inference_byok_retired");
   await t.run(async (ctx) => {
-    expect(await ctx.db.query("founderInferenceGrants").collect()).toHaveLength(0);
     expect(await ctx.db.query("userProviderConnections").collect()).toHaveLength(0);
     expect(await ctx.db.query("legalAcceptances").collect()).toHaveLength(0);
   });
@@ -51,7 +50,6 @@ test("cached suspension is an inert successful tombstone", async () => {
     reason: "founder_inference_byok_retired",
   });
   await t.run(async (ctx) => {
-    expect(await ctx.db.query("founderInferenceGrants").collect()).toHaveLength(0);
     expect(await ctx.db.query("userProviderConnections").collect()).toHaveLength(0);
   });
 });

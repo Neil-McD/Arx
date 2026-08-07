@@ -111,14 +111,26 @@ function proveCompletedCohortInitializerIsDeleted(schemaSource: string): void {
     [],
     "completed community inference policy schema must have no active source reference",
   );
-  const migration = readText("convex/founderInferenceMigration.ts");
-  assertExcludes(
-    migration,
-    /initializeExistingFounderInferenceCohortInternal|EXPECTED_EXISTING_FOUNDER_COUNT|EXPECTED_LEGACY_POLICY_COUNT|communityInferencePolicies/,
-    "completed founder cohort initializer",
+  assert.equal(
+    existsSync(join(REPO_ROOT, "convex/founderInferenceMigration.ts")),
+    false,
+    "completed founder inference migration must be deleted",
   );
-  assert.match(migration, /transitionExistingFounderToManagedInternal = internalMutation/);
-  assert.doesNotMatch(migration, /export const .* = (query|mutation|action)\(/);
+  assertExcludes(
+    schemaSource,
+    /founderInferenceGrants:\s*defineTable/,
+    "completed founder grant schema",
+  );
+  const retiredFounderMigrationNames =
+    /founderInferenceMigration|transitionExistingFounderToManagedInternal|initializeExistingFounderInferenceCohortInternal/;
+  const founderMigrationReferences = ["convex", "shared", "apps/web/src"]
+    .flatMap(listSourceFiles)
+    .filter((path) => readText(path).match(retiredFounderMigrationNames));
+  assert.deepEqual(
+    founderMigrationReferences,
+    [],
+    "completed founder inference migration must have no active source reference",
+  );
 }
 
 function proveBackendIsTombstonesOnly(backendSource: string): void {

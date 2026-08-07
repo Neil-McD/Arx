@@ -27,8 +27,7 @@ export type FounderInferenceReceiptRow = {
   communityId: any;
   actorUserId: any;
   payerUserId: any;
-  fundingMode: "owner_api_key" | "platform_subscription" | "platform_operator_grant";
-  founderGrantId?: any;
+  fundingMode: "platform_subscription" | "platform_operator_grant";
   founderSubscriptionId?: any;
   usageCycleId?: any;
   surface: CommunityInferenceSurface;
@@ -63,7 +62,7 @@ export async function resolveCommunityInferenceFundingAdmission(
 ): Promise<CommunityInferenceFundingAdmission> {
   const community = (await ctx.db.get(communityId as any)) as {
     ownerId?: any;
-    inferenceFundingPolicy: "legacy_byok_allowed" | "managed_required";
+    inferenceFundingPolicy: "managed_required";
     lifecycleStatus?: "active" | "archived";
     lifecycleGeneration?: number;
   } | null;

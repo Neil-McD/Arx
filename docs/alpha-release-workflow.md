@@ -83,7 +83,8 @@ proved all of the following without truncation:
 - four retained grandfather grants with no identity, terms, source, or duplication
   mismatch;
 - eight retained community inference policies with the community owner as payer,
-  all in `owner_api_key` and `pending_credential` state;
+  historically recorded in `owner_api_key` and `pending_credential` state before
+  the hosted-only cutover; these values are migration evidence, not current product authority;
 - a sorted ownership distribution `1/2/2/3` across the eight communities;
 - zero attribution, commission, adjustment, payout batch, payout transfer, and
   payout item rows; and

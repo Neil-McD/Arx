@@ -17,11 +17,8 @@ import { POLYNET_FOUNDER_PLAN_PRICING_VERSION } from "../shared/founderPlan";
 import type { FounderInferencePricing } from "./founderPlanPricing";
 import { buildAccountSetupStatusForRows } from "./accountSetupCore";
 
-const EXISTING_FOUNDER_INFERENCE_COHORT_KEY = "existing_founder_cutover_v1";
-
 const modules = import.meta.glob([
   "./founderInference.ts",
-  "./founderInferenceMigration.ts",
   "./founderBilling.ts",
   "./providerConnections.ts",
   "./_generated/**/*.*s",
@@ -43,37 +40,15 @@ async function insertCommunity(
   ownerId: any,
   suffix: string,
   nowMs = 1_000,
-  inferenceFundingPolicy: "legacy_byok_allowed" | "managed_required" = "managed_required",
 ) {
   return await ctx.db.insert("communities", {
     ownerId,
     slug: `founder-inference-${suffix}`,
     name: `Community ${suffix}`,
     visibility: "unlisted",
-    inferenceFundingPolicy,
+    inferenceFundingPolicy: "managed_required",
     entryPolicy: "approval",
     activeMemberCount: 1,
-    createdAt: nowMs,
-    updatedAt: nowMs,
-  });
-}
-
-async function insertOpenAiConnection(
-  ctx: any,
-  userId: any,
-  fingerprint: string,
-  nowMs = 1_000,
-) {
-  return await ctx.db.insert("userProviderConnections", {
-    userId,
-    provider: "openai",
-    authKind: "api_key",
-    encryptedSecretHex: `encrypted-${fingerprint}`,
-    secretIvHex: `iv-${fingerprint}`,
-    secretVersion: 1,
-    keyLastFour: fingerprint.slice(-4),
-    keyFingerprint: fingerprint,
-    validatedAt: nowMs,
     createdAt: nowMs,
     updatedAt: nowMs,
   });
@@ -87,13 +62,7 @@ async function createActiveFundingFixture(
   return await t.run(async (ctx) => {
     const ownerId = await insertUser(ctx, `${suffix}-owner`, nowMs);
     const memberId = await insertUser(ctx, `${suffix}-member`, nowMs);
-    const communityId = await insertCommunity(
-      ctx,
-      ownerId,
-      suffix,
-      nowMs,
-      "managed_required",
-    );
+    const communityId = await insertCommunity(ctx, ownerId, suffix, nowMs);
     const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
       ownerUserId: ownerId,
       communityId,
@@ -149,169 +118,6 @@ function claimArgs(
     nowMs,
   };
 }
-
-test("legacy grants and credentials cannot authorize community inference", async () => {
-  const t = convexTest(schema, modules);
-  await t.run(async (ctx) => {
-    const ownerId = await insertUser(ctx, "owner");
-    const memberId = await insertUser(ctx, "member");
-    const communityId = await insertCommunity(
-      ctx,
-      ownerId,
-      "community",
-      1_000,
-      "legacy_byok_allowed",
-    );
-    const managedCommunityId = await insertCommunity(
-      ctx,
-      ownerId,
-      "managed-community",
-    );
-
-    await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
-      ok: false,
-      code: "founder_plan_required",
-    });
-
-    const grantId = await ctx.db.insert("founderInferenceGrants", {
-      userId: ownerId,
-      cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
-      status: "approved",
-      approvedAt: 2_000,
-      createdAt: 2_000,
-      updatedAt: 2_000,
-    });
-    await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toMatchObject({
-      ok: false,
-      code: "founder_plan_required",
-    });
-    await expect(
-      resolveCommunityInferenceFundingAdmission(ctx, managedCommunityId),
-    ).resolves.toEqual({
-      ok: false,
-      code: "founder_plan_required",
-    });
-
-    await ctx.db.patch(grantId, { status: "active", activatedAt: 3_000, updatedAt: 3_000 });
-    await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toEqual({
-      ok: false,
-      code: "founder_plan_required",
-    });
-    await ctx.db.insert("userProviderConnections", {
-      userId: ownerId,
-      provider: "openai",
-      authKind: "api_key",
-      encryptedSecretHex: "encrypted",
-      secretIvHex: "iv",
-      secretVersion: 1,
-      keyLastFour: "test",
-      keyFingerprint: "fingerprint",
-      validatedAt: 3_000,
-      createdAt: 3_000,
-      updatedAt: 3_000,
-    });
-    await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toEqual({
-      ok: false,
-      code: "founder_plan_required",
-    });
-    await expect(
-      resolveCommunityInferenceFundingAdmission(ctx, managedCommunityId),
-    ).resolves.toEqual({
-      ok: false,
-      code: "founder_plan_required",
-    });
-
-    const receiptKey = "community_agent_mention:test";
-    await ctx.db.insert("communityInferenceReceipts", {
-      receiptKey,
-      sourceRunId: "community-agent-serve:test",
-      communityId,
-      actorUserId: memberId,
-      payerUserId: ownerId,
-      fundingMode: "owner_api_key",
-      founderGrantId: grantId,
-      surface: "community_agent_mention",
-      provider: "openai",
-      modelId: "gpt-5.6-luna",
-      status: "authorized",
-      claimToken: "claim",
-      leaseExpiresAt: 20_000,
-      providerStartedAt: 4_000,
-      authorizedAt: 4_000,
-      createdAt: 4_000,
-      updatedAt: 4_000,
-    });
-    await settleAuthorizedFounderInferenceReceipt({
-      ctx,
-      receiptKey,
-      claimToken: "claim",
-      promptTokens: 123,
-      completionTokens: 45,
-      outcomeCode: "completed",
-      nowMs: 5_000,
-    });
-    const receipt = await ctx.db
-      .query("communityInferenceReceipts")
-      .withIndex("by_receipt_key", (q: any) => q.eq("receiptKey", receiptKey))
-      .first();
-    expect(receipt).toMatchObject({
-      actorUserId: memberId,
-      payerUserId: ownerId,
-      status: "settled",
-      promptTokens: 123,
-      completionTokens: 45,
-    });
-
-    await expect(resolveCommunityInferenceFundingAdmission(ctx, communityId)).resolves.toEqual({
-      ok: false,
-      code: "founder_plan_required",
-    });
-  });
-});
-
-test("stale owner-key receipt claims fail closed", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await t.run(async (ctx) => {
-    const ownerId = await insertUser(ctx, "stale-owner-key-owner", 10_000);
-    const memberId = await insertUser(ctx, "stale-owner-key-member", 10_000);
-    const communityId = await insertCommunity(
-      ctx,
-      ownerId,
-      "stale-owner-key",
-      10_000,
-      "legacy_byok_allowed",
-    );
-    const grantId = await ctx.db.insert("founderInferenceGrants", {
-      userId: ownerId,
-      cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
-      status: "active",
-      approvedAt: 10_000,
-      activatedAt: 10_000,
-      createdAt: 10_000,
-      updatedAt: 10_000,
-    });
-    await insertOpenAiConnection(ctx, ownerId, "stale-owner-key", 10_000);
-    return { communityId, grantId, memberId, ownerId };
-  });
-
-  await expect(
-    t.mutation(
-      (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
-      {
-        receiptKey: "community_agent_mention:stale-owner-key",
-        sourceRunId: "community-agent-serve:stale-owner-key",
-        communityId: fixture.communityId,
-        actorUserId: fixture.memberId,
-        expectedPayerUserId: fixture.ownerId,
-        expectedFundingMode: "owner_api_key",
-        expectedFounderGrantId: fixture.grantId,
-        surface: "community_agent_mention",
-        claimToken: "stale-owner-key-claim",
-        nowMs: 11_000,
-      },
-    ),
-  ).resolves.toEqual({ ok: false, errorCode: "founder_plan_required" });
-});
 
 test("founders can add unlimited communities sequentially when every existing community is funded", async () => {
   const t = convexTest(schema, modules);
@@ -603,75 +409,6 @@ test("operator complimentary access fails closed for non-owner, inactive, or amb
   });
 });
 
-test("an exact existing founder can be transitioned irreversibly to managed billing", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await t.run(async (ctx) => {
-    const ownerId = await insertUser(ctx, "managed-transition");
-    await ctx.db.patch(ownerId, {
-      handle: "managed-founder",
-      normalizedHandle: "managed-founder",
-    });
-    const firstCommunityId = await insertCommunity(ctx, ownerId, "managed-one");
-    const secondCommunityId = await insertCommunity(ctx, ownerId, "managed-two");
-    await ctx.db.patch(firstCommunityId, { visibility: "published" });
-    await ctx.db.patch(secondCommunityId, { visibility: "published" });
-    const grantId = await ctx.db.insert("founderInferenceGrants", {
-      userId: ownerId,
-      cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
-      status: "approved",
-      approvedAt: 2_000,
-      createdAt: 2_000,
-      updatedAt: 2_000,
-    });
-    return { ownerId, firstCommunityId, secondCommunityId, grantId };
-  });
-  const args = {
-    userId: fixture.ownerId,
-    expectedHandle: "managed-founder",
-    expectedCommunitySlugs: [
-      "founder-inference-managed-one",
-      "founder-inference-managed-two",
-    ],
-  };
-
-  await expect(
-    t.mutation(
-      internal.founderInferenceMigration.transitionExistingFounderToManagedInternal,
-      { ...args, dryRun: true, nowMs: 3_000 },
-    ),
-  ).resolves.toMatchObject({ dry_run: true, already_transitioned: false });
-  await expect(
-    t.mutation(
-      internal.founderInferenceMigration.transitionExistingFounderToManagedInternal,
-      { ...args, expectedCommunitySlugs: ["wrong-community"], dryRun: true },
-    ),
-  ).rejects.toThrow("founder_transition_community_set_mismatch");
-  await expect(
-    t.mutation(
-      internal.founderInferenceMigration.transitionExistingFounderToManagedInternal,
-      { ...args, dryRun: false, nowMs: 3_000 },
-    ),
-  ).resolves.toMatchObject({ dry_run: false, already_transitioned: false });
-
-  await t.run(async (ctx) => {
-    await expect(ctx.db.get(fixture.grantId)).resolves.toBeNull();
-    await expect(ctx.db.get(fixture.firstCommunityId)).resolves.toMatchObject({
-      inferenceFundingPolicy: "managed_required",
-      visibility: "published",
-    });
-    await expect(ctx.db.get(fixture.secondCommunityId)).resolves.toMatchObject({
-      inferenceFundingPolicy: "managed_required",
-      visibility: "published",
-    });
-  });
-  await expect(
-    t.mutation(
-      internal.founderInferenceMigration.transitionExistingFounderToManagedInternal,
-      { ...args, dryRun: false, nowMs: 4_000 },
-    ),
-  ).resolves.toMatchObject({ already_transitioned: true });
-});
-
 test("account setup completion is independent of inference funding", () => {
   const status = buildAccountSetupStatusForRows({
     user: {
@@ -939,15 +676,6 @@ test("a community-targeted founder subscription meters managed Luna usage", asyn
     const t = convexTest(schema, modules);
     const nowMs = Date.now();
     const fixture = await t.run(async (ctx) => {
-      const cohortFounderId = await insertUser(ctx, "paid-cohort-anchor", nowMs);
-      await ctx.db.insert("founderInferenceGrants", {
-        userId: cohortFounderId,
-        cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
-        status: "approved",
-        approvedAt: nowMs,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
       const ownerId = await insertUser(ctx, "paid-owner", nowMs);
       const memberId = await insertUser(ctx, "paid-member", nowMs);
       const communityId = await insertCommunity(ctx, ownerId, "paid-community", nowMs);
@@ -1072,17 +800,6 @@ test("a community-targeted founder subscription meters managed Luna usage", asyn
         status: "past_due",
         updatedAt: nowMs + 4_000,
       });
-      const activeGrantId = await ctx.db.insert("founderInferenceGrants", {
-        userId: fixture.ownerId,
-        cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
-        status: "active",
-        approvedAt: nowMs,
-        activatedAt: nowMs,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      await insertOpenAiConnection(ctx, fixture.ownerId, "paid-fallback-key", nowMs);
-      expect(activeGrantId).toBeTruthy();
       await expect(
         resolveCommunityInferenceFundingAdmission(ctx, fixture.communityId),
       ).resolves.toEqual({ ok: false, code: "founder_subscription_inactive" });
@@ -1205,15 +922,6 @@ test("managed policy fails closed and founder checkouts remain independent per c
   const t = convexTest(schema, modules);
   const nowMs = 650_000;
   const fixture = await t.run(async (ctx) => {
-    const cohortAnchorId = await insertUser(ctx, "policy-anchor", nowMs);
-    await ctx.db.insert("founderInferenceGrants", {
-      userId: cohortAnchorId,
-      cohortKey: EXISTING_FOUNDER_INFERENCE_COHORT_KEY,
-      status: "approved",
-      approvedAt: nowMs,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
     const ownerId = await insertUser(ctx, "checkout-owner", nowMs);
     const otherOwnerId = await insertUser(ctx, "checkout-other-owner", nowMs);
     const firstCommunityId = await insertCommunity(ctx, ownerId, "checkout-first", nowMs);

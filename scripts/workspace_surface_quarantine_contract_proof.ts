@@ -481,8 +481,13 @@ assert.doesNotMatch(
 );
 assert.match(
   baseCss,
-  /\.polynet-onboarding-shell,\s*\.polynet-onboarding-provider-grid\s*\{[\s\S]*?grid-template-columns:\s*1fr;/,
-  "the live mobile onboarding selector arms must survive legacy landing cleanup",
+  /@media \(max-width: 640px\)[\s\S]*?\.polynet-onboarding-shell\s*\{[\s\S]*?grid-template-columns:\s*1fr;/,
+  "the live mobile account-onboarding layout must survive legacy provider cleanup",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.polynet-onboarding-provider-|\.provider-connection-/,
+  "account onboarding CSS must not retain the retired personal-provider presentation",
 );
 assert.doesNotMatch(
   baseCss,

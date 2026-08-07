@@ -171,25 +171,6 @@ export default defineSchema({
     .index("by_user_grantKey", ["userId", "grantKey"])
     .index("by_grantKey_capturedAt", ["grantKey", "capturedAt"]),
 
-  founderInferenceGrants: defineTable({
-    userId: v.id("users"),
-    cohortKey: v.string(),
-    status: v.union(
-      v.literal("approved"),
-      v.literal("active"),
-      v.literal("suspended"),
-    ),
-    activationAcceptanceId: v.optional(v.id("legalAcceptances")),
-    approvedAt: v.number(),
-    activatedAt: v.optional(v.number()),
-    suspendedAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_user_cohort", ["userId", "cohortKey"])
-    .index("by_cohort", ["cohortKey"])
-    .index("by_cohort_status", ["cohortKey", "status"]),
-
   founderSubscriptions: defineTable({
     ownerUserId: v.id("users"),
     communityId: v.optional(v.id("communities")),
@@ -270,11 +251,9 @@ export default defineSchema({
     actorUserId: v.id("users"),
     payerUserId: v.id("users"),
     fundingMode: v.union(
-      v.literal("owner_api_key"),
       v.literal("platform_subscription"),
       v.literal("platform_operator_grant"),
     ),
-    founderGrantId: v.optional(v.id("founderInferenceGrants")),
     founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
     usageCycleId: v.optional(v.id("founderUsageCycles")),
     surface: v.union(
@@ -1242,10 +1221,7 @@ export default defineSchema({
       }),
     ),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
-    inferenceFundingPolicy: v.union(
-      v.literal("legacy_byok_allowed"),
-      v.literal("managed_required"),
-    ),
+    inferenceFundingPolicy: v.literal("managed_required"),
     entryPolicy: v.union(
       v.literal("open"),
       v.literal("approval"),
