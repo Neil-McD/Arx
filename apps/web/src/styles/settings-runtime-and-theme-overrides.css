@@ -3179,9 +3179,15 @@ button.message-citation-chip:hover {
 }
 
 .settings-panel button.danger {
-  border-color: rgba(210, 80, 80, 0.35);
+  cursor: pointer;
+  border: 1px solid rgba(210, 80, 80, 0.35);
+  border-radius: 6px;
   background: rgba(210, 80, 80, 0.12);
   color: #f1a3a3;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: 0.15s;
 }
 
 .settings-panel button.danger:hover:not(:disabled) {

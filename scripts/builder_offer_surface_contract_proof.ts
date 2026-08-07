@@ -100,6 +100,10 @@ assert.match(
   /\.settings-panel button[^\n]+:not\(\.settings-primary-action\):not\(\.danger\)/,
   "legacy settings button defaults must not override canonical primary or danger actions",
 );
+assert.match(
+  settingsStyles,
+  /\.settings-panel button\.danger[\s\S]*border: 1px solid rgba\(210, 80, 80, 0\.35\)[\s\S]*padding: 10px 16px/,
+);
 
 assert.match(offerController, /startCheckout\(community\.community_id\)/);
 assert.match(offerController, /openPortal\(community\.community_id\)/);
