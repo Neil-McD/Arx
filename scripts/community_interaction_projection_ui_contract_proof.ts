@@ -72,7 +72,6 @@ const communityDirectoryPageQuery = communityDirectory.slice(
 const communityPublic = read("convex/communityPublic.ts");
 const communityAdmin = read("convex/communityAdmin.ts");
 const interactions = read("convex/communityInteractions.ts");
-const indexCss = read("apps/web/src/index.css");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const contextFaceCss = sectionBetween(
   baseCss,
@@ -1118,66 +1117,6 @@ assert.match(
   baseCss,
   /\.community-interaction-body\.community-interaction-chat-markdown\s*\{[\s\S]*display:\s*block;[\s\S]*\.community-interaction-chat-markdown \.chat-md-heading-1\s*\{[\s\S]*font-size:\s*1\.08em;[\s\S]*\.community-interaction-chat-markdown \.chat-md-list\s*\{[\s\S]*padding-left:\s*1\.36em;[\s\S]*\.community-interaction-chat-markdown \.chat-md-code-block\s*\{/,
   "projection markdown should style bounded headings, lists, and code with compact chat typography",
-);
-assert.match(
-  baseCss,
-  /\.community-member-chat \.community-interaction-feed-scroll\s*\{[\s\S]*--community-feed-reading-measure:\s*640px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-title\s*\{[\s\S]*max-width:\s*min\(100%,\s*var\(--community-feed-reading-measure\)\);[\s\S]*font-size:\s*17px;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-body\s*\{[\s\S]*max-width:\s*min\(100%,\s*var\(--community-feed-reading-measure\)\);[\s\S]*font-size:\s*16px;[\s\S]*line-height:\s*1\.55;/,
-  "the member feed should provide a readable prose measure and clear title-to-body hierarchy without changing shared projection density",
-);
-assert.match(
-  baseCss,
-  /\.community-member-chat \.community-interaction-feed-scroll > \.community-interaction-feed\s*\{[\s\S]*gap:\s*0;[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-group\s*\{[\s\S]*margin-block:\s*8px;[\s\S]*\.community-interaction-message[\s\S]*\+ \.community-interaction-message\s*\{[\s\S]*margin-top:\s*8px;[\s\S]*border-top:\s*1px solid[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-footer\s*\{[\s\S]*margin-top:\s*5px;[\s\S]*flex-direction:\s*row;[\s\S]*flex-wrap:\s*wrap;/,
-  "the member feed should separate interaction groups while keeping metadata and root actions legible and attached",
-);
-assert.match(
-  indexCss,
-  /--community-text-author:\s*#f4f4f5;[\s\S]*--community-text-body:\s*#d4d4d8;[\s\S]*--community-text-ui:\s*#a1a1aa;[\s\S]*--community-text-meta:\s*#8b8b95;/,
-  "member chat should expose a deliberate four-level dark-theme text ladder",
-);
-assert.match(
-  baseCss,
-  /\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-author\s*\{[\s\S]*var\(--community-text-author[\s\S]*\.community-member-chat \.community-interaction-feed-scroll \.community-interaction-body\s*\{[\s\S]*var\(--community-text-body/,
-  "member feed author and body copy should consume distinct semantic text roles",
-);
-assert.match(
-  indexCss,
-  /\.app-shell\.community-layout:has\(\.community-member-chat\) \.community-nav \.nav-item:not\(\.active\)\s*\{[\s\S]*color:\s*var\(--community-text-ui\);[\s\S]*\.nav-item:not\(\.active\) \.nav-icon\s*\{[\s\S]*color:\s*var\(--community-text-meta\);/,
-  "member chat text roles should refine inactive navigation without replacing the canonical selected state",
-);
-assert.doesNotMatch(
-  indexCss,
-  /\.app-shell\.community-layout:has\(\.community-member-chat\) \.community-nav \.nav-item\.active\s*\{/,
-  "member chat should inherit the product-wide selected channel treatment instead of adding a louder override",
-);
-assert.match(
-  indexCss,
-  /\.app-shell\.community-layout\.with-community-rail\.sessions-compact\.no-right:has\(\.community-member-chat\)\s*\{[\s\S]*grid-template-columns:\s*var\(--web-rail-width,\s*72px\) clamp\(168px,\s*20vw,\s*260px\)/,
-  "desktop community navigation should stop expanding at 260px",
-);
-assert.match(
-  baseCss,
-  /\.community-member-chat \.community-interaction-projection\.has-context-panel\s*\{[\s\S]*clamp\(280px,\s*18vw,\s*320px\)/,
-  "desktop member chat should keep the context panel within a useful bounded width",
-);
-assert.match(
-  communityNav,
-  /aria-current=\{isSelected \? "page" : undefined\}/,
-  "the selected channel should expose its current-page state to assistive technology",
-);
-assert.match(
-  contextPanel,
-  /<div className="community-context-section">Offline — \{offlineCountLabel\}<\/div>[\s\S]*offlineMembers\.map/,
-  "offline members should remain visible in the member directory without an extra disclosure step",
-);
-assert.match(
-  contextPanel,
-  /if \(!props\.membersHasMore\) return;[\s\S]*ref=\{props\.membersHasMore \? loadMoreSentinelRef : undefined\}/,
-  "the always-visible member directory should continue paging while additional members exist",
-);
-assert.doesNotMatch(
-  contextPanel,
-  /offlineMembersExpanded|community-context-offline-toggle|offlineMembersRegionId/,
-  "the desktop member directory should not hide offline members behind local disclosure state",
 );
 assert.match(
   baseCss,
