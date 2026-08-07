@@ -89,6 +89,14 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       onSelectTab={props.communityShell.onSelectCommunityTab}
     />
   ) : null;
+  const desktopSettingsSidebar = (
+    <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
+  );
+  const desktopFrameMode = desktopCommunityNav
+    ? "community"
+    : props.isGlobalSettings
+      ? "settings"
+      : "single";
 
   const { rootClassName, shellClassName } = buildWebShellChromeClassNames({
     showMobileAppShell: props.showMobileAppShell,
@@ -115,15 +123,24 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
 
       <div className={shellClassName}>
         <WebDesktopCommunityRail communityShell={props.communityShell} />
-        <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
-
-        {desktopCommunityNav ? (
-          <div className="community-shell-surface">
+        {props.communityShell.showDesktopCommunityRail ? (
+          <div
+            className={`product-shell-surface product-shell-surface--${desktopFrameMode}`}
+          >
+            {desktopFrameMode === "settings" ? desktopSettingsSidebar : null}
             {desktopCommunityNav}
             {isMobileDedicatedRoot ? null : props.mainSurface}
           </div>
-        ) : isMobileDedicatedRoot ? null : (
-          props.mainSurface
+        ) : desktopCommunityNav ? (
+          <div className="product-shell-surface product-shell-surface--community">
+            {desktopCommunityNav}
+            {isMobileDedicatedRoot ? null : props.mainSurface}
+          </div>
+        ) : (
+          <>
+            {desktopSettingsSidebar}
+            {isMobileDedicatedRoot ? null : props.mainSurface}
+          </>
         )}
       </div>
 
