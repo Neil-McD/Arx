@@ -40,6 +40,12 @@ import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
 
 type AsyncVoid = void | Promise<void>;
 
+type UsableAuthSessionResult =
+  | { status: "ready"; session: AuthSession }
+  | { status: "missing" }
+  | { status: "transient_failure"; reason: string }
+  | { status: "terminal_failure"; reason: string };
+
 type UseWebAppAuthControllerParams = {
   resumeEpoch: number;
   onSessionLost: () => AsyncVoid;
@@ -159,7 +165,7 @@ export function useWebAppAuthController(
   } | null>(null);
   const ensuredSessionInFlightRef = useRef<{
     key: string;
-    promise: Promise<AuthSession | null>;
+    promise: Promise<UsableAuthSessionResult>;
   } | null>(null);
 
   const onSessionLostRef = useLatestRef(params.onSessionLost);
@@ -233,20 +239,22 @@ export function useWebAppAuthController(
     return refreshed.status === "refreshed" ? refreshed.session : null;
   }, [refreshAuthSessionLockedResult]);
 
-  const ensureUsableAuthSession = useCallback(async (
+  const ensureUsableAuthSessionResult = useCallback(async (
     currentSession: AuthSession | null | undefined = sessionRef.current,
     sourceInput?: string,
     options?: { forceRefresh?: boolean },
-  ): Promise<AuthSession | null> => {
+  ): Promise<UsableAuthSessionResult> => {
     const requestSession = currentSession ?? null;
-    if (!requestSession) return null;
+    if (!requestSession) return { status: "missing" };
     const source = String(sourceInput ?? "").trim() || "unknown";
     const startedAt = Date.now();
 
     if (options?.forceRefresh) {
       const epochAtRefreshStart = authSessionEpochRef.current;
       const refreshed = await refreshAuthSessionLockedResult();
-      if (authSessionEpochRef.current !== epochAtRefreshStart) return null;
+      if (authSessionEpochRef.current !== epochAtRefreshStart) {
+        return { status: "transient_failure", reason: "session_changed" };
+      }
       if (refreshed.status === "terminal_failure") {
         ensuredSessionCacheRef.current = null;
         emitWorkspaceEvent({
@@ -261,7 +269,7 @@ export function useWebAppAuthController(
           },
         });
         await expireAuthSessionLocally();
-        return null;
+        return { status: "terminal_failure", reason: refreshed.reason };
       }
       if (refreshed.status !== "refreshed") {
         emitWorkspaceEvent({
@@ -275,7 +283,7 @@ export function useWebAppAuthController(
             reason: refreshed.reason,
           },
         });
-        return null;
+        return { status: "transient_failure", reason: refreshed.reason };
       }
       adoptAuthSession(refreshed.session);
       emitWorkspaceEvent({
@@ -289,7 +297,10 @@ export function useWebAppAuthController(
           sessionChanged: !sessionsEqual(refreshed.session, requestSession),
         },
       });
-      return sessionRef.current ?? refreshed.session;
+      return {
+        status: "ready",
+        session: sessionRef.current ?? refreshed.session,
+      };
     }
 
     const requestKey = buildAuthSessionCacheKey(requestSession);
@@ -313,25 +324,28 @@ export function useWebAppAuthController(
             durationMs: Date.now() - startedAt,
           },
         });
-        return sessionRef.current ?? cached.session;
+        return {
+          status: "ready",
+          session: sessionRef.current ?? cached.session,
+        };
       }
       if (ensuredSessionInFlightRef.current?.key === requestKey) {
-        const ensured = await ensuredSessionInFlightRef.current.promise;
+        const ensuredResult = await ensuredSessionInFlightRef.current.promise;
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "auth_session_ensure",
-          status: ensured ? "success" : "failure",
+          status: ensuredResult.status === "ready" ? "success" : "failure",
           detail: {
             source,
             sharedInFlight: true,
             durationMs: Date.now() - startedAt,
           },
         });
-        return ensured;
+        return ensuredResult;
       }
     }
 
-    const promise = (async (): Promise<AuthSession | null> => {
+    const promise = (async (): Promise<UsableAuthSessionResult> => {
       const ensured = await ensureAuthSessionForAuthenticatedSendResult({
         session: requestSession,
         sessionRef,
@@ -351,7 +365,7 @@ export function useWebAppAuthController(
           },
         });
         await expireAuthSessionLocally();
-        return null;
+        return { status: "terminal_failure", reason: ensured.reason };
       }
       if (ensured.status !== "ready") {
         emitWorkspaceEvent({
@@ -365,7 +379,7 @@ export function useWebAppAuthController(
             reason: ensured.reason,
           },
         });
-        return null;
+        return { status: "transient_failure", reason: ensured.reason };
       }
       if (!sessionsEqual(ensured.session, requestSession)) {
         adoptAuthSession(ensured.session);
@@ -395,7 +409,10 @@ export function useWebAppAuthController(
           runtimeProbeFailureStage: ensured.runtimeAcceptance?.failureStage ?? null,
         },
       });
-      return sessionRef.current ?? ensured.session;
+      return {
+        status: "ready",
+        session: sessionRef.current ?? ensured.session,
+      };
     })();
 
     if (requestKey) {
@@ -413,6 +430,19 @@ export function useWebAppAuthController(
       }
     }
   }, [adoptAuthSession, expireAuthSessionLocally, refreshAuthSessionLockedResult]);
+
+  const ensureUsableAuthSession = useCallback(async (
+    currentSession: AuthSession | null | undefined = sessionRef.current,
+    sourceInput?: string,
+    options?: { forceRefresh?: boolean },
+  ): Promise<AuthSession | null> => {
+    const result = await ensureUsableAuthSessionResult(
+      currentSession,
+      sourceInput,
+      options,
+    );
+    return result.status === "ready" ? result.session : null;
+  }, [ensureUsableAuthSessionResult]);
 
   const beginSignInFlow = useCallback(async (): Promise<boolean> => {
     setAuthError(null);
@@ -502,7 +532,6 @@ export function useWebAppAuthController(
       onDidJustSignInRef.current();
     },
     onSessionAvailable: (currentSession) => {
-      markAuthBootstrapComplete();
       const sessionIdentity = String(currentSession.user?.id ?? "").trim();
       if (!sessionIdentity || sessionReadyIdentityRef.current === sessionIdentity) return;
       sessionReadyIdentityRef.current = sessionIdentity;
@@ -561,6 +590,7 @@ export function useWebAppAuthController(
   });
 
   useEffect(() => {
+    if (authBootstrapCompleteRef.current) return;
     let cancelled = false;
 
     void (async () => {
@@ -593,18 +623,26 @@ export function useWebAppAuthController(
         });
         if (cancelled) return;
         if (currentSession) {
-          const usableSession = await ensureUsableAuthSession(currentSession, "bootstrap");
+          const usableSessionResult = await ensureUsableAuthSessionResult(
+            currentSession,
+            "bootstrap",
+          );
           if (cancelled) return;
-          if (usableSession) {
+          if (usableSessionResult.status === "ready") {
             markAuthBootstrapComplete();
             clearAuthSignedOutIntentMarker();
-            adoptAuthSession(usableSession);
+            adoptAuthSession(usableSessionResult.session);
             if (hadPendingAuthFlow) {
               didJustSignInRef.current = true;
             }
             clearAuthFlowPending();
             setAuthError(null);
             return;
+          }
+          if (usableSessionResult.status === "transient_failure") {
+            throw new Error(
+              `auth_bootstrap_temporarily_unavailable:${usableSessionResult.reason}`,
+            );
           }
         }
 
@@ -637,7 +675,9 @@ export function useWebAppAuthController(
           },
           error: formatWorkspaceInstrumentationError(error),
         });
-        markAuthBootstrapComplete();
+        setAuthError(
+          "We could not verify your session yet. Reopen Polynet or reconnect to try again.",
+        );
       }
     })();
 
@@ -647,8 +687,9 @@ export function useWebAppAuthController(
   }, [
     adoptAuthSession,
     clearSessionLocally,
-    ensureUsableAuthSession,
+    ensureUsableAuthSessionResult,
     markAuthBootstrapComplete,
+    params.resumeEpoch,
   ]);
 
   const isAuthResolvingSignedInState = useMemo(() => {

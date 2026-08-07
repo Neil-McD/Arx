@@ -3,10 +3,11 @@
 import { convexTest } from "convex-test";
 import { afterEach, expect, test, vi } from "vitest";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { executePlatformOperation } from "./platformOperationExecutor";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { ensurePlatformHomeCommunityMembership } from "./platformHomeCommunity";
+import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import schema from "./schema";
 
 const modules = import.meta.glob([
@@ -15,6 +16,7 @@ const modules = import.meta.glob([
   "./communityAccessQueries.ts",
   "./communityCapabilityContext.ts",
   "./communityIntelligenceDirectory.ts",
+  "./memberEntryDestination.ts",
   "./email.ts",
   "./_generated/**/*.*s",
 ]);
@@ -45,6 +47,29 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    for (const [userId, subject] of [
+      [ownerId, OWNER_SUBJECT],
+      [memberId, MEMBER_SUBJECT],
+    ] as const) {
+      await ctx.db.insert("userProfileDetails", {
+        userId,
+        displayName: subject,
+        avatarUrl: `https://example.com/${subject}.png`,
+        onboardingCompletedAt: nowMs,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      for (const document of PLATFORM_LEGAL_DOCUMENTS) {
+        await ctx.db.insert("legalAcceptances", {
+          userId,
+          documentKey: document.key,
+          documentVersion: document.version,
+          acceptedAt: nowMs,
+          source: "test",
+          createdAt: nowMs,
+        });
+      }
+    }
     const insertCommunity = async (
       slug: string,
       entryPolicy: "open" | "approval" | "paid_subscription",
@@ -104,6 +129,56 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
     };
   });
 }
+
+test("incomplete accounts cannot join or resolve a community destination", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const incompleteSubject = "community-access-incomplete";
+  const incompleteUserId = await t.run(async (ctx) =>
+    await ctx.db.insert("users", {
+      authSubject: incompleteSubject,
+      displayName: "Incomplete member",
+      handle: "community-access-incomplete",
+      normalizedHandle: "community-access-incomplete",
+      createdAt: 1_750_000_000_000,
+      updatedAt: 1_750_000_000_000,
+    }),
+  );
+  const asIncompleteMember = t.withIdentity({ subject: incompleteSubject });
+
+  await expect(
+    asIncompleteMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+      communitySlug: "access-lifecycle-open",
+    }),
+  ).rejects.toThrow("account_setup_required");
+  await expect(
+    t.mutation(
+      (internal as any).memberEntryDestination.resolveMemberEntryDestinationInternal,
+      {
+        userId: incompleteUserId,
+        communityId: fixture.openCommunityId,
+        nowMs: 1_750_000_000_100,
+      },
+    ),
+  ).rejects.toThrow("account_setup_required");
+
+  const admissionRows = await t.run(async (ctx) => ({
+    memberships: await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) =>
+        q.eq("communityId", fixture.openCommunityId).eq("userId", incompleteUserId),
+      )
+      .collect(),
+    joinRequests: await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q) =>
+        q.eq("communityId", fixture.openCommunityId).eq("userId", incompleteUserId),
+      )
+      .collect(),
+  }));
+  expect(admissionRows).toEqual({ memberships: [], joinRequests: [] });
+});
 
 function createPlatformOperationTestContext(actor: {
   query: (reference: any, args: any) => Promise<any>;

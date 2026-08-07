@@ -19,10 +19,12 @@ type UseWebCommunityUiControllerParams<
 > = {
   session: SessionT | null;
   ensureSession?: (session?: SessionT | null) => Promise<SessionT | null>;
+  isAccountSetupResolved: boolean;
   isAccountSetupComplete: boolean;
   onPrimaryUnauthenticated: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onAccountSetupRequired?: () => void;
+  onAccountSetupUnavailable?: () => void;
   onCommunityCreated: (community: CommunityT) => void;
   getFounderSubscriptionId?: () => string | null;
   createUnauthenticatedErrorMessage: string;
@@ -75,10 +77,12 @@ export function useWebCommunityUiController<
   } = useCommunityCreateController<SessionT, CommunityT>({
     session: params.session,
     ensureSession: params.ensureSession,
+    isAccountSetupResolved: params.isAccountSetupResolved,
     isAccountSetupComplete: params.isAccountSetupComplete,
     onPrimaryUnauthenticated: params.onPrimaryUnauthenticated,
     onCreateUnauthenticated: params.onCreateUnauthenticated,
     onAccountSetupRequired: params.onAccountSetupRequired,
+    onAccountSetupUnavailable: params.onAccountSetupUnavailable,
     onCommunityCreated: params.onCommunityCreated,
     getFounderSubscriptionId: params.getFounderSubscriptionId,
     createCommunityName,

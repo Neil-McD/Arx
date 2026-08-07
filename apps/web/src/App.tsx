@@ -332,6 +332,7 @@ export default function App() {
     activePage,
     publicRouteKind: publicRoute.kind,
     isAuthBootstrapComplete,
+    resumeEpoch: appActivity.resumeEpoch,
   });
   const {
     profile: profileUi,
@@ -339,6 +340,7 @@ export default function App() {
     setCloudProfile,
     accountSetupStatus,
     effectiveAccountSetupStatus,
+    isAccountSetupResolved,
     isProfileSetupCompleteForPublicActions,
     isAccountSetupCompleteForBuilderActions,
     isOnboardingModalOpen,
@@ -501,11 +503,6 @@ export default function App() {
   shellNavigation.memberEntryActionsRef.current = {
     resolveAndEnter: resolveAndEnterMemberDestination,
   };
-  onboardingProfile.actionsRef.current = {
-    navigateTo,
-    enterDefaultDestination: resolveAndEnterMemberDestination,
-  };
-
   const communityChannels = useWebCommunityChannelsController({
     activeCommunityId,
     requestedChannelSlug: communityChannelSlug,
@@ -618,6 +615,7 @@ export default function App() {
     canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
     interaction: communityInteractionProjection,
+    isProfileSetupResolved: isAccountSetupResolved,
     isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
     onMessageSent: ({ communityId, hasAttachments, hasReply }) => {
       captureProductAnalyticsEvent("community message sent", {
@@ -1404,6 +1402,8 @@ export default function App() {
     getSession: () => sessionRef.current,
     getCurrentPublicCommunitySlug: () => publicCommunityUi.publicCommunity?.slug ?? null,
     ensureSession: ensureUsableAuthSession,
+    resolveAccountSetupStatus: refreshAccountSetupStatus,
+    onAccountSetupRequired: () => navigateTo("/onboarding"),
     ...sessionArg,
     requireSignIn,
     loadCommunities,
@@ -1488,6 +1488,7 @@ export default function App() {
     CommunityRecord
   >({
     ...authenticatedSessionArg,
+    isAccountSetupResolved,
     isAccountSetupComplete: isAccountSetupCompleteForBuilderActions,
     onPrimaryUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
@@ -1496,6 +1497,11 @@ export default function App() {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
     onAccountSetupRequired: openProfileSetup,
+    onAccountSetupUnavailable: () => {
+      showAppToastMessage(
+        "We are still verifying your account. Try again in a moment.",
+      );
+    },
     getFounderSubscriptionId: () => availableBuilderSubscriptionIdRef.current,
     onCommunityCreated: (community) => {
       availableBuilderSubscriptionIdRef.current = null;
@@ -1519,6 +1525,7 @@ export default function App() {
     session,
     getSession: () => sessionRef.current,
     isAuthBootstrapComplete,
+    resumeEpoch: appActivity.resumeEpoch,
     requireSignIn,
     refreshAccountSetupStatus,
     refreshBilling: founderBilling.refresh,
@@ -1552,6 +1559,11 @@ export default function App() {
       resumeBuilderCheckout: publicBuilderCheckout.prepareCommunityCreation,
       routeTryPolynetFree,
     });
+  onboardingProfile.actionsRef.current = {
+    navigateTo,
+    enterDefaultDestination: resolveAndEnterMemberDestination,
+    resumePendingAuthIntent,
+  };
   accountGraphLifecycle.actionsRef.current = {
     loadBilling: loadAccountCommerceStatus,
     loadCommunities,
@@ -1610,6 +1622,7 @@ export default function App() {
   });
   const communityEntryBridge = useWebCommunityEntryBridgeController({
     publicRouteKind: shellPublicRoute.kind,
+    isAccountSetupResolved,
     accountSetupStatus: effectiveAccountSetupStatus,
     activeCommunity,
     activeCommunityId,
@@ -1656,6 +1669,14 @@ export default function App() {
         : operatorAccess
           ? "allowed" as const
           : "denied" as const;
+  const accountSetupRouteAccessState =
+    !session
+      ? "not_applicable" as const
+      : !isAccountSetupResolved
+        ? "resolving" as const
+        : effectiveAccountSetupStatus?.completed
+          ? "allowed" as const
+          : "denied" as const;
   const { shouldHoldRouteForAccess } =
     useWebRouteAccessBoundaryController<
       AuthSession,
@@ -1672,6 +1693,7 @@ export default function App() {
       isAuthBootstrapComplete,
       communityPreviewAccessState,
       operatorAccessState: operatorRouteAccessState,
+      accountSetupAccessState: accountSetupRouteAccessState,
       ensureSession: ensureUsableAuthSession,
       loadCommunities,
       syncCommunitySelection,
@@ -1789,6 +1811,7 @@ export default function App() {
     canPostMessagesActiveCommunity,
     requireSignIn: () => requireSignIn(),
     showAppToastMessage,
+    isProfileSetupResolved: isAccountSetupResolved,
     isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
     openProfileSetup,
     setCommunityMessageInput,

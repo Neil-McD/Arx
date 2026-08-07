@@ -6,6 +6,8 @@ function read(path: string): string {
 }
 
 const backend = read("convex/memberEntryDestination.ts");
+const auth = read("convex/auth.ts");
+const communityPublic = read("convex/communityPublic.ts");
 const homeCommunity = read("convex/platformHomeCommunity.ts");
 const gateway = read("shared/cloudMemberEntryDestinationGateway.ts");
 const routes = read("shared/webAppRouteState.ts");
@@ -43,6 +45,21 @@ assert.match(
   backend,
   /resolveAuthenticatedActorInternal[\s\S]*authenticated_user_required/,
   "member entry must resolve the authenticated database actor server-side",
+);
+assert.match(
+  backend,
+  /requireAccountSetupCompleteForUser\(ctx, args\.userId\)[\s\S]*ensurePlatformHomeCommunityMembership/,
+  "member entry must require completed account setup before creating platform-home membership",
+);
+assert.doesNotMatch(
+  auth,
+  /ensurePlatformHomeCommunityMembership/,
+  "authentication must establish identity without creating community membership",
+);
+assert.match(
+  communityPublic,
+  /joinPublicCommunityInternal[\s\S]*requireAccountSetupCompleteForUser\(args\.ctx, args\.userId\)[\s\S]*activateCommunityMembershipCore/,
+  "public community admission must require completed account setup before membership activation",
 );
 assert.match(
   backend,
@@ -96,7 +113,7 @@ assert.match(
 );
 assert.match(
   onboardingProfileController,
-  /routeTryPolynetFree[\s\S]*account_setup\?\.completed[\s\S]*enterDefaultDestination/,
+  /routeTryPolynetFree[\s\S]*const setup = row\?\.account_setup \?\? null[\s\S]*setup\.completed[\s\S]*enterDefaultDestination/,
   "completed generic accounts must resolve the canonical community destination",
 );
 assert.match(
@@ -133,6 +150,11 @@ assert.doesNotMatch(
   communityBridgeBody,
   /requestOnboardingGuide|runAgentTurn|agentLifecycle/,
   "specific community bridge completion must not start a hidden personal agent turn",
+);
+assert.match(
+  communityEntryBridgeController,
+  /if \(!args\.isAccountSetupResolved\) return "wait";[\s\S]*args\.accountSetupStatus\?\.completed \? "enter" : "setup"/,
+  "unresolved account setup must fail closed before community entry",
 );
 assert.doesNotMatch(
   routes,

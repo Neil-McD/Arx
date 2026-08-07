@@ -84,6 +84,7 @@ type UseWebCommunityChatControllerParams = {
   canonicalSessionUserId: string | null;
   ensureSession: EnsureAuthSession;
   interaction: CommunityInteractionComposerBoundary;
+  isProfileSetupResolved: boolean;
   isProfileSetupComplete: boolean;
   onMessageSent: (event: {
     communityId: string;
@@ -397,6 +398,10 @@ export function useWebCommunityChatController(
       ? [...draft.attachments]
       : [...attachmentsRef.current];
     if (!rawText && attachmentsToSend.length === 0) return;
+    if (!current.isProfileSetupResolved) {
+      setError("We are still verifying your account. Try again in a moment.");
+      return;
+    }
     if (!current.isProfileSetupComplete) {
       current.onOpenProfileSetup();
       setError("Finish your profile before posting in communities.");

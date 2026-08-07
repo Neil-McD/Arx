@@ -35,6 +35,11 @@ export type AccountSetupStatus = {
   steps: AccountSetupStepStatus[];
 };
 
+export type AccountSetupResolution =
+  | { status: "resolved"; accountSetup: AccountSetupStatus }
+  | { status: "unauthenticated" }
+  | { status: "unavailable"; error: string };
+
 export type AccountSetupStatusInput = {
   displayName?: string | null;
   handle?: string | null;

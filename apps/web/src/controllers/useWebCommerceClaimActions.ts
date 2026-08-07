@@ -58,12 +58,12 @@ export function useWebCommerceClaimActions(args: UseWebCommerceClaimActionsArgs)
   }
 
   const redeemPurchaseClaim = useCallback(
-    async (token: string): Promise<void> => {
+    async (token: string): Promise<boolean> => {
       const session = await resolveCurrentSession(args.getSession, args.ensureSession);
       if (!session) {
         args.storePendingPurchaseClaimToken(token);
         args.requireSignIn({ reason: "redeem_purchase_claim", payload: { token } });
-        return;
+        return false;
       }
 
       args.setIsRedeemingClaim(true);
@@ -82,6 +82,7 @@ export function useWebCommerceClaimActions(args: UseWebCommerceClaimActionsArgs)
           communitySlug: claim.community_slug ?? null,
         });
         await args.loadCommunities(session);
+        return true;
       } catch (error) {
         const message =
           typeof error === "string"
@@ -90,6 +91,7 @@ export function useWebCommerceClaimActions(args: UseWebCommerceClaimActionsArgs)
               ? error.message
               : "Failed to redeem.";
         args.setRedeemClaimError(message);
+        return false;
       } finally {
         args.setIsRedeemingClaim(false);
       }
@@ -184,10 +186,10 @@ export function useWebCommerceClaimActions(args: UseWebCommerceClaimActionsArgs)
           reason: "redeem_pending_purchases",
           payload: { navigate: opts?.navigate !== false, silent_noop: Boolean(opts?.silentNoop) },
         });
-        return 0;
+        return -1;
       }
 
-      if (args.redeemPendingPurchasesInFlightRef.current) return 0;
+      if (args.redeemPendingPurchasesInFlightRef.current) return -1;
       args.redeemPendingPurchasesInFlightRef.current = true;
       args.setIsRedeemingPendingPurchases(true);
       args.setPendingPurchasesError(null);
@@ -224,7 +226,7 @@ export function useWebCommerceClaimActions(args: UseWebCommerceClaimActionsArgs)
               ? error.message
               : "Failed to claim access.";
         args.setPendingPurchasesError(message);
-        return 0;
+        return -1;
       } finally {
         args.setIsRedeemingPendingPurchases(false);
         args.redeemPendingPurchasesInFlightRef.current = false;
