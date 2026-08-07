@@ -52,7 +52,9 @@ export function WebBuilderOfferModal(props: WebBuilderOfferModalProps) {
             {props.isSubmitting
               ? "Opening…"
               : props.community.lifecycle_status === "archived"
-                ? `Restore community — ${formatBuilderOfferPrice(props.community.monthly_price_base_units)}`
+                ? primaryAction === "resume_checkout"
+                  ? "Resume checkout"
+                  : `Restore community — ${formatBuilderOfferPrice(props.community.monthly_price_base_units)}`
               : builderFundingActionLabel({
                   action: primaryAction,
                   state: props.community.funding_state,

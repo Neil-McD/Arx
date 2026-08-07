@@ -69,7 +69,7 @@ export function WebPolynetMcpAccountSection(
               <div className="integration-mounted-rail polymcp-access-actions">
                 <button
                   type="button"
-                  className="settings-cta polymcp-copy-action"
+                  className="settings-cta settings-primary-action polymcp-copy-action"
                   onClick={() => void handleCopySetup()}
                   aria-label="Copy Polynet setup"
                 >

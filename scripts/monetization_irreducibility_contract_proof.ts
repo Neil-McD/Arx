@@ -90,7 +90,7 @@ assert.match(founderBilling, /funding_state: fundingProjection\.state/);
 assert.match(founderBilling, /builder_access_mode: builderAccessMode \?\? "invalid"/);
 assert.match(
   founderBilling,
-  /allowed_actions:[\s\S]*?lifecycle\.status === "active"[\s\S]*?archiveJob\?\.status === "complete" &&[\s\S]*?!operatorComped &&[\s\S]*?builderAccessMode === "subscription_required"[\s\S]*?\["buy_builder" as const\]/,
+  /allowed_actions:[\s\S]*?lifecycle\.status === "active"[\s\S]*?archiveJob\?\.status === "complete" &&[\s\S]*?!operatorComped &&[\s\S]*?builderAccessMode === "subscription_required"[\s\S]*?pendingCheckout \? "resume_checkout" as const : "buy_builder" as const/,
   "archived communities must fail closed until cleanup completes; only subscription-required communities expose the canonical Builder purchase action",
 );
 assert.match(founderBillingGateway, /BuilderFundingLane/);

@@ -17,18 +17,22 @@ export const POLYNET_BUILDER_OFFER = {
   headline: "Build a community that gets smarter every day",
   description:
     "Builder gives one community the intelligence, memory, and member experience to compound what it learns.",
+  purchaseHeadline: "Create a community",
+  purchaseDescription:
+    "Everything you need to operate one AI-powered community.",
+  purchaseNote: "Payment first. Community setup comes next.",
   benefits: [
     {
-      title: "Community AI",
-      description: "Polynet-hosted AI grounded in your community's knowledge and context.",
+      title: "Build your community",
+      description: "Bring your people, conversations, and resources into one shared place.",
     },
     {
-      title: "Knowledge that compounds",
-      description: "Resources, conversations, and useful outcomes become reusable community memory.",
+      title: "Train your AI on your knowledge",
+      description: "Seed it with your content, calls, and best answers so it learns how you think.",
     },
     {
-      title: "A complete community system",
-      description: "Public funnel, gated onboarding, chat, voice, resources, member agents, and paid memberships.",
+      title: "Serve every member at scale",
+      description: "Give every member an agent grounded in your knowledge whenever they need it.",
     },
   ],
   platformFeeBps: POLYNET_COMMUNITY_PLATFORM_FEE_BPS,

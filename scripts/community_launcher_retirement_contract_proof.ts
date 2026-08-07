@@ -30,6 +30,7 @@ const pendingAuthIntent = read(
 );
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
+const purchaseModal = read("apps/web/src/components/WebBuilderPurchaseModal.tsx");
 const webCreateController = read("apps/web/src/controllers/useWebCommunityUiController.ts");
 const createController = read("shared/useCommunityCreateController.ts");
 const settings = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
@@ -108,9 +109,20 @@ assert.doesNotMatch(
 
 assert.match(
   createModal,
-  /WebBuilderOfferSummary[\s\S]*Community name[\s\S]*Customize community URL[\s\S]*Create community/,
+  /Your payment is confirmed[\s\S]*Community name[\s\S]*Customize community URL[\s\S]*Create community/,
   "community creation should remain one post-payment identity form",
 );
+assert.doesNotMatch(
+  createModal,
+  /WebBuilderOfferSummary|Buy Builder/,
+  "post-payment setup must not repeat the purchase offer",
+);
+assert.match(
+  purchaseModal,
+  /WebBuilderOfferSummary compact purpose="purchase"/,
+  "the pre-payment offer must remain a separate compact surface",
+);
+assert.match(purchaseModal, /Buy Builder/);
 assert.match(
   webCreateController,
   /useCommunityCreateController[\s\S]*openCreateCommunityModal[\s\S]*modalHostProps/,

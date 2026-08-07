@@ -1110,7 +1110,7 @@ export default function App() {
         communitySlug: null,
         communityTab: "chat",
       });
-      openGlobalSettings("billing");
+      openGlobalSettings("account");
       void founderBilling.watchArchiveCleanup(archivedId);
     },
     session,
@@ -1532,12 +1532,12 @@ export default function App() {
     navigateTo,
     showToast: showAppToastMessage,
   });
+  const pendingBuilderCreateDraftRef = useRef<Parameters<
+    typeof communityUi.openCreateCommunityModal
+  >[0]>(null);
   const openNewCommunityPurchaseFlow: typeof communityUi.openCreateCommunityModal = (draft = null) => {
-    if (operatorComplimentaryAccess || availableBuilderSubscriptionIdRef.current) {
-      openFundedCreateCommunityModal(draft);
-      return;
-    }
-    void publicBuilderCheckout.startPurchase();
+    pendingBuilderCreateDraftRef.current = draft;
+    publicBuilderCheckout.openPurchasePrompt();
   };
   const { resumePendingAuthIntent } =
     useWebPendingAuthIntentController({
@@ -2553,9 +2553,13 @@ export default function App() {
       handleSignOut,
       founderBillingOverview: founderBilling.overview,
       isLoadingFounderBilling: founderBilling.isLoading,
+      founderBillingActionCommunityId: founderBilling.actionCommunityId,
+      founderBillingError: founderBilling.error,
       onOpenBuilderOffer: (community) => builderOffer.open({ community }),
       onOpenCommunityBilling: () => openGlobalSettings("billing"),
       onOpenCreateCommunity: () => openNewCommunityPurchaseFlow(),
+      retryCommunityArchive: founderBilling.retryArchiveCleanup,
+      restoreCommunityWithoutPayment: founderBilling.restoreCommunityWithoutPayment,
     },
     billing: {
       session,
@@ -2565,8 +2569,6 @@ export default function App() {
       founderBillingError: founderBilling.error,
       openFounderBillingPortal: founderBilling.openPortal,
       refreshFounderBilling: founderBilling.refresh,
-      retryCommunityArchive: founderBilling.retryArchiveCleanup,
-      restoreCommunityWithoutPayment: founderBilling.restoreCommunityWithoutPayment,
       onOpenBuilderOffer: (community) => builderOffer.open({ community }),
       onOpenCreateCommunity: () => openNewCommunityPurchaseFlow(),
       pendingPurchaseClaims,
@@ -2636,6 +2638,30 @@ export default function App() {
       error: founderBilling.error,
       onClose: builderOffer.close,
       onConfirm: builderOffer.confirm,
+    },
+    builderPurchaseProps: {
+      isOpen: publicBuilderCheckout.isPurchasePromptOpen,
+      accessMode: operatorComplimentaryAccess
+        ? "operator_included"
+        : availableBuilderSubscriptionIdRef.current
+          ? "paid_setup"
+          : "purchase",
+      status: publicBuilderCheckout.status,
+      error: publicBuilderCheckout.error,
+      onClose: () => {
+        pendingBuilderCreateDraftRef.current = null;
+        publicBuilderCheckout.closePurchasePrompt();
+      },
+      onConfirm: () => {
+        if (operatorComplimentaryAccess || availableBuilderSubscriptionIdRef.current) {
+          const draft = pendingBuilderCreateDraftRef.current;
+          pendingBuilderCreateDraftRef.current = null;
+          publicBuilderCheckout.closePurchasePrompt();
+          openFundedCreateCommunityModal(draft);
+          return;
+        }
+        void publicBuilderCheckout.startPurchase();
+      },
     },
     appToast,
   });

@@ -832,7 +832,7 @@ If those answers are vague, more settings will not fix the product.
 
 ## Core Steps
 
-1. Open the Builder offer from Create Community, Billing, or Account.
+1. Open the Builder offer from Create Community. Existing community funding actions remain available from Billing and Account.
 2. Complete the $79 monthly Builder checkout.
 3. Finish account setup, then name the funded community and define its purpose and public profile.
 4. Configure the community agent.
@@ -891,7 +891,7 @@ The cash path is simple: configure the community, define the paid access model, 
   account-level numeric cap, but every existing community must have current
   funding for every newly created community.
 - Create Community presents the Builder offer and completes checkout before asking for the community name and optional URL. Verified payment authority is consumed exactly once when the community is created.
-- Create Community, Billing, and Account project the same per-community Builder offer and converge on the same checkout and entitlement system. They are entry surfaces, not separate products or billing state.
+- Create Community, Billing, and Account converge on the same checkout and entitlement system. Create Community presents the compact new-community offer, Billing manages active subscriptions, and Account manages archived communities. They are entry surfaces, not separate products or billing state.
 - A grandfathered community can remain configured, published, listed in Discover, accept public joins, and collect paid-member revenue without Builder. Only its community-funded AI remains disabled.
 - Authenticated tool access is not sold as a separate plan. Polynet absorbs supported provider cost while enforcing rate limits, provider quotas, and cost receipts.
 - Paid-member community revenue always carries Polynet's 2.9% application fee, independent of Builder funding mode.

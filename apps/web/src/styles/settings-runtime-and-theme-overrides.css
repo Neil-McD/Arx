@@ -3113,7 +3113,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):not(.settings-primary-action):not(.danger) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -3125,12 +3125,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):hover:not(:disabled) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):not(.settings-primary-action):not(.danger):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):disabled {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.community-polynet-back):not(.settings-primary-action):not(.danger):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -3179,9 +3179,15 @@ button.message-citation-chip:hover {
 }
 
 .settings-panel button.danger {
-  border-color: rgba(210, 80, 80, 0.35);
+  cursor: pointer;
+  border: 1px solid rgba(210, 80, 80, 0.35);
+  border-radius: 6px;
   background: rgba(210, 80, 80, 0.12);
   color: #f1a3a3;
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: 0.15s;
 }
 
 .settings-panel button.danger:hover:not(:disabled) {
@@ -5574,7 +5580,7 @@ button.message-citation-chip:hover {
   }
 }
 
-/* Canonical Builder offer: one offer, projected into Create, Billing, and Account. */
+/* Canonical Builder offer: compact purchase entry plus existing-community funding. */
 .builder-offer-overlay {
   padding: 24px;
   backdrop-filter: blur(10px);
@@ -5616,6 +5622,33 @@ button.message-citation-chip:hover {
 .builder-offer-summary {
   display: grid;
   gap: 18px;
+}
+
+.builder-purchase-modal {
+  width: min(520px, calc(100vw - 32px));
+  padding: 30px;
+}
+
+.builder-offer-summary.is-compact {
+  gap: 14px;
+}
+
+.builder-offer-summary.is-compact h2 {
+  max-width: none;
+  font-size: clamp(30px, 5vw, 40px);
+}
+
+.builder-offer-summary.is-compact > p {
+  font-size: 14px;
+}
+
+.builder-offer-summary.is-compact .builder-offer-benefit {
+  align-items: center;
+  padding: 11px 0;
+}
+
+.builder-offer-summary.is-compact .builder-offer-benefit strong {
+  font-size: 13px;
 }
 
 .builder-offer-kicker {
@@ -5713,9 +5746,41 @@ button.message-citation-chip:hover {
 .builder-create-fields {
   display: grid;
   gap: 12px;
-  margin-top: 22px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-muted);
+  margin-top: 24px;
+}
+
+.builder-create-heading {
+  display: grid;
+  gap: 9px;
+}
+
+.builder-create-heading > span {
+  color: var(--accent-gold);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.builder-create-heading h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 580;
+  letter-spacing: -0.04em;
+}
+
+.builder-create-heading p,
+.builder-purchase-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.builder-purchase-note {
+  margin-top: 12px;
+  text-align: center;
 }
 
 .builder-create-url summary {
@@ -5869,6 +5934,41 @@ button.message-citation-chip:hover {
 
 .builder-account-section {
   gap: 14px;
+}
+
+.archived-community-section {
+  gap: 14px;
+}
+
+.archived-community-list {
+  margin-top: 2px;
+}
+
+button.settings-primary-action,
+button.settings-primary-action:hover:not(:disabled),
+button.settings-primary-action:focus-visible {
+  cursor: pointer;
+  border: 1px solid var(--bg-button);
+  border-radius: 6px;
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+  padding: 10px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  transition: 0.15s;
+}
+
+button.settings-primary-action:hover:not(:disabled) {
+  filter: brightness(0.94);
+  transform: translateY(-1px);
+}
+
+button.settings-primary-action:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+button.settings-primary-action svg {
+  stroke: currentColor;
 }
 
 @keyframes builder-offer-enter {

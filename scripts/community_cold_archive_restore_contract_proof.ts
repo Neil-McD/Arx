@@ -12,6 +12,7 @@ const httpBilling = read("convex/httpBilling.ts");
 const criticalAudit = read("convex/criticalAudit.ts");
 const settingsUi = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
 const billingUi = read("apps/web/src/components/WebBillingSettingsSection.tsx");
+const archivedUi = read("apps/web/src/components/WebArchivedCommunityList.tsx");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const communityGateway = read("shared/cloudCommunityAdminGateway.ts");
 const accountUi = read("apps/web/src/components/WebAccountSettingsSection.tsx");
@@ -59,7 +60,7 @@ assert.match(
 );
 assert.match(
   founderBilling,
-  /allowed_actions:[\s\S]*lifecycle\.status === "active"[\s\S]*archiveJob\?\.status === "complete"[\s\S]*\["buy_builder" as const\]/,
+  /allowed_actions:[\s\S]*lifecycle\.status === "active"[\s\S]*archiveJob\?\.status === "complete"[\s\S]*pendingCheckout \? "resume_checkout" as const : "buy_builder" as const/,
   "the server billing projection must expose restoration only after cleanup completes",
 );
 assert.match(
@@ -78,14 +79,19 @@ assert.match(
   "grandfathered and operator restoration must use one authenticated community gateway command",
 );
 assert.match(
-  billingUi,
-  /canRestoreWithoutPayment[\s\S]*isOperatorComped[\s\S]*builder_access_mode === "grandfathered"[\s\S]*archiveCleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*archiveCleanupStatus === "complete"[\s\S]*restoreCommunityWithoutPayment[\s\S]*Restore community[\s\S]*onOpenBuilderOffer/,
-  "global Billing must separate free grandfathered or operator restoration from paid subscription-required restoration",
+  archivedUi,
+  /canRestoreWithoutPayment[\s\S]*funding_mode === "operator_comp"[\s\S]*builder_access_mode === "grandfathered"[\s\S]*cleanupStatus === "blocked"[\s\S]*Retry cleanup[\s\S]*cleanupStatus !== "complete"[\s\S]*restoreCommunityWithoutPayment[\s\S]*canRestoreWithPayment[\s\S]*onOpenBuilderOffer[\s\S]*Restore unavailable/,
+  "Account archive management must separate free, paid, pending, blocked, and invalid restoration",
 );
 assert.match(
   billingUi,
-  /isArchived \|\| isOperatorComped \? null : primaryAction/,
-  "an archived community must not render the generic Builder action beside its restore action",
+  /const activeCommunities[\s\S]*community\.lifecycle_status === "active"[\s\S]*activeCommunities\.map/,
+  "Billing must project active subscriptions only",
+);
+assert.doesNotMatch(
+  billingUi,
+  /restoreCommunityWithoutPayment|Retry cleanup|Finishing archive/,
+  "Billing must not retain duplicate archive management",
 );
 assert.match(
   billingController,
@@ -109,13 +115,13 @@ assert.match(
 );
 assert.match(
   accountUi,
-  /const activeCommunities[\s\S]*community\.lifecycle_status === "active"[\s\S]*Restore archived communities from Billing/,
-  "Account summaries must route archived management to Billing without calling it active funding debt",
+  /const activeCommunities[\s\S]*const archivedCommunities[\s\S]*WebArchivedCommunityList/,
+  "Account must own archived community management without calling it active funding debt",
 );
 assert.match(
   app,
-  /onCommunityArchived:[\s\S]*filter\(\(community\) => community\.id !== archivedId\)[\s\S]*openGlobalSettings\("billing"\)[\s\S]*watchArchiveCleanup/,
-  "successful archive must leave the active shell and converge on global Billing",
+  /onCommunityArchived:[\s\S]*filter\(\(community\) => community\.id !== archivedId\)[\s\S]*openGlobalSettings\("account"\)[\s\S]*watchArchiveCleanup/,
+  "successful archive must leave the active shell and converge on Account archives",
 );
 
 const verifiedAuthorityUses = [

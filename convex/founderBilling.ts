@@ -1133,7 +1133,7 @@ export const getFounderBillingOverview = query({
                 : archiveJob?.status === "complete" &&
                     !operatorComped &&
                     builderAccessMode === "subscription_required"
-                  ? ["buy_builder" as const]
+                  ? [pendingCheckout ? "resume_checkout" as const : "buy_builder" as const]
                   : [],
             funding_mode: subscription
               ? "managed"

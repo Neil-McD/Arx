@@ -66,6 +66,8 @@ export function useWebFounderBillingController(params: {
   const [isLoading, setIsLoading] = useState(false);
   const [actionCommunityId, setActionCommunityId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const overviewRef = useRef(overview);
+  overviewRef.current = overview;
   const ensureSessionRef = useRef(params.ensureSession);
   ensureSessionRef.current = params.ensureSession;
   const onCommunityReadyRef = useRef(params.onCommunityReady);
@@ -156,7 +158,13 @@ export function useWebFounderBillingController(params: {
     setActionCommunityId(communityId);
     setError(null);
     try {
-      const returnUrl = `${window.location.origin}/settings/billing?founder_community=${encodeURIComponent(communityId)}`;
+      const community = overviewRef.current.communities.find(
+        (candidate) => candidate.community_id === communityId,
+      );
+      const returnSettingsGroup = community?.lifecycle_status === "archived"
+        ? "account"
+        : "billing";
+      const returnUrl = `${window.location.origin}/settings/${returnSettingsGroup}?founder_community=${encodeURIComponent(communityId)}`;
       const result = await startCloudFounderSubscriptionCheckout({
         session: usableSession,
         communityId,
