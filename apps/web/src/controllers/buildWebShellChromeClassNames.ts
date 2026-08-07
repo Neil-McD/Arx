@@ -27,7 +27,13 @@ export function buildWebShellChromeClassNames(
 
   const shellClassName = `app-shell${
     params.showDesktopCommunityRail ? " with-community-rail" : ""
-  }${params.showDesktopCommunityNav ? " community-layout" : ""}${
+  }${
+    params.showDesktopCommunityRail || params.showDesktopCommunityNav
+      ? " framed-shell"
+      : ""
+  }${
+    params.showDesktopCommunityNav ? " community-layout" : ""
+  }${
     params.showDesktopCommunityNav || params.isGlobalSettings
       ? " sessions-compact"
       : ""

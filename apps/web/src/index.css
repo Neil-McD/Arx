@@ -101,16 +101,40 @@
   }
 }
 
-/* Web-only dark rail override, expressed as a surface token assignment. */
+/* Universal shell palette hierarchy. The outer rail is the product chrome; the
+   inset surface is the selected destination. Layout stays identical so the
+   Appearance switcher compares palettes instead of comparing structures. */
 :root[data-theme="dark"] {
-  --surface-rail: #1e1e1e;
+  --bg-app: #111113;
+  --surface-app: #111113;
+  --surface-rail: #111113;
+  --bg-workspace: #1a1a1a;
+  --surface-workspace: #1a1a1a;
+  --bg-panel: #222222;
+  --surface-panel: #222222;
+  --surface-nav: #222222;
 }
 
-/* Web Polynet: use one opaque slab token to prevent rail/workspace compositing drift. */
 :root[data-theme="polynet"] {
-  --bg-workspace: rgba(18, 18, 20, 0.94);
-  --surface-workspace: rgba(18, 18, 20, 0.94);
-  --surface-rail: rgba(18, 18, 20, 0.94);
+  --bg-app: #0d0d0f;
+  --surface-app: #0d0d0f;
+  --surface-rail: #0d0d0f;
+  --bg-workspace: #121214;
+  --surface-workspace: #121214;
+  --bg-panel: #17171a;
+  --surface-panel: #17171a;
+  --surface-nav: #17171a;
+}
+
+:root[data-theme="light"] {
+  --bg-app: #ececea;
+  --surface-app: #ececea;
+  --surface-rail: #ececea;
+  --bg-workspace: #f8f8f4;
+  --surface-workspace: #f8f8f4;
+  --bg-panel: #f0f0ee;
+  --surface-panel: #f0f0ee;
+  --surface-nav: #f0f0ee;
 }
 
 /* Web: keep topbar content aligned with the left rail. */
@@ -1506,18 +1530,19 @@
 /* Desktop: one continuous fluid nav width — scales smoothly with the window
    (no discrete "steps"), comfortably wide by default, narrowing as space tightens. */
 @media (min-width: 641px) {
-  .app-shell.community-layout.sessions-compact.no-right {
+  .app-shell.framed-shell.sessions-compact.no-right,
+  .app-shell.framed-shell.no-left.no-right {
     grid-template-columns: minmax(0, 1fr);
     background: var(--surface-rail);
   }
 
-  .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
+  .app-shell.framed-shell.with-community-rail.sessions-compact.no-right,
+  .app-shell.framed-shell.with-community-rail.no-left.no-right {
     grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr);
   }
 
-  .community-shell-surface {
+  .product-shell-surface {
     display: grid;
-    grid-template-columns: clamp(168px, 20vw, 420px) minmax(0, 1fr);
     min-width: 0;
     min-height: 0;
     margin: var(--community-shell-inset) var(--community-shell-inset) var(--community-shell-inset) 0;
@@ -1528,17 +1553,30 @@
     isolation: isolate;
   }
 
-  .app-shell.community-layout:not(.with-community-rail) .community-shell-surface {
+  .product-shell-surface--community {
+    grid-template-columns: clamp(168px, 20vw, 420px) minmax(0, 1fr);
+  }
+
+  .product-shell-surface--settings {
+    grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  }
+
+  .product-shell-surface--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell:not(.with-community-rail) .product-shell-surface {
     margin-left: var(--community-shell-inset);
   }
 
-  .community-shell-surface > .community-nav {
+  .product-shell-surface > .community-nav,
+  .product-shell-surface > .sessions {
     min-width: 0;
     min-height: 0;
     border-left: 0;
   }
 
-  .community-shell-surface > :not(.community-nav) {
+  .product-shell-surface > :not(.community-nav):not(.sessions) {
     min-width: 0;
     min-height: 0;
   }
@@ -1561,9 +1599,8 @@
     grid-template-columns: var(--web-rail-width) minmax(0, 1fr);
   }
 
-  .community-shell-surface {
+  .product-shell-surface {
     display: grid;
-    grid-template-columns: 56px minmax(0, 1fr);
     min-width: 0;
     min-height: 0;
     margin: 0;
@@ -1573,12 +1610,23 @@
     background: var(--surface-workspace, var(--surface-app));
   }
 
-  .app-shell.community-layout:not(.with-community-rail) .community-shell-surface {
+  .product-shell-surface--community {
+    grid-template-columns: 56px minmax(0, 1fr);
+  }
+
+  .product-shell-surface--settings {
+    grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  }
+
+  .product-shell-surface--single {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .app-shell:not(.with-community-rail) .product-shell-surface {
     margin-left: 0;
   }
 
-  .community-shell-surface > .community-nav,
-  .community-shell-surface > :not(.community-nav) {
+  .product-shell-surface > * {
     min-width: 0;
     min-height: 0;
   }
