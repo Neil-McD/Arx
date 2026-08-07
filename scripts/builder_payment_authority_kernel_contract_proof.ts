@@ -87,7 +87,18 @@ assert.match(
 );
 assert.match(
   publicBuilderCheckoutController,
-  /latestAccountSetupStatus =[\s\S]*await current\.refreshAccountSetupStatus\(activeSession\)[\s\S]*if \(!latestAccountSetupStatus\?\.completed\)/,
+  /accountSetupResolution =[\s\S]*await current\.refreshAccountSetupStatus\(activeSession\)[\s\S]*status === "unavailable"[\s\S]*status === "unauthenticated"[\s\S]*accountSetup\.completed/,
+  "Builder return must distinguish unavailable setup authority from confirmed incomplete setup",
+);
+assert.doesNotMatch(
+  publicBuilderCheckoutController,
+  /!latestAccountSetupStatus\?\.completed/,
+  "an unavailable account-setup response must never be treated as incomplete",
+);
+assert.match(
+  publicBuilderCheckoutController,
+  /status === "unavailable"[\s\S]*return;[\s\S]*scrubCurrentRouteSearchParams\(\["builder_checkout"\]\)/,
+  "Builder return must retain its recovery marker until setup authority resolves",
 );
 assert.match(
   publicBuilderCheckoutController,

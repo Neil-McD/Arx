@@ -332,6 +332,7 @@ export default function App() {
     activePage,
     publicRouteKind: publicRoute.kind,
     isAuthBootstrapComplete,
+    resumeEpoch: appActivity.resumeEpoch,
   });
   const {
     profile: profileUi,
@@ -339,6 +340,7 @@ export default function App() {
     setCloudProfile,
     accountSetupStatus,
     effectiveAccountSetupStatus,
+    isAccountSetupResolved,
     isProfileSetupCompleteForPublicActions,
     isAccountSetupCompleteForBuilderActions,
     isOnboardingModalOpen,
@@ -618,6 +620,7 @@ export default function App() {
     canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
     interaction: communityInteractionProjection,
+    isProfileSetupResolved: isAccountSetupResolved,
     isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
     onMessageSent: ({ communityId, hasAttachments, hasReply }) => {
       captureProductAnalyticsEvent("community message sent", {
@@ -1488,6 +1491,7 @@ export default function App() {
     CommunityRecord
   >({
     ...authenticatedSessionArg,
+    isAccountSetupResolved,
     isAccountSetupComplete: isAccountSetupCompleteForBuilderActions,
     onPrimaryUnauthenticated: (draft) => {
       requireSignIn({ reason: "create_community", payload: { draft } });
@@ -1496,6 +1500,11 @@ export default function App() {
       requireSignIn({ reason: "create_community", payload: { draft } });
     },
     onAccountSetupRequired: openProfileSetup,
+    onAccountSetupUnavailable: () => {
+      showAppToastMessage(
+        "We are still verifying your account. Try again in a moment.",
+      );
+    },
     getFounderSubscriptionId: () => availableBuilderSubscriptionIdRef.current,
     onCommunityCreated: (community) => {
       availableBuilderSubscriptionIdRef.current = null;
@@ -1519,6 +1528,7 @@ export default function App() {
     session,
     getSession: () => sessionRef.current,
     isAuthBootstrapComplete,
+    resumeEpoch: appActivity.resumeEpoch,
     requireSignIn,
     refreshAccountSetupStatus,
     refreshBilling: founderBilling.refresh,
@@ -1789,6 +1799,7 @@ export default function App() {
     canPostMessagesActiveCommunity,
     requireSignIn: () => requireSignIn(),
     showAppToastMessage,
+    isProfileSetupResolved: isAccountSetupResolved,
     isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
     openProfileSetup,
     setCommunityMessageInput,

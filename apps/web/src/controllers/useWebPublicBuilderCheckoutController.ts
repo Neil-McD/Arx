@@ -6,6 +6,7 @@ import {
 } from "../../../../shared/cloudFounderBillingGateway";
 import { scrubCurrentRouteSearchParams } from "../webAppRuntime";
 import type { AuthSession } from "../auth";
+import type { AccountSetupResolution } from "../../../../shared/accountSetup";
 
 export type PublicBuilderCheckoutStatus =
   | "idle"
@@ -13,21 +14,18 @@ export type PublicBuilderCheckoutStatus =
   | "canceled"
   | "error";
 
-type AccountSetupStatus = {
-  completed: boolean;
-};
-
 type PublicBuilderCheckoutControllerParams = {
   session: AuthSession | null;
   getSession: () => AuthSession | null;
   isAuthBootstrapComplete: boolean;
+  resumeEpoch: number;
   requireSignIn: (intent?: {
     reason: string;
     payload: Record<string, unknown>;
   }) => void;
   refreshAccountSetupStatus: (
     session: AuthSession,
-  ) => Promise<AccountSetupStatus | null>;
+  ) => Promise<AccountSetupResolution>;
   refreshBilling: (
     session: AuthSession,
   ) => Promise<CloudFounderBillingOverview | null>;
@@ -65,9 +63,21 @@ export function useWebPublicBuilderCheckoutController(
       const activeSession = current.getSession() ?? current.session;
       if (!activeSession) return;
 
-      const latestAccountSetupStatus =
+      const accountSetupResolution =
         await current.refreshAccountSetupStatus(activeSession);
-      if (!latestAccountSetupStatus?.completed) {
+      if (accountSetupResolution.status === "unavailable") {
+        current.showToast(accountSetupResolution.error);
+        return;
+      }
+      if (accountSetupResolution.status === "unauthenticated") {
+        current.requireSignIn({
+          reason: "resume_builder_checkout",
+          payload: {},
+        });
+        return;
+      }
+      scrubCurrentRouteSearchParams(["builder_checkout"]);
+      if (!accountSetupResolution.accountSetup.completed) {
         current.navigateTo("/onboarding");
         return;
       }
@@ -122,10 +132,10 @@ export function useWebPublicBuilderCheckoutController(
       });
       return;
     }
-    scrubCurrentRouteSearchParams(["builder_checkout"]);
     void prepareCommunityCreation();
   }, [
     params.isAuthBootstrapComplete,
+    params.resumeEpoch,
     params.session?.user.id,
     prepareCommunityCreation,
   ]);
