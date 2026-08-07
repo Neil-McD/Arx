@@ -426,22 +426,13 @@ export function useWebOnboardingProfileController(params: {
       return;
     }
     onboardingHydrationUserIdRef.current = authSubject;
-    void loadProfileForOnboarding(params.session)
-      .then((row) => {
-        if (!row?.account_setup) {
-          void refreshAccountSetupStatus(params.session);
-        }
-      })
-      .catch(() => {
-        void refreshAccountSetupStatus(params.session);
-      });
+    void routeTryPolynetFree(params.session);
   }, [
-    loadProfileForOnboarding,
     params.activePage,
     params.isAuthBootstrapComplete,
     params.publicRouteKind,
     params.session,
-    refreshAccountSetupStatus,
+    routeTryPolynetFree,
   ]);
 
   useEffect(() => {

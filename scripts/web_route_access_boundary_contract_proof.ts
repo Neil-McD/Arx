@@ -251,8 +251,8 @@ assert.doesNotMatch(
 );
 assert.match(
   onboarding,
-  /params\.activePage !== "onboarding"[\s\S]*loadProfileForOnboarding\(params\.session\)[\s\S]*refreshAccountSetupStatus\(params\.session\)/,
-  "direct authenticated onboarding navigation must hydrate canonical profile and setup state",
+  /params\.activePage !== "onboarding"[\s\S]*routeTryPolynetFree\(params\.session\)/,
+  "direct authenticated onboarding navigation must resolve canonical profile, setup, and completed-account destination state",
 );
 assert.match(
   shellProjection,
