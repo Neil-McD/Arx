@@ -295,19 +295,19 @@
    */
 
   /* === FOUNDATION: Paper canvas + neutral context === */
-  --bg-app: #E4E4E0;
-  --bg-header: rgba(250, 250, 247, 0.94);
-  --bg-panel: #EFEFEB;
+  --bg-app: #F8F8F4;
+  --bg-header: rgba(248, 248, 244, 0.94);
+  --bg-panel: #F0F0EE;
   --bg-modal: #FFFFFF;
-  --bg-workspace: #FAFAF7;
+  --bg-workspace: #F8F8F4;
   --bg-card: #FFFFFF;
   --bg-card-solid: #FFFFFF;
-  --bg-card-alt: #F6F6F2;
-  --bg-card-hover: #E9E9E5;
+  --bg-card-alt: #F8F8F4;
+  --bg-card-hover: #ECECEA;
   --bg-input: #FFFFFF;
   --bg-terminal: #171719;
-  --surface-rail: #E4E4E0;
-  --surface-nav: #EFEFEB;
+  --surface-rail: #F8F8F4;
+  --surface-nav: #F0F0EE;
   --workspace-composer-bg: #FFFFFF;
   --workspace-landing-action-bg: #FFFFFF;
   --workspace-landing-action-hover-bg: #ECECEA;
