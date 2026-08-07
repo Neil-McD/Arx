@@ -78,6 +78,7 @@ export function useWebOnboardingProfileController(params: {
   getSessionRef.current = params.getSession;
   const timezoneSyncKeyRef = useRef<string | null>(null);
   const onboardingRedirectUserIdRef = useRef<string | null>(null);
+  const onboardingHydrationUserIdRef = useRef<string | null>(null);
 
   const profile = useWebProfileSettingsUiController({
     profileStorageUserId: params.profileStorageUserId,
@@ -405,11 +406,43 @@ export function useWebOnboardingProfileController(params: {
     setOnboardingError(null);
     timezoneSyncKeyRef.current = null;
     onboardingRedirectUserIdRef.current = null;
+    onboardingHydrationUserIdRef.current = null;
   }, []);
 
   useEffect(() => {
     resetSignedOutState();
   }, [params.profileStorageUserId, resetSignedOutState]);
+
+  useEffect(() => {
+    const authSubject = resolveAuthSubject(params.session);
+    if (
+      !params.isAuthBootstrapComplete ||
+      !params.session ||
+      !authSubject ||
+      params.publicRouteKind !== "app" ||
+      params.activePage !== "onboarding" ||
+      onboardingHydrationUserIdRef.current === authSubject
+    ) {
+      return;
+    }
+    onboardingHydrationUserIdRef.current = authSubject;
+    void loadProfileForOnboarding(params.session)
+      .then((row) => {
+        if (!row?.account_setup) {
+          void refreshAccountSetupStatus(params.session);
+        }
+      })
+      .catch(() => {
+        void refreshAccountSetupStatus(params.session);
+      });
+  }, [
+    loadProfileForOnboarding,
+    params.activePage,
+    params.isAuthBootstrapComplete,
+    params.publicRouteKind,
+    params.session,
+    refreshAccountSetupStatus,
+  ]);
 
   useEffect(() => {
     if (

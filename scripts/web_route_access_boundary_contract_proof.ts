@@ -250,6 +250,11 @@ assert.doesNotMatch(
   "direct onboarding navigation must not launch authentication",
 );
 assert.match(
+  onboarding,
+  /params\.activePage !== "onboarding"[\s\S]*loadProfileForOnboarding\(params\.session\)[\s\S]*refreshAccountSetupStatus\(params\.session\)/,
+  "direct authenticated onboarding navigation must hydrate canonical profile and setup state",
+);
+assert.match(
   shellProjection,
   /const showDesktopCommunityRail =\s*isAppRoute/,
   "the public community funnel must not expose authenticated global navigation",
