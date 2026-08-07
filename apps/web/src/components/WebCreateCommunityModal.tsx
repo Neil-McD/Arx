@@ -1,5 +1,3 @@
-import { WebBuilderOfferSummary } from "./WebBuilderOfferSummary";
-
 type WebCreateCommunityModalProps = {
   isOpen: boolean;
   hasSession: boolean;
@@ -30,8 +28,10 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
           ×
         </button>
 
-        <div id="builder-create-title">
-          <WebBuilderOfferSummary />
+        <div className="builder-create-heading" id="builder-create-title">
+          <span>Builder setup</span>
+          <h2>Name your community</h2>
+          <p>Your payment is confirmed. Choose the name members will see.</p>
         </div>
 
         <div className="builder-create-fields">

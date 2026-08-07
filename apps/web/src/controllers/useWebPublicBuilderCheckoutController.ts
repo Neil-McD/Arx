@@ -51,6 +51,7 @@ export function useWebPublicBuilderCheckoutController(
 ) {
   const [status, setStatus] = useState<PublicBuilderCheckoutStatus>("idle");
   const [error, setError] = useState<string | null>(null);
+  const [isPurchasePromptOpen, setIsPurchasePromptOpen] = useState(false);
   const inFlightRef = useRef(false);
   const returnInFlightRef = useRef(false);
   const paramsRef = useRef(params);
@@ -144,9 +145,24 @@ export function useWebPublicBuilderCheckoutController(
     }
   }, []);
 
+  const openPurchasePrompt = useCallback((): void => {
+    setStatus("idle");
+    setError(null);
+    setIsPurchasePromptOpen(true);
+  }, []);
+
+  const closePurchasePrompt = useCallback((): void => {
+    if (inFlightRef.current) return;
+    setIsPurchasePromptOpen(false);
+    setError(null);
+  }, []);
+
   return {
     status,
     error,
+    isPurchasePromptOpen,
+    openPurchasePrompt,
+    closePurchasePrompt,
     startPurchase,
     prepareCommunityCreation,
     finishOnboardingAndPrepare,

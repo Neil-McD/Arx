@@ -27,11 +27,6 @@ export type WebBillingSettingsSectionProps = {
   founderBillingError: string | null;
   openFounderBillingPortal: (communityId: string) => Promise<void> | void;
   refreshFounderBilling: () => Promise<unknown> | void;
-  retryCommunityArchive: (communityId: string) => Promise<void> | void;
-  restoreCommunityWithoutPayment: (
-    communityId: string,
-    lifecycleGeneration: number,
-  ) => Promise<void> | void;
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
   onOpenCreateCommunity: () => void;
   pendingPurchaseClaims: PendingPurchaseClaim[];
@@ -60,15 +55,6 @@ function runFundingAction(params: {
 }
 
 function communityFundingStateLabel(community: CloudFounderBillingCommunity): string {
-  if (community.lifecycle_status === "archived") {
-    if (community.archive_billing_cleanup_status === "blocked") {
-      return "Archive cleanup needs attention";
-    }
-    if (community.archive_billing_cleanup_status !== "complete") {
-      return "Finishing archive";
-    }
-    return "Community archived";
-  }
   if (community.funding_mode === "operator_comp") {
     return "Operator access included";
   }
@@ -82,6 +68,10 @@ function communityFundingStateLabel(community: CloudFounderBillingCommunity): st
 }
 
 export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps) {
+  const activeCommunities = props.founderBillingOverview.communities.filter(
+    (community) => community.lifecycle_status === "active",
+  );
+
   return (
     <>
       <div className="panel-title">Billing</div>
@@ -91,7 +81,7 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
             <div>
               <div className="settings-section-title">Builder</div>
               <div className="settings-section-desc">
-                {formatBuilderOfferPrice()} for each community. Builder activates Polynet-hosted community AI.
+                Community platform and Polynet-hosted AI.
               </div>
             </div>
             <div className="builder-settings-price">
@@ -100,90 +90,41 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
             </div>
           </div>
 
-          {props.isLoadingFounderBilling && props.founderBillingOverview.communities.length === 0 ? (
+          {props.isLoadingFounderBilling && activeCommunities.length === 0 ? (
             <div className="chat-loading">
               <div className="loading-spinner" />
               <span>Loading Builder…</span>
             </div>
-          ) : props.founderBillingOverview.communities.length === 0 ? (
+          ) : activeCommunities.length === 0 ? (
             <div className="builder-empty-state">
-              <span>No communities yet.</span>
-              <button type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
+              <span>No active communities.</span>
+              <button className="settings-primary-action" type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
             </div>
           ) : (
             <div className="builder-community-list">
-              {props.founderBillingOverview.communities.map((community) => {
+              {activeCommunities.map((community) => {
                 const primaryAction = resolveBuilderOfferPrimaryAction({
                   state: community.funding_state,
                   allowedActions: community.allowed_actions,
                 });
                 const isActing = props.founderBillingActionCommunityId === community.community_id;
                 const isOperatorComped = community.funding_mode === "operator_comp";
-                const canRestoreWithoutPayment =
-                  isOperatorComped || community.builder_access_mode === "grandfathered";
-                const isArchived = community.lifecycle_status === "archived";
-                const archiveCleanupStatus = community.archive_billing_cleanup_status;
                 return (
                   <div className="builder-community-row" key={community.community_id}>
                     <div className="builder-community-copy">
                       <span>{community.community_name}</span>
                       <strong>{communityFundingStateLabel(community)}</strong>
                       <small>
-                        {isArchived
-                          ? archiveCleanupStatus === "complete"
-                            ? "Content and settings are preserved while this community is frozen."
-                            : archiveCleanupStatus === "blocked"
-                              ? "Payments remain stopped. Retry the cleanup before restoring."
-                              : "Stopping payments and freezing community access."
-                          : community.funding_lane === "builder_included"
+                        {community.funding_lane === "builder_included"
                           ? "Polynet-hosted community AI is included."
                           : `${formatBuilderOfferPrice(community.monthly_price_base_units)} · Polynet-hosted community AI`}
                       </small>
                     </div>
                     <div className="builder-community-actions">
-                      {isArchived ? (
-                        archiveCleanupStatus === "blocked" ? (
-                          <button
-                            className="secondary"
-                            type="button"
-                            disabled={isActing}
-                            onClick={() => void props.retryCommunityArchive(community.community_id)}
-                          >
-                            {isActing ? "Retrying…" : "Retry cleanup"}
-                          </button>
-                        ) : archiveCleanupStatus === "complete" ? (
-                          canRestoreWithoutPayment ? (
-                            <button
-                              type="button"
-                              disabled={isActing}
-                              onClick={() => void props.restoreCommunityWithoutPayment(
-                                community.community_id,
-                                community.lifecycle_generation,
-                              )}
-                            >
-                              {isActing ? "Restoring…" : "Restore community"}
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              disabled={isActing}
-                              onClick={() => props.onOpenBuilderOffer(community)}
-                            >
-                              {isActing
-                                ? "Opening…"
-                                : `Restore community — ${formatBuilderOfferPrice(community.monthly_price_base_units)}`}
-                            </button>
-                          )
-                        ) : (
-                          <button className="secondary" type="button" disabled>
-                            Finishing archive…
-                          </button>
-                        )
-                      ) : null}
-                      {isArchived || isOperatorComped ? null : primaryAction ? (
+                      {isOperatorComped ? null : primaryAction ? (
                         <button
                           type="button"
-                          className={primaryAction === "manage_builder" ? "secondary" : undefined}
+                          className="settings-primary-action"
                           disabled={isActing}
                           onClick={() => runFundingAction({
                             action: primaryAction,
@@ -260,6 +201,7 @@ export function WebBillingSettingsSection(props: WebBillingSettingsSectionProps)
             ) : null}
             <div className="auth-actions">
               <button
+                className="settings-primary-action"
                 type="button"
                 onClick={() => void props.redeemPendingPurchases()}
                 disabled={

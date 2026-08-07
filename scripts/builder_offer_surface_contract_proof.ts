@@ -15,6 +15,7 @@ const read = (path: string) => readFileSync(resolve(root, path), "utf8");
 const app = read("apps/web/src/App.tsx");
 const offer = read("shared/builderOffer.ts");
 const createModal = read("apps/web/src/components/WebCreateCommunityModal.tsx");
+const purchaseModal = read("apps/web/src/components/WebBuilderPurchaseModal.tsx");
 const createController = read("shared/useCommunityCreateController.ts");
 const billing = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const account = read("apps/web/src/components/WebAccountSettingsSection.tsx");
@@ -56,7 +57,8 @@ for (const forbidden of [/GPT 5\.6/i, /\bLuna\b/i, /\$20\b/, /credits?/i, /token
   assert.doesNotMatch(offer, forbidden, "customer Builder offer must hide internal cost controls");
 }
 
-assert.match(createModal, /WebBuilderOfferSummary/);
+assert.doesNotMatch(createModal, /WebBuilderOfferSummary/);
+assert.match(createModal, /Your payment is confirmed/);
 assert.match(createModal, /Community name/);
 assert.match(createModal, /Customize community URL/);
 assert.match(createModal, /Create community/);
@@ -81,6 +83,12 @@ assert.match(offerModal, /WebBuilderOfferSummary/);
 assert.match(offerModal, /resolveBuilderOfferPrimaryAction/);
 assert.match(globalOverlay, /<WebBuilderOfferModal/);
 assert.equal((globalOverlay.match(/<WebBuilderOfferModal/g) ?? []).length, 1);
+assert.match(globalOverlay, /<WebBuilderPurchaseModal/);
+assert.equal((globalOverlay.match(/<WebBuilderPurchaseModal/g) ?? []).length, 1);
+assert.match(purchaseModal, /WebBuilderOfferSummary compact purpose="purchase"/);
+assert.match(purchaseModal, /Buy Builder/);
+assert.match(purchaseModal, /operator_included/);
+assert.match(purchaseModal, /paid_setup/);
 assert.match(offerSummary, /POLYNET_BUILDER_OFFER\.benefits\.map/);
 
 assert.match(offerController, /startCheckout\(community\.community_id\)/);
@@ -92,7 +100,11 @@ assert.match(createController, /founderSubscriptionId: current\.getFounderSubscr
 assert.match(app, /openFundedCreateCommunityModal[\s\S]*availableBuilderSubscriptionIdRef\.current/);
 assert.match(
   app,
-  /openNewCommunityPurchaseFlow[\s\S]*publicBuilderCheckout\.startPurchase\(\)/,
+  /openNewCommunityPurchaseFlow[\s\S]*publicBuilderCheckout\.openPurchasePrompt\(\)/,
+);
+assert.match(
+  app,
+  /builderPurchaseProps:[\s\S]*operatorComplimentaryAccess[\s\S]*availableBuilderSubscriptionIdRef\.current[\s\S]*publicBuilderCheckout\.startPurchase\(\)/,
 );
 assert.match(
   publicCheckoutController,
@@ -114,4 +126,4 @@ assert.doesNotMatch(
   "Builder eligibility must derive from canonical data, never a named identity branch",
 );
 
-console.log("PASS: canonical Builder offer projects through Create, Billing, and Account");
+console.log("PASS: canonical Builder offer separates purchase, setup, Billing, and Account");

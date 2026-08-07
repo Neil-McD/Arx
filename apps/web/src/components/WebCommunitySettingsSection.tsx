@@ -214,7 +214,7 @@ function CommunityDangerSettingsSection({
         </div>
       ) : (
         <button
-          className="danger"
+          className="settings-primary-action"
           type="button"
           disabled={state.isArchivingCommunity}
           onClick={() => setIsConfirmingArchive(true)}

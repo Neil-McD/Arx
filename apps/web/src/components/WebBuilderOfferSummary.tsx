@@ -6,7 +6,7 @@ import {
 type WebBuilderOfferSummaryProps = {
   communityName?: string | null;
   compact?: boolean;
-  purpose?: "activate" | "restore";
+  purpose?: "activate" | "purchase" | "restore";
 };
 
 export function WebBuilderOfferSummary(props: WebBuilderOfferSummaryProps) {
@@ -17,14 +17,18 @@ export function WebBuilderOfferSummary(props: WebBuilderOfferSummaryProps) {
         <span>One community</span>
       </div>
       <h2>
-        {props.communityName && props.purpose === "restore"
+        {props.purpose === "purchase"
+          ? POLYNET_BUILDER_OFFER.purchaseHeadline
+          : props.communityName && props.purpose === "restore"
           ? `Restore ${props.communityName}`
           : props.communityName
           ? `Activate Builder for ${props.communityName}`
           : POLYNET_BUILDER_OFFER.headline}
       </h2>
       <p>
-        {props.purpose === "restore"
+        {props.purpose === "purchase"
+          ? POLYNET_BUILDER_OFFER.purchaseDescription
+          : props.purpose === "restore"
           ? "Builder restores this community, its member experience, and its preserved content."
           : POLYNET_BUILDER_OFFER.description}
       </p>
@@ -34,7 +38,7 @@ export function WebBuilderOfferSummary(props: WebBuilderOfferSummaryProps) {
             <span aria-hidden="true">✓</span>
             <div>
               <strong>{benefit.title}</strong>
-              <small>{benefit.description}</small>
+              {props.compact ? null : <small>{benefit.description}</small>}
             </div>
           </div>
         ))}
@@ -43,10 +47,12 @@ export function WebBuilderOfferSummary(props: WebBuilderOfferSummaryProps) {
         <strong>{formatBuilderOfferPrice()}</strong>
         <span>{POLYNET_BUILDER_OFFER.scopeLabel}</span>
       </div>
-      <small className="builder-offer-disclosure">
-        Paid memberships carry a {POLYNET_BUILDER_OFFER.platformFeeBps / 100}% Polynet platform fee.
-        Stripe processing fees are separate.
-      </small>
+      {props.compact ? null : (
+        <small className="builder-offer-disclosure">
+          Paid memberships carry a {POLYNET_BUILDER_OFFER.platformFeeBps / 100}% Polynet platform fee.
+          Stripe processing fees are separate.
+        </small>
+      )}
     </section>
   );
 }

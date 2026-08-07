@@ -10,6 +10,7 @@ import {
   resolveBuilderOfferPrimaryAction,
 } from "../../../../shared/builderOffer";
 import { WebSignOutConfirmModal } from "./WebSignOutConfirmModal";
+import { WebArchivedCommunityList } from "./WebArchivedCommunityList";
 
 type SessionLike = {
   user: {
@@ -25,9 +26,16 @@ export type WebAccountSettingsSectionProps = {
   handleSignOut: () => Promise<void> | void;
   founderBillingOverview: CloudFounderBillingOverview;
   isLoadingFounderBilling: boolean;
+  founderBillingActionCommunityId: string | null;
+  founderBillingError: string | null;
   onOpenBuilderOffer: (community: CloudFounderBillingCommunity) => void;
   onOpenCommunityBilling: () => void;
   onOpenCreateCommunity: () => void;
+  retryCommunityArchive: (communityId: string) => Promise<void> | void;
+  restoreCommunityWithoutPayment: (
+    communityId: string,
+    lifecycleGeneration: number,
+  ) => Promise<void> | void;
 };
 
 export function WebAccountSettingsSection(
@@ -55,8 +63,10 @@ export function WebAccountSettingsSection(
   const activeCommunities = props.founderBillingOverview.communities.filter(
     (community) => community.lifecycle_status === "active",
   );
-  const archivedCommunityCount =
-    props.founderBillingOverview.communities.length - activeCommunities.length;
+  const archivedCommunities = props.founderBillingOverview.communities.filter(
+    (community) => community.lifecycle_status === "archived",
+  );
+  const archivedCommunityCount = archivedCommunities.length;
   const builderAttentionCommunity = activeCommunities.find((community) =>
     [
       "builder_required",
@@ -100,7 +110,7 @@ export function WebAccountSettingsSection(
               <strong>{props.session.user.email ?? props.session.user.id}</strong>
             </div>
             <button
-              className="secondary"
+              className="settings-primary-action"
               type="button"
               onClick={() => setIsSignOutConfirmOpen(true)}
               disabled={isSubmittingSignOut}
@@ -140,7 +150,7 @@ export function WebAccountSettingsSection(
                 ) : activeCommunities.length === 0 && archivedCommunityCount > 0 ? (
                   <>
                     <strong>{`${archivedCommunityCount} archived ${archivedCommunityCount === 1 ? "community" : "communities"}`}</strong>
-                    <span>Restore archived communities from Billing.</span>
+                    <span>Review or restore them below.</span>
                   </>
                 ) : builderAttentionCommunity ? (
                   <>
@@ -162,10 +172,11 @@ export function WebAccountSettingsSection(
                   </>
                 )}
               </div>
-              {props.founderBillingOverview.communities.length === 0 ? (
-                <button type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
+              {props.founderBillingOverview.communities.length === 0 ||
+              (activeCommunities.length === 0 && archivedCommunityCount > 0) ? (
+                <button className="settings-primary-action" type="button" onClick={props.onOpenCreateCommunity}>Create community</button>
               ) : builderAttentionCommunity && builderAttentionAction ? (
-                <button type="button" onClick={() => props.onOpenBuilderOffer(builderAttentionCommunity)}>
+                <button className="settings-primary-action" type="button" onClick={() => props.onOpenBuilderOffer(builderAttentionCommunity)}>
                   {builderFundingActionLabel({
                     action: builderAttentionAction,
                     state: builderAttentionCommunity.funding_state,
@@ -173,13 +184,24 @@ export function WebAccountSettingsSection(
                   })}
                 </button>
               ) : (
-                <button className="secondary" type="button" onClick={props.onOpenCommunityBilling}>
+                <button className="settings-primary-action" type="button" onClick={props.onOpenCommunityBilling}>
                   Manage billing
                 </button>
               )}
             </div>
           )}
         </div>
+      ) : null}
+
+      {props.session ? (
+        <WebArchivedCommunityList
+          communities={archivedCommunities}
+          actionCommunityId={props.founderBillingActionCommunityId}
+          error={props.founderBillingError}
+          retryCommunityArchive={props.retryCommunityArchive}
+          restoreCommunityWithoutPayment={props.restoreCommunityWithoutPayment}
+          onOpenBuilderOffer={props.onOpenBuilderOffer}
+        />
       ) : null}
 
       <WebSignOutConfirmModal

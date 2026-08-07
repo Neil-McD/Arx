@@ -5574,7 +5574,7 @@ button.message-citation-chip:hover {
   }
 }
 
-/* Canonical Builder offer: one offer, projected into Create, Billing, and Account. */
+/* Canonical Builder offer: compact purchase entry plus existing-community funding. */
 .builder-offer-overlay {
   padding: 24px;
   backdrop-filter: blur(10px);
@@ -5616,6 +5616,33 @@ button.message-citation-chip:hover {
 .builder-offer-summary {
   display: grid;
   gap: 18px;
+}
+
+.builder-purchase-modal {
+  width: min(520px, calc(100vw - 32px));
+  padding: 30px;
+}
+
+.builder-offer-summary.is-compact {
+  gap: 14px;
+}
+
+.builder-offer-summary.is-compact h2 {
+  max-width: none;
+  font-size: clamp(30px, 5vw, 40px);
+}
+
+.builder-offer-summary.is-compact > p {
+  font-size: 14px;
+}
+
+.builder-offer-summary.is-compact .builder-offer-benefit {
+  align-items: center;
+  padding: 11px 0;
+}
+
+.builder-offer-summary.is-compact .builder-offer-benefit strong {
+  font-size: 13px;
 }
 
 .builder-offer-kicker {
@@ -5713,9 +5740,41 @@ button.message-citation-chip:hover {
 .builder-create-fields {
   display: grid;
   gap: 12px;
-  margin-top: 22px;
-  padding-top: 20px;
-  border-top: 1px solid var(--border-muted);
+  margin-top: 24px;
+}
+
+.builder-create-heading {
+  display: grid;
+  gap: 9px;
+}
+
+.builder-create-heading > span {
+  color: var(--accent-gold);
+  font-size: 11px;
+  font-weight: 750;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.builder-create-heading h2 {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: clamp(28px, 5vw, 40px);
+  font-weight: 580;
+  letter-spacing: -0.04em;
+}
+
+.builder-create-heading p,
+.builder-purchase-note {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.builder-purchase-note {
+  margin-top: 12px;
+  text-align: center;
 }
 
 .builder-create-url summary {
@@ -5869,6 +5928,35 @@ button.message-citation-chip:hover {
 
 .builder-account-section {
   gap: 14px;
+}
+
+.archived-community-section {
+  gap: 14px;
+}
+
+.archived-community-list {
+  margin-top: 2px;
+}
+
+.settings-panel button.settings-primary-action,
+.settings-panel button.settings-primary-action:hover:not(:disabled),
+.settings-panel button.settings-primary-action:focus-visible {
+  border-color: var(--bg-button);
+  background: var(--bg-button);
+  color: var(--bg-button-text);
+}
+
+.settings-panel button.settings-primary-action:hover:not(:disabled) {
+  filter: brightness(0.94);
+  transform: translateY(-1px);
+}
+
+.settings-panel button.settings-primary-action:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.settings-panel button.settings-primary-action svg {
+  stroke: currentColor;
 }
 
 @keyframes builder-offer-enter {
