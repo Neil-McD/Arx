@@ -21,6 +21,9 @@
   --web-rail-anchor-inset: calc((var(--web-rail-width) - var(--web-rail-control-size)) / 2);
   --web-rail-balance-shift: calc((var(--web-rail-control-size) - var(--web-rail-width)) / 4);
   --web-sessions-drawer-width: 240px;
+  --community-shell-inset: 8px;
+  --community-shell-radius: 16px;
+  --community-shell-stroke: color-mix(in srgb, var(--stroke-default, var(--border-default)) 72%, transparent);
 
   /*
    * Three web materials, each with one job:
@@ -1503,8 +1506,41 @@
 /* Desktop: one continuous fluid nav width — scales smoothly with the window
    (no discrete "steps"), comfortably wide by default, narrowing as space tightens. */
 @media (min-width: 641px) {
+  .app-shell.community-layout.sessions-compact.no-right {
+    grid-template-columns: minmax(0, 1fr);
+    background: var(--surface-rail);
+  }
+
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
-    grid-template-columns: var(--web-rail-width, 72px) clamp(168px, 20vw, 420px) minmax(0, 1fr);
+    grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr);
+  }
+
+  .community-shell-surface {
+    display: grid;
+    grid-template-columns: clamp(168px, 20vw, 420px) minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    margin: var(--community-shell-inset) var(--community-shell-inset) var(--community-shell-inset) 0;
+    overflow: hidden;
+    border: 1px solid var(--community-shell-stroke);
+    border-radius: var(--community-shell-radius);
+    background: var(--surface-workspace, var(--surface-app));
+    isolation: isolate;
+  }
+
+  .app-shell.community-layout:not(.with-community-rail) .community-shell-surface {
+    margin-left: var(--community-shell-inset);
+  }
+
+  .community-shell-surface > .community-nav {
+    min-width: 0;
+    min-height: 0;
+    border-left: 0;
+  }
+
+  .community-shell-surface > :not(.community-nav) {
+    min-width: 0;
+    min-height: 0;
   }
 }
 
@@ -1517,8 +1553,34 @@
 }
 
 @media (max-width: 720px) {
+  .app-shell.community-layout.sessions-compact.no-right {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right {
-    grid-template-columns: var(--web-rail-width) 56px minmax(0, 1fr);
+    grid-template-columns: var(--web-rail-width) minmax(0, 1fr);
+  }
+
+  .community-shell-surface {
+    display: grid;
+    grid-template-columns: 56px minmax(0, 1fr);
+    min-width: 0;
+    min-height: 0;
+    margin: 0;
+    overflow: hidden;
+    border: 0;
+    border-radius: 0;
+    background: var(--surface-workspace, var(--surface-app));
+  }
+
+  .app-shell.community-layout:not(.with-community-rail) .community-shell-surface {
+    margin-left: 0;
+  }
+
+  .community-shell-surface > .community-nav,
+  .community-shell-surface > :not(.community-nav) {
+    min-width: 0;
+    min-height: 0;
   }
 
   .community-nav {
