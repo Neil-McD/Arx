@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type UIEvent } from "react";
 import { Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
@@ -194,6 +194,14 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const membersViewportRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const [joinRequestsExpanded, setJoinRequestsExpanded] = useState(false);
+  const [offlineMembersExpanded, setOfflineMembersExpanded] = useState(false);
+  const offlineMembersRegionId = useId();
+  const canRequestMoreMembers = Boolean(
+    props.membersHasMore && (!hasResolvedPresence || offlineMembersExpanded),
+  );
+  const shouldRevealMembersFooter = Boolean(
+    shouldShowMembersFooter && (!hasResolvedPresence || offlineMembersExpanded),
+  );
   const entryPolicy = props.entryPolicy ?? null;
   const isFreeAdmissionMode = entryPolicy === "open" || entryPolicy === "approval";
   const autoJoinEnabled = entryPolicy === "open";
@@ -240,8 +248,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     if (!canShowJoinRequests) setJoinRequestsExpanded(false);
   }, [canShowJoinRequests]);
 
+  useEffect(() => {
+    setOfflineMembersExpanded(false);
+    loadMoreRequestedRef.current = false;
+  }, [props.communityName]);
+
   const requestLoadMoreMembers = useCallback((options?: { force?: boolean }) => {
-    if (!props.membersHasMore) return;
+    if (!canRequestMoreMembers) return;
     if (props.isLoadingMembers || props.isLoadingMoreMembers) return;
     if (!props.onLoadMoreMembers) return;
     if (props.membersLoadError && !options?.force) return;
@@ -249,9 +262,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     loadMoreRequestedRef.current = true;
     props.onLoadMoreMembers();
   }, [
+    canRequestMoreMembers,
     props.isLoadingMembers,
     props.isLoadingMoreMembers,
-    props.membersHasMore,
     props.membersLoadError,
     props.onLoadMoreMembers,
   ]);
@@ -277,7 +290,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   }, [requestLoadMoreMembers]);
 
   useEffect(() => {
-    if (!props.membersHasMore || props.isLoadingMembers || props.isLoadingMoreMembers || props.membersLoadError) {
+    if (!canRequestMoreMembers || props.isLoadingMembers || props.isLoadingMoreMembers || props.membersLoadError) {
       return;
     }
     const frame = requestAnimationFrame(requestVisibleMemberPage);
@@ -285,9 +298,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   }, [
     joinRequestsExpanded,
     loadedMemberCount,
+    canRequestMoreMembers,
     props.isLoadingMembers,
     props.isLoadingMoreMembers,
-    props.membersHasMore,
     props.membersLoadError,
     requestVisibleMemberPage,
   ]);
@@ -298,7 +311,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     if (
       !viewport ||
       !sentinel ||
-      !props.membersHasMore ||
+      !canRequestMoreMembers ||
       props.isLoadingMembers ||
       props.isLoadingMoreMembers ||
       props.membersLoadError ||
@@ -320,9 +333,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     return () => observer.disconnect();
   }, [
     loadedMemberCount,
+    canRequestMoreMembers,
     props.isLoadingMembers,
     props.isLoadingMoreMembers,
-    props.membersHasMore,
     props.membersLoadError,
     requestLoadMoreMembers,
   ]);
@@ -696,10 +709,23 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
         {!lockedMembers && hasResolvedPresence && (
           offlineMembers.length > 0 || (!props.onlineCountCapped && offlineTotal > 0)
         ) ? (
-          <>
-            <div className="community-context-section">Offline — {offlineCountLabel}</div>
-            {offlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
-          </>
+          <div className="community-context-offline">
+            <button
+              className={`community-context-section community-context-offline-toggle${offlineMembersExpanded ? " is-open" : ""}`}
+              type="button"
+              aria-expanded={offlineMembersExpanded}
+              aria-controls={offlineMembersRegionId}
+              onClick={() => setOfflineMembersExpanded((expanded) => !expanded)}
+            >
+              <span>Offline — {offlineCountLabel}</span>
+              <ChevronDown size={14} strokeWidth={2} aria-hidden="true" />
+            </button>
+            {offlineMembersExpanded ? (
+              <div id={offlineMembersRegionId} className="community-context-offline-list">
+                {offlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {!lockedMembers && recentlyActiveMembers.length > 0 ? (
           <>
@@ -725,9 +751,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             ))}
           </div>
         ) : null}
-        {!lockedMembers && !props.isLoadingPresence && shouldShowMembersFooter ? (
+        {!lockedMembers && !props.isLoadingPresence && shouldRevealMembersFooter ? (
           <div
-            ref={props.membersHasMore ? loadMoreSentinelRef : undefined}
+            ref={canRequestMoreMembers ? loadMoreSentinelRef : undefined}
             className="community-context-members-footer"
           >
             {membersFooterLabel}
