@@ -206,7 +206,14 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             <p className="subhead">Polynet turns your members’ conversations, resources, and outcomes into shared intelligence that compounds.</p>
           </div>
 
-          <video className="vsl" controls preload="metadata" playsInline aria-label="Polynet video sales letter" />
+          <div className="vsl">
+            <iframe
+              src="https://player.vimeo.com/video/1216548030?dnt=1&title=0&byline=0&portrait=0"
+              title="Polynet video sales letter"
+              allow="autoplay; fullscreen; picture-in-picture"
+              allowFullScreen
+            />
+          </div>
 
           <div className="conversion">
             <button className="cta" type="button" onClick={onJoin}>Create your community — $79/month</button>
