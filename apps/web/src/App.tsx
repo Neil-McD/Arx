@@ -1526,34 +1526,22 @@ export default function App() {
     }
     communityUi.openCreateCommunityModal(draft);
   };
-  const preparePaidBuilderCommunityCreation = async (): Promise<void> => {
-    const activeSession = sessionRef.current;
-    if (!activeSession) return;
-    const latestAccountSetupStatus = await refreshAccountSetupStatus(activeSession);
-    if (!latestAccountSetupStatus?.completed) {
-      navigateTo("/onboarding");
-      return;
-    }
-    for (let attempt = 0; attempt < 8; attempt += 1) {
-      const overview = await founderBilling.refresh(activeSession);
-      const subscription = overview?.unassigned_subscriptions.find(
-        (candidate) => candidate.grants_setup,
-      );
-      if (subscription) {
-        availableBuilderSubscriptionIdRef.current = subscription.subscription_id;
-        openFundedCreateCommunityModal(null);
-        return;
-      }
-      await new Promise<void>((resolve) => window.setTimeout(resolve, 750));
-    }
-    navigateTo("/settings/billing");
-    showAppToastMessage("Payment is still being verified. Your Builder access will appear here automatically.");
-  };
   const publicBuilderCheckout = useWebPublicBuilderCheckoutController({
     session,
+    getSession: () => sessionRef.current,
     isAuthBootstrapComplete,
     requireSignIn,
-    onAuthenticatedReturn: preparePaidBuilderCommunityCreation,
+    refreshAccountSetupStatus,
+    refreshBilling: founderBilling.refresh,
+    finishOnboarding,
+    setAvailableBuilderSubscriptionId: (subscriptionId) => {
+      availableBuilderSubscriptionIdRef.current = subscriptionId;
+    },
+    openFundedCreateCommunity: () => {
+      openFundedCreateCommunityModal(null);
+    },
+    navigateTo,
+    showToast: showAppToastMessage,
   });
   const openNewCommunityPurchaseFlow: typeof communityUi.openCreateCommunityModal = (draft = null) => {
     if (operatorComplimentaryAccess || availableBuilderSubscriptionIdRef.current) {
@@ -2699,10 +2687,7 @@ export default function App() {
         profileUi.setProfileAvatarZoom(1);
       },
       onNextProfile: saveOnboardingProfile,
-      onFinishOnboarding: async () => {
-        const completed = await finishOnboarding({ navigate: false });
-        if (completed) await preparePaidBuilderCommunityCreation();
-      },
+      onFinishOnboarding: publicBuilderCheckout.finishOnboardingAndPrepare,
       onClose: closeProfileSetup,
     },
     platformBridgePageProps: {

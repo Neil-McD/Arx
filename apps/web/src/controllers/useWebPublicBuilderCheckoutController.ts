@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
-import { startCloudPublicBuilderCheckout } from "../../../../shared/cloudFounderBillingGateway";
+import {
+  startCloudPublicBuilderCheckout,
+  type CloudFounderBillingOverview,
+} from "../../../../shared/cloudFounderBillingGateway";
 import { scrubCurrentRouteSearchParams } from "../webAppRuntime";
 import type { AuthSession } from "../auth";
 
@@ -10,6 +13,31 @@ export type PublicBuilderCheckoutStatus =
   | "canceled"
   | "error";
 
+type AccountSetupStatus = {
+  completed: boolean;
+};
+
+type PublicBuilderCheckoutControllerParams = {
+  session: AuthSession | null;
+  getSession: () => AuthSession | null;
+  isAuthBootstrapComplete: boolean;
+  requireSignIn: (intent?: {
+    reason: string;
+    payload: Record<string, unknown>;
+  }) => void;
+  refreshAccountSetupStatus: (
+    session: AuthSession,
+  ) => Promise<AccountSetupStatus | null>;
+  refreshBilling: (
+    session: AuthSession,
+  ) => Promise<CloudFounderBillingOverview | null>;
+  finishOnboarding: (options?: { navigate?: boolean }) => Promise<boolean>;
+  setAvailableBuilderSubscriptionId: (subscriptionId: string) => void;
+  openFundedCreateCommunity: () => void;
+  navigateTo: (path: string) => void;
+  showToast: (message: string) => void;
+};
+
 function formatCheckoutError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
   if (message.includes("founder_stripe_price")) {
@@ -18,18 +46,63 @@ function formatCheckoutError(error: unknown): string {
   return message.trim() || "We could not open secure checkout.";
 }
 
-export function useWebPublicBuilderCheckoutController(params: {
-  session: AuthSession | null;
-  isAuthBootstrapComplete: boolean;
-  requireSignIn: (intent?: {
-    reason: string;
-    payload: Record<string, unknown>;
-  }) => void;
-  onAuthenticatedReturn: () => Promise<void> | void;
-}) {
+export function useWebPublicBuilderCheckoutController(
+  params: PublicBuilderCheckoutControllerParams,
+) {
   const [status, setStatus] = useState<PublicBuilderCheckoutStatus>("idle");
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
+  const returnInFlightRef = useRef(false);
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
+
+  const prepareCommunityCreation = useCallback(async (): Promise<void> => {
+    if (returnInFlightRef.current) return;
+    returnInFlightRef.current = true;
+    try {
+      const current = paramsRef.current;
+      const activeSession = current.getSession() ?? current.session;
+      if (!activeSession) return;
+
+      const latestAccountSetupStatus =
+        await current.refreshAccountSetupStatus(activeSession);
+      if (!latestAccountSetupStatus?.completed) {
+        current.navigateTo("/onboarding");
+        return;
+      }
+
+      for (let attempt = 0; attempt < 8; attempt += 1) {
+        const overview = await current.refreshBilling(activeSession);
+        const subscription = overview?.unassigned_subscriptions.find(
+          (candidate) => candidate.grants_setup,
+        );
+        if (subscription) {
+          current.setAvailableBuilderSubscriptionId(
+            subscription.subscription_id,
+          );
+          current.openFundedCreateCommunity();
+          return;
+        }
+        await new Promise<void>((resolve) => window.setTimeout(resolve, 750));
+      }
+
+      current.navigateTo("/settings/billing");
+      current.showToast(
+        "Payment is still being verified. Your Builder access will appear here automatically.",
+      );
+    } finally {
+      returnInFlightRef.current = false;
+    }
+  }, []);
+
+  const finishOnboardingAndPrepare = useCallback((): void => {
+    void (async () => {
+      const completed = await paramsRef.current.finishOnboarding({
+        navigate: false,
+      });
+      if (completed) await prepareCommunityCreation();
+    })();
+  }, [prepareCommunityCreation]);
 
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
@@ -42,16 +115,18 @@ export function useWebPublicBuilderCheckoutController(params: {
     if (checkoutReturn !== "success" || !params.isAuthBootstrapComplete) return;
     if (!params.session) {
       scrubCurrentRouteSearchParams(["builder_checkout"]);
-      params.requireSignIn({ reason: "try_polynet_free", payload: {} });
+      paramsRef.current.requireSignIn({
+        reason: "try_polynet_free",
+        payload: {},
+      });
       return;
     }
     scrubCurrentRouteSearchParams(["builder_checkout"]);
-    void params.onAuthenticatedReturn();
+    void prepareCommunityCreation();
   }, [
     params.isAuthBootstrapComplete,
-    params.onAuthenticatedReturn,
-    params.requireSignIn,
-    params.session,
+    params.session?.user.id,
+    prepareCommunityCreation,
   ]);
 
   const startPurchase = useCallback(async (): Promise<void> => {
@@ -69,5 +144,11 @@ export function useWebPublicBuilderCheckoutController(params: {
     }
   }, []);
 
-  return { status, error, startPurchase };
+  return {
+    status,
+    error,
+    startPurchase,
+    prepareCommunityCreation,
+    finishOnboardingAndPrepare,
+  };
 }

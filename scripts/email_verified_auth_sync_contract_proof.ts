@@ -38,10 +38,21 @@ assert.doesNotMatch(
   /resolveTrustedEmailVerification|user_management\/users/,
   "auth completion must not run a second WorkOS lookup",
 );
-assert.doesNotMatch(
+assert.match(
   auth,
-  /export const syncAuthenticatedEmailVerification/,
-  "the duplicate client-triggered verification action must stay deleted",
+  /export const syncAuthenticatedEmailVerification = action[\s\S]*resolveAuthenticatedIdentityProfile[\s\S]*verification_owned_by_auth_bridge/,
+  "cached clients must retain an authenticated, inert verification compatibility action",
+);
+const compatibilityActionStart = auth.indexOf(
+  "export const syncAuthenticatedEmailVerification = action",
+);
+const compatibilityActionEnd = auth.indexOf("export const getActor", compatibilityActionStart);
+assert.ok(compatibilityActionStart >= 0 && compatibilityActionEnd > compatibilityActionStart);
+const compatibilityAction = auth.slice(compatibilityActionStart, compatibilityActionEnd);
+assert.doesNotMatch(
+  compatibilityAction,
+  /resolveTrustedEmailVerification|user_management\/users|ensureAuthenticatedActor|runMutation|runQuery|scheduler/,
+  "the cached-client shim must not restore provider lookup, persistence, or reconciliation",
 );
 assert.doesNotMatch(
   convexClient,

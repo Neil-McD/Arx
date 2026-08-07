@@ -14,6 +14,9 @@ const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const authBridge = read("convex/httpAuthBridge.ts");
 const app = read("apps/web/src/App.tsx");
+const publicBuilderCheckoutController = read(
+  "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
+);
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const onboardingController = read("apps/web/src/controllers/useWebOnboardingProfileController.ts");
 
@@ -80,8 +83,17 @@ assert.match(
   /new URLSearchParams\(window\.location\.search\)\.has\("builder_checkout"\)/,
 );
 assert.match(
-  app,
-  /latestAccountSetupStatus = await refreshAccountSetupStatus\(activeSession\)[\s\S]*if \(!latestAccountSetupStatus\?\.completed\)/,
+  publicBuilderCheckoutController,
+  /latestAccountSetupStatus =[\s\S]*await current\.refreshAccountSetupStatus\(activeSession\)[\s\S]*if \(!latestAccountSetupStatus\?\.completed\)/,
 );
+assert.match(
+  publicBuilderCheckoutController,
+  /returnInFlightRef\.current[\s\S]*overview\?\.unassigned_subscriptions\.find[\s\S]*current\.openFundedCreateCommunity\(\)/,
+);
+assert.match(
+  publicBuilderCheckoutController,
+  /finishOnboardingAndPrepare[\s\S]*finishOnboarding\(\{[\s\S]*navigate: false[\s\S]*prepareCommunityCreation\(\)/,
+);
+assert.doesNotMatch(app, /preparePaidBuilderCommunityCreation/);
 
 console.log("PASS: verified payment and verified identity reconcile server-side into one consumable subscription.");
