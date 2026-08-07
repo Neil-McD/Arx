@@ -10,6 +10,7 @@ const conversionLandingCss = read("apps/web/src/components/polynetLanding/Conver
 const activation = read("apps/web/src/controllers/useWebBuilderPurchaseActivationController.ts");
 const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
 const bridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
+const bridgeCss = read("apps/web/src/components/CommunityVisitorChrome.css");
 const accountSetup = read("shared/accountSetup.ts");
 const accountSetupCore = read("convex/accountSetupCore.ts");
 const createController = read("shared/useCommunityCreateController.ts");
@@ -35,6 +36,16 @@ for (const marker of [
   assert.ok(activation.includes(marker), `activation controller missing ${marker}`);
 }
 assert.match(activation, /receipt\.status === "pending_payment"[\s\S]*scheduleReceiptPoll\(\)/);
+assert.match(
+  activation,
+  /founder_checkout_receipt_not_found[\s\S]*clearPendingFounderCheckout\(\)[\s\S]*setHasPendingPurchase\(false\)/,
+  "an invalid recovery receipt must be discarded instead of retrying forever",
+);
+assert.match(
+  activation,
+  /We could not find this Builder checkout\. Use the recovery link sent to your payment email\./,
+  "missing receipt errors must be actionable rather than exposing backend internals",
+);
 assert.match(activation, /community\.subscription_id === founderSubscriptionId/);
 assert.match(activation, /subscription\.subscription_id === founderSubscriptionId[\s\S]*subscription\.grants_setup/);
 assert.doesNotMatch(activation, /candidates\[0\]|unassigned_subscriptions\[0\]/);
@@ -108,5 +119,8 @@ assert.doesNotMatch(accountSetup, /inference_provider|AccountSetupStep = [^\n]*i
 assert.doesNotMatch(accountSetupCore, /userProviderConnections|hasManagedInference/);
 assert.doesNotMatch(onboarding, /Connect ChatGPT|OpenAI API key|step === "inference"/);
 assert.doesNotMatch(bridge, /Connect ChatGPT|OpenAI API key|missing\.push\("AI"\)/);
+assert.match(bridge, /const isReadyToEnter = missing\.length === 0 && !submission\.isSaving/);
+assert.match(bridge, /cvs-bridge-enter-ready/);
+assert.match(bridgeCss, /\.cvs-bridge-card \.cfg-join\.cvs-bridge-enter-ready[\s\S]*background: #ffffff/);
 
 console.log("PASS: Builder purchase activation uses verified payment before identity and community creation.");

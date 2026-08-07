@@ -92,6 +92,7 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
   if (!hasConfirmedLegal) missing.push("terms");
 
   const lit = (field: BridgeMissing) => attempted && missing.includes(field);
+  const isReadyToEnter = missing.length === 0 && !submission.isSaving;
 
   const handleEnter = async () => {
     if (submission.isSaving) return;
@@ -257,7 +258,12 @@ export function WebCommunityBridgeCard(props: WebCommunityBridgeCardProps) {
 
       {submission.error ? <p className="cvs-bridge-error">{submission.error}</p> : null}
 
-      <button className="cfg-join" type="button" onClick={() => void handleEnter()}>
+      <button
+        className={`cfg-join${isReadyToEnter ? " cvs-bridge-enter-ready" : ""}`}
+        type="button"
+        aria-busy={submission.isSaving}
+        onClick={() => void handleEnter()}
+      >
         {submission.isSaving ? "Entering..." : props.enterLabel}
       </button>
       <div className={`cfg-gmicro${attempted && missing.length ? " cvs-bridge-miss-text" : ""}`}>

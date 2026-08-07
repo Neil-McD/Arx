@@ -619,6 +619,30 @@
 
 .cvs-bridge-error { margin: 10px 0 0; font-size: 12px; color: #f0a2a2; }
 .cvs-bridge-success { margin: 10px 0 0; font-size: 12px; color: #43c37a; }
+.cvs-bridge-card .cfg-join {
+  border: 1px solid var(--border-strong, #35353b);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-secondary, #a1a1aa);
+  box-shadow: none;
+  transition:
+    background 150ms ease,
+    border-color 150ms ease,
+    color 150ms ease,
+    box-shadow 180ms ease,
+    transform 150ms ease;
+}
+.cvs-bridge-card .cfg-join.cvs-bridge-enter-ready {
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #111113;
+  box-shadow: 0 10px 26px -16px rgba(255, 255, 255, 0.72);
+}
+.cvs-bridge-card .cfg-join.cvs-bridge-enter-ready:hover {
+  border-color: #ffffff;
+  background: #ffffff;
+  box-shadow: 0 12px 30px -14px rgba(255, 255, 255, 0.82);
+  transform: translateY(-1px);
+}
 .cvs-bridge-trust {
   display: flex;
   align-items: center;

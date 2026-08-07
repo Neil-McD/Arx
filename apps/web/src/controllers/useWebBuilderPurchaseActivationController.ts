@@ -48,6 +48,9 @@ function formatActivationError(error: unknown): string {
   if (message.includes("founder_checkout_receipt_already_claimed")) {
     return "This purchase belongs to another account.";
   }
+  if (message.includes("founder_checkout_receipt_not_found")) {
+    return "We could not find this Builder checkout. Use the recovery link sent to your payment email.";
+  }
   return message.trim() || "We could not activate your Builder purchase.";
 }
 
@@ -247,6 +250,13 @@ export function useWebBuilderPurchaseActivationController(params: {
       pollAttemptRef.current = 0;
       prepareCommunityCreation(founderSubscriptionId);
     } catch (activationError) {
+      const activationMessage = activationError instanceof Error
+        ? activationError.message
+        : String(activationError ?? "");
+      if (activationMessage.includes("founder_checkout_receipt_not_found")) {
+        clearPendingFounderCheckout();
+        setHasPendingPurchase(false);
+      }
       const nextError = formatActivationError(activationError);
       setStatus("error");
       setError(nextError);
