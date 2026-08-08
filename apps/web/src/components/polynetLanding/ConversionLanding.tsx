@@ -202,7 +202,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
         <Brand />
         <main>
           <div className="intro">
-            <h1>Build a community that gets smarter every day.</h1>
+            <h1>All-in-one agentic community platform.</h1>
             <p className="subhead">Polynet turns your members’ conversations, resources, and outcomes into shared intelligence that compounds.</p>
           </div>
 
