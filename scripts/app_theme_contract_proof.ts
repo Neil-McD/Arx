@@ -274,7 +274,7 @@ assert.equal(
   "--text-faint: #726F78;",
   "--border-strong: rgba(23, 23, 25, 0.22);",
   "--border-default: rgba(23, 23, 25, 0.1);",
-  "--divider-accent: rgba(23, 23, 25, 0.22);",
+  "--divider-accent: rgba(23, 23, 25, 0.1);",
   "--accent-brand: #2F55FF;",
   "--accent-selection: #2F55FF;",
   "--accent-agent: #2F55FF;",
@@ -309,6 +309,25 @@ assert.match(
   /\.chat-date-separator::before,[\s\S]*?\.chat-date-separator::after\s*\{[\s\S]*?background:\s*var\(--stroke-divider-accent\);/,
   "legacy chat day separators should consume the same structural-divider role",
 );
+[
+  /--community-shell-stroke:\s*var\(--stroke-divider-accent\);/,
+  /\.community-rail-divider\s*\{[^}]*background:\s*var\(--stroke-divider-accent\);[^}]*\}/,
+  /\.community-nav-divider\s*\{[^}]*background:\s*var\(--stroke-divider-accent\);[^}]*\}/,
+  /\.community-context-panel\s*\{[^}]*border-left:\s*1px solid var\(--stroke-divider-accent\);[^}]*\}/,
+  /\.community-channel-header\s*\{[^}]*border-bottom:\s*1px solid var\(--stroke-divider-accent\);[^}]*\}/,
+  /\.community-interaction-drawer\s*\{[^}]*border-left:\s*1px solid var\(--stroke-divider-accent\);[^}]*\}/,
+].forEach((structuralDividerSelector) => {
+  assert.match(
+    baseCss,
+    structuralDividerSelector,
+    "shell, navigation, header, and panel seams should share the semantic structural-divider role",
+  );
+});
+assert.doesNotMatch(
+  baseCss,
+  /\.community-nav-divider\s*\{[^}]*opacity:/,
+  "the canonical navigation divider should not receive a second opacity reduction",
+);
 assert.match(
   baseCss,
   /--accent-attention:\s*#7BAAD6;[\s\S]*?--accent-attention-fill:\s*#7BAAD6;[\s\S]*?--text-on-attention:\s*#171719;/,
@@ -337,18 +356,6 @@ assert.match(
   /\.nav-item\.active\s*\{[\s\S]*?background:\s*var\(--surface-selected\);[\s\S]*?border-color:\s*var\(--stroke-selected\);[\s\S]*?color:\s*var\(--text-selected\);/,
   "routine selection should remain independent from activity attention",
 );
-[
-  /\.community-channel-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--stroke-muted\);/,
-  /\.community-context-panel\s*\{[\s\S]*?border-left:\s*1px solid var\(--stroke-muted\);/,
-  /\.community-interaction-drawer\s*\{[\s\S]*?border-left:\s*1px solid var\(--stroke-muted\);/,
-].forEach((structuralSeam) => {
-  assert.match(
-    baseCss,
-    structuralSeam,
-    "chat headers and feed boundaries should use muted structural seams",
-  );
-});
-
 assert.match(baseCss, /:root\[data-theme-family="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
 assert.doesNotMatch(
   baseCss,

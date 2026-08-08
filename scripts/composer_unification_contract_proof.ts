@@ -115,6 +115,14 @@ assert.match(
   /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*background: var\(--composer-surface\);[\s\S]*border-color: var\(--composer-border\);/,
   "community and thread composers should share the opaque material",
 );
+const desktopMemberComposerMaterialRule = baseCss.match(
+  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,\s*\.community-member-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*\}/,
+)?.[0] ?? "";
+assert.match(
+  desktopMemberComposerMaterialRule,
+  /box-shadow:\s*none;/,
+  "persistent community and thread composers should not use resting drop shadows",
+);
 assert.doesNotMatch(
   baseCss,
   /(?:\.community-member-chat \.chat-input-bar|\.community-dm-panel-composer):focus-within/,
