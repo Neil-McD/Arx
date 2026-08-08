@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { X } from "lucide-react";
+import { RefreshCw, X } from "lucide-react";
 import type {
   CloudCommunityPolynetOverview,
 } from "../../../../shared/cloudCommunityPolynetGateway";
@@ -8,6 +8,7 @@ import { useWebPolynetGraphViewport } from "../controllers/useWebPolynetGraphVie
 
 export type CommunityMemoryGraphProps = {
   activeCommunityName: string | null;
+  onRefresh?: () => void;
   state: {
     overview: CloudCommunityPolynetOverview | null;
     isLoading: boolean;
@@ -280,6 +281,18 @@ export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
                 </div>
               ) : null}
               <div className="community-polynet-graph-controls">
+                {props.onRefresh ? (
+                  <button
+                    type="button"
+                    className={`community-polynet-refresh${state.isLoading ? " is-loading" : ""}`}
+                    onClick={props.onRefresh}
+                    disabled={state.isLoading}
+                    aria-label={state.isLoading ? "Refreshing memory" : "Refresh memory"}
+                    title={state.isLoading ? "Refreshing memory" : "Refresh memory"}
+                  >
+                    <RefreshCw size={16} strokeWidth={2} aria-hidden="true" />
+                  </button>
+                ) : null}
                 <button type="button" onClick={viewportActions.zoomOut} aria-label="Zoom out">&minus;</button>
                 <button type="button" onClick={viewportActions.resetView} aria-label="Reset view">Reset</button>
                 <button type="button" onClick={viewportActions.zoomIn} aria-label="Zoom in">+</button>

@@ -3733,31 +3733,8 @@
   -webkit-backdrop-filter: none;
 }
 
-.community-memory-drawer-header {
-  justify-content: space-between;
-}
-
 .community-member-chat .community-memory-drawer .community-memory-drawer-header {
   padding-right: 58px;
-}
-
-.community-memory-drawer-refresh {
-  border: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  font: inherit;
-  font-size: 12px;
-  cursor: pointer;
-}
-
-.community-memory-drawer-refresh:hover:not(:disabled),
-.community-memory-drawer-refresh:focus-visible {
-  color: var(--text-primary);
-}
-
-.community-memory-drawer-refresh:disabled {
-  cursor: default;
-  opacity: 0.55;
 }
 
 .community-memory-graph-surface {
@@ -11989,9 +11966,33 @@ button.chat-reply-quote:hover {
   cursor: pointer;
 }
 
-.community-polynet-graph-controls button:hover {
+.community-polynet-graph-controls button:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.community-polynet-graph-controls button svg {
+  display: block;
+}
+
+.community-polynet-refresh.is-loading svg {
+  animation: community-polynet-refresh-spin 800ms linear infinite;
+}
+
+@keyframes community-polynet-refresh-spin {
+  to { transform: rotate(360deg); }
+}
+
+.community-polynet-graph-controls button:hover:not(:disabled),
+.community-polynet-graph-controls button:focus-visible {
   border-color: var(--accent-gold);
   color: var(--text-primary);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-polynet-refresh.is-loading svg {
+    animation: none;
+  }
 }
 
 /* Minimal floating inspector for the selected node — replaces the old side panel. */
