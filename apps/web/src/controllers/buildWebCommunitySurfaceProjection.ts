@@ -67,10 +67,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   markCommunitySettingsDirty: WebCommunitySecondaryPanelsProps["bannerEditor"]["markCommunitySettingsDirty"];
   feedState: WebCommunitySecondaryPanelsProps["feed"]["state"];
   feedActions: WebCommunitySecondaryPanelsProps["feed"]["actions"];
-  polynetState: WebCommunitySecondaryPanelsProps["polynet"]["state"];
-  polynetActions: WebCommunitySecondaryPanelsProps["polynet"]["actions"];
-  canViewActiveCommunityPolynet: WebCommunitySecondaryPanelsProps["polynet"]["canViewPolynet"];
-  onBackToCommunityChat: WebCommunitySecondaryPanelsProps["polynet"]["onBackToChat"];
   aiAgentHasSession: WebCommunitySecondaryPanelsProps["aiAgent"]["hasSession"];
   canManageMembersActiveCommunity: WebCommunitySecondaryPanelsProps["aiAgent"]["canManageMembersActiveCommunity"];
   communityMemberCount: number | null;
@@ -215,16 +211,6 @@ export function buildWebCommunitySurfaceProjection(
       },
       state: params.feedState,
       actions: params.feedActions,
-    },
-    polynet: {
-      hasActiveCommunity: Boolean(params.activeCommunity),
-      activeCommunityName: params.activeCommunity?.name ?? null,
-      hasSession: params.hasAuthenticatedPresentation,
-      canViewPolynet: params.canViewActiveCommunityPolynet,
-      onRequireSignIn: params.requireSignIn,
-      onBackToChat: params.onBackToCommunityChat,
-      state: params.polynetState,
-      actions: params.polynetActions,
     },
     aiAgent: {
       activeCommunity: params.activeCommunity,

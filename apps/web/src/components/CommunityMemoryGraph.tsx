@@ -5,20 +5,12 @@ import type {
 import { computePolynetLayout } from "../../../../shared/communityPolynetGraphLayout";
 import { useWebPolynetGraphViewport } from "../controllers/useWebPolynetGraphViewport";
 
-type WebCommunityPolynetSectionProps = {
-  hasActiveCommunity: boolean;
+export type CommunityMemoryGraphProps = {
   activeCommunityName: string | null;
-  hasSession: boolean;
-  canViewPolynet: boolean;
-  onRequireSignIn: () => void;
-  onBackToChat?: () => void;
   state: {
     overview: CloudCommunityPolynetOverview | null;
     isLoading: boolean;
     error: string | null;
-  };
-  actions: {
-    refresh: () => void;
   };
 };
 
@@ -99,15 +91,10 @@ function selectInitialNode(overview: CloudCommunityPolynetOverview | null): stri
   return firstMemoryNode?.id ?? null;
 }
 
-export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProps) {
+export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
   const {
-    hasActiveCommunity,
     activeCommunityName,
-    hasSession,
-    canViewPolynet,
-    onRequireSignIn,
     state,
-    actions,
   } = props;
   const overview = state.overview;
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
@@ -159,80 +146,19 @@ export function WebCommunityPolynetSection(props: WebCommunityPolynetSectionProp
   // community root (which has no edges) or an orphan node should not fade the graph.
   const hasFocus = Boolean(hoveredNodeId && focusNeighbors && focusNeighbors.size > 0);
 
-  if (!hasActiveCommunity) {
-    return <div className="settings-panel community-settings-panel"><div className="chat-empty">Select a community to open Polynet.</div></div>;
-  }
-
-  if (!hasSession) {
-    return (
-      <div className="settings-panel community-settings-panel">
-        <div className="chat-empty">
-          <div>Sign in to access Polynet.</div>
-          <button className="secondary" type="button" onClick={onRequireSignIn} style={{ marginTop: 12 }}>
-            Sign in
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!canViewPolynet) {
-    return (
-      <div className="settings-panel community-settings-panel">
-        <div className="chat-empty">You do not have access to this community memory.</div>
-      </div>
-    );
-  }
-
-  const hasBackToChat = Boolean(props.onBackToChat);
-
   return (
-    <div className="settings-panel community-settings-panel community-polynet-panel">
-      <div className={`community-polynet-header${hasBackToChat ? " has-back" : ""}`}>
-        {hasBackToChat ? (
-          <button
-            className="community-polynet-back"
-            type="button"
-            aria-label="Back to community chat"
-            title="Back to chat"
-            onClick={props.onBackToChat}
-          >
-            <svg
-              viewBox="0 0 24 24"
-              aria-hidden="true"
-              focusable="false"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M19 12H5M12 19l-7-7 7-7" />
-            </svg>
-          </button>
-        ) : null}
-        <div className="community-polynet-heading">
-          <div className="community-polynet-kicker">Polynet</div>
-          <div className="community-polynet-title">
-            {activeCommunityName ?? overview?.community.name ?? "Community"} memory
-          </div>
-          <div className="community-polynet-subtitle">
-            Read-only view of what the community has retained and how its agent is currently behaving.
-          </div>
-        </div>
-        <button className="secondary community-polynet-refresh" type="button" onClick={actions.refresh} disabled={state.isLoading}>
-          {state.isLoading ? "Refreshing..." : "Refresh"}
-        </button>
-      </div>
-
+    <div
+      className="community-memory-graph-surface"
+      aria-label={`${activeCommunityName ?? overview?.community.name ?? "Community"} memory`}
+    >
       {state.error ? (
         <div className="community-polynet-note">{state.error}</div>
       ) : null}
 
       {!overview && state.isLoading ? (
-        <div className="chat-empty">Loading Polynet memory...</div>
+        <div className="chat-empty">Loading community memory...</div>
       ) : !overview ? (
-        <div className="chat-empty">No Polynet overview is available yet.</div>
+        <div className="chat-empty">No community memory is available yet.</div>
       ) : (
         <div className="community-polynet-layout">
           <section className="community-polynet-graph-shell" aria-label="Community memory graph">

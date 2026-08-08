@@ -581,6 +581,7 @@ export default function App() {
     selectedReplies: selectedCommunityInteractionReplies,
     selectedRootId: selectedCommunityInteractionRootId,
     selectedRoot: selectedCommunityInteractionRoot,
+    sidecar: communityInteractionSidecar,
     pinnedRoot: pinnedCommunityInteractionRoot,
     isUpdatingPinnedRoot: isUpdatingPinnedCommunityInteractionRoot,
     pinnedRootError: pinnedCommunityInteractionRootError,
@@ -597,6 +598,8 @@ export default function App() {
     loadOlderRoots: loadOlderCommunityInteractionRoots,
     selectRoot: handleSelectCommunityInteractionRoot,
     closeDrawer: handleCloseCommunityInteractionDrawer,
+    openMemory: handleOpenCommunityMemory,
+    closeMemory: handleCloseCommunityMemory,
     toggleReaction: handleToggleCommunityInteractionReaction,
     editMessage: handleEditCommunityInteractionMessage,
     deleteMessage: handleDeleteCommunityInteractionMessage,
@@ -786,7 +789,6 @@ export default function App() {
     isLoadingCommunityAccess,
     communityTab,
     canViewSettings: canViewActiveCommunitySettings,
-    canViewPolynet: canViewActiveCommunityPolynet,
     canManageMembers: canManageMembersActiveCommunity,
     canViewAnalytics: canViewActiveCommunityAnalytics,
     setCommunityResourceModuleId,
@@ -1199,6 +1201,7 @@ export default function App() {
   const communityPolynetController = useWebCommunityPolynetController<AuthSession>({
     activePage,
     communityTab,
+    isMemoryOpen: communityInteractionSidecar.kind === "memory",
     activeCommunityId,
     session: session,
     ensureSession: ensureUsableAuthSession,
@@ -1843,13 +1846,16 @@ export default function App() {
     && mobileRootPage === "community"
     && selectedCommunityInteractionRootId,
   );
+  const mobileCommunityDetailOpen = Boolean(
+    mobileThreadPageOpen || communityInteractionSidecar.kind === "memory"
+  );
   const mobileChromeAutoHideEnabled = Boolean(
     showMobileAppShell
     && shellPublicRoute.kind === "app"
     && activePage === "community"
     && communityTab === "chat"
     && mobileRootPage === "community"
-    && !mobileThreadPageOpen
+    && !mobileCommunityDetailOpen
   );
   const mobileChromeScrollTrackingEnabled = Boolean(
     mobileChromeAutoHideEnabled
@@ -2198,15 +2204,6 @@ export default function App() {
         hidePost: handleHideCommunityFeedPost,
         retry: retryCommunityAiFeed,
       },
-      polynetState: communityPolynetController.state,
-      polynetActions: communityPolynetController.actions,
-      canViewActiveCommunityPolynet,
-      onBackToCommunityChat: () => {
-        const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
-        if (nextCommunitySlug) {
-          openCommunityChat(nextCommunitySlug, { pushSnapshot: false });
-        }
-      },
       aiAgentHasSession: Boolean(session),
       canManageMembersActiveCommunity,
       aiAgentPreferredTab: "instructions",
@@ -2530,12 +2527,9 @@ export default function App() {
         isLoadingCommunityMemory: communityPolynetController.state.isLoading,
         communityMemoryError: communityPolynetController.state.error,
         onRefreshCommunityMemory: communityPolynetController.actions.refresh,
-        onOpenCommunityMemory: () => {
-          const nextCommunitySlug = String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim();
-          if (nextCommunitySlug) {
-            openCommunityTab(nextCommunitySlug, "polynet", { pushSnapshot: false });
-          }
-        },
+        isCommunityMemoryOpen: communityInteractionSidecar.kind === "memory",
+        onOpenCommunityMemory: handleOpenCommunityMemory,
+        onCloseCommunityMemory: handleCloseCommunityMemory,
         canViewMemberPlanDetails: canViewMemberPlanDetailsActiveCommunity,
         isActiveCommunityOwner,
         communityInitials,

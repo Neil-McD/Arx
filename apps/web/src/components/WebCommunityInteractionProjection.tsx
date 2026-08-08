@@ -156,7 +156,9 @@ export type WebCommunityInteractionProjectionProps = {
   isLoadingCommunityMemory?: boolean;
   communityMemoryError?: string | null;
   onRefreshCommunityMemory?: () => void;
+  isCommunityMemoryOpen?: boolean;
   onOpenCommunityMemory?: () => void;
+  onCloseCommunityMemory?: () => void;
   contextPanelLockedSections?: { members?: boolean; memory?: boolean } | null;
   onContextPanelLockedSectionActivate?: (section: "members" | "memory") => void;
   communityMemoryCountLabel?: string | null;
@@ -191,6 +193,7 @@ import {
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
 import { CommunityPinnedRootSurface } from "./CommunityPinnedRootSurface";
+import { CommunityMemoryGraph } from "./CommunityMemoryGraph";
 
 const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
   "activeCommunityName",
@@ -414,6 +417,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const composerRef = useRef<HTMLDivElement | null>(null);
   const drawerScrollRef = useRef<HTMLDivElement | null>(null);
   const drawerComposerRef = useRef<HTMLDivElement | null>(null);
+  const memoryBackButtonRef = useRef<HTMLButtonElement | null>(null);
   const isNearBottomRef = useRef(true);
   const isMainComposerFocusedRef = useRef(false);
   const mobileReadingModeStateRef = useRef(createMobileReadingModeState());
@@ -722,12 +726,30 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const selectedRootBadge = selectedRoot ? agentBadgeLabel(selectedRoot.root.actor_type) : null;
   const isMobileThreadPage = Boolean(props.mobileThreadPage && selectedRoot && !props.profilePanel);
   const ThreadSurface = isMobileThreadPage ? "section" : "aside";
+  const hasDetailPanel = Boolean(selectedRoot || props.profilePanel || props.isCommunityMemoryOpen);
+
+  useEffect(() => {
+    if (!props.isCommunityMemoryOpen) return;
+    const focusFrame = window.requestAnimationFrame(() => {
+      memoryBackButtonRef.current?.focus({ preventScroll: true });
+    });
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      (props.onCloseCommunityMemory ?? props.onCloseDrawer)();
+    };
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      window.cancelAnimationFrame(focusFrame);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [props.isCommunityMemoryOpen, props.onCloseCommunityMemory, props.onCloseDrawer]);
 
   const replyById = new Map(props.replies.map((bundle) => [bundle.reply.id, bundle] as const));
 
   return (
     <>
-    <div className={`community-interaction-projection${selectedRoot || props.profilePanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
+    <div className={`community-interaction-projection${hasDetailPanel ? " has-drawer" : " has-context-panel"}${isMobileThreadPage ? " mobile-thread-page-open" : ""}`}>
       <div className="community-interaction-main" ref={mainRef}>
         {props.activeChannel ? (
           <WebCommunityChannelHeader
@@ -844,6 +866,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         <aside className="community-interaction-drawer" aria-label="Profile">
           <div className="community-interaction-drawer-back">
             <button
+              ref={memoryBackButtonRef}
               className="back-to-workspace"
               type="button"
               onClick={props.onCloseProfile}
@@ -856,6 +879,43 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             </button>
           </div>
           <div className="community-interaction-drawer-scroll">{props.profilePanel}</div>
+        </aside>
+      ) : props.isCommunityMemoryOpen ? (
+        <aside className="community-interaction-drawer community-memory-drawer" aria-label="Community memory">
+          <div className="community-interaction-drawer-back community-memory-drawer-header">
+            <button
+              className="back-to-workspace"
+              type="button"
+              onClick={props.onCloseCommunityMemory ?? props.onCloseDrawer}
+              title="Back to community"
+              aria-label="Back to community"
+            >
+              <svg viewBox="0 0 24 24" className="back-icon" aria-hidden="true">
+                <path d="M19 12H5M12 19l-7-7 7-7" />
+              </svg>
+              <span className="back-path">memory</span>
+            </button>
+            {props.onRefreshCommunityMemory ? (
+              <button
+                className="community-memory-drawer-refresh"
+                type="button"
+                onClick={props.onRefreshCommunityMemory}
+                disabled={props.isLoadingCommunityMemory}
+              >
+                {props.isLoadingCommunityMemory ? "Refreshing..." : "Refresh"}
+              </button>
+            ) : null}
+          </div>
+          <div className="community-interaction-drawer-scroll community-memory-drawer-scroll">
+            <CommunityMemoryGraph
+              activeCommunityName={props.activeCommunityName}
+              state={{
+                overview: props.communityMemoryOverview ?? null,
+                isLoading: Boolean(props.isLoadingCommunityMemory),
+                error: props.communityMemoryError ?? null,
+              }}
+            />
+          </div>
         </aside>
       ) : selectedRoot ? (
         <ThreadSurface
