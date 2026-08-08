@@ -105,6 +105,7 @@ assert.match(graph, /fitInsets:[\s\S]*bottom: 148/, "selected memory should rese
 assert.match(graph, /case "resource": return "resource"/, "resource source nodes should keep a distinct visual type");
 assert.match(preview, /case "resource": return "resource"/, "the compact preview should preserve resource node type");
 assert.match(viewportController, /const MIN_SCALE = 0\.08/, "the drawer graph should zoom far enough out for the bounded full projection");
+assert.match(viewportController, /const MAX_SCALE = 3[\s\S]*const MAX_FIT_SCALE = 1\.4/, "automatic fit should stay restrained while manual zoom retains its full range");
 assert.doesNotMatch(graph, /textarea|contentEditable|onSubmit|mutation/, "the Memory drawer should not introduce editing");
 
 assert.match(css, /\.community-memory-drawer-scroll/, "Memory should have a full-height drawer viewport");
