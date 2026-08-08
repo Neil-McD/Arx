@@ -490,8 +490,8 @@ assert.match(css, /\.community-dm-inbox-icon-button/, "DM inbox must style the n
 assert.match(css, /\.community-dm-recipient-search/, "DM recipient picker must style member search");
 assert.match(css, /\.community-dm-recipient-row/, "DM recipient picker must style recipient rows");
 assert.doesNotMatch(css, /\.community-dm-recipient-more/, "DM recipient picker must not keep CSS for deleted fake pagination control");
-assert.match(css, /\.direct-messages-topbar-button \{[^}]*position: relative;[^}]*width: 34px;[^}]*height: 34px;/, "top-right DM button must anchor the unread badge in a modestly enlarged target");
-assert.match(css, /\.direct-messages-topbar-button svg \{[^}]*width: 20px;[^}]*height: 20px;/, "top-right DM glyph must scale with its enlarged target");
+assert.match(css, /\.icon-button\.direct-messages-topbar-button \{[^}]*position: relative;[^}]*width: 34px;[^}]*height: 34px;/, "top-right DM button must anchor the unread badge in a modestly enlarged target with enough specificity to beat the generic icon-button size");
+assert.match(css, /\.icon-button\.direct-messages-topbar-button svg \{[^}]*width: 20px;[^}]*height: 20px;/, "top-right DM glyph must scale with its enlarged target with enough specificity to beat the generic icon-button glyph size");
 assert.match(css, /\.community-dm-inbox-row-unread/, "DM inbox must style unread badges");
 assert.match(css, /\.community-dm-panel-title \{[^}]*color: var\(--chat-author-text\);[^}]*font-size: 16px;[^}]*font-weight: 650;/, "DM panel identity must use the canonical conversation author role");
 assert.match(css, /\.community-dm-panel-context \{[^}]*color: var\(--chat-meta-text\);/, "DM panel context must use the canonical conversation metadata role");
