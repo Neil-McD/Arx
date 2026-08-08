@@ -48,7 +48,7 @@ public tool catalog.
 
 The personal harness and external MCP can list `/`, which contains
 `communities/` and `users/`. An authorized community contains identity,
-members, resources, channels, AI Feed, accepted memory, and versioned
+members, resources, channels, accepted memory, and versioned
 capabilities. Owner/admin authority additionally reveals `builder/`.
 
 The community-owned agent receives a server-mounted community root. It cannot
@@ -69,7 +69,7 @@ The executor derives authority for every call:
 - community-owned agent: fixed member lane within its mounted community;
 - missing or revoked entitlement: no access.
 
-Member and builder lanes can participate in chat and AI Feed. Builder-only
+Member and builder lanes can participate in chat. Builder-only
 resource work is staged as a changeset, then reviewed through operations
 discovered under `capabilities/`.
 
@@ -78,11 +78,11 @@ discovered under `capabilities/`.
 - `polynet_list` is bounded discovery.
 - `polynet_read` reads exact evidence and may append a retrieval receipt.
 - `polynet_search` searches one bounded subtree and returns paths. A community
-  root search composes the canonical channel, AI Feed, resource, and accepted
+  root search composes the canonical channel, resource, and accepted
   memory projections under one global limit; it does not use the private
   prompt-context aggregator. Every returned result path must round-trip through
   `polynet_read`, and hidden domain failures fail the operation.
-- `polynet_write` delegates to the owning chat, AI Feed, or resource changeset
+- `polynet_write` delegates to the owning chat or resource changeset
   domain.
 - `polynet_call` invokes only a discoverable versioned transition.
 

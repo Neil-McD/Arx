@@ -87,9 +87,6 @@ import {
   captureProductAnalyticsEvent,
 } from "./posthogAnalytics";
 
-import {
-  useCommunityAiFeedController,
-} from "../../../shared/useCommunityAiFeedController";
 import { AnalyticsLineChart } from "../../../shared/AnalyticsLineChart";
 import {
   copyTextToClipboard,
@@ -106,8 +103,6 @@ import {
   type SettingsPage,
 } from "../../../shared/appShellNavigation";
 import type {
-  CommunityAiFeedPost as SharedCommunityAiFeedPost,
-  CommunityAiFeedReactionType as SharedCommunityAiFeedReactionType,
   CommunityAccess as SharedCommunityAccess,
   PublicPlanSummary as SharedPublicPlanSummary,
   UserProfile as SharedUserProfile,
@@ -222,8 +217,6 @@ type CommunityJoinRequest = WebCommunityJoinRequest;
 type MyCommunityJoinRequest = WebMyCommunityJoinRequest;
 type PersonalMemoryItem = WebPersonalMemoryItem;
 type PublicPlanSummary = SharedPublicPlanSummary;
-type CommunityAiFeedPost = SharedCommunityAiFeedPost;
-type CommunityAiFeedReactionType = SharedCommunityAiFeedReactionType;
 export default function App() {
   const appActivity = useWebAppActivityController();
   const directMessages = useWebDirectMessagesController();
@@ -1266,21 +1259,6 @@ export default function App() {
     setCommunitySettingsPriceUsdAnnual,
   });
 
-  const {
-    activeCommunityFeedState,
-    reactingPostId: communityFeedReactingPostId,
-    moderatingPostId: communityFeedModeratingPostId,
-    reactToPost: handleReactToCommunityFeedPost,
-    hidePost: handleHideCommunityFeedPost,
-    retry: retryCommunityAiFeed,
-  } = useCommunityAiFeedController<AuthSession>({
-    activeCommunityId,
-    isAiFeedTabActive: communityTab === "ai_feed",
-    viewerCacheKey: session?.user?.id ?? "anonymous",
-    session: session,
-    ensureSession: ensureUsableAuthSession,
-  });
-
   const communityAttentionCommunityIds = useMemo(
     () => communities.map((community) => community.id),
     [communities],
@@ -1309,10 +1287,6 @@ export default function App() {
     interactions: {
       roots: communityInteractionRoots,
       repliesByRootId: communityInteractionRepliesByRootId,
-    },
-    aiFeed: {
-      isLoading: activeCommunityFeedState.isLoading,
-      live: activeCommunityFeedState.live,
     },
     resources: {
       isLoading: isLoadingResources,
@@ -2191,19 +2165,6 @@ export default function App() {
       communitySettingsBannerFocusY,
       communitySettingsBannerZoom,
       markCommunitySettingsDirty,
-      feedState: {
-        livePosts: activeCommunityFeedState.live,
-        rankedPosts: activeCommunityFeedState.ranked,
-        isLoading: activeCommunityFeedState.isLoading,
-        error: activeCommunityFeedState.error,
-        reactingPostId: communityFeedReactingPostId,
-        moderatingPostId: communityFeedModeratingPostId,
-      },
-      feedActions: {
-        react: handleReactToCommunityFeedPost,
-        hidePost: handleHideCommunityFeedPost,
-        retry: retryCommunityAiFeed,
-      },
       aiAgentHasSession: Boolean(session),
       canManageMembersActiveCommunity,
       aiAgentPreferredTab: "instructions",
@@ -2599,11 +2560,10 @@ export default function App() {
     },
   };
   const activeCommunityAttentionSummary = activeCommunityId
-    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false })
-    : { chat: false, ai_feed: false, resources: false, events: false };
+    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, resources: false, events: false, mentions: false, channels: [] })
+    : { chat: false, resources: false, events: false, mentions: false, channels: [] };
   const activeCommunityAttentionCount =
     Number(Boolean(activeCommunityAttentionSummary.chat)) +
-    Number(Boolean(activeCommunityAttentionSummary.ai_feed)) +
     Number(Boolean(activeCommunityAttentionSummary.resources)) +
     Number(Boolean(activeCommunityAttentionSummary.events));
   const {
@@ -2891,11 +2851,10 @@ export default function App() {
     cancelVoiceInput,
   });
   const activeIndicators = activeCommunityId
-    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, ai_feed: false, resources: false, events: false, mentions: false })
-    : { chat: false, ai_feed: false, resources: false, events: false, mentions: false };
+    ? (attentionByCommunityId[activeCommunityId] ?? { chat: false, resources: false, events: false, mentions: false, channels: [] })
+    : { chat: false, resources: false, events: false, mentions: false, channels: [] };
   const communityTabIndicators = {
     chat: Boolean(activeIndicators.chat),
-    ai_feed: Boolean(activeIndicators.ai_feed),
     resources: Boolean(activeIndicators.resources),
     events: Boolean(activeIndicators.events),
     // An unseen mention-of-you upgrades the chat dot to the accent variant.
@@ -2903,7 +2862,7 @@ export default function App() {
   };
   const communityRailAttentionById: Record<string, boolean> = {};
   for (const [communityId, indicators] of Object.entries(attentionByCommunityId)) {
-    if (indicators.chat || indicators.ai_feed || indicators.resources || indicators.events || indicators.mentions) {
+    if (indicators.chat || indicators.resources || indicators.events || indicators.mentions) {
       communityRailAttentionById[communityId] = true;
     }
   }
@@ -2985,7 +2944,7 @@ export default function App() {
     handleTopbarBackToCommunity,
     communityTab: isVisitorCommunitySurface ? "chat" : communityTab,
     communityTabIndicators: isVisitorCommunitySurface
-      ? { chat: false, ai_feed: false, resources: false, events: false, mentions: false }
+      ? { chat: false, resources: false, events: false, mentions: false }
       : communityTabIndicators,
     communityChannels: isVisitorCommunitySurface
       ? [{ id: "", slug: "general", name: "General", is_general: true, position: 0 }]
@@ -3032,7 +2991,7 @@ export default function App() {
       !isVisitorCommunitySurface &&
       (isAuthRecoveringSignedInAppShell || isLoadingCommunityAccess),
     lockedCommunityNavTabs: isVisitorCommunitySurface
-      ? { ai_feed: true, resources: true, events: true }
+      ? { resources: true, events: true }
       : null,
     handleSelectCommunityTab: isVisitorCommunitySurface
       ? (tab) => {

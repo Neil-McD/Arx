@@ -161,23 +161,6 @@ async function createCanonicalSearchFixture(
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    const aiFeedPostId = await ctx.db.insert("communityAiFeedPosts", {
-      communityId: fixture.communityId,
-      authorType: "agent",
-      authorUserId: fixture.ownerId,
-      agentKey: "community_agent",
-      agentKind: "community_agent",
-      authorLabel: "Polynet Agent",
-      type: "observation",
-      title: "Canonical repository search",
-      body: "Canonical repository search proof from the AI Feed.",
-      status: "live",
-      score: 0.9,
-      goodCount: 0,
-      lowSignalCount: 0,
-      createdAt: nowMs + 1,
-      updatedAt: nowMs + 1,
-    });
     const moduleId = await ctx.db.insert("communityResourceModules", {
       communityId: fixture.communityId,
       createdByUserId: fixture.ownerId,
@@ -256,7 +239,6 @@ async function createCanonicalSearchFixture(
     );
     return {
       interactionId,
-      aiFeedPostId,
       resourceId,
       memoryNodeId,
       adminMemoryNodeId,
@@ -542,9 +524,8 @@ test("community-root search returns canonical paths that round-trip through read
   const results = Array.isArray(searched.value.results)
     ? (searched.value.results as Array<Record<string, unknown>>)
     : [];
-  expect(results).toHaveLength(4);
+  expect(results).toHaveLength(3);
   expect(results.map((result) => result.source_type).sort()).toEqual([
-    "ai_feed",
     "interaction",
     "memory",
     "resource",
@@ -554,9 +535,6 @@ test("community-root search returns canonical paths that round-trip through read
     expect.arrayContaining([
       expect.stringMatching(
         /^\/communities\/canonical-community\/channels\/general\/interaction:root:/,
-      ),
-      expect.stringMatching(
-        /^\/communities\/canonical-community\/ai-feed\/ai_feed:/,
       ),
       expect.stringMatching(
         /^\/communities\/canonical-community\/resources\//,
@@ -679,7 +657,6 @@ test("community-root search returns canonical paths that round-trip through read
         surface: "external_mcp",
         resultRefs: expect.arrayContaining([
           expect.stringMatching(/^interaction:root:/),
-          expect.stringMatching(/^ai_feed:/),
           expect.stringMatching(/^resource:/),
           expect.stringMatching(/^\/memory\//),
         ]),
@@ -917,7 +894,7 @@ test("chat roots and replies survive receipt-completion crashes without duplicat
   });
 });
 
-test("AI Feed domain recovery does not recreate a canonical post hidden after its first effect", async () => {
+test("retired AI Feed writer fails closed without creating a post", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asMember = t.withIdentity({ subject: fixture.memberSubject });
@@ -932,48 +909,16 @@ test("AI Feed domain recovery does not recreate a canonical post hidden after it
     evidence: ["interaction:root:example"],
   };
 
-  const first = await asMember.mutation(
-    internal.communityAiFeed.publishCanonicalPolynetAiFeedPostInternal,
-    input,
-  );
-  expect(first).toMatchObject({
-    deduped: false,
-    agent_kind: "personal_agent",
-  });
-  await t.run(async (ctx) => {
-    const rows = await ctx.db.query("communityAiFeedPosts").collect();
-    expect(rows).toHaveLength(1);
-    await ctx.db.patch(rows[0]!._id, {
-      status: "hidden",
-      hiddenAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-  });
-
   await expect(
     asMember.mutation(
       internal.communityAiFeed.publishCanonicalPolynetAiFeedPostInternal,
       input,
     ),
-  ).resolves.toMatchObject({
-    deduped: true,
-    agent_kind: "personal_agent",
-  });
-  await expect(
-    asMember.mutation(
-      internal.communityAiFeed.publishCanonicalPolynetAiFeedPostInternal,
-      { ...input, body: "A conflicting observation." },
-    ),
-  ).rejects.toThrow("community_ai_feed_idempotency_key_conflict");
+  ).rejects.toThrow("ai_feed_retired");
   const rows = await t.run(async (ctx) =>
     ctx.db.query("communityAiFeedPosts").collect(),
   );
-  expect(rows).toHaveLength(1);
-  expect(rows[0]).toMatchObject({
-    status: "hidden",
-    agentKind: "personal_agent",
-    authorUserId: fixture.memberId,
-  });
+  expect(rows).toHaveLength(0);
 });
 
 test("builder resource changes use staged writes plus discoverable, idempotent calls", async () => {

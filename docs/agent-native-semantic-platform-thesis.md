@@ -204,7 +204,6 @@ Community-owned agents receive a server-selected community mount:
 |- members/
 |- resources/
 |- channels/
-|- ai-feed/
 |- memory/
 `- capabilities/
 ```
@@ -255,18 +254,18 @@ Act
 
 Bounded `polynet_list` and `polynet_read` are `IMPLEMENTED` on the staging
 source path. They serve only real platform, community, user, member, resource,
-channel, AI Feed, accepted-memory, capability, and builder mounts. Member
+channel, accepted-memory, capability, and builder mounts. Member
 projections remain bounded relationship views, not generic row browsers.
 
 `polynet_search` is `IMPLEMENTED` on the staging source path. Exact subtree
 searches reuse canonical domain owners. Community-root search composes the
-channel, AI Feed, resource, and accepted-memory projections under one global
+channel, resource, and accepted-memory projections under one global
 limit and returns paths that round-trip through `polynet_read`. Search results
 and their underlying references are reauthorized; an index is a locator, not
 authority.
 
-`polynet_write` is `IMPLEMENTED` for naturally writable community chat, AI Feed,
-and builder resource-changeset targets. Schema validation, attribution,
+`polynet_write` is `IMPLEMENTED` for naturally writable community chat and
+builder resource-changeset targets. Schema validation, attribution,
 idempotency, effects, and receipts remain owned by typed domain adapters. A
 successful write is read back from committed canonical state.
 
@@ -376,9 +375,9 @@ The labels mean:
 | Bounded `polynet_list` and `polynet_read` | `IMPLEMENTED` | native and official MCP adapters share semantic owners and fail closed |
 | One generalized capability definition/projection seam | `IMPLEMENTED` | private domain-specific tool callers remain cleanup debt |
 | Bounded `polynet_search` | `IMPLEMENTED` | staging composes canonical domain owners and returns exact follow-up paths |
-| Naturally scoped `polynet_write` | `IMPLEMENTED` | typed chat, AI Feed, and resource changeset owners remain canonical |
+| Naturally scoped `polynet_write` | `IMPLEMENTED` | typed chat and resource changeset owners remain canonical |
 | Discoverable `polynet_call` | `IMPLEMENTED` | versioned capabilities are listed before invocation |
-| Channel, AI Feed, accepted-memory, and capability mounts | `IMPLEMENTED` | each reuses its canonical domain owner and authority |
+| Channel, accepted-memory, and capability mounts | `IMPLEMENTED` | each reuses its canonical domain owner and authority |
 | App, workflow, generalized event, and custom UI mounts | `PROPOSED` | each requires a real semantic and authority contract |
 | External apps integrating once through resources/capabilities/events/surfaces | `PROPOSED` | prove one real integration before generalizing |
 | Independently enrolled agent/service community members | `DEFERRED` | current membership remains user-based |

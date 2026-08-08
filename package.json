@@ -230,6 +230,7 @@
     "check:community-polynet-tab-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_polynet_tab_ui_contract_proof.ts",
     "check:community-polynet-graph-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_polynet_graph_layout_proof.ts",
     "check:community-ai-feed-scaling-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_ai_feed_scaling_contract_proof.ts",
+    "check:community-ai-feed-retirement-release-a-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_ai_feed_retirement_release_a_contract_proof.ts",
     "check:community-compiler-digest-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_digest_contract_proof.ts",
     "check:community-compiler-candidates-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_candidates_contract_proof.ts",
     "check:community-compiler-evidence-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_compiler_evidence_contract_proof.ts",

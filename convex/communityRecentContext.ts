@@ -24,20 +24,7 @@ import {
   requireReadableChannelForAddressableRow,
 } from "./communityChannelCore";
 
-type FeedPostRow = {
-  _id: any;
-  communityId: any;
-  authorLabel: string;
-  type: "observation" | "recommendation" | "action";
-  title?: string;
-  body: string;
-  evidence?: string[];
-  status: "live" | "hidden";
-  createdAt: number;
-  updatedAt: number;
-};
-
-type RecentContextSourceType = "interaction" | "ai_feed" | "resource";
+type RecentContextSourceType = "interaction" | "resource";
 
 type RecentContextItem = {
   source_type: RecentContextSourceType;
@@ -58,7 +45,6 @@ type RecentContextItem = {
 
 const INTERACTION_ROOT_WINDOW_LIMIT = 24;
 const INTERACTION_REPLY_WINDOW_LIMIT = 48;
-const AI_FEED_WINDOW_LIMIT = 12;
 const RESOURCE_WINDOW_LIMIT = 12;
 const RESOURCE_SCAN_LIMIT = 48;
 const RECENT_CONTEXT_LIMIT = 12;
@@ -224,38 +210,6 @@ async function listRecentInteractionItems(args: {
   return { items: [...rootItems, ...replyItems], considered: roots.length + replies.length };
 }
 
-async function listRecentAiFeedItems(args: {
-  ctx: any;
-  communityId: any;
-  tokens: string[];
-}): Promise<{ items: RecentContextItem[]; considered: number }> {
-  const rows = (await args.ctx.db
-    .query("communityAiFeedPosts" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", args.communityId).eq("status", "live"),
-    )
-    .order("desc")
-    .take(AI_FEED_WINDOW_LIMIT)) as FeedPostRow[];
-  const items = rows.map((row) => {
-    const snippetSource = [row.title, row.body, ...(Array.isArray(row.evidence) ? row.evidence : [])]
-      .map((value) => String(value ?? "").trim())
-      .filter(Boolean)
-      .join(" — ");
-    const snippet = truncateText(snippetSource || row.body, 280);
-    return {
-      source_type: "ai_feed" as const,
-      source_id: String(row._id),
-      title: String(row.title ?? "").trim() || null,
-      snippet,
-      created_at: toIsoString(row.createdAt),
-      score: scoreText(snippet, args.tokens),
-      author_label: String(row.authorLabel ?? "").trim() || "Agent",
-      post_type: row.type,
-    };
-  });
-  return { items, considered: rows.length };
-}
-
 async function listRecentResourceItems(args: {
   ctx: any;
   communityId: any;
@@ -348,18 +302,14 @@ async function readCommunityRecentContextForUser(args: {
   const tokens = tokenizeQuery(queryText);
 
   let interactionFetchOk = false;
-  let aiFeedFetchOk = false;
   let resourceFetchOk = false;
   let interactionItems: RecentContextItem[] = [];
-  let aiFeedItems: RecentContextItem[] = [];
   let resourceItems: RecentContextItem[] = [];
   let interactionConsidered = 0;
-  let aiFeedConsidered = 0;
   let resourceConsidered = 0;
 
-  const [interactionResult, aiFeedResult, resourceResult] = await Promise.allSettled([
+  const [interactionResult, resourceResult] = await Promise.allSettled([
     listRecentInteractionItems({ ctx, communityId, tokens }),
-    listRecentAiFeedItems({ ctx, communityId, tokens }),
     listRecentResourceItems({ ctx, communityId, tokens }),
   ]);
 
@@ -368,18 +318,13 @@ async function readCommunityRecentContextForUser(args: {
     interactionItems = interactionResult.value.items;
     interactionConsidered = interactionResult.value.considered;
   }
-  if (aiFeedResult.status === "fulfilled") {
-    aiFeedFetchOk = true;
-    aiFeedItems = aiFeedResult.value.items;
-    aiFeedConsidered = aiFeedResult.value.considered;
-  }
   if (resourceResult.status === "fulfilled") {
     resourceFetchOk = true;
     resourceItems = resourceResult.value.items;
     resourceConsidered = resourceResult.value.considered;
   }
 
-  const selected = selectRecentContextItems([...interactionItems, ...aiFeedItems, ...resourceItems]);
+  const selected = selectRecentContextItems([...interactionItems, ...resourceItems]);
   const retrievalLatencyMs = Math.max(0, Date.now() - startedAt);
 
   return {
@@ -390,12 +335,12 @@ async function readCommunityRecentContextForUser(args: {
     query: queryText,
     source_window: {
       interaction_items_considered: interactionConsidered,
-      ai_feed_items_considered: aiFeedConsidered,
+      ai_feed_items_considered: 0,
       resources_considered: resourceConsidered,
     },
     source_counts: {
       interaction: selected.items.filter((item) => item.source_type === "interaction").length,
-      ai_feed: selected.items.filter((item) => item.source_type === "ai_feed").length,
+      ai_feed: 0,
       resource: selected.items.filter((item) => item.source_type === "resource").length,
     },
     recent_context: selected.items,
@@ -406,7 +351,7 @@ async function readCommunityRecentContextForUser(args: {
       retrieved_items_used: selected.items.length,
       fallback_used: selected.fallbackUsed,
       interaction_fetch_ok: interactionFetchOk,
-      ai_feed_fetch_ok: aiFeedFetchOk,
+      ai_feed_fetch_ok: false,
       resource_fetch_ok: resourceFetchOk,
     },
   };

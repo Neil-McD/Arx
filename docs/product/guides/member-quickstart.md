@@ -3,7 +3,7 @@ id: product.guide.member_quickstart
 title: Member Quickstart
 audience: member, llm
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-08-08
 ---
 
 # Member Quickstart
@@ -17,7 +17,7 @@ personal agent under an authorized community context.
 
 1. Sign in.
 2. Join or open a community.
-3. Use community chat, the AI Feed, and resources.
+3. Use community chat and resources.
 4. Open the bottom-right personal-agent dock.
 5. Ask the agent for help with a concrete task.
 6. When you are on a community page, verify that the dock shows that

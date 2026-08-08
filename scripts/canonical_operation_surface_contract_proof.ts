@@ -136,7 +136,6 @@ assert.match(mcpRuntime, /executePolynetCanonicalTool\(/);
 assert.match(executor, /derivePolynetHumanAuthority\(/);
 assert.match(executor, /derivePolynetCommunityAgentAuthority\(\)/);
 assert.match(executor, /createCommunityInteractionComposerMessage/);
-assert.match(executor, /publishCanonicalPolynetAiFeedPostInternal/);
 assert.match(executor, /searchCommunityRepositoryInternal/);
 assert.doesNotMatch(
   executor,
@@ -144,10 +143,14 @@ assert.doesNotMatch(
   "canonical repository search must not use the prompt-context aggregator",
 );
 assert.match(repositorySearch, /searchRecentCommunityInteractionEvidenceInternal/);
-assert.match(repositorySearch, /searchRecentCommunityAiFeedEvidenceInternal/);
 assert.match(repositorySearch, /searchRecentCommunityResourceEvidenceInternal/);
 assert.match(repositorySearch, /searchCommunityMemoryInternal/);
 assert.match(repositorySearch, /community_repository_search/);
+assert.doesNotMatch(
+  repositorySearch,
+  /communityAiFeed|source_type:\s*"ai_feed"|\/ai-feed\//,
+  "canonical repository search must not expose the retired AI Feed domain",
+);
 assert.match(executor, /stageCommunityResourceBuilderChangesetInternal/);
 assert.match(executor, /approveCommunityResourceBuilderChangeset/);
 assert.match(executor, /applyCommunityResourceBuilderChangeset/);

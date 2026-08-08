@@ -494,20 +494,6 @@ export async function backfillCommunityArchive(ctx: { db: any }, communityId: an
   resource: number;
 }> {
   const activeSourceKeys = new Set<string>();
-  const aiFeedRows = (await ctx.db
-    .query("communityAiFeedPosts" as any)
-    .withIndex("by_community_status_createdAt", (q: any) => q.eq("communityId", communityId).eq("status", "live"))
-    .collect()) as FeedPostRow[];
-  for (const row of aiFeedRows) {
-    activeSourceKeys.add(
-      archiveSourceKey({
-        sourceType: "ai_feed",
-        sourceId: normalizeIdValue(row._id),
-      }),
-    );
-    await upsertArchiveDocumentForAiFeedPost(ctx, row);
-  }
-
   const resources = (await ctx.db
     .query("communityResources" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
@@ -544,7 +530,7 @@ export async function backfillCommunityArchive(ctx: { db: any }, communityId: an
   return {
     interaction: "paginated_async",
     legacy_chat_deleted: legacyChatDeleted,
-    ai_feed: aiFeedRows.length,
+    ai_feed: 0,
     resource: resources.length,
   };
 }

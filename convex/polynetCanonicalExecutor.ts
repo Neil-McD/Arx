@@ -1,11 +1,7 @@
 import { api, internal } from "./_generated/api";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract.ts";
+import { parseCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract.ts";
 import {
-  parseCommunityAiFeedEvidenceRef,
-  parseCommunityInteractionEvidenceRef,
-} from "../shared/communityEvidenceContract.ts";
-import {
-  POLYNET_AI_FEED_DIRECTORY_PATH,
   POLYNET_BUILDER_DIRECTORY_PATH,
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
@@ -420,9 +416,6 @@ function evidencePath(args: {
   if (args.sourceType === "interaction") {
     return `/communities/${args.communitySlug}/channels/general/${args.ref}.md`;
   }
-  if (args.sourceType === "ai_feed") {
-    return `/communities/${args.communitySlug}/ai-feed/${args.ref}.md`;
-  }
   return null;
 }
 
@@ -444,7 +437,6 @@ function mountSearchResults(args: {
         [
           POLYNET_RESOURCES_DIRECTORY_PATH,
           POLYNET_CHANNELS_DIRECTORY_PATH,
-          POLYNET_AI_FEED_DIRECTORY_PATH,
           POLYNET_MEMORY_DIRECTORY_PATH,
         ].some((prefix) => localPath.startsWith(prefix))
           ? localPath
@@ -602,16 +594,6 @@ async function executeCanonicalList(args: {
     };
   }
   if (target.localPath === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH) {
-    return {
-      ok: true,
-      value: virtualDirectory({
-        path: absolutePath,
-        searchable: true,
-        writable: target.authority.canWriteParticipation,
-      }),
-    };
-  }
-  if (target.localPath === POLYNET_AI_FEED_DIRECTORY_PATH) {
     return {
       ok: true,
       value: virtualDirectory({
@@ -864,42 +846,6 @@ async function executeCanonicalRead(args: {
     }
   }
 
-  const aiFeedMatch =
-    /^\/ai-feed\/(ai_feed:[A-Za-z0-9_-]+)\.md$/.exec(target.localPath);
-  if (aiFeedMatch) {
-    if (!parseCommunityAiFeedEvidenceRef(aiFeedMatch[1])) {
-      return canonicalError("semantic_not_found", "Evidence not found.");
-    }
-    try {
-      const value = (await args.ctx.runAction(
-        (internal as any).communityAiFeedEvidence
-          .readCommunityAiFeedEvidenceForToolInternal,
-        {
-          userId: args.userId,
-          authSubject: args.authSubject,
-          communityId: target.communityId,
-          ref: aiFeedMatch[1],
-          surface: args.evidenceSurface,
-        },
-      )) as Record<string, unknown>;
-      return {
-        ok: true,
-        value: canonicalJsonDocument({
-          target,
-          localPath: target.localPath,
-          payload: value.evidence ?? value,
-          ref: aiFeedMatch[1],
-          retrievalId: value.retrieval_id,
-        }),
-      };
-    } catch (error) {
-      return canonicalError(
-        "semantic_not_found",
-        error instanceof Error ? error.message : "Evidence not found.",
-      );
-    }
-  }
-
   const memoryMatch = /^\/memory\/([A-Za-z0-9_-]+)\.md$/.exec(
     target.localPath,
   );
@@ -1077,25 +1023,6 @@ async function executeCanonicalSearch(args: {
           path: mountedPath(target.communitySlug, target.localPath),
           results: Array.isArray(value.results)
             ? (value.results as Array<Record<string, unknown>>)
-            : [],
-          retrievalId: value.retrieval_id,
-          truncated: value.truncated,
-        }),
-      };
-    }
-    if (target.localPath.startsWith(POLYNET_AI_FEED_DIRECTORY_PATH)) {
-      const value = (await args.ctx.runAction(
-        (internal as any).communityAiFeedEvidence
-          .searchCommunityAiFeedEvidenceInternal,
-        common,
-      )) as Record<string, unknown>;
-      return {
-        ok: true,
-        value: mountSearchResults({
-          communitySlug: target.communitySlug,
-          path: mountedPath(target.communitySlug, target.localPath),
-          results: Array.isArray(value.matches)
-            ? (value.matches as Array<Record<string, unknown>>)
             : [],
           retrievalId: value.retrieval_id,
           truncated: value.truncated,
@@ -1336,110 +1263,6 @@ async function executeCanonicalWrite(args: {
       });
       return canonicalError(
         "community_chat_write_failed",
-        errorMessage,
-      );
-    }
-  }
-
-  if (target.localPath === POLYNET_AI_FEED_DIRECTORY_PATH) {
-    if (!target.authority.canWriteParticipation || mode !== "create") {
-      return canonicalError(
-        "community_write_forbidden",
-        "AI Feed supports authorized create operations only.",
-      );
-    }
-    const postType = String(content.post_type ?? "observation");
-    if (
-      postType !== "observation" &&
-      postType !== "recommendation" &&
-      postType !== "action"
-    ) {
-      return canonicalError(
-        "invalid_tool_args",
-        "post_type must be observation, recommendation, or action.",
-      );
-    }
-    const reservation = await reserveMutatingOperation({
-      ...args,
-      target,
-      toolName: "polynet_write",
-      idempotencyKey,
-    });
-    if (!reservation.ok) return reservation.result;
-    if (reservation.status === "completed") {
-      return { ok: true, value: reservation.completedValue };
-    }
-    try {
-      const value = (await args.ctx.runMutation(
-        (internal as any).communityAiFeed
-          .publishCanonicalPolynetAiFeedPostInternal,
-        {
-          userId: args.userId,
-          authSubject: args.authSubject,
-          communityId: target.communityId,
-          principalKind: args.principalKind,
-          idempotencyKey,
-          postType,
-          title: requiredString(content.title, 180),
-          body: String(content.body ?? content.text ?? ""),
-          evidence: Array.isArray(content.evidence)
-            ? content.evidence.map((value) => String(value ?? ""))
-            : [],
-        },
-      )) as Record<string, unknown>;
-      const postId = requiredString(value.id, 180);
-      const ref = postId ? `ai_feed:${postId}` : null;
-      const responseValue = {
-        ok: true,
-        ...(ref
-          ? {
-              path: evidencePath({
-                communitySlug: target.communitySlug,
-                sourceType: "ai_feed",
-                ref,
-              }),
-              ref,
-            }
-          : {}),
-        deduped: value.deduped === true,
-        receipt: canonicalReceipt({
-          toolName: "polynet_write",
-          principalKind: args.principalKind,
-          target,
-          idempotencyKey,
-          deduped: value.deduped === true,
-        }),
-        result: value,
-      };
-      return {
-        ok: true,
-        value: await completeMutatingOperation({
-          ...args,
-          target,
-          toolName: "polynet_write",
-          idempotencyKey,
-          requestFingerprint: reservation.requestFingerprint,
-          attemptToken: reservation.attemptToken,
-          value: responseValue,
-        }),
-      };
-    } catch (error) {
-      const errorMessage =
-        error instanceof Error
-          ? error.message
-          : "Community AI Feed write failed.";
-      await failMutatingOperation({
-        ...args,
-        target,
-        toolName: "polynet_write",
-        idempotencyKey,
-        requestFingerprint: reservation.requestFingerprint,
-        attemptToken: reservation.attemptToken,
-        errorCode: "community_ai_feed_write_failed",
-        errorMessage,
-      });
-      return canonicalError(
-        "community_ai_feed_write_failed",
         errorMessage,
       );
     }

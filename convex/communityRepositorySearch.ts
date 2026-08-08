@@ -7,7 +7,6 @@ import {
 } from "./communityEvidenceAudit";
 import {
   normalizeCommunityEvidenceSearchLimit,
-  parseCommunityAiFeedEvidenceRef,
   parseCommunityInteractionEvidenceRef,
   parseCommunityResourceEvidenceRef,
 } from "../shared/communityEvidenceContract";
@@ -48,20 +47,6 @@ function canonicalInteractionItem(item: SearchItem): SearchItem {
     source_id: ref,
     channel_slug: channelSlug,
     path: `/channels/general/${ref}.md`,
-  };
-}
-
-function canonicalAiFeedItem(item: SearchItem): SearchItem {
-  const ref = requiredString(item.ref, 512);
-  if (!ref || !parseCommunityAiFeedEvidenceRef(ref)) {
-    throw new Error("community_repository_search_ai_feed_ref_invalid");
-  }
-  return {
-    ...item,
-    ref,
-    source_type: "ai_feed",
-    source_id: requiredString(item.source_id, 180),
-    path: `/ai-feed/${ref}.md`,
   };
 }
 
@@ -147,15 +132,10 @@ export const searchCommunityRepositoryInternal = internalAction({
       .map((value) => String(value ?? "").trim())
       .filter((value) => MEMORY_TYPES.has(value));
 
-    const [interactions, aiFeed, resources, memory] = await Promise.all([
+    const [interactions, resources, memory] = await Promise.all([
       ctx.runQuery(
         (internal as any).communityInteractionEvidence
           .searchRecentCommunityInteractionEvidenceInternal,
-        { userId, communityId: args.communityId, query, limit },
-      ),
-      ctx.runQuery(
-        (internal as any).communityAiFeedEvidence
-          .searchRecentCommunityAiFeedEvidenceInternal,
         { userId, communityId: args.communityId, query, limit },
       ),
       ctx.runQuery(
@@ -180,7 +160,6 @@ export const searchCommunityRepositoryInternal = internalAction({
       Record<string, unknown>,
       Record<string, unknown>,
       Record<string, unknown>,
-      Record<string, unknown>,
     ];
 
     if (memory?.ok !== true) {
@@ -198,12 +177,6 @@ export const searchCommunityRepositoryInternal = internalAction({
             : []
           ).map((item) => canonicalInteractionItem(item as SearchItem)),
           truncated: interactions.truncated === true,
-        },
-        {
-          items: (Array.isArray(aiFeed.matches) ? aiFeed.matches : []).map(
-            (item) => canonicalAiFeedItem(item as SearchItem),
-          ),
-          truncated: aiFeed.truncated === true,
         },
         {
           items: (Array.isArray(resources.matches)
@@ -250,7 +223,7 @@ export const searchCommunityRepositoryInternal = internalAction({
         version: 1,
         source: "canonical_community_repository",
         strategy: "bounded_rank_interleave",
-        domain_count: 4,
+        domain_count: 3,
       },
     };
   },

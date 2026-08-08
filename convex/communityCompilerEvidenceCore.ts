@@ -85,11 +85,13 @@ export function compilerStateForSourceTraceLifecycle(args: {
 }
 
 export function isCommunityCompilerEvidenceTrace(row: {
+  sourceType: string;
   visibilityScope: string;
   sourceVisibility?: string;
   actorAgentKey?: string;
 }): boolean {
   return (
+    row.sourceType !== "ai_feed" &&
     !isCommunityAgentSelfAuthoredTrace(row) &&
     compilerStateForSourceTraceVisibility(row.visibilityScope, row.sourceVisibility) === "pending"
   );
@@ -107,7 +109,6 @@ export function compilerPendingSince(row: SourceTraceRow): number {
 function classifyEvidencePriority(row: SourceTraceRow): EvidencePriority {
   if (row.sourceType === "outcome" || row.sourceType === "feedback") return "critical";
   if (
-    row.sourceType === "ai_feed" ||
     row.sourceType === "workflow_run" ||
     row.sourceType === "agent_run" ||
     row.sourceType === "transcript"

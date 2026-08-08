@@ -3113,7 +3113,7 @@ button.message-citation-chip:hover {
 }
 
 /* Settings panel buttons - consistent styling */
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger) {
   padding: 10px 16px;
   font-size: 12px;
   font-weight: 500;
@@ -3125,12 +3125,12 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):hover:not(:disabled) {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):hover:not(:disabled) {
   border-color: var(--border-default);
   background: var(--bg-card-hover);
 }
 
-.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.ai-feed-moderate-button):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):disabled {
+.settings-panel button:not(.appearance-option):not(.funnel-editor-about-trigger):not(.platform-save-button):not(.integration-mounted-menu-trigger):not(.integration-mounted-menu-item):not(.platform-switcher-btn):not(.analytics-range-btn):not(.stripe-setup-button):not(.web-social-profile-link-button):not(.settings-primary-action):not(.danger):disabled {
   opacity: 0.5;
   cursor: not-allowed;
 }
@@ -8327,34 +8327,6 @@ button.settings-primary-action svg {
 .app-root.mobile-shell .feed-post-list,
 .app-root.mobile-shell .resource-grid {
   gap: 12px;
-}
-
-.app-root.mobile-shell .ai-feed-item-card {
-  padding: 16px;
-  gap: 12px;
-  border-radius: 18px;
-}
-
-.app-root.mobile-shell .ai-feed-item-meta {
-  gap: 10px;
-}
-
-.app-root.mobile-shell .ai-feed-item-title {
-  font-size: 18px;
-}
-
-.app-root.mobile-shell .ai-feed-item-summary,
-.app-root.mobile-shell .ai-feed-item-section-body {
-  font-size: 14px;
-  line-height: 1.55;
-}
-
-.app-root.mobile-shell .ai-feed-signal-row {
-  gap: 8px;
-}
-
-.app-root.mobile-shell .ai-feed-signal-button {
-  padding: 7px 11px;
 }
 
 .app-root.mobile-shell .resource-grid {

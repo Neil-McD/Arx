@@ -2,7 +2,13 @@
 
 Status: staging architecture; canonical five-tool boundary implemented
 Scope: product architecture, memory system, community agent loop
-Last updated: 2026-08-01
+Last updated: 2026-08-08
+
+> **AI Feed retirement:** AI Feed is no longer a live product, repository, agent,
+> compiler-input, or MCP surface. Historical AI Feed lineage and schema remain
+> migration substrate until the bounded retirement census and data cleanup are
+> complete. Any older AI Feed language below is historical context and does not
+> authorize new reads, writes, UI, routes, tools, prompts, or memory admission.
 
 ## Purpose
 
@@ -41,7 +47,7 @@ personal agent runtime under the active community lens.
    - transcript loads commit only while their signed-in member generation and thread remain active
    - receives the canonical five Polynet repository tools; community context
      and authority are resolved by the server on every operation
-   - can publish to authorized community chat and AI Feed paths only when the
+   - can publish to authorized community chat paths only when the
      signed-in member explicitly requests it
    - cannot invoke workspace, Daytona, third-party MCP, or autonomous cognition
      actions
@@ -57,7 +63,7 @@ The community-owned runtime surfaces are:
      harness and official MCP
    - is server-mounted to exactly one community and always operates in the
      member lane, even when the operational sponsor is an owner or admin
-   - can publish to that community's chat and AI Feed with community-agent
+   - can publish to that community's chat with community-agent
      attribution
    - cannot access builder paths, write retained community memory directly, or
      invoke autonomous cognition
