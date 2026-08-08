@@ -75,7 +75,7 @@ assert.match(
 assert.match(interactionController, /const openMemory = useCallback\([\s\S]*setSidecar\(\{ kind: "memory" \}\)/, "the interaction owner should open memory without navigation");
 assert.match(interactionController, /setSidecar\(\{ kind: "thread", rootId \}\)/, "opening a thread should replace memory in the same sidecar");
 assert.match(interactionController, /setSidecar\(\{ kind: "context" \}\)/, "closing a detail should restore the context rail");
-assert.match(interactionController, /memoryTriggerRef[\s\S]*trigger\.focus\(\{ preventScroll: true \}\)/, "closing Memory should restore focus to its rail trigger");
+assert.match(interactionController, /memoryTriggerRef[\s\S]*button\[aria-label="Open community memory"\][\s\S]*focusTarget\?\.focus\(\{ preventScroll: true \}\)/, "closing Memory should restore focus to the newly mounted rail trigger");
 
 assert.match(contextPanel, /CommunityMemoryGraphPreview/, "the default rail should keep the live compact preview");
 assert.match(contextPanel, /onOpenMemory/, "the compact preview should remain the Memory entry point");

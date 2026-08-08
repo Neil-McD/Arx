@@ -901,7 +901,10 @@ export function useWebCommunityInteractionProjection<
     memoryTriggerRef.current = null;
     if (trigger && typeof window !== "undefined") {
       window.requestAnimationFrame(() => {
-        if (trigger.isConnected) trigger.focus({ preventScroll: true });
+        const focusTarget = trigger.isConnected
+          ? trigger
+          : document.querySelector<HTMLElement>('button[aria-label="Open community memory"]');
+        focusTarget?.focus({ preventScroll: true });
       });
     }
   }, []);
