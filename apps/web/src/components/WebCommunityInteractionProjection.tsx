@@ -866,7 +866,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         <aside className="community-interaction-drawer" aria-label="Profile">
           <div className="community-interaction-drawer-back">
             <button
-              ref={memoryBackButtonRef}
               className="back-to-workspace"
               type="button"
               onClick={props.onCloseProfile}
@@ -884,6 +883,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         <aside className="community-interaction-drawer community-memory-drawer" aria-label="Community memory">
           <div className="community-interaction-drawer-back community-memory-drawer-header">
             <button
+              ref={memoryBackButtonRef}
               className="back-to-workspace"
               type="button"
               onClick={props.onCloseCommunityMemory ?? props.onCloseDrawer}
