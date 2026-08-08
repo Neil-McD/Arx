@@ -43,9 +43,10 @@ export function useWebCommunityEntryBridgeController(params: {
   publicCommunity: PublicCommunitySummary;
   publicCommunityAccessId: string | null;
   approvalPending: boolean;
-  validateProfileInputs: (acceptance: LegalAcceptance) => boolean;
-  saveOnboardingProfile: (acceptance: LegalAcceptance) => Promise<boolean>;
-  finishOnboarding: (options: { navigate: false }) => Promise<boolean>;
+  completeAccountSetup: (acceptance: LegalAcceptance) => Promise<boolean>;
+  completeAccountSetupAndContinue: (
+    acceptance: LegalAcceptance,
+  ) => Promise<boolean>;
   setOnboardingError: (message: string | null) => void;
   resolveDestination: (options?: {
     communityId?: string | null;
@@ -139,30 +140,19 @@ export function useWebCommunityEntryBridgeController(params: {
   ]);
 
   const completePlatformBridge = useCallback(
-    async (legalAcceptance: LegalAcceptance): Promise<boolean> => {
-      if (!params.validateProfileInputs(legalAcceptance)) return false;
-      if (!(await params.saveOnboardingProfile(legalAcceptance))) return false;
-      if (!(await params.finishOnboarding({ navigate: false }))) return false;
-      const entered = await params.resolveAndEnter({ replace: true });
-      if (!entered) {
-        params.setOnboardingError("We could not open Polynet. Try again.");
-        return false;
-      }
-      return true;
-    },
+    async (legalAcceptance: LegalAcceptance): Promise<boolean> =>
+      await params.completeAccountSetupAndContinue(legalAcceptance),
     [params],
   );
 
   const completeCommunityBridge = useCallback(
     async (legalAcceptance: LegalAcceptance): Promise<boolean> => {
       if (params.approvalPending) {
-        if (!(await params.saveOnboardingProfile(legalAcceptance))) return false;
-        if (!(await params.finishOnboarding({ navigate: false }))) return false;
+        if (!(await params.completeAccountSetup(legalAcceptance))) return false;
         setIsBridgeGateOpen(false);
         setBridgePendingEntry(null);
         return true;
       }
-      if (!params.validateProfileInputs(legalAcceptance)) return false;
       const entry =
         bridgePendingEntry ??
         (params.activeCommunityId
@@ -177,8 +167,7 @@ export function useWebCommunityEntryBridgeController(params: {
         );
         return false;
       }
-      if (!(await params.saveOnboardingProfile(legalAcceptance))) return false;
-      if (!(await params.finishOnboarding({ navigate: false }))) return false;
+      if (!(await params.completeAccountSetup(legalAcceptance))) return false;
       const destination = await params.resolveDestination({
         communityId: entry.communityId,
         communitySlug: entry.communitySlug,
