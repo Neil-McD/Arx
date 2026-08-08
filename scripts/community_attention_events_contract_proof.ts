@@ -42,7 +42,7 @@ assert.match(
 assert.match(
   backend,
   /type CommunityAttentionSurface = "chat" \| "ai_feed" \| "resources" \| "events" \| "mentions"/,
-  "Events must be a first-class community attention surface",
+  "the backend must retain AI Feed as a historical attention compatibility value",
 );
 
 assert.match(
@@ -71,8 +71,13 @@ assert.match(
 
 assert.match(
   gateway,
-  /CloudCommunityAttentionSurface = "chat" \| "ai_feed" \| "resources" \| "events" \| "mentions"/,
-  "shared gateway must expose the Events surface",
+  /CloudCommunityAttentionSurface = "chat" \| "resources" \| "events" \| "mentions"/,
+  "the active shared gateway must expose Events without the retired AI Feed surface",
+);
+assert.doesNotMatch(
+  gateway,
+  /CloudCommunityAttentionSurface[^;]*ai_feed/,
+  "the active shared attention gateway must not admit AI Feed acknowledgements",
 );
 
 assert.match(
@@ -113,8 +118,8 @@ assert.match(
 
 assert.match(
   app,
-  /indicators\.chat \|\| indicators\.ai_feed \|\| indicators\.resources \|\| indicators\.events/,
-  "community rail attention must include Events",
+  /indicators\.chat \|\| indicators\.resources \|\| indicators\.events/,
+  "community rail attention must include Events without the retired AI Feed indicator",
 );
 
 assert.match(
@@ -177,7 +182,7 @@ assert.match(
 );
 assert.match(
   app,
-  /indicators\.chat \|\| indicators\.ai_feed \|\| indicators\.resources \|\| indicators\.events \|\| indicators\.mentions/,
+  /indicators\.chat \|\| indicators\.resources \|\| indicators\.events \|\| indicators\.mentions/,
   "the community rail attention OR must include mentions",
 );
 

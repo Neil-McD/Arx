@@ -8,8 +8,8 @@ applied.
 
 ## Canonical layers
 
-1. Interactions, Resources, AI Feed posts, and operational source traces are
-   canonical source records.
+1. Interactions, Resources, and operational source traces are canonical sources
+   for new evidence. Retired AI Feed posts remain historical source records only.
 2. Archive/vector rows are rebuildable search candidates only. They never grant
    visibility or admissibility.
 3. `communityEvidenceCitations` records an immutable source ref, opaque source
@@ -44,6 +44,9 @@ foreign, hidden, deleted, or nonexistent source.
 - Hiding or deleting a source revokes its citation for future application.
 - Citations are immutable and are never rewritten to point at a newer source
   version.
+- Existing AI Feed citations remain resolvable for audit and migration, but
+  direct `ai_feed:` refs and `sourceType=ai_feed` traces cannot create new
+  citations or memory proposals.
 
 ## Change-request enforcement
 

@@ -76,6 +76,25 @@ assert.doesNotMatch(digest, /query\("communityAiFeedPosts"/);
 const compiler = read("convex/communityCompilerEvidenceCore.ts");
 assert.match(compiler, /row\.sourceType !== "ai_feed"/);
 
+const citations = read("convex/communityEvidenceCitations.ts");
+assert.match(
+  citations,
+  /resolution\.sourceKind === "ai_feed"[\s\S]*community_evidence_source_retired/,
+  "direct retired Feed references must not create new citations",
+);
+assert.match(
+  citations,
+  /community_evidence_source_trace_not_admissible[\s\S]*trace\.sourceType === "ai_feed"[\s\S]*community_evidence_source_retired/,
+  "retired Feed traces must not enter new memory proposals",
+);
+
+const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
+assert.match(
+  canonicalExecutor,
+  /target\.localPath === "\/ai-feed\/"[\s\S]*semantic_not_found/,
+  "retired Feed writes must fail as an absent semantic path",
+);
+
 const inspector = read("convex/communityAiFeedRetirement.ts");
 for (const category of [
   "posts",

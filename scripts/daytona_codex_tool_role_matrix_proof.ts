@@ -27,26 +27,13 @@ const workerBridgeSource = read("convex/polynetCodexWorkerTool.ts");
 const runtimeAgentLoopSource = read("convex/runtimeAgentLoop.ts");
 const runtimeTurnHandlersSource = read("convex/runtimeTurnHandlers.ts");
 
-const productDocTools = ["search_product_docs", "get_product_doc"] as const;
-const communityReadTools = [
+const canonicalPolynetTools = [
   "polynet_list",
   "polynet_read",
-  "community_search",
-  "community_memory_search",
-  "community_memory_read",
-  "community_chat_search",
-  "community_chat_read",
-  "community_ai_feed_search",
-  "community_ai_feed_read",
-  "community_resources_read",
-  "community_resources_search",
+  "polynet_search",
+  "polynet_write",
+  "polynet_call",
 ] as const;
-const builderStageTools = [
-  "community_resource_builder_list",
-  "community_resource_builder_read",
-  "community_resource_builder_stage_changeset",
-] as const;
-const communityWriteTools = ["community_write"] as const;
 
 function projectedToolNames(authority: unknown, hasCommunity = true): string[] {
   const communityLensAuthority = normalizeCommunityLensAuthority(authority);
@@ -93,7 +80,7 @@ assert.match(
 assertToolNames(
   "no community lens",
   buildPolynetPlatformToolNames({ hasCommunity: false }),
-  productDocTools,
+  canonicalPolynetTools,
 );
 assertToolNames(
   "member lens",
@@ -101,7 +88,7 @@ assertToolNames(
     relation: "member",
     effectiveRole: "member",
   }),
-  [...communityReadTools, ...productDocTools],
+  canonicalPolynetTools,
 );
 assertToolNames(
   "moderator lens",
@@ -111,7 +98,7 @@ assertToolNames(
     canModerate: true,
     canReviewJoinRequests: true,
   }),
-  [...communityReadTools, ...communityWriteTools, ...productDocTools],
+  canonicalPolynetTools,
 );
 assertToolNames(
   "admin without resource management",
@@ -123,7 +110,7 @@ assertToolNames(
     canManageResources: false,
     canReviewJoinRequests: true,
   }),
-  [...communityReadTools, ...communityWriteTools, ...productDocTools],
+  canonicalPolynetTools,
 );
 assertToolNames(
   "admin with resource management",
@@ -135,12 +122,7 @@ assertToolNames(
     canManageResources: true,
     canReviewJoinRequests: true,
   }),
-  [
-    ...communityReadTools,
-    ...builderStageTools,
-    ...communityWriteTools,
-    ...productDocTools,
-  ],
+  canonicalPolynetTools,
 );
 
 const daytonaCodexHarnessPolicy = resolveCodexHarnessToolPolicy({
@@ -180,10 +162,7 @@ assert.deepEqual(
   [...CODEX_RUNTIME_ADAPTER_TOOL_NAMES],
 );
 assert.deepEqual(daytonaCodexHarnessPolicy.polynetPlatformToolNames, [
-  ...communityReadTools,
-  ...builderStageTools,
-  ...communityWriteTools,
-  ...productDocTools,
+  ...canonicalPolynetTools,
 ]);
 const daytonaCodexPolicyReceipt =
   buildCodexHarnessToolPolicyReceipt(daytonaCodexHarnessPolicy);
@@ -266,12 +245,7 @@ assertToolNames(
     canManageResources: true,
     canReviewJoinRequests: true,
   }),
-  [
-    ...communityReadTools,
-    ...builderStageTools,
-    ...communityWriteTools,
-    ...productDocTools,
-  ],
+  canonicalPolynetTools,
 );
 assertToolNames(
   "forged builder lane on member lens",
@@ -285,7 +259,7 @@ assertToolNames(
       can_use_resource_builder: true,
     },
   }),
-  [...communityReadTools, ...productDocTools],
+  canonicalPolynetTools,
 );
 assertToolNames(
   "forged builder lane on moderator lens",
@@ -300,7 +274,7 @@ assertToolNames(
       can_use_resource_builder: true,
     },
   }),
-  [...communityReadTools, ...communityWriteTools, ...productDocTools],
+  canonicalPolynetTools,
 );
 
 const moderatorPolicies = projectedToolPolicies({
@@ -309,16 +283,16 @@ const moderatorPolicies = projectedToolPolicies({
   canModerate: true,
 });
 assert.equal(
-  moderatorPolicies.find((tool) => tool.name === "community_write")
+  moderatorPolicies.find((tool) => tool.name === "polynet_write")
     ?.required_community_authority,
-  "moderator",
-  "community_write must require moderator authority",
+  "none",
+  "canonical write authorization must be derived per call by the server",
 );
 assert.equal(
-  moderatorPolicies.find((tool) => tool.name === "community_write")
+  moderatorPolicies.find((tool) => tool.name === "polynet_write")
     ?.risk_level,
   "write",
-  "community_write must remain marked write-risk",
+  "polynet_write must remain marked write-risk",
 );
 assert.equal(
   moderatorPolicies.some((tool) => tool.name === "community_resource_builder_stage_changeset"),
@@ -343,18 +317,13 @@ const ownerEnvelope = buildRuntimeTurnEnvelope({
       can_use_resource_builder: true,
     },
   },
-  allowedToolNames: [
-    ...communityReadTools,
-    ...builderStageTools,
-    ...communityWriteTools,
-    ...productDocTools,
-  ],
+  allowedToolNames: [...canonicalPolynetTools],
 });
 assert.equal(ownerEnvelope.authority.communityRelation, "owner");
 assert.equal(ownerEnvelope.authority.canModerate, true);
 assert.equal(ownerEnvelope.authority.canManageResources, true);
 assert.equal(
-  ownerEnvelope.authority.allowedToolNames.includes("community_write"),
+  ownerEnvelope.authority.allowedToolNames.includes("polynet_write"),
   true,
   "runtime envelope must carry the exact projected tool names",
 );
@@ -398,10 +367,10 @@ assert.match(
   /readRunCommunityAuthority[\s\S]*runAuthorityAllowsRequiredAuthority[\s\S]*readRunCommunityResourceLane[\s\S]*runAuthorityAllowsRequiredLane/,
   "worker bridge must enforce canonical run-snapshot authority before dispatching tools",
 );
-assert.match(
+assert.doesNotMatch(
   runtimeAgentLoopSource,
-  /params\.toolName === "community_write"[\s\S]*publishCommunityAiFeedAgentPostInternal/,
-  "community_write must use the trusted internal publish path for runtime calls",
+  /params\.toolName === "community_write"|publishCommunityAiFeedAgentPostInternal/,
+  "the runtime loop must not retain the retired AI Feed write tool",
 );
 assert.match(
   workerServerSource,

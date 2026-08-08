@@ -7,6 +7,7 @@ import {
   parseCommunityEvidenceRef,
 } from "../shared/communityEvidenceContract.ts";
 import {
+  captureCommunityEvidenceCitationCore,
   captureCommunityEvidenceCitationsForSourceTracesCore,
   checkCommunityEvidenceCitationCore,
   requireCommunityEvidenceCitationVisibilityCore,
@@ -353,9 +354,79 @@ async function main() {
     updatedAt: nowMs,
   });
   const aiFeedRef = buildCommunityAiFeedEvidenceRef(postId);
+  const activeAiFeedResolution = await resolveCommunityEvidenceRefCore({
+    ctx,
+    communityId,
+    ref: aiFeedRef,
+  });
+  assert.equal(activeAiFeedResolution.status, "active");
+  if (activeAiFeedResolution.status !== "active") {
+    throw new Error("expected active historical AI Feed resolution");
+  }
+  const historicalAiFeedCitationId = await db.insert("communityEvidenceCitations", {
+    communityId,
+    sourceKind: activeAiFeedResolution.sourceKind,
+    sourceRef: activeAiFeedResolution.sourceRef,
+    sourceVersion: activeAiFeedResolution.sourceVersion,
+    contentHash: activeAiFeedResolution.contentHash,
+    provenanceHash: activeAiFeedResolution.provenanceHash,
+    capturedVisibility: activeAiFeedResolution.visibilityScope,
+    capturedAt: nowMs - 1,
+  });
   assert.equal(
-    (await resolveCommunityEvidenceRefCore({ ctx, communityId, ref: aiFeedRef })).status,
+    await checkCommunityEvidenceCitationCore({
+      ctx,
+      communityId,
+      citationId: historicalAiFeedCitationId,
+    }),
     "active",
+    "historical AI Feed citations must remain auditable during retirement",
+  );
+  await assert.rejects(
+    () =>
+      captureCommunityEvidenceCitationCore({
+        ctx,
+        communityId,
+        ref: aiFeedRef,
+        capturedAt: nowMs + 1,
+      }),
+    /community_evidence_source_retired/,
+  );
+  const aiFeedTraceId = await db.insert("communitySourceTraces", {
+    communityId,
+    sourceType: "ai_feed",
+    sourceId: aiFeedRef,
+    summary: "Retired AI Feed trace",
+    visibilityScope: "community",
+    sourceVisibility: "community",
+    artifactIds: [],
+    outcomeObservationIds: [],
+    actorType: "compiler",
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  await assert.rejects(
+    () =>
+      captureCommunityEvidenceCitationsForSourceTracesCore({
+        ctx,
+        communityId: "foreign_community",
+        sourceTraceIds: [aiFeedTraceId],
+        actorType: "compiler",
+        capturedAt: nowMs + 1,
+      }),
+    /community_evidence_source_trace_not_admissible/,
+    "retirement must not disclose a foreign trace's source type",
+  );
+  await assert.rejects(
+    () =>
+      captureCommunityEvidenceCitationsForSourceTracesCore({
+        ctx,
+        communityId,
+        sourceTraceIds: [aiFeedTraceId],
+        actorType: "compiler",
+        capturedAt: nowMs + 1,
+      }),
+    /community_evidence_source_retired/,
   );
   await db.patch(postId, { status: "hidden", updatedAt: nowMs + 1 });
   assert.notEqual(
@@ -472,8 +543,7 @@ async function main() {
   assert.match(directory, /community_evidence_citation_review_required/);
   assert.match(directory, /requestRecapturesAllExistingTraces\s*\? evidenceCitationIds/);
   assert.match(directory, /citationIds: effectiveEvidenceCitationIds/);
-  assert.match(recentContext, /query\("communityInteractionRoots"/);
-  assert.match(recentContext, /query\("communityAiFeedPosts"/);
+  assert.doesNotMatch(recentContext, /query\("communityAiFeedPosts"/);
   assert.match(recentContext, /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/);
   assert.match(legacyChat, /syncLegacyChatMessageDeleteToInteractionCore/);
   assert.match(

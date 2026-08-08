@@ -162,14 +162,16 @@ includes(
 );
 includes(
   externalSmoke,
-  "AI Feed retry must reuse the canonical receipt.",
-  "AI Feed replay acceptance",
+  "Retired AI Feed directory must not be projected.",
+  "retired AI Feed projection denial",
 );
 includes(
   externalSmoke,
-  "AI Feed read-back must contain the acceptance observation.",
-  "AI Feed read-back acceptance",
+  'purpose: "retired-ai-feed-write-denied"',
+  "retired AI Feed write denial",
 );
+includes(externalSmoke, "retired_ai_feed", "retired AI Feed acceptance receipt");
+excludes(externalSmoke, "AI Feed retry must reuse", "retired AI Feed write acceptance");
 excludes(
   externalSmoke,
   "Date.now().toString(36)",

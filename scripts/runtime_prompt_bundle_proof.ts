@@ -42,13 +42,9 @@ const fullParams = {
     "get_product_doc",
     "polynet_list",
     "polynet_read",
-    "community_resources_read",
-    "community_resource_builder_list",
-    "community_resource_builder_read",
-    "community_resource_builder_stage_changeset",
-    "community_resource_builder_apply_changeset",
-    "community_search",
-    "community_write",
+    "polynet_search",
+    "polynet_write",
+    "polynet_call",
     "web_research",
     "read",
     "write",
@@ -127,7 +123,6 @@ assert.deepEqual(sectionIds(fullBundle), [
   "community_lens",
   "community_lens_authority",
   "community_system_prompt",
-  "community_feed_context",
   "community_resource_lane",
   "workspace_harness_context",
   "runtime_turn_context",
@@ -147,7 +142,6 @@ const orderedHeadings = [
   "COMMUNITY_LENS",
   "COMMUNITY_LENS_AUTHORITY",
   "COMMUNITY_SYSTEM_PROMPT",
-  "COMMUNITY_FEED_CONTEXT",
   "COMMUNITY_RESOURCE_BUILDER_LANE",
   "PLATFORM_HARNESS_CONTEXT",
   "RUNTIME_TURN_ENVELOPE",
@@ -203,7 +197,6 @@ assertRendered(omittedBundle, "workspace_harness_context");
 assertOmitted(omittedBundle, "user_agent_soul");
 assertOmitted(omittedBundle, "community_lens_authority");
 assertOmitted(omittedBundle, "community_system_prompt");
-assertOmitted(omittedBundle, "community_feed_context");
 assertOmitted(omittedBundle, "community_resource_lane");
 assertOmitted(omittedBundle, "runtime_turn_context");
 assertOmitted(omittedBundle, "temporal_context");

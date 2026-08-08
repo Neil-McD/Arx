@@ -15,12 +15,9 @@ const codexVisiblePolynetToolNames = [
   "get_product_doc",
   "polynet_list",
   "polynet_read",
-  "community_search",
-  "community_resources_read",
-  "community_resources_search",
-  "community_resource_builder_list",
-  "community_resource_builder_read",
-  "community_resource_builder_stage_changeset",
+  "polynet_search",
+  "polynet_write",
+  "polynet_call",
 ] as const;
 
 assert.match(
@@ -141,17 +138,17 @@ assert.doesNotMatch(
 );
 assert.match(
   projection.developerInstructions,
-  /Allowed tools: search_product_docs,get_product_doc,polynet_list,polynet_read,community_search,community_resources_read,community_resources_search,community_resource_builder_list,community_resource_builder_read,community_resource_builder_stage_changeset/,
+  /Allowed tools: search_product_docs,get_product_doc,polynet_list,polynet_read,polynet_search,polynet_write,polynet_call/,
   "Codex projection must render only the exact PolyNet platform tools projected to Codex",
 );
 assert.match(
   projection.developerInstructions,
-  /Available tools: search_product_docs, get_product_doc, polynet_list, polynet_read, community_search, community_resources_read, community_resources_search, community_resource_builder_list, community_resource_builder_read, community_resource_builder_stage_changeset/,
+  /Available tools: search_product_docs, get_product_doc, polynet_list, polynet_read, polynet_search, polynet_write, polynet_call/,
   "Codex runtime envelope must use the exact Codex-visible PolyNet tool surface",
 );
 assert.doesNotMatch(
   projection.developerInstructions,
-  /community_resource_builder_apply_changeset|community_write|web_research|web_crawl|terminal_start|terminal_read|computer_open_url|list_dir|read, write|write, edit|bash/,
+  /community_resource_builder_|community_(?:ai_feed|resources|search|write)|web_research|web_crawl|terminal_start|terminal_read|computer_open_url|list_dir|read, write|write, edit|bash/,
   "Codex projection must not advertise native-only, duplicate, or blocked PolyNet tools",
 );
 assert.doesNotMatch(
@@ -173,7 +170,6 @@ assert.deepEqual(projection.receipt.runtimePromptSectionIds, [
   "community_lens",
   "community_lens_authority",
   "community_system_prompt",
-  "community_feed_context",
   "community_resource_lane",
   "workspace_harness_context",
   "runtime_turn_context",
