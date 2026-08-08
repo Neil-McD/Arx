@@ -131,6 +131,7 @@ includes(
 for (const acceptanceInput of [
   "POLYNET_MCP_COMMUNITY_SLUG",
   "POLYNET_MCP_DENIED_COMMUNITY_SLUG",
+  "POLYNET_MCP_CONTROL_BEARER_TOKEN",
   "POLYNET_MCP_EXPECT_AUTHORITY_LANE",
   "POLYNET_MCP_ACCEPTANCE_RUN_ID",
 ]) {
@@ -140,6 +141,17 @@ for (const acceptanceInput of [
     `${acceptanceInput} fail-closed acceptance input`,
   );
 }
+includes(
+  externalSmoke,
+  "Acceptance actor and control identities must use different bearer tokens.",
+  "acceptance actor/control identity separation",
+);
+includes(
+  externalSmoke,
+  "Control identity must prove authorized access to the denied community.",
+  "acceptance denied-community control read",
+);
+includes(externalSmoke, "control_read", "acceptance control-read receipt");
 includes(
   externalSmoke,
   "refusing to substitute another community",
@@ -170,8 +182,16 @@ includes(
   'purpose: "retired-ai-feed-write-denied"',
   "retired AI Feed write denial",
 );
-includes(externalSmoke, "retired_ai_feed", "retired AI Feed acceptance receipt");
-excludes(externalSmoke, "AI Feed retry must reuse", "retired AI Feed write acceptance");
+includes(
+  externalSmoke,
+  "retired_ai_feed",
+  "retired AI Feed acceptance receipt",
+);
+excludes(
+  externalSmoke,
+  "AI Feed retry must reuse",
+  "retired AI Feed write acceptance",
+);
 excludes(
   externalSmoke,
   "Date.now().toString(36)",
@@ -225,7 +245,7 @@ includes(
 );
 includes(
   contract,
-  "identity successfully opened",
+  "identity successfully opens",
   "real inaccessible-community control proof",
 );
 includes(
