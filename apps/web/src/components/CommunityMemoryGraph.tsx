@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { X } from "lucide-react";
 import type {
   CloudCommunityPolynetOverview,
 } from "../../../../shared/cloudCommunityPolynetGateway";
@@ -83,14 +84,6 @@ function nodeRadius(confidence: unknown): number {
   return 9 + clamped * 7;
 }
 
-function selectInitialNode(overview: CloudCommunityPolynetOverview | null): string | null {
-  if (!overview) return null;
-  // Prefer learned memory, then a canonical source resource. Never select the seed.
-  const firstMemoryNode = overview.graph.nodes.find((node) => node.kind === "directory_node")
-    ?? overview.graph.nodes.find((node) => node.kind === "resource_node");
-  return firstMemoryNode?.id ?? null;
-}
-
 export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
   const {
     activeCommunityName,
@@ -105,11 +98,22 @@ export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
       setSelectedNodeId(null);
       return;
     }
-    const nodeExists = selectedNodeId
-      ? overview.graph.nodes.some((node) => node.id === selectedNodeId)
-      : false;
-    if (!nodeExists) setSelectedNodeId(selectInitialNode(overview));
+    if (selectedNodeId && !overview.graph.nodes.some((node) => node.id === selectedNodeId)) {
+      setSelectedNodeId(null);
+    }
   }, [overview, selectedNodeId]);
+
+  useEffect(() => {
+    if (!selectedNodeId) return;
+    const clearSelectionBeforeDrawerClose = (event: KeyboardEvent) => {
+      if (event.key !== "Escape") return;
+      event.preventDefault();
+      event.stopImmediatePropagation();
+      setSelectedNodeId(null);
+    };
+    document.addEventListener("keydown", clearSelectionBeforeDrawerClose, true);
+    return () => document.removeEventListener("keydown", clearSelectionBeforeDrawerClose, true);
+  }, [selectedNodeId]);
 
   const layout = useMemo(
     () => computePolynetLayout(
@@ -135,10 +139,14 @@ export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
     }
     return map;
   }, [overview]);
-  const { containerRef, svgRef, transform, isPanning, draggingNodeId, worldPositionFor, handlers, actions: viewportActions } =
-    useWebPolynetGraphViewport({ layout, onSelectNode: setSelectedNodeId });
-  const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const selectedNode = overview?.graph.nodes.find((node) => node.id === selectedNodeId) ?? null;
+  const { containerRef, svgRef, transform, isPanning, draggingNodeId, worldPositionFor, handlers, actions: viewportActions } =
+    useWebPolynetGraphViewport({
+      layout,
+      onSelectNode: setSelectedNodeId,
+      fitInsets: selectedNode && selectedNode.kind !== "community" ? { bottom: 148 } : undefined,
+    });
+  const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
   const memoryNodeCount = overview?.graph.nodes.filter((node) => node.kind !== "community").length ?? 0;
   const agentActivity = agentActivityClass(overview?.agent.activity_state);
   const focusNeighbors = hoveredNodeId ? adjacency.get(hoveredNodeId) ?? null : null;
@@ -171,7 +179,10 @@ export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
                 className="community-polynet-graph-canvas"
                 role="application"
                 aria-label="Community memory graph canvas"
-                onPointerDown={handlers.onBackgroundPointerDown}
+                onPointerDown={(event) => {
+                  setSelectedNodeId(null);
+                  handlers.onBackgroundPointerDown(event);
+                }}
                 onPointerMove={handlers.onPointerMove}
                 onPointerUp={handlers.onPointerUp}
                 onPointerCancel={handlers.onPointerCancel}
@@ -225,6 +236,7 @@ export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
                         role="button"
                         tabIndex={0}
                         aria-label={node.label ?? undefined}
+                        aria-pressed={isSelected}
                         onPointerDown={handlers.makeNodePointerDownHandler(node.id, layoutPos)}
                         onMouseEnter={() => setHoveredNodeId(node.id)}
                         onMouseLeave={() => setHoveredNodeId((current) => (current === node.id ? null : current))}
@@ -273,8 +285,18 @@ export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
                 <button type="button" onClick={viewportActions.zoomIn} aria-label="Zoom in">+</button>
               </div>
               {selectedNode && selectedNode.kind !== "community" ? (
-                <div className="community-polynet-detail">
-                  <div className="community-polynet-detail-title">{selectedNode.title ?? selectedNode.label}</div>
+                <div className="community-polynet-detail" role="group" aria-label="Selected memory">
+                  <div className="community-polynet-detail-heading">
+                    <div className="community-polynet-detail-title">{selectedNode.title ?? selectedNode.label}</div>
+                    <button
+                      type="button"
+                      className="community-polynet-detail-close"
+                      onClick={() => setSelectedNodeId(null)}
+                      aria-label="Clear selected memory"
+                    >
+                      <X size={16} strokeWidth={2} aria-hidden="true" />
+                    </button>
+                  </div>
                   <div className="community-polynet-detail-meta">
                     <span>{formatLabel(selectedNode.type)}</span>
                     <span>{formatLabel(selectedNode.status)}</span>

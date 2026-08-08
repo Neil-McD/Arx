@@ -48,7 +48,31 @@ type DragState = {
 type UseWebPolynetGraphViewportArgs = {
   layout: ReadonlyMap<string, PolynetLayoutPosition>;
   onSelectNode: (nodeId: string) => void;
+  fitInsets?: Partial<PolynetViewportInsets>;
 };
+
+type PolynetViewportInsets = {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+};
+
+const EMPTY_FIT_INSETS: PolynetViewportInsets = {
+  top: 0,
+  right: 0,
+  bottom: 0,
+  left: 0,
+};
+
+function normalizeFitInsets(insets: Partial<PolynetViewportInsets> | undefined): PolynetViewportInsets {
+  return {
+    top: Math.max(0, insets?.top ?? 0),
+    right: Math.max(0, insets?.right ?? 0),
+    bottom: Math.max(0, insets?.bottom ?? 0),
+    left: Math.max(0, insets?.left ?? 0),
+  };
+}
 
 function clampScale(scale: number): number {
   return Math.max(MIN_SCALE, Math.min(MAX_SCALE, scale));
@@ -56,10 +80,14 @@ function clampScale(scale: number): number {
 
 export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs) {
   const { layout, onSelectNode } = args;
+  const fitInsets = normalizeFitInsets(args.fitInsets ?? EMPTY_FIT_INSETS);
+  const fitInsetsKey = `${fitInsets.top}:${fitInsets.right}:${fitInsets.bottom}:${fitInsets.left}`;
   const onSelectNodeRef = useRef(onSelectNode);
   onSelectNodeRef.current = onSelectNode;
   const layoutRef = useRef(layout);
   layoutRef.current = layout;
+  const fitInsetsRef = useRef(fitInsets);
+  fitInsetsRef.current = fitInsets;
 
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [transform, setTransform] = useState<PolynetViewportTransform>({ scale: 1, tx: 0, ty: 0 });
@@ -86,14 +114,25 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
     setViewport({ width, height });
     if (!userAdjustedRef.current && width > 0 && height > 0) {
       const bounds = computePolynetBounds(layoutRef.current);
-      setTransform(
-        computeFitTransform(bounds, { width, height }, {
+      const insets = fitInsetsRef.current;
+      const fitted = computeFitTransform(
+        bounds,
+        {
+          width: Math.max(1, width - insets.left - insets.right),
+          height: Math.max(1, height - insets.top - insets.bottom),
+        },
+        {
           padding: FIT_PADDING,
           minScale: MIN_SCALE,
           maxScale: MAX_SCALE,
           defaultScale: 1,
-        }),
+        },
       );
+      setTransform({
+        ...fitted,
+        tx: fitted.tx + insets.left,
+        ty: fitted.ty + insets.top,
+      });
     }
   }, []);
 
@@ -101,14 +140,25 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
     const vp = viewportRef.current;
     if (vp.width <= 0 || vp.height <= 0) return;
     const bounds = computePolynetBounds(layoutRef.current);
-    setTransform(
-      computeFitTransform(bounds, vp, {
+    const insets = fitInsetsRef.current;
+    const fitted = computeFitTransform(
+      bounds,
+      {
+        width: Math.max(1, vp.width - insets.left - insets.right),
+        height: Math.max(1, vp.height - insets.top - insets.bottom),
+      },
+      {
         padding: FIT_PADDING,
         minScale: MIN_SCALE,
         maxScale: MAX_SCALE,
         defaultScale: 1,
-      }),
+      },
     );
+    setTransform({
+      ...fitted,
+      tx: fitted.tx + insets.left,
+      ty: fitted.ty + insets.top,
+    });
   }, []);
 
   // Callback ref: attach the ResizeObserver + initial fit when the container mounts.
@@ -172,7 +222,7 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
     if (!el) return;
     const rect = el.getBoundingClientRect();
     applyMeasure(rect.width, rect.height);
-  }, [layout, applyMeasure]);
+  }, [layout, fitInsetsKey, applyMeasure]);
 
   const endDrag = useCallback((event: React.PointerEvent) => {
     const drag = dragRef.current;

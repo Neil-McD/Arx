@@ -3715,9 +3715,11 @@
 }
 
 .community-member-chat .community-memory-drawer .community-interaction-drawer-back {
+  position: relative;
   top: 0;
   right: 0;
   left: 0;
+  flex: 0 0 var(--web-topbar-height, 48px);
   height: var(--web-topbar-height, 48px);
   display: flex;
   align-items: center;
@@ -3733,6 +3735,10 @@
 
 .community-memory-drawer-header {
   justify-content: space-between;
+}
+
+.community-member-chat .community-memory-drawer .community-memory-drawer-header {
+  padding-right: 58px;
 }
 
 .community-memory-drawer-refresh {
@@ -3754,23 +3760,12 @@
   opacity: 0.55;
 }
 
-.community-memory-drawer-scroll {
-  flex: 1 1 auto;
-  display: flex;
-  overflow: hidden;
-}
-
 .community-memory-graph-surface {
   display: flex;
   flex: 1;
   min-width: 0;
   min-height: 0;
   flex-direction: column;
-}
-
-.community-memory-drawer .community-polynet-graph-controls,
-.community-memory-drawer .community-polynet-detail {
-  bottom: 88px;
 }
 
 .community-interaction-drawer-scroll {
@@ -3781,6 +3776,13 @@
   overflow-x: hidden;
   /* Clear the floating back island (top 8px + ~48px pill height). */
   padding-top: calc(var(--web-topbar-height, 48px) + 12px);
+}
+
+.community-memory-drawer > .community-memory-drawer-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  padding-top: 0;
+  overflow: hidden;
 }
 
 .community-interaction-main-composer,
@@ -11985,6 +11987,7 @@ button.chat-reply-quote:hover {
   height: 100%;
   overflow: hidden;
   background: transparent;
+  container: memory-graph / inline-size;
 }
 
 /* Single SVG canvas: one user unit == one CSS pixel, so pan/zoom is one <g>
@@ -12177,8 +12180,8 @@ button.chat-reply-quote:hover {
 
 .community-polynet-graph-controls {
   position: absolute;
+  top: 12px;
   right: 12px;
-  bottom: 12px;
   display: flex;
   gap: 6px;
   z-index: 3;
@@ -12206,22 +12209,54 @@ button.chat-reply-quote:hover {
 .community-polynet-detail {
   position: absolute;
   left: 12px;
-  bottom: 12px;
+  bottom: 16px;
   z-index: 3;
-  max-width: min(320px, calc(100% - 120px));
+  width: max-content;
+  max-width: min(420px, calc(100% - 120px));
   padding: 10px 12px;
   border: 1px solid var(--border-default);
   border-radius: 10px;
   background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-app));
   backdrop-filter: blur(6px);
-  pointer-events: none;
+  box-shadow: none;
+}
+
+.community-polynet-detail-heading {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
 }
 
 .community-polynet-detail-title {
+  min-width: 0;
   color: var(--text-primary);
   font-size: 13px;
   font-weight: 600;
   line-height: 1.3;
+}
+
+.community-polynet-detail-close {
+  display: grid;
+  flex: 0 0 28px;
+  width: 28px;
+  height: 28px;
+  margin: -5px -7px -3px 0;
+  padding: 0;
+  place-items: center;
+  border: 0;
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.community-polynet-detail-close:hover,
+.community-polynet-detail-close:focus-visible {
+  background: color-mix(in srgb, var(--text-primary) 8%, transparent);
+  color: var(--text-primary);
 }
 
 .community-polynet-detail-meta {
@@ -12232,6 +12267,12 @@ button.chat-reply-quote:hover {
   color: var(--text-secondary);
   font-size: 11px;
   text-transform: capitalize;
+}
+
+@container memory-graph (max-width: 440px) {
+  .community-polynet-detail {
+    max-width: calc(100% - 116px);
+  }
 }
 
 .community-polynet-empty-graph {
