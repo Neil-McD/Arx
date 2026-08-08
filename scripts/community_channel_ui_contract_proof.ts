@@ -398,7 +398,7 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent\);/,
+  /\.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent-attention\);/,
 );
 assertMatches(
   interactionStylesPath,

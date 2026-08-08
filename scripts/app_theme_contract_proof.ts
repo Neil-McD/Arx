@@ -278,6 +278,7 @@ assert.equal(
   "--accent-brand: #2F55FF;",
   "--accent-selection: #2F55FF;",
   "--accent-agent: #2F55FF;",
+  "--accent-attention: #2F55FF;",
   "--text-link: #2F55FF;",
   "--stroke-selected: #2F55FF;",
   "--text-selected: #171719;",
@@ -305,6 +306,34 @@ assert.match(
   baseCss,
   /\.chat-date-separator::before,[\s\S]*?\.chat-date-separator::after\s*\{[\s\S]*?background:\s*var\(--stroke-divider-accent\);/,
   "legacy chat day separators should consume the same structural-divider role",
+);
+assert.match(
+  baseCss,
+  /--accent-attention:\s*var\(--accent-cyan\);[\s\S]*?--accent-attention-fill:\s*#2F55FF;[\s\S]*?--text-on-attention:\s*#FFFFFF;/,
+  "activity attention should have an independent readable foreground and count-badge treatment",
+);
+[
+  /\.community-interaction-reply-pill\s*\{[\s\S]*?color:\s*var\(--accent-attention\);/,
+  /\.community-interaction-unread-divider::before\s*\{[\s\S]*?var\(--accent-attention\)/,
+  /\.community-interaction-unread-dot\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
+  /\.community-dm-inbox-row-unread\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
+  /\.nav-item-dot\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
+].forEach((activitySelector) => {
+  assert.match(
+    baseCss,
+    activitySelector,
+    "reply, unread, DM, and navigation activity should share the semantic attention role",
+  );
+});
+assert.match(
+  baseCss,
+  /\.unread-badge\s*\{[\s\S]*?background:\s*var\(--accent-attention-fill\);[\s\S]*?color:\s*var\(--text-on-attention\);/,
+  "compact unread counts should use the higher-contrast attention fill",
+);
+assert.match(
+  baseCss,
+  /\.nav-item\.active\s*\{[\s\S]*?background:\s*var\(--surface-selected\);[\s\S]*?border-color:\s*var\(--stroke-selected\);[\s\S]*?color:\s*var\(--text-selected\);/,
+  "routine selection should remain independent from activity attention",
 );
 
 assert.match(baseCss, /:root\[data-theme-family="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
@@ -593,6 +622,9 @@ assert.match(
 );
 
 const accessiblePairs = [
+  ["Dark activity blue on canvas", "#4285F4", "#1E1E1E"],
+  ["Light activity blue on canvas", "#2F55FF", "#F8F8F4"],
+  ["Unread count on activity fill", "#FFFFFF", "#2F55FF"],
   ["Primary ink on canvas", "#171719", "#F8F8F4"],
   ["Secondary ink on canvas", "#52515A", "#F8F8F4"],
   ["Muted ink on canvas", "#6B6974", "#F8F8F4"],
