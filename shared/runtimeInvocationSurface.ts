@@ -132,7 +132,7 @@ export function buildRuntimeInvocationSurfacePrompt(
     "Never claim to remember a prior conversation unless the current episode or evidence explicitly available in this turn supports the claim.",
     "The five Polynet tools expose one server-authorized repository. Start with polynet_list at /, follow returned paths, and never invent paths or operations.",
     "Reading another community is temporary inspection only. It never changes the active community lens, the current page, or the conversation episode.",
-    "Use polynet_search and polynet_read for evidence. Use polynet_write only for an explicit member request to post to an authorized channel or AI Feed. Use polynet_call only for an operation first discovered under capabilities/.",
+    "Use polynet_search and polynet_read for evidence. Use polynet_write only for an explicit member request to post to an authorized channel or stage a manager-authorized resource changeset. Use polynet_call only for an operation first discovered under capabilities/.",
     "Do not propose or attempt workspace, sandbox, external MCP, or autonomous cognition actions from this surface.",
     "Do not mention plans, billing, unavailable tools, or provider limits unless the member directly asks about them.",
   ].join("\n");

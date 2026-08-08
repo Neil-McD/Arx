@@ -14,7 +14,6 @@ export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
 export const POLYNET_RESOURCES_DIRECTORY_PATH = "/resources/";
 export const POLYNET_CHANNELS_DIRECTORY_PATH = "/channels/";
 export const POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH = "/channels/general/";
-export const POLYNET_AI_FEED_DIRECTORY_PATH = "/ai-feed/";
 export const POLYNET_MEMORY_DIRECTORY_PATH = "/memory/";
 export const POLYNET_CAPABILITIES_DIRECTORY_PATH = "/capabilities/";
 export const POLYNET_BUILDER_DIRECTORY_PATH = "/builder/";
@@ -320,7 +319,6 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_RESOURCES_DIRECTORY_PATH &&
       value !== POLYNET_CHANNELS_DIRECTORY_PATH &&
       value !== POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH &&
-      value !== POLYNET_AI_FEED_DIRECTORY_PATH &&
       value !== POLYNET_MEMORY_DIRECTORY_PATH &&
       value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
       value !== POLYNET_BUILDER_DIRECTORY_PATH &&
@@ -347,7 +345,6 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_RESOURCES_DIRECTORY_PATH ||
     value === POLYNET_CHANNELS_DIRECTORY_PATH ||
     value === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
-    value === POLYNET_AI_FEED_DIRECTORY_PATH ||
     value === POLYNET_MEMORY_DIRECTORY_PATH ||
     value === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_DIRECTORY_PATH ||
@@ -355,7 +352,6 @@ export function parsePolynetSemanticPath(value: unknown) {
     /^\/channels\/general\/interaction:(root|reply):[A-Za-z0-9_-]+\.md$/.test(
       value,
     ) ||
-    /^\/ai-feed\/ai_feed:[A-Za-z0-9_-]+\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
     /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(value) ||
     /^\/builder\/resources\/[A-Za-z0-9_-]+\.json$/.test(value)
@@ -438,7 +434,6 @@ export function validateCommunitySemanticOperationInput(args: {
       parsed.path === POLYNET_RESOURCES_DIRECTORY_PATH ||
       parsed.path === POLYNET_CHANNELS_DIRECTORY_PATH ||
       parsed.path === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
-      parsed.path === POLYNET_AI_FEED_DIRECTORY_PATH ||
       parsed.path === POLYNET_MEMORY_DIRECTORY_PATH ||
       parsed.path === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
       parsed.path === POLYNET_BUILDER_DIRECTORY_PATH ||
@@ -489,7 +484,6 @@ export function validateCommunitySemanticOperationInput(args: {
     /^\/channels\/general\/interaction:(?:root|reply):[A-Za-z0-9_-]+\.md$/.test(
       parsed.path,
     ) ||
-    /^\/ai-feed\/ai_feed:[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||
     /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(parsed.path) ||
     /^\/builder\/resources\/[A-Za-z0-9_-]+\.json$/.test(parsed.path);
@@ -887,10 +881,6 @@ export function listCommunitySemanticRoot(args: { path: unknown }) {
         },
         {
           path: POLYNET_CHANNELS_DIRECTORY_PATH,
-          kind: "directory" as const,
-        },
-        {
-          path: POLYNET_AI_FEED_DIRECTORY_PATH,
           kind: "directory" as const,
         },
         {

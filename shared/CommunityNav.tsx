@@ -522,30 +522,6 @@ export const CommunityNav = memo(function CommunityNav({
       </div>
       <div className="community-nav-divider" aria-hidden="true" />
       <button
-        className={communityTab === "ai_feed" ? "nav-item active" : "nav-item"}
-        type="button"
-        onClick={() => onSelectTab("ai_feed")}
-        title="AI Feed"
-      >
-        <span className="nav-icon">
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="1.5"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          >
-            <path d="M4 7h16" />
-            <path d="M4 12h12" />
-            <path d="M4 17h8" />
-            <circle cx="18" cy="17" r="2" />
-          </svg>
-        </span>
-        <span className="nav-item-label">AI Feed</span>
-        {lockedTabs.ai_feed ? <NavLockGlyph /> : communityTab !== "ai_feed" && tabIndicators.ai_feed ? <span className="nav-item-dot" aria-hidden="true" /> : null}
-      </button>
-      <button
         className={communityTab === "resources" ? "nav-item active" : "nav-item"}
         type="button"
         onClick={() => onSelectTab("resources")}

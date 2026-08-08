@@ -600,10 +600,6 @@ test("platform mount exposes communities and permissioned users without leaking 
           type: "channels",
         },
         {
-          path: "/communities/resource-semantic/ai-feed/",
-          type: "ai_feed",
-        },
-        {
           path: "/communities/resource-semantic/memory/",
           type: "memory",
         },

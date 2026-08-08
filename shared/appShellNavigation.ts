@@ -45,7 +45,6 @@ export function parseOperatorTab(
 
 export const COMMUNITY_TABS = [
   "chat",
-  "ai_feed",
   "resources",
   "events",
   "settings",
@@ -90,7 +89,6 @@ export function isCommunityTabAllowedForAccess(
     case "analytics":
       return access.canViewAnalytics;
     case "chat":
-    case "ai_feed":
     case "resources":
     case "events":
       return true;
@@ -108,12 +106,12 @@ export function parseCommunityTab(
   value: string | null | undefined,
 ): CommunityTab {
   switch ((value ?? "").trim()) {
+    // Retired AI Feed routes intentionally fall back to the canonical
+    // community chat surface instead of preserving a hidden product state.
     case "ai-feed":
-      return "ai_feed";
     case "ai_feed":
-      return "ai_feed";
     case "feed":
-      return "ai_feed";
+      return "chat";
     case "library":
       return "resources";
     case "resources":

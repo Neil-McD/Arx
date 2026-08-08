@@ -3,7 +3,7 @@ id: product.polynet
 title: Polynet
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-08-08
 ---
 
 # Polynet
@@ -29,7 +29,7 @@ community, its members, and its intelligence layer reinforce one another.
 
 A builder launches a community intelligence system.
 
-A member joins communities, participates in chat and the AI Feed, uses shared
+A member joins communities, participates in chat, uses shared
 resources, and asks their personal agent for help under the current community
 context.
 
@@ -60,7 +60,7 @@ The active MVP surface includes:
 - community creation and management
 - Published and Unlisted visibility
 - gated access and public community funnels
-- community chat, AI Feed, resources, members, settings, and voice input
+- community chat, resources, members, settings, and voice input
 - billing, provider connections, and builder payouts
 - the member's bottom-right personal-agent dock
 - separate community-owned agent mentions and cognition

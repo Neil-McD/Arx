@@ -59,10 +59,6 @@ type UseWebCommunityAttentionControllerParams = {
     roots: InteractionRootLike[];
     repliesByRootId: Record<string, InteractionReplyLike[]>;
   };
-  aiFeed: {
-    isLoading: boolean;
-    live: TimestampedRow[];
-  };
   resources: {
     isLoading: boolean;
     rows: TimestampedRow[];
@@ -93,7 +89,6 @@ export function useWebCommunityAttentionModel(
     activeChannelSlug,
     activeCommunityId,
     activePage,
-    aiFeed,
     canPostMessages,
     chat,
     communityIds,
@@ -193,10 +188,6 @@ export function useWebCommunityAttentionModel(
     return latestTimestamp(timestamps);
   }, [interactions.repliesByRootId, interactions.roots]);
 
-  const latestAiFeedCreatedAt = useMemo(
-    () => latestTimestamp(aiFeed.live.map((row) => ({ timestamp: row.created_at }))),
-    [aiFeed.live],
-  );
   const latestResourcesCreatedAt = useMemo(
     () => latestTimestamp(resources.rows.map((row) => ({ timestamp: row.created_at }))),
     [resources.rows],
@@ -256,7 +247,7 @@ export function useWebCommunityAttentionModel(
   ]);
 
   const acknowledgeSurface = useCallback((
-    surface: "ai_feed" | "resources" | "events",
+    surface: "resources" | "events",
     marker: string,
     options?: {
       seenAtMs?: number;
@@ -274,26 +265,6 @@ export function useWebCommunityAttentionModel(
       }
     });
   }, [activeCommunityId, markCommunitySurfaceSeen]);
-
-  useEffect(() => {
-    if (
-      activePage !== "community"
-      || communityTab !== "ai_feed"
-      || !activeCommunityId
-      || aiFeed.isLoading
-      || latestAiFeedCreatedAt === null
-    ) {
-      return;
-    }
-    acknowledgeSurface("ai_feed", String(latestAiFeedCreatedAt));
-  }, [
-    acknowledgeSurface,
-    activeCommunityId,
-    activePage,
-    aiFeed.isLoading,
-    communityTab,
-    latestAiFeedCreatedAt,
-  ]);
 
   useEffect(() => {
     if (

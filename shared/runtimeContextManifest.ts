@@ -212,17 +212,11 @@ const COMMUNITY_ACTIVITY_TOOL_NAMES = new Set<RetrievalToolName>([
   "community_search",
   "community_chat_search",
   "community_chat_read",
-  "community_ai_feed_search",
-  "community_ai_feed_read",
 ]);
 
 const COMMUNITY_MEMORY_TOOL_NAMES = new Set<RetrievalToolName>([
   "community_memory_search",
   "community_memory_read",
-]);
-
-const COMMUNITY_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
-  "community_write",
 ]);
 
 const MEMBER_PROFILE_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
@@ -375,9 +369,6 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   }
   if (COMMUNITY_ACTIVITY_TOOL_NAMES.has(toolName)) {
     return { family: "community_activity", grantedBy: "validated_community_lens", effect: "read" };
-  }
-  if (COMMUNITY_WRITE_TOOL_NAMES.has(toolName)) {
-    return { family: "community_write", grantedBy: "validated_community_lens", effect: "write" };
   }
   if (MEMBER_PROFILE_WRITE_TOOL_NAMES.has(toolName)) {
     return {

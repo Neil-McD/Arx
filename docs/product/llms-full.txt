@@ -69,7 +69,7 @@ community, its members, and its intelligence layer reinforce one another.
 
 A builder launches a community intelligence system.
 
-A member joins communities, participates in chat and the AI Feed, uses shared
+A member joins communities, participates in chat, uses shared
 resources, and asks their personal agent for help under the current community
 context.
 
@@ -100,7 +100,7 @@ The active MVP surface includes:
 - community creation and management
 - Published and Unlisted visibility
 - gated access and public community funnels
-- community chat, AI Feed, resources, members, settings, and voice input
+- community chat, resources, members, settings, and voice input
 - billing, provider connections, and builder payouts
 - the member's bottom-right personal-agent dock
 - separate community-owned agent mentions and cognition
@@ -1516,7 +1516,7 @@ Moderator:
 Member:
 
 - participates in the community
-- uses allowed chat, AI Feed, resources, voice, and personal-agent community
+- uses allowed chat, resources, voice, and personal-agent community
   context
 
 ## Launch Checklist
@@ -1586,7 +1586,7 @@ personal agent under an authorized community context.
 
 1. Sign in.
 2. Join or open a community.
-3. Use community chat, the AI Feed, and resources.
+3. Use community chat and resources.
 4. Open the bottom-right personal-agent dock.
 5. Ask the agent for help with a concrete task.
 6. When you are on a community page, verify that the dock shows that

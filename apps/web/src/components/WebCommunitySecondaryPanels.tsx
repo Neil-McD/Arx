@@ -2,7 +2,6 @@ import type { ComponentProps, MutableRefObject, ReactNode } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
-import { CommunityAiFeedPanel } from "./CommunityAiFeedPanel";
 import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
@@ -46,7 +45,6 @@ export type WebCommunitySecondaryPanelsProps = {
     markCommunitySettingsDirty: () => void;
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
-  feed: ComponentProps<typeof CommunityAiFeedPanel>;
   aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
   funnel: ComponentProps<typeof WebCommunityFunnelSection>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
@@ -107,8 +105,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
           <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
         </>
       ) : null}
-
-      {props.communityTab === "ai_feed" && renderCenteredPane(<CommunityAiFeedPanel {...props.feed} />)}
 
       {props.communityTab === "ai_agent" &&
         renderCenteredPane(<WebCommunityAiAgentSection {...props.aiAgent} />)}

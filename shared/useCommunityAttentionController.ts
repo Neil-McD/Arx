@@ -14,7 +14,6 @@ type SessionLike = unknown;
 
 export type CommunityAttentionIndicators = {
   chat: boolean;
-  ai_feed: boolean;
   resources: boolean;
   events: boolean;
   // Unseen mention-of-me: rides the chat surface visually as the accent dot.
@@ -45,7 +44,6 @@ function buildAttentionMap(
   for (const communityId of communityIds) {
     next[communityId] = {
       chat: false,
-      ai_feed: false,
       resources: false,
       events: false,
       mentions: false,
@@ -58,7 +56,6 @@ function buildAttentionMap(
     if (!communityId) continue;
     next[communityId] = {
       chat: Boolean(row.chat),
-      ai_feed: Boolean(row.ai_feed),
       resources: Boolean(row.resources),
       events: Boolean(row.events),
       mentions: Boolean(row.mentions),
@@ -112,7 +109,7 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
         const [communityId, surface] = key.split(":");
         if (
           !communityId ||
-          (surface !== "chat" && surface !== "ai_feed" && surface !== "resources" && surface !== "events" && surface !== "mentions")
+          (surface !== "chat" && surface !== "resources" && surface !== "events" && surface !== "mentions")
         ) continue;
         if (!nextAttentionMap[communityId]) continue;
         nextAttentionMap[communityId] = {

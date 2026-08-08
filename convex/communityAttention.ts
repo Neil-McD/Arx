@@ -23,13 +23,6 @@ import {
 
 type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
-type CommunityAiFeedPostLike = {
-  _id: any;
-  communityId: any;
-  createdAt: number;
-  status: "live" | "ranked";
-};
-
 type CommunityAttentionRow = {
   community_id: string;
   chat: boolean;
@@ -154,23 +147,6 @@ async function getLatestCommunityChatActivityAt(
     communityId,
     generalChannel,
   );
-}
-
-async function getLatestCommunityAiFeedCreatedAt(
-  ctx: any,
-  communityId: any,
-): Promise<number | null> {
-  const latest = (await ctx.db
-    .query("communityAiFeedPosts" as any)
-    .withIndex("by_community_status_createdAt", (q: any) =>
-      q.eq("communityId", communityId).eq("status", "live"),
-    )
-    .order("desc")
-    .take(1)) as CommunityAiFeedPostLike[];
-  const createdAt = latest[0]?.createdAt;
-  return typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0
-    ? Math.floor(createdAt)
-    : null;
 }
 
 async function getLatestCommunityResourcesCreatedAt(
@@ -299,7 +275,6 @@ async function getCommunityAttentionRow(
   const [
     channelAttentionInputs,
     latestMentionsByChannel,
-    latestAiFeedCreatedAt,
     latestResourcesCreatedAt,
     latestEventsUpdatedAt,
   ] = await Promise.all([
@@ -325,7 +300,6 @@ async function getCommunityAttentionRow(
       userId,
       channels,
     }),
-    getLatestCommunityAiFeedCreatedAt(ctx, communityId),
     getLatestCommunityResourcesCreatedAt(ctx, communityId),
     getLatestCommunityEventsUpdatedAt(ctx, communityId),
   ]);
@@ -357,9 +331,9 @@ async function getCommunityAttentionRow(
   return {
     community_id: String(communityId),
     chat: channelRows.some((row) => row.chat),
-    ai_feed:
-      typeof latestAiFeedCreatedAt === "number" &&
-      latestAiFeedCreatedAt > Math.max(0, Math.floor(settingsRow?.aiFeedLastSeenAt ?? 0)),
+    // Rolling-client compatibility tombstone. AI Feed is retired and can no
+    // longer produce attention.
+    ai_feed: false,
     resources:
       typeof latestResourcesCreatedAt === "number" &&
       latestResourcesCreatedAt > Math.max(0, Math.floor(settingsRow?.resourcesLastSeenAt ?? 0)),
@@ -403,24 +377,8 @@ async function upsertCommunitySurfaceSeen(args: {
   const existing = await getCommunityMemberSettingsRow(ctx, communityId, userId);
 
   if (surface === "ai_feed") {
-    const latestAiFeedCreatedAt = await getLatestCommunityAiFeedCreatedAt(ctx, communityId);
-    if (latestAiFeedCreatedAt === null) return;
-    if ((existing?.aiFeedLastSeenAt ?? 0) >= latestAiFeedCreatedAt) return;
-    if (existing) {
-      await ctx.db.patch(existing._id as any, {
-        aiFeedLastSeenAt: latestAiFeedCreatedAt,
-        updatedAt: nowMs,
-      });
-      return;
-    }
-    await ctx.db.insert("communityMemberSettings" as any, {
-      communityId,
-      userId,
-      muted: false,
-      aiFeedLastSeenAt: latestAiFeedCreatedAt,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
+    // Cached clients may still acknowledge the retired surface. Preserve a
+    // harmless success response without reading or mutating Feed state.
     return;
   }
 

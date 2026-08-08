@@ -9,7 +9,7 @@ echo "UTC: $(date -u +'%Y-%m-%dT%H:%M:%SZ')"
 echo "Commit: $(git rev-parse HEAD)"
 echo "Scope: $ROOT_DIR"
 
-TOTAL_STEPS=53
+TOTAL_STEPS=54
 CURRENT_STEP=1
 
 run_step() {
@@ -53,6 +53,7 @@ run_step "Community subscription lifecycle policy proof" npm run check:community
 run_step "Runtime turn contract guard" bash scripts/runtime_turn_contract_guard.sh
 run_step "Canonical operation surface proof" npm run check:canonical-operation-surface-proof
 run_step "Community semantic repository proof" npm run check:community-semantic-repository-proof
+run_step "AI Feed retirement Release A proof" npm run check:community-ai-feed-retirement-release-a-proof
 run_step "Product documentation truth proof" npm run check:product-docs-index-proof
 run_step "Product documentation runtime proof" npm run check:product-docs-runtime-tool-proof
 run_step "Community interaction projection UI proof" npm run check:community-interaction-projection-ui-proof
