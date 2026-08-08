@@ -123,6 +123,11 @@ assert.match(
 );
 assert.match(
   webCss,
+  /\.product-shell-surface--community > \.community-nav\s*\{[^}]*padding-top:\s*0;/,
+  "the desktop community identity should seat against the shell's top edge",
+);
+assert.match(
+  webCss,
   /\.community-nav-identity\.has-banner \+ \.community-nav-header\s*\{[^}]*margin-top:\s*-44px;/,
   "the banner should scale behind the identity row without adding height",
 );
