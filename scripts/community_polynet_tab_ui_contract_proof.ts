@@ -98,6 +98,10 @@ assert.match(graph, /overview\.graph\.nodes\.map/, "the drawer graph should rend
 assert.match(graph, /overview\.graph\.edges\.map/, "the drawer graph should render backend-projected edges");
 assert.match(graph, /key=\{lineageId\}/, "memory nodes should preserve lifecycle identity");
 assert.match(graph, /data-lineage-id=\{lineageId\}/, "memory nodes should expose lineage for browser acceptance");
+assert.doesNotMatch(graph, /selectInitialNode/, "Memory should open as a clean graph without an implicit selection");
+assert.match(graph, /aria-pressed=\{isSelected\}/, "memory nodes should expose their selected state");
+assert.match(graph, /aria-label="Clear selected memory"/, "the selected-memory inspector should support explicit dismissal");
+assert.match(graph, /fitInsets:[\s\S]*bottom: 148/, "selected memory should reserve graph fit space for its inspector");
 assert.match(graph, /case "resource": return "resource"/, "resource source nodes should keep a distinct visual type");
 assert.match(preview, /case "resource": return "resource"/, "the compact preview should preserve resource node type");
 assert.match(viewportController, /const MIN_SCALE = 0\.08/, "the drawer graph should zoom far enough out for the bounded full projection");
@@ -105,7 +109,9 @@ assert.doesNotMatch(graph, /textarea|contentEditable|onSubmit|mutation/, "the Me
 
 assert.match(css, /\.community-memory-drawer-scroll/, "Memory should have a full-height drawer viewport");
 assert.match(css, /\.community-memory-graph-surface/, "the graph should fill the drawer body");
-assert.match(css, /\.community-memory-drawer \.community-polynet-graph-controls,[\s\S]*bottom: 88px/, "graph controls should clear the member-agent dock");
+assert.match(css, /\.community-memory-drawer > \.community-memory-drawer-scroll[\s\S]*flex: 1 1 auto[\s\S]*padding-top: 0/, "Memory should use the drawer body rather than a floating-header padding hack");
+assert.match(css, /\.community-polynet-graph-controls[\s\S]*top: 12px/, "graph controls should own a collision-free top-right region");
+assert.doesNotMatch(css, /\.community-memory-drawer \.community-polynet-graph-controls,[\s\S]*bottom: 88px/, "graph controls and selected memory should not share one bottom overlay band");
 assert.match(css, /\.community-member-chat \.community-memory-drawer \.community-interaction-drawer-back/, "Memory should reuse the stable thread header band");
 assert.match(css, /@container community-chat-area \(max-width: 680px\)[\s\S]*\.community-interaction-projection\.has-drawer \.community-interaction-drawer[\s\S]*z-index: 16/, "narrow drawers should sit above the sticky channel header");
 assert.doesNotMatch(css, /\.community-polynet-(panel|header|back|heading|subtitle)/, "retired full-page Memory chrome should leave no dead CSS");
