@@ -20,6 +20,16 @@ assert.equal(
   false,
   "retired semantic Feed paths must not remain navigable",
 );
+for (const operation of ["list", "read"] as const) {
+  assert.equal(
+    validatePolynetSemanticRepositoryOperationInput({
+      operation,
+      path: "/communities/polynet/ai-feed/",
+    }).ok,
+    true,
+    `platform-mounted retired Feed ${operation} requests must reach the non-enumerating executor tombstone`,
+  );
+}
 
 for (const path of [
   "apps/web/src/components/CommunityAiFeedPanel.tsx",
@@ -94,10 +104,16 @@ assert.match(
 );
 
 const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
+assert.equal(
+  (canonicalExecutor.match(/isRetiredAiFeedSemanticPath\(target\.localPath\)/g) ?? [])
+    .length,
+  4,
+  "retired Feed list, read, search, and write operations must share one absent-path tombstone",
+);
 assert.match(
   canonicalExecutor,
-  /target\.localPath === "\/ai-feed\/"[\s\S]*semantic_not_found/,
-  "retired Feed writes must fail as an absent semantic path",
+  /isRetiredAiFeedSemanticPath\(target\.localPath\)[\s\S]*semantic_not_found/,
+  "retired Feed operations must fail as an absent semantic path",
 );
 
 const inspector = read("convex/communityAiFeedRetirement.ts");

@@ -520,6 +520,49 @@ test("canonical five-tool executor derives member, builder, and community-agent 
   });
 });
 
+test("retired AI Feed paths are uniformly absent across canonical operations", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+  const ownerCtx = executionContext(asOwner);
+  const path = "/communities/canonical-community/ai-feed/";
+  const cases = [
+    { toolName: "polynet_list" as const, input: { path } },
+    { toolName: "polynet_read" as const, input: { path } },
+    {
+      toolName: "polynet_search" as const,
+      input: { path, query: "retired feed" },
+    },
+    {
+      toolName: "polynet_write" as const,
+      input: {
+        path,
+        mode: "create",
+        content: { body: "This write must remain impossible." },
+        idempotency_key: "retired-feed-write-denial",
+      },
+    },
+  ];
+
+  for (const operation of cases) {
+    await expect(
+      executePolynetCanonicalTool({
+        ctx: ownerCtx,
+        authSubject: fixture.ownerSubject,
+        userId: fixture.ownerId,
+        principalKind: "external_mcp",
+        evidenceSurface: "external_mcp",
+        toolName: operation.toolName,
+        input: operation.input,
+      }),
+    ).resolves.toEqual({
+      ok: false,
+      code: "semantic_not_found",
+      message: "Repository path not found or not accessible.",
+    });
+  }
+});
+
 test("community-root search returns canonical paths that round-trip through read", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);

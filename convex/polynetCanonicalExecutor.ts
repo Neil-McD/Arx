@@ -20,7 +20,10 @@ import {
   POLYNET_CANONICAL_TOOL_DEFINITIONS,
   type PolynetCanonicalToolName,
 } from "../shared/polynetCanonicalToolContract.ts";
-import { parsePolynetSemanticRepositoryPath } from "../shared/polynetSemanticRepositoryContract.ts";
+import {
+  isRetiredAiFeedSemanticPath,
+  parsePolynetSemanticRepositoryPath,
+} from "../shared/polynetSemanticRepositoryContract.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
 
@@ -550,6 +553,12 @@ async function executeCanonicalList(args: {
     return canonicalError(resolved.code, resolved.message);
   }
   const { target } = resolved;
+  if (isRetiredAiFeedSemanticPath(target.localPath)) {
+    return canonicalError(
+      "semantic_not_found",
+      "Repository path not found or not accessible.",
+    );
+  }
   const absolutePath = mountedPath(target.communitySlug, target.localPath);
 
   if (target.localPath === POLYNET_CHANNELS_DIRECTORY_PATH) {
@@ -789,6 +798,12 @@ async function executeCanonicalRead(args: {
     return canonicalError(resolved.code, resolved.message);
   }
   const { target } = resolved;
+  if (isRetiredAiFeedSemanticPath(target.localPath)) {
+    return canonicalError(
+      "semantic_not_found",
+      "Repository path not found or not accessible.",
+    );
+  }
 
   const interactionMatch =
     /^\/channels\/general\/(interaction:(?:root|reply):[A-Za-z0-9_-]+)\.md$/.exec(
@@ -960,6 +975,12 @@ async function executeCanonicalSearch(args: {
     return canonicalError(resolved.code, resolved.message);
   }
   const { target } = resolved;
+  if (isRetiredAiFeedSemanticPath(target.localPath)) {
+    return canonicalError(
+      "semantic_not_found",
+      "Repository path not found or not accessible.",
+    );
+  }
   const query = requiredString(args.input.query, 500);
   if (!query) return canonicalError("invalid_tool_args", "query is required.");
   const limit =
@@ -1127,10 +1148,7 @@ async function executeCanonicalWrite(args: {
     return canonicalError(resolved.code, resolved.message);
   }
   const { target } = resolved;
-  if (
-    target.localPath === "/ai-feed/" ||
-    target.localPath.startsWith("/ai-feed/")
-  ) {
+  if (isRetiredAiFeedSemanticPath(target.localPath)) {
     return canonicalError(
       "semantic_not_found",
       "Repository path not found or not accessible.",

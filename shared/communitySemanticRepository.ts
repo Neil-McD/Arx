@@ -5,7 +5,10 @@ import {
   parseCommunityResourceDirectoryUri,
 } from "./communityResourceDirectory.ts";
 import { parseCommunityResourceEvidenceRef } from "./communityEvidenceContract.ts";
-import { parsePolynetSemanticRepositoryPath } from "./polynetSemanticRepositoryContract.ts";
+import {
+  isRetiredAiFeedSemanticPath,
+  parsePolynetSemanticRepositoryPath,
+} from "./polynetSemanticRepositoryContract.ts";
 
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
@@ -528,6 +531,59 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
     return validateCommunitySemanticOperationInput(args);
   }
   if (repositoryPath.kind === "community") {
+    if (isRetiredAiFeedSemanticPath(repositoryPath.localPath)) {
+      if (args.operation === "list") {
+        if (args.offset !== undefined && args.offset !== null) {
+          return semanticError(
+            "invalid_selector",
+            "polynet_list does not accept offset.",
+          );
+        }
+        const cursor = optionalSemanticCursor(args.cursor);
+        if (!cursor.ok) return cursor;
+        const limit = optionalSemanticInteger({
+          value: args.limit,
+          field: "limit",
+          minimum: 2,
+          maximum: 50,
+        });
+        if (!limit.ok) return limit;
+        return {
+          ok: true as const,
+          operation: "list" as const,
+          path: repositoryPath.path,
+          cursor: cursor.value,
+          limit: limit.value,
+        };
+      }
+      if (args.cursor !== undefined && args.cursor !== null) {
+        return semanticError(
+          "invalid_selector",
+          "polynet_read does not accept cursor.",
+        );
+      }
+      const offset = optionalSemanticInteger({
+        value: args.offset,
+        field: "offset",
+        minimum: 0,
+        maximum: 1_000_000,
+      });
+      if (!offset.ok) return offset;
+      const limit = optionalSemanticInteger({
+        value: args.limit,
+        field: "limit",
+        minimum: 1,
+        maximum: 20_000,
+      });
+      if (!limit.ok) return limit;
+      return {
+        ok: true as const,
+        operation: "read" as const,
+        path: repositoryPath.path,
+        offset: offset.value,
+        limit: limit.value,
+      };
+    }
     const validated = validateCommunitySemanticOperationInput({
       ...args,
       path: repositoryPath.localPath,

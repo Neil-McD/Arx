@@ -7,6 +7,10 @@ export const POLYNET_COMMUNITIES_DIRECTORY_PATH = "/communities/";
 export const POLYNET_USERS_DIRECTORY_PATH = "/users/";
 export const POLYNET_SELF_USER_DIRECTORY_PATH = "/users/me/";
 
+export function isRetiredAiFeedSemanticPath(localPath: string): boolean {
+  return localPath === "/ai-feed/" || localPath.startsWith("/ai-feed/");
+}
+
 export type PolynetSemanticMount =
   | { kind: "platform" }
   | {
