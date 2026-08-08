@@ -3878,11 +3878,7 @@
 }
 
 .community-member-chat .community-interaction-thread-drawer .community-interaction-drawer-scroll {
-  padding-bottom: calc(
-    var(--community-thread-composer-height, 0px)
-    + var(--community-thread-composer-bottom-offset, 0px)
-    + 18px
-  );
+  padding-bottom: 0;
 }
 
 .community-member-chat .community-interaction-drawer-composer {
@@ -3901,6 +3897,20 @@
   .community-member-chat
   .community-interaction-thread-drawer {
   --community-thread-composer-bottom-offset: var(--member-agent-desktop-launcher-clearance);
+}
+
+/* Desktop threads keep the reply box in the conversation flow. Sparse threads
+   end naturally after the final reply; long threads shrink the scroll region
+   and keep the composer visible without covering content. */
+.app-root:not(.mobile-shell)
+  .community-member-chat
+  .community-interaction-thread-drawer
+  .community-interaction-drawer-composer {
+  position: relative;
+  right: auto;
+  bottom: auto;
+  left: auto;
+  margin-bottom: var(--community-thread-composer-bottom-offset, 0px);
 }
 
 /* Keep the scrolling layer cheap: a static layer behind each floating pill
@@ -8362,6 +8372,13 @@ button.chat-reply-quote:hover {
 
 .direct-messages-topbar-button {
   position: relative;
+  width: 34px;
+  height: 34px;
+}
+
+.direct-messages-topbar-button svg {
+  width: 20px;
+  height: 20px;
 }
 
 .community-nav-banner-img,
