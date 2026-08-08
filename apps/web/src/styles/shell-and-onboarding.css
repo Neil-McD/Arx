@@ -573,12 +573,13 @@ body {
 }
 
 /* Preserve the authored banner ratio while the navigation has room. Once the
-   panel becomes genuinely narrow, make the crop progressively shallower so the
-   banner does not consume the channel list. StableFramedMedia recomputes its
-   cover frame at each size, so the artwork is cropped rather than distorted. */
+   panel becomes genuinely narrow, hold the threshold height while the panel
+   continues to contract horizontally. StableFramedMedia recomputes its cover
+   frame at each size, so the artwork crops at the sides rather than distorting
+   or collapsing vertically. */
 @container community-navigation (max-width: 280px) {
   .community-nav-banner {
-    height: clamp(47px, calc(46cqi - 30px), 35.2113cqi);
+    height: 98.6px;
     aspect-ratio: auto;
   }
 }

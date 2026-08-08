@@ -88,8 +88,13 @@ assert.match(
 );
 assert.match(
   shellCss,
-  /@container community-navigation \(max-width:\s*280px\)\s*\{[\s\S]*?\.community-nav-banner\s*\{[^}]*height:\s*clamp\(47px, calc\(46cqi - 30px\), 35\.2113cqi\);[^}]*aspect-ratio:\s*auto;/,
-  "narrow community navigation should progressively compress banner height without stretching the artwork",
+  /@container community-navigation \(max-width:\s*280px\)\s*\{[\s\S]*?\.community-nav-banner\s*\{[^}]*height:\s*98\.6px;[^}]*aspect-ratio:\s*auto;/,
+  "narrow community navigation should preserve the threshold banner height while contracting horizontally",
+);
+assert.doesNotMatch(
+  shellCss,
+  /@container community-navigation \(max-width:\s*280px\)\s*\{[\s\S]*?\.community-nav-banner\s*\{[^}]*height:\s*(?:clamp|min|max|calc)\([^;}]*cqi/,
+  "narrow community navigation must not make banner height depend on the contracting inline size",
 );
 assert.match(
   webCss,
