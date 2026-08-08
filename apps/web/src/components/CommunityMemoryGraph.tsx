@@ -146,7 +146,7 @@ export function CommunityMemoryGraph(props: CommunityMemoryGraphProps) {
       onSelectNode: setSelectedNodeId,
       fitInsets: selectedNode && selectedNode.kind !== "community" ? { bottom: 148 } : undefined,
     });
-  const showAllLabels = transform.scale > SHOW_ALL_LABELS_SCALE;
+  const showAllLabels = transform.scale >= SHOW_ALL_LABELS_SCALE;
   const memoryNodeCount = overview?.graph.nodes.filter((node) => node.kind !== "community").length ?? 0;
   const agentActivity = agentActivityClass(overview?.agent.activity_state);
   const focusNeighbors = hoveredNodeId ? adjacency.get(hoveredNodeId) ?? null : null;
