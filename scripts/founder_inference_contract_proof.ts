@@ -209,8 +209,8 @@ assert.match(wikiArchitect, /receiptKey: `community_setup_generation:wiki_archit
 assert.match(wikiArchitect, /receiptKey: `community_setup_generation:resource_writer:\$\{requestId\}`/);
 assert.match(wikiArchitect, /modelIdOverride: fundingSession\.modelId/g);
 assert.doesNotMatch(wikiArchitect, /fundingSession\.apiKeyOverride/);
-assert.match(communityAdminGateway, /runCommunityWikiArchitectProposal[\s\S]*requestId: crypto\.randomUUID\(\)/);
-assert.match(communityAdminGateway, /draftCommunityResourceContentFromSources[\s\S]*requestId: crypto\.randomUUID\(\)/);
+assert.doesNotMatch(communityAdminGateway, /runCommunityWikiArchitectProposal/);
+assert.doesNotMatch(communityAdminGateway, /draftCommunityResourceContentFromSources/);
 
 assert.doesNotMatch(settings, /Legacy API funding|legacy-eligible|Activate for eligible|Personal AI connection|API key/i);
 assert.doesNotMatch(settings, /GPT 5\.6|\bLuna\b/i);

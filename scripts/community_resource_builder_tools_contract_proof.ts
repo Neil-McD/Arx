@@ -16,6 +16,7 @@ const app = read("apps/web/src/App.tsx");
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const communityContentController = read("apps/web/src/controllers/useWebCommunityContentController.ts");
+const resourceBuildHandler = read("apps/web/src/controllers/buildWebCommunityResourceBuildHandler.ts");
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const changesetApprovalCards = read("apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
@@ -483,9 +484,14 @@ assert.match(
   "mounted member-agent dock must recover staged proposals after a reload",
 );
 assert.match(
-  app,
+  resourceBuildHandler,
   /initial-community-resources:[\s\S]*Build the first useful draft of this community's Resources[\s\S]*startResourceBuild/,
   "Resources CTA must launch one bounded idempotent turn through the existing member-agent dock",
+);
+assert.match(
+  app,
+  /buildWebCommunityResourceBuildHandler[\s\S]*handleBuildCommunityResources/,
+  "App should wire resource building through the extracted orchestration boundary",
 );
 assert.match(
   communityContentController,
