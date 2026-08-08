@@ -128,8 +128,13 @@ assert.match(
 );
 assert.match(
   platformBridgeBody,
-  /saveOnboardingProfile[\s\S]*finishOnboarding\(\{ navigate: false \}\)[\s\S]*resolveAndEnter/,
-  "platform bridge completion must save setup before resolving Polynet entry",
+  /completeAccountSetupAndContinue/,
+  "platform bridge completion must use pending-intent-first canonical continuation",
+);
+assert.doesNotMatch(
+  platformBridgeBody,
+  /resolveAndEnter|finishOnboarding|saveOnboardingProfile/,
+  "platform bridge must not bypass canonical post-account continuation",
 );
 assert.doesNotMatch(
   platformBridgeBody,
