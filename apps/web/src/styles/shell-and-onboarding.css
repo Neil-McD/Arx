@@ -369,9 +369,8 @@ body {
 .community-rail-divider {
   width: 28px;
   height: 1px;
-  background: var(--stroke-muted);
+  background: var(--stroke-divider-accent);
   margin: 8px 0;
-  opacity: 0.6;
 }
 
 .community-rail-empty {
@@ -412,7 +411,7 @@ body {
   display: flex;
   justify-content: flex-start;
   padding-top: 10px;
-  border-top: 1px solid var(--stroke-muted);
+  border-top: 1px solid var(--stroke-divider-accent);
 }
 
 .community-nav {
@@ -883,9 +882,8 @@ body {
 
 .community-nav-divider {
   height: 1px;
-  background: var(--border-muted);
+  background: var(--stroke-divider-accent);
   margin: 10px 0;
-  opacity: 0.6;
 }
 
 .community-nav-access-loading {

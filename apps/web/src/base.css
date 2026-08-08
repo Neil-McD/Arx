@@ -357,7 +357,7 @@
   --border-strong: rgba(23, 23, 25, 0.22);
   --border-muted: rgba(23, 23, 25, 0.1);
   --border-active: #2F55FF;
-  --divider-accent: rgba(23, 23, 25, 0.22);
+  --divider-accent: rgba(23, 23, 25, 0.1);
   --header-border: none;
 
   /* === ICONS + INTERACTION === */

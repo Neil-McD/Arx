@@ -23,7 +23,7 @@
   --web-sessions-drawer-width: 240px;
   --community-shell-inset: 8px;
   --community-shell-radius: 16px;
-  --community-shell-stroke: color-mix(in srgb, var(--stroke-default, var(--border-default)) 72%, transparent);
+  --community-shell-stroke: var(--stroke-divider-accent);
 
   /*
    * Three web materials, each with one job:
@@ -135,7 +135,6 @@
   --bg-panel: #efefeb;
   --surface-panel: #efefeb;
   --surface-nav: #efefeb;
-  --community-shell-stroke: var(--stroke-divider-accent);
 }
 
 /* Web: keep topbar content aligned with the left rail. */
