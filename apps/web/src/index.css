@@ -1578,6 +1578,14 @@
     margin: -12px -12px 0;
   }
 
+  .product-shell-surface--community > .community-nav .community-nav-identity {
+    margin: -12px -12px 0;
+  }
+
+  .product-shell-surface--community > .community-nav .community-nav-identity.has-banner + .community-nav-header {
+    margin-top: -44px;
+  }
+
   .product-shell-surface--community > .community-nav .community-nav-banner {
     border-radius: 0;
   }
@@ -1666,6 +1674,10 @@
   }
 
   .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-header {
+    display: none;
+  }
+
+  .app-shell.community-layout.with-community-rail.sessions-compact.no-right .community-nav-identity {
     display: none;
   }
 
@@ -2611,6 +2623,10 @@
 .mobile-drawer.mobile-community-drawer .community-nav-header {
   display: block;
   padding-bottom: 12px;
+}
+
+.mobile-drawer.mobile-community-drawer .community-nav-identity.has-banner + .community-nav-header {
+  margin-top: -44px;
 }
 
 .mobile-drawer.mobile-community-drawer .community-nav-banner {

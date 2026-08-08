@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState, type FormEvent } from "react";
-import { Check, ChevronDown, ChevronUp, GripVertical, Hash, Plus, UserPlus, X } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, GripVertical, Hash, Plus, Settings, UserPlus, X } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 import { usePointerSortableList } from "./usePointerSortableList";
@@ -89,6 +89,8 @@ const MODAL_FOCUSABLE_SELECTOR = [
   '[tabindex]:not([tabindex="-1"])',
 ].join(",");
 
+const COMMUNITY_IDENTITY_HEIGHT_PX = 44;
+
 function trapModalFocus(event: KeyboardEvent, container: HTMLElement | null) {
   if (event.key !== "Tab" || !container) return;
   const focusable = Array.from(
@@ -165,14 +167,18 @@ export const CommunityNav = memo(function CommunityNav({
   const [channelName, setChannelName] = useState("");
   const copyResetTimeoutRef = useRef<number | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
+  const communityIdentityFrameRef = useRef<number | null>(null);
+  const communityNavRef = useRef<HTMLElement | null>(null);
+  const communityBannerHeaderRef = useRef<HTMLDivElement | null>(null);
   const channelNameInputRef = useRef<HTMLInputElement | null>(null);
   const addChannelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const addChannelDialogRef = useRef<HTMLFormElement | null>(null);
+  const [isCommunityIdentityCondensed, setIsCommunityIdentityCondensed] = useState(false);
   const showSettingsButton = canViewActiveCommunitySettings;
   const showManagementSection =
-    showSettingsButton ||
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
+  const activeCommunityName = activeCommunity?.name?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
@@ -259,6 +265,9 @@ export const CommunityNav = memo(function CommunityNav({
       if (focusRestoreFrameRef.current !== null) {
         window.cancelAnimationFrame(focusRestoreFrameRef.current);
       }
+      if (communityIdentityFrameRef.current !== null) {
+        window.cancelAnimationFrame(communityIdentityFrameRef.current);
+      }
     };
   }, []);
 
@@ -269,6 +278,42 @@ export const CommunityNav = memo(function CommunityNav({
       copyResetTimeoutRef.current = null;
     }
   }, [joinUrl]);
+
+  useEffect(() => {
+    const nav = communityNavRef.current;
+    const bannerHeader = communityBannerHeaderRef.current;
+    if (!nav || !activeCommunityBannerUrl || !bannerHeader) {
+      setIsCommunityIdentityCondensed(false);
+      return;
+    }
+
+    const updateIdentitySurface = () => {
+      if (communityIdentityFrameRef.current !== null) return;
+      communityIdentityFrameRef.current = window.requestAnimationFrame(() => {
+        const navTop = nav.getBoundingClientRect().top;
+        const bannerBottom = bannerHeader.getBoundingClientRect().bottom;
+        setIsCommunityIdentityCondensed(
+          bannerBottom <= navTop + COMMUNITY_IDENTITY_HEIGHT_PX,
+        );
+        communityIdentityFrameRef.current = null;
+      });
+    };
+
+    updateIdentitySurface();
+    nav.addEventListener("scroll", updateIdentitySurface, { passive: true });
+    window.addEventListener("resize", updateIdentitySurface);
+    const bannerResizeObserver = new ResizeObserver(updateIdentitySurface);
+    bannerResizeObserver.observe(bannerHeader);
+    return () => {
+      nav.removeEventListener("scroll", updateIdentitySurface);
+      window.removeEventListener("resize", updateIdentitySurface);
+      bannerResizeObserver.disconnect();
+      if (communityIdentityFrameRef.current !== null) {
+        window.cancelAnimationFrame(communityIdentityFrameRef.current);
+        communityIdentityFrameRef.current = null;
+      }
+    };
+  }, [activeCommunityBannerUrl]);
 
   const handleCopyJoinLink = async () => {
     if (!joinUrl || !onCopyCommunityJoinLink) return;
@@ -308,9 +353,29 @@ export const CommunityNav = memo(function CommunityNav({
   };
 
   return (
-    <aside className="community-nav">
+    <aside className="community-nav" ref={communityNavRef}>
+      {activeCommunityName ? (
+        <div
+          className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
+        >
+          <span className="community-nav-identity-name" title={activeCommunityName}>
+            {activeCommunityName}
+          </span>
+          {showSettingsButton ? (
+            <button
+              className={`community-nav-settings${communityTab === "settings" ? " active" : ""}`}
+              type="button"
+              onClick={() => onSelectTab("settings")}
+              title="Community settings"
+              aria-label={`Open ${activeCommunityName} settings`}
+            >
+              <Settings size={18} strokeWidth={1.7} aria-hidden="true" />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {activeCommunityBannerUrl ? (
-        <div className="community-nav-header">
+        <div className="community-nav-header" ref={communityBannerHeaderRef}>
           <StableFramedMedia
             className="community-nav-banner has-image"
             imageClassName="community-nav-banner-img"
@@ -527,27 +592,6 @@ export const CommunityNav = memo(function CommunityNav({
       ) : showManagementSection ? (
         <>
           <div className="community-nav-divider" />
-          {showSettingsButton ? (
-            <button
-              className={communityTab === "settings" ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={() => onSelectTab("settings")}
-              title="Settings"
-            >
-              <span className="nav-icon">
-                <svg
-                  viewBox="0 0 24 24"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ strokeWidth: 1.5 }}
-                >
-                  <circle cx="12" cy="12" r="3" />
-                  <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-                </svg>
-              </span>
-              Settings
-            </button>
-          ) : null}
           {canManageMembersActiveCommunity && (
             <button
               className={communityTab === "ai_agent" ? "nav-item active" : "nav-item"}

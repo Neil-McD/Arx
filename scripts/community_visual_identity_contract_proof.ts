@@ -91,5 +91,40 @@ assert.match(
   /\.product-shell-surface--community > \.community-nav \.community-nav-banner\s*\{[^}]*border-radius:\s*0;/,
   "the shell should own the outer banner corner clipping",
 );
+assert.match(
+  communityNav,
+  /className=\{`community-nav-identity\$\{activeCommunityBannerUrl \? " has-banner" : ""\}\$\{!activeCommunityBannerUrl \|\| isCommunityIdentityCondensed \? " is-condensed" : ""\}`\}/,
+  "community navigation should use one identity row across banner and condensed states",
+);
+assert.match(
+  communityNav,
+  /aria-label=\{`Open \$\{activeCommunityName\} settings`\}/,
+  "the community identity row should expose the authorized settings action",
+);
+assert.match(
+  communityNav,
+  /bannerBottom <= navTop \+ COMMUNITY_IDENTITY_HEIGHT_PX/,
+  "the identity surface should condense only after the banner leaves its sticky row",
+);
+assert.doesNotMatch(
+  communityNav,
+  /title="Settings"/,
+  "community settings should not remain duplicated in the lower management list",
+);
+assert.match(
+  shellCss,
+  /\.community-nav-identity\s*\{[^}]*position:\s*sticky;[^}]*min-height:\s*44px;[^}]*background:\s*var\(--surface-nav, var\(--surface-panel\)\);/,
+  "the identity row should remain sticky and resolve to the canonical navigation surface",
+);
+assert.match(
+  shellCss,
+  /\.community-nav-identity\.has-banner:not\(\.is-condensed\)\s*\{[^}]*color:\s*#fff;[^}]*background:\s*rgba\(0, 0, 0, 0\.28\);/,
+  "banner identity text should have a persistent readable scrim before hover",
+);
+assert.match(
+  webCss,
+  /\.community-nav-identity\.has-banner \+ \.community-nav-header\s*\{[^}]*margin-top:\s*-44px;/,
+  "the banner should scale behind the identity row without adding height",
+);
 
 console.log("community visual identity contract proof passed");
