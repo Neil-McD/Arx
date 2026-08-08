@@ -107,6 +107,7 @@ assert.match(css, /\.community-memory-drawer-scroll/, "Memory should have a full
 assert.match(css, /\.community-memory-graph-surface/, "the graph should fill the drawer body");
 assert.match(css, /\.community-memory-drawer \.community-polynet-graph-controls,[\s\S]*bottom: 88px/, "graph controls should clear the member-agent dock");
 assert.match(css, /\.community-member-chat \.community-memory-drawer \.community-interaction-drawer-back/, "Memory should reuse the stable thread header band");
+assert.match(css, /@container community-chat-area \(max-width: 680px\)[\s\S]*\.community-interaction-projection\.has-drawer \.community-interaction-drawer[\s\S]*z-index: 16/, "narrow drawers should sit above the sticky channel header");
 assert.doesNotMatch(css, /\.community-polynet-(panel|header|back|heading|subtitle)/, "retired full-page Memory chrome should leave no dead CSS");
 assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "memory graph motion should respect reduced-motion preferences");
 
