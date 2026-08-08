@@ -113,8 +113,14 @@ assert.match(
   /resume_builder_checkout[\s\S]*params\.resumeBuilderCheckout\(\)/,
 );
 assert.match(
+  app,
+  /onCompleteAccountSetup: completeAccountSetupAndContinue/,
+  "modal account completion must share the canonical pending-intent continuation",
+);
+assert.doesNotMatch(
   publicBuilderCheckoutController,
-  /finishOnboardingAndPrepare[\s\S]*finishOnboarding\(\{[\s\S]*navigate: false[\s\S]*prepareCommunityCreation\(\)/,
+  /finishOnboardingAndPrepare|finishOnboarding/,
+  "Builder checkout must not own a duplicate account-completion path",
 );
 assert.doesNotMatch(app, /preparePaidBuilderCommunityCreation/);
 

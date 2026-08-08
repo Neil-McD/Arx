@@ -350,9 +350,8 @@ export default function App() {
     openProfileSetup,
     closeProfileSetup,
     refreshAccountSetupStatus,
-    validateProfileInputs: validateOnboardingProfileInputs,
-    saveOnboardingProfile,
-    finishOnboarding,
+    completeAccountSetup,
+    completeAccountSetupAndContinue,
     routeTryPolynetFree,
     resetSignedOutState: resetOnboardingProfileState,
   } = onboardingProfile;
@@ -1529,7 +1528,6 @@ export default function App() {
     requireSignIn,
     refreshAccountSetupStatus,
     refreshBilling: founderBilling.refresh,
-    finishOnboarding,
     setAvailableBuilderSubscriptionId: (subscriptionId) => {
       availableBuilderSubscriptionIdRef.current = subscriptionId;
     },
@@ -1631,9 +1629,8 @@ export default function App() {
     publicCommunityAccessId:
       publicCommunityUi.publicCommunityAccess?.community_id ?? null,
     approvalPending,
-    validateProfileInputs: validateOnboardingProfileInputs,
-    saveOnboardingProfile,
-    finishOnboarding,
+    completeAccountSetup,
+    completeAccountSetupAndContinue,
     setOnboardingError,
     resolveDestination: resolveMemberEntryDestination,
     applyDestination: applyMemberEntryDestination,
@@ -2723,8 +2720,7 @@ export default function App() {
         profileUi.setProfileAvatarFocusY(0.5);
         profileUi.setProfileAvatarZoom(1);
       },
-      onNextProfile: saveOnboardingProfile,
-      onFinishOnboarding: publicBuilderCheckout.finishOnboardingAndPrepare,
+      onCompleteAccountSetup: completeAccountSetupAndContinue,
       onClose: closeProfileSetup,
     },
     platformBridgePageProps: {

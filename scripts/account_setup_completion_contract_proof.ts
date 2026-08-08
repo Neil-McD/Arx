@@ -130,7 +130,8 @@ assert.match(legalContent, /terms-of-service-v3\.md\?raw/, "the legal reader mus
 assert.doesNotMatch(legalContent, /terms-of-service-v2\.md\?raw/, "the legal reader must not project historical Terms v2 as current");
 assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/, "the legal reader must not project historical Terms v1 as current");
 assert.doesNotMatch(onboardingPage, /chatgpt\.onConnect|openai\.onConnect|OpenAI API key|Connect ChatGPT/, "onboarding must not ask members to bring inference");
-assert.match(onboardingPage, /await props\.onFinishOnboarding\(\)/, "identity completion must finish onboarding directly");
+assert.match(onboardingPage, /await props\.onCompleteAccountSetup\(/, "identity completion must use the canonical account completion operation");
+assert.doesNotMatch(onboardingPage, /onNextProfile|onFinishOnboarding/, "account setup must not split saving and continuation across two callbacks");
 assert.doesNotMatch(onboardingPage, /Direction|onBuildCommunity|onDiscoverCommunity|polynet-onboarding-direction/, "onboarding must not expose a direction step");
 assert.doesNotMatch(onboardingPage, /onSaveAgent|agentNameDraft|agentSoulDraft|polynet-onboarding-agent/, "onboarding must not expose an agent step");
 assert.doesNotMatch(onboardingPage, /WebAgentPersonalityPicker/, "onboarding must not render the personality picker");
@@ -139,11 +140,12 @@ assert.match(onboardingPage, /formatAccountSetupMissingGuidance\(props\.accountS
 assert.match(onboardingPage, /polynet-onboarding-guidance/, "onboarding setup blockers should render as guidance, not red server errors");
 assert.match(
   onboardingProfileController,
-  /const finishOnboarding = useCallback/,
-  "the onboarding profile controller must own account completion without a direction choice",
+  /const completeAccountSetup = useCallback/,
+  "the onboarding profile controller must own canonical account completion",
 );
-assert.match(onboardingProfileController, /completeOnboarding: true/, "finish flow must mark onboarding complete explicitly");
-assert.match(onboardingProfileController, /formatAccountSetupMissingGuidance\(latestSetup\)/, "finish flow must use precise canonical missing-setup guidance");
+assert.match(onboardingProfileController, /completeOnboarding: true/, "account completion must mark onboarding complete explicitly in the same profile write");
+assert.match(onboardingProfileController, /saved\?\.account_setup\?\.completed[\s\S]*formatAccountSetupMissingGuidance\(saved\.account_setup\)/, "account completion must verify canonical returned setup truth before continuing");
+assert.doesNotMatch(onboardingProfileController, /options\?\.navigate|shouldNavigate/, "account completion must not hide routing authority behind a navigation boolean");
 assert.doesNotMatch(onboardingProfileController, /Finish profile, inference, and agent setup to continue\./, "finish flow must not use stale generic missing-setup copy");
 assert.doesNotMatch(onboardingProfileController, /onboardingDirection: destination|completeOnboarding\("build_community"|completeOnboarding\("discover_community"/, "finish flow must not store a direction choice");
 assert.doesNotMatch(app, /WebAccountSetupCard|buildWebWorkspaceLandingProjection/);
