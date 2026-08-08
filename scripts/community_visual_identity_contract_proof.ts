@@ -118,8 +118,13 @@ assert.match(
 );
 assert.match(
   shellCss,
-  /\.community-nav-identity\.has-banner:not\(\.is-condensed\)\s*\{[^}]*color:\s*#fff;[^}]*background:\s*rgba\(0, 0, 0, 0\.28\);/,
-  "banner identity text should have a persistent readable scrim before hover",
+  /\.community-nav-identity\.has-banner:not\(\.is-condensed\)\s*\{[^}]*color:\s*#fff;[^}]*background:\s*linear-gradient\([\s\S]*?rgba\(0, 0, 0, 0\) 100%[\s\S]*?backdrop-filter:\s*blur\(2\.5px\);/,
+  "banner identity text should have a fading readable scrim without a hard cutoff",
+);
+assert.match(
+  shellCss,
+  /\.community-nav-identity:not\(\.has-banner\) \+ \.community-channel-list\s*\{[^}]*margin-top:\s*20px;/,
+  "communities without banners should keep the first channel clear of the identity row",
 );
 assert.match(
   webCss,
