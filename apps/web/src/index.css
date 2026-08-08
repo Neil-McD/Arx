@@ -1574,6 +1574,10 @@
     border-left: 0;
   }
 
+  .product-shell-surface--community > .community-nav {
+    padding-top: 0;
+  }
+
   .product-shell-surface--community > .community-nav .community-nav-header {
     margin: -12px -12px 0;
   }
