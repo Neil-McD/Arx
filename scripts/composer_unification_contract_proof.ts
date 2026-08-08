@@ -33,6 +33,11 @@ assert.match(
 );
 assert.match(
   baseCss,
+  /\.community-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*margin: 0 14px 12px;/,
+  "community composer bottom edge should align with the navigation invite control",
+);
+assert.match(
+  baseCss,
   /\.community-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*align-items: flex-end;/,
   "thread composer controls should remain bottom-aligned as the input grows",
 );
