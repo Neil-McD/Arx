@@ -412,7 +412,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   const mainRef = useRef<HTMLDivElement | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const composerRef = useRef<HTMLDivElement | null>(null);
-  const drawerRef = useRef<HTMLElement | null>(null);
   const drawerScrollRef = useRef<HTMLDivElement | null>(null);
   const drawerComposerRef = useRef<HTMLDivElement | null>(null);
   const isNearBottomRef = useRef(true);
@@ -614,14 +613,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
   }, [prepareProgrammaticMobileScroll, props.floatingComposers, props.mainComposer]);
 
   useLayoutEffect(() => {
-    const drawer = drawerRef.current;
     const composer = drawerComposerRef.current;
-    if (!drawer || !composer || !props.selectedRootId || !props.floatingComposers) {
-      drawer?.style.removeProperty("--community-thread-composer-height");
-      return;
-    }
+    if (!composer || !props.selectedRootId || !props.floatingComposers) return;
 
-    const syncComposerHeight = () => {
+    const followLatestAfterComposerResize = () => {
       const scroll = drawerScrollRef.current;
       const shouldFollowReplies = scroll && repliesLoadedOnce.current
         ? scroll.scrollHeight <= scroll.clientHeight || (
@@ -629,10 +624,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120
           )
         : false;
-      drawer.style.setProperty(
-        "--community-thread-composer-height",
-        `${Math.ceil(composer.getBoundingClientRect().height)}px`,
-      );
       if (shouldFollowReplies) {
         requestAnimationFrame(() => {
           const nextScroll = drawerScrollRef.current;
@@ -641,14 +632,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
       }
     };
 
-    syncComposerHeight();
+    followLatestAfterComposerResize();
     if (typeof ResizeObserver === "undefined") return;
-    const observer = new ResizeObserver(syncComposerHeight);
+    const observer = new ResizeObserver(followLatestAfterComposerResize);
     observer.observe(composer);
-    return () => {
-      observer.disconnect();
-      drawer.style.removeProperty("--community-thread-composer-height");
-    };
+    return () => observer.disconnect();
   }, [props.drawerComposer, props.floatingComposers, props.selectedRootId]);
 
   const rootWindowSignature = useMemo(
@@ -873,9 +861,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         <ThreadSurface
           className={`community-interaction-drawer community-interaction-thread-drawer${isMobileThreadPage ? " community-interaction-thread-page" : ""}`}
           aria-label={isMobileThreadPage ? "Thread" : "Thread replies"}
-          ref={(node) => {
-            drawerRef.current = node;
-          }}
         >
           {!isMobileThreadPage ? <div className="community-interaction-drawer-back">
             <button

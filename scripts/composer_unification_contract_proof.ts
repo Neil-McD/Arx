@@ -85,7 +85,7 @@ assert.match(
 assert.match(
   baseCss,
   /\.community-member-chat \.community-interaction-drawer-composer \{[\s\S]*position: absolute;[\s\S]*bottom: 0;[\s\S]*background: transparent;/,
-  "member thread composer should float over replies",
+  "the shared thread composer should retain its mobile docked fallback",
 );
 const desktopAgentThreadSafeAreaRule = baseCss.match(
   /\.app-root:not\(\.mobile-shell\):has\(\.member-agent-dock:not\(\.is-open\) \.member-agent-dock-launcher\)\s+\.community-member-chat\s+\.community-interaction-thread-drawer \{[^}]*\}/,
@@ -107,13 +107,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-thread-drawer \.community-interaction-drawer-scroll \{[\s\S]*--community-thread-composer-height[\s\S]*--community-thread-composer-bottom-offset/,
-  "thread feed should reserve measured reply-composer height and its launcher offset",
+  /\.community-member-chat \.community-interaction-thread-drawer \.community-interaction-drawer-scroll \{[^}]*padding-bottom: 0;/,
+  "desktop thread content should not reserve a floating-composer cavity",
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-drawer-composer \{[^}]*bottom: var\(--community-thread-composer-bottom-offset, 0px\);/,
-  "thread composer should consume the same launcher offset as its scroll reserve",
+  /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-thread-drawer[\s\S]*\.community-interaction-drawer-composer \{[^}]*position: relative;[^}]*bottom: auto;[^}]*margin-bottom: var\(--community-thread-composer-bottom-offset, 0px\);/,
+  "desktop thread composer should follow the final reply while retaining launcher clearance",
 );
 assert.match(
   baseCss,
@@ -161,8 +161,8 @@ assert.match(
 );
 assert.match(
   projection,
-  /--community-thread-composer-height[\s\S]*new ResizeObserver\(syncComposerHeight\)[\s\S]*observer\.observe\(composer\)/,
-  "thread clearance should follow multiline and attachment growth",
+  /followLatestAfterComposerResize[\s\S]*new ResizeObserver\(followLatestAfterComposerResize\)[\s\S]*observer\.observe\(composer\)/,
+  "thread composer growth should keep an actively followed long thread settled",
 );
 assert.match(
   projection,
