@@ -452,6 +452,7 @@ export const CommunityNav = memo(function CommunityNav({
           </button>
         ) : null}
       </div>
+      <div className="community-nav-divider" aria-hidden="true" />
       <button
         className={communityTab === "ai_feed" ? "nav-item active" : "nav-item"}
         type="button"

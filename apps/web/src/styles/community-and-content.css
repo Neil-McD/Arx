@@ -2538,7 +2538,7 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border-left: 1px solid var(--stroke-divider-accent);
+  border-left: 1px solid var(--stroke-panel-edge);
   background: color-mix(in srgb, var(--bg-workspace) 88%, var(--bg-card) 12%);
 }
 
@@ -3685,7 +3685,7 @@
 
 .community-interaction-drawer {
   position: relative;
-  border-left: 1px solid var(--stroke-divider-accent);
+  border-left: 1px solid var(--stroke-panel-edge);
   background: color-mix(in srgb, var(--bg-workspace) 94%, var(--bg-card) 6%);
   display: flex;
   flex-direction: column;

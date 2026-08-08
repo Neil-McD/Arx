@@ -245,6 +245,7 @@ const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const memberAgentComponent = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
+const communityNav = read("shared/CommunityNav.tsx");
 const voiceInputButton = read("shared/VoiceInputButton.tsx");
 const mvpGuards = read(".github/workflows/mvp-guards.yml");
 const releaseGate = read("scripts/release_gate.mjs");
@@ -275,6 +276,7 @@ assert.equal(
   "--border-strong: rgba(23, 23, 25, 0.22);",
   "--border-default: rgba(23, 23, 25, 0.1);",
   "--divider-accent: rgba(23, 23, 25, 0.1);",
+  "--stroke-panel-edge: rgba(23, 23, 25, 0.16);",
   "--accent-brand: #2F55FF;",
   "--accent-selection: #2F55FF;",
   "--accent-agent: #2F55FF;",
@@ -310,19 +312,29 @@ assert.match(
   "legacy chat day separators should consume the same structural-divider role",
 );
 [
-  /--community-shell-stroke:\s*var\(--stroke-divider-accent\);/,
+  /--community-shell-stroke:\s*var\(--stroke-panel-edge\);/,
   /\.community-rail-divider\s*\{[^}]*background:\s*var\(--stroke-divider-accent\);[^}]*\}/,
   /\.community-nav-divider\s*\{[^}]*background:\s*var\(--stroke-divider-accent\);[^}]*\}/,
-  /\.community-context-panel\s*\{[^}]*border-left:\s*1px solid var\(--stroke-divider-accent\);[^}]*\}/,
+  /\.community-context-panel\s*\{[^}]*border-left:\s*1px solid var\(--stroke-panel-edge\);[^}]*\}/,
   /\.community-channel-header\s*\{[^}]*border-bottom:\s*1px solid var\(--stroke-divider-accent\);[^}]*\}/,
-  /\.community-interaction-drawer\s*\{[^}]*border-left:\s*1px solid var\(--stroke-divider-accent\);[^}]*\}/,
+  /\.community-interaction-drawer\s*\{[^}]*border-left:\s*1px solid var\(--stroke-panel-edge\);[^}]*\}/,
 ].forEach((structuralDividerSelector) => {
   assert.match(
     baseCss,
     structuralDividerSelector,
-    "shell, navigation, header, and panel seams should share the semantic structural-divider role",
+    "shell edges and internal separators should consume their explicit semantic stroke roles",
   );
 });
+assert.match(
+  baseCss,
+  /\.community-nav\s*\{[^}]*border-left:\s*1px solid var\(--stroke-panel-edge\);[^}]*border-right:\s*1px solid var\(--stroke-panel-edge\);[^}]*\}/,
+  "community navigation panel edges should use the dedicated structural edge role",
+);
+assert.match(
+  communityNav,
+  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*<button\s*className=\{communityTab === "ai_feed"/,
+  "community navigation should separate the channel list from utility navigation",
+);
 assert.doesNotMatch(
   baseCss,
   /\.community-nav-divider\s*\{[^}]*opacity:/,

@@ -118,6 +118,7 @@
   --stroke-active: var(--border-active);
   --stroke-selected: color-mix(in srgb, var(--accent-gold) 46%, var(--stroke-default));
   --stroke-divider-accent: var(--divider-accent, var(--border-muted));
+  --stroke-panel-edge: var(--stroke-divider-accent);
   --composer-surface: var(--bg-card-solid, #17171a);
   --composer-border: color-mix(in srgb, var(--stroke-default) 88%, transparent);
   --composer-focus-ring: color-mix(in srgb, var(--text-ink-primary) 44%, transparent);
@@ -358,6 +359,7 @@
   --border-muted: rgba(23, 23, 25, 0.1);
   --border-active: #2F55FF;
   --divider-accent: rgba(23, 23, 25, 0.1);
+  --stroke-panel-edge: rgba(23, 23, 25, 0.16);
   --header-border: none;
 
   /* === ICONS + INTERACTION === */

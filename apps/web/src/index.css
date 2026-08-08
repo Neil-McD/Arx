@@ -23,7 +23,7 @@
   --web-sessions-drawer-width: 240px;
   --community-shell-inset: 8px;
   --community-shell-radius: 16px;
-  --community-shell-stroke: var(--stroke-divider-accent);
+  --community-shell-stroke: var(--stroke-panel-edge);
 
   /*
    * Three web materials, each with one job:
@@ -2439,7 +2439,7 @@
   border-left: none;
   border-top: none;
   border-bottom: none;
-  border-right: 1px solid var(--stroke-divider-accent);
+  border-right: 1px solid var(--stroke-panel-edge);
 }
 
 .mobile-drawer-right {
@@ -2447,7 +2447,7 @@
   border-right: none;
   border-top: none;
   border-bottom: none;
-  border-left: 1px solid var(--stroke-divider-accent);
+  border-left: 1px solid var(--stroke-panel-edge);
 }
 
 .mobile-drawer-header {
