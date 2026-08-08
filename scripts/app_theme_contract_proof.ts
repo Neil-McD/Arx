@@ -335,6 +335,17 @@ assert.match(
   /\.nav-item\.active\s*\{[\s\S]*?background:\s*var\(--surface-selected\);[\s\S]*?border-color:\s*var\(--stroke-selected\);[\s\S]*?color:\s*var\(--text-selected\);/,
   "routine selection should remain independent from activity attention",
 );
+[
+  /\.community-channel-header\s*\{[\s\S]*?border-bottom:\s*1px solid var\(--stroke-muted\);/,
+  /\.community-context-panel\s*\{[\s\S]*?border-left:\s*1px solid var\(--stroke-muted\);/,
+  /\.community-interaction-drawer\s*\{[\s\S]*?border-left:\s*1px solid var\(--stroke-muted\);/,
+].forEach((structuralSeam) => {
+  assert.match(
+    baseCss,
+    structuralSeam,
+    "chat headers and feed boundaries should use muted structural seams",
+  );
+});
 
 assert.match(baseCss, /:root\[data-theme-family="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
 assert.doesNotMatch(
