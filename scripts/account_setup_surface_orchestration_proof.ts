@@ -112,8 +112,9 @@ for (const surface of [onboarding, bridge]) {
 }
 
 for (const authority of [
-  "const saveOnboardingProfile = useCallback",
-  "const finishOnboarding = useCallback",
+  "const completeAccountSetup = useCallback",
+  "const continueAfterAccountSetup = useCallback",
+  "const completeAccountSetupAndContinue = useCallback",
 ]) {
   assert.ok(
     onboardingProfileController.includes(authority),
@@ -136,8 +137,15 @@ assert.match(
 );
 assert.match(
   communityEntryBridgeController,
-  /completePlatformBridge[\s\S]*resolveAndEnter\(\{ replace: true \}\)/,
-  "platform bridge must retain canonical platform destination resolution",
+  /completePlatformBridge[\s\S]*completeAccountSetupAndContinue/,
+  "platform bridge must delegate to canonical account completion continuation",
+);
+assert.doesNotMatch(
+  communityEntryBridgeController.match(
+    /const completePlatformBridge = useCallback[\s\S]*?\n  const completeCommunityBridge/,
+  )?.[0] ?? "",
+  /resolveAndEnter|finishOnboarding|saveOnboardingProfile/,
+  "platform bridge must not retain a competing destination or completion path",
 );
 assert.match(
   communityEntryBridgeController,

@@ -30,7 +30,6 @@ type PublicBuilderCheckoutControllerParams = {
   refreshBilling: (
     session: AuthSession,
   ) => Promise<CloudFounderBillingOverview | null>;
-  finishOnboarding: (options?: { navigate?: boolean }) => Promise<boolean>;
   setAvailableBuilderSubscriptionId: (subscriptionId: string) => void;
   openFundedCreateCommunity: () => void;
   navigateTo: (path: string) => void;
@@ -114,15 +113,6 @@ export function useWebPublicBuilderCheckoutController(
     }
   }, []);
 
-  const finishOnboardingAndPrepare = useCallback((): void => {
-    void (async () => {
-      const completed = await paramsRef.current.finishOnboarding({
-        navigate: false,
-      });
-      if (completed) await prepareCommunityCreation();
-    })();
-  }, [prepareCommunityCreation]);
-
   useEffect(() => {
     const search = new URLSearchParams(window.location.search);
     const checkoutReturn = search.get("builder_checkout");
@@ -183,6 +173,5 @@ export function useWebPublicBuilderCheckoutController(
     closePurchasePrompt,
     startPurchase,
     prepareCommunityCreation,
-    finishOnboardingAndPrepare,
   };
 }

@@ -82,6 +82,7 @@ export function useWebOnboardingProfileController(params: {
   const timezoneSyncKeyRef = useRef<string | null>(null);
   const onboardingRedirectUserIdRef = useRef<string | null>(null);
   const onboardingHydrationUserIdRef = useRef<string | null>(null);
+  const accountCompletionContinuationInFlightRef = useRef(false);
 
   const profile = useWebProfileSettingsUiController({
     profileStorageUserId: params.profileStorageUserId,
@@ -239,7 +240,7 @@ export function useWebOnboardingProfileController(params: {
     [accountSetupStatus, cloudProfile?.account_setup, profile],
   );
 
-  const saveOnboardingProfile = useCallback(
+  const completeAccountSetup = useCallback(
     async (legalAcceptance: LegalAcceptance): Promise<boolean> => {
       const activeSession = await params.ensureSession();
       if (!activeSession) {
@@ -280,12 +281,22 @@ export function useWebOnboardingProfileController(params: {
           bio: profile.profileBio.trim() || null,
           socialLinks: profile.profileSocialLinks,
           markOnboardingDismissed: false,
+          completeOnboarding: true,
           termsOfServiceVersion:
             legalAcceptance?.termsOfServiceVersion ?? null,
           privacyPolicyVersion:
             legalAcceptance?.privacyPolicyVersion ?? null,
         });
-        if (saved) applySavedProfile(saved);
+        if (!saved?.account_setup?.completed) {
+          setOnboardingError(
+            saved?.account_setup
+              ? formatAccountSetupMissingGuidance(saved.account_setup)
+              : "We could not verify your account setup yet. Try again.",
+          );
+          return false;
+        }
+        applySavedProfile(saved);
+        setIsOnboardingModalOpen(false);
         return true;
       } catch (error) {
         setOnboardingError(
@@ -305,77 +316,15 @@ export function useWebOnboardingProfileController(params: {
     ],
   );
 
-  const finishOnboarding = useCallback(
-    async (options?: { navigate?: boolean }): Promise<boolean> => {
-      const shouldNavigate = options?.navigate !== false;
+  const continueAfterAccountSetup = useCallback(
+    async (): Promise<boolean> => {
       const activeSession = await params.ensureSession();
       if (!activeSession) {
         params.requireSignIn({ reason: "try_polynet_free", payload: {} });
         return false;
       }
-      const userId = resolveAuthSubject(activeSession);
-      if (!userId) {
-        setOnboardingError(
-          "We could not verify your account. Sign in again to continue.",
-        );
-        return false;
-      }
-
-      const displayName = profile.profileName.trim() || null;
-      const handle = profile.profileHandle.trim() || null;
-      const avatarUrl = profile.profileAvatarUrl?.trim() || null;
-      if (!displayName || !handle || !avatarUrl) {
-        setOnboardingError(
-          "Add your display name, handle, and profile photo to continue.",
-        );
-        return false;
-      }
-
-      setIsSavingOnboarding(true);
       setOnboardingError(null);
       try {
-        const latestSetup = await loadCloudAccountSetupStatus<AuthSession>({
-          session: activeSession,
-        });
-        if (!latestSetup) {
-          setOnboardingError(
-            "We could not verify your account setup yet. Try again.",
-          );
-          return false;
-        }
-        setAccountSetupStatus(latestSetup);
-        if (!latestSetup.completed) {
-          setOnboardingError(formatAccountSetupMissingGuidance(latestSetup));
-          if (shouldNavigate) setIsOnboardingModalOpen(true);
-          return false;
-        }
-        const avatarField = await prepareCloudProfileAvatarField<AuthSession>({
-          session: activeSession,
-          nextValue: profile.profileAvatarUrl,
-          currentStorageId: profile.profileAvatarStorageId,
-          currentResolvedUrl: profile.profileAvatarUrl,
-        });
-        const saved = await upsertCloudProfileDetail<
-          AuthSession,
-          UserProfileDetail
-        >({
-          session: activeSession,
-          userId,
-          displayName,
-          handle,
-          avatarStorageId: avatarField.storageId ?? null,
-          avatarUrl: avatarField.url ?? null,
-          avatarFocusX: profile.profileAvatarFocusX,
-          avatarFocusY: profile.profileAvatarFocusY,
-          avatarZoom: profile.profileAvatarZoom,
-          bio: profile.profileBio.trim() || null,
-          socialLinks: profile.profileSocialLinks,
-          completeOnboarding: true,
-        });
-        if (saved) applySavedProfile(saved);
-        setIsOnboardingModalOpen(false);
-
-        if (!shouldNavigate) return true;
         if (readAuthResumeState()) {
           const resumed = await actionsRef.current.resumePendingAuthIntent();
           if (resumed) return true;
@@ -393,19 +342,29 @@ export function useWebOnboardingProfileController(params: {
         return true;
       } catch (error) {
         setOnboardingError(
-          formatProfileMutationError(error, "Failed to save onboarding."),
+          formatProfileMutationError(error, "We could not continue after account setup."),
         );
         return false;
-      } finally {
-        setIsSavingOnboarding(false);
       }
     },
     [
-      applySavedProfile,
       params.ensureSession,
       params.requireSignIn,
-      profile,
     ],
+  );
+
+  const completeAccountSetupAndContinue = useCallback(
+    async (legalAcceptance: LegalAcceptance): Promise<boolean> => {
+      if (accountCompletionContinuationInFlightRef.current) return false;
+      accountCompletionContinuationInFlightRef.current = true;
+      try {
+        if (!(await completeAccountSetup(legalAcceptance))) return false;
+        return await continueAfterAccountSetup();
+      } finally {
+        accountCompletionContinuationInFlightRef.current = false;
+      }
+    },
+    [completeAccountSetup, continueAfterAccountSetup],
   );
 
   const routeTryPolynetFree = useCallback(
@@ -587,9 +546,8 @@ export function useWebOnboardingProfileController(params: {
       closeProfileSetup,
       refreshAccountSetupStatus,
       loadProfileForOnboarding,
-      validateProfileInputs,
-      saveOnboardingProfile,
-      finishOnboarding,
+      completeAccountSetup,
+      completeAccountSetupAndContinue,
       routeTryPolynetFree,
       resetSignedOutState,
     }),
@@ -598,7 +556,8 @@ export function useWebOnboardingProfileController(params: {
       closeProfileSetup,
       cloudProfile,
       effectiveAccountSetupStatus,
-      finishOnboarding,
+      completeAccountSetup,
+      completeAccountSetupAndContinue,
       hasLoadedOnboardingProfile,
       isAccountSetupCompleteForBuilderActions,
       isAccountSetupResolved,
@@ -611,8 +570,6 @@ export function useWebOnboardingProfileController(params: {
       profile,
       refreshAccountSetupStatus,
       routeTryPolynetFree,
-      saveOnboardingProfile,
-      validateProfileInputs,
       resetSignedOutState,
     ],
   );

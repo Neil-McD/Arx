@@ -36,8 +36,9 @@ type WebOnboardingPageProps = {
   setIsAvatarFocusModalOpen: (value: boolean) => void;
   onAvatarDrop: (event: DragEvent<HTMLDivElement>) => void;
   onRemoveAvatar: () => void;
-  onNextProfile: (legalAcceptance: PlatformLegalAcceptanceDraft | null) => Promise<boolean> | boolean;
-  onFinishOnboarding: () => Promise<boolean | void> | boolean | void;
+  onCompleteAccountSetup: (
+    legalAcceptance: PlatformLegalAcceptanceDraft | null,
+  ) => Promise<boolean> | boolean;
   onClose?: () => void;
 };
 
@@ -136,7 +137,7 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   const goNext = async () => {
     setSetupGuidance(null);
     if (step === "identity") {
-      const ok = await props.onNextProfile(
+      await props.onCompleteAccountSetup(
         platformLegalReady
           ? {
               termsOfServiceVersion: TERMS_OF_SERVICE_ENTRY.version,
@@ -144,9 +145,6 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
             }
           : null,
       );
-      if (ok) {
-        await props.onFinishOnboarding();
-      }
       return;
     }
   };
