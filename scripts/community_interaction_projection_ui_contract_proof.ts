@@ -1163,7 +1163,7 @@ assert.match(
 assert.match(
   baseCss,
   /--chat-link:\s*var\(--accent-cyan\);[\s\S]*--chat-link-hover:[\s\S]*\.chat-link:visited\s*\{[\s\S]*color:\s*var\(--chat-link\);[\s\S]*\.chat-link:focus-visible\s*\{/,
-  "both dark-family themes should inherit one accessible semantic treatment for chat links",
+  "Dark should inherit one accessible semantic treatment for chat links",
 );
 assert.match(
   baseCss,

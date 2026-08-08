@@ -950,12 +950,12 @@ assert.match(
 assert.match(
   styles,
   /\.member-agent-dock \{[\s\S]*?--member-agent-launcher-background: color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 18%,\s*#111115 82%\s*\);[\s\S]*?--member-agent-launcher-background-hover: color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 24%,\s*#111115 76%\s*\);[\s\S]*?--member-agent-launcher-border: var\(--member-agent-accent-border\);/,
-  "the two existing dark themes must retain the launcher's exact legacy surface and border",
+  "Dark must retain the launcher's exact legacy surface and border",
 );
 assert.match(
   styles,
-  /:root\[data-theme-family="light"\] \.member-agent-dock \{[\s\S]*?--member-agent-launcher-background: var\(--surface-selected\);[\s\S]*?--member-agent-launcher-background-hover: var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border: var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow: 0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-shadow-hover: 0 4px 12px rgba\(23, 23, 25, 0\.16\);[\s\S]*?--member-agent-launcher-state-elevation: 0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-state-highlight: 0 0 0 0 transparent;[\s\S]*?--member-agent-launcher-glyph-filter: none;/,
-  "the light family must use a flat raised surface with restrained elevation and no dark glyph effects",
+  /:root\[data-theme="light"\] \.member-agent-dock \{[\s\S]*?--member-agent-launcher-background: var\(--surface-selected\);[\s\S]*?--member-agent-launcher-background-hover: var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border: var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow: 0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-shadow-hover: 0 4px 12px rgba\(23, 23, 25, 0\.16\);[\s\S]*?--member-agent-launcher-state-elevation: 0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-state-highlight: 0 0 0 0 transparent;[\s\S]*?--member-agent-launcher-glyph-filter: none;/,
+  "Light must use a flat raised surface with restrained elevation and no dark glyph effects",
 );
 assert.doesNotMatch(
   styles,
@@ -965,17 +965,17 @@ assert.doesNotMatch(
 assert.match(
   styles,
   /\.member-agent-dock-error \{[\s\S]*?color: #e8b4c4;[\s\S]*?background: rgba\(214, 106, 138, 0\.1\);[\s\S]*?border-left: 2px solid var\(--accent-gold\);/,
-  "the two existing dark themes must retain the dock error's exact legacy treatment",
+  "Dark must retain the dock error's exact legacy treatment",
 );
 assert.match(
   styles,
-  /:root\[data-theme-family="light"\] \.member-agent-dock-error \{[\s\S]*?color: var\(--accent-error\);[\s\S]*?background: color-mix\(in srgb, var\(--accent-error\) 10%, transparent\);[\s\S]*?border-left-color: var\(--accent-error\);/,
-  "light-family dock errors must use the functional error role",
+  /:root\[data-theme="light"\] \.member-agent-dock-error \{[\s\S]*?color: var\(--accent-error\);[\s\S]*?background: color-mix\(in srgb, var\(--accent-error\) 10%, transparent\);[\s\S]*?border-left-color: var\(--accent-error\);/,
+  "Light dock errors must use the functional error role",
 );
 assert.match(
   styles,
   /--member-agent-launcher-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 color-mix\(in srgb, var\(--member-agent-accent-strong\) 10%, transparent\);/,
-  "the dark-family launcher must retain its legacy separation from busy community content",
+  "the Dark launcher must retain its legacy separation from busy community content",
 );
 assert.match(
   styles,
@@ -1004,8 +1004,8 @@ assert.match(
 );
 assert.match(
   styles,
-  /:root\[data-theme-family="light"\] \.member-agent-dock \.member-agent-dock-launcher:focus-visible \{\s*outline-color: var\(--member-agent-accent\);\s*\}/,
-  "the light-family launcher must keep an explicit intelligence-blue keyboard focus ring",
+  /:root\[data-theme="light"\] \.member-agent-dock \.member-agent-dock-launcher:focus-visible \{\s*outline-color: var\(--member-agent-accent\);\s*\}/,
+  "the Light launcher must keep an explicit intelligence-blue keyboard focus ring",
 );
 assert.doesNotMatch(
   styles,

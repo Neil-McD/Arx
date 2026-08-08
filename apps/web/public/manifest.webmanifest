@@ -5,8 +5,8 @@
   "scope": "/",
   "start_url": "/workspace?launch=app",
   "display": "standalone",
-  "background_color": "#121214",
-  "theme_color": "#121214",
+  "background_color": "#1A1A1A",
+  "theme_color": "#1A1A1A",
   "icons": [
     {
       "src": "/apple-touch-icon.png?v=20260425a",

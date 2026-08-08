@@ -53,7 +53,7 @@
   pointer-events: none;
 }
 
-:root[data-theme-family="light"] .member-agent-dock {
+:root[data-theme="light"] .member-agent-dock {
   --member-agent-launcher-background: var(--surface-selected);
   --member-agent-launcher-background-hover: var(--surface-selected);
   --member-agent-launcher-border: var(--stroke-default);
@@ -110,7 +110,7 @@
   outline-offset: 2px;
 }
 
-:root[data-theme-family="light"] .member-agent-dock .member-agent-dock-launcher:focus-visible {
+:root[data-theme="light"] .member-agent-dock .member-agent-dock-launcher:focus-visible {
   outline-color: var(--member-agent-accent);
 }
 
@@ -411,7 +411,7 @@
   line-height: 1.45;
 }
 
-:root[data-theme-family="light"] .member-agent-dock-error {
+:root[data-theme="light"] .member-agent-dock-error {
   color: var(--accent-error);
   background: color-mix(in srgb, var(--accent-error) 10%, transparent);
   border-left-color: var(--accent-error);
@@ -486,7 +486,7 @@
   align-items: end;
   gap: 4px;
   padding: 7px 7px;
-  background: var(--composer-surface, var(--bg-card-solid, #17171a));
+  background: var(--composer-surface, var(--bg-card-solid, #2a2a2a));
   border: 1px solid var(--composer-border, var(--stroke-default));
   border-radius: var(--composer-radius, 24px);
   transition: border-color 120ms ease, background-color 120ms ease;
@@ -672,7 +672,7 @@
     height: 100%;
     border: 0;
     border-radius: 0;
-    background: var(--bg-app, #121214);
+    background: var(--bg-app, #1a1a1a);
     opacity: 1;
     pointer-events: auto;
     transform: none;

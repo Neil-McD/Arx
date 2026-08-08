@@ -1,5 +1,3 @@
-export type AppThemeFamily = "dark" | "light";
-
 export const APP_THEME_STORAGE_KEY = "polynet-theme";
 export const LEGACY_APP_THEME_STORAGE_KEY = "arx-theme";
 
@@ -9,23 +7,13 @@ export const APP_THEME_DEFINITIONS = [
     label: "Dark",
     description: "Neutral dark theme",
     disabled: false,
-    family: "dark",
     browserColor: "#1A1A1A",
-  },
-  {
-    id: "polynet",
-    label: "Polynet Dark",
-    description: "Graphite with Polynet accents",
-    disabled: false,
-    family: "dark",
-    browserColor: "#121214",
   },
   {
     id: "light",
     label: "Light",
     description: "Paper light with intelligence blue",
     disabled: false,
-    family: "light",
     browserColor: "#F8F8F4",
   },
 ] as const satisfies readonly {
@@ -33,7 +21,6 @@ export const APP_THEME_DEFINITIONS = [
   label: string;
   description: string;
   disabled: boolean;
-  family: AppThemeFamily;
   browserColor: `#${string}`;
 }[];
 
@@ -44,7 +31,7 @@ const LEGACY_APP_THEME_ID_ALIASES: Readonly<Record<string, AppTheme>> = {
   cris: "light",
 };
 
-export const DEFAULT_APP_THEME: AppTheme = "polynet";
+export const DEFAULT_APP_THEME: AppTheme = "dark";
 
 export type AppThemeOption = {
   id: AppTheme;
@@ -83,7 +70,6 @@ export function applyAppThemeAttributes(theme: AppTheme, root: HTMLElement | nul
   if (!root) return;
   const definition = getAppThemeDefinition(theme);
   root.setAttribute("data-theme", theme);
-  root.setAttribute("data-theme-family", definition.family);
   root.ownerDocument
     ?.querySelector<HTMLMetaElement>('meta[name="theme-color"]')
     ?.setAttribute("content", definition.browserColor);

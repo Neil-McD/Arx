@@ -40,11 +40,11 @@ assert.match(
   "the fallback everybody subtitle must not promise stale email semantics before backend hydration",
 );
 
-// --- The tile flows from the theme accent token (both platform themes) ---
+// --- The tile flows from the theme accent token in both platform themes ---
 assert.match(
   css,
   /\.mention-autocomplete-row\.is-role \.mention-autocomplete-avatar \{[\s\S]{0,200}--accent-gold/,
-  "the role tile must derive from --accent-gold so dark + polynet themes are handled without per-theme code",
+  "the role tile must derive from --accent-gold so Dark and Light are handled without component forks",
 );
 
 console.log("everybody mention row contract proof passed: themed non-person tile, real count, truthful aliases.");

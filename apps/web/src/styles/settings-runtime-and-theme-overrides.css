@@ -169,7 +169,7 @@
   display: block;
 }
 
-:root[data-theme-family="dark"] .model-picker-nav-logo-img.monochrome {
+:root[data-theme="dark"] .model-picker-nav-logo-img.monochrome {
   filter: invert(1);
 }
 
@@ -6607,41 +6607,6 @@ button.settings-primary-action svg {
   width: 60%;
 }
 
-.appearance-option-preview[data-preview-theme="polynet"] {
-  background: #121214;
-}
-
-.appearance-option-preview[data-preview-theme="polynet"] .preview-header {
-  background: #151518;
-  grid-column: 1 / -1;
-  border-radius: 3px;
-}
-
-.appearance-option-preview[data-preview-theme="polynet"] .preview-sidebar {
-  background: #151518;
-  border-radius: 3px;
-}
-
-.appearance-option-preview[data-preview-theme="polynet"] .preview-content {
-  background: #17171a;
-  border-radius: 3px;
-  padding: 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.appearance-option-preview[data-preview-theme="polynet"] .preview-line {
-  background: #2d2d33;
-  height: 4px;
-  border-radius: 2px;
-}
-
-.appearance-option-preview[data-preview-theme="polynet"] .preview-line.short {
-  width: 60%;
-  background: #d66a8a;
-}
-
 .appearance-option-preview[data-preview-theme="light"] {
   background: #F8F8F4;
   box-shadow: inset 0 0 0 1px rgba(23, 23, 25, 0.1);
@@ -10640,46 +10605,46 @@ button.settings-primary-action svg {
 }
 
 /*
- * Light-family component adapters.
+ * Light component adapters.
  *
  * These selectors intentionally leave the legacy dark component values intact.
  * They adapt only controls whose old white/pink literals do not remain legible
- * on light surfaces. Shared component rules stay frozen for Polynet Dark and Dark.
+ * on light surfaces. Shared component rules stay frozen for Dark.
  */
-:root[data-theme-family="light"] .status.canceled,
-:root[data-theme-family="light"] .status.failed {
+:root[data-theme="light"] .status.canceled,
+:root[data-theme="light"] .status.failed {
   background: color-mix(in srgb, var(--accent-error) 14%, transparent);
   color: var(--accent-error);
 }
 
-:root[data-theme-family="light"] .action-buttons .danger {
+:root[data-theme="light"] .action-buttons .danger {
   border-color: color-mix(in srgb, var(--accent-error) 54%, transparent);
   color: var(--accent-error);
 }
 
-:root[data-theme-family="light"] .action-buttons .danger:hover {
+:root[data-theme="light"] .action-buttons .danger:hover {
   background: color-mix(in srgb, var(--accent-error) 10%, transparent);
 }
 
-:root[data-theme-family="light"] .action-error {
+:root[data-theme="light"] .action-error {
   border-color: color-mix(in srgb, var(--accent-error) 34%, transparent);
   background: color-mix(in srgb, var(--accent-error) 10%, transparent);
   color: var(--accent-error);
 }
 
-:root[data-theme-family="light"] .settings-section {
+:root[data-theme="light"] .settings-section {
   border-bottom-color: var(--border-default);
 }
 
-:root[data-theme-family="light"] .settings-panel button.danger,
-:root[data-theme-family="light"] .create-community-actions .danger {
+:root[data-theme="light"] .settings-panel button.danger,
+:root[data-theme="light"] .create-community-actions .danger {
   border-color: color-mix(in srgb, var(--accent-error) 34%, transparent);
   background: color-mix(in srgb, var(--accent-error) 10%, transparent);
   color: var(--accent-error);
 }
 
-:root[data-theme-family="light"] .settings-panel button.danger:hover:not(:disabled),
-:root[data-theme-family="light"] .create-community-actions .danger:hover:not(:disabled) {
+:root[data-theme="light"] .settings-panel button.danger:hover:not(:disabled),
+:root[data-theme="light"] .create-community-actions .danger:hover:not(:disabled) {
   border-color: color-mix(in srgb, var(--accent-error) 54%, transparent);
   background: color-mix(in srgb, var(--accent-error) 14%, transparent);
 }
@@ -10688,13 +10653,13 @@ button.settings-primary-action svg {
  * Core conversation loop. These are live controls used by workspace, community
  * chat, direct messages, and the member-agent dock.
  */
-:root[data-theme-family="light"] {
+:root[data-theme="light"] {
   --conversation-primary-action-surface: var(--bg-button);
   --conversation-primary-action-hover-surface: var(--bg-button-hover);
   --conversation-primary-action-foreground: var(--bg-button-text);
 }
 
-:root[data-theme-family="light"] .ask-icon-btn.ask-mic.recording {
+:root[data-theme="light"] .ask-icon-btn.ask-mic.recording {
   background: color-mix(in srgb, var(--accent-error) 12%, transparent);
   color: var(--accent-error);
   box-shadow:
@@ -10702,11 +10667,11 @@ button.settings-primary-action svg {
     0 6px 18px color-mix(in srgb, var(--accent-error) 16%, transparent);
 }
 
-:root[data-theme-family="light"] .ask-icon-btn.ask-mic.recording .ask-mic-ripple {
+:root[data-theme="light"] .ask-icon-btn.ask-mic.recording .ask-mic-ripple {
   border-color: color-mix(in srgb, var(--accent-error) 42%, transparent);
 }
 
-:root[data-theme-family="light"] .ask-icon-btn.ask-mic.transcribing {
+:root[data-theme="light"] .ask-icon-btn.ask-mic.transcribing {
   background: color-mix(
     in srgb,
     var(--accent, var(--accent-selection)) 12%,

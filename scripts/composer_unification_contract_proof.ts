@@ -13,7 +13,7 @@ const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 
 assert.match(
   baseCss,
-  /--composer-surface: var\(--bg-card-solid, #17171a\);[\s\S]*--composer-radius: 24px;/,
+  /--composer-surface: var\(--bg-card-solid, #2a2a2a\);[\s\S]*--composer-radius: 24px;/,
   "canonical composer material should be opaque and pill-shaped",
 );
 assert.match(
