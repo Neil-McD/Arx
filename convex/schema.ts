@@ -3015,6 +3015,7 @@ export default defineSchema({
     ),
     capturedAt: v.number(),
   })
+    .index("by_community", ["communityId"])
     .index("by_community_ref_version", ["communityId", "sourceRef", "sourceVersion"])
     .index("by_community_ref_fingerprints", [
       "communityId",

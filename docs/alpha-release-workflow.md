@@ -73,6 +73,83 @@ npm run check:third-party-mcp-retirement-complete-proof
 Never delete the production rows before the first release proves ordinary
 product traffic can no longer create or refresh them.
 
+### AI Feed retirement
+
+AI Feed removal is also a two-release data retirement. Release A removes the
+product and runtime surface while retaining the legacy tables plus the dormant
+`communityAiFeedRetirement.ts` operator module. Release B may remove those
+schemas and the operator module only after production reaches a complete,
+non-truncated zero census.
+
+Before merging Release A, run its local proof and the focused behavior test:
+
+```bash
+npm run check:community-ai-feed-retirement-release-a-proof
+npx vitest run convex/communityAiFeedRetirement.test.ts
+```
+
+After Release A is deployed to staging, run the official MCP acceptance twice:
+once with a builder actor and once with an ordinary member actor. Each run must
+use a different control identity that can open the community supplied as
+`POLYNET_MCP_DENIED_COMMUNITY_SLUG`. This proves the actor's
+`semantic_not_found` response is authorization isolation from a real community,
+not merely a missing slug.
+
+Production cleanup is a separate, explicitly authorized operation:
+
+1. Back up the canonical production database outside the repository and record
+   its location and SHA-256.
+2. Select exactly one community and record its canonical Convex ID. Every
+   census and batch is community-scoped; the operator module deliberately has
+   no global destructive mode.
+3. Run the versioned census for that community and stop if `complete` is false,
+   `batchDeletionReady` is false, any `blockedRows` count is nonzero, or any
+   category appears in `truncated`. Also stop if `danglingReferences.count` is
+   nonzero:
+
+```bash
+npx convex run communityAiFeedRetirement:inspectAiFeedRetirementInternal \
+  '{"communityId":"<community-id>"}' --prod
+```
+
+4. Process only this dependency order, one category at a time:
+   `member_settings`, `agent_serve_requests`, `retrieval_logs`,
+   `intelligence_retrieval_logs`, `outcome_observations`,
+   `memory_metabolizer_runs`, `intelligence_change_requests`,
+   `intelligence_mutations`, `intelligence_edges`, `intelligence_nodes`,
+   `compiler_digests`, `activity_events`, `archive_documents`,
+   `evidence_citations`, `source_traces`, `reactions`, `posts`.
+   `polynetCanonicalOperationReceipts` are permanent idempotency and audit
+   authority and never participate in this retirement.
+5. Dry-run each bounded batch first. The default is dry-run; state it explicitly
+   in operator receipts:
+
+```bash
+npx convex run communityAiFeedRetirement:deleteAiFeedRetirementBatchInternal \
+  '{"communityId":"<community-id>","category":"member_settings","expectedCensusVersion":"ai_feed_retirement_census_v3","limit":25,"dryRun":true}' --prod
+```
+
+6. Review `wouldDelete`, `wouldPatch`, `blockedRows`, and `skipped`. Only then
+   repeat the same exact category and version with `"dryRun":false`. Continue
+   bounded batches until `hasMore` is false, then advance to the next category.
+   Never bypass an `ai_feed_retirement_order_blocked` error.
+7. Community intelligence nodes, edges, compiler history, mutations, change
+   requests, retrieval receipts, outcomes, and metabolizer receipts that carry
+   Feed lineage deliberately fail closed, even when the row appears Feed-only.
+   Community memory is protected core. Preserve or reconstruct its evidence
+   under a separately reviewed migration with explicit human authorization;
+   never coerce it through this deleter.
+8. Mixed repository retrieval logs are patched to remove only retired Feed
+   references. Pure Feed retrieval logs may be deleted. Canonical operation
+   receipts are always preserved.
+9. Re-run the complete census twice. Release B remains blocked until both runs
+   report `retirementComplete: true`, every count is zero, and no scan is
+   truncated, blocked, or dangling.
+
+The cleanup patches `communityMemberSettings.aiFeedLastSeenAt` away while
+preserving all other member settings. It does not delete shared rows based on
+free-text mentions of “AI Feed.”
+
 ### Builder Partner v1 terminal state
 
 Builder Partner v1 is retired and its evidence migration is complete. Before the

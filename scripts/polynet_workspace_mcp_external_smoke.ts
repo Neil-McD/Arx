@@ -321,6 +321,19 @@ async function runAuthenticatedSmoke(args: {
   if (!token) {
     throw new Error("POLYNET_MCP_BEARER_TOKEN is required.");
   }
+  const controlToken = args.acceptance
+    ? requiredEnv(
+        "POLYNET_MCP_CONTROL_BEARER_TOKEN",
+        "Acceptance requires POLYNET_MCP_CONTROL_BEARER_TOKEN for an independent control identity.",
+      )
+    : null;
+  if (controlToken) {
+    assert.notEqual(
+      controlToken,
+      token,
+      "Acceptance actor and control identities must use different bearer tokens.",
+    );
+  }
   const requestedSlug = args.acceptance
     ? requiredEnv(
         "POLYNET_MCP_COMMUNITY_SLUG",
@@ -507,6 +520,36 @@ async function runAuthenticatedSmoke(args: {
 
   if (deniedSlug) {
     assert.notEqual(deniedSlug, slug);
+    if (args.acceptance) {
+      assert.ok(controlToken);
+      const controlTools = jsonRpcResult(
+        await postJsonRpc({
+          mcpUrl: args.mcpUrl,
+          token: controlToken,
+          method: "tools/list",
+        }),
+        "control tools/list",
+      );
+      const controlNames = asArray(controlTools.tools)
+        .map((tool) => asString(asRecord(tool).name))
+        .filter((name): name is string => Boolean(name));
+      assert.deepEqual(
+        controlNames,
+        CANONICAL_TOOLS,
+        "Control identity must discover the canonical five tools.",
+      );
+      const controlCommunity = await callTool({
+        mcpUrl: args.mcpUrl,
+        token: controlToken,
+        name: "polynet_list",
+        toolArgs: { path: `/communities/${deniedSlug}/` },
+      });
+      const controlAuthority = asRecord(controlCommunity.authority);
+      assert.ok(
+        ["member", "builder"].includes(String(controlAuthority.lane)),
+        "Control identity must prove authorized access to the denied community.",
+      );
+    }
     await callTool({
       mcpUrl: args.mcpUrl,
       token,
@@ -755,15 +798,14 @@ async function runAuthenticatedSmoke(args: {
       ? {
           inaccessible_community_fail_closed: "semantic_not_found",
           denied_community_slug: deniedSlug,
+          control_read: args.acceptance ? "ok" : "not_requested",
         }
       : {}),
     ...(memberBuilderDenials
       ? { member_builder_denials: memberBuilderDenials }
       : {}),
     ...(participation ? { participation } : {}),
-    ...(retiredAiFeedDenials
-      ? { retired_ai_feed: retiredAiFeedDenials }
-      : {}),
+    ...(retiredAiFeedDenials ? { retired_ai_feed: retiredAiFeedDenials } : {}),
     ...(builder ? { builder } : {}),
   };
 }
@@ -777,6 +819,7 @@ Required:
   POLYNET_MCP_BEARER_TOKEN for authenticated/acceptance
 
 Required for acceptance:
+  POLYNET_MCP_CONTROL_BEARER_TOKEN (a different control identity)
   POLYNET_MCP_COMMUNITY_SLUG
   POLYNET_MCP_DENIED_COMMUNITY_SLUG (a real community proven by a control actor)
   POLYNET_MCP_EXPECT_AUTHORITY_LANE=member|builder

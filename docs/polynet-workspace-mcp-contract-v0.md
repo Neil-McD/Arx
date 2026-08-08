@@ -239,6 +239,7 @@ Live staging:
 ```bash
 POLYNET_MCP_URL=https://polynet-staging.vercel.app/runtime/mcp \
 POLYNET_MCP_BEARER_TOKEN=<staging-token> \
+POLYNET_MCP_CONTROL_BEARER_TOKEN=<different-staging-control-token> \
 POLYNET_MCP_COMMUNITY_SLUG=<accessible-community> \
 POLYNET_MCP_DENIED_COMMUNITY_SLUG=<real-inaccessible-community> \
 POLYNET_MCP_EXPECT_AUTHORITY_LANE=<member-or-builder> \
@@ -252,7 +253,8 @@ Acceptance is deliberately fail closed:
   accessible community;
 - the expected authority lane must match the server-derived lane;
 - the denied slug must identify a real community that a separate control
-  identity successfully opened, while the actor under test cannot open it;
+  identity successfully opens during the same acceptance run, while the actor
+  under test cannot open it;
 - inaccessible-community and member builder-path/write/call attempts must
   return their exact non-enumerating denial codes; and
 - the retired `ai-feed/` path must be absent from projection and reject list,
