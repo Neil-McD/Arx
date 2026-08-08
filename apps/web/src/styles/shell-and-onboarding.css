@@ -810,17 +810,17 @@ body {
   width: 7px;
   height: 7px;
   border-radius: 999px;
-  background: var(--accent-gold);
+  background: var(--accent-attention);
   flex-shrink: 0;
 }
 
-/* Someone tagged you: the chat dot upgrades to the accent (mention) variant —
+/* Someone tagged you: the chat dot upgrades to the stronger attention variant —
    "someone needs me" reads differently from "there is chatter". */
 .nav-item-dot.is-mention {
   width: 8px;
   height: 8px;
-  background: var(--accent);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent);
+  background: var(--accent-attention);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-attention) 22%, transparent);
 }
 
 .nav-item:hover {

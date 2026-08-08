@@ -4091,10 +4091,10 @@
   color: var(--accent-gold, var(--accent));
 }
 
-/* A message that tags you catches the eye at scroll speed: accent edge + wash. */
+/* A message that tags you catches the eye at scroll speed: attention edge + wash. */
 .community-interaction-message.is-self-mentioned {
-  background: color-mix(in srgb, var(--accent) 6%, transparent);
-  border-left: 2px solid var(--accent);
+  background: color-mix(in srgb, var(--accent-attention) 6%, transparent);
+  border-left: 2px solid var(--accent-attention);
   border-radius: 0 8px 8px 0;
 }
 
@@ -4936,7 +4936,7 @@
   border: 0;
   background: transparent;
   padding: 2px 0;
-  color: var(--accent);
+  color: var(--accent-attention);
   font-weight: 500;
   font-size: 13px;
   font-family: inherit;
@@ -4977,11 +4977,11 @@
   content: "";
   flex: 1;
   height: 1px;
-  background: color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent-attention) 45%, transparent);
 }
 
 .community-interaction-unread-divider > span {
-  color: var(--accent);
+  color: var(--accent-attention);
   font-size: 11px;
   font-weight: 600;
   text-transform: uppercase;
@@ -4997,7 +4997,7 @@
   width: 6px;
   height: 6px;
   border-radius: 50%;
-  background: var(--accent);
+  background: var(--accent-attention);
   margin-right: 5px;
 }
 
@@ -7239,10 +7239,10 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: var(--accent-primary);
+  background: var(--accent-attention);
   box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent-primary) 38%, transparent),
-    0 0 12px color-mix(in srgb, var(--accent-primary) 40%, transparent);
+    0 0 0 1px color-mix(in srgb, var(--accent-attention) 38%, transparent),
+    0 0 12px color-mix(in srgb, var(--accent-attention) 40%, transparent);
 }
 
 .community-dm-inbox-row-meta {
@@ -8351,8 +8351,8 @@ button.chat-reply-quote:hover {
   right: -2px;
   min-width: 16px;
   height: 16px;
-  background: #e53935;
-  color: #fff;
+  background: var(--accent-attention-fill);
+  color: var(--text-on-attention);
   font-size: 10px;
   font-weight: 600;
   border-radius: 999px;

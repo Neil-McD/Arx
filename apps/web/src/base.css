@@ -38,14 +38,16 @@
   --text-link: var(--accent-gold);
   --text-link-hover: var(--accent-gold-subtle);
 
-  /* Semantic color roles. Identity, selection, and attention are independent. */
+  /* Semantic color roles. Identity, selection, activity/attention, and presence are independent. */
   --accent-brand: #d66a8a;
   --accent-selection: var(--accent-gold);
   --accent-agent: #a78bfa;
   --accent-agent-strong: #8b5cf6;
   --accent-agent-foreground: #c4b5fd;
   --accent-agent-surface: rgba(167, 139, 250, 0.16);
-  --accent-attention: var(--accent-brand);
+  --accent-attention: var(--accent-cyan);
+  --accent-attention-fill: #2F55FF;
+  --text-on-attention: #FFFFFF;
   --focus-ring: color-mix(in srgb, var(--accent-selection) 62%, white 38%);
 
   /* Compatibility aliases for older surfaces while semantic names become canonical. */

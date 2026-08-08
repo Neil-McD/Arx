@@ -325,7 +325,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /--accent-selection: var\(--accent-gold\);[\s\S]*--accent-agent: #a78bfa;[\s\S]*--accent-agent-strong: #8b5cf6;[\s\S]*--accent-attention: var\(--accent-brand\);[\s\S]*--focus-ring:/,
+  /--accent-selection: var\(--accent-gold\);[\s\S]*--accent-agent: #a78bfa;[\s\S]*--accent-agent-strong: #8b5cf6;[\s\S]*--accent-attention: var\(--accent-cyan\);[\s\S]*--focus-ring:/,
   "selection, AI identity, attention, and focus should have independent semantic roles",
 );
 assert.match(
