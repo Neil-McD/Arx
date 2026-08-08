@@ -413,7 +413,6 @@ async function runAuthenticatedSmoke(args: {
   for (const directory of [
     "resources/",
     "channels/",
-    "ai-feed/",
     "memory/",
     "capabilities/",
   ]) {
@@ -424,6 +423,11 @@ async function runAuthenticatedSmoke(args: {
       `${communityPath} must expose ${directory}`,
     );
   }
+  assert.equal(
+    entries(community).some((row) => row.path === `${communityPath}ai-feed/`),
+    false,
+    "Retired AI Feed directory must not be projected.",
+  );
   assert.equal(
     entries(community).some((row) => String(row.path).includes("/builder/")),
     authority.lane === "builder",
@@ -576,6 +580,47 @@ async function runAuthenticatedSmoke(args: {
   }
 
   let participation: Record<string, unknown> | null = null;
+  let retiredAiFeedDenials: Record<string, unknown> | null = null;
+  if (args.acceptance) {
+    assert.ok(acceptanceRunId);
+    const retiredAiFeedPath = `${communityPath}ai-feed/`;
+    await callTool({
+      mcpUrl: args.mcpUrl,
+      token,
+      name: "polynet_list",
+      toolArgs: { path: retiredAiFeedPath },
+      expectedErrorCode: "semantic_not_found",
+    });
+    await callTool({
+      mcpUrl: args.mcpUrl,
+      token,
+      name: "polynet_read",
+      toolArgs: { path: retiredAiFeedPath },
+      expectedErrorCode: "semantic_not_found",
+    });
+    await callTool({
+      mcpUrl: args.mcpUrl,
+      token,
+      name: "polynet_write",
+      toolArgs: {
+        path: retiredAiFeedPath,
+        mode: "create",
+        content: { text: "Retired AI Feed writes must remain impossible." },
+        idempotency_key: acceptanceKey({
+          runId: acceptanceRunId,
+          lane: authority.lane as ExpectedAuthorityLane,
+          purpose: "retired-ai-feed-write-denied",
+        }),
+      },
+      expectedErrorCode: "semantic_not_found",
+    });
+    retiredAiFeedDenials = {
+      projected: false,
+      list: "semantic_not_found",
+      read: "semantic_not_found",
+      write: "semantic_not_found",
+    };
+  }
   if (args.acceptance || readBoolEnv("POLYNET_MCP_WRITE_CHAT")) {
     assert.ok(acceptanceRunId);
     const lane = authority.lane as ExpectedAuthorityLane;
@@ -624,60 +669,6 @@ async function runAuthenticatedSmoke(args: {
       "Chat read-back must contain the acceptance post.",
     );
 
-    let aiFeedParticipation: Record<string, unknown> | null = null;
-    if (args.acceptance) {
-      const feedBody =
-        "Stage acceptance observation: the official Polynet MCP traversed authorized community evidence and verified canonical AI Feed participation.";
-      const feedInput = {
-        path: `${communityPath}ai-feed/`,
-        mode: "create",
-        content: {
-          post_type: "observation",
-          title: "Canonical MCP staging acceptance",
-          body: feedBody,
-        },
-        idempotency_key: acceptanceKey({
-          runId: acceptanceRunId,
-          lane,
-          purpose: "ai-feed",
-        }),
-      };
-      const feedWritten = await callTool({
-        mcpUrl: args.mcpUrl,
-        token,
-        name: "polynet_write",
-        toolArgs: feedInput,
-      });
-      const feedRetried = await callTool({
-        mcpUrl: args.mcpUrl,
-        token,
-        name: "polynet_write",
-        toolArgs: feedInput,
-      });
-      assert.equal(
-        feedRetried.deduped,
-        true,
-        "AI Feed retry must reuse the canonical receipt.",
-      );
-      const feedPath = asString(feedWritten.path);
-      assert.ok(feedPath, "AI Feed write must return a readable path.");
-      const readFeed = await callTool({
-        mcpUrl: args.mcpUrl,
-        token,
-        name: "polynet_read",
-        toolArgs: { path: feedPath },
-      });
-      assert.ok(
-        String(readFeed.body ?? "").includes(feedBody),
-        "AI Feed read-back must contain the acceptance observation.",
-      );
-      aiFeedParticipation = {
-        write: "ok",
-        retry_deduped: "ok",
-        read_after_write: "ok",
-        path: feedPath,
-      };
-    }
     participation = {
       chat: {
         write: "ok",
@@ -685,7 +676,6 @@ async function runAuthenticatedSmoke(args: {
         read_after_write: "ok",
         path: writtenPath,
       },
-      ...(aiFeedParticipation ? { ai_feed: aiFeedParticipation } : {}),
     };
   }
 
@@ -793,6 +783,9 @@ async function runAuthenticatedSmoke(args: {
       ? { member_builder_denials: memberBuilderDenials }
       : {}),
     ...(participation ? { participation } : {}),
+    ...(retiredAiFeedDenials
+      ? { retired_ai_feed: retiredAiFeedDenials }
+      : {}),
     ...(builder ? { builder } : {}),
   };
 }

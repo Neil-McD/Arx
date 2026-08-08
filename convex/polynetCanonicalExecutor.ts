@@ -1145,6 +1145,15 @@ async function executeCanonicalWrite(args: {
     return canonicalError(resolved.code, resolved.message);
   }
   const { target } = resolved;
+  if (
+    target.localPath === "/ai-feed/" ||
+    target.localPath.startsWith("/ai-feed/")
+  ) {
+    return canonicalError(
+      "semantic_not_found",
+      "Repository path not found or not accessible.",
+    );
+  }
   const content = omitNullishObjectFields(args.input.content);
   const mode = String(args.input.mode ?? "");
   const idempotencyKey = String(args.input.idempotencyKey ?? "");

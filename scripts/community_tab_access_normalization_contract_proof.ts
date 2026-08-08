@@ -23,11 +23,19 @@ const builderAccess: CommunityTabAccess = {
   canViewAnalytics: true,
 };
 
-for (const tab of ["chat", "ai_feed", "resources", "events", "settings"] as const) {
+for (const tab of ["chat", "resources", "events", "settings"] as const) {
   assert.equal(
     normalizeCommunityTabForAccess(tab, memberAccess),
     tab,
     `members should keep member-safe tab ${tab}`,
+  );
+}
+
+for (const retiredTab of ["ai_feed", "ai-feed", "feed"] as const) {
+  assert.equal(
+    parseCommunityTab(retiredTab),
+    "chat",
+    `retired AI Feed route ${retiredTab} should collapse to chat`,
   );
 }
 

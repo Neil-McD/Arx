@@ -121,7 +121,8 @@ const criticalBeforeContinuation = await measure([
 assert.equal(criticalBeforeContinuation.measurement.reason, "critical_evidence");
 assert.deepEqual(
   criticalBeforeContinuation.selectedRows.map((row) => String(row._id)),
-  ["critical-outcome", "continued-standard", "new-strong"],
+  ["critical-outcome", "continued-standard"],
+  "retired AI Feed traces must not enter an otherwise eligible compiler packet",
 );
 
 const nineEpisodes = await measure(
@@ -140,12 +141,14 @@ assert.equal(nineEpisodes.measurement.has_more_pending, true);
 const critical = await measure([trace({ id: "outcome", sourceType: "outcome" })]);
 assert.equal(critical.measurement.reason, "critical_evidence");
 
-const strong = await measure(
+const retiredFeed = await measure(
   Array.from({ length: 5 }, (_, index) =>
     trace({ id: `feed-${index}`, sourceType: "ai_feed", group: `ai_feed:${index}` })
   ),
 );
-assert.equal(strong.measurement.reason, "strong_evidence_threshold");
+assert.equal(retiredFeed.measurement.reason, "no_trigger");
+assert.equal(retiredFeed.measurement.pending_total, 0);
+assert.equal(retiredFeed.selectedRows.length, 0);
 
 const legacy = await measure([
   trace({ id: "legacy-a" }),

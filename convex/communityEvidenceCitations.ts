@@ -140,6 +140,12 @@ export async function captureCommunityEvidenceCitationCore(args: {
   if (resolution.status !== "active") {
     throw new Error("community_evidence_not_admissible");
   }
+  // AI Feed is retained only as historical evidence during the rolling
+  // retirement. Existing citations can still be revalidated below, but no
+  // retired source may enter a new citation or memory proposal.
+  if (resolution.sourceKind === "ai_feed") {
+    throw new Error("community_evidence_source_retired");
+  }
   return await insertOrReuseCitation({
     ctx: args.ctx,
     resolution,
@@ -171,6 +177,9 @@ export async function captureCommunityEvidenceCitationsForSourceTracesCore(args:
       !traceIsAdmissibleForActor(trace, args.actorType)
     ) {
       throw new Error("community_evidence_source_trace_not_admissible");
+    }
+    if (trace.sourceType === "ai_feed") {
+      throw new Error("community_evidence_source_retired");
     }
     const ref = communityEvidenceRefForSourceTrace(trace);
     if (!ref) throw new Error("community_evidence_source_ref_required");

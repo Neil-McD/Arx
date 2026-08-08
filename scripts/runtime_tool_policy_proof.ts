@@ -51,9 +51,6 @@ const FIXED_TOOL_FAMILIES = {
     "community_memory_read",
     "community_chat_search",
     "community_chat_read",
-    "community_ai_feed_search",
-    "community_ai_feed_read",
-    "community_write",
     "member_profile_confirm_facts",
   ],
   web: ["web_research", "web_crawl"],
@@ -196,8 +193,6 @@ function proveFixedPolicyBoundaries() {
     "community_search",
     "community_chat_search",
     "community_chat_read",
-    "community_ai_feed_search",
-    "community_ai_feed_read",
     "web_research",
     "list_dir",
     "read",
@@ -225,7 +220,6 @@ function proveFixedPolicyBoundaries() {
   }
 
   const exclusiveTools: RetrievalToolName[] = [
-    "community_write",
     "member_profile_confirm_facts",
     "community_resource_builder_stage_changeset",
     "community_resource_builder_apply_changeset",
@@ -277,15 +271,11 @@ function proveFixedPolicyBoundaries() {
     "community_resource_builder_read",
     "community_chat_search",
     "community_chat_read",
-    "community_ai_feed_search",
-    "community_ai_feed_read",
   ] as const satisfies readonly RetrievalToolName[]) {
     assert.equal(getFixedRuntimeToolPolicy(toolName).category, "community");
     assert.equal(getFixedRuntimeToolPolicy(toolName).requiresCommunity, true);
     assert.equal(getFixedRuntimeToolPolicy(toolName).readOnly, true);
   }
-  assert.equal(getFixedRuntimeToolPolicy("community_write").mutatesState, true);
-  assert.equal(getFixedRuntimeToolPolicy("community_write").requiresCommunity, true);
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresCommunity, true);
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresWorkspace, false);

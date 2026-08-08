@@ -142,14 +142,20 @@ require_match_in_file "$TOOL_TYPES_FILE" '"polynet_list"' \
   "tool name type includes polynet_list"
 require_match_in_file "$TOOL_TYPES_FILE" '"polynet_read"' \
   "tool name type includes polynet_read"
+require_match_in_file "$TOOL_TYPES_FILE" '"polynet_search"' \
+  "tool name type includes polynet_search"
+require_match_in_file "$TOOL_TYPES_FILE" '"polynet_write"' \
+  "tool name type includes polynet_write"
+require_match_in_file "$TOOL_TYPES_FILE" '"polynet_call"' \
+  "tool name type includes polynet_call"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_read"' \
   "tool name type includes community_resources_read"
 require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_search"' \
   "tool name type includes community_resources_search"
 forbid_match_in_file "$TOOL_TYPES_FILE" '"community_resources_map"|"community_resources_list"|"community_resource_read"' \
   "retired native resource tools are absent from the active tool type"
-require_match_in_file "$TOOL_TYPES_FILE" '"community_write"' \
-  "tool name type includes community_write"
+forbid_match_in_file "$TOOL_TYPES_FILE" '"community_write"|"community_ai_feed_search"|"community_ai_feed_read"' \
+  "retired community write and AI Feed tools are absent from the active tool type"
 require_match_in_file "$TOOL_TYPES_FILE" '"list_dir"' \
   "tool name type includes list_dir"
 require_match_in_file "$TOOL_TYPES_FILE" '"web_research"' \
@@ -178,18 +184,18 @@ require_match_in_file "$RESOLUTION_FILE" '"polynet_list"' \
   "runtime capability resolution includes semantic community listing"
 require_match_in_file "$RESOLUTION_FILE" '"polynet_read"' \
   "runtime capability resolution includes semantic community reading"
-require_match_in_file "$RESOLUTION_FILE" '"community_resources_read"' \
-  "runtime capability resolution includes community resource batch read tool"
-require_match_in_file "$RESOLUTION_FILE" '"community_resources_search"' \
-  "runtime capability resolution includes community resource search tool"
-forbid_match_in_file "$RESOLUTION_FILE" '"community_resources_map"|"community_resources_list"|"community_resource_read"' \
-  "runtime capability resolution excludes retired native resource tools"
+require_match_in_file "$RESOLUTION_FILE" '"polynet_search"' \
+  "runtime capability resolution includes semantic community search"
+require_match_in_file "$RESOLUTION_FILE" '"polynet_write"' \
+  "runtime capability resolution includes canonical community writes"
+require_match_in_file "$RESOLUTION_FILE" '"polynet_call"' \
+  "runtime capability resolution includes discovered canonical operations"
+forbid_match_in_file "$RESOLUTION_FILE" '"community_resources_(read|search|map|list)"|"community_resource_(read|builder_[^"]+)"|"community_search"' \
+  "runtime capability resolution excludes duplicate granular community tools"
 forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'toolName === "community_resources_map"|toolName === "community_resources_list"|toolName === "community_resource_read"' \
   "runtime dispatch excludes retired native resource tools"
-require_match_in_file "$RESOLUTION_FILE" '"community_search"' \
-  "runtime capability resolution includes community search tool"
-require_match_in_file "$RESOLUTION_FILE" '"community_write"' \
-  "runtime capability resolution includes community tools"
+forbid_match_in_file "$RESOLUTION_FILE" '"community_write"|"community_ai_feed_search"|"community_ai_feed_read"' \
+  "runtime capability resolution excludes retired community write and AI Feed tools"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("search_product_docs", "get_product_doc"\)' \
   "runtime capability resolution includes product docs tools"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("web_research", "web_crawl"\)' \

@@ -38,7 +38,7 @@ const envelope = buildRuntimeTurnEnvelope({
     "community_memory_search",
     "community_memory_read",
     "community_search",
-    "community_write",
+    "polynet_write",
     "member_profile_confirm_facts",
     "web_research",
     "read",
@@ -98,7 +98,7 @@ const fullManifest = buildRuntimeContextManifest({
     "community_memory_search",
     "community_memory_read",
     "community_search",
-    "community_write",
+    "polynet_write",
     "member_profile_confirm_facts",
     "web_research",
     "read",
@@ -163,7 +163,7 @@ assert.ok(ids(fullManifest.resources).includes("web_external_evidence"));
 assert.ok(ids(fullManifest.resources).includes("background_terminal_output"));
 assert.ok(!ids(fullManifest.resources).includes("message_attachments"));
 
-assert.equal(toolByName(fullManifest, "community_write")?.effect, "write");
+assert.equal(toolByName(fullManifest, "polynet_write")?.effect, "write");
 assert.equal(toolByName(fullManifest, "community_memory_search")?.family, "community_memory");
 assert.equal(toolByName(fullManifest, "community_memory_read")?.effect, "read");
 assert.equal(toolByName(fullManifest, "member_profile_confirm_facts")?.family, "member_profile");
