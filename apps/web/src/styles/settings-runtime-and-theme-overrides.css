@@ -5825,15 +5825,29 @@ button.message-citation-chip:hover {
   text-align: center;
 }
 
-.builder-create-url summary {
-  width: fit-content;
-  color: var(--text-muted);
-  font-size: 12px;
-  cursor: pointer;
+.builder-create-url-input {
+  display: flex;
+  align-items: center;
+  min-height: 44px;
+  overflow: hidden;
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  background: var(--bg-input);
 }
 
-.builder-create-url[open] summary {
-  margin-bottom: 10px;
+.builder-create-url-input > span {
+  padding-left: 13px;
+  color: var(--text-muted);
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.builder-create-url-input input {
+  min-width: 0;
+  border: 0 !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  padding-left: 2px !important;
 }
 
 .builder-offer-actions {

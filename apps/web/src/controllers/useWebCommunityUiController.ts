@@ -1,4 +1,4 @@
-import { useState, type DragEvent } from "react";
+import { useCallback, useState, type DragEvent } from "react";
 
 import { type CreateCommunityIntentDraft } from "../../../../shared/createCommunityIntent";
 import { useCommunityCreateController } from "../../../../shared/useCommunityCreateController";
@@ -25,9 +25,17 @@ type UseWebCommunityUiControllerParams<
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onAccountSetupRequired?: () => void;
   onAccountSetupUnavailable?: () => void;
-  onCommunityCreated: (community: CommunityT) => void;
-  onCommunityCreateRecoveryRequired?: () => Promise<void> | void;
-  getFounderSubscriptionId?: () => string | null;
+  onCommunityCreated: (
+    community: CommunityT,
+    context: { founderSubscriptionId: string | null },
+  ) => Promise<void> | void;
+  onCommunityCreateRecoveryRequired?: (
+    founderSubscriptionId: string | null,
+  ) => Promise<void> | void;
+  onRequiredCommunityCreateUnavailable?: (
+    founderSubscriptionId: string,
+    error: unknown,
+  ) => Promise<void> | void;
   readBannerFileAsWideDataUrlWithinLimit: (file: File, maxChars: number) => Promise<string>;
   isLikelyImageFile: (file: File) => boolean;
   maxCreateImageDataUrlChars: number;
@@ -36,6 +44,8 @@ type UseWebCommunityUiControllerParams<
 
 type CommunityCreateModalHostProps = {
   isOpen: boolean;
+  isDismissible: boolean;
+  isPaidSetup: boolean;
   hasSession: boolean;
   createCommunityName: string;
   createCommunityOneLiner: string;
@@ -72,6 +82,12 @@ export type UseWebCommunityUiControllerResult<
   CommunityT extends CommunityLike,
 > = {
   openCreateCommunityModal: (draft?: CreateCommunityIntentDraft | null) => void;
+  openRequiredCreateCommunityModal: (
+    founderSubscriptionId: string,
+    draft?: CreateCommunityIntentDraft | null,
+  ) => void;
+  closeRequiredCreateCommunityModal: () => void;
+  requiredFounderSubscriptionId: string | null;
   resumeCreateCommunityIntent: (draft?: CreateCommunityIntentDraft | null) => void;
   modalHostProps: WebCommunityModalHostPropsShape;
 };
@@ -83,6 +99,7 @@ export function useWebCommunityUiController<
   params: UseWebCommunityUiControllerParams<SessionT, CommunityT>,
 ): UseWebCommunityUiControllerResult<CommunityT> {
   const [showCreateCommunityModal, setShowCreateCommunityModal] = useState(false);
+  const [founderSubscriptionId, setFounderSubscriptionId] = useState<string | null>(null);
   const [createCommunityName, setCreateCommunityName] = useState("");
   const [createCommunitySlug, setCreateCommunitySlug] = useState("");
   const [createCommunitySlugEdited, setCreateCommunitySlugEdited] = useState(false);
@@ -97,7 +114,7 @@ export function useWebCommunityUiController<
   const [isProcessingCreateBanner, setIsProcessingCreateBanner] = useState(false);
 
   const {
-    openCreateCommunityModal,
+    openCreateCommunityModal: openBaseCreateCommunityModal,
     closeCreateCommunityModal,
     resumeCreateCommunityIntent,
     handleCreateCommunityPrimaryAction,
@@ -114,9 +131,24 @@ export function useWebCommunityUiController<
     onCreateUnauthenticated: params.onCreateUnauthenticated,
     onAccountSetupRequired: params.onAccountSetupRequired,
     onAccountSetupUnavailable: params.onAccountSetupUnavailable,
-    onCommunityCreated: params.onCommunityCreated,
-    onCommunityCreateRecoveryRequired: params.onCommunityCreateRecoveryRequired,
-    getFounderSubscriptionId: params.getFounderSubscriptionId,
+    onCommunityCreated: async (community, context) => {
+      await params.onCommunityCreated(community, context);
+      setFounderSubscriptionId(null);
+    },
+    onCommunityCreateRecoveryRequired: params.onCommunityCreateRecoveryRequired
+      ? async (subscriptionId) => {
+          await params.onCommunityCreateRecoveryRequired?.(subscriptionId);
+          setFounderSubscriptionId(null);
+        }
+      : undefined,
+    onRequiredCommunityCreateUnavailable: params.onRequiredCommunityCreateUnavailable
+      ? async (subscriptionId, error) => {
+          await params.onRequiredCommunityCreateUnavailable?.(subscriptionId, error);
+          setFounderSubscriptionId(null);
+        }
+      : undefined,
+    founderSubscriptionId,
+    isCreateCommunityDismissible: founderSubscriptionId === null,
     createCommunityName,
     createCommunitySlug,
     createCommunitySlugEdited,
@@ -142,12 +174,39 @@ export function useWebCommunityUiController<
     createUnauthenticatedErrorMessage: params.createUnauthenticatedErrorMessage,
   });
 
+  const openCreateCommunityModal = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
+    setFounderSubscriptionId(null);
+    openBaseCreateCommunityModal(draft);
+  }, [openBaseCreateCommunityModal]);
+
+  const openRequiredCreateCommunityModal = useCallback((
+    subscriptionId: string,
+    draft: CreateCommunityIntentDraft | null = null,
+  ) => {
+    const normalizedSubscriptionId = subscriptionId.trim();
+    if (!normalizedSubscriptionId) return;
+    setFounderSubscriptionId(normalizedSubscriptionId);
+    openBaseCreateCommunityModal(draft);
+  }, [openBaseCreateCommunityModal]);
+
+  const closeRequiredCreateCommunityModal = useCallback(() => {
+    if (!founderSubscriptionId) return;
+    setShowCreateCommunityModal(false);
+    setCreateCommunityError(null);
+    setFounderSubscriptionId(null);
+  }, [founderSubscriptionId]);
+
   return {
     openCreateCommunityModal,
+    openRequiredCreateCommunityModal,
+    closeRequiredCreateCommunityModal,
+    requiredFounderSubscriptionId: founderSubscriptionId,
     resumeCreateCommunityIntent,
     modalHostProps: {
       createModal: {
         isOpen: showCreateCommunityModal,
+        isDismissible: founderSubscriptionId === null,
+        isPaidSetup: founderSubscriptionId !== null,
         hasSession: Boolean(params.session),
         createCommunityName,
         createCommunityOneLiner,

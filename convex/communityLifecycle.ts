@@ -80,6 +80,7 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   banner_zoom: number;
   visibility: string;
   entry_policy: string;
+  builder_knowledge_setup_pending: boolean;
   created_at: string;
   updated_at: string;
   branding_revision: number;
@@ -107,6 +108,7 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
     banner_zoom: branding.banner_zoom,
     visibility: row.visibility,
     entry_policy: entryPolicy,
+    builder_knowledge_setup_pending: row.builderKnowledgeSetupPending === true,
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
     branding_revision: row.brandingRevision ?? row.updatedAt,
@@ -583,6 +585,7 @@ export const createCommunity = mutation({
       lifecycleStatus: "active",
       lifecycleGeneration: 0,
       builderAccessMode: COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED,
+      builderKnowledgeSetupPending: true,
       oneLiner,
       avatarUrl,
       avatarStorageId,

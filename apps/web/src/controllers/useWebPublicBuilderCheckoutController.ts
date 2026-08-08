@@ -30,8 +30,6 @@ type PublicBuilderCheckoutControllerParams = {
   refreshBilling: (
     session: AuthSession,
   ) => Promise<CloudFounderBillingOverview | null>;
-  setAvailableBuilderSubscriptionId: (subscriptionId: string) => void;
-  openFundedCreateCommunity: () => void;
   navigateTo: (path: string) => void;
   showToast: (message: string) => void;
 };
@@ -94,10 +92,6 @@ export function useWebPublicBuilderCheckoutController(
           (candidate) => candidate.grants_setup,
         );
         if (subscription) {
-          current.setAvailableBuilderSubscriptionId(
-            subscription.subscription_id,
-          );
-          current.openFundedCreateCommunity();
           return true;
         }
         await new Promise<void>((resolve) => window.setTimeout(resolve, 750));

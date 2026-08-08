@@ -2,9 +2,12 @@ import type { DragEvent } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
+import { isValidCommunitySlug } from "../../../../shared/communitySlug";
 
 type WebCreateCommunityModalProps = {
   isOpen: boolean;
+  isDismissible: boolean;
+  isPaidSetup: boolean;
   hasSession: boolean;
   createCommunityName: string;
   createCommunityOneLiner: string;
@@ -37,7 +40,10 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
   if (!props.isOpen) return null;
 
   return (
-    <div className="modal-overlay builder-offer-overlay" onClick={props.onClose}>
+    <div
+      className="modal-overlay builder-offer-overlay"
+      onClick={props.isDismissible ? props.onClose : undefined}
+    >
       <div
         className="modal create-community-modal builder-create-modal"
         role="dialog"
@@ -45,14 +51,25 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
         aria-labelledby="builder-create-title"
         onClick={(event) => event.stopPropagation()}
       >
-        <button className="modal-close builder-offer-close" onClick={props.onClose} title="Close">
-          ×
-        </button>
+        {props.isDismissible ? (
+          <button
+            className="modal-close builder-offer-close"
+            onClick={props.onClose}
+            title="Close"
+            aria-label="Close community setup"
+          >
+            ×
+          </button>
+        ) : null}
 
         <div className="builder-create-heading" id="builder-create-title">
           <span>Builder setup</span>
           <h2>Set up your community</h2>
-          <p>Your payment is confirmed. Add the identity members will see. You can change any of it later.</p>
+          <p>
+            {props.isPaidSetup
+              ? "Your payment is confirmed. Add the identity members will see. You can change any of it later."
+              : "Add the identity members will see. You can change any of it later."}
+          </p>
         </div>
 
         <div className="builder-create-fields">
@@ -147,6 +164,27 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                   onChange={(event) => props.onChangeName(event.target.value)}
                 />
               </label>
+              <label className="create-community-field builder-create-url">
+                <span>Community handle</span>
+                <div className="builder-create-url-input">
+                  <span aria-hidden="true">polynet.ai/c/</span>
+                  <input
+                    type="text"
+                    required
+                    placeholder="your-community"
+                    value={props.createCommunitySlug}
+                    aria-invalid={
+                      props.createCommunitySlug.length > 0
+                      && !isValidCommunitySlug(props.createCommunitySlug)
+                    }
+                    onChange={(event) => {
+                      props.onChangeSlug(event.target.value);
+                      props.onChangeSlugEdited(true);
+                    }}
+                  />
+                </div>
+                <span className="create-community-hint">Lowercase letters, numbers, and dashes.</span>
+              </label>
               <label className="create-community-field">
                 <span>One-liner</span>
                 <textarea
@@ -158,21 +196,6 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                 />
                 <span className="create-community-hint">A short promise members will recognize.</span>
               </label>
-              <details className="builder-create-url">
-                <summary>Customize community URL</summary>
-                <label className="create-community-field">
-                  <span>polynet.ai/c/</span>
-                  <input
-                    type="text"
-                    placeholder="your-community"
-                    value={props.createCommunitySlug}
-                    onChange={(event) => {
-                      props.onChangeSlug(event.target.value);
-                      props.onChangeSlugEdited(true);
-                    }}
-                  />
-                </label>
-              </details>
             </div>
           </div>
         </div>
@@ -191,6 +214,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
               || props.isProcessingCreateAvatar
               || props.isProcessingCreateBanner
               || props.createCommunityName.trim().length === 0
+              || !isValidCommunitySlug(props.createCommunitySlug)
             }
           >
             {props.isCreatingCommunity

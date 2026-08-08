@@ -23,6 +23,7 @@ export type WebCommunityRecord = {
   banner_zoom?: number | null;
   visibility: string;
   entry_policy?: "open" | "approval" | "paid_subscription" | null;
+  builder_knowledge_setup_pending?: boolean;
   owner_id: string;
   created_at: string;
   updated_at: string;

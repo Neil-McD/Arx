@@ -1731,6 +1731,28 @@ export async function createCloudCommunity<SessionT, TCommunity = unknown>(
   return firstGatewayRow<TCommunity>(payload);
 }
 
+export type CloudBuilderKnowledgeSetupCompletion = {
+  ok: true;
+  changed: boolean;
+  community_id: string;
+  builder_knowledge_setup_pending: false;
+};
+
+export async function completeCloudBuilderKnowledgeSetup<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudBuilderKnowledgeSetupCompletion> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation(
+    "communityBuilderKnowledgeSetup:completeBuilderKnowledgeSetup" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+    },
+  ) as CloudBuilderKnowledgeSetupCompletion;
+}
+
 export type CloudCommunityArchiveResult = {
   ok: boolean;
   changed: boolean;

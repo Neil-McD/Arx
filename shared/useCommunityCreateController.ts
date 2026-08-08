@@ -38,9 +38,19 @@ type UseCommunityCreateControllerArgs<
   onCreateUnauthenticated?: (draft: CreateCommunityIntentDraft) => Promise<void> | void;
   onAccountSetupRequired?: () => void;
   onAccountSetupUnavailable?: () => void;
-  onCommunityCreated: (community: CommunityT) => void;
-  onCommunityCreateRecoveryRequired?: () => Promise<void> | void;
-  getFounderSubscriptionId?: () => string | null;
+  onCommunityCreated: (
+    community: CommunityT,
+    context: { founderSubscriptionId: string | null },
+  ) => Promise<void> | void;
+  onCommunityCreateRecoveryRequired?: (
+    founderSubscriptionId: string | null,
+  ) => Promise<void> | void;
+  onRequiredCommunityCreateUnavailable?: (
+    founderSubscriptionId: string,
+    error: unknown,
+  ) => Promise<void> | void;
+  founderSubscriptionId: string | null;
+  isCreateCommunityDismissible: boolean;
   createCommunityName: string;
   createCommunitySlug: string;
   createCommunitySlugEdited: boolean;
@@ -93,6 +103,16 @@ function mapCreateCommunityErrorMessage(error: unknown): string {
   return message;
 }
 
+function isRequiredFounderSubscriptionUnavailableError(message: string): boolean {
+  return [
+    "founder_subscription_forbidden",
+    "founder_subscription_risk_revoked",
+    "founder_subscription_price_mismatch",
+    "founder_subscription_inactive",
+    "founder_stripe_price",
+  ].some((code) => message.includes(code));
+}
+
 export function useCommunityCreateController<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
@@ -122,7 +142,7 @@ export function useCommunityCreateController<
 
   const closeCreateCommunityModal = useCallback(() => {
     const current = argsRef.current;
-    if (createInFlightRef.current) return;
+    if (createInFlightRef.current || !current.isCreateCommunityDismissible) return;
     current.setShowCreateCommunityModal(false);
     current.setCreateCommunityError(null);
   }, []);
@@ -209,7 +229,7 @@ export function useCommunityCreateController<
       }
 
       current.setIsCreatingCommunity(true);
-      const founderSubscriptionId = current.getFounderSubscriptionId?.() ?? null;
+      const founderSubscriptionId = current.founderSubscriptionId;
       const [avatarField, bannerField] = await Promise.all([
         prepareCloudCommunityBrandingField({
           session,
@@ -244,7 +264,7 @@ export function useCommunityCreateController<
         current.setCreateCommunityError("Failed to create community.");
         return;
       }
-      current.onCommunityCreated(community);
+      await current.onCommunityCreated(community, { founderSubscriptionId });
       resetCreateCommunityForm();
       current.setShowCreateCommunityModal(false);
       current.setCreateCommunityError(null);
@@ -255,7 +275,7 @@ export function useCommunityCreateController<
         && current.onCommunityCreateRecoveryRequired
       ) {
         try {
-          await current.onCommunityCreateRecoveryRequired();
+          await current.onCommunityCreateRecoveryRequired(current.founderSubscriptionId);
           current.setShowCreateCommunityModal(false);
           current.setCreateCommunityError(null);
         } catch {
@@ -263,6 +283,19 @@ export function useCommunityCreateController<
             "Your Builder subscription is already attached. Refresh to load its community.",
           );
         }
+        return;
+      }
+      if (
+        current.founderSubscriptionId
+        && isRequiredFounderSubscriptionUnavailableError(message)
+        && current.onRequiredCommunityCreateUnavailable
+      ) {
+        await current.onRequiredCommunityCreateUnavailable(
+          current.founderSubscriptionId,
+          error,
+        );
+        current.setShowCreateCommunityModal(false);
+        current.setCreateCommunityError(null);
         return;
       }
       current.setCreateCommunityError(mapCreateCommunityErrorMessage(error));

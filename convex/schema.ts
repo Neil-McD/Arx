@@ -1188,6 +1188,7 @@ export default defineSchema({
     builderAccessMode: v.optional(
       v.union(v.literal("grandfathered"), v.literal("subscription_required")),
     ),
+    builderKnowledgeSetupPending: v.optional(v.boolean()),
     oneLiner: v.optional(v.string()),
     about: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),

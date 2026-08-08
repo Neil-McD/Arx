@@ -491,6 +491,7 @@ test("a publish-ready first community consumes its verified Builder subscription
     owner_id: "community-launch-first-owner",
     slug: "published-before-ai-funding",
     visibility: "published",
+    builder_knowledge_setup_pending: true,
   });
 
   await expect(t.run(async (ctx) => {
@@ -501,6 +502,7 @@ test("a publish-ready first community consumes its verified Builder subscription
       if (!community) throw new Error("created_community_missing");
       expect(community).toMatchObject({
         builderAccessMode: "subscription_required",
+        builderKnowledgeSetupPending: true,
       });
       const subscription = await ctx.db.get(fixture.founderSubscriptionId);
       expect(subscription).toMatchObject({

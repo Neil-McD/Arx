@@ -18,7 +18,10 @@ assert.match(
 assert.match(auth, /getCanonicalTierByUserIdInternal[\s\S]*return "free"/);
 assert.doesNotMatch(auth, /POLYNET_FREE_MAX_COMMUNITIES|PLATFORM_OWNER_COMPLIMENTARY_MAX_COMMUNITIES|maxCommunities/);
 assert.doesNotMatch(auth, /if \(tier === "architect"\)/);
-assert.match(lifecycle, /resolveAdditionalManagedCommunityAdmission\(ctx, ownerId\)/);
+assert.match(
+  lifecycle,
+  /founderSubscriptionId: v\.optional\(v\.id\("founderSubscriptions"\)\)[\s\S]*founder_subscription_forbidden[\s\S]*founder_subscription_already_attached/,
+);
 assert.match(lifecycle, /community_funding_required_before_create/);
 assert.doesNotMatch(lifecycle, /max_communities|community_owner_limit_reached/);
 assert.match(
@@ -28,13 +31,13 @@ assert.match(
 assert.doesNotMatch(founderInference, /MAX_COMMUNITIES|fundedCommunityCount\s*[><=]/);
 assert.match(createController, /community_funding_required_before_create/);
 assert.doesNotMatch(createController, /max_communities|community_owner_limit_reached|onOwnedCommunityLimitReached/);
-assert.match(createModal, /Create and continue to payment/);
+assert.match(createModal, /Community handle[\s\S]*Create community/);
 assert.doesNotMatch(createModal, /max_communities|Community limit reached|needsPlan|limitReached/);
 assert.doesNotMatch(shellController, /hasCommunityCreateAccess|setIsFreeAccountInfoOpen/);
 assert.doesNotMatch(mobileController, /hasCommunityCreateAccess|setIsFreeAccountInfoOpen/);
 assert.equal(existsSync("shared/CommunityLimitModal.tsx"), false);
-assert.match(matrix, /\$79 \/ month \/ managed community/);
-assert.match(matrix, /unlimited number of communities/);
+assert.match(matrix, /\$79 \/ month \/ community/);
+assert.match(matrix, /Every newly created non-operator community is subscription-required/);
 assert.match(matrix, /2\.9%/);
 
-console.log("account_community_limit_contract_proof: unlimited paid communities ok");
+console.log("account_community_limit_contract_proof: one verified subscription per paid community ok");

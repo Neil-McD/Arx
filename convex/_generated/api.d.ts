@@ -58,6 +58,7 @@ import type * as communityApplicationFeeRefunds from "../communityApplicationFee
 import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityBuilderAccessCore from "../communityBuilderAccessCore.js";
+import type * as communityBuilderKnowledgeSetup from "../communityBuilderKnowledgeSetup.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChannelAudit from "../communityChannelAudit.js";
 import type * as communityChannelBackfill from "../communityChannelBackfill.js";
@@ -304,6 +305,7 @@ declare const fullApi: ApiFromModules<{
   communityArchiveDocuments: typeof communityArchiveDocuments;
   communityAttention: typeof communityAttention;
   communityBuilderAccessCore: typeof communityBuilderAccessCore;
+  communityBuilderKnowledgeSetup: typeof communityBuilderKnowledgeSetup;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChannelAudit: typeof communityChannelAudit;
   communityChannelBackfill: typeof communityChannelBackfill;

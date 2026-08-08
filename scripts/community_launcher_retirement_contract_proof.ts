@@ -109,8 +109,13 @@ assert.doesNotMatch(
 
 assert.match(
   createModal,
-  /Your payment is confirmed[\s\S]*Community name[\s\S]*Customize community URL[\s\S]*Create community/,
+  /Your payment is confirmed[\s\S]*Community name[\s\S]*Community handle[\s\S]*Create community/,
   "community creation should remain one post-payment identity form",
+);
+assert.match(
+  createModal,
+  /props\.isDismissible \? \([\s\S]*Close community setup/,
+  "required paid setup must not expose the optional creation close action",
 );
 assert.doesNotMatch(
   createModal,
@@ -130,7 +135,7 @@ assert.match(
 );
 assert.match(
   createController,
-  /resolveUsableSession[\s\S]*isAccountSetupComplete[\s\S]*prepareCloudCommunityBrandingField[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*avatarStorageId: avatarField\.storageId[\s\S]*oneLiner: current\.createCommunityOneLiner[\s\S]*founderSubscriptionId[\s\S]*onCommunityCreated\(community\)/,
+  /resolveUsableSession[\s\S]*isAccountSetupComplete[\s\S]*prepareCloudCommunityBrandingField[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*avatarStorageId: avatarField\.storageId[\s\S]*oneLiner: current\.createCommunityOneLiner[\s\S]*founderSubscriptionId[\s\S]*await current\.onCommunityCreated\(community, \{ founderSubscriptionId \}\)/,
   "canonical creation must preserve session, account, branding, attached subscription, mutation, and completion boundaries",
 );
 assert.match(
@@ -140,7 +145,7 @@ assert.match(
 );
 assert.match(
   app,
-  /const communityUi = useWebCommunityUiController<[\s\S]*onCommunityCreated: \(community\) => \{[\s\S]*setCommunities[\s\S]*enterJoinedCommunity\(\{[\s\S]*communityTab: "resources"/,
+  /const communityUi = useWebCommunityUiController<[\s\S]*onCommunityCreated: async \(community, context\) => \{[\s\S]*suppressBuilderSetupSubscription\([\s\S]*context\.founderSubscriptionId[\s\S]*"attached"[\s\S]*setCommunities[\s\S]*founderBilling\.refresh[\s\S]*enterJoinedCommunity\(\{[\s\S]*communityTab: "resources"/,
   "App should project a created community into the directory and enter canonical Resources onboarding",
 );
 assert.match(

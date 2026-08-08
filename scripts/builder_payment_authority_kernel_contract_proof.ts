@@ -102,7 +102,17 @@ assert.match(
 );
 assert.match(
   publicBuilderCheckoutController,
-  /returnInFlightRef\.current[\s\S]*overview\?\.unassigned_subscriptions\.find[\s\S]*current\.openFundedCreateCommunity\(\)/,
+  /returnInFlightRef\.current[\s\S]*overview\?\.unassigned_subscriptions\.find[\s\S]*if \(subscription\) \{[\s\S]*return true/,
+);
+assert.doesNotMatch(
+  publicBuilderCheckoutController,
+  /setAvailableBuilderSubscriptionId|openFundedCreateCommunity/,
+  "checkout return must refresh canonical billing state instead of mirroring entitlement in a browser ref",
+);
+assert.match(
+  app,
+  /pendingBuilderSetupSubscription[\s\S]*isAccountSetupCompleteForBuilderActions[\s\S]*openRequiredCreateCommunityModal/,
+  "authenticated bootstrap must force unresolved paid setup from canonical billing state",
 );
 assert.match(
   publicBuilderCheckoutController,
