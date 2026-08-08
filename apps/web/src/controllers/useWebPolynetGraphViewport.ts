@@ -20,6 +20,7 @@ import {
 
 const MIN_SCALE = 0.08;
 const MAX_SCALE = 3;
+const MAX_FIT_SCALE = 1.4;
 const ZOOM_STEP = 1.2;
 const FIT_PADDING = 72;
 // Pointer travel (CSS px) below which a press counts as a click, not a drag.
@@ -124,7 +125,7 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
         {
           padding: FIT_PADDING,
           minScale: MIN_SCALE,
-          maxScale: MAX_SCALE,
+          maxScale: MAX_FIT_SCALE,
           defaultScale: 1,
         },
       );
@@ -150,7 +151,7 @@ export function useWebPolynetGraphViewport(args: UseWebPolynetGraphViewportArgs)
       {
         padding: FIT_PADDING,
         minScale: MIN_SCALE,
-        maxScale: MAX_SCALE,
+        maxScale: MAX_FIT_SCALE,
         defaultScale: 1,
       },
     );
