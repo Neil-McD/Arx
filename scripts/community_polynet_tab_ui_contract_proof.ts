@@ -83,6 +83,7 @@ assert.match(interactionProjection, /community-memory-drawer/, "the interaction 
 assert.match(interactionProjection, /aria-label="Community memory"/, "the drawer should expose an accessible label");
 assert.match(interactionProjection, /event\.key !== "Escape"[\s\S]*onCloseCommunityMemory/, "Escape should close Memory through the canonical transition");
 assert.match(interactionProjection, /memoryBackButtonRef\.current\?\.focus\(\{ preventScroll: true \}\)/, "opening Memory should move keyboard focus into the drawer");
+assert.match(interactionProjection, /community-memory-drawer-header[\s\S]*ref=\{memoryBackButtonRef\}[\s\S]*aria-label="Back to community"/, "the Memory back control should own the drawer focus ref");
 assert.match(interactionProjection, /onCloseCommunityMemory \?\? props\.onCloseDrawer/, "Memory should use the canonical close transition");
 assert.match(interactionProjection, /<CommunityMemoryGraph/, "the drawer should reuse the canonical graph rather than a duplicate list");
 assert.match(interactionProjection, /hasDetailPanel[\s\S]*has-drawer/, "Memory, thread, and profile details should share drawer geometry");
