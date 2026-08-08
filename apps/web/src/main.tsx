@@ -3,6 +3,7 @@ import "./posthogAnalytics";
 import React from "react";
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import "@fontsource-variable/ibm-plex-sans/wght.css";
 import "./index.css";
 import { isLoginTrampolinePathname, LoginTrampolineRoute } from "./auth/loginTrampoline";
 import { bootConvexProbe } from "../../../shared/convexRuntime";

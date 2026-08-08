@@ -1,5 +1,6 @@
 :root {
-  font-family: "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  --font-sans: "IBM Plex Sans Variable", "IBM Plex Sans", system-ui, -apple-system, sans-serif;
+  font-family: var(--font-sans);
   --font-mono: "IBM Plex Mono", "SF Mono", "Fira Code", monospace;
   color-scheme: dark;
 
@@ -77,9 +78,10 @@
 
   /* Chat has its own semantic ladder so identity, content, and metadata stay
      distinct without changing the platform-wide text hierarchy. */
-  --chat-author-text: var(--text-primary);
-  --chat-body-text: color-mix(in srgb, var(--text-primary) 82%, var(--text-secondary) 18%);
-  --chat-meta-text: color-mix(in srgb, var(--text-secondary) 78%, var(--text-muted) 22%);
+  --chat-author-text: color-mix(in srgb, var(--text-primary) 98%, var(--surface-workspace) 2%);
+  --chat-body-text: color-mix(in srgb, var(--text-primary) 82%, var(--surface-workspace) 18%);
+  --chat-meta-text: color-mix(in srgb, var(--text-primary) 70%, var(--surface-workspace) 30%);
+  --chat-system-text: color-mix(in srgb, var(--text-primary) 62%, var(--surface-workspace) 38%);
 
   /* Borders */
   --border-default: #26262b;
