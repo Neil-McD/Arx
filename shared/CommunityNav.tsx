@@ -369,7 +369,7 @@ export const CommunityNav = memo(function CommunityNav({
               title="Community settings"
               aria-label={`Open ${activeCommunityName} settings`}
             >
-              <Settings size={18} strokeWidth={1.7} aria-hidden="true" />
+              <Settings size={20} strokeWidth={1.8} aria-hidden="true" />
             </button>
           ) : null}
         </div>
