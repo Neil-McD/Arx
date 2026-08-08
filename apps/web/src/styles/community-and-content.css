@@ -5602,7 +5602,9 @@
     inset: 0;
     width: 100%;
     border-left: 0;
-    z-index: 6;
+    /* Must sit above the sticky channel header (z-index: 14) when the drawer
+       becomes an overlay instead of a side-by-side column. */
+    z-index: 16;
     /* Same translucent drawer color as the side-by-side state, layered over an opaque
        base so it matches exactly yet the feed never shows through. */
     background:
