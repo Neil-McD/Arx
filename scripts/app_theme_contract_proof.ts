@@ -311,7 +311,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /--accent-attention:\s*#8EA9ED;[\s\S]*?--accent-attention-fill:\s*#8EA9ED;[\s\S]*?--text-on-attention:\s*#171719;/,
+  /--accent-attention:\s*#7BAAD6;[\s\S]*?--accent-attention-fill:\s*#7BAAD6;[\s\S]*?--text-on-attention:\s*#171719;/,
   "activity attention should have an independent readable foreground and count-badge treatment",
 );
 [
@@ -635,9 +635,9 @@ assert.match(
 );
 
 const accessiblePairs = [
-  ["Dark activity blue on canvas", "#8EA9ED", "#1E1E1E"],
+  ["Dark activity blue on canvas", "#7BAAD6", "#1E1E1E"],
   ["Light activity blue on canvas", "#2F55FF", "#F8F8F4"],
-  ["Dark unread count on activity fill", "#171719", "#8EA9ED"],
+  ["Dark unread count on activity fill", "#171719", "#7BAAD6"],
   ["Light unread count on activity fill", "#FFFFFF", "#2F55FF"],
   ["Primary ink on canvas", "#171719", "#F8F8F4"],
   ["Secondary ink on canvas", "#52515A", "#F8F8F4"],
