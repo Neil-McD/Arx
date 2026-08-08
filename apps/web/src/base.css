@@ -13,31 +13,31 @@
   --web-chat-max-width: 760px;
   --web-chat-gutter: clamp(12px, 3vw, 20px);
 
-  /* Base fallback tokens mirror Polynet so the shell never flashes light. */
-  --bg-app: #121214;
-  --bg-header: rgba(18, 18, 20, 0.94);
-  --bg-panel: rgba(21, 21, 24, 0.9);
-  --bg-modal: #17171a;
-  --bg-workspace: rgba(18, 18, 20, 0.94);
-  --bg-card: rgba(23, 23, 26, 0.9);
-  --bg-card-solid: #17171a;
-  --bg-card-alt: rgba(32, 32, 37, 0.9);
-  --bg-card-hover: #1c1c20;
-  --bg-input: rgba(24, 24, 28, 0.95);
-  --bg-button: #efeff2;
+  /* Canonical Dark fallback prevents a light flash before theme bootstrap. */
+  --bg-app: #1a1a1a;
+  --bg-header: rgba(18, 18, 18, 0.95);
+  --bg-panel: rgba(24, 24, 24, 0.9);
+  --bg-modal: rgba(20, 20, 20, 0.98);
+  --bg-workspace: rgba(30, 30, 30, 0.95);
+  --bg-card: rgba(42, 42, 42, 0.9);
+  --bg-card-solid: #2a2a2a;
+  --bg-card-alt: rgba(36, 36, 36, 0.9);
+  --bg-card-hover: rgba(50, 50, 50, 0.95);
+  --bg-input: rgba(20, 20, 20, 0.95);
+  --bg-button: #f1ede5;
   --bg-button-hover: #ffffff;
-  --bg-button-text: #101114;
+  --bg-button-text: #0a0a0a;
   --conversation-primary-action-surface: #ffffff;
   --conversation-primary-action-hover-surface: #ffffff;
   --conversation-primary-action-foreground: #111111;
-  --bg-terminal: #0d0d10;
+  --bg-terminal: #050505;
 
   /* Accent color */
-  --accent-gold: #d66a8a;
+  --accent-gold: #f1ede5;
   --accent-gold-subtle: #b75874;
   --accent-gold-glow: rgba(214, 106, 138, 0.18);
   --text-link: var(--accent-gold);
-  --text-link-hover: var(--accent-gold-subtle);
+  --text-link-hover: color-mix(in srgb, var(--accent-gold) 84%, white 16%);
 
   /* Semantic color roles. Identity, selection, activity/attention, and presence are independent. */
   --accent-brand: #d66a8a;
@@ -64,17 +64,17 @@
   --accent-cyan: #4285f4;
   --accent-cyan-subtle: #2d6de0;
   --accent-cyan-glow: rgba(66, 133, 244, 0.16);
-  /* Links are a shared dark-family utility signal. Brand accents remain free
+  /* Links are a shared Dark utility signal. Brand accents remain free
      for theme identity, selection, mentions, and community actions. */
   --chat-link: var(--accent-cyan);
   --chat-link-hover: color-mix(in srgb, var(--accent-cyan) 82%, white 18%);
 
   /* Text */
-  --text-primary: #e8e8ea;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --text-faint: #52525b;
-  --text-terminal: #ececef;
+  --text-primary: #fcf8f0;
+  --text-secondary: #d6d0c6;
+  --text-muted: #b3ad9f;
+  --text-faint: #9c968a;
+  --text-terminal: #fcf8f0;
 
   /* Chat has its own semantic ladder so identity, content, and metadata stay
      distinct without changing the platform-wide text hierarchy. */
@@ -84,29 +84,29 @@
   --chat-system-text: color-mix(in srgb, var(--text-primary) 62%, var(--surface-workspace) 38%);
 
   /* Borders */
-  --border-default: #26262b;
-  --border-strong: #2d2d33;
-  --border-muted: #1f1f24;
-  --border-active: #d66a8a;
+  --border-default: #3a3a3a;
+  --border-strong: #4a4a4a;
+  --border-muted: #2a2a2a;
+  --border-active: #f1ede5;
   --divider-accent: rgba(255, 255, 255, 0.06);
 
   /* Icons */
-  --icon-default: #71717a;
-  --icon-hover: #a1a1aa;
+  --icon-default: #b3ad9f;
+  --icon-hover: #d6d0c6;
   --icon-active: var(--border-active);
 
   /* Overlays */
-  --hover-overlay: rgba(255, 255, 255, 0.04);
-  --active-overlay: rgba(255, 255, 255, 0.08);
+  --hover-overlay: rgba(255, 255, 255, 0.06);
+  --active-overlay: rgba(255, 255, 255, 0.1);
 
   /* No panel shadows */
   --panel-shadow: none;
 
   /* Status colors - muted */
-  --status-default: #17171a;
-  --status-proposed: #372730;
-  --status-approved: #223229;
-  --status-executed: #202d3f;
+  --status-default: #2a2a2a;
+  --status-proposed: #4a4230;
+  --status-approved: #2a3d2e;
+  --status-executed: #2e3040;
 
   /* Semantic aliases (no-visual-delta compatibility layer) */
   --surface-app: var(--bg-app);
@@ -127,7 +127,7 @@
   --stroke-selected: color-mix(in srgb, var(--accent-gold) 46%, var(--stroke-default));
   --stroke-divider-accent: var(--divider-accent, var(--border-muted));
   --stroke-panel-edge: var(--stroke-divider-accent);
-  --composer-surface: var(--bg-card-solid, #17171a);
+  --composer-surface: var(--bg-card-solid, #2a2a2a);
   --composer-border: color-mix(in srgb, var(--stroke-default) 88%, transparent);
   --composer-focus-ring: color-mix(in srgb, var(--text-ink-primary) 44%, transparent);
   --composer-radius: 24px;
@@ -149,7 +149,7 @@
   --rail-width: 72px;
   --rail-control-size: 44px;
   --rail-control-anchor-inset: calc((var(--rail-width) - var(--rail-control-size)) / 2);
-  --community-rail-button-border: 1px solid var(--stroke-default);
+  --community-rail-button-border: 0;
   --scrollbar-size: 6px;
   --scrollbar-radius: 3px;
   --scrollbar-track: transparent;
@@ -158,141 +158,6 @@
 
   color: var(--text-ink-primary);
   background: var(--surface-app);
-}
-
-/* No-attribute startup fallback should behave like Polynet, not the alternate dark theme. */
-:root:not([data-theme]) {
-  --surface-nav: rgba(21, 21, 24, 0.9);
-  --workspace-composer-bg: var(--surface-nav, var(--surface-panel));
-  --workspace-landing-action-bg: var(--surface-nav, var(--surface-panel));
-  --workspace-landing-action-hover-bg: color-mix(in srgb, var(--surface-nav, var(--surface-panel)) 88%, var(--bg-card-hover) 12%);
-  --community-rail-button-border: 0;
-}
-
-/* Dark theme */
-:root[data-theme="dark"] {
-  --bg-app: #1a1a1a;
-  --bg-header: rgba(18, 18, 18, 0.95);
-  --bg-panel: rgba(24, 24, 24, 0.9);
-  --bg-modal: rgba(20, 20, 20, 0.98);
-  --bg-workspace: rgba(30, 30, 30, 0.95);
-  --bg-card: rgba(42, 42, 42, 0.9);
-  --bg-card-solid: #2a2a2a;
-  --bg-card-alt: rgba(36, 36, 36, 0.9);
-  --bg-card-hover: rgba(50, 50, 50, 0.95);
-  --bg-input: rgba(20, 20, 20, 0.95);
-  --bg-button: #f1ede5;
-  --bg-button-text: #0a0a0a;
-  --bg-terminal: #050505;
-
-  /* Accent colors (dark mode uses light tones) */
-  --accent-gold: #f1ede5;
-  --text-link: var(--accent-gold);
-  --text-link-hover: color-mix(in srgb, var(--accent-gold) 84%, white 16%);
-
-  --text-primary: #fcf8f0;
-  --text-secondary: #d6d0c6;
-  --text-muted: #b3ad9f;
-  --text-faint: #9c968a;
-  --text-terminal: #fcf8f0;
-
-  --border-default: #3a3a3a;
-  --border-strong: #4a4a4a;
-  --border-muted: #2a2a2a;
-  --border-active: #f1ede5;
-
-  --header-border: none;
-
-  --icon-default: #b3ad9f;
-  --icon-hover: #d6d0c6;
-  --icon-active: var(--border-active);
-
-  --hover-overlay: rgba(255, 255, 255, 0.06);
-  --active-overlay: rgba(255, 255, 255, 0.1);
-
-  --panel-shadow: none;
-
-  --status-default: #2a2a2a;
-  --status-proposed: #4a4230;
-  --status-approved: #2a3d2e;
-  --status-executed: #2e3040;
-  --community-rail-button-border: 0;
-}
-
-/* Polynet theme - "Monolithic Surface" */
-:root[data-theme="polynet"] {
-  /*
-   * Polynet Signature Palette
-   * Philosophy: neutral graphite surfaces with a restrained text/border ladder.
-   * Side panels share one surface token so they read as one material family.
-   */
-
-  /* === FOUNDATION: Neutral graphite === */
-  --bg-app: #121214;
-  --bg-header: rgba(18, 18, 20, 0.94);
-  --bg-panel: rgba(21, 21, 24, 0.9);
-  --bg-modal: #17171a;
-  --bg-workspace: rgba(18, 18, 20, 0.94);
-  --bg-card: rgba(23, 23, 26, 0.9);
-  --bg-card-solid: #17171a;
-  --bg-card-alt: rgba(32, 32, 37, 0.9);
-  --bg-card-hover: #1c1c20;
-  --bg-input: rgba(24, 24, 28, 0.95);
-  --bg-terminal: #0d0d10;
-  --surface-nav: rgba(21, 21, 24, 0.9);
-  --workspace-composer-bg: var(--surface-nav, var(--surface-panel));
-  --workspace-landing-action-bg: var(--surface-nav, var(--surface-panel));
-  --workspace-landing-action-hover-bg: color-mix(in srgb, var(--surface-nav, var(--surface-panel)) 88%, var(--bg-card-hover) 12%);
-
-  /* === BUTTONS: Light pills, sparse emphasis === */
-  --bg-button: #efeff2;
-  --bg-button-hover: #ffffff;
-  --bg-button-text: #101114;
-  --accent-gold: #d66a8a;
-  --accent-gold-subtle: #b75874;
-  --accent-gold-glow: rgba(214, 106, 138, 0.18);
-  --text-link: var(--accent-gold);
-  --text-link-hover: var(--accent-gold-subtle);
-
-  /* === SECONDARY ACCENT: Drive-like blue === */
-  --accent-cyan: #4285f4;
-  --accent-cyan-subtle: #2d6de0;
-  --accent-cyan-glow: rgba(66, 133, 244, 0.16);
-
-  /* === TYPOGRAPHY: Off-white with a restrained gray ramp === */
-  --text-primary: #e8e8ea;
-  --text-secondary: #a1a1aa;
-  --text-muted: #71717a;
-  --text-faint: #52525b;
-  --text-terminal: #ececef;
-
-  /* === BORDERS: Tight neutral seams === */
-  --border-default: #26262b;
-  --border-strong: #2d2d33;
-  --border-muted: #1f1f24;
-  --border-active: #d66a8a;
-  --divider-accent: rgba(255, 255, 255, 0.06);
-
-  /* === HEADER === */
-  --header-border: none;
-
-  /* === ICONS: Follow the text ladder === */
-  --icon-default: #71717a;
-  --icon-hover: #a1a1aa;
-  --icon-active: var(--border-active);
-
-  /* === OVERLAYS: Ghost white === */
-  --hover-overlay: rgba(255, 255, 255, 0.04);
-  --active-overlay: rgba(255, 255, 255, 0.08);
-
-  /* === SHADOWS: None — monolithic surface === */
-  --panel-shadow: none;
-
-  /* === STATUS: Tinted, muted === */
-  --status-default: #17171a;
-  --status-proposed: #372730;
-  --status-approved: #223229;
-  --status-executed: #202d3f;
 }
 
 /* Light theme - "Paper Intelligence" */

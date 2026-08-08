@@ -4971,7 +4971,7 @@
   padding: 1px 6px;
   border-radius: 5px;
   /* Agent purple, fixed across both themes — matches the mention-picker AGENT
-     badge (never the theme accent, which is rose in the polynet theme). */
+     badge rather than the active theme accent. */
   background: rgba(167, 139, 250, 0.2);
   color: #c4b5fd;
   font-size: 10px;
@@ -7350,7 +7350,7 @@
     padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px 12px;
     border: 0;
     border-radius: 0;
-    background: var(--bg-app, #121214);
+    background: var(--bg-app, #1a1a1a);
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;

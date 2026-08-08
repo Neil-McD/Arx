@@ -59,11 +59,11 @@ function blendHex(foreground: string, background: string, alpha: number): string
     .join("")}`;
 }
 
-const expectedThemeIds: AppTheme[] = ["dark", "polynet", "light"];
+const expectedThemeIds: AppTheme[] = ["dark", "light"];
 assert.deepEqual(
   APP_THEME_DEFINITIONS.map((definition) => definition.id),
   expectedThemeIds,
-  "the canonical theme registry should expose exactly two dark themes and one light theme",
+  "the canonical theme registry should expose exactly Dark and Light",
 );
 assert.equal(APP_THEME_OPTIONS, APP_THEME_DEFINITIONS);
 assert.deepEqual(
@@ -73,11 +73,10 @@ assert.deepEqual(
     label: "Light",
     description: "Paper light with intelligence blue",
     disabled: false,
-    family: "light",
     browserColor: "#F8F8F4",
   },
 );
-assert.equal(DEFAULT_APP_THEME, "polynet");
+assert.equal(DEFAULT_APP_THEME, "dark");
 assert.equal(APP_THEME_STORAGE_KEY, "polynet-theme");
 assert.equal(LEGACY_APP_THEME_STORAGE_KEY, "arx-theme");
 
@@ -93,6 +92,7 @@ for (const invalidTheme of [
   "",
   "CRIS",
   "Light",
+  "polynet",
   "system",
   "unknown",
   "__proto__",
@@ -161,20 +161,20 @@ function runThemeBootstrap(params: {
 for (const definition of APP_THEME_DEFINITIONS) {
   const result = runThemeBootstrap({ primary: ` ${definition.id} ` });
   assert.equal(result.rootAttributes.get("data-theme"), definition.id);
-  assert.equal(result.rootAttributes.get("data-theme-family"), definition.family);
+  assert.equal(result.rootAttributes.has("data-theme-family"), false);
   assert.equal(result.browserColor, definition.browserColor);
   assert.deepEqual(result.storageReads, [APP_THEME_STORAGE_KEY]);
 }
 
 const primaryAliasBootstrap = runThemeBootstrap({ primary: "cris" });
 assert.equal(primaryAliasBootstrap.rootAttributes.get("data-theme"), "light");
-assert.equal(primaryAliasBootstrap.rootAttributes.get("data-theme-family"), "light");
+assert.equal(primaryAliasBootstrap.rootAttributes.has("data-theme-family"), false);
 assert.equal(primaryAliasBootstrap.browserColor, "#F8F8F4");
 assert.deepEqual(primaryAliasBootstrap.storageReads, [APP_THEME_STORAGE_KEY]);
 
 const legacyBootstrap = runThemeBootstrap({ legacy: "cris" });
 assert.equal(legacyBootstrap.rootAttributes.get("data-theme"), "light");
-assert.equal(legacyBootstrap.rootAttributes.get("data-theme-family"), "light");
+assert.equal(legacyBootstrap.rootAttributes.has("data-theme-family"), false);
 assert.equal(legacyBootstrap.browserColor, "#F8F8F4");
 assert.deepEqual(legacyBootstrap.storageReads, [
   APP_THEME_STORAGE_KEY,
@@ -184,12 +184,13 @@ assert.deepEqual(legacyBootstrap.storageReads, [
 for (const params of [
   { primary: "unknown" },
   { primary: "__proto__" },
+  { primary: "polynet", legacy: "cris" },
   { storageThrows: true },
 ]) {
   const result = runThemeBootstrap(params);
   const fallbackDefinition = getAppThemeDefinition(DEFAULT_APP_THEME);
   assert.equal(result.rootAttributes.get("data-theme"), DEFAULT_APP_THEME);
-  assert.equal(result.rootAttributes.get("data-theme-family"), fallbackDefinition.family);
+  assert.equal(result.rootAttributes.has("data-theme-family"), false);
   assert.equal(result.browserColor, fallbackDefinition.browserColor);
 }
 
@@ -214,20 +215,17 @@ const root = {
 
 applyAppThemeAttributes("light", root);
 assert.equal(attributes.get("data-theme"), "light");
-assert.equal(attributes.get("data-theme-family"), "light");
+assert.equal(attributes.has("data-theme-family"), false);
 assert.equal(browserThemeColor, "#F8F8F4");
 
-applyAppThemeAttributes("polynet", root);
-assert.equal(attributes.get("data-theme"), "polynet");
-assert.equal(attributes.get("data-theme-family"), "dark");
-assert.equal(browserThemeColor, "#121214");
-
 applyAppThemeAttributes("dark", root);
-assert.equal(attributes.get("data-theme-family"), "dark");
+assert.equal(attributes.get("data-theme"), "dark");
+assert.equal(attributes.has("data-theme-family"), false);
 assert.equal(browserThemeColor, "#1A1A1A");
 
+const baseThemeCss = read("apps/web/src/base.css");
 const baseCss = [
-  read("apps/web/src/base.css"),
+  baseThemeCss,
   read("apps/web/src/index.css"),
   read("apps/web/src/styles/shell-and-onboarding.css"),
   read("apps/web/src/styles/community-and-content.css"),
@@ -249,13 +247,34 @@ const communityNav = read("shared/CommunityNav.tsx");
 const voiceInputButton = read("shared/VoiceInputButton.tsx");
 const mvpGuards = read(".github/workflows/mvp-guards.yml");
 const releaseGate = read("scripts/release_gate.mjs");
+const manifest = read("apps/web/public/manifest.webmanifest");
 
-const lightThemeBlock = baseCss.match(
+const darkRootBlock = baseThemeCss.match(/^:root\s*\{([\s\S]*?)\n\}/)?.[1];
+assert.ok(darkRootBlock, "base.css should define canonical Dark tokens at root");
+[
+  "--bg-app: #1a1a1a;",
+  "--bg-workspace: rgba(30, 30, 30, 0.95);",
+  "--bg-panel: rgba(24, 24, 24, 0.9);",
+  "--bg-card: rgba(42, 42, 42, 0.9);",
+  "--bg-card-hover: rgba(50, 50, 50, 0.95);",
+  "--accent-gold: #f1ede5;",
+  "--text-primary: #fcf8f0;",
+  "--text-secondary: #d6d0c6;",
+  "--text-muted: #b3ad9f;",
+  "--text-faint: #9c968a;",
+  "--border-default: #3a3a3a;",
+  "--border-strong: #4a4a4a;",
+  "--border-muted: #2a2a2a;",
+].forEach((token) => {
+  assert.ok(darkRootBlock.includes(token), `Dark root should define ${token}`);
+});
+
+const lightThemeBlock = baseThemeCss.match(
   /:root\[data-theme="light"\]\s*\{([\s\S]*?)\n\}/,
 )?.[1];
 assert.ok(lightThemeBlock, "base.css should define one canonical Light theme block");
 assert.equal(
-  baseCss.match(/:root\[data-theme="light"\]/g)?.length,
+  baseThemeCss.match(/:root\[data-theme="light"\]/g)?.length,
   1,
   "Light identity tokens should have exactly one theme-id-scoped owner",
 );
@@ -368,7 +387,7 @@ assert.match(
   /\.nav-item\.active\s*\{[\s\S]*?background:\s*var\(--surface-selected\);[\s\S]*?border-color:\s*var\(--stroke-selected\);[\s\S]*?color:\s*var\(--text-selected\);/,
   "routine selection should remain independent from activity attention",
 );
-assert.match(baseCss, /:root\[data-theme-family="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
+assert.match(baseCss, /:root\[data-theme="dark"\]\s*\.model-picker-nav-logo-img\.monochrome/);
 assert.doesNotMatch(
   baseCss,
   /:root\[data-theme="light"\][^{]*\{[^}]*filter:\s*invert\(1\)/,
@@ -386,8 +405,8 @@ assert.match(
 );
 assert.doesNotMatch(
   baseCss,
-  /:root\[data-theme-family="dark"\]\s*\{[^}]*--web-floating-chrome/,
-  "floating chrome must derive from each theme's workspace instead of carrying a dark-family paint override",
+  /:root\[data-theme="dark"\]\s*\{[^}]*--web-floating-chrome/,
+  "floating chrome must derive from the workspace instead of carrying a Dark-only paint override",
 );
 assert.match(
   baseCss,
@@ -424,6 +443,17 @@ assert.match(appearance, /role="group" aria-label="Theme"/);
 assert.match(appearance, /aria-pressed=\{appTheme === theme\.id\}/);
 assert.match(baseCss, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\);/);
 assert.match(baseCss, /data-preview-theme="light"/);
+assert.match(baseCss, /data-preview-theme="dark"/);
+assert.doesNotMatch(baseCss, /data-preview-theme="polynet"|data-theme="polynet"/);
+assert.doesNotMatch(
+  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${funnelCss}\n${memberAgentCss}`,
+  /data-theme-family/,
+  "theme family must not survive as a second styling authority",
+);
+assert.match(indexHtml, /<meta name="theme-color" content="#1A1A1A"/);
+assert.match(indexHtml, /manifest\.webmanifest\?v=20260808a/);
+assert.match(manifest, /"background_color": "#1A1A1A"/);
+assert.match(manifest, /"theme_color": "#1A1A1A"/);
 const genericSettingsButtonSelector =
   baseCss.match(/\.settings-panel button[^{]+\{/)?.[0] ?? "";
 assert.match(
@@ -486,12 +516,12 @@ assert.match(
 assert.match(
   memberAgentCss,
   /\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-background:\s*color-mix\(\s*in srgb,\s*var\(--member-agent-accent\) 18%,\s*#111115 82%\s*\);[\s\S]*?--member-agent-launcher-shadow:\s*0 8px 24px rgba\(0, 0, 0, 0\.46\),\s*0 2px 8px rgba\(0, 0, 0, 0\.34\),\s*inset 0 1px 0 color-mix\(in srgb, var\(--member-agent-accent-strong\) 10%, transparent\);/,
-  "the existing dark themes should retain the launcher's exact legacy surface and elevation",
+  "Dark should retain the launcher's exact legacy surface and elevation",
 );
 assert.match(
   memberAgentCss,
-  /:root\[data-theme-family="light"\]\s*\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-background:\s*var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border:\s*var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow:\s*0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-glyph-filter:\s*none;/,
-  "the light family should use the selected surface without dark-theme highlights or glyph shadow",
+  /:root\[data-theme="light"\]\s*\.member-agent-dock\s*\{[\s\S]*?--member-agent-launcher-background:\s*var\(--surface-selected\);[\s\S]*?--member-agent-launcher-border:\s*var\(--stroke-default\);[\s\S]*?--member-agent-launcher-shadow:\s*0 4px 12px rgba\(23, 23, 25, 0\.14\);[\s\S]*?--member-agent-launcher-glyph-filter:\s*none;/,
+  "Light should use the selected surface without dark-theme highlights or glyph shadow",
 );
 assert.match(
   memberAgentCss,
@@ -514,9 +544,9 @@ assert.doesNotMatch(
   "--cfg-alert-border: rgba(226, 75, 74, 0.4);",
   "--cfg-alert-surface: rgba(226, 75, 74, 0.08);",
   "--cfg-alert-text: #f0a2a2;",
-  "--cfg-primary-surface: #efeff2;",
+  "--cfg-primary-surface: #f1ede5;",
   "--cfg-primary-surface-hover: #fff;",
-  "--cfg-primary-text: #101114;",
+  "--cfg-primary-text: #0a0a0a;",
   "--cfg-error-border: rgba(226, 75, 74, 0.4);",
   "--cfg-error-surface: rgba(226, 75, 74, 0.07);",
   "--cfg-gate-surface: #161619;",
@@ -524,13 +554,13 @@ assert.doesNotMatch(
 ].forEach((declaration) => {
   assert.ok(
     funnelCss.includes(declaration),
-    `the existing dark themes should retain funnel declaration ${declaration}`,
+    `Dark should retain funnel declaration ${declaration}`,
   );
 });
 assert.match(
   funnelCss,
-  /:root\[data-theme-family="light"\]\s*\.cfg-page\s*\{[\s\S]*?--cfg-primary-surface:\s*var\(--bg-button\);[\s\S]*?--cfg-gate-surface:\s*var\(--bg-modal\);[\s\S]*?--cfg-gate-avatar-stroke:\s*var\(--bg-modal\);[\s\S]*?\}/,
-  "the light family should adapt funnel chrome through one family-scoped role block",
+  /:root\[data-theme="light"\]\s*\.cfg-page\s*\{[\s\S]*?--cfg-primary-surface:\s*var\(--bg-button\);[\s\S]*?--cfg-gate-surface:\s*var\(--bg-modal\);[\s\S]*?--cfg-gate-avatar-stroke:\s*var\(--bg-modal\);[\s\S]*?\}/,
+  "Light should adapt funnel chrome through one theme-scoped role block",
 );
 assert.match(
   funnelCss,
@@ -542,13 +572,8 @@ assert.match(
 );
 assert.doesNotMatch(
   `${funnelCss}\n${memberAgentCss}`,
-  /:root\[data-theme="(?:dark|polynet)"\]/,
-  "existing dark-theme preservation should come from legacy defaults, not new overrides",
-);
-assert.doesNotMatch(
-  `${baseCss}\n${funnelCss}\n${memberAgentCss}`,
-  /:root\[data-theme="light"\]\s+\./,
-  "component luminance adapters should use the canonical theme family, not Light identity",
+  /:root\[data-theme="dark"\]/,
+  "Dark component preservation should come from canonical root defaults, not new component overrides",
 );
 
 [
@@ -564,14 +589,14 @@ assert.doesNotMatch(
   );
 });
 [
-  /:root\[data-theme-family="light"\]\s*\.status\.canceled,[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--accent-error\) 14%,\s*transparent\);[\s\S]*?color:\s*var\(--accent-error\);/,
-  /:root\[data-theme-family="light"\]\s*\.action-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);/,
-  /:root\[data-theme-family="light"\]\s*\.settings-section\s*\{[\s\S]*?border-bottom-color:\s*var\(--border-default\);/,
+  /:root\[data-theme="light"\]\s*\.status\.canceled,[\s\S]*?background:\s*color-mix\(in srgb,\s*var\(--accent-error\) 14%,\s*transparent\);[\s\S]*?color:\s*var\(--accent-error\);/,
+  /:root\[data-theme="light"\]\s*\.action-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);/,
+  /:root\[data-theme="light"\]\s*\.settings-section\s*\{[\s\S]*?border-bottom-color:\s*var\(--border-default\);/,
 ].forEach((lightAdapter) => {
   assert.match(
     baseCss,
     lightAdapter,
-    "light-theme component divergence must remain explicitly scoped to the light family",
+    "Light component divergence must remain explicitly scoped to Light",
   );
 });
 
@@ -634,23 +659,23 @@ assert.match(
 
 assert.match(
   baseCss,
-  /:root\[data-theme-family="light"\]\s*\{[\s\S]*?--conversation-primary-action-surface:\s*var\(--bg-button\);[\s\S]*?--conversation-primary-action-hover-surface:\s*var\(--bg-button-hover\);[\s\S]*?--conversation-primary-action-foreground:\s*var\(--bg-button-text\);[\s\S]*?\}/,
-  "the live send primitive should adapt through one light-family role assignment",
+  /:root\[data-theme="light"\]\s*\{[\s\S]*?--conversation-primary-action-surface:\s*var\(--bg-button\);[\s\S]*?--conversation-primary-action-hover-surface:\s*var\(--bg-button-hover\);[\s\S]*?--conversation-primary-action-foreground:\s*var\(--bg-button-text\);[\s\S]*?\}/,
+  "the live send primitive should adapt through one Light role assignment",
 );
 [
-  /:root\[data-theme-family="light"\]\s*\.ask-icon-btn\.ask-mic\.recording\s*\{[\s\S]*?color:\s*var\(--accent-error\);/,
-  /:root\[data-theme-family="light"\]\s*\.ask-icon-btn\.ask-mic\.transcribing\s*\{[\s\S]*?var\(--accent,\s*var\(--accent-selection\)\)/,
+  /:root\[data-theme="light"\]\s*\.ask-icon-btn\.ask-mic\.recording\s*\{[\s\S]*?color:\s*var\(--accent-error\);/,
+  /:root\[data-theme="light"\]\s*\.ask-icon-btn\.ask-mic\.transcribing\s*\{[\s\S]*?var\(--accent,\s*var\(--accent-selection\)\)/,
 ].forEach((lightAdapter) => {
   assert.match(
     baseCss,
     lightAdapter,
-    "the live conversation control should adapt through semantic light-family tokens",
+    "the live conversation control should adapt through semantic Light tokens",
   );
 });
 assert.match(
   memberAgentCss,
-  /:root\[data-theme-family="light"\]\s*\.member-agent-dock-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);[\s\S]*?border-left-color:\s*var\(--accent-error\);/,
-  "light-family dock errors should use the functional error role",
+  /:root\[data-theme="light"\]\s*\.member-agent-dock-error\s*\{[\s\S]*?color:\s*var\(--accent-error\);[\s\S]*?border-left-color:\s*var\(--accent-error\);/,
+  "Light dock errors should use the functional error role",
 );
 
 const accessiblePairs = [

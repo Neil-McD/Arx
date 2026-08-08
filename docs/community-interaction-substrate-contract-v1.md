@@ -553,7 +553,7 @@ Rules:
   fallback, sends no referrer, and degrades to a neutral first-party icon without
   changing the visible hostname or link target
 - preview refresh batches clamp operator input to at most 100 rows, recover due failed HTTPS links through the status/next-refresh index, retain provider-specific freshness work through the provider/status/next-refresh index, lease rows before scheduling, and run only internal work
-- default dark and Polynet dark share one semantic chat-link treatment while their surface tokens continue to theme embed cards
+- Dark owns the default semantic chat-link treatment while Light remaps embed surfaces through explicit theme tokens
 
 Bounded chat formatting rules:
 

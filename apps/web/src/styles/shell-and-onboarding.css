@@ -276,11 +276,6 @@ body {
   transition: background 0.15s ease;
 }
 
-/* Theme-level rail surface assignment (component rule stays generic). */
-:root[data-theme-family="dark"] {
-  --surface-rail: var(--bg-workspace, var(--bg-app));
-}
-
 /* Discord-style selection/hover indicator "lip" */
 .community-rail-button.community-rail-community::before {
   content: "";
