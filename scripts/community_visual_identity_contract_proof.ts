@@ -118,8 +118,18 @@ assert.match(
 );
 assert.match(
   shellCss,
-  /\.community-nav-identity\.has-banner:not\(\.is-condensed\)\s*\{[^}]*color:\s*#fff;[^}]*background:\s*linear-gradient\([\s\S]*?rgba\(0, 0, 0, 0\) 100%[\s\S]*?backdrop-filter:\s*blur\(2\.5px\);/,
-  "banner identity text should have a fading readable scrim without a hard cutoff",
+  /\.community-nav-identity\.has-banner:not\(\.is-condensed\)::before,[\s\S]*?\.community-nav-identity\.has-banner:not\(\.is-condensed\)::after\s*\{[^}]*inset:\s*0 0 -18px;[^}]*z-index:\s*0;[^}]*background:\s*linear-gradient\([\s\S]*?rgba\(0, 0, 0, 0\) 100%/,
+  "banner identity scrims should extend below the row and dissolve into the artwork",
+);
+assert.match(
+  shellCss,
+  /\.community-nav-identity\.has-banner:not\(\.is-condensed\) > \*\s*\{[^}]*position:\s*relative;[^}]*z-index:\s*1;/,
+  "banner identity content should remain above the interactive veil",
+);
+assert.match(
+  shellCss,
+  /\.community-nav-identity\.has-banner:not\(\.is-condensed\):hover::after,[\s\S]*?\.community-nav-identity\.has-banner:not\(\.is-condensed\):focus-within::after\s*\{[^}]*opacity:\s*1;/,
+  "hover and keyboard focus should reveal the stronger banner identity veil",
 );
 assert.match(
   shellCss,
