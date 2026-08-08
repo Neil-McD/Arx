@@ -102,6 +102,7 @@ assert.doesNotMatch(graph, /selectInitialNode/, "Memory should open as a clean g
 assert.match(graph, /aria-pressed=\{isSelected\}/, "memory nodes should expose their selected state");
 assert.match(graph, /aria-label="Clear selected memory"/, "the selected-memory inspector should support explicit dismissal");
 assert.match(graph, /fitInsets:[\s\S]*bottom: 148/, "selected memory should reserve graph fit space for its inspector");
+assert.match(graph, /transform\.scale >= SHOW_ALL_LABELS_SCALE/, "a sparse graph at the fit cap should keep its memory labels visible");
 assert.match(graph, /case "resource": return "resource"/, "resource source nodes should keep a distinct visual type");
 assert.match(preview, /case "resource": return "resource"/, "the compact preview should preserve resource node type");
 assert.match(viewportController, /const MIN_SCALE = 0\.08/, "the drawer graph should zoom far enough out for the bounded full projection");
