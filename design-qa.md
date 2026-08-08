@@ -2,26 +2,25 @@
 
 ## Visual target
 
-- Source: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_mjetYb/Screenshot 2026-08-08 at 1.36.52 AM.png`
-- Intent: preserve the established banner ratio at ordinary navigation widths, then progressively reduce banner height when the community navigation becomes narrow.
+- Preserve the established `2.84 / 1` banner ratio while the community navigation has room.
+- Once the navigation contracts below 280px, preserve the threshold banner height and allow only the horizontal footprint to narrow.
+- Keep artwork undistorted by using the existing `StableFramedMedia` cover frame and saved focal point.
 
 ## Rendered implementation
 
-- Staging build: `5aa69a58b1c756208663185ad988a8f280c2695e`
+- Staging build: `24341c76d96229f52fcedc0cc5702d80f055c2a9`
 - URL: `https://polynet-staging.vercel.app/c/polynet/chat`
-- Browser viewport: `1075 x 763` CSS pixels at DPR 2.
-- Measured community navigation: `215 x 745` CSS pixels.
-- Measured banner: `214 x 57.4` CSS pixels with computed `aspect-ratio: auto`.
-- Evidence: `/Users/neilmcdevitt/.codex/visualizations/2026/08/08/polynet-banner-responsive/staging-narrow.png`
-- Side-by-side comparison: `/Users/neilmcdevitt/.codex/visualizations/2026/08/08/polynet-banner-responsive/comparison-narrow.png`
+- Signed-in browser QA at DPR 2:
+  - 168px navigation -> 167px banner width x 98.59px banner height.
+  - 218.4px navigation -> 217.4px banner width x 98.59px banner height.
+- Both narrow widths computed `aspect-ratio: auto`; the height remained invariant while the width changed.
+- The framed image retained its intrinsic scaling and extended beyond the banner width, proving horizontal crop rather than image distortion.
 
-## Design review
+## Interaction regression review
 
-- The narrow banner is visibly shallower and gives the channel list more vertical room.
-- The identity title, settings action, selected channel, shell seams, and adjacent feed remain aligned.
-- The saved focal point remains centered and the image is cover-cropped by `StableFramedMedia`; the artwork is not stretched.
-- Navigation widths above 280px retain the existing `2.84 / 1` aspect ratio unchanged.
-- Compression is progressive between 280px and the navigation floor rather than an abrupt alternate banner size.
-- Communities without banners remain unaffected and reserve no empty banner space.
+- Community name, settings action, selected channel, shell seams, and composer remained aligned.
+- Communities without banners remain unaffected and reserve no banner space.
+- Memory opened as one right-side drawer without URL navigation.
+- Drawer focus moved to `Back to community`; Escape closed it and restored focus to `Open community memory`.
 
-final result: passed
+Final result: passed.
