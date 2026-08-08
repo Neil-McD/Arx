@@ -490,8 +490,8 @@ assert.match(css, /\.community-dm-inbox-icon-button/, "DM inbox must style the n
 assert.match(css, /\.community-dm-recipient-search/, "DM recipient picker must style member search");
 assert.match(css, /\.community-dm-recipient-row/, "DM recipient picker must style recipient rows");
 assert.doesNotMatch(css, /\.community-dm-recipient-more/, "DM recipient picker must not keep CSS for deleted fake pagination control");
-assert.match(css, /\.icon-button\.direct-messages-topbar-button \{[^}]*position: relative;[^}]*width: 34px;[^}]*height: 34px;/, "top-right DM button must anchor the unread badge in a modestly enlarged target with enough specificity to beat the generic icon-button size");
-assert.match(css, /\.icon-button\.direct-messages-topbar-button svg \{[^}]*width: 20px;[^}]*height: 20px;/, "top-right DM glyph must scale with its enlarged target with enough specificity to beat the generic icon-button glyph size");
+assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button \{[^}]*position: relative;[^}]*width: 34px;[^}]*height: 34px;/, "top-right DM button must anchor the unread badge in a modestly enlarged target with enough specificity to beat the generic app-topbar icon-button size");
+assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button svg \{[^}]*width: 20px;[^}]*height: 20px;/, "top-right DM glyph must scale with its enlarged target with enough specificity to beat the generic app-topbar icon-button glyph size");
 assert.match(css, /\.community-dm-inbox-row-unread/, "DM inbox must style unread badges");
 assert.match(css, /\.community-dm-inbox-row\.is-unread \.community-dm-inbox-row-meta \{[\s\S]*color: var\(--text-primary\)[\s\S]*font-weight: 720/, "unread DM inbox previews must read as new");
 assert.match(css, /\.community-dm-inbox-row-unread \{[\s\S]*width: 8px[\s\S]*height: 8px/, "DM inbox unread indicator must be a small dot");
