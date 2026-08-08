@@ -1135,6 +1135,16 @@ assert.match(
 );
 assert.match(
   baseCss,
+  /\.community-interaction-thread-anchor-actions\s*\{[^}]*margin-top:\s*6px;[\s\S]*?\.community-interaction-reply-list\s*\{[^}]*gap:\s*0;[\s\S]*?\.community-interaction-reply\s*\{[^}]*padding:\s*8px;[\s\S]*?\.community-interaction-reply-content > \.community-interaction-reactions\s*\{[^}]*margin-top:\s*6px;/,
+  "thread roots and replies should use the same compact body-to-footer rhythm as the channel feed",
+);
+assert.match(
+  baseCss,
+  /\.community-member-chat \.community-interaction-thread-drawer \.community-interaction-drawer-back\s*\{[^}]*height:\s*var\(--web-topbar-height, 48px\);[^}]*border-bottom:\s*1px solid var\(--stroke-divider-accent\);[^}]*background:\s*var\(--community-chat-surface\);[^}]*box-shadow:\s*none;/,
+  "member threads should keep navigation in a stable top band above scrolling content",
+);
+assert.match(
+  baseCss,
   /--chat-link:\s*var\(--accent-cyan\);[\s\S]*--chat-link-hover:[\s\S]*\.chat-link:visited\s*\{[\s\S]*color:\s*var\(--chat-link\);[\s\S]*\.chat-link:focus-visible\s*\{/,
   "both dark-family themes should inherit one accessible semantic treatment for chat links",
 );

@@ -88,17 +88,17 @@ assert.match(
   "member thread composer should float over replies",
 );
 const desktopAgentThreadSafeAreaRule = baseCss.match(
-  /\.app-root:has\(\.member-agent-dock:not\(\.is-open\) \.member-agent-dock-launcher\)\s+\.community-member-chat\s+\.community-interaction-thread-drawer\s+\.community-interaction-drawer-composer \{[^}]*\}/,
+  /\.app-root:not\(\.mobile-shell\):has\(\.member-agent-dock:not\(\.is-open\) \.member-agent-dock-launcher\)\s+\.community-member-chat\s+\.community-interaction-thread-drawer \{[^}]*\}/,
 )?.[0] ?? "";
 assert.match(
   desktopAgentThreadSafeAreaRule,
-  /padding-right: calc\(12px \+ var\(--member-agent-desktop-launcher-clearance\)\);/,
-  "a closed desktop agent launcher should reserve its exact safe area beside the thread composer",
+  /--community-thread-composer-bottom-offset: var\(--member-agent-desktop-launcher-clearance\);/,
+  "a closed desktop agent launcher should reserve its exact safe area below the thread composer",
 );
 assert.doesNotMatch(
   desktopAgentThreadSafeAreaRule,
-  /community-interaction-main-composer/,
-  "the agent launcher safe area must not narrow the main community composer",
+  /padding-right|community-interaction-main-composer/,
+  "the agent launcher safe area must not narrow either community composer",
 );
 assert.match(
   baseCss,
@@ -107,8 +107,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-thread-drawer \.community-interaction-drawer-scroll \{[\s\S]*--community-thread-composer-height/,
-  "thread feed should reserve measured reply-composer clearance",
+  /\.community-member-chat \.community-interaction-thread-drawer \.community-interaction-drawer-scroll \{[\s\S]*--community-thread-composer-height[\s\S]*--community-thread-composer-bottom-offset/,
+  "thread feed should reserve measured reply-composer height and its launcher offset",
+);
+assert.match(
+  baseCss,
+  /\.community-member-chat \.community-interaction-drawer-composer \{[^}]*bottom: var\(--community-thread-composer-bottom-offset, 0px\);/,
+  "thread composer should consume the same launcher offset as its scroll reserve",
 );
 assert.match(
   baseCss,
@@ -127,6 +132,11 @@ assert.match(
   desktopMemberComposerMaterialRule,
   /box-shadow:\s*none;/,
   "persistent community and thread composers should not use resting drop shadows",
+);
+assert.match(
+  baseCss,
+  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*border-radius: var\(--radius-md\);[\s\S]*\.community-member-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*border-radius: var\(--radius-md\);/,
+  "main and thread community composers should share the same medium-radius shape",
 );
 assert.doesNotMatch(
   baseCss,
@@ -161,8 +171,8 @@ assert.match(
 );
 assert.match(
   projection,
-  /shouldFollowReplies[\s\S]*nextScroll\.scrollTop = nextScroll\.scrollHeight/,
-  "thread composer growth should preserve follow-latest behavior",
+  /shouldFollowReplies = scroll && repliesLoadedOnce\.current[\s\S]*scroll\.scrollHeight <= scroll\.clientHeight[\s\S]*scroll\.scrollTop > 0[\s\S]*nextScroll\.scrollTop = nextScroll\.scrollHeight/,
+  "thread composer growth should preserve follow-latest without pulling a newly opened short thread away from its root",
 );
 
 assert.doesNotMatch(
