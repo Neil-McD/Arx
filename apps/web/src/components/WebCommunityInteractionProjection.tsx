@@ -623,8 +623,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
 
     const syncComposerHeight = () => {
       const scroll = drawerScrollRef.current;
-      const shouldFollowReplies = scroll
-        ? scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120
+      const shouldFollowReplies = scroll && repliesLoadedOnce.current
+        ? scroll.scrollHeight <= scroll.clientHeight || (
+            scroll.scrollTop > 0 &&
+            scroll.scrollHeight - scroll.scrollTop - scroll.clientHeight < 120
+          )
         : false;
       drawer.style.setProperty(
         "--community-thread-composer-height",

@@ -3708,6 +3708,25 @@
   height: 17px;
 }
 
+/* Threads own a stable top band so scrolling root content never competes with
+   the back control. Profile drawers keep the compact floating treatment. */
+.community-member-chat .community-interaction-thread-drawer .community-interaction-drawer-back {
+  top: 0;
+  right: 0;
+  left: 0;
+  height: var(--web-topbar-height, 48px);
+  display: flex;
+  align-items: center;
+  padding: 0 14px;
+  border: 0;
+  border-bottom: 1px solid var(--stroke-divider-accent);
+  border-radius: 0;
+  background: var(--community-chat-surface);
+  box-shadow: none;
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
 .community-interaction-drawer-scroll {
   flex: 0 1 auto;
   min-height: 0;
@@ -3859,27 +3878,29 @@
 }
 
 .community-member-chat .community-interaction-thread-drawer .community-interaction-drawer-scroll {
-  padding-bottom: calc(var(--community-thread-composer-height, 0px) + 18px);
+  padding-bottom: calc(
+    var(--community-thread-composer-height, 0px)
+    + var(--community-thread-composer-bottom-offset, 0px)
+    + 18px
+  );
 }
 
 .community-member-chat .community-interaction-drawer-composer {
   position: absolute;
   right: 0;
-  bottom: 0;
+  bottom: var(--community-thread-composer-bottom-offset, 0px);
   left: 0;
   z-index: 4;
   padding: 0 12px 12px;
   background: transparent;
 }
 
-/* The closed desktop agent launcher and thread composer share the viewport's
-   bottom-right corner. Reserve the launcher's exact footprint only while both
-   controls exist; the mobile shell does not render the launcher. */
-.app-root:has(.member-agent-dock:not(.is-open) .member-agent-dock-launcher)
+/* A closed desktop agent launcher stacks below the thread composer instead of
+   narrowing it. The composer's existing 12px bottom inset becomes the gap. */
+.app-root:not(.mobile-shell):has(.member-agent-dock:not(.is-open) .member-agent-dock-launcher)
   .community-member-chat
-  .community-interaction-thread-drawer
-  .community-interaction-drawer-composer {
-  padding-right: calc(12px + var(--member-agent-desktop-launcher-clearance));
+  .community-interaction-thread-drawer {
+  --community-thread-composer-bottom-offset: var(--member-agent-desktop-launcher-clearance);
 }
 
 /* Keep the scrolling layer cheap: a static layer behind each floating pill
@@ -3922,12 +3943,12 @@
 }
 
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
-  border-radius: var(--composer-radius);
+  border-radius: var(--radius-md);
   padding: 12px 14px 10px;
 }
 
 .community-member-chat .community-interaction-reply-input-bar {
-  border-radius: var(--composer-radius);
+  border-radius: var(--radius-md);
 }
 
 .community-interaction-feed-header {
@@ -4474,7 +4495,7 @@
 }
 
 .community-interaction-thread-anchor-actions {
-  margin-top: 10px;
+  margin-top: 6px;
   display: flex;
   align-items: center;
   flex-wrap: wrap;
@@ -4500,7 +4521,7 @@
 
 .community-interaction-reply-list {
   display: grid;
-  gap: 2px;
+  gap: 0;
   padding: 12px 12px 24px;
 }
 
@@ -4509,9 +4530,13 @@
   display: grid;
   grid-template-columns: 36px minmax(0, 1fr);
   gap: 10px;
-  padding: 10px 8px;
+  padding: 8px;
   border-radius: 8px;
   transition: background 140ms ease;
+}
+
+.community-interaction-reply-content > .community-interaction-reactions {
+  margin-top: 6px;
 }
 
 .community-interaction-reply .community-interaction-avatar {
