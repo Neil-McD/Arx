@@ -895,20 +895,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               </svg>
               <span className="back-path">memory</span>
             </button>
-            {props.onRefreshCommunityMemory ? (
-              <button
-                className="community-memory-drawer-refresh"
-                type="button"
-                onClick={props.onRefreshCommunityMemory}
-                disabled={props.isLoadingCommunityMemory}
-              >
-                {props.isLoadingCommunityMemory ? "Refreshing..." : "Refresh"}
-              </button>
-            ) : null}
           </div>
           <div className="community-interaction-drawer-scroll community-memory-drawer-scroll">
             <CommunityMemoryGraph
               activeCommunityName={props.activeCommunityName}
+              onRefresh={props.onRefreshCommunityMemory}
               state={{
                 overview: props.communityMemoryOverview ?? null,
                 isLoading: Boolean(props.isLoadingCommunityMemory),

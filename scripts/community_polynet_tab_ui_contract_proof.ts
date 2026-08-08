@@ -86,6 +86,8 @@ assert.match(interactionProjection, /memoryBackButtonRef\.current\?\.focus\(\{ p
 assert.match(interactionProjection, /community-memory-drawer-header[\s\S]*ref=\{memoryBackButtonRef\}[\s\S]*aria-label="Back to community"/, "the Memory back control should own the drawer focus ref");
 assert.match(interactionProjection, /onCloseCommunityMemory \?\? props\.onCloseDrawer/, "Memory should use the canonical close transition");
 assert.match(interactionProjection, /<CommunityMemoryGraph/, "the drawer should reuse the canonical graph rather than a duplicate list");
+assert.match(interactionProjection, /<CommunityMemoryGraph[\s\S]*onRefresh=\{props\.onRefreshCommunityMemory\}/, "the drawer should route refresh into the graph controls");
+assert.doesNotMatch(interactionProjection, /community-memory-drawer-refresh/, "the drawer header should not retain a duplicate refresh action");
 assert.match(interactionProjection, /hasDetailPanel[\s\S]*has-drawer/, "Memory, thread, and profile details should share drawer geometry");
 assert.match(chatPanel, /handleSelectCommunityRoot[\s\S]*setProfilePanelUserId\(null\)/, "opening a thread should close the profile sidecar");
 assert.match(chatPanel, /handleOpenCommunityProfile[\s\S]*onCloseDrawer\(\)/, "opening a profile should close thread or Memory first");
@@ -101,6 +103,7 @@ assert.match(graph, /data-lineage-id=\{lineageId\}/, "memory nodes should expose
 assert.doesNotMatch(graph, /selectInitialNode/, "Memory should open as a clean graph without an implicit selection");
 assert.match(graph, /aria-pressed=\{isSelected\}/, "memory nodes should expose their selected state");
 assert.match(graph, /aria-label="Clear selected memory"/, "the selected-memory inspector should support explicit dismissal");
+assert.match(graph, /aria-label=\{state\.isLoading \? "Refreshing memory" : "Refresh memory"\}[\s\S]*aria-label="Zoom out"/, "refresh should be an icon control immediately before zoom out");
 assert.match(graph, /fitInsets:[\s\S]*bottom: 148/, "selected memory should reserve graph fit space for its inspector");
 assert.match(graph, /transform\.scale >= SHOW_ALL_LABELS_SCALE/, "a sparse graph at the fit cap should keep its memory labels visible");
 assert.match(graph, /case "resource": return "resource"/, "resource source nodes should keep a distinct visual type");
