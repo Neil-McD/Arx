@@ -4199,7 +4199,7 @@
 .community-interaction-author {
   color: var(--chat-author-text);
   font-size: 15px;
-  font-weight: 650;
+  font-weight: 600;
 }
 
 .community-interaction-title {
@@ -4218,7 +4218,7 @@
   color: var(--chat-body-text);
   font-size: 15px;
   font-weight: 400;
-  line-height: 1.45;
+  line-height: 1.48;
   overflow-wrap: anywhere;
 }
 
@@ -6298,9 +6298,9 @@
 
 .community-dm-panel-title {
   overflow: hidden;
-  color: var(--text-primary);
+  color: var(--chat-author-text);
   font-size: 16px;
-  font-weight: 750;
+  font-weight: 650;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -6309,7 +6309,7 @@
 .community-dm-panel-context {
   overflow: hidden;
   margin-top: 3px;
-  color: var(--text-muted);
+  color: var(--chat-meta-text);
   font-size: 12px;
   line-height: 1.25;
   text-overflow: ellipsis;
@@ -6361,7 +6361,7 @@
   align-items: center;
   gap: 10px;
   margin: 16px 0 2px;
-  color: var(--text-faint);
+  color: var(--chat-system-text);
   font-size: 11px;
   line-height: 1.3;
 }
@@ -6388,8 +6388,8 @@
 }
 
 .community-dm-panel-message-time {
-  font-size: 10.5px;
-  color: var(--text-faint);
+  font-size: 11px;
+  color: var(--chat-system-text);
   line-height: 1.2;
   padding: 0 4px;
 }
@@ -6453,7 +6453,7 @@
   border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 70%, transparent);
   border-radius: 15px;
   background: color-mix(in srgb, var(--bg-card) 50%, transparent);
-  color: var(--text-primary);
+  color: var(--chat-body-text);
   font-size: 14px;
   line-height: 1.42;
   overflow-wrap: anywhere;
@@ -7179,12 +7179,12 @@
 }
 
 .community-dm-inbox-row.is-unread .community-dm-inbox-row-name {
-  font-weight: 820;
+  font-weight: 700;
 }
 
 .community-dm-inbox-row.is-unread .community-dm-inbox-row-meta {
-  color: var(--text-primary);
-  font-weight: 720;
+  color: var(--chat-author-text);
+  font-weight: 600;
 }
 
 .community-dm-inbox-avatar {
@@ -7256,14 +7256,14 @@
 .community-dm-inbox-row-name {
   min-width: 0;
   flex: 1 1 auto;
-  color: var(--text-primary);
+  color: var(--chat-author-text);
   font-size: 14px;
-  font-weight: 740;
+  font-weight: 600;
 }
 
 .community-dm-inbox-row-time {
   flex: 0 0 auto;
-  color: var(--text-faint);
+  color: var(--chat-system-text);
   font-size: 11px;
   line-height: 1.2;
 }
@@ -7283,7 +7283,7 @@
 }
 
 .community-dm-inbox-row-meta {
-  color: var(--text-muted);
+  color: var(--chat-meta-text);
   font-size: 12px;
   line-height: 1.25;
 }

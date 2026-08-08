@@ -21,6 +21,8 @@ function sectionBetween(source: string, start: string, end: string): string {
 }
 
 const packageJson = read("package.json");
+const webPackageJson = read("apps/web/package.json");
+const webMain = read("apps/web/src/main.tsx");
 const app = read("apps/web/src/App.tsx");
 const interactionController = read(
   "apps/web/src/controllers/useWebCommunityInteractionProjection.ts",
@@ -1119,13 +1121,28 @@ assert.match(
   "projection markdown should style bounded headings, lists, and code with compact chat typography",
 );
 assert.match(
+  webPackageJson,
+  /"@fontsource-variable\/ibm-plex-sans":\s*"5\.3\.0"/,
+  "web must pin the self-hosted IBM Plex Sans package",
+);
+assert.match(
+  webMain,
+  /import\s+"@fontsource-variable\/ibm-plex-sans\/wght\.css";/,
+  "web entrypoint must load the IBM Plex Sans variable font before application styles",
+);
+assert.match(
   baseCss,
-  /--chat-author-text:\s*var\(--text-primary\);[\s\S]*--chat-body-text:\s*color-mix\(in srgb, var\(--text-primary\) 82%, var\(--text-secondary\) 18%\);[\s\S]*--chat-meta-text:\s*color-mix\(in srgb, var\(--text-secondary\) 78%, var\(--text-muted\) 22%\);/,
+  /--font-sans:\s*"IBM Plex Sans Variable",\s*"IBM Plex Sans",\s*system-ui,\s*-apple-system,\s*sans-serif;[\s\S]*font-family:\s*var\(--font-sans\);/,
+  "the application must use the loaded IBM Plex family with resilient system fallbacks",
+);
+assert.match(
+  baseCss,
+  /--chat-author-text:\s*color-mix\(in srgb, var\(--text-primary\) 98%, var\(--surface-workspace\) 2%\);[\s\S]*--chat-body-text:\s*color-mix\(in srgb, var\(--text-primary\) 82%, var\(--surface-workspace\) 18%\);[\s\S]*--chat-meta-text:\s*color-mix\(in srgb, var\(--text-primary\) 70%, var\(--surface-workspace\) 30%\);[\s\S]*--chat-system-text:\s*color-mix\(in srgb, var\(--text-primary\) 62%, var\(--surface-workspace\) 38%\);/,
   "chat identity, content, and metadata should use a theme-aware semantic text ladder",
 );
 assert.match(
   baseCss,
-  /\.community-interaction-meta-row\s*\{[^}]*color:\s*var\(--chat-meta-text\);[\s\S]*?\.community-interaction-author\s*\{[^}]*color:\s*var\(--chat-author-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*650;[\s\S]*?\.community-interaction-body\s*\{[^}]*margin-top:\s*2px;[^}]*color:\s*var\(--chat-body-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*400;[^}]*line-height:\s*1\.45;/,
+  /\.community-interaction-meta-row\s*\{[^}]*color:\s*var\(--chat-meta-text\);[\s\S]*?\.community-interaction-author\s*\{[^}]*color:\s*var\(--chat-author-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*600;[\s\S]*?\.community-interaction-body\s*\{[^}]*margin-top:\s*2px;[^}]*color:\s*var\(--chat-body-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*400;[^}]*line-height:\s*1\.48;/,
   "community chat should scan author first, body second, and metadata third",
 );
 assert.match(

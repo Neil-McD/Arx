@@ -493,7 +493,15 @@ assert.doesNotMatch(css, /\.community-dm-recipient-more/, "DM recipient picker m
 assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button \{[^}]*position: relative;[^}]*width: 34px;[^}]*height: 34px;/, "top-right DM button must anchor the unread badge in a modestly enlarged target with enough specificity to beat the generic app-topbar icon-button size");
 assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button svg \{[^}]*width: 20px;[^}]*height: 20px;/, "top-right DM glyph must scale with its enlarged target with enough specificity to beat the generic app-topbar icon-button glyph size");
 assert.match(css, /\.community-dm-inbox-row-unread/, "DM inbox must style unread badges");
-assert.match(css, /\.community-dm-inbox-row\.is-unread \.community-dm-inbox-row-meta \{[\s\S]*color: var\(--text-primary\)[\s\S]*font-weight: 720/, "unread DM inbox previews must read as new");
+assert.match(css, /\.community-dm-panel-title \{[^}]*color: var\(--chat-author-text\);[^}]*font-size: 16px;[^}]*font-weight: 650;/, "DM panel identity must use the canonical conversation author role");
+assert.match(css, /\.community-dm-panel-context \{[^}]*color: var\(--chat-meta-text\);/, "DM panel context must use the canonical conversation metadata role");
+assert.match(css, /\.community-dm-day \{[^}]*color: var\(--chat-system-text\);[^}]*font-size: 11px;/, "DM day separators must use the canonical system-text role");
+assert.match(css, /\.community-dm-panel-message-time \{[^}]*font-size: 11px;[^}]*color: var\(--chat-system-text\);/, "DM timestamps must remain quiet but readable");
+assert.match(css, /\.community-dm-panel-message-bubble \{[^}]*color: var\(--chat-body-text\);[^}]*font-size: 14px;/, "incoming DM messages must use the canonical conversation body role");
+assert.match(css, /\.community-dm-inbox-row-name \{[^}]*color: var\(--chat-author-text\);[^}]*font-size: 14px;[^}]*font-weight: 600;/, "DM inbox identity must match the canonical author hierarchy");
+assert.match(css, /\.community-dm-inbox-row-time \{[^}]*color: var\(--chat-system-text\);[^}]*font-size: 11px;/, "DM inbox timestamps must use the canonical system-text role");
+assert.match(css, /\.community-dm-inbox-row-meta \{[^}]*color: var\(--chat-meta-text\);[^}]*font-size: 12px;/, "DM inbox previews must use the canonical metadata role");
+assert.match(css, /\.community-dm-inbox-row\.is-unread \.community-dm-inbox-row-meta \{[\s\S]*color: var\(--chat-author-text\)[\s\S]*font-weight: 600/, "unread DM inbox previews must read as new without overpowering conversation content");
 assert.match(css, /\.community-dm-inbox-row-unread \{[\s\S]*width: 8px[\s\S]*height: 8px/, "DM inbox unread indicator must be a small dot");
 assert.match(packageJson, /check:direct-messages-contract-proof/, "package scripts must expose the DM contract proof");
 
