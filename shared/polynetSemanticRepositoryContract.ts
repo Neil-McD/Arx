@@ -7,6 +7,10 @@ export const POLYNET_COMMUNITIES_DIRECTORY_PATH = "/communities/";
 export const POLYNET_USERS_DIRECTORY_PATH = "/users/";
 export const POLYNET_SELF_USER_DIRECTORY_PATH = "/users/me/";
 
+export function isRetiredAiFeedSemanticPath(localPath: string): boolean {
+  return localPath === "/ai-feed/" || localPath.startsWith("/ai-feed/");
+}
+
 export type PolynetSemanticMount =
   | { kind: "platform" }
   | {
@@ -57,7 +61,6 @@ export type PolynetSemanticRepositoryEntry = {
     | "resource"
     | "channels"
     | "channel"
-    | "ai_feed"
     | "memory"
     | "capabilities"
     | "builder";
@@ -325,7 +328,6 @@ function inferMountedEntryType(path: string, kind: "directory" | "document") {
   }
   if (path.endsWith("/channels/")) return "channels" as const;
   if (path.includes("/channels/")) return "channel" as const;
-  if (path.includes("/ai-feed/")) return "ai_feed" as const;
   if (path.includes("/memory/")) return "memory" as const;
   if (path.includes("/capabilities/")) return "capabilities" as const;
   if (path.includes("/builder/")) return "builder" as const;

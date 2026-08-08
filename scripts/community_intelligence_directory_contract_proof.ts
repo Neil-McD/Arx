@@ -5,7 +5,6 @@ import { join } from "node:path";
 const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
-const aiFeed = readFileSync(join(root, "convex/communityAiFeed.ts"), "utf8");
 
 assert.doesNotMatch(directory, /communityIntelligenceProposals|reviewCommunityIntelligenceProposal|needs_review/, "directory substrate should not use legacy queue naming");
 
@@ -180,11 +179,6 @@ assert.match(
   directory,
   /const compilerLifecyclePatch = sourceTraceCompilerLifecyclePatch\([\s\S]*ctx\.db\.insert\("communitySourceTraces"[\s\S]*\.\.\.compilerLifecyclePatch/,
   "new source traces should start from the visibility-aware compiler lifecycle patch",
-);
-assert.match(
-  aiFeed,
-  /upsertCommunitySourceTrace\([\s\S]*sourceType: "ai_feed"[\s\S]*allowExistingUpdate: true/,
-  "trusted product-owned AI feed traces should explicitly opt into existing-source updates",
 );
 {
   const block = exportedFunctionBlock(directory, "createCommunityIntelligenceChangeRequest");

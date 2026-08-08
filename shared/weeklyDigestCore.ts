@@ -1,6 +1,5 @@
 export type WeeklyDigestActivityCounts = {
   chatMessageCount: number;
-  aiFeedPostCount: number;
   resourceCount: number;
   newMemberCount: number;
 };
@@ -55,7 +54,6 @@ export function buildWeeklyDigestPeriod(nowMs: number, windowDays = 7): WeeklyDi
 
 export function shouldSendWeeklyDigest(activity: WeeklyDigestActivityCounts): boolean {
   return (
-    activity.aiFeedPostCount >= 1 ||
     activity.resourceCount >= 1 ||
     activity.newMemberCount >= 2 ||
     activity.chatMessageCount >= 3
@@ -81,9 +79,6 @@ export function formatWeeklyDigestStats(activity: WeeklyDigestActivityCounts): s
   const parts: string[] = [];
   if (activity.chatMessageCount > 0) {
     parts.push(`${activity.chatMessageCount} message${activity.chatMessageCount === 1 ? "" : "s"}`);
-  }
-  if (activity.aiFeedPostCount > 0) {
-    parts.push(`${activity.aiFeedPostCount} AI signal${activity.aiFeedPostCount === 1 ? "" : "s"}`);
   }
   if (activity.resourceCount > 0) {
     parts.push(`${activity.resourceCount} resource${activity.resourceCount === 1 ? "" : "s"}`);

@@ -600,10 +600,6 @@ test("platform mount exposes communities and permissioned users without leaking 
           type: "channels",
         },
         {
-          path: "/communities/resource-semantic/ai-feed/",
-          type: "ai_feed",
-        },
-        {
           path: "/communities/resource-semantic/memory/",
           type: "memory",
         },
@@ -811,6 +807,20 @@ test("platform communities directory paginates bounded authorization results wit
     expect(ownedCommunityId).toBeTruthy();
     expectedPaths.add("/communities/semantic-owned/");
 
+    await ctx.db.insert("communities", {
+      ownerId: fixture.memberId,
+      slug: "semantic-owned-archived",
+      name: "Semantic owned archived",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 1,
+      visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 0,
+      createdAt: nowMs + 1,
+      updatedAt: nowMs + 1,
+    });
+
     for (let index = 0; index < 4; index += 1) {
       const slug = `semantic-joined-${index}`;
       const communityId = await ctx.db.insert("communities", {
@@ -860,6 +870,31 @@ test("platform communities directory paginates bounded authorization results wit
       createdAt: nowMs + 10,
       updatedAt: nowMs + 11,
     });
+
+    const archivedCommunityId = await ctx.db.insert("communities", {
+      ownerId: fixture.peerId,
+      slug: "semantic-joined-archived",
+      name: "Semantic joined archived",
+      lifecycleStatus: "archived",
+      lifecycleGeneration: 1,
+      visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "open",
+      activeMemberCount: 0,
+      createdAt: nowMs + 12,
+      updatedAt: nowMs + 12,
+    });
+    await ctx.db.insert("communityMemberships", {
+      communityId: archivedCommunityId,
+      userId: fixture.memberId,
+      role: "member",
+      accessSource: "free_grant",
+      active: true,
+      activationSequence: 6,
+      activatedAt: nowMs + 12,
+      createdAt: nowMs + 12,
+      updatedAt: nowMs + 12,
+    });
   });
 
   const asMember = t.withIdentity({ subject: fixture.memberSubject });
@@ -899,7 +934,7 @@ test("platform communities directory paginates bounded authorization results wit
   expect(completed).toBe(true);
   expect(new Set(listedPaths)).toEqual(expectedPaths);
   expect(listedPaths).toHaveLength(expectedPaths.size);
-  expect(totalSkipped).toBeGreaterThanOrEqual(1);
+  expect(totalSkipped).toBeGreaterThanOrEqual(3);
 
   await expect(
     executePlatformOperation({

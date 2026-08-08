@@ -5,7 +5,10 @@ import {
   parseCommunityResourceDirectoryUri,
 } from "./communityResourceDirectory.ts";
 import { parseCommunityResourceEvidenceRef } from "./communityEvidenceContract.ts";
-import { parsePolynetSemanticRepositoryPath } from "./polynetSemanticRepositoryContract.ts";
+import {
+  isRetiredAiFeedSemanticPath,
+  parsePolynetSemanticRepositoryPath,
+} from "./polynetSemanticRepositoryContract.ts";
 
 export const POLYNET_SEMANTIC_ROOT_PATH = "/";
 export const POLYNET_COMMUNITY_PROFILE_PATH = "/community.md";
@@ -14,7 +17,6 @@ export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
 export const POLYNET_RESOURCES_DIRECTORY_PATH = "/resources/";
 export const POLYNET_CHANNELS_DIRECTORY_PATH = "/channels/";
 export const POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH = "/channels/general/";
-export const POLYNET_AI_FEED_DIRECTORY_PATH = "/ai-feed/";
 export const POLYNET_MEMORY_DIRECTORY_PATH = "/memory/";
 export const POLYNET_CAPABILITIES_DIRECTORY_PATH = "/capabilities/";
 export const POLYNET_BUILDER_DIRECTORY_PATH = "/builder/";
@@ -320,7 +322,6 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_RESOURCES_DIRECTORY_PATH &&
       value !== POLYNET_CHANNELS_DIRECTORY_PATH &&
       value !== POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH &&
-      value !== POLYNET_AI_FEED_DIRECTORY_PATH &&
       value !== POLYNET_MEMORY_DIRECTORY_PATH &&
       value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
       value !== POLYNET_BUILDER_DIRECTORY_PATH &&
@@ -347,7 +348,6 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_RESOURCES_DIRECTORY_PATH ||
     value === POLYNET_CHANNELS_DIRECTORY_PATH ||
     value === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
-    value === POLYNET_AI_FEED_DIRECTORY_PATH ||
     value === POLYNET_MEMORY_DIRECTORY_PATH ||
     value === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_DIRECTORY_PATH ||
@@ -355,7 +355,6 @@ export function parsePolynetSemanticPath(value: unknown) {
     /^\/channels\/general\/interaction:(root|reply):[A-Za-z0-9_-]+\.md$/.test(
       value,
     ) ||
-    /^\/ai-feed\/ai_feed:[A-Za-z0-9_-]+\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
     /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(value) ||
     /^\/builder\/resources\/[A-Za-z0-9_-]+\.json$/.test(value)
@@ -438,7 +437,6 @@ export function validateCommunitySemanticOperationInput(args: {
       parsed.path === POLYNET_RESOURCES_DIRECTORY_PATH ||
       parsed.path === POLYNET_CHANNELS_DIRECTORY_PATH ||
       parsed.path === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
-      parsed.path === POLYNET_AI_FEED_DIRECTORY_PATH ||
       parsed.path === POLYNET_MEMORY_DIRECTORY_PATH ||
       parsed.path === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
       parsed.path === POLYNET_BUILDER_DIRECTORY_PATH ||
@@ -489,7 +487,6 @@ export function validateCommunitySemanticOperationInput(args: {
     /^\/channels\/general\/interaction:(?:root|reply):[A-Za-z0-9_-]+\.md$/.test(
       parsed.path,
     ) ||
-    /^\/ai-feed\/ai_feed:[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||
     /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(parsed.path) ||
     /^\/builder\/resources\/[A-Za-z0-9_-]+\.json$/.test(parsed.path);
@@ -534,6 +531,59 @@ export function validatePolynetSemanticRepositoryOperationInput(args: {
     return validateCommunitySemanticOperationInput(args);
   }
   if (repositoryPath.kind === "community") {
+    if (isRetiredAiFeedSemanticPath(repositoryPath.localPath)) {
+      if (args.operation === "list") {
+        if (args.offset !== undefined && args.offset !== null) {
+          return semanticError(
+            "invalid_selector",
+            "polynet_list does not accept offset.",
+          );
+        }
+        const cursor = optionalSemanticCursor(args.cursor);
+        if (!cursor.ok) return cursor;
+        const limit = optionalSemanticInteger({
+          value: args.limit,
+          field: "limit",
+          minimum: 2,
+          maximum: 50,
+        });
+        if (!limit.ok) return limit;
+        return {
+          ok: true as const,
+          operation: "list" as const,
+          path: repositoryPath.path,
+          cursor: cursor.value,
+          limit: limit.value,
+        };
+      }
+      if (args.cursor !== undefined && args.cursor !== null) {
+        return semanticError(
+          "invalid_selector",
+          "polynet_read does not accept cursor.",
+        );
+      }
+      const offset = optionalSemanticInteger({
+        value: args.offset,
+        field: "offset",
+        minimum: 0,
+        maximum: 1_000_000,
+      });
+      if (!offset.ok) return offset;
+      const limit = optionalSemanticInteger({
+        value: args.limit,
+        field: "limit",
+        minimum: 1,
+        maximum: 20_000,
+      });
+      if (!limit.ok) return limit;
+      return {
+        ok: true as const,
+        operation: "read" as const,
+        path: repositoryPath.path,
+        offset: offset.value,
+        limit: limit.value,
+      };
+    }
     const validated = validateCommunitySemanticOperationInput({
       ...args,
       path: repositoryPath.localPath,
@@ -887,10 +937,6 @@ export function listCommunitySemanticRoot(args: { path: unknown }) {
         },
         {
           path: POLYNET_CHANNELS_DIRECTORY_PATH,
-          kind: "directory" as const,
-        },
-        {
-          path: POLYNET_AI_FEED_DIRECTORY_PATH,
           kind: "directory" as const,
         },
         {

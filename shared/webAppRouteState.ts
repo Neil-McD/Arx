@@ -172,9 +172,7 @@ export function buildCommunityTabPath(
   const tabSegment =
     communityTab === "ai_agent"
       ? "agent"
-      : communityTab === "ai_feed"
-        ? "ai-feed"
-        : communityTab;
+      : communityTab;
   const moduleId = String(communityResourceModuleId ?? "").trim();
   const channelSlug = String(communityChannelSlug ?? "").trim().toLowerCase();
   if (communityTab === "chat" && channelSlug && channelSlug !== "general") {
@@ -293,7 +291,7 @@ function parseCommunityTabSegment(value: string | null | undefined): CommunityTa
     case "agent":
       return "ai_agent";
     case "ai-feed":
-      return "ai_feed";
+      return "chat";
     default:
       return parseCommunityTab(value);
   }

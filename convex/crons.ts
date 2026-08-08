@@ -80,27 +80,6 @@ crons.interval(
   },
 );
 
-crons.monthly(
-  "prune low-signal community ai feed posts",
-  {
-    day: 1,
-    hourUTC: 4,
-    minuteUTC: 0,
-  },
-  internal.communityAiFeed.pruneAllCommunityAiFeedPostsInternal,
-  {},
-);
-
-crons.daily(
-  "delete expired hidden community ai feed posts",
-  {
-    hourUTC: 5,
-    minuteUTC: 0,
-  },
-  internal.communityAiFeed.deleteExpiredHiddenCommunityAiFeedPostsInternal,
-  {},
-);
-
 // Ignition (contract Amendment v1.1): every 6 hours, refresh each community's
 // compiler digest (free, deterministic) and knock for a memory cycle. The
 // knock is triple-gated — owner off-switch, 2-cycles/day cap, and a delta

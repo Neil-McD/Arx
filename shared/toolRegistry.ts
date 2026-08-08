@@ -270,39 +270,6 @@ const COMMUNITY_CHAT_READ_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
-const COMMUNITY_AI_FEED_SEARCH_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 240,
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 20,
-    },
-  },
-};
-
-const COMMUNITY_AI_FEED_READ_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["ref"],
-  properties: {
-    ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 512,
-      description:
-        "A stable ai_feed:<id> evidence ref returned by community_ai_feed_search.",
-    },
-  },
-};
-
 const MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -1035,7 +1002,7 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
   community_search: {
     name: "community_search",
     description:
-      "Search the active community's raw recent activity evidence across chat, AI Feed, and resources.",
+      "Search the active community's raw recent activity evidence across chat and resources.",
     inputSchema: COMMUNITY_SEARCH_TOOL_SCHEMA,
   },
   community_memory_search: {
@@ -1061,24 +1028,6 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
     description:
       "Read one authorized canonical community chat interaction by a stable evidence ref returned from community_chat_search.",
     inputSchema: COMMUNITY_CHAT_READ_TOOL_SCHEMA,
-  },
-  community_ai_feed_search: {
-    name: "community_ai_feed_search",
-    description:
-      "Search authorized canonical live AI Feed posts in the active community and return stable evidence refs. Retrieval relevance and community reaction signal are reported separately.",
-    inputSchema: COMMUNITY_AI_FEED_SEARCH_TOOL_SCHEMA,
-  },
-  community_ai_feed_read: {
-    name: "community_ai_feed_read",
-    description:
-      "Read one authorized canonical live AI Feed post by a stable evidence ref returned from community_ai_feed_search.",
-    inputSchema: COMMUNITY_AI_FEED_READ_TOOL_SCHEMA,
-  },
-  community_write: {
-    name: "community_write",
-    description:
-      "Publish a grounded agent post into the active community live feed.",
-    inputSchema: COMMUNITY_WRITE_TOOL_SCHEMA,
   },
   web_research: {
     name: "web_research",
@@ -1762,29 +1711,6 @@ export function normalizeToolArguments(
     }
     return { ref: ref.slice(0, 512) };
   }
-  if (toolName === "community_ai_feed_search") {
-    const query = normalizeString(args.query);
-    if (!query) throw new Error("community_ai_feed_search requires query.");
-    const limit = normalizeBoundedInteger(
-      args.limit,
-      "community_ai_feed_search limit",
-      1,
-      20,
-    );
-    return {
-      query: query.slice(0, 240),
-      ...(limit ? { limit } : null),
-    };
-  }
-  if (toolName === "community_ai_feed_read") {
-    const ref = normalizeString(args.ref);
-    if (!ref || !/^ai_feed:[^\s:]+$/.test(ref)) {
-      throw new Error(
-        "community_ai_feed_read requires a valid AI Feed evidence ref.",
-      );
-    }
-    return { ref: ref.slice(0, 512) };
-  }
   if (toolName === "member_conversations_list") {
     const limit = normalizeBoundedInteger(
       args.limit,
@@ -2222,35 +2148,6 @@ export function normalizeToolArguments(
     return {
       slug: slug.slice(0, 160),
       ...(heading ? { heading: heading.slice(0, 160) } : null),
-    };
-  }
-  if (toolName === "community_write") {
-    const body = normalizeString(args.body);
-    if (!body) throw new Error("community_write requires body.");
-    const title = normalizeString(args.title);
-    if (!title) throw new Error("community_write requires title.");
-    const evidence = Array.isArray(args.evidence)
-      ? args.evidence
-          .map((value) => normalizeString(value))
-          .filter((value): value is string => Boolean(value))
-          .slice(0, 4)
-      : [];
-    if (evidence.length === 0)
-      throw new Error("community_write requires evidence.");
-    const postType = normalizeString(args.post_type)?.toLowerCase();
-    if (
-      !postType ||
-      (postType !== "observation" &&
-        postType !== "recommendation" &&
-        postType !== "action")
-    ) {
-      throw new Error("community_write requires post_type.");
-    }
-    return {
-      post_type: postType,
-      title: title.slice(0, 180),
-      body: body.slice(0, 12000),
-      evidence: evidence.map((value) => value.slice(0, 180)),
     };
   }
   if (toolName === "web_research") {

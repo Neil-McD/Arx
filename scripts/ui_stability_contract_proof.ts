@@ -13,7 +13,6 @@ const operatorBusinessPanelView = read("apps/web/src/components/OperatorBusiness
 const operatorCommunitiesPanelView = read("apps/web/src/components/OperatorCommunitiesPanelView.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const eventsPanel = read("apps/web/src/components/WebCommunityEventsSection.tsx");
-const aiFeedPanel = read("apps/web/src/components/CommunityAiFeedPanel.tsx");
 const resourcesLifecycle = read("shared/useCommunityResourcesTabLifecycle.ts");
 const eventsLifecycle = read("shared/useCommunityEventsTabLifecycle.ts");
 
@@ -112,16 +111,6 @@ assert.doesNotMatch(
   eventsPanel,
   /community-events-refreshing|Updating…/,
   "events background refresh must not change the month header height",
-);
-assert.doesNotMatch(
-  aiFeedPanel,
-  /Refreshing AI feed/,
-  "AI feed background refresh must not insert a third grid child",
-);
-assert.match(
-  aiFeedPanel,
-  /aria-busy=\{state\.isLoading\}/,
-  "AI feed background refresh must remain semantic without changing geometry",
 );
 for (const [label, lifecycle] of [
   ["resources", resourcesLifecycle],

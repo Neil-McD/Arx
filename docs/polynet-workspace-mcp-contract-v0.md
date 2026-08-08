@@ -67,7 +67,6 @@ An authorized community is mounted at:
 ├── resources/
 ├── channels/
 │   └── general/
-├── ai-feed/
 ├── memory/
 ├── capabilities/
 └── builder/          # owner/admin only
@@ -105,7 +104,7 @@ There are two human authority lanes:
   moderators and members.
 
 Both lanes can list, read, and search the member repository. Both can write
-participation to `channels/general/` and `ai-feed/`. Only the builder lane can
+participation to `channels/general/`. Only the builder lane can
 see `builder/`, stage resource changesets there, and discover or call builder
 changeset operations.
 
@@ -122,7 +121,6 @@ lane.
 `polynet_write` writes only through canonical domain owners:
 
 - `channels/general/`: create a post or append a reply.
-- `ai-feed/`: create a typed feed post.
 - `builder/resources/`: stage a bounded changeset; it does not directly edit
   live resources.
 
@@ -242,6 +240,7 @@ Live staging:
 ```bash
 POLYNET_MCP_URL=https://polynet-staging.vercel.app/runtime/mcp \
 POLYNET_MCP_BEARER_TOKEN=<staging-token> \
+POLYNET_MCP_CONTROL_BEARER_TOKEN=<different-staging-control-token> \
 POLYNET_MCP_COMMUNITY_SLUG=<accessible-community> \
 POLYNET_MCP_DENIED_COMMUNITY_SLUG=<real-inaccessible-community> \
 POLYNET_MCP_EXPECT_AUTHORITY_LANE=<member-or-builder> \
@@ -255,15 +254,18 @@ Acceptance is deliberately fail closed:
   accessible community;
 - the expected authority lane must match the server-derived lane;
 - the denied slug must identify a real community that a separate control
-  identity successfully opened, while the actor under test cannot open it;
+  identity successfully opens during the same acceptance run, while the actor
+  under test cannot open it;
 - inaccessible-community and member builder-path/write/call attempts must
   return their exact non-enumerating denial codes; and
+- the retired `ai-feed/` path must be absent from projection and reject list,
+  read, and write attempts as `semantic_not_found`; and
 - the run id is the exact candidate Git SHA, producing stable idempotency keys
   instead of timestamp-created staging residue.
 
 Acceptance proves OAuth discovery, exact five-tool discovery, repository
-navigation, current authority, search/read, real chat and AI Feed
-write/read/replay, inaccessible-community denial, and—when the actor has
+navigation, current authority, search/read, real chat write/read/replay,
+retired AI Feed absence, inaccessible-community denial, and—when the actor has
 builder authority—a staged changeset plus discovered reject call without
 applying the test change. Run it once with a builder identity and once with an
 ordinary member identity. Preserve a separate successful control read of the

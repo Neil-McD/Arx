@@ -332,7 +332,7 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*<button\s*className=\{communityTab === "ai_feed"/,
+  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*<button\s*className=\{communityTab === "resources"/,
   "community navigation should separate the channel list from utility navigation",
 );
 assert.doesNotMatch(

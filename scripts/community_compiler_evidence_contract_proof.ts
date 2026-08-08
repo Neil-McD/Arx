@@ -52,8 +52,13 @@ assert.doesNotMatch(
 );
 assert.match(
   evidenceCore,
-  /row\.sourceType === "ai_feed"[\s\S]*row\.sourceType === "workflow_run"[\s\S]*row\.sourceType === "agent_run"[\s\S]*row\.sourceType === "transcript"[\s\S]*return "strong"/,
-  "trusted feed, workflow, agent-run, and transcript evidence should be strong",
+  /row\.sourceType === "workflow_run"[\s\S]*row\.sourceType === "agent_run"[\s\S]*row\.sourceType === "transcript"[\s\S]*return "strong"/,
+  "workflow, agent-run, and transcript evidence should be strong",
+);
+assert.match(
+  evidenceCore,
+  /row\.sourceType !== "ai_feed"[\s\S]*!isCommunityAgentSelfAuthoredTrace/,
+  "retired AI Feed traces must be excluded before compiler priority selection",
 );
 
 assert.match(

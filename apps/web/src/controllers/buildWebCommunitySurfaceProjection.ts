@@ -65,8 +65,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   communitySettingsBannerFocusY: WebCommunitySecondaryPanelsProps["bannerEditor"]["focusY"];
   communitySettingsBannerZoom: WebCommunitySecondaryPanelsProps["bannerEditor"]["zoom"];
   markCommunitySettingsDirty: WebCommunitySecondaryPanelsProps["bannerEditor"]["markCommunitySettingsDirty"];
-  feedState: WebCommunitySecondaryPanelsProps["feed"]["state"];
-  feedActions: WebCommunitySecondaryPanelsProps["feed"]["actions"];
   aiAgentHasSession: WebCommunitySecondaryPanelsProps["aiAgent"]["hasSession"];
   canManageMembersActiveCommunity: WebCommunitySecondaryPanelsProps["aiAgent"]["canManageMembersActiveCommunity"];
   communityMemberCount: number | null;
@@ -201,16 +199,6 @@ export function buildWebCommunitySurfaceProjection(
       onChangeZoom: params.settingsActions.setCommunitySettingsBannerZoom,
       markCommunitySettingsDirty: params.markCommunitySettingsDirty,
       setIsCommunityBannerFocusModalOpen: params.setIsCommunityBannerFocusModalOpen,
-    },
-    feed: {
-      capabilities: {
-        hasActiveCommunity: Boolean(params.activeCommunity),
-        hasSession: params.hasAuthenticatedPresentation,
-        activeCommunityName: params.activeCommunity?.name ?? null,
-        canModerateFeed: params.canModerateContentActiveCommunity,
-      },
-      state: params.feedState,
-      actions: params.feedActions,
     },
     aiAgent: {
       activeCommunity: params.activeCommunity,

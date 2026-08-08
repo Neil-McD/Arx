@@ -283,6 +283,7 @@ for (const invalidPath of [
   "/../community.md",
   "/community\\md",
   "/community\u0000.md",
+  "/ai-feed/",
 ]) {
   assert.equal(
     parsePolynetSemanticPath(invalidPath).ok,
@@ -315,10 +316,6 @@ assert.deepEqual(listed.result, {
     },
     {
       path: "/channels/",
-      kind: "directory",
-    },
-    {
-      path: "/ai-feed/",
       kind: "directory",
     },
     {
@@ -654,11 +651,6 @@ assert.deepEqual(mountedRoot, {
       path: "/communities/polynet/channels/",
       kind: "directory",
       type: "channels",
-    },
-    {
-      path: "/communities/polynet/ai-feed/",
-      kind: "directory",
-      type: "ai_feed",
     },
     {
       path: "/communities/polynet/memory/",
