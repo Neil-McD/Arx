@@ -94,14 +94,9 @@ export type CloudCommunityOneLinerSaveResult = {
   updated_at: string;
 };
 
-export type CloudCommunitySourceLinkIngestionResult = {
+export type CloudCommunitySourceIngestionResult = {
   ok: boolean;
-  kind:
-    | "community_source_ingestion"
-    | "community_source_link_ingestion"
-    | "community_source_file_ingestion"
-    | "community_source_google_drive_ingestion"
-    | "community_source_github_ingestion";
+  kind: "community_source_ingestion";
   processed: number;
   succeeded: number;
   failed: number;
@@ -122,8 +117,6 @@ export type CloudCommunitySourceLinkIngestionResult = {
   code: string | null;
   message: string;
 };
-
-export type CloudCommunitySourceIngestionResult = CloudCommunitySourceLinkIngestionResult;
 
 export type CloudCommunitySourceCrawlJobStatus =
   | "queued"
@@ -1522,21 +1515,6 @@ export async function createCloudCommunityResourcePageDraftFromSource<SessionT, 
   return payload as TResource;
 }
 
-export async function approveCloudCommunityResourceBuilderChangeset<SessionT, TResult = unknown>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    changesetId: string;
-  },
-): Promise<TResult> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("communityResources:approveCommunityResourceBuilderChangeset" as any, {
-    authSubject,
-    communityId: params.communityId,
-    changesetId: params.changesetId,
-  });
-  return payload as TResult;
-}
-
 export async function getCloudCommunityResourceBuilderChangesetStatus<SessionT, TResult = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -1550,6 +1528,24 @@ export async function getCloudCommunityResourceBuilderChangesetStatus<SessionT, 
     changesetId: params.changesetId,
   });
   return payload as TResult;
+}
+
+export async function listCloudPendingCommunityResourceBuilderChangesets<SessionT, TResult = unknown>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+    limit?: number;
+  },
+): Promise<TResult[]> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("communityResources:listPendingCommunityResourceBuilderChangesets" as any, {
+    authSubject,
+    communityId: params.communityId,
+    limit:
+      typeof params.limit === "number" && Number.isFinite(params.limit)
+        ? Math.max(1, Math.min(5, Math.floor(params.limit)))
+        : 2,
+  });
+  return coerceGatewayRows<TResult>(payload);
 }
 
 export async function applyCloudCommunityResourceBuilderChangeset<SessionT, TResult = unknown>(
@@ -1584,28 +1580,6 @@ export async function rejectCloudCommunityResourceBuilderChangeset<SessionT, TRe
   return payload as TResult;
 }
 
-export async function ingestCloudCommunitySourceLinks<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    limit?: number;
-  },
-): Promise<CloudCommunitySourceLinkIngestionResult | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("communityResources:ingestCommunitySourceLinks" as any, {
-    authSubject,
-    communityId: params.communityId,
-    limit:
-      typeof params.limit === "number" && Number.isFinite(params.limit)
-        ? Math.max(1, Math.floor(params.limit))
-        : undefined,
-    retryFailed: true,
-  });
-  return firstGatewayRow<CloudCommunitySourceLinkIngestionResult>(payload)
-    ?? ((payload && typeof payload === "object" && !Array.isArray(payload))
-      ? (payload as CloudCommunitySourceLinkIngestionResult)
-      : null);
-}
-
 export async function ingestCloudCommunitySources<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -1626,59 +1600,6 @@ export async function ingestCloudCommunitySources<SessionT>(
     ?? ((payload && typeof payload === "object" && !Array.isArray(payload))
       ? (payload as CloudCommunitySourceIngestionResult)
       : null);
-}
-
-export async function runCloudCommunityWikiArchitectProposal<SessionT, TResult = unknown>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    builderIntent?: string | null;
-  },
-): Promise<TResult> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("communityWikiArchitect:runCommunityWikiArchitectProposal" as any, {
-    authSubject,
-    communityId: params.communityId,
-    requestId: crypto.randomUUID(),
-    builderIntent:
-      typeof params.builderIntent === "string" && params.builderIntent.trim()
-        ? params.builderIntent.trim()
-        : null,
-  });
-  return payload as TResult;
-}
-
-export async function applyCloudCommunityWikiArchitectProposal<SessionT, TResult = unknown>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    proposal: unknown;
-  },
-): Promise<TResult> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("communityWikiArchitect:applyCommunityWikiArchitectProposal" as any, {
-    authSubject,
-    communityId: params.communityId,
-    proposal: params.proposal,
-  });
-  return payload as TResult;
-}
-
-export async function draftCloudCommunityResourceContentFromSources<SessionT, TResult = unknown>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    limit?: number;
-  },
-): Promise<TResult> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.action("communityWikiArchitect:draftCommunityResourceContentFromSources" as any, {
-    authSubject,
-    communityId: params.communityId,
-    requestId: crypto.randomUUID(),
-    limit:
-      typeof params.limit === "number" && Number.isFinite(params.limit)
-        ? Math.max(1, Math.floor(params.limit))
-        : undefined,
-  });
-  return payload as TResult;
 }
 
 export async function saveCloudCommunityResourceModule<SessionT>(

@@ -152,8 +152,11 @@ assert.doesNotMatch(
   "canonical repository search must not expose the retired AI Feed domain",
 );
 assert.match(executor, /stageCommunityResourceBuilderChangesetInternal/);
-assert.match(executor, /approveCommunityResourceBuilderChangeset/);
-assert.match(executor, /applyCommunityResourceBuilderChangeset/);
+assert.doesNotMatch(
+  executor,
+  /approveCommunityResourceBuilderChangeset|rejectCommunityResourceBuilderChangeset|applyCommunityResourceBuilderChangeset/,
+  "canonical agent operations must not cross the product approval boundary",
+);
 assert.match(
   authority,
   /relation === "owner" \|\| relation === "admin"/,

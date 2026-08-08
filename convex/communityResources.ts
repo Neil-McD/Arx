@@ -5275,6 +5275,30 @@ export const readCommunityResourceBuilderResourceInternal = internalQuery({
     }),
 });
 
+const COMMUNITY_RESOURCE_BUILDER_ACTIONABLE_STATUSES = [
+  "staged",
+  "approved",
+] as const;
+
+async function readLatestCommunityResourceBuilderActionableRows(args: {
+  ctx: any;
+  communityId: any;
+}): Promise<CommunityResourceBuilderChangesetRow[]> {
+  return (
+    await Promise.all(
+      COMMUNITY_RESOURCE_BUILDER_ACTIONABLE_STATUSES.map(async (status) =>
+        await args.ctx.db
+          .query("communityResourceBuilderChangesets" as any)
+          .withIndex("by_community_status_createdAt", (q: any) =>
+            q.eq("communityId", args.communityId).eq("status", status),
+          )
+          .order("desc")
+          .first(),
+      ),
+    )
+  ).filter(Boolean) as CommunityResourceBuilderChangesetRow[];
+}
+
 async function stageCommunityResourceBuilderChangesetCore(args: {
   ctx: any;
   userId: any;
@@ -5333,6 +5357,25 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
       };
     }
   }
+  const recentActionableRows = await readLatestCommunityResourceBuilderActionableRows({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  const liveActionableRows: CommunityResourceBuilderChangesetRow[] = [];
+  for (const changeset of recentActionableRows) {
+    if (nowMs - changeset.createdAt > COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS) {
+      await args.ctx.db.patch(changeset._id as any, {
+        status: "expired",
+        error: "Superseded after the proposal expired.",
+        updatedAt: nowMs,
+      });
+      continue;
+    }
+    liveActionableRows.push(changeset);
+  }
+  if (liveActionableRows.length > 0) {
+    throw new Error("community_resource_changeset_already_pending");
+  }
   const preflight = await buildCommunityResourceBuilderChangesetPreflight({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -5367,32 +5410,6 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
     deduped: false,
   };
 }
-
-export const stageCommunityResourceBuilderChangeset = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    summary: v.string(),
-    operations: v.array(v.any()),
-    idempotencyKey: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    return await stageCommunityResourceBuilderChangesetCore({
-      ctx,
-      communityId: args.communityId,
-      userId,
-      summary: args.summary,
-      operations: args.operations,
-      idempotencyKey: args.idempotencyKey ?? null,
-    });
-  },
-});
 
 export const stageCommunityResourceBuilderChangesetInternal = internalMutation({
   args: {
@@ -5457,6 +5474,65 @@ export const getCommunityResourceBuilderChangesetStatus = query({
         : false,
       updated_at: toIsoString(changeset.updatedAt),
     };
+  },
+});
+
+export const listPendingCommunityResourceBuilderChangesets = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const rows = await readLatestCommunityResourceBuilderActionableRows({
+      ctx,
+      communityId: args.communityId,
+    });
+    const nowMs = Date.now();
+    return rows
+      .filter(
+        (changeset) =>
+          nowMs - changeset.createdAt <=
+          COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS,
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 1)
+      .map((changeset) => {
+        const operations = normalizeCommunityResourceBuilderChangesetOperations(
+          changeset.operations,
+        );
+        const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+        return {
+          ok: true,
+          kind: "community_resource_builder_changeset_pending",
+          changeset_id: normalizeIdValue(changeset._id),
+          community_id: normalizeIdValue(args.communityId),
+          status: changeset.status,
+          summary: changeset.summary,
+          operation_count: operations.length,
+          preview_items: preview.preview_items,
+          preview_total_count: preview.total_count,
+          preview_limit: preview.preview_limit,
+          warning_count:
+            getCommunityResourceBuilderPreflightIssueCount(changeset.preflight),
+          approved_by_current_user: changeset.approvedByUserId
+            ? String(changeset.approvedByUserId) === String(userId)
+            : false,
+          created_at: toIsoString(changeset.createdAt),
+          updated_at: toIsoString(changeset.updatedAt),
+        };
+      });
   },
 });
 
@@ -5640,11 +5716,7 @@ export const applyCommunityResourceBuilderChangeset = mutation({
     if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
       throw new Error("community_resource_changeset_not_found");
     }
-    if (
-      changeset.status === "applied" &&
-      changeset.appliedByUserId &&
-      String(changeset.appliedByUserId) === String(userId)
-    ) {
+    if (changeset.status === "applied") {
       const operations = normalizeCommunityResourceBuilderChangesetOperations(
         changeset.operations,
       );
@@ -5664,11 +5736,8 @@ export const applyCommunityResourceBuilderChangeset = mutation({
         deduped: true,
       };
     }
-    if (changeset.status !== "approved") {
-      throw new Error("community_resource_changeset_approval_required");
-    }
-    if (!changeset.approvedByUserId || String(changeset.approvedByUserId) !== String(userId)) {
-      throw new Error("community_resource_changeset_approved_manager_required");
+    if (changeset.status !== "staged" && changeset.status !== "approved") {
+      throw new Error("community_resource_changeset_not_applicable");
     }
     const nowMs = Date.now();
     if (nowMs - changeset.createdAt > COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS) {
@@ -8981,70 +9050,6 @@ export const ingestCommunitySources: any = action({
       retryFailed: args.retryFailed,
       sourceKind: "any",
       resultKind: "community_source_ingestion",
-    });
-  },
-});
-
-export const ingestCommunitySourceLinks: any = action({
-  args: communitySourceIngestionActionArgs,
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    return await runCommunitySourceIngestion({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      limit: args.limit,
-      retryFailed: args.retryFailed,
-      sourceKind: "url",
-      resultKind: "community_source_link_ingestion",
-    });
-  },
-});
-
-export const ingestCommunitySourceFiles: any = action({
-  args: communitySourceIngestionActionArgs,
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    return await runCommunitySourceIngestion({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      limit: args.limit,
-      retryFailed: args.retryFailed,
-      sourceKind: "file",
-      resultKind: "community_source_file_ingestion",
-    });
-  },
-});
-
-export const ingestCommunitySourceGoogleDrive: any = action({
-  args: communitySourceIngestionActionArgs,
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    return await runCommunitySourceIngestion({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      limit: args.limit,
-      retryFailed: args.retryFailed,
-      sourceKind: "google_drive",
-      resultKind: "community_source_google_drive_ingestion",
-    });
-  },
-});
-
-export const ingestCommunitySourceGitHub: any = action({
-  args: communitySourceIngestionActionArgs,
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    return await runCommunitySourceIngestion({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      limit: args.limit,
-      retryFailed: args.retryFailed,
-      sourceKind: "github",
-      resultKind: "community_source_github_ingestion",
     });
   },
 });

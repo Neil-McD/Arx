@@ -15,15 +15,17 @@ const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const app = read("apps/web/src/App.tsx");
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
+const communityContentController = read("apps/web/src/controllers/useWebCommunityContentController.ts");
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const changesetApprovalCards = read("apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
 const toolRegistry = read("shared/toolRegistry.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
+const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
 
 assert.match(
   packageJson,
-  /"check:community-resource-builder-tools-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_resource_builder_tools_contract_proof\.ts"/,
+  /"check:community-resource-builder-tools-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_resource_builder_tools_contract_proof\.ts && vitest run scripts\/runtime_resource_changeset_cards\.test\.ts"/,
   "builder resource tool contract proof should be wired into package scripts",
 );
 
@@ -32,8 +34,8 @@ for (const exportName of [
   "readCommunityResourceBuilderResource",
   "writeCommunityResourceBuilderResource",
   "editCommunityResourceBuilderResource",
-  "stageCommunityResourceBuilderChangeset",
   "getCommunityResourceBuilderChangesetStatus",
+  "listPendingCommunityResourceBuilderChangesets",
   "approveCommunityResourceBuilderChangeset",
   "rejectCommunityResourceBuilderChangeset",
   "applyCommunityResourceBuilderChangeset",
@@ -61,10 +63,15 @@ assert.match(
   /editCommunityResourceBuilderResource[\s\S]*await requireCommunityManager/,
   "builder edit must be owner/admin/manager gated",
 );
+assert.doesNotMatch(
+  resources,
+  /export const stageCommunityResourceBuilderChangeset = mutation/,
+  "changeset staging must not expose a parallel public mutation",
+);
 assert.match(
   resources,
-  /stageCommunityResourceBuilderChangeset[\s\S]*await requireCommunityManager/,
-  "changeset staging must be owner/admin/manager gated",
+  /stageCommunityResourceBuilderChangesetCore[\s\S]*await requireCommunityManager[\s\S]*stageCommunityResourceBuilderChangesetInternal = internalMutation/,
+  "internal changeset staging must remain owner/admin/manager gated",
 );
 assert.match(
   resources,
@@ -85,7 +92,7 @@ assert.match(
 assert.match(
   schema,
   /communityResourceBuilderChangesets:[\s\S]*status: v\.union\([\s\S]*v\.literal\("staged"\)[\s\S]*v\.literal\("approved"\)[\s\S]*v\.literal\("applied"\)[\s\S]*operations: v\.array\(v\.any\(\)\)[\s\S]*preflight: v\.any\(\)[\s\S]*approvedAt: v\.optional\(v\.number\(\)\)[\s\S]*approvedByUserId: v\.optional\(v\.id\("users"\)\)[\s\S]*rejectedAt: v\.optional\(v\.number\(\)\)[\s\S]*rejectedByUserId: v\.optional\(v\.id\("users"\)\)/,
-  "changesets should persist explicit approval/rejection state separately from resource rows",
+  "changesets should retain legacy approval state for cached-client and stored-row compatibility",
 );
 
 assert.match(
@@ -249,21 +256,6 @@ assert.match(
   "builder directory list should report truncation",
 );
 assert.match(
-  toolRegistry,
-  /COMMUNITY_RESOURCE_BUILDER_LIST_TOOL_SCHEMA[\s\S]*maximum: 250/,
-  "builder list tool schema should cap requested list size at 250",
-);
-assert.match(
-  toolRegistry,
-  /COMMUNITY_RESOURCE_BUILDER_READ_TOOL_SCHEMA[\s\S]*required: \["ref"\][\s\S]*ref:[\s\S]*maxLength: 1024/,
-  "builder read tool should expose one model-friendly semantic ref",
-);
-assert.match(
-  toolRegistry,
-  /toolName === "community_resource_builder_read"[\s\S]*const ref = normalizeString\(args\.ref\)[\s\S]*targetType === "resource"[\s\S]*resourceId[\s\S]*targetType === "module"[\s\S]*moduleId/,
-  "builder read normalization should prefer ref while accepting legacy target/id inputs",
-);
-assert.match(
   resources,
   /readCommunityResourceBuilderResourceCore[\s\S]*ref\?: string[\s\S]*resolveCommunityResourceBuilderRef[\s\S]*readCommunityResourceBuilderResource[\s\S]*ref: v\.optional\(v\.string\(\)\)/,
   "builder read backend should accept and resolve semantic refs",
@@ -273,45 +265,42 @@ assert.match(
   /ambiguous_resource_builder_ref[\s\S]*resource_builder_ref_not_found/,
   "builder read backend should return recoverable ambiguity and not-found outputs",
 );
-assert.match(
-  toolRegistry,
-  /community_resource_builder_list limit", 1, 250/,
-  "builder list argument normalization should cap list size at 250",
-);
-assert.match(
-  toolRegistry,
-  /community_resource_builder_stage_changeset[\s\S]*COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA/,
-  "stage changeset tool should be registered",
-);
-assert.match(
-  toolRegistry,
-  /COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA[\s\S]*additionalProperties: false[\s\S]*items: COMMUNITY_RESOURCE_BUILDER_CHANGESET_OPERATION_TOOL_SCHEMA/,
-  "stage changeset operation items must stay strict-provider compatible",
-);
-assert.match(
-  toolRegistry,
-  /"delete_page"[\s\S]*"delete_category"[\s\S]*Supported op values:[^"]*delete_page[^"]*delete_category/,
-  "changeset schema should expose safe delete page/category operations",
-);
+for (const retiredToolName of [
+  "community_resource_builder_list",
+  "community_resource_builder_read",
+  "community_resource_builder_stage_changeset",
+]) {
+  assert.ok(!toolRegistry.includes(retiredToolName), `${retiredToolName} must not be registered`);
+  assert.ok(!runtimeAgentLoop.includes(retiredToolName), `${retiredToolName} must not be dispatched`);
+}
+for (const canonicalToolName of [
+  "polynet_list",
+  "polynet_read",
+  "polynet_search",
+  "polynet_write",
+  "polynet_call",
+]) {
+  assert.match(toolRegistry, new RegExp(`${canonicalToolName}: \\{`));
+}
 assert.doesNotMatch(
   toolRegistry,
-  /COMMUNITY_RESOURCE_BUILDER_STAGE_CHANGESET_TOOL_SCHEMA[\s\S]*additionalProperties: true[\s\S]*COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA/,
-  "stage changeset schema must not expose loose nested operation objects",
+  /community_resource_builder_apply_changeset|COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA/,
+  "agent runtime must not register a resource changeset apply tool",
 );
-assert.match(
-  toolRegistry,
-  /community_resource_builder_apply_changeset[\s\S]*COMMUNITY_RESOURCE_BUILDER_APPLY_CHANGESET_TOOL_SCHEMA/,
-  "apply changeset tool should be registered",
+assert.doesNotMatch(
+  runtimeAgentLoop,
+  /community_resource_builder_apply_changeset/,
+  "agent runtime must not dispatch resource changeset apply",
 );
 assert.match(
   resources,
-  /stageCommunityResourceBuilderChangeset[\s\S]*buildCommunityResourceBuilderChangesetPreflight[\s\S]*ctx\.db\.insert\("communityResourceBuilderChangesets"/,
+  /stageCommunityResourceBuilderChangesetCore[\s\S]*buildCommunityResourceBuilderChangesetPreflight[\s\S]*ctx\.db\.insert\("communityResourceBuilderChangesets"/,
   "staging should validate and store a changeset without applying resource writes",
 );
 assert.match(
-  runtimeAgentLoop,
-  /community_resource_builder_stage_changeset[\s\S]*internal\.communityResources\.stageCommunityResourceBuilderChangesetInternal/,
-  "runtime tool staging should use the internal mutation after worker/run authority is already validated",
+  canonicalExecutor,
+  /POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH[\s\S]*toolName: "polynet_write"[\s\S]*stageCommunityResourceBuilderChangesetInternal/,
+  "canonical polynet_write should be the only agent path into internal changeset staging",
 );
 assert.match(
   resources,
@@ -322,6 +311,41 @@ assert.match(
   resources,
   /getCommunityResourceBuilderChangesetStatus[\s\S]*COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS[\s\S]*approved_by_current_user/,
   "changeset status lookup should expose effective expiry and current-user approval state",
+);
+assert.match(
+  resources,
+  /listPendingCommunityResourceBuilderChangesets[\s\S]*await requireCommunityManager[\s\S]*readLatestCommunityResourceBuilderActionableRows[\s\S]*COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS/,
+  "pending changeset recovery must be manager-authorized, indexed, and TTL-aware",
+);
+assert.match(
+  resources,
+  /readLatestCommunityResourceBuilderActionableRows[\s\S]*by_community_status_createdAt/,
+  "active changeset lookup should use the existing community and status index",
+);
+assert.match(
+  resources,
+  /stageCommunityResourceBuilderChangesetCore[\s\S]*readLatestCommunityResourceBuilderActionableRows[\s\S]*community_resource_changeset_already_pending[\s\S]*ctx\.db\.insert\("communityResourceBuilderChangesets"/,
+  "changeset staging should enforce one live proposal per community before insert",
+);
+assert.match(
+  resources,
+  /listPendingCommunityResourceBuilderChangesets[\s\S]*\.slice\(0, 1\)/,
+  "pending changeset recovery should expose only the canonical live proposal",
+);
+assert.match(
+  changesetApprovalCards,
+  /CHANGESET_CARD_LIMIT = 1/,
+  "runtime changeset rendering should expose at most one active proposal",
+);
+assert.match(
+  memberAgentDock,
+  /member_agent_resource_build[\s\S]*limit: 1[\s\S]*member_agent_resource_changeset_recovery[\s\S]*limit: 1/,
+  "resource-build launch and recovery should request one canonical proposal",
+);
+assert.match(
+  gateway,
+  /listCloudPendingCommunityResourceBuilderChangesets[\s\S]*communityResources:listPendingCommunityResourceBuilderChangesets/,
+  "web recovery must use one canonical pending changeset gateway",
 );
 assert.match(
   resources,
@@ -365,13 +389,23 @@ assert.match(
 );
 assert.match(
   resources,
-  /applyCommunityResourceBuilderChangeset[\s\S]*changeset\.status !== "approved"[\s\S]*community_resource_changeset_approval_required[\s\S]*applyCommunityResourceBuilderChangesetOperations[\s\S]*status: "applied"/,
-  "apply should only execute an approved changeset and then mark it applied",
+  /applyCommunityResourceBuilderChangeset[\s\S]*changeset\.status !== "staged" && changeset\.status !== "approved"[\s\S]*community_resource_changeset_not_applicable[\s\S]*applyCommunityResourceBuilderChangesetOperations[\s\S]*status: "applied"/,
+  "product Apply should atomically accept staged and legacy-approved changesets",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /!changeset\.approvedByUserId \|\| String\(changeset\.approvedByUserId\) !== String\(userId\)[\s\S]*community_resource_changeset_approved_manager_required/,
-  "apply should require the approving manager identity",
+  /community_resource_changeset_approval_required|community_resource_changeset_approved_manager_required/,
+  "product Apply must not depend on a browser-coordinated approval transition or one approving manager",
+);
+assert.doesNotMatch(
+  changesetApprovalCards,
+  /approveCloudCommunityResourceBuilderChangeset|approvedByCurrentUser|canApply/,
+  "approval card must issue one atomic Apply request without client-owned approval state",
+);
+assert.doesNotMatch(
+  gateway,
+  /export async function approveCloudCommunityResourceBuilderChangeset/,
+  "new web clients must not expose the legacy approval gateway",
 );
 assert.match(
   mutationEvents,
@@ -387,6 +421,11 @@ assert.match(
   changesetApprovalCards,
   /applyCloudCommunityResourceBuilderChangeset[\s\S]*getCloudCommunityResourceBuilderChangesetStatus[\s\S]*status === "applied"[\s\S]*dispatchCommunityResourcesMutated/,
   "approval card should verify applied changeset state before dispatching resource refresh",
+);
+assert.match(
+  changesetApprovalCards,
+  /findChangesetOutputRecord[\s\S]*"result"[\s\S]*toolName !== "polynet_write"[\s\S]*community_resource_builder_changeset_staged/,
+  "approval extraction must unwrap canonical polynet_write staging receipts",
 );
 assert.match(
   runtimeTimeline,
@@ -409,7 +448,22 @@ assert.match(
   "mounted member-agent dock should render live resource changeset events through the retained timeline",
 );
 assert.match(
+  memberAgentDock,
+  /startResourceBuild[\s\S]*listCloudPendingCommunityResourceBuilderChangesets[\s\S]*pendingResourceBuildRef[\s\S]*composerFormRef\.current\?\.requestSubmit/,
+  "resource launch must check durable pending state and reuse the mounted dock submit path",
+);
+assert.match(
+  memberAgentDock,
+  /member_agent_resource_changeset_recovery[\s\S]*listCloudPendingCommunityResourceBuilderChangesets[\s\S]*setRecoveredResourceChangesetCards/,
+  "mounted member-agent dock must recover staged proposals after a reload",
+);
+assert.match(
   app,
+  /initial-community-resources:[\s\S]*Build the first useful draft of this community's Resources[\s\S]*startResourceBuild/,
+  "Resources CTA must launch one bounded idempotent turn through the existing member-agent dock",
+);
+assert.match(
+  communityContentController,
   /COMMUNITY_RESOURCES_MUTATED_EVENT[\s\S]*readCommunityResourcesMutatedEventDetail[\s\S]*loadCommunityResourceModules[\s\S]*loadCommunityResources/,
   "workspace should refresh modules and resources after a verified resource mutation",
 );

@@ -61,13 +61,17 @@ for (const forbidden of [/GPT 5\.6/i, /\bLuna\b/i, /\$20\b/, /credits?/i, /token
 assert.doesNotMatch(createModal, /WebBuilderOfferSummary/);
 assert.match(createModal, /Your payment is confirmed/);
 assert.match(createModal, /Community name/);
+assert.match(createModal, /One-liner/);
 assert.match(createModal, /Customize community URL/);
+assert.match(createModal, /Upload banner/);
+assert.match(createModal, /Upload avatar/);
 assert.match(createModal, /Create community/);
-assert.doesNotMatch(createModal, /banner|avatar|one-liner|Upload/i);
 assert.match(
   createController,
-  /visibility: "unlisted"[\s\S]*avatarStorageId: null[\s\S]*oneLiner: null[\s\S]*bannerStorageId: null/,
+  /prepareCloudCommunityBrandingField[\s\S]*kind: "avatar"[\s\S]*kind: "banner"[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*avatarStorageId: avatarField\.storageId[\s\S]*oneLiner: current\.createCommunityOneLiner[\s\S]*bannerStorageId: bannerField\.storageId/,
 );
+assert.match(createController, /createInFlightRef\.current/);
+assert.match(createController, /founderSubscriptionId/);
 
 for (const surface of [billing, account]) {
   assert.match(surface, /shared\/builderOffer/);
@@ -110,7 +114,11 @@ assert.match(offerController, /openPortal\(community\.community_id\)/);
 assert.match(app, /useWebBuilderOfferController\(\{[\s\S]*startCheckout: founderBilling\.startCheckout/);
 assert.doesNotMatch(app, /startCheckoutAfterCommunityCreated/);
 assert.match(app, /publicBuilderCheckout\.startPurchase\(\)/);
-assert.match(createController, /founderSubscriptionId: current\.getFounderSubscriptionId\?\.\(\) \?\? null/);
+assert.match(
+  createController,
+  /const founderSubscriptionId = current\.getFounderSubscriptionId\?\.\(\) \?\? null[\s\S]*founderSubscriptionId,/,
+  "community creation must snapshot and attach the selected funded subscription",
+);
 assert.match(app, /openFundedCreateCommunityModal[\s\S]*availableBuilderSubscriptionIdRef\.current/);
 assert.match(
   app,

@@ -301,9 +301,9 @@ const finishedWithoutRunScope = record(
 assert.equal(finishedWithoutRunScope.community_scope_id, null);
 
 const builderPayload = {
-  tool_name: "community_resource_builder_stage_changeset",
-  args: { summary: "must remain for approval UI" },
-  output: "must remain for approval UI",
+  tool_name: "polynet_write",
+  args: { summary: "must remain for Apply or Reject UI" },
+  output: "must remain for Apply or Reject UI",
 };
 assert.strictEqual(
   projectRuntimeCommunityContextEventPayload({

@@ -5,6 +5,7 @@ import {
   createCloudCommunityResourcePageDraftFromSource,
   deleteCloudCommunityResource,
   deleteCloudCommunityResourceModule,
+  ingestCloudCommunitySources,
   listCloudCommunityResourceModuleRows,
   listCloudCommunityResourceRows,
   moveCloudCommunityResourceToModule,
@@ -12,6 +13,8 @@ import {
   reorderCloudCommunityResources,
   saveCloudCommunityResource,
   saveCloudCommunityResourceModule,
+  uploadCloudCommunityResourceSourceFile,
+  type CloudCommunitySourceIngestionResult,
 } from "./cloudCommunityAdminGateway";
 
 type SessionLike = unknown;
@@ -37,6 +40,73 @@ type ResourceModuleLike = {
   module_status?: "draft" | "live";
   sort_order?: number;
 };
+
+export type CommunitySourceIntakePhase = "saving" | "ingesting";
+
+export type CommunitySourceIntakeResult = {
+  saved: number;
+  rejected: number;
+  errors: string[];
+  ingestion: CloudCommunitySourceIngestionResult | null;
+};
+
+const COMMUNITY_SOURCE_INTAKE_MAX_ITEMS = 10;
+const COMMUNITY_SOURCE_INTAKE_MAX_FILE_BYTES = 2_500_000;
+const COMMUNITY_SOURCE_READABLE_FILE_EXTENSIONS = new Set([
+  "txt",
+  "md",
+  "markdown",
+  "csv",
+  "tsv",
+  "json",
+  "jsonl",
+  "xml",
+  "html",
+  "htm",
+  "yaml",
+  "yml",
+  "toml",
+  "log",
+]);
+
+function normalizeCommunitySourceUrl(raw: string): string | null {
+  const trimmed = String(raw ?? "").trim();
+  if (!trimmed) return null;
+  try {
+    const parsed = new URL(/^https?:\/\//i.test(trimmed) ? trimmed : `https://${trimmed}`);
+    if (parsed.protocol !== "http:" && parsed.protocol !== "https:") return null;
+    parsed.hash = "";
+    return parsed.toString();
+  } catch {
+    return null;
+  }
+}
+
+function getCommunitySourceUrlTitle(rawUrl: string): string {
+  try {
+    const parsed = new URL(rawUrl);
+    const path = parsed.pathname.replace(/\/$/, "");
+    return `${parsed.hostname.replace(/^www\./i, "")}${path}`.slice(0, 180);
+  } catch {
+    return rawUrl.slice(0, 180);
+  }
+}
+
+function isReadableCommunitySourceFile(file: File): boolean {
+  const mimeType = String(file.type ?? "").trim().toLowerCase();
+  if (
+    mimeType.startsWith("text/") ||
+    mimeType.includes("json") ||
+    mimeType.includes("xml") ||
+    mimeType.includes("csv") ||
+    mimeType.includes("yaml") ||
+    mimeType.includes("toml")
+  ) {
+    return true;
+  }
+  const extension = file.name.toLowerCase().match(/\.([a-z0-9]+)$/)?.[1] ?? "";
+  return COMMUNITY_SOURCE_READABLE_FILE_EXTENSIONS.has(extension);
+}
 
 function compareResourcesByManualOrder(a: ResourceLike, b: ResourceLike): number {
   const aSortOrder = typeof a.sort_order === "number" && Number.isFinite(a.sort_order) ? a.sort_order : null;
@@ -76,6 +146,7 @@ type UseCommunityResourceControllerArgs<
   editingResourceId: string | null;
   editingResourceModuleId: string | null;
   beforeSaveValidate?: (payload: { title: string; description: string; rawUrl: string }) => Promise<string | null>;
+  communityResources: ResourceT[];
   setCommunityResources: Dispatch<SetStateAction<ResourceT[]>>;
   setCommunityResourceModules: Dispatch<SetStateAction<ResourceModuleT[]>>;
   setIsLoadingResources: Dispatch<SetStateAction<boolean>>;
@@ -107,6 +178,7 @@ export function useCommunityResourceController<
   argsRef.current = args;
   const resourceLoadGenerationRef = useRef(0);
   const moduleLoadGenerationRef = useRef(0);
+  const sourceIntakeInFlightRef = useRef(false);
 
   const resetResourceEditor = useCallback((clearError: boolean) => {
     const current = argsRef.current;
@@ -146,6 +218,7 @@ export function useCommunityResourceController<
           limit: 200,
         });
         if (moduleLoadGenerationRef.current !== generation) return;
+        if (argsRef.current.activeCommunityId !== communityId) return;
         current.setCommunityResourceModules(rows);
       } catch {
         return;
@@ -171,6 +244,7 @@ export function useCommunityResourceController<
           limit: 200,
         });
         if (resourceLoadGenerationRef.current !== generation) return;
+        if (argsRef.current.activeCommunityId !== communityId) return;
         current.setCommunityResources(rows);
         await loadCommunityResourceModules(communityId, usableSession);
       } catch {
@@ -581,6 +655,158 @@ export function useCommunityResourceController<
     }
   }, [loadCommunityResources]);
 
+  const handleAddCommunitySources = useCallback(async (input: {
+    links: string[];
+    files: File[];
+    retryExisting?: boolean;
+    onPhase?: (phase: CommunitySourceIntakePhase) => void;
+  }): Promise<CommunitySourceIntakeResult | null> => {
+    if (sourceIntakeInFlightRef.current) return null;
+    const current = argsRef.current;
+    const session = await resolveUsableSession(current.session, current.ensureSession);
+    if (!session || !current.activeCommunityId) return null;
+
+    const rawLinks = Array.isArray(input.links) ? input.links : [];
+    const rawFiles = Array.isArray(input.files) ? input.files : [];
+    const requestedCount = rawLinks.length + rawFiles.length;
+    if (!input.retryExisting && requestedCount === 0) {
+      return {
+        saved: 0,
+        rejected: 1,
+        errors: ["Add at least one link or file."],
+        ingestion: null,
+      };
+    }
+    if (requestedCount > COMMUNITY_SOURCE_INTAKE_MAX_ITEMS) {
+      return {
+        saved: 0,
+        rejected: requestedCount,
+        errors: [`Add up to ${COMMUNITY_SOURCE_INTAKE_MAX_ITEMS} sources at a time.`],
+        ingestion: null,
+      };
+    }
+
+    sourceIntakeInFlightRef.current = true;
+    input.onPhase?.("saving");
+    const communityId = current.activeCommunityId;
+    const errors: string[] = [];
+    let saved = 0;
+    let rejected = 0;
+    let ingestion: CloudCommunitySourceIngestionResult | null = null;
+
+    try {
+      const uniqueLinks = Array.from(
+        new Set(rawLinks.map(normalizeCommunitySourceUrl).filter((url): url is string => Boolean(url))),
+      );
+      const existingSourceUrls = new Set(
+        current.communityResources
+          .filter((resource) => resource.resource_role === "source")
+          .map((resource) => normalizeCommunitySourceUrl(resource.url ?? ""))
+          .filter((url): url is string => Boolean(url)),
+      );
+      const newLinks = uniqueLinks.filter((url) => !existingSourceUrls.has(url));
+      rejected += rawLinks.length - uniqueLinks.length;
+      if (rawLinks.length > 0 && uniqueLinks.length === 0) {
+        errors.push("Add a valid public http or https link.");
+      } else if (rawLinks.length !== uniqueLinks.length) {
+        errors.push("Some links were invalid or duplicated and were skipped.");
+      }
+
+      for (const url of newLinks) {
+        try {
+          await saveCloudCommunityResource({
+            session,
+            resourceId: null,
+            isPatch: false,
+            payload: {
+              community_id: communityId,
+              type: "link",
+              resource_role: "source",
+              title: getCommunitySourceUrlTitle(url),
+              body_md: null,
+              url,
+              pinned: false,
+              module_id: null,
+            },
+          });
+          saved += 1;
+        } catch (error) {
+          rejected += 1;
+          errors.push(error instanceof Error ? error.message : `Could not add ${url}.`);
+        }
+      }
+
+      for (const file of rawFiles) {
+        if (!file || !String(file.name ?? "").trim()) {
+          rejected += 1;
+          errors.push("A selected file did not have a readable name.");
+          continue;
+        }
+        if (file.size <= 0 || file.size > COMMUNITY_SOURCE_INTAKE_MAX_FILE_BYTES) {
+          rejected += 1;
+          errors.push(`${file.name} must be smaller than 2.5 MB.`);
+          continue;
+        }
+        if (!isReadableCommunitySourceFile(file)) {
+          rejected += 1;
+          errors.push(`${file.name} is not a supported text file yet.`);
+          continue;
+        }
+        try {
+          const fileKey = await uploadCloudCommunityResourceSourceFile({
+            session,
+            communityId,
+            file,
+          });
+          await saveCloudCommunityResource({
+            session,
+            resourceId: null,
+            isPatch: false,
+            payload: {
+              community_id: communityId,
+              type: "file",
+              resource_role: "source",
+              title: file.name.slice(0, 180),
+              body_md: null,
+              url: null,
+              file_key: fileKey,
+              source_original_filename: file.name,
+              source_original_mime_type: file.type || null,
+              source_original_bytes: file.size,
+              pinned: false,
+              module_id: null,
+            },
+          });
+          saved += 1;
+        } catch (error) {
+          rejected += 1;
+          errors.push(error instanceof Error ? error.message : `Could not add ${file.name}.`);
+        }
+      }
+
+      if (saved > 0 || input.retryExisting) {
+        input.onPhase?.("ingesting");
+        try {
+          ingestion = await ingestCloudCommunitySources({
+            session,
+            communityId,
+            limit: COMMUNITY_SOURCE_INTAKE_MAX_ITEMS,
+          });
+          if (!ingestion) {
+            errors.push("Sources were saved, but readiness could not be confirmed. Retry them here.");
+          }
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : "Sources were saved, but could not be read yet.");
+        }
+      }
+    } finally {
+      await loadCommunityResources(communityId, session);
+      sourceIntakeInFlightRef.current = false;
+    }
+
+    return { saved, rejected, errors, ingestion };
+  }, [loadCommunityResources]);
+
   return {
     loadCommunityResourceModules,
     loadCommunityResources,
@@ -594,5 +820,6 @@ export function useCommunityResourceController<
     handleDeleteResource,
     handleCreatePageDraftFromSource,
     handleCreateBlankPageDraft,
+    handleAddCommunitySources,
   };
 }

@@ -217,6 +217,15 @@ type CommunityJoinRequest = WebCommunityJoinRequest;
 type MyCommunityJoinRequest = WebMyCommunityJoinRequest;
 type PersonalMemoryItem = WebPersonalMemoryItem;
 type PublicPlanSummary = SharedPublicPlanSummary;
+function hashResourceBuildSourceSet(value: string): string {
+  let hash = 2166136261;
+  for (let index = 0; index < value.length; index += 1) {
+    hash ^= value.charCodeAt(index);
+    hash = Math.imul(hash, 16777619);
+  }
+  return (hash >>> 0).toString(36);
+}
+
 export default function App() {
   const appActivity = useWebAppActivityController();
   const directMessages = useWebDirectMessagesController();
@@ -693,7 +702,7 @@ export default function App() {
     handleReorderResources,
     handleMoveResourceToModule,
     openNewResourceModal,
-    openNewSourceModal,
+    handleAddCommunitySources,
     resourceEditor,
     handleDeleteResource,
     handleCreatePageDraftFromSource,
@@ -1486,8 +1495,23 @@ export default function App() {
       void enterJoinedCommunity({
         communityId: community.id,
         communitySlug: community.slug,
+        communityTab: "resources",
       });
     },
+    onCommunityCreateRecoveryRequired: async () => {
+      availableBuilderSubscriptionIdRef.current = null;
+      const activeSession = sessionRef.current;
+      if (activeSession) {
+        await Promise.all([
+          loadCommunities(activeSession),
+          founderBilling.refresh(activeSession),
+        ]);
+      }
+      showAppToastMessage("Your Builder subscription is already attached. We refreshed your communities.");
+    },
+    readBannerFileAsWideDataUrlWithinLimit,
+    isLikelyImageFile,
+    maxCreateImageDataUrlChars: WEB_IMAGE_DATA_URL_CHAR_LIMIT,
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
   });
   const openFundedCreateCommunityModal: typeof communityUi.openCreateCommunityModal = (draft = null) => {
@@ -1794,6 +1818,49 @@ export default function App() {
       memberAgentComposerApiRef.current?.appendTranscript(transcript),
     focusMemberAgentInput: () => memberAgentComposerApiRef.current?.focusInput(),
   });
+
+  const handleBuildCommunityResources = async (input: {
+    communityId: string;
+    readySources: Array<{ id: string; ingestedAt: string | null }>;
+  }): Promise<boolean> => {
+    const communityId = String(input.communityId ?? "").trim();
+    if (
+      !communityId ||
+      communityId !== activeCommunity?.id ||
+      !canManageResourcesActiveCommunity ||
+      input.readySources.length === 0
+    ) {
+      return false;
+    }
+    const architectSources = input.readySources
+      .slice()
+      .sort((left, right) => left.id.localeCompare(right.id))
+      .slice(0, 80);
+    const idempotencyKey =
+      `initial-community-resources:${communityId}:${hashResourceBuildSourceSet(
+        architectSources
+          .map((source) => `${source.id}:${source.ingestedAt ?? "ready"}`)
+          .join("|"),
+      )}`;
+    const prompt = [
+      "Build the first useful draft of this community's Resources from the ready source inbox items.",
+      "List and inspect the active community builder/resources directory first, including its health summary and current categories, pages, and ready sources.",
+      `Use these ready source record ids as the bounded source set: ${architectSources.map((source) => source.id).join(", ")}.`,
+      "Create a small, clear draft category and page structure grounded only in those sources. Preserve source lineage, do not invent unsupported claims, do not delete or move source inbox records, and keep every created category and page in draft state.",
+      `Stage exactly one changeset with polynet_write and use this exact idempotency_key: ${idempotencyKey}.`,
+      "Do not apply or publish anything. Stop after staging so I can review the proposal in Polynet.",
+    ].join("\n");
+    const opened = await memberAgentComposerApiRef.current?.startResourceBuild({
+      communityId,
+      prompt,
+    });
+    if (!opened) {
+      showAppToastMessage(
+        "Finish the current agent message or resource build, then try again.",
+      );
+    }
+    return opened === true;
+  };
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
   const shellProjection = buildWebShellProjection({
@@ -2276,7 +2343,8 @@ export default function App() {
         handleReorderResources,
         handleMoveResourceToModule,
         openNewResourceModal,
-        openNewSourceModal,
+        handleAddCommunitySources,
+        handleBuildCommunityResources,
         resourceEditor,
         handleDeleteResource,
         handleCreatePageDraftFromSource,
@@ -3064,6 +3132,7 @@ export default function App() {
       memberAgentDockRef={memberAgentComposerApiRef}
       memberAgentDockProps={{
         isVisible: isMemberAgentDockVisible,
+        canManageResources: canManageResourcesActiveCommunity,
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",
         onRequestOpen: () => setMobileRootPage("agent"),

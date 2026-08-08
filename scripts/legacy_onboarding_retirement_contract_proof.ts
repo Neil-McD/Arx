@@ -3,7 +3,6 @@ import { existsSync, readFileSync } from "node:fs";
 
 import {
   GLOBAL_PLATFORM_SKILLS,
-  buildPlatformSkillToolNamesForSelection,
 } from "../shared/platformSkills.ts";
 
 function read(path: string): string {
@@ -29,12 +28,6 @@ assert.doesNotMatch(
 );
 
 assert.deepEqual(GLOBAL_PLATFORM_SKILLS, []);
-assert.deepEqual(
-  buildPlatformSkillToolNamesForSelection([
-    { platform_skill_id: "platform:onboarding-guide" },
-  ]),
-  [],
-);
 
 const runtimeSurface = [
   read("convex/runtimeTurnHandlers.ts"),

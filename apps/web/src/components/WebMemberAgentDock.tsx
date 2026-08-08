@@ -42,6 +42,7 @@ import {
   startNewCloudMemberAgentGlobalEpisode,
   type CloudMemberAgentChannel,
 } from "../../../../shared/cloudMemberAgentGateway";
+import { listCloudPendingCommunityResourceBuilderChangesets } from "../../../../shared/cloudCommunityAdminGateway";
 import {
   fetchCloudThreadContextById,
   setCloudThreadContext,
@@ -68,6 +69,12 @@ import type {
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
+import {
+  buildResourceChangesetCardFromPayload,
+  extractRuntimeResourceChangesetCards,
+  RuntimeResourceChangesetApprovalCards,
+  type ResourceChangesetCardModel,
+} from "./RuntimeResourceChangesetApprovalCards";
 import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import type { WebCommunityRecord } from "../webAppContracts";
 import "./WebMemberAgentDock.css";
@@ -90,6 +97,10 @@ type ActiveThreadContext = {
 export type WebMemberAgentDockHandle = {
   appendTranscript: (transcript: string) => void;
   focusInput: () => void;
+  startResourceBuild: (request: {
+    communityId: string;
+    prompt: string;
+  }) => Promise<boolean>;
 };
 
 type MemberAgentImageDraft = Omit<MemberAgentImageAttachment, "storage_id"> & {
@@ -107,6 +118,7 @@ type MemberAgentRetryState = {
 
 export type WebMemberAgentDockProps = {
   isVisible: boolean;
+  canManageResources?: boolean;
   mobileShellActive?: boolean;
   onRequestOpen?: () => void;
   mobileRoot?: boolean;
@@ -197,6 +209,10 @@ function WebMemberAgentDock(props, ref) {
   const [isAttachmentDragOver, setIsAttachmentDragOver] = useState(false);
   const [isPreparing, setIsPreparing] = useState(false);
   const [isStartingNewChat, setIsStartingNewChat] = useState(false);
+  const [resourceBuildLaunchVersion, setResourceBuildLaunchVersion] = useState(0);
+  const [recoveredResourceChangesetCards, setRecoveredResourceChangesetCards] = useState<
+    ResourceChangesetCardModel[]
+  >([]);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] = useState<InferenceIssueModalState | null>(null);
   const [sendingByThread, setSendingByThread] = useState<Record<string, boolean>>({});
@@ -206,6 +222,7 @@ function WebMemberAgentDock(props, ref) {
   const [, setRuntimeEventsByRunId] = useState<Record<string, ThreadStreamingRuntimeEvent[]>>({});
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const composerFormRef = useRef<HTMLFormElement | null>(null);
   const onboardingOpenedSessionIdsRef = useRef(new Set<string>());
   const onboardingSeededSessionIdsRef = useRef(new Set<string>());
   const onboardingFocusSessionIdRef = useRef<string | null>(null);
@@ -213,6 +230,12 @@ function WebMemberAgentDock(props, ref) {
   const attachmentsRef = useRef<MemberAgentImageDraft[]>([]);
   const draftTextRef = useRef("");
   const submitInFlightRef = useRef(false);
+  const resourceBuildStartInFlightRef = useRef(false);
+  const resourceBuildLaunchBusyRef = useRef(false);
+  const pendingResourceBuildRef = useRef<{
+    communityId: string;
+    prompt: string;
+  } | null>(null);
   const retryRef = useRef<MemberAgentRetryState | null>(null);
   const runUiScopeRef = useRef<AgentScope | null>(null);
   const activeThreadKeyRef = useRef<string | null>(null);
@@ -270,7 +293,93 @@ function WebMemberAgentDock(props, ref) {
       inputElement.style.height = `${Math.min(inputElement.scrollHeight, 112)}px`;
       inputElement.focus();
     },
-  }), []);
+    startResourceBuild: async (request) => {
+      const requestedCommunityId = String(request.communityId ?? "").trim();
+      const prompt = String(request.prompt ?? "").trim();
+      if (
+        !requestedCommunityId ||
+        requestedCommunityId !== communityId ||
+        !prompt ||
+        !props.canManageResources ||
+        !props.session ||
+        props.voiceButtonProps.state !== "idle" ||
+        resourceBuildStartInFlightRef.current ||
+        pendingResourceBuildRef.current ||
+        resourceBuildLaunchBusyRef.current ||
+        draftTextRef.current.trim() ||
+        attachmentsRef.current.length > 0
+      ) {
+        return false;
+      }
+      resourceBuildStartInFlightRef.current = true;
+      const launchScope = agentScopeRef.current;
+      if (props.mobileShellActive) props.onRequestOpen?.();
+      else setIsOpen(true);
+      setLocalError(null);
+      try {
+        const usableSession = await props.ensureSession(
+          props.session,
+          "member_agent_resource_build",
+        );
+        if (
+          !usableSession ||
+          agentScopeRef.current.userId !== launchScope.userId ||
+          agentScopeRef.current.generation !== launchScope.generation
+        ) return false;
+        const rows = await listCloudPendingCommunityResourceBuilderChangesets<
+          AuthSession,
+          Record<string, unknown>
+        >({
+          session: usableSession,
+          communityId: requestedCommunityId,
+          limit: 1,
+        });
+        const pendingCards = rows.flatMap((row, index) => {
+          const updatedAt = Date.parse(String(row.updated_at ?? ""));
+          const card = buildResourceChangesetCardFromPayload(
+            row,
+            Number.isFinite(updatedAt) ? updatedAt : index,
+          );
+          return card ? [card] : [];
+        });
+        if (
+          agentScopeRef.current.userId !== launchScope.userId ||
+          agentScopeRef.current.generation !== launchScope.generation
+        ) return false;
+        if (pendingCards.length > 0) {
+          setRecoveredResourceChangesetCards(pendingCards);
+          return true;
+        }
+        if (
+          resourceBuildLaunchBusyRef.current ||
+          draftTextRef.current.trim() ||
+          attachmentsRef.current.length > 0
+        ) {
+          return false;
+        }
+        pendingResourceBuildRef.current = {
+          communityId: requestedCommunityId,
+          prompt,
+        };
+        setResourceBuildLaunchVersion((current) => current + 1);
+        return true;
+      } catch (error) {
+        console.warn("member_agent_resource_build_start_failed", error);
+        setLocalError("Your resource proposal could not be checked. Try again.");
+        return false;
+      } finally {
+        resourceBuildStartInFlightRef.current = false;
+      }
+    },
+  }), [
+    communityId,
+    props.canManageResources,
+    props.ensureSession,
+    props.mobileShellActive,
+    props.onRequestOpen,
+    props.session,
+    props.voiceButtonProps.state,
+  ]);
 
   const isCurrentScope = useCallback((scope: AgentScope): boolean => {
     const current = agentScopeRef.current;
@@ -415,6 +524,9 @@ function WebMemberAgentDock(props, ref) {
     setLocalError(null);
     setInferenceIssue(null);
     retryRef.current = null;
+    pendingResourceBuildRef.current = null;
+    resourceBuildStartInFlightRef.current = false;
+    setRecoveredResourceChangesetCards([]);
   }, [clearAttachmentDrafts, props.session?.user.id, stopStreamingTurn]);
 
   const previousSurfaceKeyRef = useRef(surfaceKey);
@@ -431,6 +543,8 @@ function WebMemberAgentDock(props, ref) {
     setIsAttachmentDragOver(false);
     retryRef.current = null;
     setLocalError(null);
+    pendingResourceBuildRef.current = null;
+    setRecoveredResourceChangesetCards([]);
   }, [clearAttachmentDrafts, surfaceKey]);
 
   useEffect(() => {
@@ -507,6 +621,11 @@ function WebMemberAgentDock(props, ref) {
   const isSending = Boolean(threadKey && sendingByThread[threadKey]);
   const turnIsActive = isSending || Boolean(streamingState);
   const composerIsBusy = turnIsActive || isUploadingAttachments || isSubmitting;
+  resourceBuildLaunchBusyRef.current =
+    composerIsBusy ||
+    isPreparing ||
+    isStartingNewChat ||
+    props.voiceButtonProps.state !== "idle";
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
   const showOnboardingAgentFocus = Boolean(
@@ -520,6 +639,111 @@ function WebMemberAgentDock(props, ref) {
     ),
   );
   const onboardingDescriptionId = "community-onboarding-agent-description";
+
+  useEffect(() => {
+    const request = pendingResourceBuildRef.current;
+    if (
+      !request ||
+      !isOpenSurface ||
+      !props.isVisible ||
+      !props.session ||
+      props.surfaceContext?.kind !== "community" ||
+      request.communityId !== communityId ||
+      composerIsBusy ||
+      isPreparing ||
+      isStartingNewChat
+    ) {
+      return;
+    }
+    if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) {
+      pendingResourceBuildRef.current = null;
+      setLocalError("Finish or clear your current agent message, then try again.");
+      return;
+    }
+    pendingResourceBuildRef.current = null;
+    draftTextRef.current = request.prompt;
+    setInput(request.prompt);
+    composerFormRef.current?.requestSubmit();
+  }, [
+    communityId,
+    composerIsBusy,
+    isOpenSurface,
+    isPreparing,
+    isStartingNewChat,
+    props.isVisible,
+    props.session,
+    props.surfaceContext,
+    resourceBuildLaunchVersion,
+  ]);
+
+  useEffect(() => {
+    const liveCards = extractRuntimeResourceChangesetCards(runtimeEvents);
+    if (liveCards.length === 0) return;
+    setRecoveredResourceChangesetCards((current) => {
+      const merged = new Map(current.map((card) => [card.changesetId, card]));
+      liveCards.forEach((card) => merged.set(card.changesetId, card));
+      return [...merged.values()]
+        .sort((a, b) => a.seq - b.seq)
+        .slice(-1);
+    });
+  }, [runtimeEvents]);
+
+  useEffect(() => {
+    if (
+      !isOpenSurface ||
+      turnIsActive ||
+      !props.canManageResources ||
+      !props.session ||
+      !communityId
+    ) {
+      return;
+    }
+    let cancelled = false;
+    const scope = agentScopeRef.current;
+    void (async () => {
+      try {
+        const usableSession = await props.ensureSession(
+          props.session,
+          "member_agent_resource_changeset_recovery",
+        );
+        if (!usableSession || cancelled || !isCurrentScope(scope)) return;
+        const rows = await listCloudPendingCommunityResourceBuilderChangesets<
+          AuthSession,
+          Record<string, unknown>
+        >({
+          session: usableSession,
+          communityId,
+          limit: 1,
+        });
+        if (cancelled || !isCurrentScope(scope)) return;
+        setRecoveredResourceChangesetCards(
+          rows.flatMap((row, index) => {
+            const updatedAt = Date.parse(String(row.updated_at ?? ""));
+            const card = buildResourceChangesetCardFromPayload(
+              row,
+              Number.isFinite(updatedAt) ? updatedAt : index,
+            );
+            return card ? [card] : [];
+          }),
+        );
+      } catch (error) {
+        if (!cancelled) {
+          console.warn("member_agent_resource_changeset_recovery_failed", error);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    communityId,
+    isCurrentScope,
+    isOpenSurface,
+    props.canManageResources,
+    props.ensureSession,
+    props.session,
+    turnIsActive,
+  ]);
 
   useEffect(() => {
     if (
@@ -1014,6 +1238,15 @@ function WebMemberAgentDock(props, ref) {
 
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
+  const liveResourceChangesetIds = new Set(
+    extractRuntimeResourceChangesetCards(runtimeEvents).map(
+      (card) => card.changesetId,
+    ),
+  );
+  const persistentResourceChangesetCards =
+    recoveredResourceChangesetCards.filter(
+      (card) => !liveResourceChangesetIds.has(card.changesetId),
+    );
 
   return (
     <>
@@ -1129,6 +1362,13 @@ function WebMemberAgentDock(props, ref) {
             );
           })}
 
+          {persistentResourceChangesetCards.length > 0 ? (
+            <RuntimeResourceChangesetApprovalCards
+              cards={persistentResourceChangesetCards}
+              session={props.session}
+            />
+          ) : null}
+
           {isPreparing ? (
             <div className="member-agent-dock-reasoning">
               <LoaderCircle aria-hidden="true" />
@@ -1196,6 +1436,7 @@ function WebMemberAgentDock(props, ref) {
             </div>
           ) : null}
           <form
+            ref={composerFormRef}
             className={`member-agent-dock-composer${isAttachmentDragOver ? " is-dragging" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
             onSubmit={submit}
             onDragEnter={(event) => {

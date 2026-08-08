@@ -5,10 +5,7 @@ import { buildEffectiveSkills } from "../shared/effectiveSkills.ts";
 import {
   COMMUNITY_MANAGER_PLATFORM_SKILLS,
   GLOBAL_PLATFORM_SKILLS,
-  PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
-  buildPlatformSkillToolNamesForSelection,
-  hasSelectedPlatformResourcesArchitectSkill,
 } from "../shared/platformSkills.ts";
 
 function readText(path: string): string {
@@ -32,26 +29,6 @@ function main() {
     PLATFORM_RESOURCES_ARCHITECT_SKILL.requiresCapability,
     "community_resources_manage",
   );
-  assert.deepEqual(PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES, [
-    "community_resource_builder_list",
-    "community_resource_builder_read",
-    "community_resource_builder_stage_changeset",
-    "community_resource_builder_apply_changeset",
-  ]);
-  assert.equal(
-    hasSelectedPlatformResourcesArchitectSkill([
-      { platform_skill_id: "platform:resources-architect" },
-    ]),
-    true,
-  );
-  assert.deepEqual(
-    buildPlatformSkillToolNamesForSelection([
-      { mention_token: "resources-architect" },
-    ]),
-    PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
-  );
-  assert.deepEqual(buildPlatformSkillToolNamesForSelection([]), []);
-
   const projected = buildEffectiveSkills({
     platformSkills: COMMUNITY_MANAGER_PLATFORM_SKILLS,
     personalSkills: [
@@ -138,6 +115,9 @@ function main() {
     "shared/runtimeToolPolicy.ts",
   );
   const runtimePrompt = readText("shared/runtimePrompt.ts");
+  const runtimeInvocationSurface = readText(
+    "shared/runtimeInvocationSurface.ts",
+  );
   const runtimeTurnResolution = readText(
     "convex/runtimeTurnResolution.ts",
   );
@@ -174,6 +154,31 @@ function main() {
     platformSkillRuntime,
     "PLATFORM_RESOURCES_ARCHITECT_INSTRUCTIONS_MD",
     "server-side Resources Architect instructions",
+  );
+  assertIncludes(
+    platformSkillRuntime,
+    "use the five canonical Polynet tools only",
+    "canonical Resources Architect tool boundary",
+  );
+  assertIncludes(
+    platformSkillRuntime,
+    "whose ingestion status is ready",
+    "ready-source-only architect boundary",
+  );
+  assertIncludes(
+    platformSkillRuntime,
+    "The explicit 'Build my resources' launch request is sufficient direction",
+    "explicit launch alignment contract",
+  );
+  assertIncludes(
+    platformSkillRuntime,
+    "Never apply the changeset yourself",
+    "founder Apply or Reject boundary",
+  );
+  assertIncludes(
+    runtimeInvocationSurface,
+    "explicit builder request to stage a Resources changeset",
+    "member dock builder staging permission",
   );
   assertIncludes(
     platformSkillRuntime,
@@ -254,21 +259,23 @@ function main() {
     "community_resource_lane",
     "platform skill runtime evidence includes resource lane",
   );
-  for (const toolName of PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES) {
-    assertIncludes(retrievalTools, toolName, "Resources Architect retrieval tool");
-    assertIncludes(toolRegistry, `${toolName}: {`, "Resources Architect tool registry entry");
-    assertIncludes(runtimeToolPolicy, `${toolName}: {`, "Resources Architect tool policy");
-    assertIncludes(runtimeAgentLoop, `params.toolName === "${toolName}"`, "Resources Architect tool executor");
+  for (const toolName of [
+    "community_resource_builder_list",
+    "community_resource_builder_read",
+    "community_resource_builder_stage_changeset",
+  ]) {
+    assert.ok(!retrievalTools.includes(toolName), `${toolName} must not be a retrieval tool`);
+    assert.ok(!toolRegistry.includes(toolName), `${toolName} must not be registered`);
+    assert.ok(!runtimeToolPolicy.includes(toolName), `${toolName} must not have a runtime policy`);
+    assert.ok(!runtimeAgentLoop.includes(toolName), `${toolName} must not have a runtime executor`);
   }
-  assertIncludes(
-    runtimeAgentLoop,
-    "buildEffectiveAllowedToolNames",
-    "selected platform skill tool exposure",
+  assert.ok(
+    !runtimeAgentLoop.includes("buildEffectiveAllowedToolNames"),
+    "platform skills must not expand the allowed tool surface",
   );
-  assertIncludes(
-    runtimeAgentLoop,
-    "buildPlatformSkillToolNamesForSelection",
-    "platform skill tool selection helper",
+  assert.ok(
+    !runtimeAgentLoop.includes("buildPlatformSkillToolNamesForSelection"),
+    "platform skills must not select a parallel native tool plane",
   );
   assert.ok(
     !/resolveAllowedToolNames[\s\S]*community_resource_builder_list/.test(

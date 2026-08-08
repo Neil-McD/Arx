@@ -1,3 +1,8 @@
+import type {
+  CommunitySourceIntakePhase,
+  CommunitySourceIntakeResult,
+} from "../../../../shared/useCommunityResourceController";
+
 export type CommunityResource = {
   id: string;
   module_id: string | null;
@@ -49,6 +54,7 @@ export type CommunityResourceModule = {
 
 export type CommunityResourcesCapabilities = {
   hasActiveCommunity: boolean;
+  activeCommunityId: string | null;
   activeCommunityName: string | null;
   canOperateResources: boolean;
 };
@@ -77,7 +83,19 @@ export type CommunityResourcesActions = {
     beforeResourceId?: string | null,
   ) => Promise<boolean> | boolean;
   openNewResourceModal: (moduleId?: string | null) => void;
-  openNewSourceModal: (moduleId?: string | null) => void;
+  handleAddCommunitySources: (input: {
+    links: string[];
+    files: File[];
+    retryExisting?: boolean;
+    onPhase?: (phase: CommunitySourceIntakePhase) => void;
+  }) => Promise<CommunitySourceIntakeResult | null>;
+  handleBuildCommunityResources: (input: {
+    communityId: string;
+    readySources: Array<{
+      id: string;
+      ingestedAt: string | null;
+    }>;
+  }) => Promise<boolean>;
   resourceEditor: {
     editingResourceId: string | null;
     titleInput: string;

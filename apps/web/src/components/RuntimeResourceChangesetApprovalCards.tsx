@@ -2,7 +2,6 @@ import { useEffect, useState } from "react";
 import { Check, X } from "lucide-react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import {
-  approveCloudCommunityResourceBuilderChangeset,
   applyCloudCommunityResourceBuilderChangeset,
   getCloudCommunityResourceBuilderChangesetStatus,
   rejectCloudCommunityResourceBuilderChangeset,
@@ -10,7 +9,7 @@ import {
 import { dispatchCommunityResourcesMutated } from "../../../../shared/communityResourceMutationEvents";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 
-const CHANGESET_CARD_LIMIT = 2;
+const CHANGESET_CARD_LIMIT = 1;
 
 type ResourceChangesetPreviewItem = {
   id: string;
@@ -91,6 +90,23 @@ function parseToolOutputRecord(payload: Record<string, unknown>): Record<string,
   );
 }
 
+function findChangesetOutputRecord(
+  value: unknown,
+  depth = 0,
+): Record<string, unknown> | null {
+  if (depth > 5) return null;
+  const record = typeof value === "string" ? parseJsonRecord(value) : asRecord(value);
+  if (!record) return null;
+  const changesetId = asString(record.changeset_id);
+  const communityId = asString(record.community_id);
+  if (changesetId && communityId) return record;
+  for (const key of ["result", "value", "data", "details", "output", "output_preview"] as const) {
+    const nested = findChangesetOutputRecord(record[key], depth + 1);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 function normalizePreviewItems(value: unknown): ResourceChangesetPreviewItem[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 3).flatMap((raw, index) => {
@@ -120,12 +136,40 @@ function extractTerminalChangesetIds(
     const payload = asRecord(event.payload);
     if (!payload || payload.success !== true) continue;
     const toolName = asString(payload.tool_name);
-    if (toolName !== "community_resource_builder_apply_changeset") continue;
-    const output = parseToolOutputRecord(payload);
+    if (
+      toolName !== "community_resource_builder_apply_changeset" &&
+      toolName !== "polynet_call"
+    ) continue;
+    const output = findChangesetOutputRecord(parseToolOutputRecord(payload));
+    const kind = asString(output?.kind);
+    if (
+      kind !== "community_resource_builder_changeset_applied" &&
+      kind !== "community_resource_builder_changeset_rejected"
+    ) continue;
     const changesetId = asString(output?.changeset_id);
     if (changesetId) terminal.add(changesetId);
   }
   return terminal;
+}
+
+export function buildResourceChangesetCardFromPayload(
+  value: unknown,
+  seq = 0,
+): ResourceChangesetCardModel | null {
+  const output = findChangesetOutputRecord(value);
+  const changesetId = asString(output?.changeset_id);
+  const communityId = asString(output?.community_id);
+  if (!changesetId || !communityId) return null;
+  return {
+    id: changesetId,
+    communityId,
+    changesetId,
+    summary: asString(output?.summary) || "Resource changes proposed.",
+    operationCount: asNumber(output?.operation_count ?? output?.preview_total_count),
+    warningCount: asNumber(output?.warning_count),
+    previewItems: normalizePreviewItems(output?.preview_items),
+    seq,
+  };
 }
 
 export function extractRuntimeResourceChangesetCards(
@@ -138,26 +182,20 @@ export function extractRuntimeResourceChangesetCards(
     const payload = asRecord(event.payload);
     if (!payload || payload.success !== true) continue;
     const toolName = asString(payload.tool_name);
-    if (toolName !== "community_resource_builder_stage_changeset") continue;
-    const output = parseToolOutputRecord(payload);
+    if (
+      toolName !== "community_resource_builder_stage_changeset" &&
+      toolName !== "polynet_write"
+    ) continue;
+    const rawOutput = parseToolOutputRecord(payload);
+    const output = findChangesetOutputRecord(rawOutput);
     if (asString(output?.kind) !== "community_resource_builder_changeset_staged") {
       continue;
     }
-    const changesetId = asString(output?.changeset_id);
-    const communityId = asString(output?.community_id);
-    if (!changesetId || !communityId || terminalChangesetIds.has(changesetId)) {
+    const card = buildResourceChangesetCardFromPayload(output, event.seq);
+    if (!card || terminalChangesetIds.has(card.changesetId)) {
       continue;
     }
-    cards.set(changesetId, {
-      id: changesetId,
-      communityId,
-      changesetId,
-      summary: asString(output?.summary) || "Resource changes proposed.",
-      operationCount: asNumber(output?.operation_count ?? output?.preview_total_count),
-      warningCount: asNumber(output?.warning_count),
-      previewItems: normalizePreviewItems(output?.preview_items),
-      seq: event.seq,
-    });
+    cards.set(card.changesetId, card);
   }
   return [...cards.values()]
     .sort((a, b) => a.seq - b.seq)
@@ -170,7 +208,6 @@ function ResourceChangesetApprovalCard(props: {
 }): JSX.Element {
   const [actionState, setActionState] = useState<ResourceChangesetActionState>("idle");
   const [serverStatus, setServerStatus] = useState<ResourceChangesetServerStatus | null>(null);
-  const [approvedByCurrentUser, setApprovedByCurrentUser] = useState(false);
   const [verifiedApply, setVerifiedApply] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const isBusy = actionState === "applying" || actionState === "rejecting";
@@ -181,7 +218,6 @@ function ResourceChangesetApprovalCard(props: {
     serverStatus === "rejected" ||
     serverStatus === "failed" ||
     serverStatus === "expired";
-  const canApply = !(serverStatus === "approved" && !approvedByCurrentUser);
 
   useEffect(() => {
     if (!props.session) return;
@@ -197,15 +233,11 @@ function ResourceChangesetApprovalCard(props: {
         const status = asResourceChangesetServerStatus(payload?.status);
         if (status) {
           setServerStatus(status);
-          setApprovedByCurrentUser(payload?.approved_by_current_user === true);
           if (status === "applied") {
             setActionState("applied");
             setVerifiedApply(true);
           }
           if (status === "rejected") setActionState("rejected");
-          if (status === "approved" && payload?.approved_by_current_user !== true) {
-            setErrorMessage("This changeset was approved by another manager.");
-          }
           if (status === "failed") {
             setActionState("error");
             setErrorMessage("This proposed changeset failed.");
@@ -225,26 +257,16 @@ function ResourceChangesetApprovalCard(props: {
   }, [props.card.changesetId, props.card.communityId, props.session]);
 
   async function applyChangeset(): Promise<void> {
-    if (!props.session || isBusy || isDone || !canApply) return;
+    if (!props.session || isBusy || isDone) return;
     setActionState("applying");
     setVerifiedApply(false);
     setErrorMessage(null);
     try {
-      if (serverStatus !== "approved") {
-        await approveCloudCommunityResourceBuilderChangeset({
-          session: props.session,
-          communityId: props.card.communityId,
-          changesetId: props.card.changesetId,
-        });
-        setServerStatus("approved");
-        setApprovedByCurrentUser(true);
-      }
       await applyCloudCommunityResourceBuilderChangeset({
         session: props.session,
         communityId: props.card.communityId,
         changesetId: props.card.changesetId,
       });
-      setApprovedByCurrentUser(true);
       try {
         const payload = await getCloudCommunityResourceBuilderChangesetStatus<unknown, Record<string, unknown>>({
           session: props.session,
@@ -312,7 +334,7 @@ function ResourceChangesetApprovalCard(props: {
             className="resource-changeset-icon-action approve"
             aria-label="Apply resource changes"
             title="Apply"
-            disabled={isBusy || isDone || !canApply}
+            disabled={isBusy || isDone}
             onClick={() => {
               void applyChangeset();
             }}

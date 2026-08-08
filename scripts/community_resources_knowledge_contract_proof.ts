@@ -608,15 +608,40 @@ assert.doesNotMatch(
   />\s*No pages yet\s*</,
   "empty categories should collapse to the inline add-page action instead of rendering a duplicate empty-state row",
 );
-assert.match(
-  webResourceController,
-  /openNewSourceModal[\s\S]*setResourceRoleInput\("source"\)[\s\S]*setResourceStatusInput\("review"\)/,
-  "web resources controller must make new source intake land in review status",
-);
 assert.doesNotMatch(
+  `${webResourceController}\n${resourceContracts}\n${resourcesPanel}`,
+  /openNewSourceModal/,
+  "resources must not keep the retired modal-based source intake path",
+);
+assert.match(
+  resourceController,
+  /handleAddCommunitySources[\s\S]*uploadCloudCommunityResourceSourceFile[\s\S]*saveCloudCommunityResource[\s\S]*ingestCloudCommunitySources/,
+  "source intake must reuse the canonical upload, resource save, and ingestion gateways",
+);
+assert.match(
   resourcesPanel,
-  /actions\.openNewSourceModal/,
-  "resources panel must not expose a separate source intake button in the reader header",
+  /Seed your knowledge[\s\S]*Add and read sources[\s\S]*actions\.handleAddCommunitySources/,
+  "manager-empty resources must expose one canonical link and file source intake",
+);
+assert.match(
+  resourcesPanel,
+  /Build my resources/,
+  "ready sources must expose one explicit Resources Architect launch action",
+);
+assert.match(
+  resourcesPanel,
+  /source_ingestion_status === "ready"[\s\S]*onBuildResources=\{actions\.handleBuildCommunityResources\}/,
+  "resource launch must receive only canonical ready source records",
+);
+assert.match(
+  resourceContracts,
+  /handleBuildCommunityResources:[\s\S]*communityId: string[\s\S]*readySources:/,
+  "resource launch must stay bound to one community and an explicit ready-source set",
+);
+assert.match(
+  resourceController,
+  /sourceIntakeInFlightRef[\s\S]*if \(sourceIntakeInFlightRef\.current\) return null/,
+  "source intake must reject duplicate in-flight submissions synchronously",
 );
 assert.doesNotMatch(
   resourcesPanel,

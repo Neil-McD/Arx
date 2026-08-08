@@ -130,13 +130,18 @@ assert.match(
 );
 assert.match(
   createController,
-  /resolveUsableSession[\s\S]*isAccountSetupComplete[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*avatarStorageId: null[\s\S]*oneLiner: null[\s\S]*onCommunityCreated\(community\)/,
-  "canonical creation must preserve session, account, attached draft, mutation, and completion boundaries without premature branding",
+  /resolveUsableSession[\s\S]*isAccountSetupComplete[\s\S]*prepareCloudCommunityBrandingField[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*avatarStorageId: avatarField\.storageId[\s\S]*oneLiner: current\.createCommunityOneLiner[\s\S]*founderSubscriptionId[\s\S]*onCommunityCreated\(community\)/,
+  "canonical creation must preserve session, account, branding, attached subscription, mutation, and completion boundaries",
+);
+assert.match(
+  createController,
+  /createInFlightRef\.current[\s\S]*founder_subscription_already_attached[\s\S]*onCommunityCreateRecoveryRequired/,
+  "community creation must suppress duplicate submission and recover an already-attached subscription",
 );
 assert.match(
   app,
-  /const communityUi = useWebCommunityUiController<[\s\S]*onCommunityCreated: \(community\) => \{[\s\S]*setCommunities[\s\S]*enterJoinedCommunity/,
-  "App should project a created community into the directory and enter the canonical destination",
+  /const communityUi = useWebCommunityUiController<[\s\S]*onCommunityCreated: \(community\) => \{[\s\S]*setCommunities[\s\S]*enterJoinedCommunity\(\{[\s\S]*communityTab: "resources"/,
+  "App should project a created community into the directory and enter canonical Resources onboarding",
 );
 assert.match(
   pendingAuthIntent,

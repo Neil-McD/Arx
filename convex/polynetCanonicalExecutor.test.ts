@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { internal } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import schema from "./schema";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
@@ -135,6 +135,36 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       ownerSubject: "canonical-owner-subject",
       memberSubject: "canonical-member-subject",
     };
+  });
+}
+
+async function createAdminFixture(
+  t: ReturnType<typeof convexTest>,
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+) {
+  const nowMs = 1_760_000_000_100;
+  return await t.run(async (ctx) => {
+    const authSubject = "canonical-admin-subject";
+    const userId = await ctx.db.insert("users", {
+      authSubject,
+      displayName: "canonical-admin",
+      handle: "canonical-admin",
+      normalizedHandle: "canonical-admin",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    await ctx.db.insert("communityMemberships", {
+      communityId: fixture.communityId,
+      userId,
+      role: "admin",
+      accessSource: "free_grant",
+      active: true,
+      activationSequence: 2,
+      activatedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { authSubject, userId };
   });
 }
 
@@ -921,12 +951,10 @@ test("retired AI Feed writer fails closed without creating a post", async () => 
   expect(rows).toHaveLength(0);
 });
 
-test("builder resource changes use staged writes plus discoverable, idempotent calls", async () => {
+test("builder resource agents may stage changes but cannot make terminal decisions", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
-  const asMember = t.withIdentity({ subject: fixture.memberSubject });
   const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
-  const memberCtx = executionContext(asMember);
   const ownerCtx = executionContext(asOwner);
 
   const stage = await executePolynetCanonicalTool({
@@ -965,70 +993,339 @@ test("builder resource changes use staged writes plus discoverable, idempotent c
   );
   expect(changesetId).not.toBe("");
 
-  await expect(
-    executePolynetCanonicalTool({
-      ctx: memberCtx,
-      authSubject: fixture.memberSubject,
-      userId: fixture.memberId,
-      principalKind: "personal_agent",
-      evidenceSurface: "member_agent_dock",
-      toolName: "polynet_call",
-      input: {
-        operation: "community.resources.changeset.approve",
-        version: 1,
-        target:
-          "/communities/canonical-community/capabilities/community.resources.changeset.approve.json",
-        input: { changeset_id: changesetId },
-        idempotency_key: "member-approve-denied",
-      },
-    }),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "operation_not_found",
+  const agentPrincipals = [
+    {
+      principalKind: "personal_agent" as const,
+      evidenceSurface: "member_agent_dock" as const,
+    },
+    {
+      principalKind: "external_mcp" as const,
+      evidenceSurface: "external_mcp" as const,
+    },
+    {
+      principalKind: "community_agent" as const,
+      evidenceSurface: "community_concierge" as const,
+      mountedCommunityId: fixture.communityId,
+    },
+  ];
+  for (const principal of agentPrincipals) {
+    for (const operation of ["approve", "reject", "apply"] as const) {
+      await expect(
+        executePolynetCanonicalTool({
+          ctx: ownerCtx,
+          authSubject: fixture.ownerSubject,
+          userId: fixture.ownerId,
+          principalKind: principal.principalKind,
+          evidenceSurface: principal.evidenceSurface,
+          ...(principal.mountedCommunityId
+            ? { mountedCommunityId: principal.mountedCommunityId }
+            : {}),
+          toolName: "polynet_call",
+          input: {
+            operation: `community.resources.changeset.${operation}`,
+            version: 1,
+            target: `/communities/canonical-community/capabilities/community.resources.changeset.${operation}.json`,
+            input: { changeset_id: changesetId },
+            idempotency_key: `${principal.principalKind}-${operation}-denied`,
+          },
+        }),
+      ).resolves.toMatchObject({
+        ok: false,
+        code: "operation_not_found",
+      });
+    }
+  }
+
+  const applied = await asOwner.mutation(
+    api.communityResources.applyCommunityResourceBuilderChangeset,
+    {
+      communityId: fixture.communityId,
+      changesetId: changesetId as any,
+    },
+  );
+  expect(applied).toMatchObject({
+    ok: true,
+    status: "applied",
+    deduped: false,
   });
 
-  const approveInput = {
-    operation: "community.resources.changeset.approve",
-    version: 1,
-    target:
-      "/communities/canonical-community/capabilities/community.resources.changeset.approve.json",
-    input: { changeset_id: changesetId },
-    idempotency_key: "builder-approve-1",
-  };
-  const approved = await executePolynetCanonicalTool({
+  const admin = await createAdminFixture(t, fixture);
+  const asAdmin = t.withIdentity({ subject: admin.authSubject });
+  await expect(
+    asAdmin.mutation(
+      api.communityResources.applyCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: changesetId as any,
+      },
+    ),
+  ).resolves.toMatchObject({
+    ok: true,
+    status: "applied",
+    deduped: true,
+  });
+
+  const legacyStage = await executePolynetCanonicalTool({
     ctx: ownerCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
     principalKind: "external_mcp",
     evidenceSurface: "external_mcp",
-    toolName: "polynet_call",
-    input: approveInput,
-  });
-  expect(approved).toMatchObject({
-    ok: true,
-    value: {
-      operation: "community.resources.changeset.approve",
-      deduped: false,
-      result: { status: "approved" },
+    toolName: "polynet_write",
+    input: {
+      path: "/communities/canonical-community/builder/resources/",
+      mode: "create",
+      content: {
+        summary: "Stage one legacy-approved resource category.",
+        operations: [
+          {
+            op: "create_module",
+            module_key: "legacy-approved-test",
+            name: "Legacy approved test",
+            module_status: "draft",
+          },
+        ],
+      },
+      idempotency_key: "builder-stage-legacy-approved-1",
     },
   });
+  const legacyChangesetId = String(
+    legacyStage.ok ? legacyStage.value.ref ?? "" : "",
+  );
+  expect(legacyChangesetId).not.toBe("");
+  await asOwner.mutation(
+    api.communityResources.approveCommunityResourceBuilderChangeset,
+    {
+      communityId: fixture.communityId,
+      changesetId: legacyChangesetId as any,
+    },
+  );
   await expect(
-    executePolynetCanonicalTool({
-      ctx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "external_mcp",
-      evidenceSurface: "external_mcp",
-      toolName: "polynet_call",
-      input: approveInput,
-    }),
+    asAdmin.mutation(
+      api.communityResources.applyCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: legacyChangesetId as any,
+      },
+    ),
   ).resolves.toMatchObject({
     ok: true,
-    value: {
-      deduped: true,
-      receipt: { deduped: true },
+    status: "applied",
+    deduped: false,
+  });
+
+  const rejectedStage = await executePolynetCanonicalTool({
+    ctx: ownerCtx,
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "external_mcp",
+    evidenceSurface: "external_mcp",
+    toolName: "polynet_write",
+    input: {
+      path: "/communities/canonical-community/builder/resources/",
+      mode: "create",
+      content: {
+        summary: "Stage one rejected resource category.",
+        operations: [
+          {
+            op: "create_module",
+            module_key: "rejected-test",
+            name: "Rejected test",
+            module_status: "draft",
+          },
+        ],
+      },
+      idempotency_key: "builder-stage-rejected-1",
     },
   });
+  const rejectedChangesetId = String(
+    rejectedStage.ok ? rejectedStage.value.ref ?? "" : "",
+  );
+  await asOwner.mutation(
+    api.communityResources.rejectCommunityResourceBuilderChangeset,
+    {
+      communityId: fixture.communityId,
+      changesetId: rejectedChangesetId as any,
+      reason: "Rejected in lifecycle proof.",
+    },
+  );
+  await expect(
+    asOwner.mutation(
+      api.communityResources.applyCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: rejectedChangesetId as any,
+      },
+    ),
+  ).rejects.toThrow("community_resource_changeset_not_applicable");
+
+  await t.run(async (ctx) => {
+    const modules = await ctx.db.query("communityResourceModules").collect();
+    expect(modules.map((module) => module.name).sort()).toEqual([
+      "Canonical test",
+      "Legacy approved test",
+    ]);
+  });
+});
+
+test("resource changeset staging permits only one live proposal per community", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+  const stage = (idempotencyKey: string, name: string) =>
+    t.mutation(
+      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      {
+        userId: fixture.ownerId,
+        communityId: fixture.communityId,
+        summary: `Stage ${name}.`,
+        operations: [
+          {
+            op: "create_module",
+            module_key: idempotencyKey,
+            name,
+            module_status: "draft",
+          },
+        ],
+        idempotencyKey,
+      },
+    );
+
+  await expect(
+    t.mutation(
+      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      {
+        userId: fixture.memberId,
+        communityId: fixture.communityId,
+        summary: "Unauthorized proposal.",
+        operations: [
+          {
+            op: "create_module",
+            module_key: "unauthorized",
+            name: "Unauthorized",
+            module_status: "draft",
+          },
+        ],
+        idempotencyKey: "unauthorized",
+      },
+    ),
+  ).rejects.toThrow();
+
+  const first = await stage("single-active-1", "Single active one");
+  expect(first).toMatchObject({ status: "staged", deduped: false });
+  await expect(stage("single-active-1", "Single active one")).resolves.toMatchObject({
+    changeset_id: first.changeset_id,
+    status: "staged",
+    deduped: true,
+  });
+  await expect(stage("single-active-2", "Single active two")).rejects.toThrow(
+    "community_resource_changeset_already_pending",
+  );
+  await expect(
+    asOwner.query(
+      api.communityResources.listPendingCommunityResourceBuilderChangesets,
+      { communityId: fixture.communityId, limit: 5 },
+    ),
+  ).resolves.toHaveLength(1);
+  await expect(
+    t.mutation(
+      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      {
+        userId: fixture.ownerId,
+        communityId: fixture.otherCommunityId,
+        summary: "Independent community proposal.",
+        operations: [
+          {
+            op: "create_module",
+            module_key: "other-community",
+            name: "Other community",
+            module_status: "draft",
+          },
+        ],
+        idempotencyKey: "other-community",
+      },
+    ),
+  ).resolves.toMatchObject({ status: "staged", deduped: false });
+
+  await asOwner.mutation(
+    api.communityResources.rejectCommunityResourceBuilderChangeset,
+    {
+      communityId: fixture.communityId,
+      changesetId: first.changeset_id as any,
+      reason: "Release the active slot.",
+    },
+  );
+  const second = await stage("single-active-2", "Single active two");
+  await t.run(async (ctx) => {
+    await ctx.db.patch(second.changeset_id as any, {
+      createdAt: Date.now() - 25 * 60 * 60 * 1000,
+      updatedAt: Date.now() - 25 * 60 * 60 * 1000,
+    });
+  });
+  const third = await stage("single-active-3", "Single active three");
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(second.changeset_id as any)).toMatchObject({
+      status: "expired",
+    });
+  });
+
+  await asOwner.mutation(
+    api.communityResources.approveCommunityResourceBuilderChangeset,
+    {
+      communityId: fixture.communityId,
+      changesetId: third.changeset_id as any,
+    },
+  );
+  await expect(stage("single-active-4", "Single active four")).rejects.toThrow(
+    "community_resource_changeset_already_pending",
+  );
+  await asOwner.mutation(
+    api.communityResources.applyCommunityResourceBuilderChangeset,
+    {
+      communityId: fixture.communityId,
+      changesetId: third.changeset_id as any,
+    },
+  );
+  await expect(stage("single-active-4", "Single active four")).resolves.toMatchObject({
+    status: "staged",
+    deduped: false,
+  });
+});
+
+test("concurrent resource changeset staging leaves one live proposal", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+  const stage = (suffix: string) =>
+    t.mutation(
+      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      {
+        userId: fixture.ownerId,
+        communityId: fixture.communityId,
+        summary: `Concurrent proposal ${suffix}.`,
+        operations: [
+          {
+            op: "create_module",
+            module_key: `concurrent-${suffix}`,
+            name: `Concurrent ${suffix}`,
+            module_status: "draft",
+          },
+        ],
+        idempotencyKey: `concurrent-${suffix}`,
+      },
+    );
+  const results = await Promise.allSettled([stage("a"), stage("b")]);
+  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  const rejected = results.find((result) => result.status === "rejected");
+  expect(String(rejected && rejected.status === "rejected" ? rejected.reason : "")).toContain(
+    "community_resource_changeset_already_pending",
+  );
+  await expect(
+    asOwner.query(
+      api.communityResources.listPendingCommunityResourceBuilderChangesets,
+      { communityId: fixture.communityId, limit: 5 },
+    ),
+  ).resolves.toHaveLength(1);
 });
 
 test("builder resource effects survive receipt-completion crashes without duplication", async () => {
@@ -1036,20 +1333,6 @@ test("builder resource effects survive receipt-completion crashes without duplic
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
   const ownerCtx = executionContext(asOwner);
-  const executeOwner = (
-    ctx: ReturnType<typeof executionContext>,
-    toolName: "polynet_write" | "polynet_call",
-    input: Record<string, unknown>,
-  ) =>
-    executePolynetCanonicalTool({
-      ctx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "external_mcp",
-      evidenceSurface: "external_mcp",
-      toolName,
-      input,
-    });
 
   const stageInput = {
     path: "/communities/canonical-community/builder/resources/",
@@ -1087,158 +1370,13 @@ test("builder resource effects survive receipt-completion crashes without duplic
       });
     },
   });
-  const stagedChangesetId = await t.run(async (ctx) => {
+  await t.run(async (ctx) => {
     const changesets = await ctx.db
       .query("communityResourceBuilderChangesets")
       .collect();
     expect(changesets).toHaveLength(1);
     expect(changesets[0]).toMatchObject({ status: "staged" });
-    return changesets[0]!._id;
-  });
-
-  const approveInput = {
-    operation: "community.resources.changeset.approve",
-    version: 1,
-    target:
-      "/communities/canonical-community/capabilities/community.resources.changeset.approve.json",
-    input: { changeset_id: String(stagedChangesetId) },
-    idempotency_key: "builder-approve-crash-1",
-  };
-  const recoveredApprove =
-    await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
-      healthyCtx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "external_mcp",
-      evidenceSurface: "external_mcp",
-      toolName: "polynet_call",
-      input: approveInput,
-      idempotencyKey: "builder-approve-crash-1",
-      expectedErrorCode: "polynet_call_failed",
-      assertDomainEffect: async () => {
-        await t.run(async (ctx) => {
-          expect(await ctx.db.get(stagedChangesetId)).toMatchObject({
-            status: "approved",
-          });
-        });
-      },
-    });
-  expect(recoveredApprove).toMatchObject({
-    ok: true,
-    value: {
-      result: { status: "approved", deduped: true },
-    },
-  });
-
-  const applyInput = {
-    operation: "community.resources.changeset.apply",
-    version: 1,
-    target:
-      "/communities/canonical-community/capabilities/community.resources.changeset.apply.json",
-    input: { changeset_id: String(stagedChangesetId) },
-    idempotency_key: "builder-apply-crash-1",
-  };
-  const recoveredApply =
-    await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
-      healthyCtx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "external_mcp",
-      evidenceSurface: "external_mcp",
-      toolName: "polynet_call",
-      input: applyInput,
-      idempotencyKey: "builder-apply-crash-1",
-      expectedErrorCode: "polynet_call_failed",
-      assertDomainEffect: async () => {
-        await t.run(async (ctx) => {
-          expect(await ctx.db.get(stagedChangesetId)).toMatchObject({
-            status: "applied",
-          });
-          expect(
-            await ctx.db.query("communityResourceModules").collect(),
-          ).toHaveLength(1);
-        });
-      },
-    });
-  expect(recoveredApply).toMatchObject({
-    ok: true,
-    value: {
-      result: { status: "applied", deduped: true },
-    },
-  });
-  await t.run(async (ctx) => {
-    const modules = await ctx.db.query("communityResourceModules").collect();
-    expect(modules).toHaveLength(1);
-    expect(modules[0]).toMatchObject({ name: "Crash-safe module" });
-  });
-
-  const rejectedStage = await executeOwner(ownerCtx, "polynet_write", {
-    path: "/communities/canonical-community/builder/resources/",
-    mode: "create",
-    content: {
-      summary: "Stage one changeset for crash-safe rejection.",
-      operations: [
-        {
-          op: "create_module",
-          module_key: "rejected-module",
-          name: "Rejected module",
-          module_status: "draft",
-        },
-      ],
-    },
-    idempotency_key: "builder-stage-reject-1",
-  });
-  const rejectedChangesetId = String(
-    rejectedStage.ok ? rejectedStage.value.ref ?? "" : "",
-  );
-  expect(rejectedChangesetId).not.toBe("");
-  const rejectInput = {
-    operation: "community.resources.changeset.reject",
-    version: 1,
-    target:
-      "/communities/canonical-community/capabilities/community.resources.changeset.reject.json",
-    input: {
-      changeset_id: rejectedChangesetId,
-      reason: "Rejected during crash-recovery proof.",
-    },
-    idempotency_key: "builder-reject-crash-1",
-  };
-  const recoveredReject =
-    await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
-      healthyCtx: ownerCtx,
-      authSubject: fixture.ownerSubject,
-      userId: fixture.ownerId,
-      principalKind: "external_mcp",
-      evidenceSurface: "external_mcp",
-      toolName: "polynet_call",
-      input: rejectInput,
-      idempotencyKey: "builder-reject-crash-1",
-      expectedErrorCode: "polynet_call_failed",
-      assertDomainEffect: async () => {
-        await t.run(async (ctx) => {
-          expect(await ctx.db.get(rejectedChangesetId as any)).toMatchObject({
-            status: "rejected",
-          });
-        });
-      },
-    });
-  expect(recoveredReject).toMatchObject({
-    ok: true,
-    value: {
-      result: { status: "rejected", deduped: true },
-    },
-  });
-  await t.run(async (ctx) => {
-    const changesets = await ctx.db
-      .query("communityResourceBuilderChangesets")
-      .collect();
-    expect(changesets).toHaveLength(2);
-    expect(
-      changesets.filter((changeset) => changeset.status === "applied"),
-    ).toHaveLength(1);
-    expect(
-      changesets.filter((changeset) => changeset.status === "rejected"),
-    ).toHaveLength(1);
+    expect(await ctx.db.query("communityResourceModules").collect()).toHaveLength(0);
   });
 });
 

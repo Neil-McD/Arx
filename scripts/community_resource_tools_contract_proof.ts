@@ -135,13 +135,17 @@ assert.match(
   /POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH[\s\S]*stageCommunityResourceBuilderChangesetInternal/,
   "builder writes must stage changesets instead of directly mutating resources",
 );
-for (const operation of [
+for (const forbiddenOperation of [
   "community.resources.changeset.status",
   "community.resources.changeset.approve",
   "community.resources.changeset.reject",
   "community.resources.changeset.apply",
 ]) {
-  assert.match(executor, new RegExp(operation.replaceAll(".", "\\.")));
+  assert.doesNotMatch(
+    executor,
+    new RegExp(forbiddenOperation.replaceAll(".", "\\.")),
+    `${forbiddenOperation} must remain a product-control-only command`,
+  );
 }
 assert.match(authority, /relation === "owner" \|\| relation === "admin"/);
 assert.match(authority, /canUseBuilderProjection: lane === "builder"/);

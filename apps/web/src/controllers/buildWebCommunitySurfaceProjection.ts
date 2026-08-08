@@ -232,6 +232,7 @@ export function buildWebCommunitySurfaceProjection(
     resources: {
       capabilities: {
         hasActiveCommunity: Boolean(params.activeCommunity),
+        activeCommunityId: params.activeCommunity?.id ?? null,
         activeCommunityName: params.activeCommunity?.name ?? null,
         canOperateResources: Boolean(params.hasSession && params.canManageResourcesActiveCommunity),
       },
