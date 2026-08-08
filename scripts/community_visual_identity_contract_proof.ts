@@ -138,6 +138,11 @@ assert.match(
 );
 assert.match(
   shellCss,
+  /\.community-nav-identity\.has-banner:not\(\.is-condensed\) \.community-nav-settings svg\s*\{[^}]*filter:\s*drop-shadow\(0 1px 2px rgba\(0, 0, 0, 0\.82\)\);/,
+  "the banner settings wheel should retain contrast over bright artwork",
+);
+assert.match(
+  shellCss,
   /\.community-nav-identity\.has-banner:not\(\.is-condensed\):hover::after,[\s\S]*?\.community-nav-identity\.has-banner:not\(\.is-condensed\):focus-within::after\s*\{[^}]*opacity:\s*1;/,
   "hover and keyboard focus should reveal the stronger banner identity veil",
 );
