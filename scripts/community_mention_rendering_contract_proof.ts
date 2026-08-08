@@ -205,8 +205,8 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
   assert.match(
     styles,
-    /\.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent-attention\);/,
-    "self-mention attention should remain on the message container",
+    /\.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent-selection\);/,
+    "self-mention selection should remain on the message container",
   );
 }
 

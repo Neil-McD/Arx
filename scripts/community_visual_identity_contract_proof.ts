@@ -103,6 +103,11 @@ assert.match(
 );
 assert.match(
   communityNav,
+  /<Settings size=\{20\} strokeWidth=\{1\.8\}/,
+  "the community settings wheel should be legible at the banner corner",
+);
+assert.match(
+  communityNav,
   /bannerBottom <= navTop \+ COMMUNITY_IDENTITY_HEIGHT_PX/,
   "the identity surface should condense only after the banner leaves its sticky row",
 );
@@ -115,6 +120,11 @@ assert.match(
   shellCss,
   /\.community-nav-identity\s*\{[^}]*position:\s*sticky;[^}]*min-height:\s*44px;[^}]*background:\s*var\(--surface-nav, var\(--surface-panel\)\);/,
   "the identity row should remain sticky and resolve to the canonical navigation surface",
+);
+assert.match(
+  shellCss,
+  /\.community-nav-identity\s*\{[^}]*padding:\s*0 4px 0 12px;/,
+  "the community identity action should sit close to the banner's right edge",
 );
 assert.match(
   shellCss,
