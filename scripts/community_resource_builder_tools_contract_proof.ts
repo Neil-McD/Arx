@@ -435,7 +435,7 @@ assert.match(
 );
 assert.match(
   changesetApprovalCards,
-  /applyCloudCommunityResourceBuilderChangeset[\s\S]*readAuthoritativeStatus[\s\S]*status !== "applied"[\s\S]*setActionState\("applied"\)[\s\S]*dispatchCommunityResourcesMutated/,
+  /finishVerifiedApply[\s\S]*setActionState\("applied"\)[\s\S]*dispatchCommunityResourcesMutated[\s\S]*applyCloudCommunityResourceBuilderChangeset[\s\S]*readAuthoritativeStatus[\s\S]*status !== "applied"[\s\S]*finishVerifiedApply/,
   "approval card should verify applied changeset state before dispatching resource refresh",
 );
 assert.match(
@@ -487,6 +487,26 @@ assert.match(
   resourceBuildHandler,
   /initial-community-resources:[\s\S]*Build the first useful draft of this community's Resources[\s\S]*startResourceBuild/,
   "Resources CTA must launch one bounded idempotent turn through the existing member-agent dock",
+);
+assert.match(
+  resources,
+  /communityResourceBuilderChangesetIntent[\s\S]*polynet:personal_agent:initial-community-resources:[\s\S]*initial_community_resources[\s\S]*listPendingCommunityResourceBuilderChangesets/,
+  "the canonical initial-resource idempotency key must survive durable proposal recovery as presentation intent",
+);
+assert.match(
+  changesetApprovalCards,
+  /isInitialResources[\s\S]*Your community knowledge is ready[\s\S]*resource-changeset-next-action[\s\S]*Next/,
+  "initial community resources must present one Next action instead of a second approval decision",
+);
+assert.match(
+  changesetApprovalCards,
+  /actionInFlightRef[\s\S]*readAuthoritativeStatus[\s\S]*status === "applied"[\s\S]*finishVerifiedApply/,
+  "the final Next action must suppress duplicate requests and recover authoritative applied state",
+);
+assert.match(
+  app,
+  /onInitialResourcesApplied[\s\S]*setMobileRootPage\("community"\)[\s\S]*communityTab: "chat"/,
+  "verified initial resource application must enter the completed community",
 );
 assert.match(
   app,

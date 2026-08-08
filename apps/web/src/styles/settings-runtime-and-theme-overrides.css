@@ -643,6 +643,30 @@
   color: var(--accent-error, #c75a4a);
 }
 
+.resource-changeset-next-action {
+  min-width: 74px;
+  min-height: 34px;
+  padding: 0 16px;
+  border: 1px solid color-mix(in srgb, white 20%, transparent);
+  border-radius: 8px;
+  background: #f4f4f5;
+  color: #111114;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.resource-changeset-next-action:hover:not(:disabled),
+.resource-changeset-next-action:focus-visible:not(:disabled) {
+  background: #fff;
+}
+
+.resource-changeset-next-action:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
 .resource-changeset-preview-list {
   display: flex;
   flex-direction: column;

@@ -104,6 +104,7 @@ export function RuntimeLiveTimeline(props: {
   renderReasoningMarkdown: (text: string) => ReactNode;
   showActiveIndicators?: boolean;
   showThinkingFooter?: boolean;
+  onInitialResourcesApplied?: (communityId: string) => void;
 }): JSX.Element | null {
   const showActiveIndicators = props.showActiveIndicators ?? false;
   const allowThinkingFooter = props.showThinkingFooter ?? true;
@@ -152,6 +153,8 @@ export function RuntimeLiveTimeline(props: {
       <RuntimeResourceChangesetApprovalCards
         cards={changesetCards}
         session={props.session}
+        onInitialResourcesApplied={props.onInitialResourcesApplied}
+        disableInitialResourcesAction={showActiveIndicators}
       />
     ) : null;
 

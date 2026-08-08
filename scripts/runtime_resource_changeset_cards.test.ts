@@ -24,6 +24,7 @@ describe("resource changeset approval cards", () => {
               summary: "Draft the first Resources structure.",
               operation_count: 3,
               warning_count: 0,
+              intent: "initial_community_resources",
               preview_items: [
                 { marker: "+", title: "Start here", preview: "Draft page" },
               ],
@@ -39,6 +40,7 @@ describe("resource changeset approval cards", () => {
         communityId: "community-1",
         operationCount: 3,
         summary: "Draft the first Resources structure.",
+        intent: "initial_community_resources",
       }),
     ]);
   });
@@ -90,6 +92,7 @@ describe("resource changeset approval cards", () => {
         summary: "Recovered proposal.",
         operation_count: 2,
         warning_count: 1,
+        intent: "initial_community_resources",
         preview_items: [{ marker: "+", title: "Guide" }],
       }, 12),
     ).toEqual(
@@ -98,8 +101,21 @@ describe("resource changeset approval cards", () => {
         communityId: "community-1",
         operationCount: 2,
         warningCount: 1,
+        intent: "initial_community_resources",
         seq: 12,
       }),
     );
+  });
+
+  it("does not treat ordinary resource proposals as initial launch completion", () => {
+    expect(
+      buildResourceChangesetCardFromPayload({
+        kind: "community_resource_builder_changeset_pending",
+        changeset_id: "changeset-4",
+        community_id: "community-1",
+        summary: "Update an existing guide.",
+        operation_count: 1,
+      }),
+    ).toEqual(expect.objectContaining({ intent: null }));
   });
 });

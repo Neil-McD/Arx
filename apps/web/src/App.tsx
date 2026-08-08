@@ -3085,6 +3085,16 @@ export default function App() {
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",
         onRequestOpen: () => setMobileRootPage("agent"),
+        onInitialResourcesApplied: (communityId) => {
+          const community = communities.find((candidate) => candidate.id === communityId);
+          setMobileRootPage("community");
+          enterJoinedCommunity({
+            communityId,
+            communitySlug: community?.slug ?? null,
+            communityTab: "chat",
+          });
+          showAppToastMessage("Your community is ready.");
+        },
         community: memberAgentDockCommunity,
         surfaceContext: memberAgentSurfaceContext,
         session,

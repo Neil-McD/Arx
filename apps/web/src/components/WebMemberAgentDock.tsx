@@ -121,6 +121,7 @@ export type WebMemberAgentDockProps = {
   canManageResources?: boolean;
   mobileShellActive?: boolean;
   onRequestOpen?: () => void;
+  onInitialResourcesApplied?: (communityId: string) => void;
   mobileRoot?: boolean;
   community: WebCommunityRecord | null;
   surfaceContext: MemberAgentSurfaceContextV1 | null;
@@ -1366,6 +1367,7 @@ function WebMemberAgentDock(props, ref) {
             <RuntimeResourceChangesetApprovalCards
               cards={persistentResourceChangesetCards}
               session={props.session}
+              onInitialResourcesApplied={props.onInitialResourcesApplied}
             />
           ) : null}
 
@@ -1392,6 +1394,7 @@ function WebMemberAgentDock(props, ref) {
                   renderReasoningMarkdown={renderMarkdown}
                   showActiveIndicators={turnIsActive}
                   showThinkingFooter={!shouldRenderStreamedText}
+                  onInitialResourcesApplied={props.onInitialResourcesApplied}
                 />
               ) : turnIsActive ? (
                 <div className="member-agent-dock-reasoning">

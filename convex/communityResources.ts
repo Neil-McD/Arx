@@ -295,6 +295,7 @@ type CommunityResourceBuilderChangesetRow = {
   _id?: unknown;
   communityId: unknown;
   createdByUserId: unknown;
+  idempotencyKey?: string;
   status: "staged" | "approved" | "applied" | "rejected" | "failed" | "expired";
   summary: string;
   operations: CommunityResourceBuilderChangesetOperation[];
@@ -5282,6 +5283,18 @@ const COMMUNITY_RESOURCE_BUILDER_ACTIONABLE_STATUSES = [
   "approved",
 ] as const;
 
+function communityResourceBuilderChangesetIntent(args: {
+  communityId: unknown;
+  idempotencyKey?: string | null;
+}): "initial_community_resources" | null {
+  const idempotencyKey = String(args.idempotencyKey ?? "").trim();
+  const expectedPrefix =
+    `polynet:personal_agent:initial-community-resources:${String(args.communityId)}:`;
+  return idempotencyKey.startsWith(expectedPrefix)
+    ? "initial_community_resources"
+    : null;
+}
+
 function communityResourceBuilderChangesetExpiresAt(
   changeset: CommunityResourceBuilderChangesetRow,
 ): number {
@@ -5431,6 +5444,10 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
       }
       const existingPreview =
         buildCommunityResourceBuilderChangesetPreview(existingOperations);
+      const intent = communityResourceBuilderChangesetIntent({
+        communityId: args.communityId,
+        idempotencyKey: existing.idempotencyKey,
+      });
       return {
         ok: true,
         kind: "community_resource_builder_changeset_staged",
@@ -5445,6 +5462,7 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
         warning_count:
           getCommunityResourceBuilderPreflightIssueCount(existing.preflight),
         preflight: existing.preflight,
+        ...(intent ? { intent } : {}),
         deduped: true,
       };
     }
@@ -5493,6 +5511,10 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
       .expireCommunityResourceBuilderChangesetInternal,
     { changesetId: id },
   );
+  const intent = communityResourceBuilderChangesetIntent({
+    communityId: args.communityId,
+    idempotencyKey,
+  });
   return {
     ok: true,
     kind: "community_resource_builder_changeset_staged",
@@ -5506,6 +5528,7 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
     preview_limit: preview.preview_limit,
     warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
     preflight,
+    ...(intent ? { intent } : {}),
     deduped: false,
   };
 }
@@ -5612,6 +5635,10 @@ export const getCommunityResourceBuilderChangesetStatus = query({
     );
     const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
     const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+    const intent = communityResourceBuilderChangesetIntent({
+      communityId: args.communityId,
+      idempotencyKey: changeset.idempotencyKey,
+    });
     return {
       ok: true,
       kind: "community_resource_builder_changeset_status",
@@ -5626,6 +5653,7 @@ export const getCommunityResourceBuilderChangesetStatus = query({
       approved_by_current_user: changeset.approvedByUserId
         ? String(changeset.approvedByUserId) === String(userId)
         : false,
+      ...(intent ? { intent } : {}),
       updated_at: toIsoString(changeset.updatedAt),
     };
   },
@@ -5666,6 +5694,10 @@ export const listPendingCommunityResourceBuilderChangesets = query({
           changeset.operations,
         );
         const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+        const intent = communityResourceBuilderChangesetIntent({
+          communityId: args.communityId,
+          idempotencyKey: changeset.idempotencyKey,
+        });
         return {
           ok: true,
           kind: "community_resource_builder_changeset_pending",
@@ -5682,6 +5714,7 @@ export const listPendingCommunityResourceBuilderChangesets = query({
           approved_by_current_user: changeset.approvedByUserId
             ? String(changeset.approvedByUserId) === String(userId)
             : false,
+          ...(intent ? { intent } : {}),
           created_at: toIsoString(changeset.createdAt),
           updated_at: toIsoString(changeset.updatedAt),
         };
