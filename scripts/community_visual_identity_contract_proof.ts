@@ -82,6 +82,16 @@ assert.match(
   "community banners should preserve the established wide Polynet ratio while scaling",
 );
 assert.match(
+  shellCss,
+  /\.community-nav\s*\{[^}]*container-name:\s*community-navigation;[^}]*container-type:\s*inline-size;/,
+  "community navigation should expose its actual inline size to responsive banner framing",
+);
+assert.match(
+  shellCss,
+  /@container community-navigation \(max-width:\s*280px\)\s*\{[\s\S]*?\.community-nav-banner\s*\{[^}]*height:\s*clamp\(47px, calc\(46cqi - 30px\), 35\.2113cqi\);[^}]*aspect-ratio:\s*auto;/,
+  "narrow community navigation should progressively compress banner height without stretching the artwork",
+);
+assert.match(
   webCss,
   /\.product-shell-surface--community > \.community-nav \.community-nav-header\s*\{[^}]*margin:\s*-12px -12px 0;/,
   "desktop community banners should extend through the navigation padding to the shell edges",
