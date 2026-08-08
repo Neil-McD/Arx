@@ -6,8 +6,11 @@ const root = process.cwd();
 const fixture = JSON.parse(
   readFileSync(join(root, "scripts/seeds/community-polynet-overview.example.json"), "utf8"),
 );
-const section = readFileSync(join(root, "apps/web/src/components/WebCommunityPolynetSection.tsx"), "utf8");
-const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
+const section = readFileSync(join(root, "apps/web/src/components/CommunityMemoryGraph.tsx"), "utf8");
+const css = [
+  readFileSync(join(root, "apps/web/src/base.css"), "utf8"),
+  readFileSync(join(root, "apps/web/src/styles/community-and-content.css"), "utf8"),
+].join("\n");
 
 const ACCEPTED_STATUSES = new Set(["promising", "validated", "canonical", "contested", "stale"]);
 const FORBIDDEN_STATUSES = new Set(["draft", "candidate", "archived", "deprecated"]);

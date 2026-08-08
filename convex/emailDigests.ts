@@ -177,7 +177,7 @@ function formatDigestDateLabel(periodStartDay: string, periodEndDay: string): st
   return `${formatter.format(start)} - ${formatter.format(end)}`;
 }
 
-function itemUrlPath(communitySlug: string, tab: "chat" | "ai_feed" | "resources" | "polynet"): string {
+function itemUrlPath(communitySlug: string, tab: "chat" | "ai_feed" | "resources"): string {
   return buildCommunityTabPath(communitySlug, tab) ?? "/discover";
 }
 
@@ -318,7 +318,7 @@ function buildDigestItems(args: {
       title,
       summary,
       meta: `AI ${post.type}`,
-      urlPath: itemUrlPath(args.communitySlug, "polynet"),
+      urlPath: itemUrlPath(args.communitySlug, "chat"),
     });
   }
   for (const resource of args.resources.slice(0, 3)) {

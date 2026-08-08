@@ -820,6 +820,18 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const showInteractionProjection = communityChatPresentationMode === "canonical";
   const showCanonicalCommunityBootstrap =
     communityChatPresentationMode === "canonical_bootstrap";
+  const handleOpenCommunityProfile = useCallback((userId: string) => {
+    interactionProjection?.onCloseDrawer();
+    setProfilePanelUserId(userId);
+  }, [interactionProjection]);
+  const handleSelectCommunityRoot = useCallback((rootId: string) => {
+    setProfilePanelUserId(null);
+    interactionProjection?.onSelectRoot(rootId);
+  }, [interactionProjection]);
+  const handleOpenCommunityMemory = useCallback(() => {
+    setProfilePanelUserId(null);
+    interactionProjection?.onOpenCommunityMemory?.();
+  }, [interactionProjection]);
   const communityComposerFocusTargetKey = (() => {
     if (
       !activeCommunity?.id ||
@@ -1483,7 +1495,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           getInitials={getInitials}
           formatChatTime={formatChatTime}
           renderTextWithLinks={renderTextWithLinks}
-          onOpenProfile={setProfilePanelUserId}
+          onOpenProfile={handleOpenCommunityProfile}
           onMessageUser={canOpenDirectMessageFromCommunity ? openDirectMessage : undefined}
           containerClassName="community-interaction-drawer community-context-panel mobile-members-overlay-panel"
         />
@@ -1520,6 +1532,8 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             <div className="community-interaction-scroll">
               <WebCommunityInteractionProjection
                 {...interactionProjection}
+                onSelectRoot={handleSelectCommunityRoot}
+                onOpenCommunityMemory={handleOpenCommunityMemory}
                 floatingComposers
                 onOpenCommunityChatLightbox={onOpenCommunityChatLightbox}
                 activeCommunityName={activeCommunity?.name ?? "Community"}
@@ -1564,7 +1578,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                     });
                   }, 0);
                 }}
-                onOpenProfile={setProfilePanelUserId}
+                onOpenProfile={handleOpenCommunityProfile}
                 onMessageUser={canOpenDirectMessageFromCommunity ? openDirectMessage : undefined}
                 profilePanel={profilePanelElement}
                 onCloseProfile={() => setProfilePanelUserId(null)}

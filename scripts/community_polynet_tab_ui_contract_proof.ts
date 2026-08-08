@@ -3,289 +3,110 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const controller = readFileSync(join(root, "apps/web/src/controllers/useWebCommunityPolynetController.ts"), "utf8");
-const viewportController = readFileSync(join(root, "apps/web/src/controllers/useWebPolynetGraphViewport.ts"), "utf8");
-const section = readFileSync(join(root, "apps/web/src/components/WebCommunityPolynetSection.tsx"), "utf8");
-const preview = readFileSync(join(root, "apps/web/src/components/CommunityMemoryGraphPreview.tsx"), "utf8");
-const gateway = readFileSync(join(root, "shared/cloudCommunityPolynetGateway.ts"), "utf8");
-const activeCommunityShell = readFileSync(join(root, "apps/web/src/controllers/useWebActiveCommunityShellController.ts"), "utf8");
-const contextPanel = readFileSync(join(root, "apps/web/src/components/CommunityContextPanel.tsx"), "utf8");
-const interactionProjection = readFileSync(join(root, "apps/web/src/components/WebCommunityInteractionProjection.tsx"), "utf8");
-const communityNav = readFileSync(join(root, "shared/CommunityNav.tsx"), "utf8");
-const desktopChrome = readFileSync(join(root, "apps/web/src/components/WebShellChromeHost.tsx"), "utf8");
-const mobileShell = readFileSync(join(root, "apps/web/src/components/WebMobileCommunityShell.tsx"), "utf8");
-const app = readFileSync(join(root, "apps/web/src/App.tsx"), "utf8");
-const surfaceProjection = readFileSync(join(root, "apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts"), "utf8");
+const read = (path: string) => readFileSync(join(root, path), "utf8");
 
-function readCssRuleBody(css: string, selector: string): string {
-  const escapedSelector = selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  return css.match(new RegExp(`${escapedSelector}\\s*\\{([^}]+)\\}`))?.[1] ?? "";
-}
+const controller = read("apps/web/src/controllers/useWebCommunityPolynetController.ts");
+const interactionController = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
+const viewportController = read("apps/web/src/controllers/useWebPolynetGraphViewport.ts");
+const graph = read("apps/web/src/components/CommunityMemoryGraph.tsx");
+const preview = read("apps/web/src/components/CommunityMemoryGraphPreview.tsx");
+const gateway = read("shared/cloudCommunityPolynetGateway.ts");
+const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
+const interactionProjection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
+const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const secondaryPanels = read("apps/web/src/components/WebCommunitySecondaryPanels.tsx");
+const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
+const navigation = read("shared/appShellNavigation.ts");
+const app = read("apps/web/src/App.tsx");
+const emailDigests = read("convex/emailDigests.ts");
+const css = [
+  read("apps/web/src/base.css"),
+  read("apps/web/src/styles/shell-and-onboarding.css"),
+  read("apps/web/src/styles/community-and-content.css"),
+  read("apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
+  read("apps/web/src/index.css"),
+].join("\n");
 
-// Memory belongs in the community context/right-panel path, so the left nav
-// should not retain a hidden Polynet configuration branch.
 assert.doesNotMatch(
-  communityNav,
-  /showPolynetItem|showPolynetButton|onSelectTab\("polynet"\)/,
-  "CommunityNav should not carry a hidden Polynet item or selection path",
+  navigation,
+  /case "polynet"|\n\s*"polynet",/,
+  "community navigation should not retain a standalone Polynet tab or route case",
 );
 assert.doesNotMatch(
-  desktopChrome,
-  /showPolynetItem|canViewActiveCommunityPolynet/,
-  "Desktop community nav should not transport dead Polynet visibility state",
+  `${secondaryPanels}\n${surfaceProjection}`,
+  /WebCommunityPolynetSection|communityTab === "polynet"|polynetState|polynetActions|onBackToCommunityChat/,
+  "secondary community pages should not retain the deleted full-page memory destination",
 );
 assert.doesNotMatch(
-  mobileShell,
-  /showPolynetItem|canViewActiveCommunityPolynet/,
-  "Mobile community nav should not transport dead Polynet visibility state",
+  app,
+  /openCommunityTab\([^)]*"polynet"|communityTab:\s*"polynet"/,
+  "opening memory should not navigate away from community chat",
+);
+assert.doesNotMatch(
+  emailDigests,
+  /itemUrlPath\(args\.communitySlug, "polynet"\)/,
+  "memory digest links should not emit the retired route",
 );
 
 assert.match(
   gateway,
   /client\.query\("communityIntelligenceDirectory:getCommunityPolynetOverview" as any/,
-  "Polynet gateway should read the overview projection",
+  "memory should keep the canonical overview query",
 );
-assert.match(gateway, /acquireAuthenticatedConvexRealtimeClient/, "Polynet live updates should lease the canonical authenticated Convex realtime transport");
-assert.doesNotMatch(gateway, /createAuthenticatedConvexRealtimeClient/, "Polynet gateway must not construct a domain-local realtime transport");
-assert.match(gateway, /watchQuery\([\s\S]*api\.communityIntelligenceDirectory\.getCommunityPolynetOverview/, "Polynet live updates should subscribe to the same overview projection");
-assert.doesNotMatch(gateway, /setInterval|setTimeout/, "Polynet overview continuity should use subscriptions instead of polling");
-assert.doesNotMatch(
-  gateway,
-  /mutation\(|action\(|getCommunityArchiveHealth|requestCommunityArchiveBackfill|processCommunityArchivePending|retryCommunityArchiveFailures/,
-  "Polynet gateway should stay read-only and should not call archive operations",
-);
+assert.match(gateway, /acquireAuthenticatedConvexRealtimeClient/, "memory live updates should lease the shared realtime transport");
+assert.match(gateway, /watchQuery\([\s\S]*api\.communityIntelligenceDirectory\.getCommunityPolynetOverview/, "memory should subscribe to the same canonical projection");
+assert.doesNotMatch(gateway, /setInterval|setTimeout/, "memory continuity should not poll");
+assert.doesNotMatch(gateway, /mutation\(|action\(/, "the memory drawer must remain read-only");
 
-assert.match(controller, /fetchCloudCommunityPolynetOverview/, "Polynet controller should load the overview projection");
-assert.match(controller, /subscribeCloudCommunityPolynetOverview/, "Polynet controller should subscribe while the community surface is active");
-assert.match(controller, /unsubscribe\?\.\(\)/, "Polynet controller should dispose the overview subscription");
-assert.match(controller, /closeLiveClient\?\.\(\)/, "Polynet controller should close its realtime client");
-assert.match(controller, /canViewPolynet/, "Polynet controller should model view access, not manage access");
-assert.match(
-  controller,
-  /communityTab === "chat" \|\| communityTab === "polynet"/,
-  "Polynet controller should hydrate for the chat context rail and the full Polynet tab",
-);
-assert.match(
-  controller,
-  /COMMUNITY_POLYNET_RAIL_NODE_LIMIT = 12/,
-  "Polynet controller should use a compact node limit for the chat rail",
-);
-assert.match(
-  controller,
-  /communityTab === "chat" \? COMMUNITY_POLYNET_RAIL_NODE_LIMIT : undefined/,
-  "Polynet controller should only apply the compact limit to the chat rail",
-);
-assert.match(
-  controller,
-  /current\.communityTab !== communityTab/,
-  "Polynet controller should invalidate pending compact requests when switching tabs",
-);
-assert.doesNotMatch(
-  controller,
-  /ArchiveHealth|archiveHealth|Backfill|backfill|processPending|retryFailed|getCommunityArchiveHealth|requestCommunityArchiveBackfill|processCommunityArchivePending|retryCommunityArchiveFailures/,
-  "Polynet controller should not expose archive health or archive mutation controls",
-);
-
-assert.match(section, /community-polynet-graph/, "Polynet section should render the memory graph workspace");
-assert.match(section, /community-polynet-detail/, "Polynet section should render selected node details");
-assert.match(section, /selectedNodeId/, "Polynet section should support local node selection");
-assert.match(section, /onBackToChat\?: \(\) => void/, "Polynet section should accept a deterministic back-to-chat action");
-assert.match(section, /aria-label="Back to community chat"/, "Polynet section should expose an accessible back-to-chat control");
-assert.match(section, /community-polynet-header\$\{hasBackToChat \? " has-back" : ""\}/, "Polynet back control should be a real header grid cell");
-assert.match(section, /strokeWidth="2"/, "Polynet back control should set SVG stroke width directly");
-assert.match(section, /<path d="M19 12H5M12 19l-7-7 7-7" \/>/, "Polynet back control should render a visible inline arrow");
-assert.doesNotMatch(section, /ArrowLeft/, "Polynet back control should not depend on a collapsed external icon render");
-assert.doesNotMatch(
-  section,
-  /community-polynet-title-row/,
-  "Polynet title text should not be shifted away from the kicker/subtitle by an inline back button",
-);
-assert.match(
-  surfaceProjection,
-  /onBackToChat: params\.onBackToCommunityChat/,
-  "Polynet section should receive the back-to-chat action through the community surface projection",
-);
-assert.match(
-  app,
-  /openCommunityChat\(nextCommunitySlug, \{ pushSnapshot: false \}\)/,
-  "Polynet back action should route to the same community chat without relying on browser history",
-);
-assert.match(section, /overview\.graph\.nodes\.map/, "Polynet graph should render backend-projected nodes");
-assert.match(section, /case "resource": return "resource"/, "Polynet graph should give resource source nodes a distinct visual type");
-assert.match(preview, /case "resource": return "resource"/, "The compact graph should preserve the resource source-node type");
-assert.match(section, /selectedNode\.kind === "directory_node"[\s\S]*confidence/, "resource details should not fabricate learned-memory confidence");
-assert.match(section, /key=\{lineageId\}/, "Polynet nodes should preserve React identity across retained-memory updates");
-assert.match(section, /data-lineage-id=\{lineageId\}/, "Polynet nodes should expose lifecycle lineage for visual acceptance tests");
-assert.match(section, /style=\{\{ transform: `translate\(\$\{pos\.x\}px, \$\{pos\.y\}px\)` \}\}/, "Polynet node movement should be CSS-transitionable");
-assert.match(preview, /key=\{lineageId\}/, "The compact memory graph should preserve retained-memory node identity");
-assert.match(preview, /data-lineage-id=\{lineageId\}/, "The compact memory graph should expose lifecycle lineage for acceptance tests");
-assert.match(section, /overview\.graph\.edges\.map/, "Polynet graph should render backend-projected edges");
-assert.match(viewportController, /const MIN_SCALE = 0\.08/, "full graph should zoom out far enough to fit the bounded 120-node projection");
-assert.match(section, /edgeType === "derived_from"\) return "derived-from"/, "full graph should visibly classify resource provenance edges");
-assert.match(preview, /edgeType === "derived_from"\) return "derived-from"/, "rail graph should preserve resource provenance edges");
-assert.match(
-  section,
-  /className=\{`cp-node-label/,
-  "Polynet node label should be a text annotation around the node, not the node body",
-);
-assert.match(
-  section,
-  /cp-node-circle|cp-root-circle/,
-  "Polynet graph nodes should render as circle dot primitives",
-);
-assert.doesNotMatch(
-  `${section}\n${preview}\n${gateway}`,
-  /forming_memory|forming_node|cp-forming-circle/,
-  "Polynet UI contracts should not retain the deleted approval-plane projection",
-);
-assert.match(section, /agentActivityClass\(overview\?\.agent\.activity_state\)/, "Polynet root should reflect the projected community-agent state");
-assert.match(section, /The community agent is examining recent activity\./, "empty graph should expose active inspection without claiming memory");
-assert.match(section, /No community intelligence yet\./, "resting empty graph should account for both learned and source intelligence");
-assert.doesNotMatch(
-  section,
-  /Backfill archive|Process pending|Retry failed|Total docs|Embedded|PDF docs|archive health|archive memory/i,
-  "Polynet section should not be the old archive-health panel",
-);
-assert.doesNotMatch(
-  section,
-  /textarea|contentEditable|onSubmit|mutation|createCommunityIntelligence|applyCommunityIntelligence|decideCommunityIntelligence/,
-  "Polynet tab should remain read-only in this slice",
-);
+assert.match(controller, /activePage === "community" && communityTab === "chat"/, "memory should load only inside community chat");
+assert.match(controller, /type CommunityMemoryPresentation = "rail" \| "drawer"/, "the controller should distinguish compact rail and full drawer projections");
+assert.match(controller, /COMMUNITY_POLYNET_RAIL_NODE_LIMIT = 12/, "the right rail should retain the compact projection");
+assert.match(controller, /presentation === "rail" \? COMMUNITY_POLYNET_RAIL_NODE_LIMIT : undefined/, "the drawer should request the full bounded overview");
+assert.match(controller, /resolveCommunityMemoryPresentation\(current\.isMemoryOpen\) !== presentation/, "stale compact and full responses should not cross presentation boundaries");
+assert.match(controller, /subscribeCloudCommunityPolynetOverview/, "the active presentation should retain realtime updates");
+assert.match(controller, /unsubscribe\?\.\(\)/, "presentation changes should dispose the prior subscription");
+assert.match(controller, /closeLiveClient\?\.\(\)/, "presentation changes should close the prior realtime client");
 
 assert.match(
-  contextPanel,
-  /memoryOverview\?: CloudCommunityPolynetOverview \| null/,
-  "Community context rail should accept the Polynet overview projection",
+  interactionController,
+  /export type CommunityInteractionSidecar =[\s\S]*kind: "context"[\s\S]*kind: "memory"[\s\S]*kind: "thread"; rootId: string/,
+  "thread and memory should share one canonical interaction sidecar state",
 );
-assert.match(
-  contextPanel,
-  /node\.kind === "directory_node" \|\| node\.kind === "resource_node"/,
-  "Community context memory should treat canonical resource nodes as real memory",
-);
-assert.match(
-  contextPanel,
-  /Memory — \$\{memoryCountLabel\}/,
-  "Community context rail should project a compact memory count",
-);
-assert.match(
-  contextPanel,
-  /onOpenMemory/,
-  "Community context rail should expose memory as the member-facing entry point",
-);
-assert.match(
-  interactionProjection,
-  /memoryOverview=\{props\.communityMemoryOverview \?\? null\}/,
-  "Interaction projection should pass memory state into the right rail",
-);
-// Memory is embedded inline in the rail as a live graph preview; there is no
-// intermediate drawer — clicking the preview opens the full graph directly.
-assert.match(
-  contextPanel,
-  /CommunityMemoryGraphPreview/,
-  "Community context rail should render the live memory graph preview inline",
-);
-assert.match(
-  interactionProjection,
-  /onOpenMemory=\{props\.onOpenCommunityMemory\}/,
-  "Rail memory should open the full graph directly (no intermediate drawer)",
-);
-assert.doesNotMatch(
-  interactionProjection,
-  /CommunityMemoryDrawer/,
-  "The intermediate memory drawer should be removed",
-);
-assert.doesNotMatch(
-  interactionProjection,
-  /isCommunityMemoryOpen/,
-  "The local memory drawer state should be removed",
-);
+assert.match(interactionController, /const openMemory = useCallback\([\s\S]*setSidecar\(\{ kind: "memory" \}\)/, "the interaction owner should open memory without navigation");
+assert.match(interactionController, /setSidecar\(\{ kind: "thread", rootId \}\)/, "opening a thread should replace memory in the same sidecar");
+assert.match(interactionController, /setSidecar\(\{ kind: "context" \}\)/, "closing a detail should restore the context rail");
+assert.match(interactionController, /memoryTriggerRef[\s\S]*trigger\.focus\(\{ preventScroll: true \}\)/, "closing Memory should restore focus to its rail trigger");
 
-const css = [
-  readFileSync(join(root, "apps/web/src/base.css"), "utf8"),
-  readFileSync(join(root, "apps/web/src/styles/shell-and-onboarding.css"), "utf8"),
-  readFileSync(join(root, "apps/web/src/styles/community-and-content.css"), "utf8"),
-  readFileSync(
-    join(root, "apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
-    "utf8",
-  ),
-  readFileSync(join(root, "apps/web/src/index.css"), "utf8"),
-].join("\n");
-const polynetBackRule = readCssRuleBody(css, ".community-polynet-back");
-assert.match(
-  css,
-  /\.cp-root-circle \{[\s\S]*fill: var\(--accent-gold\)/,
-  "Polynet root node should be a compact dot in the theme accent",
-);
-assert.match(css, /\.cp-node-circle\.type-resource/, "Polynet CSS should visibly distinguish canonical resource nodes");
-assert.match(css, /\.cp-edge\.contains-resource/, "Polynet CSS should distinguish resource containment edges");
-assert.match(css, /\.cp-edge\.derived-from/, "Polynet CSS should distinguish resource provenance edges");
-assert.doesNotMatch(css, /\.cp-forming-circle/, "deleted forming-memory treatment should not remain in CSS");
-assert.match(css, /\.cp-node \{[\s\S]*transition:[^;]*transform 380ms/, "retained-memory layout changes should animate smoothly");
-assert.match(css, /\.cp-root-circle\.activity-running/, "community root should pulse only for active agent states");
-assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "community-agent graph motion should respect reduced-motion preferences");
-assert.doesNotMatch(
-  css,
-  /min-width: 92px;[\s\S]{0,80}padding: 0 14px;/,
-  "Polynet root node should not regress to the old rectangular pill shape",
-);
-assert.match(
-  css,
-  /\.community-context-memory-preview/,
-  "Community memory should render as an inline live graph preview in the rail",
-);
-assert.match(
-  css,
-  /\.community-polynet-back/,
-  "Polynet page should style the back-to-chat control",
-);
-assert.match(
-  css,
-  /\.community-polynet-header\.has-back/,
-  "Polynet page should keep the back control inside the header grid instead of hanging outside the copy container",
-);
-assert.match(
-  css,
-  /\.community-polynet-heading/,
-  "Polynet page should keep the kicker, title, and subtitle in one aligned copy stack",
-);
-assert.match(
-  css,
-  /stroke: currentColor/,
-  "Polynet back arrow should have explicit SVG stroke styling",
-);
-assert.match(
-  css,
-  /\.settings-panel button:[^{]+:not\(\.community-polynet-back\)/,
-  "Polynet back control should be excluded from the broad settings-panel button reset",
-);
-assert.match(polynetBackRule, /padding: 0;/, "Polynet back control should reserve its full 28px box for the SVG");
-assert.doesNotMatch(polynetBackRule, /position:\s*absolute/, "Polynet back control should not use fragile absolute positioning");
-assert.doesNotMatch(polynetBackRule, /left:\s*-/, "Polynet back control should not hang outside the header with a negative left offset");
-assert.doesNotMatch(
-  css,
-  /\.community-polynet-title-row/,
-  "Polynet page should not use a title-only row that misaligns the header copy",
-);
-assert.doesNotMatch(
-  css,
-  /\.community-memory-drawer/,
-  "The removed memory drawer should leave no dead styling behind",
-);
+assert.match(contextPanel, /CommunityMemoryGraphPreview/, "the default rail should keep the live compact preview");
+assert.match(contextPanel, /onOpenMemory/, "the compact preview should remain the Memory entry point");
+assert.match(interactionProjection, /community-memory-drawer/, "the interaction projection should render Memory in the existing drawer shell");
+assert.match(interactionProjection, /aria-label="Community memory"/, "the drawer should expose an accessible label");
+assert.match(interactionProjection, /event\.key !== "Escape"[\s\S]*onCloseCommunityMemory/, "Escape should close Memory through the canonical transition");
+assert.match(interactionProjection, /memoryBackButtonRef\.current\?\.focus\(\{ preventScroll: true \}\)/, "opening Memory should move keyboard focus into the drawer");
+assert.match(interactionProjection, /onCloseCommunityMemory \?\? props\.onCloseDrawer/, "Memory should use the canonical close transition");
+assert.match(interactionProjection, /<CommunityMemoryGraph/, "the drawer should reuse the canonical graph rather than a duplicate list");
+assert.match(interactionProjection, /hasDetailPanel[\s\S]*has-drawer/, "Memory, thread, and profile details should share drawer geometry");
+assert.match(chatPanel, /handleSelectCommunityRoot[\s\S]*setProfilePanelUserId\(null\)/, "opening a thread should close the profile sidecar");
+assert.match(chatPanel, /handleOpenCommunityProfile[\s\S]*onCloseDrawer\(\)/, "opening a profile should close thread or Memory first");
+assert.match(app, /isMemoryOpen: communityInteractionSidecar\.kind === "memory"/, "the data projection should follow canonical sidecar state");
+assert.match(app, /isCommunityMemoryOpen: communityInteractionSidecar\.kind === "memory"/, "the visual drawer should follow the same canonical sidecar state");
 
-assert.match(
-  activeCommunityShell,
-  /canViewActiveCommunityPolynet = communityAccessCapabilities\.canViewCommunity/,
-  "Polynet nav access should follow member community access",
-);
-assert.doesNotMatch(
-  activeCommunityShell,
-  /canViewActiveCommunityPolynet = canManageCommunitySettings/,
-  "Polynet nav access must not follow the owner/admin community management gate",
-);
-assert.doesNotMatch(
-  activeCommunityShell,
-  /canViewActiveCommunityPolynet = canViewActiveCommunitySettings/,
-  "Polynet nav access must not follow member-visible settings access",
-);
+assert.match(graph, /export function CommunityMemoryGraph/, "the retired page should leave one reusable graph surface");
+assert.doesNotMatch(graph, /onBackToChat|Back to community chat|community-polynet-header/, "the graph should not retain page navigation chrome");
+assert.match(graph, /overview\.graph\.nodes\.map/, "the drawer graph should render backend-projected nodes");
+assert.match(graph, /overview\.graph\.edges\.map/, "the drawer graph should render backend-projected edges");
+assert.match(graph, /key=\{lineageId\}/, "memory nodes should preserve lifecycle identity");
+assert.match(graph, /data-lineage-id=\{lineageId\}/, "memory nodes should expose lineage for browser acceptance");
+assert.match(graph, /case "resource": return "resource"/, "resource source nodes should keep a distinct visual type");
+assert.match(preview, /case "resource": return "resource"/, "the compact preview should preserve resource node type");
+assert.match(viewportController, /const MIN_SCALE = 0\.08/, "the drawer graph should zoom far enough out for the bounded full projection");
+assert.doesNotMatch(graph, /textarea|contentEditable|onSubmit|mutation/, "the Memory drawer should not introduce editing");
 
-console.log("Community Polynet tab UI contract proof passed");
+assert.match(css, /\.community-memory-drawer-scroll/, "Memory should have a full-height drawer viewport");
+assert.match(css, /\.community-memory-graph-surface/, "the graph should fill the drawer body");
+assert.match(css, /\.community-memory-drawer \.community-polynet-graph-controls,[\s\S]*bottom: 88px/, "graph controls should clear the member-agent dock");
+assert.match(css, /\.community-member-chat \.community-memory-drawer \.community-interaction-drawer-back/, "Memory should reuse the stable thread header band");
+assert.doesNotMatch(css, /\.community-polynet-(panel|header|back|heading|subtitle)/, "retired full-page Memory chrome should leave no dead CSS");
+assert.match(css, /@media \(prefers-reduced-motion: reduce\)/, "memory graph motion should respect reduced-motion preferences");
+
+console.log("Community memory drawer UI contract proof passed");

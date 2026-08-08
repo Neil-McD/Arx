@@ -31,6 +31,15 @@ describe("community channel routes", () => {
     });
   });
 
+  it("normalizes the retired standalone memory route back to community chat", () => {
+    expect(parseAppRouteFromPathname("/c/polynet/polynet")).toMatchObject({
+      page: "community",
+      communitySlug: "polynet",
+      communityTab: "chat",
+      communityChannelSlug: null,
+    });
+  });
+
   it("does not let channel state bleed into another community surface", () => {
     expect(buildAppRoutePath({
       page: "community",

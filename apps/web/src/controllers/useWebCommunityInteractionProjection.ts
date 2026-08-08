@@ -86,6 +86,11 @@ type UseWebCommunityInteractionProjectionParams = {
   session: AuthSession | null;
 };
 
+export type CommunityInteractionSidecar =
+  | { kind: "context" }
+  | { kind: "memory" }
+  | { kind: "thread"; rootId: string };
+
 function formatProjectionError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const normalized = message.trim().toLowerCase();
@@ -342,7 +347,8 @@ export function useWebCommunityInteractionProjection<
   const [pending, setPending] = useState<PendingCanonicalInteraction<AttachmentT>[]>([]);
   const [isLoadingRoots, setIsLoadingRoots] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [selectedRootId, setSelectedRootId] = useState<string | null>(null);
+  const [sidecar, setSidecar] = useState<CommunityInteractionSidecar>({ kind: "context" });
+  const selectedRootId = sidecar.kind === "thread" ? sidecar.rootId : null;
   const [selectedRoot, setSelectedRoot] = useState<CommunityInteractionRootBundle | null>(null);
   const [repliesByRootId, setRepliesByRootId] = useState<
     Record<string, CommunityInteractionReplyBundle[]>
@@ -369,6 +375,7 @@ export function useWebCommunityInteractionProjection<
   const lastSubscribedPinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
   const pinnedRootRef = useRef<CommunityInteractionRootBundle | null>(null);
   const pinMutationBoundaryRef = useRef<string | null>(null);
+  const memoryTriggerRef = useRef<HTMLElement | null>(null);
 
   sessionRef.current = session;
   rootsRef.current = roots;
@@ -407,7 +414,8 @@ export function useWebCommunityInteractionProjection<
     setRootChangeReason("reset");
     setError(null);
     setIsLoadingRoots(isNextBoundaryLoading);
-    setSelectedRootId(null);
+    setSidecar({ kind: "context" });
+    memoryTriggerRef.current = null;
     setSelectedRoot(null);
     setRepliesByRootId({});
     setRepliesErrorByRootId({});
@@ -732,7 +740,11 @@ export function useWebCommunityInteractionProjection<
       if (!usableSession || cancelled) {
         if (!cancelled) {
           setSelectedRoot(null);
-          setSelectedRootId((current) => current === rootId ? null : current);
+          setSidecar((current) =>
+            current.kind === "thread" && current.rootId === rootId
+              ? { kind: "context" }
+              : current,
+          );
         }
         return;
       }
@@ -754,13 +766,21 @@ export function useWebCommunityInteractionProjection<
             ) return;
             setSelectedRoot(root);
             if (!root) {
-              setSelectedRootId((current) => current === rootId ? null : current);
+              setSidecar((current) =>
+                current.kind === "thread" && current.rootId === rootId
+                  ? { kind: "context" }
+                  : current,
+              );
             }
           },
           onError: () => {
             if (cancelled) return;
             setSelectedRoot(null);
-            setSelectedRootId((current) => current === rootId ? null : current);
+            setSidecar((current) =>
+              current.kind === "thread" && current.rootId === rootId
+                ? { kind: "context" }
+                : current,
+            );
           },
         });
         unsubscribeReplies = subscribeCloudCommunityInteractionReplies({
@@ -785,7 +805,11 @@ export function useWebCommunityInteractionProjection<
       } catch (subscriptionError) {
         if (!cancelled) {
           setSelectedRoot(null);
-          setSelectedRootId((current) => current === rootId ? null : current);
+          setSidecar((current) =>
+            current.kind === "thread" && current.rootId === rootId
+              ? { kind: "context" }
+              : current,
+          );
           setRepliesErrorByRootId((current) => ({
             ...current,
             [rootId]: formatProjectionError(subscriptionError),
@@ -847,7 +871,7 @@ export function useWebCommunityInteractionProjection<
     const rootId = String(rawRootId ?? "").trim();
     if (!rootId) return;
     if (selectedRootId === rootId) {
-      setSelectedRootId(null);
+      setSidecar({ kind: "context" });
       setSelectedRoot(null);
       return;
     }
@@ -855,12 +879,31 @@ export function useWebCommunityInteractionProjection<
       rootsRef.current.find((bundle) => bundle.root.id === rootId)
         ?? (pinnedRootRef.current?.root.id === rootId ? pinnedRootRef.current : null),
     );
-    setSelectedRootId(rootId);
+    setSidecar({ kind: "thread", rootId });
   }, [selectedRootId]);
 
   const closeDrawer = useCallback(() => {
-    setSelectedRootId(null);
+    setSidecar({ kind: "context" });
     setSelectedRoot(null);
+  }, []);
+
+  const openMemory = useCallback(() => {
+    if (typeof document !== "undefined" && document.activeElement instanceof HTMLElement) {
+      memoryTriggerRef.current = document.activeElement;
+    }
+    setSelectedRoot(null);
+    setSidecar({ kind: "memory" });
+  }, []);
+
+  const closeMemory = useCallback(() => {
+    setSidecar((current) => current.kind === "memory" ? { kind: "context" } : current);
+    const trigger = memoryTriggerRef.current;
+    memoryTriggerRef.current = null;
+    if (trigger && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        if (trigger.isConnected) trigger.focus({ preventScroll: true });
+      });
+    }
   }, []);
 
   const toggleReaction = useCallback(async (
@@ -908,7 +951,7 @@ export function useWebCommunityInteractionProjection<
     const usableSession = await ensureSession(sessionRef.current);
     if (!usableSession) return;
     if (targetType === "root" && selectedRootId === targetId) {
-      setSelectedRootId(null);
+      setSidecar({ kind: "context" });
       setSelectedRoot(null);
     }
     try {
@@ -1055,6 +1098,7 @@ export function useWebCommunityInteractionProjection<
     selectedReplies,
     selectedRootId: presentedSelectedRootId,
     selectedRoot: presentedSelectedRoot,
+    sidecar: isPresentationScopedToBoundary ? sidecar : { kind: "context" } as CommunityInteractionSidecar,
     pinnedRoot: isPresentationScopedToBoundary ? pinnedRoot : null,
     isUpdatingPinnedRoot,
     pinnedRootError: isPresentationScopedToBoundary ? pinnedRootError : null,
@@ -1074,6 +1118,8 @@ export function useWebCommunityInteractionProjection<
     loadOlderRoots,
     selectRoot,
     closeDrawer,
+    openMemory,
+    closeMemory,
     toggleReaction,
     editMessage,
     deleteMessage,

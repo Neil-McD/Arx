@@ -7,7 +7,6 @@ import { WebCommunityAnalyticsSection } from "./WebCommunityAnalyticsSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityAvatarEditorModal } from "./WebCommunityAvatarEditorModal";
 import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
-import { WebCommunityPolynetSection } from "./WebCommunityPolynetSection";
 import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
@@ -48,7 +47,6 @@ export type WebCommunitySecondaryPanelsProps = {
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
   feed: ComponentProps<typeof CommunityAiFeedPanel>;
-  polynet: ComponentProps<typeof WebCommunityPolynetSection>;
   aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
   funnel: ComponentProps<typeof WebCommunityFunnelSection>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
@@ -59,13 +57,10 @@ export type WebCommunitySecondaryPanelsProps = {
   resourceModal: ComponentProps<typeof WebCommunityResourceModal>;
 };
 
-function renderCenteredPane(children: ReactNode, options?: { fill?: boolean }) {
-  // `fill` makes the pane a full-height, non-scrolling flex column so its child
-  // (the Polynet graph) can size to the window frame instead of overflowing.
-  const fill = options?.fill ?? false;
+function renderCenteredPane(children: ReactNode) {
   return (
-    <div className={`community-tab-scroll${fill ? " community-tab-scroll--fill" : ""}`}>
-      <div className={`web-community-centered-pane${fill ? " web-community-centered-pane--fill" : ""}`}>
+    <div className="community-tab-scroll">
+      <div className="web-community-centered-pane">
         {children}
       </div>
     </div>
@@ -114,9 +109,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       ) : null}
 
       {props.communityTab === "ai_feed" && renderCenteredPane(<CommunityAiFeedPanel {...props.feed} />)}
-
-      {props.communityTab === "polynet" &&
-        renderCenteredPane(<WebCommunityPolynetSection {...props.polynet} />, { fill: true })}
 
       {props.communityTab === "ai_agent" &&
         renderCenteredPane(<WebCommunityAiAgentSection {...props.aiAgent} />)}

@@ -13,19 +13,17 @@ function read(path: string): string {
 
 const memberAccess: CommunityTabAccess = {
   canViewSettings: true,
-  canViewPolynet: true,
   canManageMembers: false,
   canViewAnalytics: false,
 };
 
 const builderAccess: CommunityTabAccess = {
   canViewSettings: true,
-  canViewPolynet: true,
   canManageMembers: true,
   canViewAnalytics: true,
 };
 
-for (const tab of ["chat", "ai_feed", "resources", "events", "settings", "polynet"] as const) {
+for (const tab of ["chat", "ai_feed", "resources", "events", "settings"] as const) {
   assert.equal(
     normalizeCommunityTabForAccess(tab, memberAccess),
     tab,
@@ -37,6 +35,11 @@ assert.equal(
   parseCommunityTab("members"),
   "chat",
   "legacy /members routes should collapse to the member-facing chat/right-panel surface",
+);
+assert.equal(
+  parseCommunityTab("polynet"),
+  "chat",
+  "legacy /polynet routes should collapse to chat because Memory is a chat sidecar",
 );
 
 for (const tab of ["ai_agent", "funnel", "analytics"] as const) {
@@ -64,8 +67,13 @@ const membersReviewController = read("shared/useCommunityMembersReviewController
 
 assert.match(
   navigation,
-  /export type CommunityTabAccess = \{[\s\S]*canViewSettings: boolean;[\s\S]*canViewPolynet: boolean;[\s\S]*canManageMembers: boolean;[\s\S]*canViewAnalytics: boolean;[\s\S]*\};/,
+  /export type CommunityTabAccess = \{[\s\S]*canViewSettings: boolean;[\s\S]*canManageMembers: boolean;[\s\S]*canViewAnalytics: boolean;[\s\S]*\};/,
   "community tab access contract must stay centralized",
+);
+assert.doesNotMatch(
+  navigation,
+  /canViewPolynet: boolean;/,
+  "CommunityTabAccess must not keep the deleted standalone Memory-tab permission",
 );
 assert.doesNotMatch(
   navigation,
@@ -104,7 +112,7 @@ assert.doesNotMatch(
 );
 assert.match(
   tabAccessGuard,
-  /normalizeCommunityTabForAccess\([\s\S]*canViewSettings: params\.canViewSettings,[\s\S]*canViewPolynet: params\.canViewPolynet,[\s\S]*canManageMembers: params\.canManageMembers,[\s\S]*canViewAnalytics: params\.canViewAnalytics/,
+  /normalizeCommunityTabForAccess\([\s\S]*canViewSettings: params\.canViewSettings,[\s\S]*canManageMembers: params\.canManageMembers,[\s\S]*canViewAnalytics: params\.canViewAnalytics/,
   "the tab guard must normalize from the same capability booleans used by CommunityNav",
 );
 assert.match(

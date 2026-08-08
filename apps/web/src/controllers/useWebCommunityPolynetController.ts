@@ -28,6 +28,7 @@ type EnsureSessionFn<SessionT> = (session?: SessionT | null) => Promise<SessionT
 type UseWebCommunityPolynetControllerArgs<SessionT> = {
   activePage: AppPage;
   communityTab: CommunityTab;
+  isMemoryOpen: boolean;
   activeCommunityId: string | null;
   session: SessionT | null;
   ensureSession: EnsureSessionFn<SessionT>;
@@ -36,13 +37,18 @@ type UseWebCommunityPolynetControllerArgs<SessionT> = {
 };
 
 const COMMUNITY_POLYNET_RAIL_NODE_LIMIT = 12;
+type CommunityMemoryPresentation = "rail" | "drawer";
 
 function shouldLoadCommunityPolynet(activePage: AppPage, communityTab: CommunityTab): boolean {
-  return activePage === "community" && (communityTab === "chat" || communityTab === "polynet");
+  return activePage === "community" && communityTab === "chat";
 }
 
-function resolveCommunityPolynetNodeLimit(communityTab: CommunityTab): number | undefined {
-  return communityTab === "chat" ? COMMUNITY_POLYNET_RAIL_NODE_LIMIT : undefined;
+function resolveCommunityMemoryPresentation(isMemoryOpen: boolean): CommunityMemoryPresentation {
+  return isMemoryOpen ? "drawer" : "rail";
+}
+
+function resolveCommunityPolynetNodeLimit(presentation: CommunityMemoryPresentation): number | undefined {
+  return presentation === "rail" ? COMMUNITY_POLYNET_RAIL_NODE_LIMIT : undefined;
 }
 
 export function useWebCommunityPolynetController<SessionT>(
@@ -58,12 +64,16 @@ export function useWebCommunityPolynetController<SessionT>(
   const requestSeqRef = useRef(0);
   const sessionIdentity = resolveAuthPresentationIdentity(args.session as AuthSessionLike);
 
-  const isStaleRequest = useCallback((requestSeq: number, communityId: string, communityTab: CommunityTab) => {
+  const isStaleRequest = useCallback((
+    requestSeq: number,
+    communityId: string,
+    presentation: CommunityMemoryPresentation,
+  ) => {
     const current = argsRef.current;
     return (
       requestSeq !== requestSeqRef.current
       || !shouldLoadCommunityPolynet(current.activePage, current.communityTab)
-      || current.communityTab !== communityTab
+      || resolveCommunityMemoryPresentation(current.isMemoryOpen) !== presentation
       || current.activeCommunityId !== communityId
       || !current.canViewPolynet
     );
@@ -82,14 +92,14 @@ export function useWebCommunityPolynetController<SessionT>(
     sessionInput?: SessionT | null,
   ) => {
     const requestSeq = ++requestSeqRef.current;
-    const communityTab = argsRef.current.communityTab;
-    const nodeLimit = resolveCommunityPolynetNodeLimit(communityTab);
+    const presentation = resolveCommunityMemoryPresentation(argsRef.current.isMemoryOpen);
+    const nodeLimit = resolveCommunityPolynetNodeLimit(presentation);
     setAttemptedCommunityId(communityId);
     setIsLoading(true);
     setError(null);
     try {
       const usableSession = await argsRef.current.ensureSession(sessionInput ?? argsRef.current.session);
-      if (isStaleRequest(requestSeq, communityId, communityTab)) return null;
+      if (isStaleRequest(requestSeq, communityId, presentation)) return null;
       if (!usableSession) {
         return null;
       }
@@ -98,15 +108,15 @@ export function useWebCommunityPolynetController<SessionT>(
         communityId,
         ...(typeof nodeLimit === "number" ? { nodeLimit } : {}),
       });
-      if (isStaleRequest(requestSeq, communityId, communityTab)) return null;
+      if (isStaleRequest(requestSeq, communityId, presentation)) return null;
       setOverview(nextOverview ?? null);
       return nextOverview ?? null;
     } catch (err) {
-      if (isStaleRequest(requestSeq, communityId, communityTab)) return null;
+      if (isStaleRequest(requestSeq, communityId, presentation)) return null;
       setError(formatCommunityPolynetError(err instanceof Error ? err.message : err));
       return null;
     } finally {
-      if (!isStaleRequest(requestSeq, communityId, communityTab)) {
+      if (!isStaleRequest(requestSeq, communityId, presentation)) {
         setIsLoading(false);
       }
     }
@@ -139,6 +149,7 @@ export function useWebCommunityPolynetController<SessionT>(
     args.activePage,
     args.canViewPolynet,
     args.communityTab,
+    args.isMemoryOpen,
     sessionIdentity,
     loadOverview,
     resetPolynetState,
@@ -155,8 +166,8 @@ export function useWebCommunityPolynetController<SessionT>(
     }
 
     const communityId = args.activeCommunityId;
-    const communityTab = args.communityTab;
-    const nodeLimit = resolveCommunityPolynetNodeLimit(communityTab);
+    const presentation = resolveCommunityMemoryPresentation(args.isMemoryOpen);
+    const nodeLimit = resolveCommunityPolynetNodeLimit(presentation);
     let cancelled = false;
     let unsubscribe: (() => void) | null = null;
     let closeLiveClient: (() => void) | null = null;
@@ -169,7 +180,7 @@ export function useWebCommunityPolynetController<SessionT>(
         const current = argsRef.current;
         if (
           !shouldLoadCommunityPolynet(current.activePage, current.communityTab)
-          || current.communityTab !== communityTab
+          || resolveCommunityMemoryPresentation(current.isMemoryOpen) !== presentation
           || current.activeCommunityId !== communityId
           || !current.canViewPolynet
         ) {
@@ -190,7 +201,7 @@ export function useWebCommunityPolynetController<SessionT>(
             if (
               cancelled
               || !shouldLoadCommunityPolynet(latestArgs.activePage, latestArgs.communityTab)
-              || latestArgs.communityTab !== communityTab
+              || resolveCommunityMemoryPresentation(latestArgs.isMemoryOpen) !== presentation
               || latestArgs.activeCommunityId !== communityId
               || !latestArgs.canViewPolynet
             ) {
@@ -226,6 +237,7 @@ export function useWebCommunityPolynetController<SessionT>(
     args.activePage,
     args.canViewPolynet,
     args.communityTab,
+    args.isMemoryOpen,
     sessionIdentity,
   ]);
 

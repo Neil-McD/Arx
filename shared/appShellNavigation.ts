@@ -49,7 +49,6 @@ export const COMMUNITY_TABS = [
   "resources",
   "events",
   "settings",
-  "polynet",
   "ai_agent",
   "funnel",
   "analytics",
@@ -63,7 +62,6 @@ export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 
 const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
   "settings",
-  "polynet",
   "ai_agent",
   "funnel",
   "analytics",
@@ -75,7 +73,6 @@ export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
 
 export type CommunityTabAccess = {
   canViewSettings: boolean;
-  canViewPolynet: boolean;
   canManageMembers: boolean;
   canViewAnalytics: boolean;
 };
@@ -87,8 +84,6 @@ export function isCommunityTabAllowedForAccess(
   switch (tab) {
     case "settings":
       return access.canViewSettings;
-    case "polynet":
-      return access.canViewPolynet;
     case "ai_agent":
     case "funnel":
       return access.canManageMembers;
@@ -129,8 +124,6 @@ export function parseCommunityTab(
       return "events";
     case "settings":
       return "settings";
-    case "polynet":
-      return "polynet";
     case "ai_agent":
       return "ai_agent";
     case "funnel":
