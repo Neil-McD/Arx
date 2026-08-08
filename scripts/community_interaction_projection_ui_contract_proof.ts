@@ -1120,6 +1120,21 @@ assert.match(
 );
 assert.match(
   baseCss,
+  /--chat-author-text:\s*var\(--text-primary\);[\s\S]*--chat-body-text:\s*color-mix\(in srgb, var\(--text-primary\) 82%, var\(--text-secondary\) 18%\);[\s\S]*--chat-meta-text:\s*color-mix\(in srgb, var\(--text-secondary\) 78%, var\(--text-muted\) 22%\);/,
+  "chat identity, content, and metadata should use a theme-aware semantic text ladder",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-meta-row\s*\{[^}]*color:\s*var\(--chat-meta-text\);[\s\S]*?\.community-interaction-author\s*\{[^}]*color:\s*var\(--chat-author-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*650;[\s\S]*?\.community-interaction-body\s*\{[^}]*margin-top:\s*2px;[^}]*color:\s*var\(--chat-body-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*400;[^}]*line-height:\s*1\.45;/,
+  "community chat should scan author first, body second, and metadata third",
+);
+assert.match(
+  baseCss,
+  /\.community-interaction-footer\s*\{[^}]*margin-top:\s*6px;[\s\S]*?\.community-interaction-day\s*\{[^}]*padding:\s*10px 4px 4px;[\s\S]*?\.community-interaction-group-body\s*\{[^}]*gap:\s*0;[\s\S]*?\.community-interaction-message\s*\{[^}]*padding:\s*0 6px 2px;/,
+  "community chat rhythm should stay compact within groups while preserving separation between groups",
+);
+assert.match(
+  baseCss,
   /--chat-link:\s*var\(--accent-cyan\);[\s\S]*--chat-link-hover:[\s\S]*\.chat-link:visited\s*\{[\s\S]*color:\s*var\(--chat-link\);[\s\S]*\.chat-link:focus-visible\s*\{/,
   "both dark-family themes should inherit one accessible semantic treatment for chat links",
 );

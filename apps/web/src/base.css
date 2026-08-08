@@ -75,6 +75,12 @@
   --text-faint: #52525b;
   --text-terminal: #ececef;
 
+  /* Chat has its own semantic ladder so identity, content, and metadata stay
+     distinct without changing the platform-wide text hierarchy. */
+  --chat-author-text: var(--text-primary);
+  --chat-body-text: color-mix(in srgb, var(--text-primary) 82%, var(--text-secondary) 18%);
+  --chat-meta-text: color-mix(in srgb, var(--text-secondary) 78%, var(--text-muted) 22%);
+
   /* Borders */
   --border-default: #26262b;
   --border-strong: #2d2d33;
