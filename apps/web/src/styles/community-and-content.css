@@ -8370,13 +8370,13 @@ button.chat-reply-quote:hover {
   }
 }
 
-.icon-button.direct-messages-topbar-button {
+.app-topbar .icon-button.direct-messages-topbar-button {
   position: relative;
   width: 34px;
   height: 34px;
 }
 
-.icon-button.direct-messages-topbar-button svg {
+.app-topbar .icon-button.direct-messages-topbar-button svg {
   width: 20px;
   height: 20px;
 }
