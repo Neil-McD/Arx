@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
@@ -1290,6 +1290,157 @@ test("resource changeset staging permits only one live proposal per community", 
     status: "staged",
     deduped: false,
   });
+});
+
+test("expired resource changesets commit one terminal state across every decision path", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+  const stage = (suffix: string) =>
+    t.mutation(
+      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      {
+        userId: fixture.ownerId,
+        communityId: fixture.communityId,
+        summary: `Expiring proposal ${suffix}.`,
+        operations: [
+          {
+            op: "create_module",
+            module_key: `expired-${suffix}`,
+            name: `Expired ${suffix}`,
+            module_status: "draft",
+          },
+        ],
+        idempotencyKey: `expired-${suffix}`,
+      },
+    );
+  const makeExpired = async (changesetId: string) => {
+    await t.run(async (ctx) => {
+      const expiredAt = Date.now() - 25 * 60 * 60 * 1000;
+      await ctx.db.patch(changesetId as any, {
+        createdAt: expiredAt,
+        updatedAt: expiredAt,
+      });
+    });
+  };
+
+  const applyCandidate = await stage("apply");
+  await makeExpired(applyCandidate.changeset_id);
+  await expect(
+    asOwner.mutation(
+      api.communityResources.applyCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: applyCandidate.changeset_id as any,
+      },
+    ),
+  ).resolves.toMatchObject({
+    ok: false,
+    code: "community_resource_changeset_expired",
+    status: "expired",
+    deduped: false,
+  });
+  await expect(
+    asOwner.mutation(
+      api.communityResources.applyCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: applyCandidate.changeset_id as any,
+      },
+    ),
+  ).resolves.toMatchObject({ status: "expired", deduped: true });
+
+  const rejectCandidate = await stage("reject");
+  await makeExpired(rejectCandidate.changeset_id);
+  await expect(
+    asOwner.mutation(
+      api.communityResources.rejectCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: rejectCandidate.changeset_id as any,
+      },
+    ),
+  ).resolves.toMatchObject({
+    ok: false,
+    code: "community_resource_changeset_expired",
+    status: "expired",
+    deduped: false,
+  });
+
+  const approvedCandidate = await stage("legacy-approved");
+  await asOwner.mutation(
+    api.communityResources.approveCommunityResourceBuilderChangeset,
+    {
+      communityId: fixture.communityId,
+      changesetId: approvedCandidate.changeset_id as any,
+    },
+  );
+  await makeExpired(approvedCandidate.changeset_id);
+  await expect(
+    asOwner.mutation(
+      api.communityResources.applyCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: approvedCandidate.changeset_id as any,
+      },
+    ),
+  ).resolves.toMatchObject({ status: "expired", deduped: false });
+
+  const idempotentCandidate = await stage("idempotent");
+  await makeExpired(idempotentCandidate.changeset_id);
+  await expect(stage("idempotent")).resolves.toMatchObject({
+    ok: false,
+    changeset_id: idempotentCandidate.changeset_id,
+    status: "expired",
+    deduped: true,
+  });
+
+  await t.run(async (ctx) => {
+    const rows = await ctx.db
+      .query("communityResourceBuilderChangesets")
+      .collect();
+    expect(rows).toHaveLength(4);
+    expect(rows.every((row) => row.status === "expired")).toBe(true);
+    expect(await ctx.db.query("communityResourceModules").collect()).toHaveLength(0);
+  });
+});
+
+test("scheduled resource changeset expiry commits without customer action", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.setSystemTime(new Date("2026-08-08T12:00:00.000Z"));
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const staged = await t.mutation(
+      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      {
+        userId: fixture.ownerId,
+        communityId: fixture.communityId,
+        summary: "Expire this proposal on schedule.",
+        operations: [
+          {
+            op: "create_module",
+            module_key: "scheduled-expiry",
+            name: "Scheduled expiry",
+            module_status: "draft",
+          },
+        ],
+        idempotencyKey: "scheduled-expiry",
+      },
+    );
+
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(staged.changeset_id as any)).toMatchObject({
+        status: "expired",
+        error: "This resource proposal expired after 24 hours.",
+      });
+      expect(await ctx.db.query("communityResourceModules").collect()).toHaveLength(0);
+    });
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("concurrent resource changeset staging leaves one live proposal", async () => {

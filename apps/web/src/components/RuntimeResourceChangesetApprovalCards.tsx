@@ -256,6 +256,23 @@ function ResourceChangesetApprovalCard(props: {
     };
   }, [props.card.changesetId, props.card.communityId, props.session]);
 
+  async function readAuthoritativeStatus(): Promise<ResourceChangesetServerStatus> {
+    const payload = await getCloudCommunityResourceBuilderChangesetStatus<
+      unknown,
+      Record<string, unknown>
+    >({
+      session: props.session,
+      communityId: props.card.communityId,
+      changesetId: props.card.changesetId,
+    });
+    const status = asResourceChangesetServerStatus(payload?.status);
+    if (!status) {
+      throw new Error("Could not verify the resource proposal state.");
+    }
+    setServerStatus(status);
+    return status;
+  }
+
   async function applyChangeset(): Promise<void> {
     if (!props.session || isBusy || isDone) return;
     setActionState("applying");
@@ -267,29 +284,23 @@ function ResourceChangesetApprovalCard(props: {
         communityId: props.card.communityId,
         changesetId: props.card.changesetId,
       });
-      try {
-        const payload = await getCloudCommunityResourceBuilderChangesetStatus<unknown, Record<string, unknown>>({
-          session: props.session,
-          communityId: props.card.communityId,
-          changesetId: props.card.changesetId,
-        });
-        const status = asResourceChangesetServerStatus(payload?.status);
-        if (status) setServerStatus(status);
-        if (status === "applied") {
-          setVerifiedApply(true);
-          dispatchCommunityResourcesMutated({
-            communityId: props.card.communityId,
-            changesetId: props.card.changesetId,
-            source: "resource_changeset_approval_card",
-          });
-        } else {
-          setErrorMessage("Applied, but resource refresh could not be verified.");
-        }
-      } catch {
-        setServerStatus("applied");
-        setErrorMessage("Applied, but resource refresh could not be verified.");
+      const status = await readAuthoritativeStatus();
+      if (status !== "applied") {
+        setActionState("error");
+        setErrorMessage(
+          status === "expired"
+            ? "This proposed changeset expired."
+            : `The server reports this proposal as ${status}, not applied.`,
+        );
+        return;
       }
+      setVerifiedApply(true);
       setActionState("applied");
+      dispatchCommunityResourcesMutated({
+        communityId: props.card.communityId,
+        changesetId: props.card.changesetId,
+        source: "resource_changeset_approval_card",
+      });
     } catch (error) {
       setActionState("error");
       setErrorMessage(error instanceof Error ? error.message : "Could not apply changes.");
@@ -308,7 +319,16 @@ function ResourceChangesetApprovalCard(props: {
         changesetId: props.card.changesetId,
         reason: "Rejected from resource changeset approval card.",
       });
-      setServerStatus("rejected");
+      const status = await readAuthoritativeStatus();
+      if (status !== "rejected") {
+        setActionState("error");
+        setErrorMessage(
+          status === "expired"
+            ? "This proposed changeset expired."
+            : `The server reports this proposal as ${status}, not rejected.`,
+        );
+        return;
+      }
       setActionState("rejected");
     } catch (error) {
       setActionState("error");

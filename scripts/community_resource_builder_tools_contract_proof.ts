@@ -309,12 +309,12 @@ assert.match(
 );
 assert.match(
   resources,
-  /getCommunityResourceBuilderChangesetStatus[\s\S]*COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS[\s\S]*approved_by_current_user/,
+  /getCommunityResourceBuilderChangesetStatus[\s\S]*communityResourceBuilderChangesetIsExpired[\s\S]*approved_by_current_user/,
   "changeset status lookup should expose effective expiry and current-user approval state",
 );
 assert.match(
   resources,
-  /listPendingCommunityResourceBuilderChangesets[\s\S]*await requireCommunityManager[\s\S]*readLatestCommunityResourceBuilderActionableRows[\s\S]*COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS/,
+  /listPendingCommunityResourceBuilderChangesets[\s\S]*await requireCommunityManager[\s\S]*readLatestCommunityResourceBuilderActionableRows[\s\S]*communityResourceBuilderChangesetIsExpired/,
   "pending changeset recovery must be manager-authorized, indexed, and TTL-aware",
 );
 assert.match(
@@ -326,6 +326,21 @@ assert.match(
   resources,
   /stageCommunityResourceBuilderChangesetCore[\s\S]*readLatestCommunityResourceBuilderActionableRows[\s\S]*community_resource_changeset_already_pending[\s\S]*ctx\.db\.insert\("communityResourceBuilderChangesets"/,
   "changeset staging should enforce one live proposal per community before insert",
+);
+assert.match(
+  resources,
+  /stageCommunityResourceBuilderChangesetCore[\s\S]*ctx\.scheduler\.runAt\([\s\S]*expireCommunityResourceBuilderChangesetInternal/,
+  "every staged changeset should schedule its canonical expiry mutation",
+);
+assert.match(
+  resources,
+  /expireCommunityResourceBuilderChangesetInternal = internalMutation[\s\S]*expireCommunityResourceBuilderChangesetIfNeeded/,
+  "changeset expiry should have one private idempotent mutation",
+);
+assert.doesNotMatch(
+  resources,
+  /throw new Error\("community_resource_changeset_expired"\)/,
+  "expected expiry must commit as a typed terminal result instead of rolling back by throwing",
 );
 assert.match(
   resources,
@@ -419,8 +434,18 @@ assert.match(
 );
 assert.match(
   changesetApprovalCards,
-  /applyCloudCommunityResourceBuilderChangeset[\s\S]*getCloudCommunityResourceBuilderChangesetStatus[\s\S]*status === "applied"[\s\S]*dispatchCommunityResourcesMutated/,
+  /applyCloudCommunityResourceBuilderChangeset[\s\S]*readAuthoritativeStatus[\s\S]*status !== "applied"[\s\S]*setActionState\("applied"\)[\s\S]*dispatchCommunityResourcesMutated/,
   "approval card should verify applied changeset state before dispatching resource refresh",
+);
+assert.match(
+  changesetApprovalCards,
+  /rejectCloudCommunityResourceBuilderChangeset[\s\S]*readAuthoritativeStatus[\s\S]*status !== "rejected"[\s\S]*setActionState\("rejected"\)/,
+  "rejection card should verify rejected changeset state before presenting success",
+);
+assert.doesNotMatch(
+  changesetApprovalCards,
+  /setServerStatus\("applied"\)|setServerStatus\("rejected"\)/,
+  "the browser must not manufacture terminal changeset state when confirmation fails",
 );
 assert.match(
   changesetApprovalCards,
