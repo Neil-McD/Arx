@@ -3733,7 +3733,7 @@
 .community-chat .community-interaction-main-composer .chat-input-bar {
   margin: 0 14px 14px;
   max-width: none;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   box-shadow: none;
   align-items: flex-end;
   padding: 13px 14px;
@@ -3917,7 +3917,7 @@
 }
 
 .community-member-chat .community-interaction-main-composer .chat-input-bar {
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
   padding: 12px 14px 10px;
 }
 
