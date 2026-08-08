@@ -173,6 +173,7 @@ export const CommunityNav = memo(function CommunityNav({
     showSettingsButton ||
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
+  const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
   const inviteTitle = didCopyJoinLink ? "Copied invite link" : "Copy invite link";
@@ -308,22 +309,24 @@ export const CommunityNav = memo(function CommunityNav({
 
   return (
     <aside className="community-nav">
-      <div className="community-nav-header">
-        <StableFramedMedia
-          className={`community-nav-banner${activeCommunity?.banner_url ? " has-image" : ""}`}
-          imageClassName="community-nav-banner-img"
-          imageUrl={activeCommunity?.banner_url}
-          frame={{
-            focusX: activeCommunity?.banner_focus_x,
-            focusY: activeCommunity?.banner_focus_y,
-            zoom: activeCommunity?.banner_zoom,
-          }}
-          alt=""
-          loading="eager"
-          fetchPriority="high"
-          aria-hidden
-        />
-      </div>
+      {activeCommunityBannerUrl ? (
+        <div className="community-nav-header">
+          <StableFramedMedia
+            className="community-nav-banner has-image"
+            imageClassName="community-nav-banner-img"
+            imageUrl={activeCommunityBannerUrl}
+            frame={{
+              focusX: activeCommunity?.banner_focus_x,
+              focusY: activeCommunity?.banner_focus_y,
+              zoom: activeCommunity?.banner_zoom,
+            }}
+            alt=""
+            loading="eager"
+            fetchPriority="high"
+            aria-hidden
+          />
+        </div>
+      ) : null}
       <div
         className="community-channel-list"
         aria-label="Channels"

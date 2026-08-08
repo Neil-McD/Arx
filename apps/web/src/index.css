@@ -1574,6 +1574,14 @@
     border-left: 0;
   }
 
+  .product-shell-surface--community > .community-nav .community-nav-header {
+    margin: -12px -12px 0;
+  }
+
+  .product-shell-surface--community > .community-nav .community-nav-banner {
+    border-radius: 0;
+  }
+
   .product-shell-surface > :not(.community-nav):not(.sessions) {
     min-width: 0;
     min-height: 0;
