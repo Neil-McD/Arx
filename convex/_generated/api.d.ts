@@ -52,6 +52,7 @@ import type * as communityAgentServeWorker from "../communityAgentServeWorker.js
 import type * as communityAiFeed from "../communityAiFeed.js";
 import type * as communityAiFeedEvidence from "../communityAiFeedEvidence.js";
 import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCore.js";
+import type * as communityAiFeedRetirement from "../communityAiFeedRetirement.js";
 import type * as communityApplicationFeeRefundCore from "../communityApplicationFeeRefundCore.js";
 import type * as communityApplicationFeeRefunds from "../communityApplicationFeeRefunds.js";
 import type * as communityArchiveDocuments from "../communityArchiveDocuments.js";
@@ -297,6 +298,7 @@ declare const fullApi: ApiFromModules<{
   communityAiFeed: typeof communityAiFeed;
   communityAiFeedEvidence: typeof communityAiFeedEvidence;
   communityAiFeedEvidenceCore: typeof communityAiFeedEvidenceCore;
+  communityAiFeedRetirement: typeof communityAiFeedRetirement;
   communityApplicationFeeRefundCore: typeof communityApplicationFeeRefundCore;
   communityApplicationFeeRefunds: typeof communityApplicationFeeRefunds;
   communityArchiveDocuments: typeof communityArchiveDocuments;
