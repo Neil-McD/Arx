@@ -18,7 +18,7 @@ export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
   settings: Omit<
     ComponentProps<typeof WebCommunitySettingsSection>,
-    "state" | "actions" | "aiAgentProps" | "funnelProps"
+    "state" | "actions" | "aiAgentProps"
   > & {
     state: ComponentProps<typeof WebCommunitySettingsSection>["state"];
     actions: Omit<
@@ -72,7 +72,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
   const settingsSectionProps: ComponentProps<typeof WebCommunitySettingsSection> = {
     ...props.settings,
     aiAgentProps: props.aiAgent,
-    funnelProps: props.funnel,
     actions: {
       ...props.settings.actions,
       openCommunityAvatarFocusModal: () => props.settings.setIsCommunityAvatarFocusModalOpen(true),
@@ -110,6 +109,9 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
           <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
         </>
       ) : null}
+
+      {props.communityTab === "funnel" &&
+        renderCenteredPane(<WebCommunityFunnelSection {...props.funnel} />)}
 
       {props.communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}

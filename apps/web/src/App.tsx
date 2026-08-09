@@ -791,6 +791,7 @@ export default function App() {
     isLoadingCommunityAccess,
     communityTab,
     canViewSettings: canViewActiveCommunitySettings,
+    canManageMembers: canManageMembersActiveCommunity,
     canViewAnalytics: canViewActiveCommunityAnalytics,
     setCommunityResourceModuleId,
     applyCommunityShellState,
@@ -2974,8 +2975,6 @@ export default function App() {
           ? applyShellVariantToAppPath(
             buildCommunityTabPath(
               publicRoute.slug,
-              "settings",
-              null,
               "funnel",
             ) ?? "",
             shellVariant,
