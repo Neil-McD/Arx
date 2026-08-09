@@ -207,6 +207,19 @@ assert.match(workflowUi, /community-onboarding-preview-steps/);
 assert.match(workflowUi, /buildPlatformSwitcherStyle/);
 assert.match(workflowUi, /disabled=\{!enabled \|\| isSaving \|\| isDirty\}/);
 assert.match(workflowUi, /\{enabled \? \(/);
+const onboardingToggleStyles = baseCss.match(
+  /\.community-onboarding-toggle input:checked[\s\S]*?\.community-onboarding-field/,
+)?.[0] ?? "";
+assert.match(
+  onboardingToggleStyles,
+  /var\(--accent-selection\)/,
+  "onboarding enabled and focus states must follow the active theme selection color",
+);
+assert.doesNotMatch(
+  onboardingToggleStyles,
+  /var\(--accent-rose\)/,
+  "onboarding controls must not retain the retired Polynet pink accent",
+);
 assert.match(
   workflowUi,
   /export const WebCommunityOnboardingWorkflowSection = memo\(/,

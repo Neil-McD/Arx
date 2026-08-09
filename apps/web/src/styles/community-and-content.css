@@ -11972,21 +11972,6 @@ button.chat-reply-quote:hover {
   box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-gold) 26%, var(--border-default));
 }
 
-.community-ai-agent-tablist {
-  align-self: flex-start;
-  width: fit-content;
-  max-width: 100%;
-  margin: 0 0 16px;
-}
-
-.community-ai-agent-tab {
-  min-width: 78px;
-}
-
-.community-ai-agent-tab.is-active {
-  color: var(--text-primary);
-}
-
 .member-settings-section {
   display: grid;
   gap: 18px;

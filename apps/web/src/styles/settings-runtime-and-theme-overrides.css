@@ -7100,7 +7100,7 @@ button.settings-primary-action svg {
 }
 
 /* -------------------------------------------------------------------------- */
-/* Community AI Agent editor */
+/* Community Agent editor */
 /* -------------------------------------------------------------------------- */
 
 .agent-landing-preview-row {
@@ -9715,18 +9715,18 @@ button.settings-primary-action svg {
 }
 
 .community-onboarding-toggle input:checked ~ .community-onboarding-switch {
-  border-color: color-mix(in srgb, var(--accent-rose) 54%, var(--border-muted));
-  background: color-mix(in srgb, var(--accent-rose) 18%, transparent);
+  border-color: color-mix(in srgb, var(--accent-selection) 54%, var(--border-muted));
+  background: color-mix(in srgb, var(--accent-selection) 18%, transparent);
 }
 
 .community-onboarding-toggle input:checked ~ .community-onboarding-switch::after {
   transform: translateX(16px);
-  background: var(--text-primary);
+  background: var(--accent-selection);
 }
 
 .community-onboarding-toggle:focus-within .community-onboarding-switch {
-  border-color: var(--accent-rose);
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-rose) 20%, transparent);
+  border-color: var(--accent-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-selection) 20%, transparent);
 }
 
 .community-onboarding-field {
@@ -9767,9 +9767,9 @@ button.settings-primary-action svg {
 }
 
 .community-onboarding-video-input:focus {
-  border-color: color-mix(in srgb, var(--accent-rose) 68%, var(--border-default));
+  border-color: color-mix(in srgb, var(--accent-selection) 68%, var(--border-default));
   background: color-mix(in srgb, var(--bg-app) 58%, var(--surface-card) 42%);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-rose) 13%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-selection) 13%, transparent);
 }
 
 .community-onboarding-builder {

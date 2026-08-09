@@ -101,7 +101,6 @@ const app = read("apps/web/src/App.tsx");
 const shellNavigation = read(
   "apps/web/src/controllers/useWebShellNavigationController.ts",
 );
-const skillsModel = read("apps/web/src/controllers/useWebSkillsModel.ts");
 const settingsPanels = read("apps/web/src/components/WebSettingsPanels.tsx");
 const onboardingProfile = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
@@ -139,10 +138,10 @@ assert.match(
   shellNavigation,
   /const openGlobalSettings = useCallback[\s\S]*current\.activePage === "settings" && current\.settingsPage === page[\s\S]*pushNavSnapshot\(\)[\s\S]*navigateTo\(buildSettingsPath\(page\)\)/,
 );
-assert.doesNotMatch(
-  skillsModel,
-  /settingsPage|userPlatformSkills|useWebUserPlatformSkillsController/,
-  "global settings must not initialize the retired personal-skills editor",
+assert.equal(
+  existsSync("apps/web/src/controllers/useWebSkillsModel.ts"),
+  false,
+  "the retired community skill configuration model must not remain in the web client",
 );
 assert.match(
   settingsPanels,

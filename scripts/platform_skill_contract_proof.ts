@@ -124,14 +124,8 @@ function main() {
   const communitySkillAttachments = readText(
     "convex/communitySkillAttachments.ts",
   );
-  const skillsEditor = readText(
-    "apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
-  );
   const settingsPanels = readText(
     "apps/web/src/components/WebSettingsPanels.tsx",
-  );
-  const skillsModel = readText(
-    "apps/web/src/controllers/useWebSkillsModel.ts",
   );
   const app = readText("apps/web/src/App.tsx");
 
@@ -363,21 +357,6 @@ function main() {
     !communitySkillAttachments.includes("PLATFORM_RESOURCES_ARCHITECT_SKILL"),
     "platform Resources Architect must not be stored as a community attachment",
   );
-  assertIncludes(
-    skillsEditor,
-    "Available by default",
-    "community skills editor platform section",
-  );
-  assertIncludes(
-    skillsEditor,
-    "Built in",
-    "community skills editor platform badge",
-  );
-  assertIncludes(
-    skillsEditor,
-    "Locked",
-    "community skills editor locked platform state",
-  );
   assert.ok(
     !settingsPanels.includes("WebPersonalSkillsAccountSection") &&
       !settingsPanels.includes("effectiveSkill"),
@@ -387,21 +366,10 @@ function main() {
     !app.includes("settingsEffectiveSkills"),
     "App must not materialize community-scoped effective skills into global settings",
   );
-  assert.match(
+  assert.doesNotMatch(
     app,
-    /useWebSkillsModel\(\{[\s\S]*canManageResources: canManageResourcesActiveCommunity/,
-    "App must pass resource-builder authority into the skills model",
-  );
-  assert.match(
-    skillsModel,
-    /communityPlatformSkills: canManageResources\s*\?\s*COMMUNITY_MANAGER_PLATFORM_SKILLS/,
-    "community AI skills editor should use resource-builder authority",
-  );
-  assert.ok(
-    !/communityPlatformSkills:\s*canManageMembers[\s\S]*\? COMMUNITY_MANAGER_PLATFORM_SKILLS/.test(
-      skillsModel,
-    ),
-    "platform Resources Architect visibility must not be tied to member-management authority",
+    /useWebSkillsModel|aiAgentSkillsEditorProps/,
+    "App must not initialize the retired community skill configuration surface",
   );
 
   console.log("platform_skill_contract_proof: ok");

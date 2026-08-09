@@ -67,7 +67,6 @@ import { useWebPendingAuthIntentController } from "./controllers/useWebPendingAu
 import { useWebCommunityNavigationActions } from "./controllers/useWebCommunityNavigationActions";
 import { useWebJoinedCommunityEntryAction } from "./controllers/useWebJoinedCommunityEntryAction";
 import { useWebDiscoverActivationController } from "./controllers/useWebDiscoverActivationController";
-import { useWebSkillsModel } from "./controllers/useWebSkillsModel";
 import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLifecycle";
 import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
 import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
@@ -885,30 +884,6 @@ export default function App() {
     hydrateCommunityAgentEditor,
     handleResetCommunityAgentConfig,
   } = communityAgentConfigUi;
-  const skillsModel = useWebSkillsModel({
-    activeCommunityId,
-    activePage,
-    canManageMembers: canManageMembersActiveCommunity,
-    canManageResources: canManageResourcesActiveCommunity,
-    communitySettingsPane,
-    communityTab,
-    ensureSession: ensureUsableAuthSession,
-    session,
-  });
-  const {
-    communitySkillAttachments,
-    ownedSkillPackages,
-    isLoadingCommunitySkillAttachments,
-    isLoadingOwnedSkillPackages,
-    communitySkillAttachmentError,
-    ownedSkillPackagesError,
-    isCreatingSkill,
-    communitySkillMutationError,
-    updatingCommunitySkillAttachmentId,
-    removingCommunitySkillAttachmentId,
-    attachingSkillPackageId,
-  } = skillsModel.community;
-
   const communityAdminUi = communityAdministration.adminUi;
   const {
     communityFunnelConfig,
@@ -1112,13 +1087,6 @@ export default function App() {
     handleSaveCommunityAgentConfig,
     handleSaveCommunityFunnel,
   } = communityAgentAndFunnel;
-  const {
-    createCommunitySkill: handleCreateCommunitySkill,
-    attachSkillPackageToCommunity: handleAttachSkillPackageToCommunity,
-    updateCommunitySkillAttachment: handleUpdateCommunitySkillAttachment,
-    detachCommunitySkill: handleDetachCommunitySkill,
-  } = skillsModel.actions;
-
   const communitySettingsController = useWebCommunitySettingsController({
     activeCommunity,
     activeCommunityId,
@@ -2209,7 +2177,6 @@ export default function App() {
       markCommunitySettingsDirty,
       aiAgentHasSession: Boolean(session),
       canManageMembersActiveCommunity,
-      aiAgentPreferredTab: "instructions",
       isLoadingCommunityAgentConfig,
       communityAgentConfigError,
       aiAgentInstructionsEditorProps: {
@@ -2221,27 +2188,6 @@ export default function App() {
         communityAgentConfigCommunitySystemPrompt,
         setCommunityAgentConfigCommunitySystemPrompt,
         markCommunityAgentConfigDirty,
-      },
-      aiAgentSkillsEditorProps: {
-        intro: "Attach reusable skill packages here so this community lens can load behavior units on demand without bloating the base prompt.",
-        emptyState: "Attach the first skill package to this community. Attached skills become available when members explicitly mention them in this lens.",
-        addButtonLabel: "Create skill",
-        platformSkills: skillsModel.communityPlatformSkills,
-        skills: communitySkillAttachments,
-        packages: ownedSkillPackages,
-        isLoading: isLoadingCommunitySkillAttachments,
-        isLoadingPackages: isLoadingOwnedSkillPackages,
-        error: communitySkillAttachmentError,
-        packagesError: ownedSkillPackagesError,
-        mutationError: communitySkillMutationError,
-        isCreatingSkill: isCreatingSkill,
-        attachingPackageId: attachingSkillPackageId,
-        updatingSkillId: updatingCommunitySkillAttachmentId,
-        removingSkillId: removingCommunitySkillAttachmentId,
-        onCreateSkill: handleCreateCommunitySkill,
-        onAttachPackage: handleAttachSkillPackageToCommunity,
-        onUpdateSkill: handleUpdateCommunitySkillAttachment,
-        onDetachSkill: handleDetachCommunitySkill,
       },
       isLoadingCommunityFunnel,
       communityFunnelError,

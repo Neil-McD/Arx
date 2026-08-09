@@ -68,11 +68,9 @@ type BuildWebCommunitySurfaceProjectionParams = {
   aiAgentHasSession: WebCommunitySecondaryPanelsProps["aiAgent"]["hasSession"];
   canManageMembersActiveCommunity: WebCommunitySecondaryPanelsProps["aiAgent"]["canManageMembersActiveCommunity"];
   communityMemberCount: number | null;
-  aiAgentPreferredTab: WebCommunitySecondaryPanelsProps["aiAgent"]["preferredTab"];
   isLoadingCommunityAgentConfig: WebCommunitySecondaryPanelsProps["aiAgent"]["isLoadingCommunityAgentConfig"];
   communityAgentConfigError: WebCommunitySecondaryPanelsProps["aiAgent"]["communityAgentConfigError"];
   aiAgentInstructionsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["instructionsEditorProps"];
-  aiAgentSkillsEditorProps: WebCommunitySecondaryPanelsProps["aiAgent"]["skillsEditorProps"];
   isLoadingCommunityFunnel: WebCommunitySecondaryPanelsProps["funnel"]["isLoadingCommunityFunnel"];
   communityFunnelError: WebCommunitySecondaryPanelsProps["funnel"]["communityFunnelError"];
   funnelEditorProps: WebCommunitySecondaryPanelsProps["funnel"]["editorProps"];
@@ -205,12 +203,10 @@ export function buildWebCommunitySurfaceProjection(
       activeCommunity: params.activeCommunity,
       hasSession: params.aiAgentHasSession,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
-      preferredTab: params.aiAgentPreferredTab,
       isLoadingCommunityAgentConfig: params.isLoadingCommunityAgentConfig,
       communityAgentConfigError: params.communityAgentConfigError,
       onRequireSignIn: params.requireSignIn,
       instructionsEditorProps: params.aiAgentInstructionsEditorProps,
-      skillsEditorProps: params.aiAgentSkillsEditorProps,
     },
     funnel: {
       activeCommunity: params.activeCommunity,

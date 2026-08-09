@@ -294,8 +294,18 @@ assert.match(
 );
 assert.match(
   communityAgentSection,
-  /\{ id: "instructions", label: "Instructions" \}/,
-  "community agent settings must expose instructions as the canonical configuration surface",
+  /settings-section-title">Community Agent</,
+  "community agent settings must use the canonical Community Agent heading",
+);
+assert.match(
+  communityAgentSection,
+  /content = <WebCommunityAiAgentInstructionsEditor \{\.\.\.instructionsEditorProps\} \/>/,
+  "community agent settings must render the instructions editor directly",
+);
+assert.doesNotMatch(
+  communityAgentSection,
+  /WebCommunityAiAgentSkillsEditor|WebPlatformTabList|skillsEditorProps/,
+  "community agent settings must not retain the retired skills switcher or editor",
 );
 assert.doesNotMatch(
   communityAgentSection,

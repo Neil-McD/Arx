@@ -73,8 +73,8 @@ export function useWebCommunityAgentAndFunnelController(params: {
     setCommunityAgentConfigSaveError:
       params.agentUi.setCommunityAgentConfigSaveError,
     saveValidationErrorMessage: "Add at least one onboarding prompt.",
-    loadFailureMessage: "Failed to load AI agent config.",
-    saveFailureMessage: "Failed to save AI agent changes.",
+    loadFailureMessage: "Failed to load community agent settings.",
+    saveFailureMessage: "Failed to save community agent changes.",
   });
 
   const funnel = useCommunityFunnelController<

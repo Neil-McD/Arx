@@ -161,7 +161,7 @@ assert.equal(
 );
 
 assert.match(settings, /WebCommunitySettingsSection/, "community settings must remain available");
-assert.match(agent, /Instructions/, "AI Agent instructions must remain available");
+assert.match(agent, /Community Agent/, "Community Agent instructions must remain available");
 assert.match(resources, /WebCommunityResourcesSection/, "community resources must remain available");
 assert.match(funnel, /WebCommunityFunnelEditor/, "community funnel configuration must remain available");
 

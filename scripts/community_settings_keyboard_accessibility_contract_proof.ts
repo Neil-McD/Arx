@@ -90,15 +90,14 @@ assert.match(choiceControls, /tabIndex=\{isActive \? 0 : -1\}/);
 assert.match(choiceControls, /role="radiogroup"/);
 assert.match(choiceControls, /role="radio"/);
 assert.match(choiceControls, /aria-checked=\{isActive\}/);
-assert.match(
+assert.doesNotMatch(
   agentSettings,
-  /buttonClassName: "community-ai-agent-tab"/,
-  "the shared tab control must preserve Agent tab sizing and active styling",
+  /WebPlatformTabList|role="tabpanel"/,
+  "the instructions-only Community Agent pane must not retain a nested tab interface",
 );
 
 for (const [source, label] of [
   [communitySettings, "community settings"],
-  [agentSettings, "agent settings"],
   [onboardingSettings, "onboarding preview"],
 ] as const) {
   assert.match(

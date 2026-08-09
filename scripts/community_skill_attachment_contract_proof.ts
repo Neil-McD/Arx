@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function readText(path: string): string {
   return readFileSync(path, "utf8");
@@ -21,9 +21,6 @@ function main() {
   );
   const runtimeHarnessComposition = readText(
     "convex/runtimeHarnessComposition.ts",
-  );
-  const skillsEditor = readText(
-    "apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx",
   );
 
   for (const exportedName of [
@@ -92,24 +89,10 @@ function main() {
     !communitySkillAttachments.includes("dependencyAppSlugs"),
     "expected skill app dependency wiring to be removed",
   );
-  assertIncludes(
-    skillsEditor,
-    "Attached skills are injected only when explicitly mentioned",
-    "skills editor explicit mention guidance",
-  );
-  assertIncludes(
-    skillsEditor,
-    "Available skill packages",
-    "skills editor package library section",
-  );
-  assertIncludes(
-    skillsEditor,
-    "Attach",
-    "skills editor package attach action",
-  );
-  assert.ok(
-    !skillsEditor.includes("explicitly mentioned by\n              slug"),
-    "expected skills editor slug guidance to be removed",
+  assert.equal(
+    existsSync("apps/web/src/components/WebCommunityAiAgentSkillsEditor.tsx"),
+    false,
+    "community skill runtime support must not require a first-party settings surface",
   );
   assertIncludes(
     communitySkillAttachments,
