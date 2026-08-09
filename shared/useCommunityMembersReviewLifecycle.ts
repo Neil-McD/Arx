@@ -1,4 +1,4 @@
-import { useEffect, useRef, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useRef } from "react";
 import { toCanonicalCommunityVisibility } from "./communityVisibility";
 import { deriveCommunityMembersJoinReviewMode, type CommunityMembersJoinReviewMode } from "../apps/web/src/communityJoinPolicy";
 
@@ -10,7 +10,6 @@ type CommunityLike = {
 
 type LifecycleParams<
   SessionT,
-  JoinRequestT,
   CommunityT extends CommunityLike,
 > = {
   session: SessionT | null;
@@ -20,18 +19,14 @@ type LifecycleParams<
   activeCommunityMembersJoinReviewMode: CommunityMembersJoinReviewMode | null;
   shouldLoad?: boolean;
   loadCommunityJoinRequests: (communityId: string, session: SessionT) => Promise<void> | void;
-  setCommunityJoinRequests: Dispatch<SetStateAction<JoinRequestT[]>>;
-  setIsLoadingCommunityJoinRequests: Dispatch<SetStateAction<boolean>>;
-  setCommunityJoinRequestsError: Dispatch<SetStateAction<string | null>>;
-  setDecidingCommunityJoinRequestId: Dispatch<SetStateAction<string | null>>;
+  resetCommunityJoinRequests: () => void;
 };
 
 export function useCommunityMembersReviewLifecycle<
   SessionT,
-  JoinRequestT,
   CommunityT extends CommunityLike,
 >(
-  params: LifecycleParams<SessionT, JoinRequestT, CommunityT>,
+  params: LifecycleParams<SessionT, CommunityT>,
 ) {
   const loadCommunityJoinRequestsRef = useRef(params.loadCommunityJoinRequests);
 
@@ -40,29 +35,23 @@ export function useCommunityMembersReviewLifecycle<
   }, [params.loadCommunityJoinRequests]);
 
   useEffect(() => {
-    params.setCommunityJoinRequests([]);
-    params.setIsLoadingCommunityJoinRequests(false);
-    params.setCommunityJoinRequestsError(null);
-    params.setDecidingCommunityJoinRequestId(null);
-  }, [params.activeCommunityId]);
+    params.resetCommunityJoinRequests();
+  }, [params.activeCommunityId, params.resetCommunityJoinRequests]);
 
   useEffect(() => {
     const shouldLoadForSurface = params.shouldLoad === true;
-    if (!shouldLoadForSurface) return;
+    if (!shouldLoadForSurface) {
+      params.resetCommunityJoinRequests();
+      return;
+    }
     const session = params.session;
     const communityId = params.activeCommunityId;
     if (!session || !communityId) {
-      params.setCommunityJoinRequests([]);
-      params.setIsLoadingCommunityJoinRequests(false);
-      params.setCommunityJoinRequestsError(null);
-      params.setDecidingCommunityJoinRequestId(null);
+      params.resetCommunityJoinRequests();
       return;
     }
     if (!params.canReviewJoinRequests) {
-      params.setCommunityJoinRequests([]);
-      params.setIsLoadingCommunityJoinRequests(false);
-      params.setCommunityJoinRequestsError(null);
-      params.setDecidingCommunityJoinRequestId(null);
+      params.resetCommunityJoinRequests();
       return;
     }
 
@@ -71,48 +60,26 @@ export function useCommunityMembersReviewLifecycle<
       .trim()
       .toLowerCase();
     if (rawVisibility && !["published", "unlisted", "public", "private"].includes(rawVisibility)) {
-      params.setCommunityJoinRequests([]);
-      params.setIsLoadingCommunityJoinRequests(false);
-      params.setCommunityJoinRequestsError(null);
-      params.setDecidingCommunityJoinRequestId(null);
+      params.resetCommunityJoinRequests();
       return;
     }
     const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
 
     if (visibility !== "published" && visibility !== "unlisted") {
-      params.setCommunityJoinRequests([]);
-      params.setIsLoadingCommunityJoinRequests(false);
-      params.setCommunityJoinRequestsError(null);
-      params.setDecidingCommunityJoinRequestId(null);
+      params.resetCommunityJoinRequests();
       return;
     }
 
-    params.setCommunityJoinRequestsError(null);
     const joinReviewMode =
       params.activeCommunityMembersJoinReviewMode ??
       deriveCommunityMembersJoinReviewMode({ entry_policy: activeCommunityRecord?.entry_policy });
 
     if (joinReviewMode !== "free_approval") {
-      params.setCommunityJoinRequests([]);
-      params.setIsLoadingCommunityJoinRequests(false);
-      params.setCommunityJoinRequestsError(null);
-      params.setDecidingCommunityJoinRequestId(null);
+      params.resetCommunityJoinRequests();
       return;
     }
 
-    void Promise.resolve(loadCommunityJoinRequestsRef.current(communityId, session))
-      .catch((error) => {
-        const message =
-          typeof error === "string"
-            ? error
-            : error instanceof Error
-              ? error.message
-              : "Failed to load join requests.";
-        params.setCommunityJoinRequests([]);
-        params.setIsLoadingCommunityJoinRequests(false);
-        params.setCommunityJoinRequestsError(message);
-        params.setDecidingCommunityJoinRequestId(null);
-      });
+    void loadCommunityJoinRequestsRef.current(communityId, session);
   }, [
     params.session,
     params.activeCommunityId,
@@ -120,5 +87,6 @@ export function useCommunityMembersReviewLifecycle<
     params.activeCommunityMembersJoinReviewMode,
     params.shouldLoad,
     params.communities,
+    params.resetCommunityJoinRequests,
   ]);
 }

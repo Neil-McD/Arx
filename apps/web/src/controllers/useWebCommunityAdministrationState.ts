@@ -24,10 +24,6 @@ export type WebCommunityJoinRequest = {
   status: string;
   message: string | null;
   created_at: string;
-  updated_at: string;
-  decided_at: string | null;
-  decided_by: string | null;
-  denied_until: string | null;
 };
 
 type EnsureAuthSession = (
@@ -62,9 +58,7 @@ export function useWebCommunityAdministrationState(params: {
   const { activeCommunityId, ensureSession, resumeEpoch, session } = params;
 
   const joinRequests =
-    useWebCommunityJoinRequestsController<WebCommunityJoinRequest>({
-      activeCommunityId,
-    });
+    useWebCommunityJoinRequestsController<WebCommunityJoinRequest>();
 
   const [isSettingFreeAccessMode, setIsSettingFreeAccessMode] = useState(false);
   const [freeAccessModeError, setFreeAccessModeError] = useState<string | null>(null);

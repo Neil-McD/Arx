@@ -685,6 +685,7 @@ async function runLoggedCommunityAdminMutation<T>(params: {
       "community_not_found",
       "community_owner_cannot_leave",
       "community_paid_checkout_required",
+      "join_request_already_decided",
       "community_forbidden",
       "community_owner_required",
       "community_entitlement_required",
@@ -699,6 +700,20 @@ async function runLoggedCommunityAdminMutation<T>(params: {
     });
     throw error;
   }
+}
+
+function resolveCommunityJoinRequestDecision(
+  request: CommunityJoinRequestLike,
+  targetStatus: "approved" | "denied",
+): "apply" | "already_applied" {
+  const currentStatus = String(request.status ?? "")
+    .trim()
+    .toLowerCase();
+  if (currentStatus === targetStatus) return "already_applied";
+  if (currentStatus !== "pending") {
+    throw new Error("join_request_already_decided");
+  }
+  return "apply";
 }
 
 async function approveCommunityJoinRequestForFreeAccess(args: {
@@ -1275,6 +1290,7 @@ export const listCommunityJoinRequests = query({
         .slice(0, limit)
         .map(async (row) => ({
           id: String(row._id),
+          community_id: String(row.communityId),
           user_id:
             (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
             String(row.userId),
@@ -1321,6 +1337,9 @@ export const approveCommunityJoinRequest = mutation({
           communityId: request.communityId,
           userId: args.userId,
         });
+        if (resolveCommunityJoinRequestDecision(request, "approved") === "already_applied") {
+          return { ok: true };
+        }
         if (resolveCommunityEntryPolicy(community) === "paid_subscription") {
           throw new Error("community_paid_checkout_required");
         }
@@ -1368,6 +1387,9 @@ export const denyCommunityJoinRequest = mutation({
           communityId: request.communityId,
           userId: args.userId,
         });
+        if (resolveCommunityJoinRequestDecision(request, "denied") === "already_applied") {
+          return { ok: true };
+        }
         await ctx.db.patch(request._id as any, {
           status: "denied",
           deniedAt: nowMs,

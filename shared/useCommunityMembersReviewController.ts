@@ -55,6 +55,12 @@ function formatCommunityJoinRequestError(error: unknown, fallback: string): stri
   return text || fallback;
 }
 
+function isCommunityJoinRequestAlreadyDecidedError(error: unknown): boolean {
+  return readCommunityJoinRequestErrorText(error)
+    .toLowerCase()
+    .includes("join_request_already_decided");
+}
+
 type UseCommunityMembersReviewControllerArgs<
   SessionT extends SessionLike,
   JoinRequestT extends JoinRequestLike,
@@ -79,84 +85,144 @@ export function useCommunityMembersReviewController<
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
+  const loadGenerationRef = useRef(0);
+  const decisionGenerationRef = useRef(0);
+  const activeDecisionRef = useRef<{
+    communityId: string;
+    requestId: string;
+    token: number;
+  } | null>(null);
+
+  const resetCommunityJoinRequests = useCallback(() => {
+    loadGenerationRef.current += 1;
+    decisionGenerationRef.current += 1;
+    activeDecisionRef.current = null;
+    const current = argsRef.current;
+    current.setCommunityJoinRequests([]);
+    current.setIsLoadingCommunityJoinRequests(false);
+    current.setCommunityJoinRequestsError(null);
+    current.setDecidingCommunityJoinRequestId(null);
+  }, []);
 
   const loadCommunityJoinRequests = useCallback(async (communityId: string, session: SessionT) => {
-    const current = argsRef.current;
-    const usableSession = await resolveUsableSession(session, current.ensureSession);
-    if (!usableSession) return;
-    current.setIsLoadingCommunityJoinRequests(true);
-    current.setCommunityJoinRequestsError(null);
+    const generation = ++loadGenerationRef.current;
+    const isCurrentLoad = () =>
+      generation === loadGenerationRef.current &&
+      argsRef.current.activeCommunityId === communityId;
+    if (!isCurrentLoad()) return;
+    argsRef.current.setIsLoadingCommunityJoinRequests(true);
+    argsRef.current.setCommunityJoinRequestsError(null);
     try {
+      const usableSession = await resolveUsableSession(
+        session,
+        argsRef.current.ensureSession,
+      );
+      if (!usableSession || !isCurrentLoad()) return;
       const rows = await listCloudCommunityJoinRequestRows<SessionT, JoinRequestT>({
         session: usableSession,
         communityId,
       });
+      if (!isCurrentLoad()) return;
       const normalizedRows = Array.isArray(rows) ? rows : [];
-      current.setCommunityJoinRequests(normalizedRows);
+      argsRef.current.setCommunityJoinRequests(normalizedRows);
       const userIds = Array.from(new Set(normalizedRows.map((row) => row.user_id)));
-      await current.loadUserProfiles(userIds, usableSession);
+      try {
+        await argsRef.current.loadUserProfiles(userIds, usableSession);
+      } catch {
+        // Request review remains usable with the existing display-name fallback.
+      }
     } catch (error) {
-      current.setCommunityJoinRequests([]);
-      current.setCommunityJoinRequestsError(
+      if (!isCurrentLoad()) return;
+      argsRef.current.setCommunityJoinRequests([]);
+      argsRef.current.setCommunityJoinRequestsError(
         formatCommunityJoinRequestError(error, "Failed to load join requests."),
       );
     } finally {
-      current.setIsLoadingCommunityJoinRequests(false);
+      if (isCurrentLoad()) {
+        argsRef.current.setIsLoadingCommunityJoinRequests(false);
+      }
     }
   }, []);
 
-  const handleApproveCommunityJoinRequest = useCallback(async (requestId: string) => {
-    const current = argsRef.current;
-    const communityId = current.activeCommunityId;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session || !communityId) return;
-    current.setCommunityJoinRequestsError(null);
-    current.setDecidingCommunityJoinRequestId(requestId);
+  const runCommunityJoinRequestDecision = useCallback(async (
+    requestId: string,
+    decision: "approve" | "deny",
+  ) => {
+    const communityId = argsRef.current.activeCommunityId;
+    if (!communityId) return;
+    if (activeDecisionRef.current?.communityId === communityId) return;
+    const token = ++decisionGenerationRef.current;
+    activeDecisionRef.current = { communityId, requestId, token };
+    const isCurrentDecision = () =>
+      activeDecisionRef.current?.token === token &&
+      argsRef.current.activeCommunityId === communityId;
+    argsRef.current.setCommunityJoinRequestsError(null);
+    argsRef.current.setDecidingCommunityJoinRequestId(requestId);
+    let session: SessionT | null = null;
     try {
-      await approveCloudCommunityJoinRequest({
-        session,
-        requestId,
-      });
-      await Promise.all([
-        current.reloadCommunityDirectoryMembers(communityId, session),
-        loadCommunityJoinRequests(communityId, session),
-        current.onJoinRequestApproved?.({
-          communityId,
-          requestId,
-        }),
-      ]);
-    } catch (error) {
-      current.setCommunityJoinRequestsError(
-        formatCommunityJoinRequestError(error, "Failed to approve request."),
+      session = await resolveUsableSession(
+        argsRef.current.session,
+        argsRef.current.ensureSession,
       );
+      if (!session || !isCurrentDecision()) return;
+      if (decision === "approve") {
+        await approveCloudCommunityJoinRequest({ session, requestId });
+      } else {
+        await denyCloudCommunityJoinRequest({ session, requestId });
+      }
+      if (!isCurrentDecision()) return;
+      if (decision === "approve") {
+        await Promise.all([
+          argsRef.current.reloadCommunityDirectoryMembers(communityId, session),
+          loadCommunityJoinRequests(communityId, session),
+          argsRef.current.onJoinRequestApproved?.({
+            communityId,
+            requestId,
+          }),
+        ]);
+      } else {
+        await loadCommunityJoinRequests(communityId, session);
+      }
+    } catch (error) {
+      if (!isCurrentDecision()) return;
+      if (isCommunityJoinRequestAlreadyDecidedError(error) && session) {
+        await loadCommunityJoinRequests(communityId, session);
+      } else {
+        argsRef.current.setCommunityJoinRequestsError(
+          formatCommunityJoinRequestError(
+            error,
+            decision === "approve"
+              ? "Failed to approve request."
+              : "Failed to deny request.",
+          ),
+        );
+      }
     } finally {
-      current.setDecidingCommunityJoinRequestId(null);
+      if (activeDecisionRef.current?.token === token) {
+        activeDecisionRef.current = null;
+        if (argsRef.current.activeCommunityId === communityId) {
+          argsRef.current.setDecidingCommunityJoinRequestId(null);
+        }
+      }
     }
   }, [loadCommunityJoinRequests]);
 
-  const handleDenyCommunityJoinRequest = useCallback(async (requestId: string) => {
-    const current = argsRef.current;
-    const communityId = current.activeCommunityId;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session || !communityId) return;
-    current.setCommunityJoinRequestsError(null);
-    current.setDecidingCommunityJoinRequestId(requestId);
-    try {
-      await denyCloudCommunityJoinRequest({
-        session,
-        requestId,
-      });
-      await loadCommunityJoinRequests(communityId, session);
-    } catch (error) {
-      current.setCommunityJoinRequestsError(
-        formatCommunityJoinRequestError(error, "Failed to deny request."),
-      );
-    } finally {
-      current.setDecidingCommunityJoinRequestId(null);
-    }
-  }, [loadCommunityJoinRequests]);
+  const handleApproveCommunityJoinRequest = useCallback(
+    async (requestId: string) => {
+      await runCommunityJoinRequestDecision(requestId, "approve");
+    },
+    [runCommunityJoinRequestDecision],
+  );
+
+  const handleDenyCommunityJoinRequest = useCallback(
+    async (requestId: string) => {
+      await runCommunityJoinRequestDecision(requestId, "deny");
+    },
+    [runCommunityJoinRequestDecision],
+  );
 
   return {
+    resetCommunityJoinRequests,
     loadCommunityJoinRequests,
     handleApproveCommunityJoinRequest,
     handleDenyCommunityJoinRequest,

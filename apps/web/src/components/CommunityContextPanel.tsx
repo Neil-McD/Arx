@@ -217,6 +217,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const requestDividerAriaLabel = hasPendingJoinRequestOverflow
     ? "200 or more requests to join"
     : requestDividerLabel;
+  const isJoinRequestDecisionPending = Boolean(props.decidingJoinRequestId);
   const canShowJoinRequestLoadError = Boolean(
     props.canReviewJoinRequests &&
       props.joinReviewMode === "free_approval" &&
@@ -457,7 +458,8 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           <button
             className="community-context-request-action"
             type="button"
-            disabled={isDeciding}
+            disabled={isJoinRequestDecisionPending}
+            aria-busy={isDeciding || undefined}
             aria-label={`Approve ${name}`}
             title="Approve"
             onClick={() => void props.onApproveJoinRequest?.(request.id)}
@@ -467,7 +469,8 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           <button
             className="community-context-request-action is-danger"
             type="button"
-            disabled={isDeciding}
+            disabled={isJoinRequestDecisionPending}
+            aria-busy={isDeciding || undefined}
             aria-label={`Deny ${name}`}
             title="Deny"
             onClick={() => void props.onDenyJoinRequest?.(request.id)}

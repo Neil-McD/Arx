@@ -1049,6 +1049,31 @@ export default function App() {
     setCommunityAnalyticsSummary,
     setCommunityAnalyticsSeries,
   });
+  const {
+    resetCommunityJoinRequests,
+    loadCommunityJoinRequests,
+    handleApproveCommunityJoinRequest,
+    handleDenyCommunityJoinRequest,
+  } = useCommunityMembersReviewController<
+    AuthSession,
+    CommunityJoinRequest
+  >({
+    activeCommunityId,
+    ...authenticatedSessionArg,
+    loadUserProfiles: (userIds, session) => loadUserProfiles(userIds, session),
+    reloadCommunityDirectoryMembers: loadCommunityDirectoryMembers,
+    onJoinRequestApproved: ({ communityId, requestId }) => {
+      captureProductAnalyticsEvent("community join request approved", {
+        community_id: communityId,
+        request_id: requestId,
+        surface: "workspace_community_panel",
+      });
+    },
+    setCommunityJoinRequests,
+    setIsLoadingCommunityJoinRequests,
+    setCommunityJoinRequestsError,
+    setDecidingCommunityJoinRequestId,
+  });
   const communityMemberManagement =
     useWebCommunityMemberManagementController({
     activeCommunityId,
@@ -1061,7 +1086,7 @@ export default function App() {
     setCommunities,
     setFreeAccessError: setCommunityFreeAccessModeError,
     setIsSettingFreeAccess: setIsSettingCommunityFreeAccessMode,
-    clearJoinRequests: () => setCommunityJoinRequests([]),
+    clearJoinRequests: resetCommunityJoinRequests,
   });
   const {
     loadMemberBillingHistory: loadCommunityMemberBillingHistory,
@@ -1145,32 +1170,6 @@ export default function App() {
     isArchivingCommunity,
     communityArchiveError,
   } = communitySettingsController;
-  const {
-    loadCommunityJoinRequests,
-    handleApproveCommunityJoinRequest,
-    handleDenyCommunityJoinRequest,
-  } = useCommunityMembersReviewController<
-    AuthSession,
-    CommunityJoinRequest
-  >({
-    activeCommunityId,
-    ...authenticatedSessionArg,
-    loadUserProfiles: (userIds, session) => loadUserProfiles(userIds, session),
-    reloadCommunityDirectoryMembers: loadCommunityDirectoryMembers,
-    onJoinRequestApproved: ({ communityId, requestId }) => {
-      captureProductAnalyticsEvent("community join request approved", {
-        community_id: communityId,
-        request_id: requestId,
-        surface: "workspace_community_panel",
-      });
-    },
-    setCommunityJoinRequests,
-    setIsLoadingCommunityJoinRequests,
-    setCommunityJoinRequestsError,
-    setDecidingCommunityJoinRequestId,
-  });
-
-
   const {
     discoverCommunities,
     setDiscoverCommunities,
@@ -1359,7 +1358,6 @@ export default function App() {
 
   useCommunityMembersReviewLifecycle<
     AuthSession,
-    CommunityJoinRequest,
     CommunityRecord
   >({
     ...sessionArg,
@@ -1369,10 +1367,7 @@ export default function App() {
     activeCommunityMembersJoinReviewMode,
     shouldLoad: shouldHydrateCommunityContextPanel,
     loadCommunityJoinRequests,
-    setCommunityJoinRequests,
-    setIsLoadingCommunityJoinRequests,
-    setCommunityJoinRequestsError,
-    setDecidingCommunityJoinRequestId,
+    resetCommunityJoinRequests,
   });
 
   useCommunityAdminAnalyticsLifecycle({

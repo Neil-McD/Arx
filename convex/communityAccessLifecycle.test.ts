@@ -527,6 +527,18 @@ test("approval join fails closed until manager approval and closes again after r
   expect(pendingState.requests).toHaveLength(1);
   expect(pendingState.requests[0].status).toBe("pending");
   const requestId = pendingState.requests[0]._id;
+  await expect(
+    asOwner.query(api.communityAdmin.listCommunityJoinRequests, {
+      communityId: fixture.approvalCommunityId,
+      includeStatuses: ["pending"],
+    }),
+  ).resolves.toEqual([
+    expect.objectContaining({
+      id: String(requestId),
+      community_id: String(fixture.approvalCommunityId),
+      status: "pending",
+    }),
+  ]);
 
   const pendingNativeAccess = await executeSemanticList({
     actor: asMember,
@@ -555,6 +567,16 @@ test("approval join fails closed until manager approval and closes again after r
       requestId,
     }),
   ).resolves.toEqual({ ok: true });
+  await expect(
+    asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, {
+      requestId,
+    }),
+  ).resolves.toEqual({ ok: true });
+  await expect(
+    asOwner.mutation(api.communityAdmin.denyCommunityJoinRequest, {
+      requestId,
+    }),
+  ).rejects.toThrow("join_request_already_decided");
 
   const approvedState = await t.run(async (ctx) => ({
     community: await ctx.db.get(fixture.approvalCommunityId),
@@ -643,6 +665,53 @@ test("approval join fails closed until manager approval and closes again after r
     outcome: "approval_denied",
     community_id: String(fixture.approvalCommunityId),
   });
+});
+
+test("denied join-request decisions are idempotent and cannot later grant access", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+
+  await asMember.mutation(api.communityPublic.joinPublicCommunityBySlug, {
+    communitySlug: "access-lifecycle-approval",
+  });
+  const requestId = await t.run(async (ctx) => {
+    const rows = await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.memberId),
+      )
+      .collect();
+    return rows[0]._id;
+  });
+
+  await expect(
+    asOwner.mutation(api.communityAdmin.denyCommunityJoinRequest, { requestId }),
+  ).resolves.toEqual({ ok: true });
+  await expect(
+    asOwner.mutation(api.communityAdmin.denyCommunityJoinRequest, { requestId }),
+  ).resolves.toEqual({ ok: true });
+  await expect(
+    asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, { requestId }),
+  ).rejects.toThrow("join_request_already_decided");
+
+  const terminalState = await t.run(async (ctx) => ({
+    request: await ctx.db.get(requestId),
+    memberships: await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.memberId),
+      )
+      .collect(),
+  }));
+  expect(terminalState.request?.status).toBe("denied");
+  expect(terminalState.memberships).toHaveLength(0);
 });
 
 test("paid public join never materializes access without an entitlement", async () => {
