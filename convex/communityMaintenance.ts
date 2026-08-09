@@ -3,7 +3,6 @@ import { internalMutation } from "./_generated/server";
 import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
-  type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
   type CommunityMembershipLike,
@@ -12,6 +11,7 @@ import {
   type CommunitySubscriptionLike,
   normalizeIdValue,
 } from "./communityCore";
+import type { CommunityJoinRequestLike } from "./communityJoinRequestCore";
 
 function normalizeMaintenanceSlug(raw: unknown): string {
   return String(raw ?? "")

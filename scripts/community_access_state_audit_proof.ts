@@ -40,7 +40,9 @@ function main() {
     "active_paid_membership_without_granting_subscription",
     "active_paid_membership_with_stale_subscription_period",
     "paid_community_durable_grant_review",
-    "approved_join_request_without_active_membership",
+    "join_request_not_canonical",
+    "active_membership_with_join_request",
+    "join_request_pair_not_unique",
   ]) {
     assertIncludes(audit, findingCode, `audit finding ${findingCode}`);
   }

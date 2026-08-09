@@ -2,7 +2,6 @@ import { internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import {
   type CommunityBlockLike,
-  type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMembershipLike,
   type CommunityPricePointLike,
@@ -14,6 +13,10 @@ import {
   pickMostRelevantCommunityMembership,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
+import {
+  type CommunityJoinRequestLike,
+  assertCanonicalCommunityJoinRequest,
+} from "./communityJoinRequestCore";
 
 type CommunityAccessAuditSeverity = "info" | "warning" | "error";
 
@@ -195,23 +198,51 @@ export const listCommunityAccessStateAuditFindingsInternal = internalQuery({
         }
       }
 
+      const joinRequestCountByUser = new Map<string, number>();
       for (const request of joinRequests) {
-        const status = String(request.status ?? "").trim().toLowerCase();
-        if (status !== "approved") continue;
-        const membership = pickMostRelevantCommunityMembership(membershipsByUser.get(String(request.userId)));
-        if (!communityMembershipRowIsActive(membership)) {
+        const requestUserId = String(request.userId);
+        joinRequestCountByUser.set(
+          requestUserId,
+          (joinRequestCountByUser.get(requestUserId) ?? 0) + 1,
+        );
+        try {
+          assertCanonicalCommunityJoinRequest(request);
+        } catch (error) {
           pushFinding(findings, community, {
-            code: "approved_join_request_without_active_membership",
-            severity: entryPolicy === "paid_subscription" ? "warning" : "error",
+            code: "join_request_not_canonical",
+            severity: "error",
+            user_id: requestUserId,
+            join_request_id: String(request._id),
+            details: {
+              status: request.status,
+              reason: error instanceof Error ? error.message : String(error),
+            },
+          });
+          continue;
+        }
+        const membership = pickMostRelevantCommunityMembership(membershipsByUser.get(String(request.userId)));
+        if (communityMembershipRowIsActive(membership)) {
+          pushFinding(findings, community, {
+            code: "active_membership_with_join_request",
+            severity: "error",
             user_id: String(request.userId),
             join_request_id: String(request._id),
             membership_id: membership ? String(membership._id) : undefined,
             details: {
               entry_policy: entryPolicy,
-              request_updated_at: request.updatedAt,
+              request_status: request.status,
             },
           });
         }
+      }
+      for (const [requestUserId, count] of joinRequestCountByUser) {
+        if (count <= 1) continue;
+        pushFinding(findings, community, {
+          code: "join_request_pair_not_unique",
+          severity: "error",
+          user_id: requestUserId,
+          details: { count },
+        });
       }
     }
 

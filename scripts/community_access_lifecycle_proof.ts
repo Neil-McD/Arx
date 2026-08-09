@@ -15,7 +15,7 @@ type Membership = {
 type LifecycleState = {
   entryPolicy: EntryPolicy;
   membership: Membership | null;
-  joinRequestStatus: "none" | "pending" | "approved" | "denied" | "canceled";
+  joinRequestStatus: "none" | "pending" | "denied";
   blocked: boolean;
   subscriptionStatus: SubscriptionStatus | null;
 };
@@ -60,7 +60,7 @@ function joinPublicCommunity(state: LifecycleState): "joined" | "approval_pendin
 function approveJoinRequest(state: LifecycleState) {
   if (state.entryPolicy === "paid_subscription") throw new Error("community_paid_checkout_required");
   if (state.joinRequestStatus !== "pending") throw new Error("join_request_not_pending");
-  state.joinRequestStatus = "approved";
+  state.joinRequestStatus = "none";
   state.membership = { active: true, accessSource: "free_grant", role: "member" };
 }
 
@@ -115,7 +115,9 @@ function assertSourceAnchors() {
   assertIncludes(communityAdmin, "await ctx.db.delete(membership._id as any);", "member leave deletes own membership row intentionally");
   assertIncludes(audit, "active_membership_with_active_block", "state audit checks active block drift");
   assertIncludes(audit, "active_paid_membership_without_granting_subscription", "state audit checks paid subscription drift");
-  assertIncludes(audit, "approved_join_request_without_active_membership", "state audit checks approved request drift");
+  assertIncludes(audit, "join_request_not_canonical", "state audit checks legacy request drift");
+  assertIncludes(audit, "active_membership_with_join_request", "state audit checks residual request drift");
+  assertIncludes(audit, "join_request_pair_not_unique", "state audit checks duplicate request drift");
 }
 
 function main() {

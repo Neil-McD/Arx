@@ -68,8 +68,8 @@ assert.match(
 );
 assert.match(
   homeCommunity,
-  /PLATFORM_HOME_AUTOJOIN_OPT_OUT_MESSAGE[\s\S]*readPlatformHomeAutojoinOptOut/,
-  "canonical Polynet auto-membership must preserve explicit member opt-out",
+  /PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON[\s\S]*platformHomeMembershipDisablesAutojoin[\s\S]*existingMembership[\s\S]*status: "disabled"/,
+  "canonical Polynet auto-membership must preserve explicit member opt-out as membership state",
 );
 assert.match(
   backend,
