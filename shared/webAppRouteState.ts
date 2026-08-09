@@ -169,10 +169,7 @@ export function buildCommunityTabPath(
 ): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
-  const tabSegment =
-    communityTab === "ai_agent"
-      ? "agent"
-      : communityTab;
+  const tabSegment = communityTab;
   const moduleId = String(communityResourceModuleId ?? "").trim();
   const channelSlug = String(communityChannelSlug ?? "").trim().toLowerCase();
   if (communityTab === "chat" && channelSlug && channelSlug !== "general") {
@@ -288,8 +285,6 @@ function parseSettingsPage(value: string | null | undefined): SettingsPage {
 
 function parseCommunityTabSegment(value: string | null | undefined): CommunityTab {
   switch ((value ?? "").trim()) {
-    case "agent":
-      return "ai_agent";
     case "ai-feed":
       return "chat";
     default:
@@ -420,13 +415,24 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
   if (segments[0] === "c" && segments.length >= 3) {
     const slug = String(segments[1] ?? "").trim() || null;
     if (!slug) return null;
-    const communityTab = parseCommunityTabSegment(segments[2] ?? null);
+    const tabSegment = String(segments[2] ?? "").trim();
+    const legacySettingsPane =
+      tabSegment === "agent" || tabSegment === "ai_agent"
+        ? "agent"
+        : tabSegment === "funnel"
+          ? "funnel"
+          : null;
+    const communityTab = legacySettingsPane
+      ? "settings"
+      : parseCommunityTabSegment(tabSegment);
     const communityResourceModuleId =
       communityTab === "resources" ? String(segments[3] ?? "").trim() || null : null;
     const communityChannelSlug =
       communityTab === "chat" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communitySettingsPane =
-      communityTab === "settings" ? parseCommunitySettingsPane(segments[3] ?? null) : null;
+      communityTab === "settings"
+        ? parseCommunitySettingsPane(legacySettingsPane ?? segments[3] ?? null)
+        : null;
     return {
       page: "community",
       view: "home",

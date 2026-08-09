@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 import type { DragEvent } from "react";
 import type { CommunitySettingsLayer } from "../../../../shared/communityAccessViewModel";
 import { deriveCommunitySettingsAccessPresentation } from "../../../../shared/communityAccessResolution";
@@ -7,11 +7,17 @@ import type { AccountCommerceStatus } from "../../../../shared/accountCommerceSt
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { formatStripeConnectCountry } from "../../../../shared/stripeConnectCountries";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
-import type { CommunitySettingsPane } from "../../../../shared/appShellNavigation";
+import {
+  listCommunitySettingsPanesForAccess,
+  normalizeCommunitySettingsPaneForAccess,
+  type CommunitySettingsPane,
+} from "../../../../shared/appShellNavigation";
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebCommunityOnboardingWorkflowSection } from "./WebCommunityOnboardingWorkflowSection";
+import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
+import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -42,6 +48,9 @@ type WebCommunitySettingsSectionProps = {
   onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
   onPreviewCommunityOnboarding: () => void;
   canManageCommunitySettings: boolean;
+  canManageMembersActiveCommunity: boolean;
+  aiAgentProps: ComponentProps<typeof WebCommunityAiAgentSection>;
+  funnelProps: ComponentProps<typeof WebCommunityFunnelSection>;
   requireSignIn: () => void;
   accountCommerceStatus: AccountCommerceStatus | null;
   communityPlatformFeeBps: number | null;
@@ -127,8 +136,10 @@ type WebCommunitySettingsSectionProps = {
 type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "actions">;
 
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
-  community: "Community",
-  workflows: "Workflows",
+  community: "General",
+  workflows: "Onboarding",
+  agent: "Agent",
+  funnel: "Funnel",
   danger: "Danger",
 };
 
@@ -703,6 +714,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     activePane,
     onSelectPane,
     canManageCommunitySettings,
+    canManageMembersActiveCommunity,
+    aiAgentProps,
+    funnelProps,
     requireSignIn,
     accountCommerceStatus,
     communityPlatformFeeBps,
@@ -713,15 +727,17 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     actions,
   } = props;
   const isOwnerSettingsLayer = communitySettingsLayer === "owner";
-  const managerSettingsPanes: CommunitySettingsPane[] = ["community", "workflows"];
-  const availableSettingsPanes: CommunitySettingsPane[] = canManageCommunitySettings
-    ? isOwnerSettingsLayer
-      ? [...managerSettingsPanes, "danger" as const]
-      : managerSettingsPanes
-    : [];
-  const selectedSettingsPane = availableSettingsPanes.includes(activePane)
-    ? activePane
-    : availableSettingsPanes[0] ?? "community";
+  const settingsPaneAccess = {
+    canViewSettings: canViewActiveCommunitySettings,
+    canManageSettings: canManageCommunitySettings,
+    canManageMembers: canManageMembersActiveCommunity,
+    isOwner: isOwnerSettingsLayer,
+  };
+  const availableSettingsPanes = listCommunitySettingsPanesForAccess(settingsPaneAccess);
+  const selectedSettingsPane = normalizeCommunitySettingsPaneForAccess(
+    activePane,
+    settingsPaneAccess,
+  );
   const availableSettingsPaneKey = availableSettingsPanes.join("|");
   const accessPresentationState = deriveCommunitySettingsAccessPresentation({
     hasActiveCommunity: Boolean(activeCommunity),
@@ -854,6 +870,12 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 communityAvatarZoom={resolvedActiveCommunity.avatar_zoom}
                 onPreview={props.onPreviewCommunityOnboarding}
               />
+            ) : null}
+            {selectedSettingsPane === "agent" ? (
+              <WebCommunityAiAgentSection {...aiAgentProps} embedded />
+            ) : null}
+            {selectedSettingsPane === "funnel" ? (
+              <WebCommunityFunnelSection {...funnelProps} embedded />
             ) : null}
             {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
               <CommunityDangerSettingsSection

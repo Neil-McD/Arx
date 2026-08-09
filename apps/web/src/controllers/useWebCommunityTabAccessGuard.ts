@@ -13,7 +13,6 @@ export function useWebCommunityTabAccessGuard(params: {
   isLoadingCommunityAccess: boolean;
   communityTab: CommunityTab;
   canViewSettings: boolean;
-  canManageMembers: boolean;
   canViewAnalytics: boolean;
   setCommunityResourceModuleId: (value: null) => void;
   applyCommunityShellState: (value: {
@@ -33,7 +32,6 @@ export function useWebCommunityTabAccessGuard(params: {
       params.communityTab,
       {
         canViewSettings: params.canViewSettings,
-        canManageMembers: params.canManageMembers,
         canViewAnalytics: params.canViewAnalytics,
       },
     );
@@ -45,7 +43,6 @@ export function useWebCommunityTabAccessGuard(params: {
     params.activeCommunityId,
     params.activePage,
     params.applyCommunityShellState,
-    params.canManageMembers,
     params.canViewAnalytics,
     params.canViewSettings,
     params.communityTab,

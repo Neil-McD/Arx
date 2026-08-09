@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
   isCommunityTabAllowedForAccess,
+  listCommunitySettingsPanesForAccess,
   normalizeCommunityTabForAccess,
   parseCommunityTab,
   type CommunityTabAccess,
@@ -13,13 +14,11 @@ function read(path: string): string {
 
 const memberAccess: CommunityTabAccess = {
   canViewSettings: true,
-  canManageMembers: false,
   canViewAnalytics: false,
 };
 
 const builderAccess: CommunityTabAccess = {
   canViewSettings: true,
-  canManageMembers: true,
   canViewAnalytics: true,
 };
 
@@ -50,23 +49,21 @@ assert.equal(
   "legacy /polynet routes should collapse to chat because Memory is a chat sidecar",
 );
 
-for (const tab of ["ai_agent", "funnel", "analytics"] as const) {
-  assert.equal(
-    isCommunityTabAllowedForAccess(tab, memberAccess),
-    false,
-    `members must not be allowed to stay on builder-only tab ${tab}`,
-  );
-  assert.equal(
-    normalizeCommunityTabForAccess(tab, memberAccess),
-    "chat",
-    `builder-only tab ${tab} must fall back to chat for members`,
-  );
-  assert.equal(
-    normalizeCommunityTabForAccess(tab, builderAccess),
-    tab,
-    `builders should keep builder tab ${tab}`,
-  );
-}
+assert.equal(isCommunityTabAllowedForAccess("analytics", memberAccess), false);
+assert.equal(normalizeCommunityTabForAccess("analytics", memberAccess), "chat");
+assert.equal(normalizeCommunityTabForAccess("analytics", builderAccess), "analytics");
+assert.equal(parseCommunityTab("ai_agent"), "settings");
+assert.equal(parseCommunityTab("funnel"), "settings");
+assert.deepEqual(
+  listCommunitySettingsPanesForAccess({
+    canViewSettings: true,
+    canManageSettings: true,
+    canManageMembers: true,
+    isOwner: false,
+  }),
+  ["community", "workflows", "agent", "funnel"],
+  "admins must receive configuration panes without the owner-only Danger pane",
+);
 
 const navigation = read("shared/appShellNavigation.ts");
 const activeCommunityShellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
@@ -75,8 +72,16 @@ const membersReviewController = read("shared/useCommunityMembersReviewController
 
 assert.match(
   navigation,
-  /export type CommunityTabAccess = \{[\s\S]*canViewSettings: boolean;[\s\S]*canManageMembers: boolean;[\s\S]*canViewAnalytics: boolean;[\s\S]*\};/,
+  /export type CommunityTabAccess = \{[\s\S]*canViewSettings: boolean;[\s\S]*canViewAnalytics: boolean;[\s\S]*\};/,
   "community tab access contract must stay centralized",
+);
+assert.doesNotMatch(
+  navigation.slice(
+    navigation.indexOf("export const COMMUNITY_TABS"),
+    navigation.indexOf("export type CommunityTab"),
+  ),
+  /"ai_agent"|"funnel"/,
+  "Agent and Funnel must not remain first-class community tabs",
 );
 assert.doesNotMatch(
   navigation,
@@ -90,8 +95,8 @@ assert.doesNotMatch(
 );
 assert.match(
   navigation,
-  /case "ai_agent":[\s\S]*case "funnel":[\s\S]*return access\.canManageMembers;/,
-  "AI Agent and Funnel tabs must remain builder-only",
+  /case "agent":[\s\S]*case "funnel":[\s\S]*return access\.canManageMembers;/,
+  "Agent and Funnel settings panes must remain builder-only",
 );
 assert.match(
   tabAccessGuard,
@@ -120,7 +125,7 @@ assert.doesNotMatch(
 );
 assert.match(
   tabAccessGuard,
-  /normalizeCommunityTabForAccess\([\s\S]*canViewSettings: params\.canViewSettings,[\s\S]*canManageMembers: params\.canManageMembers,[\s\S]*canViewAnalytics: params\.canViewAnalytics/,
+  /normalizeCommunityTabForAccess\([\s\S]*canViewSettings: params\.canViewSettings,[\s\S]*canViewAnalytics: params\.canViewAnalytics/,
   "the tab guard must normalize from the same capability booleans used by CommunityNav",
 );
 assert.match(

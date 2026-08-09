@@ -3,6 +3,7 @@ import { useCallback, useEffect } from "react";
 import type { AuthSession } from "../auth";
 import type {
   AppPage,
+  CommunitySettingsPane,
   CommunityTab,
 } from "../../../../shared/appShellNavigation";
 import { COMMUNITY_MANAGER_PLATFORM_SKILLS } from "../../../../shared/platformSkills";
@@ -20,6 +21,7 @@ export function useWebSkillsModel(params: {
   activePage: AppPage;
   canManageMembers: boolean;
   canManageResources: boolean;
+  communitySettingsPane: CommunitySettingsPane;
   communityTab: CommunityTab;
   ensureSession: EnsureAuthSession;
   session: AuthSession | null;
@@ -29,6 +31,7 @@ export function useWebSkillsModel(params: {
     activePage,
     canManageMembers,
     canManageResources,
+    communitySettingsPane,
     communityTab,
     ensureSession,
     session,
@@ -64,7 +67,9 @@ export function useWebSkillsModel(params: {
 
   useEffect(() => {
     const shouldLoad =
-      activePage === "community" && communityTab === "ai_agent";
+      activePage === "community"
+      && communityTab === "settings"
+      && communitySettingsPane === "agent";
     if (!shouldLoad) return;
     if (!session || !activeCommunityId || !canManageMembers) {
       communityController.clearCommunitySkillAttachments();
@@ -87,13 +92,16 @@ export function useWebSkillsModel(params: {
     communityController.clearCommunitySkillAttachments,
     communityController.communitySkillAttachmentsLoadedCommunityIdRef,
     communityController.loadCommunitySkillAttachments,
+    communitySettingsPane,
     communityTab,
     session,
   ]);
 
   useEffect(() => {
     const shouldLoad =
-      activePage === "community" && communityTab === "ai_agent";
+      activePage === "community"
+      && communityTab === "settings"
+      && communitySettingsPane === "agent";
     if (!shouldLoad) return;
     if (!session || !canManageMembers) {
       communityController.clearCommunitySkillAttachments();
@@ -107,6 +115,7 @@ export function useWebSkillsModel(params: {
     communityController.clearCommunitySkillAttachments,
     communityController.loadOwnedSkillPackages,
     communityController.ownedSkillPackagesLoadedRef,
+    communitySettingsPane,
     communityTab,
     session,
   ]);

@@ -22,6 +22,7 @@ type WebCommunityAiAgentSectionProps = {
   onRequireSignIn: () => void;
   instructionsEditorProps: WebCommunityAiAgentInstructionsEditorProps;
   skillsEditorProps: WebCommunityAiAgentSkillsEditorProps;
+  embedded?: boolean;
 };
 
 const COMMUNITY_AI_AGENT_TABS: Array<{
@@ -43,6 +44,7 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     onRequireSignIn,
     instructionsEditorProps,
     skillsEditorProps,
+    embedded = false,
   } = props;
   const [activeTab, setActiveTab] = useState<CommunityAiAgentTab>("instructions");
   useEffect(() => {
@@ -88,7 +90,7 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
   }
 
   return (
-    <div className="settings-panel community-settings-panel">
+    <div className={embedded ? "community-settings-embedded-pane" : "settings-panel community-settings-panel"}>
       <div className="settings-section-title">AI Agent</div>
       {canRenderTabbedEditor ? (
         <div

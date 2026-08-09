@@ -1,6 +1,7 @@
 export type ConfirmDiscardUnsavedCommunityChangesInput = {
   hasUnsavedSettings: boolean;
   hasUnsavedAgentConfig?: boolean;
+  hasUnsavedFunnelConfig?: boolean;
   activeCommunityId: string | null;
   nextCommunityId: string | null;
   confirmDiscard: (message: string) => boolean;
@@ -10,7 +11,10 @@ export type ConfirmDiscardUnsavedCommunityChangesInput = {
 export function confirmDiscardUnsavedCommunityChanges(
   input: ConfirmDiscardUnsavedCommunityChangesInput,
 ): boolean {
-  const hasUnsavedChanges = input.hasUnsavedSettings || Boolean(input.hasUnsavedAgentConfig);
+  const hasUnsavedChanges =
+    input.hasUnsavedSettings
+    || Boolean(input.hasUnsavedAgentConfig)
+    || Boolean(input.hasUnsavedFunnelConfig);
   if (!hasUnsavedChanges) return true;
 
   const currentId = input.activeCommunityId;
@@ -23,6 +27,7 @@ export function confirmDiscardUnsavedCommunityChanges(
 export type ConfirmDiscardUnsavedCommunitySettingsWebInput = {
   isCommunitySettingsDirty: boolean;
   isCommunityAgentConfigDirty: boolean;
+  isCommunityFunnelDirty: boolean;
   activeCommunityId: string | null;
   nextCommunityId: string | null;
   confirmDiscard: (message: string) => boolean;
@@ -34,6 +39,7 @@ export function confirmDiscardUnsavedCommunitySettingsWeb(
   return confirmDiscardUnsavedCommunityChanges({
     hasUnsavedSettings: input.isCommunitySettingsDirty,
     hasUnsavedAgentConfig: input.isCommunityAgentConfigDirty,
+    hasUnsavedFunnelConfig: input.isCommunityFunnelDirty,
     activeCommunityId: input.activeCommunityId,
     nextCommunityId: input.nextCommunityId,
     confirmDiscard: input.confirmDiscard,

@@ -1,6 +1,10 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
-import { parseCommunitySettingsPane } from "../shared/appShellNavigation.ts";
+import {
+  listCommunitySettingsPanesForAccess,
+  normalizeCommunitySettingsPaneForAccess,
+  parseCommunitySettingsPane,
+} from "../shared/appShellNavigation.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -33,14 +37,14 @@ const communitySettingsPaneContract = navigation.slice(
   navigation.indexOf("export type CommunitySettingsPane"),
 );
 
-for (const pane of ["community", "workflows", "danger"] as const) {
+for (const pane of ["community", "workflows", "agent", "funnel", "danger"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"danger"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"agent"[\s\S]*"funnel"[\s\S]*"danger"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
 );
 assert.doesNotMatch(
@@ -52,6 +56,28 @@ assert.equal(
   parseCommunitySettingsPane("danger"),
   "danger",
   "the owner archive pane must survive refresh and popstate",
+);
+assert.equal(parseCommunitySettingsPane("ai_agent"), "agent");
+assert.equal(parseCommunitySettingsPane("funnel"), "funnel");
+assert.deepEqual(
+  listCommunitySettingsPanesForAccess({
+    canViewSettings: true,
+    canManageSettings: false,
+    canManageMembers: false,
+    isOwner: false,
+  }),
+  ["community"],
+  "members must receive only member-safe community settings",
+);
+assert.equal(
+  normalizeCommunitySettingsPaneForAccess("agent", {
+    canViewSettings: true,
+    canManageSettings: false,
+    canManageMembers: false,
+    isOwner: false,
+  }),
+  "community",
+  "unauthorized Agent deep links must fail closed to member settings",
 );
 assert.doesNotMatch(
   settingsSection,
@@ -136,8 +162,13 @@ assert.match(
 );
 assert.match(
   routeState,
-  /communityTab === "settings" \? parseCommunitySettingsPane\(segments\[3\] \?\? null\) : null/,
+  /communityTab === "settings"[\s\S]*\? parseCommunitySettingsPane\(legacySettingsPane \?\? segments\[3\] \?\? null\)/,
   "settings routes must restore the pane slug from the path",
+);
+assert.match(
+  routeState,
+  /tabSegment === "agent" \|\| tabSegment === "ai_agent"[\s\S]*\? "agent"[\s\S]*tabSegment === "funnel"[\s\S]*\? "funnel"/,
+  "legacy top-level Agent and Funnel URLs must normalize into settings panes",
 );
 assert.match(
   routeState,
@@ -215,6 +246,11 @@ assert.match(
 );
 assert.match(
   settingsSection,
+  /selectedSettingsPane === "agent"[\s\S]*WebCommunityAiAgentSection[\s\S]*selectedSettingsPane === "funnel"[\s\S]*WebCommunityFunnelSection/,
+  "Agent and Funnel editors must render inside route-backed Settings panes",
+);
+assert.match(
+  settingsSection,
   /onSelectPane: \(pane: CommunitySettingsPane, opts\?: \{ replace\?: boolean \}\) => void/,
   "settings section must emit pane selection instead of owning route state",
 );
@@ -235,8 +271,8 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /const availableSettingsPanes: CommunitySettingsPane\[\] = canManageCommunitySettings[\s\S]*isOwnerSettingsLayer[\s\S]*managerSettingsPanes, "danger" as const[\s\S]*managerSettingsPanes/,
-  "admins may manage ordinary settings while only owners receive Danger",
+  /listCommunitySettingsPanesForAccess\(settingsPaneAccess\)/,
+  "settings pane visibility must come from the centralized access contract",
 );
 assert.doesNotMatch(
   settingsSection,

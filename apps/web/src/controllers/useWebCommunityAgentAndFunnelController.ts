@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import type { AuthSession } from "../auth";
 import type {
   AppPage,
+  CommunitySettingsPane,
   CommunityTab,
 } from "../../../../shared/appShellNavigation";
 import {
@@ -36,6 +37,7 @@ export function useWebCommunityAgentAndFunnelController(params: {
   adminUi: ReturnType<typeof useWebCommunityAdminUiController>;
   agentUi: ReturnType<typeof useWebCommunityAgentConfigUiController>;
   canManageMembers: boolean;
+  communitySettingsPane: CommunitySettingsPane;
   communityTab: CommunityTab;
   ensureSession: EnsureAuthSession;
   session: AuthSession | null;
@@ -124,6 +126,7 @@ export function useWebCommunityAgentAndFunnelController(params: {
   useCommunityAgentConfigLifecycle<AuthSession>({
     activePage: params.activePage,
     communityTab: params.communityTab,
+    communitySettingsPane: params.communitySettingsPane,
     session: params.session,
     activeCommunityId: params.activeCommunityId,
     canManageMembersActiveCommunity: params.canManageMembers,
@@ -136,7 +139,8 @@ export function useWebCommunityAgentAndFunnelController(params: {
   useEffect(() => {
     if (
       params.activePage !== "community"
-      || params.communityTab !== "funnel"
+      || params.communityTab !== "settings"
+      || params.communitySettingsPane !== "funnel"
     ) {
       return;
     }
@@ -165,6 +169,7 @@ export function useWebCommunityAgentAndFunnelController(params: {
     params.adminUi.communityFunnelLoadedCommunityIdRef,
     params.adminUi.resetCommunityFunnelState,
     params.canManageMembers,
+    params.communitySettingsPane,
     params.communityTab,
     params.session,
   ]);

@@ -175,9 +175,7 @@ export const CommunityNav = memo(function CommunityNav({
   const addChannelDialogRef = useRef<HTMLFormElement | null>(null);
   const [isCommunityIdentityCondensed, setIsCommunityIdentityCondensed] = useState(false);
   const showSettingsButton = canViewActiveCommunitySettings;
-  const showManagementSection =
-    canManageMembersActiveCommunity ||
-    canViewActiveCommunityAnalytics;
+  const showManagementSection = canViewActiveCommunityAnalytics;
   const activeCommunityName = activeCommunity?.name?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
@@ -568,46 +566,6 @@ export const CommunityNav = memo(function CommunityNav({
       ) : showManagementSection ? (
         <>
           <div className="community-nav-divider" />
-          {canManageMembersActiveCommunity && (
-            <button
-              className={communityTab === "ai_agent" ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={() => onSelectTab("ai_agent")}
-              title="AI Agent"
-            >
-              <span className="nav-icon">
-                <svg viewBox="0 0 24 24">
-                  <circle cx="6" cy="7" r="2" />
-                  <circle cx="6" cy="17" r="2" />
-                  <circle cx="12" cy="12" r="2" />
-                  <circle cx="18" cy="7" r="2" />
-                  <circle cx="18" cy="17" r="2" />
-                  <path d="M7.5 8.3L10.5 10.7" />
-                  <path d="M7.5 15.7L10.5 13.3" />
-                  <path d="M13.5 10.7L16.5 8.3" />
-                  <path d="M13.5 13.3L16.5 15.7" />
-                </svg>
-              </span>
-              AI Agent
-            </button>
-          )}
-          {canManageMembersActiveCommunity && (
-            <button
-              className={communityTab === "funnel" ? "nav-item active" : "nav-item"}
-              type="button"
-              onClick={() => onSelectTab("funnel")}
-              title="Funnel"
-            >
-              <span className="nav-icon">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M4 6h16" />
-                  <path d="M7 11h10" />
-                  <path d="M10 16h4" />
-                </svg>
-              </span>
-              Funnel
-            </button>
-          )}
           {canViewActiveCommunityAnalytics && (
             <button
               className={communityTab === "analytics" ? "nav-item active" : "nav-item"}

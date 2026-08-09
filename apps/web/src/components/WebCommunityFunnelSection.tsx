@@ -8,6 +8,7 @@ type WebCommunityFunnelSectionProps = {
   communityFunnelError: string | null;
   onRequireSignIn: () => void;
   editorProps: WebCommunityFunnelEditorProps;
+  embedded?: boolean;
 };
 
 export function WebCommunityFunnelSection(props: WebCommunityFunnelSectionProps) {
@@ -19,10 +20,11 @@ export function WebCommunityFunnelSection(props: WebCommunityFunnelSectionProps)
     communityFunnelError,
     onRequireSignIn,
     editorProps,
+    embedded = false,
   } = props;
 
   return (
-    <div className="settings-panel community-settings-panel">
+    <div className={embedded ? "community-settings-embedded-pane" : "settings-panel community-settings-panel"}>
       {!activeCommunity ? (
         <div className="chat-empty">Select a community to configure the public funnel.</div>
       ) : !hasSession ? (

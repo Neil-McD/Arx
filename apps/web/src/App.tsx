@@ -782,7 +782,6 @@ export default function App() {
     isLoadingCommunityAccess,
     communityTab,
     canViewSettings: canViewActiveCommunitySettings,
-    canManageMembers: canManageMembersActiveCommunity,
     canViewAnalytics: canViewActiveCommunityAnalytics,
     setCommunityResourceModuleId,
     applyCommunityShellState,
@@ -881,6 +880,7 @@ export default function App() {
     activePage,
     canManageMembers: canManageMembersActiveCommunity,
     canManageResources: canManageResourcesActiveCommunity,
+    communitySettingsPane,
     communityTab,
     ensureSession: ensureUsableAuthSession,
     session,
@@ -1058,6 +1058,7 @@ export default function App() {
     adminUi: communityAdminUi,
     agentUi: communityAgentConfigUi,
     canManageMembers: canManageMembersActiveCommunity,
+    communitySettingsPane,
     communityTab,
     ensureSession: ensureUsableAuthSession,
     session,
@@ -1992,6 +1993,7 @@ export default function App() {
     isOnboardingPreviewMode: isCommunityOnboardingPreviewMode,
     communitySettingsDirtyRef,
     communityAgentConfigDirtyRef,
+    communityFunnelDirtyRef,
     syncCommunitySelection,
     resolveKnownCommunitySlugById,
     setCommunitySettingsPane,
@@ -2934,8 +2936,13 @@ export default function App() {
     directMessagesButton,
     publicFunnelPreviewExitPath:
       publicRoute.kind === "community_funnel_preview"
-        ? applyShellVariantToAppPath(
-            buildCommunityTabPath(publicRoute.slug, "funnel") ?? "",
+          ? applyShellVariantToAppPath(
+            buildCommunityTabPath(
+              publicRoute.slug,
+              "settings",
+              null,
+              "funnel",
+            ) ?? "",
             shellVariant,
           ) || null
         : null,

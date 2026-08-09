@@ -40,6 +40,28 @@ describe("community channel routes", () => {
     });
   });
 
+  it("builds canonical Agent and Funnel settings pane routes", () => {
+    expect(buildCommunityTabPath("polynet", "settings", null, "agent")).toBe(
+      "/c/polynet/settings/agent",
+    );
+    expect(buildCommunityTabPath("polynet", "settings", null, "funnel")).toBe(
+      "/c/polynet/settings/funnel",
+    );
+  });
+
+  it.each([
+    ["/c/polynet/agent", "agent"],
+    ["/c/polynet/ai_agent", "agent"],
+    ["/c/polynet/funnel", "funnel"],
+  ] as const)("maps legacy configuration route %s into Settings", (path, pane) => {
+    expect(parseAppRouteFromPathname(path)).toMatchObject({
+      page: "community",
+      communitySlug: "polynet",
+      communityTab: "settings",
+      communitySettingsPane: pane,
+    });
+  });
+
   it("does not let channel state bleed into another community surface", () => {
     expect(buildAppRoutePath({
       page: "community",

@@ -160,6 +160,7 @@ export function buildWebCommunitySurfaceProjection(
       onSelectPane: params.onSelectCommunitySettingsPane,
       onPreviewCommunityOnboarding: params.onPreviewCommunityOnboarding,
       canManageCommunitySettings: params.canManageCommunitySettings,
+      canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       requireSignIn: params.requireSignIn,
       accountCommerceStatus: params.accountCommerceStatus,
       communityPlatformFeeBps: params.communityPlatformFeeBps,

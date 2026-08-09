@@ -289,7 +289,7 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /publicFunnelPreviewExitPath:[\s\S]*buildCommunityTabPath\(publicRoute\.slug, "funnel"\)/,
+  /publicFunnelPreviewExitPath:[\s\S]*buildCommunityTabPath\([\s\S]*publicRoute\.slug,[\s\S]*"settings",[\s\S]*null,[\s\S]*"funnel",/,
   "preview exit must target the owning community's funnel editor",
 );
 assert.match(
