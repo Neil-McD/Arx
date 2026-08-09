@@ -23,6 +23,7 @@ const communityNavigation = read(
 const routeLifecycle = read("apps/web/src/controllers/useWebPathRouteLifecycle.ts");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const settingsSection = read("apps/web/src/components/WebCommunitySettingsSection.tsx");
+const secondaryPanels = read("apps/web/src/components/WebCommunitySecondaryPanels.tsx");
 const modalHost = read("apps/web/src/components/WebCommunityModalHost.tsx");
 const communityUiController = read(
   "apps/web/src/controllers/useWebCommunityUiController.ts",
@@ -37,14 +38,14 @@ const communitySettingsPaneContract = navigation.slice(
   navigation.indexOf("export type CommunitySettingsPane"),
 );
 
-for (const pane of ["community", "workflows", "agent", "funnel", "danger"] as const) {
+for (const pane of ["community", "workflows", "agent", "danger"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"agent"[\s\S]*"funnel"[\s\S]*"danger"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"agent"[\s\S]*"danger"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
 );
 assert.doesNotMatch(
@@ -58,7 +59,11 @@ assert.equal(
   "the owner archive pane must survive refresh and popstate",
 );
 assert.equal(parseCommunitySettingsPane("ai_agent"), "agent");
-assert.equal(parseCommunitySettingsPane("funnel"), "funnel");
+assert.equal(
+  parseCommunitySettingsPane("funnel"),
+  "community",
+  "Funnel must not remain selectable as a Settings pane",
+);
 assert.deepEqual(
   listCommunitySettingsPanesForAccess({
     canViewSettings: true,
@@ -162,13 +167,13 @@ assert.match(
 );
 assert.match(
   routeState,
-  /communityTab === "settings"[\s\S]*\? parseCommunitySettingsPane\(legacySettingsPane \?\? segments\[3\] \?\? null\)/,
+  /communityTab === "settings"[\s\S]*\? parseCommunitySettingsPane\(legacyAgentSettingsPane \?\? segments\[3\] \?\? null\)/,
   "settings routes must restore the pane slug from the path",
 );
 assert.match(
   routeState,
-  /tabSegment === "agent" \|\| tabSegment === "ai_agent"[\s\S]*\? "agent"[\s\S]*tabSegment === "funnel"[\s\S]*\? "funnel"/,
-  "legacy top-level Agent and Funnel URLs must normalize into settings panes",
+  /tabSegment === "settings" && String\(segments\[3\] \?\? ""\)\.trim\(\) === "funnel"[\s\S]*tabSegment === "funnel" \|\| isLegacyFunnelSettingsRoute[\s\S]*\? "funnel"/,
+  "canonical and legacy Funnel URLs must resolve to the top-level Funnel tab",
 );
 assert.match(
   routeState,
@@ -246,8 +251,23 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /selectedSettingsPane === "agent"[\s\S]*WebCommunityAiAgentSection[\s\S]*selectedSettingsPane === "funnel"[\s\S]*WebCommunityFunnelSection/,
-  "Agent and Funnel editors must render inside route-backed Settings panes",
+  /workflows: "Workflows"/,
+  "the configuration category must be visibly named Workflows",
+);
+assert.match(
+  settingsSection,
+  /selectedSettingsPane === "agent"[\s\S]*WebCommunityAiAgentSection/,
+  "Agent must render inside the route-backed Settings panes",
+);
+assert.doesNotMatch(
+  settingsSection,
+  /WebCommunityFunnelSection|selectedSettingsPane === "funnel"/,
+  "Funnel must not remain embedded in Settings",
+);
+assert.match(
+  secondaryPanels,
+  /communityTab === "funnel"[\s\S]*WebCommunityFunnelSection/,
+  "Funnel must render as a top-level community surface",
 );
 assert.match(
   settingsSection,

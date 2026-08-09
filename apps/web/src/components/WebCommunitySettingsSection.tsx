@@ -17,7 +17,6 @@ import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
 import { WebCommunityOnboardingWorkflowSection } from "./WebCommunityOnboardingWorkflowSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
-import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import {
   platformTabId,
   platformTabPanelId,
@@ -56,7 +55,6 @@ type WebCommunitySettingsSectionProps = {
   canManageCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   aiAgentProps: ComponentProps<typeof WebCommunityAiAgentSection>;
-  funnelProps: ComponentProps<typeof WebCommunityFunnelSection>;
   requireSignIn: () => void;
   accountCommerceStatus: AccountCommerceStatus | null;
   communityPlatformFeeBps: number | null;
@@ -143,9 +141,8 @@ type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "act
 
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "General",
-  workflows: "Onboarding",
+  workflows: "Workflows",
   agent: "Agent",
-  funnel: "Funnel",
   danger: "Danger",
 };
 
@@ -709,7 +706,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
     canManageCommunitySettings,
     canManageMembersActiveCommunity,
     aiAgentProps,
-    funnelProps,
     requireSignIn,
     accountCommerceStatus,
     communityPlatformFeeBps,
@@ -873,9 +869,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               ) : null}
               {selectedSettingsPane === "agent" ? (
               <WebCommunityAiAgentSection {...aiAgentProps} embedded />
-              ) : null}
-              {selectedSettingsPane === "funnel" ? (
-              <WebCommunityFunnelSection {...funnelProps} embedded />
               ) : null}
               {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
               <CommunityDangerSettingsSection

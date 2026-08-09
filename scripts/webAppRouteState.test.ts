@@ -40,26 +40,43 @@ describe("community channel routes", () => {
     });
   });
 
-  it("builds canonical Agent and Funnel settings pane routes", () => {
+  it("builds canonical Agent settings and Funnel community routes", () => {
     expect(buildCommunityTabPath("polynet", "settings", null, "agent")).toBe(
       "/c/polynet/settings/agent",
     );
-    expect(buildCommunityTabPath("polynet", "settings", null, "funnel")).toBe(
-      "/c/polynet/settings/funnel",
-    );
+    expect(buildCommunityTabPath("polynet", "funnel")).toBe("/c/polynet/funnel");
   });
 
   it.each([
     ["/c/polynet/agent", "agent"],
     ["/c/polynet/ai_agent", "agent"],
-    ["/c/polynet/funnel", "funnel"],
-  ] as const)("maps legacy configuration route %s into Settings", (path, pane) => {
+  ] as const)("maps legacy Agent route %s into Settings", (path, pane) => {
     expect(parseAppRouteFromPathname(path)).toMatchObject({
       page: "community",
       communitySlug: "polynet",
       communityTab: "settings",
       communitySettingsPane: pane,
     });
+  });
+
+  it("round-trips the canonical Funnel route", () => {
+    expect(parseAppRouteFromPathname("/c/polynet/funnel")).toMatchObject({
+      page: "community",
+      communitySlug: "polynet",
+      communityTab: "funnel",
+      communitySettingsPane: null,
+    });
+  });
+
+  it("canonicalizes the former Settings Funnel route", () => {
+    const parsed = parseAppRouteFromPathname("/c/polynet/settings/funnel");
+    expect(parsed).toMatchObject({
+      page: "community",
+      communitySlug: "polynet",
+      communityTab: "funnel",
+      communitySettingsPane: null,
+    });
+    expect(buildAppRoutePath(parsed!)).toBe("/c/polynet/funnel");
   });
 
   it("does not let channel state bleed into another community surface", () => {

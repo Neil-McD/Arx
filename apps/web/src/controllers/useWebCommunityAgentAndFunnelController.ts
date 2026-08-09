@@ -119,8 +119,8 @@ export function useWebCommunityAgentAndFunnelController(params: {
     setCommunityFunnelError: params.adminUi.setCommunityFunnelError,
     setCommunityFunnelSaveError: params.adminUi.setCommunityFunnelSaveError,
     setIsSavingCommunityFunnel: params.adminUi.setIsSavingCommunityFunnel,
-    loadFailureMessage: "Failed to load funnel settings.",
-    saveFailureMessage: "Failed to save funnel settings.",
+    loadFailureMessage: "Failed to load funnel.",
+    saveFailureMessage: "Failed to save funnel.",
   });
 
   useCommunityAgentConfigLifecycle<AuthSession>({
@@ -139,8 +139,7 @@ export function useWebCommunityAgentAndFunnelController(params: {
   useEffect(() => {
     if (
       params.activePage !== "community"
-      || params.communityTab !== "settings"
-      || params.communitySettingsPane !== "funnel"
+      || params.communityTab !== "funnel"
     ) {
       return;
     }
@@ -169,7 +168,6 @@ export function useWebCommunityAgentAndFunnelController(params: {
     params.adminUi.communityFunnelLoadedCommunityIdRef,
     params.adminUi.resetCommunityFunnelState,
     params.canManageMembers,
-    params.communitySettingsPane,
     params.communityTab,
     params.session,
   ]);
