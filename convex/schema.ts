@@ -1338,6 +1338,8 @@ export default defineSchema({
   communityJoinRequests: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
+    // Migration compatibility only. Tighten this to the canonical pending/denied
+    // union and remove message after the production preflight + migration receipt.
     status: v.string(),
     message: v.optional(v.string()),
     deniedAt: v.optional(v.number()),

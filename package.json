@@ -106,7 +106,7 @@
     "check:purchase-token-hygiene-proof": "tsx scripts/purchase_token_hygiene_proof.ts",
     "check:frontend-privacy-hygiene-proof": "tsx scripts/frontend_privacy_hygiene_proof.ts",
     "check:community-admin-contract-guard": "bash scripts/community_admin_contract_guard.sh",
-    "check:community-join-request-correctness": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_join_request_correctness_contract_proof.ts && vitest run convex/communityAccessLifecycle.test.ts",
+    "check:community-join-request-correctness": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_join_request_correctness_contract_proof.ts && vitest run convex/communityJoinRequestCore.test.ts convex/platformHomeAdmission.test.ts convex/publicFunnelAccessProjection.test.ts convex/communityAccessLifecycle.test.ts convex/memberOntologyAdmission.test.ts",
     "check:community-public-identity-guard": "bash scripts/community_public_identity_guard.sh",
     "check:community-access-role-policy-proof": "tsx scripts/community_access_role_policy_proof.ts",
     "check:community-access-lifecycle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_access_lifecycle_proof.ts",

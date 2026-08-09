@@ -14,7 +14,6 @@ import {
   cancelCloudMyJoinRequestBySlug,
   fetchCloudPublicCommunityMemoryOverview,
   fetchCloudPublicFunnelStats,
-  fetchCloudMyJoinRequestBySlug,
   recordCloudPublicFunnelVisit,
   resolveCloudPublicFunnel,
   startCloudPublicFunnelCheckout,
@@ -22,7 +21,6 @@ import {
 import { preloadImageUrls } from "../../../../shared/preloadImageUrls";
 import { applyShellVariantToPublicPath, readShellVariantFromPathname } from "../../../../shared/webAppRouteState";
 import type { AuthSession } from "../auth";
-import { deriveCommunityFunnelAction } from "../communityJoinPolicy";
 import type { CommunityBillingPeriod } from "../../../../shared/communityTypes";
 
 type UseWebPublicFunnelActionsArgs<
@@ -45,7 +43,6 @@ type UseWebPublicFunnelActionsArgs<
   },
   PublicPlanT extends { billing_period: CommunityBillingPeriod },
   CommunityAccessT extends CommunityAccessRow,
-  MyCommunityJoinRequestT extends { community_id: string; status: string },
 > = {
   getSession: () => AuthSession | null;
   getCurrentPublicCommunitySlug: () => string | null;
@@ -67,9 +64,6 @@ type UseWebPublicFunnelActionsArgs<
   setPublicCommunityAccess: Dispatch<SetStateAction<CommunityAccessT | null>>;
   setPublicCommunityAccessResolutionKey: Dispatch<SetStateAction<string | null>>;
 
-  setIsLoadingMyPublicCommunityJoinRequest: Dispatch<SetStateAction<boolean>>;
-  setMyPublicCommunityJoinRequest: Dispatch<SetStateAction<MyCommunityJoinRequestT | null>>;
-
   setIsLoadingPublicCommunity: Dispatch<SetStateAction<boolean>>;
   setPublicCommunityError: Dispatch<SetStateAction<string | null>>;
   setPublicCommunityPlans: Dispatch<SetStateAction<PublicPlanT[]>>;
@@ -81,8 +75,11 @@ type UseWebPublicFunnelActionsArgs<
 
 type CommunityAccessRow = {
   community_id: string;
+  relation?: "visitor" | "pending" | "member" | "moderator" | "admin" | "owner" | null;
   can_enter_community?: boolean;
   is_owner: boolean;
+  join_request_status?: "pending" | "denied" | null;
+  join_request_reapply_at?: string | null;
   can_manage_branding?: boolean;
   can_manage_publishing?: boolean;
   can_manage_pricing?: boolean;
@@ -108,13 +105,11 @@ export function useWebPublicFunnelActions<
   },
   PublicPlanT extends { billing_period: CommunityBillingPeriod },
   CommunityAccessT extends CommunityAccessRow,
-  MyCommunityJoinRequestT extends { community_id: string; status: string },
 >(
   args: UseWebPublicFunnelActionsArgs<
     PublicCommunityT,
     PublicPlanT,
-    CommunityAccessT,
-    MyCommunityJoinRequestT
+    CommunityAccessT
   >,
 ) {
   const argsRef = useRef(args);
@@ -129,17 +124,25 @@ export function useWebPublicFunnelActions<
       communityId?: string | null;
       communitySlug?: string | null;
       reapplyAt?: string | null;
-      deniedUntil?: string | null;
     }) => {
       const current = argsRef.current;
+      if (
+        opts.communitySlug &&
+        current.getCurrentPublicCommunitySlug() !== opts.communitySlug
+      ) return;
       current.setPublicJoinError(null);
-      current.setMyPublicCommunityJoinRequest({
-        community_id: (opts.communityId ?? opts.communitySlug ?? "__pending__").trim() || "__pending__",
-        status: opts.status,
-        updated_at: new Date().toISOString(),
-        reapply_at: opts.reapplyAt ?? null,
-        denied_until: opts.deniedUntil ?? opts.reapplyAt ?? null,
-      } as unknown as MyCommunityJoinRequestT);
+      current.setPublicCommunityAccess((previous) => {
+        if (!previous) return previous;
+        if (opts.communityId && previous.community_id !== opts.communityId) {
+          return previous;
+        }
+        return {
+          ...previous,
+          relation: opts.status === "pending" ? "pending" : "visitor",
+          join_request_status: opts.status,
+          join_request_reapply_at: opts.reapplyAt ?? null,
+        } as CommunityAccessT;
+      });
       current.setPublicCommunity((prev) =>
         prev
           ? ({
@@ -157,91 +160,40 @@ export function useWebPublicFunnelActions<
       const trimmedSlug = communitySlug.trim();
       if (!trimmedSlug) return "none";
 
-      const [accessResult, joinRequestResult] = await Promise.allSettled([
-        fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
-          session,
-          communitySlug: trimmedSlug,
-        }),
-        fetchCloudMyJoinRequestBySlug<AuthSession, MyCommunityJoinRequestT>({
-          session,
-          communitySlug: trimmedSlug,
-        }),
-      ]);
-
-      if (accessResult.status === "fulfilled") {
-        const access = accessResult.value;
-        if (access && (access.can_enter_community || access.is_owner) && access.community_id) {
-          clearPendingPublicJoin();
-          const current = argsRef.current;
-          current.setPublicCommunityAccess(access);
-          current.setMyPublicCommunityJoinRequest(null);
-          current.setPublicJoinError(null);
-          current.openCommunityWorkspace({
-            communityId: access.community_id,
-            communitySlug: trimmedSlug,
-          });
-          await current.loadCommunities(session);
-          return "entered";
-        }
-      }
-
-      if (joinRequestResult.status === "fulfilled") {
-        const joinRequest = joinRequestResult.value;
-        const status = String(joinRequest?.status ?? "").trim().toLowerCase();
-        if (status === "pending") {
-          clearPendingPublicJoin();
-          const current = argsRef.current;
-          current.setPublicJoinError(null);
-          current.setMyPublicCommunityJoinRequest(joinRequest);
-          current.setPublicCommunity((prev) =>
-            prev
-              ? ({
-                  ...prev,
-                  entry_policy: "approval",
-                } as PublicCommunityT)
-              : prev,
-          );
-          return "pending";
-        }
-        if (status === "denied") {
-          clearPendingPublicJoin();
-          const current = argsRef.current;
-          current.setPublicJoinError(null);
-          current.setMyPublicCommunityJoinRequest(joinRequest);
-          current.setPublicCommunity((prev) =>
-            prev
-              ? ({
-                  ...prev,
-                  entry_policy: "approval",
-                } as PublicCommunityT)
-              : prev,
-          );
-          return "denied";
-        }
-      }
-      return "none";
-    },
-    [],
-  );
-
-  const loadMyJoinRequestBySlug = useCallback(
-    async (communitySlug: string, session: AuthSession): Promise<void> => {
-      const trimmed = communitySlug.trim();
-      if (!trimmed) return;
-      const current = argsRef.current;
-      current.setIsLoadingMyPublicCommunityJoinRequest(true);
-      current.setMyPublicCommunityJoinRequest(null);
+      let access: CommunityAccessT | null;
       try {
-        const row = await fetchCloudMyJoinRequestBySlug<AuthSession, MyCommunityJoinRequestT>({
+        access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
           session,
-          communitySlug: trimmed,
+          communitySlug: trimmedSlug,
         });
-        current.setMyPublicCommunityJoinRequest(row);
-      } catch (error) {
-        console.warn("Failed to load join request:", error);
-      } finally {
-        current.setIsLoadingMyPublicCommunityJoinRequest(false);
+      } catch {
+        return "none";
       }
+      const current = argsRef.current;
+      if (current.getCurrentPublicCommunitySlug() !== trimmedSlug || !access) {
+        return "none";
+      }
+      current.setPublicCommunityAccess(access);
+      if ((access.can_enter_community || access.is_owner) && access.community_id) {
+        clearPendingPublicJoin();
+        current.setPublicJoinError(null);
+        current.openCommunityWorkspace({
+          communityId: access.community_id,
+          communitySlug: trimmedSlug,
+        });
+        await current.loadCommunities(session);
+        return "entered";
+      }
+      const status = access.join_request_status;
+      if (status !== "pending" && status !== "denied") return "none";
+      clearPendingPublicJoin();
+      current.setPublicJoinError(null);
+      current.setPublicCommunity((previous) =>
+        previous
+          ? ({ ...previous, entry_policy: "approval" } as PublicCommunityT)
+          : previous,
+      );
+      return status;
     },
     [],
   );
@@ -307,6 +259,10 @@ export function useWebPublicFunnelActions<
           communitySlug: trimmedSlug || undefined,
         });
         clearPendingPublicJoin();
+        if (
+          trimmedSlug &&
+          current.getCurrentPublicCommunitySlug() !== trimmedSlug
+        ) return false;
 
         if (joinResult.outcome === "joined") {
           current.openCommunityWorkspace({
@@ -326,6 +282,9 @@ export function useWebPublicFunnelActions<
             communityId: joinResult.community_id ?? null,
             communitySlug: trimmedSlug || null,
           });
+          if (trimmedSlug) {
+            await reconcileJoinOutcomeBySlug(trimmedSlug, session);
+          }
           return true;
         }
         if (joinResult.outcome === "approval_denied") {
@@ -335,6 +294,9 @@ export function useWebPublicFunnelActions<
             communitySlug: trimmedSlug || null,
             reapplyAt: joinResult.reapply_at ?? null,
           });
+          if (trimmedSlug) {
+            await reconcileJoinOutcomeBySlug(trimmedSlug, session);
+          }
           return true;
         }
         if (joinResult.outcome === "paid_plan_required") {
@@ -408,7 +370,16 @@ export function useWebPublicFunnelActions<
           communitySlug: trimmedSlug,
         });
         if (result?.outcome === "canceled" || result?.outcome === "none") {
-          current.setMyPublicCommunityJoinRequest(null);
+          current.setPublicCommunityAccess((previous) =>
+            previous
+              ? ({
+                  ...previous,
+                  relation: "visitor",
+                  join_request_status: null,
+                  join_request_reapply_at: null,
+                } as CommunityAccessT)
+              : previous,
+          );
         }
       } catch (error) {
         const message = getErrorMessage(error, "Failed to cancel join request.");
@@ -432,7 +403,6 @@ export function useWebPublicFunnelActions<
       current.setPublicCommunityError(null);
       current.setPublicJoinError(null);
       current.setPublicCommunityAccessResolutionKey(null);
-      current.setMyPublicCommunityJoinRequest(null);
       current.setPublicCommunityAccess(null);
       if (!isSameSlugRefresh) {
         current.setPublicCommunity(null);
@@ -523,8 +493,6 @@ export function useWebPublicFunnelActions<
           const rawSession = current.getSession();
           const session = current.ensureSession ? await current.ensureSession(rawSession) : rawSession;
           const accessSubject = session ? resolveAuthSubject(session) : null;
-          let hasEnterAccess = false;
-          let accessLookupFailed = false;
           if (session) {
             try {
               const access = await fetchCloudMyCommunityAccessBySlug<AuthSession, CommunityAccessT>({
@@ -535,19 +503,13 @@ export function useWebPublicFunnelActions<
                 current.getCurrentPublicCommunitySlug() !== resolvedSlug ||
                 resolveAuthSubject(current.getSession()) !== accessSubject
               ) return;
-              hasEnterAccess = Boolean(access && (access.can_enter_community || access.is_owner));
               current.setPublicCommunityAccess(access);
-              if (hasEnterAccess) {
-                current.setMyPublicCommunityJoinRequest(null);
-              }
             } catch (error) {
               if (
                 current.getCurrentPublicCommunitySlug() !== resolvedSlug ||
                 resolveAuthSubject(current.getSession()) !== accessSubject
               ) return;
-              accessLookupFailed = true;
               current.setPublicCommunityAccess(null);
-              current.setMyPublicCommunityJoinRequest(null);
               current.setPublicCommunityError(
                 "You are signed in, but Polynet could not verify your community access. Refresh and try again.",
               );
@@ -561,16 +523,6 @@ export function useWebPublicFunnelActions<
             current.setPublicCommunityAccessResolutionKey(
               accessSubject ? `${accessSubject}:${resolvedSlug}` : null,
             );
-          }
-
-          if (
-            session &&
-            deriveCommunityFunnelAction(payload.community as { entry_policy?: unknown }) === "request_access" &&
-            !hasEnterAccess &&
-            !accessLookupFailed &&
-            current.getCurrentPublicCommunitySlug() === resolvedSlug
-          ) {
-            void loadMyJoinRequestBySlug(resolvedSlug, session);
           }
         })();
       } catch (error) {
@@ -588,7 +540,7 @@ export function useWebPublicFunnelActions<
         );
       }
     },
-    [loadMyJoinRequestBySlug],
+    [],
   );
 
   const startCheckoutForPlan = useCallback(

@@ -9,10 +9,7 @@ import type {
   DiscoverCommunitySnapshot,
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
-import type {
-  WebMyCommunityJoinRequest,
-  WebPublicCommunityRecord,
-} from "../webAppContracts";
+import type { WebPublicCommunityRecord } from "../webAppContracts";
 
 type PublicCommunityUiActions = {
   setPublicCommunity: Dispatch<
@@ -26,12 +23,6 @@ type PublicCommunityUiActions = {
   >;
   setPublicCommunityError: Dispatch<SetStateAction<string | null>>;
   setPublicJoinError: Dispatch<SetStateAction<string | null>>;
-  setMyPublicCommunityJoinRequest: Dispatch<
-    SetStateAction<WebMyCommunityJoinRequest | null>
-  >;
-  setIsLoadingMyPublicCommunityJoinRequest: Dispatch<
-    SetStateAction<boolean>
-  >;
   setIsLoadingPublicCommunity: Dispatch<SetStateAction<boolean>>;
 };
 
@@ -109,10 +100,6 @@ export function useWebDiscoverActivationController(params: {
       params.publicCommunityUi.setPublicCommunityAccess(null);
       params.publicCommunityUi.setPublicCommunityError(null);
       params.publicCommunityUi.setPublicJoinError(null);
-      params.publicCommunityUi.setMyPublicCommunityJoinRequest(null);
-      params.publicCommunityUi.setIsLoadingMyPublicCommunityJoinRequest(
-        false,
-      );
       params.publicCommunityUi.setIsLoadingPublicCommunity(true);
       params.setCheckoutError(null);
       params.setCheckoutStatus("idle");

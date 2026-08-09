@@ -14,6 +14,7 @@ COMMUNITY_CORE_FILE="convex/communityCore.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
 COMMUNITY_MEMBERSHIP_LIFECYCLE_FILE="convex/communityMembershipLifecycle.ts"
 COMMUNITY_PUBLIC_FILE="convex/communityPublic.ts"
+COMMUNITY_JOIN_REQUEST_CORE_FILE="convex/communityJoinRequestCore.ts"
 COMMUNITY_COMMERCE_FILE="convex/communityCommerce.ts"
 STRIPE_SUBSCRIPTION_CANCELLATION_FILE="convex/stripeSubscriptionCancellation.ts"
 BILLING_CORE_FILE="convex/billingCore.ts"
@@ -477,7 +478,7 @@ require_multiline_match "$COMMUNITY_ADMIN_FILE" \
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \
   'export const unbanCommunityUser = mutation\(' \
   "unbanCommunityUser mutation exists"
-require_multiline_match "$COMMUNITY_CORE_FILE" \
+require_multiline_match "$COMMUNITY_JOIN_REQUEST_CORE_FILE" \
   'export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 \* 24 \* 60 \* 60 \* 1000;' \
   "removed member reapply cooldown is 14 days"
 

@@ -271,6 +271,186 @@ test("open public join is authenticated, immediately authorized, and idempotent"
   });
 });
 
+test("community owner admission is a no-op with no request or membership row", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+
+  await expect(asOwner.mutation(api.communityPublic.joinPublicCommunity, {
+    communityId: fixture.approvalCommunityId,
+  })).resolves.toEqual({
+    outcome: "joined",
+    community_id: String(fixture.approvalCommunityId),
+  });
+
+  const state = await t.run(async (ctx) => ({
+    memberships: await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.ownerId),
+      )
+      .collect(),
+    requests: await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.ownerId),
+      )
+      .collect(),
+  }));
+  expect(state).toEqual({ memberships: [], requests: [] });
+});
+
+test("approval rechecks target blocks and leaves admission state untouched", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+
+  await expect(asMember.mutation(api.communityPublic.joinPublicCommunity, {
+    communityId: fixture.approvalCommunityId,
+  })).resolves.toMatchObject({ outcome: "approval_pending" });
+  const requestId = await t.run(async (ctx) => {
+    const request = await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.memberId),
+      )
+      .unique();
+    if (!request) throw new Error("request_missing");
+    await ctx.db.insert("communityBlocks", {
+      communityId: fixture.approvalCommunityId,
+      userId: fixture.memberId,
+      createdByUserId: fixture.ownerId,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    return request._id;
+  });
+
+  await expect(asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, {
+    requestId,
+  })).rejects.toThrow("community_user_blocked");
+  const state = await t.run(async (ctx) => ({
+    request: await ctx.db.get(requestId),
+    memberships: await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.memberId),
+      )
+      .collect(),
+  }));
+  expect(state.request).toMatchObject({ status: "pending" });
+  expect(state.memberships).toHaveLength(0);
+  await expect(asMember.query(api.communityPublic.getMyJoinRequestBySlug, {
+    communitySlug: "access-lifecycle-approval",
+  })).resolves.toBeNull();
+  await expect(asMember.query(api.communityAccessQueries.getMyCommunityAccessBySlug, {
+    communitySlug: "access-lifecycle-approval",
+  })).resolves.toMatchObject({
+    is_blocked: true,
+    relation: null,
+    join_request_status: null,
+    join_request_reapply_at: null,
+  });
+
+  await expect(asOwner.mutation(api.communityAdmin.setCommunityFreeAccessMode, {
+    communityId: fixture.approvalCommunityId,
+    mode: "open",
+  })).resolves.toMatchObject({
+    entry_policy: "open",
+    approved_pending_request_count: 0,
+  });
+  const openedState = await t.run(async (ctx) => ({
+    request: await ctx.db.get(requestId),
+    memberships: await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.memberId),
+      )
+      .collect(),
+  }));
+  expect(openedState).toEqual({ request: null, memberships: [] });
+});
+
+test("legacy owner requests cannot be approved or denied", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const requestId = await t.run(async (ctx) =>
+    await ctx.db.insert("communityJoinRequests", {
+      communityId: fixture.approvalCommunityId,
+      userId: fixture.ownerId,
+      status: "pending",
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    }),
+  );
+
+  await expect(asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, {
+    requestId,
+  })).rejects.toThrow("community_owner_join_request_forbidden");
+  await expect(asOwner.mutation(api.communityAdmin.denyCommunityJoinRequest, {
+    requestId,
+  })).rejects.toThrow("community_owner_join_request_forbidden");
+  expect(await t.run(async (ctx) => ctx.db.get(requestId)))
+    .toMatchObject({ status: "pending" });
+});
+
+test("legacy terminal status filters are harmless while canonical filters remain usable", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityJoinRequests", {
+      communityId: fixture.approvalCommunityId,
+      userId: fixture.memberId,
+      status: "approved",
+      createdAt: 1_750_000_000_100,
+      updatedAt: 1_750_000_000_100,
+    });
+    await ctx.db.insert("communityJoinRequests", {
+      communityId: fixture.approvalCommunityId,
+      userId: fixture.memberId,
+      status: "canceled",
+      createdAt: 1_750_000_000_200,
+      updatedAt: 1_750_000_000_200,
+    });
+    await ctx.db.insert("communityJoinRequests", {
+      communityId: fixture.approvalCommunityId,
+      userId: fixture.ownerId,
+      status: "denied",
+      deniedAt: 1_750_000_000_300,
+      reapplyAt: 1_750_000_000_400,
+      createdAt: 1_750_000_000_300,
+      updatedAt: 1_750_000_000_300,
+    });
+  });
+
+  await expect(asOwner.query(api.communityAdmin.listCommunityJoinRequests, {
+    communityId: fixture.approvalCommunityId,
+    includeStatuses: ["approved", "canceled", "unknown"],
+  })).resolves.toEqual([]);
+  await expect(asOwner.query(api.communityAdmin.listCommunityJoinRequests, {
+    communityId: fixture.approvalCommunityId,
+    includeStatuses: ["denied"],
+  })).resolves.toEqual([
+    expect.objectContaining({ status: "denied" }),
+  ]);
+});
+
 test("unfunded managed communities remain public while AI funding fails closed", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
   const t = convexTest(schema, modules);
@@ -568,6 +748,11 @@ test("approval join fails closed until manager approval and closes again after r
     }),
   ).resolves.toEqual({ ok: true });
   await expect(
+    asMember.mutation(api.communityAdmin.approveCommunityJoinRequest, {
+      requestId,
+    }),
+  ).rejects.toThrow("join_request_not_found");
+  await expect(
     asOwner.mutation(api.communityAdmin.approveCommunityJoinRequest, {
       requestId,
     }),
@@ -576,7 +761,7 @@ test("approval join fails closed until manager approval and closes again after r
     asOwner.mutation(api.communityAdmin.denyCommunityJoinRequest, {
       requestId,
     }),
-  ).rejects.toThrow("join_request_already_decided");
+  ).rejects.toThrow("join_request_not_found");
 
   const approvedState = await t.run(async (ctx) => ({
     community: await ctx.db.get(fixture.approvalCommunityId),
@@ -591,7 +776,7 @@ test("approval join fails closed until manager approval and closes again after r
       .collect(),
   }));
   expect(approvedState.community?.activeMemberCount).toBe(2);
-  expect(approvedState.request?.status).toBe("approved");
+  expect(approvedState.request).toBeNull();
   expect(approvedState.memberships).toHaveLength(1);
   expect(approvedState.memberships[0]).toMatchObject({
     active: true,
@@ -627,7 +812,14 @@ test("approval join fails closed until manager approval and closes again after r
 
   const revokedState = await t.run(async (ctx) => ({
     community: await ctx.db.get(fixture.approvalCommunityId),
-    request: await ctx.db.get(requestId),
+    requests: await ctx.db
+      .query("communityJoinRequests")
+      .withIndex("by_community_user", (q) =>
+        q
+          .eq("communityId", fixture.approvalCommunityId)
+          .eq("userId", fixture.memberId),
+      )
+      .collect(),
     membership: await ctx.db.get(membershipId),
   }));
   expect(revokedState.community?.activeMemberCount).toBe(1);
@@ -636,9 +828,10 @@ test("approval join fails closed until manager approval and closes again after r
     activationSequence: 1,
     revokedReason: "removed_by_manager",
   });
-  expect(revokedState.request?.status).toBe("denied");
-  expect(revokedState.request?.reapplyAt).toBeGreaterThan(
-    revokedState.request?.deniedAt ?? 0,
+  expect(revokedState.requests).toHaveLength(1);
+  expect(revokedState.requests[0]?.status).toBe("denied");
+  expect(revokedState.requests[0]?.reapplyAt).toBeGreaterThan(
+    revokedState.requests[0]?.deniedAt ?? 0,
   );
 
   const revokedNativeAccess = await executeSemanticList({

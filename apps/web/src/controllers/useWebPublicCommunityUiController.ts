@@ -4,7 +4,6 @@ export function useWebPublicCommunityUiController<
   PublicCommunityT,
   PublicPlanT,
   PublicCommunityAccessT,
-  MyPublicCommunityJoinRequestT,
 >() {
   const [publicCommunity, setPublicCommunity] = useState<PublicCommunityT | null>(null);
   const [publicCommunityPlans, setPublicCommunityPlans] = useState<PublicPlanT[]>([]);
@@ -16,9 +15,6 @@ export function useWebPublicCommunityUiController<
   const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
   const [isCancellingPublicCommunityJoinRequest, setIsCancellingPublicCommunityJoinRequest] = useState(false);
   const [publicJoinError, setPublicJoinError] = useState<string | null>(null);
-  const [myPublicCommunityJoinRequest, setMyPublicCommunityJoinRequest] =
-    useState<MyPublicCommunityJoinRequestT | null>(null);
-  const [isLoadingMyPublicCommunityJoinRequest, setIsLoadingMyPublicCommunityJoinRequest] = useState(false);
   const [visitorGateNonce, setVisitorGateNonce] = useState(0);
 
   return {
@@ -40,10 +36,6 @@ export function useWebPublicCommunityUiController<
     setIsCancellingPublicCommunityJoinRequest,
     publicJoinError,
     setPublicJoinError,
-    myPublicCommunityJoinRequest,
-    setMyPublicCommunityJoinRequest,
-    isLoadingMyPublicCommunityJoinRequest,
-    setIsLoadingMyPublicCommunityJoinRequest,
     visitorGateNonce,
     setVisitorGateNonce,
   };

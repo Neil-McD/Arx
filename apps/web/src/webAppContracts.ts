@@ -73,15 +73,6 @@ export type WebCommunityVoiceTranscriptTarget = {
 
 export type WebCommunityVoiceButtonOwner = "main" | "drawer";
 
-export type WebMyCommunityJoinRequest = {
-  community_id: string;
-  status: string;
-  updated_at: string;
-  denied_at?: string | null;
-  reapply_at?: string | null;
-  denied_until?: string | null;
-};
-
 export type WebPersonalMemoryItem = {
   id: string;
   content: string;

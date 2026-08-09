@@ -3,10 +3,7 @@ import { paginationOptsValidator } from "convex/server";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import {
-  COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
-  COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
   type CommunityBlockLike,
-  type CommunityJoinRequestLike,
   type CommunityLike,
   type CommunityMemberSettingsLike,
   type CommunityMembershipLike,
@@ -17,6 +14,7 @@ import {
   countCanonicalCommunityMembers,
   getCommunityAndMembership,
   getActiveCommunityBlock,
+  getUniqueCommunityMembershipByPair,
   listCommunityMembershipRowsForManager,
   mapCommunityMemberSettingsRow,
   mapCommunityPricingRow,
@@ -27,6 +25,7 @@ import {
   requireCommunityChatAccess,
   requireCommunityModerator,
   requireCommunityManager,
+  requireCommunityUserNotBlocked,
   resolveCommunityMembershipEntitlementState,
   resolveCommunityEntryPolicy,
   resolveCommunityBrandingFields,
@@ -36,13 +35,20 @@ import {
   syncCommunityActiveMemberCount,
   toIsoString,
 } from "./communityCore";
+import {
+  COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
+  COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
+  type CommunityJoinRequestLike,
+  assertCanonicalCommunityJoinRequest,
+  deleteCommunityJoinRequestByPair,
+  denyCommunityJoinRequestCore,
+  ensureDeniedCommunityJoinRequest,
+} from "./communityJoinRequestCore";
 import { logStructuredError } from "./errorLogging";
 import { enqueueCommunityAccessGrantedEmailInternal } from "./emailEvents";
 import {
-  clearPlatformHomeCommunityAutojoinOptOut,
-  isPlatformHomeAutojoinOptOutRequest,
   isPlatformHomeCommunity,
-  upsertPlatformHomeCommunityAutojoinOptOut,
+  PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
 } from "./platformHomeCommunity";
 import { cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
@@ -51,6 +57,7 @@ import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCurso
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
 import { requireCommunityBuilderAccess } from "./communityBuilderAccessCore";
+import { recordCriticalAuditEvent } from "./criticalAudit";
 
 type AnalyticsRangeValue = "7d" | "30d" | "90d" | "1y" | "all";
 type AnalyticsBucketValue = "day" | "week" | "month";
@@ -704,11 +711,9 @@ async function runLoggedCommunityAdminMutation<T>(params: {
 
 function resolveCommunityJoinRequestDecision(
   request: CommunityJoinRequestLike,
-  targetStatus: "approved" | "denied",
+  targetStatus: "denied",
 ): "apply" | "already_applied" {
-  const currentStatus = String(request.status ?? "")
-    .trim()
-    .toLowerCase();
+  const currentStatus = assertCanonicalCommunityJoinRequest(request);
   if (currentStatus === targetStatus) return "already_applied";
   if (currentStatus !== "pending") {
     throw new Error("join_request_already_decided");
@@ -723,51 +728,40 @@ async function approveCommunityJoinRequestForFreeAccess(args: {
   nowMs: number;
   grantReason: string;
 }): Promise<{ grantedMembership: boolean }> {
-  const existingMembershipRows = (await args.ctx.db
-    .query("communityMemberships")
-    .withIndex("by_community_user", (q: any) =>
-      q
-        .eq("communityId", args.request.communityId)
-        .eq("userId", args.request.userId),
-    )
-    .collect()) as CommunityMembershipLike[];
-  const existingMembership = pickMostRelevantCommunityMembership(
-    existingMembershipRows,
-  );
-  let grantedMembershipMarker: string | null = null;
-  if (!existingMembership || !communityMembershipRowIsActive(existingMembership)) {
-    const restoredAccessSource =
-      existingMembership?.accessSource === "paid_subscription" ||
-      existingMembership?.accessSource === "free_grant" ||
-      existingMembership?.accessSource === "manual_grant"
-        ? existingMembership.accessSource
-        : "free_grant";
-    const activation = await activateCommunityMembershipCore({
-      ctx: args.ctx,
-      communityId: args.request.communityId,
-      userId: args.request.userId,
-      role: existingMembership
-        ? normalizeCommunityRoleForOutput(existingMembership.role) || "member"
-        : "member",
-      accessSource: restoredAccessSource,
-      activationReason: args.grantReason,
-      nowMs: args.nowMs,
-    });
-    grantedMembershipMarker = activation.activationMarker;
+  if (String(args.community.ownerId) === String(args.request.userId)) {
+    throw new Error("community_owner_join_request_forbidden");
   }
-  await args.ctx.db.patch(args.request._id as any, {
-    status: "approved",
-    deniedAt: undefined,
-    reapplyAt: undefined,
-    updatedAt: args.nowMs,
+  await requireCommunityUserNotBlocked({
+    ctx: args.ctx,
+    communityId: args.request.communityId,
+    userId: args.request.userId,
   });
-  if (isPlatformHomeCommunity({ communitySlug: args.community?.slug })) {
-    await clearPlatformHomeCommunityAutojoinOptOut({
-      ctx: args.ctx,
-      communityId: args.request.communityId,
-      userId: args.request.userId,
-    });
+  const existingMembership = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: args.request.communityId,
+    userId: args.request.userId,
+  });
+  if (assertCanonicalCommunityJoinRequest(args.request) !== "pending") {
+    throw new Error("join_request_already_decided");
   }
+  const restoredAccessSource =
+    existingMembership?.accessSource === "paid_subscription" ||
+    existingMembership?.accessSource === "free_grant" ||
+    existingMembership?.accessSource === "manual_grant"
+      ? existingMembership.accessSource
+      : "free_grant";
+  const activation = await activateCommunityMembershipCore({
+    ctx: args.ctx,
+    communityId: args.request.communityId,
+    userId: args.request.userId,
+    role: existingMembership
+      ? normalizeCommunityRoleForOutput(existingMembership.role) || "member"
+      : "member",
+    accessSource: restoredAccessSource,
+    activationReason: args.grantReason,
+    nowMs: args.nowMs,
+  });
+  const grantedMembershipMarker = activation.activationMarker;
   if (grantedMembershipMarker) {
     await enqueueCommunityAccessGrantedEmailInternal({
       ctx: args.ctx,
@@ -794,7 +788,23 @@ async function approvePendingJoinRequestsForOpenAccessBatch(args: {
     .order("asc")
     .take(args.limit + 1)) as CommunityJoinRequestLike[];
   const batch = rows.slice(0, args.limit);
+  let approvedCount = 0;
   for (const request of batch) {
+    const impossibleApplicant =
+      String(args.community.ownerId) === String(request.userId) ||
+      Boolean(await getActiveCommunityBlock({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        userId: request.userId,
+      }));
+    if (impossibleApplicant) {
+      await deleteCommunityJoinRequestByPair({
+        ctx: args.ctx,
+        communityId: args.community._id,
+        userId: request.userId,
+      });
+      continue;
+    }
     await approveCommunityJoinRequestForFreeAccess({
       ctx: args.ctx,
       community: args.community,
@@ -802,9 +812,10 @@ async function approvePendingJoinRequestsForOpenAccessBatch(args: {
       nowMs: args.nowMs,
       grantReason: "free_access_mode_opened",
     });
+    approvedCount += 1;
   }
   return {
-    approvedCount: batch.length,
+    approvedCount,
     hasMore: rows.length > args.limit,
   };
 }
@@ -1262,12 +1273,15 @@ export const listCommunityJoinRequests = query({
       userId: args.userId,
     });
     const statuses = Array.from(new Set(
-      (args.includeStatuses ?? ["pending"]).map((status) =>
-        String(status ?? "")
-          .trim()
-          .toLowerCase(),
-      ),
+      (args.includeStatuses ?? ["pending"])
+        .map((status) =>
+          String(status ?? "")
+            .trim()
+            .toLowerCase(),
+        )
+        .filter((status) => status === "pending" || status === "denied"),
     ));
+    if (statuses.length === 0) return [];
     const limit = Math.max(1, Math.min(5000, Math.floor(args.limit ?? 200)));
     const rows = (
       await Promise.all(
@@ -1285,23 +1299,21 @@ export const listCommunityJoinRequests = query({
     const userIdCache = new Map<string, string | null>();
     return await Promise.all(
       rows
-        .filter((row) => !isPlatformHomeAutojoinOptOutRequest(row))
         .sort((a, b) => b.createdAt - a.createdAt)
         .slice(0, limit)
-        .map(async (row) => ({
-          id: String(row._id),
-          community_id: String(row.communityId),
-          user_id:
-            (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
-            String(row.userId),
-          message: row.message ?? null,
-          status:
-            String(row.status ?? "")
-              .trim()
-              .toLowerCase() || "pending",
-          created_at: toIsoString(row.createdAt),
-          updated_at: toIsoString(row.updatedAt),
-        })),
+        .map(async (row) => {
+          const status = assertCanonicalCommunityJoinRequest(row);
+          return {
+            id: String(row._id),
+            community_id: String(row.communityId),
+            user_id:
+              (await resolvePublicUserId(ctx, row.userId, userIdCache)) ??
+              String(row.userId),
+            status,
+            created_at: toIsoString(row.createdAt),
+            updated_at: toIsoString(row.updatedAt),
+          };
+        }),
     );
   },
 });
@@ -1328,8 +1340,21 @@ export const approveCommunityJoinRequest = mutation({
       context: logContext,
       handler: async () => {
         const nowMs = Date.now();
+        const approvalReceiptKey = `community_join_request_approved:${String(args.requestId)}`;
         const request = (await ctx.db.get(args.requestId)) as CommunityJoinRequestLike | null;
-        if (!request) throw new Error("join_request_not_found");
+        if (!request) {
+          const receipt = await ctx.db
+            .query("criticalAuditEvents")
+            .withIndex("by_eventKey", (q: any) => q.eq("eventKey", approvalReceiptKey))
+            .unique();
+          if (
+            receipt?.status === "succeeded" &&
+            String(receipt.actorUserId ?? "") === String(args.userId)
+          ) {
+            return { ok: true };
+          }
+          throw new Error("join_request_not_found");
+        }
         logContext.communityId = String(request.communityId);
         logContext.targetUserId = String(request.userId);
         const { community } = await requireCommunityModerator({
@@ -1337,8 +1362,8 @@ export const approveCommunityJoinRequest = mutation({
           communityId: request.communityId,
           userId: args.userId,
         });
-        if (resolveCommunityJoinRequestDecision(request, "approved") === "already_applied") {
-          return { ok: true };
+        if (assertCanonicalCommunityJoinRequest(request) !== "pending") {
+          throw new Error("join_request_already_decided");
         }
         if (resolveCommunityEntryPolicy(community) === "paid_subscription") {
           throw new Error("community_paid_checkout_required");
@@ -1349,6 +1374,18 @@ export const approveCommunityJoinRequest = mutation({
           request,
           nowMs,
           grantReason: "join_request_approved",
+        });
+        await recordCriticalAuditEvent(ctx, {
+          eventKey: approvalReceiptKey,
+          eventType: "community_join_request_approved",
+          severity: "info",
+          status: "succeeded",
+          actorUserId: args.userId,
+          subjectUserId: request.userId,
+          communityId: request.communityId,
+          provider: "polynet",
+          providerObjectId: String(args.requestId),
+          createdAt: nowMs,
         });
         return { ok: true };
       },
@@ -1382,19 +1419,22 @@ export const denyCommunityJoinRequest = mutation({
         if (!request) throw new Error("join_request_not_found");
         logContext.communityId = String(request.communityId);
         logContext.targetUserId = String(request.userId);
-        await requireCommunityModerator({
+        const { community } = await requireCommunityModerator({
           ctx,
           communityId: request.communityId,
           userId: args.userId,
         });
+        if (String(community.ownerId) === String(request.userId)) {
+          throw new Error("community_owner_join_request_forbidden");
+        }
         if (resolveCommunityJoinRequestDecision(request, "denied") === "already_applied") {
           return { ok: true };
         }
-        await ctx.db.patch(request._id as any, {
-          status: "denied",
-          deniedAt: nowMs,
-          reapplyAt: nowMs + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
-          updatedAt: nowMs,
+        await denyCommunityJoinRequestCore({
+          ctx,
+          request,
+          nowMs,
+          cooldownMs: COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS,
         });
         return { ok: true };
       },
@@ -1581,30 +1621,46 @@ export const revokeCommunityMemberInternal = internalMutation({
           actorUserId: userId,
           targetMembership: membership,
         });
-        await endCommunitySubscriptionsForMembership({
-          ctx,
-          membershipId: membership._id,
-          nowMs,
-        });
+        const alreadyManagerRevoked =
+          !communityMembershipRowIsActive(membership) &&
+          String(membership.revokedReason ?? "").startsWith("removed_by_manager");
+        if (!communityMembershipRowIsActive(membership) && !alreadyManagerRevoked) {
+          return { ok: true };
+        }
+        const revokedAt = alreadyManagerRevoked && typeof membership.revokedAt === "number"
+          ? membership.revokedAt
+          : nowMs;
+        const revokedReason = alreadyManagerRevoked
+          ? String(membership.revokedReason)
+          : String(args.revokedReason ?? "").trim() || "removed_by_manager";
+        if (!alreadyManagerRevoked) {
+          await endCommunitySubscriptionsForMembership({
+            ctx,
+            membershipId: membership._id,
+            nowMs,
+          });
+        }
         const revokedMembership = {
           ...membership,
           active: false,
-          revokedAt: nowMs,
-          revokedReason: String(args.revokedReason ?? "").trim() || "removed_by_manager",
-          updatedAt: nowMs,
+          revokedAt,
+          revokedReason,
+          updatedAt: alreadyManagerRevoked ? membership.updatedAt : nowMs,
         } as CommunityMembershipLike;
-        await ctx.db.patch(membership._id as any, {
-          active: false,
-          revokedAt: nowMs,
-          revokedReason: revokedMembership.revokedReason,
-          updatedAt: nowMs,
-        });
-        await adjustCommunityActiveMemberCountForMembershipTransition({
-          ctx,
-          communityId: args.communityId,
-          before: membership,
-          after: revokedMembership,
-        });
+        if (!alreadyManagerRevoked) {
+          await ctx.db.patch(membership._id as any, {
+            active: false,
+            revokedAt,
+            revokedReason,
+            updatedAt: nowMs,
+          });
+          await adjustCommunityActiveMemberCountForMembershipTransition({
+            ctx,
+            communityId: args.communityId,
+            before: membership,
+            after: revokedMembership,
+          });
+        }
 
         const memberSettings = (await ctx.db
           .query("communityMemberSettings" as any)
@@ -1628,41 +1684,13 @@ export const revokeCommunityMemberInternal = internalMutation({
           userId: membership.userId,
         });
 
-        const joinRequest = (await ctx.db
-          .query("communityJoinRequests")
-          .withIndex("by_community_user", (q: any) =>
-            q
-              .eq("communityId", args.communityId)
-              .eq("userId", membership.userId),
-          )
-          .first()) as CommunityJoinRequestLike | null;
-        if (joinRequest) {
-          await ctx.db.patch(joinRequest._id as any, {
-            status: "denied",
-            deniedAt: nowMs,
-            reapplyAt: nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
-            updatedAt: nowMs,
-          });
-        } else {
-          await ctx.db.insert("communityJoinRequests", {
-            communityId: args.communityId,
-            userId: membership.userId,
-            status: "denied",
-            deniedAt: nowMs,
-            reapplyAt: nowMs + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
-            createdAt: nowMs,
-            updatedAt: nowMs,
-          });
-        }
-        if (isPlatformHomeCommunity({ communitySlug: community.slug })) {
-          await upsertPlatformHomeCommunityAutojoinOptOut({
-            ctx,
-            communityId: args.communityId,
-            userId: membership.userId,
-            nowMs,
-            kind: "removed",
-          });
-        }
+        await ensureDeniedCommunityJoinRequest({
+          ctx,
+          communityId: args.communityId,
+          userId: membership.userId,
+          nowMs: revokedAt,
+          cooldownMs: COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS,
+        });
         return { ok: true };
       },
     });
@@ -2180,24 +2208,44 @@ export const leaveCommunity = mutation({
         if (String(community.ownerId) === String(args.userId)) {
           throw new Error("community_owner_cannot_leave");
         }
-        const membership = (await ctx.db
-          .query("communityMemberships")
-          .withIndex("by_community_user", (q: any) =>
-            q.eq("communityId", args.communityId).eq("userId", args.userId),
-          )
-          .first()) as CommunityMembershipLike | null;
+        const membership = await getUniqueCommunityMembershipByPair({
+          ctx,
+          communityId: args.communityId,
+          userId: args.userId,
+        });
         if (membership) {
           await endCommunitySubscriptionsForMembership({
             ctx,
             membershipId: membership._id,
             nowMs,
           });
-          await ctx.db.delete(membership._id as any);
+          const preservePlatformHomeRelationship = isPlatformHomeCommunity({
+            communitySlug: community.slug,
+          });
+          const after = preservePlatformHomeRelationship
+            ? ({
+                ...membership,
+                active: false,
+                revokedAt: nowMs,
+                revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
+                updatedAt: nowMs,
+              } as CommunityMembershipLike)
+            : null;
+          if (after) {
+            await ctx.db.patch(membership._id as any, {
+              active: false,
+              revokedAt: nowMs,
+              revokedReason: PLATFORM_HOME_MEMBER_LEFT_REVOKED_REASON,
+              updatedAt: nowMs,
+            });
+          } else {
+            await ctx.db.delete(membership._id as any);
+          }
           await adjustCommunityActiveMemberCountForMembershipTransition({
             ctx,
             communityId: args.communityId,
             before: membership,
-            after: null,
+            after,
           });
         }
         const memberSettings = (await ctx.db
@@ -2214,24 +2262,11 @@ export const leaveCommunity = mutation({
           args.communityId,
           args.userId,
         );
-        const joinRequest = (await ctx.db
-          .query("communityJoinRequests")
-          .withIndex("by_community_user", (q: any) =>
-            q.eq("communityId", args.communityId).eq("userId", args.userId),
-          )
-          .first()) as CommunityJoinRequestLike | null;
-        if (joinRequest) {
-          await ctx.db.delete(joinRequest._id as any);
-        }
-        if (isPlatformHomeCommunity({ communitySlug: community.slug })) {
-          await upsertPlatformHomeCommunityAutojoinOptOut({
-            ctx,
-            communityId: args.communityId,
-            userId: args.userId,
-            nowMs,
-            kind: "left",
-          });
-        }
+        await deleteCommunityJoinRequestByPair({
+          ctx,
+          communityId: args.communityId,
+          userId: args.userId,
+        });
         return { ok: true };
       },
     });

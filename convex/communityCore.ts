@@ -17,6 +17,10 @@ import {
   requireCommunityBuilderAccess,
   resolveCommunityBuilderAccess,
 } from "./communityBuilderAccessCore";
+import {
+  getCurrentCommunityJoinRequestByPair,
+  resolveCommunityJoinRequestReapplyAtMs,
+} from "./communityJoinRequestCore";
 export { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type CommunityLike = {
@@ -117,18 +121,6 @@ export type CommunityAgentConfigLike = {
   communityId: any;
   landingJson?: unknown;
   systemPrompt: string;
-  createdAt: number;
-  updatedAt: number;
-};
-
-export type CommunityJoinRequestLike = {
-  _id: any;
-  communityId: any;
-  userId: any;
-  status: string;
-  message?: string;
-  deniedAt?: number;
-  reapplyAt?: number;
   createdAt: number;
   updatedAt: number;
 };
@@ -893,9 +885,6 @@ export function pickMostRelevantCommunityMembership(
   return list[0] ?? null;
 }
 
-export const COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
-export const COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS = 14 * 24 * 60 * 60 * 1000;
-
 export async function getActiveCommunityBlock(args: {
   ctx: any;
   communityId: any;
@@ -930,44 +919,6 @@ export async function requireCommunityUserNotBlocked(args: {
   if (await communityUserIsBlocked(args)) {
     throw new Error("community_user_blocked");
   }
-}
-
-export function resolveCommunityJoinRequestReapplyAtMs(
-  request: CommunityJoinRequestLike | null | undefined,
-): number | null {
-  if (!request) return null;
-  const status = String(request.status ?? "").trim().toLowerCase();
-  if (status !== "denied") return null;
-  if (typeof request.reapplyAt === "number" && Number.isFinite(request.reapplyAt)) {
-    return request.reapplyAt;
-  }
-  const base = typeof request.deniedAt === "number" && Number.isFinite(request.deniedAt)
-    ? request.deniedAt
-    : typeof request.updatedAt === "number" && Number.isFinite(request.updatedAt)
-      ? request.updatedAt
-      : null;
-  if (base === null) return null;
-  return base + COMMUNITY_JOIN_REAPPLY_COOLDOWN_MS;
-}
-
-export function pickMostRelevantCommunityJoinRequest(
-  rows: CommunityJoinRequestLike[] | null | undefined,
-): CommunityJoinRequestLike | null {
-  const list = Array.isArray(rows) ? rows.slice() : [];
-  if (list.length === 0) return null;
-  list.sort((a, b) => {
-    if (b.updatedAt !== a.updatedAt) return b.updatedAt - a.updatedAt;
-    return b.createdAt - a.createdAt;
-  });
-  return list[0] ?? null;
-}
-
-export function communityJoinRequestCanReapply(
-  request: CommunityJoinRequestLike | null | undefined,
-  nowMs: number,
-): boolean {
-  const reapplyAt = resolveCommunityJoinRequestReapplyAtMs(request);
-  return reapplyAt !== null && reapplyAt <= nowMs;
 }
 
 export function communitySubscriptionStatusGrantsAccess(
@@ -1243,24 +1194,6 @@ export async function resolveCommunityMembershipEntitlementState(args: {
   };
 }
 
-export function mapJoinRequestRow(args: {
-  communityId: string;
-  row: CommunityJoinRequestLike;
-}) {
-  const deniedAt = typeof args.row.deniedAt === "number" ? args.row.deniedAt : null;
-  const reapplyAt = resolveCommunityJoinRequestReapplyAtMs(args.row);
-  return {
-    community_id: args.communityId,
-    status: String(args.row.status ?? "").trim().toLowerCase() || "pending",
-    message: args.row.message ?? null,
-    created_at: toIsoString(args.row.createdAt),
-    updated_at: toIsoString(args.row.updatedAt),
-    denied_at: deniedAt !== null ? toIsoString(deniedAt) : null,
-    reapply_at: reapplyAt !== null ? toIsoString(reapplyAt) : null,
-    denied_until: reapplyAt !== null ? toIsoString(reapplyAt) : null,
-  };
-}
-
 export async function requireCommunityChatAccess(args: {
   ctx: any;
   communityId: any;
@@ -1320,15 +1253,13 @@ export async function resolveCommunityAccessBundle(args: {
   const isModerator = !isOwner && isMembershipEntitled && role === "moderator";
   let joinRequestStatus: string | null = null;
   let joinRequestReapplyAt: number | null = null;
-  if (!isEntitled) {
-    const joinRequestRows = (await args.ctx.db
-      .query("communityJoinRequests")
-      .withIndex("by_community_user", (q: any) =>
-        q.eq("communityId", args.community._id).eq("userId", args.userId),
-      )
-      .collect()) as CommunityJoinRequestLike[];
-    const joinRequest = pickMostRelevantCommunityJoinRequest(joinRequestRows);
-    joinRequestStatus = joinRequest ? String(joinRequest.status ?? "").trim().toLowerCase() || "pending" : null;
+  if (!isEntitled && !isOwner && !isBlocked) {
+    const joinRequest = await getCurrentCommunityJoinRequestByPair({
+      ctx: args.ctx,
+      communityId: args.community._id,
+      userId: args.userId,
+    });
+    joinRequestStatus = joinRequest ? String(joinRequest.status).trim().toLowerCase() : null;
     joinRequestReapplyAt = resolveCommunityJoinRequestReapplyAtMs(joinRequest);
   }
   const relation: CommunityAccessRelation | null = isOwner

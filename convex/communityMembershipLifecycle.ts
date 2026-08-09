@@ -1,12 +1,13 @@
 import {
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
+  getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
-  pickMostRelevantCommunityMembership,
   syncCommunityActiveMemberCount,
 } from "./communityCore";
 import { createCommunityOnboardingSessionForActivation } from "./communityOnboardingCore";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
+import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -27,13 +28,11 @@ export async function activateCommunityMembershipCore(args: {
   accessGranted: boolean;
   activationMarker: string | null;
 }> {
-  const rows = (await args.ctx.db
-    .query("communityMemberships" as any)
-    .withIndex("by_community_user", (q: any) =>
-      q.eq("communityId", args.communityId).eq("userId", args.userId),
-    )
-    .collect()) as CommunityMembershipLike[];
-  const existing = pickMostRelevantCommunityMembership(rows);
+  const existing = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
   if (existing && communityMembershipRowIsActive(existing)) {
     const role = args.role ?? (normalizeCommunityRoleForOutput(existing.role) || "member");
     await args.ctx.db.patch(existing._id, {
@@ -49,6 +48,11 @@ export async function activateCommunityMembershipCore(args: {
       communityId: args.communityId,
       userId: args.userId,
       baselineAt: Number(existing.activatedAt ?? existing.createdAt ?? args.nowMs),
+    });
+    await deleteCommunityJoinRequestByPair({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
     });
     return {
       membership: refreshed,
@@ -111,6 +115,11 @@ export async function activateCommunityMembershipCore(args: {
     // Community access is authoritative. Optional onboarding state must never
     // turn an otherwise-valid membership activation into a failed join.
   }
+  await deleteCommunityJoinRequestByPair({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.userId,
+  });
   return {
     membership,
     accessGranted: true,

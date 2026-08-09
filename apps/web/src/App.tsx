@@ -183,7 +183,6 @@ import { buildWebShellChromeHostProps } from "./controllers/buildWebShellChromeH
 import type { WebMemberAgentDockHandle } from "./components/WebMemberAgentDock";
 import type {
   WebCommunityRecord,
-  WebMyCommunityJoinRequest,
   WebPersonalMemoryItem,
   WebPublicCommunityRecord,
 } from "./webAppContracts";
@@ -216,7 +215,6 @@ type CommunityAccess = SharedCommunityAccess;
 type UserProfile = SharedUserProfile;
 type UserProfileDetail = SharedUserProfileDetail;
 type CommunityJoinRequest = WebCommunityJoinRequest;
-type MyCommunityJoinRequest = WebMyCommunityJoinRequest;
 type PersonalMemoryItem = WebPersonalMemoryItem;
 type PublicPlanSummary = SharedPublicPlanSummary;
 export default function App() {
@@ -352,8 +350,7 @@ export default function App() {
   const publicCommunityUi = useWebPublicCommunityUiController<
     PublicCommunityRecord,
     PublicPlanSummary,
-    CommunityAccess,
-    MyCommunityJoinRequest
+    CommunityAccess
   >();
   const billingUi = useWebBillingUiController<
     AccountCommerceStatus,
@@ -1389,8 +1386,7 @@ export default function App() {
   } = useWebPublicFunnelActions<
     PublicCommunityRecord,
     PublicPlanSummary,
-    CommunityAccess,
-    MyCommunityJoinRequest
+    CommunityAccess
   >({
     getSession: () => sessionRef.current,
     getCurrentPublicCommunitySlug: () => publicCommunityUi.publicCommunity?.slug ?? null,
@@ -1417,8 +1413,6 @@ export default function App() {
     setPublicCommunityAccess: publicCommunityUi.setPublicCommunityAccess,
     setPublicCommunityAccessResolutionKey:
       publicCommunityUi.setPublicCommunityAccessResolutionKey,
-    setIsLoadingMyPublicCommunityJoinRequest: publicCommunityUi.setIsLoadingMyPublicCommunityJoinRequest,
-    setMyPublicCommunityJoinRequest: publicCommunityUi.setMyPublicCommunityJoinRequest,
     setIsLoadingPublicCommunity: publicCommunityUi.setIsLoadingPublicCommunity,
     setPublicCommunityError: publicCommunityUi.setPublicCommunityError,
     setPublicCommunityPlans: publicCommunityUi.setPublicCommunityPlans,
@@ -1623,12 +1617,11 @@ export default function App() {
     approvalDenied,
     canRequestAgain,
     approvalReapplyLabel,
-  } = useWebPublicCommunityRouteController<PublicCommunityRecord, MyCommunityJoinRequest>({
+  } = useWebPublicCommunityRouteController<PublicCommunityRecord>({
     publicRoute: shellPublicRoute,
     publicCommunity: publicCommunityUi.publicCommunity,
     publicCommunityPlans: publicCommunityUi.publicCommunityPlans,
     publicCommunityAccess: publicCommunityUi.publicCommunityAccess,
-    myPublicCommunityJoinRequest: publicCommunityUi.myPublicCommunityJoinRequest,
     isSignedIn: Boolean(session),
     /* Re-fire only when the authenticated subject changes — not on every
        session object identity change — so access cannot leak across accounts
@@ -2788,8 +2781,6 @@ export default function App() {
       isJoiningPublicCommunity: publicCommunityUi.isJoiningPublicCommunity,
       isCancellingPublicCommunityJoinRequest:
         publicCommunityUi.isCancellingPublicCommunityJoinRequest,
-      isLoadingMyPublicCommunityJoinRequest:
-        publicCommunityUi.isLoadingMyPublicCommunityJoinRequest,
       approvalPending,
       approvalDenied,
       canRequestAgain,
