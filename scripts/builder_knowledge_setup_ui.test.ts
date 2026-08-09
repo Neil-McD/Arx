@@ -11,6 +11,13 @@ const appSource = readFileSync(
   resolve(process.cwd(), "apps/web/src/App.tsx"),
   "utf8",
 );
+const knowledgeControllerSource = readFileSync(
+  resolve(
+    process.cwd(),
+    "apps/web/src/controllers/useWebBuilderKnowledgeSetupController.ts",
+  ),
+  "utf8",
+);
 
 test("Builder knowledge setup is a required, non-dismissible step", () => {
   expect(source).toContain("Community setup · 2 of 2");
@@ -30,8 +37,8 @@ test("Skip and ready-source continuation share the canonical completion command"
 });
 
 test("a source-loading failure cannot trap the buyer in onboarding", () => {
-  expect(appSource).toMatch(
-    /loadCommunityResources\(pendingCommunity\.id, activeSession\)[\s\S]*?\.catch\([\s\S]*?\.finally\(\(\) => \{[\s\S]*?setHydratedBuilderKnowledgeCommunityId\(pendingCommunity\.id\)/,
+  expect(knowledgeControllerSource).toMatch(
+    /loadCommunityResources\(pendingCommunity\.id, session\)[\s\S]*?\.catch\([\s\S]*?\.finally\(\(\) => \{[\s\S]*?setHydratedCommunityId\(pendingCommunity\.id\)/,
   );
 });
 

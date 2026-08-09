@@ -1,9 +1,7 @@
 import {
   lazy,
-  useEffect,
   useMemo,
   useRef,
-  useState,
   Suspense,
   type ChangeEvent,
 } from "react";
@@ -196,14 +194,14 @@ import {
   WEB_IMAGE_DATA_URL_CHAR_LIMIT,
 } from "./webAppRuntime";
 import { useWebCommunityVisualIdentityRegistryLifecycle } from "./controllers/useWebCommunityVisualIdentityRegistryLifecycle";
-import { completeCloudBuilderKnowledgeSetup } from "../../../shared/cloudCommunityAdminGateway";
 import {
-  findPendingBuilderSetupSubscription,
-  reconcileBuilderSetupSuppressions,
-  resolveBuilderSetupModalReconciliation,
-  type BuilderSetupSuppressionReason,
-  type BuilderSetupSuppressions,
-} from "../../../shared/builderSetupReconciliation";
+  useWebBuilderKnowledgeCompletionController,
+  useWebBuilderKnowledgeHydrationController,
+} from "./controllers/useWebBuilderKnowledgeSetupController";
+import {
+  useWebBuilderPurchaseFlowController,
+  useWebBuilderSetupSubscriptionController,
+} from "./controllers/useWebBuilderSetupFlowController";
 
 const WebStandalonePublicRouteShell = lazy(() =>
   import("./components/WebStandalonePublicRouteShell").then((module) => ({
@@ -409,15 +407,6 @@ export default function App() {
     canonicalSessionUserId,
     initiallyLoading: Boolean(session),
   });
-  const pendingBuilderKnowledgeCommunity = useMemo(
-    () => communities
-      .filter((community) => community.builder_knowledge_setup_pending === true)
-      .slice()
-      .sort((left, right) => (
-        new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
-      ))[0] ?? null,
-    [communities],
-  );
   const {
     activeCommunity,
     activeCommunityId,
@@ -719,51 +708,17 @@ export default function App() {
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
   } = communityContent;
-  const [hydratedBuilderKnowledgeCommunityId, setHydratedBuilderKnowledgeCommunityId] =
-    useState<string | null>(null);
-  useEffect(() => {
-    const pendingCommunity = pendingBuilderKnowledgeCommunity;
-    if (!pendingCommunity) {
-      setHydratedBuilderKnowledgeCommunityId(null);
-      return;
-    }
-    if (activeCommunityId !== pendingCommunity.id) {
-      setHydratedBuilderKnowledgeCommunityId(null);
-      applyCommunityShellState({
-        communityId: pendingCommunity.id,
-        communitySlug: pendingCommunity.slug,
-        communityTab: "resources",
-      });
-      return;
-    }
-    const activeSession = sessionRef.current ?? session;
-    if (!activeSession) {
-      setHydratedBuilderKnowledgeCommunityId(null);
-      return;
-    }
-    let cancelled = false;
-    setHydratedBuilderKnowledgeCommunityId(null);
-    void loadCommunityResources(pendingCommunity.id, activeSession)
-      .catch((error) => {
-        if (!cancelled) {
-          console.warn("[builder-knowledge-setup] failed to load sources:", error);
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setHydratedBuilderKnowledgeCommunityId(pendingCommunity.id);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [
+  const {
+    pendingBuilderKnowledgeCommunity,
+    hydratedBuilderKnowledgeCommunityId,
+  } = useWebBuilderKnowledgeHydrationController({
+    communities,
     activeCommunityId,
-    appActivity.resumeEpoch,
+    resumeEpoch: appActivity.resumeEpoch,
+    getSession: () => sessionRef.current ?? session,
     applyCommunityShellState,
     loadCommunityResources,
-    pendingBuilderKnowledgeCommunity?.id,
-    pendingBuilderKnowledgeCommunity?.slug,
-    session?.user.id,
-  ]);
+  });
   const communityAdministration = useWebCommunityAdministrationState({
     activeCommunityId,
     ensureSession: ensureUsableAuthSession,
@@ -1013,29 +968,11 @@ export default function App() {
     operatorComplimentaryAccess,
     onCommunityReady: (_communityId, readySession) => loadCommunities(readySession),
   });
-  const [builderSetupSuppressions, setBuilderSetupSuppressions] =
-    useState<BuilderSetupSuppressions>({});
-  const suppressBuilderSetupSubscription = (
-    subscriptionId: string | null,
-    reason: BuilderSetupSuppressionReason,
-  ) => {
-    const normalizedSubscriptionId = String(subscriptionId ?? "").trim();
-    if (!normalizedSubscriptionId) return;
-    setBuilderSetupSuppressions((current) => (
-      current[normalizedSubscriptionId] === reason
-        ? current
-        : { ...current, [normalizedSubscriptionId]: reason }
-    ));
-  };
-  useEffect(() => {
-    setBuilderSetupSuppressions((current) => reconcileBuilderSetupSuppressions(
-      current,
-      founderBilling.overview.unassigned_subscriptions,
-    ));
-  }, [founderBilling.overview]);
-  const pendingBuilderSetupSubscription = findPendingBuilderSetupSubscription(
+  const {
+    pendingBuilderSetupSubscription,
+    suppressBuilderSetupSubscription,
+  } = useWebBuilderSetupSubscriptionController(
     founderBilling.overview.unassigned_subscriptions,
-    builderSetupSuppressions,
   );
   const builderOffer = useWebBuilderOfferController({
     startCheckout: founderBilling.startCheckout,
@@ -1050,6 +987,13 @@ export default function App() {
     applyAppRouteState,
     loadCommunities,
   });
+  const completePendingBuilderKnowledgeSetup =
+    useWebBuilderKnowledgeCompletionController({
+      pendingCommunity: pendingBuilderKnowledgeCommunity,
+      ensureSession: ensureUsableAuthSession,
+      setCommunities,
+      enterCommunity: enterJoinedCommunity,
+    });
 
   const {
     loadSelfProfile,
@@ -1556,7 +1500,7 @@ export default function App() {
         "We are still verifying your account. Try again in a moment.",
       );
     },
-    onCommunityCreated: async (community, context) => {
+    onCommunityCreated: (community, context) => {
       suppressBuilderSetupSubscription(
         context.founderSubscriptionId,
         "attached",
@@ -1606,54 +1550,23 @@ export default function App() {
     navigateTo,
     showToast: showAppToastMessage,
   });
-  const pendingBuilderCreateDraftRef = useRef<Parameters<
-    typeof communityUi.openCreateCommunityModal
-  >[0]>(null);
-  const openNewCommunityPurchaseFlow: typeof communityUi.openCreateCommunityModal = (draft = null) => {
-    if (pendingBuilderSetupSubscription) {
-      communityUi.openRequiredCreateCommunityModal(
-        pendingBuilderSetupSubscription.subscription_id,
-        draft,
-      );
-      return;
-    }
-    pendingBuilderCreateDraftRef.current = draft;
-    publicBuilderCheckout.openPurchasePrompt();
-  };
-  useEffect(() => {
-    if (
-      !session
-      || !isAuthBootstrapComplete
-      || !isAccountSetupResolved
-      || !isAccountSetupCompleteForBuilderActions
-    ) {
-      return;
-    }
-    const reconciliation = resolveBuilderSetupModalReconciliation({
-      isModalOpen: communityUi.modalHostProps.createModal.isOpen,
-      requiredSubscriptionId: communityUi.requiredFounderSubscriptionId,
-      pendingSubscriptionId: pendingBuilderSetupSubscription?.subscription_id ?? null,
-    });
-    if (reconciliation.kind === "close_required") {
-      communityUi.closeRequiredCreateCommunityModal();
-      return;
-    }
-    if (reconciliation.kind === "open_required") {
-      communityUi.openRequiredCreateCommunityModal(
-        reconciliation.subscriptionId,
-      );
-    }
-  }, [
-    session?.user.id,
+  const {
+    openCommunityPurchaseFlow: openNewCommunityPurchaseFlow,
+    clearPendingDraft: clearPendingBuilderCreateDraft,
+    consumePendingDraft: consumePendingBuilderCreateDraft,
+  } = useWebBuilderPurchaseFlowController({
+    pendingSubscriptionId: pendingBuilderSetupSubscription?.subscription_id ?? null,
+    sessionUserId: session?.user.id ?? null,
     isAuthBootstrapComplete,
     isAccountSetupResolved,
-    isAccountSetupCompleteForBuilderActions,
-    pendingBuilderSetupSubscription?.subscription_id,
-    communityUi.modalHostProps.createModal.isOpen,
-    communityUi.requiredFounderSubscriptionId,
-    communityUi.closeRequiredCreateCommunityModal,
-    communityUi.openRequiredCreateCommunityModal,
-  ]);
+    isAccountSetupComplete: isAccountSetupCompleteForBuilderActions,
+    isCreateModalOpen: communityUi.modalHostProps.createModal.isOpen,
+    requiredSubscriptionId: communityUi.requiredFounderSubscriptionId,
+    openCreateCommunityModal: communityUi.openCreateCommunityModal,
+    openRequiredCreateCommunityModal: communityUi.openRequiredCreateCommunityModal,
+    closeRequiredCreateCommunityModal: communityUi.closeRequiredCreateCommunityModal,
+    openPurchasePrompt: publicBuilderCheckout.openPurchasePrompt,
+  });
   const { resumePendingAuthIntent } =
     useWebPendingAuthIntentController({
       session,
@@ -2762,13 +2675,12 @@ export default function App() {
       status: publicBuilderCheckout.status,
       error: publicBuilderCheckout.error,
       onClose: () => {
-        pendingBuilderCreateDraftRef.current = null;
+        clearPendingBuilderCreateDraft();
         publicBuilderCheckout.closePurchasePrompt();
       },
       onConfirm: () => {
         if (operatorComplimentaryAccess) {
-          const draft = pendingBuilderCreateDraftRef.current;
-          pendingBuilderCreateDraftRef.current = null;
+          const draft = consumePendingBuilderCreateDraft();
           publicBuilderCheckout.closePurchasePrompt();
           communityUi.openCreateCommunityModal(draft);
           return;
@@ -3208,26 +3120,7 @@ export default function App() {
         isHydrating={!isKnowledgeCommunityReady || isLoadingResources}
         resources={isKnowledgeCommunityReady ? communityResources : []}
         onAddSources={handleAddCommunitySources}
-        onComplete={async () => {
-          const activeSession = await ensureUsableAuthSession();
-          if (!activeSession) return false;
-          const result = await completeCloudBuilderKnowledgeSetup({
-            session: activeSession,
-            communityId: pendingBuilderKnowledgeCommunity.id,
-          });
-          if (!result.ok) return false;
-          setCommunities((current) => current.map((community) => (
-            community.id === pendingBuilderKnowledgeCommunity.id
-              ? { ...community, builder_knowledge_setup_pending: false }
-              : community
-          )));
-          void enterJoinedCommunity({
-            communityId: pendingBuilderKnowledgeCommunity.id,
-            communitySlug: pendingBuilderKnowledgeCommunity.slug,
-            communityTab: "chat",
-          });
-          return true;
-        }}
+        onComplete={completePendingBuilderKnowledgeSetup}
       />
     );
   }

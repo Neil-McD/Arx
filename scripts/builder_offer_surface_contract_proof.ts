@@ -25,6 +25,9 @@ const offerController = read("apps/web/src/controllers/useWebBuilderOfferControl
 const publicCheckoutController = read(
   "apps/web/src/controllers/useWebPublicBuilderCheckoutController.ts",
 );
+const builderSetupFlowController = read(
+  "apps/web/src/controllers/useWebBuilderSetupFlowController.ts",
+);
 const founderBillingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const globalOverlay = read("apps/web/src/components/WebGlobalOverlayHost.tsx");
 const settingsStyles = read("apps/web/src/styles/settings-runtime-and-theme-overrides.css");
@@ -120,9 +123,10 @@ assert.match(
   "community creation must snapshot and attach the selected funded subscription",
 );
 assert.doesNotMatch(app, /availableBuilderSubscriptionIdRef|setAvailableBuilderSubscriptionId/);
+assert.match(app, /pendingBuilderSetupSubscription\?\.subscription_id/);
 assert.match(
-  app,
-  /pendingBuilderSetupSubscription[\s\S]*openRequiredCreateCommunityModal\([\s\S]*subscription_id/,
+  builderSetupFlowController,
+  /pendingSubscriptionId[\s\S]*openRequiredCreateCommunityModal\(params\.pendingSubscriptionId/,
   "a canonical unassigned subscription must open required identity setup directly",
 );
 assert.match(createModal, /props\.isDismissible \? \([\s\S]*Close community setup/);
@@ -135,9 +139,10 @@ assert.match(
 assert.match(createModal, /Community handle/);
 assert.doesNotMatch(createModal, /Customize community URL/);
 assert.match(
-  app,
-  /openNewCommunityPurchaseFlow[\s\S]*publicBuilderCheckout\.openPurchasePrompt\(\)/,
+  builderSetupFlowController,
+  /openCommunityPurchaseFlow[\s\S]*params\.openPurchasePrompt\(\)/,
 );
+assert.match(app, /useWebBuilderPurchaseFlowController\(\{/);
 assert.match(
   app,
   /builderPurchaseProps:[\s\S]*operatorComplimentaryAccess[\s\S]*"purchase"[\s\S]*publicBuilderCheckout\.startPurchase\(\)/,
