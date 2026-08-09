@@ -54,6 +54,7 @@ import {
   textContainsEverybodyMentionToken,
 } from "./communityMentionBroadcasts";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
+import { readCanonicalUserIdentityProjection } from "./profileCore";
 import {
   ensureGeneralChannel,
   clearPinnedRootIfMatches,
@@ -2091,16 +2092,16 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       ) {
         throw new Error("community_founder_welcome_contract_invalid");
       }
-      const [community, founder] = await Promise.all([
+      const [community, founderIdentity] = await Promise.all([
         ctx.db.get(args.communityId),
-        ctx.db.get(args.userId),
+        readCanonicalUserIdentityProjection(ctx, args.userId),
       ]);
-      if (!community || String(community.ownerId) !== String(args.userId) || !founder) {
+      if (!community || String(community.ownerId) !== String(args.userId) || !founderIdentity) {
         throw new Error("community_founder_welcome_owner_required");
       }
       sponsorUserId = args.userId;
       canonicalText = buildCommunityFounderWelcomeText({
-        founderDisplayName: founder.displayName,
+        founderDisplayName: founderIdentity.displayName,
         communityName: community.name,
       });
     } else {

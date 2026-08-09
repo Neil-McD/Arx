@@ -1,4 +1,4 @@
-export const COMMUNITY_AGENT_THREAD_CONTEXT_VERSION = 1 as const;
+export const COMMUNITY_AGENT_THREAD_CONTEXT_VERSION = 2 as const;
 export const COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CANDIDATE_REPLIES = 48;
 export const COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS = 24;
 export const COMMUNITY_AGENT_THREAD_CONTEXT_MAX_PARTICIPANTS = 8;
@@ -8,6 +8,13 @@ export type CommunityAgentThreadActorType =
   | "human"
   | "personal_agent"
   | "community_agent"
+  | "system";
+
+export type CommunityAgentThreadSpeakerRole =
+  | "self"
+  | "requester"
+  | "participant"
+  | "other_agent"
   | "system";
 
 export type CommunityAgentThreadTurnInput = {
@@ -40,6 +47,8 @@ export type CommunityAgentThreadParticipantInput = {
 
 export type CommunityAgentThreadContextInput = {
   capturedAt: number;
+  selfAgentKey: string;
+  selfAgentDisplayName: string;
   requesterUserId: string;
   requesterTimezone: string | null;
   sourceRootId: string;
@@ -50,7 +59,7 @@ export type CommunityAgentThreadContextInput = {
   omittedUnreadableTurnCount?: number;
 };
 
-export type CommunityAgentThreadContextV1 = {
+export type CommunityAgentThreadContextV2 = {
   version: typeof COMMUNITY_AGENT_THREAD_CONTEXT_VERSION;
   capturedAt: number;
   rendered: string;
@@ -129,6 +138,8 @@ function renderParticipant(participant: CommunityAgentThreadParticipantInput): s
 function renderTurn(
   turn: CommunityAgentThreadTurnInput,
   participantsById: Map<string, CommunityAgentThreadParticipantInput>,
+  selfAgentKey: string,
+  requesterUserId: string,
 ): string {
   const participant = turn.actorUserId ? participantsById.get(turn.actorUserId) : undefined;
   const speaker = turn.actorType === "human"
@@ -151,11 +162,39 @@ function renderTurn(
   const target = turn.targetReplyId ? ` replying_to=${turn.targetReplyId}` : "";
   const seq = turn.kind === "root" ? "root" : `reply:${Math.max(0, Math.floor(Number(turn.seq ?? 0)))}`;
   const edited = turn.editedAt ? ` edited_at=${new Date(turn.editedAt).toISOString()}` : "";
+  const speakerRole = communityAgentThreadSpeakerRole({
+    turn,
+    selfAgentKey,
+    requesterUserId,
+  });
   return [
-    `<turn id="${turn.id}" position="${seq}" speaker="${speaker}" actor_type="${turn.actorType}"${target} created_at="${new Date(turn.createdAt).toISOString()}"${edited}>`,
+    `<turn id="${turn.id}" position="${seq}" speaker="${speaker}" speaker_role="${speakerRole}" actor_type="${turn.actorType}"${target} created_at="${new Date(turn.createdAt).toISOString()}"${edited}>`,
     turn.content || "[empty]",
     "</turn>",
   ].join("\n");
+}
+
+export function communityAgentThreadSpeakerRole(args: {
+  turn: Pick<CommunityAgentThreadTurnInput, "actorType" | "actorUserId" | "actorAgentKey">;
+  selfAgentKey: string;
+  requesterUserId: string;
+}): CommunityAgentThreadSpeakerRole {
+  const selfAgentKey = boundedText(args.selfAgentKey, 128);
+  const requesterUserId = boundedText(args.requesterUserId, 128);
+  if (
+    args.turn.actorType === "community_agent" &&
+    selfAgentKey &&
+    boundedText(args.turn.actorAgentKey, 128) === selfAgentKey
+  ) {
+    return "self";
+  }
+  if (args.turn.actorType === "human") {
+    return requesterUserId && boundedText(args.turn.actorUserId, 128) === requesterUserId
+      ? "requester"
+      : "participant";
+  }
+  if (args.turn.actorType === "system") return "system";
+  return "other_agent";
 }
 
 function selectTurns(input: CommunityAgentThreadContextInput): {
@@ -219,6 +258,7 @@ function renderPacket(args: {
   const header = [
     `COMMUNITY_AGENT_THREAD_CONTEXT_V${COMMUNITY_AGENT_THREAD_CONTEXT_VERSION}`,
     `captured_at=${new Date(args.input.capturedAt).toISOString()}`,
+    `self_agent=${boundedText(args.input.selfAgentDisplayName, 80) || "Community agent"} [agent:${boundedText(args.input.selfAgentKey, 128)}]`,
     `requester=${participantLabel(requester)} [user:${boundedText(args.input.requesterUserId, 128)}]`,
     args.input.requesterTimezone ? `requester_timezone=${boundedText(args.input.requesterTimezone, 80)}` : "",
     `source=${source}`,
@@ -227,22 +267,30 @@ function renderPacket(args: {
   const participantBlock = args.participants.length > 0
     ? args.participants.map(renderParticipant).join("\n")
     : "- No active participant profile enrichment available.";
-  const threadBlock = args.turns.map((turn) => renderTurn(turn, participantsById)).join("\n\n");
+  const threadBlock = args.turns.map((turn) => renderTurn(
+    turn,
+    participantsById,
+    args.input.selfAgentKey,
+    args.input.requesterUserId,
+  )).join("\n\n");
   const truncation = `omitted_turns=${args.omittedTurnCount}; omitted_unreadable_turns=${args.omittedUnreadableTurnCount}`;
   return `${header}\n\nAUTHORIZED PARTICIPANT ORIENTATION\n${participantBlock}\n\nTHREAD TRANSCRIPT\n${threadBlock}\n\n${truncation}`;
 }
 
 export function compileCommunityAgentThreadContext(
   input: CommunityAgentThreadContextInput,
-): CommunityAgentThreadContextV1 {
+): CommunityAgentThreadContextV2 {
   const normalizedInput = {
     ...input,
     capturedAt: boundedTimestamp(input.capturedAt),
+    selfAgentKey: boundedText(input.selfAgentKey, 128),
+    selfAgentDisplayName: boundedText(input.selfAgentDisplayName, 120),
     requesterUserId: boundedText(input.requesterUserId, 128),
     requesterTimezone: boundedText(input.requesterTimezone, 80) || null,
     sourceRootId: boundedText(input.sourceRootId, 128),
     sourceReplyId: boundedText(input.sourceReplyId, 128) || null,
   };
+  if (!normalizedInput.selfAgentKey) throw new Error("community_agent_thread_context_self_agent_required");
   if (!normalizedInput.requesterUserId) throw new Error("community_agent_thread_context_requester_required");
   const selection = selectTurns(normalizedInput);
   let turns = selection.selected.slice();

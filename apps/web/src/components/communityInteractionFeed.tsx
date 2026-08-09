@@ -43,10 +43,13 @@ export function actorLabel(
     actor_agent_key: string | null;
   },
   displayName: (userId: string) => string,
+  communityAgentDisplayName?: string,
 ): string {
   if (actor.actor_user_id) return displayName(actor.actor_user_id);
+  if (actor.actor_type === "community_agent") {
+    return String(communityAgentDisplayName ?? "").trim() || "Community agent";
+  }
   if (actor.actor_agent_key) return actor.actor_agent_key.replace(/_/g, " ");
-  if (actor.actor_type === "community_agent") return "Community agent";
   if (actor.actor_type === "personal_agent") return "Personal agent";
   if (actor.actor_type === "system") return "System";
   return "Member";
@@ -931,7 +934,7 @@ export function CommunityInteractionFeedList(
                   );
                 }
                 const first = segment.bundles[0]!;
-                const label = actorLabel(first.root, props.displayName);
+                const label = actorLabel(first.root, props.displayName, props.activeCommunityName);
                 const profile = first.root.actor_user_id
                   ? props.profilesByUserId[first.root.actor_user_id] ?? null
                   : null;

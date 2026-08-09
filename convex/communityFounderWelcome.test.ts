@@ -138,6 +138,32 @@ test("founder bootstrap creates one deterministic canonical welcome root", async
   }));
 });
 
+test("founder welcome prefers the canonical product profile over the auth identity name", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.ownerId, { displayName: "OAuth Provider Name" });
+    const detail = await ctx.db
+      .query("userProfileDetails")
+      .withIndex("by_user", (q) => q.eq("userId", fixture.ownerId))
+      .unique();
+    if (!detail) throw new Error("profile_detail_required");
+    await ctx.db.patch(detail._id, { displayName: "Chosen Product Name" });
+  });
+  await t.mutation(
+    internal.communityInteractions.createCommunityAgentCanonicalInteractionInternal,
+    {
+      userId: fixture.ownerId,
+      communityId: fixture.communityId,
+      idempotencyKey: communityFounderWelcomeIdempotencyKey(fixture.communityId),
+      founderBootstrap: true,
+    },
+  );
+  const blocks = await t.run(async (ctx) => ctx.db.query("communityInteractionContentBlocks").collect());
+  expect(blocks[0]?.text).toContain("Hi Chosen Product Name");
+  expect(blocks[0]?.text).not.toContain("OAuth Provider Name");
+});
+
 test("canonical community creation schedules the welcome without blocking durability", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-08-09T16:00:00.000Z"));

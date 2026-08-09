@@ -58,7 +58,9 @@ import {
   type CommunityAgentThreadTurnInput,
 } from "../shared/communityAgentThreadContext";
 import { readMemberFactsForLens, readMemberSpine } from "./memberOntologyCore";
-import { getUniqueUserProfileDetailByUserId } from "./profileCore";
+import {
+  readCanonicalUserIdentityProjection,
+} from "./profileCore";
 
 const SERVE_WORKER_DEFAULT_LIMIT = 3;
 const SERVE_WORKER_MAX_LIMIT = 5;
@@ -413,23 +415,12 @@ type ThreadActorIdentity = {
 };
 
 async function loadThreadActorIdentity(ctx: any, userId: any): Promise<ThreadActorIdentity> {
-  const user = (await ctx.db.get(userId as any)) as {
-    displayName?: string;
-    handle?: string;
-    normalizedHandle?: string;
-  } | null;
-  if (!user) return { displayName: null, handle: null, timezone: null };
-  let detail: { displayName?: string; timezone?: string } | null = null;
-  try {
-    detail = await getUniqueUserProfileDetailByUserId(ctx, userId);
-  } catch {
-    // Ambiguous optional profile enrichment never widens context or breaks the
-    // canonical thread transcript. The unique user row remains the identity.
-  }
+  const identity = await readCanonicalUserIdentityProjection(ctx, userId);
+  if (!identity) return { displayName: null, handle: null, timezone: null };
   return {
-    displayName: boundedText(detail?.displayName ?? user.displayName, 120) || null,
-    handle: boundedText(user.normalizedHandle ?? user.handle, 64) || null,
-    timezone: boundedText(detail?.timezone, 80) || null,
+    displayName: boundedText(identity.displayName, 120) || null,
+    handle: boundedText(identity.handle, 64) || null,
+    timezone: boundedText(identity.timezone, 80) || null,
   };
 }
 
@@ -658,6 +649,8 @@ async function loadCommunityAgentThreadContext(args: {
     await loadThreadActorIdentity(args.ctx, args.request.requesterUserId);
   return compileCommunityAgentThreadContext({
     capturedAt: Date.now(),
+    selfAgentKey: args.request.agentKey,
+    selfAgentDisplayName: args.agentDisplayName,
     requesterUserId: normalizeIdValue(args.request.requesterUserId),
     requesterTimezone: requesterIdentity.timezone,
     sourceRootId: normalizeIdValue(args.root._id),

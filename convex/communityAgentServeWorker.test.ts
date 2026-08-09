@@ -465,9 +465,16 @@ test("thread context is chronological, cutoff-bound, and scoped through member o
     { requestId, expectedAttempt: claim.attempt },
   );
   expect(context).toMatchObject({ ok: true });
+  expect(context.agent.displayName).toBe("Serve thread-context");
+  expect(context.threadContext.version).toBe(2);
+  expect(context.threadContext.rendered).toContain(
+    "self_agent=Serve thread-context [agent:community_agent]",
+  );
   expect(context.threadContext.rendered).toContain("position=\"reply:1\"");
   expect(context.threadContext.rendered).toContain("position=\"reply:3\"");
   expect(context.threadContext.rendered).toContain("requester=Blair Member (@blair)");
+  expect(context.threadContext.rendered).toContain('speaker_role="requester"');
+  expect(context.threadContext.rendered).toContain('speaker_role="participant"');
   expect(context.threadContext.rendered).toContain("situation=Helping launch the first cohort");
   expect(context.threadContext.rendered).toContain("preference=Prefers concise launch plans");
   expect(context.threadContext.rendered).not.toContain("PRIVATE PENDING FACT");

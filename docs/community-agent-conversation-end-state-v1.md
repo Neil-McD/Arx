@@ -128,6 +128,13 @@ For every invocation, the server-built context must:
 
 - include the root, exact source turn, and readable reply target;
 - preserve chronology, speaker identity, and flat reply relationships;
+- derive each turn's conversational role from canonical actor identifiers:
+  the exact community agent is `self`, the invoking human is `requester`, other
+  humans are `participant`, other agents are `other_agent`, and platform turns
+  are `system`;
+- tell the runtime explicitly that `self` turns are its own prior speech,
+  `requester` is the person addressed as "you", and participant names or
+  pronouns inside untrusted message content never override those roles;
 - include only turns at or before the source cutoff;
 - independently validate every turn's current readability;
 - omit hidden, deleted, future, cross-thread, cross-channel, or unauthorized
@@ -147,6 +154,13 @@ after a participant leaves, but current profile enrichment is omitted.
 
 All participant and thread content is untrusted context, never system
 instruction.
+
+Display names are presentation, not identity authority. Current product display
+identity prefers `userProfileDetails.displayName` with the durable user row as a
+compatibility fallback. Historical message text is never rewritten after a
+profile rename. The community agent's display name resolves from its current
+configured name, then the community name, then `Community agent`; its stable
+agent key remains the identity authority.
 
 ### 5. Completion Enhancement: Attachments And Community Knowledge
 

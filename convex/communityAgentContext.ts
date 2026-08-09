@@ -14,6 +14,15 @@ function boundedText(raw: unknown, maxLength: number): string {
   return String(raw ?? "").trim().slice(0, maxLength);
 }
 
+export function resolveCommunityAgentDisplayName(args: {
+  configuredDisplayName?: unknown;
+  communityName?: unknown;
+}): string {
+  return boundedText(args.configuredDisplayName, 120) ||
+    boundedText(args.communityName, 120) ||
+    "Community agent";
+}
+
 export async function readCanonicalCommunityAgentContext(
   ctx: any,
   communityId: any,
@@ -35,7 +44,10 @@ export async function readCanonicalCommunityAgentContext(
     communityAbout: boundedText(community.about, 4_000) || null,
     ownerUserId: community.ownerId ?? null,
     agentEnabled: config?.agentEnabled !== false,
-    agentDisplayName: boundedText(config?.agentDisplayName, 120) || "Polynet",
+    agentDisplayName: resolveCommunityAgentDisplayName({
+      configuredDisplayName: config?.agentDisplayName,
+      communityName: community.name,
+    }),
     communitySystemPrompt: boundedText(config?.systemPrompt, 40_000) || null,
   };
 }

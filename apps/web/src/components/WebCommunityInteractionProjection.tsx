@@ -715,7 +715,9 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     props.pinnedRoot,
     props.selectedRootId,
   );
-  const selectedRootLabel = selectedRoot ? actorLabel(selectedRoot.root, props.displayName) : "";
+  const selectedRootLabel = selectedRoot
+    ? actorLabel(selectedRoot.root, props.displayName, props.activeCommunityName)
+    : "";
   const selectedRootText = selectedRoot
     ? stripSharedAttachmentSummary(
         bundleText(selectedRoot.content_blocks, selectedRoot.root.content_summary),
@@ -770,7 +772,11 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
             isUnpinning={Boolean(props.isUpdatingPinnedRoot)}
             onUnpin={() => void props.onSetPinnedRoot?.(null)}
             onOpen={() => props.onSelectRoot(props.pinnedRoot!.root.id)}
-            openLabel={`View full pinned post by ${actorLabel(props.pinnedRoot.root, props.displayName)}`}
+            openLabel={`View full pinned post by ${actorLabel(
+              props.pinnedRoot.root,
+              props.displayName,
+              props.activeCommunityName,
+            )}`}
           >
             <CommunityInteractionFeedList
               {...props}
@@ -1028,7 +1034,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               <div className="community-interaction-reply-list">
                 {props.replies.map((bundle) => {
                   const reply = bundle.reply;
-                  const label = actorLabel(reply, props.displayName);
+                  const label = actorLabel(reply, props.displayName, props.activeCommunityName);
                   const profile = reply.actor_user_id ? props.profilesByUserId[reply.actor_user_id] ?? null : null;
                   const body = stripSharedAttachmentSummary(
                     bundleText(bundle.content_blocks, reply.content_summary),

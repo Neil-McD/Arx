@@ -155,8 +155,13 @@ assert.match(
 assert.doesNotMatch(readBlock, /rootText|replyText|isReply|conversationText/);
 assert.match(
   threadContext,
-  /COMMUNITY_AGENT_THREAD_CONTEXT_VERSION = 1[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS = 24[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_PARTICIPANTS = 8[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CHARS = 7_800/,
+  /COMMUNITY_AGENT_THREAD_CONTEXT_VERSION = 2[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS = 24[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_PARTICIPANTS = 8[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CHARS = 7_800/,
   "the pure thread compiler should own deterministic context bounds",
+);
+assert.match(
+  threadContext,
+  /speaker_role[\s\S]*communityAgentThreadSpeakerRole[\s\S]*actorType === "community_agent"[\s\S]*actorAgentKey[\s\S]*return "self"/,
+  "the thread compiler should derive self identity only from the canonical agent key",
 );
 assert.match(
   threadContext,
