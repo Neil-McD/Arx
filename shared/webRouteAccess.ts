@@ -68,6 +68,21 @@ export function classifyWebRouteAccessRequirement(params: {
   return "authenticated";
 }
 
+export function shouldHydrateWebRouteAccountSetup(params: {
+  publicRoute: PublicRoute;
+  activePage: AppPage;
+  pathname: string;
+}): boolean {
+  const requirement = classifyWebRouteAccessRequirement(params);
+  return (
+    requirement === "account_setup" ||
+    requirement === "authenticated" ||
+    requirement === "community" ||
+    requirement === "community_preview" ||
+    requirement === "operator"
+  );
+}
+
 export function resolveWebRouteAccessProjection(params: {
   publicRoute: PublicRoute;
   activePage: AppPage;

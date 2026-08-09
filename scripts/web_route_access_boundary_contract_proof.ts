@@ -5,6 +5,7 @@ import type { AppPage } from "../shared/appShellNavigation.ts";
 import type { PublicRoute } from "../shared/webAppRouteState.ts";
 import {
   resolveWebRouteAccessProjection,
+  shouldHydrateWebRouteAccountSetup,
   type WebRouteAuthState,
   type WebRouteScopedAccessState,
 } from "../shared/webRouteAccess.ts";
@@ -55,6 +56,15 @@ for (const [activePage, pathname] of [
   ["docs", "/docs"],
   ["settings", "/settings/billing"],
 ] as const) {
+  assert.equal(
+    shouldHydrateWebRouteAccountSetup({
+      publicRoute: { kind: "app" },
+      activePage,
+      pathname,
+    }),
+    true,
+    `${pathname} must hydrate the account state required by route admission`,
+  );
   assert.deepEqual(project({ activePage, pathname }), {
     kind: "redirect_landing",
     requirement: "authenticated",
@@ -70,6 +80,31 @@ for (const [activePage, pathname] of [
   assert.deepEqual(
     project({ activePage, pathname, authState: "signed_in" }),
     { kind: "render_authenticated", requirement: "authenticated" },
+  );
+}
+
+for (const [publicRoute, activePage, pathname] of [
+  [{ kind: "app" }, "landing", "/"],
+  [{ kind: "community_funnel", slug: "polynet" }, "landing", "/c/polynet"],
+  [{ kind: "app" }, "landing", "/workspace"],
+] satisfies Array<[PublicRoute, AppPage, string]>) {
+  assert.equal(
+    shouldHydrateWebRouteAccountSetup({ publicRoute, activePage, pathname }),
+    false,
+    `${pathname} must not block public or legacy entry on account hydration`,
+  );
+}
+
+for (const [publicRoute, activePage, pathname] of [
+  [{ kind: "app" }, "onboarding", "/onboarding"],
+  [{ kind: "app" }, "community", "/c/polynet/chat"],
+  [{ kind: "community_funnel_preview", slug: "polynet" }, "landing", "/c/polynet/preview"],
+  [{ kind: "app" }, "operator", "/operator/platform"],
+] satisfies Array<[PublicRoute, AppPage, string]>) {
+  assert.equal(
+    shouldHydrateWebRouteAccountSetup({ publicRoute, activePage, pathname }),
+    true,
+    `${pathname} must hydrate account state before protected admission`,
   );
 }
 
@@ -270,6 +305,26 @@ assert.equal(
   "the independent joined-community redirect owner must stay deleted",
 );
 assert.match(app, /useWebRouteAccessBoundaryController/);
+assert.match(
+  app,
+  /shouldHydrateWebRouteAccountSetup\([\s\S]*shouldHydrateAccountSetup,/,
+  "the app must pass canonical route-driven account hydration into the profile controller",
+);
+assert.match(
+  onboarding,
+  /!params\.shouldHydrateAccountSetup/,
+  "account hydration must consume the canonical route decision",
+);
+assert.doesNotMatch(
+  onboarding,
+  /params\.activePage === "settings"|params\.activePage === "community"|params\.activePage === "onboarding"/,
+  "account hydration must not drift behind a page-name allowlist",
+);
+assert.match(
+  app,
+  /landing-auth-hold-content[\s\S]*Polynet could not finish verifying your session[\s\S]*Try again/,
+  "a held route must expose visible, recoverable failure UI",
+);
 assert.match(
   app,
   /useWebMemberAgentSurfaceController[\s\S]*if \(shouldHoldRouteForAccess\) \{[\s\S]*landing-auth-hold/,

@@ -57,6 +57,7 @@ export function useWebOnboardingProfileController(params: {
   profileStorageUserId: string | null;
   activePage: AppPage;
   publicRouteKind: string;
+  shouldHydrateAccountSetup: boolean;
   isAuthBootstrapComplete: boolean;
   resumeEpoch: number;
 }) {
@@ -498,13 +499,8 @@ export function useWebOnboardingProfileController(params: {
   }, [cloudProfile, params.session]);
 
   useEffect(() => {
-    const needsProfile =
-      params.activePage === "settings" ||
-      params.activePage === "community" ||
-      params.activePage === "onboarding" ||
-      params.publicRouteKind === "community_funnel";
     if (
-      !needsProfile ||
+      !params.shouldHydrateAccountSetup ||
       !params.isAuthBootstrapComplete ||
       !params.session ||
       cloudProfile ||
@@ -517,10 +513,9 @@ export function useWebOnboardingProfileController(params: {
     cloudProfile,
     hasLoadedOnboardingProfile,
     loadProfileForOnboarding,
-    params.activePage,
     params.isAuthBootstrapComplete,
-    params.publicRouteKind,
     params.session,
+    params.shouldHydrateAccountSetup,
   ]);
 
   return useMemo(

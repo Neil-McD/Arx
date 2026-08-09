@@ -190,7 +190,39 @@
 
 .landing-auth-hold {
   min-height: 100vh;
+  display: grid;
+  place-items: center;
   background: var(--bg-workspace);
+  color: var(--text-muted);
+}
+
+.landing-auth-hold-content {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: 24px;
+  text-align: center;
+}
+
+.landing-auth-hold-content p {
+  margin: 0;
+}
+
+.landing-auth-hold-retry {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-primary);
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+.landing-auth-hold-retry:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent));
+  outline-offset: 4px;
+  border-radius: 2px;
 }
 
 /* Floating "island" wrapper for single controls (used when we don't box the whole header). */

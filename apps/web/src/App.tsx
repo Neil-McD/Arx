@@ -109,6 +109,7 @@ import {
   buildCommunityTabPath,
   buildSettingsPath,
 } from "../../../shared/webAppRouteState";
+import { shouldHydrateWebRouteAccountSetup } from "../../../shared/webRouteAccess";
 import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
 import {
   communityInitials,
@@ -314,6 +315,12 @@ export default function App() {
     appTheme,
     setAppTheme,
   } = shellState;
+  const shouldHydrateAccountSetup =
+    shouldHydrateWebRouteAccountSetup({
+      publicRoute,
+      activePage,
+      pathname: window.location.pathname || "/",
+    }) || publicRoute.kind === "community_funnel";
   const onboardingProfile = useWebOnboardingProfileController({
     session,
     getSession: () => sessionRef.current ?? session,
@@ -322,6 +329,7 @@ export default function App() {
     profileStorageUserId,
     activePage,
     publicRouteKind: publicRoute.kind,
+    shouldHydrateAccountSetup,
     isAuthBootstrapComplete,
     resumeEpoch: appActivity.resumeEpoch,
   });
@@ -3057,7 +3065,37 @@ export default function App() {
   }
 
   if (shouldHoldRouteForAccess) {
-    return <div className="landing-auth-hold" aria-hidden="true" />;
+    const routeAdmissionError = authError ?? onboardingError;
+    return (
+      <main
+        className="landing-auth-hold"
+        aria-busy={!routeAdmissionError}
+      >
+        <div className="landing-auth-hold-content">
+          <p role="status" aria-live="polite">
+            {routeAdmissionError
+              ? "Polynet could not finish verifying your session."
+              : "Opening Polynet…"}
+          </p>
+          {routeAdmissionError ? (
+            <button
+              type="button"
+              className="landing-auth-hold-retry"
+              onClick={() => {
+                if (authError) {
+                  window.location.reload();
+                  return;
+                }
+                setOnboardingError(null);
+                void refreshAccountSetupStatus();
+              }}
+            >
+              Try again
+            </button>
+          ) : null}
+        </div>
+      </main>
+    );
   }
 
   return (
