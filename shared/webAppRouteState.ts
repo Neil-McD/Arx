@@ -416,22 +416,25 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     const slug = String(segments[1] ?? "").trim() || null;
     if (!slug) return null;
     const tabSegment = String(segments[2] ?? "").trim();
-    const legacySettingsPane =
+    const legacyAgentSettingsPane =
       tabSegment === "agent" || tabSegment === "ai_agent"
         ? "agent"
-        : tabSegment === "funnel"
-          ? "funnel"
-          : null;
-    const communityTab = legacySettingsPane
-      ? "settings"
-      : parseCommunityTabSegment(tabSegment);
+        : null;
+    const isLegacyFunnelSettingsRoute =
+      tabSegment === "settings" && String(segments[3] ?? "").trim() === "funnel";
+    const communityTab =
+      tabSegment === "funnel" || isLegacyFunnelSettingsRoute
+        ? "funnel"
+        : legacyAgentSettingsPane
+          ? "settings"
+          : parseCommunityTabSegment(tabSegment);
     const communityResourceModuleId =
       communityTab === "resources" ? String(segments[3] ?? "").trim() || null : null;
     const communityChannelSlug =
       communityTab === "chat" ? String(segments[3] ?? "").trim().toLowerCase() || null : null;
     const communitySettingsPane =
       communityTab === "settings"
-        ? parseCommunitySettingsPane(legacySettingsPane ?? segments[3] ?? null)
+        ? parseCommunitySettingsPane(legacyAgentSettingsPane ?? segments[3] ?? null)
         : null;
     return {
       page: "community",

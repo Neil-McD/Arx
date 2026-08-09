@@ -175,7 +175,9 @@ export const CommunityNav = memo(function CommunityNav({
   const addChannelDialogRef = useRef<HTMLFormElement | null>(null);
   const [isCommunityIdentityCondensed, setIsCommunityIdentityCondensed] = useState(false);
   const showSettingsButton = canViewActiveCommunitySettings;
-  const showManagementSection = canViewActiveCommunityAnalytics;
+  const showManagementSection =
+    canManageMembersActiveCommunity ||
+    canViewActiveCommunityAnalytics;
   const activeCommunityName = activeCommunity?.name?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
@@ -566,6 +568,23 @@ export const CommunityNav = memo(function CommunityNav({
       ) : showManagementSection ? (
         <>
           <div className="community-nav-divider" />
+          {canManageMembersActiveCommunity && (
+            <button
+              className={communityTab === "funnel" ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={() => onSelectTab("funnel")}
+              title="Funnel"
+            >
+              <span className="nav-icon">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M4 6h16" />
+                  <path d="M7 11h10" />
+                  <path d="M10 16h4" />
+                </svg>
+              </span>
+              Funnel
+            </button>
+          )}
           {canViewActiveCommunityAnalytics && (
             <button
               className={communityTab === "analytics" ? "nav-item active" : "nav-item"}

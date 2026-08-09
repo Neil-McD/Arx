@@ -48,6 +48,7 @@ export const COMMUNITY_TABS = [
   "resources",
   "events",
   "settings",
+  "funnel",
   "analytics",
 ] as const;
 
@@ -57,7 +58,6 @@ export const COMMUNITY_SETTINGS_PANES = [
   "community",
   "workflows",
   "agent",
-  "funnel",
   "danger",
 ] as const;
 
@@ -65,6 +65,7 @@ export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 
 const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
   "settings",
+  "funnel",
   "analytics",
 ]);
 
@@ -74,6 +75,7 @@ export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
 
 export type CommunityTabAccess = {
   canViewSettings: boolean;
+  canManageMembers: boolean;
   canViewAnalytics: boolean;
 };
 
@@ -84,6 +86,8 @@ export function isCommunityTabAllowedForAccess(
   switch (tab) {
     case "settings":
       return access.canViewSettings;
+    case "funnel":
+      return access.canManageMembers;
     case "analytics":
       return access.canViewAnalytics;
     case "chat":
@@ -120,12 +124,13 @@ export function parseCommunityTab(
       return "events";
     case "settings":
       return "settings";
-    // Retired top-level configuration routes normalize to Settings. The
-    // pathname parser preserves the specific Agent/Funnel pane.
+    // The retired top-level Agent route normalizes to Settings. Funnel is a
+    // canonical acquisition surface beside Analytics.
     case "agent":
     case "ai_agent":
-    case "funnel":
       return "settings";
+    case "funnel":
+      return "funnel";
     case "analytics":
       return "analytics";
     default:
@@ -140,8 +145,6 @@ export function parseCommunitySettingsPane(
     case "agent":
     case "ai_agent":
       return "agent";
-    case "funnel":
-      return "funnel";
     case "danger":
       return "danger";
     case "workflows":
@@ -169,7 +172,6 @@ export function isCommunitySettingsPaneAllowedForAccess(
     case "workflows":
       return access.canManageSettings;
     case "agent":
-    case "funnel":
       return access.canManageMembers;
     case "danger":
       return access.isOwner;
