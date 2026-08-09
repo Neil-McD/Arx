@@ -7,6 +7,10 @@
 :root {
   --web-chat-max-width: 800px;
   --web-chat-gutter: clamp(12px, 3vw, 20px);
+  /* Fixed topbar actions float over the shell. Reserve their full footprint
+     (right inset + 34px control + focus/badge breathing room) in surfaces
+     that render underneath them. */
+  --web-topbar-right-action-safe-inset: 62px;
   /* Keep the original top spacing, but render the controls as floating "islands". */
   --web-topbar-height: 48px;
   --mobile-topbar-control-size: 34px;

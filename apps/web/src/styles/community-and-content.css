@@ -2540,8 +2540,16 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
+  min-width: 0;
   padding: 14px 16px 10px;
   flex-shrink: 0;
+}
+
+/* The desktop DM action is fixed above the framed shell. When it exists, make
+   its right-edge footprint a real layout constraint instead of letting long
+   community names render underneath it. */
+.app-root:has(.app-topbar .direct-messages-topbar-button) .community-context-rail-head {
+  padding-right: var(--web-topbar-right-action-safe-inset);
 }
 
 .community-interaction-bootstrap-context {
@@ -2570,6 +2578,11 @@
 }
 
 .community-context-rail-name {
+  display: block;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 16px;
   font-weight: 600;
   color: var(--text-primary);

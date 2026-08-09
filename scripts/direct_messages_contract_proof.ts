@@ -33,6 +33,7 @@ const dmInboxPanel = read("apps/web/src/components/WebDirectMessageInboxPanel.ts
 const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const shellChromeShared = read("apps/web/src/components/webShellChromeShared.ts");
 const shellChromeProps = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
+const indexCss = read("apps/web/src/index.css");
 const app = read("apps/web/src/App.tsx");
 const appCompositionRoot = read(
   "apps/web/src/components/WebAppCompositionRoot.tsx",
@@ -492,6 +493,21 @@ assert.match(css, /\.community-dm-recipient-row/, "DM recipient picker must styl
 assert.doesNotMatch(css, /\.community-dm-recipient-more/, "DM recipient picker must not keep CSS for deleted fake pagination control");
 assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button \{[^}]*position: relative;[^}]*width: 34px;[^}]*height: 34px;/, "top-right DM button must anchor the unread badge in a modestly enlarged target with enough specificity to beat the generic app-topbar icon-button size");
 assert.match(css, /\.app-topbar \.icon-button\.direct-messages-topbar-button svg \{[^}]*width: 20px;[^}]*height: 20px;/, "top-right DM glyph must scale with its enlarged target with enough specificity to beat the generic app-topbar icon-button glyph size");
+assert.match(
+  indexCss,
+  /--web-topbar-right-action-safe-inset:\s*62px;/,
+  "the shell must expose one explicit safe inset for content rendered beneath the floating DM action",
+);
+assert.match(
+  css,
+  /\.app-root:has\(\.app-topbar \.direct-messages-topbar-button\) \.community-context-rail-head\s*\{[^}]*padding-right:\s*var\(--web-topbar-right-action-safe-inset\);/,
+  "the community context header must reserve the DM action footprint only when that action is rendered",
+);
+assert.match(
+  css,
+  /\.community-context-rail-name\s*\{[^}]*min-width:\s*0;[^}]*overflow:\s*hidden;[^}]*text-overflow:\s*ellipsis;[^}]*white-space:\s*nowrap;/,
+  "long community names must truncate before the reserved DM action safe area",
+);
 assert.match(css, /\.community-dm-inbox-row-unread/, "DM inbox must style unread badges");
 assert.match(css, /\.community-dm-panel-title \{[^}]*color: var\(--chat-author-text\);[^}]*font-size: 16px;[^}]*font-weight: 650;/, "DM panel identity must use the canonical conversation author role");
 assert.match(css, /\.community-dm-panel-context \{[^}]*color: var\(--chat-meta-text\);/, "DM panel context must use the canonical conversation metadata role");
