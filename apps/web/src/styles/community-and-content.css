@@ -2907,8 +2907,7 @@
   white-space: nowrap;
 }
 
-.community-context-autojoin,
-.community-context-request-chip {
+.community-context-autojoin {
   min-width: 0;
   color: var(--text-muted);
   font: inherit;
@@ -2986,50 +2985,60 @@
   box-shadow: 0 0 0 2px var(--border-active);
 }
 
-.community-context-request-chip:hover,
-.community-context-request-chip:focus-visible {
-  background: var(--hover-overlay);
-  border-color: var(--border-strong);
-  color: var(--text-primary);
-  outline: none;
-}
-
 .community-context-autojoin:disabled {
   cursor: wait;
   opacity: 1;
 }
 
-.community-context-request-control-row {
+.community-context-request-divider {
+  width: calc(100% - 16px);
   display: flex;
-  justify-content: flex-end;
-  margin: 0 8px 8px;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 8px 8px;
+  padding: 7px 0 5px;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  cursor: pointer;
 }
 
-.community-context-request-chip {
+.community-context-request-divider::before,
+.community-context-request-divider::after {
+  content: "";
+  flex: 1;
+  height: 1px;
+  background: var(--stroke-divider-accent);
+}
+
+.community-context-request-divider > span {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   gap: 3px;
-  min-width: 32px;
-  height: 24px;
-  padding: 0 7px;
-  border: 1px solid var(--border-muted);
-  border-radius: 999px;
-  background: transparent;
-  color: color-mix(in srgb, var(--accent) 82%, var(--text-primary));
-  border-color: color-mix(in srgb, var(--accent) 38%, var(--border-muted));
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    color 0.12s ease;
+  white-space: nowrap;
+  transition: color 0.12s ease;
 }
 
-.community-context-request-chip svg {
+.community-context-request-divider svg {
   transition: transform 0.12s ease;
 }
 
-.community-context-request-chip.is-open svg {
+.community-context-request-divider.is-open svg {
   transform: rotate(180deg);
+}
+
+.community-context-request-divider:hover > span {
+  color: var(--text-primary);
+}
+
+.community-context-request-divider:focus-visible {
+  border-radius: 6px;
+  outline: 2px solid var(--border-active);
+  outline-offset: 2px;
 }
 
 .community-context-admission-status {

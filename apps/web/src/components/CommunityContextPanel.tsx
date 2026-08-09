@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, type UIEvent } from "react";
+import { useCallback, useEffect, useId, useRef, useState, type UIEvent } from "react";
 import { Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
@@ -194,6 +194,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const membersViewportRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
   const [joinRequestsExpanded, setJoinRequestsExpanded] = useState(false);
+  const joinRequestPanelId = useId();
   const entryPolicy = props.entryPolicy ?? null;
   const isFreeAdmissionMode = entryPolicy === "open" || entryPolicy === "approval";
   const autoJoinEnabled = entryPolicy === "open";
@@ -206,17 +207,23 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const canShowJoinRequests = Boolean(
     props.canReviewJoinRequests &&
       props.joinReviewMode === "free_approval" &&
-      (pendingJoinRequests.length > 0 || props.isLoadingJoinRequests || props.joinRequestsError),
+      pendingJoinRequests.length > 0,
   );
   const requestCountLabel =
     hasPendingJoinRequestOverflow ? "200+" : String(pendingJoinRequestCount);
-  const requestChipLabel =
-    pendingJoinRequestCount > 0 ? requestCountLabel : "Requests";
-  const requestChipAriaLabel = hasPendingJoinRequestOverflow
-    ? "200 or more pending join requests"
-    : pendingJoinRequestCount > 0
-      ? `${pendingJoinRequestCount} pending join request${pendingJoinRequestCount === 1 ? "" : "s"}`
-      : "Join requests";
+  const requestDividerLabel = `${requestCountLabel} request${
+    hasPendingJoinRequestOverflow || pendingJoinRequestCount !== 1 ? "s" : ""
+  } to join`;
+  const requestDividerAriaLabel = hasPendingJoinRequestOverflow
+    ? "200 or more requests to join"
+    : requestDividerLabel;
+  const canShowJoinRequestLoadError = Boolean(
+    props.canReviewJoinRequests &&
+      props.joinReviewMode === "free_approval" &&
+      pendingJoinRequests.length === 0 &&
+      !props.isLoadingJoinRequests &&
+      props.joinRequestsError,
+  );
   const membersFooterLabel = props.membersHasMore
     ? props.isLoadingMoreMembers
       ? "Loading more..."
@@ -610,24 +617,28 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           <div className="community-context-admission-status">{props.freeAccessModeError}</div>
         ) : null}
         {canShowJoinRequests ? (
-          <div className="community-context-request-control-row">
-            <button
-              className={`community-context-request-chip${joinRequestsExpanded ? " is-open" : ""}`}
-              type="button"
-              aria-expanded={joinRequestsExpanded}
-              aria-label={requestChipAriaLabel}
-              onClick={() => setJoinRequestsExpanded((expanded) => !expanded)}
-            >
-              <span>{requestChipLabel}</span>
+          <button
+            className={`community-context-request-divider${joinRequestsExpanded ? " is-open" : ""}`}
+            type="button"
+            aria-busy={props.isLoadingJoinRequests || undefined}
+            aria-controls={joinRequestPanelId}
+            aria-expanded={joinRequestsExpanded}
+            aria-label={requestDividerAriaLabel}
+            onClick={() => setJoinRequestsExpanded((expanded) => !expanded)}
+          >
+            <span>
+              {requestDividerLabel}
               <ChevronDown size={13} strokeWidth={2.1} aria-hidden="true" />
-            </button>
+            </span>
+          </button>
+        ) : null}
+        {canShowJoinRequestLoadError ? (
+          <div className="community-context-admission-status" role="status">
+            {props.joinRequestsError}
           </div>
         ) : null}
         {canShowJoinRequests && joinRequestsExpanded ? (
-          <div className="community-context-request-panel">
-            {props.isLoadingJoinRequests && pendingJoinRequestCount === 0 ? (
-              <div className="community-context-admission-status">Loading requests...</div>
-            ) : null}
+          <div className="community-context-request-panel" id={joinRequestPanelId}>
             {visiblePendingJoinRequests.map(renderJoinRequest)}
             {props.joinRequestsError ? (
               <div className="community-context-admission-status">{props.joinRequestsError}</div>

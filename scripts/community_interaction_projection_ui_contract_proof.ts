@@ -717,8 +717,8 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /community-context-members-total[\s\S]*community-context-autojoin[\s\S]*community-context-request-control-row[\s\S]*community-context-request-chip/,
-  "context panel should keep Auto-join in the stable members header and render transient join requests on a separate row",
+  /community-context-members-total[\s\S]*community-context-autojoin[\s\S]*community-context-request-divider/,
+  "context panel should keep Auto-join in the stable members header and render confirmed join requests as a separate divider",
 );
 assert.match(
   contextPanel,
@@ -732,8 +732,8 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200[\s\S]*hasPendingJoinRequestOverflow[\s\S]*\? "200\+"[\s\S]*aria-label=\{requestChipAriaLabel\}[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
-  "context panel should render a bounded 200+ pending-request projection with an accessible request chip",
+  /PENDING_JOIN_REQUEST_DISPLAY_LIMIT = 200[\s\S]*hasPendingJoinRequestOverflow[\s\S]*\? "200\+"[\s\S]*requestDividerLabel[\s\S]*requestDividerAriaLabel[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
+  "context panel should render a bounded 200+ pending-request projection with an accessible divider label",
 );
 assert.match(
   adminGateway,
@@ -742,8 +742,18 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /className=\{`community-context-request-chip[\s\S]*aria-expanded=\{joinRequestsExpanded\}[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
-  "context panel should render pending join requests from a compact member-header dropdown",
+  /className=\{`community-context-request-divider[\s\S]*aria-busy=\{props\.isLoadingJoinRequests \|\| undefined\}[\s\S]*aria-controls=\{joinRequestPanelId\}[\s\S]*aria-expanded=\{joinRequestsExpanded\}[\s\S]*id=\{joinRequestPanelId\}[\s\S]*visiblePendingJoinRequests\.map\(renderJoinRequest\)/,
+  "context panel should expand confirmed pending requests from an accessible member-rail divider",
+);
+assert.doesNotMatch(
+  contextPanel,
+  /community-context-request-chip|community-context-request-control-row|Loading requests\.\.\./,
+  "context panel should not retain the legacy request pill or mount a transient loading affordance",
+);
+assert.match(
+  contextPanel,
+  /const canShowJoinRequestLoadError = Boolean\([\s\S]*pendingJoinRequests\.length === 0[\s\S]*!props\.isLoadingJoinRequests[\s\S]*props\.joinRequestsError[\s\S]*role="status"/,
+  "zero-count request load failures should remain readable without recreating the request control",
 );
 assert.match(
   contextPanel,
@@ -827,12 +837,22 @@ assert.doesNotMatch(
 );
 [
   ".community-context-autojoin",
-  ".community-context-request-chip",
+  ".community-context-request-divider",
   ".community-context-request-panel",
   ".community-context-request-row",
 ].forEach((selector) => {
   assert.ok(baseCss.includes(selector), `base.css should include ${selector}`);
 });
+assert.doesNotMatch(
+  baseCss,
+  /\.community-context-request-chip|\.community-context-request-control-row/,
+  "base CSS should not retain the legacy request pill selectors",
+);
+assert.match(
+  baseCss,
+  /\.community-context-request-divider::before,[\s\S]*\.community-context-request-divider::after[\s\S]*background: var\(--stroke-divider-accent\);/,
+  "the request divider should reuse the platform divider token",
+);
 assert.match(
   baseCss,
   /\.community-context-members \{[\s\S]*scrollbar-gutter: stable;/,
