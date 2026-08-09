@@ -113,6 +113,12 @@ function isRequiredFounderSubscriptionUnavailableError(message: string): boolean
   ].some((code) => message.includes(code));
 }
 
+function slugifyCommunityCreateName(name: string): string {
+  return slugifyCommunityName(name)
+    .slice(0, 32)
+    .replace(/-+$/g, "");
+}
+
 export function useCommunityCreateController<
   SessionT extends SessionLike,
   CommunityT extends CommunityLike,
@@ -123,7 +129,7 @@ export function useCommunityCreateController<
 
   useEffect(() => {
     if (args.createCommunitySlugEdited) return;
-    args.setCreateCommunitySlug(slugifyCommunityName(args.createCommunityName));
+    args.setCreateCommunitySlug(slugifyCommunityCreateName(args.createCommunityName));
   }, [args.createCommunityName, args.createCommunitySlugEdited, args.setCreateCommunitySlug]);
 
   const resetCreateCommunityForm = useCallback((draft: CreateCommunityIntentDraft | null = null) => {
@@ -167,7 +173,7 @@ export function useCommunityCreateController<
     current.setCreateCommunityError(null);
 
     const name = current.createCommunityName.trim();
-    const rawSlug = current.createCommunitySlug.trim() || slugifyCommunityName(name);
+    const rawSlug = current.createCommunitySlug.trim() || slugifyCommunityCreateName(name);
     const slug = rawSlug.toLowerCase();
     if (!name || !slug) {
       current.setCreateCommunityError("Name and slug are required.");
@@ -217,7 +223,7 @@ export function useCommunityCreateController<
       }
 
       const name = current.createCommunityName.trim();
-      const rawSlug = current.createCommunitySlug.trim() || slugifyCommunityName(name);
+      const rawSlug = current.createCommunitySlug.trim() || slugifyCommunityCreateName(name);
       const slug = rawSlug.toLowerCase();
       if (!name || !slug) {
         current.setCreateCommunityError("Name and slug are required.");

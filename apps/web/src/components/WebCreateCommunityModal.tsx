@@ -171,6 +171,7 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                   <input
                     type="text"
                     required
+                    maxLength={32}
                     placeholder="your-community"
                     value={props.createCommunitySlug}
                     aria-invalid={
@@ -183,7 +184,9 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
                     }}
                   />
                 </div>
-                <span className="create-community-hint">Lowercase letters, numbers, and dashes.</span>
+                <span className="create-community-hint">
+                  3–32 characters. Lowercase letters, numbers, and dashes.
+                </span>
               </label>
               <label className="create-community-field">
                 <span>One-liner</span>

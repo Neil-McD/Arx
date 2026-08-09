@@ -34,3 +34,11 @@ test("a source-loading failure cannot trap the buyer in onboarding", () => {
     /loadCommunityResources\(pendingCommunity\.id, activeSession\)[\s\S]*?\.catch\([\s\S]*?\.finally\(\(\) => \{[\s\S]*?setHydratedBuilderKnowledgeCommunityId\(pendingCommunity\.id\)/,
   );
 });
+
+test("the durable knowledge gate runs only after every app hook", () => {
+  const gateIndex = appSource.indexOf("if (pendingBuilderKnowledgeCommunity)");
+  const finalHookIndex = appSource.indexOf("useWebMemberAgentSurfaceController({");
+  const routeHoldIndex = appSource.indexOf("if (shouldHoldRouteForAccess)");
+  expect(gateIndex).toBeGreaterThan(finalHookIndex);
+  expect(gateIndex).toBeLessThan(routeHoldIndex);
+});

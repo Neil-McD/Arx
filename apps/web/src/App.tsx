@@ -2741,40 +2741,6 @@ export default function App() {
     );
   }
 
-  if (pendingBuilderKnowledgeCommunity) {
-    const isKnowledgeCommunityReady =
-      activeCommunityId === pendingBuilderKnowledgeCommunity.id
-      && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id;
-    return (
-      <WebBuilderKnowledgeSetup
-        community={pendingBuilderKnowledgeCommunity}
-        isHydrating={!isKnowledgeCommunityReady || isLoadingResources}
-        resources={isKnowledgeCommunityReady ? communityResources : []}
-        onAddSources={handleAddCommunitySources}
-        onComplete={async () => {
-          const activeSession = await ensureUsableAuthSession();
-          if (!activeSession) return false;
-          const result = await completeCloudBuilderKnowledgeSetup({
-            session: activeSession,
-            communityId: pendingBuilderKnowledgeCommunity.id,
-          });
-          if (!result.ok) return false;
-          setCommunities((current) => current.map((community) => (
-            community.id === pendingBuilderKnowledgeCommunity.id
-              ? { ...community, builder_knowledge_setup_pending: false }
-              : community
-          )));
-          void enterJoinedCommunity({
-            communityId: pendingBuilderKnowledgeCommunity.id,
-            communitySlug: pendingBuilderKnowledgeCommunity.slug,
-            communityTab: "chat",
-          });
-          return true;
-        }}
-      />
-    );
-  }
-
   const globalOverlayHostProps = buildWebGlobalOverlayHostProps({
     communityModalHostProps: communityUi.modalHostProps,
     builderOfferProps: {
@@ -3224,6 +3190,40 @@ export default function App() {
     hasLeftPanel,
     isGlobalSettings,
   });
+
+  if (pendingBuilderKnowledgeCommunity) {
+    const isKnowledgeCommunityReady =
+      activeCommunityId === pendingBuilderKnowledgeCommunity.id
+      && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id;
+    return (
+      <WebBuilderKnowledgeSetup
+        community={pendingBuilderKnowledgeCommunity}
+        isHydrating={!isKnowledgeCommunityReady || isLoadingResources}
+        resources={isKnowledgeCommunityReady ? communityResources : []}
+        onAddSources={handleAddCommunitySources}
+        onComplete={async () => {
+          const activeSession = await ensureUsableAuthSession();
+          if (!activeSession) return false;
+          const result = await completeCloudBuilderKnowledgeSetup({
+            session: activeSession,
+            communityId: pendingBuilderKnowledgeCommunity.id,
+          });
+          if (!result.ok) return false;
+          setCommunities((current) => current.map((community) => (
+            community.id === pendingBuilderKnowledgeCommunity.id
+              ? { ...community, builder_knowledge_setup_pending: false }
+              : community
+          )));
+          void enterJoinedCommunity({
+            communityId: pendingBuilderKnowledgeCommunity.id,
+            communitySlug: pendingBuilderKnowledgeCommunity.slug,
+            communityTab: "chat",
+          });
+          return true;
+        }}
+      />
+    );
+  }
 
   if (shouldHoldRouteForAccess) {
     return <div className="landing-auth-hold" aria-hidden="true" />;
