@@ -1106,8 +1106,9 @@ body {
 /* Step 4 — monetize: smooth exponential curve */
 
 /* Required setup has one visual and interaction contract everywhere: the
-   workspace stays legible as context, but cannot be used until the centered
-   task is complete. */
+   workspace remains recognizable as context, but is deliberately reduced to
+   a soft silhouette until the centered task is complete. Keep this treatment
+   theme-neutral so light and dark shells enforce the same visual gate. */
 .blocking-setup-overlay {
   position: fixed;
   inset: 0;
@@ -1117,9 +1118,9 @@ body {
   overflow: hidden auto;
   overscroll-behavior: contain;
   padding: clamp(14px, 3vw, 30px);
-  background: rgba(5, 5, 8, 0.7);
-  backdrop-filter: blur(14px) saturate(0.74);
-  -webkit-backdrop-filter: blur(14px) saturate(0.74);
+  background: rgba(5, 5, 8, 0.84);
+  backdrop-filter: blur(24px) saturate(0.35) brightness(0.62);
+  -webkit-backdrop-filter: blur(24px) saturate(0.35) brightness(0.62);
 }
 
 .blocking-setup-modal {

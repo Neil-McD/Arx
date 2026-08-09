@@ -7,6 +7,7 @@ const read = (path: string) =>
   readFileSync(resolve(process.cwd(), path), "utf8");
 
 const shell = read("apps/web/src/components/WebBlockingSetupModal.tsx");
+const shellStyles = read("apps/web/src/styles/shell-and-onboarding.css");
 const create = read("apps/web/src/components/WebCreateCommunityModal.tsx");
 const account = read("apps/web/src/components/WebPlatformBridgePage.tsx");
 const profile = read("apps/web/src/components/WebOnboardingPage.tsx");
@@ -45,4 +46,13 @@ test("only an explicitly dismissible setup can close from backdrop or Escape", (
   expect(create).toContain("dismissible={props.isDismissible}");
   expect(knowledge).not.toMatch(/dismissible=/);
   expect(account).not.toMatch(/dismissible=/);
+});
+
+test("the shared setup veil strongly obscures both light and dark shells", () => {
+  expect(shellStyles).toMatch(
+    /\.blocking-setup-overlay\s*\{[\s\S]*?background: rgba\(5, 5, 8, 0\.84\);[\s\S]*?backdrop-filter: blur\(24px\) saturate\(0\.35\) brightness\(0\.62\);/,
+  );
+  expect(shellStyles).not.toMatch(
+    /\[data-theme=["'](?:light|dark)["']\][^{]*\.blocking-setup-overlay/,
+  );
 });
