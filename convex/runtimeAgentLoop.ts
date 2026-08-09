@@ -116,10 +116,6 @@ import {
   classifyRuntimeToolSchedule,
   type RuntimeToolSchedulePlan,
 } from "../shared/runtimeToolPolicy";
-import {
-  buildPlatformSkillToolNamesForSelection,
-  type PlatformSkillSelectionSummary,
-} from "../shared/platformSkills";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -140,20 +136,6 @@ const CHAT_TOOLS_RUNTIME_KERNEL_BUDGET: RuntimeKernelBudget =
   DEFAULT_RUNTIME_KERNEL_BUDGET;
 const RUNTIME_PARALLEL_READ_TOOLS_FLAG =
   "RUNTIME_PARALLEL_READ_TOOLS_ENABLED";
-
-function buildEffectiveAllowedToolNames(params: {
-  baseAllowedToolNames: readonly RetrievalToolName[];
-  selectedPlatformSkills: readonly PlatformSkillSelectionSummary[];
-}): RetrievalToolName[] {
-  const allowed = [...params.baseAllowedToolNames];
-  if (!allowed.includes("polynet_read")) return allowed;
-  for (const toolName of buildPlatformSkillToolNamesForSelection(
-    params.selectedPlatformSkills,
-  )) {
-    if (!allowed.includes(toolName)) allowed.push(toolName);
-  }
-  return allowed;
-}
 
 function communityMemoryToolExecutionResult(params: {
   payload: unknown;
@@ -863,176 +845,6 @@ export async function executeRetrievalHarnessTool(params: {
     }
   }
 
-  if (params.toolName === "community_resource_builder_list") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resource_builder_list requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runQuery(
-        internal.communityResources.listCommunityResourceBuilderDirectoryInternal as any,
-        {
-          userId: params.userId,
-          communityId: params.communityId,
-          limit:
-            typeof normalizedArgs.limit === "number"
-              ? normalizedArgs.limit
-              : undefined,
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resource_builder_list_failed",
-        errorMessage: message || "Community resource builder listing failed.",
-      };
-    }
-  }
-
-  if (params.toolName === "community_resource_builder_read") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resource_builder_read requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runQuery(
-        internal.communityResources.readCommunityResourceBuilderResourceInternal as any,
-        {
-          userId: params.userId,
-          communityId: params.communityId,
-          ref:
-            typeof normalizedArgs.ref === "string"
-              ? normalizedArgs.ref
-              : typeof normalizedArgs.id === "string"
-                ? normalizedArgs.id
-                : undefined,
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resource_builder_read_failed",
-        errorMessage: message || "Community resource builder read failed.",
-      };
-    }
-  }
-
-  if (params.toolName === "community_resource_builder_stage_changeset") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resource_builder_stage_changeset requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runMutation(
-        internal.communityResources.stageCommunityResourceBuilderChangesetInternal as any,
-        {
-          userId: params.userId,
-          communityId: params.communityId,
-          summary:
-            typeof normalizedArgs.summary === "string"
-              ? normalizedArgs.summary
-              : "",
-          operations: Array.isArray(normalizedArgs.operations)
-            ? normalizedArgs.operations
-            : [],
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resource_builder_stage_changeset_failed",
-        errorMessage: message || "Community resource changeset staging failed.",
-      };
-    }
-  }
-
-  if (params.toolName === "community_resource_builder_apply_changeset") {
-    if (!params.communityId) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_required",
-        errorMessage: "community_resource_builder_apply_changeset requires an active community context.",
-      };
-    }
-    try {
-      const payload = await params.ctx.runMutation(
-        api.communityResources.applyCommunityResourceBuilderChangeset as any,
-        {
-          userId: params.userId,
-          authSubject: params.authSubject ?? undefined,
-          communityId: params.communityId,
-          changesetId:
-            typeof normalizedArgs.changesetId === "string"
-              ? normalizedArgs.changesetId
-              : "",
-        },
-      );
-      return {
-        status: "ok",
-        exitCode: 0,
-        outputText: formatJsonToolOutput(payload),
-        errorCode: null,
-        errorMessage: null,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "community_resource_builder_apply_changeset_failed",
-        errorMessage: message || "Community resource changeset apply failed.",
-      };
-    }
-  }
-
   if (params.toolName === "web_crawl") {
     const webResearchAction = "crawl" as WebResearchCreditAction;
     const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
@@ -1446,10 +1258,7 @@ async function executeRetrievalAgentLoop(
   const selectedPlatformSkills = resolvedHarness.selectedPlatformSkills;
   const effectiveAllowedToolNames = restrictToolNamesForInvocationSurface({
     invocationSurface: params.invocationSurface ?? "workspace",
-    toolNames: buildEffectiveAllowedToolNames({
-      baseAllowedToolNames: params.allowedToolNames,
-      selectedPlatformSkills,
-    }),
+    toolNames: params.allowedToolNames,
   });
   const installedUserPlatformSkills = resolvedHarness.personalSkillInventory;
   const selectedUserPlatformSkills = resolvedHarness.selectedPersonalSkills;

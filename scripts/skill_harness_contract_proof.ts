@@ -8,8 +8,6 @@ import {
   COMMUNITY_MANAGER_PLATFORM_SKILLS,
   GLOBAL_PLATFORM_SKILLS,
   PLATFORM_RESOURCES_ARCHITECT_SKILL,
-  PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
-  buildPlatformSkillToolNamesForSelection,
 } from "../shared/platformSkills.ts";
 import {
   extractExplicitSkillMentions,
@@ -124,18 +122,6 @@ assert.equal(projected[0]?.platform_skill?.id, PLATFORM_RESOURCES_ARCHITECT_SKIL
 assert.equal(projected[0]?.personal_install?.id, "personal-install");
 assert.equal(projected[0]?.community_attachment?.id, "community-attachment");
 assert.deepEqual(GLOBAL_PLATFORM_SKILLS, []);
-assert.deepEqual(
-  buildPlatformSkillToolNamesForSelection([
-    { platform_skill_id: PLATFORM_RESOURCES_ARCHITECT_SKILL.id },
-  ]),
-  PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES,
-);
-assert.deepEqual(
-  buildPlatformSkillToolNamesForSelection([
-    { platform_skill_id: "platform:onboarding-guide" },
-  ]),
-  [],
-);
 
 const normalized = normalizeRuntimeSkillResolution({
   requested_mention_tokens: ["resources-architect"],
@@ -172,7 +158,13 @@ assert.match(
 
 const manifest = buildRuntimeContextManifest({
   selectedPlatformSkills: normalized.selected_platform_skills,
-  allowedToolNames: [...PLATFORM_RESOURCES_ARCHITECT_TOOL_NAMES],
+  allowedToolNames: [
+    "polynet_list",
+    "polynet_read",
+    "polynet_search",
+    "polynet_write",
+    "polynet_call",
+  ],
 });
 const selectedPrompt = manifest.prompts.find(
   (prompt) => prompt.id === "platform_skill:resources-architect",
@@ -187,7 +179,8 @@ assert.doesNotMatch(
   runtimeSkillResolution,
   /lifecycleTrigger|lifecycle_trigger|onboarding_completed|onboarding-guide/,
 );
-assert.match(runtimeAgentLoop, /buildEffectiveAllowedToolNames/);
+assert.doesNotMatch(runtimeAgentLoop, /buildEffectiveAllowedToolNames/);
+assert.doesNotMatch(runtimeAgentLoop, /buildPlatformSkillToolNamesForSelection/);
 assert.match(runtimeAgentLoop, /buildRuntimeContextManifest/);
 assert.doesNotMatch(
   runtimeAgentLoop,

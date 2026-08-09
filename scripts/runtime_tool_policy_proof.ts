@@ -42,10 +42,6 @@ const FIXED_TOOL_FAMILIES = {
     "polynet_get_community",
     "community_resources_read",
     "community_resources_search",
-    "community_resource_builder_list",
-    "community_resource_builder_read",
-    "community_resource_builder_stage_changeset",
-    "community_resource_builder_apply_changeset",
     "community_search",
     "community_memory_search",
     "community_memory_read",
@@ -188,8 +184,6 @@ function proveFixedPolicyBoundaries() {
     "polynet_list",
     "community_resources_read",
     "community_resources_search",
-    "community_resource_builder_list",
-    "community_resource_builder_read",
     "community_search",
     "community_chat_search",
     "community_chat_read",
@@ -221,8 +215,8 @@ function proveFixedPolicyBoundaries() {
 
   const exclusiveTools: RetrievalToolName[] = [
     "member_profile_confirm_facts",
-    "community_resource_builder_stage_changeset",
-    "community_resource_builder_apply_changeset",
+    "polynet_write",
+    "polynet_call",
     "web_crawl",
     "write",
     "edit",
@@ -267,8 +261,6 @@ function proveFixedPolicyBoundaries() {
   for (const toolName of [
     "community_resources_read",
     "community_resources_search",
-    "community_resource_builder_list",
-    "community_resource_builder_read",
     "community_chat_search",
     "community_chat_read",
   ] as const satisfies readonly RetrievalToolName[]) {
@@ -279,14 +271,16 @@ function proveFixedPolicyBoundaries() {
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresCommunity, true);
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresWorkspace, false);
-  for (const toolName of [
+  for (const retiredToolName of [
+    "community_resource_builder_list",
+    "community_resource_builder_read",
     "community_resource_builder_stage_changeset",
-    "community_resource_builder_apply_changeset",
-  ] as const satisfies readonly RetrievalToolName[]) {
-    const policy = getFixedRuntimeToolPolicy(toolName);
-    assert.equal(policy.mutatesState, true, `${toolName} should mutate state`);
-    assert.equal(policy.requiresCommunity, true, `${toolName} should require community`);
-    assert.equal(policy.readOnly, false, `${toolName} should not be read-only`);
+  ]) {
+    assert.equal(
+      RETRIEVAL_TOOL_NAMES.includes(retiredToolName as RetrievalToolName),
+      false,
+      `${retiredToolName} must remain retired`,
+    );
   }
   assert.equal(
     getFixedRuntimeToolPolicy("terminal_read").exclusive,

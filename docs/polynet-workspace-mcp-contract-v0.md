@@ -128,10 +128,9 @@ lane.
 `capabilities/`. Current operations are:
 
 - member: `community.memory.record_outcome`
-- builder: `community.resources.changeset.status`
-- builder: `community.resources.changeset.approve`
-- builder: `community.resources.changeset.reject`
-- builder: `community.resources.changeset.apply`
+
+Builder resource changesets are terminally decided only through the authenticated
+product Apply or Reject controls. They are not agent-callable capabilities.
 
 Unknown, undiscoverable, wrong-version, cross-community, and unauthorized
 operations fail closed.

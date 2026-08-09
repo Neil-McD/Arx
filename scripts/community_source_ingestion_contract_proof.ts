@@ -395,8 +395,13 @@ assert.match(
 );
 assert.match(
   resources,
-  /export const ingestCommunitySources(?:: any)? = action\([\s\S]*export const ingestCommunitySourceLinks(?:: any)? = action\([\s\S]*export const ingestCommunitySourceFiles(?:: any)? = action\(/,
-  "source ingestion should expose combined, link-only, and file-only actions",
+  /export const ingestCommunitySources(?:: any)? = action\(/,
+  "source ingestion should expose one canonical combined action",
+);
+assert.doesNotMatch(
+  resources,
+  /export const ingestCommunitySource(?:Links|Files|GoogleDrive|GitHub)(?:: any)? = action\(/,
+  "source ingestion must not retain duplicate source-kind action aliases",
 );
 assert.match(
   resources,

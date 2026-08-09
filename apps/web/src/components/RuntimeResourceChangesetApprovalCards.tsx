@@ -1,8 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Check, X } from "lucide-react";
 import type { AuthSessionLike } from "../../../../shared/authSession";
 import {
-  approveCloudCommunityResourceBuilderChangeset,
   applyCloudCommunityResourceBuilderChangeset,
   getCloudCommunityResourceBuilderChangesetStatus,
   rejectCloudCommunityResourceBuilderChangeset,
@@ -10,7 +9,7 @@ import {
 import { dispatchCommunityResourcesMutated } from "../../../../shared/communityResourceMutationEvents";
 import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunnerCore";
 
-const CHANGESET_CARD_LIMIT = 2;
+const CHANGESET_CARD_LIMIT = 1;
 
 type ResourceChangesetPreviewItem = {
   id: string;
@@ -27,6 +26,7 @@ export type ResourceChangesetCardModel = {
   operationCount: number;
   warningCount: number;
   previewItems: ResourceChangesetPreviewItem[];
+  intent: "initial_community_resources" | null;
   seq: number;
 };
 
@@ -91,6 +91,23 @@ function parseToolOutputRecord(payload: Record<string, unknown>): Record<string,
   );
 }
 
+function findChangesetOutputRecord(
+  value: unknown,
+  depth = 0,
+): Record<string, unknown> | null {
+  if (depth > 5) return null;
+  const record = typeof value === "string" ? parseJsonRecord(value) : asRecord(value);
+  if (!record) return null;
+  const changesetId = asString(record.changeset_id);
+  const communityId = asString(record.community_id);
+  if (changesetId && communityId) return record;
+  for (const key of ["result", "value", "data", "details", "output", "output_preview"] as const) {
+    const nested = findChangesetOutputRecord(record[key], depth + 1);
+    if (nested) return nested;
+  }
+  return null;
+}
+
 function normalizePreviewItems(value: unknown): ResourceChangesetPreviewItem[] {
   if (!Array.isArray(value)) return [];
   return value.slice(0, 3).flatMap((raw, index) => {
@@ -120,12 +137,43 @@ function extractTerminalChangesetIds(
     const payload = asRecord(event.payload);
     if (!payload || payload.success !== true) continue;
     const toolName = asString(payload.tool_name);
-    if (toolName !== "community_resource_builder_apply_changeset") continue;
-    const output = parseToolOutputRecord(payload);
+    if (
+      toolName !== "community_resource_builder_apply_changeset" &&
+      toolName !== "polynet_call"
+    ) continue;
+    const output = findChangesetOutputRecord(parseToolOutputRecord(payload));
+    const kind = asString(output?.kind);
+    if (
+      kind !== "community_resource_builder_changeset_applied" &&
+      kind !== "community_resource_builder_changeset_rejected"
+    ) continue;
     const changesetId = asString(output?.changeset_id);
     if (changesetId) terminal.add(changesetId);
   }
   return terminal;
+}
+
+export function buildResourceChangesetCardFromPayload(
+  value: unknown,
+  seq = 0,
+): ResourceChangesetCardModel | null {
+  const output = findChangesetOutputRecord(value);
+  const changesetId = asString(output?.changeset_id);
+  const communityId = asString(output?.community_id);
+  if (!changesetId || !communityId) return null;
+  return {
+    id: changesetId,
+    communityId,
+    changesetId,
+    summary: asString(output?.summary) || "Resource changes proposed.",
+    operationCount: asNumber(output?.operation_count ?? output?.preview_total_count),
+    warningCount: asNumber(output?.warning_count),
+    previewItems: normalizePreviewItems(output?.preview_items),
+    intent: asString(output?.intent) === "initial_community_resources"
+      ? "initial_community_resources"
+      : null,
+    seq,
+  };
 }
 
 export function extractRuntimeResourceChangesetCards(
@@ -138,26 +186,20 @@ export function extractRuntimeResourceChangesetCards(
     const payload = asRecord(event.payload);
     if (!payload || payload.success !== true) continue;
     const toolName = asString(payload.tool_name);
-    if (toolName !== "community_resource_builder_stage_changeset") continue;
-    const output = parseToolOutputRecord(payload);
+    if (
+      toolName !== "community_resource_builder_stage_changeset" &&
+      toolName !== "polynet_write"
+    ) continue;
+    const rawOutput = parseToolOutputRecord(payload);
+    const output = findChangesetOutputRecord(rawOutput);
     if (asString(output?.kind) !== "community_resource_builder_changeset_staged") {
       continue;
     }
-    const changesetId = asString(output?.changeset_id);
-    const communityId = asString(output?.community_id);
-    if (!changesetId || !communityId || terminalChangesetIds.has(changesetId)) {
+    const card = buildResourceChangesetCardFromPayload(output, event.seq);
+    if (!card || terminalChangesetIds.has(card.changesetId)) {
       continue;
     }
-    cards.set(changesetId, {
-      id: changesetId,
-      communityId,
-      changesetId,
-      summary: asString(output?.summary) || "Resource changes proposed.",
-      operationCount: asNumber(output?.operation_count ?? output?.preview_total_count),
-      warningCount: asNumber(output?.warning_count),
-      previewItems: normalizePreviewItems(output?.preview_items),
-      seq: event.seq,
-    });
+    cards.set(card.changesetId, card);
   }
   return [...cards.values()]
     .sort((a, b) => a.seq - b.seq)
@@ -167,12 +209,16 @@ export function extractRuntimeResourceChangesetCards(
 function ResourceChangesetApprovalCard(props: {
   card: ResourceChangesetCardModel;
   session: AuthSessionLike;
+  onInitialResourcesApplied?: (communityId: string) => void;
+  disableInitialResourcesAction?: boolean;
 }): JSX.Element {
   const [actionState, setActionState] = useState<ResourceChangesetActionState>("idle");
   const [serverStatus, setServerStatus] = useState<ResourceChangesetServerStatus | null>(null);
-  const [approvedByCurrentUser, setApprovedByCurrentUser] = useState(false);
   const [verifiedApply, setVerifiedApply] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const actionInFlightRef = useRef(false);
+  const verifiedApplyRef = useRef(false);
+  const isInitialResources = props.card.intent === "initial_community_resources";
   const isBusy = actionState === "applying" || actionState === "rejecting";
   const isDone =
     actionState === "applied" ||
@@ -181,7 +227,6 @@ function ResourceChangesetApprovalCard(props: {
     serverStatus === "rejected" ||
     serverStatus === "failed" ||
     serverStatus === "expired";
-  const canApply = !(serverStatus === "approved" && !approvedByCurrentUser);
 
   useEffect(() => {
     if (!props.session) return;
@@ -197,15 +242,11 @@ function ResourceChangesetApprovalCard(props: {
         const status = asResourceChangesetServerStatus(payload?.status);
         if (status) {
           setServerStatus(status);
-          setApprovedByCurrentUser(payload?.approved_by_current_user === true);
           if (status === "applied") {
             setActionState("applied");
             setVerifiedApply(true);
           }
           if (status === "rejected") setActionState("rejected");
-          if (status === "approved" && payload?.approved_by_current_user !== true) {
-            setErrorMessage("This changeset was approved by another manager.");
-          }
           if (status === "failed") {
             setActionState("error");
             setErrorMessage("This proposed changeset failed.");
@@ -224,58 +265,81 @@ function ResourceChangesetApprovalCard(props: {
     };
   }, [props.card.changesetId, props.card.communityId, props.session]);
 
+  async function readAuthoritativeStatus(): Promise<ResourceChangesetServerStatus> {
+    const payload = await getCloudCommunityResourceBuilderChangesetStatus<
+      unknown,
+      Record<string, unknown>
+    >({
+      session: props.session,
+      communityId: props.card.communityId,
+      changesetId: props.card.changesetId,
+    });
+    const status = asResourceChangesetServerStatus(payload?.status);
+    if (!status) {
+      throw new Error("Could not verify the resource proposal state.");
+    }
+    setServerStatus(status);
+    return status;
+  }
+
+  function finishVerifiedApply(): void {
+    if (verifiedApplyRef.current) return;
+    verifiedApplyRef.current = true;
+    setVerifiedApply(true);
+    setActionState("applied");
+    dispatchCommunityResourcesMutated({
+      communityId: props.card.communityId,
+      changesetId: props.card.changesetId,
+      source: "resource_changeset_approval_card",
+    });
+    if (isInitialResources) {
+      props.onInitialResourcesApplied?.(props.card.communityId);
+    }
+  }
+
   async function applyChangeset(): Promise<void> {
-    if (!props.session || isBusy || isDone || !canApply) return;
+    if (!props.session || actionInFlightRef.current || isBusy || isDone) return;
+    actionInFlightRef.current = true;
     setActionState("applying");
     setVerifiedApply(false);
     setErrorMessage(null);
     try {
-      if (serverStatus !== "approved") {
-        await approveCloudCommunityResourceBuilderChangeset({
-          session: props.session,
-          communityId: props.card.communityId,
-          changesetId: props.card.changesetId,
-        });
-        setServerStatus("approved");
-        setApprovedByCurrentUser(true);
-      }
       await applyCloudCommunityResourceBuilderChangeset({
         session: props.session,
         communityId: props.card.communityId,
         changesetId: props.card.changesetId,
       });
-      setApprovedByCurrentUser(true);
+      const status = await readAuthoritativeStatus();
+      if (status !== "applied") {
+        setActionState("error");
+        setErrorMessage(
+          status === "expired"
+            ? "This proposed changeset expired."
+            : `The server reports this proposal as ${status}, not applied.`,
+        );
+        return;
+      }
+      finishVerifiedApply();
+    } catch (error) {
       try {
-        const payload = await getCloudCommunityResourceBuilderChangesetStatus<unknown, Record<string, unknown>>({
-          session: props.session,
-          communityId: props.card.communityId,
-          changesetId: props.card.changesetId,
-        });
-        const status = asResourceChangesetServerStatus(payload?.status);
-        if (status) setServerStatus(status);
+        const status = await readAuthoritativeStatus();
         if (status === "applied") {
-          setVerifiedApply(true);
-          dispatchCommunityResourcesMutated({
-            communityId: props.card.communityId,
-            changesetId: props.card.changesetId,
-            source: "resource_changeset_approval_card",
-          });
-        } else {
-          setErrorMessage("Applied, but resource refresh could not be verified.");
+          finishVerifiedApply();
+          return;
         }
       } catch {
-        setServerStatus("applied");
-        setErrorMessage("Applied, but resource refresh could not be verified.");
+        // Preserve the original error when authoritative recovery is unavailable.
       }
-      setActionState("applied");
-    } catch (error) {
       setActionState("error");
       setErrorMessage(error instanceof Error ? error.message : "Could not apply changes.");
+    } finally {
+      actionInFlightRef.current = false;
     }
   }
 
   async function rejectChangeset(): Promise<void> {
-    if (!props.session || isBusy || isDone) return;
+    if (!props.session || actionInFlightRef.current || isBusy || isDone) return;
+    actionInFlightRef.current = true;
     setActionState("rejecting");
     setVerifiedApply(false);
     setErrorMessage(null);
@@ -286,11 +350,22 @@ function ResourceChangesetApprovalCard(props: {
         changesetId: props.card.changesetId,
         reason: "Rejected from resource changeset approval card.",
       });
-      setServerStatus("rejected");
+      const status = await readAuthoritativeStatus();
+      if (status !== "rejected") {
+        setActionState("error");
+        setErrorMessage(
+          status === "expired"
+            ? "This proposed changeset expired."
+            : `The server reports this proposal as ${status}, not rejected.`,
+        );
+        return;
+      }
       setActionState("rejected");
     } catch (error) {
       setActionState("error");
       setErrorMessage(error instanceof Error ? error.message : "Could not reject changes.");
+    } finally {
+      actionInFlightRef.current = false;
     }
   }
 
@@ -300,37 +375,57 @@ function ResourceChangesetApprovalCard(props: {
   ].filter(Boolean);
 
   return (
-    <section className="resource-changeset-card" aria-label="Resource changes proposed">
+    <section
+      className="resource-changeset-card"
+      aria-label={isInitialResources ? "Community knowledge ready" : "Resource changes proposed"}
+    >
       <div className="resource-changeset-card-header">
         <div className="resource-changeset-card-title-block">
-          <div className="resource-changeset-card-title">Resource changes proposed</div>
+          <div className="resource-changeset-card-title">
+            {isInitialResources ? "Your community knowledge is ready" : "Resource changes proposed"}
+          </div>
           <div className="resource-changeset-card-summary">{props.card.summary}</div>
         </div>
         <div className="resource-changeset-card-actions">
-          <button
-            type="button"
-            className="resource-changeset-icon-action approve"
-            aria-label="Apply resource changes"
-            title="Apply"
-            disabled={isBusy || isDone || !canApply}
-            onClick={() => {
-              void applyChangeset();
-            }}
-          >
-            <Check size={15} strokeWidth={2.4} aria-hidden="true" />
-          </button>
-          <button
-            type="button"
-            className="resource-changeset-icon-action reject"
-            aria-label="Reject resource changes"
-            title="Reject"
-            disabled={isBusy || isDone}
-            onClick={() => {
-              void rejectChangeset();
-            }}
-          >
-            <X size={15} strokeWidth={2.4} aria-hidden="true" />
-          </button>
+          {isInitialResources ? (
+            <button
+              type="button"
+              className="resource-changeset-next-action"
+              disabled={isBusy || isDone || props.disableInitialResourcesAction}
+              onClick={() => {
+                void applyChangeset();
+              }}
+            >
+              {actionState === "applying" ? "Finishing…" : "Next"}
+            </button>
+          ) : (
+            <>
+              <button
+                type="button"
+                className="resource-changeset-icon-action approve"
+                aria-label="Apply resource changes"
+                title="Apply"
+                disabled={isBusy || isDone}
+                onClick={() => {
+                  void applyChangeset();
+                }}
+              >
+                <Check size={15} strokeWidth={2.4} aria-hidden="true" />
+              </button>
+              <button
+                type="button"
+                className="resource-changeset-icon-action reject"
+                aria-label="Reject resource changes"
+                title="Reject"
+                disabled={isBusy || isDone}
+                onClick={() => {
+                  void rejectChangeset();
+                }}
+              >
+                <X size={15} strokeWidth={2.4} aria-hidden="true" />
+              </button>
+            </>
+          )}
         </div>
       </div>
       {props.card.previewItems.length > 0 ? (
@@ -367,6 +462,8 @@ function ResourceChangesetApprovalCard(props: {
 export function RuntimeResourceChangesetApprovalCards(props: {
   cards: ResourceChangesetCardModel[];
   session: AuthSessionLike | null;
+  onInitialResourcesApplied?: (communityId: string) => void;
+  disableInitialResourcesAction?: boolean;
 }): JSX.Element | null {
   if (!props.session || props.cards.length === 0) return null;
   return (
@@ -376,6 +473,8 @@ export function RuntimeResourceChangesetApprovalCards(props: {
           key={card.id}
           card={card}
           session={props.session}
+          onInitialResourcesApplied={props.onInitialResourcesApplied}
+          disableInitialResourcesAction={props.disableInitialResourcesAction}
         />
       ))}
     </div>

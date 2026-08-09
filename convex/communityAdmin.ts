@@ -883,6 +883,8 @@ export const listCommunityMemberships = query({
             banner_zoom: branding.banner_zoom,
             visibility: community.visibility,
             entry_policy: resolveCommunityEntryPolicy(community),
+            builder_knowledge_setup_pending:
+              role === "owner" && community.builderKnowledgeSetupPending === true,
             updated_at: toIsoString(community.updatedAt),
           };
     };

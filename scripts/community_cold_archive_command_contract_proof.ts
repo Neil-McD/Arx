@@ -89,13 +89,18 @@ assert.match(
 );
 assert.match(
   founderBilling,
-  /lifecycle_status: lifecycle\.status[\s\S]*archive_billing_cleanup_status[\s\S]*row\.lifecycle_status === "active" && row\.funding_mode === "managed"/,
-  "billing management must expose archive state without charging it in active totals",
+  /lifecycle_status: lifecycle\.status[\s\S]*archive_billing_cleanup_status/,
+  "billing management must expose archive state",
+);
+assert.match(
+  founderBilling,
+  /row\.lifecycle_status === "active"[\s\S]*row\.funding_mode === "managed"/,
+  "billing management must not charge archived communities in active totals",
 );
 assert.match(
   founderInference,
-  /communities\.filter\(\(community\) => communityIsActive\(community\)\)/,
-  "legacy founder projections must omit archived communities",
+  /getCurrentFounderInferenceStatus[\s\S]*communities: \[\]/,
+  "the retired legacy founder projection must expose no communities",
 );
 assert.match(
   memberOntology,

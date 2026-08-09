@@ -114,6 +114,8 @@ const COMMUNITY_RESOURCE_BUILDER_HEALTH_STALE_DRAFT_MS = 14 * 24 * 60 * 60 * 100
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_MAX_OPERATIONS = 25;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_SUMMARY_MAX_CHARS = 2000;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS = 24 * 60 * 60 * 1000;
+const COMMUNITY_RESOURCE_BUILDER_CHANGESET_EXPIRED_MESSAGE =
+  "This resource proposal expired after 24 hours.";
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_ITEM_LIMIT = 3;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TEXT_CHARS = 140;
 const COMMUNITY_RESOURCE_BUILDER_CHANGESET_PREVIEW_TITLE_CHARS = 96;
@@ -293,6 +295,7 @@ type CommunityResourceBuilderChangesetRow = {
   _id?: unknown;
   communityId: unknown;
   createdByUserId: unknown;
+  idempotencyKey?: string;
   status: "staged" | "approved" | "applied" | "rejected" | "failed" | "expired";
   summary: string;
   operations: CommunityResourceBuilderChangesetOperation[];
@@ -5275,6 +5278,110 @@ export const readCommunityResourceBuilderResourceInternal = internalQuery({
     }),
 });
 
+const COMMUNITY_RESOURCE_BUILDER_ACTIONABLE_STATUSES = [
+  "staged",
+  "approved",
+] as const;
+
+function communityResourceBuilderChangesetIntent(args: {
+  communityId: unknown;
+  idempotencyKey?: string | null;
+}): "initial_community_resources" | null {
+  const idempotencyKey = String(args.idempotencyKey ?? "").trim();
+  const expectedPrefix =
+    `polynet:personal_agent:initial-community-resources:${String(args.communityId)}:`;
+  return idempotencyKey.startsWith(expectedPrefix)
+    ? "initial_community_resources"
+    : null;
+}
+
+function communityResourceBuilderChangesetExpiresAt(
+  changeset: CommunityResourceBuilderChangesetRow,
+): number {
+  return changeset.createdAt + COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS;
+}
+
+function communityResourceBuilderChangesetIsActionable(
+  changeset: CommunityResourceBuilderChangesetRow,
+): boolean {
+  return changeset.status === "staged" || changeset.status === "approved";
+}
+
+function communityResourceBuilderChangesetIsExpired(
+  changeset: CommunityResourceBuilderChangesetRow,
+  nowMs: number,
+): boolean {
+  return (
+    communityResourceBuilderChangesetIsActionable(changeset) &&
+    nowMs >= communityResourceBuilderChangesetExpiresAt(changeset)
+  );
+}
+
+function buildCommunityResourceBuilderExpiredResult(args: {
+  changeset: CommunityResourceBuilderChangesetRow;
+  changesetId: unknown;
+  communityId: unknown;
+  deduped: boolean;
+}) {
+  const operations = normalizeCommunityResourceBuilderChangesetOperations(
+    args.changeset.operations,
+  );
+  const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+  return {
+    ok: false,
+    kind: "community_resource_builder_changeset_expired",
+    code: "community_resource_changeset_expired",
+    changeset_id: normalizeIdValue(args.changesetId),
+    community_id: normalizeIdValue(args.communityId),
+    status: "expired",
+    summary: args.changeset.summary,
+    operation_count: operations.length,
+    preview_items: preview.preview_items,
+    preview_total_count: preview.total_count,
+    preview_limit: preview.preview_limit,
+    error: COMMUNITY_RESOURCE_BUILDER_CHANGESET_EXPIRED_MESSAGE,
+    expires_at: toIsoString(
+      communityResourceBuilderChangesetExpiresAt(args.changeset),
+    ),
+    deduped: args.deduped,
+  };
+}
+
+async function expireCommunityResourceBuilderChangesetIfNeeded(args: {
+  ctx: any;
+  changeset: CommunityResourceBuilderChangesetRow;
+  nowMs: number;
+}): Promise<boolean> {
+  if (!communityResourceBuilderChangesetIsExpired(args.changeset, args.nowMs)) {
+    return false;
+  }
+  await args.ctx.db.patch(args.changeset._id as any, {
+    status: "expired",
+    error: COMMUNITY_RESOURCE_BUILDER_CHANGESET_EXPIRED_MESSAGE,
+    updatedAt: args.nowMs,
+  });
+  return true;
+}
+
+async function readLatestCommunityResourceBuilderActionableRows(args: {
+  ctx: any;
+  communityId: any;
+}): Promise<CommunityResourceBuilderChangesetRow[]> {
+  return (
+    await Promise.all(
+      COMMUNITY_RESOURCE_BUILDER_ACTIONABLE_STATUSES.map(async (status) =>
+        await args.ctx.db
+          .query("communityResourceBuilderChangesets" as any)
+          .withIndex("by_community_status_createdAt", (q: any) =>
+            q.eq("communityId", args.communityId).eq("status", status),
+          )
+          .order("desc")
+          .first(),
+      ),
+    )
+  ).filter(Boolean) as CommunityResourceBuilderChangesetRow[];
+}
+
 async function stageCommunityResourceBuilderChangesetCore(args: {
   ctx: any;
   userId: any;
@@ -5313,8 +5420,34 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
       ) {
         throw new Error("community_resource_changeset_idempotency_conflict");
       }
+      if (existing.status === "expired") {
+        return buildCommunityResourceBuilderExpiredResult({
+          changeset: existing,
+          changesetId: existing._id,
+          communityId: args.communityId,
+          deduped: true,
+        });
+      }
+      if (
+        await expireCommunityResourceBuilderChangesetIfNeeded({
+          ctx: args.ctx,
+          changeset: existing,
+          nowMs,
+        })
+      ) {
+        return buildCommunityResourceBuilderExpiredResult({
+          changeset: existing,
+          changesetId: existing._id,
+          communityId: args.communityId,
+          deduped: true,
+        });
+      }
       const existingPreview =
         buildCommunityResourceBuilderChangesetPreview(existingOperations);
+      const intent = communityResourceBuilderChangesetIntent({
+        communityId: args.communityId,
+        idempotencyKey: existing.idempotencyKey,
+      });
       return {
         ok: true,
         kind: "community_resource_builder_changeset_staged",
@@ -5329,9 +5462,30 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
         warning_count:
           getCommunityResourceBuilderPreflightIssueCount(existing.preflight),
         preflight: existing.preflight,
+        ...(intent ? { intent } : {}),
         deduped: true,
       };
     }
+  }
+  const recentActionableRows = await readLatestCommunityResourceBuilderActionableRows({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  const liveActionableRows: CommunityResourceBuilderChangesetRow[] = [];
+  for (const changeset of recentActionableRows) {
+    if (
+      await expireCommunityResourceBuilderChangesetIfNeeded({
+        ctx: args.ctx,
+        changeset,
+        nowMs,
+      })
+    ) {
+      continue;
+    }
+    liveActionableRows.push(changeset);
+  }
+  if (liveActionableRows.length > 0) {
+    throw new Error("community_resource_changeset_already_pending");
   }
   const preflight = await buildCommunityResourceBuilderChangesetPreflight({
     ctx: args.ctx,
@@ -5351,6 +5505,16 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
     createdAt: nowMs,
     updatedAt: nowMs,
   });
+  await args.ctx.scheduler.runAt(
+    nowMs + COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS,
+    (internal as any).communityResources
+      .expireCommunityResourceBuilderChangesetInternal,
+    { changesetId: id },
+  );
+  const intent = communityResourceBuilderChangesetIntent({
+    communityId: args.communityId,
+    idempotencyKey,
+  });
   return {
     ok: true,
     kind: "community_resource_builder_changeset_staged",
@@ -5364,35 +5528,10 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
     preview_limit: preview.preview_limit,
     warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
     preflight,
+    ...(intent ? { intent } : {}),
     deduped: false,
   };
 }
-
-export const stageCommunityResourceBuilderChangeset = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    summary: v.string(),
-    operations: v.array(v.any()),
-    idempotencyKey: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    return await stageCommunityResourceBuilderChangesetCore({
-      ctx,
-      communityId: args.communityId,
-      userId,
-      summary: args.summary,
-      operations: args.operations,
-      idempotencyKey: args.idempotencyKey ?? null,
-    });
-  },
-});
 
 export const stageCommunityResourceBuilderChangesetInternal = internalMutation({
   args: {
@@ -5411,6 +5550,60 @@ export const stageCommunityResourceBuilderChangesetInternal = internalMutation({
       operations: args.operations,
       idempotencyKey: args.idempotencyKey ?? null,
     }),
+});
+
+export const expireCommunityResourceBuilderChangesetInternal = internalMutation({
+  args: {
+    changesetId: v.id("communityResourceBuilderChangesets"),
+  },
+  handler: async (ctx, args) => {
+    const changeset = (await ctx.db.get(
+      args.changesetId as any,
+    )) as CommunityResourceBuilderChangesetRow | null;
+    if (!changeset) {
+      return {
+        ok: true,
+        kind: "community_resource_builder_changeset_expiry_noop",
+        status: "missing",
+        changeset_id: normalizeIdValue(args.changesetId),
+        deduped: true,
+      };
+    }
+    if (changeset.status === "expired") {
+      return buildCommunityResourceBuilderExpiredResult({
+        changeset,
+        changesetId: args.changesetId,
+        communityId: changeset.communityId,
+        deduped: true,
+      });
+    }
+    const nowMs = Date.now();
+    if (
+      !(await expireCommunityResourceBuilderChangesetIfNeeded({
+        ctx,
+        changeset,
+        nowMs,
+      }))
+    ) {
+      return {
+        ok: true,
+        kind: "community_resource_builder_changeset_expiry_noop",
+        status: changeset.status,
+        changeset_id: normalizeIdValue(args.changesetId),
+        community_id: normalizeIdValue(changeset.communityId),
+        expires_at: toIsoString(
+          communityResourceBuilderChangesetExpiresAt(changeset),
+        ),
+        deduped: true,
+      };
+    }
+    return buildCommunityResourceBuilderExpiredResult({
+      changeset,
+      changesetId: args.changesetId,
+      communityId: changeset.communityId,
+      deduped: false,
+    });
+  },
 });
 
 export const getCommunityResourceBuilderChangesetStatus = query({
@@ -5436,11 +5629,16 @@ export const getCommunityResourceBuilderChangesetStatus = query({
       throw new Error("community_resource_changeset_not_found");
     }
     const nowMs = Date.now();
-    const expired =
-      (changeset.status === "staged" || changeset.status === "approved") &&
-      nowMs - changeset.createdAt > COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS;
+    const expired = communityResourceBuilderChangesetIsExpired(
+      changeset,
+      nowMs,
+    );
     const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
     const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+    const intent = communityResourceBuilderChangesetIntent({
+      communityId: args.communityId,
+      idempotencyKey: changeset.idempotencyKey,
+    });
     return {
       ok: true,
       kind: "community_resource_builder_changeset_status",
@@ -5455,8 +5653,72 @@ export const getCommunityResourceBuilderChangesetStatus = query({
       approved_by_current_user: changeset.approvedByUserId
         ? String(changeset.approvedByUserId) === String(userId)
         : false,
+      ...(intent ? { intent } : {}),
       updated_at: toIsoString(changeset.updatedAt),
     };
+  },
+});
+
+export const listPendingCommunityResourceBuilderChangesets = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    limit: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const rows = await readLatestCommunityResourceBuilderActionableRows({
+      ctx,
+      communityId: args.communityId,
+    });
+    const nowMs = Date.now();
+    return rows
+      .filter(
+        (changeset) =>
+          !communityResourceBuilderChangesetIsExpired(changeset, nowMs),
+      )
+      .sort((a, b) => b.updatedAt - a.updatedAt)
+      .slice(0, 1)
+      .map((changeset) => {
+        const operations = normalizeCommunityResourceBuilderChangesetOperations(
+          changeset.operations,
+        );
+        const preview = buildCommunityResourceBuilderChangesetPreview(operations);
+        const intent = communityResourceBuilderChangesetIntent({
+          communityId: args.communityId,
+          idempotencyKey: changeset.idempotencyKey,
+        });
+        return {
+          ok: true,
+          kind: "community_resource_builder_changeset_pending",
+          changeset_id: normalizeIdValue(changeset._id),
+          community_id: normalizeIdValue(args.communityId),
+          status: changeset.status,
+          summary: changeset.summary,
+          operation_count: operations.length,
+          preview_items: preview.preview_items,
+          preview_total_count: preview.total_count,
+          preview_limit: preview.preview_limit,
+          warning_count:
+            getCommunityResourceBuilderPreflightIssueCount(changeset.preflight),
+          approved_by_current_user: changeset.approvedByUserId
+            ? String(changeset.approvedByUserId) === String(userId)
+            : false,
+          ...(intent ? { intent } : {}),
+          created_at: toIsoString(changeset.createdAt),
+          updated_at: toIsoString(changeset.updatedAt),
+        };
+      });
   },
 });
 
@@ -5481,6 +5743,29 @@ export const approveCommunityResourceBuilderChangeset = mutation({
     const changeset = (await ctx.db.get(args.changesetId as any)) as CommunityResourceBuilderChangesetRow | null;
     if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
       throw new Error("community_resource_changeset_not_found");
+    }
+    const nowMs = Date.now();
+    if (changeset.status === "expired") {
+      return buildCommunityResourceBuilderExpiredResult({
+        changeset,
+        changesetId: args.changesetId,
+        communityId: args.communityId,
+        deduped: true,
+      });
+    }
+    if (
+      await expireCommunityResourceBuilderChangesetIfNeeded({
+        ctx,
+        changeset,
+        nowMs,
+      })
+    ) {
+      return buildCommunityResourceBuilderExpiredResult({
+        changeset,
+        changesetId: args.changesetId,
+        communityId: args.communityId,
+        deduped: false,
+      });
     }
     if (
       (changeset.status === "approved" || changeset.status === "applied") &&
@@ -5511,14 +5796,6 @@ export const approveCommunityResourceBuilderChangeset = mutation({
     }
     if (changeset.status !== "staged") {
       throw new Error("community_resource_changeset_not_staged");
-    }
-    const nowMs = Date.now();
-    if (nowMs - changeset.createdAt > COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS) {
-      await ctx.db.patch(args.changesetId as any, {
-        status: "expired",
-        updatedAt: nowMs,
-      });
-      throw new Error("community_resource_changeset_expired");
     }
     const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
     const preflight = await buildCommunityResourceBuilderChangesetPreflight({
@@ -5595,10 +5872,32 @@ export const rejectCommunityResourceBuilderChangeset = mutation({
         deduped: true,
       };
     }
+    const nowMs = Date.now();
+    if (changeset.status === "expired") {
+      return buildCommunityResourceBuilderExpiredResult({
+        changeset,
+        changesetId: args.changesetId,
+        communityId: args.communityId,
+        deduped: true,
+      });
+    }
+    if (
+      await expireCommunityResourceBuilderChangesetIfNeeded({
+        ctx,
+        changeset,
+        nowMs,
+      })
+    ) {
+      return buildCommunityResourceBuilderExpiredResult({
+        changeset,
+        changesetId: args.changesetId,
+        communityId: args.communityId,
+        deduped: false,
+      });
+    }
     if (changeset.status !== "staged" && changeset.status !== "approved") {
       throw new Error("community_resource_changeset_not_rejectable");
     }
-    const nowMs = Date.now();
     await ctx.db.patch(args.changesetId as any, {
       status: "rejected",
       error: normalizeOptionalText(args.reason, 1000),
@@ -5640,11 +5939,7 @@ export const applyCommunityResourceBuilderChangeset = mutation({
     if (!changeset || String(changeset.communityId) !== String(args.communityId)) {
       throw new Error("community_resource_changeset_not_found");
     }
-    if (
-      changeset.status === "applied" &&
-      changeset.appliedByUserId &&
-      String(changeset.appliedByUserId) === String(userId)
-    ) {
+    if (changeset.status === "applied") {
       const operations = normalizeCommunityResourceBuilderChangesetOperations(
         changeset.operations,
       );
@@ -5664,19 +5959,31 @@ export const applyCommunityResourceBuilderChangeset = mutation({
         deduped: true,
       };
     }
-    if (changeset.status !== "approved") {
-      throw new Error("community_resource_changeset_approval_required");
-    }
-    if (!changeset.approvedByUserId || String(changeset.approvedByUserId) !== String(userId)) {
-      throw new Error("community_resource_changeset_approved_manager_required");
-    }
     const nowMs = Date.now();
-    if (nowMs - changeset.createdAt > COMMUNITY_RESOURCE_BUILDER_CHANGESET_TTL_MS) {
-      await ctx.db.patch(args.changesetId as any, {
-        status: "expired",
-        updatedAt: nowMs,
+    if (changeset.status === "expired") {
+      return buildCommunityResourceBuilderExpiredResult({
+        changeset,
+        changesetId: args.changesetId,
+        communityId: args.communityId,
+        deduped: true,
       });
-      throw new Error("community_resource_changeset_expired");
+    }
+    if (
+      await expireCommunityResourceBuilderChangesetIfNeeded({
+        ctx,
+        changeset,
+        nowMs,
+      })
+    ) {
+      return buildCommunityResourceBuilderExpiredResult({
+        changeset,
+        changesetId: args.changesetId,
+        communityId: args.communityId,
+        deduped: false,
+      });
+    }
+    if (changeset.status !== "staged" && changeset.status !== "approved") {
+      throw new Error("community_resource_changeset_not_applicable");
     }
     const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
     const preflight = await buildCommunityResourceBuilderChangesetPreflight({
@@ -8981,70 +9288,6 @@ export const ingestCommunitySources: any = action({
       retryFailed: args.retryFailed,
       sourceKind: "any",
       resultKind: "community_source_ingestion",
-    });
-  },
-});
-
-export const ingestCommunitySourceLinks: any = action({
-  args: communitySourceIngestionActionArgs,
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    return await runCommunitySourceIngestion({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      limit: args.limit,
-      retryFailed: args.retryFailed,
-      sourceKind: "url",
-      resultKind: "community_source_link_ingestion",
-    });
-  },
-});
-
-export const ingestCommunitySourceFiles: any = action({
-  args: communitySourceIngestionActionArgs,
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    return await runCommunitySourceIngestion({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      limit: args.limit,
-      retryFailed: args.retryFailed,
-      sourceKind: "file",
-      resultKind: "community_source_file_ingestion",
-    });
-  },
-});
-
-export const ingestCommunitySourceGoogleDrive: any = action({
-  args: communitySourceIngestionActionArgs,
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    return await runCommunitySourceIngestion({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      limit: args.limit,
-      retryFailed: args.retryFailed,
-      sourceKind: "google_drive",
-      resultKind: "community_source_google_drive_ingestion",
-    });
-  },
-});
-
-export const ingestCommunitySourceGitHub: any = action({
-  args: communitySourceIngestionActionArgs,
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    return await runCommunitySourceIngestion({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-      communityId: args.communityId,
-      limit: args.limit,
-      retryFailed: args.retryFailed,
-      sourceKind: "github",
-      resultKind: "community_source_github_ingestion",
     });
   },
 });

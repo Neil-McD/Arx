@@ -23,6 +23,7 @@ const resourceModal = read("apps/web/src/components/WebCommunityResourceModal.ts
 const resourceModuleModal = read("apps/web/src/components/WebCommunityResourceModuleModal.tsx");
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
+const knowledgeSourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const resourceContracts = read("apps/web/src/components/communityResourcesContracts.ts");
 const resourceController = read("shared/useCommunityResourceController.ts");
@@ -608,15 +609,45 @@ assert.doesNotMatch(
   />\s*No pages yet\s*</,
   "empty categories should collapse to the inline add-page action instead of rendering a duplicate empty-state row",
 );
-assert.match(
-  webResourceController,
-  /openNewSourceModal[\s\S]*setResourceRoleInput\("source"\)[\s\S]*setResourceStatusInput\("review"\)/,
-  "web resources controller must make new source intake land in review status",
-);
 assert.doesNotMatch(
+  `${webResourceController}\n${resourceContracts}\n${resourcesPanel}`,
+  /openNewSourceModal/,
+  "resources must not keep the retired modal-based source intake path",
+);
+assert.match(
+  resourceController,
+  /handleAddCommunitySources[\s\S]*uploadCloudCommunityResourceSourceFile[\s\S]*saveCloudCommunityResource[\s\S]*ingestCloudCommunitySources/,
+  "source intake must reuse the canonical upload, resource save, and ingestion gateways",
+);
+assert.match(
   resourcesPanel,
-  /actions\.openNewSourceModal/,
-  "resources panel must not expose a separate source intake button in the reader header",
+  /WebCommunityKnowledgeSourceIntake[\s\S]*onAddSources=\{actions\.handleAddCommunitySources\}/,
+  "manager-empty resources must wire the canonical source intake to the resource controller",
+);
+assert.match(
+  knowledgeSourceIntake,
+  /Seed your knowledge[\s\S]*Add and read sources/,
+  "manager-empty resources must expose one canonical link and file source intake",
+);
+assert.match(
+  knowledgeSourceIntake,
+  /readySources\.length > 0[\s\S]*Build my resources/,
+  "ready sources must expose one explicit Resources Architect launch action",
+);
+assert.match(
+  resourcesPanel,
+  /readySources=\{readySources\}[\s\S]*onBuildResources=\{actions\.handleBuildCommunityResources\}/,
+  "resource launch must receive only canonical ready source records",
+);
+assert.match(
+  resourceContracts,
+  /handleBuildCommunityResources:[\s\S]*communityId: string[\s\S]*readySources:/,
+  "resource launch must stay bound to one community and an explicit ready-source set",
+);
+assert.match(
+  resourceController,
+  /sourceIntakeInFlightRef[\s\S]*if \(sourceIntakeInFlightRef\.current\) return null/,
+  "source intake must reject duplicate in-flight submissions synchronously",
 );
 assert.doesNotMatch(
   resourcesPanel,

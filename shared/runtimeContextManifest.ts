@@ -202,10 +202,6 @@ const COMMUNITY_DIRECTORY_TOOL_NAMES = new Set<RetrievalToolName>([
 const COMMUNITY_RESOURCE_TOOL_NAMES = new Set<RetrievalToolName>([
   "community_resources_read",
   "community_resources_search",
-  "community_resource_builder_list",
-  "community_resource_builder_read",
-  "community_resource_builder_stage_changeset",
-  "community_resource_builder_apply_changeset",
 ]);
 
 const COMMUNITY_ACTIVITY_TOOL_NAMES = new Set<RetrievalToolName>([
@@ -355,13 +351,10 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
     };
   }
   if (COMMUNITY_RESOURCE_TOOL_NAMES.has(toolName)) {
-    const isWrite =
-      toolName === "community_resource_builder_stage_changeset" ||
-      toolName === "community_resource_builder_apply_changeset";
     return {
       family: "community_resources",
       grantedBy: "validated_community_resource_lane",
-      effect: isWrite ? "write" : "read",
+      effect: "read",
     };
   }
   if (COMMUNITY_MEMORY_TOOL_NAMES.has(toolName)) {

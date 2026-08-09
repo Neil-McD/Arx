@@ -120,7 +120,7 @@ const baseEvents = [
           { name: "polynet_list" },
           { name: "polynet_read" },
           { name: "read" },
-          { name: "community_resource_builder_read" },
+          { name: "polynet_search" },
         ],
         runtimeState: [{ id: "runtime_turn_envelope" }],
         exclusions: [],

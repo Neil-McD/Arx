@@ -1,6 +1,10 @@
 import { useState, type ComponentProps, type Dispatch, type SetStateAction } from "react";
 
-import { useCommunityResourceController } from "../../../../shared/useCommunityResourceController";
+import {
+  useCommunityResourceController,
+  type CommunitySourceIntakePhase,
+  type CommunitySourceIntakeResult,
+} from "../../../../shared/useCommunityResourceController";
 import { useCommunityResourceEditorController } from "../../../../shared/useCommunityResourceEditorController";
 import { WebDeleteResourceModuleModal } from "../components/WebDeleteResourceModuleModal";
 import { WebCommunityResourceModal } from "../components/WebCommunityResourceModal";
@@ -72,7 +76,12 @@ export type UseWebCommunityResourceUiControllerResult<
     beforeResourceId?: string | null,
   ) => Promise<boolean>;
   openNewResourceModal: (moduleId?: string | null) => void;
-  openNewSourceModal: (moduleId?: string | null) => void;
+  handleAddCommunitySources: (input: {
+    links: string[];
+    files: File[];
+    retryExisting?: boolean;
+    onPhase?: (phase: CommunitySourceIntakePhase) => void;
+  }) => Promise<CommunitySourceIntakeResult | null>;
   resourceEditor: {
     editingResourceId: string | null;
     titleInput: string;
@@ -143,6 +152,7 @@ export function useWebCommunityResourceUiController<
     handleDeleteResource,
     handleCreatePageDraftFromSource,
     handleCreateBlankPageDraft,
+    handleAddCommunitySources,
   } = useCommunityResourceController<SessionT, ResourceT, ResourceModuleT>({
     activeCommunityId: params.activeCommunityId,
     session: params.session,
@@ -163,6 +173,7 @@ export function useWebCommunityResourceUiController<
     moduleNameInput,
     editingResourceId,
     editingResourceModuleId,
+    communityResources: params.communityResources,
     setCommunityResources: params.setCommunityResources,
     setCommunityResourceModules: params.setCommunityResourceModules,
     setIsLoadingResources: params.setIsLoadingResources,
@@ -208,13 +219,6 @@ export function useWebCommunityResourceUiController<
     rawOpenNewResourceModal();
     setResourceRoleInput("page");
     setResourceStatusInput("draft");
-    setResourceModuleIdInput(moduleId ?? null);
-  };
-
-  const openNewSourceModal = (moduleId?: string | null) => {
-    rawOpenNewResourceModal();
-    setResourceRoleInput("source");
-    setResourceStatusInput("review");
     setResourceModuleIdInput(moduleId ?? null);
   };
 
@@ -311,7 +315,7 @@ export function useWebCommunityResourceUiController<
     handleReorderResources: handleReorderCommunityResources,
     handleMoveResourceToModule: handleMoveCommunityResourceToModule,
     openNewResourceModal,
-    openNewSourceModal,
+    handleAddCommunitySources,
     resourceEditor: {
       editingResourceId,
       titleInput: resourceTitleInput,

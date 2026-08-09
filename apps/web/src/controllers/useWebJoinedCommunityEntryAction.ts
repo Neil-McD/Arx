@@ -4,6 +4,7 @@ import {
 } from "react";
 
 import type { AuthSession } from "../auth";
+import type { CommunityTab } from "../../../../shared/appShellNavigation";
 
 export function useWebJoinedCommunityEntryAction(params: {
   session: AuthSession | null;
@@ -21,7 +22,7 @@ export function useWebJoinedCommunityEntryAction(params: {
     view: "home";
     settingsPage: "profile";
     communitySlug: string | null;
-    communityTab: "chat";
+    communityTab: CommunityTab;
   }) => void;
   loadCommunities: (session: AuthSession) => Promise<void>;
 }) {
@@ -29,6 +30,7 @@ export function useWebJoinedCommunityEntryAction(params: {
     (options: {
       communityId: string;
       communitySlug?: string | null;
+      communityTab?: CommunityTab;
     }) => {
       const communityId = String(
         options.communityId ?? "",
@@ -48,7 +50,7 @@ export function useWebJoinedCommunityEntryAction(params: {
         view: "home",
         settingsPage: "profile",
         communitySlug: slug || null,
-        communityTab: "chat",
+        communityTab: options.communityTab ?? "chat",
       });
 
       const session = params.sessionRef.current ?? params.session;

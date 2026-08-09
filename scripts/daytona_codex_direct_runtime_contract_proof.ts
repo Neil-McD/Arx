@@ -703,13 +703,13 @@ assert.match(
 );
 assert.match(
   handlers,
-  /workspace_compute_billing: \{[\s\S]*credit_key: polynetCodexRuntimeCreditKey[\s\S]*daytona_workspace_compute_usd_per_second/,
+  /workspace_compute_cost_tracking: \{[\s\S]*cost_key: polynetCodexRuntimeCostKey[\s\S]*daytona_workspace_compute_usd_per_second/,
   "runtime handler must pass canonical workspace compute billing context to worker ingest",
 );
 assert.match(
   ingest,
-  /asRecord\(contextRecord\?\.workspace_compute_billing\) \?\?[\s\S]*asRecord\(contextRecord\?\.codex_runtime_billing\)/,
-  "worker ingest must prefer workspace compute billing while accepting legacy Codex billing context",
+  /asRecord\(contextRecord\?\.workspace_compute_cost_tracking\)/,
+  "worker ingest must read the canonical workspace compute cost-tracking context",
 );
 assert.match(
   handlers,

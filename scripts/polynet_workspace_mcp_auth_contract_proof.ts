@@ -125,8 +125,13 @@ includes(
 includes(externalSmoke, "retry_deduped", "live retry acceptance");
 includes(
   externalSmoke,
-  "rejected_without_apply",
-  "builder call acceptance without applying test data",
+  "terminal_agent_call: \"operation_not_found\"",
+  "builder terminal decisions remain unavailable to the agent harness",
+);
+includes(
+  externalSmoke,
+  "pending_product_review: \"required\"",
+  "builder staging acceptance leaves the proposal for product review",
 );
 for (const acceptanceInput of [
   "POLYNET_MCP_COMMUNITY_SLUG",

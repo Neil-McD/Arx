@@ -1,7 +1,9 @@
 import {
   lazy,
+  useEffect,
   useMemo,
   useRef,
+  useState,
   Suspense,
   type ChangeEvent,
 } from "react";
@@ -18,9 +20,7 @@ import {
 import { resolveAuthSubject } from "../../../shared/authSession";
 import { getAuthUid } from "../../../shared/authCore";
 import { CommunityAvatar } from "../../../shared/CommunityAvatar";
-import {
-  isLikelyImageFile,
-} from "../../../shared/attachmentHelpers";
+import { isLikelyImageFile } from "../../../shared/attachmentHelpers";
 import {
   DEFAULT_EMPTY_THREAD_LANDING, normalizeCommunityAgentLanding, } from "../../../shared/communityAgentLanding";
 import {
@@ -43,6 +43,7 @@ import {
   getWebCommunityEventsMonthRange,
   useWebCommunityContentController,
 } from "./controllers/useWebCommunityContentController";
+import { buildWebCommunityResourceBuildHandler } from "./controllers/buildWebCommunityResourceBuildHandler";
 import { useWebCommunityAttentionModel } from "./controllers/useWebCommunityAttentionController";
 import {
   useWebCommunityAdministrationState,
@@ -64,9 +65,7 @@ import { useWebMobileChromeReadingModeLifecycle } from "./controllers/useWebMobi
 import { useWebPublicFunnelEntryController } from "./controllers/useWebPublicFunnelEntryController";
 import { useWebShellActionController } from "./controllers/useWebShellActionController";
 import { useWebCommunityFunnelAboutController } from "./controllers/useWebCommunityFunnelAboutController";
-import {
-  useWebPendingAuthIntentController,
-} from "./controllers/useWebPendingAuthIntentController";
+import { useWebPendingAuthIntentController } from "./controllers/useWebPendingAuthIntentController";
 import { useWebCommunityNavigationActions } from "./controllers/useWebCommunityNavigationActions";
 import { useWebJoinedCommunityEntryAction } from "./controllers/useWebJoinedCommunityEntryAction";
 import { useWebDiscoverActivationController } from "./controllers/useWebDiscoverActivationController";
@@ -83,9 +82,7 @@ import { useWebCommunityEntryBridgeController } from "./controllers/useWebCommun
 import { useWebShellNavigationController } from "./controllers/useWebShellNavigationController";
 import { useWebAppAuthController } from "./controllers/useWebAppAuthController";
 import { useWebAppActivityController } from "./controllers/useWebAppActivityController";
-import {
-  captureProductAnalyticsEvent,
-} from "./posthogAnalytics";
+import { captureProductAnalyticsEvent } from "./posthogAnalytics";
 
 import { AnalyticsLineChart } from "../../../shared/AnalyticsLineChart";
 import {
@@ -130,9 +127,7 @@ import {
 } from "../../../shared/messageMetadataUi";
 import { renderTextWithLinks } from "../../../shared/linkEmbedUi";
 import { renderMarkdown } from "../../../shared/markdownUi";
-import {
-  readBannerFileAsWideDataUrlWithinLimit,
-} from "../../../shared/imageTransforms";
+import { readBannerFileAsWideDataUrlWithinLimit } from "../../../shared/imageTransforms";
 import { resetWebSessionStateAfterSignOut } from "./auth/resetSessionState";
 import { usePointerSortableList } from "../../../shared/usePointerSortableList";
 import { useWebCommunityAccessController } from "../../../shared/useWebCommunityAccessController";
@@ -181,6 +176,7 @@ import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommun
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebAppCompositionRoot } from "./components/WebAppCompositionRoot";
+import { WebBuilderKnowledgeSetup } from "./components/WebBuilderKnowledgeSetup";
 import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
@@ -200,6 +196,14 @@ import {
   WEB_IMAGE_DATA_URL_CHAR_LIMIT,
 } from "./webAppRuntime";
 import { useWebCommunityVisualIdentityRegistryLifecycle } from "./controllers/useWebCommunityVisualIdentityRegistryLifecycle";
+import { completeCloudBuilderKnowledgeSetup } from "../../../shared/cloudCommunityAdminGateway";
+import {
+  findPendingBuilderSetupSubscription,
+  reconcileBuilderSetupSuppressions,
+  resolveBuilderSetupModalReconciliation,
+  type BuilderSetupSuppressionReason,
+  type BuilderSetupSuppressions,
+} from "../../../shared/builderSetupReconciliation";
 
 const WebStandalonePublicRouteShell = lazy(() =>
   import("./components/WebStandalonePublicRouteShell").then((module) => ({
@@ -237,7 +241,6 @@ export default function App() {
       beginBrowserSignedOutState();
       return Promise.resolve();
     });
-  const availableBuilderSubscriptionIdRef = useRef<string | null>(null);
   const accountGraphLifecycle = useWebAccountGraphLifecycle();
   const {
     session,
@@ -406,6 +409,15 @@ export default function App() {
     canonicalSessionUserId,
     initiallyLoading: Boolean(session),
   });
+  const pendingBuilderKnowledgeCommunity = useMemo(
+    () => communities
+      .filter((community) => community.builder_knowledge_setup_pending === true)
+      .slice()
+      .sort((left, right) => (
+        new Date(left.created_at).getTime() - new Date(right.created_at).getTime()
+      ))[0] ?? null,
+    [communities],
+  );
   const {
     activeCommunity,
     activeCommunityId,
@@ -693,7 +705,7 @@ export default function App() {
     handleReorderResources,
     handleMoveResourceToModule,
     openNewResourceModal,
-    openNewSourceModal,
+    handleAddCommunitySources,
     resourceEditor,
     handleDeleteResource,
     handleCreatePageDraftFromSource,
@@ -707,6 +719,51 @@ export default function App() {
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
   } = communityContent;
+  const [hydratedBuilderKnowledgeCommunityId, setHydratedBuilderKnowledgeCommunityId] =
+    useState<string | null>(null);
+  useEffect(() => {
+    const pendingCommunity = pendingBuilderKnowledgeCommunity;
+    if (!pendingCommunity) {
+      setHydratedBuilderKnowledgeCommunityId(null);
+      return;
+    }
+    if (activeCommunityId !== pendingCommunity.id) {
+      setHydratedBuilderKnowledgeCommunityId(null);
+      applyCommunityShellState({
+        communityId: pendingCommunity.id,
+        communitySlug: pendingCommunity.slug,
+        communityTab: "resources",
+      });
+      return;
+    }
+    const activeSession = sessionRef.current ?? session;
+    if (!activeSession) {
+      setHydratedBuilderKnowledgeCommunityId(null);
+      return;
+    }
+    let cancelled = false;
+    setHydratedBuilderKnowledgeCommunityId(null);
+    void loadCommunityResources(pendingCommunity.id, activeSession)
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("[builder-knowledge-setup] failed to load sources:", error);
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setHydratedBuilderKnowledgeCommunityId(pendingCommunity.id);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    activeCommunityId,
+    appActivity.resumeEpoch,
+    applyCommunityShellState,
+    loadCommunityResources,
+    pendingBuilderKnowledgeCommunity?.id,
+    pendingBuilderKnowledgeCommunity?.slug,
+    session?.user.id,
+  ]);
   const communityAdministration = useWebCommunityAdministrationState({
     activeCommunityId,
     ensureSession: ensureUsableAuthSession,
@@ -956,10 +1013,30 @@ export default function App() {
     operatorComplimentaryAccess,
     onCommunityReady: (_communityId, readySession) => loadCommunities(readySession),
   });
-  availableBuilderSubscriptionIdRef.current =
-    founderBilling.overview.unassigned_subscriptions.find(
-      (subscription) => subscription.grants_setup,
-    )?.subscription_id ?? null;
+  const [builderSetupSuppressions, setBuilderSetupSuppressions] =
+    useState<BuilderSetupSuppressions>({});
+  const suppressBuilderSetupSubscription = (
+    subscriptionId: string | null,
+    reason: BuilderSetupSuppressionReason,
+  ) => {
+    const normalizedSubscriptionId = String(subscriptionId ?? "").trim();
+    if (!normalizedSubscriptionId) return;
+    setBuilderSetupSuppressions((current) => (
+      current[normalizedSubscriptionId] === reason
+        ? current
+        : { ...current, [normalizedSubscriptionId]: reason }
+    ));
+  };
+  useEffect(() => {
+    setBuilderSetupSuppressions((current) => reconcileBuilderSetupSuppressions(
+      current,
+      founderBilling.overview.unassigned_subscriptions,
+    ));
+  }, [founderBilling.overview]);
+  const pendingBuilderSetupSubscription = findPendingBuilderSetupSubscription(
+    founderBilling.overview.unassigned_subscriptions,
+    builderSetupSuppressions,
+  );
   const builderOffer = useWebBuilderOfferController({
     startCheckout: founderBilling.startCheckout,
     openPortal: founderBilling.openPortal,
@@ -1479,25 +1556,45 @@ export default function App() {
         "We are still verifying your account. Try again in a moment.",
       );
     },
-    getFounderSubscriptionId: () => availableBuilderSubscriptionIdRef.current,
-    onCommunityCreated: (community) => {
-      availableBuilderSubscriptionIdRef.current = null;
+    onCommunityCreated: async (community, context) => {
+      suppressBuilderSetupSubscription(
+        context.founderSubscriptionId,
+        "attached",
+      );
       setCommunities((prev) => [community, ...prev]);
       void founderBilling.refresh(sessionRef.current);
       void enterJoinedCommunity({
         communityId: community.id,
         communitySlug: community.slug,
+        communityTab: "resources",
       });
     },
+    onCommunityCreateRecoveryRequired: (founderSubscriptionId) => {
+      suppressBuilderSetupSubscription(founderSubscriptionId, "attached");
+      const activeSession = sessionRef.current;
+      const refresh = activeSession
+        ? Promise.all([
+          loadCommunities(activeSession),
+          founderBilling.refresh(activeSession),
+        ])
+        : Promise.resolve([]);
+      return refresh.then(() => {
+        showAppToastMessage("Your Builder subscription is already attached. We refreshed your communities.");
+      });
+    },
+    onRequiredCommunityCreateUnavailable: (founderSubscriptionId) => {
+      suppressBuilderSetupSubscription(founderSubscriptionId, "unavailable");
+      showAppToastMessage(
+        "This Builder payment is no longer available for setup. Review Billing to continue.",
+      );
+      navigateTo("/settings/billing");
+      void founderBilling.refresh(sessionRef.current);
+    },
+    readBannerFileAsWideDataUrlWithinLimit,
+    isLikelyImageFile,
+    maxCreateImageDataUrlChars: WEB_IMAGE_DATA_URL_CHAR_LIMIT,
     createUnauthenticatedErrorMessage: "Sign in to create a community.",
   });
-  const openFundedCreateCommunityModal: typeof communityUi.openCreateCommunityModal = (draft = null) => {
-    if (!operatorComplimentaryAccess && !availableBuilderSubscriptionIdRef.current) {
-      showAppToastMessage("Complete Builder checkout before creating your community.");
-      return;
-    }
-    communityUi.openCreateCommunityModal(draft);
-  };
   const publicBuilderCheckout = useWebPublicBuilderCheckoutController({
     session,
     getSession: () => sessionRef.current,
@@ -1506,12 +1603,6 @@ export default function App() {
     requireSignIn,
     refreshAccountSetupStatus,
     refreshBilling: founderBilling.refresh,
-    setAvailableBuilderSubscriptionId: (subscriptionId) => {
-      availableBuilderSubscriptionIdRef.current = subscriptionId;
-    },
-    openFundedCreateCommunity: () => {
-      openFundedCreateCommunityModal(null);
-    },
     navigateTo,
     showToast: showAppToastMessage,
   });
@@ -1519,9 +1610,50 @@ export default function App() {
     typeof communityUi.openCreateCommunityModal
   >[0]>(null);
   const openNewCommunityPurchaseFlow: typeof communityUi.openCreateCommunityModal = (draft = null) => {
+    if (pendingBuilderSetupSubscription) {
+      communityUi.openRequiredCreateCommunityModal(
+        pendingBuilderSetupSubscription.subscription_id,
+        draft,
+      );
+      return;
+    }
     pendingBuilderCreateDraftRef.current = draft;
     publicBuilderCheckout.openPurchasePrompt();
   };
+  useEffect(() => {
+    if (
+      !session
+      || !isAuthBootstrapComplete
+      || !isAccountSetupResolved
+      || !isAccountSetupCompleteForBuilderActions
+    ) {
+      return;
+    }
+    const reconciliation = resolveBuilderSetupModalReconciliation({
+      isModalOpen: communityUi.modalHostProps.createModal.isOpen,
+      requiredSubscriptionId: communityUi.requiredFounderSubscriptionId,
+      pendingSubscriptionId: pendingBuilderSetupSubscription?.subscription_id ?? null,
+    });
+    if (reconciliation.kind === "close_required") {
+      communityUi.closeRequiredCreateCommunityModal();
+      return;
+    }
+    if (reconciliation.kind === "open_required") {
+      communityUi.openRequiredCreateCommunityModal(
+        reconciliation.subscriptionId,
+      );
+    }
+  }, [
+    session?.user.id,
+    isAuthBootstrapComplete,
+    isAccountSetupResolved,
+    isAccountSetupCompleteForBuilderActions,
+    pendingBuilderSetupSubscription?.subscription_id,
+    communityUi.modalHostProps.createModal.isOpen,
+    communityUi.requiredFounderSubscriptionId,
+    communityUi.closeRequiredCreateCommunityModal,
+    communityUi.openRequiredCreateCommunityModal,
+  ]);
   const { resumePendingAuthIntent } =
     useWebPendingAuthIntentController({
       session,
@@ -1794,6 +1926,12 @@ export default function App() {
     appendMemberAgentTranscript: (transcript) =>
       memberAgentComposerApiRef.current?.appendTranscript(transcript),
     focusMemberAgentInput: () => memberAgentComposerApiRef.current?.focusInput(),
+  });
+  const handleBuildCommunityResources = buildWebCommunityResourceBuildHandler({
+    activeCommunityId: activeCommunity?.id ?? null,
+    canManageResources: canManageResourcesActiveCommunity,
+    startResourceBuild: (input) => memberAgentComposerApiRef.current?.startResourceBuild(input) ?? Promise.resolve(false),
+    showToastMessage: showAppToastMessage,
   });
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
@@ -2278,7 +2416,8 @@ export default function App() {
         handleReorderResources,
         handleMoveResourceToModule,
         openNewResourceModal,
-        openNewSourceModal,
+        handleAddCommunitySources,
+        handleBuildCommunityResources,
         resourceEditor,
         handleDeleteResource,
         handleCreatePageDraftFromSource,
@@ -2619,9 +2758,7 @@ export default function App() {
       isOpen: publicBuilderCheckout.isPurchasePromptOpen,
       accessMode: operatorComplimentaryAccess
         ? "operator_included"
-        : availableBuilderSubscriptionIdRef.current
-          ? "paid_setup"
-          : "purchase",
+        : "purchase",
       status: publicBuilderCheckout.status,
       error: publicBuilderCheckout.error,
       onClose: () => {
@@ -2629,11 +2766,11 @@ export default function App() {
         publicBuilderCheckout.closePurchasePrompt();
       },
       onConfirm: () => {
-        if (operatorComplimentaryAccess || availableBuilderSubscriptionIdRef.current) {
+        if (operatorComplimentaryAccess) {
           const draft = pendingBuilderCreateDraftRef.current;
           pendingBuilderCreateDraftRef.current = null;
           publicBuilderCheckout.closePurchasePrompt();
-          openFundedCreateCommunityModal(draft);
+          communityUi.openCreateCommunityModal(draft);
           return;
         }
         void publicBuilderCheckout.startPurchase();
@@ -3061,6 +3198,40 @@ export default function App() {
     isGlobalSettings,
   });
 
+  if (pendingBuilderKnowledgeCommunity) {
+    const isKnowledgeCommunityReady =
+      activeCommunityId === pendingBuilderKnowledgeCommunity.id
+      && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id;
+    return (
+      <WebBuilderKnowledgeSetup
+        community={pendingBuilderKnowledgeCommunity}
+        isHydrating={!isKnowledgeCommunityReady || isLoadingResources}
+        resources={isKnowledgeCommunityReady ? communityResources : []}
+        onAddSources={handleAddCommunitySources}
+        onComplete={async () => {
+          const activeSession = await ensureUsableAuthSession();
+          if (!activeSession) return false;
+          const result = await completeCloudBuilderKnowledgeSetup({
+            session: activeSession,
+            communityId: pendingBuilderKnowledgeCommunity.id,
+          });
+          if (!result.ok) return false;
+          setCommunities((current) => current.map((community) => (
+            community.id === pendingBuilderKnowledgeCommunity.id
+              ? { ...community, builder_knowledge_setup_pending: false }
+              : community
+          )));
+          void enterJoinedCommunity({
+            communityId: pendingBuilderKnowledgeCommunity.id,
+            communitySlug: pendingBuilderKnowledgeCommunity.slug,
+            communityTab: "chat",
+          });
+          return true;
+        }}
+      />
+    );
+  }
+
   if (shouldHoldRouteForAccess) {
     return <div className="landing-auth-hold" aria-hidden="true" />;
   }
@@ -3071,9 +3242,20 @@ export default function App() {
       memberAgentDockRef={memberAgentComposerApiRef}
       memberAgentDockProps={{
         isVisible: isMemberAgentDockVisible,
+        canManageResources: canManageResourcesActiveCommunity,
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",
         onRequestOpen: () => setMobileRootPage("agent"),
+        onInitialResourcesApplied: (communityId) => {
+          const community = communities.find((candidate) => candidate.id === communityId);
+          setMobileRootPage("community");
+          enterJoinedCommunity({
+            communityId,
+            communitySlug: community?.slug ?? null,
+            communityTab: "chat",
+          });
+          showAppToastMessage("Your community is ready.");
+        },
         community: memberAgentDockCommunity,
         surfaceContext: memberAgentSurfaceContext,
         session,

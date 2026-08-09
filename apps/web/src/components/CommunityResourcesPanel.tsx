@@ -24,6 +24,7 @@ import {
   type WebCommunityResourceSourceLineage,
 } from "./WebCommunityResourceViewerModal";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
+import { WebCommunityKnowledgeSourceIntake } from "./WebCommunityKnowledgeSourceIntake";
 
 type CommunityResourcesPanelProps = {
   capabilities: CommunityResourcesCapabilities;
@@ -36,7 +37,6 @@ const MODULE_DRAG_MIME = "application/x-polynet-community-resource-module";
 const RESOURCE_DRAG_MIME = "application/x-polynet-community-resource";
 const RESOURCE_CATEGORY_DRAG_MIME = "application/x-polynet-community-resource-category";
 const PAGE_DRAFT_CREATION_GESTURE_LOCK_MS = 650;
-
 type ReorderDirection = "up" | "down" | "top" | "bottom";
 
 type ResourceModuleView = CommunityResourceModule & {
@@ -78,6 +78,22 @@ function resourceNeedsBodyHydration(resource: CommunityResource | null): boolean
   if (!resource) return false;
   const bodyChars = Number(resource.body_chars ?? 0);
   return Number.isFinite(bodyChars) && bodyChars > 0 && !(resource.body_md ?? "").trim();
+}
+
+function getSourceIngestionLabel(resource: CommunityResource): string | null {
+  if (getResourceRole(resource) !== "source") return null;
+  switch (resource.source_ingestion_status) {
+    case "ready":
+      return "Ready";
+    case "failed":
+      return "Needs attention";
+    case "processing":
+      return "Reading";
+    case "queued":
+      return "Queued";
+    default:
+      return "Saved";
+  }
 }
 
 function resourceHasUsableKnowledgeContent(resource: CommunityResource): boolean {
@@ -483,6 +499,7 @@ function ResourceRailItem(props: {
     isDropTarget,
   } = props;
   const summary = (resource.body_md ?? "").trim();
+  const sourceIngestionLabel = getSourceIngestionLabel(resource);
   const isEditDisabled = resourceNeedsBodyHydration(resource);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -541,6 +558,11 @@ function ResourceRailItem(props: {
           <div className="knowledge-resource-item-title">{resource.title}</div>
           {resource.pinned ? <PinIcon /> : null}
         </div>
+        {sourceIngestionLabel ? (
+          <div className={`knowledge-resource-source-status is-${resource.source_ingestion_status ?? "saved"}`}>
+            {sourceIngestionLabel}
+          </div>
+        ) : null}
         {summary ? <div className="knowledge-resource-item-summary">{summary}</div> : null}
       </div>
       {canManage ? (
@@ -659,6 +681,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [activeResourceEditField, setActiveResourceEditField] =
     useState<WebCommunityResourceInlineEditorField | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [showSourceIntake, setShowSourceIntake] = useState(false);
   const [isCreatingPageDraft, setIsCreatingPageDraft] = useState(false);
   const pageDraftCreationInFlightRef = useRef(false);
   const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
@@ -770,6 +793,19 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => categorySections.flatMap((section) => section.sourceResources),
     [categorySections],
   );
+  const failedSourceCount = useMemo(
+    () => allSourceResources.filter((resource) => resource.source_ingestion_status === "failed").length,
+    [allSourceResources],
+  );
+  const readySources = useMemo(
+    () => allSourceResources
+      .filter((resource) => resource.source_ingestion_status === "ready")
+      .map((resource) => ({
+        id: resource.id,
+        ingestedAt: resource.source_ingested_at ?? null,
+      })),
+    [allSourceResources],
+  );
   const displayableResources = useMemo(
     () => (canManageResources ? [...allPageResources, ...allSourceResources] : allPageResources),
     [allPageResources, allSourceResources, canManageResources],
@@ -877,6 +913,10 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (capabilities.canOperateResources || !isPreviewMode) return;
     setIsPreviewMode(false);
   }, [capabilities.canOperateResources, isPreviewMode]);
+
+  useEffect(() => {
+    setShowSourceIntake(false);
+  }, [capabilities.activeCommunityId]);
 
   useEffect(() => {
     if (canManageResources || !actions.resourceEditor.editingResourceId) return;
@@ -1139,12 +1179,14 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleSelectCategory = (module: ResourceModuleView) => {
+    setShowSourceIntake(false);
     actions.handleSelectModule(module.id);
     const firstResource = getFirstResourceForCategory(module);
     actions.setOpenResourceEmbedId(firstResource?.id ?? null);
   };
 
   const handleSelectResource = (resource: CommunityResource) => {
+    setShowSourceIntake(false);
     actions.handleSelectModule(getResourceCategoryId(resource));
     actions.setOpenResourceEmbedId(resource.id);
   };
@@ -1326,6 +1368,13 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               </div>
               {capabilities.hasActiveCommunity && canManageResources ? (
                 <div className="resources-add-split" role="group" aria-label="Resource actions">
+                  <button
+                    className="resources-source-intake-action"
+                    type="button"
+                    onClick={() => setShowSourceIntake(true)}
+                  >
+                    Add sources
+                  </button>
                   {selectedModule && !selectedModule.is_virtual ? (
                     <button
                       className={`resources-module-status-action is-${selectedModuleNextStatus}`}
@@ -1459,7 +1508,16 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               </div>
             </aside>
             <div className="knowledge-resource-reader">
-              {readerResource ? (
+              {canManageResources && (!hasVisibleResourceContent || showSourceIntake) ? (
+                <WebCommunityKnowledgeSourceIntake
+                  communityId={capabilities.activeCommunityId}
+                  communityName={capabilities.activeCommunityName}
+                  failedSourceCount={failedSourceCount}
+                  readySources={readySources}
+                  onAddSources={actions.handleAddCommunitySources}
+                  onBuildResources={actions.handleBuildCommunityResources}
+                />
+              ) : readerResource ? (
                 <>
                   <WebCommunityResourceViewerContent
                     resource={readerResource}

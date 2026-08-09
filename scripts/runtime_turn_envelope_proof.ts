@@ -33,10 +33,10 @@ const builderEnvelope = buildRuntimeTurnEnvelope({
   allowedToolNames: [
     "polynet_list",
     "polynet_read",
+    "polynet_search",
+    "polynet_write",
+    "polynet_call",
     "community_resources_read",
-    "community_resource_builder_list",
-    "community_resource_builder_read",
-    "community_resource_builder_stage_changeset",
   ],
 });
 
@@ -108,7 +108,8 @@ assert.match(builderPrompt, /RUNTIME_TURN_ENVELOPE/);
 assert.match(builderPrompt, /Current request: Build the community wiki from these sources\./);
 assert.match(builderPrompt, /Continuity goal: Create a useful resource map for the founder community\./);
 assert.match(builderPrompt, /resource_lane=builder/);
-assert.match(builderPrompt, /Available tools: .*community_resource_builder_list/);
+assert.match(builderPrompt, /Available tools: .*polynet_write/);
+assert.doesNotMatch(builderPrompt, /community_resource_builder_/);
 assert.match(builderPrompt, /does not replace the user request/);
 assert.match(builderPrompt, /Authority fields only bound available actions/);
 assert.doesNotMatch(builderPrompt, /Job kind:/);

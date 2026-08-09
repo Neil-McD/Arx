@@ -49,13 +49,6 @@ const MEMORY_TYPES = new Set([
   "open_question",
 ]);
 
-const BUILDER_CAPABILITIES = [
-  "community.resources.changeset.status",
-  "community.resources.changeset.approve",
-  "community.resources.changeset.reject",
-  "community.resources.changeset.apply",
-] as const;
-
 const MEMBER_CAPABILITIES = [
   "community.memory.record_outcome",
 ] as const;
@@ -495,13 +488,7 @@ function capabilityDocument(args: {
   const isMemberCapability = (MEMBER_CAPABILITIES as readonly string[]).includes(
     args.operation,
   );
-  const isBuilderCapability = (
-    BUILDER_CAPABILITIES as readonly string[]
-  ).includes(args.operation);
-  if (
-    !isMemberCapability &&
-    !(isBuilderCapability && args.target.authority.canUseBuilderProjection)
-  ) {
+  if (!isMemberCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -509,7 +496,7 @@ function capabilityDocument(args: {
     version: 1,
     tool: "polynet_call",
     target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
-    authority_lane: isBuilderCapability ? "builder" : "member",
+    authority_lane: "member",
     idempotency_required: true,
   };
   if (args.operation === "community.memory.record_outcome") {
@@ -623,12 +610,7 @@ async function executeCanonicalList(args: {
     };
   }
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
-    const operations = [
-      ...MEMBER_CAPABILITIES,
-      ...(target.authority.canUseBuilderProjection
-        ? BUILDER_CAPABILITIES
-        : []),
-    ];
+    const operations = [...MEMBER_CAPABILITIES];
     return {
       ok: true,
       value: virtualDirectory({
@@ -1419,47 +1401,25 @@ async function executeCanonicalCall(args: {
       "Operation is not discoverable or authorized for this community.",
     );
   }
-  let resultStatus: "worked" | "failed" | "mixed" | null = null;
-  let changesetId: string | null = null;
-  if (operation === "community.memory.record_outcome") {
-    const candidate = String(input.result_status ?? "");
-    if (
-      candidate !== "worked" &&
-      candidate !== "failed" &&
-      candidate !== "mixed"
-    ) {
-      return canonicalError(
-        "invalid_tool_args",
-        "result_status must be worked, failed, or mixed.",
-      );
-    }
-    if (
-      !requiredString(input.retrieval_log_id, 180) ||
-      !requiredString(input.node_id, 180)
-    ) {
-      return canonicalError(
-        "invalid_tool_args",
-        "retrieval_log_id and node_id are required.",
-      );
-    }
-    resultStatus = candidate;
-  } else {
-    if (!target.authority.canUseBuilderProjection) {
-      return canonicalError(
-        "builder_authority_required",
-        "Builder authority is required.",
-      );
-    }
-    changesetId = requiredString(
-      input.changeset_id ?? input.changesetId,
-      180,
+  const candidate = String(input.result_status ?? "");
+  if (
+    candidate !== "worked" &&
+    candidate !== "failed" &&
+    candidate !== "mixed"
+  ) {
+    return canonicalError(
+      "invalid_tool_args",
+      "result_status must be worked, failed, or mixed.",
     );
-    if (!changesetId) {
-      return canonicalError(
-        "invalid_tool_args",
-        "changeset_id is required.",
-      );
-    }
+  }
+  if (
+    !requiredString(input.retrieval_log_id, 180) ||
+    !requiredString(input.node_id, 180)
+  ) {
+    return canonicalError(
+      "invalid_tool_args",
+      "retrieval_log_id and node_id are required.",
+    );
   }
   const reservation = await reserveMutatingOperation({
     ...args,
@@ -1472,63 +1432,20 @@ async function executeCanonicalCall(args: {
     return { ok: true, value: reservation.completedValue };
   }
   try {
-    let result: Record<string, unknown>;
-    if (operation === "community.memory.record_outcome") {
-      result = (await args.ctx.runMutation(
-        (internal as any).communityIntelligenceDirectory
-          .recordCommunityOutcomeObservationInternal,
-        {
-          userId: args.userId,
-          authSubject: args.authSubject,
-          communityId: target.communityId,
-          surface: args.evidenceSurface,
-          retrievalLogId: String(input.retrieval_log_id ?? ""),
-          nodeId: String(input.node_id ?? ""),
-          resultStatus: resultStatus!,
-          ...(input.notes ? { notes: String(input.notes) } : {}),
-        },
-      )) as Record<string, unknown>;
-    } else {
-      const common = {
+    const result = (await args.ctx.runMutation(
+      (internal as any).communityIntelligenceDirectory
+        .recordCommunityOutcomeObservationInternal,
+      {
         userId: args.userId,
         authSubject: args.authSubject,
         communityId: target.communityId,
-        changesetId: changesetId!,
-      };
-      if (operation === "community.resources.changeset.status") {
-        result = (await args.ctx.runQuery(
-          (api as any).communityResources
-            .getCommunityResourceBuilderChangesetStatus,
-          common,
-        )) as Record<string, unknown>;
-      } else if (operation === "community.resources.changeset.approve") {
-        result = (await args.ctx.runMutation(
-          (api as any).communityResources
-            .approveCommunityResourceBuilderChangeset,
-          common,
-        )) as Record<string, unknown>;
-      } else if (operation === "community.resources.changeset.reject") {
-        result = (await args.ctx.runMutation(
-          (api as any).communityResources
-            .rejectCommunityResourceBuilderChangeset,
-          {
-            ...common,
-            ...(input.reason ? { reason: String(input.reason) } : {}),
-          },
-        )) as Record<string, unknown>;
-      } else if (operation === "community.resources.changeset.apply") {
-        result = (await args.ctx.runMutation(
-          (api as any).communityResources
-            .applyCommunityResourceBuilderChangeset,
-          common,
-        )) as Record<string, unknown>;
-      } else {
-        return canonicalError(
-          "operation_not_found",
-          "Operation is not implemented.",
-        );
-      }
-    }
+        surface: args.evidenceSurface,
+        retrievalLogId: String(input.retrieval_log_id ?? ""),
+        nodeId: String(input.node_id ?? ""),
+        resultStatus: candidate,
+        ...(input.notes ? { notes: String(input.notes) } : {}),
+      },
+    )) as Record<string, unknown>;
     const deduped =
       result.deduped === true || result.deduplicated === true;
     const responseValue = {

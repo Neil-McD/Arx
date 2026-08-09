@@ -37,6 +37,7 @@ const cleanup = read("convex/communityCognitionCleanupCore.ts");
 const recentContext = read("convex/communityRecentContext.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const httpMcp = read("convex/httpMcp.ts");
+const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
 const mcp = read("shared/polynetMcp.ts");
 
 for (const source of [communityMaintenance, adminGateway]) {
@@ -51,10 +52,11 @@ assert.match(cleanup, /table: "communityArchiveDocuments"/);
 assert.match(communityMaintenance, /purgeOrphanedCommunityUserArtifactsInternal/);
 assert.match(recentContext, /readCommunityRecentContextInternal = internalQuery/);
 assert.match(runtimeAgentLoop, /communityRecentContext\.readCommunityRecentContextInternal/);
-assert.match(httpMcp, /communityRecentContext\.readCommunityRecentContextInternal/);
+assert.match(httpMcp, /executePolynetCanonicalTool/);
+assert.match(canonicalExecutor, /searchCommunityRepositoryInternal/);
 assert.doesNotMatch(runtimeAgentLoop, /communityArchive\.searchCommunityKnowledgeInternal/);
-assert.doesNotMatch(httpMcp, /communityArchive\.searchCommunityKnowledgeInternal/);
-assert.match(httpMcp, /archive_context: \[\]/);
-assert.match(mcp, /required: \["community", "query", "recent_context", "archive_context"\]/);
+for (const source of [httpMcp, canonicalExecutor, mcp]) {
+  assert.doesNotMatch(source, /communityArchive\.searchCommunityKnowledgeInternal|archive_context/);
+}
 
 console.log("community_archive_runtime_severance_contract_proof: ok");

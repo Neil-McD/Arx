@@ -9,7 +9,7 @@ import { WebBuilderOfferSummary } from "./WebBuilderOfferSummary";
 
 export type WebBuilderPurchaseModalProps = {
   isOpen: boolean;
-  accessMode: "purchase" | "operator_included" | "paid_setup";
+  accessMode: "purchase" | "operator_included";
   status: PublicBuilderCheckoutStatus;
   error: string | null;
   onClose: () => void;
@@ -21,7 +21,6 @@ function primaryLabel(props: WebBuilderPurchaseModalProps): string {
   if (props.accessMode === "operator_included") {
     return "Continue — included with operator access";
   }
-  if (props.accessMode === "paid_setup") return "Continue to community setup";
   return `Buy Builder — ${formatBuilderOfferPrice()}`;
 }
 

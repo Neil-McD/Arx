@@ -725,7 +725,7 @@ async function runAuthenticatedSmoke(args: {
   let builder: Record<string, unknown> | null = null;
   if (
     authority.lane === "builder" &&
-    (args.acceptance || readBoolEnv("POLYNET_MCP_EXERCISE_BUILDER"))
+    readBoolEnv("POLYNET_MCP_EXERCISE_BUILDER")
   ) {
     assert.ok(acceptanceRunId);
     const id = acceptanceRunId;
@@ -737,7 +737,7 @@ async function runAuthenticatedSmoke(args: {
         path: `${communityPath}builder/resources/`,
         mode: "create",
         content: {
-          summary: "Stage acceptance changeset; reject after proving call.",
+          summary: "Stage an explicit builder-exercise changeset for product review.",
           operations: [
             {
               op: "create_module",
@@ -756,53 +756,31 @@ async function runAuthenticatedSmoke(args: {
     });
     const changesetId = asString(staged.ref);
     assert.ok(changesetId);
-    const capabilities = await callTool({
-      mcpUrl: args.mcpUrl,
-      token,
-      name: "polynet_list",
-      toolArgs: { path: `${communityPath}capabilities/` },
-    });
     const rejectPath = `${communityPath}capabilities/community.resources.changeset.reject.json`;
-    assert.ok(entries(capabilities).some((row) => row.path === rejectPath));
     await callTool({
       mcpUrl: args.mcpUrl,
       token,
-      name: "polynet_read",
-      toolArgs: { path: rejectPath },
-    });
-    const rejectInput = {
-      operation: "community.resources.changeset.reject",
-      version: 1,
-      target: rejectPath,
-      input: {
-        changeset_id: changesetId,
-        reason:
-          "Stage acceptance completed without applying the test changeset.",
+      name: "polynet_call",
+      toolArgs: {
+        operation: "community.resources.changeset.reject",
+        version: 1,
+        target: rejectPath,
+        input: {
+          changeset_id: changesetId,
+        },
+        idempotency_key: acceptanceKey({
+          runId: id,
+          lane: "builder",
+          purpose: "builder-reject-denied",
+        }),
       },
-      idempotency_key: acceptanceKey({
-        runId: id,
-        lane: "builder",
-        purpose: "builder-reject",
-      }),
-    };
-    await callTool({
-      mcpUrl: args.mcpUrl,
-      token,
-      name: "polynet_call",
-      toolArgs: rejectInput,
+      expectedErrorCode: "operation_not_found",
     });
-    const retried = await callTool({
-      mcpUrl: args.mcpUrl,
-      token,
-      name: "polynet_call",
-      toolArgs: rejectInput,
-    });
-    assert.equal(retried.deduped, true);
     builder = {
       stage: "ok",
-      discovered_call: "ok",
-      rejected_without_apply: "ok",
-      retry_deduped: "ok",
+      status: "product_query_required",
+      terminal_agent_call: "operation_not_found",
+      pending_product_review: "required",
     };
   }
 

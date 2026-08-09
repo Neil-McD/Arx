@@ -61,13 +61,17 @@ for (const forbidden of [/GPT 5\.6/i, /\bLuna\b/i, /\$20\b/, /credits?/i, /token
 assert.doesNotMatch(createModal, /WebBuilderOfferSummary/);
 assert.match(createModal, /Your payment is confirmed/);
 assert.match(createModal, /Community name/);
-assert.match(createModal, /Customize community URL/);
+assert.match(createModal, /One-liner/);
+assert.match(createModal, /Community handle/);
+assert.match(createModal, /Upload banner/);
+assert.match(createModal, /Upload avatar/);
 assert.match(createModal, /Create community/);
-assert.doesNotMatch(createModal, /banner|avatar|one-liner|Upload/i);
 assert.match(
   createController,
-  /visibility: "unlisted"[\s\S]*avatarStorageId: null[\s\S]*oneLiner: null[\s\S]*bannerStorageId: null/,
+  /prepareCloudCommunityBrandingField[\s\S]*kind: "avatar"[\s\S]*kind: "banner"[\s\S]*createCloudCommunity<[\s\S]*visibility: "unlisted"[\s\S]*avatarStorageId: avatarField\.storageId[\s\S]*oneLiner: current\.createCommunityOneLiner[\s\S]*bannerStorageId: bannerField\.storageId/,
 );
+assert.match(createController, /createInFlightRef\.current/);
+assert.match(createController, /founderSubscriptionId/);
 
 for (const surface of [billing, account]) {
   assert.match(surface, /shared\/builderOffer/);
@@ -89,7 +93,7 @@ assert.equal((globalOverlay.match(/<WebBuilderPurchaseModal/g) ?? []).length, 1)
 assert.match(purchaseModal, /WebBuilderOfferSummary compact purpose="purchase"/);
 assert.match(purchaseModal, /Buy Builder/);
 assert.match(purchaseModal, /operator_included/);
-assert.match(purchaseModal, /paid_setup/);
+assert.doesNotMatch(purchaseModal, /paid_setup|Continue to community setup/);
 assert.match(offerSummary, /POLYNET_BUILDER_OFFER\.benefits\.map/);
 assert.match(
   settingsStyles,
@@ -110,15 +114,33 @@ assert.match(offerController, /openPortal\(community\.community_id\)/);
 assert.match(app, /useWebBuilderOfferController\(\{[\s\S]*startCheckout: founderBilling\.startCheckout/);
 assert.doesNotMatch(app, /startCheckoutAfterCommunityCreated/);
 assert.match(app, /publicBuilderCheckout\.startPurchase\(\)/);
-assert.match(createController, /founderSubscriptionId: current\.getFounderSubscriptionId\?\.\(\) \?\? null/);
-assert.match(app, /openFundedCreateCommunityModal[\s\S]*availableBuilderSubscriptionIdRef\.current/);
+assert.match(
+  createController,
+  /const founderSubscriptionId = current\.founderSubscriptionId[\s\S]*founderSubscriptionId,/,
+  "community creation must snapshot and attach the selected funded subscription",
+);
+assert.doesNotMatch(app, /availableBuilderSubscriptionIdRef|setAvailableBuilderSubscriptionId/);
+assert.match(
+  app,
+  /pendingBuilderSetupSubscription[\s\S]*openRequiredCreateCommunityModal\([\s\S]*subscription_id/,
+  "a canonical unassigned subscription must open required identity setup directly",
+);
+assert.match(createModal, /props\.isDismissible \? \([\s\S]*Close community setup/);
+assert.match(createModal, /onClick=\{props\.isDismissible \? props\.onClose : undefined\}/);
+assert.match(
+  createController,
+  /createInFlightRef\.current \|\| !current\.isCreateCommunityDismissible/,
+  "required setup must reject both backdrop and controller-level dismissal",
+);
+assert.match(createModal, /Community handle/);
+assert.doesNotMatch(createModal, /Customize community URL/);
 assert.match(
   app,
   /openNewCommunityPurchaseFlow[\s\S]*publicBuilderCheckout\.openPurchasePrompt\(\)/,
 );
 assert.match(
   app,
-  /builderPurchaseProps:[\s\S]*operatorComplimentaryAccess[\s\S]*availableBuilderSubscriptionIdRef\.current[\s\S]*publicBuilderCheckout\.startPurchase\(\)/,
+  /builderPurchaseProps:[\s\S]*operatorComplimentaryAccess[\s\S]*"purchase"[\s\S]*publicBuilderCheckout\.startPurchase\(\)/,
 );
 assert.match(
   publicCheckoutController,

@@ -437,12 +437,9 @@ function hasCommunityResourceBuilderTools(
   allowedToolNames: readonly RetrievalToolName[],
 ): boolean {
   return (
-    (allowedToolNames.includes("polynet_write") &&
-      allowedToolNames.includes("polynet_call")) ||
-    allowedToolNames.includes("community_resource_builder_list") ||
-    allowedToolNames.includes("community_resource_builder_read") ||
-    allowedToolNames.includes("community_resource_builder_stage_changeset") ||
-    allowedToolNames.includes("community_resource_builder_apply_changeset")
+    allowedToolNames.includes("polynet_list") &&
+    allowedToolNames.includes("polynet_read") &&
+    allowedToolNames.includes("polynet_write")
   );
 }
 
@@ -460,16 +457,7 @@ function buildCommunityResourceLanePrompt(params: {
     params.allowedToolNames,
   );
   if (lane.lane === "builder" && hasBuilderTools) {
-    const canStageChangesets =
-      params.allowedToolNames.includes("polynet_write") ||
-      params.allowedToolNames.includes(
-        "community_resource_builder_stage_changeset",
-      );
-    const canApplyChangesets =
-      params.allowedToolNames.includes("polynet_call") ||
-      params.allowedToolNames.includes(
-        "community_resource_builder_apply_changeset",
-      );
+    const canStageChangesets = params.allowedToolNames.includes("polynet_write");
     return [
       "COMMUNITY_RESOURCE_BUILDER_LANE",
       "The active user can build Resources for this exact community lens.",
@@ -482,16 +470,12 @@ function buildCommunityResourceLanePrompt(params: {
       canStageChangesets
         ? "Stage only an exact implementation proposal after the builder has agreed on the direction."
         : "Do not imply resource edits have been staged or saved unless a staging tool is actually available and has succeeded.",
-      canApplyChangesets
-        ? "Apply only after explicit approval of the exact staged changeset, then verify by reading or listing affected resources."
-        : "A staged changeset is a proposal only; do not say it is live or applied. Ask the builder to review and apply it through the approval flow.",
+      "A staged changeset is a proposal only; do not say it is live or applied. Ask the builder to review it and choose Apply or Reject in the product.",
       "Builder-facing replies must translate resource tool results into product state: what exists now, what was saved, what is staged, what is live, what is unverified, and the next concrete builder decision.",
       "After source crawl, import, or source-inbox inspection, report source title, URL or domain, saved versus reused state, ready/failed/partial status, page count, source-unit count when visible, failed pages or units, and whether the material lives in source inbox, draft Resources, or live Resources.",
       "Do not expose internal ids, database ids, resource ids, category/module ids, source ids, crawl job ids, run ids, or changeset ids in builder-facing prose unless the user explicitly asks for debugging/internal details.",
       "Use human labels instead of ids: source title, category name, page title, status, and next action. Tool payloads may still use internal ids when required.",
-      canApplyChangesets
-        ? "When approval is needed, ask for natural approval such as \"Apply it\" or \"Approve these changes\". Do not ask the builder to paste a changeset id."
-        : "When approval is needed, ask for natural approval such as \"Review this proposal\" or \"Apply this through the approval flow\". Do not ask the builder to paste a changeset id.",
+      "Agents cannot approve, reject, or apply resource changesets. Ask the builder to use the product Apply or Reject controls. Do not ask the builder to paste a changeset id.",
     ].join("\n");
   }
   if (hasLiveTools) {
@@ -615,34 +599,19 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
     );
   }
   if (hasCommunityResourceBuilderTools(params.allowedToolNames)) {
-    const canStageChangesets =
-      params.allowedToolNames.includes("polynet_write") ||
-      params.allowedToolNames.includes(
-        "community_resource_builder_stage_changeset",
-      );
-    const canApplyChangesets =
-      params.allowedToolNames.includes("polynet_call") ||
-      params.allowedToolNames.includes(
-        "community_resource_builder_apply_changeset",
-      );
+    const canStageChangesets = params.allowedToolNames.includes("polynet_write");
     toolGuidance.push(
       "- The builder/ repository subtree is owner/admin-only and exposes draft, review, source inbox, and health state that the member projection intentionally hides.",
       "- List builder/resources/ first; its health summary is the deterministic architecture preflight. Read returned entries before proposing edits.",
-      canStageChangesets && canApplyChangesets
-        ? "- For builder edits, align on direction, stage the smallest defensible changeset with polynet_write on builder/resources/, then wait for explicit approval before discovering and invoking the approve/apply operations with polynet_call."
-        : canStageChangesets
-          ? "- For builder edits, align on direction, then stage the smallest defensible changeset as a proposal only. Do not claim it is live or applied."
-          : "- For builder edits, explain what you found as product state, align with the builder on direction, and propose the smallest defensible change without claiming it was staged or saved.",
+      canStageChangesets
+        ? "- For builder edits, align on direction, then stage the smallest defensible changeset as a proposal only. Do not claim it is live or applied."
+        : "- For builder edits, explain what you found as product state, align with the builder on direction, and propose the smallest defensible change without claiming it was staged or saved.",
       "- You may propose delete_page or delete_category only when deletion is clearly justified. Prefer move/edit for ambiguous material. Do not delete source inbox records; delete_category is only for empty categories.",
     );
-    if (canApplyChangesets) {
+    if (canStageChangesets) {
       toolGuidance.push(
-        "- Do not approve or apply a changeset merely because it exists. Use only operations discovered under capabilities/, and apply only after the builder clearly confirms the exact staged changeset.",
-        "- After applying a changeset, verify by listing or reading the affected resources and report what changed.",
-      );
-    } else if (canStageChangesets) {
-      toolGuidance.push(
-        "- After staging a changeset, summarize the proposal, warnings, and exact next approval step. Keep the changeset id internal unless the user explicitly asks for debugging details.",
+        "- After staging a changeset, summarize the proposal, warnings, and the product Apply or Reject step. Keep the changeset id internal unless the user explicitly asks for debugging details.",
+        "- Agents cannot approve, reject, or apply resource changesets. Those terminal decisions belong only to explicit authenticated product controls.",
       );
     }
   }

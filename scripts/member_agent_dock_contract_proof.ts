@@ -746,8 +746,13 @@ assert.match(
 );
 assert.match(
   runtimeLoop,
-  /effectiveAllowedToolNames = restrictToolNamesForInvocationSurface[\s\S]*buildEffectiveAllowedToolNames/,
-  "skill activation must not widen the member-agent dock tool boundary",
+  /effectiveAllowedToolNames = restrictToolNamesForInvocationSurface\(\{[\s\S]*toolNames: params\.allowedToolNames/,
+  "the member-agent dock boundary must restrict the pre-authorized tool surface",
+);
+assert.doesNotMatch(
+  runtimeLoop,
+  /buildEffectiveAllowedToolNames|buildPlatformSkillToolNamesForSelection/,
+  "skill activation must never widen the pre-authorized tool surface",
 );
 assert.match(
   runtimeLoop,

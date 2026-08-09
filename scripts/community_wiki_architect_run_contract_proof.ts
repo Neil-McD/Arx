@@ -256,25 +256,10 @@ assert.match(
   "content writer action should call the model, patch through the guarded mutation, and surface partial failures",
 );
 
-assert.match(
-  gateway,
-  /runCloudCommunityWikiArchitectProposal[\s\S]*client\.action\("communityWikiArchitect:runCommunityWikiArchitectProposal" as any/,
-  "web gateway should call the architect action",
-);
-assert.match(
-  gateway,
-  /applyCloudCommunityWikiArchitectProposal[\s\S]*client\.mutation\("communityWikiArchitect:applyCommunityWikiArchitectProposal" as any/,
-  "web gateway should expose the reviewed architect apply mutation",
-);
-assert.match(
-  gateway,
-  /draftCloudCommunityResourceContentFromSources[\s\S]*client\.action\("communityWikiArchitect:draftCommunityResourceContentFromSources" as any/,
-  "web gateway should expose the resource content writer action",
-);
 assert.doesNotMatch(
   gateway,
-  /writeCommunityResourceBuilderResource|editCommunityResourceBuilderResource/,
-  "web gateway should not expose raw architect write/edit tools in this slice",
+  /runCloudCommunityWikiArchitectProposal|applyCloudCommunityWikiArchitectProposal|draftCloudCommunityResourceContentFromSources|writeCommunityResourceBuilderResource|editCommunityResourceBuilderResource/,
+  "first-party web gateway must not expose the retired direct Wiki Architect path",
 );
 
 console.log("community_wiki_architect_run_contract_proof: ok");

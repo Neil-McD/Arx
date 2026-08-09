@@ -27,6 +27,7 @@ export type CommunityLike = {
   lifecycleStatus?: CommunityLifecycleStatus;
   lifecycleGeneration?: number;
   builderAccessMode?: CommunityBuilderAccessMode;
+  builderKnowledgeSetupPending?: boolean;
   oneLiner?: string;
   about?: string;
   avatarUrl?: string;
