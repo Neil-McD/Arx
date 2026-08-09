@@ -21,19 +21,19 @@ function exportedFunctionBlock(source: string, exportName: string): string {
 
 assert.match(
   packageJson,
-  /"check:community-agent-concierge-intake-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_agent_concierge_intake_contract_proof\.ts"/,
+  /"check:community-agent-concierge-intake-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_agent_concierge_intake_contract_proof\.ts && vitest run convex\/communityAgentConciergeCore\.test\.ts"/,
   "package scripts should expose the Concierge intake proof",
 );
 
 assert.match(
   schema,
-  /communityAgentServeRequests: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*agentKey: v\.string\(\)[\s\S]*sourceMentionId: v\.id\("communityInteractionMentions"\)[\s\S]*requesterUserId: v\.optional\(v\.id\("users"\)\)[\s\S]*sponsorUserId: v\.optional\(v\.id\("users"\)\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("queued"\)[\s\S]*v\.literal\("skipped"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("responded"\)[\s\S]*v\.literal\("error"\)[\s\S]*intakeReason: v\.union\([\s\S]*v\.literal\("accepted"\)[\s\S]*v\.literal\("requester_connection_missing"\)/,
-  "schema should include the serve request intake ledger with queued/skipped lifecycle",
+  /communityAgentServeRequests: defineTable\(\{[\s\S]*communityId: v\.id\("communities"\)[\s\S]*agentKey: v\.string\(\)[\s\S]*sourceMentionId: v\.optional\(v\.id\("communityInteractionMentions"\)\)[\s\S]*invocationKey: v\.optional\(v\.string\(\)\)[\s\S]*triggerKind: v\.optional\(v\.union\([\s\S]*v\.literal\("mention"\)[\s\S]*v\.literal\("direct_reply"\)[\s\S]*requesterUserId: v\.optional\(v\.id\("users"\)\)[\s\S]*status: v\.union\([\s\S]*v\.literal\("queued"\)[\s\S]*v\.literal\("skipped"\)[\s\S]*v\.literal\("running"\)[\s\S]*v\.literal\("responded"\)[\s\S]*v\.literal\("error"\)/,
+  "schema should include rolling-compatible source-turn admission fields and serve lifecycle",
 );
 assert.match(
   schema,
-  /communityAgentServeRequests: defineTable\([\s\S]*\.index\("by_sourceMention", \["sourceMentionId"\]\)[\s\S]*\.index\("by_status_createdAt", \["status", "createdAt"\]\)[\s\S]*\.index\("by_community_createdAt", \["communityId", "createdAt"\]\)[\s\S]*\.index\("by_requester_createdAt", \["requesterUserId", "createdAt"\]\)/,
-  "serve request table should be idempotent by source mention and queryable by status/community/requester",
+  /communityAgentServeRequests: defineTable\([\s\S]*\.index\("by_sourceMention", \["sourceMentionId"\]\)[\s\S]*\.index\("by_community_invocationKey", \["communityId", "invocationKey"\]\)[\s\S]*\.index\("by_sourceReply", \["sourceReplyId"\]\)[\s\S]*\.index\("by_requester_createdAt", \["requesterUserId", "createdAt"\]\)/,
+  "serve request table should dedupe canonical source turns while retaining legacy mention lookup",
 );
 
 const block = exportedFunctionBlock(concierge, "consumePendingCommunityAgentMentionsInternal");
@@ -44,18 +44,18 @@ assert.match(
 );
 assert.match(
   interactions,
-  /import \{ intakeCommunityAgentMention \} from "\.\/communityAgentConciergeCore"/,
+  /intakeCommunityAgentTurn,[\s\S]*from "\.\/communityAgentConciergeCore"/,
   "community interaction writes should use the shared Concierge intake core",
 );
 assert.match(
   interactions,
-  /const mentionId = await args\.ctx\.db\.insert\("communityInteractionMentions" as any,[\s\S]*if \(spec\.kind === "community_agent"\) \{[\s\S]*await intakeCommunityAgentMention\(\{[\s\S]*mention:[\s\S]*_id: mentionId[\s\S]*communityId: args\.communityId[\s\S]*mentionedAgentKey: spec\.agentKey[\s\S]*notifyState: "pending"/,
-  "community-agent mentions should be born into Concierge intake immediately after mention insert",
+  /const mentionRows = await insertCommunityInteractionMentionRows\([\s\S]*communityAgentMention = mentionRows\.communityAgentMention[\s\S]*if \(actorType === "human"\) \{[\s\S]*await intakeCommunityAgentTurn\([\s\S]*rootId: root\._id/,
+  "canonical human roots should enter source-turn admission after persistence",
 );
 assert.match(
   interactions,
-  /catch \{[\s\S]*repair cron will retry the still-pending mention/,
-  "birth-time Concierge intake should not make chat posting fragile",
+  /if \(actorType === "human"\) \{[\s\S]*await intakeCommunityAgentTurn\([\s\S]*replyId: reply\._id/,
+  "canonical human replies should enter the same source-turn admission path",
 );
 assert.match(
   block,
@@ -69,13 +69,13 @@ assert.match(
 );
 assert.match(
   conciergeCore,
-  /existingServeRequestForMention[\s\S]*query\("communityAgentServeRequests"[\s\S]*withIndex\("by_sourceMention"[\s\S]*q\.eq\("sourceMentionId", mentionId\)/,
-  "Concierge intake should lookup sourceMentionId before insert for retry idempotency",
+  /existingServeRequestForInvocation[\s\S]*withIndex\("by_community_invocationKey"[\s\S]*q\.eq\("communityId", args\.communityId\)\.eq\("invocationKey", args\.invocationKey\)[\s\S]*existingServeRequestForMention[\s\S]*withIndex\("by_sourceReply"/,
+  "Concierge intake should prefer the source-turn invocation key and fall back to rolling legacy locators",
 );
 assert.match(
   conciergeCore,
-  /agentKey: CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*sourceMentionId: args\.mention\._id/,
-  "serve request rows should bind to the canonical community agent and source mention",
+  /agentKey: CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*sourceMentionId: args\.mention\._id[\s\S]*invocationKey: args\.invocationKey[\s\S]*triggerKind: args\.triggerKind/,
+  "serve requests should bind the canonical agent to one source-turn invocation",
 );
 assert.match(
   conciergeCore,
@@ -89,8 +89,18 @@ assert.match(
 );
 assert.match(
   conciergeCore,
-  /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.mention\.communityId[\s\S]*userId: source\.requesterUserId/,
+  /requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId[\s\S]*userId: source\.requesterUserId/,
   "Concierge intake should require requester chat access at processing time",
+);
+assert.match(
+  conciergeCore,
+  /reply\?\.targetReplyId[\s\S]*target\.status === "live"[\s\S]*target\.actorType === "community_agent"[\s\S]*target\.actorAgentKey === CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*target\.communityId[\s\S]*reply\.communityId[\s\S]*target\.rootId[\s\S]*reply\.rootId[\s\S]*return "direct_reply"[\s\S]*if \(args\.mention\) return "mention"[\s\S]*!reply\.targetReplyId[\s\S]*root\?\.actorType === "community_agent"[\s\S]*root\.actorAgentKey === CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*return "direct_reply"/,
+  "admission should recognize only a live canonical-agent target, explicit mention, or an untargeted reply under a canonical agent root",
+);
+assert.doesNotMatch(
+  schema + conciergeCore,
+  /participating_thread|priorAgentReply|by_root_actor_status_seq/,
+  "admission must not wake the agent merely because it previously participated in the thread",
 );
 assert.match(
   conciergeCore,
@@ -114,7 +124,7 @@ assert.doesNotMatch(
 );
 assert.doesNotMatch(
   concierge + conciergeCore,
-  /communityInteractionReplies"[\s\S]*insert|communityInteractionRoots"[\s\S]*insert|communitySourceTraces"[\s\S]*insert|communityIntelligenceNodes|communityIntelligenceChangeRequests|communityIntelligenceMutations/,
+  /db\.insert\("communityInteractionReplies"|db\.insert\("communityInteractionRoots"|db\.insert\("communitySourceTraces"|db\.insert\("communityIntelligenceNodes"|db\.insert\("communityIntelligenceChangeRequests"|db\.insert\("communityIntelligenceMutations"/,
   "Concierge intake must not write chat replies, source traces, or memory truth",
 );
 assert.match(

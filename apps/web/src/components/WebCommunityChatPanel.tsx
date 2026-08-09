@@ -44,6 +44,10 @@ import {
 import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
 import { resolveWebCommunityChatPresentationMode } from "../controllers/resolveWebCommunityChatPresentationMode";
 import {
+  buildCommunityRootReplyTarget,
+  type WebCommunityReplyTarget as CommunityReplyTarget,
+} from "../controllers/communityRootReplyTarget";
+import {
   MentionAutocompleteMenu,
   MentionComposerHighlight,
   committedMentionFromCandidate,
@@ -65,17 +69,6 @@ type ProfileCommunityContext = SharedProfileCommunityContext;
 type CommunityMentionMember = {
   user_id?: string | null;
 };
-type CommunityReplyTarget = {
-  id: string;
-  sender_id: string;
-  body: string;
-  reply_author_label?: string | null;
-  mention_candidate?: MentionCandidate | null;
-  interaction_root_id?: string | null;
-  interaction_reply_id?: string | null;
-  legacy_message_id?: string | null;
-};
-
 type CommunityChatSendDraft = {
   text?: string;
   attachments?: CommunityMessageAttachment[];
@@ -781,19 +774,16 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       ) ?? null
     : null;
   const rootReplyTarget = useMemo<CommunityReplyTarget | null>(() => {
-    const root = selectedInteractionRootBundle?.root;
-    if (!root?.id || !root.actor_user_id) return null;
-    return {
-      id: root.legacy_message_id ?? root.id,
-      sender_id: root.actor_user_id,
-      body: root.content_summary ?? "",
-      interaction_root_id: root.id,
-      interaction_reply_id: null,
-      legacy_message_id: root.legacy_message_id ?? null,
-    };
+    return buildCommunityRootReplyTarget({
+      root: selectedInteractionRootBundle?.root,
+      communityName: activeCommunity?.name,
+    });
   }, [
+    activeCommunity?.name,
     selectedInteractionRootBundle?.root.legacy_message_id,
     selectedInteractionRootBundle?.root.actor_user_id,
+    selectedInteractionRootBundle?.root.actor_agent_key,
+    selectedInteractionRootBundle?.root.actor_type,
     selectedInteractionRootBundle?.root.id,
     selectedInteractionRootBundle?.root.content_summary,
   ]);

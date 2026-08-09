@@ -8,6 +8,7 @@ import {
 
 import type { AuthSession } from "../auth";
 import type { CommittedMention } from "../components/communityMentionAutocomplete";
+import type { WebCommunityReplyTarget } from "./communityRootReplyTarget";
 import {
   isLikelyImageFile,
   isLikelyMediaFile,
@@ -40,15 +41,6 @@ const MAX_WEB_TEXT_ATTACHMENT_BYTES = 200 * 1024;
 const MAX_WEB_IMAGE_DATA_URL_CHARS = 600_000;
 export type WebCommunityMessageAttachment = CommunityMessageAttachment & {
   file?: File | null;
-};
-
-export type WebCommunityReplyTarget = {
-  id: string;
-  sender_id: string;
-  body: string;
-  interaction_root_id?: string | null;
-  interaction_reply_id?: string | null;
-  legacy_message_id?: string | null;
 };
 
 type EnsureAuthSession = (
@@ -422,7 +414,7 @@ export function useWebCommunityChatController(
     const legacyReplyToMessageId =
       String(replySnapshot?.legacy_message_id ?? "").trim() || null;
     const canonicalReplyToMessageId =
-      interactionReplyToId ?? legacyReplyToMessageId;
+      interactionReplyToId ?? (replyRootId ? null : legacyReplyToMessageId);
     if (replySnapshot && textContainsEverybodyMentionToken(rawText)) {
       setError("@everybody can only be used in top-level community posts.");
       return;

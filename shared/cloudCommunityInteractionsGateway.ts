@@ -149,46 +149,6 @@ export type CommunityInteractionReplyBundle = {
   pending?: CommunityInteractionPendingStatus;
 };
 
-export type CommunityAgentDockEvent = {
-  id: string;
-  seq: number;
-  kind: "reasoning" | "assistant" | "tool_call" | "tool_result" | "final" | "error" | string;
-  tool_name: string | null;
-  status: string | null;
-  error_code: string | null;
-  content: string;
-  created_at: string;
-};
-
-export type CommunityAgentDockMessage = {
-  id: string;
-  actor_type: "human" | "community_agent" | string;
-  actor_agent_key: string | null;
-  text: string;
-  created_at: string;
-};
-
-export type CommunityAgentDockRequest = {
-  id: string;
-  status: "queued" | "skipped" | "running" | "responded" | "error" | string;
-  intake_reason: string;
-  attempt: number;
-  response_reply_id: string | null;
-  public_issue: { code: string; message: string } | null;
-  created_at: string;
-  updated_at: string;
-};
-
-export type CommunityAgentDockTranscript = {
-  root_id: string | null;
-  messages: CommunityAgentDockMessage[];
-};
-
-export type CommunityAgentDockTurn = {
-  request: CommunityAgentDockRequest | null;
-  events: CommunityAgentDockEvent[];
-};
-
 function coerceObjectRows<TRow>(payload: unknown, key: string): TRow[] {
   if (Array.isArray(payload)) return payload as TRow[];
   if (!payload || typeof payload !== "object") return [];
@@ -289,29 +249,6 @@ export async function createCloudCommunityInteractionComposerMessageRows<Session
     } as any,
   );
   return coerceObjectRows<TRow>(payload, "rows");
-}
-
-export async function sendCloudCommunityAgentDockMessage<SessionT>(
-  params: CloudCommunityInteractionsGatewayParams<SessionT> & {
-    communityId: string;
-    idempotencyKey: string;
-    text: string;
-  },
-): Promise<{
-  root_id: string;
-  reply_id: string;
-  serve_request_id: string | null;
-  serve_status: string;
-  intake_reason: string;
-  deduped: boolean;
-}> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  return await client.mutation("communityInteractions:sendCommunityAgentDockMessage" as any, {
-    authSubject,
-    communityId: params.communityId,
-    idempotencyKey: params.idempotencyKey,
-    text: params.text,
-  }) as any;
 }
 
 export async function toggleCloudCommunityInteractionReaction<SessionT>(
@@ -484,64 +421,6 @@ export function subscribeCloudCommunityInteractionReplies(params: {
       const result = watch.localQueryResult() as { replies?: CommunityInteractionReplyBundle[] } | undefined;
       if (typeof result === "undefined") return;
       params.onUpdate(Array.isArray(result?.replies) ? result.replies : []);
-    } catch (error) {
-      params.onError?.(error);
-    }
-  };
-  publish();
-  return watch.onUpdate(publish);
-}
-
-export function subscribeCloudCommunityAgentDockTranscript(params: {
-  liveClient: CloudCommunityChatLiveClient;
-  communityId: string;
-  onUpdate: (transcript: CommunityAgentDockTranscript) => void;
-  onError?: (error: unknown) => void;
-}): () => void {
-  const watch = params.liveClient.client.watchQuery(
-    (api as any).communityInteractions.getMyCommunityAgentDockTranscript,
-    {
-      authSubject: params.liveClient.authSubject,
-      communityId: params.communityId as any,
-    } as any,
-  );
-  const publish = () => {
-    try {
-      const result = watch.localQueryResult() as CommunityAgentDockTranscript | undefined;
-      if (typeof result === "undefined") return;
-      params.onUpdate({
-        root_id: result?.root_id ?? null,
-        messages: Array.isArray(result?.messages) ? result.messages : [],
-      });
-    } catch (error) {
-      params.onError?.(error);
-    }
-  };
-  publish();
-  return watch.onUpdate(publish);
-}
-
-export function subscribeCloudCommunityAgentDockTurn(params: {
-  liveClient: CloudCommunityChatLiveClient;
-  communityId: string;
-  onUpdate: (turn: CommunityAgentDockTurn) => void;
-  onError?: (error: unknown) => void;
-}): () => void {
-  const watch = params.liveClient.client.watchQuery(
-    (api as any).communityInteractions.getMyCommunityAgentDockTurn,
-    {
-      authSubject: params.liveClient.authSubject,
-      communityId: params.communityId as any,
-    } as any,
-  );
-  const publish = () => {
-    try {
-      const result = watch.localQueryResult() as CommunityAgentDockTurn | undefined;
-      if (typeof result === "undefined") return;
-      params.onUpdate({
-        request: result?.request ?? null,
-        events: Array.isArray(result?.events) ? result.events : [],
-      });
     } catch (error) {
       params.onError?.(error);
     }

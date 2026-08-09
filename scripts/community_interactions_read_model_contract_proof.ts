@@ -47,20 +47,15 @@ assert.match(
   /\(api as any\)\.communityInteractions\.listCommunityInteractionReplies/,
   "gateway should subscribe to replies through the canonical communityInteractions module",
 );
-assert.match(
+assert.doesNotMatch(
   gateway,
-  /\(api as any\)\.communityInteractions\.getMyCommunityAgentDockTranscript/,
-  "gateway should subscribe to the agent transcript through the canonical communityInteractions module",
-);
-assert.match(
-  gateway,
-  /\(api as any\)\.communityInteractions\.getMyCommunityAgentDockTurn/,
-  "gateway should subscribe to the agent turn through the canonical communityInteractions module",
+  /\(api as any\)\.community\.(?:listCommunityInteractionRoots|listCommunityInteractionReplies)/,
+  "gateway should not retain live subscriptions to the deleted community module surface",
 );
 assert.doesNotMatch(
   gateway,
-  /\(api as any\)\.community\.(?:listCommunityInteractionRoots|listCommunityInteractionReplies|getMyCommunityAgentDockTranscript|getMyCommunityAgentDockTurn)/,
-  "gateway should not retain live subscriptions to the deleted community module surface",
+  /CommunityAgentDock|getMyCommunityAgentDock|sendCommunityAgentDockMessage|subscribeCloudCommunityAgentDock/,
+  "the canonical interaction gateway should not expose a competing private community-agent dock",
 );
 
 assert.match(

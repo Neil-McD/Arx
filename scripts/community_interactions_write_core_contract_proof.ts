@@ -75,6 +75,11 @@ assert.match(
 );
 assert.match(
   contract,
+  /supplied reply target must resolve to a live, channel-addressable reply in the same community, channel, and root[\s\S]*stale or invalid targets fail closed[\s\S]*reply idempotency binds the resolved canonical target/,
+  "contract should document fail-closed target authorization and target-bound idempotency",
+);
+assert.match(
+  contract,
   /write paths do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously/,
   "contract should delete synchronous unfurls from interaction writes",
 );
@@ -144,6 +149,10 @@ assert.match(
 );
 
 const createComposerMessage = exportedConstBlock(interactions, "createCommunityInteractionComposerMessage");
+const canonicalReplyTargetResolver = functionBlock(
+  interactions,
+  "resolveOptionalReplyTargetForCanonicalComposer",
+);
 assert.match(
   createComposerMessage,
   /resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess[\s\S]*requireProfileSetupCompleteForUser/,
@@ -196,8 +205,13 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /resolveOptionalReplyTargetForCanonicalComposer\(\{[\s\S]*replyToMessageId: args\.replyToMessageId \?\? null/,
-  "composer reply quote targets should resolve through the same-root helper",
+  /resolveOptionalReplyTargetForCanonicalComposer\(\{[\s\S]*rootChannel,[\s\S]*replyToMessageId: args\.replyToMessageId \?\? null/,
+  "composer reply targets should resolve through the channel-aware canonical helper",
+);
+assert.match(
+  canonicalReplyTargetResolver,
+  /candidate\.status !== "live"[\s\S]*!interactionIsChannelAddressable\(candidate\)[\s\S]*candidate\.communityId[\s\S]*candidate\.rootId[\s\S]*!interactionBelongsToChannel\(candidate, args\.rootChannel\)[\s\S]*interaction_target_reply_invalid/,
+  "canonical reply targets must fail closed across status, visibility, community, root, and channel boundaries",
 );
 assert.match(
   createComposerMessage,
@@ -221,8 +235,8 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /if \([\s\S]*reply &&[\s\S]*normalizeIdValue\(reply\.rootId\) !== normalizeIdValue\(root\._id\)[\s\S]*interaction_idempotency_key_conflict/,
-  "composer reply writes should be idempotent only within the same root",
+  /if \([\s\S]*reply &&[\s\S]*normalizeIdValue\(reply\.rootId\) !== normalizeIdValue\(root\._id\)[\s\S]*normalizeIdValue\(reply\.targetReplyId\) !==[\s\S]*normalizeIdValue\(replyTarget\.targetReplyId\)[\s\S]*interaction_idempotency_key_conflict/,
+  "composer reply idempotency must bind both the root and exact canonical target",
 );
 assert.match(
   createComposerMessage,

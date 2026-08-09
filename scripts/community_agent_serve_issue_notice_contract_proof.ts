@@ -82,18 +82,18 @@ assert.doesNotMatch(
 );
 assert.match(
   issueQuery,
-  /if \(issueCode === "requester_connection_missing"\) return null/,
-  "historical requester-connection issues should be ignored without reviving BYOK authority",
-);
-assert.match(
-  issueQuery,
   /withIndex\("by_requester_community_createdAt"[\s\S]*q\.eq\("requesterUserId", userId\)\.eq\("communityId", args\.communityId\)/,
   "serve issue lookup should query by requester and community before filtering",
 );
 assert.match(
   issueQuery,
-  /row\.agentKey !== CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*row\.status !== "skipped" && row\.status !== "error"[\s\S]*requester_connection_missing[\s\S]*founder_plan_required/,
-  "serve issue lookup should inspect only canonical historical or hosted-funding issues",
+  /row\.agentKey !== CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*row\.status !== "skipped" && row\.status !== "error"[\s\S]*founder_plan_required[\s\S]*founder_subscription_inactive/,
+  "serve issue lookup should inspect only canonical hosted-funding issues",
+);
+assert.doesNotMatch(
+  concierge,
+  /requester_connection_missing|owner_credential_missing|owner_funding_suspended/,
+  "serve issue lookup should not retain obsolete BYOK-era issue states",
 );
 assert.match(
   concierge,

@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 
 import { api } from "./_generated/api";
 import schema from "./schema";
@@ -9,6 +9,11 @@ import schema from "./schema";
 const modules = import.meta.glob([
   "./communityAdmin.ts",
   "./communityBuilderKnowledgeSetup.ts",
+  "./communityInteractions.ts",
+  "./communityInteractionEvidence.ts",
+  "./communityAgentConcierge.ts",
+  "./communityAgentServeWorker.ts",
+  "./communityOnboarding.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -93,6 +98,9 @@ test("only the owner projection exposes pending Builder knowledge setup", async 
 });
 
 test("Builder knowledge completion is owner-only, active-only, and idempotent", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-09T16:00:00.000Z"));
+  try {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: "builder-knowledge-owner" });
@@ -109,9 +117,24 @@ test("Builder knowledge completion is owner-only, active-only, and idempotent", 
   await expect(asOwner.mutation(completeMutation, {
     communityId: fixture.pendingCommunityId,
   })).resolves.toMatchObject({ ok: true, changed: false });
+  await t.finishAllScheduledFunctions(() => vi.runAllTimers());
 
-  await expect(t.run(async (ctx) => await ctx.db.get(fixture.pendingCommunityId)))
-    .resolves.toMatchObject({ builderKnowledgeSetupPending: false });
+  await expect(t.run(async (ctx) => {
+    const community = await ctx.db.get(fixture.pendingCommunityId);
+    const welcomeRoots = await ctx.db
+      .query("communityInteractionRoots")
+      .withIndex("by_community_idempotencyKey", (q) => q
+        .eq("communityId", fixture.pendingCommunityId)
+        .eq(
+          "idempotencyKey",
+          `community_canonical_agent:root:founder_welcome:v1:${fixture.pendingCommunityId}`,
+        ))
+      .collect();
+    return { community, welcomeRoots };
+  })).resolves.toMatchObject({
+    community: { builderKnowledgeSetupPending: false },
+    welcomeRoots: [{ actorType: "community_agent", actorAgentKey: "community_agent" }],
+  });
 
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.legacyCommunityId, {
@@ -122,4 +145,7 @@ test("Builder knowledge completion is owner-only, active-only, and idempotent", 
   await expect(asOwner.mutation(completeMutation, {
     communityId: fixture.legacyCommunityId,
   })).rejects.toThrow("community_archived");
+  } finally {
+    vi.useRealTimers();
+  }
 });

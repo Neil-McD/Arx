@@ -12,13 +12,24 @@ const interactionProjectionController = read("apps/web/src/controllers/useWebCom
 const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const composerController = read("apps/web/src/controllers/useWebCommunityChatController.ts");
+const rootReplyTarget = read("apps/web/src/controllers/communityRootReplyTarget.ts");
 const app = read("apps/web/src/App.tsx");
 const packageJson = read("package.json");
 
 assert.match(
+  rootReplyTarget,
+  /export type WebCommunityReplyTarget = \{[\s\S]*id: string;[\s\S]*sender_id: string;[\s\S]*body: string;[\s\S]*interaction_root_id: string;[\s\S]*interaction_reply_id\?: string \| null;[\s\S]*legacy_message_id\?: string \| null;/,
+  "the canonical web reply-target type must carry explicit interaction ids",
+);
+assert.doesNotMatch(
   chatPanel,
-  /type CommunityReplyTarget = \{[\s\S]*id: string;[\s\S]*sender_id: string;[\s\S]*body: string;[\s\S]*interaction_root_id\?: string \| null;[\s\S]*interaction_reply_id\?: string \| null;[\s\S]*legacy_message_id\?: string \| null;/,
-  "drawer reply targets must carry an explicit canonical interaction reply id",
+  /type CommunityReplyTarget = \{/,
+  "the chat panel must not duplicate the canonical web reply-target type",
+);
+assert.doesNotMatch(
+  composerController,
+  /export type WebCommunityReplyTarget = \{/,
+  "the composer controller must not duplicate the canonical web reply-target type",
 );
 assert.match(
   mentionAutocomplete,
@@ -52,7 +63,7 @@ assert.equal(
 );
 assert.match(
   chatPanel,
-  /handleMentionTokenBackspace\(\{[\s\S]*mentions: communityMessageMentions,[\s\S]*applyText: onCommunityMessageInputChange,[\s\S]*setMentions: setCommunityMessageMentions,/,
+  /handleMentionTokenBackspace\(\{[\s\S]*mentions: communityMessageMentions,[\s\S]*applyText: handleMainCommunityComposerUserInput,[\s\S]*setMentions: setCommunityMessageMentions,/,
   "main community composer must select/delete committed mention tokens on Backspace",
 );
 assert.match(
@@ -81,14 +92,14 @@ assert.doesNotMatch(
   "community-agent replies must not silently no-op behind a visible Reply action",
 );
 assert.match(
-  composerController,
+  rootReplyTarget,
   /interaction_reply_id\?: string \| null;/,
   "send drafts must preserve canonical interaction reply ids",
 );
 assert.match(
   composerController,
-  /const interactionReplyToId =[\s\S]*String\(replySnapshot\?\.interaction_reply_id \?\? ""\)\.trim\(\) \|\| null;[\s\S]*const canonicalReplyToMessageId =[\s\S]*interactionReplyToId \?\? legacyReplyToMessageId;/,
-  "canonical sends should prefer the explicit interaction reply id before falling back to legacy chat ids",
+  /const interactionReplyToId =[\s\S]*String\(replySnapshot\?\.interaction_reply_id \?\? ""\)\.trim\(\) \|\| null;[\s\S]*const canonicalReplyToMessageId =[\s\S]*interactionReplyToId \?\? \(replyRootId \? null : legacyReplyToMessageId\);/,
+  "canonical sends should use explicit reply ids and never miscast a root message as a reply target",
 );
 assert.match(
   composerController,

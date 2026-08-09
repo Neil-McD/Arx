@@ -11,6 +11,7 @@ export type ServeRequestStatus = "queued" | "skipped" | "running" | "responded" 
 export type ServeRequestIntakeReason =
   | "accepted"
   | "duplicate"
+  | "not_addressed"
   | "invalid_agent"
   | "source_missing"
   | "source_not_live"
@@ -38,6 +39,7 @@ type InteractionRootRow = {
   communityId: any;
   actorType: "human" | "personal_agent" | "community_agent" | "system";
   actorUserId?: any;
+  actorAgentKey?: string;
   status: "live" | "hidden" | "deleted";
   visibilityScope: VisibilityScope;
 };
@@ -48,16 +50,23 @@ type InteractionReplyRow = {
   rootId: any;
   actorType: "human" | "personal_agent" | "community_agent" | "system";
   actorUserId?: any;
+  actorAgentKey?: string;
+  targetReplyId?: any;
+  seq: number;
   status: "live" | "hidden" | "deleted";
   visibilityScope: VisibilityScope;
 };
 
 export type ConciergeIntakeResult = {
-  mention_id: string;
-  status: "queued" | "skipped" | "duplicate";
+  mention_id: string | null;
+  invocation_key: string;
+  trigger_kind: "mention" | "direct_reply" | null;
+  status: "queued" | "skipped" | "duplicate" | "ignored";
   intake_reason: ServeRequestIntakeReason;
   request_id: string | null;
 };
+
+type CommunityAgentTriggerKind = "mention" | "direct_reply";
 
 function boundedText(raw: unknown, maxLength: number): string {
   return String(raw ?? "").trim().slice(0, maxLength);
@@ -80,6 +89,40 @@ async function existingServeRequestForMention(ctx: any, mentionId: any): Promise
     .query("communityAgentServeRequests" as any)
     .withIndex("by_sourceMention", (q: any) => q.eq("sourceMentionId", mentionId))
     .first()) as Record<string, any> | null;
+}
+
+async function existingServeRequestForInvocation(args: {
+  ctx: any;
+  communityId: any;
+  invocationKey: string;
+  mentionId?: any;
+  rootId?: any;
+  replyId?: any;
+}): Promise<Record<string, any> | null> {
+  const current = (await args.ctx.db
+    .query("communityAgentServeRequests" as any)
+    .withIndex("by_community_invocationKey", (q: any) =>
+      q.eq("communityId", args.communityId).eq("invocationKey", args.invocationKey),
+    )
+    .first()) as Record<string, any> | null;
+  if (current) return current;
+  if (args.mentionId) {
+    const historicalMentionRequest = await existingServeRequestForMention(args.ctx, args.mentionId);
+    if (historicalMentionRequest) return historicalMentionRequest;
+  }
+  if (args.replyId) {
+    return (await args.ctx.db
+      .query("communityAgentServeRequests" as any)
+      .withIndex("by_sourceReply", (q: any) => q.eq("sourceReplyId", args.replyId))
+      .first()) as Record<string, any> | null;
+  }
+  if (!args.rootId) return null;
+  const rootRequests = (await args.ctx.db
+    .query("communityAgentServeRequests" as any)
+    .withIndex("by_sourceRoot_createdAt", (q: any) => q.eq("sourceRootId", args.rootId))
+    .order("asc")
+    .take(10)) as Array<Record<string, any>>;
+  return rootRequests.find((row) => !row.sourceReplyId) ?? null;
 }
 
 async function settleMentionFromServeRequest(args: {
@@ -117,7 +160,10 @@ async function scheduleImmediateServeWorker(args: {
 
 async function insertServeRequest(args: {
   ctx: any;
-  mention: ConciergeMentionRow;
+  communityId: any;
+  invocationKey: string;
+  triggerKind: CommunityAgentTriggerKind;
+  mention?: ConciergeMentionRow;
   status: ServeRequestStatus;
   intakeReason: ServeRequestIntakeReason;
   sourceRootId?: any;
@@ -138,9 +184,11 @@ async function insertServeRequest(args: {
     }
   }
   return await args.ctx.db.insert("communityAgentServeRequests" as any, {
-    communityId: args.mention.communityId,
+    communityId: args.communityId,
     agentKey: CANONICAL_COMMUNITY_AGENT_KEY,
-    sourceMentionId: args.mention._id,
+    ...(args.mention ? { sourceMentionId: args.mention._id } : {}),
+    invocationKey: args.invocationKey,
+    triggerKind: args.triggerKind,
     ...(args.sourceRootId ? { sourceRootId: args.sourceRootId } : {}),
     ...(args.sourceReplyId ? { sourceReplyId: args.sourceReplyId } : {}),
     ...(args.requesterUserId ? { requesterUserId: args.requesterUserId, sponsorUserId } : {}),
@@ -154,9 +202,12 @@ async function insertServeRequest(args: {
   });
 }
 
-async function skipMention(args: {
+async function skipInvocation(args: {
   ctx: any;
-  mention: ConciergeMentionRow;
+  communityId: any;
+  invocationKey: string;
+  triggerKind: CommunityAgentTriggerKind;
+  mention?: ConciergeMentionRow;
   intakeReason: Exclude<ServeRequestIntakeReason, "accepted">;
   sourceRootId?: any;
   sourceReplyId?: any;
@@ -168,6 +219,9 @@ async function skipMention(args: {
 }): Promise<{ status: "skipped"; intake_reason: ServeRequestIntakeReason; request_id: string }> {
   const requestId = await insertServeRequest({
     ctx: args.ctx,
+    communityId: args.communityId,
+    invocationKey: args.invocationKey,
+    triggerKind: args.triggerKind,
     mention: args.mention,
     status: "skipped",
     intakeReason: args.intakeReason,
@@ -179,12 +233,14 @@ async function skipMention(args: {
     skipReason: args.skipReason,
     nowMs: args.nowMs,
   });
-  await settleMentionFromServeRequest({
-    ctx: args.ctx,
-    mention: args.mention,
-    status: "skipped",
-    nowMs: args.nowMs,
-  });
+  if (args.mention) {
+    await settleMentionFromServeRequest({
+      ctx: args.ctx,
+      mention: args.mention,
+      status: "skipped",
+      nowMs: args.nowMs,
+    });
+  }
   return {
     status: "skipped",
     intake_reason: args.intakeReason,
@@ -192,7 +248,22 @@ async function skipMention(args: {
   };
 }
 
-async function resolveMentionSource(ctx: any, mention: ConciergeMentionRow): Promise<{
+function invocationKeyForSource(args: {
+  rootId?: any;
+  replyId?: any;
+  mentionId?: any;
+}): string {
+  if (args.replyId) return `community_agent_turn:reply:${normalizeIdValue(args.replyId)}`;
+  if (args.rootId) return `community_agent_turn:root:${normalizeIdValue(args.rootId)}`;
+  return `community_agent_turn:mention:${normalizeIdValue(args.mentionId)}`;
+}
+
+async function resolveInvocationSource(args: {
+  ctx: any;
+  communityId: any;
+  rootId?: any;
+  replyId?: any;
+}): Promise<{
   root: InteractionRootRow | null;
   reply: InteractionReplyRow | null;
   sourceRootId?: any;
@@ -201,13 +272,17 @@ async function resolveMentionSource(ctx: any, mention: ConciergeMentionRow): Pro
   requesterUserId?: any;
   visibilityScope?: VisibilityScope;
 }> {
-  if (mention.replyId) {
-    const reply = (await ctx.db.get(mention.replyId as any)) as InteractionReplyRow | null;
-    if (!reply || normalizeIdValue(reply.communityId) !== normalizeIdValue(mention.communityId)) {
+  if (args.replyId) {
+    const reply = (await args.ctx.db.get(args.replyId as any)) as InteractionReplyRow | null;
+    if (!reply || normalizeIdValue(reply.communityId) !== normalizeIdValue(args.communityId)) {
       return { root: null, reply: null };
     }
-    const root = (await ctx.db.get(reply.rootId as any)) as InteractionRootRow | null;
-    if (!root || normalizeIdValue(root.communityId) !== normalizeIdValue(mention.communityId)) {
+    const root = (await args.ctx.db.get(reply.rootId as any)) as InteractionRootRow | null;
+    if (
+      !root ||
+      normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId) ||
+      (args.rootId && normalizeIdValue(root._id) !== normalizeIdValue(args.rootId))
+    ) {
       return { root: null, reply };
     }
     return {
@@ -220,9 +295,9 @@ async function resolveMentionSource(ctx: any, mention: ConciergeMentionRow): Pro
       visibilityScope: reply.visibilityScope,
     };
   }
-  if (mention.rootId) {
-    const root = (await ctx.db.get(mention.rootId as any)) as InteractionRootRow | null;
-    if (!root || normalizeIdValue(root.communityId) !== normalizeIdValue(mention.communityId)) {
+  if (args.rootId) {
+    const root = (await args.ctx.db.get(args.rootId as any)) as InteractionRootRow | null;
+    if (!root || normalizeIdValue(root.communityId) !== normalizeIdValue(args.communityId)) {
       return { root: null, reply: null };
     }
     return {
@@ -237,21 +312,72 @@ async function resolveMentionSource(ctx: any, mention: ConciergeMentionRow): Pro
   return { root: null, reply: null };
 }
 
-export async function intakeCommunityAgentMention(args: {
+async function resolveTriggerKind(args: {
   ctx: any;
-  mention: ConciergeMentionRow;
+  source: Awaited<ReturnType<typeof resolveInvocationSource>>;
+  mention?: ConciergeMentionRow;
+}): Promise<CommunityAgentTriggerKind | null> {
+  const { root, reply } = args.source;
+  if (reply?.targetReplyId) {
+    const target = (await args.ctx.db.get(reply.targetReplyId as any)) as InteractionReplyRow | null;
+    if (
+      target &&
+      target.status === "live" &&
+      target.actorType === "community_agent" &&
+      target.actorAgentKey === CANONICAL_COMMUNITY_AGENT_KEY &&
+      normalizeIdValue(target.communityId) === normalizeIdValue(reply.communityId) &&
+      normalizeIdValue(target.rootId) === normalizeIdValue(reply.rootId)
+    ) {
+      return "direct_reply";
+    }
+  }
+  if (args.mention) return "mention";
+  if (
+    reply &&
+    !reply.targetReplyId &&
+    root?.actorType === "community_agent" &&
+    root.actorAgentKey === CANONICAL_COMMUNITY_AGENT_KEY
+  ) {
+    return "direct_reply";
+  }
+  return null;
+}
+
+export async function intakeCommunityAgentTurn(args: {
+  ctx: any;
+  communityId: any;
+  rootId?: any;
+  replyId?: any;
+  mention?: ConciergeMentionRow;
   nowMs: number;
 }): Promise<ConciergeIntakeResult> {
-  const existing = await existingServeRequestForMention(args.ctx, args.mention._id);
+  const mentionId = args.mention?._id;
+  const invocationKey = invocationKeyForSource({
+    rootId: args.rootId ?? args.mention?.rootId,
+    replyId: args.replyId ?? args.mention?.replyId,
+    mentionId,
+  });
+  const existing = await existingServeRequestForInvocation({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    invocationKey,
+    mentionId,
+    rootId: args.rootId ?? args.mention?.rootId,
+    replyId: args.replyId ?? args.mention?.replyId,
+  });
   if (existing) {
-    await settleMentionFromServeRequest({
-      ctx: args.ctx,
-      mention: args.mention,
-      status: existing.status,
-      nowMs: args.nowMs,
-    });
+    if (args.mention) {
+      await settleMentionFromServeRequest({
+        ctx: args.ctx,
+        mention: args.mention,
+        status: existing.status,
+        nowMs: args.nowMs,
+      });
+    }
     return {
-      mention_id: normalizeIdValue(args.mention._id),
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: existing.triggerKind ?? (args.mention ? "mention" : null),
       status: "duplicate",
       intake_reason: "duplicate",
       request_id: normalizeIdValue(existing._id),
@@ -259,33 +385,73 @@ export async function intakeCommunityAgentMention(args: {
   }
 
   if (
-    args.mention.mentionKind !== "community_agent" ||
-    args.mention.mentionedAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY
+    args.mention &&
+    (args.mention.mentionKind !== "community_agent" ||
+      args.mention.mentionedAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY)
   ) {
-    const skipped = await skipMention({
+    const skipped = await skipInvocation({
       ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind: "mention",
       mention: args.mention,
       intakeReason: "invalid_agent",
       skipReason: "Only the canonical community agent can be served by Concierge intake.",
       nowMs: args.nowMs,
     });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+    return {
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: "mention",
+      ...skipped,
+    };
   }
 
-  const source = await resolveMentionSource(args.ctx, args.mention);
+  const source = await resolveInvocationSource({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    rootId: args.rootId ?? args.mention?.rootId,
+    replyId: args.replyId ?? args.mention?.replyId,
+  });
+  const triggerKind = await resolveTriggerKind({
+    ctx: args.ctx,
+    source,
+    mention: args.mention,
+  });
   if (!source.root && !source.reply) {
-    const skipped = await skipMention({
+    const skipped = await skipInvocation({
       ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind: triggerKind ?? "mention",
       mention: args.mention,
       intakeReason: "source_missing",
       skipReason: "The mentioned interaction no longer exists.",
       nowMs: args.nowMs,
     });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+    return {
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: triggerKind,
+      ...skipped,
+    };
+  }
+  if (!triggerKind) {
+    return {
+      mention_id: null,
+      invocation_key: invocationKey,
+      trigger_kind: null,
+      status: "ignored",
+      intake_reason: "not_addressed",
+      request_id: null,
+    };
   }
   if (source.root?.status !== "live" || (source.reply && source.reply.status !== "live")) {
-    const skipped = await skipMention({
+    const skipped = await skipInvocation({
       ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind,
       mention: args.mention,
       intakeReason: "source_not_live",
       sourceRootId: source.sourceRootId,
@@ -296,11 +462,19 @@ export async function intakeCommunityAgentMention(args: {
       skipReason: "The mentioned interaction is not live.",
       nowMs: args.nowMs,
     });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+    return {
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: triggerKind,
+      ...skipped,
+    };
   }
   if (source.actorType !== "human") {
-    const skipped = await skipMention({
+    const skipped = await skipInvocation({
       ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind,
       mention: args.mention,
       intakeReason: "source_not_human",
       sourceRootId: source.sourceRootId,
@@ -311,11 +485,19 @@ export async function intakeCommunityAgentMention(args: {
       skipReason: "Concierge intake only serves human-authored mentions.",
       nowMs: args.nowMs,
     });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+    return {
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: triggerKind,
+      ...skipped,
+    };
   }
   if (!source.requesterUserId) {
-    const skipped = await skipMention({
+    const skipped = await skipInvocation({
       ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind,
       mention: args.mention,
       intakeReason: "requester_missing",
       sourceRootId: source.sourceRootId,
@@ -325,17 +507,25 @@ export async function intakeCommunityAgentMention(args: {
       skipReason: "The mention author could not be resolved.",
       nowMs: args.nowMs,
     });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+    return {
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: triggerKind,
+      ...skipped,
+    };
   }
   try {
     await requireCommunityChatAccess({
       ctx: args.ctx,
-      communityId: args.mention.communityId,
+      communityId: args.communityId,
       userId: source.requesterUserId,
     });
   } catch {
-    const skipped = await skipMention({
+    const skipped = await skipInvocation({
       ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind,
       mention: args.mention,
       intakeReason: "requester_access_missing",
       sourceRootId: source.sourceRootId,
@@ -346,12 +536,20 @@ export async function intakeCommunityAgentMention(args: {
       skipReason: "The mention author no longer has community chat access.",
       nowMs: args.nowMs,
     });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+    return {
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: triggerKind,
+      ...skipped,
+    };
   }
-  const config = await latestCommunityAgentConfig(args.ctx, args.mention.communityId);
+  const config = await latestCommunityAgentConfig(args.ctx, args.communityId);
   if (config?.agentEnabled === false) {
-    const skipped = await skipMention({
+    const skipped = await skipInvocation({
       ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind,
       mention: args.mention,
       intakeReason: "agent_disabled",
       sourceRootId: source.sourceRootId,
@@ -362,18 +560,26 @@ export async function intakeCommunityAgentMention(args: {
       skipReason: "The community agent is disabled by the owner.",
       nowMs: args.nowMs,
     });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+    return {
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: triggerKind,
+      ...skipped,
+    };
   }
   const funding = await resolveCommunityInferenceFundingAdmission(
     args.ctx,
-    args.mention.communityId,
+    args.communityId,
   );
   if (funding.ok === false) {
     const intakeReason = funding.code === "community_not_found"
       ? "source_missing"
       : funding.code;
-    const skipped = await skipMention({
+    const skipped = await skipInvocation({
       ctx: args.ctx,
+      communityId: args.communityId,
+      invocationKey,
+      triggerKind,
       mention: args.mention,
       intakeReason,
       sourceRootId: source.sourceRootId,
@@ -388,10 +594,18 @@ export async function intakeCommunityAgentMention(args: {
             : "Community inference funding could not be resolved.",
       nowMs: args.nowMs,
     });
-    return { mention_id: normalizeIdValue(args.mention._id), ...skipped };
+    return {
+      mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+      invocation_key: invocationKey,
+      trigger_kind: triggerKind,
+      ...skipped,
+    };
   }
   const requestId = await insertServeRequest({
     ctx: args.ctx,
+    communityId: args.communityId,
+    invocationKey,
+    triggerKind,
     mention: args.mention,
     status: "queued",
     intakeReason: "accepted",
@@ -402,20 +616,39 @@ export async function intakeCommunityAgentMention(args: {
     responseVisibilityScope: source.visibilityScope,
     nowMs: args.nowMs,
   });
-  await settleMentionFromServeRequest({
-    ctx: args.ctx,
-    mention: args.mention,
-    status: "queued",
-    nowMs: args.nowMs,
-  });
+  if (args.mention) {
+    await settleMentionFromServeRequest({
+      ctx: args.ctx,
+      mention: args.mention,
+      status: "queued",
+      nowMs: args.nowMs,
+    });
+  }
   await scheduleImmediateServeWorker({
     ctx: args.ctx,
     requestId,
   });
   return {
-    mention_id: normalizeIdValue(args.mention._id),
+    mention_id: mentionId ? normalizeIdValue(mentionId) : null,
+    invocation_key: invocationKey,
+    trigger_kind: triggerKind,
     status: "queued",
     intake_reason: "accepted",
     request_id: normalizeIdValue(requestId),
   };
+}
+
+export async function intakeCommunityAgentMention(args: {
+  ctx: any;
+  mention: ConciergeMentionRow;
+  nowMs: number;
+}): Promise<ConciergeIntakeResult> {
+  return await intakeCommunityAgentTurn({
+    ctx: args.ctx,
+    communityId: args.mention.communityId,
+    rootId: args.mention.rootId,
+    replyId: args.mention.replyId,
+    mention: args.mention,
+    nowMs: args.nowMs,
+  });
 }

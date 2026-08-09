@@ -1737,13 +1737,13 @@ Concierge intake ledger turns community-agent mentions into auditable serve
 requests at birth-time intake:
 
 ```txt
-human mentions the community agent in community chat
-  -> interaction root/reply is created
-  -> communityInteractionMentions[pending, community_agent] is created
+human creates a canonical community root/reply
+  -> classify the source turn: explicit mention, direct agent target, or ignore
+  -> explicit mentions also create communityInteractionMentions[pending, community_agent]
   -> validate source and requester
   -> require requester access and resolve community funding
-  -> insert communityAgentServeRequests
-  -> settle mention as sent or suppressed
+  -> insert one communityAgentServeRequests row for the source turn
+  -> settle any mention as sent or suppressed
 ```
 
 The cron is only a repair drain:
@@ -1767,15 +1767,25 @@ Rules:
   - `suppressed` = intake rejected/skipped it deterministically
   - `read` = user-mention lifecycle only
 - The serve lifecycle itself lives in `communityAgentServeRequests`, not in `notifyState`.
-- Fresh `community_agent` mentions are born into intake immediately after the mention row is inserted.
+- Fresh human-authored roots and replies enter one source-turn intake after the
+  canonical interaction exists. An explicit mention and direct agent target are
+  signals for that same intake, not separate jobs. A direct agent target is
+  either `targetReplyId` pointing to a live reply authored by the canonical
+  community-agent identity or an untargeted reply under a root authored by
+  that canonical identity. Targeting a human,
+  a general comment under a human-authored root, or prior agent participation
+  elsewhere in the thread does not invoke the agent without an explicit mention.
 - The bounded cron consumes only leftover pending canonical `community_agent` mentions as a repair drain, not as the primary product path.
-- `sourceMentionId` is the idempotency key; retries must lookup before insert.
+- `invocationKey` identifies the canonical source root or reply and is the
+  idempotency key across all qualifying signals. `sourceMentionId` remains an
+  optional audit pointer and rolling-deploy fallback for historical requests.
 - Accepted requests require a live human-authored source interaction, current
   requester chat access, enabled community agent config, and active community
   hosted-inference authority.
 - Source and response visibility scopes are captured at intake so the future response path cannot guess or widen the boundary.
 - Skipped requests are recorded with machine-readable `intakeReason`; no tokens are spent for skipped intake.
-- Unexpected birth-time intake errors must not fail the chat write; the mention remains pending for the repair drain.
+- Immediate worker scheduling failure must not fail the chat write; the durable
+  queued request remains available to the repair worker.
 
 ## Twenty-Fifth Implementation Slice: Concierge Serve Worker v0
 
@@ -1785,8 +1795,9 @@ memory authority.
 ```txt
 communityAgentServeRequests[queued, accepted]
   -> schedule immediate serve worker for that request
-  -> claim request
-  -> load same-community source thread
+  -> claim request with attempt N and an explicit lease
+  -> compile one bounded, requester-readable multi-party thread context
+  -> persist the exact attempt-scoped provider context snapshot
   -> authorize one privacy-bounded funding receipt
   -> run GPT 5.6 Luna through the community's canonical owner funding authority
   -> insert one community-agent reply in that source thread
@@ -1797,7 +1808,9 @@ Rules:
 
 - This slice is serve only: it does not write source traces, compiler digests,
   directory nodes, directory edges, change requests, mutations, retrieval logs,
-  outcomes, or community-agent runs.
+  outcomes, or autonomous `communityAgentRuns`. It writes only the bounded
+  attempt-scoped `context_snapshot` and existing model/tool/final audit events
+  under `communityAgentRunEvents`.
 - The worker keeps three identities separate: requester/sponsor for access and tools,
   canonical community agent for the response identity, and current community owner
   for payment authority. `sponsorUserId` must equal `requesterUserId`; the owner
@@ -1845,10 +1858,37 @@ Rules:
   instructions field in the AI Agent settings. These instructions shape the
   answer, but do not grant builder authority or override the serve/security
   rules above.
+- The source thread is compiled from canonical `communityInteractionRoots` and
+  flat `communityInteractionReplies`. For a reply source, the cutoff is the
+  source reply sequence: future replies are never included. The root, source
+  mention, and readable `targetReplyId` are retained under deterministic turn,
+  participant, per-item, and total-character bounds.
+- Every included turn is independently checked for current requester
+  readability. Hidden, deleted, cross-thread, cross-channel, future, or
+  unauthorized turns are omitted. The prompt preserves chronological speaker
+  identity and flat reply relationships without creating another conversation
+  store or nested-thread model.
+- Human participant enrichment reuses canonical profile uniqueness, active
+  community membership, role, approved platform profile spine, and the exact
+  community's `member_orientation` fact lens. It never uses the wider `self`
+  lens and never exposes auth, email, billing, provider, other-community,
+  pending, rejected, retracted, observed-behavior, or agent-internal context.
+  A departed participant's historical speech remains, but their profile
+  enrichment is omitted.
+- Participant orientation and thread turns are explicitly delimited as
+  untrusted context. The compiled packet includes server capture time and the
+  requester's timezone when available; it is the only thread packet passed to
+  the provider.
+- Before any funding receipt is claimed or provider call can begin, the worker
+  must persist the exact initial provider messages as
+  `communityAgentRunEvents.kind = context_snapshot` at sequence zero. This
+  write rechecks the running attempt, requester access, live source, and source
+  visibility. Snapshot conflicts fail closed; later reasoning/tool/final audit
+  events begin at sequence one. Retries receive distinct attempt-scoped run IDs.
 - The response is always a reply in the source thread:
-  - if the mention source is a root post, insert `communityInteractionReplies`
+  - if the source is a root post, insert `communityInteractionReplies`
     under that root
-  - if the mention source is a reply, insert `communityInteractionReplies`
+  - if the source is a reply, insert `communityInteractionReplies`
     under that root with `targetReplyId = sourceReplyId`
   - never create `communityInteractionRoots`
 - Reply visibility is no wider than the captured response scope and current
@@ -1860,8 +1900,30 @@ Rules:
   and finalization time.
 - Only live, same-community source roots/replies can be answered.
 - Reply insertion is idempotent by `community_agent_serve:<requestId>`.
-- Stale `running` serve requests can be retried; idempotent finalization
-  prevents duplicate visible answers.
+- One addressed source turn creates one logical serve request, one request-scoped inference
+  receipt, and at most one visible reply. Attempts are process recovery for
+  that same turn; a new user turn requires a new explicit mention or direct
+  agent target.
+- Claims store an explicit `leaseExpiresAt` and an incrementing `attempt`.
+- The serve lease exceeds the maximum Convex-runtime action duration by a
+  positive recovery grace window. Recovery therefore cannot fence an original
+  provider-started action while that action can still settle and publish its
+  canonical reply.
+  Context reads, failure transitions, and reply finalization require the exact
+  claiming attempt, so an expired worker cannot mutate a newer attempt.
+- Expired running requests are found through the `status + leaseExpiresAt`
+  index and reclaimed directly without a transient queued state. Recovery is
+  bounded to three total claims; exhausted requests become terminal errors.
+- The inference receipt key remains request-scoped across attempts. Provider
+  outcome settlement may complete for a stale attempt, but the attempt fence
+  still prevents that attempt from changing request state or materializing a
+  reply. Provider-start ambiguity is terminal and never authorizes an
+  automatic second spend.
+- `responded`, `error`, and `skipped` are terminal. Provider errors are not
+  silently retried; the member must make a new explicitly addressed turn.
+- Sending an accepted addressed turn invokes it. Editing the source does not
+  retract an accepted request. Deleting or hiding the source before
+  finalization fails closed through the live-source recheck.
 - The cron is a bounded worker. It processes a small number of queued requests
   per tick and leaves product truth in `communityAgentServeRequests`.
 - Serve is event-driven primary, cron-repaired secondary. Fresh accepted

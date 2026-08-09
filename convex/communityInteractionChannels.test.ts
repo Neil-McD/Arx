@@ -100,7 +100,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       slug: "custom",
       position: 1,
     });
-    await insertChannel({
+    const otherGeneralChannelId = await insertChannel({
       communityId: otherCommunityId,
       slug: "general",
       position: 0,
@@ -113,9 +113,11 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
     });
     return {
       communityId,
+      otherCommunityId,
       ownerId,
       generalChannelId,
       customChannelId,
+      otherGeneralChannelId,
       otherChannelId,
     };
   });
@@ -254,4 +256,194 @@ test("composer, feeds, idempotency, and replies preserve exact channel ownership
         item.channel_slug === "custom",
     ),
   ).toBe(true);
+});
+
+test("reply targets fail closed and idempotency binds exact addressing", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+
+  const rootWrite = await asOwner.mutation(
+    api.communityInteractions.createCommunityInteractionComposerMessage,
+    {
+      communityId: fixture.communityId,
+      channelId: fixture.customChannelId,
+      idempotencyKey: "target-root",
+      text: "Target root",
+    },
+  );
+  const rootId = rootWrite.interaction.root_id as any;
+  const firstReplyWrite = await asOwner.mutation(
+    api.communityInteractions.createCommunityInteractionComposerMessage,
+    {
+      communityId: fixture.communityId,
+      channelId: fixture.customChannelId,
+      rootId,
+      idempotencyKey: "target-first-reply",
+      text: "First reply",
+    },
+  );
+  const firstReplyId = firstReplyWrite.interaction.reply_id as string;
+
+  const addressedArgs = {
+    communityId: fixture.communityId,
+    channelId: fixture.customChannelId,
+    rootId,
+    replyToMessageId: firstReplyId,
+    idempotencyKey: "target-addressed-reply",
+    text: "Addressed reply",
+  };
+  const addressed = await asOwner.mutation(
+    api.communityInteractions.createCommunityInteractionComposerMessage,
+    addressedArgs,
+  );
+  expect(addressed.interaction.deduped).toBe(false);
+  const addressedRetry = await asOwner.mutation(
+    api.communityInteractions.createCommunityInteractionComposerMessage,
+    addressedArgs,
+  );
+  expect(addressedRetry.interaction.deduped).toBe(true);
+
+  const replies = await asOwner.query(
+    api.communityInteractions.listCommunityInteractionReplies,
+    { rootId },
+  );
+  expect(
+    replies.replies.find(
+      (bundle: any) =>
+        bundle.reply.id === String(addressed.interaction.reply_id),
+    )?.reply.target_reply_id,
+  ).toBe(firstReplyId);
+
+  await expect(
+    asOwner.mutation(
+      api.communityInteractions.createCommunityInteractionComposerMessage,
+      { ...addressedArgs, replyToMessageId: null },
+    ),
+  ).rejects.toThrow("interaction_idempotency_key_conflict");
+  await expect(
+    asOwner.mutation(
+      api.communityInteractions.createCommunityInteractionComposerMessage,
+      {
+        ...addressedArgs,
+        idempotencyKey: "target-missing-reply",
+        replyToMessageId: "not-a-canonical-or-legacy-reply",
+      },
+    ),
+  ).rejects.toThrow("interaction_target_reply_invalid");
+
+  const otherRootWrite = await asOwner.mutation(
+    api.communityInteractions.createCommunityInteractionComposerMessage,
+    {
+      communityId: fixture.communityId,
+      channelId: fixture.customChannelId,
+      idempotencyKey: "target-other-root",
+      text: "Other root",
+    },
+  );
+  const otherRootId = otherRootWrite.interaction.root_id as any;
+  const otherReplyWrite = await asOwner.mutation(
+    api.communityInteractions.createCommunityInteractionComposerMessage,
+    {
+      communityId: fixture.communityId,
+      channelId: fixture.customChannelId,
+      rootId: otherRootId,
+      idempotencyKey: "target-other-root-reply",
+      text: "Other root reply",
+    },
+  );
+  await expect(
+    asOwner.mutation(
+      api.communityInteractions.createCommunityInteractionComposerMessage,
+      {
+        ...addressedArgs,
+        idempotencyKey: "target-cross-root",
+        replyToMessageId: String(otherReplyWrite.interaction.reply_id),
+      },
+    ),
+  ).rejects.toThrow("interaction_target_reply_invalid");
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(firstReplyId as any, { status: "hidden" });
+  });
+  await expect(
+    asOwner.mutation(
+      api.communityInteractions.createCommunityInteractionComposerMessage,
+      {
+        ...addressedArgs,
+        idempotencyKey: "target-hidden-reply",
+      },
+    ),
+  ).rejects.toThrow("interaction_target_reply_invalid");
+
+  const malformedChannelReplyId = await t.run(async (ctx) =>
+    await ctx.db.insert("communityInteractionReplies", {
+      communityId: fixture.communityId,
+      channelId: fixture.generalChannelId,
+      rootId,
+      seq: 99,
+      actorType: "human",
+      actorUserId: fixture.ownerId,
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Wrong channel",
+      reactionSummary: [],
+      idempotencyKey: "malformed-channel-reply",
+      createdAt: 1_780_000_000_100,
+      updatedAt: 1_780_000_000_100,
+    }),
+  );
+  await expect(
+    asOwner.mutation(
+      api.communityInteractions.createCommunityInteractionComposerMessage,
+      {
+        ...addressedArgs,
+        idempotencyKey: "target-cross-channel",
+        replyToMessageId: String(malformedChannelReplyId),
+      },
+    ),
+  ).rejects.toThrow("interaction_target_reply_invalid");
+
+  const foreignReplyId = await t.run(async (ctx) => {
+    const foreignRootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.otherCommunityId,
+      channelId: fixture.otherGeneralChannelId,
+      actorType: "human",
+      actorUserId: fixture.ownerId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Foreign root",
+      replyCount: 1,
+      reactionSummary: [],
+      idempotencyKey: "foreign-root",
+      createdAt: 1_780_000_000_200,
+      updatedAt: 1_780_000_000_200,
+    });
+    return await ctx.db.insert("communityInteractionReplies", {
+      communityId: fixture.otherCommunityId,
+      channelId: fixture.otherGeneralChannelId,
+      rootId: foreignRootId,
+      seq: 1,
+      actorType: "human",
+      actorUserId: fixture.ownerId,
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Foreign reply",
+      reactionSummary: [],
+      idempotencyKey: "foreign-reply",
+      createdAt: 1_780_000_000_201,
+      updatedAt: 1_780_000_000_201,
+    });
+  });
+  await expect(
+    asOwner.mutation(
+      api.communityInteractions.createCommunityInteractionComposerMessage,
+      {
+        ...addressedArgs,
+        idempotencyKey: "target-cross-community",
+        replyToMessageId: String(foreignReplyId),
+      },
+    ),
+  ).rejects.toThrow("interaction_target_reply_invalid");
 });

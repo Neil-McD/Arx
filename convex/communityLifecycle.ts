@@ -57,6 +57,9 @@ import {
   requireFounderStripePriceIdFromEnv,
 } from "./founderPlanPricing";
 import { hasPlatformOwnerComplimentaryAccess } from "./operatorEntitlementsCore";
+import {
+  communityFounderWelcomeIdempotencyKey,
+} from "../shared/communityFounderWelcome";
 
 const COMMUNITY_DELETION_QUARANTINE_CODE =
   "community_delete_lifecycle_migration_blocked" as const;
@@ -632,6 +635,16 @@ export const createCommunity = mutation({
       baselineAt: nowMs,
     });
     await ensureGeneralChannel({ ctx, communityId, nowMs });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.communityInteractions.createCommunityAgentCanonicalInteractionInternal,
+      {
+        userId: ownerId,
+        communityId,
+        idempotencyKey: communityFounderWelcomeIdempotencyKey(communityId),
+        founderBootstrap: true,
+      },
+    );
     const created = (await ctx.db.get(communityId)) as CommunityLike | null;
     if (!created) throw new Error("community_create_failed");
     return await mapCommunityRecord(ctx, created);

@@ -405,7 +405,10 @@ Rules:
 - duplicate root writes return the existing root bundle only when actor, content, and channel still match
 - duplicate reply writes return the existing reply bundle when the key belongs to the same root
 - reply writes create a flat one-level drawer under the root
-- `replyToMessageId` is quote/context only and must resolve inside the same root when present
+- `replyToMessageId` must resolve inside the same root and persists as the flat
+  `targetReplyId` address/context pointer; it never creates nested persistence.
+  The community-agent conversation contract may use that pointer as explicit
+  direct-address evidence.
 - composer text is normalized into typed canonical content blocks before storage
 - link blocks create pending `communityInteractionEmbeds`
 - user mentions are capped, deduped, resolved to existing users, and must pass community chat access
@@ -496,6 +499,9 @@ Rules:
 - the mutation returns an empty legacy `rows` array; canonical projection completion depends on canonical mutation success and idempotency-key reconciliation
 - pending canonical projection overlays reconcile by canonical idempotency keys, not legacy chat row replacement
 - drawer replies require a canonical `rootId`; optional reply targets may resolve through canonical reply ids or pre-existing legacy links
+- a supplied reply target must resolve to a live, channel-addressable reply in the same community, channel, and root; stale or invalid targets fail closed and never degrade into untargeted replies
+- reply idempotency binds the resolved canonical target, so a retry cannot silently change who was addressed
+- legacy root-message ids explicitly mean an untargeted reply under that root during rolling compatibility; new canonical root replies omit `replyToMessageId`
 - canonical projection reply targets without a canonical `rootId` fail closed instead of falling back to legacy sends
 - legacy timeline replies stay on `createThreadUserMessage`
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`
@@ -512,6 +518,7 @@ Rules:
 - composer writes may create pending link embed records from eligible pasted URLs
 - unsafe or unsupported URLs remain as plain message text and do not create fetchable preview embeds
 - eligible preview URLs must pass the shared community source URL policy before storage and again before enrichment
+- returned preview image URLs must pass the same shared community source URL policy or be omitted
 - preview URLs must be HTTPS, public-shaped, credential-free, custom-port-free, hashless, and not local/private/reserved/metadata/internal-shaped hosts
 - Convex never fetches the user-provided source URL directly
 - the internal enrichment action may only POST bounded requests to the configured first-party source URL fetcher endpoint

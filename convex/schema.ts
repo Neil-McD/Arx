@@ -1952,7 +1952,13 @@ export default defineSchema({
   communityAgentServeRequests: defineTable({
     communityId: v.id("communities"),
     agentKey: v.string(),
-    sourceMentionId: v.id("communityInteractionMentions"),
+    // Rolling-compatible: historical requests were keyed only by mention.
+    sourceMentionId: v.optional(v.id("communityInteractionMentions")),
+    invocationKey: v.optional(v.string()),
+    triggerKind: v.optional(v.union(
+      v.literal("mention"),
+      v.literal("direct_reply"),
+    )),
     sourceRootId: v.optional(v.id("communityInteractionRoots")),
     sourceReplyId: v.optional(v.id("communityInteractionReplies")),
     requesterUserId: v.optional(v.id("users")),
@@ -1974,10 +1980,10 @@ export default defineSchema({
       v.literal("requester_missing"),
       v.literal("requester_access_missing"),
       v.literal("agent_disabled"),
-      v.literal("requester_connection_missing"),
-      v.literal("owner_credential_missing"),
-      v.literal("owner_funding_suspended"),
       v.literal("founder_plan_required"),
+      v.literal("founder_subscription_inactive"),
+      v.literal("founder_subscription_ambiguous"),
+      v.literal("founder_subscription_owner_mismatch"),
     ),
     sourceVisibilityScope: v.optional(
       v.union(
@@ -2003,14 +2009,18 @@ export default defineSchema({
     skipReason: v.optional(v.string()),
     errorCode: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
     respondedAt: v.optional(v.number()),
   })
     .index("by_sourceMention", ["sourceMentionId"])
+    .index("by_community_invocationKey", ["communityId", "invocationKey"])
     .index("by_status_createdAt", ["status", "createdAt"])
+    .index("by_status_leaseExpiresAt", ["status", "leaseExpiresAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_sourceRoot_createdAt", ["sourceRootId", "createdAt"])
+    .index("by_sourceReply", ["sourceReplyId"])
     .index("by_requester_createdAt", ["requesterUserId", "createdAt"])
     .index("by_requester_community_createdAt", ["requesterUserId", "communityId", "createdAt"]),
 
@@ -2181,8 +2191,8 @@ export default defineSchema({
     // Owner-set display name for the agent's taggable identity; absent means
     // the community's own name.
     agentDisplayName: v.optional(v.string()),
-    // Owner off-switch for the memory agent. Absent means enabled: the memory
-    // system is on by default wherever the owner has a usable connection.
+    // Owner off-switch for the memory agent. Absent means enabled; inference
+    // admission is resolved through the canonical managed-funding policy.
     agentEnabled: v.optional(v.boolean()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -2258,6 +2268,7 @@ export default defineSchema({
     runId: v.string(),
     seq: v.number(),
     kind: v.union(
+      v.literal("context_snapshot"),
       v.literal("system_prompt"),
       v.literal("wake_context"),
       v.literal("reasoning"),

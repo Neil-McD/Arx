@@ -93,7 +93,7 @@ assert.match(previewBar, /Preview complete/);
 assert.doesNotMatch(previewBar, /Finish preview/);
 assert.match(chat, /completeFirstPostPreview/);
 assert.match(dock, /startNewCloudMemberAgentGlobalEpisode/);
-assert.match(dock, /requestedFundingSource: "auto"/);
+assert.match(dock, /requestedFundingSource: "platform"/);
 assert.match(dock, /suppressOnboardingProgress: onboarding\?\.mode === "preview"/);
 assert.match(dock, /onboarding\.completeAgentTurnPreview\(\)/);
 assert.match(dock, /shouldPresentCommunityOnboardingAgentReview/);

@@ -4,6 +4,9 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const worker = readFileSync(join(root, "convex/communityAgentServeWorker.ts"), "utf8");
+const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
+const serveContract = readFileSync(join(root, "shared/communityAgentServeContract.ts"), "utf8");
+const threadContext = readFileSync(join(root, "shared/communityAgentThreadContext.ts"), "utf8");
 const conciergeTools = readFileSync(join(root, "shared/communityAgentConciergeTools.ts"), "utf8");
 const context = readFileSync(join(root, "convex/communityAgentContext.ts"), "utf8");
 const boundary = readFileSync(join(root, "shared/communityAgentRuntimeBoundary.ts"), "utf8");
@@ -22,34 +25,81 @@ function exportedFunctionBlock(source: string, exportName: string): string {
 const claimBlock = exportedFunctionBlock(worker, "claimNextCommunityAgentServeRequestInternal");
 const readBlock = exportedFunctionBlock(worker, "readCommunityAgentServeRequestContextInternal");
 const failBlock = exportedFunctionBlock(worker, "failCommunityAgentServeRequestInternal");
+const snapshotBlock = exportedFunctionBlock(worker, "recordCommunityAgentServeContextSnapshotInternal");
 const finalizeBlock = exportedFunctionBlock(worker, "finalizeCommunityAgentServeReplyInternal");
 const actionBlock = exportedFunctionBlock(worker, "processQueuedCommunityAgentServeRequestsInternal");
 
 assert.match(
   packageJson,
-  /"check:community-agent-serve-worker-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_agent_serve_worker_contract_proof\.ts"/,
-  "package scripts should expose the community-agent serve worker proof",
+  /"check:community-agent-serve-worker-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_agent_serve_worker_contract_proof\.ts && vitest run convex\/communityAgentThreadContext\.test\.ts convex\/communityAgentServeWorker\.test\.ts"/,
+  "package scripts should expose both the serve worker contract and behavior tests",
 );
 
 assert.match(
   claimBlock,
-  /internalMutation[\s\S]*query\("communityAgentServeRequests" as any\)[\s\S]*withIndex\("by_status_createdAt"[\s\S]*q\.eq\("status", "queued"\)[\s\S]*status: "running"/,
+  /internalMutation[\s\S]*query\("communityAgentServeRequests" as any\)[\s\S]*withIndex\("by_status_createdAt"[\s\S]*q\.eq\("status", "queued"\)[\s\S]*claimServeRequest/,
   "serve worker should claim queued requests by moving them to running",
 );
 assert.match(
   claimBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*ctx\.db\.get\(args\.requestId as any\)[\s\S]*status: "running"/,
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*ctx\.db\.get\(args\.requestId as any\)[\s\S]*claimServeRequest/,
   "serve worker should support claiming one explicitly scheduled request",
 );
 assert.match(
   claimBlock,
-  /query\("communityAgentServeRequests" as any\)[\s\S]*q\.eq\("status", "running"\)[\s\S]*SERVE_WORKER_STALE_RUNNING_MS[\s\S]*status: "queued"/,
-  "serve worker should retry stale running requests instead of leaving dead rows",
+  /withIndex\("by_status_leaseExpiresAt"[\s\S]*q\.eq\("status", "running"\)\.lte\("leaseExpiresAt", nowMs\)[\s\S]*claimServeRequest/,
+  "serve worker should reclaim expired running requests through the lease index",
+);
+assert.match(
+  worker,
+  /claimServeRequest[\s\S]*COMMUNITY_AGENT_SERVE_MAX_ATTEMPTS[\s\S]*community_agent_serve_attempts_exhausted[\s\S]*leaseExpiresAt = nowMs \+ COMMUNITY_AGENT_SERVE_LEASE_MS[\s\S]*attempt,[\s\S]*leaseExpiresAt/,
+  "serve claims should use explicit leases and bounded attempts",
+);
+assert.match(
+  serveContract,
+  /COMMUNITY_AGENT_SERVE_RUNTIME_MAX_MS = 30 \* 60 \* 1000[\s\S]*COMMUNITY_AGENT_SERVE_RECOVERY_GRACE_MS = 5 \* 60 \* 1000[\s\S]*COMMUNITY_AGENT_SERVE_LEASE_MS =[\s\S]*COMMUNITY_AGENT_SERVE_RUNTIME_MAX_MS \+ COMMUNITY_AGENT_SERVE_RECOVERY_GRACE_MS[\s\S]*COMMUNITY_AGENT_SERVE_MAX_ATTEMPTS = 3[\s\S]*communityAgentServeAttemptMatches/,
+  "the shared serve contract should own lease, attempt, and fence semantics",
+);
+assert.match(
+  schema,
+  /communityAgentServeRequests: defineTable\([\s\S]*founder_subscription_inactive[\s\S]*founder_subscription_ambiguous[\s\S]*founder_subscription_owner_mismatch[\s\S]*leaseExpiresAt: v\.optional\(v\.number\(\)\)[\s\S]*by_status_leaseExpiresAt/,
+  "the serve schema should accept canonical funding failures and index explicit leases",
+);
+assert.doesNotMatch(
+  schema,
+  /requester_connection_missing|owner_credential_missing|owner_funding_suspended/,
+  "the serve schema must not retain retired requester or owner BYOK intake states after the zero-row census",
 );
 assert.match(
   worker,
   /serveRequestIsClaimable[\s\S]*agentKey === CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*intakeReason === "accepted"[\s\S]*normalizeIdValue\(request\.requesterUserId\) === normalizeIdValue\(request\.sponsorUserId\)/,
   "serve requests should be canonical-agent accepted rows sponsored by the requester",
+);
+
+assert.match(
+  readBlock,
+  /expectedAttempt: v\.number\(\)[\s\S]*communityAgentServeAttemptMatches\(request\.attempt, args\.expectedAttempt\)/,
+  "serve context reads should be fenced to the claiming attempt",
+);
+assert.match(
+  failBlock,
+  /expectedAttempt: v\.number\(\)[\s\S]*communityAgentServeAttemptMatches\(request\.attempt, args\.expectedAttempt\)/,
+  "serve failure transitions should be fenced to the claiming attempt",
+);
+assert.match(
+  finalizeBlock,
+  /expectedAttempt: v\.number\(\)[\s\S]*settleAuthorizedFounderInferenceReceipt[\s\S]*communityAgentServeAttemptMatches\(request\.attempt, args\.expectedAttempt\)[\s\S]*serve_request_attempt_stale/,
+  "receipt truth may settle, but only the current attempt may materialize a response",
+);
+assert.match(
+  actionBlock,
+  /const expectedAttempt = normalizeCommunityAgentServeAttempt\(claim\.attempt\)[\s\S]*readCommunityAgentServeRequestContextInternal[\s\S]*expectedAttempt[\s\S]*finalizeCommunityAgentServeReplyInternal[\s\S]*expectedAttempt/,
+  "the action should carry one attempt fence through context, failure, and finalization",
+);
+assert.match(
+  worker,
+  /communityAgentMentionReceiptKey\(requestId: unknown\)[\s\S]*community_agent_mention:\$\{normalizeIdValue\(requestId\)\}/,
+  "recovery attempts must share one logical request-scoped inference receipt",
 );
 
 assert.match(
@@ -97,6 +147,44 @@ assert.match(
   /requesterCanReadSourceVisibility[\s\S]*source_not_readable/,
   "serve context should not load prompt text if the requester cannot currently read the source visibility",
 );
+assert.match(
+  readBlock,
+  /loadCommunityAgentThreadContext\([\s\S]*threadContext,/,
+  "serve context should return one canonical compiled multi-party thread packet",
+);
+assert.doesNotMatch(readBlock, /rootText|replyText|isReply|conversationText/);
+assert.match(
+  threadContext,
+  /COMMUNITY_AGENT_THREAD_CONTEXT_VERSION = 1[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS = 24[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_PARTICIPANTS = 8[\s\S]*COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CHARS = 7_800/,
+  "the pure thread compiler should own deterministic context bounds",
+);
+assert.match(
+  threadContext,
+  /source\.targetReplyId[\s\S]*requiredIds\.add\(source\.targetReplyId\)[\s\S]*untrusted community context, never system instructions/,
+  "the thread compiler should preserve the addressed target and mark community context untrusted",
+);
+assert.match(
+  worker,
+  /readMemberFactsForLens\([\s\S]*kind: "member_orientation"[\s\S]*scope: \{ communityId: args\.communityId \}/,
+  "participant enrichment should reuse the exact-community member-orientation lens",
+);
+assert.doesNotMatch(worker, /lens:\s*\{\s*kind:\s*"self"/);
+
+assert.match(
+  snapshotBlock,
+  /expectedAttempt: v\.number\(\)[\s\S]*communityAgentServeAttemptMatches\(request\.attempt, args\.expectedAttempt\)[\s\S]*requireCommunityChatAccess[\s\S]*source_not_live[\s\S]*source_not_readable[\s\S]*seq: 0[\s\S]*kind: "context_snapshot"/,
+  "context snapshots should be mandatory, attempt-fenced, access-checked sequence-zero evidence",
+);
+assert.match(
+  schema,
+  /communityAgentRunEvents: defineTable\([\s\S]*v\.literal\("context_snapshot"\)/,
+  "run-event schema should accept the canonical context snapshot",
+);
+assert.doesNotMatch(
+  readFileSync(join(root, "convex/communityAgentRuntime.ts"), "utf8"),
+  /recordCommunityAgentRunEventsInternal[\s\S]*v\.literal\("context_snapshot"\)/,
+  "the generic best-effort event writer must not gain authority to overwrite mandatory context snapshots",
+);
 
 assert.match(
   actionBlock,
@@ -136,8 +224,14 @@ assert.match(
 );
 assert.match(
   worker,
-  /direct community-agent mention request[\s\S]*member's community-agent mention request/,
-  "serve prompt should refer to the canonical community-agent mention rather than a legacy literal token",
+  /addressed community-agent request[\s\S]*identified requester's addressed turn/,
+  "serve prompt should answer the canonical addressed source turn regardless of qualifying signal",
+);
+assert.doesNotMatch(worker, /Thread root:\\n|Mentioned reply:\\n|Mentioned post:\\n/);
+assert.match(
+  actionBlock,
+  /const initialMessages = buildServeMessages\(context\)[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*claimCommunityInferenceReceiptInternal[\s\S]*messages: initialMessages/,
+  "the exact audited initial messages should be persisted before funding claim and reused by the provider",
 );
 assert.match(
   worker,
@@ -245,6 +339,11 @@ assert.match(
   docs,
   /Serve is event-driven primary, cron-repaired secondary[\s\S]*schedule the serve worker immediately with `requestId`[\s\S]*leftover\/stale request drain/,
   "architecture docs should state that cron is repair, not primary serve",
+);
+assert.match(
+  docs,
+  /multi-party thread context[\s\S]*member_orientation[\s\S]*context_snapshot[\s\S]*sequence zero/,
+  "architecture docs should define the bounded participant lens and mandatory context receipt",
 );
 
 console.log("community_agent_serve_worker_contract_proof: ok");

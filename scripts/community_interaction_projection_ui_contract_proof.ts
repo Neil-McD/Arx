@@ -33,6 +33,9 @@ const profileHydrationController = read(
 const chatController = read(
   "apps/web/src/controllers/useWebCommunityChatController.ts",
 );
+const rootReplyTarget = read(
+  "apps/web/src/controllers/communityRootReplyTarget.ts",
+);
 const administrationState = read(
   "apps/web/src/controllers/useWebCommunityAdministrationState.ts",
 );
@@ -1043,8 +1046,18 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /const rootReplyTarget[\s\S]*if \(!root\?\.id \|\| !root\.actor_user_id\) return null[\s\S]*id: root\.legacy_message_id \?\? root\.id[\s\S]*legacy_message_id: root\.legacy_message_id \?\? null/,
-  "canonical drawer root reply target should not require a legacy message id",
+  /buildCommunityRootReplyTarget[\s\S]*root: selectedInteractionRootBundle\?\.root[\s\S]*communityName: activeCommunity\?\.name/,
+  "canonical drawer should derive its root reply target from the shared fail-closed resolver",
+);
+assert.match(
+  rootReplyTarget,
+  /root\.actor_type === "human"[\s\S]*Boolean\(humanUserId\)[\s\S]*root\.actor_type === "personal_agent"[\s\S]*root\.actor_agent_key === `personal_agent:\$\{humanUserId\}`[\s\S]*root\.actor_type === "community_agent"[\s\S]*root\.actor_agent_key === CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*!isHumanTarget[\s\S]*!isCanonicalPersonalAgentTarget[\s\S]*!isCanonicalCommunityAgentTarget[\s\S]*interaction_root_id: rootId[\s\S]*interaction_reply_id: null/,
+  "root replies should support humans and canonical personal/community agents without inventing a user or reply target",
+);
+assert.doesNotMatch(
+  chatPanel,
+  /if \(!root\?\.id \|\| !root\.actor_user_id\) return null/,
+  "canonical agent-authored roots must not be hidden by the former human-only composer gate",
 );
 assert.match(
   projection,

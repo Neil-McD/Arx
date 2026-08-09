@@ -71,7 +71,6 @@ export const getMyLatestCommunityAgentServeIssue = query({
       if (row.status !== "skipped" && row.status !== "error") return false;
       const issueCode = row.status === "skipped" ? row.intakeReason : row.errorCode;
       if (
-        issueCode !== "requester_connection_missing" &&
         issueCode !== "founder_plan_required" &&
         issueCode !== "founder_subscription_inactive" &&
         issueCode !== "founder_subscription_ambiguous" &&
@@ -90,7 +89,6 @@ export const getMyLatestCommunityAgentServeIssue = query({
 
     if (!issue) return null;
     const issueCode = issue.status === "skipped" ? issue.intakeReason : issue.errorCode;
-    if (issueCode === "requester_connection_missing") return null;
     const funding = await resolveCommunityInferenceFundingAdmission(ctx, args.communityId);
     const usageIssue =
       issueCode === "founder_usage_exhausted" ||

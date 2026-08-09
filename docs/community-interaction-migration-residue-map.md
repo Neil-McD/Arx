@@ -26,6 +26,8 @@ This map is the deletion queue for the community chat substrate migration. It se
 | R-002 | Legacy compatibility message rows created by canonical composer | Deleted for the staging clean-room composer. New canonical sends no longer create `communityChatMessages`, `communityChatThreads`, or `communityInteractionLegacyChatLinks`. |
 | R-005 | Projection feature flag and authenticated legacy client bootstrap | Deleted for production projection promotion. Canonical interaction projection is the only authenticated community chat owner. The web composition no longer mounts a legacy preload lifecycle, legacy realtime subscription, or legacy scroll-pagination lifecycle. Signed-out/empty-state markup and backend compatibility remain separate residue. |
 | R-006 | Legacy web timeline props and inactive client state | Deleted with the orphaned web data and mixed mutation controllers. The web shell now carries only canonical composer state into the canonical interaction projection; signed-out and unresolved-community markup are empty states, not a second timeline. |
+| R-010 | Private community-agent dock endpoints and gateway | Deleted after a complete production census found zero dock roots, replies, mentions, or serve requests and the application caller census found no first-party owner. Community-agent conversations now have one destination: canonical community interaction threads. |
+| R-011 | Historical Community Agent serve intake literals for retired requester/owner BYOK states | Deleted after the 2026-08-09 bounded census found zero matching rows across 6 staging and 10 production `communityAgentServeRequests` records. Current intake has no writer for these values. |
 
 ## Remaining Legacy Chat Row Blockers
 

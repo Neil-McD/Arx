@@ -307,7 +307,7 @@ assert.match(communitySurfaceProjection, /avatar_focus_x: params\.activeCommunit
 assert.match(chat, /buildCommunityOnboardingIntroductionDraft/);
 assert.match(dock, /shouldPresentCommunityOnboardingAgentStep/);
 assert.match(dock, /shouldPresentCommunityOnboardingAgentReview/);
-assert.match(dock, /requestedFundingSource: "auto"/);
+assert.match(dock, /requestedFundingSource: "platform"/);
 assert.match(dock, /What is one useful first action I should take in/);
 assert.match(dock, /disabled=\{showOnboardingAgentFocus\}/);
 assert.doesNotMatch(dockCss, /member-agent-dock-header::after/);
