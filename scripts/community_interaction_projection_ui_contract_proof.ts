@@ -712,8 +712,13 @@ assert.match(
 );
 assert.match(
   contextPanel,
-  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
-  "context panel should render the free-access mode as an accessible Auto-join switch",
+  /role="switch"[\s\S]*aria-checked=\{autoJoinEnabled\}[\s\S]*aria-busy=\{props\.isSettingFreeAccessMode \|\| undefined\}[\s\S]*onClick=\{handleToggleFreeAccessMode\}[\s\S]*Auto-join/,
+  "context panel should render the free-access mode as an accessible, server-pending Auto-join switch",
+);
+assert.match(
+  contextPanel,
+  /community-context-members-total[\s\S]*community-context-autojoin[\s\S]*community-context-request-control-row[\s\S]*community-context-request-chip/,
+  "context panel should keep Auto-join in the stable members header and render transient join requests on a separate row",
 );
 assert.match(
   contextPanel,
@@ -828,6 +833,21 @@ assert.doesNotMatch(
 ].forEach((selector) => {
   assert.ok(baseCss.includes(selector), `base.css should include ${selector}`);
 });
+assert.match(
+  baseCss,
+  /\.community-context-members \{[\s\S]*scrollbar-gutter: stable;/,
+  "member rail should reserve stable scrollbar space so roster refreshes do not move admission controls",
+);
+assert.match(
+  baseCss,
+  /\.community-context-autojoin \{[\s\S]*padding: 0;[\s\S]*border: 0;[\s\S]*background: transparent;/,
+  "Auto-join should render as plain text and a switch without an outer capsule",
+);
+assert.match(
+  baseCss,
+  /\.community-context-autojoin:disabled \{[\s\S]*cursor: wait;[\s\S]*opacity: 1;/,
+  "Auto-join should remain visually stable while the canonical access mutation is pending",
+);
 assert.match(
   memberSettingsDialog,
   /export function CommunityMemberSettingsDialog\(props: CommunityMemberSettingsDialogProps\)/,

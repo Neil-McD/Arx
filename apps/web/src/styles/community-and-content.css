@@ -2879,6 +2879,7 @@
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   padding: 10px 8px 14px;
 }
 
@@ -2906,19 +2907,9 @@
   white-space: nowrap;
 }
 
-.community-context-members-controls {
-  flex: 0 0 auto;
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-}
-
 .community-context-autojoin,
 .community-context-request-chip {
   min-width: 0;
-  border: 1px solid var(--border-muted);
-  border-radius: 999px;
-  background: transparent;
   color: var(--text-muted);
   font: inherit;
   font-size: 10px;
@@ -2926,11 +2917,6 @@
   letter-spacing: 0;
   text-transform: none;
   cursor: pointer;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    color 0.12s ease,
-    opacity 0.12s ease;
 }
 
 .community-context-autojoin {
@@ -2938,7 +2924,11 @@
   align-items: center;
   gap: 6px;
   height: 24px;
-  padding: 0 7px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  transition: color 0.12s ease;
 }
 
 .community-context-autojoin-label {
@@ -2972,7 +2962,6 @@
 }
 
 .community-context-autojoin.is-on {
-  border-color: color-mix(in srgb, var(--accent) 42%, var(--border-muted));
   color: var(--text-primary);
 }
 
@@ -2985,8 +2974,18 @@
   transform: translateX(10px);
 }
 
-.community-context-autojoin:hover:not(:disabled),
-.community-context-autojoin:focus-visible,
+.community-context-autojoin:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.community-context-autojoin:focus-visible {
+  outline: none;
+}
+
+.community-context-autojoin:focus-visible .community-context-autojoin-track {
+  box-shadow: 0 0 0 2px var(--border-active);
+}
+
 .community-context-request-chip:hover,
 .community-context-request-chip:focus-visible {
   background: var(--hover-overlay);
@@ -2996,8 +2995,14 @@
 }
 
 .community-context-autojoin:disabled {
-  cursor: default;
-  opacity: 0.55;
+  cursor: wait;
+  opacity: 1;
+}
+
+.community-context-request-control-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: 0 8px 8px;
 }
 
 .community-context-request-chip {
@@ -3008,8 +3013,15 @@
   min-width: 32px;
   height: 24px;
   padding: 0 7px;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  background: transparent;
   color: color-mix(in srgb, var(--accent) 82%, var(--text-primary));
   border-color: color-mix(in srgb, var(--accent) 38%, var(--border-muted));
+  transition:
+    background 0.12s ease,
+    border-color 0.12s ease,
+    color 0.12s ease;
 }
 
 .community-context-request-chip svg {

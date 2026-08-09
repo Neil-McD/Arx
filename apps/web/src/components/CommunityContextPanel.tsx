@@ -583,40 +583,45 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       >
         <div className="community-context-section community-context-members-total">
           <span>Members — {memberCountLabel}</span>
-          <div className="community-context-members-controls">
-            {canShowFreeAccessSwitch ? (
-              <button
-                className={`community-context-autojoin${autoJoinEnabled ? " is-on" : ""}`}
-                type="button"
-                role="switch"
-                aria-checked={autoJoinEnabled}
-                aria-label={`Auto-join is ${autoJoinEnabled ? "on" : "off"}`}
-                disabled={props.isSettingFreeAccessMode}
-                onClick={handleToggleFreeAccessMode}
-                title={autoJoinEnabled ? "Auto-join on" : "Auto-join off"}
-              >
-                <span className="community-context-autojoin-label">Auto-join</span>
-                <span className="community-context-autojoin-track" aria-hidden="true">
-                  <span className="community-context-autojoin-thumb" />
-                </span>
-              </button>
-            ) : null}
-            {canShowJoinRequests ? (
-              <button
-                className={`community-context-request-chip${joinRequestsExpanded ? " is-open" : ""}`}
-                type="button"
-                aria-expanded={joinRequestsExpanded}
-                aria-label={requestChipAriaLabel}
-                onClick={() => setJoinRequestsExpanded((expanded) => !expanded)}
-              >
-                <span>{requestChipLabel}</span>
-                <ChevronDown size={13} strokeWidth={2.1} aria-hidden="true" />
-              </button>
-            ) : null}
-          </div>
+          {canShowFreeAccessSwitch ? (
+            <button
+              className={`community-context-autojoin${autoJoinEnabled ? " is-on" : ""}`}
+              type="button"
+              role="switch"
+              aria-checked={autoJoinEnabled}
+              aria-busy={props.isSettingFreeAccessMode || undefined}
+              aria-label={`Auto-join is ${autoJoinEnabled ? "on" : "off"}`}
+              disabled={props.isSettingFreeAccessMode}
+              onClick={handleToggleFreeAccessMode}
+              title={props.isSettingFreeAccessMode
+                ? "Updating Auto-join"
+                : autoJoinEnabled
+                  ? "Auto-join on"
+                  : "Auto-join off"}
+            >
+              <span className="community-context-autojoin-label">Auto-join</span>
+              <span className="community-context-autojoin-track" aria-hidden="true">
+                <span className="community-context-autojoin-thumb" />
+              </span>
+            </button>
+          ) : null}
         </div>
         {props.freeAccessModeError ? (
           <div className="community-context-admission-status">{props.freeAccessModeError}</div>
+        ) : null}
+        {canShowJoinRequests ? (
+          <div className="community-context-request-control-row">
+            <button
+              className={`community-context-request-chip${joinRequestsExpanded ? " is-open" : ""}`}
+              type="button"
+              aria-expanded={joinRequestsExpanded}
+              aria-label={requestChipAriaLabel}
+              onClick={() => setJoinRequestsExpanded((expanded) => !expanded)}
+            >
+              <span>{requestChipLabel}</span>
+              <ChevronDown size={13} strokeWidth={2.1} aria-hidden="true" />
+            </button>
+          </div>
         ) : null}
         {canShowJoinRequests && joinRequestsExpanded ? (
           <div className="community-context-request-panel">
