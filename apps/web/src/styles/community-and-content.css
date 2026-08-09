@@ -467,6 +467,10 @@
   z-index: 2;
 }
 
+:root[data-theme="light"] .discover-card.clickable:hover {
+  background: var(--bg-card);
+}
+
 .discover-card:active {
   transform: translateY(0);
   box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);

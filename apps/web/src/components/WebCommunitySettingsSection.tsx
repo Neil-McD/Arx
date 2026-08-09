@@ -488,9 +488,10 @@ function CommunityMonetizationConfigSection({
     platformFeeBpsOverride: communityPlatformFeeBps,
   });
   const canReceiveCommunityRevenue = stripeConnectPresentation.isReady;
-  const canMonetizeCommunities = Number(
+  const platformFeePercent = Number(
     communityPlatformFeeBps ?? accountCommerceStatus?.platform_fee_bps ?? 0,
-  ) > 0;
+  ) / 100;
+  const canMonetizeCommunities = platformFeePercent > 0;
   const needsStripeConnect = !canMonetizeCommunities || !canReceiveCommunityRevenue;
   const storedStripeConnectCountry = accountCommerceStatus?.stripe_connect.country ?? null;
   const [stripeConnectCountry, setStripeConnectCountry] = useState("");
@@ -589,28 +590,48 @@ function CommunityMonetizationConfigSection({
         <div className="settings-section-desc" style={{ marginTop: 12 }}>
           Community monetization is not available for this account yet.
         </div>
+      ) : canReceiveCommunityRevenue ? (
+        canManagePayoutAccount ? (
+          <div className="community-settings-payout-summary">
+            <span className="auth-status">
+              Stripe connected{stripeConnectCountryLabel ? ` · ${stripeConnectCountryLabel}` : ""}.
+              {` Paid memberships: ${platformFeePercent.toFixed(1)}% Polynet fee, plus Stripe fees.`}
+            </span>
+            <StripeSetupButton
+              label={
+                isStartingStripeConnectOnboarding
+                  ? "Opening…"
+                  : stripeConnectPresentation.connectCtaLabel
+              }
+              onClick={() =>
+                void startStripeConnectOnboarding({
+                  context: "community",
+                  communitySlug: activeCommunity.slug,
+                  country: selectedStripeConnectCountry || null,
+                })
+              }
+              disabled={isStartingStripeConnectOnboarding}
+            />
+          </div>
+        ) : null
       ) : (
         <>
-          <div className="settings-section-desc" style={{ marginTop: 12 }}>
+          <div className="settings-section-desc community-settings-payout-message">
             {stripeConnectPresentation.statusMessage}
           </div>
-          {canReceiveCommunityRevenue ? null : stripeConnectPresentation.requirementsPreview.length > 0 ? (
+          {stripeConnectPresentation.requirementsPreview.length > 0 ? (
             <div className="auth-status" style={{ marginTop: 8 }}>
               Stripe still needs: {stripeConnectPresentation.requirementsPreview.join(", ")}.
             </div>
           ) : null}
           {canManagePayoutAccount ? (
             <div className="create-community-actions" style={{ marginTop: 12 }}>
-              {canReceiveCommunityRevenue && stripeConnectCountryLabel ? (
-                <span className="auth-status">Country: {stripeConnectCountryLabel}</span>
-              ) : (
-                <StripeConnectCountrySelect
-                  value={selectedStripeConnectCountry}
-                  disabled={isStartingStripeConnectOnboarding}
-                  onChange={setStripeConnectCountry}
-                  style={{ margin: 0, minWidth: 220 }}
-                />
-              )}
+              <StripeConnectCountrySelect
+                value={selectedStripeConnectCountry}
+                disabled={isStartingStripeConnectOnboarding}
+                onChange={setStripeConnectCountry}
+                style={{ margin: 0, minWidth: 220 }}
+              />
               <StripeSetupButton
                 label={
                   isStartingStripeConnectOnboarding
@@ -627,7 +648,7 @@ function CommunityMonetizationConfigSection({
                 disabled={isStartingStripeConnectOnboarding || needsStripeConnectCountry}
               />
             </div>
-          ) : canReceiveCommunityRevenue ? null : (
+          ) : (
             <div className="auth-status" style={{ marginTop: 8 }}>
               The community owner must finish Stripe setup before paid access can be changed.
             </div>
@@ -851,25 +872,26 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         ? "Unsaved changes"
                         : "All changes saved"}
                   </span>
-                  <button
-                    className={`platform-save-button${
-                      state.isCommunitySettingsDirty ? " is-dirty" : " is-saved"
-                    }`}
-                    onClick={() => void actions.handleSaveCommunitySettings()}
-                    disabled={
-                      state.isSavingCommunitySettings ||
-                      state.isProcessingCommunitySettingsBanner ||
-                      !state.isCommunitySettingsDirty
-                    }
-                  >
-                    {state.isSavingCommunitySettings
-                      ? "Saving..."
-                      : state.isProcessingCommunitySettingsBanner
-                        ? "Processing banner…"
-                        : state.isCommunitySettingsDirty
-                          ? "Save changes"
-                          : "Saved"}
-                  </button>
+                  {state.isCommunitySettingsDirty ||
+                  state.isSavingCommunitySettings ||
+                  state.isProcessingCommunitySettingsBanner ? (
+                    <button
+                      className="platform-save-button is-dirty"
+                      type="button"
+                      onClick={() => void actions.handleSaveCommunitySettings()}
+                      disabled={
+                        state.isSavingCommunitySettings ||
+                        state.isProcessingCommunitySettingsBanner ||
+                        !state.isCommunitySettingsDirty
+                      }
+                    >
+                      {state.isSavingCommunitySettings
+                        ? "Saving..."
+                        : state.isProcessingCommunitySettingsBanner
+                          ? "Processing banner…"
+                          : "Save changes"}
+                    </button>
+                  ) : null}
                 </div>
               </div>
               ) : null}

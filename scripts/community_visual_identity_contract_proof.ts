@@ -173,6 +173,11 @@ assert.match(
 );
 assert.match(
   webCss,
+  /\.product-shell-surface--community > \.community-nav \.community-nav-identity:not\(\.has-banner\)\s*\{[^}]*flex:\s*0 0 var\(--web-topbar-height,\s*48px\);[^}]*min-height:\s*var\(--web-topbar-height,\s*48px\);[^}]*height:\s*var\(--web-topbar-height,\s*48px\);/,
+  "desktop communities without banners should align their identity divider to the channel header",
+);
+assert.match(
+  webCss,
   /\.community-nav-identity\.has-banner \+ \.community-nav-header\s*\{[^}]*margin-top:\s*-44px;/,
   "the banner should scale behind the identity row without adding height",
 );

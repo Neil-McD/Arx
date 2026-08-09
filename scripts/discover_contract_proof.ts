@@ -56,6 +56,9 @@ function main() {
       import.meta.url,
     ),
   );
+  const communityCss = readText(
+    new URL("../apps/web/src/styles/community-and-content.css", import.meta.url),
+  );
 
   const listDiscover = extractSection(
     communityPublic,
@@ -174,6 +177,16 @@ function main() {
     navSnapshot,
     /\| "apps"|\| "skills"|formatDiscoverRouteBackTargetLabel/,
     "back navigation must not model retired catalog destinations",
+  );
+  assert.match(
+    communityCss,
+    /\.discover-card:hover\s*\{[^}]*background:\s*var\(--bg-card-hover\);[^}]*transform:\s*translateY\(-1px\);[^}]*box-shadow:\s*0 10px 26px rgba\(0, 0, 0, 0\.22\);/,
+    "Discover cards should retain the canonical dark-theme hover elevation",
+  );
+  assert.match(
+    communityCss,
+    /:root\[data-theme="light"\] \.discover-card\.clickable:hover\s*\{[^}]*background:\s*var\(--bg-card\);/,
+    "light-theme Discover hover should preserve the card surface while elevation changes around it",
   );
 
   console.log("discover_contract_proof: ok (communities only)");

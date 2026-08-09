@@ -1579,6 +1579,12 @@
     margin: -12px -12px 0;
   }
 
+  .product-shell-surface--community > .community-nav .community-nav-identity:not(.has-banner) {
+    flex: 0 0 var(--web-topbar-height, 48px);
+    min-height: var(--web-topbar-height, 48px);
+    height: var(--web-topbar-height, 48px);
+  }
+
   .product-shell-surface--community > .community-nav .community-nav-identity.has-banner + .community-nav-header {
     margin-top: -44px;
   }

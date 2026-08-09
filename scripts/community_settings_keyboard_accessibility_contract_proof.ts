@@ -143,6 +143,26 @@ assert.match(
   /\.settings-panel \.platform-switcher-btn:focus-visible\s*\{[\s\S]*var\(--focus-ring\)/,
   "settings switchers must expose a visible theme-aware focus indicator",
 );
+assert.doesNotMatch(
+  settingsStyles,
+  /\.create-(?:banner|avatar)-btn input(?:\[type="file"\])?\s*\{\s*display:\s*none/,
+  "community image uploads must remain keyboard-focusable",
+);
+assert.match(
+  settingsStyles,
+  /\.create-banner-btn:has\(input\[type="file"\]:focus-visible\)[\s\S]*var\(--focus-ring\)/,
+  "community image upload labels must expose a visible focus indicator",
+);
+assert.match(
+  communitySettings,
+  /state\.isCommunitySettingsDirty \|\|[\s\S]*state\.isSavingCommunitySettings \|\|[\s\S]*state\.isProcessingCommunitySettingsBanner \?[\s\S]*Save changes[\s\S]*: null/,
+  "the save action must disappear when there is nothing actionable",
+);
+assert.doesNotMatch(
+  communitySettings,
+  /className=\{`platform-save-button\$\{[\s\S]*is-saved/,
+  "the General pane must not retain a redundant disabled saved-state button",
+);
 
 console.log(
   "PASS: community settings keyboard accessibility contract is complete.",
