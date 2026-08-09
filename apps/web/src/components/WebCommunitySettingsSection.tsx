@@ -244,10 +244,10 @@ function CommunityBrandingSettingsSection({
   activeCommunity: ActiveCommunity;
 }) {
   return (
-    <div className="settings-section">
-      <div className="settings-section-title">Branding</div>
+    <div className="settings-section community-settings-identity-section">
+      <div className="settings-section-title">Identity &amp; Media</div>
       <div
-        className={`create-community-banner${state.isSettingsBannerDragOver ? " drag-over" : ""}`}
+        className={`create-community-banner community-settings-banner${state.isSettingsBannerDragOver ? " drag-over" : ""}`}
         aria-busy={state.isProcessingCommunitySettingsBanner || undefined}
         onDragOver={(event) => {
           event.preventDefault();
@@ -272,7 +272,7 @@ function CommunityBrandingSettingsSection({
         <label
           className={`create-banner-btn${state.isProcessingCommunitySettingsBanner ? " disabled" : ""}`}
         >
-          Upload banner
+          Change banner
           <input
             type="file"
             accept="image/*"
@@ -319,106 +319,111 @@ function CommunityBrandingSettingsSection({
           <div className="auth-error">{state.communitySettingsBannerUploadError}</div>
         ) : null}
       </div>
-      <div className="create-community-avatar-row">
-        <CommunityAvatar
-          className={`create-community-avatar${state.isSettingsAvatarDragOver ? " drag-over" : ""}`}
-          imageUrl={state.communitySettingsAvatarUrl}
-          focusX={state.communitySettingsAvatarFocusX}
-          focusY={state.communitySettingsAvatarFocusY}
-          zoom={state.communitySettingsAvatarZoom}
-          name={state.communitySettingsName || activeCommunity?.name || "Community"}
-          alt="Community avatar preview"
-          fallback={actions.communityInitials(
-            state.communitySettingsName || activeCommunity?.name || "Community",
-          )}
-          onDragOver={(event) => {
-            event.preventDefault();
-            actions.setIsSettingsAvatarDragOver(true);
-          }}
-          onDragLeave={() => actions.setIsSettingsAvatarDragOver(false)}
-          onDrop={actions.handleSettingsAvatarDrop}
-        />
-        <div className="create-community-avatar-actions">
-          <label className="create-avatar-btn">
-            Upload avatar
+      <div className="community-settings-identity-row">
+        <div className="create-community-avatar-row community-settings-avatar-block">
+          <CommunityAvatar
+            className={`create-community-avatar${state.isSettingsAvatarDragOver ? " drag-over" : ""}`}
+            imageUrl={state.communitySettingsAvatarUrl}
+            focusX={state.communitySettingsAvatarFocusX}
+            focusY={state.communitySettingsAvatarFocusY}
+            zoom={state.communitySettingsAvatarZoom}
+            name={state.communitySettingsName || activeCommunity?.name || "Community"}
+            alt="Community avatar preview"
+            fallback={actions.communityInitials(
+              state.communitySettingsName || activeCommunity?.name || "Community",
+            )}
+            onDragOver={(event) => {
+              event.preventDefault();
+              actions.setIsSettingsAvatarDragOver(true);
+            }}
+            onDragLeave={() => actions.setIsSettingsAvatarDragOver(false)}
+            onDrop={actions.handleSettingsAvatarDrop}
+          />
+          <div className="create-community-avatar-actions">
+            <label className="create-avatar-btn">
+              Change avatar
+              <input
+                type="file"
+                accept="image/*"
+                onChange={(event) => {
+                  const file = event.target.files?.[0] ?? null;
+                  event.target.value = "";
+                  void actions.handleCommunityAvatarUpload(file);
+                }}
+              />
+            </label>
+            {state.communitySettingsAvatarUrl ? (
+              <>
+                <button
+                  className="create-avatar-btn"
+                  type="button"
+                  onClick={actions.openCommunityAvatarFocusModal}
+                >
+                  Adjust
+                </button>
+                <button
+                  className="create-avatar-remove"
+                  type="button"
+                  onClick={() => {
+                    actions.setCommunitySettingsAvatarUrl(null);
+                    actions.setCommunitySettingsAvatarFocusX(0.5);
+                    actions.setCommunitySettingsAvatarFocusY(0.5);
+                    actions.setCommunitySettingsAvatarZoom(1);
+                    actions.closeCommunityAvatarFocusModal();
+                    actions.markCommunitySettingsDirty();
+                  }}
+                >
+                  Remove
+                </button>
+              </>
+            ) : null}
+          </div>
+        </div>
+        <div className="community-settings-identity-fields">
+          <label className="create-community-field">
+            <span>Name</span>
             <input
-              type="file"
-              accept="image/*"
+              type="text"
+              placeholder="Community name"
+              value={state.communitySettingsName}
               onChange={(event) => {
-                const file = event.target.files?.[0] ?? null;
-                event.target.value = "";
-                void actions.handleCommunityAvatarUpload(file);
+                actions.setCommunitySettingsName(event.target.value);
+                actions.markCommunitySettingsDirty();
               }}
             />
           </label>
-          {state.communitySettingsAvatarUrl ? (
-            <>
-              <button
-                className="create-avatar-btn"
-                type="button"
-                onClick={actions.openCommunityAvatarFocusModal}
-              >
-                Adjust avatar
-              </button>
-              <button
-                className="create-avatar-remove"
-                type="button"
-                onClick={() => {
-                  actions.setCommunitySettingsAvatarUrl(null);
-                  actions.setCommunitySettingsAvatarFocusX(0.5);
-                  actions.setCommunitySettingsAvatarFocusY(0.5);
-                  actions.setCommunitySettingsAvatarZoom(1);
-                  actions.closeCommunityAvatarFocusModal();
-                  actions.markCommunitySettingsDirty();
-                }}
-              >
-                Remove
-              </button>
-            </>
-          ) : null}
+          <label className="create-community-field">
+            <span>Slug</span>
+            <input
+              type="text"
+              placeholder="your-community"
+              value={state.communitySettingsSlug}
+              maxLength={32}
+              onChange={(event) => {
+                actions.setCommunitySettingsSlug(actions.slugifyCommunityName(event.target.value));
+                actions.markCommunitySettingsDirty();
+              }}
+            />
+            <span className="create-community-hint">
+              {`/c/${state.communitySettingsSlug.trim() || "your-community"}`}
+            </span>
+          </label>
         </div>
       </div>
-      <label className="create-community-field">
-        <span>Name</span>
-        <input
-          type="text"
-          placeholder="Community name"
-          value={state.communitySettingsName}
-          onChange={(event) => {
-            actions.setCommunitySettingsName(event.target.value);
-            actions.markCommunitySettingsDirty();
-          }}
-        />
-      </label>
-      <label className="create-community-field">
-        <span>Slug</span>
-        <input
-          type="text"
-          placeholder="your-community"
-          value={state.communitySettingsSlug}
-          maxLength={32}
-          onChange={(event) => {
-            actions.setCommunitySettingsSlug(actions.slugifyCommunityName(event.target.value));
-            actions.markCommunitySettingsDirty();
-          }}
-        />
-        <span className="create-community-hint">
-          {`/c/${state.communitySettingsSlug.trim() || "your-community"}`}
-        </span>
-      </label>
     </div>
   );
 }
 
 function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps) {
   return (
-    <div className="settings-section">
-      <div className="settings-section-title">Profile</div>
+    <div className="settings-section community-settings-profile-section">
+      <div className="settings-section-title">Public Profile</div>
       <label className="create-community-field">
         <span>One-liner</span>
         <textarea
           placeholder="Short one-liner for the public funnel card"
-          rows={3}
+          rows={2}
+          className="community-profile-one-liner"
           value={state.communitySettingsOneLiner}
           onChange={(event) => {
             actions.setCommunitySettingsOneLiner(event.target.value);
@@ -430,7 +435,8 @@ function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps
         <span>About</span>
         <textarea
           placeholder="Long-form public description for who this community is for and what members get."
-          rows={6}
+          rows={4}
+          className="community-profile-about"
           value={state.communitySettingsAbout}
           onChange={(event) => {
             actions.setCommunitySettingsAbout(event.target.value);
@@ -498,50 +504,50 @@ function CommunityMonetizationConfigSection({
   const needsStripeConnectCountry = !canReceiveCommunityRevenue && !selectedStripeConnectCountry;
 
   return (
-    <div className="settings-section">
+    <div className="settings-section community-settings-access-section">
       <div className="settings-section-title">Access & Pricing</div>
-      {canManagePublishing ? (
-        <label className="create-community-field">
-          <span>Visibility</span>
-          <select
-            className="select-styled"
-            value={state.communitySettingsVisibility}
-            onChange={(event) => {
-              actions.setCommunitySettingsVisibility(event.target.value);
+      <div className="community-settings-access-controls">
+        {canManagePublishing ? (
+          <label className="create-community-field">
+            <span>Visibility</span>
+            <select
+              className="select-styled"
+              value={state.communitySettingsVisibility}
+              onChange={(event) => {
+                actions.setCommunitySettingsVisibility(event.target.value);
+                actions.markCommunitySettingsDirty();
+              }}
+            >
+              <option value="published">Published</option>
+              <option value="unlisted">Unlisted</option>
+            </select>
+            <span className="create-community-hint">
+              {state.communitySettingsVisibility === "published"
+                ? "Listed in Discover. Membership is still required."
+                : "Hidden from Discover. Share its direct link."}
+            </span>
+          </label>
+        ) : null}
+        <div className="create-community-field">
+          <span>Pricing</span>
+          <WebPlatformRadioGroup
+            options={pricingOptions.map((opt) => ({
+              id: opt.key,
+              label: opt.label,
+              disabled: opt.key !== "free" && needsStripeConnect,
+            }))}
+            value={state.communitySettingsPricingMode}
+            onSelectValue={(value) => {
+              actions.setCommunitySettingsPricingMode(value);
+              actions.setCommunityPricingDirty();
               actions.markCommunitySettingsDirty();
             }}
-          >
-            <option value="published">Published</option>
-            <option value="unlisted">Unlisted</option>
-          </select>
-          <span className="create-community-hint">
-            {state.communitySettingsVisibility === "published"
-              ? "Discoverable. Anyone can join to participate."
-              : "Not listed in discovery. Share the link when you're ready."}
-          </span>
-        </label>
-      ) : null}
-      <div className="create-community-field">
-        <span>Pricing</span>
-        <WebPlatformRadioGroup
-          options={pricingOptions.map((opt) => ({
-            id: opt.key,
-            label: opt.label,
-            disabled: opt.key !== "free" && needsStripeConnect,
-          }))}
-          value={state.communitySettingsPricingMode}
-          onSelectValue={(value) => {
-            actions.setCommunitySettingsPricingMode(value);
-            actions.setCommunityPricingDirty();
-            actions.markCommunitySettingsDirty();
-          }}
-          ariaLabel="Pricing options"
-          className="platform-switcher platform-switcher-compact"
-          style={pricingSwitcherStyle}
-        />
-        <span className="create-community-hint">
-          Configure the member-facing pricing shown on your funnel and checkout.
-        </span>
+            ariaLabel="Pricing options"
+            className="platform-switcher platform-switcher-compact"
+            style={pricingSwitcherStyle}
+          />
+          <span className="create-community-hint">Shown on your funnel and checkout.</span>
+        </div>
       </div>
       {state.communitySettingsPricingMode === "monthly" ? (
         <label className="create-community-field">
@@ -809,29 +815,42 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               className="community-settings-pane-content"
             >
               {selectedSettingsPane === "community" ? (
-              <>
-                {isOwnerSettingsLayer ? (
-                  <CommunityBrandingSettingsSection
-                    activeCommunity={resolvedActiveCommunity}
-                    state={state}
-                    actions={actions}
-                  />
-                ) : null}
-                <CommunityProfileSettingsSection state={state} actions={actions} />
-                <CommunityMonetizationConfigSection
-                  activeCommunity={resolvedActiveCommunity}
-                  accountCommerceStatus={accountCommerceStatus}
-                  communityPlatformFeeBps={communityPlatformFeeBps}
-                  accountCommerceError={accountCommerceError}
-                  startStripeConnectOnboarding={startStripeConnectOnboarding}
-                  isStartingStripeConnectOnboarding={isStartingStripeConnectOnboarding}
-                  canManagePublishing={isOwnerSettingsLayer}
-                  canManagePayoutAccount={isOwnerSettingsLayer}
-                  state={state}
-                  actions={actions}
-                />
+              <div className="community-general-settings">
+                <div
+                  className={`community-general-settings-grid${isOwnerSettingsLayer ? "" : " without-branding"}`}
+                >
+                  {isOwnerSettingsLayer ? (
+                    <CommunityBrandingSettingsSection
+                      activeCommunity={resolvedActiveCommunity}
+                      state={state}
+                      actions={actions}
+                    />
+                  ) : null}
+                  <div className="community-general-settings-secondary">
+                    <CommunityProfileSettingsSection state={state} actions={actions} />
+                    <CommunityMonetizationConfigSection
+                      activeCommunity={resolvedActiveCommunity}
+                      accountCommerceStatus={accountCommerceStatus}
+                      communityPlatformFeeBps={communityPlatformFeeBps}
+                      accountCommerceError={accountCommerceError}
+                      startStripeConnectOnboarding={startStripeConnectOnboarding}
+                      isStartingStripeConnectOnboarding={isStartingStripeConnectOnboarding}
+                      canManagePublishing={isOwnerSettingsLayer}
+                      canManagePayoutAccount={isOwnerSettingsLayer}
+                      state={state}
+                      actions={actions}
+                    />
+                  </div>
+                </div>
                 {state.communitySettingsError && <div className="auth-error">{state.communitySettingsError}</div>}
-                <div className="create-community-actions">
+                <div className="create-community-actions community-general-settings-save">
+                  <span className="community-general-settings-status" aria-live="polite">
+                    {state.isSavingCommunitySettings
+                      ? "Saving changes…"
+                      : state.isCommunitySettingsDirty
+                        ? "Unsaved changes"
+                        : "All changes saved"}
+                  </span>
                   <button
                     className={`platform-save-button${
                       state.isCommunitySettingsDirty ? " is-dirty" : " is-saved"
@@ -852,7 +871,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                           : "Saved"}
                   </button>
                 </div>
-              </>
+              </div>
               ) : null}
               {selectedSettingsPane === "workflows" ? (
               <WebCommunityOnboardingWorkflowSection

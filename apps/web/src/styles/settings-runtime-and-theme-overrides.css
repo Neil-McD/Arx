@@ -5566,6 +5566,143 @@ button.message-citation-chip:hover {
   margin: 0;
 }
 
+/* Community General settings: compact desktop composition with a narrow fallback. */
+.community-settings-form {
+  container-type: inline-size;
+}
+
+.community-general-settings,
+.community-general-settings-grid,
+.community-general-settings-secondary,
+.community-settings-identity-fields {
+  display: grid;
+  min-width: 0;
+}
+
+.community-general-settings {
+  gap: 14px;
+}
+
+.community-general-settings-grid,
+.community-general-settings-secondary,
+.community-settings-identity-fields {
+  gap: 12px;
+}
+
+.community-general-settings .settings-section {
+  min-width: 0;
+}
+
+.community-settings-banner {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.community-settings-banner .create-community-banner-media {
+  grid-column: 1 / -1;
+}
+
+.community-settings-banner .create-community-banner-media,
+.community-settings-banner .create-community-banner-media img,
+.community-settings-banner .create-community-banner-placeholder {
+  height: auto;
+  aspect-ratio: 3 / 1;
+}
+
+.community-settings-banner .banner-branding-actions {
+  align-self: center;
+}
+
+.community-settings-banner .create-upload-status,
+.community-settings-banner .auth-error {
+  grid-column: 1 / -1;
+}
+
+.community-settings-identity-row {
+  display: grid;
+  grid-template-columns: minmax(116px, auto) minmax(0, 1fr);
+  align-items: start;
+  gap: 14px;
+}
+
+.community-settings-avatar-block {
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.community-settings-avatar-block .create-community-avatar {
+  width: 72px;
+  height: 72px;
+  border-radius: 20px;
+}
+
+.community-settings-avatar-block .create-community-avatar-actions {
+  max-width: 136px;
+  gap: 6px;
+}
+
+.community-settings-avatar-block .create-avatar-btn {
+  padding: 7px 9px;
+}
+
+.community-settings-profile-section .community-profile-one-liner {
+  min-height: 64px;
+}
+
+.community-settings-profile-section .community-profile-about {
+  min-height: 96px;
+}
+
+.community-settings-access-controls {
+  display: grid;
+  gap: 12px;
+}
+
+.community-settings-access-section > .settings-section-desc {
+  margin: 0;
+}
+
+.community-general-settings-save {
+  align-items: center;
+  justify-content: space-between;
+  min-height: 46px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border-muted);
+}
+
+.community-general-settings-status {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-weight: 560;
+}
+
+@container (min-width: 760px) {
+  .community-general-settings-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
+    gap: 20px;
+  }
+
+  .community-general-settings-grid.without-branding {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .community-general-settings-grid.without-branding .community-general-settings-secondary {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 20px;
+  }
+
+  .community-general-settings .settings-section {
+    gap: 10px;
+    padding-bottom: 16px;
+  }
+
+  .community-settings-access-controls {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  }
+}
+
 .create-community-primary {
   min-height: 46px;
   padding: 0 18px;
@@ -8406,6 +8543,11 @@ button.settings-primary-action svg {
   gap: 14px;
 }
 
+.app-root.mobile-shell .community-general-settings-grid,
+.app-root.mobile-shell .community-general-settings-secondary {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app-root.mobile-shell .settings-section {
   gap: 10px;
   padding-bottom: 18px;
@@ -8467,6 +8609,19 @@ button.settings-primary-action svg {
 .app-root.mobile-shell .create-community-avatar-row {
   flex-direction: column;
   align-items: flex-start;
+}
+
+.app-root.mobile-shell .community-settings-identity-row,
+.app-root.mobile-shell .community-settings-access-controls {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.app-root.mobile-shell .community-settings-avatar-block .create-community-avatar-actions {
+  max-width: none;
+}
+
+.app-root.mobile-shell .community-general-settings-save {
+  align-items: stretch;
 }
 
 .app-root.mobile-shell .create-community-avatar {
