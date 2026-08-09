@@ -3116,44 +3116,35 @@
 .community-context-request-actions {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 4px;
 }
 
 .community-context-request-action {
-  width: 25px;
-  height: 25px;
-  border: 1px solid color-mix(in srgb, #22c55e 32%, var(--border-muted));
-  border-radius: 999px;
-  background: color-mix(in srgb, #22c55e 8%, transparent);
-  color: color-mix(in srgb, #22c55e 78%, var(--text-primary));
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-muted);
   display: grid;
   place-items: center;
   cursor: pointer;
-  transition:
-    background 0.12s ease,
-    border-color 0.12s ease,
-    opacity 0.12s ease;
+  transition: color 0.12s ease, opacity 0.12s ease;
 }
 
-.community-context-request-action.is-danger {
-  border-color: color-mix(in srgb, #f87171 34%, var(--border-muted));
-  background: color-mix(in srgb, #f87171 8%, transparent);
-  color: color-mix(in srgb, #f87171 78%, var(--text-primary));
+.community-context-request-action:hover:not(:disabled) {
+  color: var(--text-primary);
 }
 
-.community-context-request-action:hover:not(:disabled),
 .community-context-request-action:focus-visible {
-  background: var(--hover-overlay);
+  color: var(--text-primary);
   outline: none;
+  box-shadow: 0 0 0 2px var(--border-active);
 }
 
 .community-context-request-action:disabled {
   cursor: default;
   opacity: 0.5;
-}
-
-.community-context-request-action .lucide-loader-circle {
-  animation: spin 0.8s linear infinite;
 }
 
 .community-context-member {

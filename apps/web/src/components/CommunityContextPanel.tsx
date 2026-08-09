@@ -464,10 +464,10 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             title="Approve"
             onClick={() => void props.onApproveJoinRequest?.(request.id)}
           >
-            <Check size={14} strokeWidth={2.2} aria-hidden="true" />
+            <Check size={15} strokeWidth={1.9} aria-hidden="true" />
           </button>
           <button
-            className="community-context-request-action is-danger"
+            className="community-context-request-action"
             type="button"
             disabled={isJoinRequestDecisionPending}
             aria-busy={isDeciding || undefined}
@@ -475,7 +475,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             title="Deny"
             onClick={() => void props.onDenyJoinRequest?.(request.id)}
           >
-            <X size={14} strokeWidth={2.2} aria-hidden="true" />
+            <X size={15} strokeWidth={1.9} aria-hidden="true" />
           </button>
         </div>
       </div>
