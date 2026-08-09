@@ -1,9 +1,10 @@
 import { useEffect, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
-import type { AppPage, CommunityTab } from "./appShellNavigation";
+import type { AppPage, CommunitySettingsPane, CommunityTab } from "./appShellNavigation";
 
 export function useCommunityAgentConfigLifecycle<SessionT>(params: {
   activePage: AppPage;
   communityTab: CommunityTab;
+  communitySettingsPane: CommunitySettingsPane;
   session: SessionT | null;
   activeCommunityId: string | null;
   canManageMembersActiveCommunity: boolean;
@@ -14,7 +15,11 @@ export function useCommunityAgentConfigLifecycle<SessionT>(params: {
   const session = params.session;
 
   useEffect(() => {
-    if (params.activePage !== "community" || params.communityTab !== "ai_agent") return;
+    if (
+      params.activePage !== "community"
+      || params.communityTab !== "settings"
+      || params.communitySettingsPane !== "agent"
+    ) return;
     if (!session || !params.activeCommunityId || !params.canManageMembersActiveCommunity) {
       params.setCommunityAgentConfigError(null);
       params.communityAgentConfigLoadedCommunityIdRef.current = null;
@@ -26,6 +31,7 @@ export function useCommunityAgentConfigLifecycle<SessionT>(params: {
   }, [
     params.activePage,
     params.communityTab,
+    params.communitySettingsPane,
     session,
     params.activeCommunityId,
     params.canManageMembersActiveCommunity,

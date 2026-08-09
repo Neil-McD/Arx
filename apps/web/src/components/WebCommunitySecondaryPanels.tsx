@@ -16,7 +16,10 @@ import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
-  settings: Omit<ComponentProps<typeof WebCommunitySettingsSection>, "state" | "actions"> & {
+  settings: Omit<
+    ComponentProps<typeof WebCommunitySettingsSection>,
+    "state" | "actions" | "aiAgentProps" | "funnelProps"
+  > & {
     state: ComponentProps<typeof WebCommunitySettingsSection>["state"];
     actions: Omit<
       ComponentProps<typeof WebCommunitySettingsSection>["actions"],
@@ -68,6 +71,8 @@ function renderCenteredPane(children: ReactNode) {
 export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsProps) {
   const settingsSectionProps: ComponentProps<typeof WebCommunitySettingsSection> = {
     ...props.settings,
+    aiAgentProps: props.aiAgent,
+    funnelProps: props.funnel,
     actions: {
       ...props.settings.actions,
       openCommunityAvatarFocusModal: () => props.settings.setIsCommunityAvatarFocusModalOpen(true),
@@ -105,12 +110,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
           <WebCommunityBannerEditorModal {...bannerEditorModalProps} />
         </>
       ) : null}
-
-      {props.communityTab === "ai_agent" &&
-        renderCenteredPane(<WebCommunityAiAgentSection {...props.aiAgent} />)}
-
-      {props.communityTab === "funnel" &&
-        renderCenteredPane(<WebCommunityFunnelSection {...props.funnel} />)}
 
       {props.communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}

@@ -48,21 +48,23 @@ export const COMMUNITY_TABS = [
   "resources",
   "events",
   "settings",
-  "ai_agent",
-  "funnel",
   "analytics",
 ] as const;
 
 export type CommunityTab = (typeof COMMUNITY_TABS)[number];
 
-export const COMMUNITY_SETTINGS_PANES = ["community", "workflows", "danger"] as const;
+export const COMMUNITY_SETTINGS_PANES = [
+  "community",
+  "workflows",
+  "agent",
+  "funnel",
+  "danger",
+] as const;
 
 export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 
 const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
   "settings",
-  "ai_agent",
-  "funnel",
   "analytics",
 ]);
 
@@ -72,7 +74,6 @@ export function isCommunityRouteManagedTab(tab: CommunityTab): boolean {
 
 export type CommunityTabAccess = {
   canViewSettings: boolean;
-  canManageMembers: boolean;
   canViewAnalytics: boolean;
 };
 
@@ -83,9 +84,6 @@ export function isCommunityTabAllowedForAccess(
   switch (tab) {
     case "settings":
       return access.canViewSettings;
-    case "ai_agent":
-    case "funnel":
-      return access.canManageMembers;
     case "analytics":
       return access.canViewAnalytics;
     case "chat":
@@ -122,10 +120,12 @@ export function parseCommunityTab(
       return "events";
     case "settings":
       return "settings";
+    // Retired top-level configuration routes normalize to Settings. The
+    // pathname parser preserves the specific Agent/Funnel pane.
+    case "agent":
     case "ai_agent":
-      return "ai_agent";
     case "funnel":
-      return "funnel";
+      return "settings";
     case "analytics":
       return "analytics";
     default:
@@ -137,6 +137,11 @@ export function parseCommunitySettingsPane(
   value: string | null | undefined,
 ): CommunitySettingsPane {
   switch ((value ?? "").trim()) {
+    case "agent":
+    case "ai_agent":
+      return "agent";
+    case "funnel":
+      return "funnel";
     case "danger":
       return "danger";
     case "workflows":
@@ -145,6 +150,46 @@ export function parseCommunitySettingsPane(
     default:
       return "community";
   }
+}
+
+export type CommunitySettingsPaneAccess = {
+  canViewSettings: boolean;
+  canManageSettings: boolean;
+  canManageMembers: boolean;
+  isOwner: boolean;
+};
+
+export function isCommunitySettingsPaneAllowedForAccess(
+  pane: CommunitySettingsPane,
+  access: CommunitySettingsPaneAccess,
+): boolean {
+  switch (pane) {
+    case "community":
+      return access.canViewSettings;
+    case "workflows":
+      return access.canManageSettings;
+    case "agent":
+    case "funnel":
+      return access.canManageMembers;
+    case "danger":
+      return access.isOwner;
+  }
+}
+
+export function listCommunitySettingsPanesForAccess(
+  access: CommunitySettingsPaneAccess,
+): CommunitySettingsPane[] {
+  return COMMUNITY_SETTINGS_PANES.filter((pane) =>
+    isCommunitySettingsPaneAllowedForAccess(pane, access),
+  );
+}
+
+export function normalizeCommunitySettingsPaneForAccess(
+  pane: CommunitySettingsPane,
+  access: CommunitySettingsPaneAccess,
+): CommunitySettingsPane {
+  if (isCommunitySettingsPaneAllowedForAccess(pane, access)) return pane;
+  return listCommunitySettingsPanesForAccess(access)[0] ?? "community";
 }
 
 export function settingsGroupForPage(page: SettingsPage): SettingsGroup {
