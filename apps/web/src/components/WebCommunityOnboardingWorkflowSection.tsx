@@ -17,6 +17,11 @@ import { DiscoverCatalogLogo } from "./DiscoverCatalogLogo";
 import { WebCommunityOnboardingConciergeSurface } from "./WebCommunityOnboardingConciergeSurface";
 import { WebCommunityOnboardingMcpCompatibility } from "./WebCommunityOnboardingMcpCompatibility";
 import { WebCommunityOnboardingOrientationSurface } from "./WebCommunityOnboardingOrientationSurface";
+import {
+  platformTabId,
+  platformTabPanelId,
+  WebPlatformTabList,
+} from "./WebPlatformChoiceControls";
 
 const ignoreInlinePreviewAction = () => undefined;
 const INLINE_PREVIEW_STEPS: Array<{
@@ -228,27 +233,26 @@ export const WebCommunityOnboardingWorkflowSection = memo(function WebCommunityO
               </div>
 
               <aside className="community-onboarding-live-preview" aria-label="Onboarding pop-up preview">
-                <div
+                <WebPlatformTabList
+                  tabs={INLINE_PREVIEW_STEPS.map((step) => ({
+                    id: step.cue,
+                    label: step.label,
+                  }))}
+                  activeTab={selectedPreviewCue}
+                  onSelectTab={(cue) => setSelectedPreviewCue(cue)}
+                  idPrefix="community-onboarding-preview"
+                  ariaLabel="Preview onboarding step"
                   className="platform-switcher platform-switcher-compact community-onboarding-preview-steps"
-                  role="tablist"
-                  aria-label="Preview onboarding step"
                   style={previewSwitcherStyle}
-                >
-                  {INLINE_PREVIEW_STEPS.map((step) => (
-                    <button
-                      key={step.cue}
-                      type="button"
-                      role="tab"
-                      aria-selected={selectedPreviewCue === step.cue}
-                      className={`platform-switcher-btn${selectedPreviewCue === step.cue ? " is-active" : ""}`}
-                      onClick={() => setSelectedPreviewCue(step.cue)}
-                    >
-                      {step.label}
-                    </button>
-                  ))}
-                </div>
+                />
 
-                <div className="community-onboarding-inline-preview-frame">
+                <div
+                  id={platformTabPanelId("community-onboarding-preview", selectedPreviewCue)}
+                  role="tabpanel"
+                  aria-labelledby={platformTabId("community-onboarding-preview", selectedPreviewCue)}
+                  tabIndex={0}
+                  className="community-onboarding-inline-preview-frame"
+                >
                   {selectedPreviewCue === "orientation" ? (
                     <div
                       key={selectedPreviewCue}

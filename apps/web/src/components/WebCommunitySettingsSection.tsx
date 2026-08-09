@@ -18,6 +18,12 @@ import { StripeSetupButton } from "./StripeSetupButton";
 import { WebCommunityOnboardingWorkflowSection } from "./WebCommunityOnboardingWorkflowSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
+import {
+  platformTabId,
+  platformTabPanelId,
+  WebPlatformRadioGroup,
+  WebPlatformTabList,
+} from "./WebPlatformChoiceControls";
 
 type CommunityPricingMode = "free" | "monthly" | "annual";
 
@@ -156,29 +162,25 @@ function CommunitySettingsPaneSwitcher({
     panes.length,
     Math.max(0, panes.indexOf(activePane)),
   );
+  const tabs = panes.map((pane) => ({
+    id: pane,
+    label: COMMUNITY_SETTINGS_PANE_LABELS[pane],
+  }));
 
   return (
-    <div
+    <WebPlatformTabList
+      tabs={tabs}
+      activeTab={activePane}
+      onSelectTab={(pane, { source }) => {
+        if (activePane !== pane) {
+          onSelectPane(pane, source === "keyboard" ? { replace: true } : undefined);
+        }
+      }}
+      idPrefix="community-settings"
+      ariaLabel="Community settings sections"
       className="platform-switcher platform-switcher-compact community-settings-pane-switcher"
-      role="tablist"
-      aria-label="Community settings sections"
       style={switcherStyle}
-    >
-      {panes.map((pane) => (
-        <button
-          key={pane}
-          type="button"
-          role="tab"
-          aria-selected={activePane === pane}
-          className={`platform-switcher-btn${activePane === pane ? " is-active" : ""}`}
-          onClick={() => {
-            if (activePane !== pane) onSelectPane(pane);
-          }}
-        >
-          {COMMUNITY_SETTINGS_PANE_LABELS[pane]}
-        </button>
-      ))}
-    </div>
+    />
   );
 }
 
@@ -524,31 +526,22 @@ function CommunityMonetizationConfigSection({
       ) : null}
       <div className="create-community-field">
         <span>Pricing</span>
-        <div
+        <WebPlatformRadioGroup
+          options={pricingOptions.map((opt) => ({
+            id: opt.key,
+            label: opt.label,
+            disabled: opt.key !== "free" && needsStripeConnect,
+          }))}
+          value={state.communitySettingsPricingMode}
+          onSelectValue={(value) => {
+            actions.setCommunitySettingsPricingMode(value);
+            actions.setCommunityPricingDirty();
+            actions.markCommunitySettingsDirty();
+          }}
+          ariaLabel="Pricing options"
           className="platform-switcher platform-switcher-compact"
-          role="tablist"
-          aria-label="Pricing options"
           style={pricingSwitcherStyle}
-        >
-          {pricingOptions.map((opt) => (
-            <button
-              key={opt.key}
-              type="button"
-              className={`platform-switcher-btn${
-                state.communitySettingsPricingMode === opt.key ? " active" : ""
-              }`}
-              disabled={opt.key !== "free" && needsStripeConnect}
-              onClick={() => {
-                if (opt.key !== "free" && needsStripeConnect) return;
-                actions.setCommunitySettingsPricingMode(opt.key);
-                actions.setCommunityPricingDirty();
-                actions.markCommunitySettingsDirty();
-              }}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        />
         <span className="create-community-hint">
           Configure the member-facing pricing shown on your funnel and checkout.
         </span>
@@ -812,7 +805,14 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               panes={availableSettingsPanes}
               onSelectPane={onSelectPane}
             />
-            {selectedSettingsPane === "community" ? (
+            <div
+              id={platformTabPanelId("community-settings", selectedSettingsPane)}
+              role="tabpanel"
+              aria-labelledby={platformTabId("community-settings", selectedSettingsPane)}
+              tabIndex={0}
+              className="community-settings-pane-content"
+            >
+              {selectedSettingsPane === "community" ? (
               <>
                 {isOwnerSettingsLayer ? (
                   <CommunityBrandingSettingsSection
@@ -857,8 +857,8 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   </button>
                 </div>
               </>
-            ) : null}
-            {selectedSettingsPane === "workflows" ? (
+              ) : null}
+              {selectedSettingsPane === "workflows" ? (
               <WebCommunityOnboardingWorkflowSection
                 session={props.session}
                 ensureSession={props.ensureSession}
@@ -870,20 +870,21 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                 communityAvatarZoom={resolvedActiveCommunity.avatar_zoom}
                 onPreview={props.onPreviewCommunityOnboarding}
               />
-            ) : null}
-            {selectedSettingsPane === "agent" ? (
+              ) : null}
+              {selectedSettingsPane === "agent" ? (
               <WebCommunityAiAgentSection {...aiAgentProps} embedded />
-            ) : null}
-            {selectedSettingsPane === "funnel" ? (
+              ) : null}
+              {selectedSettingsPane === "funnel" ? (
               <WebCommunityFunnelSection {...funnelProps} embedded />
-            ) : null}
-            {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
+              ) : null}
+              {selectedSettingsPane === "danger" && isOwnerSettingsLayer ? (
               <CommunityDangerSettingsSection
                 activeCommunity={resolvedActiveCommunity}
                 state={state}
                 actions={actions}
               />
-            ) : null}
+              ) : null}
+            </div>
           </div>
         </>
       ) : (

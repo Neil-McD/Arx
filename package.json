@@ -98,6 +98,7 @@
     "check:community-launcher-retirement-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_launcher_retirement_contract_proof.ts",
     "check:community-launch-contract-transition-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_launch_contract_transition_proof.ts",
     "check:community-settings-panes-route-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_settings_panes_route_contract_proof.ts",
+    "check:community-settings-keyboard-accessibility-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_settings_keyboard_accessibility_contract_proof.ts",
     "check:community-onboarding-workflow-contract": "tsx scripts/community_onboarding_workflow_contract_proof.ts",
     "check:community-onboarding-preview-contract": "tsx scripts/community_onboarding_preview_contract_proof.ts",
     "check:community-funnel-editor-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_funnel_editor_contract_proof.ts",

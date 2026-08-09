@@ -256,7 +256,7 @@ assert.match(
 );
 assert.match(
   settingsSection,
-  /if \(activePane !== pane\) onSelectPane\(pane\);/,
+  /if \(activePane !== pane\) \{[\s\S]*onSelectPane\(pane, source === "keyboard" \? \{ replace: true \} : undefined\);[\s\S]*\}/,
   "clicking the active pane must not add duplicate history entries",
 );
 assert.match(

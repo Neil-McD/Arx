@@ -1,0 +1,150 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+import { resolveHorizontalRovingIndex } from "../shared/horizontalRovingNavigation.ts";
+
+function read(path: string): string {
+  return readFileSync(path, "utf8");
+}
+
+const choiceControls = read(
+  "apps/web/src/components/WebPlatformChoiceControls.tsx",
+);
+const communitySettings = read(
+  "apps/web/src/components/WebCommunitySettingsSection.tsx",
+);
+const agentSettings = read(
+  "apps/web/src/components/WebCommunityAiAgentSection.tsx",
+);
+const onboardingSettings = read(
+  "apps/web/src/components/WebCommunityOnboardingWorkflowSection.tsx",
+);
+const settingsNav = read("shared/SettingsNavList.tsx");
+const settingsStyles = read(
+  "apps/web/src/styles/settings-runtime-and-theme-overrides.css",
+);
+
+assert.equal(
+  resolveHorizontalRovingIndex({
+    key: "ArrowRight",
+    currentIndex: 2,
+    enabled: [true, true, true],
+  }),
+  0,
+  "ArrowRight must wrap to the first enabled choice",
+);
+assert.equal(
+  resolveHorizontalRovingIndex({
+    key: "ArrowLeft",
+    currentIndex: 0,
+    enabled: [true, true, true],
+  }),
+  2,
+  "ArrowLeft must wrap to the last enabled choice",
+);
+assert.equal(
+  resolveHorizontalRovingIndex({
+    key: "ArrowRight",
+    currentIndex: 0,
+    enabled: [true, false, true],
+  }),
+  2,
+  "roving navigation must skip disabled choices",
+);
+assert.equal(
+  resolveHorizontalRovingIndex({
+    key: "Home",
+    currentIndex: 2,
+    enabled: [false, true, true],
+  }),
+  1,
+  "Home must select the first enabled choice",
+);
+assert.equal(
+  resolveHorizontalRovingIndex({
+    key: "End",
+    currentIndex: 0,
+    enabled: [true, true, false],
+  }),
+  1,
+  "End must select the last enabled choice",
+);
+assert.equal(
+  resolveHorizontalRovingIndex({
+    key: "ArrowDown",
+    currentIndex: 0,
+    enabled: [true, true],
+  }),
+  null,
+  "horizontal widgets must preserve vertical browser behavior",
+);
+
+assert.match(choiceControls, /role="tablist"/);
+assert.match(choiceControls, /role="tab"/);
+assert.match(choiceControls, /aria-selected=\{isActive\}/);
+assert.match(
+  choiceControls,
+  /aria-controls=\{platformTabPanelId\(idPrefix, tab\.id\)\}/,
+);
+assert.match(choiceControls, /tabIndex=\{isActive \? 0 : -1\}/);
+assert.match(choiceControls, /role="radiogroup"/);
+assert.match(choiceControls, /role="radio"/);
+assert.match(choiceControls, /aria-checked=\{isActive\}/);
+assert.match(
+  agentSettings,
+  /buttonClassName: "community-ai-agent-tab"/,
+  "the shared tab control must preserve Agent tab sizing and active styling",
+);
+
+for (const [source, label] of [
+  [communitySettings, "community settings"],
+  [agentSettings, "agent settings"],
+  [onboardingSettings, "onboarding preview"],
+] as const) {
+  assert.match(
+    source,
+    /WebPlatformTabList/,
+    `${label} must use the shared tab contract`,
+  );
+  assert.match(
+    source,
+    /role="tabpanel"/,
+    `${label} must expose its selected panel`,
+  );
+  assert.match(
+    source,
+    /aria-labelledby=\{platformTabId/,
+    `${label} panel must reference its tab`,
+  );
+}
+
+assert.match(
+  communitySettings,
+  /source === "keyboard" \? \{ replace: true \} : undefined/,
+  "route-backed arrow navigation must replace instead of polluting browser history",
+);
+assert.match(
+  communitySettings,
+  /listCommunitySettingsPanesForAccess\(settingsPaneAccess\)/,
+  "keyboard targets must remain filtered by centralized access authority",
+);
+assert.match(communitySettings, /WebPlatformRadioGroup/);
+assert.doesNotMatch(
+  communitySettings,
+  /role="tablist"\s*aria-label="Pricing options"/,
+  "Pricing must not claim tab semantics",
+);
+assert.match(
+  settingsNav,
+  /aria-current=\{settingsGroup === item\.id \? "page" : undefined\}/,
+  "global settings navigation must expose the current page",
+);
+assert.match(
+  settingsStyles,
+  /\.settings-panel \.platform-switcher-btn:focus-visible\s*\{[\s\S]*var\(--focus-ring\)/,
+  "settings switchers must expose a visible theme-aware focus indicator",
+);
+
+console.log(
+  "PASS: community settings keyboard accessibility contract is complete.",
+);

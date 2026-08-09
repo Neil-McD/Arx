@@ -9,6 +9,11 @@ import {
   WebCommunityAiAgentSkillsEditor,
   type WebCommunityAiAgentSkillsEditorProps,
 } from "./WebCommunityAiAgentSkillsEditor";
+import {
+  platformTabId,
+  platformTabPanelId,
+  WebPlatformTabList,
+} from "./WebPlatformChoiceControls";
 
 type CommunityAiAgentTab = "instructions" | "skills";
 
@@ -93,27 +98,29 @@ export function WebCommunityAiAgentSection(props: WebCommunityAiAgentSectionProp
     <div className={embedded ? "community-settings-embedded-pane" : "settings-panel community-settings-panel"}>
       <div className="settings-section-title">AI Agent</div>
       {canRenderTabbedEditor ? (
-        <div
+        <WebPlatformTabList
+          tabs={COMMUNITY_AI_AGENT_TABS.map((tab) => ({
+            ...tab,
+            buttonClassName: "community-ai-agent-tab",
+          }))}
+          activeTab={activeTab}
+          onSelectTab={(tab) => setActiveTab(tab)}
+          idPrefix="community-ai-agent"
+          ariaLabel="AI agent configuration sections"
           className="platform-switcher platform-switcher-compact community-ai-agent-tablist"
-          role="tablist"
-          aria-label="AI agent configuration sections"
           style={tabSwitcherStyle}
-        >
-          {COMMUNITY_AI_AGENT_TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              role="tab"
-              className={`platform-switcher-btn community-ai-agent-tab${activeTab === tab.id ? " is-active" : ""}`}
-              aria-selected={activeTab === tab.id}
-              onClick={() => setActiveTab(tab.id)}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
+        />
       ) : null}
-      {canRenderTabbedEditor ? <div role="tabpanel">{content}</div> : content}
+      {canRenderTabbedEditor ? (
+        <div
+          id={platformTabPanelId("community-ai-agent", activeTab)}
+          role="tabpanel"
+          aria-labelledby={platformTabId("community-ai-agent", activeTab)}
+          tabIndex={0}
+        >
+          {content}
+        </div>
+      ) : content}
     </div>
   );
 }

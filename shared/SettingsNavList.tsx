@@ -81,6 +81,7 @@ export function SettingsNavList({
           className={settingsGroup === item.id ? "nav-item active" : "nav-item"}
           onClick={() => onSelectPage(item.page)}
           type={buttonType}
+          aria-current={settingsGroup === item.id ? "page" : undefined}
           aria-label={settingsGroupLabel(item.id)}
           title={settingsGroupLabel(item.id)}
         >
