@@ -27,9 +27,8 @@ export function buildWebShellProjection(params: {
   const isAppRoute = params.publicRouteKind === "app";
   const isGlobalSettings = isAppRoute && params.activePage === "settings";
   const isLandingPage = isAppRoute && params.activePage === "landing";
-  const isOnboardingPage = isAppRoute && params.activePage === "onboarding";
   const isOperatorPage = isAppRoute && params.activePage === "operator";
-  const isPublicAppPage = isLandingPage || isOnboardingPage;
+  const isPublicAppPage = isLandingPage;
   /* The visitor lens on mobile: /c/:slug gets the SAME mobile community
      shell a member gets — one column, the middle panel is the page. */
   const isVisitorCommunityRoute =
@@ -43,6 +42,7 @@ export function buildWebShellProjection(params: {
       !isPublicAppPage &&
       !params.isPublicCommunityFunnel &&
       (params.activePage === "settings" ||
+        params.activePage === "onboarding" ||
         params.activePage === "community" ||
         params.activePage === "discover" ||
         params.activePage === "operator" ||

@@ -55,7 +55,12 @@ export function WebAppMainSurfaceHost(props: WebAppMainSurfaceHostProps) {
       ) : props.activePage === "landing" ? (
         <WebLandingPage {...props.landingPageProps} />
       ) : props.activePage === "onboarding" ? (
-        <WebPlatformBridgePage {...props.platformBridgePageProps} />
+        <>
+          <div className="community-body">
+            <WebDiscoverPanel {...props.discoverPanelProps} />
+          </div>
+          <WebPlatformBridgePage {...props.platformBridgePageProps} />
+        </>
       ) : props.activePage === "settings" ? (
         <WebSettingsSurfaceHost {...props.settingsSurfaceHostProps} />
       ) : props.activePage === "operator" ? (

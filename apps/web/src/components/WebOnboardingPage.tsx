@@ -16,6 +16,7 @@ import {
 import { WebPlatformLegalReaderModal } from "./WebPlatformLegalReaderModal";
 import { WebUserAvatarEditorModal } from "./WebUserAvatarEditorModal";
 import { WebSocialProfileLinksFields } from "./WebSocialProfileLinksFields";
+import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 import {
   PROFILE_BIO_MAX_CHARS,
   PROFILE_DISPLAY_NAME_MAX_CHARS,
@@ -411,15 +412,15 @@ export function WebOnboardingPage(props: WebOnboardingPageProps) {
   );
 
   return (
-    <div className="polynet-onboarding-modal-backdrop" role="presentation">
-      <div
-        className="polynet-onboarding-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="polynet-onboarding-title"
-      >
-        {flow}
-      </div>
-    </div>
+    <WebBlockingSetupModal
+      titleId="polynet-onboarding-title"
+      dismissible={Boolean(props.onClose)}
+      busy={submission.isSaving}
+      size="wide"
+      className="polynet-onboarding-modal"
+      onDismiss={handleClose}
+    >
+      {flow}
+    </WebBlockingSetupModal>
   );
 }

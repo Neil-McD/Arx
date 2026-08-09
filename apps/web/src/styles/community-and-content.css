@@ -10292,45 +10292,10 @@ button.chat-reply-quote:hover {
   cursor: not-allowed;
 }
 
-.builder-knowledge-setup {
-  min-height: 100vh;
-  min-height: 100svh;
-  display: grid;
-  align-content: start;
-  justify-items: center;
-  gap: 28px;
-  overflow-x: hidden;
-  background: var(--bg-app);
-  color: var(--text-primary);
-  padding: clamp(24px, 5vw, 56px) 20px 48px;
-}
-
-.builder-knowledge-setup-brand {
-  display: inline-flex;
-  align-items: center;
-  gap: 9px;
-  color: var(--text-primary);
-  font-size: 17px;
-}
-
-.builder-knowledge-setup-brand > img {
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-}
-
-.builder-knowledge-setup-brand strong > span {
-  color: var(--accent-pink);
-}
-
 .builder-knowledge-setup-card {
-  width: min(100%, 940px);
+  width: 100%;
   display: grid;
   gap: 10px;
-  border: 1px solid var(--border-default);
-  border-radius: 22px;
-  background: var(--bg-card);
-  padding: clamp(24px, 5vw, 54px);
 }
 
 .builder-knowledge-setup-step {
@@ -10424,15 +10389,6 @@ button.chat-reply-quote:hover {
 }
 
 @media (max-width: 680px) {
-  .builder-knowledge-setup {
-    padding: 22px 12px 24px;
-  }
-
-  .builder-knowledge-setup-card {
-    border-radius: 17px;
-    padding: 22px 16px;
-  }
-
   .builder-knowledge-setup-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;

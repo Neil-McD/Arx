@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from "react";
 
 import { WebCommunityKnowledgeSourceIntake } from "./WebCommunityKnowledgeSourceIntake";
+import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 import type {
   CommunityResource,
   CommunityResourcesActions,
@@ -68,15 +69,17 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
   };
 
   return (
-    <main className="builder-knowledge-setup" aria-busy={controlsDisabled}>
-      <div className="builder-knowledge-setup-brand" aria-label="Polynet">
-        <img src="/landing-polynet/logo.png" alt="" />
-        <strong>Polynet<span>.</span></strong>
-      </div>
-      <section className="builder-knowledge-setup-card" aria-labelledby="builder-knowledge-setup-title">
+    <WebBlockingSetupModal
+      titleId="builder-knowledge-setup-title"
+      descriptionId="builder-knowledge-setup-description"
+      busy={controlsDisabled}
+      size="wide"
+      className="builder-knowledge-setup"
+    >
+      <section className="builder-knowledge-setup-card">
         <div className="builder-knowledge-setup-step">Community setup · 2 of 2</div>
         <h1 id="builder-knowledge-setup-title">Add your community knowledge.</h1>
-        <p className="builder-knowledge-setup-intro">
+        <p id="builder-knowledge-setup-description" className="builder-knowledge-setup-intro">
           Add links or files now, or skip and do this later from Resources.
         </p>
 
@@ -122,6 +125,6 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
           </button>
         </div>
       </section>
-    </main>
+    </WebBlockingSetupModal>
   );
 }

@@ -11,6 +11,10 @@ const appSource = readFileSync(
   resolve(process.cwd(), "apps/web/src/App.tsx"),
   "utf8",
 );
+const overlayHostSource = readFileSync(
+  resolve(process.cwd(), "apps/web/src/components/WebGlobalOverlayHost.tsx"),
+  "utf8",
+);
 const knowledgeControllerSource = readFileSync(
   resolve(
     process.cwd(),
@@ -24,7 +28,9 @@ test("Builder knowledge setup is a required, non-dismissible step", () => {
   expect(source).toContain("Add your community knowledge.");
   expect(source).toContain("Skip for now");
   expect(source).toContain('className="builder-knowledge-setup-next"');
+  expect(source).toContain("<WebBlockingSetupModal");
   expect(source).not.toContain('aria-label="Close');
+  expect(source).not.toContain("<main");
   expect(source).not.toContain("Build my resources");
 });
 
@@ -42,10 +48,14 @@ test("a source-loading failure cannot trap the buyer in onboarding", () => {
   );
 });
 
-test("the durable knowledge gate runs only after every app hook", () => {
-  const gateIndex = appSource.indexOf("if (pendingBuilderKnowledgeCommunity)");
-  const finalHookIndex = appSource.indexOf("useWebMemberAgentSurfaceController({");
+test("the durable knowledge gate is projected through the canonical global overlay host", () => {
+  const setupProjectionIndex = appSource.indexOf("builderKnowledgeSetupProps:");
   const routeHoldIndex = appSource.indexOf("if (shouldHoldRouteForAccess)");
-  expect(gateIndex).toBeGreaterThan(finalHookIndex);
-  expect(gateIndex).toBeLessThan(routeHoldIndex);
+  const workspaceIndex = appSource.lastIndexOf("<WebAppCompositionRoot");
+  expect(setupProjectionIndex).toBeLessThan(routeHoldIndex);
+  expect(workspaceIndex).toBeGreaterThan(routeHoldIndex);
+  expect(overlayHostSource).toContain("props.builderKnowledgeSetupProps");
+  expect(overlayHostSource).toContain("<WebBuilderKnowledgeSetup");
+  expect(appSource).not.toContain("<WebBuilderKnowledgeSetup");
+  expect(appSource).not.toMatch(/if \(pendingBuilderKnowledgeCommunity\) \{[\s\S]*?return \(\s*<WebBuilderKnowledgeSetup/);
 });

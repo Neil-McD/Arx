@@ -1104,21 +1104,69 @@ body {
 /* Step 3 — compound: simple feedback loop */
 
 /* Step 4 — monetize: smooth exponential curve */
-/* Standalone platform bridge: generic joiners' front door — clean page,
-   platform mark, the bridge card, nothing else. */
-.polynet-platform-bridge-page {
-  min-height: 100%;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  padding: 56px 20px 80px;
+
+/* Required setup has one visual and interaction contract everywhere: the
+   workspace stays legible as context, but cannot be used until the centered
+   task is complete. */
+.blocking-setup-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 9998;
+  display: grid;
+  place-items: center;
+  overflow: hidden auto;
+  overscroll-behavior: contain;
+  padding: clamp(14px, 3vw, 30px);
+  background: rgba(5, 5, 8, 0.7);
+  backdrop-filter: blur(14px) saturate(0.74);
+  -webkit-backdrop-filter: blur(14px) saturate(0.74);
+}
+
+.blocking-setup-modal {
+  position: relative;
+  width: min(100%, 560px);
+  max-height: calc(100vh - clamp(28px, 6vw, 60px));
+  max-height: calc(100svh - clamp(28px, 6vw, 60px));
+  overflow: auto;
+  overscroll-behavior: contain;
+  border: 1px solid color-mix(in srgb, var(--text-primary) 12%, transparent);
+  border-radius: 22px;
+  padding: clamp(22px, 3vw, 34px);
   color: var(--text-primary);
-  background: var(--bg-app);
+  background: color-mix(in srgb, var(--bg-card) 94%, #000 6%);
+  box-shadow: 0 34px 110px -32px rgba(0, 0, 0, 0.88);
+  animation: blocking-setup-enter 180ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+  scrollbar-width: thin;
+}
+
+.blocking-setup-modal:focus {
+  outline: none;
+}
+
+.blocking-setup-modal--wide {
+  width: min(100%, 940px);
+}
+
+@keyframes blocking-setup-enter {
+  from {
+    opacity: 0;
+    transform: translateY(10px) scale(0.992);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.polynet-platform-bridge-modal {
+  width: min(100%, 490px);
+  padding: 26px;
 }
 
 .polynet-platform-bridge-mark {
   display: flex;
   align-items: center;
+  justify-content: center;
   gap: 10px;
   font-size: 18px;
   font-weight: 650;
@@ -1131,31 +1179,31 @@ body {
 }
 
 .polynet-platform-bridge-tagline {
-  margin: 8px 0 30px;
+  margin: 8px 0 2px;
   font-size: 13px;
   color: var(--text-muted);
+  text-align: center;
 }
 
-.polynet-onboarding-modal-backdrop {
-  position: fixed;
-  inset: 0;
-  z-index: 80;
-  display: grid;
-  place-items: center;
-  padding: 24px;
-  background: rgba(0, 0, 0, 0.66);
-  backdrop-filter: blur(12px);
+.blocking-setup-hold {
+  min-height: 210px;
+}
+
+.blocking-setup-modal.polynet-platform-bridge-modal > .cfg-gatecard.cvs-bridge-card {
+  width: 100%;
+  max-width: 100%;
+  max-height: none;
+  overflow: visible;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  padding-inline: 0;
+  padding-bottom: 0;
 }
 
 .polynet-onboarding-modal {
   width: min(100%, 900px);
-  max-height: min(820px, calc(100vh - 48px));
-  overflow: auto;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  border-radius: 18px;
   padding: 24px;
-  background: color-mix(in srgb, var(--bg-card) 92%, #000000 8%);
-  box-shadow: 0 30px 90px rgba(0, 0, 0, 0.52);
 }
 
 .polynet-onboarding-panel {
@@ -1166,6 +1214,29 @@ body {
 
 .polynet-onboarding-modal .polynet-onboarding-panel {
   width: 100%;
+}
+
+@media (max-width: 680px) {
+  .blocking-setup-overlay {
+    padding: 10px;
+  }
+
+  .blocking-setup-modal {
+    width: 100%;
+    max-height: calc(100svh - 20px);
+    border-radius: 20px;
+    padding: 22px 18px;
+  }
+
+  .polynet-platform-bridge-modal {
+    padding: 22px 18px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blocking-setup-modal {
+    animation: none;
+  }
 }
 
 .polynet-onboarding-topbar {

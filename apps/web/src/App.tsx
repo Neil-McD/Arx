@@ -174,7 +174,6 @@ import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommun
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebAppCompositionRoot } from "./components/WebAppCompositionRoot";
-import { WebBuilderKnowledgeSetup } from "./components/WebBuilderKnowledgeSetup";
 import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
@@ -2631,6 +2630,22 @@ export default function App() {
         void publicBuilderCheckout.startPurchase();
       },
     },
+    builderKnowledgeSetupProps: pendingBuilderKnowledgeCommunity
+      ? {
+          community: pendingBuilderKnowledgeCommunity,
+          isHydrating:
+            activeCommunityId !== pendingBuilderKnowledgeCommunity.id
+            || hydratedBuilderKnowledgeCommunityId !== pendingBuilderKnowledgeCommunity.id
+            || isLoadingResources,
+          resources:
+            activeCommunityId === pendingBuilderKnowledgeCommunity.id
+            && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id
+              ? communityResources
+              : [],
+          onAddSources: handleAddCommunitySources,
+          onComplete: completePendingBuilderKnowledgeSetup,
+        }
+      : null,
     appToast,
   });
 
@@ -3048,21 +3063,6 @@ export default function App() {
     hasLeftPanel,
     isGlobalSettings,
   });
-
-  if (pendingBuilderKnowledgeCommunity) {
-    const isKnowledgeCommunityReady =
-      activeCommunityId === pendingBuilderKnowledgeCommunity.id
-      && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id;
-    return (
-      <WebBuilderKnowledgeSetup
-        community={pendingBuilderKnowledgeCommunity}
-        isHydrating={!isKnowledgeCommunityReady || isLoadingResources}
-        resources={isKnowledgeCommunityReady ? communityResources : []}
-        onAddSources={handleAddCommunitySources}
-        onComplete={completePendingBuilderKnowledgeSetup}
-      />
-    );
-  }
 
   if (shouldHoldRouteForAccess) {
     const routeAdmissionError = authError ?? onboardingError;

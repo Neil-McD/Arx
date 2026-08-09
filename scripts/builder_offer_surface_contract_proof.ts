@@ -130,7 +130,11 @@ assert.match(
   "a canonical unassigned subscription must open required identity setup directly",
 );
 assert.match(createModal, /props\.isDismissible \? \([\s\S]*Close community setup/);
-assert.match(createModal, /onClick=\{props\.isDismissible \? props\.onClose : undefined\}/);
+assert.match(
+  createModal,
+  /<WebBlockingSetupModal[\s\S]*dismissible=\{props\.isDismissible\}[\s\S]*onDismiss=\{props\.onClose\}/,
+  "community creation must use the canonical setup shell without weakening required setup",
+);
 assert.match(
   createController,
   /createInFlightRef\.current \|\| !current\.isCreateCommunityDismissible/,

@@ -93,3 +93,34 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 - Remaining severity: no P0, P1, P2, or P3 findings remain for this hover slice.
 
 final result: passed
+
+---
+
+# Onboarding setup overlay QA
+
+## Scope
+
+- Reference: the existing paid community identity modal shown in the product and the user-provided onboarding screenshots.
+- Implementation: the canonical blocking setup shell across account setup, paid community identity, and community knowledge setup.
+- Behavior intentionally unchanged: account completion, community creation, knowledge ingestion, skip/next completion, and backend authority.
+
+## Visual comparison
+
+- Desktop: all three surfaces render as one centered dark card over the visible, dimmed, blurred Polynet workspace.
+- Mobile (390 x 844): compact account setup remains centered; tall community and knowledge forms remain bounded to the viewport and scroll inside the card.
+- Hierarchy: kicker, title, supporting copy, task controls, and terminal action use the same order across setup steps.
+- Interaction: required surfaces expose no close control, backdrop dismissal, or Escape dismissal. Focus is contained and the underlying workspace is inert.
+
+## Defects found and fixed
+
+- Account setup initially overflowed horizontally by four pixels because the bridge card's later-loaded width rule beat the modal override. Increased the canonical selector specificity and constrained the child to the modal content width.
+- Mobile compact account setup initially inherited bottom-sheet alignment. Removed that exception so every setup card follows the selected centered-card philosophy.
+
+## Verification
+
+- Browser-rendered desktop and mobile screenshots reviewed for community identity, account setup, and knowledge setup.
+- Browser console: no warnings or errors on any reviewed surface.
+- Required account setup remained visible after Escape; `#root` was inert while the dialog was open.
+- TypeScript, focused UI contracts, account/continuation contracts, Builder surface contract, launcher retirement proof, and production web build passed.
+
+final result: passed

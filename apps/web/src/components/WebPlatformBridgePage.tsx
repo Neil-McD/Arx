@@ -1,8 +1,5 @@
-/* The standalone platform bridge: generic joiners (no community context) meet
-   the same bridge card in its platform presentation on a clean page — no
-   community pitch or community backdrop. The server resolves their canonical
-   community destination after setup. Community joiners never see this page. */
 import { WebCommunityBridgeCard, type WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
+import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 
 export function WebPlatformBridgePage(props: {
   /** null = hold: setup status is loading, or a completed account is about to
@@ -10,17 +7,23 @@ export function WebPlatformBridgePage(props: {
   bridge: WebCommunityBridgeCardProps | null;
 }) {
   return (
-    <div className="polynet-platform-bridge-page">
+    <WebBlockingSetupModal
+      titleId="polynet-platform-bridge-title"
+      descriptionId="polynet-platform-bridge-description"
+      className="polynet-platform-bridge-modal"
+    >
       <div className="polynet-platform-bridge-mark">
         <img src="/favicon.svg" alt="" />
-        <span>Polynet</span>
+        <span id="polynet-platform-bridge-title">Polynet</span>
       </div>
-      <p className="polynet-platform-bridge-tagline">Communities with a brain.</p>
+      <p id="polynet-platform-bridge-description" className="polynet-platform-bridge-tagline">
+        Finish your profile to enter Polynet.
+      </p>
       {props.bridge ? (
         <WebCommunityBridgeCard {...props.bridge} />
       ) : (
-        <div className="landing-auth-hold" aria-hidden="true" />
+        <div className="blocking-setup-hold" role="status" aria-label="Loading account setup" />
       )}
-    </div>
+    </WebBlockingSetupModal>
   );
 }

@@ -3,6 +3,7 @@ import type { DragEvent } from "react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import { isValidCommunitySlug } from "../../../../shared/communitySlug";
+import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 
 type WebCreateCommunityModalProps = {
   isOpen: boolean;
@@ -40,39 +41,36 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
   if (!props.isOpen) return null;
 
   return (
-    <div
-      className="modal-overlay builder-offer-overlay"
-      onClick={props.isDismissible ? props.onClose : undefined}
+    <WebBlockingSetupModal
+      titleId="builder-create-title"
+      dismissible={props.isDismissible}
+      busy={props.isCreatingCommunity}
+      size="wide"
+      className="create-community-modal builder-create-modal"
+      onDismiss={props.onClose}
     >
-      <div
-        className="modal create-community-modal builder-create-modal"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="builder-create-title"
-        onClick={(event) => event.stopPropagation()}
-      >
-        {props.isDismissible ? (
-          <button
-            className="modal-close builder-offer-close"
-            onClick={props.onClose}
-            title="Close"
-            aria-label="Close community setup"
-          >
-            ×
-          </button>
-        ) : null}
+      {props.isDismissible ? (
+        <button
+          className="modal-close builder-offer-close"
+          onClick={props.onClose}
+          title="Close"
+          aria-label="Close community setup"
+        >
+          ×
+        </button>
+      ) : null}
 
-        <div className="builder-create-heading" id="builder-create-title">
-          <span>Builder setup</span>
-          <h2>Set up your community</h2>
-          <p>
-            {props.isPaidSetup
-              ? "Your payment is confirmed. Add the identity members will see. You can change any of it later."
-              : "Add the identity members will see. You can change any of it later."}
-          </p>
-        </div>
+      <div className="builder-create-heading" id="builder-create-title">
+        <span>Builder setup</span>
+        <h2>Set up your community</h2>
+        <p>
+          {props.isPaidSetup
+            ? "Your payment is confirmed. Add the identity members will see. You can change any of it later."
+            : "Add the identity members will see. You can change any of it later."}
+        </p>
+      </div>
 
-        <div className="builder-create-fields">
+      <div className="builder-create-fields">
           <div className="create-community-layout builder-create-identity-layout">
             <div className="create-community-branding">
               <div
@@ -201,33 +199,32 @@ export function WebCreateCommunityModal(props: WebCreateCommunityModalProps) {
               </label>
             </div>
           </div>
-        </div>
-
-        {props.createCommunityError ? (
-          <div className="auth-error builder-offer-error">{props.createCommunityError}</div>
-        ) : null}
-
-        <div className="builder-offer-actions">
-          <button
-            className="builder-offer-primary"
-            type="button"
-            onClick={() => void props.onPrimaryAction()}
-            disabled={
-              props.isCreatingCommunity
-              || props.isProcessingCreateAvatar
-              || props.isProcessingCreateBanner
-              || props.createCommunityName.trim().length === 0
-              || !isValidCommunitySlug(props.createCommunitySlug)
-            }
-          >
-            {props.isCreatingCommunity
-              ? "Creating community…"
-              : props.hasSession
-                ? "Create community"
-                : "Sign in to continue"}
-          </button>
-        </div>
       </div>
-    </div>
+
+      {props.createCommunityError ? (
+        <div className="auth-error builder-offer-error">{props.createCommunityError}</div>
+      ) : null}
+
+      <div className="builder-offer-actions">
+        <button
+          className="builder-offer-primary"
+          type="button"
+          onClick={() => void props.onPrimaryAction()}
+          disabled={
+            props.isCreatingCommunity
+            || props.isProcessingCreateAvatar
+            || props.isProcessingCreateBanner
+            || props.createCommunityName.trim().length === 0
+            || !isValidCommunitySlug(props.createCommunitySlug)
+          }
+        >
+          {props.isCreatingCommunity
+            ? "Creating community…"
+            : props.hasSession
+              ? "Create community"
+              : "Sign in to continue"}
+        </button>
+      </div>
+    </WebBlockingSetupModal>
   );
 }
