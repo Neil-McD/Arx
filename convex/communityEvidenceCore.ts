@@ -193,6 +193,7 @@ async function resolveInteractionEvidence(args: {
 
   const readableEmbeds = embeds.filter(
     (embed) =>
+      embed.embedKind === "workspace_ref" &&
       embed.status !== "redacted" &&
       communityInteractionVisibilityIsEvidenceReadable(String(embed.visibilityScope ?? "private")),
   );

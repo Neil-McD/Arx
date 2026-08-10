@@ -42,6 +42,7 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
+import { completeBuilderKnowledgeSetupForOwner } from "./communityBuilderKnowledgeSetupCore";
 import {
   revokeCommunityResourceMemoryProjection,
   syncCommunityResourceMemoryProjection,
@@ -2254,12 +2255,6 @@ function normalizeDirectoryToolPath(raw: unknown): string {
 
 function normalizeDirectoryPathForMatch(raw: unknown): string {
   return normalizeDirectoryToolPath(raw).toLowerCase();
-}
-
-function normalizeBuilderWriteKind(raw: unknown): "module" | "page" | "source" {
-  const value = String(raw ?? "").trim().toLowerCase();
-  if (value === "module" || value === "page" || value === "source") return value;
-  throw new Error("community_resource_builder_kind_invalid");
 }
 
 function requireExpectedUpdatedAt(args: {
@@ -5295,6 +5290,32 @@ function communityResourceBuilderChangesetIntent(args: {
     : null;
 }
 
+async function completeInitialBuilderKnowledgeSetup(args: {
+  ctx: any;
+  changeset: CommunityResourceBuilderChangesetRow;
+  communityId: any;
+  userId: any;
+  nowMs: number;
+}): Promise<boolean> {
+  if (
+    communityResourceBuilderChangesetIntent({
+      communityId: args.communityId,
+      idempotencyKey: args.changeset.idempotencyKey,
+    }) !== "initial_community_resources"
+  ) {
+    return false;
+  }
+  const community = await args.ctx.db.get(args.communityId);
+  if (!community) throw new Error("community_not_found");
+  const { changed } = await completeBuilderKnowledgeSetupForOwner({
+    ctx: args.ctx,
+    community,
+    userId: args.userId,
+    nowMs: args.nowMs,
+  });
+  return changed;
+}
+
 function communityResourceBuilderChangesetExpiresAt(
   changeset: CommunityResourceBuilderChangesetRow,
 ): number {
@@ -5940,6 +5961,14 @@ export const applyCommunityResourceBuilderChangeset = mutation({
       throw new Error("community_resource_changeset_not_found");
     }
     if (changeset.status === "applied") {
+      const builderKnowledgeSetupCompleted =
+        await completeInitialBuilderKnowledgeSetup({
+          ctx,
+          changeset,
+          communityId: args.communityId,
+          userId,
+          nowMs: Date.now(),
+        });
       const operations = normalizeCommunityResourceBuilderChangesetOperations(
         changeset.operations,
       );
@@ -5956,6 +5985,7 @@ export const applyCommunityResourceBuilderChangeset = mutation({
         preview_total_count: preview.total_count,
         preview_limit: preview.preview_limit,
         result: changeset.result ?? null,
+        builder_knowledge_setup_completed: builderKnowledgeSetupCompleted,
         deduped: true,
       };
     }
@@ -6008,6 +6038,14 @@ export const applyCommunityResourceBuilderChangeset = mutation({
       appliedAt: nowMs,
       appliedByUserId: userId,
     });
+    const builderKnowledgeSetupCompleted =
+      await completeInitialBuilderKnowledgeSetup({
+        ctx,
+        changeset,
+        communityId: args.communityId,
+        userId,
+        nowMs,
+      });
     return {
       ok: true,
       kind: "community_resource_builder_changeset_applied",
@@ -6020,318 +6058,8 @@ export const applyCommunityResourceBuilderChangeset = mutation({
       preview_total_count: preview.total_count,
       preview_limit: preview.preview_limit,
       result,
+      builder_knowledge_setup_completed: builderKnowledgeSetupCompleted,
       deduped: false,
-    };
-  },
-});
-
-export const writeCommunityResourceBuilderResource = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    kind: v.string(),
-    payload: v.optional(v.any()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    const kind = normalizeBuilderWriteKind(args.kind);
-    const payload =
-      args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
-        ? (args.payload as Record<string, unknown>)
-        : {};
-    const nowMs = Date.now();
-
-    if (kind === "module") {
-      const rows = (await ctx.db
-        .query("communityResourceModules" as any)
-        .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-        .collect()) as CommunityResourceModuleLike[];
-      const nextSortOrder = rows.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
-      const id = await ctx.db.insert("communityResourceModules" as any, {
-        communityId: args.communityId,
-        createdByUserId: userId,
-        status: Object.prototype.hasOwnProperty.call(payload, "module_status")
-          ? requireResourceModuleStatusForWrite(payload.module_status)
-          : "draft",
-        name: normalizeName(payload.name),
-        descriptionMd: normalizeOptionalText(payload.description_md, 1200),
-        sortOrder: nextSortOrder,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-      });
-      const created = (await ctx.db.get(id as any)) as CommunityResourceModuleLike | null;
-      if (!created) throw new Error("community_resource_module_create_failed");
-      return {
-        ok: true,
-        kind: "community_resource_builder_write",
-        module: await mapCommunityResourceModuleRow(ctx, created),
-      };
-    }
-
-    const role = kind === "source" ? "source" : "page";
-    const status = normalizeBuilderResourceStatus({
-      raw: payload.resource_status,
-      confirmPublish: Boolean(payload.confirm_publish),
-      defaultStatus: role === "source" ? "review" : "draft",
-    });
-    const moduleId = await requireValidResourceModule({
-      ctx,
-      communityId: args.communityId,
-      moduleId: normalizeOptionalModuleId(payload.module_id),
-    });
-    const sourceResourceIdRaw = normalizeOptionalModuleId(payload.source_resource_id);
-    const sourceResource = sourceResourceIdRaw
-      ? ((await ctx.db.get(sourceResourceIdRaw as any)) as CommunityResourceLike | null)
-      : null;
-    if (sourceResourceIdRaw) {
-      if (!sourceResource || String(sourceResource.communityId) !== String(args.communityId)) {
-        throw new Error("community_source_resource_not_found");
-      }
-      if (normalizeResourceRole(sourceResource.role) !== "source") {
-        throw new Error("community_source_resource_required");
-      }
-    }
-    const sortOrder = await getNextResourceSortOrder({
-      ctx,
-      communityId: args.communityId,
-      moduleId,
-    });
-    const bodyMd = normalizeCommunityResourceBodyMd(payload.body_md, 20_000);
-    const url = normalizeOptionalUrl(payload.url);
-    const fileKey = normalizeOptionalFileKey(payload.file_key);
-    const sourceIngestionStatus = role === "source" && bodyMd
-      ? "ready"
-      : role === "source" && (url || fileKey)
-        ? "queued"
-        : "not_required";
-    const sourceIngestionKind = role === "source" && url
-      ? "url"
-      : role === "source" && fileKey
-        ? "file"
-        : "manual";
-    const id = await ctx.db.insert("communityResources" as any, {
-      communityId: args.communityId,
-      ...(moduleId ? { moduleId } : {}),
-      createdByUserId: userId,
-      type: normalizeResourceType(payload.type),
-      role,
-      status,
-      ...(sourceResource ? { sourceResourceId: sourceResource._id } : {}),
-      title: normalizeName(payload.title),
-      url,
-      fileKey,
-      sourceIngestionStatus,
-      sourceIngestionKind,
-      pinned: Boolean(payload.pinned),
-      sortOrder,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
-    if (!created) throw new Error("community_resource_create_failed");
-    if (bodyMd) {
-      await writeCommunityResourceBodyContent(ctx, {
-        communityId: args.communityId,
-        resourceId: created._id,
-        bodyMd,
-        nowMs,
-        maxChars: 20_000,
-      });
-    }
-    const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-    return {
-      ok: true,
-      kind: "community_resource_builder_write",
-      resource: await mapCommunityResourceRow(ctx, hydrated),
-    };
-  },
-});
-
-export const editCommunityResourceBuilderResource = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    resourceId: v.optional(v.union(v.id("communityResources"), v.null())),
-    moduleId: v.optional(v.union(v.id("communityResourceModules"), v.null())),
-    expectedUpdatedAt: v.number(),
-    confirmPublish: v.optional(v.boolean()),
-    payload: v.optional(v.any()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    const payload =
-      args.payload && typeof args.payload === "object" && !Array.isArray(args.payload)
-        ? (args.payload as Record<string, unknown>)
-        : {};
-    const nowMs = Date.now();
-
-    if (args.moduleId) {
-      const existing = (await ctx.db.get(args.moduleId as any)) as CommunityResourceModuleLike | null;
-      if (!existing || String(existing.communityId) !== String(args.communityId)) {
-        throw new Error("community_resource_module_not_found");
-      }
-      requireExpectedUpdatedAt({
-        expectedUpdatedAt: args.expectedUpdatedAt,
-        actualUpdatedAt: existing.updatedAt,
-      });
-      const moduleStatusChanged = Object.prototype.hasOwnProperty.call(payload, "module_status") &&
-        normalizeResourceModuleStatus(existing.status) !== requireResourceModuleStatusForWrite(payload.module_status);
-      await ctx.db.patch(existing._id as any, {
-        ...(Object.prototype.hasOwnProperty.call(payload, "name")
-          ? { name: normalizeName(payload.name) }
-          : {}),
-        ...(Object.prototype.hasOwnProperty.call(payload, "description_md")
-          ? { descriptionMd: normalizeOptionalText(payload.description_md, 1200) }
-          : {}),
-        ...(Object.prototype.hasOwnProperty.call(payload, "module_status")
-          ? { status: requireResourceModuleStatusForWrite(payload.module_status) }
-          : {}),
-        updatedAt: nowMs,
-      });
-      if (moduleStatusChanged) {
-        await syncResourceMemoryProjectionsForModule({
-          ctx,
-          communityId: args.communityId,
-          moduleId: existing._id,
-        });
-      }
-      const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceModuleLike | null;
-      if (!updated) throw new Error("community_resource_module_not_found");
-      return {
-        ok: true,
-        kind: "community_resource_builder_edit",
-        module: await mapCommunityResourceModuleRow(ctx, updated),
-      };
-    }
-
-    if (!args.resourceId) throw new Error("community_resource_builder_edit_ref_required");
-    const existing = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
-    if (!existing || String(existing.communityId) !== String(args.communityId)) {
-      throw new Error("community_resource_not_found");
-    }
-    requireExpectedUpdatedAt({
-      expectedUpdatedAt: args.expectedUpdatedAt,
-      actualUpdatedAt: existing.updatedAt,
-    });
-    const nextStatus = Object.prototype.hasOwnProperty.call(payload, "resource_status")
-      ? normalizeBuilderResourceStatus({
-          raw: payload.resource_status,
-          existingStatus: existing.status,
-          confirmPublish: Boolean(args.confirmPublish),
-          defaultStatus: normalizeResourceRole(existing.role) === "source" ? "review" : "draft",
-        })
-      : normalizeResourceStatus(existing.status);
-    const nextModuleIdRaw = Object.prototype.hasOwnProperty.call(payload, "module_id")
-      ? payload.module_id
-      : existing.moduleId;
-    const nextModuleId = await requireValidResourceModule({
-      ctx,
-      communityId: args.communityId,
-      moduleId: normalizeOptionalModuleId(nextModuleIdRaw),
-    });
-    const sourceResourceIdRaw = Object.prototype.hasOwnProperty.call(payload, "source_resource_id")
-      ? normalizeOptionalModuleId(payload.source_resource_id)
-      : normalizeIdValue(existing.sourceResourceId ?? "");
-    const sourceResource = sourceResourceIdRaw
-      ? ((await ctx.db.get(sourceResourceIdRaw as any)) as CommunityResourceLike | null)
-      : null;
-    if (sourceResourceIdRaw) {
-      if (!sourceResource || String(sourceResource.communityId) !== String(args.communityId)) {
-        throw new Error("community_source_resource_not_found");
-      }
-      if (normalizeResourceRole(sourceResource.role) !== "source") {
-        throw new Error("community_source_resource_required");
-      }
-    }
-    const moduleChanged = resourceModuleIdentity(existing.moduleId) !== resourceModuleIdentity(nextModuleId);
-    const nextSortOrder = moduleChanged
-      ? await getNextResourceSortOrder({
-          ctx,
-          communityId: args.communityId,
-          moduleId: nextModuleId,
-          excludeResourceId: existing._id,
-        })
-      : existing.sortOrder;
-    const bodyChanged = Object.prototype.hasOwnProperty.call(payload, "body_md");
-    const urlChanged = Object.prototype.hasOwnProperty.call(payload, "url");
-    const fileChanged = Object.prototype.hasOwnProperty.call(payload, "file_key");
-    const nextBodyMd = bodyChanged ? normalizeCommunityResourceBodyMd(payload.body_md, 20_000) : null;
-    const nextBodyChars = bodyChanged ? String(nextBodyMd ?? "").trim().length : communityResourceBodyChars(existing);
-    const nextUrl = urlChanged ? normalizeOptionalUrl(payload.url) : existing.url;
-    const nextFileKey = fileChanged ? normalizeOptionalFileKey(payload.file_key) : existing.fileKey;
-    const sourceIngestionPatch =
-      normalizeResourceRole(existing.role) === "source"
-        ? {
-            sourceIngestionStatus: bodyChanged && nextBodyChars > 0
-              ? "ready"
-              : urlChanged || fileChanged
-                ? "queued"
-                : normalizeResourceSourceIngestionStatus({
-                    ...existing,
-                    bodyMd: bodyChanged ? nextBodyMd ?? undefined : existing.bodyMd,
-                    bodyChars: nextBodyChars,
-                    url: nextUrl,
-                    fileKey: nextFileKey,
-                  }),
-            sourceIngestionKind: nextUrl
-              ? "url"
-              : nextFileKey
-                ? "file"
-                : "manual",
-          }
-        : {};
-
-    await ctx.db.patch(existing._id as any, {
-      ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
-      ...(Object.prototype.hasOwnProperty.call(payload, "type") ? { type: normalizeResourceType(payload.type) } : {}),
-      status: nextStatus,
-      ...(sourceResource ? { sourceResourceId: sourceResource._id } : { sourceResourceId: undefined }),
-      ...(Object.prototype.hasOwnProperty.call(payload, "title") ? { title: normalizeName(payload.title) } : {}),
-      ...(urlChanged ? { url: nextUrl } : {}),
-      ...(fileChanged ? { fileKey: nextFileKey } : {}),
-      ...sourceIngestionPatch,
-      ...(Object.prototype.hasOwnProperty.call(payload, "pinned") ? { pinned: Boolean(payload.pinned) } : {}),
-      ...(typeof nextSortOrder === "number" ? { sortOrder: nextSortOrder } : {}),
-      updatedAt: nowMs,
-    });
-    const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
-    if (!updated) throw new Error("community_resource_not_found");
-    if (bodyChanged) {
-      await writeCommunityResourceBodyContent(ctx, {
-        communityId: updated.communityId,
-        resourceId: updated._id,
-        bodyMd: nextBodyMd,
-        nowMs,
-        maxChars: 20_000,
-      });
-    }
-    const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
-    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-    return {
-      ok: true,
-      kind: "community_resource_builder_edit",
-      resource: await mapCommunityResourceRow(ctx, hydrated),
     };
   },
 });

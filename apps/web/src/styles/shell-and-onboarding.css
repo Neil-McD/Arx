@@ -350,7 +350,7 @@ body {
   width: 9px;
   height: 9px;
   border-radius: 999px;
-  background: var(--accent-gold);
+  background: var(--accent-global-attention);
   border: 2px solid var(--surface-rail);
   pointer-events: none;
 }

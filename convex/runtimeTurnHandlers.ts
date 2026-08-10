@@ -105,8 +105,9 @@ import {
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
 import {
-  beginCommunityInferenceFundingSession,
+  claimCommunityInferenceFundingSession,
   failCommunityInferenceFundingSession,
+  markCommunityInferenceFundingSessionProviderStarted,
   providerFailureIsKnownPreSpend,
   settleCommunityInferenceFundingSession,
   type CommunityInferenceFundingSession,
@@ -1245,12 +1246,16 @@ export async function handleRuntimeTurnRequest(args: {
         return null;
       }
     };
-    const beginMemberAgentFundingSession = async (): Promise<CommunityInferenceFundingSession | null> => {
+    let memberAgentFundingProviderStarted = false;
+    let memberAgentFundingUsageComplete = true;
+    let memberAgentFundingPromptTokens = 0;
+    let memberAgentFundingCompletionTokens = 0;
+    const claimMemberAgentFundingSession = async (): Promise<CommunityInferenceFundingSession | null> => {
       if (invocationSurface !== "member_agent_dock") return null;
       if (!runtimeCommunityId || !communityInferenceAdmission?.ok) {
         throw new Error("member_agent_community_funding_authority_missing");
       }
-      return await beginCommunityInferenceFundingSession({
+      return await claimCommunityInferenceFundingSession({
         ctx,
         communityId: runtimeCommunityId,
         actorUserId: actor.dbUserId,
@@ -1260,28 +1265,81 @@ export async function handleRuntimeTurnRequest(args: {
         admission: communityInferenceAdmission,
       });
     };
+    const markMemberAgentFundingProviderStarted = async (
+      session: CommunityInferenceFundingSession | null,
+    ): Promise<void> => {
+      if (!session || memberAgentFundingProviderStarted) return;
+      await markCommunityInferenceFundingSessionProviderStarted({ ctx, session });
+      memberAgentFundingProviderStarted = true;
+    };
+    const observeMemberAgentProviderResult = (result: {
+      ok: boolean;
+      code: string | null;
+      promptTokens: number | null;
+      completionTokens: number | null;
+    }): void => {
+      if (invocationSurface !== "member_agent_dock") return;
+      if (!memberAgentFundingProviderStarted) {
+        memberAgentFundingUsageComplete = false;
+        return;
+      }
+      if (!result.ok) {
+        if (!providerFailureIsKnownPreSpend(result.code ?? "provider_error")) {
+          memberAgentFundingUsageComplete = false;
+        }
+        return;
+      }
+      if (result.promptTokens === null || result.completionTokens === null) {
+        memberAgentFundingUsageComplete = false;
+        return;
+      }
+      memberAgentFundingPromptTokens += Math.max(0, Math.floor(result.promptTokens));
+      memberAgentFundingCompletionTokens += Math.max(0, Math.floor(result.completionTokens));
+    };
+    const failUnhandledMemberAgentFundingSession = async (
+      session: CommunityInferenceFundingSession | null,
+      failureCode: string,
+    ): Promise<void> => {
+      if (!session) return;
+      await failCommunityInferenceFundingSession({
+        ctx,
+        session,
+        promptTokens: memberAgentFundingPromptTokens,
+        completionTokens: memberAgentFundingCompletionTokens,
+        usageComplete: memberAgentFundingProviderStarted
+          ? memberAgentFundingUsageComplete
+          : true,
+        failureCode,
+        disposition: memberAgentFundingProviderStarted ? "indeterminate" : "failed",
+      });
+    };
     const finalizeMemberAgentFundingForLoopResult = async (params: {
       session: CommunityInferenceFundingSession | null;
       result: {
         ok: boolean;
         code?: string;
-        promptTokens: number | null;
-        completionTokens: number | null;
       };
     }): Promise<void> => {
       if (!params.session) return;
-      const usageComplete =
-        params.result.promptTokens !== null &&
-        params.result.completionTokens !== null;
-      const promptTokens = Math.max(0, Math.floor(params.result.promptTokens ?? 0));
-      const completionTokens = Math.max(0, Math.floor(params.result.completionTokens ?? 0));
       if (params.result.ok) {
+        if (!memberAgentFundingProviderStarted) {
+          await failCommunityInferenceFundingSession({
+            ctx,
+            session: params.session,
+            promptTokens: 0,
+            completionTokens: 0,
+            usageComplete: true,
+            failureCode: "member_agent_provider_not_started",
+            disposition: "failed",
+          });
+          throw new Error("member_agent_provider_not_started");
+        }
         await settleCommunityInferenceFundingSession({
           ctx,
           session: params.session,
-          promptTokens,
-          completionTokens,
-          usageComplete,
+          promptTokens: memberAgentFundingPromptTokens,
+          completionTokens: memberAgentFundingCompletionTokens,
+          usageComplete: memberAgentFundingUsageComplete,
           outcomeCode: "member_agent_completed",
         });
         return;
@@ -1290,11 +1348,13 @@ export async function handleRuntimeTurnRequest(args: {
       await failCommunityInferenceFundingSession({
         ctx,
         session: params.session,
-        promptTokens,
-        completionTokens,
-        usageComplete,
+        promptTokens: memberAgentFundingPromptTokens,
+        completionTokens: memberAgentFundingCompletionTokens,
+        usageComplete: memberAgentFundingProviderStarted
+          ? memberAgentFundingUsageComplete
+          : true,
         failureCode,
-        disposition: providerFailureIsKnownPreSpend(failureCode)
+        disposition: !memberAgentFundingProviderStarted || providerFailureIsKnownPreSpend(failureCode)
           ? "failed"
           : "indeterminate",
       });
@@ -2476,7 +2536,7 @@ export async function handleRuntimeTurnRequest(args: {
           let loopResult;
           let memberAgentFundingSession: CommunityInferenceFundingSession | null = null;
           try {
-            memberAgentFundingSession = await beginMemberAgentFundingSession();
+            memberAgentFundingSession = await claimMemberAgentFundingSession();
             loopResult = await executeChatToolsAgentLoop({
               ctx,
               req,
@@ -2517,20 +2577,19 @@ export async function handleRuntimeTurnRequest(args: {
                 await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
               },
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
+              beforeProviderRequest: async (): Promise<void> => {
+                await markMemberAgentFundingProviderStarted(memberAgentFundingSession);
+              },
+              observeProviderResult: observeMemberAgentProviderResult,
             });
             await appendContextIntegrityCheckBestEffortForRun();
           } catch (error) {
             if (memberAgentFundingSession) {
               try {
-                await failCommunityInferenceFundingSession({
-                  ctx,
-                  session: memberAgentFundingSession,
-                  promptTokens: 0,
-                  completionTokens: 0,
-                  usageComplete: false,
-                  failureCode: "member_agent_loop_unhandled",
-                  disposition: "indeterminate",
-                });
+                await failUnhandledMemberAgentFundingSession(
+                  memberAgentFundingSession,
+                  "member_agent_loop_unhandled",
+                );
               } catch {
                 // Preserve the original runtime failure; the receipt remains fail-closed.
               }
@@ -2814,7 +2873,7 @@ export async function handleRuntimeTurnRequest(args: {
       let loopResult;
       let memberAgentFundingSession: CommunityInferenceFundingSession | null = null;
       try {
-        memberAgentFundingSession = await beginMemberAgentFundingSession();
+        memberAgentFundingSession = await claimMemberAgentFundingSession();
         loopResult = await executeChatToolsAgentLoop({
           ctx,
           req,
@@ -2858,20 +2917,19 @@ export async function handleRuntimeTurnRequest(args: {
             await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
           },
           touchRunHeartbeat: touchRunHeartbeatBestEffort,
+          beforeProviderRequest: async (): Promise<void> => {
+            await markMemberAgentFundingProviderStarted(memberAgentFundingSession);
+          },
+          observeProviderResult: observeMemberAgentProviderResult,
         });
         await appendContextIntegrityCheckBestEffortForRun();
       } catch (error) {
         if (memberAgentFundingSession) {
           try {
-            await failCommunityInferenceFundingSession({
-              ctx,
-              session: memberAgentFundingSession,
-              promptTokens: 0,
-              completionTokens: 0,
-              usageComplete: false,
-              failureCode: "member_agent_loop_unhandled",
-              disposition: "indeterminate",
-            });
+            await failUnhandledMemberAgentFundingSession(
+              memberAgentFundingSession,
+              "member_agent_loop_unhandled",
+            );
           } catch {
             // Preserve the original runtime failure; the receipt remains fail-closed.
           }

@@ -1,10 +1,6 @@
 import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
-import {
-  interactionPresentationForEmbeds,
-  selectRichInteractionEmbeds,
-} from "../shared/communityInteractionLinkPresentation.ts";
 
 const root = process.cwd();
 
@@ -57,11 +53,7 @@ const chromeHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
 const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
-const linkPreview = read("apps/web/src/components/CommunityInteractionLinkPreview.tsx");
-const socialLinkPreview = linkPreview.slice(
-  linkPreview.indexOf("function SocialPostLinkPreview"),
-  linkPreview.indexOf("function GenericLinkPreview"),
-);
+const youtubeEmbed = read("apps/web/src/components/CommunityInteractionYouTubeEmbed.tsx");
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
@@ -90,31 +82,6 @@ const contextMemberAvatarMediaCss = sectionBetween(
 );
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 const chatBlockMarkdownUi = read("shared/chatBlockMarkdownUi.tsx");
-const readyFirstLinkEmbed = {
-  embed_kind: "link",
-  status: "ready",
-  source_url: "https://example.com/first",
-  normalized_source_url: "https://example.com/first",
-};
-const readySecondLinkEmbed = {
-  embed_kind: "link",
-  status: "ready",
-  source_url: "https://example.com/second",
-  normalized_source_url: "https://example.com/second",
-};
-const failedFirstLinkEmbed = {
-  ...readyFirstLinkEmbed,
-  status: "failed",
-};
-const pendingFirstLinkEmbed = {
-  ...readyFirstLinkEmbed,
-  status: "pending",
-};
-const failedHttpLinkEmbed = {
-  ...failedFirstLinkEmbed,
-  source_url: "http://example.com/first",
-  normalized_source_url: "http://example.com/first",
-};
 const publicCommunityStatsMapper = sectionBetween(
   communityPublic,
   "function mapPublicCommunityStats",
@@ -305,173 +272,28 @@ assert.match(
 );
 assert.match(
   feed,
-  /selectRichInteractionEmbeds[\s\S]*export function EmbedCards[\s\S]*const visible = selectRichInteractionEmbeds\(props\.embeds\)[\s\S]*embed\.embed_kind === "link"[\s\S]*<CommunityInteractionLinkPreview[^>]*embed=\{embed\}/,
-  "generic link embeds should use the shared single-preview policy and one deterministic card component in every visible status",
+  /export function InteractionContent[\s\S]*firstYouTubeEmbedInText\(props\.text\)[\s\S]*<InteractionBody[\s\S]*<CommunityInteractionYouTubeEmbed[\s\S]*props\.afterBody/,
+  "interaction content should preserve authored text, add one deterministic YouTube enhancement, and preserve attachments",
 );
 assert.doesNotMatch(
   feed,
-  /community-interaction-embed is-bare/,
-  "interaction embeds should not render failed previews as duplicate bare URL cards",
+  /CommunityInteractionLinkPreview|EmbedCards|selectRichInteractionEmbeds|props\.embeds/,
+  "the shared feed renderer should not retain generic preview or stored-link-embed branches",
 );
 assert.match(
-  linkPreview,
-  /function approvedHttpsUrl[\s\S]*function approvedVideoUrl[\s\S]*const isLoom[\s\S]*const isYouTube[\s\S]*function VideoPreviewMetadata[\s\S]*community-interaction-embed-video-link[\s\S]*function VideoLinkPreview[\s\S]*const \[active, setActive\] = useState\(false\)[\s\S]*data-preview-kind="video"[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"/,
-  "video previews should revalidate source and player hosts and paths, defer the player until an explicit click, and retain an external fallback",
-);
-assert.match(
-  linkPreview,
-  /const href = approvedHttpsUrl[\s\S]*const videoUrl = props\.embed\.video_url \? approvedVideoUrl[\s\S]*props\.embed\.preview_kind === "video"[\s\S]*const thumbnailUrl = approvedHttpsUrl\(props\.embed\.image_url\)/,
-  "the browser should validate thumbnail URLs only inside the approved video path",
-);
-assert.match(
-  linkPreview,
-  /referrerPolicy="no-referrer"/,
-  "preview images should avoid leaking chat referrers to third-party media hosts",
-);
-assert.match(
-  socialLinkPreview,
-  /function SocialPostLinkPreview[\s\S]*author_name[\s\S]*author_handle[\s\S]*author_avatar_url[\s\S]*<a[\s\S]*data-preview-kind="social_post"[\s\S]*href=\{props\.href\}[\s\S]*target="_blank"[\s\S]*community-interaction-embed-social-avatar[\s\S]*community-interaction-embed-social-identity[\s\S]*published_at[\s\S]*community-interaction-embed-social-body[\s\S]*<\/a>/,
-  "social previews should render one compact theme-aware X-style provenance-and-text link with a same-origin avatar",
-);
-assert.match(
-  linkPreview,
-  /function approvedXAvatarUrl[\s\S]*pbs\.twimg\.com[\s\S]*\/api\/x-avatar\?url=/,
-  "X avatars should reach the browser only through the bounded same-origin proxy",
-);
-assert.doesNotMatch(
-  socialLinkPreview,
-  /community-interaction-embed-media|community-interaction-embed-social-mark|iframe|replies|Copy link|favorite_count|conversation_count|BadgeCheck/,
-  "meaningful-text social previews should omit attached media, provider marks, and action chrome",
-);
-assert.doesNotMatch(
-  linkPreview,
-  /dangerouslySetInnerHTML|platform\.x\.com\/widgets\.js|createTweet/,
-  "community X previews must not inject raw provider markup or load the oversized widget",
-);
-assert.match(
-  linkPreview,
-  /function GenericLinkPreview[\s\S]*data-preview-kind="link"[\s\S]*target="_blank"[\s\S]*rel="noreferrer noopener"/,
-  "unknown providers should retain one safe generic metadata card",
-);
-assert.match(
-  feed,
-  /export function InteractionContent[\s\S]*interactionPresentationForEmbeds\(props\.text, props\.embeds\)[\s\S]*presentation\.bodySegments\.map[\s\S]*segment\.type === "embed"[\s\S]*props\.afterBody[\s\S]*presentation\.trailingEmbeds/,
-  "interaction content should render authored-order text and embed segments before preserving attachments and trailing previews",
+  youtubeEmbed,
+  /data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*setActive\(true\)/,
+  "YouTube should use one click-activated, sandboxed deterministic media component",
 );
 assert.match(
   projection,
-  /<InteractionContent[\s\S]*embeds=\{selectedRoot\.embeds\}[\s\S]*afterBody=\{\([\s\S]*<InteractionAttachments[\s\S]*<InteractionContent[\s\S]*embeds=\{bundle\.embeds\}[\s\S]*afterBody=\{\([\s\S]*<InteractionAttachments/,
-  "thread roots and replies should share authored-order presentation while preserving attachment placement",
+  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*firstYouTubeEmbedInText\(bundleText\(bundle\.content_blocks, bundle\.root\.content_summary\)\)/,
+  "rich-content detection should reflect attachments or renderable YouTube media only",
 );
-assert.equal(
-  selectRichInteractionEmbeds([readyFirstLinkEmbed, readySecondLinkEmbed]).length,
-  1,
-  "a message should render at most one rich embed",
-);
-assert.equal(
-  selectRichInteractionEmbeds([failedFirstLinkEmbed]).length,
-  1,
-  "a failed generic preview should retain one compact fallback card",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds("Shared https://example.com/first for context", [readyFirstLinkEmbed]),
-  {
-    bodySegments: [{ type: "text", text: "Shared https://example.com/first for context" }],
-    trailingEmbeds: [readyFirstLinkEmbed],
-  },
-  "links inside meaningful prose should remain visible while their preview keeps its trailing position",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds("Wild: https://example.com/first", [readyFirstLinkEmbed]),
-  {
-    bodySegments: [
-      { type: "text", text: "Wild:" },
-      { type: "embed", embed: readyFirstLinkEmbed },
-    ],
-    trailingEmbeds: [],
-  },
-  "a ready preview should replace its matching bare URL at the end of a caption line",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds(
-    "Useful context\nhttps://example.com/first\nhttps://example.com/first",
-    [readyFirstLinkEmbed],
-  ),
-  {
-    bodySegments: [
-      { type: "text", text: "Useful context" },
-      { type: "embed", embed: readyFirstLinkEmbed },
-    ],
-    trailingEmbeds: [],
-  },
-  "a ready preview should replace its standalone URL in authored order and collapse consecutive duplicates",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds(
-    "Read online:\nhttps://example.com/first\n\nDownload the PDF: https://example.com/second\n\nSafe to share.",
-    [readyFirstLinkEmbed, readySecondLinkEmbed],
-  ),
-  {
-    bodySegments: [
-      { type: "text", text: "Read online:" },
-      { type: "embed", embed: readyFirstLinkEmbed },
-      {
-        type: "text",
-        text: "Download the PDF: https://example.com/second\n\nSafe to share.",
-      },
-    ],
-    trailingEmbeds: [],
-  },
-  "a mid-message standalone URL should become an in-flow card without reordering the surrounding copy",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds(
-    "https://example.com/first\nhttps://example.com/first",
-    [failedFirstLinkEmbed],
-  ),
-  {
-    bodySegments: [{ type: "embed", embed: failedFirstLinkEmbed }],
-    trailingEmbeds: [],
-  },
-  "failed previews should preserve one compact in-flow card without duplicating the standalone URL",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds("https://example.com/first", [pendingFirstLinkEmbed]),
-  {
-    bodySegments: [{ type: "embed", embed: pendingFirstLinkEmbed }],
-    trailingEmbeds: [],
-  },
-  "pending previews should render the same compact in-flow card used after enrichment",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds("http://example.com/first", [failedHttpLinkEmbed]),
-  {
-    bodySegments: [{ type: "text", text: "http://example.com/first" }],
-    trailingEmbeds: [],
-  },
-  "an embed that cannot render as an approved HTTPS card must not remove the authored URL",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds("```txt\nhttps://example.com/first\n```", [readyFirstLinkEmbed]),
-  {
-    bodySegments: [{ type: "text", text: "```txt\nhttps://example.com/first\n```" }],
-    trailingEmbeds: [readyFirstLinkEmbed],
-  },
-  "standalone URLs inside fenced code should remain code instead of becoming in-flow embeds",
-);
-assert.deepEqual(
-  interactionPresentationForEmbeds(
-    "https://example.com/first\nhttps://example.com/second",
-    [readyFirstLinkEmbed, readySecondLinkEmbed],
-  ),
-  {
-    bodySegments: [
-      { type: "embed", embed: readyFirstLinkEmbed },
-      { type: "text", text: "https://example.com/second" },
-    ],
-    trailingEmbeds: [],
-  },
-  "additional ready links should remain as text when only the first rich preview is shown",
+assert.doesNotMatch(
+  projection,
+  /selectRichInteractionEmbeds|CommunityInteractionEmbed|embeds=\{/,
+  "thread roots and replies should not depend on stored generic link previews",
 );
 assert.match(
   communityAccessViewModel,
@@ -1036,8 +858,13 @@ assert.match(
 );
 assert.match(
   interactionController,
-  /function optimisticLinkEmbeds[\s\S]*extractCommunityInteractionLinkSources[\s\S]*maybeSafeCommunitySourceUrl[\s\S]*status: "pending"[\s\S]*embeds: optimisticLinkEmbeds\(pending\.text, pending\.idempotencyKey\)/,
-  "optimistic roots and replies should project the same safe pending link cards as canonical bundles",
+  /embeds:\s*\[\]/,
+  "optimistic roots and replies should not synthesize a second generic link-preview state",
+);
+assert.doesNotMatch(
+  interactionController,
+  /optimisticLinkEmbeds|pending-link:|extractCommunityInteractionLinkSources|maybeSafeCommunitySourceUrl/,
+  "optimistic projection should keep authored links in canonical message text only",
 );
 assert.match(
   interactionController,
@@ -1127,8 +954,8 @@ assert.match(
 );
 assert.match(
   projection,
-  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*selectRichInteractionEmbeds\(bundle\.embeds\)\.length > 0[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
-  "rich pinned roots should preserve real attachment and preview visibility without clamping text-only pins",
+  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*firstYouTubeEmbedInText\(bundleText\(bundle\.content_blocks, bundle\.root\.content_summary\)\)[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
+  "rich pinned roots should preserve real attachments and YouTube media without treating generic links as rich cards",
 );
 assert.doesNotMatch(
   `${app}\n${projection}\n${feed}`,
@@ -1220,13 +1047,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-embeds\s*\{[\s\S]*--community-interaction-embed-max-width:\s*420px;[\s\S]*--community-interaction-embed-row-height:\s*104px;[\s\S]*\.community-interaction-embed\s*\{[\s\S]*height:\s*max-content;[\s\S]*max-width:\s*var\(--community-interaction-embed-max-width\);[\s\S]*background:\s*var\(--surface-card\);[\s\S]*\.community-interaction-embed:focus-visible[\s\S]*\.community-interaction-embed-provider\s*\{[\s\S]*color:\s*var\(--text-ink-secondary\);[\s\S]*\.community-interaction-embed-desc\s*\{[\s\S]*-webkit-line-clamp:\s*1;/,
-  "embed rows should own their readable intrinsic height, inherit theme surfaces, and keep metadata clear",
+  /\.community-interaction-youtube-wrap\s*\{[\s\S]*width:\s*min\(100%,\s*480px\);[\s\S]*\.community-interaction-youtube[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-youtube-play:focus-visible[\s\S]*outline:\s*2px solid var\(--chat-link\);/,
+  "YouTube media should use one bounded 16:9 surface with the semantic chat-link focus treatment",
 );
-assert.match(
+assert.doesNotMatch(
   baseCss,
-  /\.community-interaction-embed-summary[\s\S]*grid-template-columns:[\s\S]*\.community-interaction-embed-play:focus-visible[\s\S]*\.community-interaction-embed-video-link:focus-visible[\s\S]*\.community-interaction-embed-player[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-embed\.is-social-post[\s\S]*max-width:\s*var\(--community-interaction-social-max-width\);[\s\S]*background:\s*var\(--community-social-embed-surface\);[\s\S]*\.community-interaction-embed-social-identity[\s\S]*unicode-bidi:\s*plaintext;[\s\S]*\.community-interaction-embed-social-meta[\s\S]*\.community-interaction-embed-social-body[\s\S]*-webkit-line-clamp:\s*5;/,
-  "video previews should retain horizontal play rows while social previews use compact theme-aware provenance-and-text cards",
+  /community-interaction-embed|community-social-embed/,
+  "generic and social preview styling should be deleted with their renderers",
 );
 assert.match(
   read("shared/linkEmbedUi.tsx"),
@@ -1261,8 +1088,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Async Link Embed Enrichment Slice[\s\S]*link blocks as derived preview metadata[\s\S]*must not append the URL a second time[\s\S]*pending, ready, and failed generic link embeds render the same compact card shell/,
-  "interaction contract should require deterministic generic link cards without duplicate URL text",
+  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*generic websites, meeting links, documents, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards[\s\S]*YouTube is the only URL-derived rich media exception/,
+  "interaction contract should require simple authored links and one deterministic YouTube exception",
 );
 
 console.log("community interaction projection UI contract proof passed");

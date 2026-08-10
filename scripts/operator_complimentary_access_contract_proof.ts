@@ -56,8 +56,13 @@ assert.match(
 );
 assert.match(
   worker,
-  /expectedFundingMode: context\.funding\.mode[\s\S]*runOpenAiNativeToolCompletion/,
-  "operator-funded community turns must use the bounded platform OpenAI path",
+  /claimCommunityInferenceFundingSession\(\{[\s\S]*admission: context\.funding/,
+  "operator-funded community turns must claim the canonical funding session",
+);
+assert.match(
+  worker,
+  /markCommunityInferenceFundingSessionProviderStarted\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
+  "operator-funded community turns must fence provider start and use the authorized platform model",
 );
 assert.match(
   builderFunding,

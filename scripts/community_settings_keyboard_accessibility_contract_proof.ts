@@ -13,6 +13,12 @@ const choiceControls = read(
 const communitySettings = read(
   "apps/web/src/components/WebCommunitySettingsSection.tsx",
 );
+const communitySettingsUiController = read(
+  "apps/web/src/controllers/useWebCommunitySettingsUiController.ts",
+);
+const communitySettingsGovernanceController = read(
+  "shared/useCommunitySettingsGovernanceController.ts",
+);
 const agentSettings = read(
   "apps/web/src/components/WebCommunityAiAgentSection.tsx",
 );
@@ -157,6 +163,26 @@ assert.match(
   communitySettings,
   /state\.isCommunitySettingsDirty \|\|[\s\S]*state\.isSavingCommunitySettings \|\|[\s\S]*state\.isProcessingCommunitySettingsBanner \?[\s\S]*Save changes[\s\S]*: null/,
   "the save action must disappear when there is nothing actionable",
+);
+assert.match(
+  communitySettings,
+  /onClick=\{actions\.handleCancelCommunitySettings\}[\s\S]*Cancel[\s\S]*onClick=\{\(\) => void actions\.handleSaveCommunitySettings\(\)\}/,
+  "dirty General settings must expose Cancel immediately to the left of Save changes",
+);
+assert.match(
+  communitySettingsUiController,
+  /handleCancelCommunitySettings[\s\S]*getSavedCommunitySettingsSnapshot\(\)[\s\S]*setDraftFromSnapshot\(saved\)[\s\S]*clearCommunitySettingsDirty\(\)/,
+  "Cancel must restore the complete saved aggregate snapshot locally",
+);
+assert.match(
+  communitySettingsGovernanceController,
+  /communitySettingsSaveInFlightRef\.current\) return;[\s\S]*communitySettingsSaveInFlightRef\.current = true;[\s\S]*communitySettingsSaveInFlightRef\.current = false;/,
+  "community settings saves must be single-flight even before React disables the button",
+);
+assert.match(
+  communitySettingsUiController,
+  /communitySettingsDraftRevisionRef\.current \+= 1;[\s\S]*communitySettingsLoadSequenceRef/,
+  "settings drafts must carry a revision so late save completions cannot erase newer edits",
 );
 assert.doesNotMatch(
   communitySettings,

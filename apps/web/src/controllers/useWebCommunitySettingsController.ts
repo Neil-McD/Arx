@@ -1,20 +1,23 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { AuthSession } from "../auth";
-import { isValidCommunitySlug, slugifyCommunityName } from "../../../../shared/communitySlug";
-import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
-import { useCommunitySettingsDataController } from "../../../../shared/useCommunitySettingsDataController";
-import { useCommunitySettingsFormController } from "../../../../shared/useCommunitySettingsFormController";
+import { isValidCommunitySlug } from "../../../../shared/communitySlug";
+import { useCommunityMemberSettingsDataController } from "../../../../shared/useCommunityMemberSettingsDataController";
 import { useCommunitySettingsGovernanceController } from "../../../../shared/useCommunitySettingsGovernanceController";
 import type { WebCommunityRecord } from "../webAppContracts";
 import type { useWebCommunityAdminUiController } from "./useWebCommunityAdminUiController";
-import type { useWebCommunitySettingsUiController } from "./useWebCommunitySettingsUiController";
+import {
+  type CommunitySettingsSavedSnapshot,
+  type useWebCommunitySettingsUiController,
+} from "./useWebCommunitySettingsUiController";
 import {
   coerceCommunityVisualIdentity,
   type CommunityVisualIdentity,
 } from "../../../../shared/communityVisualIdentity";
 import {
   archiveCloudCommunity,
+  fetchCloudCommunitySettings,
   type CloudCommunityArchiveResult,
+  type CloudCommunitySettingsSnapshot,
 } from "../../../../shared/cloudCommunityAdminGateway";
 
 type EnsureAuthSession = (
@@ -22,6 +25,42 @@ type EnsureAuthSession = (
   source?: string,
   options?: { forceRefresh?: boolean },
 ) => Promise<AuthSession | null>;
+
+function formatPriceBaseUnits(value: number | null): string {
+  if (value === null) return "";
+  return (value / 100).toFixed(2).replace(/\.?0+$/, "");
+}
+
+function toSavedSnapshot(
+  result: CloudCommunitySettingsSnapshot,
+): CommunitySettingsSavedSnapshot {
+  return {
+    communityId: result.community_id,
+    settingsRevision: result.settings_revision,
+    updatedAt: result.updated_at,
+    brandingRevision: result.branding_revision ?? null,
+    name: result.name,
+    slug: result.slug,
+    oneLiner: result.one_liner ?? "",
+    about: result.about ?? "",
+    visibility: result.visibility,
+    avatarUrl: result.avatar_url,
+    avatarStorageId: result.avatar_storage_id,
+    avatarFocusX: result.avatar_focus_x,
+    avatarFocusY: result.avatar_focus_y,
+    avatarZoom: result.avatar_zoom,
+    bannerUrl: result.banner_url,
+    bannerStorageId: result.banner_storage_id,
+    bannerFocusX: result.banner_focus_x,
+    bannerFocusY: result.banner_focus_y,
+    bannerZoom: result.banner_zoom,
+    pricing: {
+      mode: result.pricing.mode,
+      monthly: formatPriceBaseUnits(result.pricing.monthly_amount_base_units),
+      annual: formatPriceBaseUnits(result.pricing.annual_amount_base_units),
+    },
+  };
+}
 
 export function useWebCommunitySettingsController(params: {
   activeCommunity: WebCommunityRecord | null;
@@ -45,6 +84,8 @@ export function useWebCommunitySettingsController(params: {
   ) => void;
   onVisualIdentitySaved?: (identity: CommunityVisualIdentity) => void;
 }) {
+  const paramsRef = useRef(params);
+  paramsRef.current = params;
   const { adminUi, settingsUi } = params;
   const [isArchivingCommunity, setIsArchivingCommunity] = useState(false);
   const [communityArchiveError, setCommunityArchiveError] = useState<string | null>(null);
@@ -53,80 +94,90 @@ export function useWebCommunitySettingsController(params: {
     setIsArchivingCommunity(false);
     setCommunityArchiveError(null);
   }, [params.activeCommunityId]);
-  const { syncCommunitySettingsSelection } =
-    useCommunitySettingsFormController<WebCommunityRecord>({
-      slugifyCommunityName,
-      communitySettingsLoadedCommunityIdRef:
-        settingsUi.communitySettingsLoadedCommunityIdRef,
-      communitySettingsDirtyRef: settingsUi.communitySettingsDirtyRef,
-      communityPricingDirtyRef: settingsUi.communityPricingDirtyRef,
-      setCommunitySettingsError: settingsUi.setCommunitySettingsError,
+
+  const { loadCommunityMemberSettings } =
+    useCommunityMemberSettingsDataController<AuthSession>({
+      ensureSession: params.ensureSession,
+      setCommunityMemberMuted: adminUi.setCommunityMemberMuted,
+      setIsLoadingCommunityMemberSettings:
+        adminUi.setIsLoadingCommunityMemberSettings,
       setCommunityMemberSettingsError:
         adminUi.setCommunityMemberSettingsError,
-      setCommunitySettingsName: settingsUi.setCommunitySettingsName,
-      setCommunitySettingsSlug: settingsUi.setCommunitySettingsSlug,
-      setCommunitySettingsOneLiner: settingsUi.setCommunitySettingsOneLiner,
-      setCommunitySettingsAbout: settingsUi.setCommunitySettingsAbout,
-      setCommunitySettingsVisibility:
-        settingsUi.setCommunitySettingsVisibility,
-      setCommunitySettingsAvatarUrl: settingsUi.setCommunitySettingsAvatarUrl,
-      setCommunitySettingsAvatarFocusX:
-        settingsUi.setCommunitySettingsAvatarFocusX,
-      setCommunitySettingsAvatarFocusY:
-        settingsUi.setCommunitySettingsAvatarFocusY,
-      setCommunitySettingsAvatarZoom:
-        settingsUi.setCommunitySettingsAvatarZoom,
-      setCommunitySettingsBannerUrl: settingsUi.setCommunitySettingsBannerUrl,
-      setCommunitySettingsBannerFocusX:
-        settingsUi.setCommunitySettingsBannerFocusX,
-      setCommunitySettingsBannerFocusY:
-        settingsUi.setCommunitySettingsBannerFocusY,
-      setCommunitySettingsBannerZoom:
-        settingsUi.setCommunitySettingsBannerZoom,
-      setCommunitySettingsPricingMode:
-        settingsUi.setCommunitySettingsPricingMode,
-      setCommunitySettingsPriceUsdMonthly:
-        settingsUi.setCommunitySettingsPriceUsdMonthly,
-      setCommunitySettingsPriceUsdAnnual:
-        settingsUi.setCommunitySettingsPriceUsdAnnual,
-      setCommunityMemberMuted: adminUi.setCommunityMemberMuted,
-      setCommunitySettingsBannerUploadError:
-        settingsUi.setCommunitySettingsBannerUploadError,
-      setIsProcessingCommunitySettingsBanner:
-        settingsUi.setIsProcessingCommunitySettingsBanner,
     });
 
-  const {
-    loadCommunityMemberSettings,
-    loadCommunityPricing,
-  } = useCommunitySettingsDataController<AuthSession>({
-    ensureSession: params.ensureSession,
-    communitySettingsLoadedCommunityIdRef:
-      settingsUi.communitySettingsLoadedCommunityIdRef,
-    communityPricingDirtyRef: settingsUi.communityPricingDirtyRef,
-    setCommunityMemberMuted: adminUi.setCommunityMemberMuted,
-    setIsLoadingCommunityMemberSettings:
-      adminUi.setIsLoadingCommunityMemberSettings,
-    setCommunityMemberSettingsError:
-      adminUi.setCommunityMemberSettingsError,
-    setCommunitySettingsPricingMode:
-      settingsUi.setCommunitySettingsPricingMode,
-    setCommunitySettingsPriceUsdMonthly:
-      settingsUi.setCommunitySettingsPriceUsdMonthly,
-    setCommunitySettingsPriceUsdAnnual:
-      settingsUi.setCommunitySettingsPriceUsdAnnual,
-  });
+  const resetCommunitySettingsSelection = useCallback(
+    (communityId: string | null) => {
+      paramsRef.current.settingsUi.resetCommunitySettingsSelection(communityId);
+      paramsRef.current.adminUi.setCommunityMemberSettingsError(null);
+      if (!communityId) paramsRef.current.adminUi.setCommunityMemberMuted(false);
+    },
+    [],
+  );
+
+  const loadCommunitySettings = useCallback(async (input: {
+    communityId: string;
+    session: AuthSession;
+    force?: boolean;
+    shouldIgnore?: () => boolean;
+  }) => {
+    const current = paramsRef.current;
+    const ui = current.settingsUi;
+    const requestSequence = ++ui.communitySettingsLoadSequenceRef.current;
+    const draftRevision = ui.communitySettingsDraftRevisionRef.current;
+    ui.setIsLoadingCommunitySettings(true);
+    ui.setCommunitySettingsError(null);
+    try {
+      const session = await current.ensureSession(input.session);
+      if (!session) throw new Error("community_settings_session_required");
+      const result = await fetchCloudCommunitySettings({
+        session,
+        communityId: input.communityId,
+      });
+      if (!result) throw new Error("community_settings_snapshot_missing");
+      if (
+        input.shouldIgnore?.() ||
+        ui.communitySettingsLoadSequenceRef.current !== requestSequence ||
+        ui.communitySettingsLoadedCommunityIdRef.current !== input.communityId
+      ) {
+        return;
+      }
+      if (
+        !input.force &&
+        (ui.communitySettingsDirtyRef.current ||
+          ui.communitySettingsDraftRevisionRef.current !== draftRevision)
+      ) {
+        return;
+      }
+      ui.applyCommunitySettingsSnapshot(toSavedSnapshot(result));
+    } catch (error) {
+      if (
+        input.shouldIgnore?.() ||
+        ui.communitySettingsLoadSequenceRef.current !== requestSequence ||
+        ui.communitySettingsLoadedCommunityIdRef.current !== input.communityId
+      ) {
+        return;
+      }
+      ui.setCommunitySettingsError(
+        String(error ?? "").includes("community_settings_forbidden")
+          ? "You do not have permission to manage these settings."
+          : "Community settings could not be loaded. Try again.",
+      );
+    } finally {
+      if (ui.communitySettingsLoadSequenceRef.current === requestSequence) {
+        ui.setIsLoadingCommunitySettings(false);
+      }
+    }
+  }, []);
+
+  const handleReloadLatestCommunitySettings = useCallback(async () => {
+    const current = paramsRef.current;
+    const communityId = current.activeCommunityId;
+    const session = current.session;
+    if (!communityId || !session) return;
+    await loadCommunitySettings({ communityId, session, force: true });
+  }, [loadCommunitySettings]);
 
   const governance = useCommunitySettingsGovernanceController<AuthSession>({
-    activeCommunityName: params.activeCommunity?.name ?? null,
-    activeCommunityOneLiner: params.activeCommunity?.one_liner ?? null,
-    activeCommunityVisibility: params.activeCommunity?.visibility ?? null,
-    activeCommunityAvatarStorageId:
-      params.activeCommunity?.avatar_storage_id ?? null,
-    activeCommunityBannerStorageId:
-      params.activeCommunity?.banner_storage_id ?? null,
-    activeCommunityAvatarUrl: params.activeCommunity?.avatar_url ?? null,
-    activeCommunityBannerUrl: params.activeCommunity?.banner_url ?? null,
     activeCommunityId: params.activeCommunityId,
     session: params.session,
     ensureSession: params.ensureSession,
@@ -160,13 +211,22 @@ export function useWebCommunitySettingsController(params: {
     isValidCommunitySlug,
     setCommunitySettingsError: settingsUi.setCommunitySettingsError,
     setIsSavingCommunitySettings: settingsUi.setIsSavingCommunitySettings,
-    onSaveCommunitySettingsSuccess: (result) => {
+    getCommunitySettingsDraftRevision: () =>
+      settingsUi.communitySettingsDraftRevisionRef.current,
+    getCommunitySettingsBaseline: () =>
+      settingsUi.getSavedCommunitySettingsSnapshot(params.activeCommunityId),
+    onCommunitySettingsConflict: () => {
+      settingsUi.setCommunitySettingsConflict(true);
+    },
+    onSaveCommunitySettingsSuccess: (result, context) => {
+      const latest = paramsRef.current;
+      const latestSettingsUi = latest.settingsUi;
       const visualIdentity = coerceCommunityVisualIdentity(
         result.visual_identity,
         { id: result.community_id, ...result },
       );
-      if (visualIdentity) params.onVisualIdentitySaved?.(visualIdentity);
-      params.setCommunities((current) =>
+      if (visualIdentity) latest.onVisualIdentitySaved?.(visualIdentity);
+      latest.setCommunities((current) =>
         current.map((community) =>
           community.id === result.community_id
             ? {
@@ -174,21 +234,18 @@ export function useWebCommunitySettingsController(params: {
                 name: result.name,
                 slug: result.slug,
                 one_liner: result.one_liner,
-                about: result.about ?? null,
+                about: result.about,
                 avatar_url: result.avatar_url,
-                avatar_storage_id: result.avatar_storage_id ?? null,
-                avatar_focus_x: result.avatar_focus_x ?? 0.5,
-                avatar_focus_y: result.avatar_focus_y ?? 0.5,
-                avatar_zoom: result.avatar_zoom ?? 1,
+                avatar_storage_id: result.avatar_storage_id,
+                avatar_focus_x: result.avatar_focus_x,
+                avatar_focus_y: result.avatar_focus_y,
+                avatar_zoom: result.avatar_zoom,
                 banner_url: result.banner_url,
-                banner_storage_id: result.banner_storage_id ?? null,
-                banner_focus_x: result.banner_focus_x ?? 0.5,
-                banner_focus_y: result.banner_focus_y ?? 0.5,
-                banner_zoom: result.banner_zoom ?? 1,
-                visibility: toCanonicalCommunityVisibility(
-                  result.visibility,
-                  "unlisted",
-                ),
+                banner_storage_id: result.banner_storage_id,
+                banner_focus_x: result.banner_focus_x,
+                banner_focus_y: result.banner_focus_y,
+                banner_zoom: result.banner_zoom,
+                visibility: result.visibility,
                 updated_at: result.updated_at,
                 branding_revision:
                   result.branding_revision ?? community.branding_revision ?? null,
@@ -198,11 +255,20 @@ export function useWebCommunitySettingsController(params: {
             : community,
         ),
       );
-      if (params.activeCommunityId === result.community_id) {
-        params.onCommunityIdentityChanged(result.community_id, result.slug);
+      if (latest.activeCommunityId === result.community_id) {
+        latest.onCommunityIdentityChanged(result.community_id, result.slug);
       }
-      settingsUi.communitySettingsDirtyRef.current = false;
-      settingsUi.communityPricingDirtyRef.current = false;
+      const snapshot = toSavedSnapshot(result);
+      latestSettingsUi.rememberSavedCommunitySettings(snapshot);
+      latestSettingsUi.setCommunitySettingsConflict(false);
+      if (
+        latestSettingsUi.communitySettingsLoadedCommunityIdRef.current ===
+          result.community_id &&
+        latestSettingsUi.communitySettingsDraftRevisionRef.current ===
+          context.savedDraftRevision
+      ) {
+        latestSettingsUi.applyCommunitySettingsSnapshot(snapshot);
+      }
     },
   });
 
@@ -231,12 +297,14 @@ export function useWebCommunitySettingsController(params: {
   };
 
   return {
-    syncCommunitySettingsSelection,
+    resetCommunitySettingsSelection,
+    loadCommunitySettings,
     loadCommunityMemberSettings,
-    loadCommunityPricing,
     handleToggleCommunityMute: governance.handleToggleCommunityMute,
     handleLeaveCommunity: governance.handleLeaveCommunity,
     handleSaveCommunitySettings: governance.handleSaveCommunitySettings,
+    handleCancelCommunitySettings: settingsUi.handleCancelCommunitySettings,
+    handleReloadLatestCommunitySettings,
     handleArchiveCommunity,
     isArchivingCommunity,
     communityArchiveError,

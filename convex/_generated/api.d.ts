@@ -87,7 +87,6 @@ import type * as communityFunnelValidators from "../communityFunnelValidators.js
 import type * as communityIntelligenceDirectory from "../communityIntelligenceDirectory.js";
 import type * as communityInteractionAttachmentBridge from "../communityInteractionAttachmentBridge.js";
 import type * as communityInteractionBackfill from "../communityInteractionBackfill.js";
-import type * as communityInteractionEmbedRefresh from "../communityInteractionEmbedRefresh.js";
 import type * as communityInteractionEvidence from "../communityInteractionEvidence.js";
 import type * as communityInteractionEvidenceCore from "../communityInteractionEvidenceCore.js";
 import type * as communityInteractionLegacyAttachments from "../communityInteractionLegacyAttachments.js";
@@ -123,7 +122,6 @@ import type * as communitySkillAttachments from "../communitySkillAttachments.js
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
 import type * as communityText from "../communityText.js";
 import type * as communityTypingPresenceCore from "../communityTypingPresenceCore.js";
-import type * as communityWikiArchitect from "../communityWikiArchitect.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
 import type * as crons from "../crons.js";
@@ -336,7 +334,6 @@ declare const fullApi: ApiFromModules<{
   communityIntelligenceDirectory: typeof communityIntelligenceDirectory;
   communityInteractionAttachmentBridge: typeof communityInteractionAttachmentBridge;
   communityInteractionBackfill: typeof communityInteractionBackfill;
-  communityInteractionEmbedRefresh: typeof communityInteractionEmbedRefresh;
   communityInteractionEvidence: typeof communityInteractionEvidence;
   communityInteractionEvidenceCore: typeof communityInteractionEvidenceCore;
   communityInteractionLegacyAttachments: typeof communityInteractionLegacyAttachments;
@@ -372,7 +369,6 @@ declare const fullApi: ApiFromModules<{
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
   communityText: typeof communityText;
   communityTypingPresenceCore: typeof communityTypingPresenceCore;
-  communityWikiArchitect: typeof communityWikiArchitect;
   creatorCommerce: typeof creatorCommerce;
   criticalAudit: typeof criticalAudit;
   crons: typeof crons;

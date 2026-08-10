@@ -24,7 +24,9 @@ const communityPublic = read("convex/communityPublic.ts");
 const intake = read("convex/communityAgentConciergeCore.ts");
 const worker = read("convex/communityAgentServeWorker.ts");
 const autonomousRuntime = read("convex/communityAgentRuntime.ts");
-const wikiArchitect = read("convex/communityWikiArchitect.ts");
+const memberRuntime = read("convex/runtimeAgentLoop.ts");
+const memberTurnHandlers = read("convex/runtimeTurnHandlers.ts");
+const communityFacade = read("convex/community.ts");
 const communityAdminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const modelCatalog = read("shared/modelCatalog.ts");
 const settings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
@@ -45,14 +47,33 @@ const admissionResolver = core.slice(
   core.indexOf("export async function resolveCommunityInferenceFundingAdmission"),
   core.indexOf("export type AdditionalManagedCommunityAdmission"),
 );
+const receiptExpiration = backend.slice(
+  backend.indexOf("export const expireCommunityInferenceReceiptInternal"),
+  backend.indexOf("export const settleCommunityInferenceReceiptInternal"),
+);
+const expiredReceiptFinalizer = backend.slice(
+  backend.indexOf("async function finalizeExpiredAuthorizedFounderInferenceReceipt"),
+  backend.indexOf("const FOUNDER_INFERENCE_BYOK_RETIRED"),
+);
+const knownNoSpendFinalizer = core.slice(
+  core.indexOf("export async function finalizeKnownNoSpendFounderInferenceReceipt"),
+);
+const failureFinalizer = backend.slice(
+  backend.indexOf("export const finalizeCommunityInferenceFailureInternal"),
+);
+const providerStart = backend.slice(
+  backend.indexOf("export const markCommunityInferenceProviderStartedInternal"),
+  backend.indexOf("export const finalizeCommunityInferenceFailureInternal"),
+);
 
 assert.match(packageJson, /"check:founder-inference-proof"/);
 assert.match(shared, /COMMUNITY_OWNER_FUNDED_MODEL_ID = "gpt-5\.6-luna"/);
 assert.doesNotMatch(shared, /LEGACY_BYOK|OWNER_INFERENCE_TERMS|FounderInferenceGrantStatus/);
 assert.match(
   shared,
-  /COMMUNITY_INFERENCE_SURFACES = \[[\s\S]*"member_agent_dock"[\s\S]*"community_agent_mention"[\s\S]*"community_autonomous_cognition"[\s\S]*"community_setup_generation"/,
+  /COMMUNITY_INFERENCE_SURFACES = \[[\s\S]*"member_agent_dock"[\s\S]*"community_agent_mention"[\s\S]*"community_autonomous_cognition"/,
 );
+assert.doesNotMatch(shared, /community_setup_generation/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS = 7_900/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COMMUNITIES = 1/);
@@ -86,8 +107,9 @@ assert.match(receiptSchema, /\.index\("by_receipt_key", \["receiptKey"\]\)/);
 assert.doesNotMatch(receiptSchema, /owner_api_key|founderGrantId|founderInferenceGrants/);
 assert.match(
   receiptSchema,
-  /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
+  /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition/,
 );
+assert.doesNotMatch(receiptSchema, /community_setup_generation/);
 assert.doesNotMatch(receiptSchema, /apiKey|encryptedSecret|prompt:|response:|toolOutput|costDollars/);
 
 assert.equal(existsSync(join(root, "convex/founderInferenceMigration.ts")), false);
@@ -171,20 +193,113 @@ assert.doesNotMatch(backend, /decryptStoredSecret|apiKeyOverride|userProviderCon
 assert.match(backend, /claimCommunityInferenceReceiptInternal = internalMutation/);
 assert.match(backend, /surface: communityInferenceSurfaceValidator/);
 assert.match(backend, /surface: args\.surface/);
-assert.match(backend, /providerStartedAt[\s\S]*status: "indeterminate"[\s\S]*ambiguous_provider_retry_blocked/);
+assert.match(
+  core,
+  /getUniqueFounderInferenceReceiptByKey[\s\S]*\.take\(2\)[\s\S]*founder_inference_receipt_ambiguous/,
+);
+assert.doesNotMatch(
+  core,
+  /query\("communityInferenceReceipts"[\s\S]{0,240}\.first\(\)/,
+);
+assert.match(
+  core,
+  /founderInferenceReceiptIdentityMatches[\s\S]*sourceRunId[\s\S]*communityId[\s\S]*actorUserId[\s\S]*payerUserId[\s\S]*fundingMode[\s\S]*founderSubscriptionId[\s\S]*surface/,
+);
+assert.match(backend, /founderInferenceReceiptIdentityMatches\(existing/);
+assert.match(backend, /founder_inference_receipt_conflict/);
+assert.match(backend, /founder_inference_receipt_key_invalid/);
+assert.match(backend, /founder_inference_source_run_invalid/);
+assert.match(backend, /founder_inference_claim_token_invalid/);
+assert.match(backend, /scheduleFounderInferenceReceiptExpiration/);
+assert.match(
+  backend,
+  /ctx\.scheduler\.runAfter\([\s\S]*expireCommunityInferenceReceiptInternal[\s\S]*expectedClaimToken/,
+);
+assert.match(backend, /claimToken,[\s\S]*scheduleFounderInferenceReceiptExpiration/);
+assert.match(receiptExpiration, /const nowMs = Date\.now\(\)/);
+assert.doesNotMatch(receiptExpiration, /nowMs: v\.(?:optional\()?number/);
+assert.match(receiptExpiration, /receipt\.claimToken !== expectedClaimToken/);
+assert.doesNotMatch(receiptExpiration, /status: "provider_started"/);
+assert.match(
+  receiptExpiration,
+  /receipt\.leaseExpiresAt > nowMs[\s\S]*scheduleFounderInferenceReceiptExpiration[\s\S]*finalizeExpiredAuthorizedFounderInferenceReceipt/,
+);
+assert.match(
+  expiredReceiptFinalizer,
+  /receipt\.providerStartedAt !== undefined[\s\S]*settleAuthorizedFounderInferenceReceipt\([\s\S]*usageComplete: false[\s\S]*outcomeCode: "provider_execution_deadline_exceeded"[\s\S]*failureCode: "provider_execution_deadline_exceeded"[\s\S]*status: "indeterminate"/,
+);
+assert.match(
+  expiredReceiptFinalizer,
+  /finalizeKnownNoSpendFounderInferenceReceipt\([\s\S]*authorization_expired_before_provider/,
+);
+assert.doesNotMatch(
+  receiptExpiration,
+  /releaseFounderUsageReservation|settleFounderUsageReservation|settleAuthorizedFounderInferenceReceipt|finalizeKnownNoSpendFounderInferenceReceipt|ctx\.db\.patch/,
+);
+assert.doesNotMatch(backend, /releaseFounderUsageReservation/);
+assert.equal(
+  (backend.match(/finalizeKnownNoSpendFounderInferenceReceipt\(/g) ?? []).length,
+  3,
+);
+assert.match(
+  providerStart,
+  /receipt\.leaseExpiresAt <= args\.nowMs[\s\S]*finalizeExpiredAuthorizedFounderInferenceReceipt\([\s\S]*receipt\.providerStartedAt !== undefined[\s\S]*return \{ ok: true \}[\s\S]*resolveCommunityInferenceFundingAdmission/,
+);
+assert.equal(
+  (providerStart.match(/providerStartedAt: args\.nowMs/g) ?? []).length,
+  1,
+);
+assert.match(
+  knownNoSpendFinalizer,
+  /receipt\.status !== "authorized"[\s\S]*receipt\.claimToken !== args\.claimToken/,
+);
+assert.match(
+  knownNoSpendFinalizer,
+  /requireFounderInferenceSettlementCycle\([\s\S]*Number\.isSafeInteger\(reservedCostMicros\)[\s\S]*reservedCostMicros <= 0[\s\S]*founder_usage_receipt_authority_missing/,
+);
+assert.match(
+  knownNoSpendFinalizer,
+  /settleFounderUsageReservation\([\s\S]*reservedCostMicros,[\s\S]*settledCostMicros: 0/,
+);
+assert.match(
+  knownNoSpendFinalizer,
+  /status: "failed"[\s\S]*failureCode,[\s\S]*failedAt: args\.nowMs/,
+);
+assert.match(
+  failureFinalizer,
+  /args\.usageComplete === false[\s\S]*args\.disposition === "indeterminate" && promptTokens === 0 && completionTokens === 0[\s\S]*settleAuthorizedFounderInferenceReceipt\([\s\S]*usageComplete: false[\s\S]*failureCode: "provider_token_usage_missing"/,
+);
+assert.match(
+  backend,
+  /providerStartedAt[\s\S]*settleAuthorizedFounderInferenceReceipt\(\{[\s\S]*usageComplete: false[\s\S]*failureCode: "ambiguous_provider_retry_blocked"/,
+);
 assert.match(backend, /COMMUNITY_OWNER_INFERENCE_ACTOR_TURNS_PER_MINUTE/);
 assert.match(backend, /COMMUNITY_OWNER_INFERENCE_COMMUNITY_TURNS_PER_MINUTE/);
+assert.match(planCore, /settledCostMicros > reservedCostMicros[\s\S]*founder_usage_settlement_exceeds_reservation/);
+assert.match(planCore, /founder_usage_cycle_ledger_invalid/);
+assert.match(
+  core,
+  /usageComplete === false[\s\S]*settledCostMicros = Number\(receipt\.reservedCostMicros\)[\s\S]*settleFounderUsageReservation/,
+);
 
 assert.match(intake, /resolveCommunityInferenceFundingAdmission/);
 assert.doesNotMatch(intake, /connect an OpenAI API key|activate an OpenAI API key/);
 assert.doesNotMatch(intake + worker + admissionResolver, /legacy_requester_chatgpt|requesterHasChatgptConnection|owner_api_key/);
 assert.match(worker, /const receiptKey = communityAgentMentionReceiptKey\(requestId\)/);
-assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID/);
+assert.match(worker, /runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/);
 assert.doesNotMatch(worker, /userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(worker, /aggregatePromptTokens \+=/);
-assert.match(worker, /claimCommunityInferenceReceiptInternal/);
+assert.doesNotMatch(worker, /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/);
+assert.match(worker, /claimCommunityInferenceFundingSession/);
 assert.match(worker, /surface: "community_agent_mention"/);
-assert.match(worker, /markCommunityInferenceProviderStartedInternal/);
+assert.match(
+  worker,
+  /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
+);
+assert.match(
+  worker,
+  /if \(providerStarted\) aggregateUsageComplete = false[\s\S]*!providerFailureIsKnownPreSpend\(toolCompletion\.code\)[\s\S]*aggregateUsageComplete = false/,
+);
 assert.match(
   worker,
   /executeRetrievalHarnessTool\(\{[\s\S]*userId: normalizeIdValue\(args\.context\.request\.sponsorUserId\)[\s\S]*authSubject: normalizeIdValue\(args\.context\.request\.authSubject\)/,
@@ -192,25 +307,54 @@ assert.match(
 assert.doesNotMatch(worker, /executeRetrievalHarnessTool\(\{[\s\S]{0,300}userId: normalizeIdValue\(context\.funding\.payerUserId\)/);
 
 assert.match(fundingRuntime, /resolveCommunityInferenceFundingAdmissionInternal/);
-assert.match(fundingRuntime, /beginCommunityInferenceFundingSession/);
+assert.doesNotMatch(fundingRuntime, /beginCommunityInferenceFundingSession/);
 assert.match(fundingRuntime, /surface: args\.surface/);
 assert.match(fundingRuntime, /COMMUNITY_OWNER_FUNDED_MODEL_ID/);
 assert.match(fundingRuntime, /markCommunityInferenceProviderStartedInternal/);
 assert.match(fundingRuntime, /settleCommunityInferenceReceiptInternal/);
 assert.doesNotMatch(fundingRuntime, /owner_api_key|userProviderConnections|getOpenAiConnectionForUserInternal|decryptStoredSecret|apiKeyOverride/);
+assert.doesNotMatch(memberTurnHandlers, /beginMemberAgentFundingSession/);
+assert.match(memberTurnHandlers, /claimMemberAgentFundingSession/);
+assert.match(
+  memberTurnHandlers,
+  /beforeProviderRequest: async[\s\S]*markMemberAgentFundingProviderStarted[\s\S]*observeProviderResult: observeMemberAgentProviderResult/,
+);
+assert.match(
+  memberRuntime,
+  /operation: async \(signal\) => \{[\s\S]*beforeProviderRequest\?\.\(\)[\s\S]*runProviderNativeToolCompletion/,
+);
+assert.match(
+  memberTurnHandlers,
+  /memberAgentFundingPromptTokens \+=[\s\S]*memberAgentFundingCompletionTokens \+=[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: memberAgentFundingPromptTokens[\s\S]*completionTokens: memberAgentFundingCompletionTokens/,
+);
 assert.match(autonomousRuntime, /resolveCommunityInferenceFundingForAction\(ctx, args\.communityId\)/);
 assert.match(autonomousRuntime, /surface: "community_autonomous_cognition"/);
 assert.match(autonomousRuntime, /receiptKey: `community_autonomous_cognition:\$\{runId\}`/);
+assert.doesNotMatch(autonomousRuntime, /beginCommunityInferenceFundingSession/);
+assert.match(autonomousRuntime, /claimCommunityInferenceFundingSession/);
+assert.match(
+  autonomousRuntime,
+  /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
+);
+assert.match(
+  autonomousRuntime,
+  /usageComplete: !providerStarted[\s\S]*disposition: providerStarted \? "indeterminate" : "failed"/,
+);
 assert.match(autonomousRuntime, /modelId: fundingSession\.modelId/);
 assert.doesNotMatch(autonomousRuntime, /runChatgptNativeToolCompletion|fundingSession\.apiKeyOverride/);
 assert.match(autonomousRuntime, /settleCommunityInferenceFundingSession/);
-assert.match(wikiArchitect, /surface: "community_setup_generation"/g);
-assert.match(wikiArchitect, /receiptKey: `community_setup_generation:wiki_architect:\$\{requestId\}`/);
-assert.match(wikiArchitect, /receiptKey: `community_setup_generation:resource_writer:\$\{requestId\}`/);
-assert.match(wikiArchitect, /modelIdOverride: fundingSession\.modelId/g);
-assert.doesNotMatch(wikiArchitect, /fundingSession\.apiKeyOverride/);
 assert.doesNotMatch(communityAdminGateway, /runCommunityWikiArchitectProposal/);
 assert.doesNotMatch(communityAdminGateway, /draftCommunityResourceContentFromSources/);
+assert.equal(existsSync(join(root, "convex/communityWikiArchitect.ts")), false);
+assert.match(communityFacade, /community_wiki_architect_retired/);
+const retiredWikiFacade = communityFacade.slice(
+  communityFacade.indexOf("const COMMUNITY_WIKI_ARCHITECT_RETIRED_CODE"),
+  communityFacade.indexOf("// Cached clients may still invoke the retired third-party MCP names"),
+);
+assert.doesNotMatch(
+  retiredWikiFacade,
+  /runAction|runMutation|runQuery|fetch\(|ctx\.db|generateText|runOpenAi|stageCommunityResourceBuilderChangeset/,
+);
 
 assert.doesNotMatch(settings, /Legacy API funding|legacy-eligible|Activate for eligible|Personal AI connection|API key/i);
 assert.doesNotMatch(settings, /GPT 5\.6|\bLuna\b/i);

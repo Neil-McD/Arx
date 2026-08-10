@@ -67,8 +67,18 @@ assert.match(
 );
 assert.match(runtime, /runNativeRuntimeKernel<CommunityAgentToolName>/);
 assert.match(runtime, /parallelToolCalls: false/);
-assert.match(runtime, /beginCommunityInferenceFundingSession/);
-assert.match(runtime, /runOpenAiNativeToolCompletion/);
+assert.doesNotMatch(runtime, /beginCommunityInferenceFundingSession/);
+assert.match(runtime, /claimCommunityInferenceFundingSession/);
+assert.match(
+  runtime,
+  /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
+  "community cognition should mark provider start once at the exact first provider request",
+);
+assert.match(
+  runtime,
+  /usageComplete: !providerStarted[\s\S]*disposition: providerStarted \? "indeterminate" : "failed"/,
+  "runtime exceptions should release pre-provider reservations and conservatively settle post-provider uncertainty",
+);
 assert.doesNotMatch(
   runtime,
   /runChatgptNativeToolCompletion|apiKeyOverride|carryReasoningItems/,

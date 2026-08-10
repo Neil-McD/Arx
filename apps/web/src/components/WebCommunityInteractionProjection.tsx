@@ -13,12 +13,11 @@ import {
 import type {
   CommunityInteractionAttachment,
   CommunityInteractionContentBlock,
-  CommunityInteractionEmbed,
   CommunityInteractionReplyBundle,
   CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
-import { selectRichInteractionEmbeds } from "../../../../shared/communityInteractionLinkPresentation";
+import { firstYouTubeEmbedInText } from "../../../../shared/linkEmbedUi";
 import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../../shared/CommunityChatMediaGrid";
 import {
   CommunityContextPanel,
@@ -407,7 +406,7 @@ export function communityInteractionRootHasRichContent(
   bundle: CommunityInteractionRootBundle,
 ): boolean {
   return bundle.attachments.length > 0
-    || selectRichInteractionEmbeds(bundle.embeds).length > 0;
+    || firstYouTubeEmbedInText(bundleText(bundle.content_blocks, bundle.root.content_summary)) !== null;
 }
 
 
@@ -983,7 +982,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   ) : null}
                   <InteractionContent
                     text={selectedRootText}
-                    embeds={selectedRoot.embeds}
                     renderTextWithLinks={props.renderTextWithLinks}
                     mentionContext={{
                       mentions: selectedRoot.mentions ?? [],
@@ -1140,7 +1138,6 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                           <>
                             <InteractionContent
                               text={body}
-                              embeds={bundle.embeds}
                               renderTextWithLinks={props.renderTextWithLinks}
                               mentionContext={{
                                 mentions: bundle.mentions ?? [],

@@ -1,7 +1,12 @@
-import { useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { WebCommunityKnowledgeSourceIntake } from "./WebCommunityKnowledgeSourceIntake";
 import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
+import {
+  RuntimeResourceChangesetApprovalCards,
+  type ResourceChangesetCardModel,
+} from "./RuntimeResourceChangesetApprovalCards";
+import type { AuthSessionLike } from "../../../../shared/authSession";
 import type {
   CommunityResource,
   CommunityResourcesActions,
@@ -14,15 +19,22 @@ type WebBuilderKnowledgeSetupProps = {
   };
   isHydrating: boolean;
   resources: CommunityResource[];
+  session: AuthSessionLike;
   onAddSources: CommunityResourcesActions["handleAddCommunitySources"];
+  onBuildResources: CommunityResourcesActions["handleBuildCommunityResources"];
+  changesetCards: ResourceChangesetCardModel[];
+  changesetRecoveryError: string | null;
   onComplete: () => Promise<boolean>;
 };
 
 export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
   const [isIntakeBusy, setIsIntakeBusy] = useState(false);
   const [isCompleting, setIsCompleting] = useState(false);
+  const [isStartingBuild, setIsStartingBuild] = useState(false);
+  const [buildRequested, setBuildRequested] = useState(false);
   const [completionError, setCompletionError] = useState<string | null>(null);
   const completionInFlightRef = useRef(false);
+  const buildInFlightRef = useRef(false);
   const sourceResources = useMemo(
     () => props.resources.filter((resource) => resource.resource_role === "source"),
     [props.resources],
@@ -43,11 +55,30 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
     resource.source_ingestion_status !== "ready"
     && resource.source_ingestion_status !== "failed"
   ));
-  const controlsDisabled = props.isHydrating || isIntakeBusy || isCompleting;
+  const baseBusy = props.isHydrating || isIntakeBusy || isCompleting;
+  const hasChangeset = props.changesetCards.length > 0;
+  const controlsDisabled = baseBusy || isStartingBuild || buildRequested || hasChangeset;
   const canContinue = readySources.length > 0 && !hasPendingSources && !props.isHydrating;
 
+  useEffect(() => {
+    if (props.changesetCards.length === 0) return;
+    setBuildRequested(false);
+    setCompletionError(null);
+  }, [props.changesetCards.length]);
+
+  useEffect(() => {
+    if (!buildRequested || hasChangeset) return;
+    const timeoutId = window.setTimeout(() => {
+      setBuildRequested(false);
+      setCompletionError(
+        "Your agent is taking longer than expected. Try again, or skip and add knowledge later.",
+      );
+    }, 90_000);
+    return () => window.clearTimeout(timeoutId);
+  }, [buildRequested, hasChangeset]);
+
   const complete = async () => {
-    if (controlsDisabled || completionInFlightRef.current) return;
+    if (baseBusy || completionInFlightRef.current) return;
     completionInFlightRef.current = true;
     setCompletionError(null);
     setIsCompleting(true);
@@ -68,6 +99,39 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
     }
   };
 
+  const buildResources = async () => {
+    if (
+      !canContinue
+      || controlsDisabled
+      || buildInFlightRef.current
+    ) return;
+    buildInFlightRef.current = true;
+    setCompletionError(null);
+    setIsStartingBuild(true);
+    try {
+      const opened = await props.onBuildResources({
+        communityId: props.community.id,
+        readySources,
+      });
+      if (!opened) {
+        setCompletionError(
+          "Your agent could not start the resource draft. Finish its current message, then try again.",
+        );
+        return;
+      }
+      setBuildRequested(true);
+    } catch (error) {
+      setCompletionError(
+        error instanceof Error && error.message.trim()
+          ? error.message
+          : "Your agent could not start the resource draft.",
+      );
+    } finally {
+      buildInFlightRef.current = false;
+      setIsStartingBuild(false);
+    }
+  };
+
   return (
     <WebBlockingSetupModal
       titleId="builder-knowledge-setup-title"
@@ -83,34 +147,51 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
           Add links or files now, or skip and do this later from Resources.
         </p>
 
-        <WebCommunityKnowledgeSourceIntake
-          communityId={props.community.id}
-          communityName={props.community.name}
-          failedSourceCount={failedSourceCount}
-          readySources={readySources}
-          onAddSources={props.onAddSources}
-          externalDisabled={props.isHydrating || isCompleting}
-          onBusyChange={setIsIntakeBusy}
-        />
+        {hasChangeset ? (
+          <RuntimeResourceChangesetApprovalCards
+            cards={props.changesetCards}
+            session={props.session}
+            onInitialResourcesApplied={() => {
+              void complete();
+            }}
+            disableInitialResourcesAction={isCompleting}
+          />
+        ) : (
+          <WebCommunityKnowledgeSourceIntake
+            communityId={props.community.id}
+            communityName={props.community.name}
+            failedSourceCount={failedSourceCount}
+            readySources={readySources}
+            onAddSources={props.onAddSources}
+            externalDisabled={props.isHydrating || isCompleting || buildRequested}
+            onBusyChange={setIsIntakeBusy}
+          />
+        )}
 
         {props.isHydrating ? (
           <div className="builder-knowledge-setup-status" role="status">
             Loading your community knowledge…
           </div>
-        ) : readySources.length > 0 ? (
+        ) : buildRequested ? (
+          <div className="builder-knowledge-setup-status is-ready" role="status">
+            Your agent is building the first resource draft…
+          </div>
+        ) : hasChangeset ? null : readySources.length > 0 ? (
           <div className="builder-knowledge-setup-status is-ready" role="status">
             {readySources.length} source{readySources.length === 1 ? " is" : "s are"} ready.
           </div>
         ) : null}
-        {completionError ? (
-          <div className="builder-knowledge-setup-error" role="alert">{completionError}</div>
+        {completionError || props.changesetRecoveryError ? (
+          <div className="builder-knowledge-setup-error" role="alert">
+            {completionError ?? props.changesetRecoveryError}
+          </div>
         ) : null}
 
-        <div className="builder-knowledge-setup-actions">
+        {!hasChangeset ? <div className="builder-knowledge-setup-actions">
           <button
             type="button"
             className="builder-knowledge-setup-skip"
-            disabled={controlsDisabled}
+            disabled={baseBusy || isStartingBuild || buildRequested}
             onClick={() => void complete()}
           >
             Skip for now
@@ -119,11 +200,11 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
             type="button"
             className="builder-knowledge-setup-next"
             disabled={controlsDisabled || !canContinue}
-            onClick={() => void complete()}
+            onClick={() => void buildResources()}
           >
-            {isCompleting ? "Finishing…" : "Next"}
+            {isStartingBuild ? "Starting…" : "Next"}
           </button>
-        </div>
+        </div> : null}
       </section>
     </WebBlockingSetupModal>
   );

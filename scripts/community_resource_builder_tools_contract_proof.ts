@@ -33,8 +33,6 @@ assert.match(
 for (const exportName of [
   "listCommunityResourceBuilderDirectory",
   "readCommunityResourceBuilderResource",
-  "writeCommunityResourceBuilderResource",
-  "editCommunityResourceBuilderResource",
   "getCommunityResourceBuilderChangesetStatus",
   "listPendingCommunityResourceBuilderChangesets",
   "approveCommunityResourceBuilderChangeset",
@@ -54,15 +52,10 @@ assert.match(
   /readCommunityResourceBuilderResource[\s\S]*await requireCommunityManager/,
   "builder read must be owner/admin/manager gated",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /writeCommunityResourceBuilderResource[\s\S]*await requireCommunityManager/,
-  "builder write must be owner/admin/manager gated",
-);
-assert.match(
-  resources,
-  /editCommunityResourceBuilderResource[\s\S]*await requireCommunityManager/,
-  "builder edit must be owner/admin/manager gated",
+  /export const (?:write|edit)CommunityResourceBuilderResource/,
+  "agents must not retain direct resource write mutations beside canonical changesets",
 );
 assert.doesNotMatch(
   resources,
@@ -98,11 +91,6 @@ assert.match(
 
 assert.match(
   resources,
-  /const role = kind === "source" \? "source" : "page"[\s\S]*defaultStatus: role === "source" \? "review" : "draft"/,
-  "builder writes should default sources to review and pages to draft",
-);
-assert.match(
-  resources,
   /if \(next === "published"\)[\s\S]*community_resource_page_status_deprecated/,
   "builder tools should reject page-level publish writes",
 );
@@ -120,17 +108,6 @@ assert.match(
   resources,
   /source_resource_id[\s\S]*community_source_resource_required/,
   "builder writes/edits should validate source lineage points to a source resource",
-);
-
-const builderEditBody = resources.slice(
-  resources.indexOf("export const editCommunityResourceBuilderResource"),
-  resources.indexOf("export const compactCommunityResourceBodyStorage"),
-);
-assert.ok(builderEditBody.length > 0, "builder edit body should be discoverable");
-assert.doesNotMatch(
-  builderEditBody,
-  /resource_role/,
-  "builder edit should not allow changing resource role identity",
 );
 
 for (const healthKey of [

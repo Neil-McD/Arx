@@ -1,4 +1,4 @@
-import type { ComponentProps, MutableRefObject, ReactNode } from "react";
+import type { ComponentProps, ReactNode } from "react";
 import type { CommunityTab } from "../../../../shared/appShellNavigation";
 import { communityInitials } from "../../../../shared/messageMetadataUi";
 import { slugifyCommunityName } from "../../../../shared/communitySlug";
@@ -27,12 +27,9 @@ export type WebCommunitySecondaryPanelsProps = {
       | "closeCommunityBannerFocusModal"
       | "openCommunityAvatarFocusModal"
       | "closeCommunityAvatarFocusModal"
-      | "setCommunityPricingDirty"
       | "communityInitials"
       | "slugifyCommunityName"
-    > & {
-      communityPricingDirtyRef: MutableRefObject<boolean>;
-    };
+    >;
     setIsCommunityAvatarFocusModalOpen: (value: boolean) => void;
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
@@ -88,9 +85,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       closeCommunityAvatarFocusModal: () => props.settings.setIsCommunityAvatarFocusModalOpen(false),
       openCommunityBannerFocusModal: () => props.settings.setIsCommunityBannerFocusModalOpen(true),
       closeCommunityBannerFocusModal: () => props.settings.setIsCommunityBannerFocusModalOpen(false),
-      setCommunityPricingDirty: () => {
-        props.settings.actions.communityPricingDirtyRef.current = true;
-      },
       communityInitials,
       slugifyCommunityName,
     },

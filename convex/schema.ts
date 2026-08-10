@@ -261,7 +261,6 @@ export default defineSchema({
       v.literal("member_agent_dock"),
       v.literal("community_agent_mention"),
       v.literal("community_autonomous_cognition"),
-      v.literal("community_setup_generation"),
     ),
     provider: v.literal("openai"),
     modelId: v.string(),
@@ -1203,6 +1202,7 @@ export default defineSchema({
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
     brandingRevision: v.optional(v.number()),
+    settingsRevision: v.optional(v.number()),
     /* Deprecated release-compatibility field. Current product code never reads
        or writes it; legacyOnboardingMigration removes stored values. */
     memberOnboarding: v.optional(

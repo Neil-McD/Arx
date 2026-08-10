@@ -1073,8 +1073,40 @@ assert.match(
 );
 
 const firstRuntimeReplayLookup = runtimeHandlers.indexOf("lookupExistingRuntimeReplay");
-const firstMemberFundingBegin = runtimeHandlers.indexOf("beginMemberAgentFundingSession()");
-assert.ok(firstRuntimeReplayLookup >= 0 && firstMemberFundingBegin > firstRuntimeReplayLookup);
+const firstMemberFundingClaim = runtimeHandlers.indexOf("claimMemberAgentFundingSession()");
+assert.ok(firstRuntimeReplayLookup >= 0 && firstMemberFundingClaim > firstRuntimeReplayLookup);
+const memberFundingBlock = runtimeHandlers.slice(
+  runtimeHandlers.indexOf("let memberAgentFundingProviderStarted"),
+  runtimeHandlers.indexOf("const polynetToolSurface"),
+);
+assert.doesNotMatch(memberFundingBlock, /beginCommunityInferenceFundingSession/);
+assert.match(memberFundingBlock, /claimCommunityInferenceFundingSession/);
+assert.match(memberFundingBlock, /markCommunityInferenceFundingSessionProviderStarted/);
+assert.match(
+  memberFundingBlock,
+  /memberAgentFundingPromptTokens \+= [\s\S]*memberAgentFundingCompletionTokens \+=/,
+  "member funding must aggregate every completed provider call instead of trusting the loop's final call only",
+);
+assert.match(
+  memberFundingBlock,
+  /usageComplete: memberAgentFundingProviderStarted[\s\S]*memberAgentFundingUsageComplete[\s\S]*: true/,
+  "member funding should release pre-provider failures and preserve post-provider usage certainty",
+);
+assert.match(
+  runtimeLoop,
+  /operation: async \(signal\) => \{[\s\S]*beforeProviderRequest\?\.\(\)[\s\S]*runProviderNativeToolCompletion/,
+  "provider-start authority must run inside the abortable operation immediately before the provider request",
+);
+assert.match(
+  runtimeLoop,
+  /providerResultObserved = true[\s\S]*observeProviderResult[\s\S]*catch \(error\)[\s\S]*if \(!providerResultObserved\)/,
+  "already-observed provider usage must not be reclassified as unknown by a later cancellation check",
+);
+assert.equal(
+  (runtimeHandlers.match(/observeProviderResult: observeMemberAgentProviderResult/g) ?? []).length,
+  2,
+  "streaming and JSON member turns must use the same provider result accounting",
+);
 assert.match(
   runtimeHandlers,
   /surface: "member_agent_dock"[\s\S]*receiptKey: `member_agent_dock:\$\{runId\}`[\s\S]*settleCommunityInferenceFundingSession[\s\S]*failCommunityInferenceFundingSession/,

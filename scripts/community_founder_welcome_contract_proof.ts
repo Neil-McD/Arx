@@ -10,6 +10,7 @@ const contract = read("shared/communityFounderWelcome.ts");
 const interactions = read("convex/communityInteractions.ts");
 const lifecycle = read("convex/communityLifecycle.ts");
 const knowledge = read("convex/communityBuilderKnowledgeSetup.ts");
+const knowledgeCore = read("convex/communityBuilderKnowledgeSetupCore.ts");
 const baseline = read("scripts/foundation_baseline_gate.sh");
 const packageJson = read("package.json");
 
@@ -36,12 +37,17 @@ assert.match(
   "recovery must preserve the first canonical welcome even if mutable labels later change",
 );
 
-for (const source of [lifecycle, knowledge]) {
+for (const source of [lifecycle, knowledgeCore]) {
   assert.match(
     source,
     /ctx\.scheduler\.runAfter\([\s\S]*createCommunityAgentCanonicalInteractionInternal[\s\S]*communityFounderWelcomeIdempotencyKey[\s\S]*founderBootstrap: true/,
   );
 }
+assert.match(
+  knowledge,
+  /completeBuilderKnowledgeSetupForOwner\([\s\S]*community[\s\S]*userId/,
+  "the public completion mutation must use the single Builder knowledge completion authority",
+);
 
 assert.match(
   packageJson,

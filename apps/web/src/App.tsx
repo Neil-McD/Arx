@@ -194,6 +194,7 @@ import {
 } from "./webAppRuntime";
 import { useWebCommunityVisualIdentityRegistryLifecycle } from "./controllers/useWebCommunityVisualIdentityRegistryLifecycle";
 import {
+  useWebBuilderKnowledgeChangesetController,
   useWebBuilderKnowledgeCompletionController,
   useWebBuilderKnowledgeHydrationController,
 } from "./controllers/useWebBuilderKnowledgeSetupController";
@@ -869,8 +870,13 @@ export default function App() {
     setIsSettingsAvatarDragOver,
     communitySettingsLoadedCommunityIdRef,
     communitySettingsDirtyRef,
-    communityPricingDirtyRef,
+    isCommunitySettingsDirty,
+    setCommunitySettingsDirty,
     markCommunitySettingsDirty,
+    isLoadingCommunitySettings,
+    isCommunitySettingsReady,
+    communitySettingsConflict,
+    hasCommunitySettingsChangesExceptAbout,
   } = communitySettingsUi;
   const communityAgentConfigUi = communityAdministration.agentConfigUi;
   const {
@@ -966,6 +972,12 @@ export default function App() {
       ensureSession: ensureUsableAuthSession,
       setCommunities,
       enterCommunity: enterJoinedCommunity,
+    });
+  const builderKnowledgeChangesets =
+    useWebBuilderKnowledgeChangesetController({
+      communityId: pendingBuilderKnowledgeCommunity?.id ?? null,
+      session,
+      resumeEpoch: appActivity.resumeEpoch,
     });
 
   const {
@@ -1125,12 +1137,14 @@ export default function App() {
     },
   });
   const {
-    syncCommunitySettingsSelection,
+    resetCommunitySettingsSelection,
+    loadCommunitySettings,
     loadCommunityMemberSettings,
-    loadCommunityPricing,
     handleToggleCommunityMute,
     handleLeaveCommunity,
     handleSaveCommunitySettings,
+    handleCancelCommunitySettings,
+    handleReloadLatestCommunitySettings,
     handleArchiveCommunity,
     isArchivingCommunity,
     communityArchiveError,
@@ -1229,20 +1243,16 @@ export default function App() {
     activePage === "community" &&
     communityTab === "chat";
 
-  useCommunitySettingsAccessLifecycle<AuthSession, CommunityRecord>({
+  useCommunitySettingsAccessLifecycle<AuthSession>({
     activePage,
     communityTab,
     ...sessionArg,
     activeCommunityId,
     activeCommunityAccess,
-    communities,
-    syncCommunitySettingsSelection,
+    resetCommunitySettingsSelection,
+    loadCommunitySettings,
     loadCommunityMemberSettings,
-    loadCommunityPricing,
     setCommunityMemberMuted,
-    setCommunitySettingsPricingMode,
-    setCommunitySettingsPriceUsdMonthly,
-    setCommunitySettingsPriceUsdAnnual,
   });
 
   const communityAttentionCommunityIds = useMemo(
@@ -2025,20 +2035,8 @@ export default function App() {
   } = useWebCommunityFunnelAboutController({
     activeCommunity,
     about: communitySettingsAbout,
-    name: communitySettingsName,
-    slug: communitySettingsSlug,
-    oneLiner: communitySettingsOneLiner,
-    visibility: communitySettingsVisibility,
-    avatarUrl: communitySettingsAvatarUrl,
-    avatarFocusX: communitySettingsAvatarFocusX,
-    avatarFocusY: communitySettingsAvatarFocusY,
-    avatarZoom: communitySettingsAvatarZoom,
-    bannerUrl: communitySettingsBannerUrl,
-    bannerFocusX: communitySettingsBannerFocusX,
-    bannerFocusY: communitySettingsBannerFocusY,
-    bannerZoom: communitySettingsBannerZoom,
-    pricingDirtyRef: communityPricingDirtyRef,
-    settingsDirtyRef: communitySettingsDirtyRef,
+    hasOtherSettingsDirty: hasCommunitySettingsChangesExceptAbout,
+    setSettingsDirty: setCommunitySettingsDirty,
     ensureSession: ensureUsableAuthSession,
     setAbout: setCommunitySettingsAbout,
     setError: setCommunitySettingsError,
@@ -2127,7 +2125,10 @@ export default function App() {
         communitySettingsPricingMode,
         communitySettingsPriceUsdMonthly,
         communitySettingsPriceUsdAnnual,
-        isCommunitySettingsDirty: communitySettingsDirtyRef.current,
+        isCommunitySettingsDirty,
+        isLoadingCommunitySettings,
+        isCommunitySettingsReady,
+        communitySettingsConflict,
         communitySettingsError,
         isSavingCommunitySettings,
         communityMemberMuted,
@@ -2162,7 +2163,8 @@ export default function App() {
         setCommunitySettingsPricingMode,
         setCommunitySettingsPriceUsdMonthly,
         setCommunitySettingsPriceUsdAnnual,
-        communityPricingDirtyRef,
+        handleCancelCommunitySettings,
+        handleReloadLatestCommunitySettings,
         handleSaveCommunitySettings,
         handleToggleCommunityMute,
         handleLeaveCommunity,
@@ -2607,7 +2609,7 @@ export default function App() {
         void publicBuilderCheckout.startPurchase();
       },
     },
-    builderKnowledgeSetupProps: pendingBuilderKnowledgeCommunity
+    builderKnowledgeSetupProps: pendingBuilderKnowledgeCommunity && session
       ? {
           community: pendingBuilderKnowledgeCommunity,
           isHydrating:
@@ -2619,7 +2621,11 @@ export default function App() {
             && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id
               ? communityResources
               : [],
+          session,
           onAddSources: handleAddCommunitySources,
+          onBuildResources: handleBuildCommunityResources,
+          changesetCards: builderKnowledgeChangesets.cards,
+          changesetRecoveryError: builderKnowledgeChangesets.error,
           onComplete: completePendingBuilderKnowledgeSetup,
         }
       : null,
@@ -3091,6 +3097,12 @@ export default function App() {
         mobileRoot: showMobileShell && mobileRootPage === "agent",
         onRequestOpen: () => setMobileRootPage("agent"),
         onInitialResourcesApplied: (communityId) => {
+          if (pendingBuilderKnowledgeCommunity?.id === communityId) {
+            void completePendingBuilderKnowledgeSetup().then((completed) => {
+              if (completed) showAppToastMessage("Your community is ready.");
+            });
+            return;
+          }
           const community = communities.find((candidate) => candidate.id === communityId);
           setMobileRootPage("community");
           enterJoinedCommunity({

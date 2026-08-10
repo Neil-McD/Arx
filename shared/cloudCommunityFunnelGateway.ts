@@ -14,6 +14,7 @@ export type CloudCommunityAboutSaveResult = {
   community_id: string;
   about: string | null;
   updated_at: string;
+  settings_revision: number;
 };
 
 function firstObjectRow(payload: unknown): Record<string, unknown> | null {
@@ -117,5 +118,6 @@ export async function saveCloudCommunityAbout<SessionT>(
     community_id: String(row.community_id ?? params.communityId).trim() || params.communityId,
     about: typeof row.about === "string" ? row.about : null,
     updated_at: String(row.updated_at ?? "").trim(),
+    settings_revision: Math.max(0, Math.floor(Number(row.settings_revision ?? 0))),
   };
 }

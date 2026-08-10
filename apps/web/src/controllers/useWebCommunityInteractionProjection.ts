@@ -30,13 +30,10 @@ import {
   subscribeCloudCommunityChannelPinnedRoot,
   toggleCloudCommunityInteractionReaction,
   type CommunityInteractionAttachment,
-  type CommunityInteractionEmbed,
   type CommunityInteractionPendingStatus,
   type CommunityInteractionReplyBundle,
   type CommunityInteractionRootBundle,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
-import { extractCommunityInteractionLinkSources } from "../../../../shared/communityInteractionLinkExtraction";
-import { maybeSafeCommunitySourceUrl } from "../../../../convex/communitySourceUrlPolicy";
 const COMMUNITY_INTERACTION_ROOT_LIMIT = 50;
 const COMMUNITY_INTERACTION_REPLY_LIMIT = 80;
 const MAX_INTERACTION_IDEMPOTENCY_KEY_CHARS = 160;
@@ -147,41 +144,6 @@ function optimisticAttachment(attachment: OptimisticAttachment): CommunityIntera
   };
 }
 
-function optimisticLinkEmbeds(
-  text: string,
-  idempotencyKey: string,
-): CommunityInteractionEmbed[] {
-  return extractCommunityInteractionLinkSources(
-    text,
-    (rawUrl) => maybeSafeCommunitySourceUrl(rawUrl, 2_048),
-  ).map((url, index) => ({
-    id: `pending-link:${idempotencyKey}:${index}`,
-    embed_kind: "link",
-    status: "pending",
-    visibility_scope: "community",
-    source_url: url,
-    normalized_source_url: url,
-    workspace_ref_kind: null,
-    workspace_ref_id: null,
-    preview_kind: null,
-    author_name: null,
-    author_handle: null,
-    author_avatar_url: null,
-    provider: null,
-    provider_post_id: null,
-    published_at: null,
-    post_context: null,
-    title: null,
-    description: null,
-    image_url: null,
-    image_alt: null,
-    video_url: null,
-    resolver_version: null,
-    fetched_at: null,
-    error: null,
-  }));
-}
-
 function buildOptimisticRoot<AttachmentT extends OptimisticAttachment>(
   pending: PendingCanonicalInteraction<AttachmentT>,
 ): CommunityInteractionRootBundle {
@@ -189,7 +151,7 @@ function buildOptimisticRoot<AttachmentT extends OptimisticAttachment>(
     deduped: false,
     pending: pending.status,
     content_blocks: [],
-    embeds: optimisticLinkEmbeds(pending.text, pending.idempotencyKey),
+    embeds: [],
     mentions: [],
     attachments: pending.attachments.map(optimisticAttachment),
     root: {
@@ -228,7 +190,7 @@ function buildOptimisticReply<AttachmentT extends OptimisticAttachment>(
     deduped: false,
     pending: pending.status,
     content_blocks: [],
-    embeds: optimisticLinkEmbeds(pending.text, pending.idempotencyKey),
+    embeds: [],
     mentions: [],
     attachments: pending.attachments.map(optimisticAttachment),
     reply: {

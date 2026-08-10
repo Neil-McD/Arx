@@ -1,4 +1,5 @@
 import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
   COMMUNITY_OWNER_FUNDED_MODEL_ID,
@@ -7,11 +8,15 @@ import {
   type CommunityInferenceFundingAdmission,
 } from "../shared/founderInference";
 import {
+  finalizeKnownNoSpendFounderInferenceReceipt,
+  founderInferenceReceiptIdentityMatches,
+  getUniqueFounderInferenceReceiptByKey,
+  requireBoundedFounderInferenceIdentifier,
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
   type FounderInferenceReceiptRow,
 } from "./founderInferenceCore";
-import { releaseFounderUsageReservation, reserveFounderUsage } from "./founderPlanCore";
+import { reserveFounderUsage } from "./founderPlanCore";
 import { requireFounderInferencePricingFromEnv } from "./founderPlanPricing";
 
 const RECEIPT_LEASE_MS = 10 * 60_000;
@@ -20,7 +25,6 @@ const communityInferenceSurfaceValidator = v.union(
   v.literal("member_agent_dock"),
   v.literal("community_agent_mention"),
   v.literal("community_autonomous_cognition"),
-  v.literal("community_setup_generation"),
 );
 
 function normalizedId(value: unknown): string {
@@ -29,6 +33,74 @@ function normalizedId(value: unknown): string {
 
 function boundedCode(value: unknown, fallback: string): string {
   return String(value ?? "").trim().slice(0, 120) || fallback;
+}
+
+async function scheduleFounderInferenceReceiptExpiration(args: {
+  ctx: any;
+  receiptKey: string;
+  claimToken: string;
+  delayMs?: number;
+}): Promise<void> {
+  await args.ctx.scheduler.runAfter(
+    Math.max(0, Math.floor(args.delayMs ?? RECEIPT_LEASE_MS)),
+    (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+    {
+      receiptKey: args.receiptKey,
+      expectedClaimToken: args.claimToken,
+    },
+  );
+}
+
+async function finalizeExpiredAuthorizedFounderInferenceReceipt(args: {
+  ctx: any;
+  receipt: FounderInferenceReceiptRow;
+  claimToken: string;
+  nowMs: number;
+}): Promise<
+  | {
+      status: "failed";
+      errorCode: "authorization_expired_before_provider";
+    }
+  | {
+      status: "indeterminate";
+      errorCode: "provider_execution_deadline_exceeded";
+    }
+> {
+  if (
+    args.receipt.status !== "authorized" ||
+    args.receipt.claimToken !== args.claimToken
+  ) {
+    throw new Error("founder_inference_receipt_claim_invalid");
+  }
+  if (args.receipt.providerStartedAt !== undefined) {
+    await settleAuthorizedFounderInferenceReceipt({
+      ctx: args.ctx,
+      receiptKey: args.receipt.receiptKey,
+      claimToken: args.claimToken,
+      promptTokens: 0,
+      completionTokens: 0,
+      usageComplete: false,
+      outcomeCode: "provider_execution_deadline_exceeded",
+      failureCode: "provider_execution_deadline_exceeded",
+      nowMs: args.nowMs,
+    });
+    return {
+      status: "indeterminate",
+      errorCode: "provider_execution_deadline_exceeded",
+    };
+  }
+
+  await finalizeKnownNoSpendFounderInferenceReceipt({
+    ctx: args.ctx,
+    receipt: args.receipt,
+    claimToken: args.claimToken,
+    failureCode: "authorization_expired_before_provider",
+    nowMs: args.nowMs,
+  });
+  return {
+    status: "failed",
+    errorCode: "authorization_expired_before_provider",
+  };
 }
 
 const FOUNDER_INFERENCE_BYOK_RETIRED = "founder_inference_byok_retired";
@@ -116,9 +188,21 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
-    const receiptKey = String(args.receiptKey ?? "").trim();
-    const claimToken = String(args.claimToken ?? "").trim();
-    if (!receiptKey || !claimToken) throw new Error("founder_inference_receipt_claim_required");
+    const receiptKey = requireBoundedFounderInferenceIdentifier(
+      args.receiptKey,
+      "founder_inference_receipt_key_invalid",
+      240,
+    );
+    const sourceRunId = requireBoundedFounderInferenceIdentifier(
+      args.sourceRunId,
+      "founder_inference_source_run_invalid",
+      240,
+    );
+    const claimToken = requireBoundedFounderInferenceIdentifier(
+      args.claimToken,
+      "founder_inference_claim_token_invalid",
+      128,
+    );
 
     const admission = await resolveCommunityInferenceFundingAdmission(
       ctx,
@@ -135,23 +219,36 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       return { ok: false, errorCode: admission.ok === false ? admission.code : "funding_authority_changed" };
     }
 
-    const existing = (await ctx.db
-      .query("communityInferenceReceipts" as any)
-      .withIndex("by_receipt_key", (q: any) => q.eq("receiptKey", receiptKey))
-      .first()) as FounderInferenceReceiptRow | null;
+    const existing = await getUniqueFounderInferenceReceiptByKey(ctx, receiptKey);
     if (existing) {
+      if (!founderInferenceReceiptIdentityMatches(existing, {
+        sourceRunId,
+        communityId: args.communityId,
+        actorUserId: args.actorUserId,
+        payerUserId: args.expectedPayerUserId,
+        fundingMode: args.expectedFundingMode,
+        founderSubscriptionId: args.expectedFounderSubscriptionId,
+        surface: args.surface,
+      })) {
+        return { ok: false, errorCode: "founder_inference_receipt_conflict" };
+      }
       if (existing.status === "settled") {
         return { ok: false, errorCode: "inference_receipt_already_settled" };
       }
       if (existing.status === "failed" || existing.status === "indeterminate") {
         return { ok: false, errorCode: `inference_receipt_${existing.status}` };
       }
-      if (existing.providerStartedAt) {
-        await ctx.db.patch(existing._id as any, {
-          status: "indeterminate",
+      if (existing.providerStartedAt !== undefined) {
+        await settleAuthorizedFounderInferenceReceipt({
+          ctx,
+          receiptKey,
+          claimToken: existing.claimToken,
+          promptTokens: 0,
+          completionTokens: 0,
+          usageComplete: false,
+          outcomeCode: "provider_usage_unknown",
           failureCode: "ambiguous_provider_retry_blocked",
-          failedAt: args.nowMs,
-          updatedAt: args.nowMs,
+          nowMs: args.nowMs,
         });
         return { ok: false, errorCode: "inference_receipt_indeterminate" };
       }
@@ -162,6 +259,11 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
         claimToken,
         leaseExpiresAt: args.nowMs + RECEIPT_LEASE_MS,
         updatedAt: args.nowMs,
+      });
+      await scheduleFounderInferenceReceiptExpiration({
+        ctx,
+        receiptKey,
+        claimToken,
       });
       return { ok: true, receiptId: existing._id, reclaimed: true };
     }
@@ -216,7 +318,7 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
 
     const receiptId = await ctx.db.insert("communityInferenceReceipts" as any, {
       receiptKey,
-      sourceRunId: String(args.sourceRunId ?? "").trim(),
+      sourceRunId,
       communityId: args.communityId,
       actorUserId: args.actorUserId,
       payerUserId: args.expectedPayerUserId,
@@ -235,7 +337,61 @@ export const claimCommunityInferenceReceiptInternal = internalMutation({
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
     });
+    await scheduleFounderInferenceReceiptExpiration({
+      ctx,
+      receiptKey,
+      claimToken,
+    });
     return { ok: true, receiptId, reclaimed: false };
+  },
+});
+
+export const expireCommunityInferenceReceiptInternal = internalMutation({
+  args: {
+    receiptKey: v.string(),
+    expectedClaimToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const nowMs = Date.now();
+    const receiptKey = requireBoundedFounderInferenceIdentifier(
+      args.receiptKey,
+      "founder_inference_receipt_key_invalid",
+      240,
+    );
+    const expectedClaimToken = requireBoundedFounderInferenceIdentifier(
+      args.expectedClaimToken,
+      "founder_inference_claim_token_invalid",
+      128,
+    );
+    const receipt = await getUniqueFounderInferenceReceiptByKey(ctx, receiptKey);
+    if (!receipt) {
+      return { ok: true, status: "missing" as const, alreadyFinalized: true };
+    }
+    if (receipt.status !== "authorized") {
+      return { ok: true, status: receipt.status, alreadyFinalized: true };
+    }
+    if (receipt.claimToken !== expectedClaimToken) {
+      return { ok: true, status: "stale_claim" as const, alreadyFinalized: false };
+    }
+    if (!Number.isFinite(receipt.leaseExpiresAt) || receipt.leaseExpiresAt <= 0) {
+      throw new Error("founder_inference_receipt_lease_invalid");
+    }
+    if (receipt.leaseExpiresAt > nowMs) {
+      await scheduleFounderInferenceReceiptExpiration({
+        ctx,
+        receiptKey,
+        claimToken: expectedClaimToken,
+        delayMs: receipt.leaseExpiresAt - nowMs,
+      });
+      return { ok: true, status: "pending" as const, alreadyFinalized: false };
+    }
+    const finalized = await finalizeExpiredAuthorizedFounderInferenceReceipt({
+      ctx,
+      receipt,
+      claimToken: expectedClaimToken,
+      nowMs,
+    });
+    return { ok: true, status: finalized.status, alreadyFinalized: false };
   },
 });
 
@@ -269,12 +425,24 @@ export const markCommunityInferenceProviderStartedInternal = internalMutation({
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
-    const receipt = (await ctx.db
-      .query("communityInferenceReceipts" as any)
-      .withIndex("by_receipt_key", (q: any) => q.eq("receiptKey", args.receiptKey))
-      .first()) as FounderInferenceReceiptRow | null;
+    const receipt = await getUniqueFounderInferenceReceiptByKey(ctx, args.receiptKey);
     if (!receipt || receipt.status !== "authorized" || receipt.claimToken !== args.claimToken) {
       return { ok: false, errorCode: "founder_inference_receipt_claim_invalid" };
+    }
+    if (!Number.isFinite(receipt.leaseExpiresAt) || receipt.leaseExpiresAt <= 0) {
+      throw new Error("founder_inference_receipt_lease_invalid");
+    }
+    if (receipt.leaseExpiresAt <= args.nowMs) {
+      const finalized = await finalizeExpiredAuthorizedFounderInferenceReceipt({
+        ctx,
+        receipt,
+        claimToken: args.claimToken,
+        nowMs: args.nowMs,
+      });
+      return { ok: false, errorCode: finalized.errorCode };
+    }
+    if (receipt.providerStartedAt !== undefined) {
+      return { ok: true };
     }
     const admission = await resolveCommunityInferenceFundingAdmission(
       ctx,
@@ -288,23 +456,12 @@ export const markCommunityInferenceProviderStartedInternal = internalMutation({
       expectedFounderSubscriptionId: receipt.founderSubscriptionId,
     });
     if (!authorityMatches) {
-      if (
-        receipt.fundingMode === "platform_subscription" &&
-        receipt.usageCycleId &&
-        Number(receipt.reservedCostMicros ?? 0) > 0
-      ) {
-        await releaseFounderUsageReservation({
-          ctx,
-          usageCycleId: receipt.usageCycleId,
-          reservedCostMicros: Number(receipt.reservedCostMicros),
-          nowMs: args.nowMs,
-        });
-      }
-      await ctx.db.patch(receipt._id as any, {
-        status: "failed",
+      await finalizeKnownNoSpendFounderInferenceReceipt({
+        ctx,
+        receipt,
+        claimToken: args.claimToken,
         failureCode: "funding_authority_changed",
-        failedAt: args.nowMs,
-        updatedAt: args.nowMs,
+        nowMs: args.nowMs,
       });
       return { ok: false, errorCode: "funding_authority_changed" };
     }
@@ -328,22 +485,27 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
     nowMs: v.number(),
   },
   handler: async (ctx, args) => {
-    const receipt = (await ctx.db
-      .query("communityInferenceReceipts" as any)
-      .withIndex("by_receipt_key", (q: any) => q.eq("receiptKey", args.receiptKey))
-      .first()) as FounderInferenceReceiptRow | null;
+    const receipt = await getUniqueFounderInferenceReceiptByKey(ctx, args.receiptKey);
     if (!receipt || receipt.status !== "authorized" || receipt.claimToken !== args.claimToken) {
       return { ok: false, errorCode: "founder_inference_receipt_claim_invalid" };
     }
     const promptTokens = Math.max(0, Math.floor(args.promptTokens));
     const completionTokens = Math.max(0, Math.floor(args.completionTokens));
     const failureCode = boundedCode(args.failureCode, "provider_error");
-    if (args.usageComplete === false) {
-      await ctx.db.patch(receipt._id as any, {
-        status: "indeterminate",
+    if (
+      args.usageComplete === false ||
+      (args.disposition === "indeterminate" && promptTokens === 0 && completionTokens === 0)
+    ) {
+      await settleAuthorizedFounderInferenceReceipt({
+        ctx,
+        receiptKey: args.receiptKey,
+        claimToken: args.claimToken,
+        promptTokens,
+        completionTokens,
+        usageComplete: false,
+        outcomeCode: failureCode,
         failureCode: "provider_token_usage_missing",
-        failedAt: args.nowMs,
-        updatedAt: args.nowMs,
+        nowMs: args.nowMs,
       });
       return { ok: true, status: "indeterminate" };
     }
@@ -360,25 +522,13 @@ export const finalizeCommunityInferenceFailureInternal = internalMutation({
       });
       return { ok: true, status: "settled" };
     }
-    if (
-      receipt.fundingMode === "platform_subscription" &&
-      args.disposition === "failed" &&
-      receipt.usageCycleId &&
-      Number(receipt.reservedCostMicros ?? 0) > 0
-    ) {
-      await releaseFounderUsageReservation({
-        ctx,
-        usageCycleId: receipt.usageCycleId,
-        reservedCostMicros: Number(receipt.reservedCostMicros),
-        nowMs: args.nowMs,
-      });
-    }
-    await ctx.db.patch(receipt._id as any, {
-      status: args.disposition,
+    await finalizeKnownNoSpendFounderInferenceReceipt({
+      ctx,
+      receipt,
+      claimToken: args.claimToken,
       failureCode,
-      failedAt: args.nowMs,
-      updatedAt: args.nowMs,
+      nowMs: args.nowMs,
     });
-    return { ok: true, status: args.disposition };
+    return { ok: true, status: "failed" as const };
   },
 });

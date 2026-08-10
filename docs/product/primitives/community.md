@@ -3,7 +3,7 @@ id: product.community
 title: Community
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-08-09
 ---
 
 # Community
@@ -31,6 +31,8 @@ The public funnel is the front door. The real community surface is the member ar
 ## System Mental Model
 
 A community is identified by durable backend state. It has visibility, membership, roles, entitlements, resources, settings, and optional billing configuration.
+
+Manager-facing General settings load as one authorized backend snapshot. Saves are atomic across community identity, branding, visibility, and pricing, and use a settings revision to reject stale writers before any part of the snapshot changes. Cancel restores the complete locally saved snapshot without a network read; a stale-write conflict preserves the draft until the manager explicitly reloads current settings.
 
 Community access is not determined by the URL alone. The backend evaluates membership, entitlement, role, blocks, approval state, and billing-derived access where relevant.
 
@@ -61,6 +63,7 @@ The MVP community surface includes:
 6. Role controls authority; entitlement controls access.
 7. Community access should fail closed when membership or entitlement evidence is missing.
 8. Community docs, prompts, resources, skills, and memory remain scoped to the community.
+9. Community settings conflicts must fail closed; a stale browser must reload current settings instead of overwriting newer values.
 
 ## Examples
 

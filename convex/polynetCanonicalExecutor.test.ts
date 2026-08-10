@@ -1514,6 +1514,11 @@ test("initial community resource intent survives staging and durable recovery", 
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.communityId, {
+      builderKnowledgeSetupPending: true,
+    });
+  });
   const staged = await t.mutation(
     internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
     {
@@ -1553,6 +1558,35 @@ test("initial community resource intent survives staging and durable recovery", 
       },
     ),
   ).resolves.toMatchObject({ intent: "initial_community_resources" });
+
+  await expect(
+    asOwner.mutation(
+      api.communityResources.applyCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: staged.changeset_id as any,
+      },
+    ),
+  ).resolves.toMatchObject({
+    status: "applied",
+    builder_knowledge_setup_completed: true,
+  });
+  await expect(t.run(async (ctx) => ctx.db.get(fixture.communityId)))
+    .resolves.toMatchObject({ builderKnowledgeSetupPending: false });
+
+  await expect(
+    asOwner.mutation(
+      api.communityResources.applyCommunityResourceBuilderChangeset,
+      {
+        communityId: fixture.communityId,
+        changesetId: staged.changeset_id as any,
+      },
+    ),
+  ).resolves.toMatchObject({
+    status: "applied",
+    builder_knowledge_setup_completed: false,
+    deduped: true,
+  });
 });
 
 test("expired resource changesets commit one terminal state across every decision path", async () => {

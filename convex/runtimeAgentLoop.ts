@@ -126,6 +126,15 @@ type InferenceMessage = {
 type RuntimeAgentLoopSuccess = RuntimeKernelSuccess<string>;
 type RuntimeAgentLoopFailure = RuntimeKernelFailure<string>;
 type RuntimeAgentLoopFailureInput = RuntimeKernelFailureInput;
+type RuntimeProviderLifecycleHooks = {
+  beforeProviderRequest?: () => Promise<void>;
+  observeProviderResult?: (result: {
+    ok: boolean;
+    code: string | null;
+    promptTokens: number | null;
+    completionTokens: number | null;
+  }) => void;
+};
 
 type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
@@ -1195,7 +1204,7 @@ async function runProviderNativeToolCompletion(params: {
 }
 
 async function executeRetrievalAgentLoop(
-  params: RuntimeCommunityPromptFields & {
+  params: RuntimeCommunityPromptFields & RuntimeProviderLifecycleHooks & {
     ctx: any;
     req: Request;
     userId: string;
@@ -1737,6 +1746,7 @@ async function executeRetrievalAgentLoop(
         let completion:
           | NativeToolAwareCompletionSuccess<string>
           | RuntimeAgentLoopFailureInput;
+        let providerResultObserved = false;
         const reasoningSummaryEmitter = createRuntimeReasoningSummaryEmitter({
           runId: params.runId,
           summaryStreamId: `${params.runId}:tool_completion:${reasoningSummaryStreamCount}`,
@@ -1750,8 +1760,9 @@ async function executeRetrievalAgentLoop(
             ctx: params.ctx,
             ownerId: params.userId,
             runId: params.runId,
-            operation: async (signal) =>
-              await runProviderNativeToolCompletion({
+            operation: async (signal) => {
+              await params.beforeProviderRequest?.();
+              return await runProviderNativeToolCompletion({
                 ctx: params.ctx,
                 userId: params.userId,
                 requestedModelId: params.requestedModelId,
@@ -1793,10 +1804,28 @@ async function executeRetrievalAgentLoop(
                   }
                 },
                 signal,
-              }),
+              });
+            },
+          });
+          providerResultObserved = true;
+          params.observeProviderResult?.({
+            ok: completion.ok !== false,
+            code: completion.ok === false ? completion.code : null,
+            promptTokens: completion.ok === false ? null : completion.promptTokens,
+            completionTokens: completion.ok === false ? null : completion.completionTokens,
           });
           await throwIfCancelled();
         } catch (error) {
+          if (!providerResultObserved) {
+            params.observeProviderResult?.({
+              ok: false,
+              code: isRuntimeRunCancelledError(error)
+                ? USER_CANCELLED_RUNTIME_CODE
+                : "agent_loop_provider_crash",
+              promptTokens: null,
+              completionTokens: null,
+            });
+          }
           if (isRuntimeRunCancelledError(error)) {
             return {
               ok: false,
@@ -2359,7 +2388,7 @@ async function executeRetrievalAgentLoop(
 }
 
 async function executeChatToolsAgentLoop(
-  params: RuntimeCommunityPromptFields & {
+  params: RuntimeCommunityPromptFields & RuntimeProviderLifecycleHooks & {
     ctx: any;
     req: Request;
     userId: string;

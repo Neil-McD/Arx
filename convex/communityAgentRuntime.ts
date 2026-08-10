@@ -34,8 +34,9 @@ import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { requireLiveCommunityForCognitionWrite } from "./communityCognitionLifecycle";
 import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
 import {
-  beginCommunityInferenceFundingSession,
+  claimCommunityInferenceFundingSession,
   failCommunityInferenceFundingSession,
+  markCommunityInferenceFundingSessionProviderStarted,
   providerFailureIsKnownPreSpend,
   resolveCommunityInferenceFundingForAction,
   settleCommunityInferenceFundingSession,
@@ -835,8 +836,9 @@ export const runCommunityAgentLoopInternal = internalAction({
     let aggregateCompletionTokens = 0;
     let aggregateUsageComplete = true;
     let fundingFinalized = false;
+    let providerStarted = false;
     try {
-      fundingSession = await beginCommunityInferenceFundingSession({
+      fundingSession = await claimCommunityInferenceFundingSession({
         ctx,
         communityId: args.communityId,
         actorUserId: resolved.sponsorUserId,
@@ -962,6 +964,13 @@ export const runCommunityAgentLoopInternal = internalAction({
         },
         runCompletion: async (kernelMessages) => {
           if (!fundingSession) throw new Error("community_inference_funding_session_missing");
+          if (!providerStarted) {
+            await markCommunityInferenceFundingSessionProviderStarted({
+              ctx,
+              session: fundingSession,
+            });
+            providerStarted = true;
+          }
           const completion = await runOpenAiNativeToolCompletion({
             modelId: fundingSession.modelId,
             messages: kernelMessages,
@@ -1063,7 +1072,10 @@ export const runCommunityAgentLoopInternal = internalAction({
               completionTokens: 0,
               usageComplete: true,
               failureCode,
-              disposition: providerFailureIsKnownPreSpend(failureCode) ? "failed" : "indeterminate",
+              disposition:
+                !providerStarted || providerFailureIsKnownPreSpend(failureCode)
+                  ? "failed"
+                  : "indeterminate",
             });
           }
           fundingFinalized = true;
@@ -1100,9 +1112,9 @@ export const runCommunityAgentLoopInternal = internalAction({
             session: fundingSession,
             promptTokens: aggregatePromptTokens,
             completionTokens: aggregateCompletionTokens,
-            usageComplete: false,
+            usageComplete: !providerStarted,
             failureCode: "community_agent_runtime_exception",
-            disposition: "indeterminate",
+            disposition: providerStarted ? "indeterminate" : "failed",
           });
           fundingFinalized = true;
         } catch {

@@ -49,7 +49,7 @@ export function useWebDirectMessagesChromeController(params: {
     >
       <MessageCircle aria-hidden="true" />
       {params.unreadCount > 0 ? (
-        <span className="unread-badge">
+        <span className="direct-messages-unread-badge">
           {params.unreadCount > 99 ? "99+" : params.unreadCount}
         </span>
       ) : null}

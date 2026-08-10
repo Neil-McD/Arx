@@ -22,7 +22,6 @@ const knowledgeControllerSource = readFileSync(
   ),
   "utf8",
 );
-
 test("Builder knowledge setup is a required, non-dismissible step", () => {
   expect(source).toContain("Community setup · 2 of 2");
   expect(source).toContain("Add your community knowledge.");
@@ -34,12 +33,14 @@ test("Builder knowledge setup is a required, non-dismissible step", () => {
   expect(source).not.toContain("Build my resources");
 });
 
-test("Skip and ready-source continuation share the canonical completion command", () => {
+test("Skip completes setup while Next starts the canonical resource builder", () => {
   expect(source).toContain(
     "const canContinue = readySources.length > 0 && !hasPendingSources && !props.isHydrating;",
   );
   expect(source).toMatch(/className="builder-knowledge-setup-skip"[\s\S]*?onClick=\{\(\) => void complete\(\)\}/);
-  expect(source).toMatch(/className="builder-knowledge-setup-next"[\s\S]*?disabled=\{controlsDisabled \|\| !canContinue\}[\s\S]*?onClick=\{\(\) => void complete\(\)\}/);
+  expect(source).toMatch(/const buildResources = async \(\) =>[\s\S]*?props\.onBuildResources\([\s\S]*?readySources/);
+  expect(source).toMatch(/className="builder-knowledge-setup-next"[\s\S]*?disabled=\{controlsDisabled \|\| !canContinue\}[\s\S]*?onClick=\{\(\) => void buildResources\(\)\}/);
+  expect(source).toMatch(/RuntimeResourceChangesetApprovalCards[\s\S]*?onInitialResourcesApplied=\{\(\) => \{[\s\S]*?void complete\(\)/);
 });
 
 test("a source-loading failure cannot trap the buyer in onboarding", () => {
@@ -57,5 +58,16 @@ test("the durable knowledge gate is projected through the canonical global overl
   expect(overlayHostSource).toContain("props.builderKnowledgeSetupProps");
   expect(overlayHostSource).toContain("<WebBuilderKnowledgeSetup");
   expect(appSource).not.toContain("<WebBuilderKnowledgeSetup");
+  expect(appSource).toContain("onBuildResources: handleBuildCommunityResources");
   expect(appSource).not.toMatch(/if \(pendingBuilderKnowledgeCommunity\) \{[\s\S]*?return \(\s*<WebBuilderKnowledgeSetup/);
+});
+
+test("onboarding recovers durable staged changesets without a second builder", () => {
+  expect(knowledgeControllerSource).toContain(
+    "listCloudPendingCommunityResourceBuilderChangesets",
+  );
+  expect(knowledgeControllerSource).toContain(
+    "buildResourceChangesetCardFromPayload",
+  );
+  expect(knowledgeControllerSource).toMatch(/window\.setInterval\([\s\S]*?readPendingChangeset/);
 });

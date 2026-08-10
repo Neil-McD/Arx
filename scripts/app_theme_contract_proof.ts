@@ -243,6 +243,9 @@ const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const memberAgentComponent = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
+const directMessagesChrome = read(
+  "apps/web/src/controllers/useWebDirectMessagesChromeController.tsx",
+);
 const communityNav = read("shared/CommunityNav.tsx");
 const voiceInputButton = read("shared/VoiceInputButton.tsx");
 const mvpGuards = read(".github/workflows/mvp-guards.yml");
@@ -300,16 +303,12 @@ assert.equal(
   "--accent-selection: #2F55FF;",
   "--accent-agent: #2F55FF;",
   "--accent-attention: #2F55FF;",
-  "--accent-attention-fill: #2F55FF;",
   "--text-on-attention: #FFFFFF;",
+  "--accent-global-attention: #B42318;",
+  "--text-on-global-attention: #FFFFFF;",
   "--text-link: #2F55FF;",
   "--stroke-selected: #2F55FF;",
   "--text-selected: #171719;",
-  "--community-social-embed-surface: var(--surface-card);",
-  "--community-social-embed-surface-hover: var(--surface-card-hover);",
-  "--community-social-embed-stroke: var(--stroke-default);",
-  "--community-social-embed-text: var(--text-ink-primary);",
-  "--community-social-embed-muted: var(--text-ink-secondary);",
 ].forEach((token) => {
   assert.ok(lightThemeBlock.includes(token), `Light should define ${token}`);
 });
@@ -361,26 +360,44 @@ assert.doesNotMatch(
 );
 assert.match(
   baseCss,
-  /--accent-attention:\s*#7BAAD6;[\s\S]*?--accent-attention-fill:\s*#7BAAD6;[\s\S]*?--text-on-attention:\s*#171719;/,
-  "activity attention should have an independent readable foreground and count-badge treatment",
+  /--accent-attention:\s*#7BAAD6;[\s\S]*?--text-on-attention:\s*#171719;[\s\S]*?--accent-global-attention:\s*#EF4444;[\s\S]*?--text-on-global-attention:\s*#171719;/,
+  "community and global attention should have independent readable semantic roles",
 );
 [
   /\.community-interaction-reply-pill\s*\{[\s\S]*?color:\s*var\(--accent-attention\);/,
   /\.community-interaction-unread-divider::before\s*\{[\s\S]*?var\(--accent-attention\)/,
   /\.community-interaction-unread-dot\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
-  /\.community-dm-inbox-row-unread\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
   /\.nav-item-dot\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
+  /\.mobile-topbar-attention\s*\{[\s\S]*?background:\s*var\(--accent-attention\);[\s\S]*?color:\s*var\(--text-on-attention\);/,
 ].forEach((activitySelector) => {
   assert.match(
     baseCss,
     activitySelector,
-    "reply, unread, DM, and navigation activity should share the semantic attention role",
+    "community-local reply, unread, and navigation activity should share the blue attention role",
+  );
+});
+[
+  /\.community-dm-inbox-row-unread\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);/,
+  /\.community-rail-dot\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);/,
+  /\.mobile-bottom-rail-unread\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);[\s\S]*?color:\s*var\(--text-on-global-attention\);/,
+  /\.mobile-bottom-rail-dot\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);/,
+  /\.direct-messages-unread-badge\s*\{[\s\S]*?background:\s*var\(--accent-global-attention\);[\s\S]*?color:\s*var\(--text-on-global-attention\);/,
+].forEach((globalAttentionSelector) => {
+  assert.match(
+    baseCss,
+    globalAttentionSelector,
+    "DM and outer-rail attention should share the red global-attention role",
   );
 });
 assert.match(
-  baseCss,
-  /\.unread-badge\s*\{[\s\S]*?background:\s*var\(--accent-attention-fill\);[\s\S]*?color:\s*var\(--text-on-attention\);/,
-  "compact unread counts should use the higher-contrast attention fill",
+  directMessagesChrome,
+  /className="direct-messages-unread-badge"/,
+  "the DM trigger should use its exact semantic badge class",
+);
+assert.doesNotMatch(
+  `${baseThemeCss}\n${baseCss}\n${directMessagesChrome}`,
+  /accent-attention-fill|className="unread-badge"|\.unread-badge\s*\{/,
+  "the redundant attention fill and generic unread badge aliases should stay deleted",
 );
 assert.match(
   baseCss,
@@ -683,6 +700,8 @@ const accessiblePairs = [
   ["Light activity blue on canvas", "#2F55FF", "#F8F8F4"],
   ["Dark unread count on activity fill", "#171719", "#7BAAD6"],
   ["Light unread count on activity fill", "#FFFFFF", "#2F55FF"],
+  ["Dark global attention count", "#171719", "#EF4444"],
+  ["Light global attention count", "#FFFFFF", "#B42318"],
   ["Primary ink on canvas", "#171719", "#F8F8F4"],
   ["Secondary ink on canvas", "#52515A", "#F8F8F4"],
   ["Muted ink on canvas", "#6B6974", "#F8F8F4"],

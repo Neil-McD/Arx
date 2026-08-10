@@ -1,4 +1,5 @@
 import { memo, type ReactNode } from "react";
+import { extractCommunityInteractionLinkSources } from "./communityInteractionLinkExtraction";
 
 const CHAT_LINK_RE = /\b(https?:\/\/[^\s<]+|www\.[^\s<]+)/gi;
 
@@ -99,6 +100,19 @@ export function normalizeExternalUrl(raw: string | null): URL | null {
   return url;
 }
 
+function hostMatches(host: string, apex: string): boolean {
+  return host === apex || host.endsWith(`.${apex}`);
+}
+
+const YOUTUBE_PAGE_HOSTS = new Set([
+  "youtube.com",
+  "www.youtube.com",
+  "m.youtube.com",
+  "music.youtube.com",
+  "youtube-nocookie.com",
+  "www.youtube-nocookie.com",
+]);
+
 function parseYouTubeId(url: URL): { id: string; startSeconds: number | null } | null {
   const host = url.hostname.toLowerCase();
   const parts = url.pathname.split("/").filter(Boolean);
@@ -106,7 +120,7 @@ function parseYouTubeId(url: URL): { id: string; startSeconds: number | null } |
   let id: string | null = null;
   if (host === "youtu.be") {
     id = parts[0] ?? null;
-  } else if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+  } else if (YOUTUBE_PAGE_HOSTS.has(host)) {
     if (url.pathname === "/watch") {
       id = url.searchParams.get("v");
     } else if (parts[0] === "embed" || parts[0] === "shorts" || parts[0] === "live" || parts[0] === "v") {
@@ -133,7 +147,7 @@ function buildYouTubeThumbnailUrls(id: string): string[] {
 
 function parseWistiaId(url: URL): string | null {
   const host = url.hostname.toLowerCase();
-  if (!host.includes("wistia.com") && !host.includes("wistia.net")) return null;
+  if (!hostMatches(host, "wistia.com") && !hostMatches(host, "wistia.net")) return null;
 
   const fromQuery = url.searchParams.get("wvideo");
   if (fromQuery && /^[a-zA-Z0-9]+$/.test(fromQuery)) return fromQuery;
@@ -145,7 +159,7 @@ function parseWistiaId(url: URL): string | null {
 
 function parseVimeoId(url: URL): string | null {
   const host = url.hostname.toLowerCase();
-  if (!host.includes("vimeo.com")) return null;
+  if (!hostMatches(host, "vimeo.com")) return null;
 
   const parts = url.pathname.split("/").filter(Boolean);
   for (let index = parts.length - 1; index >= 0; index -= 1) {
@@ -170,16 +184,8 @@ export function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
   const url = normalizeExternalUrl(rawUrl);
   if (!url) return null;
 
-  const youtube = parseYouTubeId(url);
-  if (youtube) {
-    const params = new URLSearchParams();
-    if (youtube.startSeconds && youtube.startSeconds > 0) {
-      params.set("start", String(youtube.startSeconds));
-    }
-    const src = `https://www.youtube.com/embed/${youtube.id}${params.toString() ? `?${params.toString()}` : ""}`;
-    const thumbnailUrls = buildYouTubeThumbnailUrls(youtube.id);
-    return { provider: "youtube", id: youtube.id, src, thumbnailUrl: thumbnailUrls[0]!, thumbnailUrls };
-  }
+  const youtube = parseYouTubeEmbedUrl(url.toString());
+  if (youtube) return youtube;
 
   const wistiaId = parseWistiaId(url);
   if (wistiaId) {
@@ -200,6 +206,48 @@ export function parseEmbedUrl(rawUrl: string): ParsedEmbed | null {
   }
 
   return null;
+}
+
+export function parseYouTubeEmbedUrl(
+  rawUrl: string,
+): Extract<ParsedEmbed, { provider: "youtube" }> | null {
+  const url = normalizeExternalUrl(rawUrl);
+  if (
+    !url ||
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    (url.port && url.port !== "443")
+  ) return null;
+  const youtube = parseYouTubeId(url);
+  if (!youtube) return null;
+  const params = new URLSearchParams();
+  if (youtube.startSeconds && youtube.startSeconds > 0) {
+    params.set("start", String(youtube.startSeconds));
+  }
+  const src = `https://www.youtube.com/embed/${youtube.id}${params.toString() ? `?${params.toString()}` : ""}`;
+  const thumbnailUrls = buildYouTubeThumbnailUrls(youtube.id);
+  return {
+    provider: "youtube",
+    id: youtube.id,
+    src,
+    thumbnailUrl: thumbnailUrls[0]!,
+    thumbnailUrls,
+  };
+}
+
+export function firstYouTubeEmbedInText(text: string): {
+  href: string;
+  embed: Extract<ParsedEmbed, { provider: "youtube" }>;
+} | null {
+  const href = extractCommunityInteractionLinkSources(
+    text,
+    (rawUrl) => (parseYouTubeEmbedUrl(rawUrl) ? rawUrl : null),
+    1,
+  )[0];
+  if (!href) return null;
+  const embed = parseYouTubeEmbedUrl(href);
+  return embed ? { href, embed } : null;
 }
 
 export const StableMediaEmbedFrame = memo(function StableMediaEmbedFrame(props: {

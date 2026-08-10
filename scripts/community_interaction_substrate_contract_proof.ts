@@ -70,10 +70,10 @@ const directory = read(directoryPath);
   "there is no intermediate source-trace link table",
   "`interaction` as a product-owned",
   "`communitySourceTraces.sourceType`",
-  "## Current Async Link Embed Enrichment Slice",
-  "Convex never fetches the user-provided source URL directly",
-  "the source URL fetcher remains authoritative for DNS resolution checks, public-address pinning, and redirect target revalidation",
-  "returned preview image URLs must pass the same shared community source URL policy or be omitted",
+  "## Current Link Presentation Slice",
+  "ordinary links render as authored blue links",
+  "YouTube is the only URL-derived rich media exception",
+  "community chat does not invoke an interaction-preview mode",
 ].forEach((needle) => assertIncludes(contractPath, contract, needle));
 
 const corePath = "docs/irreducible-core-contract.md";

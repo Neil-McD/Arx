@@ -1,5 +1,5 @@
 import { internal } from "./_generated/api";
-import { mutation } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import {
   type CommunityLike,
@@ -87,6 +87,7 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
   created_at: string;
   updated_at: string;
   branding_revision: number;
+  settings_revision: number;
   visual_identity: ReturnType<typeof buildCommunityVisualIdentity>;
 }> {
   const branding = await resolveCommunityBrandingFields(ctx, row);
@@ -115,8 +116,32 @@ async function mapCommunityRecord(ctx: any, row: CommunityLike): Promise<{
     created_at: toIsoString(row.createdAt),
     updated_at: toIsoString(row.updatedAt),
     branding_revision: row.brandingRevision ?? row.updatedAt,
+    settings_revision: resolveCommunitySettingsRevision(row),
     visual_identity: buildCommunityVisualIdentity(row, branding),
   };
+}
+
+function resolveCommunitySettingsRevision(community: CommunityLike): number {
+  const revision = Number(community.settingsRevision ?? 0);
+  return Number.isFinite(revision) && revision >= 0
+    ? Math.floor(revision)
+    : 0;
+}
+
+function requireExpectedCommunitySettingsRevision(
+  expectedRevision: number | undefined,
+  community: CommunityLike,
+): void {
+  if (expectedRevision === undefined) return;
+  if (
+    !Number.isSafeInteger(expectedRevision) ||
+    expectedRevision < 0
+  ) {
+    throw new Error("community_settings_revision_invalid");
+  }
+  if (expectedRevision !== resolveCommunitySettingsRevision(community)) {
+    throw new Error("community_settings_conflict");
+  }
 }
 
 async function saveCommunityOneLinerInternal(
@@ -128,6 +153,7 @@ async function saveCommunityOneLinerInternal(
   const nextOneLiner = normalizeOptionalText(oneLiner);
   await ctx.db.patch(community._id as any, {
     oneLiner: nextOneLiner,
+    settingsRevision: resolveCommunitySettingsRevision(community) + 1,
     updatedAt: nowMs,
   });
   const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
@@ -184,6 +210,76 @@ async function getCurrentCommunityPriceAmounts(ctx: any, communityId: any): Prom
   return {
     monthlyAmount: pickCurrentAmount("monthly"),
     annualAmount: pickCurrentAmount("annual"),
+  };
+}
+
+async function mapCommunitySettingsSnapshot(
+  ctx: any,
+  community: CommunityLike,
+): Promise<{
+  community_id: string;
+  name: string;
+  slug: string;
+  one_liner: string | null;
+  about: string | null;
+  avatar_url: string | null;
+  avatar_storage_id: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
+  banner_url: string | null;
+  banner_storage_id: string | null;
+  banner_focus_x: number;
+  banner_focus_y: number;
+  banner_zoom: number;
+  visibility: string;
+  updated_at: string;
+  branding_revision: number;
+  settings_revision: number;
+  visual_identity: ReturnType<typeof buildCommunityVisualIdentity>;
+  pricing: {
+    mode: "free" | "monthly" | "annual";
+    monthly_amount_base_units: number | null;
+    annual_amount_base_units: number | null;
+    currency: "usd";
+    currency_decimals: 2;
+  };
+}> {
+  const record = await mapCommunityRecord(ctx, community);
+  const pricing = await getCurrentCommunityPriceAmounts(ctx, community._id);
+  const mode = pricing.monthlyAmount !== null
+    ? "monthly"
+    : pricing.annualAmount !== null
+      ? "annual"
+      : "free";
+  return {
+    community_id: record.id,
+    name: record.name,
+    slug: record.slug,
+    one_liner: record.one_liner,
+    about: record.about,
+    avatar_url: record.avatar_url,
+    avatar_storage_id: record.avatar_storage_id,
+    avatar_focus_x: record.avatar_focus_x,
+    avatar_focus_y: record.avatar_focus_y,
+    avatar_zoom: record.avatar_zoom,
+    banner_url: record.banner_url,
+    banner_storage_id: record.banner_storage_id,
+    banner_focus_x: record.banner_focus_x,
+    banner_focus_y: record.banner_focus_y,
+    banner_zoom: record.banner_zoom,
+    visibility: record.visibility,
+    updated_at: record.updated_at,
+    branding_revision: record.branding_revision,
+    settings_revision: record.settings_revision,
+    visual_identity: record.visual_identity,
+    pricing: {
+      mode,
+      monthly_amount_base_units: pricing.monthlyAmount,
+      annual_amount_base_units: pricing.annualAmount,
+      currency: "usd",
+      currency_decimals: 2,
+    },
   };
 }
 
@@ -601,6 +697,7 @@ export const createCommunity = mutation({
       bannerFocusY: normalizeBannerFocus(args.bannerFocusY),
       bannerZoom: normalizeBannerZoom(args.bannerZoom),
       brandingRevision: nowMs,
+      settingsRevision: 0,
       visibility: requestedVisibility,
       inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
       entryPolicy,
@@ -670,11 +767,33 @@ export const generateCommunityBrandingUploadUrl = mutation({
   },
 });
 
+export const getCommunitySettings = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const { community } = await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    return await mapCommunitySettingsSnapshot(ctx, community);
+  },
+});
+
 export const saveCommunitySettings = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    expectedSettingsRevision: v.optional(v.number()),
     name: v.string(),
     slug: v.string(),
     oneLiner: v.optional(v.union(v.string(), v.null())),
@@ -708,6 +827,10 @@ export const saveCommunitySettings = mutation({
       communityId: args.communityId,
       userId: args.userId,
     });
+    requireExpectedCommunitySettingsRevision(
+      args.expectedSettingsRevision,
+      community,
+    );
     const currentPricing = await getCurrentCommunityPriceAmounts(ctx, args.communityId);
     const settingsState = resolveCommunitySettingsState(args, community, currentPricing);
     const existingBySlug = (await ctx.db
@@ -752,6 +875,7 @@ export const saveCommunitySettings = mutation({
           ? { brandingRevision: nextCommunityBrandingRevision(community) }
           : null
       ),
+      settingsRevision: resolveCommunitySettingsRevision(community) + 1,
       updatedAt: nowMs,
     });
 
@@ -771,28 +895,7 @@ export const saveCommunitySettings = mutation({
 
     const updated = (await ctx.db.get(community._id as any)) as CommunityLike | null;
     if (!updated) throw new Error("community_not_found");
-    const branding = await resolveCommunityBrandingFields(ctx, updated);
-    return {
-      community_id: String(updated._id),
-      name: updated.name,
-      slug: updated.slug,
-      one_liner: updated.oneLiner ?? null,
-      about: updated.about ?? null,
-      avatar_url: branding.avatar_url,
-      avatar_storage_id: branding.avatar_storage_id,
-      avatar_focus_x: branding.avatar_focus_x,
-      avatar_focus_y: branding.avatar_focus_y,
-      avatar_zoom: branding.avatar_zoom,
-      banner_url: branding.banner_url,
-      banner_storage_id: branding.banner_storage_id,
-      banner_focus_x: branding.banner_focus_x,
-      banner_focus_y: branding.banner_focus_y,
-      banner_zoom: branding.banner_zoom,
-      visibility: updated.visibility,
-      updated_at: toIsoString(updated.updatedAt),
-      branding_revision: updated.brandingRevision ?? updated.updatedAt,
-      visual_identity: buildCommunityVisualIdentity(updated, branding),
-    };
+    return await mapCommunitySettingsSnapshot(ctx, updated);
   },
 });
 
@@ -818,12 +921,14 @@ export const saveCommunityAbout = mutation({
     const about = normalizeOptionalText(args.about, 8_000);
     await ctx.db.patch(community._id as any, {
       about,
+      settingsRevision: resolveCommunitySettingsRevision(community) + 1,
       updatedAt: nowMs,
     });
     return {
       community_id: String(community._id),
       about: about ?? null,
       updated_at: toIsoString(nowMs),
+      settings_revision: resolveCommunitySettingsRevision(community) + 1,
     };
   },
 });
@@ -1019,6 +1124,7 @@ export const saveCommunityLaunchProfile = mutation({
           ? { brandingRevision: nextCommunityBrandingRevision(community) }
           : null
       ),
+      settingsRevision: resolveCommunitySettingsRevision(community) + 1,
       updatedAt: nowMs,
     });
 
@@ -1068,6 +1174,7 @@ export const saveCommunityOneLiner = mutation({
       community_id: String(updated._id),
       one_liner: updated.oneLiner ?? null,
       updated_at: toIsoString(updated.updatedAt),
+      settings_revision: resolveCommunitySettingsRevision(updated),
     };
   },
 });

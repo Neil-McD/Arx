@@ -7,7 +7,6 @@ const read = (path: string) => readFileSync(join(root, path), "utf8");
 
 const projection = read("convex/communityResourceMemoryProjection.ts");
 const resources = read("convex/communityResources.ts");
-const wikiArchitect = read("convex/communityWikiArchitect.ts");
 const directory = read("convex/communityIntelligenceDirectory.ts");
 const compiler = read("convex/communityCompilerDigest.ts");
 const gateway = read("shared/cloudCommunityPolynetGateway.ts");
@@ -70,13 +69,6 @@ assert.match(
   /revokeCommunityResourceMemoryProjection\(ctx, resource\)[\s\S]*deleteCommunityResourceBodyContent[\s\S]*ctx\.db\.delete/,
   "deletion should revoke projections before deleting source truth",
 );
-assert.match(wikiArchitect, /from "\.\/communityResourceMemoryProjection"/);
-assert.doesNotMatch(wikiArchitect, /upsertArchiveDocumentForResource/);
-assert.ok(
-  (wikiArchitect.match(/syncCommunityResourceMemoryProjection/g) ?? []).length >= 5,
-  "wiki architect writes should use the same canonical resource memory lifecycle",
-);
-
 assert.match(directory, /kind: "resource_node"/);
 assert.match(directory, /lineage_id: resourceMemoryLineageId\(row\._id\)/);
 assert.match(directory, /status: "source"/);
