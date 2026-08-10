@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   MessageCircle,
   MessageSquare,
@@ -31,6 +31,7 @@ import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../.
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { resolveCommunityInteractionOverflowMenuPlacement } from "../controllers/resolveCommunityInteractionOverflowMenuPlacement";
 
 export function actorLabel(
   actor: {
@@ -134,29 +135,58 @@ export function OverflowMenu(props: {
   isPinned?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<"above" | "below">("below");
   const ref = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const updatePlacement = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    setPlacement(
+      resolveCommunityInteractionOverflowMenuPlacement(
+        trigger.getBoundingClientRect(),
+        window.innerHeight,
+      ),
+    );
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
     };
+    updatePlacement();
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [open, updatePlacement]);
   if (!props.onEdit && !props.onDelete && !props.onPin) return null;
   return (
     <div className="community-interaction-emoji-picker" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         className="community-interaction-msg-action"
         aria-label="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
         title="More actions"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (!open) updatePlacement();
+          setOpen((value) => !value);
+        }}
       >
         <MoreHorizontal size={15} aria-hidden="true" />
       </button>
       {open ? (
-        <div className="community-interaction-overflow-menu" role="menu">
+        <div
+          className={`community-interaction-overflow-menu is-${placement}`}
+          data-placement={placement}
+          role="menu"
+        >
           {props.onPin ? (
             <button
               type="button"

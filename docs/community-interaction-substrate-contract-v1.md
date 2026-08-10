@@ -480,6 +480,7 @@ Rules:
 - main-channel and drawer-reply composers share one raised two-zone presentation: the editor owns the upper region and existing mention, attachment, dictation, and send actions occupy the lower utility row
 - the visible mention control inserts at the current caret and opens the same authorized autocomplete used by typed `@`; reply candidates continue to exclude role broadcasts such as `@everybody`
 - reply context and queued attachments remain transient composer state inside the visual shell; formatting controls are not presented until their insertion and rendering contract is implemented
+- message overflow menus open below triggers in the top half of the viewport and above triggers in the bottom half so edit, pin, and delete actions remain clear of the floating composer
 - only community managers see the active-channel options trigger; custom-channel rename preserves the canonical slug and delete archives without deleting interaction history
 - the sidebar owns channel selection and creation only; it does not duplicate edit or delete controls on channel rows
 - General's options menu identifies it as the protected default channel without exposing rename or delete; both server mutations still reject General if called outside the UI

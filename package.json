@@ -90,6 +90,7 @@
     "check:community-composer-focus-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_composer_focus_policy_proof.ts",
     "check:community-composer-placeholder-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_composer_placeholder_policy_proof.ts",
     "check:community-composer-shell-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_composer_shell_contract_proof.ts",
+    "check:community-interaction-overflow-menu-placement": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_overflow_menu_placement_contract_proof.ts",
     "check:composer-unification-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/composer_unification_contract_proof.ts",
     "check:community-thread-reply-mention-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_thread_reply_mention_policy_proof.ts",
     "check:no-builder-plan-infra": "bash scripts/no_builder_plan_infra_guard.sh",
