@@ -14,6 +14,7 @@ describe("Community Funnel V1 document", () => {
       oneLiner: "Build compounding systems together.",
     });
     expect(validateCommunityFunnelDocumentV1(document)).toEqual(document);
+    expect(document.theme.accent).toBe("blue");
     expect(document.sections).toHaveLength(4);
     expect(document.sections.some((section) => section.type === "media")).toBe(
       false,

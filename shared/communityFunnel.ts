@@ -28,7 +28,7 @@ export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConf
 export const DEFAULT_COMMUNITY_FUNNEL_THEME: CommunityFunnelThemeV1 = {
   appearance: "dark",
   character: "editorial",
-  accent: "rose",
+  accent: "blue",
   density: "balanced",
   radius: "soft",
 };

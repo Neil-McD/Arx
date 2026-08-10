@@ -210,6 +210,13 @@
   margin: 0;
 }
 
+.landing-auth-hold-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
 .landing-auth-hold-retry {
   padding: 0;
   border: 0;

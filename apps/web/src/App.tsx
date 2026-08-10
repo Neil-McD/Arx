@@ -1639,22 +1639,14 @@ export default function App() {
     completePlatformBridge,
     completeCommunityBridge: completeBridgeAndEnter,
   } = communityEntryBridge;
-  /* Visitor lens: locked shell-nav tabs reopen the join gate on the funnel
-     surface (nonce bump crosses the shell/surface boundary). */
+  /* The manager-only draft read is the single authority for both preview
+     admission and content. Public-funnel access state must not gate it. */
   const communityPreviewAccessState =
     shellPublicRoute.kind !== "community_funnel_preview"
       ? "not_applicable" as const
       : authPresentationState !== "signed_in"
         ? "resolving" as const
-        : publicCommunityUi.publicCommunityAccessResolutionKey !==
-            `${resolveAuthSubject(session) ?? ""}:${shellPublicRoute.slug}`
-          ? "resolving" as const
-          : publicCommunityUi.publicCommunityAccess?.is_owner ||
-              publicCommunityUi.publicCommunityAccess?.can_manage_branding ||
-              publicCommunityUi.publicCommunityAccess?.can_manage_publishing ||
-              publicCommunityUi.publicCommunityAccess?.can_manage_pricing
-            ? "allowed" as const
-            : "denied" as const;
+        : funnelDraftPreview.accessState;
   const operatorRouteAccessState =
     activePage !== "operator"
       ? "not_applicable" as const
@@ -3048,7 +3040,26 @@ export default function App() {
   }
 
   if (shouldHoldRouteForAccess) {
-    const routeAdmissionError = authError ?? onboardingError;
+    const previewAdmissionError = isPublicFunnelPreviewRoute
+      ? funnelDraftPreview.error
+      : null;
+    const routeAdmissionError =
+      authError ?? onboardingError ?? previewAdmissionError;
+    const isPreviewAdmissionFailure = Boolean(
+      previewAdmissionError && !authError && !onboardingError,
+    );
+    const retryRouteAdmission = () => {
+      if (isPreviewAdmissionFailure) {
+        funnelDraftPreview.retry();
+        return;
+      }
+      if (authError) {
+        window.location.reload();
+        return;
+      }
+      setOnboardingError(null);
+      void refreshAccountSetupStatus();
+    };
     return (
       <main
         className="landing-auth-hold"
@@ -3057,24 +3068,36 @@ export default function App() {
         <div className="landing-auth-hold-content">
           <p role="status" aria-live="polite">
             {routeAdmissionError
-              ? "Polynet could not finish verifying your session."
+              ? isPreviewAdmissionFailure
+                ? previewAdmissionError
+                : "Polynet could not finish verifying your session."
               : "Opening Polynet…"}
           </p>
           {routeAdmissionError ? (
-            <button
-              type="button"
-              className="landing-auth-hold-retry"
-              onClick={() => {
-                if (authError) {
-                  window.location.reload();
-                  return;
-                }
-                setOnboardingError(null);
-                void refreshAccountSetupStatus();
-              }}
-            >
-              Try again
-            </button>
+            <div className="landing-auth-hold-actions">
+              <button
+                type="button"
+                className="landing-auth-hold-retry"
+                onClick={retryRouteAdmission}
+              >
+                Try again
+              </button>
+              {isPreviewAdmissionFailure ? (
+                <button
+                  type="button"
+                  className="landing-auth-hold-retry"
+                  onClick={() =>
+                    navigateTo(
+                      buildCommunityTabPath(publicFunnelSlug, "funnel") ??
+                        "/discover",
+                      { replace: true },
+                    )
+                  }
+                >
+                  Back to builder
+                </button>
+              ) : null}
+            </div>
           ) : null}
         </div>
       </main>

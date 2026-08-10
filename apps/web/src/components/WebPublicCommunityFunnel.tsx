@@ -2,7 +2,6 @@ import type {
   CommunityFunnelConfig,
   CommunityFunnelDocumentV1,
 } from "../../../../shared/communityTypes";
-import { buildDefaultCommunityFunnelDocumentV1 } from "../../../../shared/communityFunnel";
 import {
   buildCommunityFunnelCopy,
   filterOnlineAvatarFaces,
@@ -230,11 +229,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
     (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
     (canJoinWithApproval && (approvalPending || (approvalDenied && !canRequestAgain)));
-  const previewDocument = props.previewDocument ?? buildDefaultCommunityFunnelDocumentV1({
-    communityName,
-    oneLiner: publicCommunity?.one_liner,
-    about: publicCommunity?.about,
-  });
   const funnelErrors = [publicCommunityError, publicJoinError, checkoutError].filter(
     Boolean,
   ) as string[];
@@ -323,7 +317,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     return (
       <CommunityFunnelV1Preview
         community={publicCommunity}
-        document={previewDocument}
+        document={props.previewDocument ?? null}
         vslUrl={props.previewVslUrl}
         primaryActionLabel={primaryActionLabel}
         isLoading={props.previewDocumentIsLoading}
