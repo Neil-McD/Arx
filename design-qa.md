@@ -92,4 +92,19 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 - Contract coverage: the Discover contract now protects both the canonical dark hover treatment and the light clickable-card surface override.
 - Remaining severity: no P0, P1, P2, or P3 findings remain for this hover slice.
 
+## General settings responsive composition addendum
+
+- Source visual truth: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_a4GJp7/Screenshot 2026-08-09 at 7.28.44 PM.png`.
+- Browser-rendered implementation: `/tmp/polynet-general-settings-responsive-20260809/implementation-931x800-dark-final2.jpg`, `/tmp/polynet-general-settings-responsive-20260809/implementation-931x800-light-final2.jpg`, `/tmp/polynet-general-settings-responsive-20260809/implementation-1100x1291-dark-v3.jpg`, and `/tmp/polynet-general-settings-responsive-20260809/implementation-1100x1291-light-v3.jpg`.
+- Focused comparison: `/tmp/polynet-general-settings-responsive-20260809/comparison-source-implementation-large.png` places the supplied large-monitor source above the revised component at matching height.
+- Viewports and density: `931 x 800` models the `883px` General-form width visible inside a 1280px product shell; `1100 x 1291` exercises the tall-monitor regime; `807 x 900` and `727 x 900` exercise the compact and narrow container regimes. Captures are 1x CSS-pixel images.
+- State: General pane, owner access, connected Stripe account, free pricing, saved and dirty-save states, dark and light themes.
+- Root cause: the previous form had one abrupt desktop breakpoint and fixed vertical rhythm. It became a single dense block at large viewports while narrower desktop widths either stacked too early or compressed nested pricing controls.
+- Fix: the form now has three width behaviors: roomy two-column with split access controls at `820px+`, compact two-column with stacked access controls at `680-819px`, and a true single-column fallback below `680px`. Width and gaps are fluid, while tall desktop viewports expand the real banner, text areas, section gaps, and final action separation.
+- MacBook acceptance: at an `883px` form width and `800px` viewport height, the saved and dirty states fit without document or panel overflow; the final action row ends at `704px` and the dirty Save changes button remains visible.
+- Tall-monitor acceptance: at `1100 x 1291`, the content grows from the prior `701px` form height to `840px`; the final action row ends at `849px`, leaving intentional lower breathing room without stretching individual controls or inserting a full-height blank spacer.
+- Compact acceptance: a `759px` form remains two-column with nested access controls stacked and no horizontal overflow. At `679px`, the canonical single-column layout takes over and scrolls vertically as expected.
+- Fidelity surfaces: component structure, copy, images, typography, theme tokens, control semantics, save behavior, Stripe state, and persistence logic are unchanged.
+- Remaining severity: no P0, P1, P2, or P3 findings remain for this responsive composition slice.
+
 final result: passed

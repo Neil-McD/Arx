@@ -5578,9 +5578,12 @@ button.message-citation-chip:hover {
   margin: 0;
 }
 
-/* Community General settings: compact desktop composition with a narrow fallback. */
+/* Community General settings: fluid desktop composition with a true narrow fallback. */
 .community-settings-form {
   container-type: inline-size;
+  width: 100%;
+  max-width: 1180px;
+  margin-inline: auto;
 }
 
 .community-general-settings,
@@ -5592,8 +5595,8 @@ button.message-citation-chip:hover {
 }
 
 .community-general-settings {
-  gap: 18px;
-  padding-bottom: 28px;
+  gap: clamp(18px, 2cqi, 28px);
+  padding: clamp(2px, 0.8vh, 10px) 0 clamp(28px, 3vh, 44px);
 }
 
 .community-general-settings-grid,
@@ -5711,11 +5714,11 @@ button.message-citation-chip:hover {
   font-weight: 560;
 }
 
-@container (min-width: 900px) {
+@container (min-width: 680px) {
   .community-general-settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
     align-items: start;
-    gap: 24px;
+    gap: clamp(16px, 2.4cqi, 28px);
   }
 
   .community-general-settings-grid.without-branding {
@@ -5724,23 +5727,60 @@ button.message-citation-chip:hover {
 
   .community-general-settings-grid.without-branding .community-general-settings-secondary {
     grid-template-columns: repeat(2, minmax(0, 1fr));
-    gap: 24px;
+    gap: clamp(16px, 2.4cqi, 28px);
   }
 
   .community-general-settings .settings-section {
     gap: 12px;
     padding-bottom: 20px;
   }
+}
 
+@container (min-width: 820px) {
   .community-settings-access-controls {
     grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
   }
 }
 
-@container (max-width: 899px) {
+@container (max-width: 679px) {
   .community-settings-payout-summary {
     align-items: flex-start;
     flex-direction: column;
+  }
+}
+
+@media (min-height: 1000px) and (min-width: 1100px) {
+  .settings-panel .community-settings-pane-switcher {
+    margin-bottom: clamp(12px, 1.5vh, 20px);
+  }
+
+  .community-general-settings-grid,
+  .community-general-settings-secondary,
+  .community-settings-identity-fields {
+    gap: clamp(16px, 1.8vh, 24px);
+  }
+
+  .community-general-settings .settings-section {
+    gap: clamp(12px, 1.4vh, 18px);
+    padding-bottom: clamp(20px, 2.2vh, 30px);
+  }
+
+  .community-settings-banner .create-community-banner-media,
+  .community-settings-banner .create-community-banner-media img,
+  .community-settings-banner .create-community-banner-placeholder {
+    aspect-ratio: 2.75 / 1;
+  }
+
+  .community-settings-profile-section .community-profile-one-liner {
+    min-height: 84px;
+  }
+
+  .community-settings-profile-section .community-profile-about {
+    min-height: 132px;
+  }
+
+  .community-general-settings-save {
+    margin-top: clamp(24px, 4vh, 56px);
   }
 }
 
