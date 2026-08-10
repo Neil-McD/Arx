@@ -741,6 +741,10 @@ export function buildPlatformHarnessRuntimePromptBundle(
   params: RuntimePlatformHarnessPromptParams,
 ): RuntimePromptBundle {
   const communityId = String(params.communityId ?? "").trim();
+  const invocationSurfacePrompt = buildRuntimeInvocationSurfacePrompt(
+    params.invocationSurface ?? "workspace",
+    params.memberAgentSurfaceContext,
+  );
   const stablePromptBlocks = [
     buildRuntimePromptSection({
       id: "platform_doctrine",
@@ -783,18 +787,19 @@ export function buildPlatformHarnessRuntimePromptBundle(
     }),
   ];
   const semiStablePromptBlocks = [
-    ...(params.invocationSurface === "member_agent_dock"
+    ...(invocationSurfacePrompt
       ? [
           buildRuntimePromptSection({
             id: "invocation_surface",
             layer: "scoped",
             owner: "runtime",
             source: "shared/runtimeInvocationSurface.ts#buildRuntimeInvocationSurfacePrompt",
-            text: buildRuntimeInvocationSurfacePrompt(
-              params.invocationSurface,
-              params.memberAgentSurfaceContext,
-            ),
+            text: invocationSurfacePrompt,
           }),
+        ]
+      : []),
+    ...(params.invocationSurface === "member_agent_dock"
+      ? [
           buildRuntimePromptSection({
             id: "current_surface",
             layer: "scoped",
