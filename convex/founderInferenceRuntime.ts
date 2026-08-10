@@ -96,23 +96,6 @@ export async function markCommunityInferenceFundingSessionProviderStarted(args: 
   }
 }
 
-export async function beginCommunityInferenceFundingSession(args: {
-  ctx: any;
-  communityId: unknown;
-  actorUserId: unknown;
-  surface: CommunityInferenceSurface;
-  receiptKey: string;
-  sourceRunId: string;
-  admission: CommunityInferenceFundingAdmission;
-}): Promise<CommunityInferenceFundingSession> {
-  const session = await claimCommunityInferenceFundingSession(args);
-  await markCommunityInferenceFundingSessionProviderStarted({
-    ctx: args.ctx,
-    session,
-  });
-  return session;
-}
-
 export async function settleCommunityInferenceFundingSession(args: {
   ctx: any;
   session: CommunityInferenceFundingSession;

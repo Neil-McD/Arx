@@ -260,7 +260,6 @@ export default defineSchema({
       v.literal("member_agent_dock"),
       v.literal("community_agent_mention"),
       v.literal("community_autonomous_cognition"),
-      v.literal("community_setup_generation"),
     ),
     provider: v.literal("openai"),
     modelId: v.string(),

@@ -193,8 +193,23 @@ assert.doesNotMatch(
 
 assert.match(
   actionBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*claimCommunityInferenceReceiptInternal[\s\S]*expectedFounderSubscriptionId[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID/,
-  "serve action should use fixed Luna only after hosted community funding is claimed",
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: "community_agent_mention"[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
+  "serve action should use canonical hosted funding and mark provider start at the exact model boundary",
+);
+assert.doesNotMatch(
+  actionBlock,
+  /claimCommunityInferenceReceiptInternal|markCommunityInferenceProviderStartedInternal|finalizeCommunityInferenceFailureInternal/,
+  "serve action should not duplicate the canonical inference receipt lifecycle",
+);
+assert.match(
+  actionBlock,
+  /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
+  "provider start should be persisted once immediately before the first OpenAI request",
+);
+assert.match(
+  actionBlock,
+  /catch \(error\) \{[\s\S]*if \(providerStarted\) aggregateUsageComplete = false[\s\S]*else if \(!providerFailureIsKnownPreSpend\(toolCompletion\.code\)\)[\s\S]*aggregateUsageComplete = false/,
+  "unknown provider crashes and returned failures should settle conservatively",
 );
 assert.doesNotMatch(actionBlock, /owner_api_key|ownerApiKey|runChatgptNativeToolCompletion|apiKeyOverride/);
 assert.match(
@@ -235,7 +250,7 @@ assert.match(
 assert.doesNotMatch(worker, /Thread root:\\n|Mentioned reply:\\n|Mentioned post:\\n/);
 assert.match(
   actionBlock,
-  /const initialMessages = buildServeMessages\(context\)[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*claimCommunityInferenceReceiptInternal[\s\S]*messages: initialMessages/,
+  /const initialMessages = buildServeMessages\(context\)[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*claimCommunityInferenceFundingSession[\s\S]*messages: initialMessages/,
   "the exact audited initial messages should be persisted before funding claim and reused by the provider",
 );
 assert.match(
@@ -307,7 +322,7 @@ assert.match(
 );
 assert.match(
   actionBlock,
-  /catch \(error\)[\s\S]*errorCode: "provider_exception"[\s\S]*catch \(error\)[\s\S]*errorCode: "serve_finalize_exception"/,
+  /catch \(error\)[\s\S]*const failureCode = providerStarted[\s\S]*errorCode: failureCode[\s\S]*catch \(error\)[\s\S]*errorCode: "serve_finalize_exception"/,
   "serve worker should mark provider and finalize exceptions as deterministic request errors",
 );
 assert.match(

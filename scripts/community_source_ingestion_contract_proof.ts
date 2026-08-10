@@ -21,8 +21,6 @@ const gateway = read("shared/cloudCommunityAdminGateway.ts");
 const sourceCrawler = read("shared/communitySourceCrawler.ts");
 const sourceCrawlerServicePath = join(root, "services/community-source-crawler/app.py");
 const app = read("apps/web/src/App.tsx");
-const architect = read("convex/communityWikiArchitect.ts");
-const prompt = read("shared/communityWikiArchitectPrompt.ts");
 
 assert.match(
   packageJson,
@@ -383,11 +381,6 @@ assert.doesNotMatch(
   /ctx\.db\.insert\("communityResourceModules"[\s\S]{0,500}descriptionMd:\s*null/,
   "community resource module scaffolds must omit empty descriptions instead of writing null into an optional string field",
 );
-assert.doesNotMatch(
-  architect,
-  /ctx\.db\.insert\("communityResourceModules"[\s\S]{0,500}descriptionMd:[^\n]*\?\?\s*null/,
-  "wiki architect module creation must omit empty descriptions instead of writing null into an optional string field",
-);
 assert.match(
   resources,
   /patchCommunitySourceIngestionInternal = internalMutation\([\s\S]*if \(!existing\) return null[\s\S]*if \(!updated\) return null/,
@@ -615,35 +608,4 @@ assert.match(
   /importCloudCommunityGoogleDriveSourceFiles[\s\S]*failed:[\s\S]*failures: Array\.isArray\(payload\?\.failures\)[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*failed:[\s\S]*failures: Array\.isArray\(payload\?\.failures\)/,
   "web gateway should preserve Drive/GitHub per-file import failures",
 );
-assert.match(
-  architect,
-  /const readySourceRows = allSources\.filter\(communityResourceSourceHasReadyText\)[\s\S]*COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_HYDRATION_CANDIDATES[\s\S]*hydrateCommunityResourceBody/,
-  "architect context should filter source inbox to ready ingested sources and hydrate only bounded selected source text",
-);
-assert.match(
-  architect,
-  /ready_sources_total:[\s\S]*sources_pending_ingestion:[\s\S]*sources_failed_ingestion:/,
-  "architect context should expose source ingestion counts",
-);
-assert.match(
-  architect,
-  /source_ingestion_status:[\s\S]*length_chars:[\s\S]*excerpt: buildSourceExcerpt/,
-  "architect context should send bounded ready-source excerpts rather than URL metadata only",
-);
-assert.match(
-  architect,
-  /code: "no_ready_sources"[\s\S]*Source material must be ingested/,
-  "architect action should refuse to draft from non-ready source metadata",
-);
-assert.match(
-  architect,
-  /const sources = resources\.filter\(\(row\) => communityResourceSourceHasReadyText\(row\)\)/,
-  "architect apply validation should only accept ready source lineage",
-);
-assert.match(
-  prompt,
-  /ready ingested sources only[\s\S]*bounded excerpt/,
-  "architect prompt should describe ready ingested source context, not metadata-only source context",
-);
-
 console.log("community_source_ingestion_contract_proof: ok");

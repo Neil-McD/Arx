@@ -10,7 +10,6 @@ import {
   requireCommunityChatAccess,
   requireCommunityManager,
 } from "./communityCore";
-import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import {
   buildCommunityAgentConciergeFunctionTools,
@@ -50,6 +49,13 @@ import {
   settleAuthorizedFounderInferenceReceipt,
 } from "./founderInferenceCore";
 import {
+  claimCommunityInferenceFundingSession,
+  failCommunityInferenceFundingSession,
+  markCommunityInferenceFundingSessionProviderStarted,
+  providerFailureIsKnownPreSpend,
+  type CommunityInferenceFundingSession,
+} from "./founderInferenceRuntime";
+import {
   COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CANDIDATE_REPLIES,
   COMMUNITY_AGENT_THREAD_CONTEXT_MAX_TURNS,
   compileCommunityAgentThreadContext,
@@ -77,15 +83,6 @@ const SERVE_CONTEXT_SNAPSHOT_MAX_CHARS = 48_000;
 
 function communityAgentMentionReceiptKey(requestId: unknown): string {
   return `community_agent_mention:${normalizeIdValue(requestId)}`;
-}
-
-function providerFailureIsKnownPreSpend(code: unknown): boolean {
-  return new Set([
-    "invalid_openai_request",
-    "provider_inference_misconfigured",
-    "provider_inference_quota_exceeded",
-    "rate_limited",
-  ]).has(String(code ?? "").trim());
 }
 
 async function sha256HexText(value: string): Promise<string> {
@@ -1396,31 +1393,27 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       });
 
       const receiptKey = communityAgentMentionReceiptKey(requestId);
-      const receiptClaimToken = crypto.randomUUID();
       let aggregatePromptTokens = 0;
       let aggregateCompletionTokens = 0;
       let aggregateUsageComplete = true;
+      let providerStarted = false;
 
-      const receiptClaim = await ctx.runMutation(
-        internalRefs.founderInference.claimCommunityInferenceReceiptInternal,
-        {
+      let fundingSession: CommunityInferenceFundingSession;
+      try {
+        fundingSession = await claimCommunityInferenceFundingSession({
+          ctx,
           receiptKey,
           sourceRunId: `community-agent-serve:${normalizeIdValue(requestId)}`,
           communityId: context.request.communityId,
           actorUserId: context.request.requesterUserId,
-          expectedPayerUserId: context.funding.payerUserId,
-          expectedFundingMode: context.funding.mode,
-          expectedFounderSubscriptionId:
-            context.funding.mode === "platform_subscription"
-              ? context.funding.subscriptionId
-              : undefined,
           surface: "community_agent_mention",
-          claimToken: receiptClaimToken,
-          nowMs: Date.now(),
-        },
-      );
-      if (!receiptClaim?.ok) {
-        const errorCode = receiptClaim?.errorCode ?? "founder_inference_receipt_unavailable";
+          admission: context.funding,
+        });
+      } catch (error) {
+        const errorCode = boundedText(
+          error instanceof Error ? error.message : String(error),
+          ERROR_CODE_MAX_CHARS,
+        ) || "founder_inference_receipt_unavailable";
         await ctx.runMutation(
           internalRefs.communityAgentServeWorker.failCommunityAgentServeRequestInternal,
           {
@@ -1428,30 +1421,6 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             expectedAttempt,
             errorCode,
             errorMessage: "Community inference authorization could not be completed safely.",
-            nowMs: Date.now(),
-          },
-        );
-        results.push({ request_id: normalizeIdValue(requestId), status: "error", error_code: errorCode });
-        continue;
-      }
-
-      const providerStart = await ctx.runMutation(
-        internalRefs.founderInference.markCommunityInferenceProviderStartedInternal,
-        {
-          receiptKey,
-          claimToken: receiptClaimToken,
-          nowMs: Date.now(),
-        },
-      );
-      if (!providerStart?.ok) {
-        const errorCode = providerStart?.errorCode ?? "funding_authority_changed";
-        await ctx.runMutation(
-          internalRefs.communityAgentServeWorker.failCommunityAgentServeRequestInternal,
-          {
-            requestId,
-            expectedAttempt,
-            errorCode,
-            errorMessage: "Community inference funding changed before this turn could start.",
             nowMs: Date.now(),
           },
         );
@@ -1470,13 +1439,26 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             maxNoProgressSteps: 2,
           },
           runCompletion: async (kernelMessages) => {
-            const toolCompletion = await runOpenAiNativeToolCompletion({
-              modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
-              messages: kernelMessages,
-              maxTokens: SERVE_REPLY_MAX_TOKENS,
-              tools: buildCommunityAgentConciergeFunctionTools(),
-              parallelToolCalls: false,
-            });
+            let toolCompletion;
+            try {
+              if (!providerStarted) {
+                await markCommunityInferenceFundingSessionProviderStarted({
+                  ctx,
+                  session: fundingSession,
+                });
+                providerStarted = true;
+              }
+              toolCompletion = await runOpenAiNativeToolCompletion({
+                modelId: fundingSession.modelId,
+                messages: kernelMessages,
+                maxTokens: SERVE_REPLY_MAX_TOKENS,
+                tools: buildCommunityAgentConciergeFunctionTools(),
+                parallelToolCalls: false,
+              });
+            } catch (error) {
+              if (providerStarted) aggregateUsageComplete = false;
+              throw error;
+            }
             if (toolCompletion.ok !== false) {
               if (toolCompletion.promptTokens === null || toolCompletion.completionTokens === null) {
                 aggregateUsageComplete = false;
@@ -1484,6 +1466,8 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                 aggregatePromptTokens += Math.max(0, Math.floor(Number(toolCompletion.promptTokens)));
                 aggregateCompletionTokens += Math.max(0, Math.floor(Number(toolCompletion.completionTokens)));
               }
+            } else if (!providerFailureIsKnownPreSpend(toolCompletion.code)) {
+              aggregateUsageComplete = false;
             }
             return coerceConciergeCompletion(toolCompletion);
           },
@@ -1516,57 +1500,55 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             }),
         });
       } catch (error) {
-        await ctx.runMutation(
-          internalRefs.founderInference.finalizeCommunityInferenceFailureInternal,
-          {
-            receiptKey,
-            claimToken: receiptClaimToken,
-            promptTokens: aggregatePromptTokens,
-            completionTokens: aggregateCompletionTokens,
-            usageComplete: aggregateUsageComplete,
-            failureCode: "provider_exception",
-            disposition: "indeterminate",
-            nowMs: Date.now(),
-          },
-        );
+        const failureCode = providerStarted
+          ? "provider_exception"
+          : boundedText(
+              error instanceof Error ? error.message : String(error),
+              ERROR_CODE_MAX_CHARS,
+            ) || "funding_authority_changed";
+        await failCommunityInferenceFundingSession({
+          ctx,
+          session: fundingSession,
+          promptTokens: aggregatePromptTokens,
+          completionTokens: aggregateCompletionTokens,
+          usageComplete: providerStarted ? aggregateUsageComplete : true,
+          failureCode,
+          disposition: providerStarted ? "indeterminate" : "failed",
+        });
         await eventRecorder.flushAll();
         await eventRecorder.record({
           kind: "error",
-          errorCode: "provider_exception",
+          errorCode: failureCode,
           content: "The community agent could not complete this turn.",
         });
         await ctx.runMutation(internalRefs.communityAgentServeWorker.failCommunityAgentServeRequestInternal, {
           requestId,
           expectedAttempt,
-          errorCode: "provider_exception",
+          errorCode: failureCode,
           errorMessage: "The community inference provider request failed.",
           nowMs: Date.now(),
         });
         results.push({
           request_id: normalizeIdValue(requestId),
           status: "error",
-          error_code: "provider_exception",
+          error_code: failureCode,
         });
         continue;
       }
       await eventRecorder.flushAll();
       if ((completion as any)?.ok === false) {
         const errorCode = (completion as any).code ?? "provider_error";
-        await ctx.runMutation(
-          internalRefs.founderInference.finalizeCommunityInferenceFailureInternal,
-          {
-            receiptKey,
-            claimToken: receiptClaimToken,
-            promptTokens: aggregatePromptTokens,
-            completionTokens: aggregateCompletionTokens,
-            usageComplete: aggregateUsageComplete,
-            failureCode: errorCode,
-            disposition: aggregateUsageComplete && providerFailureIsKnownPreSpend(errorCode)
-              ? "failed"
-              : "indeterminate",
-            nowMs: Date.now(),
-          },
-        );
+        await failCommunityInferenceFundingSession({
+          ctx,
+          session: fundingSession,
+          promptTokens: aggregatePromptTokens,
+          completionTokens: aggregateCompletionTokens,
+          usageComplete: providerStarted ? aggregateUsageComplete : true,
+          failureCode: errorCode,
+          disposition: !providerStarted || providerFailureIsKnownPreSpend(errorCode)
+            ? "failed"
+            : "indeterminate",
+        });
         await eventRecorder.record({
           kind: "error",
           errorCode: (completion as any).code ?? "provider_error",
@@ -1601,8 +1583,8 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
             requestId,
             expectedAttempt,
             content: String((completion as any).assistantText ?? ""),
-            receiptKey,
-            receiptClaimToken,
+            receiptKey: fundingSession.receiptKey,
+            receiptClaimToken: fundingSession.claimToken,
             promptTokens: aggregatePromptTokens,
             completionTokens: aggregateCompletionTokens,
             usageComplete: aggregateUsageComplete,
@@ -1610,19 +1592,19 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           },
         );
       } catch (error) {
-        await ctx.runMutation(
-          internalRefs.founderInference.finalizeCommunityInferenceFailureInternal,
-          {
-            receiptKey,
-            claimToken: receiptClaimToken,
+        try {
+          await failCommunityInferenceFundingSession({
+            ctx,
+            session: fundingSession,
             promptTokens: aggregatePromptTokens,
             completionTokens: aggregateCompletionTokens,
-            usageComplete: aggregateUsageComplete,
+            usageComplete: providerStarted ? aggregateUsageComplete : true,
             failureCode: "serve_finalize_exception",
-            disposition: "indeterminate",
-            nowMs: Date.now(),
-          },
-        );
+            disposition: providerStarted ? "indeterminate" : "failed",
+          });
+        } catch {
+          // The reply finalizer may have committed before its response was lost.
+        }
         await eventRecorder.record({
           kind: "error",
           errorCode: "serve_finalize_exception",

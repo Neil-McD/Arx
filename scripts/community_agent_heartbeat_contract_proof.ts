@@ -185,11 +185,20 @@ assert.match(
 );
 const runtimeLoop = exportedFunctionBlock(runtime, "runCommunityAgentLoopInternal");
 const fundingAdmissionIndex = runtimeLoop.indexOf("resolveCommunityInferenceFundingForAction");
-const providerSessionIndex = runtimeLoop.indexOf("beginCommunityInferenceFundingSession");
+const fundingClaimIndex = runtimeLoop.indexOf("claimCommunityInferenceFundingSession");
+const runCompletionIndex = runtimeLoop.indexOf("runCompletion: async");
+const providerStartIndex = runtimeLoop.indexOf(
+  "markCommunityInferenceFundingSessionProviderStarted",
+);
+const providerRequestIndex = runtimeLoop.indexOf("runOpenAiNativeToolCompletion");
 assert.ok(fundingAdmissionIndex >= 0, "community runtime should resolve canonical founder funding");
 assert.ok(
-  providerSessionIndex > fundingAdmissionIndex,
-  "community runtime should admit canonical founder funding before opening a provider session",
+  fundingClaimIndex > fundingAdmissionIndex,
+  "community runtime should admit canonical founder funding before claiming provider spend",
+);
+assert.ok(
+  providerStartIndex > runCompletionIndex && providerRequestIndex > providerStartIndex,
+  "community runtime should mark provider start inside the completion boundary immediately before the provider request",
 );
 assert.doesNotMatch(
   fundingRuntime,

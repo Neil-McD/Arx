@@ -1,4 +1,3 @@
-import { internal } from "./_generated/api";
 import { mutation } from "./_generated/server";
 import { v } from "convex/values";
 
@@ -6,9 +5,7 @@ import {
   getCommunityAndMembership,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
-import {
-  communityFounderWelcomeIdempotencyKey,
-} from "../shared/communityFounderWelcome";
+import { completeBuilderKnowledgeSetupForOwner } from "./communityBuilderKnowledgeSetupCore";
 
 export const completeBuilderKnowledgeSetup = mutation({
   args: {
@@ -25,26 +22,12 @@ export const completeBuilderKnowledgeSetup = mutation({
       communityId: args.communityId,
       userId,
     });
-    if (String(community.ownerId) !== String(userId)) {
-      throw new Error("community_owner_required");
-    }
-    const changed = community.builderKnowledgeSetupPending === true;
-    if (changed) {
-      await ctx.db.patch(community._id as any, {
-        builderKnowledgeSetupPending: false,
-        updatedAt: Date.now(),
-      });
-    }
-    await ctx.scheduler.runAfter(
-      0,
-      internal.communityInteractions.createCommunityAgentCanonicalInteractionInternal,
-      {
-        userId,
-        communityId: community._id,
-        idempotencyKey: communityFounderWelcomeIdempotencyKey(community._id),
-        founderBootstrap: true,
-      },
-    );
+    const { changed } = await completeBuilderKnowledgeSetupForOwner({
+      ctx,
+      community,
+      userId,
+      nowMs: Date.now(),
+    });
     return {
       ok: true,
       changed,

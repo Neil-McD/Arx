@@ -194,6 +194,7 @@ import {
 } from "./webAppRuntime";
 import { useWebCommunityVisualIdentityRegistryLifecycle } from "./controllers/useWebCommunityVisualIdentityRegistryLifecycle";
 import {
+  useWebBuilderKnowledgeChangesetController,
   useWebBuilderKnowledgeCompletionController,
   useWebBuilderKnowledgeHydrationController,
 } from "./controllers/useWebBuilderKnowledgeSetupController";
@@ -979,6 +980,12 @@ export default function App() {
       ensureSession: ensureUsableAuthSession,
       setCommunities,
       enterCommunity: enterJoinedCommunity,
+    });
+  const builderKnowledgeChangesets =
+    useWebBuilderKnowledgeChangesetController({
+      communityId: pendingBuilderKnowledgeCommunity?.id ?? null,
+      session,
+      resumeEpoch: appActivity.resumeEpoch,
     });
 
   const {
@@ -3044,20 +3051,11 @@ export default function App() {
     isGlobalSettings,
   });
 
-  if (pendingBuilderKnowledgeCommunity) {
-    const isKnowledgeCommunityReady =
-      activeCommunityId === pendingBuilderKnowledgeCommunity.id
-      && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id;
-    return (
-      <WebBuilderKnowledgeSetup
-        community={pendingBuilderKnowledgeCommunity}
-        isHydrating={!isKnowledgeCommunityReady || isLoadingResources}
-        resources={isKnowledgeCommunityReady ? communityResources : []}
-        onAddSources={handleAddCommunitySources}
-        onComplete={completePendingBuilderKnowledgeSetup}
-      />
-    );
-  }
+  const isKnowledgeCommunityReady = Boolean(
+    pendingBuilderKnowledgeCommunity
+    && activeCommunityId === pendingBuilderKnowledgeCommunity.id
+    && hydratedBuilderKnowledgeCommunityId === pendingBuilderKnowledgeCommunity.id,
+  );
 
   if (shouldHoldRouteForAccess) {
     const routeAdmissionError = authError ?? onboardingError;
@@ -3095,7 +3093,22 @@ export default function App() {
 
   return (
     <WebAppCompositionRoot
-      globalOverlayHostProps={globalOverlayHostProps}
+      globalOverlayHostProps={{
+        ...globalOverlayHostProps,
+        blockingOverlay: pendingBuilderKnowledgeCommunity && session ? (
+          <WebBuilderKnowledgeSetup
+            community={pendingBuilderKnowledgeCommunity}
+            isHydrating={!isKnowledgeCommunityReady || isLoadingResources}
+            resources={isKnowledgeCommunityReady ? communityResources : []}
+            session={session}
+            onAddSources={handleAddCommunitySources}
+            onBuildResources={handleBuildCommunityResources}
+            changesetCards={builderKnowledgeChangesets.cards}
+            changesetRecoveryError={builderKnowledgeChangesets.error}
+            onComplete={completePendingBuilderKnowledgeSetup}
+          />
+        ) : null,
+      }}
       memberAgentDockRef={memberAgentComposerApiRef}
       memberAgentDockProps={{
         isVisible: isMemberAgentDockVisible,
@@ -3104,6 +3117,12 @@ export default function App() {
         mobileRoot: showMobileShell && mobileRootPage === "agent",
         onRequestOpen: () => setMobileRootPage("agent"),
         onInitialResourcesApplied: (communityId) => {
+          if (pendingBuilderKnowledgeCommunity?.id === communityId) {
+            void completePendingBuilderKnowledgeSetup().then((completed) => {
+              if (completed) showAppToastMessage("Your community is ready.");
+            });
+            return;
+          }
           const community = communities.find((candidate) => candidate.id === communityId);
           setMobileRootPage("community");
           enterJoinedCommunity({

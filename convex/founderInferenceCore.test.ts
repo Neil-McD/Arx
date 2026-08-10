@@ -11,6 +11,8 @@ import {
 } from "./founderInferenceCore";
 import {
   getFounderSubscriptionByCommunity,
+  reserveFounderUsage,
+  settleFounderUsageReservation,
   syncFounderUsageCycle,
 } from "./founderPlanCore";
 import { POLYNET_FOUNDER_PLAN_PRICING_VERSION } from "../shared/founderPlan";
@@ -103,7 +105,7 @@ function claimArgs(
   receiptKey: string,
   claimToken: string,
   nowMs: number,
-  surface: "community_agent_mention" | "community_autonomous_cognition" | "community_setup_generation" = "community_agent_mention",
+  surface: "community_agent_mention" | "community_autonomous_cognition" = "community_agent_mention",
 ) {
   return {
     receiptKey,
@@ -473,7 +475,784 @@ test("receipt claims preserve member actor and owner payer across safe and ambig
     expect(await ctx.db.get(first.receiptId)).toMatchObject({
       status: "indeterminate",
       failureCode: "ambiguous_provider_retry_blocked",
+      settledCostMicros: 1_000_000,
     });
+    const cycles = await ctx.db
+      .query("founderUsageCycles")
+      .withIndex("by_subscription_status", (q) =>
+        q.eq("founderSubscriptionId", fixture.founderSubscriptionId).eq("status", "open"),
+      )
+      .collect();
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0]).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 1_000_000,
+    });
+  });
+});
+
+test("a receipt key cannot be reused across immutable inference identities", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "receipt-identity", 120_000);
+  const receiptKey = "community_agent_mention:receipt-identity";
+  const initialArgs = claimArgs(fixture, receiptKey, "identity-claim", 121_000);
+  const first = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    initialArgs,
+  );
+  expect(first).toMatchObject({ ok: true, reclaimed: false });
+
+  const alternate = await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, "receipt-identity-other-owner", 121_001);
+    const memberId = await insertUser(ctx, "receipt-identity-other-member", 121_001);
+    const communityId = await insertCommunity(
+      ctx,
+      ownerId,
+      "receipt-identity-other-community",
+      121_001,
+    );
+    const founderSubscriptionId = await ctx.db.insert("founderSubscriptions", {
+      ownerUserId: ownerId,
+      communityId,
+      provider: "stripe",
+      providerCustomerId: "cus_receipt_identity_other",
+      providerSubscriptionId: "sub_receipt_identity_other",
+      providerPriceId: "price_founder_79_monthly",
+      status: "active",
+      currentPeriodStartAt: 120_000,
+      currentPeriodEndAt: 2_592_120_000,
+      cancelAtPeriodEnd: false,
+      lastProviderEventCreatedAt: 121_001,
+      createdAt: 121_001,
+      updatedAt: 121_001,
+    });
+    return { communityId, founderSubscriptionId, memberId, ownerId };
+  });
+
+  const originalReceipt = await t.run(async (ctx) => await ctx.db.get(first.receiptId) as any);
+  if (!originalReceipt?.usageCycleId) throw new Error("test_usage_cycle_missing");
+  const originalCycle = await t.run(async (ctx) => await ctx.db.get(originalReceipt.usageCycleId) as any);
+  const conflicts = [
+    { field: "sourceRunId", value: "community-agent-serve:different-run" },
+    { field: "communityId", value: alternate.communityId },
+    { field: "actorUserId", value: alternate.memberId },
+    { field: "payerUserId", value: alternate.ownerId },
+    { field: "fundingMode", value: "platform_operator_grant" },
+    { field: "founderSubscriptionId", value: alternate.founderSubscriptionId },
+    { field: "surface", value: "community_autonomous_cognition" },
+  ] as const;
+
+  for (const [index, conflict] of conflicts.entries()) {
+    await t.run(async (ctx) => {
+      await ctx.db.patch(first.receiptId, { [conflict.field]: conflict.value });
+    });
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+        {
+          ...initialArgs,
+          claimToken: `identity-conflict-${index}`,
+          nowMs: 121_010 + index,
+        },
+      ),
+    ).resolves.toEqual({
+      ok: false,
+      errorCode: "founder_inference_receipt_conflict",
+    });
+    await t.run(async (ctx) => {
+      const conflictedReceipt = await ctx.db.get(first.receiptId) as any;
+      expect(conflictedReceipt).toMatchObject({
+        claimToken: "identity-claim",
+        leaseExpiresAt: originalReceipt.leaseExpiresAt,
+        status: "authorized",
+      });
+      expect(await ctx.db.get(originalReceipt.usageCycleId)).toMatchObject({
+        reservedCostMicros: originalCycle.reservedCostMicros,
+        settledCostMicros: originalCycle.settledCostMicros,
+      });
+      await ctx.db.patch(first.receiptId, {
+        [conflict.field]: originalReceipt[conflict.field],
+      });
+    });
+  }
+});
+
+test("ambiguous inference receipt rows fail closed across the entire lifecycle", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "receipt-ambiguous", 130_000);
+  const receiptKey = "community_agent_mention:receipt-ambiguous";
+  await t.run(async (ctx) => {
+    for (let index = 0; index < 2; index += 1) {
+      await ctx.db.insert("communityInferenceReceipts", {
+        receiptKey,
+        sourceRunId: `community-agent-serve:ambiguous-${index}`,
+        communityId: fixture.communityId,
+        actorUserId: fixture.memberId,
+        payerUserId: fixture.ownerId,
+        fundingMode: "platform_subscription",
+        founderSubscriptionId: fixture.founderSubscriptionId,
+        surface: "community_agent_mention",
+        provider: "openai",
+        modelId: "gpt-5.6-luna",
+        status: "authorized",
+        claimToken: `ambiguous-claim-${index}`,
+        leaseExpiresAt: 140_000,
+        pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+        reservedCostMicros: 1_000_000,
+        authorizedAt: 131_000 + index,
+        createdAt: 131_000 + index,
+        updatedAt: 131_000 + index,
+      });
+    }
+  });
+
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+      claimArgs(fixture, receiptKey, "ambiguous-new-claim", 131_010),
+    ),
+  ).rejects.toThrow("founder_inference_receipt_ambiguous");
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken: "ambiguous-claim-0", nowMs: 131_011 },
+    ),
+  ).rejects.toThrow("founder_inference_receipt_ambiguous");
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.finalizeCommunityInferenceFailureInternal,
+      {
+        receiptKey,
+        claimToken: "ambiguous-claim-0",
+        promptTokens: 0,
+        completionTokens: 0,
+        usageComplete: true,
+        failureCode: "ambiguous_test",
+        disposition: "failed",
+        nowMs: 131_012,
+      },
+    ),
+  ).rejects.toThrow("founder_inference_receipt_ambiguous");
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: "ambiguous-claim-0" },
+    ),
+  ).rejects.toThrow("founder_inference_receipt_ambiguous");
+  await t.run(async (ctx) => {
+    await expect(settleAuthorizedFounderInferenceReceipt({
+      ctx,
+      receiptKey,
+      claimToken: "ambiguous-claim-0",
+      promptTokens: 1,
+      completionTokens: 1,
+      outcomeCode: "completed",
+      nowMs: 131_013,
+    })).rejects.toThrow("founder_inference_receipt_ambiguous");
+    const cycles = await ctx.db
+      .query("founderUsageCycles")
+      .withIndex("by_subscription_status", (q) =>
+        q.eq("founderSubscriptionId", fixture.founderSubscriptionId).eq("status", "open"),
+      )
+      .collect();
+    expect(cycles).toHaveLength(1);
+    expect(cycles[0]).toMatchObject({ reservedCostMicros: 0, settledCostMicros: 0 });
+  });
+});
+
+test("receipt identifiers are non-empty and bounded before authorization", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "receipt-identifiers", 140_000);
+  const base = claimArgs(
+    fixture,
+    "community_agent_mention:receipt-identifiers",
+    "identifier-claim",
+    141_000,
+  );
+  const invalidCases = [
+    { patch: { receiptKey: " " }, error: "founder_inference_receipt_key_invalid" },
+    { patch: { receiptKey: "r".repeat(241) }, error: "founder_inference_receipt_key_invalid" },
+    { patch: { sourceRunId: "" }, error: "founder_inference_source_run_invalid" },
+    { patch: { sourceRunId: "s".repeat(241) }, error: "founder_inference_source_run_invalid" },
+    { patch: { claimToken: "" }, error: "founder_inference_claim_token_invalid" },
+    { patch: { claimToken: "c".repeat(129) }, error: "founder_inference_claim_token_invalid" },
+  ];
+  for (const invalid of invalidCases) {
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+        { ...base, ...invalid.patch },
+      ),
+    ).rejects.toThrow(invalid.error);
+  }
+  await t.run(async (ctx) => {
+    expect(await ctx.db.query("communityInferenceReceipts").collect()).toHaveLength(0);
+    const cycles = await ctx.db
+      .query("founderUsageCycles")
+      .withIndex("by_subscription_status", (q) =>
+        q.eq("founderSubscriptionId", fixture.founderSubscriptionId).eq("status", "open"),
+      )
+      .collect();
+    expect(cycles[0]).toMatchObject({ reservedCostMicros: 0, settledCostMicros: 0 });
+  });
+});
+
+test("pre-provider expiration releases the reservation exactly once and blocks provider start", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "receipt-expiration", 145_000);
+  const receiptKey = "community_agent_mention:receipt-expiration";
+  const claimToken = "expiration-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 146_000),
+  );
+  expect(claimed).toMatchObject({ ok: true, reclaimed: false });
+
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: claimToken },
+    ),
+  ).resolves.toEqual({ ok: true, status: "failed", alreadyFinalized: false });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: claimToken },
+    ),
+  ).resolves.toEqual({ ok: true, status: "failed", alreadyFinalized: true });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 146_001 },
+    ),
+  ).resolves.toEqual({ ok: false, errorCode: "founder_inference_receipt_claim_invalid" });
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "failed",
+      failureCode: "authorization_expired_before_provider",
+    });
+    const cycle = await ctx.db.get(receipt.usageCycleId as any);
+    expect(cycle).toMatchObject({ reservedCostMicros: 0, settledCostMicros: 0 });
+  });
+});
+
+test("provider start fails closed when the authorization lease has already expired", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "provider-start-expired", 146_100);
+  const receiptKey = "community_agent_mention:provider-start-expired";
+  const claimToken = "provider-start-expired-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 146_200),
+  );
+  await t.run(async (ctx) => {
+    await ctx.db.patch(claimed.receiptId, {
+      leaseExpiresAt: 146_201,
+      updatedAt: 146_201,
+    });
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 146_202 },
+    ),
+  ).resolves.toEqual({ ok: false, errorCode: "authorization_expired_before_provider" });
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "failed",
+      failureCode: "authorization_expired_before_provider",
+    });
+    expect(receipt).not.toHaveProperty("providerStartedAt");
+    expect(await ctx.db.get(receipt.usageCycleId as any)).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 0,
+    });
+  });
+});
+
+test("duplicate provider start is idempotent and preserves the first start timestamp", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "provider-start-idempotent", 146_300);
+  const receiptKey = "community_agent_mention:provider-start-idempotent";
+  const claimToken = "provider-start-idempotent-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 146_400),
+  );
+
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 146_401 },
+    ),
+  ).resolves.toEqual({ ok: true });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 146_402 },
+    ),
+  ).resolves.toEqual({ ok: true });
+
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "authorized",
+      providerStartedAt: 146_401,
+      updatedAt: 146_401,
+    });
+    expect(await ctx.db.get(receipt.usageCycleId as any)).toMatchObject({
+      reservedCostMicros: 1_000_000,
+      settledCostMicros: 0,
+    });
+  });
+});
+
+test("duplicate provider start after expiration can never release known provider work", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "provider-start-expiration-race", 146_500);
+  const receiptKey = "community_agent_mention:provider-start-expiration-race";
+  const claimToken = "provider-start-expiration-race-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 146_600),
+  );
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 146_601 },
+    ),
+  ).resolves.toEqual({ ok: true });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(claimed.receiptId, {
+      leaseExpiresAt: 146_602,
+      updatedAt: 146_602,
+    });
+  });
+
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 146_603 },
+    ),
+  ).resolves.toEqual({
+    ok: false,
+    errorCode: "provider_execution_deadline_exceeded",
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: claimToken },
+    ),
+  ).resolves.toEqual({ ok: true, status: "indeterminate", alreadyFinalized: true });
+
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "indeterminate",
+      providerStartedAt: 146_601,
+      failureCode: "provider_execution_deadline_exceeded",
+      settledCostMicros: 1_000_000,
+    });
+    expect(await ctx.db.get(receipt.usageCycleId as any)).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 1_000_000,
+    });
+  });
+});
+
+test("expiration before a duplicate provider mark settles known provider work exactly once", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "expiration-provider-start-race", 146_700);
+  const receiptKey = "community_agent_mention:expiration-provider-start-race";
+  const claimToken = "expiration-provider-start-race-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 146_800),
+  );
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 146_801 },
+    ),
+  ).resolves.toEqual({ ok: true });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(claimed.receiptId, {
+      leaseExpiresAt: 146_802,
+      updatedAt: 146_802,
+    });
+  });
+
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: claimToken },
+    ),
+  ).resolves.toEqual({ ok: true, status: "indeterminate", alreadyFinalized: false });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 146_803 },
+    ),
+  ).resolves.toEqual({
+    ok: false,
+    errorCode: "founder_inference_receipt_claim_invalid",
+  });
+
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "indeterminate",
+      providerStartedAt: 146_801,
+      failureCode: "provider_execution_deadline_exceeded",
+      settledCostMicros: 1_000_000,
+    });
+    expect(await ctx.db.get(receipt.usageCycleId as any)).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 1_000_000,
+    });
+  });
+});
+
+test("stale expiration cannot affect a reclaimed receipt and post-provider timeout closes it", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "receipt-expiration-race", 147_000);
+  const receiptKey = "community_agent_mention:receipt-expiration-race";
+  const firstClaim = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, "expiration-old-claim", 148_000),
+  );
+  await t.run(async (ctx) => {
+    await ctx.db.patch(firstClaim.receiptId, {
+      leaseExpiresAt: 148_001,
+      updatedAt: 148_001,
+    });
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+      claimArgs(fixture, receiptKey, "expiration-new-claim", 148_002),
+    ),
+  ).resolves.toMatchObject({ ok: true, receiptId: firstClaim.receiptId, reclaimed: true });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: "expiration-old-claim" },
+    ),
+  ).resolves.toEqual({ ok: true, status: "stale_claim", alreadyFinalized: false });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken: "expiration-new-claim", nowMs: 148_003 },
+    ),
+  ).resolves.toEqual({ ok: true });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: "expiration-new-claim" },
+    ),
+  ).resolves.toEqual({ ok: true, status: "indeterminate", alreadyFinalized: false });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.settleCommunityInferenceReceiptInternal,
+      {
+        receiptKey,
+        claimToken: "expiration-new-claim",
+        promptTokens: 100,
+        completionTokens: 50,
+        usageComplete: true,
+        outcomeCode: "late_provider_completion",
+        nowMs: 148_004,
+      },
+    ),
+  ).rejects.toThrow("founder_inference_receipt_claim_invalid");
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(firstClaim.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "indeterminate",
+      claimToken: "expiration-new-claim",
+      providerStartedAt: 148_003,
+      failureCode: "provider_execution_deadline_exceeded",
+      settledCostMicros: 1_000_000,
+    });
+    const cycle = await ctx.db.get(receipt.usageCycleId as any);
+    expect(cycle).toMatchObject({ reservedCostMicros: 0, settledCostMicros: 1_000_000 });
+  });
+});
+
+test("provider settlement before expiration wins without a second charge", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "receipt-settlement-race", 148_100);
+  const receiptKey = "community_agent_mention:receipt-settlement-race";
+  const claimToken = "settlement-race-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 148_200),
+  );
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: 148_201 },
+    ),
+  ).resolves.toEqual({ ok: true });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.settleCommunityInferenceReceiptInternal,
+      {
+        receiptKey,
+        claimToken,
+        promptTokens: 100,
+        completionTokens: 50,
+        usageComplete: true,
+        outcomeCode: "provider_completed",
+        nowMs: 148_202,
+      },
+    ),
+  ).resolves.toMatchObject({ status: "settled", settledCostMicros: 200 });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: claimToken },
+    ),
+  ).resolves.toEqual({ ok: true, status: "settled", alreadyFinalized: true });
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "settled",
+      settledCostMicros: 200,
+      outcomeCode: "provider_completed",
+    });
+    expect(await ctx.db.get(receipt.usageCycleId as any)).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 200,
+    });
+  });
+});
+
+test("operator expiration is terminal without a ledger and missing receipts are idempotent", async () => {
+  const t = convexTest(schema, modules);
+  const receiptKey = "community_agent_mention:operator-expiration";
+  const fixture = await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, "operator-expiration-owner", 149_000);
+    const memberId = await insertUser(ctx, "operator-expiration-member", 149_000);
+    const communityId = await insertCommunity(ctx, ownerId, "operator-expiration", 149_000);
+    const receiptId = await ctx.db.insert("communityInferenceReceipts", {
+      receiptKey,
+      sourceRunId: "community-agent-serve:operator-expiration",
+      communityId,
+      actorUserId: memberId,
+      payerUserId: ownerId,
+      fundingMode: "platform_operator_grant",
+      surface: "community_agent_mention",
+      provider: "openai",
+      modelId: "gpt-5.6-luna",
+      status: "authorized",
+      claimToken: "operator-expiration-claim",
+      leaseExpiresAt: 149_001,
+      pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+      authorizedAt: 149_000,
+      createdAt: 149_000,
+      updatedAt: 149_000,
+    });
+    return { receiptId };
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: "operator-expiration-claim" },
+    ),
+  ).resolves.toEqual({ ok: true, status: "failed", alreadyFinalized: false });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey: "community_agent_mention:missing-expiration", expectedClaimToken: "missing-claim" },
+    ),
+  ).resolves.toEqual({ ok: true, status: "missing", alreadyFinalized: true });
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(fixture.receiptId)).toMatchObject({
+      status: "failed",
+      failureCode: "authorization_expired_before_provider",
+    });
+  });
+});
+
+test("post-provider operator expiration is indeterminate without ledger accounting", async () => {
+  const t = convexTest(schema, modules);
+  const receiptKey = "community_agent_mention:operator-provider-expiration";
+  const fixture = await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, "operator-provider-expiration-owner", 149_100);
+    const memberId = await insertUser(ctx, "operator-provider-expiration-member", 149_100);
+    const communityId = await insertCommunity(
+      ctx,
+      ownerId,
+      "operator-provider-expiration",
+      149_100,
+    );
+    const receiptId = await ctx.db.insert("communityInferenceReceipts", {
+      receiptKey,
+      sourceRunId: "community-agent-serve:operator-provider-expiration",
+      communityId,
+      actorUserId: memberId,
+      payerUserId: ownerId,
+      fundingMode: "platform_operator_grant",
+      surface: "community_agent_mention",
+      provider: "openai",
+      modelId: "gpt-5.6-luna",
+      status: "authorized",
+      claimToken: "operator-provider-expiration-claim",
+      leaseExpiresAt: 149_101,
+      providerStartedAt: 149_100,
+      pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+      authorizedAt: 149_100,
+      createdAt: 149_100,
+      updatedAt: 149_100,
+    });
+    return { receiptId };
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      {
+        receiptKey,
+        expectedClaimToken: "operator-provider-expiration-claim",
+      },
+    ),
+  ).resolves.toEqual({ ok: true, status: "indeterminate", alreadyFinalized: false });
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(fixture.receiptId)).toMatchObject({
+      status: "indeterminate",
+      failureCode: "provider_execution_deadline_exceeded",
+    });
+    expect(await ctx.db.query("founderUsageCycles").collect()).toHaveLength(0);
+  });
+});
+
+test("expiration reschedules an unexpired provider-started lease without changing accounting", async () => {
+  const t = convexTest(schema, modules);
+  const nowMs = Date.now();
+  const fixture = await createActiveFundingFixture(t, "receipt-expiration-pending", nowMs);
+  const receiptKey = "community_agent_mention:receipt-expiration-pending";
+  const claimToken = "expiration-pending-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, nowMs),
+  );
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      { receiptKey, claimToken, nowMs: nowMs + 1 },
+    ),
+  ).resolves.toEqual({ ok: true });
+
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: claimToken },
+    ),
+  ).resolves.toEqual({ ok: true, status: "pending", alreadyFinalized: false });
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "authorized",
+      claimToken,
+      providerStartedAt: nowMs + 1,
+    });
+    const cycle = await ctx.db.get(receipt.usageCycleId as any);
+    expect(cycle).toMatchObject({ reservedCostMicros: 1_000_000, settledCostMicros: 0 });
+  });
+});
+
+test("expiration never mutates terminal receipt states", async () => {
+  const t = convexTest(schema, modules);
+  const terminalRows = await t.run(async (ctx) => {
+    const ownerId = await insertUser(ctx, "terminal-expiration-owner", 149_500);
+    const memberId = await insertUser(ctx, "terminal-expiration-member", 149_500);
+    const communityId = await insertCommunity(ctx, ownerId, "terminal-expiration", 149_500);
+    const rows = [] as Array<{ receiptId: any; receiptKey: string; claimToken: string; status: "settled" | "failed" | "indeterminate" }>;
+    for (const status of ["settled", "failed", "indeterminate"] as const) {
+      const receiptKey = `community_agent_mention:terminal-expiration-${status}`;
+      const claimToken = `terminal-expiration-${status}-claim`;
+      const receiptId = await ctx.db.insert("communityInferenceReceipts", {
+        receiptKey,
+        sourceRunId: `community-agent-serve:terminal-expiration-${status}`,
+        communityId,
+        actorUserId: memberId,
+        payerUserId: ownerId,
+        fundingMode: "platform_operator_grant",
+        surface: "community_agent_mention",
+        provider: "openai",
+        modelId: "gpt-5.6-luna",
+        status,
+        claimToken,
+        leaseExpiresAt: 149_501,
+        pricingVersion: POLYNET_FOUNDER_PLAN_PRICING_VERSION,
+        authorizedAt: 149_500,
+        createdAt: 149_500,
+        updatedAt: 149_500,
+      });
+      rows.push({ receiptId, receiptKey, claimToken, status });
+    }
+    return rows;
+  });
+
+  for (const row of terminalRows) {
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+        { receiptKey: row.receiptKey, expectedClaimToken: row.claimToken },
+      ),
+    ).resolves.toEqual({ ok: true, status: row.status, alreadyFinalized: true });
+  }
+  await t.run(async (ctx) => {
+    for (const row of terminalRows) {
+      expect(await ctx.db.get(row.receiptId)).toMatchObject({
+        status: row.status,
+        updatedAt: 149_500,
+      });
+    }
+  });
+});
+
+test("post-provider expiration fails closed when subscription receipt authority is incomplete", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "receipt-expiration-authority", 150_000);
+  const receiptKey = "community_agent_mention:receipt-expiration-authority";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, "expiration-authority-claim", 151_000),
+  );
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.markCommunityInferenceProviderStartedInternal,
+      {
+        receiptKey,
+        claimToken: "expiration-authority-claim",
+        nowMs: 151_001,
+      },
+    ),
+  ).resolves.toEqual({ ok: true });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(claimed.receiptId, { usageCycleId: undefined });
+  });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.expireCommunityInferenceReceiptInternal,
+      { receiptKey, expectedClaimToken: "expiration-authority-claim" },
+    ),
+  ).rejects.toThrow("founder_usage_receipt_authority_missing");
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(claimed.receiptId)).toMatchObject({
+      status: "authorized",
+      providerStartedAt: 151_001,
+    });
+    const cycles = await ctx.db
+      .query("founderUsageCycles")
+      .withIndex("by_subscription_status", (q) =>
+        q.eq("founderSubscriptionId", fixture.founderSubscriptionId).eq("status", "open"),
+      )
+      .collect();
+    expect(cycles[0]).toMatchObject({ reservedCostMicros: 1_000_000, settledCostMicros: 0 });
   });
 });
 
@@ -483,7 +1262,6 @@ test("receipt claims preserve the explicit community inference surface", async (
   const surfaces = [
     "community_agent_mention",
     "community_autonomous_cognition",
-    "community_setup_generation",
   ] as const;
   for (const [index, surface] of surfaces.entries()) {
     const receiptKey = `${surface}:receipt-surface-${index}`;
@@ -656,10 +1434,260 @@ test("provider start revalidates ownership and failure settlement preserves know
     ),
   ).resolves.toEqual({ ok: true, status: "indeterminate" });
   await settlementTest.run(async (ctx) => {
-    expect(await ctx.db.get(unknownClaim.receiptId)).toMatchObject({
+    const unknownReceipt = await ctx.db.get(unknownClaim.receiptId) as any;
+    expect(unknownReceipt).toMatchObject({
       status: "indeterminate",
       failureCode: "provider_token_usage_missing",
+      settledCostMicros: 1_000_000,
     });
+    const cycle = await ctx.db.get(unknownReceipt?.usageCycleId as any);
+    expect(cycle).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 1_000_213,
+    });
+  });
+});
+
+test("zero-token indeterminate failure consumes the full reservation", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "zero-token-indeterminate", 525_000);
+  const receiptKey = "community_agent_mention:zero-token-indeterminate";
+  const claimToken = "zero-token-indeterminate-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 526_000),
+  );
+
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.finalizeCommunityInferenceFailureInternal,
+      {
+        receiptKey,
+        claimToken,
+        promptTokens: 0,
+        completionTokens: 0,
+        usageComplete: true,
+        failureCode: "provider_inference_unavailable",
+        disposition: "indeterminate",
+        nowMs: 526_001,
+      },
+    ),
+  ).resolves.toEqual({ ok: true, status: "indeterminate" });
+  await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    expect(receipt).toMatchObject({
+      status: "indeterminate",
+      failureCode: "provider_token_usage_missing",
+      settledCostMicros: 1_000_000,
+    });
+    expect(await ctx.db.get(receipt.usageCycleId as any)).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 1_000_000,
+    });
+  });
+});
+
+test("known-no-spend finalization validates the complete receipt authority before release", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "known-no-spend-authority", 530_000);
+  const otherFixture = await createActiveFundingFixture(t, "known-no-spend-other", 530_000);
+  const receiptKey = "community_agent_mention:known-no-spend-authority";
+  const claimToken = "known-no-spend-authority-claim";
+  const claimed = await t.mutation(
+    (internal as any).founderInference.claimCommunityInferenceReceiptInternal,
+    claimArgs(fixture, receiptKey, claimToken, 531_000),
+  );
+  const original = await t.run(async (ctx) => {
+    const receipt = await ctx.db.get(claimed.receiptId) as any;
+    const otherCycles = await ctx.db
+      .query("founderUsageCycles")
+      .withIndex("by_subscription_status", (q) =>
+        q.eq("founderSubscriptionId", otherFixture.founderSubscriptionId).eq("status", "open"),
+      )
+      .collect();
+    expect(otherCycles).toHaveLength(1);
+    return { receipt, otherCycleId: otherCycles[0]!._id };
+  });
+  const conflicts = [
+    {
+      patch: { usageCycleId: original.otherCycleId },
+      restore: { usageCycleId: original.receipt.usageCycleId },
+      error: "founder_usage_cycle_authority_mismatch",
+    },
+    {
+      patch: { founderSubscriptionId: otherFixture.founderSubscriptionId },
+      restore: { founderSubscriptionId: original.receipt.founderSubscriptionId },
+      error: "founder_usage_cycle_authority_mismatch",
+    },
+    {
+      patch: { communityId: otherFixture.communityId },
+      restore: { communityId: original.receipt.communityId },
+      error: "founder_usage_cycle_community_mismatch",
+    },
+    {
+      patch: { payerUserId: otherFixture.ownerId },
+      restore: { payerUserId: original.receipt.payerUserId },
+      error: "founder_usage_cycle_community_mismatch",
+    },
+    {
+      patch: { pricingVersion: "wrong-pricing-version" },
+      restore: { pricingVersion: original.receipt.pricingVersion },
+      error: "founder_inference_pricing_version_mismatch",
+    },
+  ];
+
+  for (const conflict of conflicts) {
+    await t.run(async (ctx) => {
+      await ctx.db.patch(claimed.receiptId, conflict.patch as any);
+    });
+    await expect(
+      t.mutation(
+        (internal as any).founderInference.finalizeCommunityInferenceFailureInternal,
+        {
+          receiptKey,
+          claimToken,
+          promptTokens: 0,
+          completionTokens: 0,
+          usageComplete: true,
+          failureCode: "known_no_spend",
+          disposition: "failed",
+          nowMs: 531_001,
+        },
+      ),
+    ).rejects.toThrow(conflict.error);
+    await t.run(async (ctx) => {
+      expect(await ctx.db.get(claimed.receiptId)).toMatchObject({ status: "authorized" });
+      await ctx.db.patch(claimed.receiptId, conflict.restore as any);
+    });
+  }
+
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.finalizeCommunityInferenceFailureInternal,
+      {
+        receiptKey,
+        claimToken,
+        promptTokens: 0,
+        completionTokens: 0,
+        usageComplete: true,
+        failureCode: "known_no_spend",
+        disposition: "failed",
+        nowMs: 531_002,
+      },
+    ),
+  ).resolves.toEqual({ ok: true, status: "failed" });
+  await expect(
+    t.mutation(
+      (internal as any).founderInference.finalizeCommunityInferenceFailureInternal,
+      {
+        receiptKey,
+        claimToken,
+        promptTokens: 0,
+        completionTokens: 0,
+        usageComplete: true,
+        failureCode: "known_no_spend_duplicate",
+        disposition: "failed",
+        nowMs: 531_003,
+      },
+    ),
+  ).resolves.toEqual({ ok: false, errorCode: "founder_inference_receipt_claim_invalid" });
+  await t.run(async (ctx) => {
+    expect(await ctx.db.get(claimed.receiptId)).toMatchObject({
+      status: "failed",
+      failureCode: "known_no_spend",
+    });
+    expect(await ctx.db.get(original.receipt.usageCycleId as any)).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 0,
+    });
+    expect(await ctx.db.get(original.otherCycleId as any)).toMatchObject({
+      reservedCostMicros: 0,
+      settledCostMicros: 0,
+    });
+  });
+});
+
+test("shared founder allowance rejects malformed ledger values and settlement above reservation", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "ledger-invariants", 550_000);
+  await t.run(async (ctx) => {
+    const [cycle] = await ctx.db
+      .query("founderUsageCycles")
+      .withIndex("by_subscription_status", (q) =>
+        q.eq("founderSubscriptionId", fixture.founderSubscriptionId).eq("status", "open"),
+      )
+      .collect();
+    if (!cycle) throw new Error("test_usage_cycle_missing");
+    await ctx.db.patch(cycle._id, { maxRunReservationCostMicros: 1.5 });
+    await expect(reserveFounderUsage({
+      ctx,
+      founderSubscriptionId: fixture.founderSubscriptionId,
+      communityId: fixture.communityId,
+      nowMs: 551_000,
+    })).resolves.toEqual({
+      ok: false,
+      code: "founder_inference_pricing_misconfigured",
+    });
+    await ctx.db.patch(cycle._id, { maxRunReservationCostMicros: 1_000_000 });
+
+    const reservation = await reserveFounderUsage({
+      ctx,
+      founderSubscriptionId: fixture.founderSubscriptionId,
+      communityId: fixture.communityId,
+      nowMs: 551_001,
+    });
+    if (!reservation.ok) throw new Error(reservation.code);
+
+    await expect(settleFounderUsageReservation({
+      ctx,
+      usageCycleId: reservation.cycle._id,
+      reservedCostMicros: reservation.reservationCostMicros,
+      settledCostMicros: reservation.reservationCostMicros + 1,
+      nowMs: 551_002,
+    })).rejects.toThrow("founder_usage_settlement_exceeds_reservation");
+    await expect(settleFounderUsageReservation({
+      ctx,
+      usageCycleId: reservation.cycle._id,
+      reservedCostMicros: reservation.reservationCostMicros + 0.5,
+      settledCostMicros: reservation.reservationCostMicros,
+      nowMs: 551_003,
+    })).rejects.toThrow("founder_usage_settlement_invalid");
+    expect(await ctx.db.get(reservation.cycle._id)).toMatchObject({
+      reservedCostMicros: reservation.reservationCostMicros,
+      settledCostMicros: 0,
+    });
+  });
+});
+
+test("shared founder allowance fails closed when persisted cycle totals are corrupt", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createActiveFundingFixture(t, "ledger-corrupt", 560_000);
+  await t.run(async (ctx) => {
+    const cycles = await ctx.db
+      .query("founderUsageCycles")
+      .withIndex("by_subscription_status", (q) =>
+        q.eq("founderSubscriptionId", fixture.founderSubscriptionId).eq("status", "open"),
+      )
+      .collect();
+    expect(cycles).toHaveLength(1);
+    await ctx.db.patch(cycles[0]!._id, {
+      reservedCostMicros: 1,
+      settledCostMicros: 20_000_000,
+      updatedAt: 560_001,
+    });
+    await expect(reserveFounderUsage({
+      ctx,
+      founderSubscriptionId: fixture.founderSubscriptionId,
+      communityId: fixture.communityId,
+      nowMs: 560_002,
+    })).rejects.toThrow("founder_usage_cycle_ledger_invalid");
+    await expect(settleFounderUsageReservation({
+      ctx,
+      usageCycleId: cycles[0]!._id,
+      reservedCostMicros: 1,
+      settledCostMicros: 1,
+      nowMs: 560_003,
+    })).rejects.toThrow("founder_usage_cycle_ledger_invalid");
   });
 });
 

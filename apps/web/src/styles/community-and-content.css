@@ -10002,16 +10002,19 @@ button.chat-reply-quote:hover {
 }
 
 .builder-knowledge-setup {
-  min-height: 100vh;
-  min-height: 100svh;
+  position: fixed;
+  inset: 0;
+  z-index: 240;
   display: grid;
   align-content: start;
   justify-items: center;
   gap: 28px;
-  overflow-x: hidden;
-  background: var(--bg-app);
+  overflow: auto;
+  background: color-mix(in srgb, #050507 88%, transparent);
+  backdrop-filter: blur(20px) saturate(0.62);
+  -webkit-backdrop-filter: blur(20px) saturate(0.62);
   color: var(--text-primary);
-  padding: clamp(24px, 5vw, 56px) 20px 48px;
+  padding: clamp(24px, 7vh, 64px) 20px 48px;
 }
 
 .builder-knowledge-setup-brand {
@@ -10039,6 +10042,7 @@ button.chat-reply-quote:hover {
   border: 1px solid var(--border-default);
   border-radius: 22px;
   background: var(--bg-card);
+  box-shadow: 0 32px 100px rgb(0 0 0 / 0.58);
   padding: clamp(24px, 5vw, 54px);
 }
 

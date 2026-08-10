@@ -51,6 +51,26 @@ function normalizedId(value: unknown): string {
   return String(value ?? "").trim();
 }
 
+function isNonNegativeSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) >= 0;
+}
+
+function isPositiveSafeInteger(value: unknown): value is number {
+  return Number.isSafeInteger(value) && Number(value) > 0;
+}
+
+function assertFounderUsageCycleLedgerState(cycle: FounderUsageCycleRow): void {
+  if (
+    !isPositiveSafeInteger(cycle.includedCostMicros) ||
+    !isNonNegativeSafeInteger(cycle.reservedCostMicros) ||
+    !isNonNegativeSafeInteger(cycle.settledCostMicros) ||
+    !Number.isSafeInteger(cycle.reservedCostMicros + cycle.settledCostMicros) ||
+    cycle.reservedCostMicros + cycle.settledCostMicros > cycle.includedCostMicros
+  ) {
+    throw new Error("founder_usage_cycle_ledger_invalid");
+  }
+}
+
 export function founderUsageCycleKey(args: {
   providerSubscriptionId: string;
   cycleStartAt: number;
@@ -140,6 +160,7 @@ export async function syncFounderUsageCycle(args: {
     });
   }
   if (existing) {
+    assertFounderUsageCycleLedgerState(existing);
     if (normalizedId(existing.founderSubscriptionId) !== normalizedId(args.subscription._id)) {
       throw new Error("founder_usage_cycle_identity_mismatch");
     }
@@ -163,7 +184,11 @@ export async function syncFounderUsageCycle(args: {
   if (!args.pricing) return null;
   if (
     args.pricing.pricingVersion !== POLYNET_FOUNDER_PLAN_PRICING_VERSION ||
-    args.pricing.includedCostMicros !== POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS
+    args.pricing.includedCostMicros !== POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS ||
+    !isPositiveSafeInteger(args.pricing.inputCostMicrosPerMillionTokens) ||
+    !isPositiveSafeInteger(args.pricing.outputCostMicrosPerMillionTokens) ||
+    !isPositiveSafeInteger(args.pricing.maxRunReservationCostMicros) ||
+    args.pricing.maxRunReservationCostMicros > args.pricing.includedCostMicros
   ) {
     throw new Error("founder_inference_pricing_misconfigured");
   }
@@ -227,17 +252,18 @@ export async function reserveFounderUsage(args: {
     return { ok: false, code: active.length > 1 ? "founder_usage_cycle_ambiguous" : "founder_usage_cycle_missing" };
   }
   const cycle = active[0]!;
+  assertFounderUsageCycleLedgerState(cycle);
   if (normalizedId(cycle.communityId) !== normalizedId(args.communityId)) {
     return { ok: false, code: "founder_usage_cycle_community_mismatch" };
   }
-  const reservationCostMicros = Math.max(
-    0,
-    Math.floor(cycle.maxRunReservationCostMicros),
-  );
-  if (reservationCostMicros <= 0) {
+  const reservationCostMicros = cycle.maxRunReservationCostMicros;
+  if (!isPositiveSafeInteger(reservationCostMicros)) {
     return { ok: false, code: "founder_inference_pricing_misconfigured" };
   }
   const nextReserved = cycle.reservedCostMicros + reservationCostMicros;
+  if (!Number.isSafeInteger(nextReserved)) {
+    throw new Error("founder_usage_cycle_ledger_invalid");
+  }
   if (nextReserved + cycle.settledCostMicros > cycle.includedCostMicros) {
     return { ok: false, code: "founder_usage_exhausted" };
   }
@@ -265,26 +291,34 @@ export async function settleFounderUsageReservation(args: {
 }): Promise<void> {
   const cycle = (await args.ctx.db.get(args.usageCycleId as any)) as FounderUsageCycleRow | null;
   if (!cycle) throw new Error("founder_usage_cycle_missing");
-  const reservedCostMicros = Math.max(0, Math.floor(args.reservedCostMicros));
-  const settledCostMicros = Math.max(0, Math.floor(args.settledCostMicros));
+  assertFounderUsageCycleLedgerState(cycle);
+  if (!isPositiveSafeInteger(args.reservedCostMicros)) {
+    throw new Error("founder_usage_settlement_invalid");
+  }
+  if (!isNonNegativeSafeInteger(args.settledCostMicros)) {
+    throw new Error("founder_usage_settlement_invalid");
+  }
+  const reservedCostMicros = args.reservedCostMicros;
+  const settledCostMicros = args.settledCostMicros;
+  if (settledCostMicros > reservedCostMicros) {
+    throw new Error("founder_usage_settlement_exceeds_reservation");
+  }
   if (cycle.reservedCostMicros < reservedCostMicros) {
     throw new Error("founder_usage_reservation_underflow");
   }
+  const nextReservedCostMicros = cycle.reservedCostMicros - reservedCostMicros;
+  const nextSettledCostMicros = cycle.settledCostMicros + settledCostMicros;
+  if (
+    !Number.isSafeInteger(nextReservedCostMicros) ||
+    !Number.isSafeInteger(nextSettledCostMicros) ||
+    !Number.isSafeInteger(nextReservedCostMicros + nextSettledCostMicros) ||
+    nextReservedCostMicros + nextSettledCostMicros > cycle.includedCostMicros
+  ) {
+    throw new Error("founder_usage_cycle_ledger_invalid");
+  }
   await args.ctx.db.patch(cycle._id as any, {
-    reservedCostMicros: cycle.reservedCostMicros - reservedCostMicros,
-    settledCostMicros: cycle.settledCostMicros + settledCostMicros,
+    reservedCostMicros: nextReservedCostMicros,
+    settledCostMicros: nextSettledCostMicros,
     updatedAt: args.nowMs,
-  });
-}
-
-export async function releaseFounderUsageReservation(args: {
-  ctx: any;
-  usageCycleId: any;
-  reservedCostMicros: number;
-  nowMs: number;
-}): Promise<void> {
-  await settleFounderUsageReservation({
-    ...args,
-    settledCostMicros: 0,
   });
 }

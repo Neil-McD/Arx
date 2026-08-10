@@ -51,8 +51,102 @@ export type FounderInferenceReceiptRow = {
   updatedAt: number;
 };
 
+export type FounderInferenceReceiptIdentity = Pick<
+  FounderInferenceReceiptRow,
+  | "sourceRunId"
+  | "communityId"
+  | "actorUserId"
+  | "payerUserId"
+  | "fundingMode"
+  | "founderSubscriptionId"
+  | "surface"
+>;
+
 function normalizedId(value: unknown): string {
   return String(value ?? "").trim();
+}
+
+function boundedCode(value: unknown, fallback: string): string {
+  return String(value ?? "").trim().slice(0, 120) || fallback;
+}
+
+export function requireBoundedFounderInferenceIdentifier(
+  value: unknown,
+  errorCode: string,
+  maxLength: number,
+): string {
+  const normalized = String(value ?? "").trim();
+  if (!normalized || normalized.length > maxLength) throw new Error(errorCode);
+  return normalized;
+}
+
+export async function getUniqueFounderInferenceReceiptByKey(
+  ctx: any,
+  receiptKey: string,
+): Promise<FounderInferenceReceiptRow | null> {
+  const normalizedReceiptKey = requireBoundedFounderInferenceIdentifier(
+    receiptKey,
+    "founder_inference_receipt_key_invalid",
+    240,
+  );
+  const rows = (await ctx.db
+    .query("communityInferenceReceipts" as any)
+    .withIndex("by_receipt_key", (q: any) => q.eq("receiptKey", normalizedReceiptKey))
+    .take(2)) as FounderInferenceReceiptRow[];
+  if (rows.length > 1) throw new Error("founder_inference_receipt_ambiguous");
+  return rows[0] ?? null;
+}
+
+export function founderInferenceReceiptIdentityMatches(
+  receipt: FounderInferenceReceiptRow,
+  expected: FounderInferenceReceiptIdentity,
+): boolean {
+  return (
+    receipt.sourceRunId === expected.sourceRunId &&
+    normalizedId(receipt.communityId) === normalizedId(expected.communityId) &&
+    normalizedId(receipt.actorUserId) === normalizedId(expected.actorUserId) &&
+    normalizedId(receipt.payerUserId) === normalizedId(expected.payerUserId) &&
+    receipt.fundingMode === expected.fundingMode &&
+    normalizedId(receipt.founderSubscriptionId) ===
+      normalizedId(expected.founderSubscriptionId) &&
+    receipt.surface === expected.surface
+  );
+}
+
+async function requireFounderInferenceSettlementCycle(args: {
+  ctx: any;
+  receipt: FounderInferenceReceiptRow;
+}): Promise<FounderUsageCycleRow> {
+  const { receipt } = args;
+  if (!receipt.usageCycleId || !receipt.founderSubscriptionId) {
+    throw new Error("founder_usage_receipt_authority_missing");
+  }
+  const [cycle, subscription] = (await Promise.all([
+    args.ctx.db.get(receipt.usageCycleId as any),
+    args.ctx.db.get(receipt.founderSubscriptionId as any),
+  ])) as [FounderUsageCycleRow | null, FounderSubscriptionRow | null];
+  if (
+    !cycle ||
+    !subscription ||
+    normalizedId(cycle.founderSubscriptionId) !== normalizedId(subscription._id) ||
+    normalizedId(subscription._id) !== normalizedId(receipt.founderSubscriptionId)
+  ) {
+    throw new Error("founder_usage_cycle_authority_mismatch");
+  }
+  if (
+    normalizedId(cycle.communityId) !== normalizedId(receipt.communityId) ||
+    normalizedId(subscription.communityId) !== normalizedId(receipt.communityId) ||
+    normalizedId(subscription.ownerUserId) !== normalizedId(receipt.payerUserId)
+  ) {
+    throw new Error("founder_usage_cycle_community_mismatch");
+  }
+  if (
+    receipt.pricingVersion !== cycle.pricingVersion ||
+    cycle.pricingVersion !== POLYNET_FOUNDER_PLAN_PRICING_VERSION
+  ) {
+    throw new Error("founder_inference_pricing_version_mismatch");
+  }
+  return cycle;
 }
 
 export async function resolveCommunityInferenceFundingAdmission(
@@ -172,63 +266,60 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
   completionTokens: number;
   usageComplete?: boolean;
   outcomeCode: string;
+  failureCode?: string;
   nowMs: number;
 }): Promise<FounderInferenceReceiptRow> {
-  const receipt = (await args.ctx.db
-    .query("communityInferenceReceipts" as any)
-    .withIndex("by_receipt_key", (q: any) => q.eq("receiptKey", args.receiptKey))
-    .first()) as FounderInferenceReceiptRow | null;
+  const receipt = await getUniqueFounderInferenceReceiptByKey(
+    args.ctx,
+    args.receiptKey,
+  );
   if (!receipt) throw new Error("founder_inference_receipt_missing");
   if (receipt.status !== "authorized" || receipt.claimToken !== args.claimToken) {
     throw new Error("founder_inference_receipt_claim_invalid");
   }
+  const promptTokens = Math.max(0, Math.floor(args.promptTokens));
+  const completionTokens = Math.max(0, Math.floor(args.completionTokens));
+  let settledCostMicros: number | undefined;
+  const cycle = receipt.fundingMode === "platform_subscription"
+    ? await requireFounderInferenceSettlementCycle({ ctx: args.ctx, receipt })
+    : undefined;
   if (args.usageComplete === false) {
+    if (cycle) {
+      settledCostMicros = Number(receipt.reservedCostMicros);
+      await settleFounderUsageReservation({
+        ctx: args.ctx,
+        usageCycleId: receipt.usageCycleId,
+        reservedCostMicros: settledCostMicros,
+        settledCostMicros,
+        nowMs: args.nowMs,
+      });
+    }
+    const failureCode = boundedCode(
+      args.failureCode,
+      "provider_token_usage_missing",
+    );
     await args.ctx.db.patch(receipt._id as any, {
       status: "indeterminate",
-      failureCode: "provider_token_usage_missing",
+      promptTokens,
+      completionTokens,
+      settledCostMicros,
+      failureCode,
       failedAt: args.nowMs,
       updatedAt: args.nowMs,
     });
     return {
       ...receipt,
       status: "indeterminate",
-      failureCode: "provider_token_usage_missing",
+      promptTokens,
+      completionTokens,
+      settledCostMicros,
+      failureCode,
       failedAt: args.nowMs,
       updatedAt: args.nowMs,
     };
   }
-  const promptTokens = Math.max(0, Math.floor(args.promptTokens));
-  const completionTokens = Math.max(0, Math.floor(args.completionTokens));
-  let settledCostMicros: number | undefined;
   if (receipt.fundingMode === "platform_subscription") {
-    if (!receipt.usageCycleId || !receipt.founderSubscriptionId) {
-      throw new Error("founder_usage_receipt_authority_missing");
-    }
-    const [cycle, subscription] = (await Promise.all([
-      args.ctx.db.get(receipt.usageCycleId as any),
-      args.ctx.db.get(receipt.founderSubscriptionId as any),
-    ])) as [FounderUsageCycleRow | null, FounderSubscriptionRow | null];
-    if (
-      !cycle ||
-      !subscription ||
-      normalizedId(cycle.founderSubscriptionId) !== normalizedId(subscription._id) ||
-      normalizedId(subscription._id) !== normalizedId(receipt.founderSubscriptionId)
-    ) {
-      throw new Error("founder_usage_cycle_authority_mismatch");
-    }
-    if (
-      normalizedId(cycle.communityId) !== normalizedId(receipt.communityId) ||
-      normalizedId(subscription.communityId) !== normalizedId(receipt.communityId) ||
-      normalizedId(subscription.ownerUserId) !== normalizedId(receipt.payerUserId)
-    ) {
-      throw new Error("founder_usage_cycle_community_mismatch");
-    }
-    if (
-      receipt.pricingVersion !== cycle.pricingVersion ||
-      cycle.pricingVersion !== POLYNET_FOUNDER_PLAN_PRICING_VERSION
-    ) {
-      throw new Error("founder_inference_pricing_version_mismatch");
-    }
+    if (!cycle) throw new Error("founder_usage_cycle_missing");
     settledCostMicros = calculateFounderInferenceCostMicros({
       promptTokens,
       completionTokens,
@@ -276,6 +367,47 @@ export async function settleAuthorizedFounderInferenceReceipt(args: {
     settledCostMicros,
     outcomeCode: args.outcomeCode,
     settledAt: args.nowMs,
+    updatedAt: args.nowMs,
+  };
+}
+
+export async function finalizeKnownNoSpendFounderInferenceReceipt(args: {
+  ctx: any;
+  receipt: FounderInferenceReceiptRow;
+  claimToken: string;
+  failureCode: string;
+  nowMs: number;
+}): Promise<FounderInferenceReceiptRow> {
+  const { receipt } = args;
+  if (receipt.status !== "authorized" || receipt.claimToken !== args.claimToken) {
+    throw new Error("founder_inference_receipt_claim_invalid");
+  }
+  if (receipt.fundingMode === "platform_subscription") {
+    await requireFounderInferenceSettlementCycle({ ctx: args.ctx, receipt });
+    const reservedCostMicros = Number(receipt.reservedCostMicros);
+    if (!Number.isSafeInteger(reservedCostMicros) || reservedCostMicros <= 0) {
+      throw new Error("founder_usage_receipt_authority_missing");
+    }
+    await settleFounderUsageReservation({
+      ctx: args.ctx,
+      usageCycleId: receipt.usageCycleId,
+      reservedCostMicros,
+      settledCostMicros: 0,
+      nowMs: args.nowMs,
+    });
+  }
+  const failureCode = boundedCode(args.failureCode, "provider_rejected_before_spend");
+  await args.ctx.db.patch(receipt._id as any, {
+    status: "failed",
+    failureCode,
+    failedAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  return {
+    ...receipt,
+    status: "failed",
+    failureCode,
+    failedAt: args.nowMs,
     updatedAt: args.nowMs,
   };
 }
