@@ -171,6 +171,9 @@ const runtimeComputerUseViewer = readText("shared/runtimeComputerUseViewerUi.ts"
 const runtimeLiveTimeline = readText("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const runtimeComputerUseViewerComponent = readText("apps/web/src/components/RuntimeComputerUseViewer.tsx");
 const memberAgentDock = readText("apps/web/src/components/WebMemberAgentDock.tsx");
+const webAgentLiveTurn = readText(
+  "apps/web/src/components/WebAgentLiveTurn.tsx",
+);
 const packageJson = readText("package.json");
 
 for (const [source, token, label] of [
@@ -194,11 +197,12 @@ for (const [source, token, label] of [
   [runtimeComputerUseViewer, "buildRuntimeComputerUseViewer", "dedicated computer use viewer projection"],
   [runtimeComputerUseViewerComponent, "runtimeComputerUseViewerUi", "computer use viewer imports dedicated projection"],
   [runtimeLiveTimeline, "showThinkingFooter?: boolean", "timeline footer suppression prop"],
-  [memberAgentDock, "hasSequencedAssistantText", "mounted member-agent streaming text duplicate guard"],
+  [memberAgentDock, "WebAgentLiveTurn", "member-agent shared live-turn mount"],
+  [webAgentLiveTurn, "hasSequencedAssistantText", "shared streaming text duplicate guard"],
   [
-    memberAgentDock,
+    webAgentLiveTurn,
     "showThinkingFooter={!shouldRenderStreamedText}",
-    "mounted member-agent coordinates the thinking footer with streamed text",
+    "shared live turn coordinates the thinking footer with streamed text",
   ],
   [packageJson, "check:runtime-live-timeline-codex-proof", "Codex proof npm script"],
 ] as const) {
@@ -215,16 +219,16 @@ assert.doesNotMatch(
   "Codex live timeline should not derive fake reasoning from local activity buckets",
 );
 
-const mountedTimelineIndex = memberAgentDock.indexOf("<RuntimeLiveTimeline");
-const mountedStreamedTextIndex = memberAgentDock.indexOf("{shouldRenderStreamedText ? (");
-const mountedStreamedCaretIndex = memberAgentDock.indexOf('className="member-agent-dock-caret"');
-assert.ok(mountedTimelineIndex >= 0, "mounted member-agent must render the live timeline");
-assert.ok(mountedStreamedTextIndex >= 0, "mounted member-agent must keep the streamed-text fallback");
-assert.ok(mountedStreamedCaretIndex >= 0, "mounted member-agent must identify active fallback streaming");
+const mountedTimelineIndex = webAgentLiveTurn.indexOf("<RuntimeLiveTimeline");
+const mountedStreamedTextIndex = webAgentLiveTurn.indexOf("{shouldRenderStreamedText ? (");
+const mountedStreamedCaretIndex = webAgentLiveTurn.indexOf('className="web-agent-live-turn-caret"');
+assert.ok(mountedTimelineIndex >= 0, "shared live turn must render the live timeline");
+assert.ok(mountedStreamedTextIndex >= 0, "shared live turn must keep the streamed-text fallback");
+assert.ok(mountedStreamedCaretIndex >= 0, "shared live turn must identify active fallback streaming");
 assert.ok(
   mountedTimelineIndex < mountedStreamedTextIndex &&
     mountedStreamedTextIndex < mountedStreamedCaretIndex,
-  "mounted member-agent must render the runtime timeline before the fallback streamed answer",
+  "shared live turn must render the runtime timeline before the fallback streamed answer",
 );
 
 const codexEvents: ProofEvent[] = [
