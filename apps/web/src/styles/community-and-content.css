@@ -2490,12 +2490,19 @@
   text-transform: uppercase;
   letter-spacing: 0.08em;
 }
-.funnel-builder-message p {
+.funnel-builder-message p,
+.funnel-builder-message-content {
   margin: 0;
   color: var(--text-secondary);
   font-size: 13px;
   line-height: 1.55;
   white-space: pre-wrap;
+}
+.funnel-builder-message-content > :first-child {
+  margin-top: 0;
+}
+.funnel-builder-message-content > :last-child {
+  margin-bottom: 0;
 }
 .funnel-builder-message.is-user {
   margin-left: 22px;

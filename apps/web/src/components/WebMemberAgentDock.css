@@ -357,14 +357,9 @@
   opacity: 0.72;
 }
 
-.member-agent-dock-message.is-assistant,
-.member-agent-dock-message.is-streaming {
+.member-agent-dock-message.is-assistant {
   max-width: 100%;
   color: var(--text-ink-primary);
-}
-
-.member-agent-dock-live-turn {
-  margin-top: 4px;
 }
 
 .member-agent-dock-reasoning,
@@ -393,16 +388,6 @@
 
 .member-agent-dock-tool svg {
   color: var(--member-agent-accent);
-}
-
-.member-agent-dock-caret {
-  display: inline-block;
-  width: 2px;
-  height: 1em;
-  margin-left: 3px;
-  vertical-align: -0.12em;
-  background: var(--member-agent-accent);
-  animation: member-agent-dock-caret 900ms steps(1) infinite;
 }
 
 .member-agent-dock-error {
@@ -596,10 +581,6 @@
   to { transform: rotate(360deg); }
 }
 
-@keyframes member-agent-dock-caret {
-  50% { opacity: 0; }
-}
-
 @keyframes member-agent-dock-working-pulse {
   0%, 100% {
     box-shadow:
@@ -700,7 +681,6 @@
 
   .member-agent-dock-reasoning svg,
   .member-agent-dock-launcher,
-  .member-agent-dock-caret,
   .member-agent-dock-composer.is-onboarding,
   .is-spinning {
     animation: none;
