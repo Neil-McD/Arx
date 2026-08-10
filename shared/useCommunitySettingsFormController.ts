@@ -22,7 +22,25 @@ type UseCommunitySettingsFormControllerArgs = {
   slugifyCommunityName: (value: string) => string;
   communitySettingsLoadedCommunityIdRef: MutableRefObject<string | null>;
   communitySettingsDirtyRef: MutableRefObject<boolean>;
-  communityPricingDirtyRef: MutableRefObject<boolean>;
+  clearCommunitySettingsDirty: () => void;
+  rememberSavedCommunityIdentity: (params: {
+    communityId: string;
+    identity: {
+      name: string;
+      slug: string;
+      oneLiner: string;
+      about: string;
+      visibility: string;
+      avatarUrl: string | null;
+      avatarFocusX: number;
+      avatarFocusY: number;
+      avatarZoom: number;
+      bannerUrl: string | null;
+      bannerFocusX: number;
+      bannerFocusY: number;
+      bannerZoom: number;
+    };
+  }) => void;
 
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
   setCommunityMemberSettingsError: Dispatch<SetStateAction<string | null>>;
@@ -70,8 +88,7 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
     const switchingCommunity = current.communitySettingsLoadedCommunityIdRef.current !== nextLoadedId;
     if (switchingCommunity) {
       current.communitySettingsLoadedCommunityIdRef.current = nextLoadedId;
-      current.communitySettingsDirtyRef.current = false;
-      current.communityPricingDirtyRef.current = false;
+      current.clearCommunitySettingsDirty();
       current.setCommunitySettingsPricingMode("free");
       current.setCommunitySettingsPriceUsdMonthly("");
       current.setCommunitySettingsPriceUsdAnnual("");
@@ -110,46 +127,59 @@ export function useCommunitySettingsFormController<CommunityT extends CommunityL
       return;
     }
 
+    const identity = {
+      name: selectedCommunity.name ?? "",
+      slug: current.slugifyCommunityName(selectedCommunity.slug ?? ""),
+      oneLiner: selectedCommunity.one_liner ?? "",
+      about: selectedCommunity.about ?? "",
+      visibility: toCanonicalCommunityVisibility(selectedCommunity.visibility, "unlisted"),
+      avatarUrl: selectedCommunity.avatar_url ?? null,
+      avatarFocusX:
+        typeof selectedCommunity.avatar_focus_x === "number" && Number.isFinite(selectedCommunity.avatar_focus_x)
+          ? Math.max(0, Math.min(1, selectedCommunity.avatar_focus_x))
+          : 0.5,
+      avatarFocusY:
+        typeof selectedCommunity.avatar_focus_y === "number" && Number.isFinite(selectedCommunity.avatar_focus_y)
+          ? Math.max(0, Math.min(1, selectedCommunity.avatar_focus_y))
+          : 0.5,
+      avatarZoom:
+        typeof selectedCommunity.avatar_zoom === "number" && Number.isFinite(selectedCommunity.avatar_zoom)
+          ? Math.max(1, Math.min(2.5, selectedCommunity.avatar_zoom))
+          : 1,
+      bannerUrl: selectedCommunity.banner_url ?? null,
+      bannerFocusX:
+        typeof selectedCommunity.banner_focus_x === "number" && Number.isFinite(selectedCommunity.banner_focus_x)
+          ? Math.max(0, Math.min(1, selectedCommunity.banner_focus_x))
+          : 0.5,
+      bannerFocusY:
+        typeof selectedCommunity.banner_focus_y === "number" && Number.isFinite(selectedCommunity.banner_focus_y)
+          ? Math.max(0, Math.min(1, selectedCommunity.banner_focus_y))
+          : 0.5,
+      bannerZoom:
+        typeof selectedCommunity.banner_zoom === "number" && Number.isFinite(selectedCommunity.banner_zoom)
+          ? Math.max(1, Math.min(2.5, selectedCommunity.banner_zoom))
+          : 1,
+    };
+    current.rememberSavedCommunityIdentity({
+      communityId: selectedCommunity.id,
+      identity,
+    });
     current.setCommunitySettingsError(null);
     current.setCommunityMemberSettingsError(null);
     clearBannerState(false);
-    current.setCommunitySettingsName(selectedCommunity.name ?? "");
-    current.setCommunitySettingsSlug(current.slugifyCommunityName(selectedCommunity.slug ?? ""));
-    current.setCommunitySettingsOneLiner(selectedCommunity.one_liner ?? "");
-    current.setCommunitySettingsAbout(selectedCommunity.about ?? "");
-    current.setCommunitySettingsVisibility(toCanonicalCommunityVisibility(selectedCommunity.visibility, "unlisted"));
-    current.setCommunitySettingsAvatarUrl(selectedCommunity.avatar_url ?? null);
-    current.setCommunitySettingsAvatarFocusX(
-      typeof selectedCommunity.avatar_focus_x === "number" && Number.isFinite(selectedCommunity.avatar_focus_x)
-        ? Math.max(0, Math.min(1, selectedCommunity.avatar_focus_x))
-        : 0.5,
-    );
-    current.setCommunitySettingsAvatarFocusY(
-      typeof selectedCommunity.avatar_focus_y === "number" && Number.isFinite(selectedCommunity.avatar_focus_y)
-        ? Math.max(0, Math.min(1, selectedCommunity.avatar_focus_y))
-        : 0.5,
-    );
-    current.setCommunitySettingsAvatarZoom(
-      typeof selectedCommunity.avatar_zoom === "number" && Number.isFinite(selectedCommunity.avatar_zoom)
-        ? Math.max(1, Math.min(2.5, selectedCommunity.avatar_zoom))
-        : 1,
-    );
-    current.setCommunitySettingsBannerUrl(selectedCommunity.banner_url ?? null);
-    current.setCommunitySettingsBannerFocusX(
-      typeof selectedCommunity.banner_focus_x === "number" && Number.isFinite(selectedCommunity.banner_focus_x)
-        ? Math.max(0, Math.min(1, selectedCommunity.banner_focus_x))
-        : 0.5,
-    );
-    current.setCommunitySettingsBannerFocusY(
-      typeof selectedCommunity.banner_focus_y === "number" && Number.isFinite(selectedCommunity.banner_focus_y)
-        ? Math.max(0, Math.min(1, selectedCommunity.banner_focus_y))
-        : 0.5,
-    );
-    current.setCommunitySettingsBannerZoom(
-      typeof selectedCommunity.banner_zoom === "number" && Number.isFinite(selectedCommunity.banner_zoom)
-        ? Math.max(1, Math.min(2.5, selectedCommunity.banner_zoom))
-        : 1,
-    );
+    current.setCommunitySettingsName(identity.name);
+    current.setCommunitySettingsSlug(identity.slug);
+    current.setCommunitySettingsOneLiner(identity.oneLiner);
+    current.setCommunitySettingsAbout(identity.about);
+    current.setCommunitySettingsVisibility(identity.visibility);
+    current.setCommunitySettingsAvatarUrl(identity.avatarUrl);
+    current.setCommunitySettingsAvatarFocusX(identity.avatarFocusX);
+    current.setCommunitySettingsAvatarFocusY(identity.avatarFocusY);
+    current.setCommunitySettingsAvatarZoom(identity.avatarZoom);
+    current.setCommunitySettingsBannerUrl(identity.bannerUrl);
+    current.setCommunitySettingsBannerFocusX(identity.bannerFocusX);
+    current.setCommunitySettingsBannerFocusY(identity.bannerFocusY);
+    current.setCommunitySettingsBannerZoom(identity.bannerZoom);
   }, [clearBannerState]);
 
   return {

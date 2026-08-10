@@ -130,6 +130,7 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsPriceUsdMonthly: (value: string) => void;
     setCommunitySettingsPriceUsdAnnual: (value: string) => void;
     setCommunityPricingDirty: () => void;
+    handleCancelCommunitySettings: () => void;
     handleSaveCommunitySettings: () => Promise<void> | void;
     handleToggleCommunityMute: (value: boolean) => Promise<void> | void;
     handleLeaveCommunity: () => Promise<void> | void;
@@ -875,22 +876,36 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   {state.isCommunitySettingsDirty ||
                   state.isSavingCommunitySettings ||
                   state.isProcessingCommunitySettingsBanner ? (
-                    <button
-                      className="platform-save-button is-dirty"
-                      type="button"
-                      onClick={() => void actions.handleSaveCommunitySettings()}
-                      disabled={
-                        state.isSavingCommunitySettings ||
-                        state.isProcessingCommunitySettingsBanner ||
-                        !state.isCommunitySettingsDirty
-                      }
-                    >
-                      {state.isSavingCommunitySettings
-                        ? "Saving..."
-                        : state.isProcessingCommunitySettingsBanner
-                          ? "Processing banner…"
-                          : "Save changes"}
-                    </button>
+                    <div className="community-general-settings-actions">
+                      <button
+                        className="community-general-settings-cancel"
+                        type="button"
+                        onClick={actions.handleCancelCommunitySettings}
+                        disabled={
+                          state.isSavingCommunitySettings ||
+                          state.isProcessingCommunitySettingsBanner ||
+                          !state.isCommunitySettingsDirty
+                        }
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        className="platform-save-button is-dirty"
+                        type="button"
+                        onClick={() => void actions.handleSaveCommunitySettings()}
+                        disabled={
+                          state.isSavingCommunitySettings ||
+                          state.isProcessingCommunitySettingsBanner ||
+                          !state.isCommunitySettingsDirty
+                        }
+                      >
+                        {state.isSavingCommunitySettings
+                          ? "Saving..."
+                          : state.isProcessingCommunitySettingsBanner
+                            ? "Processing banner…"
+                            : "Save changes"}
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               </div>

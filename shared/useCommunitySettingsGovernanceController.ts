@@ -56,7 +56,18 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   isValidCommunitySlug: (slug: string) => boolean;
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
   setIsSavingCommunitySettings: Dispatch<SetStateAction<boolean>>;
-  onSaveCommunitySettingsSuccess: (result: CloudCommunitySettingsSaveResult) => void;
+  getCommunitySettingsDraftRevision: () => number;
+  onSaveCommunitySettingsSuccess: (
+    result: CloudCommunitySettingsSaveResult,
+    context: {
+      savedDraftRevision: number;
+      pricing: {
+        mode: "free" | "monthly" | "annual";
+        monthly: string;
+        annual: string;
+      };
+    },
+  ) => void;
 };
 
 function parsePriceBaseUnits(raw: string): number | null {
@@ -102,6 +113,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
 ) {
   const argsRef = useRef(args);
   argsRef.current = args;
+  const communitySettingsSaveInFlightRef = useRef(false);
 
   const handleToggleCommunityMute = useCallback(async (nextMuted: boolean) => {
     const current = argsRef.current;
@@ -162,10 +174,25 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
   }, []);
 
   const handleSaveCommunitySettings = useCallback(async () => {
+    if (communitySettingsSaveInFlightRef.current) return;
+    communitySettingsSaveInFlightRef.current = true;
     const current = argsRef.current;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
+    let session: SessionT | null;
+    try {
+      session = await resolveUsableSession(current.session, current.ensureSession);
+    } catch (error) {
+      current.setCommunitySettingsError(
+        formatCommunitySettingsErrorMessage(error),
+      );
+      communitySettingsSaveInFlightRef.current = false;
+      return;
+    }
     const communityId = current.activeCommunityId;
-    if (!session || !communityId) return;
+    if (!session || !communityId) {
+      communitySettingsSaveInFlightRef.current = false;
+      return;
+    }
+    const savedDraftRevision = current.getCommunitySettingsDraftRevision();
 
     current.setCommunitySettingsError(null);
     current.setIsSavingCommunitySettings(true);
@@ -174,11 +201,13 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
     if (!name || !slug) {
       current.setCommunitySettingsError("Name and slug are required.");
       current.setIsSavingCommunitySettings(false);
+      communitySettingsSaveInFlightRef.current = false;
       return;
     }
     if (!current.isValidCommunitySlug(slug)) {
       current.setCommunitySettingsError("Slug must be 3–32 characters (letters, numbers, hyphens).");
       current.setIsSavingCommunitySettings(false);
+      communitySettingsSaveInFlightRef.current = false;
       return;
     }
 
@@ -188,6 +217,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
     if (rawVisibility && !["published", "unlisted", "public", "private"].includes(rawVisibility)) {
       current.setCommunitySettingsError("Visibility must be published or unlisted.");
       current.setIsSavingCommunitySettings(false);
+      communitySettingsSaveInFlightRef.current = false;
       return;
     }
     const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
@@ -214,6 +244,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         "Published communities need a name, one-liner, avatar, and banner.",
       );
       current.setIsSavingCommunitySettings(false);
+      communitySettingsSaveInFlightRef.current = false;
       return;
     }
 
@@ -262,16 +293,26 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         monthlyAmountBaseUnits: monthlyAmount,
         annualAmountBaseUnits: annualAmount,
       });
-      if (result?.community_id) {
-        current.onSaveCommunitySettingsSuccess({
+      if (!result?.community_id) throw new Error("Failed to save settings.");
+      current.onSaveCommunitySettingsSuccess(
+        {
           ...result,
           visibility: toCanonicalCommunityVisibility(result.visibility, "unlisted"),
-        });
-      }
+        },
+        {
+          savedDraftRevision,
+          pricing: {
+            mode: monthlyEnabled ? "monthly" : annualEnabled ? "annual" : "free",
+            monthly: monthlyEnabled ? current.communitySettingsPriceUsdMonthly.trim() : "",
+            annual: annualEnabled ? current.communitySettingsPriceUsdAnnual.trim() : "",
+          },
+        },
+      );
     } catch (error) {
       current.setCommunitySettingsError(formatCommunitySettingsErrorMessage(error));
     } finally {
       current.setIsSavingCommunitySettings(false);
+      communitySettingsSaveInFlightRef.current = false;
     }
   }, []);
 

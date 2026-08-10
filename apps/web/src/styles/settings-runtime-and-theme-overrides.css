@@ -5714,6 +5714,42 @@ button.message-citation-chip:hover {
   font-weight: 560;
 }
 
+.community-general-settings-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.community-general-settings-cancel {
+  min-height: 46px;
+  padding: 0 18px;
+  border: 1px solid var(--border-default);
+  border-radius: 14px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease;
+}
+
+.community-general-settings-cancel:hover:not(:disabled) {
+  border-color: var(--border-strong);
+  background: var(--bg-card-hover);
+  color: var(--text-primary);
+}
+
+.community-general-settings-cancel:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.community-general-settings-cancel:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
 @container (min-width: 680px) {
   .community-general-settings-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -8703,6 +8739,14 @@ button.settings-primary-action svg {
 
 .app-root.mobile-shell .community-general-settings-save {
   align-items: stretch;
+}
+
+.app-root.mobile-shell .community-general-settings-actions {
+  width: 100%;
+}
+
+.app-root.mobile-shell .community-general-settings-actions > button {
+  flex: 1 1 0;
 }
 
 .app-root.mobile-shell .create-community-avatar {

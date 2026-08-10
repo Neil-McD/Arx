@@ -31,7 +31,7 @@ type UseWebCommunityFunnelAboutControllerParams = {
   bannerFocusY: number;
   bannerZoom: number;
   pricingDirtyRef: MutableRefObject<boolean>;
-  settingsDirtyRef: MutableRefObject<boolean>;
+  setSettingsDirty: (value: boolean) => void;
   ensureSession: () => Promise<AuthSession | null>;
   setAbout: Dispatch<SetStateAction<string>>;
   setError: Dispatch<SetStateAction<string | null>>;
@@ -108,13 +108,13 @@ export function useWebCommunityFunnelAboutController(
   const reset = useCallback(() => {
     params.setAbout(params.activeCommunity?.about ?? "");
     params.setError(null);
-    params.settingsDirtyRef.current = hasOtherSettingsDirty();
+    params.setSettingsDirty(hasOtherSettingsDirty());
   }, [
     hasOtherSettingsDirty,
     params.activeCommunity?.about,
     params.setAbout,
     params.setError,
-    params.settingsDirtyRef,
+    params.setSettingsDirty,
   ]);
 
   const save = useCallback(async (): Promise<boolean> => {
@@ -146,7 +146,7 @@ export function useWebCommunityFunnelAboutController(
             : candidate,
         ),
       );
-      params.settingsDirtyRef.current = hasOtherSettingsDirty();
+      params.setSettingsDirty(hasOtherSettingsDirty());
       return true;
     } catch (error) {
       params.setError(
@@ -168,7 +168,7 @@ export function useWebCommunityFunnelAboutController(
     params.setCommunities,
     params.setError,
     params.setIsSaving,
-    params.settingsDirtyRef,
+    params.setSettingsDirty,
   ]);
 
   return {

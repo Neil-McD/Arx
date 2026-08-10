@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { AuthSession } from "../auth";
 import { isValidCommunitySlug, slugifyCommunityName } from "../../../../shared/communitySlug";
 import { toCanonicalCommunityVisibility } from "../../../../shared/communityVisibility";
@@ -59,7 +59,9 @@ export function useWebCommunitySettingsController(params: {
       communitySettingsLoadedCommunityIdRef:
         settingsUi.communitySettingsLoadedCommunityIdRef,
       communitySettingsDirtyRef: settingsUi.communitySettingsDirtyRef,
-      communityPricingDirtyRef: settingsUi.communityPricingDirtyRef,
+      clearCommunitySettingsDirty: settingsUi.clearCommunitySettingsDirty,
+      rememberSavedCommunityIdentity:
+        settingsUi.rememberSavedCommunityIdentity,
       setCommunitySettingsError: settingsUi.setCommunitySettingsError,
       setCommunityMemberSettingsError:
         adminUi.setCommunityMemberSettingsError,
@@ -115,7 +117,24 @@ export function useWebCommunitySettingsController(params: {
       settingsUi.setCommunitySettingsPriceUsdMonthly,
     setCommunitySettingsPriceUsdAnnual:
       settingsUi.setCommunitySettingsPriceUsdAnnual,
+    rememberSavedCommunityPricing: settingsUi.rememberSavedCommunityPricing,
   });
+
+  const handleCancelCommunitySettings = useCallback(() => {
+    settingsUi.handleCancelCommunitySettings();
+    const communityId = params.activeCommunityId;
+    const session = params.session;
+    if (!communityId || !session) return;
+    void loadCommunityPricing({
+      communityId,
+      session,
+    });
+  }, [
+    loadCommunityPricing,
+    params.activeCommunityId,
+    params.session,
+    settingsUi,
+  ]);
 
   const governance = useCommunitySettingsGovernanceController<AuthSession>({
     activeCommunityName: params.activeCommunity?.name ?? null,
@@ -160,7 +179,9 @@ export function useWebCommunitySettingsController(params: {
     isValidCommunitySlug,
     setCommunitySettingsError: settingsUi.setCommunitySettingsError,
     setIsSavingCommunitySettings: settingsUi.setIsSavingCommunitySettings,
-    onSaveCommunitySettingsSuccess: (result) => {
+    getCommunitySettingsDraftRevision: () =>
+      settingsUi.communitySettingsDraftRevisionRef.current,
+    onSaveCommunitySettingsSuccess: (result, context) => {
       const visualIdentity = coerceCommunityVisualIdentity(
         result.visual_identity,
         { id: result.community_id, ...result },
@@ -201,8 +222,33 @@ export function useWebCommunitySettingsController(params: {
       if (params.activeCommunityId === result.community_id) {
         params.onCommunityIdentityChanged(result.community_id, result.slug);
       }
-      settingsUi.communitySettingsDirtyRef.current = false;
-      settingsUi.communityPricingDirtyRef.current = false;
+      settingsUi.rememberSavedCommunitySettings({
+        communityId: result.community_id,
+        identity: {
+          name: result.name,
+          slug: result.slug,
+          oneLiner: result.one_liner ?? "",
+          about: result.about ?? "",
+          visibility: toCanonicalCommunityVisibility(result.visibility, "unlisted"),
+          avatarUrl: result.avatar_url,
+          avatarFocusX: result.avatar_focus_x ?? 0.5,
+          avatarFocusY: result.avatar_focus_y ?? 0.5,
+          avatarZoom: result.avatar_zoom ?? 1,
+          bannerUrl: result.banner_url,
+          bannerFocusX: result.banner_focus_x ?? 0.5,
+          bannerFocusY: result.banner_focus_y ?? 0.5,
+          bannerZoom: result.banner_zoom ?? 1,
+        },
+        pricing: context.pricing,
+      });
+      if (
+        settingsUi.communitySettingsLoadedCommunityIdRef.current ===
+          result.community_id &&
+        settingsUi.communitySettingsDraftRevisionRef.current ===
+          context.savedDraftRevision
+      ) {
+        settingsUi.clearCommunitySettingsDirty();
+      }
     },
   });
 
@@ -237,6 +283,7 @@ export function useWebCommunitySettingsController(params: {
     handleToggleCommunityMute: governance.handleToggleCommunityMute,
     handleLeaveCommunity: governance.handleLeaveCommunity,
     handleSaveCommunitySettings: governance.handleSaveCommunitySettings,
+    handleCancelCommunitySettings,
     handleArchiveCommunity,
     isArchivingCommunity,
     communityArchiveError,

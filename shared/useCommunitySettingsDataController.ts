@@ -37,6 +37,12 @@ type UseCommunitySettingsDataControllerArgs<SessionT extends SessionLike> = {
   setCommunitySettingsPricingMode: Dispatch<SetStateAction<CommunityPricingMode>>;
   setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
   setCommunitySettingsPriceUsdAnnual: Dispatch<SetStateAction<string>>;
+  rememberSavedCommunityPricing?: (pricing: {
+    communityId: string;
+    mode: CommunityPricingMode;
+    monthly: string;
+    annual: string;
+  }) => void;
 };
 
 function formatPlanAmount(row: CommunityPricingRow | null): string {
@@ -87,9 +93,18 @@ export function useCommunitySettingsDataController<SessionT extends SessionLike>
 
         const monthly = rows.find((row) => row.billing_period === "monthly") ?? null;
         const annual = rows.find((row) => row.billing_period === "annual") ?? null;
-        current.setCommunitySettingsPriceUsdMonthly(formatPlanAmount(monthly));
-        current.setCommunitySettingsPriceUsdAnnual(formatPlanAmount(annual));
-        current.setCommunitySettingsPricingMode(monthly ? "monthly" : annual ? "annual" : "free");
+        const monthlyAmount = formatPlanAmount(monthly);
+        const annualAmount = formatPlanAmount(annual);
+        const mode = monthly ? "monthly" : annual ? "annual" : "free";
+        current.rememberSavedCommunityPricing?.({
+          communityId: params.communityId,
+          mode,
+          monthly: monthlyAmount,
+          annual: annualAmount,
+        });
+        current.setCommunitySettingsPriceUsdMonthly(monthlyAmount);
+        current.setCommunitySettingsPriceUsdAnnual(annualAmount);
+        current.setCommunitySettingsPricingMode(mode);
       } catch {
         // ignore
       }
