@@ -3086,6 +3086,8 @@ export default function App() {
       memberAgentDockRef={memberAgentComposerApiRef}
       memberAgentDockProps={{
         isVisible: isMemberAgentDockVisible,
+        isSuppressed:
+          activePage === "community" && communityTab === "funnel",
         canManageResources: canManageResourcesActiveCommunity,
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",

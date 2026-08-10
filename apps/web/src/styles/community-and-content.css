@@ -2404,6 +2404,22 @@
 .funnel-builder-preview.is-empty {
   padding: 0;
 }
+.funnel-builder-preview-empty {
+  display: grid;
+  min-height: 100%;
+  place-content: center;
+  gap: 5px;
+  padding: 24px;
+  color: var(--text-muted);
+  text-align: center;
+}
+.funnel-builder-preview-empty strong {
+  color: var(--text-primary);
+  font-size: 14px;
+}
+.funnel-builder-preview-empty span {
+  font-size: 12px;
+}
 .funnel-builder-preview .funnel-v1-preview {
   width: min(780px, 100%);
   min-height: 100%;
