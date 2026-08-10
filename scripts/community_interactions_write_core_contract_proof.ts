@@ -4,8 +4,6 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
-const interactionEmbedRefresh = readFileSync(join(root, "convex/communityInteractionEmbedRefresh.ts"), "utf8");
-const interactionPreviewContract = readFileSync(join(root, "shared/interactionEmbedPreviewContract.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const sourceUrlPolicy = readFileSync(join(root, "convex/communitySourceUrlPolicy.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
@@ -85,8 +83,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Async Link Embed Enrichment Slice[\s\S]*Convex never fetches the user-provided source URL directly[\s\S]*source URL fetcher remains authoritative for DNS resolution checks/,
-  "contract should document the async link embed fetch boundary",
+  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*YouTube is the only URL-derived rich media exception[\s\S]*community chat does not invoke an interaction-preview mode/,
+  "contract should document the deterministic simple-link boundary",
 );
 
 assertNoExportedConst(interactions, "createCommunityInteractionRoot");
@@ -126,11 +124,6 @@ assert.match(
   interactions,
   /MAX_INTERACTION_BLOCKS_PER_WRITE/,
   "write core should bound canonical content block hydration",
-);
-assert.match(
-  interactions,
-  /nextRefreshAt: embed\.nextRefreshAt \?\? null[\s\S]*leaseUntil: v\.optional\(v\.union\(v\.number\(\), v\.null\(\)\)\)[\s\S]*args\.leaseUntil \?\? null[\s\S]*embed\.nextRefreshAt \?\? null[\s\S]*leaseUntil: embed\.nextRefreshAt/,
-  "enrichment writes should use the leased next-refresh value as a generation token so delayed workers cannot overwrite newer results",
 );
 assert.match(
   interactions,
@@ -263,10 +256,10 @@ assert.doesNotMatch(
   /createCommunityInteractionRoot|createCommunityInteractionReply/,
   "composer bridge should not call public root or reply mutations",
 );
-assert.match(
+assert.doesNotMatch(
   createComposerMessage,
-  /scheduleEmbedEnrichment\(ctx, inserted\.embedIds\)[\s\S]*scheduleEmbedEnrichment\(ctx, insertedReply\.embedIds\)/,
-  "composer bridge should hand pending link embeds to async enrichment after canonical writes",
+  /scheduleEmbedEnrichment|enrichInteractionEmbed|communityInteractionEmbedRefresh/,
+  "composer bridge should not schedule or enrich generic link previews",
 );
 assert.doesNotMatch(
   createComposerMessage,
@@ -319,21 +312,6 @@ assert.match(
   "delete should validate target type/community and require owner or moderator authority",
 );
 
-const scheduleEmbedEnrichment = interactions.slice(
-  interactions.indexOf("async function scheduleEmbedEnrichment"),
-  interactions.indexOf("export const getInteractionEmbedForEnrichment"),
-);
-assert.match(
-  scheduleEmbedEnrichment,
-  /ctx\.scheduler\.runAfter\(0, internal\.communityInteractions\.enrichInteractionEmbed/,
-  "embed enrichment handoff should be an internal scheduled action",
-);
-assert.doesNotMatch(
-  scheduleEmbedEnrichment,
-  /\bfetch\s*\(|ctx\.runAction|ctx\.storage\.getUrl/,
-  "embed enrichment scheduler should not do the enrichment work inline",
-);
-
 assert.match(
   sourceUrlPolicy,
   /COMMUNITY_SOURCE_URL_DENIED_HOSTNAME_SUFFIXES[\s\S]*"\.localhost"[\s\S]*"\.internal"[\s\S]*"\.arpa"[\s\S]*"\.invalid"/,
@@ -366,82 +344,25 @@ assert.match(
   "link block normalization should share extraction with optimistic messages and require the safe source URL policy",
 );
 
-const fetchEmbedPreview = interactions.slice(
-  interactions.indexOf("async function fetchEmbedPreview"),
-  interactions.indexOf("export const enrichInteractionEmbed"),
-);
-assert.match(
-  fetchEmbedPreview,
-  /const requestedUrl = requireSafeCommunitySourceUrl\(sourceUrl, MAX_INTERACTION_URL_CHARS\)/,
-  "embed enrichment should revalidate the source URL before broker handoff",
-);
-assert.match(
-  fetchEmbedPreview,
-  /fetchInteractionEmbedWithTimeout\(resolveInteractionEmbedSourceFetcherEndpoint\(\),[\s\S]*headers: interactionEmbedSourceFetcherHeaders\(\)/,
-  "embed enrichment should only call the configured first-party fetcher endpoint",
+assert.doesNotMatch(
+  interactions,
+  /scheduleEmbedEnrichment|enrichInteractionEmbed|applyInteractionEmbedEnrichment|interaction_embed_v2/,
+  "interaction writes should retain no generic link-preview producer or enrichment machinery",
 );
 assert.doesNotMatch(
-  fetchEmbedPreview,
-  /\bfetch\s*\(\s*(sourceUrl|requestedUrl)|process\.env/,
-  "embed enrichment must not directly fetch user URLs or read raw process env",
-);
-assert.match(
-  fetchEmbedPreview,
-  /max_bytes: INTERACTION_EMBED_SOURCE_FETCHER_MAX_BYTES[\s\S]*max_chars: INTERACTION_EMBED_SOURCE_FETCHER_MAX_CHARS[\s\S]*timeout_ms: INTERACTION_EMBED_SOURCE_FETCHER_TIMEOUT_MS[\s\S]*max_redirects: INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS[\s\S]*preview_mode: "interaction_embed_v2"/,
-  "embed enrichment should send bounded fetcher limits",
-);
-assert.match(
-  interactions,
-  /const INTERACTION_EMBED_SOURCE_FETCHER_MAX_REDIRECTS = 3/,
-  "embed enrichment redirect cap should not exceed the first-party broker hard cap",
-);
-assert.match(
-  fetchEmbedPreview,
-  /readEmbedFetcherJsonBounded\(response\)[\s\S]*sanitizeEmbedVideoUrl\(payload\.preview_video_url, requestedUrl\)[\s\S]*sanitizeEmbedImageUrl\(payload\.preview_image \?\? payload\.og_image\)/,
-  "embed enrichment should bound fetcher JSON and sanitize returned image and player URLs",
-);
-
-const enrichInteractionEmbed = exportedConstBlock(interactions, "enrichInteractionEmbed");
-assert.match(
-  enrichInteractionEmbed,
-  /internalAction\(\{[\s\S]*fetchEmbedPreview/,
-  "external URL fetching should be isolated to the internal embed enrichment action",
-);
-assert.match(
-  enrichInteractionEmbed,
-  /const sourceUrl = requireSafeCommunitySourceUrl\(embed\.sourceUrl, MAX_INTERACTION_URL_CHARS\)[\s\S]*fetchEmbedPreview\(sourceUrl\)[\s\S]*previewKind: preview\.previewKind[\s\S]*const errorCode = boundedEmbedError[\s\S]*error: errorCode/,
-  "internal embed enrichment action should fail closed on unsafe URLs and bounded errors",
-);
-assert.match(
-  interactions,
-  /export const applyInteractionEmbedEnrichment = internalMutation\(\{[\s\S]*embed\.status === "redacted"[\s\S]*isRefresh[\s\S]*status: "unavailable" as const[\s\S]*isPending \? \{ status: "failed" as const \} : \{\}[\s\S]*interactionEmbedRefreshRetryMs\(failureCount\)[\s\S]*nextRefreshAt: nowMs \+ INTERACTION_EMBED_REFRESH_SUCCESS_MS/,
-  "typed preview refreshes should preserve ready snapshots on transient failure, retire authoritative unavailable posts, and schedule deterministic retry or success refreshes",
-);
-assert.match(
-  interactionEmbedRefresh,
-  /const MAX_REFRESH_BATCH_SIZE = 100[\s\S]*scheduleDueInteractionEmbedPreviewRefresh = internalMutation\(\{[\s\S]*Math\.max\(1, Math\.min\(requestedLimit, MAX_REFRESH_BATCH_SIZE\)\)[\s\S]*withIndex\("by_status_nextRefreshAt"[\s\S]*status", "failed"[\s\S]*refresh: true[\s\S]*withIndex\("by_provider_status_nextRefreshAt"[\s\S]*dueByVersion[\s\S]*dueByTime[\s\S]*INTERACTION_EMBED_REFRESH_LEASE_MS/,
-  "the canonical preview refresh queue should repair failed generic links before running bounded provider freshness work",
-);
-assert.match(
-  interactionEmbedRefresh,
-  /REFRESHABLE_PROVIDERS = \[[\s\S]*"x"[\s\S]*"loom\.com"[\s\S]*"youtube\.com"[\s\S]*interactionXStatusIdentity[\s\S]*refreshableSourceMatchesProvider/,
-  "the canonical preview refresh queue should only schedule exact sources for supported providers",
-);
-assert.match(
-  interactionPreviewContract,
-  /INTERACTION_EMBED_RESOLVER_VERSION = 4[\s\S]*INTERACTION_EMBED_REFRESH_SUCCESS_MS[\s\S]*interactionXStatusIdentity[\s\S]*interactionEmbedRefreshRetryMs/,
-  "browser and cloud preview timing plus exact X URL identity should share one typed contract",
-);
-assert.match(
   crons,
-  /refresh due community interaction previews[\s\S]*\{ hours: 1 \}[\s\S]*scheduleDueInteractionEmbedPreviewRefresh[\s\S]*\{ limit: 50 \}/,
-  "the canonical bounded refresh queue should have one production repair cron",
+  /community interaction previews|scheduleDueInteractionEmbedPreviewRefresh/,
+  "the removed preview state machine should not retain a repair cron",
 );
-
 assert.match(
   interactions,
-  /embedKind: "link"[\s\S]*status: "pending"[\s\S]*normalizedSourceUrl/,
-  "link blocks should create pending async embed records",
+  /insertContentBlocksForTarget[\s\S]*block\.blockType === "workspace_ref"[\s\S]*embedKind: "workspace_ref"[\s\S]*block\.blockType === "link" \? \{ url: block\.url \} : \{\}/,
+  "content blocks should store link URL semantics while reserving embed rows for protected workspace references",
+);
+assert.match(
+  interactions,
+  /editCommunityInteractionTargetCore[\s\S]*blockType: "markdown_text"[\s\S]*extractLinkBlocksFromText\(args\.text\)[\s\S]*insertContentBlocksForTarget/,
+  "editing should rebuild typed link blocks from current text so removed URLs cannot leave stale projection state",
 );
 assert.match(
   interactions,

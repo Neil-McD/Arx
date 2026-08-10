@@ -3,125 +3,82 @@
 import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
-import { CommunityInteractionLinkPreview } from "../apps/web/src/components/CommunityInteractionLinkPreview";
-import type { CommunityInteractionEmbed } from "../shared/cloudCommunityInteractionsGateway";
-import { extractCommunityInteractionLinkSources } from "../shared/communityInteractionLinkExtraction";
-import { maybeSafeCommunitySourceUrl } from "../convex/communitySourceUrlPolicy";
+import { InteractionContent } from "../apps/web/src/components/communityInteractionFeed";
+import { CommunityInteractionYouTubeEmbed } from "../apps/web/src/components/CommunityInteractionYouTubeEmbed";
+import {
+  firstYouTubeEmbedInText,
+  parseEmbedUrl,
+  parseYouTubeEmbedUrl,
+  renderTextWithLinks,
+} from "../shared/linkEmbedUi";
 
-const requireFromWeb = createRequire(
-  new URL("../apps/web/package.json", import.meta.url),
-);
+const requireFromWeb = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { createElement } = requireFromWeb("react") as typeof import("react");
-const { renderToStaticMarkup } = requireFromWeb(
-  "react-dom/server",
-) as typeof import("react-dom/server");
+const { renderToStaticMarkup } = requireFromWeb("react-dom/server") as typeof import("react-dom/server");
 
-function embed(
-  overrides: Partial<CommunityInteractionEmbed>,
-): CommunityInteractionEmbed {
-  return {
-    id: "embed-1",
-    embed_kind: "link",
-    status: "ready",
-    visibility_scope: "community",
-    source_url: "https://example.com/article",
-    normalized_source_url: "https://example.com/article",
-    workspace_ref_kind: null,
-    workspace_ref_id: null,
-    preview_kind: "link",
-    author_name: null,
-    author_handle: null,
-    author_avatar_url: null,
-    provider: "example.com",
-    provider_post_id: null,
-    published_at: null,
-    post_context: null,
-    title: "Example article",
-    description: "A compact link preview",
-    image_url: null,
-    image_alt: null,
-    video_url: null,
-    resolver_version: 4,
-    fetched_at: "2026-08-04T23:00:00.000Z",
-    error: null,
-    ...overrides,
-  };
+function renderInteraction(text: string): string {
+  return renderToStaticMarkup(
+    createElement(InteractionContent, {
+      text,
+      renderTextWithLinks,
+    }),
+  );
 }
 
-describe("CommunityInteractionLinkPreview", () => {
-  it("shares the canonical safe URL extraction rule with optimistic messages", () => {
-    const normalize = (rawUrl: string) => maybeSafeCommunitySourceUrl(rawUrl, 2_048);
-    expect(extractCommunityInteractionLinkSources(
-      "Join https://Example.com/room). Again https://example.com/room and https://localhost/private",
-      normalize,
-    )).toEqual(["https://example.com/room"]);
+describe("community interaction link presentation", () => {
+  it.each([
+    "https://meet.google.com/abc-defg-hij",
+    "https://us05web.zoom.us/j/89423453054",
+    "https://share.descript.com/view/example",
+    "https://x.com/polynet/status/1234567890",
+    "https://www.loom.com/share/29f6556e6f6849609b0225fbbc6224ff",
+  ])("keeps an ordinary provider as one visible blue link: %s", (url) => {
+    const markup = renderInteraction(`Open ${url}`);
+    expect(markup).toContain('class="chat-link"');
+    expect(markup).toContain(url);
+    expect(markup).not.toContain("community-interaction-youtube");
+    expect(markup).not.toContain("community-interaction-embed");
   });
 
-  it.each(["pending", "failed"] as const)(
-    "renders the compact generic shell while enrichment is %s",
-    (status) => {
-      const url = "https://us05web.zoom.us/j/89423453054";
-      const markup = renderToStaticMarkup(
-        createElement(CommunityInteractionLinkPreview, {
-          embed: embed({
-            status,
-            source_url: url,
-            normalized_source_url: url,
-            provider: "us05web.zoom.us",
-            preview_kind: null,
-            title: null,
-            description: null,
-          }),
-        }),
-      );
-
-      expect(markup).toContain('data-preview-kind="link"');
-      expect(markup).toContain('data-preview-density="compact"');
-      expect(markup).toContain("us05web.zoom.us");
-      expect(markup).not.toContain("web-skeleton-pill");
-    },
-  );
-
-  it("renders a generic website compactly from first paint even when stale image metadata exists", () => {
-    const staleThumbnail = "https://storage.googleapis.com/expired-descript-thumbnail.jpg";
-    const markup = renderToStaticMarkup(
-      createElement(CommunityInteractionLinkPreview, {
-        embed: embed({
-          source_url: "https://share.descript.com/view/yzRCVpFoueC",
-          normalized_source_url: "https://share.descript.com/view/yzRCVpFoueC",
-          provider: "share.descript.com",
-          title: "Quick Recording - Descript",
-          image_url: staleThumbnail,
-          image_alt: "Recording thumbnail",
-        }),
-      }),
-    );
-
-    expect(markup).toContain('data-preview-kind="link"');
-    expect(markup).toContain('data-preview-density="compact"');
-    expect(markup).not.toContain("has-media");
-    expect(markup).not.toContain("community-interaction-embed-media");
-    expect(markup).not.toContain(staleThumbnail);
+  it("keeps the YouTube link visible and adds one deterministic player", () => {
+    const url = "https://youtu.be/M7lc1UVf-VE?t=42";
+    const markup = renderInteraction(`Watch this\n${url}`);
+    expect(markup).toContain('class="chat-link"');
+    expect(markup).toContain(url.replaceAll("&", "&amp;"));
+    expect(markup).toContain('data-community-youtube-embed="M7lc1UVf-VE"');
+    expect(markup).toContain("i.ytimg.com/vi/M7lc1UVf-VE/maxresdefault.jpg");
+    expect(markup).not.toContain("<iframe");
   });
 
-  it("retains a thumbnail shell for an approved explicit video preview", () => {
-    const thumbnail = "https://i.ytimg.com/vi/M7lc1UVf-VE/hqdefault.jpg";
-    const markup = renderToStaticMarkup(
-      createElement(CommunityInteractionLinkPreview, {
-        embed: embed({
-          source_url: "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-          normalized_source_url: "https://www.youtube.com/watch?v=M7lc1UVf-VE",
-          preview_kind: "video",
-          provider: "youtube.com",
-          title: "YouTube API Demo",
-          image_url: thumbnail,
-          video_url: "https://www.youtube.com/embed/M7lc1UVf-VE",
-        }),
-      }),
-    );
+  it("embeds only the first YouTube video while preserving every authored link", () => {
+    const first = "https://www.youtube.com/watch?v=M7lc1UVf-VE";
+    const second = "https://youtu.be/dQw4w9WgXcQ";
+    const markup = renderInteraction(`${first}\n${second}`);
+    expect(markup.match(/class="chat-link"/g)).toHaveLength(2);
+    expect(markup.match(/data-community-youtube-embed=/g)).toHaveLength(1);
+    expect(markup).toContain('data-community-youtube-embed="M7lc1UVf-VE"');
+  });
 
-    expect(markup).toContain('data-preview-kind="video"');
-    expect(markup).toContain("community-interaction-embed-media");
-    expect(markup).toContain(thumbnail);
+  it("ignores YouTube URLs inside inline and fenced code", () => {
+    expect(firstYouTubeEmbedInText("`https://youtu.be/M7lc1UVf-VE`")).toBeNull();
+    expect(firstYouTubeEmbedInText("```\nhttps://youtu.be/M7lc1UVf-VE\n```")).toBeNull();
+  });
+
+  it("rejects lookalike hosts and unsafe YouTube URLs", () => {
+    expect(parseYouTubeEmbedUrl("https://evilyoutube.com/watch?v=M7lc1UVf-VE")).toBeNull();
+    expect(parseYouTubeEmbedUrl("https://evil.youtube.com/watch?v=M7lc1UVf-VE")).toBeNull();
+    expect(parseYouTubeEmbedUrl("http://youtube.com/watch?v=M7lc1UVf-VE")).toBeNull();
+    expect(parseYouTubeEmbedUrl("https://user:pass@youtube.com/watch?v=M7lc1UVf-VE")).toBeNull();
+    expect(parseEmbedUrl("https://fakevimeo.com/123456789")).toBeNull();
+    expect(parseEmbedUrl("https://evilwistia.com/medias/abc123def")).toBeNull();
+  });
+
+  it("keeps start time in the click-activated YouTube source", () => {
+    const resolved = parseYouTubeEmbedUrl("https://youtu.be/M7lc1UVf-VE?t=1m2s");
+    expect(resolved?.src).toBe("https://www.youtube.com/embed/M7lc1UVf-VE?start=62");
+    const markup = renderToStaticMarkup(
+      createElement(CommunityInteractionYouTubeEmbed, { embed: resolved! }),
+    );
+    expect(markup).toContain('aria-label="Play YouTube video"');
   });
 });

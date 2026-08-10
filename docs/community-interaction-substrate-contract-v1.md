@@ -75,9 +75,11 @@ Workspace embeds require explicit permissioned references. A preview can reveal 
 
 ### Delete Synchronous Unfurls
 
-Link previews and workspace previews are async derived records.
+Community chat does not unfurl ordinary links. Workspace previews remain async
+derived records.
 
-The message send path must not block on external fetches, scraping, media processing, or workspace preview generation.
+The message send path must not block on external fetches, scraping, media
+processing, or workspace preview generation.
 
 ### Delete Human-Only Room Assumption
 
@@ -169,7 +171,7 @@ interaction substrate:
 The web projection reads a pinned root through the same canonical root bundle
 and renders it with the chronological feed's canonical content primitives. The
 pinned wrapper is a bounded teaser, not a second message renderer: it may clamp
-long body text when needed to keep real attachments or link previews visible,
+long body text when needed to keep real attachments or YouTube media visible,
 hide nested feed actions, and add one open-post action plus manager controls.
 The teaser ends with a narrow chat-canvas-colored separation band rather than a
 standard divider border.
@@ -240,9 +242,9 @@ Attachments are referenced by content blocks. The root/reply row may keep bounde
 
 ### `interactionEmbeds`
 
-Async link and workspace preview records.
-
-Embeds have fetch state, source URL or workspace reference, visibility, preview payload, and error state.
+Workspace-preview compatibility records. Historical link-preview rows may remain
+until the bounded data cleanup, but current interaction paths neither create nor
+consume them.
 
 ### `interactionMentions`
 
@@ -410,7 +412,7 @@ Rules:
   The community-agent conversation contract may use that pointer as explicit
   direct-address evidence.
 - composer text is normalized into typed canonical content blocks before storage
-- link blocks create pending `communityInteractionEmbeds`
+- link blocks store bounded canonical URLs without creating preview records
 - user mentions are capped, deduped, resolved to existing users, and must pass community chat access
 - community-agent mentions store the canonical `community_agent` key, but v0
   writes require the visible current-community-name token in the final text
@@ -506,61 +508,30 @@ Rules:
 - legacy timeline replies stay on `createThreadUserMessage`
 - idempotency keys use a composer namespace, not `legacy_chat_message:*`
 - the bridge does not call public root/reply mutations
-- the bridge may schedule async link-embed enrichment after creating pending embed records
+- the bridge does not schedule link enrichment or create link-preview records
 - the bridge does not generate upload URLs, fetch URLs, scrape pages, process media, write source traces, or call the compiler synchronously; it schedules the idempotent derived-evidence sync
 
-## Current Async Link Embed Enrichment Slice
+## Current Link Presentation Slice
 
-Link previews are async projections over canonical interaction content, not part of the message write contract.
+Authored interaction text is canonical. Link presentation does not fetch, persist,
+refresh, or replace third-party metadata.
 
 Rules:
 
-- composer writes may create pending link embed records from eligible pasted URLs
-- unsafe or unsupported URLs remain as plain message text and do not create fetchable preview embeds
-- eligible preview URLs must pass the shared community source URL policy before storage and again before enrichment
-- returned preview image URLs must pass the same shared community source URL policy or be omitted
-- preview URLs must be HTTPS, public-shaped, credential-free, custom-port-free, hashless, and not local/private/reserved/metadata/internal-shaped hosts
-- Convex never fetches the user-provided source URL directly
-- the internal enrichment action may only POST bounded requests to the configured first-party source URL fetcher endpoint
-- the configured fetcher endpoint must itself be HTTPS, credential-free, custom-port-free, hashless, and public-shaped
-- the source URL fetcher remains authoritative for DNS resolution checks, public-address pinning, and redirect target revalidation
-- enrichment requests must include byte, character, timeout, redirect, and accept-header bounds
-- fetcher responses must be read with a bounded response cap before JSON parsing
-- interaction embed requests may opt into one additional bounded oEmbed fetch only when the source provider, discovered endpoint, final response endpoint after redirects, and returned player host/path are all on the explicit Loom, YouTube, or X allowlist
-- ordinary resource/source ingestion does not opt into interaction oEmbed resolution and keeps its existing single-fetch behavior
-- oEmbed contributes normalized fields only (`video`, `social_post`, or `link` plus bounded author, title, body, provenance, media, and approved player URL); raw provider HTML and scripts are never persisted or rendered
-- content-specific oEmbed fields win over platform-level Open Graph marketing fields; unsupported providers and failed or malformed oEmbed responses fall back to the existing Open Graph link card
-- known Loom and X marketing descriptions or artwork are suppressed when content-specific resolution is unavailable, leaving a compact non-promotional fallback instead of recreating the original ad-like card
-- only validated `video` previews may retain a preview image URL; generic link and
-  social-post projections omit image metadata even when upstream Open Graph data
-  contains it
-- an X-styled `social_post` requires the broker, cloud, and browser to independently validate an exact HTTPS `x.com` or `twitter.com/{handle}/status/{numericId}` source and the same provider post id; any mismatch degrades to the generic link card
-- X social metadata is a bounded snapshot containing only author identity, post text, post id, publication time, and optional `reply` or `quote` context; attached media, engagement metrics, action chrome, provider HTML, and provider JavaScript are excluded
-- X post text and identity strip direction-control and C0 control characters at broker and cloud boundaries while preserving ordinary RTL text; the browser renders them with automatic direction and plaintext Unicode isolation
-- X profile images are optional and must match the exact `pbs.twimg.com/profile_images/{numericId}/{bounded-image-name}` contract; the browser loads them only through the bounded same-origin `/api/x-avatar` proxy, which pins public DNS, rejects redirects and non-image MIME types, caps bytes/time, and sends `nosniff`
-- fresh enrichment failures patch the embed to `failed`; they do not fail or mutate the canonical root/reply text
-- one indexed, bounded, leased refresh queue owns missed pending work, resolver upgrades, scheduled freshness checks, and failed retries; there is no separate version-only refresh path
-- enrichment applies only when the row still carries the lease value read by that worker, so a delayed older worker cannot overwrite a newer result
-- successful preview resolution records `fetchedAt`, resets failures, and schedules the next verification after seven days
-- transient refresh failures preserve an existing usable ready snapshot, leave its last successful `fetchedAt` unchanged, and retry with bounded exponential backoff; the browser labels snapshots older than the freshness interval
-- explicit X source `401`, `403`, `404`, or `410` responses mark the embed unavailable, clear impersonable derived identity/body fields, and leave the canonical authored URL as the fallback
-- redacted and unavailable embeds are never revived by the refresh queue
-- renderers treat link blocks as derived preview metadata when canonical `markdown_text` already contains the URL; they must not append the URL a second time
-- pending, ready, and failed generic link embeds render the same compact card shell; enrichment may improve metadata but never controls whether the card exists
-- optimistic composer roots and replies use the same bounded URL extractor and source-safety policy as canonical writes, so an eligible generic link starts as the compact pending card instead of briefly rendering as plain text
-- renderers show at most one rich preview per message; additional links remain visible in canonical message text
-- a visible generic link card replaces its matching exact standalone URL line at that authored position in pending, ready, or failed state; it must not move surrounding copy or remove the same URL when it appears inside prose
-- previews without an exact standalone URL match retain the trailing position after canonical attachments, preserving inline-link, workspace-reference, and attachment ordering
-- exact consecutive standalone duplicates collapse at presentation time without mutating stored message text
-- tracking-only URL differences are ignored for exact standalone replacement, while content-bearing parameters such as video start time remain significant
-- approved video players are click-to-activate, sandboxed, and retain a direct provider link; the browser revalidates stored source, media, and player URLs before rendering; preview images send no referrer; social previews render normalized identity, provenance, and text without loading attached media or third-party widget JavaScript
-- generic link previews always render as compact website rows from first paint and
-  never select their density from third-party image load state; their decorative
-  favicon may try only the validated source origin and one bounded parent-domain
-  fallback, sends no referrer, and degrades to a neutral first-party icon without
-  changing the visible hostname or link target
-- preview refresh batches clamp operator input to at most 100 rows, recover due failed HTTPS links through the status/next-refresh index, retain provider-specific freshness work through the provider/status/next-refresh index, lease rows before scheduling, and run only internal work
-- Dark owns the default semantic chat-link treatment while Light remaps embed surfaces through explicit theme tokens
+- ordinary links render as authored blue links through the shared semantic chat-link token
+- links remain visible, copyable, keyboard-focusable, and stable in optimistic and persisted messages
+- generic websites, meeting links, documents, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards
+- typed `link` content blocks retain bounded canonical URL semantics without creating `communityInteractionEmbeds` rows
+- YouTube is the only URL-derived rich media exception in community chat
+- the first valid HTTPS YouTube video URL adds one deterministic thumbnail/player beneath the still-visible authored link; additional YouTube URLs remain links
+- YouTube URL parsing accepts exact approved hosts and known video paths, rejects credentials and custom ports, and preserves validated start times
+- URLs inside inline or fenced code never create media
+- YouTube players are click-to-activate, sandboxed, lazy, and never depend on OpenGraph, oEmbed, a remote preview fetch, or persisted preview state
+- thumbnail failure degrades to a neutral player surface while the authored link remains authoritative
+- uploaded images, video, audio, and files remain canonical attachments and do not share the URL-derived media path
+- historical link embed rows are ignored by interaction and evidence read models pending a separate bounded data cleanup
+- workspace-reference embed compatibility remains unchanged until its protected migration substrate receives an explicit census and decision
+- the general source URL fetcher remains available for resource ingestion; community chat does not invoke an interaction-preview mode
 
 Bounded chat formatting rules:
 

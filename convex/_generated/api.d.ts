@@ -86,7 +86,6 @@ import type * as communityFunnel from "../communityFunnel.js";
 import type * as communityIntelligenceDirectory from "../communityIntelligenceDirectory.js";
 import type * as communityInteractionAttachmentBridge from "../communityInteractionAttachmentBridge.js";
 import type * as communityInteractionBackfill from "../communityInteractionBackfill.js";
-import type * as communityInteractionEmbedRefresh from "../communityInteractionEmbedRefresh.js";
 import type * as communityInteractionEvidence from "../communityInteractionEvidence.js";
 import type * as communityInteractionEvidenceCore from "../communityInteractionEvidenceCore.js";
 import type * as communityInteractionLegacyAttachments from "../communityInteractionLegacyAttachments.js";
@@ -334,7 +333,6 @@ declare const fullApi: ApiFromModules<{
   communityIntelligenceDirectory: typeof communityIntelligenceDirectory;
   communityInteractionAttachmentBridge: typeof communityInteractionAttachmentBridge;
   communityInteractionBackfill: typeof communityInteractionBackfill;
-  communityInteractionEmbedRefresh: typeof communityInteractionEmbedRefresh;
   communityInteractionEvidence: typeof communityInteractionEvidence;
   communityInteractionEvidenceCore: typeof communityInteractionEvidenceCore;
   communityInteractionLegacyAttachments: typeof communityInteractionLegacyAttachments;

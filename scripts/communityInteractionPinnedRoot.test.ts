@@ -12,6 +12,7 @@ function bundle(id: string, contentSummary: string): CommunityInteractionRootBun
       id,
       content_summary: contentSummary,
     },
+    content_blocks: [],
     attachments: [],
     embeds: [],
   } as CommunityInteractionRootBundle;
@@ -51,28 +52,22 @@ describe("pinned community root selection", () => {
     )).toBeNull();
   });
 
-  it("only clamps body text when the root has real media or a renderable preview", () => {
+  it("only clamps body text when the root has an attachment or YouTube media", () => {
     const textOnly = bundle("text", "Text only");
     const attachment = bundle("attachment", "Attachment");
     attachment.attachments = [{ id: "file" }] as CommunityInteractionRootBundle["attachments"];
-    const embed = bundle("embed", "Embed");
-    embed.embeds = [{
+    const youtube = bundle("youtube", "Watch https://youtu.be/M7lc1UVf-VE");
+    const genericLink = bundle("generic-link", "Read https://example.com/article");
+    genericLink.embeds = [{
       embed_kind: "link",
       status: "ready",
-      source_url: "https://example.com/article",
-      normalized_source_url: "https://example.com/article",
-    }] as CommunityInteractionRootBundle["embeds"];
-    const failedEmbed = bundle("failed-embed", "Failed embed");
-    failedEmbed.embeds = [{
-      embed_kind: "link",
-      status: "failed",
       source_url: "https://example.com/article",
       normalized_source_url: "https://example.com/article",
     }] as CommunityInteractionRootBundle["embeds"];
 
     expect(communityInteractionRootHasRichContent(textOnly)).toBe(false);
     expect(communityInteractionRootHasRichContent(attachment)).toBe(true);
-    expect(communityInteractionRootHasRichContent(embed)).toBe(true);
-    expect(communityInteractionRootHasRichContent(failedEmbed)).toBe(true);
+    expect(communityInteractionRootHasRichContent(youtube)).toBe(true);
+    expect(communityInteractionRootHasRichContent(genericLink)).toBe(false);
   });
 });

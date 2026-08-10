@@ -136,16 +136,6 @@
   --text-ink-muted: var(--text-muted);
   --text-ink-faint: var(--text-faint);
   --text-selected: var(--text-primary);
-  /* Social-post previews own a first-party shell around provider content.
-     Dark-family defaults preserve the existing X treatment; light themes can
-     remap the shell without forking renderer markup or provider behavior. */
-  --community-social-embed-surface: #000;
-  --community-social-embed-surface-hover: #080808;
-  --community-social-embed-stroke: #2f3336;
-  --community-social-embed-stroke-hover: #536471;
-  --community-social-embed-text: #e7e9ea;
-  --community-social-embed-muted: #71767b;
-  --community-social-embed-avatar-surface: #202327;
   --rail-width: 72px;
   --rail-control-size: 44px;
   --rail-control-anchor-inset: calc((var(--rail-width) - var(--rail-control-size)) / 2);
@@ -252,15 +242,6 @@
   --composer-surface: #FFFFFF;
   --composer-border: rgba(23, 23, 25, 0.1);
   --composer-focus-ring: rgba(47, 85, 255, 0.42);
-
-  /* === SOCIAL EMBEDS: Theme the Polynet-owned shell, not provider media === */
-  --community-social-embed-surface: var(--surface-card);
-  --community-social-embed-surface-hover: var(--surface-card-hover);
-  --community-social-embed-stroke: var(--stroke-default);
-  --community-social-embed-stroke-hover: var(--stroke-strong);
-  --community-social-embed-text: var(--text-ink-primary);
-  --community-social-embed-muted: var(--text-ink-secondary);
-  --community-social-embed-avatar-surface: var(--surface-card-alt);
 
   /* === STATUS: Light semantic surfaces === */
   --status-default: #FFFFFF;

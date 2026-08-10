@@ -2,14 +2,6 @@ import dns from "node:dns";
 import https from "node:https";
 import net from "node:net";
 import { timingSafeEqual } from "node:crypto";
-import {
-  extractInteractionOEmbedDiscoveryUrl,
-  interactionOEmbedResponseUrlIsAllowed,
-  interactionPreviewOpenGraphFallback,
-  interactionXSyndicationResponseUrlIsAllowed,
-  interactionXSyndicationUrl,
-  normalizeInteractionOEmbedPreview,
-} from "./source-url-preview.mjs";
 
 const BROKER_SECRET_ENV = "ARX_SOURCE_URL_FETCHER_SECRET";
 const USER_AGENT = "Polynet Community Source Ingestion/1.0";
@@ -498,53 +490,6 @@ function extractOpenGraph(html, finalUrl) {
   };
 }
 
-async function resolveInteractionEmbedPreview(fetched, openGraph, options) {
-  const fallback = interactionPreviewOpenGraphFallback(openGraph, fetched.finalUrl);
-  const oEmbedUrl = extractInteractionOEmbedDiscoveryUrl(fetched.rawText, fetched.finalUrl);
-  const syndicationUrl = interactionXSyndicationUrl(fetched.finalUrl);
-  if (!oEmbedUrl && !syndicationUrl) return fallback;
-
-  const [oEmbed, syndication] = await Promise.all([
-    oEmbedUrl
-      ? fetchSourceUrl(oEmbedUrl, {
-          maxBytes: 64_000,
-          maxChars: 8_000,
-          timeoutMs: Math.min(options.timeoutMs, 6_000),
-          maxRedirects: Math.min(options.maxRedirects, 1),
-          accept: "application/json",
-        })
-          .then((response) => {
-            if (!interactionOEmbedResponseUrlIsAllowed(fetched.finalUrl, response.finalUrl)) return null;
-            if (!normalizeContentType(response.contentType).includes("application/json")) return null;
-            return JSON.parse(response.rawText || "{}");
-          })
-          .catch(() => null)
-      : Promise.resolve(null),
-    syndicationUrl
-      ? fetchSourceUrl(syndicationUrl, {
-          maxBytes: 128_000,
-          maxChars: 50_000,
-          timeoutMs: Math.min(options.timeoutMs, 6_000),
-          maxRedirects: Math.min(options.maxRedirects, 1),
-          accept: "application/json",
-        })
-          .then((response) => {
-            if (!interactionXSyndicationResponseUrlIsAllowed(fetched.finalUrl, response.finalUrl)) return null;
-            if (!normalizeContentType(response.contentType).includes("application/json")) return null;
-            return JSON.parse(response.rawText || "{}");
-          })
-          .catch(() => null)
-      : Promise.resolve(null),
-  ]);
-
-  return normalizeInteractionOEmbedPreview({
-    sourceUrl: fetched.finalUrl,
-    openGraph,
-    oEmbed,
-    syndication,
-  });
-}
-
 function extractReadableTextFromHtml(html, maxChars) {
   const title = extractTitleFromHtml(html);
   const withoutScripts = String(html)
@@ -624,9 +569,6 @@ export default async function handler(req, res) {
     const openGraph = isHtml
       ? extractOpenGraph(fetched.rawText, fetched.finalUrl)
       : { og_title: null, og_description: null, og_image: null, og_image_alt: null };
-    const interactionPreview = payload.preview_mode === "interaction_embed_v2"
-      ? await resolveInteractionEmbedPreview(fetched, openGraph, options)
-      : null;
     sendJson(res, 200, {
       ok: true,
       final_url: fetched.finalUrl,
@@ -634,7 +576,6 @@ export default async function handler(req, res) {
       title: extracted.title,
       text: extracted.text,
       ...openGraph,
-      ...(interactionPreview ?? {}),
     });
   } catch (error) {
     const isKnown = error instanceof SourceFetchError;

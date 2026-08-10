@@ -494,6 +494,7 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
       embeds: embeds
         .filter(
           (embed) =>
+            embed.embedKind === "workspace_ref" &&
             embed.status !== "redacted" &&
             communityInteractionVisibilityIsEvidenceReadable(embed.visibilityScope),
         )

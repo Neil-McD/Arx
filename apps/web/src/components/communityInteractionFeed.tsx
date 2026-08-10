@@ -10,23 +10,19 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmojiPickerButton, QUICK_REACTIONS, ReactionSummary } from "./communityInteractionRowParts";
-import { CommunityInteractionLinkPreview } from "./CommunityInteractionLinkPreview";
+import { CommunityInteractionYouTubeEmbed } from "./CommunityInteractionYouTubeEmbed";
 import { groupInteractionFeed } from "./groupInteractionFeed";
 import type { WebCommunityInteractionProjectionProps } from "./WebCommunityInteractionProjection";
 import type {
   CommunityInteractionAttachment,
   CommunityInteractionContentBlock,
-  CommunityInteractionEmbed,
   CommunityInteractionMention,
 } from "../../../../shared/cloudCommunityInteractionsGateway";
 import {
   splitBodyIntoMentionSegments,
   type ResolvedMentionForRendering,
 } from "../../../../shared/communityMentionRendering";
-import {
-  interactionPresentationForEmbeds,
-  selectRichInteractionEmbeds,
-} from "../../../../shared/communityInteractionLinkPresentation";
+import { firstYouTubeEmbedInText } from "../../../../shared/linkEmbedUi";
 import { ChatBlockMarkdown } from "../../../../shared/chatBlockMarkdownUi";
 import { tokenizeChatContactText } from "../../../../shared/chatContactText";
 import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
@@ -286,31 +282,6 @@ export function MessageActions(props: {
         onPin={props.onPin}
         isPinned={props.isPinned}
       />
-    </div>
-  );
-}
-
-export function EmbedCards(props: { embeds: CommunityInteractionEmbed[] }) {
-  const visible = selectRichInteractionEmbeds(props.embeds);
-  if (visible.length === 0) return null;
-  return (
-    <div className="community-interaction-embeds">
-      {visible.map((embed) => {
-        if (embed.embed_kind === "link") {
-          return <CommunityInteractionLinkPreview key={embed.id} embed={embed} />;
-        }
-        if (embed.status === "pending") {
-          return (
-            <div
-              key={embed.id}
-              className="community-interaction-embed is-pending web-skeleton-pill"
-              aria-hidden="true"
-            />
-          );
-        }
-        if (embed.status !== "ready") return null;
-        return <CommunityInteractionLinkPreview key={embed.id} embed={embed} />;
-      })}
     </div>
   );
 }
@@ -752,27 +723,23 @@ export function InteractionBody(props: InteractionBodyProps) {
 
 export function InteractionContent(
   props: InteractionBodyProps & {
-    embeds: CommunityInteractionEmbed[];
     afterBody?: ReactNode;
   },
 ) {
-  const presentation = interactionPresentationForEmbeds(props.text, props.embeds);
+  const youtube = firstYouTubeEmbedInText(props.text);
   return (
     <>
-      {presentation.bodySegments.map((segment, index) =>
-        segment.type === "embed" ? (
-          <EmbedCards key={`embed:${segment.embed.id}`} embeds={[segment.embed]} />
-        ) : (
-          <InteractionBody
-            key={`text:${index}`}
-            text={segment.text}
-            renderTextWithLinks={props.renderTextWithLinks}
-            mentionContext={props.mentionContext}
-          />
-        ),
-      )}
+      <InteractionBody
+        text={props.text}
+        renderTextWithLinks={props.renderTextWithLinks}
+        mentionContext={props.mentionContext}
+      />
+      {youtube ? (
+        <div className="community-interaction-youtube-wrap">
+          <CommunityInteractionYouTubeEmbed embed={youtube.embed} />
+        </div>
+      ) : null}
       {props.afterBody}
-      <EmbedCards embeds={presentation.trailingEmbeds} />
     </>
   );
 }
@@ -1057,7 +1024,6 @@ export function CommunityInteractionFeedList(
                                 >
                                   <InteractionContent
                                     text={body}
-                                    embeds={bundle.embeds}
                                     renderTextWithLinks={props.renderTextWithLinks}
                                     mentionContext={{
                                       mentions: bundle.mentions ?? [],
