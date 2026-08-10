@@ -19,13 +19,14 @@ assert.doesNotMatch(editor, /streamingState\?\.content \? \(/);
 assert.doesNotMatch(liveTurn, /EventSource|WebSocket|setInterval/);
 assert.match(turnRunner, /maxDelayMs = 900/);
 
-// Sequenced assistant events are authoritative; the aggregate content path is
-// only rendered when it would not duplicate those events.
-assert.match(liveTurn, /event\.event_type === "assistant_text_delta"/);
+// Runtime events remain authoritative for activity, while assistant text uses
+// the controller's smoothed aggregate path exactly once.
+assert.match(liveTurn, /event\.event_type !== "assistant_text_delta"/);
 assert.match(
   liveTurn,
-  /Boolean\(normalizedText\) && !hasSequencedAssistantText\(props\.events\)/,
+  /const shouldRenderStreamedText = Boolean\(normalizedText\)/,
 );
+assert.match(liveTurn, /events=\{timelineEvents\}/);
 assert.match(liveTurn, /<RuntimeLiveTimeline/);
 assert.match(liveTurn, /props\.renderMarkdown\(normalizedText\)/);
 assert.match(liveTurn, /web-agent-live-turn-caret/);

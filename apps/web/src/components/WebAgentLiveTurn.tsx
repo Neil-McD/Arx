@@ -6,10 +6,10 @@ import type { ThreadStreamingRuntimeEvent } from "../../../../shared/webTurnRunn
 import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
 import "./WebAgentLiveTurn.css";
 
-function hasSequencedAssistantText(
+function withoutSequencedAssistantText(
   events: ThreadStreamingRuntimeEvent[],
-): boolean {
-  return events.some((event) => event.event_type === "assistant_text_delta");
+): ThreadStreamingRuntimeEvent[] {
+  return events.filter((event) => event.event_type !== "assistant_text_delta");
 }
 
 export function WebAgentLiveTurn(props: {
@@ -23,8 +23,8 @@ export function WebAgentLiveTurn(props: {
   onInitialResourcesApplied?: (communityId: string) => void;
 }): JSX.Element | null {
   const normalizedText = props.streamedText.trim();
-  const shouldRenderStreamedText =
-    Boolean(normalizedText) && !hasSequencedAssistantText(props.events);
+  const timelineEvents = withoutSequencedAssistantText(props.events);
+  const shouldRenderStreamedText = Boolean(normalizedText);
 
   if (!props.isActive && !shouldRenderStreamedText) return null;
 
@@ -34,9 +34,9 @@ export function WebAgentLiveTurn(props: {
       aria-live={props.variant === "funnel" ? "polite" : undefined}
       aria-atomic="false"
     >
-      {props.events.length > 0 ? (
+      {timelineEvents.length > 0 ? (
         <RuntimeLiveTimeline
-          events={props.events}
+          events={timelineEvents}
           session={props.session}
           renderReasoningMarkdown={props.renderMarkdown}
           showActiveIndicators={props.isActive}
