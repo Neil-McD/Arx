@@ -23,8 +23,8 @@ assert.match(
 );
 assert.match(
   panel,
-  /onAttach=\{\(\) => fileInputRef\.current\?\.click\(\)\}[\s\S]*onEmoji=\{insertMainComposerEmoji\}[\s\S]*onFormat=\{applyMainComposerFormatting\}/,
-  "main composer add, emoji, and formatting actions should preserve existing attachment input ownership",
+  /onAttach=\{\(\) => fileInputRef\.current\?\.click\(\)\}[\s\S]*onMention=\{mainMention\.begin\}[\s\S]*onEmoji=\{insertMainComposerEmoji\}/,
+  "main composer add, mention, and emoji actions should preserve existing attachment and mention ownership",
 );
 assert.equal(
   (panel.match(/<CommunityComposerControls/g) ?? []).length,
@@ -38,13 +38,23 @@ assert.match(
 );
 assert.match(
   controls,
-  /"bold"[\s\S]*"italic"[\s\S]*"strike"[\s\S]*"code"[\s\S]*"link"[\s\S]*"bullet"[\s\S]*"ordered"[\s\S]*"quote"[\s\S]*"outdent"[\s\S]*"indent"/,
-  "formatting rail should expose the bounded supported authoring grammar",
+  /<Plus size=\{17\} strokeWidth=\{1\.8\}[\s\S]*<AtSign size=\{17\} strokeWidth=\{1\.8\}[\s\S]*<Smile size=\{17\} strokeWidth=\{1\.8\}/,
+  "visible insertion actions should use one icon family, size, and stroke weight",
 );
 assert.match(
   controls,
-  /useEffect\(\(\) => \{[\s\S]*setFormattingOpen\(false\);[\s\S]*setEmojiOpen\(false\);[\s\S]*\}, \[props\.contextKey\]\)/,
+  /useEffect\(\(\) => \{[\s\S]*setEmojiOpen\(false\);[\s\S]*\}, \[props\.contextKey\]\)/,
   "transient composer tools should reset on context changes",
+);
+assert.doesNotMatch(
+  controls,
+  /Formatting options|community-composer-format|FORMATTING_ACTIONS|onFormat/,
+  "the compact composer should not expose visible formatting chrome",
+);
+assert.match(
+  css,
+  /\.community-composer-tools \{[^}]*gap: 0;/,
+  "visible insertion actions should share one tight hit-area row",
 );
 assert.match(editing, /const MAX_LIST_INDENT = 4;/, "list authoring should cap indentation at two two-space levels");
 assert.match(

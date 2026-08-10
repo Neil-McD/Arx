@@ -43,18 +43,13 @@ import {
   type WebCommunityInteractionProjectionProps,
 } from "./WebCommunityInteractionProjection";
 import { WebCommunityProfilePanel } from "./WebCommunityProfilePanel";
-import {
-  CommunityComposerControls,
-  type CommunityComposerFormattingAction,
-} from "./CommunityComposerControls";
+import { CommunityComposerControls } from "./CommunityComposerControls";
 import { resolveWebCommunityChatPresentationMode } from "../controllers/resolveWebCommunityChatPresentationMode";
 import {
   continueCommunityComposerList,
   indentCommunityComposerList,
-  insertCommunityComposerLink,
   insertCommunityComposerText,
   toggleCommunityComposerInlineFormat,
-  toggleCommunityComposerLineFormat,
   type CommunityComposerEdit,
   type CommunityComposerSelection,
 } from "../controllers/communityComposerTextEditing";
@@ -144,20 +139,6 @@ function applyCommunityComposerEdit(
     syncMentionComposerHighlightScroll(textarea);
   });
   return true;
-}
-
-function buildCommunityComposerFormattingEdit(
-  selection: CommunityComposerSelection,
-  action: CommunityComposerFormattingAction,
-): CommunityComposerEdit {
-  if (action === "bold" || action === "italic" || action === "strike" || action === "code") {
-    return toggleCommunityComposerInlineFormat(selection, action);
-  }
-  if (action === "link") return insertCommunityComposerLink(selection);
-  if (action === "bullet" || action === "ordered" || action === "quote") {
-    return toggleCommunityComposerLineFormat(selection, action);
-  }
-  return indentCommunityComposerList(selection, action);
 }
 
 function syncMentionComposerHighlightScroll(textarea: HTMLTextAreaElement): void {
@@ -1062,26 +1043,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       ),
   });
 
-  const applyMainComposerFormatting = useCallback((action: CommunityComposerFormattingAction) => {
-    const textarea = chatInputRef.current;
-    if (!textarea) return;
-    applyCommunityComposerEdit(
-      textarea,
-      buildCommunityComposerFormattingEdit(readCommunityComposerSelection(textarea), action),
-      handleMainCommunityComposerUserInput,
-    );
-  }, [chatInputRef, handleMainCommunityComposerUserInput]);
-
-  const applyDrawerComposerFormatting = useCallback((action: CommunityComposerFormattingAction) => {
-    const textarea = drawerReplyInputRef.current;
-    if (!textarea) return;
-    applyCommunityComposerEdit(
-      textarea,
-      buildCommunityComposerFormattingEdit(readCommunityComposerSelection(textarea), action),
-      handleDrawerReplyInputChange,
-    );
-  }, [handleDrawerReplyInputChange]);
-
   const insertMainComposerEmoji = useCallback((emoji: string) => {
     const textarea = chatInputRef.current;
     if (!textarea) return;
@@ -1449,11 +1410,9 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             !canUseCommunityAttachments ||
             isSendingCommunityMessage
           }
-          formattingDisabled={isCommunityOnboardingPreview}
           onAttach={() => fileInputRef.current?.click()}
           onMention={mainMention.begin}
           onEmoji={insertMainComposerEmoji}
-          onFormat={applyMainComposerFormatting}
           voiceControl={(
             <VoiceInputButton
               {...voiceButtonProps}
@@ -1594,7 +1553,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           onAttach={() => drawerReplyFileInputRef.current?.click()}
           onMention={drawerMention.begin}
           onEmoji={insertDrawerComposerEmoji}
-          onFormat={applyDrawerComposerFormatting}
           voiceControl={(
             <VoiceInputButton
               {...drawerVoiceButtonProps}

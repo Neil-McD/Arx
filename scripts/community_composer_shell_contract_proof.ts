@@ -61,8 +61,13 @@ assert.match(
 );
 assert.match(
   composerControls,
-  /community-composer-add[\s\S]*<Plus[\s\S]*ask-mention[\s\S]*community-composer-emoji[\s\S]*community-composer-format-toggle[\s\S]*community-composer-submit-tools[\s\S]*props\.voiceControl[\s\S]*props\.sendControl/,
-  "shared composer row should order add, mention, emoji, formatting, voice, and send actions",
+  /community-composer-add[\s\S]*<Plus[\s\S]*ask-mention[\s\S]*<AtSign[\s\S]*community-composer-emoji[\s\S]*<Smile[\s\S]*community-composer-submit-tools[\s\S]*props\.voiceControl[\s\S]*props\.sendControl/,
+  "shared composer row should order add, mention, emoji, voice, and send actions",
+);
+assert.doesNotMatch(
+  composerControls,
+  /Formatting options|community-composer-format-toggle/,
+  "shared composer row should omit formatting chrome",
 );
 assert.match(
   chatPanel,
