@@ -198,7 +198,7 @@ for (const [source, token, label] of [
   [runtimeComputerUseViewerComponent, "runtimeComputerUseViewerUi", "computer use viewer imports dedicated projection"],
   [runtimeLiveTimeline, "showThinkingFooter?: boolean", "timeline footer suppression prop"],
   [memberAgentDock, "WebAgentLiveTurn", "member-agent shared live-turn mount"],
-  [webAgentLiveTurn, "hasSequencedAssistantText", "shared streaming text duplicate guard"],
+  [webAgentLiveTurn, "withoutSequencedAssistantText", "shared streaming text duplicate guard"],
   [
     webAgentLiveTurn,
     "showThinkingFooter={!shouldRenderStreamedText}",
