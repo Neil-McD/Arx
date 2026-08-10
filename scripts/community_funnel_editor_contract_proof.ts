@@ -25,6 +25,12 @@ const schema = read("convex/schema.ts");
 assert.match(editor, /buildCommunityFunnelThreadKey/);
 assert.match(editor, /useWebTurnRunnerController/);
 assert.match(editor, /invocationSurface: "community_funnel_builder"/);
+assert.match(editor, /resolveAuthPresentationIdentity\(props\.session\)/);
+assert.match(editor, /props\.ensureSession\(\s*sessionRef\.current,/);
+assert.doesNotMatch(
+  editor,
+  /props\.previewCommunity\.name,\s*props\.session,/,
+);
 assert.match(editor, /uploadCloudThreadAttachmentFile/);
 assert.match(editor, /CommunityFunnelV1Preview/);
 assert.doesNotMatch(
