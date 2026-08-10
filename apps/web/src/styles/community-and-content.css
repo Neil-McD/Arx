@@ -4279,16 +4279,22 @@
   color: #c4b5fd;
 }
 
+.community-mention-chip.is-self,
 .community-mention-chip.is-role {
-  background: color-mix(in srgb, var(--accent-gold, var(--accent)) 18%, transparent);
-  color: var(--accent-gold, var(--accent));
+  background: color-mix(in srgb, var(--accent-attention) 16%, transparent);
+  color: color-mix(in srgb, var(--accent-attention) 82%, var(--text-primary));
 }
 
-/* A message that tags you becomes selected content, not activity chrome.
-   Selection is light in neutral dark and blue on paper, matching the active nav. */
-.community-interaction-message.is-self-mentioned {
-  background: color-mix(in srgb, var(--accent-selection) 6%, transparent);
-  border-left: 2px solid var(--accent-selection);
+.community-mention-trigger:hover .community-mention-chip.is-self {
+  background: color-mix(in srgb, var(--accent-attention) 24%, transparent);
+}
+
+/* A root or reply that targets the viewer directly or through @everybody is
+   community-local attention, not routine selection. */
+.community-interaction-message.is-self-mentioned,
+.community-interaction-reply.is-self-mentioned {
+  background: color-mix(in srgb, var(--accent-attention) 6%, transparent);
+  border-left: 2px solid var(--accent-attention);
   border-radius: 0 8px 8px 0;
 }
 

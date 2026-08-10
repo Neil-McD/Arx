@@ -608,12 +608,23 @@ export type InteractionMentionContext = {
   communityAgentDisplayName?: string;
 };
 
-export function interactionMentionsSelf(
+export function interactionMentionsViewer(
   mentions: CommunityInteractionMention[] | undefined,
   currentUserId: string | null | undefined,
+  actorUserId?: string | null,
 ): boolean {
-  if (!currentUserId || !Array.isArray(mentions)) return false;
-  return mentions.some((mention) => mention.mentioned_user_id === currentUserId);
+  if (
+    !currentUserId ||
+    actorUserId === currentUserId ||
+    !Array.isArray(mentions)
+  ) {
+    return false;
+  }
+  return mentions.some(
+    (mention) =>
+      mention.mentioned_user_id === currentUserId ||
+      String(mention.mentioned_role_key ?? "").trim() === "everybody",
+  );
 }
 
 function resolveMentionsForRendering(
@@ -1004,7 +1015,7 @@ export function CommunityInteractionFeedList(
                         return (
                           <div
                             key={root.id}
-                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${interactionMentionsSelf(bundle.mentions, props.currentUserId) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
+                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${interactionMentionsViewer(bundle.mentions, props.currentUserId, root.actor_user_id) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
                           >
                             {bundle.pending ? null : (
                               <MessageActions
