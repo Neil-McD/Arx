@@ -10,7 +10,6 @@ describe("community admin unsaved changes", () => {
     expect(confirmDiscardUnsavedCommunitySettingsWeb({
       isCommunitySettingsDirty: false,
       isCommunityAgentConfigDirty: false,
-      isCommunityFunnelDirty: true,
       activeCommunityId: "community-a",
       nextCommunityId: "community-a",
       confirmDiscard,
@@ -18,12 +17,11 @@ describe("community admin unsaved changes", () => {
     expect(confirmDiscard).not.toHaveBeenCalled();
   });
 
-  it("protects dirty Funnel configuration when changing communities", () => {
+  it("protects dirty community settings when changing communities", () => {
     const confirmDiscard = vi.fn(() => false);
     expect(confirmDiscardUnsavedCommunitySettingsWeb({
-      isCommunitySettingsDirty: false,
+      isCommunitySettingsDirty: true,
       isCommunityAgentConfigDirty: false,
-      isCommunityFunnelDirty: true,
       activeCommunityId: "community-a",
       nextCommunityId: "community-b",
       confirmDiscard,
@@ -35,7 +33,6 @@ describe("community admin unsaved changes", () => {
     expect(confirmDiscardUnsavedCommunitySettingsWeb({
       isCommunitySettingsDirty: true,
       isCommunityAgentConfigDirty: true,
-      isCommunityFunnelDirty: true,
       activeCommunityId: "community-a",
       nextCommunityId: "community-b",
       confirmDiscard: () => true,

@@ -29,7 +29,6 @@ export function useWebCommunityNavigationActions(params: {
   isOnboardingPreviewMode: boolean;
   communitySettingsDirtyRef: MutableRefObject<boolean>;
   communityAgentConfigDirtyRef: MutableRefObject<boolean>;
-  communityFunnelDirtyRef: MutableRefObject<boolean>;
   syncCommunitySelection: (value: {
     communitySlug: string | null;
     communityId: string;
@@ -66,15 +65,12 @@ export function useWebCommunityNavigationActions(params: {
           params.communitySettingsDirtyRef.current,
         isCommunityAgentConfigDirty:
           params.communityAgentConfigDirtyRef.current,
-        isCommunityFunnelDirty:
-          params.communityFunnelDirtyRef.current,
         activeCommunityId: params.selectedActiveCommunityId,
         nextCommunityId,
         confirmDiscard: (message) => window.confirm(message),
       }),
     [
       params.communityAgentConfigDirtyRef,
-      params.communityFunnelDirtyRef,
       params.communitySettingsDirtyRef,
       params.selectedActiveCommunityId,
     ],
@@ -85,7 +81,6 @@ export function useWebCommunityNavigationActions(params: {
       if (
         !params.communitySettingsDirtyRef.current
         && !params.communityAgentConfigDirtyRef.current
-        && !params.communityFunnelDirtyRef.current
       ) return;
       event.preventDefault();
       event.returnValue = "";
@@ -94,7 +89,6 @@ export function useWebCommunityNavigationActions(params: {
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
   }, [
     params.communityAgentConfigDirtyRef,
-    params.communityFunnelDirtyRef,
     params.communitySettingsDirtyRef,
   ]);
 
