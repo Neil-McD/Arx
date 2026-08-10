@@ -107,4 +107,20 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 - Fidelity surfaces: component structure, copy, images, typography, theme tokens, control semantics, save behavior, Stripe state, and persistence logic are unchanged.
 - Remaining severity: no P0, P1, P2, or P3 findings remain for this responsive composition slice.
 
-final result: passed
+## Community funnel V1 draft preview addendum
+
+- Source visual truth: `/Users/neilmcdevitt/.codex/generated_images/019fdd6d-2606-7572-a1b9-2ae9a91d7375/exec-928f25af-21b9-4b48-9874-4013bbf60d59.png` (`928 x 1819` pixels).
+- Intended implementation route: `https://polynet-staging.vercel.app/c/polynet/preview`.
+- Intended state: authenticated community-manager preview of the saved Funnel V1 draft.
+- Intended desktop viewport: approximately `1440 x 1200` CSS pixels at device scale factor `1`.
+- Implementation screenshot: not captured. The approved in-app browser did not hold a manager session and the protected route correctly redirected to `/c/polynet`.
+- Implementation pixels and density normalization: unavailable because no valid implementation capture was produced.
+- Full-view comparison: blocked. The public V0 funnel is intentionally a different state and is not a valid substitute for the manager-only V1 preview.
+- Focused comparison: not performed because there was no comparable implementation capture.
+- Required fidelity surfaces: typography, spacing, colors, image treatment, copy, responsive behavior, and interactions remain visually unverified for this addendum.
+- Primary interaction tested: the staging route loaded build `2b7b82bb1ad29c68cf8b5e7030e63a550d34c501` and enforced its manager-only boundary.
+- Console errors: not checked because the browser never reached the intended implementation state.
+- Finding: `[P0]` authenticate the approved in-app browser as a Polynet community manager, capture desktop and mobile preview states, compare each with the source in a single normalized comparison input, and iterate on any P0/P1/P2 difference.
+- Comparison history: the initial pass stopped at the authorization boundary; no visual fixes were made from invalid evidence.
+
+final result: blocked
