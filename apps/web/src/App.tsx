@@ -869,11 +869,13 @@ export default function App() {
     setIsSettingsAvatarDragOver,
     communitySettingsLoadedCommunityIdRef,
     communitySettingsDirtyRef,
-    communityPricingDirtyRef,
     isCommunitySettingsDirty,
     setCommunitySettingsDirty,
     markCommunitySettingsDirty,
-    markCommunityPricingDirty,
+    isLoadingCommunitySettings,
+    isCommunitySettingsReady,
+    communitySettingsConflict,
+    hasCommunitySettingsChangesExceptAbout,
   } = communitySettingsUi;
   const communityAgentConfigUi = communityAdministration.agentConfigUi;
   const {
@@ -1137,13 +1139,14 @@ export default function App() {
     },
   });
   const {
-    syncCommunitySettingsSelection,
+    resetCommunitySettingsSelection,
+    loadCommunitySettings,
     loadCommunityMemberSettings,
-    loadCommunityPricing,
     handleToggleCommunityMute,
     handleLeaveCommunity,
     handleSaveCommunitySettings,
     handleCancelCommunitySettings,
+    handleReloadLatestCommunitySettings,
     handleArchiveCommunity,
     isArchivingCommunity,
     communityArchiveError,
@@ -1242,20 +1245,16 @@ export default function App() {
     activePage === "community" &&
     communityTab === "chat";
 
-  useCommunitySettingsAccessLifecycle<AuthSession, CommunityRecord>({
+  useCommunitySettingsAccessLifecycle<AuthSession>({
     activePage,
     communityTab,
     ...sessionArg,
     activeCommunityId,
     activeCommunityAccess,
-    communities,
-    syncCommunitySettingsSelection,
+    resetCommunitySettingsSelection,
+    loadCommunitySettings,
     loadCommunityMemberSettings,
-    loadCommunityPricing,
     setCommunityMemberMuted,
-    setCommunitySettingsPricingMode,
-    setCommunitySettingsPriceUsdMonthly,
-    setCommunitySettingsPriceUsdAnnual,
   });
 
   const communityAttentionCommunityIds = useMemo(
@@ -2033,19 +2032,7 @@ export default function App() {
   } = useWebCommunityFunnelAboutController({
     activeCommunity,
     about: communitySettingsAbout,
-    name: communitySettingsName,
-    slug: communitySettingsSlug,
-    oneLiner: communitySettingsOneLiner,
-    visibility: communitySettingsVisibility,
-    avatarUrl: communitySettingsAvatarUrl,
-    avatarFocusX: communitySettingsAvatarFocusX,
-    avatarFocusY: communitySettingsAvatarFocusY,
-    avatarZoom: communitySettingsAvatarZoom,
-    bannerUrl: communitySettingsBannerUrl,
-    bannerFocusX: communitySettingsBannerFocusX,
-    bannerFocusY: communitySettingsBannerFocusY,
-    bannerZoom: communitySettingsBannerZoom,
-    pricingDirtyRef: communityPricingDirtyRef,
+    hasOtherSettingsDirty: hasCommunitySettingsChangesExceptAbout,
     setSettingsDirty: setCommunitySettingsDirty,
     ensureSession: ensureUsableAuthSession,
     setAbout: setCommunitySettingsAbout,
@@ -2136,6 +2123,9 @@ export default function App() {
         communitySettingsPriceUsdMonthly,
         communitySettingsPriceUsdAnnual,
         isCommunitySettingsDirty,
+        isLoadingCommunitySettings,
+        isCommunitySettingsReady,
+        communitySettingsConflict,
         communitySettingsError,
         isSavingCommunitySettings,
         communityMemberMuted,
@@ -2170,8 +2160,8 @@ export default function App() {
         setCommunitySettingsPricingMode,
         setCommunitySettingsPriceUsdMonthly,
         setCommunitySettingsPriceUsdAnnual,
-        markCommunityPricingDirty,
         handleCancelCommunitySettings,
+        handleReloadLatestCommunitySettings,
         handleSaveCommunitySettings,
         handleToggleCommunityMute,
         handleLeaveCommunity,

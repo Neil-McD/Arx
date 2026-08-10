@@ -137,7 +137,7 @@ assert.match(
 );
 assert.match(
   funnelAboutController,
-  /const reset = useCallback\(\(\) => \{[\s\S]*params\.setAbout\(params\.activeCommunity\?\.about \?\? ""\);[\s\S]*params\.settingsDirtyRef\.current = hasOtherSettingsDirty\(\);/,
+  /const reset = useCallback\(\(\) => \{[\s\S]*params\.setAbout\(params\.activeCommunity\?\.about \?\? ""\);[\s\S]*params\.setSettingsDirty\(params\.hasOtherSettingsDirty\(\)\);/,
   "the Funnel About controller must reset copy back to active community truth",
 );
 assert.match(
@@ -152,7 +152,7 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /useWebCommunityFunnelAboutController\(\{[\s\S]*about: communitySettingsAbout,[\s\S]*setAbout: setCommunitySettingsAbout,[\s\S]*funnelOneLiner: communitySettingsOneLiner,[\s\S]*funnelAbout: communitySettingsAbout,[\s\S]*isFunnelAboutDirty: isCommunityFunnelAboutDirty,[\s\S]*handleSaveCommunityFunnelAbout,[\s\S]*handleResetCommunityFunnelAbout,/,
+  /useWebCommunityFunnelAboutController\(\{[\s\S]*about: communitySettingsAbout,[\s\S]*hasOtherSettingsDirty: hasCommunitySettingsChangesExceptAbout,[\s\S]*setAbout: setCommunitySettingsAbout,[\s\S]*funnelOneLiner: communitySettingsOneLiner,[\s\S]*funnelAbout: communitySettingsAbout,[\s\S]*isFunnelAboutDirty: isCommunityFunnelAboutDirty,[\s\S]*handleSaveCommunityFunnelAbout,[\s\S]*handleResetCommunityFunnelAbout,/,
   "App must compose the Funnel About controller into the builder's canonical settings state",
 );
 assert.doesNotMatch(

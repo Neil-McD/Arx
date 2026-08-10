@@ -11,6 +11,18 @@ import {
   type CloudCommunitySettingsSaveResult,
 } from "./cloudCommunityAdminGateway";
 
+type CommunitySettingsBaseline = {
+  communityId: string;
+  settingsRevision: number;
+  name: string;
+  oneLiner: string;
+  visibility: string;
+  avatarUrl: string | null;
+  avatarStorageId: string | null;
+  bannerUrl: string | null;
+  bannerStorageId: string | null;
+};
+
 type SessionLike = {
   user: {
     id: string;
@@ -43,13 +55,6 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   communitySettingsBannerFocusX: number;
   communitySettingsBannerFocusY: number;
   communitySettingsBannerZoom: number;
-  activeCommunityName?: string | null;
-  activeCommunityOneLiner?: string | null;
-  activeCommunityVisibility?: string | null;
-  activeCommunityAvatarStorageId?: string | null;
-  activeCommunityBannerStorageId?: string | null;
-  activeCommunityAvatarUrl?: string | null;
-  activeCommunityBannerUrl?: string | null;
   communitySettingsPricingMode: string;
   communitySettingsPriceUsdMonthly: string;
   communitySettingsPriceUsdAnnual: string;
@@ -57,15 +62,12 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   setCommunitySettingsError: Dispatch<SetStateAction<string | null>>;
   setIsSavingCommunitySettings: Dispatch<SetStateAction<boolean>>;
   getCommunitySettingsDraftRevision: () => number;
+  getCommunitySettingsBaseline: () => CommunitySettingsBaseline | null;
+  onCommunitySettingsConflict: () => void;
   onSaveCommunitySettingsSuccess: (
     result: CloudCommunitySettingsSaveResult,
     context: {
       savedDraftRevision: number;
-      pricing: {
-        mode: "free" | "monthly" | "annual";
-        monthly: string;
-        annual: string;
-      };
     },
   ) => void;
 };
@@ -104,6 +106,9 @@ function formatCommunitySettingsErrorMessage(error: unknown): string {
   }
   if (message.includes("community_publish_ready_required")) {
     return "Published communities need a name, one-liner, avatar, and banner.";
+  }
+  if (message.includes("community_settings_conflict")) {
+    return "Settings changed elsewhere. Reload the latest settings to continue.";
   }
   return message;
 }
@@ -193,6 +198,18 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
       return;
     }
     const savedDraftRevision = current.getCommunitySettingsDraftRevision();
+    const baseline = current.getCommunitySettingsBaseline();
+    if (
+      !baseline ||
+      baseline.communityId !== communityId ||
+      !Number.isSafeInteger(baseline.settingsRevision)
+    ) {
+      current.setCommunitySettingsError(
+        "Load the latest community settings before saving.",
+      );
+      communitySettingsSaveInFlightRef.current = false;
+      return;
+    }
 
     current.setCommunitySettingsError(null);
     current.setIsSavingCommunitySettings(true);
@@ -222,15 +239,15 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
     }
     const visibility = toCanonicalCommunityVisibility(rawVisibility || "unlisted", "unlisted");
     const blockingPublishFields = getCommunityPublishReadinessBlockingFields({
-      currentVisibility: current.activeCommunityVisibility,
+      currentVisibility: baseline.visibility,
       nextVisibility: visibility,
       current: {
-        name: current.activeCommunityName,
-        oneLiner: current.activeCommunityOneLiner,
-        avatarUrl: current.activeCommunityAvatarUrl,
-        avatarStorageId: current.activeCommunityAvatarStorageId,
-        bannerUrl: current.activeCommunityBannerUrl,
-        bannerStorageId: current.activeCommunityBannerStorageId,
+        name: baseline.name,
+        oneLiner: baseline.oneLiner,
+        avatarUrl: baseline.avatarUrl,
+        avatarStorageId: baseline.avatarStorageId,
+        bannerUrl: baseline.bannerUrl,
+        bannerStorageId: baseline.bannerStorageId,
       },
       next: {
         name,
@@ -260,21 +277,22 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
           session,
           kind: "avatar",
           nextValue: current.communitySettingsAvatarUrl,
-          currentStorageId: current.activeCommunityAvatarStorageId ?? null,
-          currentResolvedUrl: current.activeCommunityAvatarUrl ?? null,
+          currentStorageId: baseline.avatarStorageId,
+          currentResolvedUrl: baseline.avatarUrl,
         }),
         prepareCloudCommunityBrandingField({
           session,
           kind: "banner",
           nextValue: current.communitySettingsBannerUrl,
-          currentStorageId: current.activeCommunityBannerStorageId ?? null,
-          currentResolvedUrl: current.activeCommunityBannerUrl ?? null,
+          currentStorageId: baseline.bannerStorageId,
+          currentResolvedUrl: baseline.bannerUrl,
         }),
       ]);
 
       const result = await saveCloudCommunitySettings({
         session,
         communityId,
+        expectedSettingsRevision: baseline.settingsRevision,
         name,
         slug,
         oneLiner: current.communitySettingsOneLiner.trim() || null,
@@ -301,14 +319,12 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         },
         {
           savedDraftRevision,
-          pricing: {
-            mode: monthlyEnabled ? "monthly" : annualEnabled ? "annual" : "free",
-            monthly: monthlyEnabled ? current.communitySettingsPriceUsdMonthly.trim() : "",
-            annual: annualEnabled ? current.communitySettingsPriceUsdAnnual.trim() : "",
-          },
         },
       );
     } catch (error) {
+      if (String(error ?? "").includes("community_settings_conflict")) {
+        current.onCommunitySettingsConflict();
+      }
       current.setCommunitySettingsError(formatCommunitySettingsErrorMessage(error));
     } finally {
       current.setIsSavingCommunitySettings(false);

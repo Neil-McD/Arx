@@ -1,40 +1,30 @@
 import { useEffect, type Dispatch, type SetStateAction } from "react";
 import type { AppPage, CommunityTab } from "./appShellNavigation";
-import type { CommunityAccess, CommunityPricingMode } from "./communityTypes";
+import type { CommunityAccess } from "./communityTypes";
 
-export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params: {
+export function useCommunitySettingsAccessLifecycle<SessionT>(params: {
   activePage: AppPage;
   communityTab: CommunityTab;
   session: SessionT | null;
   activeCommunityId: string | null;
   activeCommunityAccess: CommunityAccess | null;
-  communities: CommunityT[];
-  syncCommunitySettingsSelection: (args: {
-    activeCommunityId: string | null;
-    communities: CommunityT[];
-  }) => void;
-  loadCommunityMemberSettings: (args: {
-    communityId: string;
-    session: SessionT;
-  }) => Promise<void>;
-  loadCommunityPricing: (args: {
+  resetCommunitySettingsSelection: (communityId: string | null) => void;
+  loadCommunitySettings: (args: {
     communityId: string;
     session: SessionT;
     shouldIgnore: () => boolean;
   }) => Promise<void>;
+  loadCommunityMemberSettings: (args: {
+    communityId: string;
+    session: SessionT;
+  }) => Promise<void>;
   setCommunityMemberMuted: Dispatch<SetStateAction<boolean>>;
-  setCommunitySettingsPricingMode: Dispatch<SetStateAction<CommunityPricingMode>>;
-  setCommunitySettingsPriceUsdMonthly: Dispatch<SetStateAction<string>>;
-  setCommunitySettingsPriceUsdAnnual: Dispatch<SetStateAction<string>>;
 }) {
   const session = params.session;
 
   useEffect(() => {
-    params.syncCommunitySettingsSelection({
-      activeCommunityId: params.activeCommunityId,
-      communities: params.communities,
-    });
-  }, [params.activeCommunityId, params.communities, params.syncCommunitySettingsSelection]);
+    params.resetCommunitySettingsSelection(params.activeCommunityId);
+  }, [params.activeCommunityId, params.resetCommunitySettingsSelection]);
 
   useEffect(() => {
     if (!session || !params.activeCommunityId) {
@@ -55,19 +45,16 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
   ]);
 
   useEffect(() => {
-    if (params.activePage !== "community" || params.communityTab !== "settings") return;
-    if (!session || !params.activeCommunityId) {
-      params.setCommunitySettingsPricingMode("free");
-      params.setCommunitySettingsPriceUsdMonthly("");
-      params.setCommunitySettingsPriceUsdAnnual("");
-      return;
-    }
+    const needsSettingsSnapshot =
+      params.activePage === "community" &&
+      (params.communityTab === "settings" || params.communityTab === "funnel");
+    if (!needsSettingsSnapshot) return;
+    if (!session || !params.activeCommunityId) return;
     if (!params.activeCommunityAccess?.can_manage_members) return;
 
     let cancelled = false;
-    const communityId = params.activeCommunityId;
-    void params.loadCommunityPricing({
-      communityId,
+    void params.loadCommunitySettings({
+      communityId: params.activeCommunityId,
       session,
       shouldIgnore: () => cancelled,
     });
@@ -80,6 +67,6 @@ export function useCommunitySettingsAccessLifecycle<SessionT, CommunityT>(params
     session,
     params.activeCommunityId,
     params.activeCommunityAccess?.can_manage_members,
-    params.loadCommunityPricing,
+    params.loadCommunitySettings,
   ]);
 }

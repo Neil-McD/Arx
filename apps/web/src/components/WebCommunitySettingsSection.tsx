@@ -89,6 +89,9 @@ type WebCommunitySettingsSectionProps = {
     communitySettingsPriceUsdMonthly: string;
     communitySettingsPriceUsdAnnual: string;
     isCommunitySettingsDirty: boolean;
+    isLoadingCommunitySettings: boolean;
+    isCommunitySettingsReady: boolean;
+    communitySettingsConflict: boolean;
     communitySettingsError: string | null;
     isSavingCommunitySettings: boolean;
     communityMemberMuted: boolean;
@@ -129,8 +132,8 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsPricingMode: (value: CommunityPricingMode) => void;
     setCommunitySettingsPriceUsdMonthly: (value: string) => void;
     setCommunitySettingsPriceUsdAnnual: (value: string) => void;
-    setCommunityPricingDirty: () => void;
     handleCancelCommunitySettings: () => void;
+    handleReloadLatestCommunitySettings: () => Promise<void> | void;
     handleSaveCommunitySettings: () => Promise<void> | void;
     handleToggleCommunityMute: (value: boolean) => Promise<void> | void;
     handleLeaveCommunity: () => Promise<void> | void;
@@ -541,7 +544,6 @@ function CommunityMonetizationConfigSection({
             value={state.communitySettingsPricingMode}
             onSelectValue={(value) => {
               actions.setCommunitySettingsPricingMode(value);
-              actions.setCommunityPricingDirty();
               actions.markCommunitySettingsDirty();
             }}
             ariaLabel="Pricing options"
@@ -562,7 +564,6 @@ function CommunityMonetizationConfigSection({
             disabled={needsStripeConnect}
             onChange={(event) => {
               actions.setCommunitySettingsPriceUsdMonthly(event.target.value);
-              actions.setCommunityPricingDirty();
               actions.markCommunitySettingsDirty();
             }}
           />
@@ -580,7 +581,6 @@ function CommunityMonetizationConfigSection({
             disabled={needsStripeConnect}
             onChange={(event) => {
               actions.setCommunitySettingsPriceUsdAnnual(event.target.value);
-              actions.setCommunityPricingDirty();
               actions.markCommunitySettingsDirty();
             }}
           />
@@ -836,7 +836,27 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
               tabIndex={0}
               className="community-settings-pane-content"
             >
-              {selectedSettingsPane === "community" ? (
+              {selectedSettingsPane === "community" && state.isLoadingCommunitySettings ? (
+              <div className="chat-empty">Loading community settings...</div>
+              ) : null}
+              {selectedSettingsPane === "community" &&
+              !state.isLoadingCommunitySettings &&
+              !state.isCommunitySettingsReady ? (
+                <div className="chat-empty">
+                  <div>{state.communitySettingsError ?? "Community settings are unavailable."}</div>
+                  <button
+                    className="secondary"
+                    type="button"
+                    onClick={() => void actions.handleReloadLatestCommunitySettings()}
+                    style={{ marginTop: 12 }}
+                  >
+                    Try again
+                  </button>
+                </div>
+              ) : null}
+              {selectedSettingsPane === "community" &&
+              !state.isLoadingCommunitySettings &&
+              state.isCommunitySettingsReady ? (
               <div className="community-general-settings">
                 <div
                   className={`community-general-settings-grid${isOwnerSettingsLayer ? "" : " without-branding"}`}
@@ -864,7 +884,22 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                     />
                   </div>
                 </div>
-                {state.communitySettingsError && <div className="auth-error">{state.communitySettingsError}</div>}
+                {state.communitySettingsError ? (
+                  <div className="auth-error">
+                    {state.communitySettingsError}
+                    {state.communitySettingsConflict ? (
+                      <button
+                        className="secondary"
+                        type="button"
+                        onClick={() => void actions.handleReloadLatestCommunitySettings()}
+                        disabled={state.isLoadingCommunitySettings}
+                        style={{ marginLeft: 12 }}
+                      >
+                        Reload latest
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
                 <div className="create-community-actions community-general-settings-save">
                   <span className="community-general-settings-status" aria-live="polite">
                     {state.isSavingCommunitySettings
@@ -884,6 +919,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         disabled={
                           state.isSavingCommunitySettings ||
                           state.isProcessingCommunitySettingsBanner ||
+                          state.communitySettingsConflict ||
                           !state.isCommunitySettingsDirty
                         }
                       >
@@ -896,6 +932,7 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                         disabled={
                           state.isSavingCommunitySettings ||
                           state.isProcessingCommunitySettingsBanner ||
+                          state.communitySettingsConflict ||
                           !state.isCommunitySettingsDirty
                         }
                       >

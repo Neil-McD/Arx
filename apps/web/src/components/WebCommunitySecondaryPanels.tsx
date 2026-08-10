@@ -27,12 +27,9 @@ export type WebCommunitySecondaryPanelsProps = {
       | "closeCommunityBannerFocusModal"
       | "openCommunityAvatarFocusModal"
       | "closeCommunityAvatarFocusModal"
-      | "setCommunityPricingDirty"
       | "communityInitials"
       | "slugifyCommunityName"
-    > & {
-      markCommunityPricingDirty: () => void;
-    };
+    >;
     setIsCommunityAvatarFocusModalOpen: (value: boolean) => void;
     setIsCommunityBannerFocusModalOpen: (value: boolean) => void;
   };
@@ -78,9 +75,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
       closeCommunityAvatarFocusModal: () => props.settings.setIsCommunityAvatarFocusModalOpen(false),
       openCommunityBannerFocusModal: () => props.settings.setIsCommunityBannerFocusModalOpen(true),
       closeCommunityBannerFocusModal: () => props.settings.setIsCommunityBannerFocusModalOpen(false),
-      setCommunityPricingDirty: () => {
-        props.settings.actions.markCommunityPricingDirty();
-      },
       communityInitials,
       slugifyCommunityName,
     },

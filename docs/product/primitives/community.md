@@ -32,7 +32,7 @@ The public funnel is the front door. The real community surface is the member ar
 
 A community is identified by durable backend state. It has visibility, membership, roles, entitlements, resources, settings, and optional billing configuration.
 
-Manager-facing General settings load as one authorized backend snapshot. Saves are atomic across community identity, branding, visibility, and pricing, and use a settings revision to reject stale writers before any part of the snapshot changes.
+Manager-facing General settings load as one authorized backend snapshot. Saves are atomic across community identity, branding, visibility, and pricing, and use a settings revision to reject stale writers before any part of the snapshot changes. Cancel restores the complete locally saved snapshot without a network read; a stale-write conflict preserves the draft until the manager explicitly reloads current settings.
 
 Community access is not determined by the URL alone. The backend evaluates membership, entitlement, role, blocks, approval state, and billing-derived access where relevant.
 

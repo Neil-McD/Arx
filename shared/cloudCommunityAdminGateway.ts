@@ -1,6 +1,12 @@
 import { api } from "../convex/_generated/api";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
-import { coerceGatewayRows, firstGatewayRow, parseGatewayNumberLike } from "./cloudGateway";
+import {
+  coerceGatewayRows,
+  firstGatewayObjectRow,
+  firstGatewayRow,
+  normalizeGatewayNullableString,
+  parseGatewayNumberLike,
+} from "./cloudGateway";
 import type { CommunityAnalyticsSnapshot } from "./communityTypes";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 
@@ -73,16 +79,16 @@ export type CloudCommunitySettingsSaveResult = {
   one_liner: string | null;
   about: string | null;
   avatar_url: string | null;
-  avatar_storage_id?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
+  avatar_storage_id: string | null;
+  avatar_focus_x: number;
+  avatar_focus_y: number;
+  avatar_zoom: number;
   banner_url: string | null;
-  banner_storage_id?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-  visibility: string;
+  banner_storage_id: string | null;
+  banner_focus_x: number;
+  banner_focus_y: number;
+  banner_zoom: number;
+  visibility: "published" | "unlisted";
   updated_at: string;
   branding_revision?: number | null;
   settings_revision: number;
@@ -98,11 +104,110 @@ export type CloudCommunitySettingsSaveResult = {
 
 export type CloudCommunitySettingsSnapshot = CloudCommunitySettingsSaveResult;
 
-export type CloudCommunityOneLinerSaveResult = {
-  community_id: string;
-  one_liner: string | null;
-  updated_at: string;
-};
+export function parseCloudCommunitySettingsSnapshot(
+  payload: unknown,
+): CloudCommunitySettingsSnapshot | null {
+  const row = firstGatewayObjectRow(payload);
+  if (!row) return null;
+  const communityId = String(row.community_id ?? row.id ?? "").trim();
+  const name = String(row.name ?? "").trim();
+  const slug = String(row.slug ?? "").trim();
+  const visibilityRaw = String(row.visibility ?? "").trim().toLowerCase();
+  const updatedAt = String(row.updated_at ?? "").trim();
+  const settingsRevision = parseGatewayNumberLike(row.settings_revision);
+  const brandingRevision = parseGatewayNumberLike(row.branding_revision);
+  const pricingRow =
+    row.pricing && typeof row.pricing === "object" && !Array.isArray(row.pricing)
+      ? (row.pricing as Record<string, unknown>)
+      : null;
+  const pricingMode = String(pricingRow?.mode ?? "").trim().toLowerCase();
+  if (
+    !communityId ||
+    !name ||
+    !slug ||
+    !updatedAt ||
+    (visibilityRaw !== "published" && visibilityRaw !== "unlisted") ||
+    !Number.isSafeInteger(settingsRevision) ||
+    Number(settingsRevision) < 0 ||
+    (brandingRevision !== null &&
+      (!Number.isSafeInteger(brandingRevision) || brandingRevision < 0)) ||
+    !pricingRow ||
+    !["free", "monthly", "annual"].includes(pricingMode)
+  ) {
+    throw new Error("community_settings_snapshot_invalid");
+  }
+  const requiredNumber = (value: unknown, field: string): number => {
+    const parsed = parseGatewayNumberLike(value);
+    if (parsed === null) throw new Error(`community_settings_snapshot_invalid:${field}`);
+    return parsed;
+  };
+  const requiredRange = (
+    value: unknown,
+    field: string,
+    minimum: number,
+    maximum: number,
+  ): number => {
+    const parsed = requiredNumber(value, field);
+    if (parsed < minimum || parsed > maximum) {
+      throw new Error(`community_settings_snapshot_invalid:${field}`);
+    }
+    return parsed;
+  };
+  const nullableAmount = (value: unknown, field: string): number | null => {
+    if (value === null || value === undefined) return null;
+    const parsed = parseGatewayNumberLike(value);
+    if (parsed === null || parsed < 0) {
+      throw new Error(`community_settings_snapshot_invalid:${field}`);
+    }
+    return Math.floor(parsed);
+  };
+  const currency = String(pricingRow.currency ?? "").trim().toLowerCase();
+  const currencyDecimals = requiredNumber(
+    pricingRow.currency_decimals,
+    "currency_decimals",
+  );
+  if (currency !== "usd" || currencyDecimals !== 2) {
+    throw new Error("community_settings_snapshot_invalid:currency");
+  }
+  return {
+    community_id: communityId,
+    name,
+    slug,
+    one_liner: normalizeGatewayNullableString(row.one_liner),
+    about: normalizeGatewayNullableString(row.about),
+    avatar_url: normalizeGatewayNullableString(row.avatar_url),
+    avatar_storage_id: normalizeGatewayNullableString(row.avatar_storage_id),
+    avatar_focus_x: requiredRange(row.avatar_focus_x, "avatar_focus_x", 0, 1),
+    avatar_focus_y: requiredRange(row.avatar_focus_y, "avatar_focus_y", 0, 1),
+    avatar_zoom: requiredRange(row.avatar_zoom, "avatar_zoom", 1, 2.5),
+    banner_url: normalizeGatewayNullableString(row.banner_url),
+    banner_storage_id: normalizeGatewayNullableString(row.banner_storage_id),
+    banner_focus_x: requiredRange(row.banner_focus_x, "banner_focus_x", 0, 1),
+    banner_focus_y: requiredRange(row.banner_focus_y, "banner_focus_y", 0, 1),
+    banner_zoom: requiredRange(row.banner_zoom, "banner_zoom", 1, 2.5),
+    visibility: visibilityRaw,
+    updated_at: updatedAt,
+    branding_revision: brandingRevision,
+    settings_revision: Math.floor(Number(settingsRevision)),
+    pricing: {
+      mode: pricingMode as "free" | "monthly" | "annual",
+      monthly_amount_base_units: nullableAmount(
+        pricingRow.monthly_amount_base_units,
+        "monthly_amount_base_units",
+      ),
+      annual_amount_base_units: nullableAmount(
+        pricingRow.annual_amount_base_units,
+        "annual_amount_base_units",
+      ),
+      currency: "usd",
+      currency_decimals: 2,
+    },
+    visual_identity:
+      row.visual_identity && typeof row.visual_identity === "object"
+        ? (row.visual_identity as import("./communityVisualIdentity").CommunityVisualIdentity)
+        : null,
+  };
+}
 
 export type CloudCommunitySourceIngestionResult = {
   ok: boolean;
@@ -1442,20 +1547,6 @@ export async function denyCloudCommunityJoinRequest<SessionT>(
   });
 }
 
-export async function listCloudCommunityPricePointRows<SessionT, TPricingRow = unknown>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<TPricingRow[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityAdmin:listCommunityPricePoints" as any, {
-    authSubject,
-    communityId: params.communityId,
-    activeOnly: true,
-  });
-  return coerceGatewayRows<TPricingRow>(payload);
-}
-
 export async function listCloudCommunityResourceRows<SessionT, TResource = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -1884,7 +1975,7 @@ export async function saveCloudCommunitySettings<SessionT>(
     currency: "usd",
     currencyDecimals: 2,
   });
-  return firstGatewayRow<CloudCommunitySettingsSaveResult>(payload);
+  return parseCloudCommunitySettingsSnapshot(payload);
 }
 
 export async function fetchCloudCommunitySettings<SessionT>(
@@ -1897,22 +1988,7 @@ export async function fetchCloudCommunitySettings<SessionT>(
     authSubject,
     communityId: params.communityId,
   });
-  return firstGatewayRow<CloudCommunitySettingsSnapshot>(payload);
-}
-
-export async function saveCloudCommunityOneLiner<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    oneLiner: string | null;
-  },
-): Promise<CloudCommunityOneLinerSaveResult | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("communityLifecycle:saveCommunityOneLiner" as any, {
-    authSubject,
-    communityId: params.communityId,
-    oneLiner: params.oneLiner,
-  });
-  return firstGatewayRow<CloudCommunityOneLinerSaveResult>(payload);
+  return parseCloudCommunitySettingsSnapshot(payload);
 }
 
 export async function saveCloudCommunityMemberSettings<SessionT>(

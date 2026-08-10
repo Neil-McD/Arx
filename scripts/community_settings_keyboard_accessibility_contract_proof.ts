@@ -171,8 +171,8 @@ assert.match(
 );
 assert.match(
   communitySettingsUiController,
-  /handleCancelCommunitySettings[\s\S]*communitySettingsSavedSnapshotsRef\.current\.get\(communityId\)[\s\S]*setCommunitySettingsName\(saved\.name\)[\s\S]*setCommunitySettingsPricingMode\(saved\.pricing\?\.mode \?\? "free"\)[\s\S]*clearCommunitySettingsDirty\(\)/,
-  "Cancel must restore the complete saved form snapshot and clear both dirty authorities",
+  /handleCancelCommunitySettings[\s\S]*getSavedCommunitySettingsSnapshot\(\)[\s\S]*setDraftFromSnapshot\(saved\)[\s\S]*clearCommunitySettingsDirty\(\)/,
+  "Cancel must restore the complete saved aggregate snapshot locally",
 );
 assert.match(
   communitySettingsGovernanceController,
@@ -181,7 +181,7 @@ assert.match(
 );
 assert.match(
   communitySettingsUiController,
-  /communitySettingsDraftRevisionRef\.current \+= 1;[\s\S]*rememberSavedCommunitySettings/,
+  /communitySettingsDraftRevisionRef\.current \+= 1;[\s\S]*communitySettingsLoadSequenceRef/,
   "settings drafts must carry a revision so late save completions cannot erase newer edits",
 );
 assert.doesNotMatch(
