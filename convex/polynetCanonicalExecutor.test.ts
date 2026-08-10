@@ -629,6 +629,16 @@ test("funnel draft capability is visible and executable only on the manager funn
     communityName: "Canonical community",
     oneLiner: "Build together with a shared operating memory.",
   });
+  const creatorVslUrl = "https://www.youtube.com/watch?v=abcdefghijk";
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityFunnels", {
+      communityId: fixture.communityId,
+      draftVslUrl: creatorVslUrl,
+      draftRevision: 0,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+  });
   const callInput = {
     operation: "community.funnel.update_draft",
     version: 1,
@@ -681,13 +691,18 @@ test("funnel draft capability is visible and executable only on the manager funn
   });
   if (!updatedCapability.ok) throw new Error("updated funnel capability unavailable");
   expect(JSON.parse(String(updatedCapability.value.body))).toMatchObject({
-    current_state: { draft_revision: 1, draft_document_v1: document },
+    current_state: {
+      draft_revision: 1,
+      draft_vsl_url: creatorVslUrl,
+      draft_document_v1: document,
+    },
   });
   await t.run(async (ctx) => {
     const rows = await ctx.db.query("communityFunnels").collect();
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({
       communityId: fixture.communityId,
+      draftVslUrl: creatorVslUrl,
       draftRevision: 1,
       draftDocumentV1: document,
     });

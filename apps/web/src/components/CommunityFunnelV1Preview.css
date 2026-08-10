@@ -124,10 +124,7 @@
   box-shadow: 0 26px 85px -42px rgba(255, 59, 120, 0.72);
 }
 
-.funnel-v1-media iframe,
-.funnel-v1-media video,
-.funnel-v1-media-poster,
-.funnel-v1-media-poster img {
+.funnel-v1-media iframe {
   display: block;
   width: 100%;
   height: 100%;
@@ -135,53 +132,6 @@
 
 .funnel-v1-media iframe {
   border: 0;
-}
-.funnel-v1-media video,
-.funnel-v1-media-poster img {
-  object-fit: cover;
-}
-.funnel-v1-media-poster {
-  position: relative;
-  overflow: hidden;
-}
-.funnel-v1-media-poster::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: rgba(0, 0, 0, 0.14);
-}
-.funnel-v1-play {
-  position: absolute;
-  z-index: 1;
-  inset: 50% auto auto 50%;
-  display: grid;
-  width: 82px;
-  height: 82px;
-  place-items: center;
-  border-radius: 50%;
-  transform: translate(-50%, -50%);
-  background: rgba(7, 7, 9, 0.82);
-  backdrop-filter: blur(10px);
-}
-.funnel-v1-play svg {
-  width: 32px;
-  height: 32px;
-  margin-left: 4px;
-  fill: currentColor;
-}
-.funnel-v1-media-empty {
-  height: 100%;
-  display: grid;
-  place-content: center;
-  justify-items: center;
-  gap: 14px;
-  color: var(--funnel-v1-muted);
-}
-.funnel-v1-media-caption {
-  margin: 10px 0 0;
-  color: var(--funnel-v1-muted);
-  font-size: 13px;
-  text-align: center;
 }
 
 .funnel-v1-conversion,

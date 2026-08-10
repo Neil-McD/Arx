@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildDefaultCommunityFunnelDocumentV1,
+  normalizeCommunityFunnelVslUrl,
   validateCommunityFunnelDocumentV1,
+  withoutCommunityFunnelMediaSections,
 } from "../shared/communityFunnel";
 
 describe("Community Funnel V1 document", () => {
@@ -12,7 +14,10 @@ describe("Community Funnel V1 document", () => {
       oneLiner: "Build compounding systems together.",
     });
     expect(validateCommunityFunnelDocumentV1(document)).toEqual(document);
-    expect(document.sections).toHaveLength(5);
+    expect(document.sections).toHaveLength(4);
+    expect(document.sections.some((section) => section.type === "media")).toBe(
+      false,
+    );
   });
 
   it("rejects documents that exceed the section budget", () => {
@@ -24,7 +29,7 @@ describe("Community Funnel V1 document", () => {
         ...document,
         sections: [
           ...document.sections,
-          ...Array.from({ length: 6 }, (_, index) => ({
+          ...Array.from({ length: 7 }, (_, index) => ({
             id: `proof-${index}`,
             type: "social_proof",
             headline: null,
@@ -67,15 +72,23 @@ describe("Community Funnel V1 document", () => {
     const document = buildDefaultCommunityFunnelDocumentV1({
       communityName: "Builders",
     });
+    const withMedia = (mediaUrl: string) => ({
+      ...document,
+      sections: [
+        document.sections[0],
+        {
+          id: "legacy-media",
+          type: "media",
+          media_url: mediaUrl,
+          caption: null,
+        },
+        ...document.sections.slice(1),
+      ],
+    });
     expect(() =>
-      validateCommunityFunnelDocumentV1({
-        ...document,
-        sections: document.sections.map((section) =>
-          section.type === "media"
-            ? { ...section, media_url: "https://attacker.example/payload" }
-            : section,
-        ),
-      }),
+      validateCommunityFunnelDocumentV1(
+        withMedia("https://attacker.example/payload"),
+      ),
     ).toThrow("community_funnel_media_url_unsupported");
     for (const mediaUrl of [
       "https://evilyoutube.com/watch?v=123",
@@ -83,16 +96,42 @@ describe("Community Funnel V1 document", () => {
       "https://fakewistia.com/medias/abc",
     ]) {
       expect(() =>
-        validateCommunityFunnelDocumentV1({
-          ...document,
-          sections: document.sections.map((section) =>
-            section.type === "media"
-              ? { ...section, media_url: mediaUrl }
-              : section,
-          ),
-        }),
+        validateCommunityFunnelDocumentV1(
+          withMedia(mediaUrl),
+        ),
       ).toThrow("community_funnel_media_url_unsupported");
     }
+  });
+
+  it("normalizes supported creator VSL links and strips legacy media authority", () => {
+    expect(
+      normalizeCommunityFunnelVslUrl("youtube.com/watch?v=abcdefghijk"),
+    ).toBe("https://youtube.com/watch?v=abcdefghijk");
+    expect(() =>
+      normalizeCommunityFunnelVslUrl("https://attacker.example/video"),
+    ).toThrow("community_funnel_vsl_url_unsupported");
+
+    const document = buildDefaultCommunityFunnelDocumentV1({
+      communityName: "Builders",
+    });
+    const legacyDocument = validateCommunityFunnelDocumentV1({
+      ...document,
+      sections: [
+        document.sections[0],
+        {
+          id: "legacy-media",
+          type: "media",
+          media_url: "https://youtu.be/abcdefghijk",
+          caption: null,
+        },
+        ...document.sections.slice(1),
+      ],
+    });
+    expect(
+      withoutCommunityFunnelMediaSections(legacyDocument).sections.some(
+        (section) => section.type === "media",
+      ),
+    ).toBe(false);
   });
 
   it("rejects oversized section contents instead of silently truncating them", () => {

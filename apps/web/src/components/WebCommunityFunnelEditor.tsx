@@ -1,4 +1,12 @@
-import { ImagePlus, LoaderCircle, Send, Sparkles, Square, X } from "lucide-react";
+import {
+  ImagePlus,
+  Link2,
+  LoaderCircle,
+  Send,
+  Sparkles,
+  Square,
+  X,
+} from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -12,10 +20,14 @@ import {
 import { getAuthUrl, type AuthSession } from "../auth";
 import { resolveAuthPresentationIdentity } from "../../../../shared/authSession";
 import { extractTextFromContentJson } from "../../../../shared/communityMessageParsing";
-import { normalizeCommunityFunnelManagerConfig } from "../../../../shared/communityFunnel";
+import {
+  normalizeCommunityFunnelManagerConfig,
+  normalizeCommunityFunnelVslUrl,
+} from "../../../../shared/communityFunnel";
 import {
   fetchCloudCommunityFunnelConfig,
   publishCloudCommunityFunnelDraft,
+  setCloudCommunityFunnelDraftVsl,
 } from "../../../../shared/cloudCommunityFunnelGateway";
 import {
   ensureCloudThreadRecord,
@@ -107,6 +119,20 @@ function formatInferenceIssue(
   );
 }
 
+function formatVslSaveError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  if (message.includes("community_funnel_draft_conflict")) {
+    return "The draft changed elsewhere. The latest version was reloaded; try again.";
+  }
+  if (message.includes("community_funnel_vsl_url_unsupported")) {
+    return "Use a YouTube, Vimeo, Loom, or Wistia video link.";
+  }
+  if (message.includes("community_forbidden")) {
+    return "Only community managers can change the intro video.";
+  }
+  return "The intro video could not be saved.";
+}
+
 export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const threadKey = useMemo(
     () => buildCommunityFunnelThreadKey(props.previewCommunity.id),
@@ -120,6 +146,11 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAwaitingStream, setIsAwaitingStream] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
+  const [isSavingVsl, setIsSavingVsl] = useState(false);
+  const [vslInput, setVslInput] = useState(
+    props.communityFunnelConfig.draft_vsl_url ?? "",
+  );
+  const [vslError, setVslError] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] =
     useState<InferenceIssueModalState | null>(null);
@@ -145,12 +176,22 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const sessionIdentity = resolveAuthPresentationIdentity(props.session);
 
   const document = props.communityFunnelConfig.draft_document_v1;
+  const savedVslUrl = props.communityFunnelConfig.draft_vsl_url;
+  const isVslInputDirty = vslInput.trim() !== (savedVslUrl ?? "");
   const isPublishedCurrentDraft =
     Boolean(document) &&
     Boolean(props.communityFunnelConfig.published_document_v1) &&
     props.communityFunnelConfig.draft_revision > 0 &&
     props.communityFunnelConfig.published_draft_revision ===
       props.communityFunnelConfig.draft_revision;
+
+  useEffect(() => {
+    setVslInput(props.communityFunnelConfig.draft_vsl_url ?? "");
+  }, [props.communityFunnelConfig.draft_vsl_url, props.previewCommunity.id]);
+
+  useEffect(() => {
+    setVslError(null);
+  }, [props.previewCommunity.id]);
 
   const loadMessages = useCallback(
     async (targetThreadKey: string, session: AuthSession) => {
@@ -488,10 +529,57 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     }
   };
 
+  const handleSaveVsl = async (url: string | null) => {
+    if (isSavingVsl || turnIsActive || isPublishing) return;
+    let normalizedUrl: string | null = null;
+    try {
+      normalizedUrl = normalizeCommunityFunnelVslUrl(url);
+    } catch {
+      setVslError("Use a YouTube, Vimeo, Loom, or Wistia video link.");
+      return;
+    }
+    setIsSavingVsl(true);
+    setVslError(null);
+    try {
+      const session = await props.ensureSession(
+        props.session,
+        "community_funnel_vsl_save",
+      );
+      if (!session) throw new Error("auth_session_required");
+      const config = await setCloudCommunityFunnelDraftVsl<
+        AuthSession,
+        CommunityFunnelManagerConfig
+      >({
+        session,
+        communityId: props.previewCommunity.id,
+        expectedDraftRevision: props.communityFunnelConfig.draft_revision,
+        url: normalizedUrl,
+      });
+      const normalizedConfig = normalizeCommunityFunnelManagerConfig(config);
+      props.hydrateCommunityFunnelEditor(normalizedConfig);
+      setVslInput(normalizedConfig.draft_vsl_url ?? "");
+    } catch (error) {
+      console.warn("community_funnel_vsl_save_failed", error);
+      setVslError(formatVslSaveError(error));
+      try {
+        const session = await props.ensureSession(
+          props.session,
+          "community_funnel_vsl_refresh",
+        );
+        if (session) await refreshDraft(session);
+      } catch {
+        // Preserve the save error; the next editor load reconciles the draft.
+      }
+    } finally {
+      setIsSavingVsl(false);
+    }
+  };
+
   const isBusy =
     isPreparing ||
     isSubmitting ||
     isPublishing ||
+    isSavingVsl ||
     turnIsActive;
   const visibleMessages = messages.filter(
     (message) => message.role !== "system",
@@ -541,6 +629,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
             <CommunityFunnelV1Preview
               community={props.previewCommunity}
               document={document}
+              vslUrl={savedVslUrl}
               primaryActionLabel={`Join ${props.previewCommunity.name}`}
             />
           ) : (
@@ -617,6 +706,71 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               </button>
             </div>
           ) : null}
+          <form
+            className="funnel-builder-vsl"
+            onSubmit={(event) => {
+              event.preventDefault();
+              void handleSaveVsl(vslInput);
+            }}
+          >
+            <label htmlFor="community-funnel-vsl-url">
+              <span>Intro video</span>
+              <small>YouTube, Vimeo, Loom, or Wistia</small>
+            </label>
+            <div className="funnel-builder-vsl-control">
+              <Link2 aria-hidden="true" />
+              <input
+                id="community-funnel-vsl-url"
+                type="url"
+                inputMode="url"
+                value={vslInput}
+                maxLength={2_000}
+                placeholder="Paste the VSL link…"
+                onChange={(event) => {
+                  setVslInput(event.target.value);
+                  setVslError(null);
+                }}
+                disabled={isBusy}
+              />
+              <button
+                type="submit"
+                disabled={
+                  isBusy ||
+                  !vslInput.trim() ||
+                  !isVslInputDirty
+                }
+              >
+                {isSavingVsl
+                  ? "Saving…"
+                  : savedVslUrl
+                    ? "Replace"
+                    : "Save"}
+              </button>
+              {savedVslUrl ? (
+                <button
+                  type="button"
+                  className="funnel-builder-vsl-remove"
+                  onClick={() => void handleSaveVsl(null)}
+                  aria-label="Remove intro video"
+                  title="Remove intro video"
+                  disabled={isBusy}
+                >
+                  <X aria-hidden="true" />
+                </button>
+              ) : null}
+            </div>
+            {vslError ? (
+              <span className="funnel-builder-vsl-error">{vslError}</span>
+            ) : isVslInputDirty ? (
+              <span className="funnel-builder-vsl-status">
+                Save to update this private draft.
+              </span>
+            ) : savedVslUrl ? (
+              <span className="funnel-builder-vsl-status">
+                Saved to this private draft.
+              </span>
+            ) : null}
+          </form>
           {localError || inferenceIssue ? (
             <div className="auth-error">
               {localError ?? formatInferenceIssue(inferenceIssue)}

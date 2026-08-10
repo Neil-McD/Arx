@@ -1370,6 +1370,8 @@ export default defineSchema({
     communityId: v.id("communities"),
     heroMediaUrl: v.optional(v.string()),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
+    draftVslUrl: v.optional(v.union(v.string(), v.null())),
+    publishedVslUrl: v.optional(v.union(v.string(), v.null())),
     // Read compatibility for the short-lived manual V1 draft plus the
     // canonical bounded design grammar. New writes accept only the latter.
     draftDocumentV1: v.optional(v.union(

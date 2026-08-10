@@ -372,17 +372,6 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
               {
                 type: "object",
                 additionalProperties: false,
-                required: ["id", "type", "media_url", "caption"],
-                properties: {
-                  id: { type: "string", minLength: 1, maxLength: 64 },
-                  type: { type: "string", enum: ["media"] },
-                  media_url: { type: ["string", "null"], maxLength: 2_000 },
-                  caption: { type: ["string", "null"], maxLength: 240 },
-                },
-              },
-              {
-                type: "object",
-                additionalProperties: false,
                 required: ["id", "type", "heading", "items"],
                 properties: {
                   id: { type: "string", minLength: 1, maxLength: 64 },
