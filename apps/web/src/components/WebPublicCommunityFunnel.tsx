@@ -331,6 +331,20 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     );
   }
 
+  if (publicCommunity && funnel?.published_document_v1) {
+    return (
+      <CommunityFunnelV1Preview
+        community={publicCommunity}
+        document={funnel.published_document_v1}
+        primaryActionLabel={primaryActionLabel}
+        isPreview={false}
+        primaryActionDisabled={isPrimaryActionDisabled}
+        onPrimaryAction={onPrimaryJoinAction}
+        error={funnelErrors[0] ?? null}
+      />
+    );
+  }
+
   return (
     <WebCommunityVisitorSurface
       title={communityName}

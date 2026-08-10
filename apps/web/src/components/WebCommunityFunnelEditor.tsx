@@ -13,7 +13,10 @@ import { getAuthUrl, type AuthSession } from "../auth";
 import { resolveAuthPresentationIdentity } from "../../../../shared/authSession";
 import { extractTextFromContentJson } from "../../../../shared/communityMessageParsing";
 import { normalizeCommunityFunnelManagerConfig } from "../../../../shared/communityFunnel";
-import { fetchCloudCommunityFunnelConfig } from "../../../../shared/cloudCommunityFunnelGateway";
+import {
+  fetchCloudCommunityFunnelConfig,
+  publishCloudCommunityFunnelDraft,
+} from "../../../../shared/cloudCommunityFunnelGateway";
 import {
   ensureCloudThreadRecord,
   uploadCloudThreadAttachmentFile,
@@ -113,6 +116,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     useState<ReferenceImageDraft | null>(null);
   const [isPreparing, setIsPreparing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isPublishing, setIsPublishing] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] =
     useState<InferenceIssueModalState | null>(null);
@@ -136,6 +140,12 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const sessionIdentity = resolveAuthPresentationIdentity(props.session);
 
   const document = props.communityFunnelConfig.draft_document_v1;
+  const isPublishedCurrentDraft =
+    Boolean(document) &&
+    Boolean(props.communityFunnelConfig.published_document_v1) &&
+    props.communityFunnelConfig.draft_revision > 0 &&
+    props.communityFunnelConfig.published_draft_revision ===
+      props.communityFunnelConfig.draft_revision;
 
   const loadMessages = useCallback(
     async (targetThreadKey: string, session: AuthSession) => {
@@ -392,10 +402,64 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     }
   };
 
+  const handlePublish = async () => {
+    if (
+      !document ||
+      isPublishing ||
+      isPreparing ||
+      isSubmitting ||
+      sendingByThread[threadKey] === true ||
+      Boolean(streamingByThread[threadKey]) ||
+      isPublishedCurrentDraft
+    ) {
+      return;
+    }
+    setIsPublishing(true);
+    setLocalError(null);
+    try {
+      const session = await props.ensureSession(
+        props.session,
+        "community_funnel_publish",
+      );
+      if (!session) throw new Error("auth_session_required");
+      const config = await publishCloudCommunityFunnelDraft<
+        AuthSession,
+        CommunityFunnelManagerConfig
+      >({
+        session,
+        communityId: props.previewCommunity.id,
+        expectedDraftRevision: props.communityFunnelConfig.draft_revision,
+      });
+      props.hydrateCommunityFunnelEditor(
+        normalizeCommunityFunnelManagerConfig(config),
+      );
+    } catch (error) {
+      console.warn("community_funnel_publish_failed", error);
+      setLocalError(
+        error instanceof Error && error.message
+          ? error.message
+          : "The funnel could not be published.",
+      );
+      try {
+        const session = await props.ensureSession(
+          props.session,
+          "community_funnel_publish_refresh",
+        );
+        if (session) await refreshDraft(session);
+      } catch {
+        // Preserve the original publication error. The next editor load will
+        // reconcile any stale revision.
+      }
+    } finally {
+      setIsPublishing(false);
+    }
+  };
+
   const streamingState = streamingByThread[threadKey] ?? null;
   const isBusy =
     isPreparing ||
     isSubmitting ||
+    isPublishing ||
     sendingByThread[threadKey] === true ||
     Boolean(streamingState);
   const visibleMessages = messages.filter(
@@ -414,13 +478,27 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
             never the live funnel.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={props.handlePreviewCommunityFunnel}
-          disabled={!document}
-        >
-          Open full preview
-        </button>
+        <div className="funnel-builder-header-actions">
+          <button
+            type="button"
+            onClick={props.handlePreviewCommunityFunnel}
+            disabled={!document}
+          >
+            Open full preview
+          </button>
+          <button
+            type="button"
+            className="is-primary"
+            onClick={() => void handlePublish()}
+            disabled={!document || isBusy || isPublishedCurrentDraft}
+          >
+            {isPublishing
+              ? "Publishing…"
+              : isPublishedCurrentDraft
+                ? "Published"
+                : "Publish funnel"}
+          </button>
+        </div>
       </header>
 
       <div className="funnel-builder-layout">
