@@ -69,6 +69,7 @@ export type CommunityFunnelHeroMediaKind = "image" | "video";
 export type CommunityFunnelConfig = {
   hero_media_url: string | null;
   hero_media_kind: CommunityFunnelHeroMediaKind;
+  published_vsl_url: string | null;
   published_document_v1: CommunityFunnelDocumentV1 | null;
 };
 
@@ -143,6 +144,7 @@ export type CommunityFunnelDocumentV1 = {
 };
 
 export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
+  draft_vsl_url: string | null;
   draft_document_v1: CommunityFunnelDocumentV1 | null;
   draft_revision: number;
   draft_updated_at: number | null;

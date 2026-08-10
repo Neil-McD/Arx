@@ -19,6 +19,7 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
   ensureSession: EnsureSession;
 }) {
   const [document, setDocument] = useState<CommunityFunnelDocumentV1 | null>(null);
+  const [vslUrl, setVslUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +28,7 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
     const slug = params.communitySlug?.trim() ?? "";
     if (!params.enabled || !slug) {
       setDocument(null);
+      setVslUrl(null);
       setError(null);
       setIsLoading(false);
       return () => {
@@ -45,10 +47,13 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
           communitySlug: slug,
         });
         if (cancelled) return;
-        setDocument(normalizeCommunityFunnelManagerConfig(result).draft_document_v1);
+        const config = normalizeCommunityFunnelManagerConfig(result);
+        setDocument(config.draft_document_v1);
+        setVslUrl(config.draft_vsl_url);
       } catch (cause) {
         if (cancelled) return;
         setDocument(null);
+        setVslUrl(null);
         setError(cause instanceof Error ? cause.message : "Failed to load the funnel draft.");
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -60,5 +65,5 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
     };
   }, [params.communitySlug, params.enabled, params.ensureSession, params.session]);
 
-  return { document, isLoading, error };
+  return { document, vslUrl, isLoading, error };
 }

@@ -141,6 +141,33 @@ assert.match(
 );
 assert.match(editor, /community_funnel_publish/);
 assert.match(editor, /Publish funnel/);
+assert.match(editor, /Intro video/);
+assert.match(editor, /setCloudCommunityFunnelDraftVsl/);
+assert.match(editor, /community_funnel_vsl_save/);
+assert.doesNotMatch(editor, /Assets tab|asset library/i);
+assert.match(
+  backend,
+  /export const setCommunityFunnelDraftVsl = mutation[\s\S]*requireCommunityManager[\s\S]*expectedDraftRevision[\s\S]*community_funnel_draft_conflict[\s\S]*normalizeCommunityFunnelVslUrl/,
+);
+assert.match(
+  backend,
+  /publishedVslUrl: resolveDraftVslUrl\(existing\)[\s\S]*publishedDocumentV1: draftDocumentV1|publishedDocumentV1: draftDocumentV1[\s\S]*publishedVslUrl: resolveDraftVslUrl\(existing\)/,
+);
+assert.match(gateway, /communityFunnel:setCommunityFunnelDraftVsl/);
+assert.match(schema, /draftVslUrl:[\s\S]*publishedVslUrl:/);
+assert.match(preview, /vslUrl\?: string \| null/);
+assert.match(preview, /section\.type === "media"\) return null/);
+assert.match(preview, /<PreviewMedia community=\{community\} vslUrl=\{props\.vslUrl\}/);
+
+const funnelDocumentSchema = POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call
+  .inputSchema.properties?.input as {
+  properties?: { document?: { properties?: { sections?: unknown } } };
+};
+assert.doesNotMatch(
+  JSON.stringify(funnelDocumentSchema.properties?.document?.properties?.sections),
+  /media_url|"media"/,
+  "the agent tool must not advertise creator-owned VSL authority",
+);
 
 // Runtime authority is scoped twice: canonical thread + manager lens, then one
 // discoverable manager-only canonical operation.

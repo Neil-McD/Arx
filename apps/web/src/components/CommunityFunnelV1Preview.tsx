@@ -1,11 +1,11 @@
 import {
   Brain,
   ChevronDown,
-  Play,
   Sparkles,
   UsersRound,
   type LucideIcon,
 } from "lucide-react";
+import { Fragment } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type {
@@ -28,10 +28,6 @@ type PreviewCommunity = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-  banner_url?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
   member_count?: number | null;
   member_faces_preview?: Face[] | null;
   host?: {
@@ -47,49 +43,18 @@ const BENEFIT_ICONS: LucideIcon[] = [UsersRound, Brain, Sparkles, UsersRound];
 
 function PreviewMedia(props: {
   community: PreviewCommunity;
-  section: Extract<CommunityFunnelSectionV1, { type: "media" }>;
+  vslUrl: string;
 }) {
-  const embed = props.section.media_url
-    ? parseEmbedUrl(props.section.media_url)
-    : null;
+  const embed = parseEmbedUrl(props.vslUrl);
+  if (!embed) return null;
   return (
     <section className="funnel-v1-media" aria-label="Community media">
-      {embed ? (
-        <iframe
-          src={embed.src}
-          title={`${props.community.name} intro video`}
-          allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
-          allowFullScreen
-        />
-      ) : props.community.banner_url ? (
-        <div className="funnel-v1-media-poster">
-          <img
-            src={props.community.banner_url}
-            alt=""
-            style={{
-              objectPosition: `${(props.community.banner_focus_x ?? 0.5) * 100}% ${(props.community.banner_focus_y ?? 0.5) * 100}%`,
-              transform: `scale(${props.community.banner_zoom ?? 1})`,
-            }}
-          />
-          <span className="funnel-v1-play" aria-hidden="true">
-            <Play />
-          </span>
-        </div>
-      ) : (
-        <div className="funnel-v1-media-empty">
-          <CommunityAvatar
-            communityId={props.community.id}
-            name={props.community.name}
-            imageUrl={props.community.avatar_url ?? null}
-            className="funnel-v1-media-empty-avatar"
-            style={{ width: 88, height: 88 }}
-          />
-          <span>Add an approved intro video or community banner.</span>
-        </div>
-      )}
-      {props.section.caption ? (
-        <p className="funnel-v1-media-caption">{props.section.caption}</p>
-      ) : null}
+      <iframe
+        src={embed.src}
+        title={`${props.community.name} intro video`}
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
+        allowFullScreen
+      />
     </section>
   );
 }
@@ -97,6 +62,7 @@ function PreviewMedia(props: {
 export function CommunityFunnelV1Preview(props: {
   community: PreviewCommunity;
   document: CommunityFunnelDocumentV1;
+  vslUrl?: string | null;
   primaryActionLabel: string;
   isLoading?: boolean;
   error?: string | null;
@@ -115,26 +81,21 @@ export function CommunityFunnelV1Preview(props: {
   const renderSection = (section: CommunityFunnelSectionV1, index: number) => {
     if (section.type === "hero") {
       return (
-        <section
-          key={section.id}
-          className={`funnel-v1-hero is-${section.alignment}`}
-        >
-          {section.eyebrow ? (
-            <span className="funnel-v1-eyebrow">{section.eyebrow}</span>
+        <Fragment key={section.id}>
+          <section className={`funnel-v1-hero is-${section.alignment}`}>
+            {section.eyebrow ? (
+              <span className="funnel-v1-eyebrow">{section.eyebrow}</span>
+            ) : null}
+            <h1>{section.headline}</h1>
+            <p>{section.body}</p>
+          </section>
+          {props.vslUrl ? (
+            <PreviewMedia community={community} vslUrl={props.vslUrl} />
           ) : null}
-          <h1>{section.headline}</h1>
-          <p>{section.body}</p>
-        </section>
+        </Fragment>
       );
     }
-    if (section.type === "media")
-      return (
-        <PreviewMedia
-          key={section.id}
-          community={community}
-          section={section}
-        />
-      );
+    if (section.type === "media") return null;
     if (section.type === "benefits") {
       return (
         <section

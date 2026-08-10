@@ -7,8 +7,11 @@ import {
 import { ConvexError, v } from "convex/values";
 import {
   isSupportedCommunityFunnelVideoUrl,
+  normalizeCommunityFunnelVslUrl,
   normalizeCommunityFunnelDocumentV1,
+  resolveCommunityFunnelDocumentVslUrl,
   validateCommunityFunnelDocumentV1,
+  withoutCommunityFunnelMediaSections,
 } from "../shared/communityFunnel";
 import {
   requireCommunityManager,
@@ -21,6 +24,8 @@ type CommunityFunnelRowLike = {
   communityId: unknown;
   heroMediaUrl?: string | null;
   heroMediaKind?: "image" | "video" | null;
+  draftVslUrl?: string | null;
+  publishedVslUrl?: string | null;
   draftDocumentV1?: unknown;
   draftRevision?: number | null;
   draftUpdatedAt?: number | null;
@@ -47,10 +52,48 @@ function normalizeHeroMediaKind(raw: unknown): "image" | "video" {
   return raw === "video" ? "video" : "image";
 }
 
+function normalizeStoredVslUrl(raw: unknown): string | null {
+  try {
+    return normalizeCommunityFunnelVslUrl(raw);
+  } catch {
+    return null;
+  }
+}
+
+function resolveLegacyVslUrl(
+  row: CommunityFunnelRowLike | null,
+  document: unknown,
+): string | null {
+  const documentUrl = resolveCommunityFunnelDocumentVslUrl(
+    normalizeCommunityFunnelDocumentV1(document),
+  );
+  if (documentUrl) return documentUrl;
+  return row?.heroMediaKind === "video"
+    ? normalizeStoredVslUrl(row.heroMediaUrl)
+    : null;
+}
+
+function resolveDraftVslUrl(row: CommunityFunnelRowLike | null): string | null {
+  if (row?.draftVslUrl !== undefined) {
+    return normalizeStoredVslUrl(row.draftVslUrl);
+  }
+  return resolveLegacyVslUrl(row, row?.draftDocumentV1);
+}
+
+function resolvePublishedVslUrl(
+  row: CommunityFunnelRowLike | null,
+): string | null {
+  if (row?.publishedVslUrl !== undefined) {
+    return normalizeStoredVslUrl(row.publishedVslUrl);
+  }
+  return resolveLegacyVslUrl(row, row?.publishedDocumentV1);
+}
+
 function buildCommunityFunnelConfig(row: CommunityFunnelRowLike | null) {
   return {
     hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
     hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
+    published_vsl_url: resolvePublishedVslUrl(row),
     published_document_v1: normalizeCommunityFunnelDocumentV1(
       row?.publishedDocumentV1,
     ),
@@ -61,12 +104,14 @@ function buildCommunityFunnelManagerConfig(row: CommunityFunnelRowLike | null) {
   return {
     hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
     hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
+    published_vsl_url: resolvePublishedVslUrl(row),
     published_document_v1: normalizeCommunityFunnelDocumentV1(
       row?.publishedDocumentV1,
     ),
     draft_document_v1: normalizeCommunityFunnelDocumentV1(
       row?.draftDocumentV1,
     ),
+    draft_vsl_url: resolveDraftVslUrl(row),
     draft_revision: Math.max(0, Math.floor(Number(row?.draftRevision ?? 0))),
     draft_updated_at: row?.draftUpdatedAt ?? null,
     published_draft_revision: Math.max(
@@ -121,7 +166,9 @@ export async function saveCommunityFunnelConfigInternal(
     if (
       existing &&
       !existing.draftDocumentV1 &&
-      !existing.publishedDocumentV1
+      !existing.publishedDocumentV1 &&
+      !resolveDraftVslUrl(existing) &&
+      !resolvePublishedVslUrl(existing)
     ) {
       await ctx.db.delete(existing._id as any);
     } else if (existing) {
@@ -242,8 +289,14 @@ async function saveCommunityFunnelDraftForManager(args: {
   const nowMs = Date.now();
   const nextRevision = currentRevision + 1;
   const draftDocumentV1 = validateCommunityFunnelDocumentV1(args.document);
-  const draftFields = {
+  const boundedDraftDocumentV1 = withoutCommunityFunnelMediaSections(
     draftDocumentV1,
+  );
+  const draftFields = {
+    draftDocumentV1: boundedDraftDocumentV1,
+    ...(existing?.draftVslUrl === undefined
+      ? { draftVslUrl: resolveDraftVslUrl(existing) }
+      : {}),
     draftRevision: nextRevision,
     draftUpdatedAt: nowMs,
     draftUpdatedByUserId: args.userId,
@@ -280,6 +333,83 @@ export const saveCommunityFunnelDraftInternal = internalMutation({
     }),
 });
 
+export const setCommunityFunnelDraftVsl = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    expectedDraftRevision: v.number(),
+    url: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    const currentRevision = Math.max(
+      0,
+      Math.floor(Number(existing?.draftRevision ?? 0)),
+    );
+    if (Math.floor(args.expectedDraftRevision) !== currentRevision) {
+      throw new ConvexError({
+        code: "community_funnel_draft_conflict",
+        expected_revision: args.expectedDraftRevision,
+        current_revision: currentRevision,
+      });
+    }
+    let draftVslUrl: string | null = null;
+    try {
+      draftVslUrl = normalizeCommunityFunnelVslUrl(args.url);
+    } catch {
+      throw new ConvexError({ code: "community_funnel_vsl_url_unsupported" });
+    }
+    if (
+      (!existing && draftVslUrl === null) ||
+      (existing?.draftVslUrl !== undefined &&
+        draftVslUrl === resolveDraftVslUrl(existing) &&
+        !resolveCommunityFunnelDocumentVslUrl(
+          normalizeCommunityFunnelDocumentV1(existing.draftDocumentV1),
+        ))
+    ) {
+      return buildCommunityFunnelManagerConfig(existing);
+    }
+    const nowMs = Date.now();
+    const nextFields = {
+      draftVslUrl,
+      ...(existing?.draftDocumentV1
+        ? {
+            draftDocumentV1: withoutCommunityFunnelMediaSections(
+              validateCommunityFunnelDocumentV1(existing.draftDocumentV1),
+            ),
+          }
+        : {}),
+      draftRevision: currentRevision + 1,
+      draftUpdatedAt: nowMs,
+      draftUpdatedByUserId: userId,
+      updatedAt: nowMs,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id as any, nextFields);
+    } else {
+      await ctx.db.insert("communityFunnels", {
+        communityId: args.communityId,
+        ...nextFields,
+        createdAt: nowMs,
+      });
+    }
+    return buildCommunityFunnelManagerConfig(
+      await getCommunityFunnelRow(ctx, args.communityId),
+    );
+  },
+});
+
 export const publishCommunityFunnelDraft = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -313,8 +443,8 @@ export const publishCommunityFunnelDraft = mutation({
         current_revision: currentRevision,
       });
     }
-    const draftDocumentV1 = validateCommunityFunnelDocumentV1(
-      existing.draftDocumentV1,
+    const draftDocumentV1 = withoutCommunityFunnelMediaSections(
+      validateCommunityFunnelDocumentV1(existing.draftDocumentV1),
     );
     if (
       existing.publishedDocumentV1 &&
@@ -326,6 +456,7 @@ export const publishCommunityFunnelDraft = mutation({
     const nowMs = Date.now();
     await ctx.db.patch(existing._id as any, {
       publishedDocumentV1: draftDocumentV1,
+      publishedVslUrl: resolveDraftVslUrl(existing),
       publishedDraftRevision: currentRevision,
       publishedAt: nowMs,
       publishedByUserId: userId,

@@ -85,6 +85,7 @@ type WebPublicCommunityFunnelProps = {
   shellVariant?: AppShellVariant;
   isPreviewMode?: boolean;
   previewDocument?: CommunityFunnelDocumentV1 | null;
+  previewVslUrl?: string | null;
   previewDocumentIsLoading?: boolean;
   previewDocumentError?: string | null;
   publicVisibilityLabel: string;
@@ -233,7 +234,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     communityName,
     oneLiner: publicCommunity?.one_liner,
     about: publicCommunity?.about,
-    heroMediaUrl: funnel?.hero_media_url,
   });
   const funnelErrors = [publicCommunityError, publicJoinError, checkoutError].filter(
     Boolean,
@@ -324,6 +324,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       <CommunityFunnelV1Preview
         community={publicCommunity}
         document={previewDocument}
+        vslUrl={props.previewVslUrl}
         primaryActionLabel={primaryActionLabel}
         isLoading={props.previewDocumentIsLoading}
         error={props.previewDocumentError}
@@ -336,6 +337,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       <CommunityFunnelV1Preview
         community={publicCommunity}
         document={funnel.published_document_v1}
+        vslUrl={funnel.published_vsl_url}
         primaryActionLabel={primaryActionLabel}
         isPreview={false}
         primaryActionDisabled={isPrimaryActionDisabled}
