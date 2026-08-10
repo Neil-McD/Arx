@@ -1667,9 +1667,6 @@ export function normalizeToolArguments(
       throw new Error("polynet_call requires idempotency_key.");
     }
     const target = normalizeString(args.target);
-    const expectedRevision = normalizeString(
-      args.expected_revision ?? args.expectedRevision,
-    );
     if (target) {
       const parsedTarget = parsePolynetSemanticRepositoryPath(target);
       if (!parsedTarget.ok) {
@@ -1683,9 +1680,6 @@ export function normalizeToolArguments(
       version,
       ...(target ? { target: target.slice(0, 1024) } : {}),
       input: args.input,
-      ...(expectedRevision
-        ? { expectedRevision: expectedRevision.slice(0, 256) }
-        : {}),
       idempotencyKey: idempotencyKey.slice(0, 200),
     };
   }

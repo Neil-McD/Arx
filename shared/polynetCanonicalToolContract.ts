@@ -309,6 +309,183 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
     notes: { type: "string", maxLength: 4_000 },
     changeset_id: { type: "string", minLength: 1, maxLength: 180 },
     reason: { type: "string", maxLength: 1_000 },
+    expected_revision: { type: "integer", minimum: 0 },
+    document: {
+      type: "object",
+      additionalProperties: false,
+      required: ["version", "theme", "sections"],
+      properties: {
+        version: { type: "integer", enum: [1] },
+        theme: {
+          type: "object",
+          additionalProperties: false,
+          required: [
+            "appearance",
+            "character",
+            "accent",
+            "density",
+            "radius",
+          ],
+          properties: {
+            appearance: { type: "string", enum: ["light", "dark"] },
+            character: {
+              type: "string",
+              enum: ["minimal", "editorial", "cinematic"],
+            },
+            accent: {
+              type: "string",
+              enum: ["blue", "violet", "rose", "amber", "emerald"],
+            },
+            density: {
+              type: "string",
+              enum: ["compact", "balanced", "airy"],
+            },
+            radius: { type: "string", enum: ["subtle", "soft"] },
+          },
+        },
+        sections: {
+          type: "array",
+          minItems: 2,
+          maxItems: 10,
+          items: {
+            anyOf: [
+              {
+                type: "object",
+                additionalProperties: false,
+                required: [
+                  "id",
+                  "type",
+                  "eyebrow",
+                  "headline",
+                  "body",
+                  "alignment",
+                ],
+                properties: {
+                  id: { type: "string", minLength: 1, maxLength: 64 },
+                  type: { type: "string", enum: ["hero"] },
+                  eyebrow: { type: ["string", "null"], maxLength: 80 },
+                  headline: { type: "string", minLength: 1, maxLength: 180 },
+                  body: { type: "string", minLength: 1, maxLength: 480 },
+                  alignment: { type: "string", enum: ["left", "center"] },
+                },
+              },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["id", "type", "media_url", "caption"],
+                properties: {
+                  id: { type: "string", minLength: 1, maxLength: 64 },
+                  type: { type: "string", enum: ["media"] },
+                  media_url: { type: ["string", "null"], maxLength: 2_000 },
+                  caption: { type: ["string", "null"], maxLength: 240 },
+                },
+              },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["id", "type", "heading", "items"],
+                properties: {
+                  id: { type: "string", minLength: 1, maxLength: 64 },
+                  type: { type: "string", enum: ["benefits"] },
+                  heading: { type: ["string", "null"], maxLength: 140 },
+                  items: {
+                    type: "array",
+                    minItems: 2,
+                    maxItems: 4,
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["title", "body"],
+                      properties: {
+                        title: {
+                          type: "string",
+                          minLength: 1,
+                          maxLength: 90,
+                        },
+                        body: {
+                          type: "string",
+                          minLength: 1,
+                          maxLength: 320,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["id", "type", "headline", "body"],
+                properties: {
+                  id: { type: "string", minLength: 1, maxLength: 64 },
+                  type: { type: "string", enum: ["social_proof"] },
+                  headline: { type: ["string", "null"], maxLength: 160 },
+                  body: { type: ["string", "null"], maxLength: 360 },
+                },
+              },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["id", "type", "quote", "attribution"],
+                properties: {
+                  id: { type: "string", minLength: 1, maxLength: 64 },
+                  type: { type: "string", enum: ["testimonial"] },
+                  quote: { type: "string", minLength: 1, maxLength: 1_200 },
+                  attribution: {
+                    type: "string",
+                    minLength: 1,
+                    maxLength: 160,
+                  },
+                },
+              },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["id", "type", "heading", "items"],
+                properties: {
+                  id: { type: "string", minLength: 1, maxLength: 64 },
+                  type: { type: "string", enum: ["faq"] },
+                  heading: { type: ["string", "null"], maxLength: 140 },
+                  items: {
+                    type: "array",
+                    minItems: 1,
+                    maxItems: 5,
+                    items: {
+                      type: "object",
+                      additionalProperties: false,
+                      required: ["question", "answer"],
+                      properties: {
+                        question: {
+                          type: "string",
+                          minLength: 1,
+                          maxLength: 180,
+                        },
+                        answer: {
+                          type: "string",
+                          minLength: 1,
+                          maxLength: 1_200,
+                        },
+                      },
+                    },
+                  },
+                },
+              },
+              {
+                type: "object",
+                additionalProperties: false,
+                required: ["id", "type", "headline", "body"],
+                properties: {
+                  id: { type: "string", minLength: 1, maxLength: 64 },
+                  type: { type: "string", enum: ["cta"] },
+                  headline: { type: "string", minLength: 1, maxLength: 180 },
+                  body: { type: ["string", "null"], maxLength: 360 },
+                },
+              },
+            ],
+          },
+        },
+      },
+    },
   },
 };
 
@@ -333,10 +510,6 @@ const CALL_INPUT_SCHEMA: PlatformOperationJsonSchema = {
       maxLength: 1024,
     },
     input: CALL_OPERATION_INPUT_SCHEMA,
-    expected_revision: {
-      type: ["string", "null"],
-      maxLength: 256,
-    },
     idempotency_key: {
       type: "string",
       minLength: 1,
