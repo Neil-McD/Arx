@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import { POLYNET_CANONICAL_TOOL_DEFINITIONS } from "../shared/polynetCanonicalToolContract.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const editor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
@@ -16,6 +17,7 @@ const previewController = read(
 const gateway = read("shared/cloudCommunityFunnelGateway.ts");
 const documentContract = read("shared/communityFunnel.ts");
 const invocationSurface = read("shared/runtimeInvocationSurface.ts");
+const contextIntegrity = read("shared/runtimeContextIntegrity.ts");
 const runtimeResolution = read("convex/runtimeTurnResolution.ts");
 const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
 const backend = read("convex/communityFunnel.ts");
@@ -96,6 +98,29 @@ assert.match(canonicalExecutor, /current_state: currentState/);
 assert.match(
   canonicalExecutor,
   /forbidden_effects: \["publish", "change_access", "change_pricing"\]/,
+);
+const funnelCallInput = POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call
+  .inputSchema.properties?.input as {
+  properties?: Record<string, unknown>;
+};
+assert.ok(
+  funnelCallInput.properties?.expected_revision,
+  "polynet_call must expose the funnel draft revision inside operation input",
+);
+assert.ok(
+  funnelCallInput.properties?.document,
+  "polynet_call must expose the bounded Funnel V1 document inside operation input",
+);
+assert.equal(
+  POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call.inputSchema.properties
+    ?.expected_revision,
+  undefined,
+  "polynet_call must not advertise a dead top-level revision field",
+);
+assert.doesNotMatch(
+  contextIntegrity,
+  /"community_feed_context"/,
+  "runtime integrity must not require a retired feed prompt section",
 );
 
 // Preview is analytics-free and disabled; live V0 remains the independent

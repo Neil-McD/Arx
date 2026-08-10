@@ -68,7 +68,6 @@ const REQUIRED_PROMPT_SECTION_IDS = [
   "harness_operating_policy",
   "community_lens",
   "community_system_prompt",
-  "community_feed_context",
   "community_resource_lane",
   "workspace_harness_context",
   "runtime_turn_context",
