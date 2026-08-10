@@ -12,10 +12,7 @@ import {
 import { getAuthUrl, type AuthSession } from "../auth";
 import { resolveAuthPresentationIdentity } from "../../../../shared/authSession";
 import { extractTextFromContentJson } from "../../../../shared/communityMessageParsing";
-import {
-  buildDefaultCommunityFunnelDocumentV1,
-  normalizeCommunityFunnelManagerConfig,
-} from "../../../../shared/communityFunnel";
+import { normalizeCommunityFunnelManagerConfig } from "../../../../shared/communityFunnel";
 import { fetchCloudCommunityFunnelConfig } from "../../../../shared/cloudCommunityFunnelGateway";
 import {
   ensureCloudThreadRecord,
@@ -76,8 +73,6 @@ export type WebCommunityFunnelEditorProps = {
   hydrateCommunityFunnelEditor: (
     config: CommunityFunnelManagerConfig | null,
   ) => void;
-  funnelOneLiner: string;
-  funnelAbout: string;
   previewCommunity: PreviewCommunityLike;
 };
 
@@ -140,23 +135,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   activeCommunityIdRef.current = props.previewCommunity.id;
   const sessionIdentity = resolveAuthPresentationIdentity(props.session);
 
-  const document = useMemo(
-    () =>
-      props.communityFunnelConfig.draft_document_v1 ??
-      buildDefaultCommunityFunnelDocumentV1({
-        communityName: props.previewCommunity.name,
-        oneLiner: props.funnelOneLiner,
-        about: props.funnelAbout,
-        heroMediaUrl: props.communityFunnelConfig.hero_media_url,
-      }),
-    [
-      props.communityFunnelConfig.draft_document_v1,
-      props.communityFunnelConfig.hero_media_url,
-      props.funnelAbout,
-      props.funnelOneLiner,
-      props.previewCommunity.name,
-    ],
-  );
+  const document = props.communityFunnelConfig.draft_document_v1;
 
   const loadMessages = useCallback(
     async (targetThreadKey: string, session: AuthSession) => {
@@ -435,21 +414,27 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
             never the live funnel.
           </p>
         </div>
-        <button type="button" onClick={props.handlePreviewCommunityFunnel}>
+        <button
+          type="button"
+          onClick={props.handlePreviewCommunityFunnel}
+          disabled={!document}
+        >
           Open full preview
         </button>
       </header>
 
       <div className="funnel-builder-layout">
         <div
-          className="funnel-builder-preview"
+          className={`funnel-builder-preview${document ? "" : " is-empty"}`}
           aria-label="Funnel draft preview"
         >
-          <CommunityFunnelV1Preview
-            community={props.previewCommunity}
-            document={document}
-            primaryActionLabel={`Join ${props.previewCommunity.name}`}
-          />
+          {document ? (
+            <CommunityFunnelV1Preview
+              community={props.previewCommunity}
+              document={document}
+              primaryActionLabel={`Join ${props.previewCommunity.name}`}
+            />
+          ) : null}
         </div>
 
         <aside

@@ -4,6 +4,13 @@ import { POLYNET_CANONICAL_TOOL_DEFINITIONS } from "../shared/polynetCanonicalTo
 
 const read = (path: string) => readFileSync(path, "utf8");
 const editor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
+const secondaryPanels = read(
+  "apps/web/src/components/WebCommunitySecondaryPanels.tsx",
+);
+const funnelSection = read(
+  "apps/web/src/components/WebCommunityFunnelSection.tsx",
+);
+const communityStyles = read("apps/web/src/styles/community-and-content.css");
 const preview = read("apps/web/src/components/CommunityFunnelV1Preview.tsx");
 const publicFunnel = read(
   "apps/web/src/components/WebPublicCommunityFunnel.tsx",
@@ -29,15 +36,44 @@ assert.match(editor, /useWebTurnRunnerController/);
 assert.match(editor, /invocationSurface: "community_funnel_builder"/);
 assert.match(editor, /resolveAuthPresentationIdentity\(props\.session\)/);
 assert.match(editor, /props\.ensureSession\(\s*sessionRef\.current,/);
-assert.doesNotMatch(
-  editor,
-  /props\.previewCommunity\.name,\s*props\.session,/,
-);
+assert.doesNotMatch(editor, /props\.previewCommunity\.name,\s*props\.session,/);
 assert.match(editor, /uploadCloudThreadAttachmentFile/);
 assert.match(editor, /CommunityFunnelV1Preview/);
+assert.doesNotMatch(editor, /buildDefaultCommunityFunnelDocumentV1/);
+assert.match(
+  editor,
+  /const document = props\.communityFunnelConfig\.draft_document_v1;/,
+);
+assert.match(editor, /disabled=\{!document\}/);
+assert.match(editor, /\{document \? \([\s\S]*<CommunityFunnelV1Preview/);
 assert.doesNotMatch(
   editor,
   /Save draft|Headline[\s\S]*Subheadline|custom html|custom css|script/i,
+);
+
+// The builder owns one viewport-height workspace. The outer community page is
+// locked; only the preview and conversation history may scroll independently.
+assert.match(
+  secondaryPanels,
+  /communityTab === "funnel"[\s\S]*renderWorkspacePane/,
+);
+assert.match(secondaryPanels, /className="community-tab-workspace"/);
+assert.match(funnelSection, /community-funnel-panel/);
+assert.match(
+  communityStyles,
+  /\.community-tab-workspace\s*\{[\s\S]*?overflow:\s*hidden;/,
+);
+assert.match(
+  communityStyles,
+  /\.community-funnel-panel\.settings-panel\s*\{[\s\S]*?overflow:\s*hidden;/,
+);
+assert.match(
+  communityStyles,
+  /\.funnel-builder-preview\s*\{[\s\S]*?overflow-y:\s*auto;/,
+);
+assert.match(
+  communityStyles,
+  /\.funnel-builder-messages\s*\{[\s\S]*?overflow-y:\s*auto;/,
 );
 
 // The model produces a bounded design document, never executable page code.

@@ -2199,8 +2199,6 @@ export default function App() {
         handlePreviewCommunityFunnel,
         communityFunnelConfig,
         hydrateCommunityFunnelEditor,
-        funnelOneLiner: communitySettingsOneLiner,
-        funnelAbout: communitySettingsAbout,
         previewCommunity: {
           id: activeCommunity?.id ?? "",
           name: activeCommunity?.name ?? "Community",
