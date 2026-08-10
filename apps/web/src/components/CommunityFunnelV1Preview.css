@@ -1,0 +1,162 @@
+.funnel-v1-preview {
+  --funnel-v1-accent: #ff3b78;
+  --funnel-v1-text: #f7f5f2;
+  --funnel-v1-muted: #aaa7a4;
+  min-height: 100%;
+  overflow-y: auto;
+  background:
+    radial-gradient(circle at 50% 19%, rgba(255, 59, 120, 0.09), transparent 25rem),
+    #09090b;
+  color: var(--funnel-v1-text);
+}
+
+.funnel-v1-preview-main {
+  width: min(820px, calc(100% - 40px));
+  margin: 0 auto;
+  padding: clamp(34px, 5vw, 70px) 0 72px;
+}
+
+.funnel-v1-brand {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 16px;
+  font-weight: 650;
+  letter-spacing: -0.01em;
+}
+
+.funnel-v1-hero {
+  margin: clamp(32px, 5vw, 56px) auto 40px;
+  text-align: center;
+}
+
+.funnel-v1-hero h1 {
+  max-width: 760px;
+  margin: 0 auto;
+  font-size: clamp(46px, 7vw, 78px);
+  line-height: 0.98;
+  letter-spacing: -0.058em;
+  text-wrap: balance;
+}
+
+.funnel-v1-hero p {
+  max-width: 630px;
+  margin: 24px auto 0;
+  color: var(--funnel-v1-muted);
+  font-size: clamp(17px, 2vw, 21px);
+  line-height: 1.55;
+  text-wrap: balance;
+}
+
+.funnel-v1-media {
+  position: relative;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 1px solid color-mix(in srgb, var(--funnel-v1-accent) 32%, #26262b);
+  border-radius: 14px;
+  background: #111114;
+  box-shadow: 0 26px 85px -42px rgba(255, 59, 120, 0.72);
+}
+
+.funnel-v1-media iframe,
+.funnel-v1-media video,
+.funnel-v1-media-poster,
+.funnel-v1-media-poster img {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.funnel-v1-media iframe { border: 0; }
+.funnel-v1-media video,
+.funnel-v1-media-poster img { object-fit: cover; }
+.funnel-v1-media-poster { position: relative; overflow: hidden; }
+.funnel-v1-media-poster::after { content: ""; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.14); }
+.funnel-v1-play {
+  position: absolute;
+  z-index: 1;
+  inset: 50% auto auto 50%;
+  display: grid;
+  width: 82px;
+  height: 82px;
+  place-items: center;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: rgba(7, 7, 9, 0.82);
+  backdrop-filter: blur(10px);
+}
+.funnel-v1-play svg { width: 32px; height: 32px; margin-left: 4px; fill: currentColor; }
+.funnel-v1-media-empty { height: 100%; display: grid; place-content: center; justify-items: center; gap: 14px; color: var(--funnel-v1-muted); }
+
+.funnel-v1-conversion,
+.funnel-v1-final-cta { text-align: center; }
+.funnel-v1-conversion { padding: 34px 0 30px; }
+.funnel-v1-conversion button,
+.funnel-v1-final-cta button {
+  width: min(340px, 100%);
+  min-height: 60px;
+  border: 0;
+  border-radius: 9px;
+  background: linear-gradient(135deg, #f02c6c, #ff4e82);
+  color: white;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 650;
+  opacity: 1;
+}
+.funnel-v1-conversion p,
+.funnel-v1-final-cta p { margin: 15px 0 0; color: var(--funnel-v1-muted); font-size: 13px; }
+.funnel-v1-conversion p span { margin: 0 9px; }
+
+.funnel-v1-pillars {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  border-block: 1px solid #28282d;
+  padding: 34px 0;
+}
+.funnel-v1-pillars article { padding: 0 28px; text-align: center; }
+.funnel-v1-pillars article + article { border-left: 1px solid #28282d; }
+.funnel-v1-pillars svg { width: 43px; height: 43px; color: var(--funnel-v1-accent); stroke-width: 1.55; }
+.funnel-v1-pillars h2 { margin: 16px 0 0; font-size: 17px; letter-spacing: -0.02em; }
+.funnel-v1-pillars p { margin: 10px 0 0; color: var(--funnel-v1-muted); font-size: 14px; line-height: 1.55; }
+
+.funnel-v1-proof { display: grid; grid-template-columns: 112px 1fr; align-items: center; gap: 30px; padding: 38px 46px; border-bottom: 1px solid #28282d; }
+.funnel-v1-proof > img { width: 108px; height: 108px; object-fit: cover; border: 1px solid var(--funnel-v1-accent); border-radius: 50%; }
+.funnel-v1-proof blockquote { margin: 0; }
+.funnel-v1-proof blockquote > p { margin: 0; font-size: clamp(18px, 2.6vw, 25px); line-height: 1.42; letter-spacing: -0.025em; }
+.funnel-v1-proof footer { display: flex; flex-direction: column; margin-top: 20px; color: var(--funnel-v1-muted); font-size: 13px; }
+.funnel-v1-proof footer strong { color: var(--funnel-v1-text); }
+
+.funnel-v1-member-proof { display: flex; align-items: center; justify-content: center; gap: 22px; padding: 30px 0; border-bottom: 1px solid #28282d; }
+.funnel-v1-member-proof p { color: var(--funnel-v1-muted); font-size: 14px; }
+.funnel-v1-facepile { display: flex; padding-left: 10px; }
+.funnel-v1-facepile img,
+.funnel-v1-facepile span { width: 36px; height: 36px; margin-left: -10px; border: 2px solid #09090b; border-radius: 50%; object-fit: cover; }
+.funnel-v1-facepile span { display: grid; place-items: center; background: #232328; color: var(--funnel-v1-text); font-size: 11px; }
+
+.funnel-v1-faq { width: min(650px, 100%); margin: 38px auto 0; }
+.funnel-v1-faq h2 { margin: 0 0 12px; font-size: 22px; }
+.funnel-v1-faq details { border-bottom: 1px solid #28282d; }
+.funnel-v1-faq summary { display: flex; align-items: center; justify-content: space-between; padding: 17px 0; cursor: pointer; list-style: none; color: #d8d5d1; }
+.funnel-v1-faq summary::-webkit-details-marker { display: none; }
+.funnel-v1-faq summary svg { width: 17px; transition: transform 160ms ease; }
+.funnel-v1-faq details[open] summary svg { transform: rotate(180deg); }
+.funnel-v1-faq details p { margin: -5px 36px 18px 0; color: var(--funnel-v1-muted); line-height: 1.6; }
+.funnel-v1-final-cta { padding-top: 46px; }
+.funnel-v1-preview-error { margin: 0 0 18px; border: 1px solid rgba(226, 75, 74, 0.45); border-radius: 8px; padding: 12px 14px; color: #f1a2a2; }
+
+@media (max-width: 680px) {
+  .funnel-v1-preview-main { width: min(100% - 28px, 820px); padding-top: 28px; }
+  .funnel-v1-hero h1 { font-size: clamp(40px, 13vw, 58px); }
+  .funnel-v1-media { border-radius: 10px; }
+  .funnel-v1-pillars { grid-template-columns: 1fr; padding: 12px 0; }
+  .funnel-v1-pillars article { padding: 26px 18px; }
+  .funnel-v1-pillars article + article { border-left: 0; border-top: 1px solid #28282d; }
+  .funnel-v1-proof { grid-template-columns: 1fr; justify-items: center; padding: 34px 12px; text-align: center; }
+  .funnel-v1-member-proof { flex-direction: column; gap: 8px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .funnel-v1-faq summary svg { transition: none; }
+}

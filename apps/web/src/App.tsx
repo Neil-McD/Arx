@@ -168,6 +168,7 @@ import { useWebCommunityRouteController } from "./controllers/useWebCommunityRou
 import { useWebRouteAccessBoundaryController } from "./controllers/useWebRouteAccessBoundaryController";
 import { useWebSelectedCommunityController } from "./controllers/useWebSelectedCommunityController";
 import { useWebPublicCommunityRouteController } from "./controllers/useWebPublicCommunityRouteController";
+import { useWebCommunityFunnelDraftPreviewController } from "./controllers/useWebCommunityFunnelDraftPreviewController";
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
 import { buildWebShellProjection } from "./controllers/buildWebShellProjection";
 import { buildWebAuthShellProjection } from "./controllers/buildWebAuthShellProjection";
@@ -1617,6 +1618,12 @@ export default function App() {
     sessionDependency: resolveAuthSubject(session),
     loadPublicCommunity,
   });
+  const funnelDraftPreview = useWebCommunityFunnelDraftPreviewController({
+    enabled: isPublicFunnelPreviewRoute,
+    communitySlug: publicFunnelSlug,
+    session,
+    ensureSession: ensureUsableAuthSession,
+  });
   const communityEntryBridge = useWebCommunityEntryBridgeController({
     publicRouteKind: shellPublicRoute.kind,
     isAccountSetupResolved,
@@ -2217,34 +2224,9 @@ export default function App() {
         markCommunityFunnelDirty,
         funnelOneLiner: communitySettingsOneLiner,
         funnelAbout: communitySettingsAbout,
-        setFunnelAbout: setCommunitySettingsAbout,
-        isFunnelAboutDirty: isCommunityFunnelAboutDirty,
-        markCommunitySettingsDirty,
-        handleSaveCommunityFunnelAbout,
-        handleResetCommunityFunnelAbout,
-        isSavingCommunitySettings,
-        communitySettingsError,
         previewCommunity: {
-          slug: activeCommunity?.slug ?? null,
           name: activeCommunity?.name ?? "Community",
-          one_liner: communitySettingsOneLiner || null,
-          about: communitySettingsAbout || null,
-          avatar_url: activeCommunity?.avatar_url ?? null,
-          avatar_focus_x: activeCommunity?.avatar_focus_x ?? null,
-          avatar_focus_y: activeCommunity?.avatar_focus_y ?? null,
-          avatar_zoom: activeCommunity?.avatar_zoom ?? null,
-          banner_url: activeCommunity?.banner_url ?? null,
-          banner_focus_x: activeCommunity?.banner_focus_x ?? null,
-          banner_focus_y: activeCommunity?.banner_focus_y ?? null,
-          banner_zoom: activeCommunity?.banner_zoom ?? null,
-          visibility: activeCommunity?.visibility ?? "unlisted",
-          admin_count: funnelPreviewAdminCount,
-          online_count: funnelPreviewOnlineCount,
-          online_faces: funnelPreviewOnlineFaces,
         },
-        previewVisibilityLabel: funnelPreviewVisibilityLabel,
-        previewMemberCount: activeCommunitySocialMemberCount,
-        previewFunnelAction: funnelPreviewAction,
       },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,
@@ -2714,6 +2696,9 @@ export default function App() {
       isMobile: showMobilePublicFunnel,
       shellVariant,
       isPreviewMode: isPublicFunnelPreviewRoute,
+      previewDocument: funnelDraftPreview.document,
+      previewDocumentIsLoading: funnelDraftPreview.isLoading,
+      previewDocumentError: funnelDraftPreview.error,
       gateOpenNonce: publicCommunityUi.visitorGateNonce,
       mobileMembersOverlayOpen:
         showMobileShell &&

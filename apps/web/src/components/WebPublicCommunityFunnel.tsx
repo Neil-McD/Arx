@@ -1,6 +1,8 @@
 import type {
   CommunityFunnelConfig,
+  CommunityFunnelDocumentV1,
 } from "../../../../shared/communityTypes";
+import { buildDefaultCommunityFunnelDocumentV1 } from "../../../../shared/communityFunnel";
 import {
   buildCommunityFunnelCopy,
   filterOnlineAvatarFaces,
@@ -8,6 +10,7 @@ import {
 import type { ComponentProps } from "react";
 import type { WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityVisitorSurface } from "./WebCommunityVisitorSurface";
+import { CommunityFunnelV1Preview } from "./CommunityFunnelV1Preview";
 
 type FunnelMode = "enter" | "join" | "request_access" | "checkout" | "private";
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
@@ -16,6 +19,7 @@ type MagicLinkStatus = "idle" | "sending" | "sent";
 import { applyShellVariantToPublicPath, type AppShellVariant } from "../../../../shared/webAppRouteState";
 
 export type PublicCommunityFunnelCommunityLike = {
+  id?: string;
   slug?: string;
   name: string;
   one_liner: string | null;
@@ -80,6 +84,9 @@ type WebPublicCommunityFunnelProps = {
   isMobile?: boolean;
   shellVariant?: AppShellVariant;
   isPreviewMode?: boolean;
+  previewDocument?: CommunityFunnelDocumentV1 | null;
+  previewDocumentIsLoading?: boolean;
+  previewDocumentError?: string | null;
   publicVisibilityLabel: string;
   selectedPublicCommunityPlanLabel: string | null;
   hasSelectedPublicCommunityPlan: boolean;
@@ -222,6 +229,12 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
     (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
     (canJoinWithApproval && (approvalPending || (approvalDenied && !canRequestAgain)));
+  const previewDocument = props.previewDocument ?? buildDefaultCommunityFunnelDocumentV1({
+    communityName,
+    oneLiner: publicCommunity?.one_liner,
+    about: publicCommunity?.about,
+    heroMediaUrl: funnel?.hero_media_url,
+  });
   const funnelErrors = [publicCommunityError, publicJoinError, checkoutError].filter(
     Boolean,
   ) as string[];
@@ -303,6 +316,18 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
           </aside>
         </div>
       </div>
+    );
+  }
+
+  if (isPreviewMode && publicCommunity) {
+    return (
+      <CommunityFunnelV1Preview
+        community={publicCommunity}
+        document={previewDocument}
+        primaryActionLabel={primaryActionLabel}
+        isLoading={props.previewDocumentIsLoading}
+        error={props.previewDocumentError}
+      />
     );
   }
 
