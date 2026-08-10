@@ -1,4 +1,4 @@
-import { ImagePlus, LoaderCircle, Send, Sparkles, X } from "lucide-react";
+import { ImagePlus, LoaderCircle, Send, Sparkles, Square, X } from "lucide-react";
 import {
   useCallback,
   useEffect,
@@ -29,12 +29,14 @@ import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
 import { buildCommunityFunnelThreadKey } from "../../../../shared/runtimeInvocationSurface";
 import type { CommunityFunnelManagerConfig } from "../../../../shared/communityTypes";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
+import { renderMarkdown } from "../../../../shared/markdownUi";
 import type {
   InferenceIssueModalState,
   ThreadStreamingRuntimeEvent,
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
 import { CommunityFunnelV1Preview } from "./CommunityFunnelV1Preview";
+import { WebAgentLiveTurn } from "./WebAgentLiveTurn";
 
 type PreviewCommunityLike = {
   id: string;
@@ -116,6 +118,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     useState<ReferenceImageDraft | null>(null);
   const [isPreparing, setIsPreparing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isAwaitingStream, setIsAwaitingStream] = useState(false);
   const [isPublishing, setIsPublishing] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
   const [inferenceIssue, setInferenceIssue] =
@@ -130,6 +133,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     Record<string, ThreadStreamingRuntimeEvent[]>
   >({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const messagesRef = useRef<HTMLDivElement | null>(null);
+  const followStreamingRef = useRef(true);
   const sessionRef = useRef(props.session);
   const activeThreadKeyRef = useRef(threadKey);
   const activeCommunityIdRef = useRef(props.previewCommunity.id);
@@ -276,6 +281,30 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     };
   }, [referenceImage]);
 
+  const streamingState = streamingByThread[threadKey] ?? null;
+  const runtimeEvents = streamingState?.runtimeEvents ?? [];
+  const streamedText = streamingState?.content ?? "";
+  const turnIsActive =
+    sendingByThread[threadKey] === true || Boolean(streamingState);
+
+  useEffect(() => {
+    if (!followStreamingRef.current) return;
+    const frame = window.requestAnimationFrame(() => {
+      const container = messagesRef.current;
+      if (!container) return;
+      container.scrollTop = container.scrollHeight;
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isAwaitingStream, messages.length, runtimeEvents.length, streamedText]);
+
+  const handleMessagesScroll = () => {
+    const container = messagesRef.current;
+    if (!container) return;
+    const distanceFromBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight;
+    followStreamingRef.current = distanceFromBottom <= 48;
+  };
+
   const selectReferenceImage = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0] ?? null;
     event.target.value = "";
@@ -308,7 +337,9 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     const text = input.trim();
     if ((!text && !referenceImage) || submitInFlightRef.current) return;
     submitInFlightRef.current = true;
+    followStreamingRef.current = true;
     setIsSubmitting(true);
+    setIsAwaitingStream(true);
     setLocalError(null);
     setInferenceIssue(null);
     const messageId = crypto.randomUUID();
@@ -381,6 +412,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         requestedFundingSource: "platform",
         requestedAgenticTools: true,
         suppressOnboardingProgress: true,
+        onStreamStart: () => setIsAwaitingStream(false),
         replyToId: messageId,
         messages: [optimisticMessage],
       });
@@ -398,6 +430,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       );
     } finally {
       submitInFlightRef.current = false;
+      setIsAwaitingStream(false);
       setIsSubmitting(false);
     }
   };
@@ -455,13 +488,11 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     }
   };
 
-  const streamingState = streamingByThread[threadKey] ?? null;
   const isBusy =
     isPreparing ||
     isSubmitting ||
     isPublishing ||
-    sendingByThread[threadKey] === true ||
-    Boolean(streamingState);
+    turnIsActive;
   const visibleMessages = messages.filter(
     (message) => message.role !== "system",
   );
@@ -524,7 +555,11 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           className="funnel-builder-conversation"
           aria-label="Funnel composer conversation"
         >
-          <div className="funnel-builder-messages" aria-live="polite">
+          <div
+            className="funnel-builder-messages"
+            ref={messagesRef}
+            onScroll={handleMessagesScroll}
+          >
             {isPreparing ? (
               <div className="funnel-builder-empty">
                 <LoaderCircle className="is-spinning" />
@@ -546,16 +581,27 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                   className={`funnel-builder-message is-${message.role}`}
                 >
                   <span>{message.role === "user" ? "You" : "Composer"}</span>
-                  <p>{extractTextFromContentJson(message.content_json)}</p>
+                  {message.role === "assistant" ? (
+                    <div className="funnel-builder-message-content message-text">
+                      {renderMarkdown(
+                        extractTextFromContentJson(message.content_json),
+                      )}
+                    </div>
+                  ) : (
+                    <p>{extractTextFromContentJson(message.content_json)}</p>
+                  )}
                 </article>
               ))
             )}
-            {streamingState?.content ? (
-              <article className="funnel-builder-message is-assistant is-streaming">
-                <span>Composer</span>
-                <p>{streamingState.content}</p>
-              </article>
-            ) : null}
+            <WebAgentLiveTurn
+              events={runtimeEvents}
+              streamedText={streamedText}
+              isActive={turnIsActive || isAwaitingStream}
+              session={props.session}
+              renderMarkdown={renderMarkdown}
+              fallbackLabel="Understanding your direction"
+              variant="funnel"
+            />
           </div>
 
           {referenceImage ? (
@@ -599,6 +645,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               maxLength={4_000}
               placeholder="Describe the funnel or ask for a revision…"
               onChange={(event) => setInput(event.target.value)}
+              disabled={isBusy}
               onKeyDown={(event) => {
                 if (event.key === "Enter" && !event.shiftKey) {
                   event.preventDefault();
@@ -606,14 +653,26 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                 }
               }}
             />
-            <button
-              type="submit"
-              className="funnel-builder-send"
-              aria-label="Send"
-              disabled={isBusy || (!input.trim() && !referenceImage)}
-            >
-              {isBusy ? <LoaderCircle className="is-spinning" /> : <Send />}
-            </button>
+            {turnIsActive ? (
+              <button
+                type="button"
+                className="funnel-builder-send"
+                onClick={() => stopStreamingTurn(threadKey)}
+                aria-label="Stop"
+                title="Stop"
+              >
+                <Square aria-hidden="true" />
+              </button>
+            ) : (
+              <button
+                type="submit"
+                className="funnel-builder-send"
+                aria-label="Send"
+                disabled={isBusy || (!input.trim() && !referenceImage)}
+              >
+                {isBusy ? <LoaderCircle className="is-spinning" /> : <Send />}
+              </button>
+            )}
           </form>
         </aside>
       </div>
