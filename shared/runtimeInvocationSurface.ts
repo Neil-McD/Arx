@@ -7,6 +7,11 @@ export type RuntimeInvocationSurface =
   | "member_agent_dock"
   | "community_funnel_builder";
 
+export type RuntimeInvocationFundingPolicy =
+  | "generic_gate"
+  | "community_owner"
+  | "platform_managed";
+
 export const MEMBER_AGENT_THREAD_KEY_PREFIX = "member-agent";
 export const MEMBER_AGENT_GLOBAL_SCOPE_KEY = "global";
 export const COMMUNITY_FUNNEL_THREAD_KEY_PREFIX = "community-funnel";
@@ -37,6 +42,16 @@ export function normalizeRuntimeInvocationSurface(
   if (value === "member_agent_dock" || value === "community_funnel_builder")
     return value;
   return "workspace";
+}
+
+export function resolveRuntimeInvocationFundingPolicy(
+  invocationSurface: RuntimeInvocationSurface,
+): RuntimeInvocationFundingPolicy {
+  if (invocationSurface === "member_agent_dock") return "community_owner";
+  if (invocationSurface === "community_funnel_builder") {
+    return "platform_managed";
+  }
+  return "generic_gate";
 }
 
 export function shouldRecordCommunityOnboardingAgentTurn(params: {

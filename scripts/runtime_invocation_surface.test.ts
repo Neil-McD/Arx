@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCommunityFunnelThreadKey,
   isCommunityFunnelThreadKeyForCommunity,
+  resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
   restrictToolNamesForInvocationSurface,
 } from "../shared/runtimeInvocationSurface";
@@ -38,5 +39,17 @@ describe("community funnel runtime surface", () => {
         ],
       }),
     ).toEqual(["polynet_list", "polynet_read", "polynet_call"]);
+  });
+
+  it("uses platform-managed inference without personal provider gates", () => {
+    expect(
+      resolveRuntimeInvocationFundingPolicy("community_funnel_builder"),
+    ).toBe("platform_managed");
+    expect(resolveRuntimeInvocationFundingPolicy("member_agent_dock")).toBe(
+      "community_owner",
+    );
+    expect(resolveRuntimeInvocationFundingPolicy("workspace")).toBe(
+      "generic_gate",
+    );
   });
 });
