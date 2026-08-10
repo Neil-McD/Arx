@@ -31,6 +31,7 @@ import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../.
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { resolveCommunityInteractionOverflowMenuPlacement } from "../controllers/resolveCommunityInteractionOverflowMenuPlacement";
 
 export function actorLabel(
@@ -607,25 +608,6 @@ export type InteractionMentionContext = {
   // Label for community_agent mentions (default policy: the community's name).
   communityAgentDisplayName?: string;
 };
-
-export function interactionMentionsViewer(
-  mentions: CommunityInteractionMention[] | undefined,
-  currentUserId: string | null | undefined,
-  actorUserId?: string | null,
-): boolean {
-  if (
-    !currentUserId ||
-    actorUserId === currentUserId ||
-    !Array.isArray(mentions)
-  ) {
-    return false;
-  }
-  return mentions.some(
-    (mention) =>
-      mention.mentioned_user_id === currentUserId ||
-      String(mention.mentioned_role_key ?? "").trim() === "everybody",
-  );
-}
 
 function resolveMentionsForRendering(
   context: InteractionMentionContext,

@@ -188,10 +188,10 @@ import {
   formatRelativeTime,
   hostnameOf,
   kindChipLabel,
-  interactionMentionsViewer,
   sortedBlocks,
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
+import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { CommunityPinnedRootSurface } from "./CommunityPinnedRootSurface";
 import { CommunityMemoryGraph } from "./CommunityMemoryGraph";
 

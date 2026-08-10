@@ -1022,7 +1022,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-meta-row\s*\{[^}]*color:\s*var\(--chat-meta-text\);[\s\S]*?\.community-interaction-author\s*\{[^}]*color:\s*var\(--chat-author-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*600;[\s\S]*?\.community-interaction-body\s*\{[^}]*margin-top:\s*2px;[^}]*color:\s*var\(--chat-body-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*400;[^}]*line-height:\s*1\.48;/,
+  /\.community-interaction-meta-row\s*\{[^}]*color:\s*var\(--chat-meta-text\);[\s\S]*?\.community-interaction-author\s*\{[^}]*color:\s*color-mix\(in srgb, var\(--text-primary\) 93%, var\(--surface-workspace\) 7%\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*600;[\s\S]*?\.community-interaction-body\s*\{[^}]*margin-top:\s*2px;[^}]*color:\s*var\(--chat-body-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*400;[^}]*line-height:\s*1\.48;/,
   "community chat should scan author first, body second, and metadata third",
 );
 assert.match(

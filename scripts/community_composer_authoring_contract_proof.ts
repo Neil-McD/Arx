@@ -57,10 +57,10 @@ assert.match(
   "visible insertion actions should share one tight hit-area row",
 );
 assert.match(editing, /const MAX_LIST_INDENT = 4;/, "list authoring should cap indentation at two two-space levels");
-assert.match(
+assert.doesNotMatch(
   editing,
-  /const replacement = `\[\$\{label\}\]\(https:\/\/\)`;/,
-  "link insertion should use safe labeled-link syntax",
+  /insertCommunityComposerLink|toggleCommunityComposerLineFormat|"strike"|"code"/,
+  "removed formatting controls must not leave unreachable authoring actions behind",
 );
 assert.match(
   css,

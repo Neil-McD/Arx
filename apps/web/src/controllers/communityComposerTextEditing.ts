@@ -8,14 +8,11 @@ export type CommunityComposerEdit = CommunityComposerSelection & {
   changed: boolean;
 };
 
-export type CommunityComposerInlineFormat = "bold" | "italic" | "strike" | "code";
-export type CommunityComposerLineFormat = "bullet" | "ordered" | "quote";
+export type CommunityComposerInlineFormat = "bold" | "italic";
 
 const INLINE_MARKERS: Record<CommunityComposerInlineFormat, string> = {
   bold: "**",
   italic: "*",
-  strike: "~~",
-  code: "`",
 };
 
 const LIST_MARKER_PATTERN = /^(\s*)(?:[-*+]\s+|\d+[.)]\s+)(.*)$/;
@@ -109,58 +106,6 @@ export function toggleCommunityComposerInlineFormat(
     selectionEnd: normalized.selectionStart + replacement.length,
     changed: replacement !== selected,
   };
-}
-
-export function insertCommunityComposerLink(
-  selection: CommunityComposerSelection,
-): CommunityComposerEdit {
-  const normalized = normalizeSelection(selection);
-  const selected = normalized.value.slice(normalized.selectionStart, normalized.selectionEnd);
-  const label = selected || "link text";
-  const replacement = `[${label}](https://)`;
-  const value = `${normalized.value.slice(0, normalized.selectionStart)}${replacement}${normalized.value.slice(normalized.selectionEnd)}`;
-  const editableStart = selected
-    ? normalized.selectionStart + label.length + 3
-    : normalized.selectionStart + 1;
-  const editableEnd = selected
-    ? editableStart + "https://".length
-    : editableStart + label.length;
-  return { value, selectionStart: editableStart, selectionEnd: editableEnd, changed: true };
-}
-
-function lineFormatPattern(format: CommunityComposerLineFormat): RegExp {
-  if (format === "bullet") return /^(\s*)[-*+]\s+(.*)$/;
-  if (format === "ordered") return /^(\s*)\d+[.)]\s+(.*)$/;
-  return /^(\s*)>\s?(.*)$/;
-}
-
-export function toggleCommunityComposerLineFormat(
-  selection: CommunityComposerSelection,
-  format: CommunityComposerLineFormat,
-): CommunityComposerEdit {
-  const range = selectedLineRange(selection);
-  const lines = range.value.slice(range.lineStart, range.lineEnd).split("\n");
-  const pattern = lineFormatPattern(format);
-  const contentLines = lines.filter((line) => line.trim().length > 0);
-  const shouldRemove = contentLines.length > 0 && contentLines.every((line) => pattern.test(line));
-  let orderedIndex = 0;
-  return replaceSelectedLines(selection, (line) => {
-    if (!line.trim()) return line;
-    if (shouldRemove) {
-      const match = line.match(pattern);
-      return match ? `${match[1]}${match[2]}` : line;
-    }
-    const indentation = line.match(/^\s*/)?.[0] ?? "";
-    const rawContent = line.slice(indentation.length);
-    const existingList = rawContent.match(/^(?:[-*+]\s+|\d+[.)]\s+)(.*)$/);
-    const content = format === "bullet" || format === "ordered"
-      ? existingList?.[1] ?? rawContent
-      : rawContent;
-    if (format === "quote") return `${indentation}> ${content}`;
-    if (format === "bullet") return `${indentation}- ${content}`;
-    orderedIndex += 1;
-    return `${indentation}${orderedIndex}. ${content}`;
-  });
 }
 
 export function indentCommunityComposerList(

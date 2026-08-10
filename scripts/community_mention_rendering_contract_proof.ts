@@ -213,23 +213,27 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
     new URL("../apps/web/src/components/communityInteractionFeed.tsx", import.meta.url),
     "utf8",
   );
+  const attentionSource = readFileSync(
+    new URL("../apps/web/src/controllers/communityMentionAttention.ts", import.meta.url),
+    "utf8",
+  );
   const projectionSource = readFileSync(
     new URL("../apps/web/src/components/WebCommunityInteractionProjection.tsx", import.meta.url),
     "utf8",
   );
   assert.match(
-    feedSource,
+    attentionSource,
     /export function interactionMentionsViewer\([\s\S]*?actorUserId === currentUserId[\s\S]*?mentioned_user_id === currentUserId[\s\S]*?mentioned_role_key[\s\S]*?=== "everybody"/,
     "viewer attention should include direct and everybody mentions while excluding the author",
   );
   assert.match(
     feedSource,
-    /interactionMentionsViewer\(bundle\.mentions, props\.currentUserId, root\.actor_user_id\)/,
+    /import \{ interactionMentionsViewer \} from "\.\.\/controllers\/communityMentionAttention";[\s\S]*?interactionMentionsViewer\(bundle\.mentions, props\.currentUserId, root\.actor_user_id\)/,
     "root messages should derive viewer attention from canonical mention rows",
   );
   assert.match(
     projectionSource,
-    /interactionMentionsViewer\(bundle\.mentions, props\.currentUserId, reply\.actor_user_id\)/,
+    /import \{ interactionMentionsViewer \} from "\.\.\/controllers\/communityMentionAttention";[\s\S]*?interactionMentionsViewer\(bundle\.mentions, props\.currentUserId, reply\.actor_user_id\)/,
     "thread replies should derive viewer attention from canonical mention rows",
   );
 }
