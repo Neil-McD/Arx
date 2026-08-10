@@ -1369,22 +1369,96 @@ export default defineSchema({
     communityId: v.id("communities"),
     heroMediaUrl: v.optional(v.string()),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
-    draftDocumentV1: v.optional(v.object({
-      version: v.literal(1),
-      template: v.literal("editorial_vsl"),
-      headline: v.string(),
-      subheadline: v.string(),
-      intro_video_url: v.union(v.string(), v.null()),
-      pillars: v.array(v.object({
-        title: v.string(),
-        body: v.string(),
-      })),
-      founder_quote: v.union(v.string(), v.null()),
-      faq: v.array(v.object({
-        question: v.string(),
-        answer: v.string(),
-      })),
-    })),
+    // Read compatibility for the short-lived manual V1 draft plus the
+    // canonical bounded design grammar. New writes accept only the latter.
+    draftDocumentV1: v.optional(v.union(
+      v.object({
+        version: v.literal(1),
+        template: v.literal("editorial_vsl"),
+        headline: v.string(),
+        subheadline: v.string(),
+        intro_video_url: v.union(v.string(), v.null()),
+        pillars: v.array(v.object({
+          title: v.string(),
+          body: v.string(),
+        })),
+        founder_quote: v.union(v.string(), v.null()),
+        faq: v.array(v.object({
+          question: v.string(),
+          answer: v.string(),
+        })),
+      }),
+      v.object({
+        version: v.literal(1),
+        theme: v.object({
+          appearance: v.union(v.literal("light"), v.literal("dark")),
+          character: v.union(
+            v.literal("minimal"),
+            v.literal("editorial"),
+            v.literal("cinematic"),
+          ),
+          accent: v.union(
+            v.literal("blue"),
+            v.literal("violet"),
+            v.literal("rose"),
+            v.literal("amber"),
+            v.literal("emerald"),
+          ),
+          density: v.union(
+            v.literal("compact"),
+            v.literal("balanced"),
+            v.literal("airy"),
+          ),
+          radius: v.union(v.literal("subtle"), v.literal("soft")),
+        }),
+        sections: v.array(v.union(
+          v.object({
+            id: v.string(),
+            type: v.literal("hero"),
+            eyebrow: v.union(v.string(), v.null()),
+            headline: v.string(),
+            body: v.string(),
+            alignment: v.union(v.literal("left"), v.literal("center")),
+          }),
+          v.object({
+            id: v.string(),
+            type: v.literal("media"),
+            media_url: v.union(v.string(), v.null()),
+            caption: v.union(v.string(), v.null()),
+          }),
+          v.object({
+            id: v.string(),
+            type: v.literal("benefits"),
+            heading: v.union(v.string(), v.null()),
+            items: v.array(v.object({ title: v.string(), body: v.string() })),
+          }),
+          v.object({
+            id: v.string(),
+            type: v.literal("social_proof"),
+            headline: v.union(v.string(), v.null()),
+            body: v.union(v.string(), v.null()),
+          }),
+          v.object({
+            id: v.string(),
+            type: v.literal("testimonial"),
+            quote: v.string(),
+            attribution: v.string(),
+          }),
+          v.object({
+            id: v.string(),
+            type: v.literal("faq"),
+            heading: v.union(v.string(), v.null()),
+            items: v.array(v.object({ question: v.string(), answer: v.string() })),
+          }),
+          v.object({
+            id: v.string(),
+            type: v.literal("cta"),
+            headline: v.string(),
+            body: v.union(v.string(), v.null()),
+          }),
+        )),
+      }),
+    )),
     draftRevision: v.optional(v.number()),
     draftUpdatedAt: v.optional(v.number()),
     draftUpdatedByUserId: v.optional(v.id("users")),
@@ -3067,6 +3141,7 @@ export default defineSchema({
       v.literal("coding_harness"),
       v.literal("external_mcp"),
       v.literal("community_concierge"),
+      v.literal("community_funnel_builder"),
     ),
     capability: v.union(
       v.literal("community_repository_search"),
@@ -3371,6 +3446,7 @@ export default defineSchema({
         v.literal("coding_harness"),
         v.literal("external_mcp"),
         v.literal("community_concierge"),
+      v.literal("community_funnel_builder"),
       ),
     ),
     workflowId: v.optional(v.string()),

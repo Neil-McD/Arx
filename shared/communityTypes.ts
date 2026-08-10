@@ -71,7 +71,15 @@ export type CommunityFunnelConfig = {
   hero_media_kind: CommunityFunnelHeroMediaKind;
 };
 
-export type CommunityFunnelPillarV1 = {
+export type CommunityFunnelThemeV1 = {
+  appearance: "light" | "dark";
+  character: "minimal" | "editorial" | "cinematic";
+  accent: "blue" | "violet" | "rose" | "amber" | "emerald";
+  density: "compact" | "balanced" | "airy";
+  radius: "subtle" | "soft";
+};
+
+export type CommunityFunnelBenefitV1 = {
   title: string;
   body: string;
 };
@@ -81,15 +89,56 @@ export type CommunityFunnelFaqV1 = {
   answer: string;
 };
 
+export type CommunityFunnelSectionV1 =
+  | {
+      id: string;
+      type: "hero";
+      eyebrow: string | null;
+      headline: string;
+      body: string;
+      alignment: "left" | "center";
+    }
+  | {
+      id: string;
+      type: "media";
+      media_url: string | null;
+      caption: string | null;
+    }
+  | {
+      id: string;
+      type: "benefits";
+      heading: string | null;
+      items: CommunityFunnelBenefitV1[];
+    }
+  | {
+      id: string;
+      type: "social_proof";
+      headline: string | null;
+      body: string | null;
+    }
+  | {
+      id: string;
+      type: "testimonial";
+      quote: string;
+      attribution: string;
+    }
+  | {
+      id: string;
+      type: "faq";
+      heading: string | null;
+      items: CommunityFunnelFaqV1[];
+    }
+  | {
+      id: string;
+      type: "cta";
+      headline: string;
+      body: string | null;
+    };
+
 export type CommunityFunnelDocumentV1 = {
   version: 1;
-  template: "editorial_vsl";
-  headline: string;
-  subheadline: string;
-  intro_video_url: string | null;
-  pillars: [CommunityFunnelPillarV1, CommunityFunnelPillarV1, CommunityFunnelPillarV1];
-  founder_quote: string | null;
-  faq: CommunityFunnelFaqV1[];
+  theme: CommunityFunnelThemeV1;
+  sections: CommunityFunnelSectionV1[];
 };
 
 export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
@@ -310,7 +359,14 @@ export type CommunityTypingPresenceBundle = {
 export type CommunityAccess = {
   community_id: string;
   user_id: string;
-  relation?: "visitor" | "pending" | "member" | "moderator" | "admin" | "owner" | null;
+  relation?:
+    | "visitor"
+    | "pending"
+    | "member"
+    | "moderator"
+    | "admin"
+    | "owner"
+    | null;
   entry_policy?: CommunityEntryPolicy | null;
   visibility?: "published" | "unlisted";
   join_request_status?: "pending" | "denied" | null;
@@ -319,7 +375,13 @@ export type CommunityAccess = {
   is_owner: boolean;
   is_entitled: boolean;
   access_source?: "free_grant" | "manual_grant" | "paid_subscription" | null;
-  subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
+  subscription_status?:
+    | "active"
+    | "past_due"
+    | "cancel_at_period_end"
+    | "canceled"
+    | "ended"
+    | null;
   entitlement_role: string | null;
   entitlement_ends_at: string | null;
   effective_role: string | null;
@@ -348,7 +410,10 @@ export type CommunityAgentConfig<TLanding = unknown> = {
   updated_at: string;
 };
 
-export type CommunityAiFeedPostType = "observation" | "recommendation" | "action";
+export type CommunityAiFeedPostType =
+  | "observation"
+  | "recommendation"
+  | "action";
 
 export type CommunityAiFeedReactionType = "good" | "low_signal";
 

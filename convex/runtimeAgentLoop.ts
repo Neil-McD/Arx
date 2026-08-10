@@ -310,12 +310,14 @@ export async function executeRetrievalHarnessTool(params: {
     }
     const communityOwned =
       params.evidenceSurface === "community_concierge";
+    const communityMounted =
+      communityOwned || params.evidenceSurface === "community_funnel_builder";
     const execution = await executePolynetCanonicalTool({
       ctx: params.ctx,
       authSubject,
       userId: params.userId,
       principalKind: communityOwned ? "community_agent" : "personal_agent",
-      ...(communityOwned && params.communityId
+      ...(communityMounted && params.communityId
         ? { mountedCommunityId: params.communityId }
         : {}),
       evidenceSurface: params.evidenceSurface ?? "member_agent_dock",
@@ -2116,7 +2118,9 @@ async function executeRetrievalAgentLoop(
                 evidenceSurface:
                   params.invocationSurface === "member_agent_dock"
                     ? "member_agent_dock"
-                    : "coding_harness",
+                    : params.invocationSurface === "community_funnel_builder"
+                      ? "community_funnel_builder"
+                      : "coding_harness",
                 workspaceSession: executionSession.getWorkspaceSession(),
                 activeDaytonaRuntimeSubstrate,
                 executeDaytonaWorkspaceTool: async (toolParams) =>

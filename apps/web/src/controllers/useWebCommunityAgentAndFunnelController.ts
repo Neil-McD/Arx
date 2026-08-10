@@ -10,12 +10,7 @@ import {
   normalizeCommunityAgentDraftForSave,
   type CommunityAgentLanding,
 } from "../../../../shared/communityAgentLanding";
-import { normalizeCommunityFunnelManagerConfig } from "../../../../shared/communityFunnel";
-import { saveCloudCommunityFunnelDraft } from "../../../../shared/cloudCommunityFunnelGateway";
-import type {
-  CommunityAgentConfig,
-  CommunityFunnelManagerConfig,
-} from "../../../../shared/communityTypes";
+import type { CommunityAgentConfig, CommunityFunnelManagerConfig } from "../../../../shared/communityTypes";
 import { useCommunityAgentConfigController } from "../../../../shared/useCommunityAgentDraftController";
 import { useCommunityAgentConfigLifecycle } from "../../../../shared/useCommunityAgentConfigLifecycle";
 import { useCommunityFunnelController } from "../../../../shared/useCommunityFunnelController";
@@ -81,37 +76,15 @@ export function useWebCommunityAgentAndFunnelController(params: {
     AuthSession,
     CommunityFunnelManagerConfig
   >({
-    activeCommunityId: params.activeCommunityId,
-    session: params.session,
     ensureSession: params.ensureSession,
-    communityFunnelConfig: params.adminUi.communityFunnelConfig,
-    normalizeConfigForSave: normalizeCommunityFunnelManagerConfig,
-    saveConfig: async ({ session, communityId, normalizedConfig }) => {
-      const saved = await saveCloudCommunityFunnelDraft<
-        AuthSession,
-        CommunityFunnelManagerConfig
-      >({
-        session,
-        communityId,
-        expectedDraftRevision: normalizedConfig.draft_revision,
-        document: normalizedConfig.draft_document_v1,
-      });
-      return saved ?? normalizedConfig;
-    },
     hydrateEditor: params.adminUi.hydrateCommunityFunnelEditor,
     setLoadedCommunityId: (communityId) => {
       params.adminUi.communityFunnelLoadedCommunityIdRef.current = communityId;
     },
-    markDraftClean: () => {
-      params.adminUi.communityFunnelDirtyRef.current = false;
-    },
     setIsLoadingCommunityFunnel:
       params.adminUi.setIsLoadingCommunityFunnel,
     setCommunityFunnelError: params.adminUi.setCommunityFunnelError,
-    setCommunityFunnelSaveError: params.adminUi.setCommunityFunnelSaveError,
-    setIsSavingCommunityFunnel: params.adminUi.setIsSavingCommunityFunnel,
     loadFailureMessage: "Failed to load funnel.",
-    saveFailureMessage: "Failed to save funnel.",
   });
 
   useCommunityAgentConfigLifecycle<AuthSession>({
@@ -167,6 +140,5 @@ export function useWebCommunityAgentAndFunnelController(params: {
     loadCommunityAgentConfig: agent.loadCommunityAgentConfig,
     handleSaveCommunityAgentConfig: agent.handleSaveCommunityAgentConfig,
     loadCommunityFunnelConfig: funnel.loadCommunityFunnelConfig,
-    handleSaveCommunityFunnel: funnel.handleSaveCommunityFunnel,
   };
 }

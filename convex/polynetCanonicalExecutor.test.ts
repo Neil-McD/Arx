@@ -7,6 +7,7 @@ import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import schema from "./schema";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
+import { buildDefaultCommunityFunnelDocumentV1 } from "../shared/communityFunnel";
 
 const modules = import.meta.glob([
   "./authActor.ts",
@@ -17,6 +18,7 @@ const modules = import.meta.glob([
   "./communityCapabilityContext.ts",
   "./communityChannels.ts",
   "./communityEvidenceAudit.ts",
+  "./communityFunnel.ts",
   "./communityIntelligenceDirectory.ts",
   "./communityInteractionEvidence.ts",
   "./communityInteractions.ts",
@@ -338,7 +340,8 @@ async function recoverCanonicalOperationAfterReceiptCompletionCrash(
       | "member_agent_dock"
       | "coding_harness"
       | "external_mcp"
-      | "community_concierge";
+      | "community_concierge"
+      | "community_funnel_builder";
     toolName: "polynet_write" | "polynet_call";
     input: Record<string, unknown>;
     idempotencyKey: string;
@@ -520,6 +523,177 @@ test("canonical five-tool executor derives member, builder, and community-agent 
   });
 });
 
+test("funnel draft capability is visible and executable only on the manager funnel surface", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const ownerCtx = executionContext(
+    t.withIdentity({ subject: fixture.ownerSubject }),
+  );
+  const memberCtx = executionContext(
+    t.withIdentity({ subject: fixture.memberSubject }),
+  );
+  const capabilityPath =
+    "/communities/canonical-community/capabilities/community.funnel.update_draft.json";
+  const capabilitiesPath = "/communities/canonical-community/capabilities/";
+
+  const ownerCapabilities = await executePolynetCanonicalTool({
+    ctx: ownerCtx,
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "personal_agent",
+    evidenceSurface: "community_funnel_builder",
+    toolName: "polynet_list",
+    input: { path: capabilitiesPath },
+  });
+  expect(ownerCapabilities).toMatchObject({
+    ok: true,
+    value: {
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          operation: "community.funnel.update_draft",
+        }),
+      ]),
+    },
+  });
+  if (!ownerCapabilities.ok)
+    throw new Error("owner funnel capabilities unavailable");
+  expect(ownerCapabilities.value.entries).toHaveLength(1);
+
+  const initialCapability = await executePolynetCanonicalTool({
+    ctx: ownerCtx,
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "personal_agent",
+    evidenceSurface: "community_funnel_builder",
+    toolName: "polynet_read",
+    input: { path: capabilityPath },
+  });
+  expect(initialCapability).toMatchObject({ ok: true });
+  if (!initialCapability.ok) throw new Error("owner funnel capability unavailable");
+  expect(JSON.parse(String(initialCapability.value.body))).toMatchObject({
+    operation: "community.funnel.update_draft",
+    current_state: { draft_revision: 0, draft_document_v1: null },
+  });
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "personal_agent",
+      mountedCommunityId: "different-community",
+      evidenceSurface: "community_funnel_builder",
+      toolName: "polynet_read",
+      input: { path: capabilityPath },
+    }),
+  ).resolves.toMatchObject({
+    ok: false,
+    code: "community_context_mismatch",
+  });
+
+  for (const denied of [
+    {
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "personal_agent" as const,
+      evidenceSurface: "member_agent_dock" as const,
+    },
+    {
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "external_mcp" as const,
+      evidenceSurface: "community_funnel_builder" as const,
+    },
+    {
+      ctx: memberCtx,
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      principalKind: "personal_agent" as const,
+      evidenceSurface: "community_funnel_builder" as const,
+    },
+  ]) {
+    await expect(
+      executePolynetCanonicalTool({
+        ...denied,
+        toolName: "polynet_read",
+        input: { path: capabilityPath },
+      }),
+    ).resolves.toMatchObject({
+      ok: false,
+      code: "semantic_not_found",
+    });
+  }
+
+  const document = buildDefaultCommunityFunnelDocumentV1({
+    communityName: "Canonical community",
+    oneLiner: "Build together with a shared operating memory.",
+  });
+  const callInput = {
+    operation: "community.funnel.update_draft",
+    version: 1,
+    target: capabilityPath,
+    input: {
+      expected_revision: 0,
+      document,
+    },
+    idempotency_key: "funnel-draft-update-1",
+  };
+  const saved = await executePolynetCanonicalTool({
+    ctx: ownerCtx,
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "personal_agent",
+    evidenceSurface: "community_funnel_builder",
+    toolName: "polynet_call",
+    input: callInput,
+  });
+  expect(saved).toMatchObject({
+    ok: true,
+    value: {
+      operation: "community.funnel.update_draft",
+      result: { draft_revision: 1 },
+      receipt: { authority_lane: "builder", deduped: false },
+    },
+  });
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "personal_agent",
+      evidenceSurface: "community_funnel_builder",
+      toolName: "polynet_call",
+      input: callInput,
+    }),
+  ).resolves.toMatchObject({
+    ok: true,
+    value: { deduped: true, receipt: { deduped: true } },
+  });
+  const updatedCapability = await executePolynetCanonicalTool({
+    ctx: ownerCtx,
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "personal_agent",
+    evidenceSurface: "community_funnel_builder",
+    toolName: "polynet_read",
+    input: { path: capabilityPath },
+  });
+  if (!updatedCapability.ok) throw new Error("updated funnel capability unavailable");
+  expect(JSON.parse(String(updatedCapability.value.body))).toMatchObject({
+    current_state: { draft_revision: 1, draft_document_v1: document },
+  });
+  await t.run(async (ctx) => {
+    const rows = await ctx.db.query("communityFunnels").collect();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      communityId: fixture.communityId,
+      draftRevision: 1,
+      draftDocumentV1: document,
+    });
+  });
+});
+
 test("retired AI Feed paths are uniformly absent across canonical operations", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
@@ -609,12 +783,8 @@ test("community-root search returns canonical paths that round-trip through read
       expect.stringMatching(
         /^\/communities\/canonical-community\/channels\/general\/interaction:root:/,
       ),
-      expect.stringMatching(
-        /^\/communities\/canonical-community\/resources\//,
-      ),
-      expect.stringMatching(
-        /^\/communities\/canonical-community\/memory\//,
-      ),
+      expect.stringMatching(/^\/communities\/canonical-community\/resources\//),
+      expect.stringMatching(/^\/communities\/canonical-community\/memory\//),
     ]),
   );
   expect(JSON.stringify(results)).not.toContain(String(fixture.ownerId));
@@ -874,12 +1044,12 @@ test("canonical writes are attributed, retry safe, and reject conflicting idempo
 
   const rows = await t.run(async (ctx) => ({
     roots: await ctx.db.query("communityInteractionRoots").collect(),
-    receipts: await ctx.db
-      .query("polynetCanonicalOperationReceipts")
-      .collect(),
+    receipts: await ctx.db.query("polynetCanonicalOperationReceipts").collect(),
   }));
   expect(rows.roots).toHaveLength(2);
-  expect(rows.roots.every((root) => root.channelId === fixture.generalChannelId)).toBe(true);
+  expect(
+    rows.roots.every((root) => root.channelId === fixture.generalChannelId),
+  ).toBe(true);
   expect(rows.roots).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
@@ -1031,9 +1201,7 @@ test("builder resource agents may stage changes but cannot make terminal decisio
       receipt: { authority_lane: "builder" },
     },
   });
-  const changesetId = String(
-    stage.ok ? stage.value.ref ?? "" : "",
-  );
+  const changesetId = String(stage.ok ? (stage.value.ref ?? "") : "");
   expect(changesetId).not.toBe("");
 
   const agentPrincipals = [
@@ -1133,7 +1301,7 @@ test("builder resource agents may stage changes but cannot make terminal decisio
     },
   });
   const legacyChangesetId = String(
-    legacyStage.ok ? legacyStage.value.ref ?? "" : "",
+    legacyStage.ok ? (legacyStage.value.ref ?? "") : "",
   );
   expect(legacyChangesetId).not.toBe("");
   await asOwner.mutation(
@@ -1182,7 +1350,7 @@ test("builder resource agents may stage changes but cannot make terminal decisio
     },
   });
   const rejectedChangesetId = String(
-    rejectedStage.ok ? rejectedStage.value.ref ?? "" : "",
+    rejectedStage.ok ? (rejectedStage.value.ref ?? "") : "",
   );
   await asOwner.mutation(
     api.communityResources.rejectCommunityResourceBuilderChangeset,
@@ -1217,7 +1385,8 @@ test("resource changeset staging permits only one live proposal per community", 
   const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
   const stage = (idempotencyKey: string, name: string) =>
     t.mutation(
-      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      internal.communityResources
+        .stageCommunityResourceBuilderChangesetInternal,
       {
         userId: fixture.ownerId,
         communityId: fixture.communityId,
@@ -1236,7 +1405,8 @@ test("resource changeset staging permits only one live proposal per community", 
 
   await expect(
     t.mutation(
-      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      internal.communityResources
+        .stageCommunityResourceBuilderChangesetInternal,
       {
         userId: fixture.memberId,
         communityId: fixture.communityId,
@@ -1256,7 +1426,9 @@ test("resource changeset staging permits only one live proposal per community", 
 
   const first = await stage("single-active-1", "Single active one");
   expect(first).toMatchObject({ status: "staged", deduped: false });
-  await expect(stage("single-active-1", "Single active one")).resolves.toMatchObject({
+  await expect(
+    stage("single-active-1", "Single active one"),
+  ).resolves.toMatchObject({
     changeset_id: first.changeset_id,
     status: "staged",
     deduped: true,
@@ -1272,7 +1444,8 @@ test("resource changeset staging permits only one live proposal per community", 
   ).resolves.toHaveLength(1);
   await expect(
     t.mutation(
-      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      internal.communityResources
+        .stageCommunityResourceBuilderChangesetInternal,
       {
         userId: fixture.ownerId,
         communityId: fixture.otherCommunityId,
@@ -1329,7 +1502,9 @@ test("resource changeset staging permits only one live proposal per community", 
       changesetId: third.changeset_id as any,
     },
   );
-  await expect(stage("single-active-4", "Single active four")).resolves.toMatchObject({
+  await expect(
+    stage("single-active-4", "Single active four"),
+  ).resolves.toMatchObject({
     status: "staged",
     deduped: false,
   });
@@ -1353,8 +1528,7 @@ test("initial community resource intent survives staging and durable recovery", 
           module_status: "draft",
         },
       ],
-      idempotencyKey:
-        `polynet:personal_agent:initial-community-resources:${String(fixture.communityId)}:fixture`,
+      idempotencyKey: `polynet:personal_agent:initial-community-resources:${String(fixture.communityId)}:fixture`,
     },
   );
 
@@ -1387,7 +1561,8 @@ test("expired resource changesets commit one terminal state across every decisio
   const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
   const stage = (suffix: string) =>
     t.mutation(
-      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      internal.communityResources
+        .stageCommunityResourceBuilderChangesetInternal,
       {
         userId: fixture.ownerId,
         communityId: fixture.communityId,
@@ -1490,7 +1665,9 @@ test("expired resource changesets commit one terminal state across every decisio
       .collect();
     expect(rows).toHaveLength(4);
     expect(rows.every((row) => row.status === "expired")).toBe(true);
-    expect(await ctx.db.query("communityResourceModules").collect()).toHaveLength(0);
+    expect(
+      await ctx.db.query("communityResourceModules").collect(),
+    ).toHaveLength(0);
   });
 });
 
@@ -1501,7 +1678,8 @@ test("scheduled resource changeset expiry commits without customer action", asyn
     const t = convexTest(schema, modules);
     const fixture = await createFixture(t);
     const staged = await t.mutation(
-      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      internal.communityResources
+        .stageCommunityResourceBuilderChangesetInternal,
       {
         userId: fixture.ownerId,
         communityId: fixture.communityId,
@@ -1525,7 +1703,9 @@ test("scheduled resource changeset expiry commits without customer action", asyn
         status: "expired",
         error: "This resource proposal expired after 24 hours.",
       });
-      expect(await ctx.db.query("communityResourceModules").collect()).toHaveLength(0);
+      expect(
+        await ctx.db.query("communityResourceModules").collect(),
+      ).toHaveLength(0);
     });
   } finally {
     vi.useRealTimers();
@@ -1538,7 +1718,8 @@ test("concurrent resource changeset staging leaves one live proposal", async () 
   const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
   const stage = (suffix: string) =>
     t.mutation(
-      internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
+      internal.communityResources
+        .stageCommunityResourceBuilderChangesetInternal,
       {
         userId: fixture.ownerId,
         communityId: fixture.communityId,
@@ -1555,11 +1736,13 @@ test("concurrent resource changeset staging leaves one live proposal", async () 
       },
     );
   const results = await Promise.allSettled([stage("a"), stage("b")]);
-  expect(results.filter((result) => result.status === "fulfilled")).toHaveLength(1);
+  expect(
+    results.filter((result) => result.status === "fulfilled"),
+  ).toHaveLength(1);
   const rejected = results.find((result) => result.status === "rejected");
-  expect(String(rejected && rejected.status === "rejected" ? rejected.reason : "")).toContain(
-    "community_resource_changeset_already_pending",
-  );
+  expect(
+    String(rejected && rejected.status === "rejected" ? rejected.reason : ""),
+  ).toContain("community_resource_changeset_already_pending");
   await expect(
     asOwner.query(
       api.communityResources.listPendingCommunityResourceBuilderChangesets,
@@ -1616,7 +1799,9 @@ test("builder resource effects survive receipt-completion crashes without duplic
       .collect();
     expect(changesets).toHaveLength(1);
     expect(changesets[0]).toMatchObject({ status: "staged" });
-    expect(await ctx.db.query("communityResourceModules").collect()).toHaveLength(0);
+    expect(
+      await ctx.db.query("communityResourceModules").collect(),
+    ).toHaveLength(0);
   });
 });
 
@@ -1682,8 +1867,9 @@ test("community-memory outcome effects survive receipt-completion crashes withou
     idempotency_key: "memory-outcome-crash-1",
   };
 
-  const recovered =
-    await recoverCanonicalOperationAfterReceiptCompletionCrash(t, {
+  const recovered = await recoverCanonicalOperationAfterReceiptCompletionCrash(
+    t,
+    {
       healthyCtx: memberCtx,
       authSubject: fixture.memberSubject,
       userId: fixture.memberId,
@@ -1699,13 +1885,12 @@ test("community-memory outcome effects survive receipt-completion crashes withou
             await ctx.db.query("communityOutcomeObservations").collect(),
           ).toHaveLength(1);
           expect(
-            await ctx.db
-              .query("communityIntelligenceChangeRequests")
-              .collect(),
+            await ctx.db.query("communityIntelligenceChangeRequests").collect(),
           ).toHaveLength(1);
         });
       },
-    });
+    },
+  );
   expect(recovered).toMatchObject({
     ok: true,
     value: {
@@ -1713,9 +1898,9 @@ test("community-memory outcome effects survive receipt-completion crashes withou
     },
   });
   await t.run(async (ctx) => {
-    expect(await ctx.db.query("communityOutcomeObservations").collect()).toHaveLength(
-      1,
-    );
+    expect(
+      await ctx.db.query("communityOutcomeObservations").collect(),
+    ).toHaveLength(1);
     expect(
       await ctx.db.query("communityIntelligenceChangeRequests").collect(),
     ).toHaveLength(1);
