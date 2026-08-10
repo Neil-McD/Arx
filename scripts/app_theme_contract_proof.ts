@@ -287,6 +287,7 @@ assert.equal(
   "--bg-workspace: #F8F8F4;",
   "--bg-panel: #F0F0EE;",
   "--surface-rail: #F8F8F4;",
+  "--community-rail-control-bg: var(--surface-rail);",
   "--surface-nav: #F0F0EE;",
   "--bg-card: #FFFFFF;",
   "--bg-card-hover: #ECECEA;",
@@ -312,6 +313,11 @@ assert.equal(
 ].forEach((token) => {
   assert.ok(lightThemeBlock.includes(token), `Light should define ${token}`);
 });
+assert.match(
+  baseCss,
+  /\.community-rail-button\s*\{[\s\S]*?background:\s*var\(--community-rail-control-bg\);/,
+  "community rail utility controls should consume the theme-specific rail control surface",
+);
 const lightSelection = lightThemeBlock.match(/--accent-selection:\s*([^;]+);/)?.[1]?.trim();
 const lightAttention = lightThemeBlock.match(/--accent-attention:\s*([^;]+);/)?.[1]?.trim();
 assert.ok(lightSelection && lightAttention, "Light should expose selection and attention roles");

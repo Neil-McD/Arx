@@ -141,6 +141,7 @@
   --rail-width: 72px;
   --rail-control-size: 44px;
   --rail-control-anchor-inset: calc((var(--rail-width) - var(--rail-control-size)) / 2);
+  --community-rail-control-bg: var(--surface-card);
   --community-rail-button-border: 0;
   --scrollbar-size: 6px;
   --scrollbar-radius: 3px;
@@ -253,6 +254,7 @@
   --status-approved: color-mix(in srgb, #147A4B 12%, #FFFFFF 88%);
   --status-executed: rgba(47, 85, 255, 0.1);
 
+  --community-rail-control-bg: var(--surface-rail);
   --community-rail-button-border: 1px solid rgba(23, 23, 25, 0.1);
   --scrollbar-thumb: rgba(23, 23, 25, 0.22);
   --scrollbar-thumb-hover: #6B6974;
