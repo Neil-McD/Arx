@@ -1,5 +1,5 @@
 .funnel-v1-preview {
-  --funnel-v1-accent: #ff3b78;
+  --funnel-v1-accent: #72a7ff;
   --funnel-v1-text: #f7f5f2;
   --funnel-v1-muted: #aaa7a4;
   --funnel-v1-divider: #28282d;
@@ -11,7 +11,7 @@
   background:
     radial-gradient(
       circle at 50% 19%,
-      rgba(255, 59, 120, 0.09),
+      color-mix(in srgb, var(--funnel-v1-accent) 9%, transparent),
       transparent 25rem
     ),
     var(--funnel-v1-page);
@@ -121,7 +121,8 @@
   border: 1px solid color-mix(in srgb, var(--funnel-v1-accent) 32%, #26262b);
   border-radius: var(--funnel-v1-radius);
   background: #111114;
-  box-shadow: 0 26px 85px -42px rgba(255, 59, 120, 0.72);
+  box-shadow: 0 26px 85px -42px
+    color-mix(in srgb, var(--funnel-v1-accent) 72%, transparent);
 }
 
 .funnel-v1-media iframe {
@@ -329,6 +330,27 @@
   border-radius: 8px;
   padding: 12px 14px;
   color: #f1a2a2;
+}
+
+.funnel-v1-preview-empty {
+  min-height: 100%;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 8px;
+  text-align: center;
+  color: var(--funnel-v1-muted);
+}
+
+.funnel-v1-preview-empty svg {
+  width: 22px;
+  height: 22px;
+  margin-bottom: 4px;
+  color: var(--funnel-v1-accent);
+}
+
+.funnel-v1-preview-empty strong {
+  color: var(--funnel-v1-text);
 }
 
 @media (max-width: 680px) {

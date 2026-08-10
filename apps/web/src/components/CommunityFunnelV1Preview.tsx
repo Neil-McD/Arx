@@ -61,7 +61,7 @@ function PreviewMedia(props: {
 
 export function CommunityFunnelV1Preview(props: {
   community: PreviewCommunity;
-  document: CommunityFunnelDocumentV1;
+  document: CommunityFunnelDocumentV1 | null;
   vslUrl?: string | null;
   primaryActionLabel: string;
   isLoading?: boolean;
@@ -77,6 +77,18 @@ export function CommunityFunnelV1Preview(props: {
     .slice(0, 8);
   const memberCount =
     typeof community.member_count === "number" ? community.member_count : null;
+
+  if (!document) {
+    return (
+      <div className="funnel-v1-preview is-dark is-editorial accent-blue density-balanced radius-soft">
+        <main className="funnel-v1-preview-main funnel-v1-preview-empty">
+          <Sparkles aria-hidden="true" />
+          <strong>Nothing to preview yet.</strong>
+          <span>Prompt the agent to build your funnel.</span>
+        </main>
+      </div>
+    );
+  }
 
   const renderSection = (section: CommunityFunnelSectionV1, index: number) => {
     if (section.type === "hero") {

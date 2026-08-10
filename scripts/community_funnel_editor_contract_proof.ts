@@ -21,6 +21,9 @@ const funnelSection = read(
 );
 const communityStyles = read("apps/web/src/styles/community-and-content.css");
 const preview = read("apps/web/src/components/CommunityFunnelV1Preview.tsx");
+const previewStyles = read(
+  "apps/web/src/components/CommunityFunnelV1Preview.css",
+);
 const publicFunnel = read(
   "apps/web/src/components/WebPublicCommunityFunnel.tsx",
 );
@@ -299,10 +302,36 @@ assert.doesNotMatch(
 // published snapshot; communities without one retain the V0 compatibility
 // surface.
 assert.match(previewController, /fetchCloudCommunityFunnelDraftPreview/);
+assert.match(previewController, /setAccessState\("allowed"\)/);
+assert.match(
+  previewController,
+  /classifyCommunityFunnelDraftPreviewFailure\(cause\) === "denied"/,
+);
+assert.match(previewController, /const retry = useCallback/);
+assert.match(
+  app,
+  /const communityPreviewAccessState =[^;]*funnelDraftPreview\.accessState;/s,
+);
+assert.doesNotMatch(
+  app,
+  /const communityPreviewAccessState =[\s\S]{0,700}publicCommunityAccessResolutionKey/,
+  "draft preview admission must not depend on the public-funnel access cache",
+);
+assert.match(
+  app,
+  /previewAdmissionError[\s\S]*funnelDraftPreview\.retry\(\)[\s\S]*Back to builder/,
+);
 assert.match(
   publicFunnel,
   /isPreviewMode && publicCommunity[\s\S]*CommunityFunnelV1Preview/,
 );
+assert.doesNotMatch(
+  publicFunnel,
+  /buildDefaultCommunityFunnelDocumentV1/,
+  "full preview must render the private draft exactly, not synthesize a fallback page",
+);
+assert.match(preview, /Nothing to preview yet\./);
+assert.match(preview, /Prompt the agent to build your funnel\./);
 assert.match(publicFunnel, /return \([\s\S]*<WebCommunityVisitorSurface/);
 assert.match(
   publicFunnel,
@@ -311,6 +340,19 @@ assert.match(
 assert.match(routeController, /recordVisit: !isPublicFunnelPreviewRoute/);
 assert.match(preview, /disabled=\{isPreview \|\| props\.primaryActionDisabled\}/);
 assert.match(preview, /onPrimaryAction/);
+assert.match(
+  documentContract,
+  /DEFAULT_COMMUNITY_FUNNEL_THEME[\s\S]*accent: "blue"/,
+);
+assert.match(
+  previewStyles,
+  /--funnel-v1-accent: #72a7ff;[\s\S]*color-mix\(in srgb, var\(--funnel-v1-accent\) 9%, transparent\)/,
+);
+assert.match(
+  previewStyles,
+  /box-shadow:[\s\S]*color-mix\(in srgb, var\(--funnel-v1-accent\) 72%, transparent\)/,
+);
+assert.doesNotMatch(previewStyles, /rgba\(255,\s*59,\s*120/);
 
 console.log(
   "PASS: Funnel V1 is an AI-assisted bounded draft composer with explicit manager-only revision-safe publication; preview stays disabled, published snapshots power live V1, and unpublished communities retain V0.",
