@@ -7,6 +7,7 @@ const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const liveTurn = read("apps/web/src/components/WebAgentLiveTurn.tsx");
 const liveTurnStyles = read("apps/web/src/components/WebAgentLiveTurn.css");
 const dockStyles = read("apps/web/src/components/WebMemberAgentDock.css");
+const turnRunner = read("shared/useWebTurnRunnerController.ts");
 
 // One presentation path consumes the existing SSE/runtime state on both
 // surfaces. Neither surface owns a second transport or typing simulation.
@@ -16,6 +17,7 @@ assert.match(dock, /<WebAgentLiveTurn[\s\S]*variant="dock"/);
 assert.match(editor, /<WebAgentLiveTurn[\s\S]*variant="funnel"/);
 assert.doesNotMatch(editor, /streamingState\?\.content \? \(/);
 assert.doesNotMatch(liveTurn, /EventSource|WebSocket|setInterval/);
+assert.match(turnRunner, /maxDelayMs = 900/);
 
 // Sequenced assistant events are authoritative; the aggregate content path is
 // only rendered when it would not duplicate those events.
