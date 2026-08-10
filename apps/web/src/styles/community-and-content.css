@@ -4359,7 +4359,7 @@
 }
 
 .community-interaction-author {
-  color: var(--chat-author-text);
+  color: color-mix(in srgb, var(--text-primary) 93%, var(--surface-workspace) 7%);
   font-size: 15px;
   font-weight: 600;
 }
