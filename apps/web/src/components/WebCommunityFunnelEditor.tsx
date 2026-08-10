@@ -10,6 +10,7 @@ import {
 } from "react";
 
 import { getAuthUrl, type AuthSession } from "../auth";
+import { resolveAuthPresentationIdentity } from "../../../../shared/authSession";
 import { extractTextFromContentJson } from "../../../../shared/communityMessageParsing";
 import {
   buildDefaultCommunityFunnelDocumentV1,
@@ -130,11 +131,14 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     Record<string, ThreadStreamingRuntimeEvent[]>
   >({});
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const sessionRef = useRef(props.session);
   const activeThreadKeyRef = useRef(threadKey);
   const activeCommunityIdRef = useRef(props.previewCommunity.id);
   const submitInFlightRef = useRef(false);
+  sessionRef.current = props.session;
   activeThreadKeyRef.current = threadKey;
   activeCommunityIdRef.current = props.previewCommunity.id;
+  const sessionIdentity = resolveAuthPresentationIdentity(props.session);
 
   const document = useMemo(
     () =>
@@ -238,7 +242,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     void (async () => {
       try {
         const session = await props.ensureSession(
-          props.session,
+          sessionRef.current,
           "community_funnel_builder_open",
         );
         if (!session || cancelled) return;
@@ -272,7 +276,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     props.ensureSession,
     props.previewCommunity.id,
     props.previewCommunity.name,
-    props.session,
+    sessionIdentity,
     stopStreamingTurn,
     threadKey,
   ]);
