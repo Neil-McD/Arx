@@ -1,29 +1,29 @@
 import { useCallback, useRef, useState } from "react";
 
 import {
-  DEFAULT_COMMUNITY_FUNNEL_CONFIG,
-  normalizeCommunityFunnelConfig,
+  DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG,
+  normalizeCommunityFunnelManagerConfig,
 } from "../../../../shared/communityFunnel";
-import type { CommunityFunnelConfig } from "../../../../shared/communityTypes";
+import type { CommunityFunnelManagerConfig } from "../../../../shared/communityTypes";
 
 export function useWebCommunityAdminUiController() {
-  const [communityFunnelConfig, setCommunityFunnelConfig] = useState<CommunityFunnelConfig>(
-    DEFAULT_COMMUNITY_FUNNEL_CONFIG,
+  const [communityFunnelConfig, setCommunityFunnelConfig] = useState<CommunityFunnelManagerConfig>(
+    DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG,
   );
   const [isLoadingCommunityFunnel, setIsLoadingCommunityFunnel] = useState(false);
   const [communityFunnelError, setCommunityFunnelError] = useState<string | null>(null);
   const [isSavingCommunityFunnel, setIsSavingCommunityFunnel] = useState(false);
   const [communityFunnelSaveError, setCommunityFunnelSaveError] = useState<string | null>(null);
   const communityFunnelLoadedCommunityIdRef = useRef<string | null>(null);
-  const communityFunnelSavedConfigRef = useRef<CommunityFunnelConfig>(DEFAULT_COMMUNITY_FUNNEL_CONFIG);
+  const communityFunnelSavedConfigRef = useRef<CommunityFunnelManagerConfig>(DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG);
   const communityFunnelDirtyRef = useRef(false);
 
   const markCommunityFunnelDirty = useCallback(() => {
     communityFunnelDirtyRef.current = true;
   }, []);
 
-  const hydrateCommunityFunnelEditor = useCallback((config: CommunityFunnelConfig | null) => {
-    const normalized = normalizeCommunityFunnelConfig(config);
+  const hydrateCommunityFunnelEditor = useCallback((config: CommunityFunnelManagerConfig | null) => {
+    const normalized = normalizeCommunityFunnelManagerConfig(config);
     setCommunityFunnelConfig(normalized);
     communityFunnelSavedConfigRef.current = normalized;
     setCommunityFunnelSaveError(null);
@@ -40,8 +40,8 @@ export function useWebCommunityAdminUiController() {
     setCommunityFunnelError(null);
     setIsLoadingCommunityFunnel(false);
     communityFunnelLoadedCommunityIdRef.current = null;
-    communityFunnelSavedConfigRef.current = DEFAULT_COMMUNITY_FUNNEL_CONFIG;
-    setCommunityFunnelConfig(DEFAULT_COMMUNITY_FUNNEL_CONFIG);
+    communityFunnelSavedConfigRef.current = DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG;
+    setCommunityFunnelConfig(DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG);
     communityFunnelDirtyRef.current = false;
   }, []);
 

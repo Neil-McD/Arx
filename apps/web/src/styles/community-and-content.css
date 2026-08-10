@@ -2339,6 +2339,111 @@
   background: transparent;
 }
 
+/* Funnel V1 is intentionally one fixed conversion template rather than an
+   open-ended page builder. The editor exposes only the content that renderer
+   can safely persist and preview. */
+.funnel-v1-editor {
+  width: min(1120px, 100%);
+  margin: 0 auto;
+  padding: 4px 0 44px;
+}
+
+.funnel-v1-editor-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 28px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border-muted);
+}
+
+.funnel-v1-editor-header p,
+.funnel-v1-editor-section-heading p,
+.funnel-v1-editor-empty-copy {
+  margin: 5px 0 0;
+  color: var(--text-muted);
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.funnel-v1-editor-actions { display: flex; align-items: center; gap: 8px; }
+.funnel-v1-editor-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 22px; align-items: start; }
+.funnel-v1-editor-column { display: grid; gap: 22px; }
+.funnel-v1-editor-section {
+  display: grid;
+  gap: 15px;
+  border: 1px solid var(--border-muted);
+  border-radius: 12px;
+  background: var(--bg-card-alt);
+  padding: 20px;
+}
+.funnel-v1-editor-section-heading { display: grid; grid-template-columns: 28px 1fr; gap: 10px; align-items: start; }
+.funnel-v1-editor-section-heading > span {
+  color: var(--text-faint);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  padding-top: 2px;
+}
+.funnel-v1-editor-section-heading h3 { margin: 0; color: var(--text-primary); font-size: 14px; }
+.funnel-v1-editor-section-heading-with-action { grid-template-columns: 28px 1fr auto; }
+.funnel-v1-editor label { display: grid; gap: 7px; color: var(--text-secondary); font-size: 12px; font-weight: 600; }
+.funnel-v1-editor input,
+.funnel-v1-editor textarea {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  padding: 11px 12px;
+  font: inherit;
+  font-size: 13px;
+  line-height: 1.5;
+  resize: vertical;
+}
+.funnel-v1-editor input:focus,
+.funnel-v1-editor textarea:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--accent-gold) 62%, var(--border-strong));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent-gold) 10%, transparent);
+}
+.funnel-v1-pillar-editor-list,
+.funnel-v1-faq-editor-list { display: grid; gap: 12px; }
+.funnel-v1-editor fieldset {
+  position: relative;
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  border: 1px solid var(--border-muted);
+  border-radius: 10px;
+  padding: 14px;
+}
+.funnel-v1-editor legend { padding: 0 5px; color: var(--text-faint); font-size: 11px; }
+.funnel-v1-icon-action {
+  display: inline-grid !important;
+  width: 30px !important;
+  height: 30px !important;
+  min-height: 0 !important;
+  place-items: center;
+  padding: 0 !important;
+}
+.funnel-v1-icon-action svg { width: 15px; height: 15px; }
+.funnel-v1-faq-editor-list fieldset > .funnel-v1-icon-action { position: absolute; top: 7px; right: 8px; }
+.funnel-v1-field-error { color: var(--accent-error); font-weight: 500; }
+
+@media (max-width: 900px) {
+  .funnel-v1-editor-header { flex-direction: column; }
+  .funnel-v1-editor-grid { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .funnel-v1-editor-actions { width: 100%; flex-wrap: wrap; }
+  .funnel-v1-editor-actions button { flex: 1; }
+  .funnel-v1-editor-section { padding: 16px; }
+}
+
 .community-chat {
   display: flex;
   flex-direction: column;

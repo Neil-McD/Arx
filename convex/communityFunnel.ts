@@ -1,5 +1,5 @@
-import { query } from "./_generated/server";
-import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
 import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
@@ -10,9 +10,37 @@ type CommunityFunnelRowLike = {
   communityId: unknown;
   heroMediaUrl?: string | null;
   heroMediaKind?: "image" | "video" | null;
+  draftDocumentV1?: CommunityFunnelDocumentV1Like | null;
+  draftRevision?: number | null;
+  draftUpdatedAt?: number | null;
+  draftUpdatedByUserId?: unknown;
   createdAt: number;
   updatedAt: number;
 };
+
+type CommunityFunnelDocumentV1Like = {
+  version: 1;
+  template: "editorial_vsl";
+  headline: string;
+  subheadline: string;
+  intro_video_url: string | null;
+  pillars: Array<{ title: string; body: string }>;
+  founder_quote: string | null;
+  faq: Array<{ question: string; answer: string }>;
+};
+
+const funnelPillarValidator = v.object({ title: v.string(), body: v.string() });
+const funnelFaqValidator = v.object({ question: v.string(), answer: v.string() });
+const funnelDocumentV1Validator = v.object({
+  version: v.literal(1),
+  template: v.literal("editorial_vsl"),
+  headline: v.string(),
+  subheadline: v.string(),
+  intro_video_url: v.union(v.string(), v.null()),
+  pillars: v.array(funnelPillarValidator),
+  founder_quote: v.union(v.string(), v.null()),
+  faq: v.array(funnelFaqValidator),
+});
 
 function normalizeTrimmedString(raw: unknown, maxLength: number): string | null {
   if (typeof raw !== "string") return null;
@@ -84,6 +112,52 @@ async function buildCommunityFunnelConfig(
   };
 }
 
+function normalizeBoundedText(raw: unknown, maxLength: number): string {
+  return typeof raw === "string" ? raw.trim().slice(0, maxLength) : "";
+}
+
+function normalizeFunnelDocumentV1(raw: CommunityFunnelDocumentV1Like): CommunityFunnelDocumentV1Like {
+  if (raw.version !== 1 || raw.template !== "editorial_vsl") {
+    throw new Error("community_funnel_draft_invalid_version");
+  }
+  if (!Array.isArray(raw.pillars) || raw.pillars.length !== 3) {
+    throw new Error("community_funnel_draft_requires_three_pillars");
+  }
+  if (!Array.isArray(raw.faq) || raw.faq.length > 3) {
+    throw new Error("community_funnel_draft_faq_limit_exceeded");
+  }
+  const introVideoUrl = normalizeTrimmedString(raw.intro_video_url, 2_000);
+  if (introVideoUrl && !isSupportedCommunityFunnelVideoUrl(introVideoUrl)) {
+    throw new Error("Only YouTube, Vimeo, Loom, and Wistia links are supported for funnel media.");
+  }
+  return {
+    version: 1,
+    template: "editorial_vsl",
+    headline: normalizeBoundedText(raw.headline, 160),
+    subheadline: normalizeBoundedText(raw.subheadline, 360),
+    intro_video_url: introVideoUrl,
+    pillars: raw.pillars.map((pillar) => ({
+      title: normalizeBoundedText(pillar.title, 80),
+      body: normalizeBoundedText(pillar.body, 280),
+    })),
+    founder_quote: normalizeTrimmedString(raw.founder_quote, 1_200),
+    faq: raw.faq.map((item) => ({
+      question: normalizeBoundedText(item.question, 160),
+      answer: normalizeBoundedText(item.answer, 1_200),
+    })),
+  };
+}
+
+function buildCommunityFunnelManagerConfig(row: CommunityFunnelRowLike | null) {
+  return {
+    hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
+    hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
+    draft_document_v1: row?.draftDocumentV1 ?? null,
+    draft_revision: Math.max(0, Math.floor(Number(row?.draftRevision ?? 0))),
+    draft_updated_at: row?.draftUpdatedAt ?? null,
+  };
+}
+
 export function normalizeCommunityFunnelConfigInput(raw: unknown) {
   const value = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
   const heroMediaKind = normalizeHeroMediaKind(value.hero_media_kind);
@@ -113,8 +187,14 @@ export async function saveCommunityFunnelConfigInternal(
   const existing = await getCommunityFunnelRow(ctx, communityId);
   const hasHeroMedia = Boolean(normalized?.hero_media_url);
   if (!hasHeroMedia) {
-    if (existing) {
+    if (existing && !existing.draftDocumentV1) {
       await ctx.db.delete(existing._id as any);
+    } else if (existing) {
+      await ctx.db.patch(existing._id as any, {
+        heroMediaUrl: undefined,
+        heroMediaKind: undefined,
+        updatedAt: nowMs,
+      });
     }
     return await buildCommunityFunnelConfig(ctx, communityId, null);
   }
@@ -126,7 +206,7 @@ export async function saveCommunityFunnelConfigInternal(
     updatedAt: nowMs,
   };
   if (existing) {
-    await ctx.db.replace(existing._id as any, nextFields);
+    await ctx.db.patch(existing._id as any, nextFields);
   } else {
     await ctx.db.insert("communityFunnels" as any, nextFields);
   }
@@ -158,6 +238,76 @@ export const getCommunityFunnelConfig = query({
       userId: args.userId,
     });
     const row = await getCommunityFunnelRow(ctx, args.communityId);
-    return await buildCommunityFunnelConfig(ctx, args.communityId, row);
+    return buildCommunityFunnelManagerConfig(row);
+  },
+});
+
+export const getCommunityFunnelDraftPreview = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    slug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    const slug = args.slug.trim();
+    const community = await ctx.db
+      .query("communities")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first();
+    if (!community) throw new Error("community_not_found");
+    await requireCommunityManager({ ctx, communityId: community._id, userId });
+    return buildCommunityFunnelManagerConfig(await getCommunityFunnelRow(ctx, community._id));
+  },
+});
+
+export const saveCommunityFunnelDraft = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    expectedDraftRevision: v.number(),
+    document: funnelDocumentV1Validator,
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    const currentRevision = Math.max(0, Math.floor(Number(existing?.draftRevision ?? 0)));
+    if (Math.floor(args.expectedDraftRevision) !== currentRevision) {
+      throw new ConvexError({
+        code: "community_funnel_draft_conflict",
+        expected_revision: args.expectedDraftRevision,
+        current_revision: currentRevision,
+      });
+    }
+    const nowMs = Date.now();
+    const nextRevision = currentRevision + 1;
+    const draftDocumentV1 = normalizeFunnelDocumentV1(args.document);
+    const draftFields = {
+      draftDocumentV1,
+      draftRevision: nextRevision,
+      draftUpdatedAt: nowMs,
+      draftUpdatedByUserId: userId,
+      updatedAt: nowMs,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id as any, draftFields);
+    } else {
+      await ctx.db.insert("communityFunnels", {
+        communityId: args.communityId,
+        ...draftFields,
+        createdAt: nowMs,
+      });
+    }
+    return buildCommunityFunnelManagerConfig(await getCommunityFunnelRow(ctx, args.communityId));
   },
 });
