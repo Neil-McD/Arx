@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { POLYNET_CANONICAL_TOOL_DEFINITIONS } from "../shared/polynetCanonicalToolContract.ts";
+import { buildPlatformHarnessRuntimePromptBundle } from "../shared/runtimePrompt.ts";
+import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
 const editor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
@@ -175,9 +177,48 @@ assert.match(
   invocationSurface,
   /COMMUNITY_FUNNEL_BUILDER_TOOL_NAME_SET[\s\S]*"polynet_list"[\s\S]*"polynet_read"[\s\S]*"polynet_call"/,
 );
+const assembledFunnelPrompt = buildPlatformHarnessRuntimePromptBundle({
+  loopBudget: {
+    maxToolSteps: 4,
+    maxRepeatedIdenticalCalls: 1,
+    maxConsecutiveFailures: 2,
+    maxNoProgressSteps: 2,
+  },
+  allowedToolNames: ["polynet_list", "polynet_read", "polynet_call"],
+  harnessName: "chat_tools",
+  runtimeTurnContext: buildRuntimeTurnContextPacket({}),
+  invocationSurface: "community_funnel_builder",
+  communityId: "community-proof",
+  communityName: "Proof Community",
+  communitySlug: "proof-community",
+});
+assert.equal(
+  assembledFunnelPrompt.sections.find(
+    (section) => section.id === "invocation_surface",
+  )?.rendered,
+  true,
+  "the bounded funnel contract must render in the final runtime prompt bundle",
+);
+assert.match(assembledFunnelPrompt.text, /bounded community funnel composer/);
+assert.match(assembledFunnelPrompt.text, /Never invent an audience, offer, price/);
 assert.match(
-  invocationSurface,
+  assembledFunnelPrompt.text,
+  /saved intro video immediately after the hero/,
+);
+assert.match(
+  assembledFunnelPrompt.text,
+  /Do not default every funnel to a dark theme or rose accent/,
+);
+assert.match(
+  assembledFunnelPrompt.text,
   /Never publish, change pricing, change access policy/,
+);
+assert.equal(
+  assembledFunnelPrompt.sections.some(
+    (section) => section.id === "member_identity_context",
+  ),
+  false,
+  "the funnel surface must not inherit private member-dock identity context",
 );
 assert.match(runtimeResolution, /isCommunityFunnelThreadKeyForCommunity/);
 assert.match(
