@@ -10,12 +10,14 @@ import type {
 export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
   hero_media_url: null,
   hero_media_kind: "image",
+  published_vsl_url: null,
   published_document_v1: null,
 };
 
 export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConfig =
   {
     ...DEFAULT_COMMUNITY_FUNNEL_CONFIG,
+    draft_vsl_url: null,
     draft_document_v1: null,
     draft_revision: 0,
     draft_updated_at: null,
@@ -134,6 +136,39 @@ export function isSupportedCommunityFunnelVideoUrl(
   return false;
 }
 
+export function normalizeCommunityFunnelVslUrl(raw: unknown): string | null {
+  const value = normalizeTrimmedString(raw, 2_000);
+  if (!value) return null;
+  const url = normalizeExternalUrl(value);
+  if (!url || !isSupportedCommunityFunnelVideoUrl(url.href)) {
+    throw new Error("community_funnel_vsl_url_unsupported");
+  }
+  return url.href;
+}
+
+export function resolveCommunityFunnelDocumentVslUrl(
+  document: CommunityFunnelDocumentV1 | null | undefined,
+): string | null {
+  const mediaSection = document?.sections.find(
+    (section): section is Extract<CommunityFunnelSectionV1, { type: "media" }> =>
+      section.type === "media" && Boolean(section.media_url),
+  );
+  try {
+    return normalizeCommunityFunnelVslUrl(mediaSection?.media_url ?? null);
+  } catch {
+    return null;
+  }
+}
+
+export function withoutCommunityFunnelMediaSections(
+  document: CommunityFunnelDocumentV1,
+): CommunityFunnelDocumentV1 {
+  return {
+    ...document,
+    sections: document.sections.filter((section) => section.type !== "media"),
+  };
+}
+
 export function normalizeCommunityFunnelConfig(
   raw: unknown,
 ): CommunityFunnelConfig {
@@ -141,12 +176,37 @@ export function normalizeCommunityFunnelConfig(
     return DEFAULT_COMMUNITY_FUNNEL_CONFIG;
   }
   const value = raw as Record<string, unknown>;
+  const heroMediaUrl = normalizeTrimmedString(value.hero_media_url, 2_000);
+  const heroMediaKind = normalizeHeroMediaKind(value.hero_media_kind);
+  const publishedDocumentV1 = normalizeCommunityFunnelDocumentV1(
+    value.published_document_v1,
+  );
+  let publishedVslUrl: string | null = null;
+  try {
+    publishedVslUrl = normalizeCommunityFunnelVslUrl(
+      value.published_vsl_url,
+    );
+  } catch {
+    publishedVslUrl = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(value, "published_vsl_url")) {
+    publishedVslUrl =
+      resolveCommunityFunnelDocumentVslUrl(publishedDocumentV1) ??
+      (heroMediaKind === "video"
+        ? (() => {
+            try {
+              return normalizeCommunityFunnelVslUrl(heroMediaUrl);
+            } catch {
+              return null;
+            }
+          })()
+        : null);
+  }
   return {
-    hero_media_url: normalizeTrimmedString(value.hero_media_url, 2_000),
-    hero_media_kind: normalizeHeroMediaKind(value.hero_media_kind),
-    published_document_v1: normalizeCommunityFunnelDocumentV1(
-      value.published_document_v1,
-    ),
+    hero_media_url: heroMediaUrl,
+    hero_media_kind: heroMediaKind,
+    published_vsl_url: publishedVslUrl,
+    published_document_v1: publishedDocumentV1,
   };
 }
 
@@ -378,13 +438,11 @@ export function buildDefaultCommunityFunnelDocumentV1(params: {
   communityName: string;
   oneLiner?: string | null;
   about?: string | null;
-  heroMediaUrl?: string | null;
 }): CommunityFunnelDocumentV1 {
   const communityName =
     normalizeTrimmedString(params.communityName, 80) || "this community";
   const oneLiner = normalizeTrimmedString(params.oneLiner, 180);
   const about = normalizeTrimmedString(params.about, 480);
-  const mediaUrl = normalizeTrimmedString(params.heroMediaUrl, 2_000);
   return {
     version: 1,
     theme: { ...DEFAULT_COMMUNITY_FUNNEL_THEME },
@@ -398,15 +456,6 @@ export function buildDefaultCommunityFunnelDocumentV1(params: {
           about ||
           `Meet the people, knowledge, and agents inside ${communityName}.`,
         alignment: "center",
-      },
-      {
-        id: "media",
-        type: "media",
-        media_url:
-          mediaUrl && isSupportedCommunityFunnelVideoUrl(mediaUrl)
-            ? mediaUrl
-            : null,
-        caption: null,
       },
       {
         id: "benefits",
@@ -450,11 +499,32 @@ export function normalizeCommunityFunnelManagerConfig(
   const publishedRevision = Math.floor(Number(value.published_draft_revision));
   const draftUpdatedAt = Number(value.draft_updated_at);
   const publishedAt = Number(value.published_at);
+  const draftDocumentV1 = normalizeCommunityFunnelDocumentV1(
+    value.draft_document_v1,
+  );
+  let draftVslUrl: string | null = null;
+  try {
+    draftVslUrl = normalizeCommunityFunnelVslUrl(value.draft_vsl_url);
+  } catch {
+    draftVslUrl = null;
+  }
+  if (!Object.prototype.hasOwnProperty.call(value, "draft_vsl_url")) {
+    draftVslUrl =
+      resolveCommunityFunnelDocumentVslUrl(draftDocumentV1) ??
+      (base.hero_media_kind === "video"
+        ? (() => {
+            try {
+              return normalizeCommunityFunnelVslUrl(base.hero_media_url);
+            } catch {
+              return null;
+            }
+          })()
+        : null);
+  }
   return {
     ...base,
-    draft_document_v1: normalizeCommunityFunnelDocumentV1(
-      value.draft_document_v1,
-    ),
+    draft_vsl_url: draftVslUrl,
+    draft_document_v1: draftDocumentV1,
     draft_revision: Number.isFinite(revision) && revision >= 0 ? revision : 0,
     draft_updated_at:
       Number.isFinite(draftUpdatedAt) && draftUpdatedAt > 0

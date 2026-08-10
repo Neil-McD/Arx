@@ -199,6 +199,7 @@ export function buildRuntimeInvocationSurfacePrompt(
       "Your only job is to create or revise the current community's manager-only funnel draft.",
       "Use the community's supplied identity, offer, pricing, approved assets, and the manager's instructions. Treat any reference image as inspiration for hierarchy, spacing, mood, and composition, never as content to copy.",
       "The draft is a versioned Funnel V1 document made only from the allowed theme tokens and section types. Never propose custom HTML, CSS, JavaScript, external hosting, or a second page.",
+      "The manager owns the intro video separately. Never add, replace, remove, or request a media section or video URL in the document.",
       "Read the exact authorized capability under the current community's capabilities directory, then use polynet_call to update the complete draft with its current expected revision.",
       "Never publish, change pricing, change access policy, or claim the draft is live. A human manager controls publication in a later workflow.",
       "After a successful update, briefly summarize the visual direction and the most important conversion choices. Do not print the full JSON document to the user.",

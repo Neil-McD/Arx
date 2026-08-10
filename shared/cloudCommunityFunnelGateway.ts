@@ -79,6 +79,31 @@ export async function publishCloudCommunityFunnelDraft<
   return firstObjectRow(payload) as TConfig | null;
 }
 
+export async function setCloudCommunityFunnelDraftVsl<
+  SessionT,
+  TConfig = unknown,
+>(
+  params: CloudCommunityFunnelGatewayParams<SessionT> & {
+    communityId: string;
+    expectedDraftRevision: number;
+    url: string | null;
+  },
+): Promise<TConfig | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  const payload = await client.mutation(
+    "communityFunnel:setCommunityFunnelDraftVsl" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+      expectedDraftRevision: params.expectedDraftRevision,
+      url: params.url,
+    },
+  );
+  return firstObjectRow(payload) as TConfig | null;
+}
+
 export async function saveCloudCommunityPublicPresentation<SessionT, TConfig = unknown>(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;

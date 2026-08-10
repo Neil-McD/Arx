@@ -2692,6 +2692,7 @@ export default function App() {
       shellVariant,
       isPreviewMode: isPublicFunnelPreviewRoute,
       previewDocument: funnelDraftPreview.document,
+      previewVslUrl: funnelDraftPreview.vslUrl,
       previewDocumentIsLoading: funnelDraftPreview.isLoading,
       previewDocumentError: funnelDraftPreview.error,
       gateOpenNonce: publicCommunityUi.visitorGateNonce,
