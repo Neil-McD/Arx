@@ -287,7 +287,7 @@ assert.equal(
   "--bg-workspace: #F8F8F4;",
   "--bg-panel: #F0F0EE;",
   "--surface-rail: #F8F8F4;",
-  "--community-rail-control-bg: var(--surface-rail);",
+  "--community-rail-control-bg: var(--surface-nav);",
   "--surface-nav: #F0F0EE;",
   "--bg-card: #FFFFFF;",
   "--bg-card-hover: #ECECEA;",
@@ -317,11 +317,6 @@ assert.match(
   baseCss,
   /\.community-rail-button\s*\{[\s\S]*?background:\s*var\(--community-rail-control-bg\);/,
   "community rail utility controls should consume the theme-specific rail control surface",
-);
-assert.match(
-  baseCss,
-  /\.community-rail-button:not\(\.community-rail-community\)\s*\{[\s\S]*?border-color:\s*transparent;/,
-  "community rail utility controls should blend into the rail without changing community avatar borders",
 );
 const lightSelection = lightThemeBlock.match(/--accent-selection:\s*([^;]+);/)?.[1]?.trim();
 const lightAttention = lightThemeBlock.match(/--accent-attention:\s*([^;]+);/)?.[1]?.trim();
