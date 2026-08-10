@@ -2182,7 +2182,7 @@
   align-items: center;
   justify-content: center;
   background: var(--accent-attention);
-  color: white;
+  color: var(--text-on-attention);
   font-size: 8px;
   font-weight: 800;
 }
@@ -2404,8 +2404,8 @@
   height: 15px;
   padding: 0 3px;
   border-radius: 999px;
-  background: var(--accent-attention);
-  color: white;
+  background: var(--accent-global-attention);
+  color: var(--text-on-global-attention);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2421,7 +2421,7 @@
   height: 7px;
   border: 2px solid var(--surface-workspace, var(--bg-workspace));
   border-radius: 999px;
-  background: var(--accent-attention);
+  background: var(--accent-global-attention);
 }
 
 .mobile-bottom-rail-ai {

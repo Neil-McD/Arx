@@ -67,9 +67,9 @@ assert.match(
   /const mobileThreadPageOpen = Boolean\([\s\S]*showMobileShell[\s\S]*mobileRootPage === "community"[\s\S]*selectedCommunityInteractionRootId[\s\S]*\);/,
   "a selected reply thread should become a page only inside the mobile Community root",
 );
-assert.match(
+assert.doesNotMatch(
   interactionProjectionController,
-  /if \(!activeCommunityId\) return;[\s\S]*if \(shellVariant === "mobile"\) return;[\s\S]*readStoredSelectedRoot/,
+  /readStoredSelectedRoot/,
   "mobile Community should not reopen a stale thread selection from storage",
 );
 assert.match(
@@ -289,7 +289,7 @@ assert.match(
 );
 assert.match(
   interactionProjection,
-  /export function CommunityInteractionContextPanelSurface[\s\S]*<CommunityContextPanel/,
+  /const StableCommunityInteractionContextPanelSurface = memo\([\s\S]*<CommunityContextPanel[\s\S]*export function CommunityInteractionContextPanelSurface[\s\S]*<StableCommunityInteractionContextPanelSurface/,
   "member context should be reused without duplicating its state",
 );
 assert.match(
@@ -325,8 +325,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /--accent-selection: var\(--accent-gold\);[\s\S]*--accent-agent: #a78bfa;[\s\S]*--accent-agent-strong: #8b5cf6;[\s\S]*--accent-attention: #7BAAD6;[\s\S]*--focus-ring:/,
-  "selection, AI identity, attention, and focus should have independent semantic roles",
+  /--accent-selection: var\(--accent-gold\);[\s\S]*--accent-agent: #a78bfa;[\s\S]*--accent-agent-strong: #8b5cf6;[\s\S]*--accent-attention: #7BAAD6;[\s\S]*--accent-global-attention: #EF4444;[\s\S]*--focus-ring:/,
+  "selection, AI identity, community attention, global attention, and focus should have independent semantic roles",
 );
 assert.match(
   indexCss,
@@ -340,8 +340,8 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community-cutout \{[\s\S]*position: absolute;[\s\S]*display: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > \.mobile-bottom-rail-community-cutout \{[\s\S]*display: block;[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-community-cutout > path:first-child \{[\s\S]*fill: color-mix[\s\S]*stroke: color-mix[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*background: var\(--accent-attention\);/,
-  "routine selection should use solid white icon forms with a real Home cutout while attention retains its semantic accent",
+  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community-cutout \{[\s\S]*position: absolute;[\s\S]*display: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > \.mobile-bottom-rail-community-cutout \{[\s\S]*display: block;[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-community-cutout > path:first-child \{[\s\S]*fill: color-mix[\s\S]*stroke: color-mix[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-global-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*background: var\(--accent-global-attention\);/,
+  "routine selection should use solid white icon forms while outer-context attention uses the global red role",
 );
 assert.match(
   indexCss,

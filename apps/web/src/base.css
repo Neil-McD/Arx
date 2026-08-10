@@ -47,8 +47,9 @@
   --accent-agent-foreground: #c4b5fd;
   --accent-agent-surface: rgba(167, 139, 250, 0.16);
   --accent-attention: #7BAAD6;
-  --accent-attention-fill: #7BAAD6;
   --text-on-attention: #171719;
+  --accent-global-attention: #EF4444;
+  --text-on-global-attention: #171719;
   --focus-ring: color-mix(in srgb, var(--accent-selection) 62%, white 38%);
 
   /* Compatibility aliases for older surfaces while semantic names become canonical. */
@@ -194,8 +195,9 @@
   --accent-agent-foreground: #2F55FF;
   --accent-agent-surface: rgba(47, 85, 255, 0.1);
   --accent-attention: #2F55FF;
-  --accent-attention-fill: #2F55FF;
   --text-on-attention: #FFFFFF;
+  --accent-global-attention: #B42318;
+  --text-on-global-attention: #FFFFFF;
   --focus-ring: rgba(47, 85, 255, 0.52);
   --text-link: #2F55FF;
   --text-link-hover: color-mix(in srgb, #2F55FF 84%, #171719 16%);
