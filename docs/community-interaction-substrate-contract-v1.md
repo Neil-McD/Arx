@@ -477,6 +477,9 @@ Rules:
 - channel switching clears transient composer/reply state and cannot expose roots or pending sends from another channel
 - only community managers see Add Channel; the dialog accepts one display name and the server remains authoritative for normalization, authorization, and the ten-channel limit
 - every resolved member channel renders one canonical conversation header so the active scope remains explicit independently of sidebar or mobile-drawer state
+- main-channel and drawer-reply composers share one raised two-zone presentation: the editor owns the upper region and existing mention, attachment, dictation, and send actions occupy the lower utility row
+- the visible mention control inserts at the current caret and opens the same authorized autocomplete used by typed `@`; reply candidates continue to exclude role broadcasts such as `@everybody`
+- reply context and queued attachments remain transient composer state inside the visual shell; formatting controls are not presented until their insertion and rendering contract is implemented
 - only community managers see the active-channel options trigger; custom-channel rename preserves the canonical slug and delete archives without deleting interaction history
 - the sidebar owns channel selection and creation only; it does not duplicate edit or delete controls on channel rows
 - General's options menu identifies it as the protected default channel without exposing rename or delete; both server mutations still reject General if called outside the UI

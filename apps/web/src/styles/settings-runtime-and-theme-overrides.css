@@ -8313,7 +8313,7 @@ button.settings-primary-action svg {
 
 .app-root.mobile-shell .community-chat .community-interaction-reply-input-bar {
   margin: 0;
-  border-radius: 18px;
+  border-radius: 20px;
 }
 
 .app-root.mobile-shell .community-member-chat .community-interaction-thread-page .community-interaction-drawer-composer {
@@ -8324,14 +8324,27 @@ button.settings-primary-action svg {
 
 .app-root.mobile-shell .community-member-chat .chat-input-bar {
   --community-composer-control-size: 42px;
-  --community-composer-input-size: 28px;
-  border-radius: var(--composer-radius);
+  --community-composer-input-size: 52px;
+  border-radius: 20px;
   background: var(--composer-surface);
   border-color: var(--composer-border);
 }
 
 .app-root.mobile-shell .community-member-chat .community-interaction-reply-input-bar {
-  border-radius: var(--composer-radius);
+  border-radius: 20px;
+}
+
+.app-root.mobile-shell .community-member-chat .community-composer-editor-row .chat-input,
+.app-root.mobile-shell .community-member-chat .community-composer-editor-row .mention-composer-highlight {
+  min-height: var(--community-composer-input-size);
+}
+
+.app-root.mobile-shell .community-member-chat .chat-input-bar > .chat-replying-bar {
+  margin-inline: -2px;
+}
+
+.app-root.mobile-shell .community-member-chat .chat-input-bar > .community-attachments-preview {
+  margin-inline: 0;
 }
 
 .app-root.mobile-shell .community-chat .chat-input {

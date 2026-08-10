@@ -100,6 +100,8 @@ const COMMUNITY_ATTACHMENT_ACCEPT =
   "image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf";
 const COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
 const COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID = "community-onboarding-first-post-description";
+const COMMUNITY_MAIN_MENTION_MENU_ID = "community-main-mention-autocomplete";
+const COMMUNITY_REPLY_MENTION_MENU_ID = "community-reply-mention-autocomplete";
 
 function syncMentionComposerHighlightScroll(textarea: HTMLTextAreaElement): void {
   textarea.parentElement?.style.setProperty("--mention-composer-scroll-top", `${textarea.scrollTop}px`);
@@ -1181,29 +1183,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
   const mainCommunityComposer = (
     <>
-      {replyingToMessage && (
-        <div className="chat-replying-bar">
-          <div className="chat-replying-content">
-            <span className="chat-replying-label">Replying to</span>
-            <span className="chat-replying-sender">{displayName(replyingToMessage.sender_id)}</span>
-            <span className="chat-replying-preview">{truncateReplyPreview(replyingToMessage.body)}</span>
-          </div>
-          <button
-            className="chat-replying-cancel"
-            type="button"
-            onClick={() => onSetReplyingToMessage(null)}
-            title="Cancel reply"
-            aria-label="Cancel reply"
-          >
-            <svg viewBox="0 0 24 24">
-              <path d="M18 6L6 18M6 6l12 12" />
-            </svg>
-          </button>
-        </div>
-      )}
-
-      {renderCommunityAttachmentsPreview(communityAttachments, onRemoveCommunityAttachment)}
-
       {renderCommunityAgentServeNotice()}
 
       {showOnboardingFirstPostGuide && activeCommunity && communityOnboarding ? (
@@ -1224,28 +1203,34 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
 
       <div className={`chat-input-bar${showOnboardingFirstPostGuide ? " is-onboarding-first-post" : ""}`}>
         <MentionAutocompleteMenu
+          id={COMMUNITY_MAIN_MENTION_MENU_ID}
           autocomplete={mainMention}
           getAvatarColor={getAvatarColor}
           getInitials={getInitials}
         />
-        <button
-          className="ask-icon-btn ask-plus"
-          type="button"
-          onClick={() => fileInputRef.current?.click()}
-          disabled={
-            isAuthRecoveringSignedIn ||
-            !hasSession ||
-            !activeCommunity ||
-            !canUseCommunityAttachments ||
-            isSendingCommunityMessage
-          }
-          aria-label="Attach files"
-          title="Attach files"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
+        {replyingToMessage && (
+          <div className="chat-replying-bar">
+            <div className="chat-replying-content">
+              <span className="chat-replying-label">Replying to</span>
+              <span className="chat-replying-sender">{displayName(replyingToMessage.sender_id)}</span>
+              <span className="chat-replying-preview">{truncateReplyPreview(replyingToMessage.body)}</span>
+            </div>
+            <button
+              className="chat-replying-cancel"
+              type="button"
+              onClick={() => onSetReplyingToMessage(null)}
+              title="Cancel reply"
+              aria-label="Cancel reply"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        )}
+
+        {renderCommunityAttachmentsPreview(communityAttachments, onRemoveCommunityAttachment)}
+
         <input
           ref={(node) => {
             fileInputRef.current = node;
@@ -1256,94 +1241,139 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           style={{ display: "none" }}
           onChange={onCommunityFileInputChange}
         />
-        <div className="mention-composer-field">
-          <MentionComposerHighlight
-            value={communityMessageInput}
-            mentions={communityMessageMentions}
-          />
-          <textarea
-            ref={(node) => {
-              chatInputRef.current = node;
-            }}
-            className="chat-input"
-            aria-label={mainCommunityComposerPlaceholder}
-            aria-describedby={
-              showOnboardingFirstPostGuide
-                ? COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID
-                : undefined
-            }
-            placeholder={mainCommunityComposerPlaceholder}
-            value={communityMessageInput}
-            onChange={(event) => {
-              handleMainCommunityComposerUserInput(event.target.value, event.target);
-              if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.target);
-              syncMentionComposerHighlightScroll(event.target);
-            }}
-            onClick={(event) => {
-              if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.currentTarget);
-            }}
-            onBlur={() => {
-              mainMention.close();
-              onCommunityTypingClear?.(null);
-            }}
-            onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
-            onPaste={isCommunityOnboardingPreview ? undefined : onCommunityAttachmentPaste}
-            onKeyDown={(event) => {
-              if (!isCommunityOnboardingPreview && mainMention.handleKeyDown(event)) return;
-              if (
-                !isCommunityOnboardingPreview &&
-                handleMentionTokenBackspace({
-                  event,
-                  mentions: communityMessageMentions,
-                  applyText: handleMainCommunityComposerUserInput,
-                  setMentions: setCommunityMessageMentions,
-                })
-              ) return;
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                if (isAuthRecoveringSignedIn) return;
-                void handleMainCommunityComposerSubmit();
+        <div className="community-composer-editor-row">
+          <div className="mention-composer-field">
+            <MentionComposerHighlight
+              value={communityMessageInput}
+              mentions={communityMessageMentions}
+            />
+            <textarea
+              ref={(node) => {
+                chatInputRef.current = node;
+              }}
+              className="chat-input"
+              aria-label={mainCommunityComposerPlaceholder}
+              aria-describedby={
+                showOnboardingFirstPostGuide
+                  ? COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID
+                  : undefined
               }
-            }}
+              placeholder={mainCommunityComposerPlaceholder}
+              value={communityMessageInput}
+              onChange={(event) => {
+                handleMainCommunityComposerUserInput(event.target.value, event.target);
+                if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.target);
+                syncMentionComposerHighlightScroll(event.target);
+              }}
+              onClick={(event) => {
+                if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.currentTarget);
+              }}
+              onBlur={() => {
+                mainMention.close();
+                onCommunityTypingClear?.(null);
+              }}
+              onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
+              onPaste={isCommunityOnboardingPreview ? undefined : onCommunityAttachmentPaste}
+              onKeyDown={(event) => {
+                if (!isCommunityOnboardingPreview && mainMention.handleKeyDown(event)) return;
+                if (
+                  !isCommunityOnboardingPreview &&
+                  handleMentionTokenBackspace({
+                    event,
+                    mentions: communityMessageMentions,
+                    applyText: handleMainCommunityComposerUserInput,
+                    setMentions: setCommunityMessageMentions,
+                  })
+                ) return;
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  if (isAuthRecoveringSignedIn) return;
+                  void handleMainCommunityComposerSubmit();
+                }
+              }}
+              disabled={
+                isAuthRecoveringSignedIn ||
+                !hasSession ||
+                !activeCommunity ||
+                !canUseComposer ||
+                isOnboardingFirstPostAcknowledgement
+              }
+              rows={1}
+            />
+          </div>
+        </div>
+        <div className="community-composer-toolbar">
+          <div className="community-composer-tools" role="group" aria-label="Message tools">
+            <button
+              className="ask-icon-btn ask-mention"
+              type="button"
+              onClick={mainMention.begin}
+              disabled={
+                isAuthRecoveringSignedIn ||
+                !hasSession ||
+                !activeCommunity ||
+                !canUseComposer ||
+                isCommunityOnboardingPreview ||
+                isOnboardingFirstPostAcknowledgement ||
+                isSendingCommunityMessage
+              }
+              aria-label="Mention someone"
+              aria-haspopup="listbox"
+              aria-expanded={mainMention.isOpen}
+              aria-controls={COMMUNITY_MAIN_MENTION_MENU_ID}
+              title="Mention someone"
+            >
+              <span className="community-composer-mention-glyph" aria-hidden="true">@</span>
+            </button>
+            <button
+              className="ask-icon-btn ask-attach"
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              disabled={
+                isAuthRecoveringSignedIn ||
+                !hasSession ||
+                !activeCommunity ||
+                !canUseCommunityAttachments ||
+                isSendingCommunityMessage
+              }
+              aria-label="Attach files"
+              title="Attach files"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m21.4 11.1-9.1 9.1a6 6 0 0 1-8.5-8.5l9.2-9.1a4 4 0 0 1 5.6 5.6l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" />
+              </svg>
+            </button>
+            <VoiceInputButton
+              {...voiceButtonProps}
+              disabled={
+                voiceButtonProps.disabled ||
+                isCommunityOnboardingPreview ||
+                isOnboardingFirstPostAcknowledgement
+              }
+            />
+          </div>
+          <button
+            className="chat-send ask-send-btn ask-send-btn-v2"
+            onClick={() => void handleMainCommunityComposerSubmit()}
             disabled={
               isAuthRecoveringSignedIn ||
               !hasSession ||
               !activeCommunity ||
               !canUseComposer ||
-              isOnboardingFirstPostAcknowledgement
+              isOnboardingFirstPostAcknowledgement ||
+              isSendingCommunityMessage ||
+              (isOnboardingFirstPostInteraction && !isOnboardingIntroductionReady) ||
+              (communityMessageInput.trim().length === 0 && communityAttachments.length === 0)
             }
-            rows={1}
-          />
+            type="button"
+            aria-label="Send"
+            title="Send"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+            </svg>
+          </button>
         </div>
-        <VoiceInputButton
-          {...voiceButtonProps}
-          disabled={
-            voiceButtonProps.disabled ||
-            isCommunityOnboardingPreview ||
-            isOnboardingFirstPostAcknowledgement
-          }
-        />
-        <button
-          className="chat-send ask-send-btn ask-send-btn-v2"
-          onClick={() => void handleMainCommunityComposerSubmit()}
-          disabled={
-            isAuthRecoveringSignedIn ||
-            !hasSession ||
-            !activeCommunity ||
-            !canUseComposer ||
-            isOnboardingFirstPostAcknowledgement ||
-            isSendingCommunityMessage ||
-            (isOnboardingFirstPostInteraction && !isOnboardingIntroductionReady) ||
-            (communityMessageInput.trim().length === 0 && communityAttachments.length === 0)
-          }
-          type="button"
-          aria-label="Send"
-          title="Send"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
-          </svg>
-        </button>
       </div>
     </>
   );
@@ -1353,36 +1383,19 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     : "Reply...";
   const drawerReplyComposer = drawerReplyTarget ? (
     <div className="community-interaction-reply-composer-panel">
-      {renderCommunityAttachmentsPreview(
-        drawerReplyAttachments,
-        removeDrawerReplyAttachment,
-        "community-attachments-preview community-interaction-reply-attachments-preview",
-      )}
       {renderCommunityAgentServeNotice()}
       <div className="chat-input-bar community-interaction-reply-input-bar">
         <MentionAutocompleteMenu
+          id={COMMUNITY_REPLY_MENTION_MENU_ID}
           autocomplete={drawerMention}
           getAvatarColor={getAvatarColor}
           getInitials={getInitials}
         />
-        <button
-          className="ask-icon-btn ask-plus"
-          type="button"
-          onClick={() => drawerReplyFileInputRef.current?.click()}
-          disabled={
-            isAuthRecoveringSignedIn ||
-            !hasSession ||
-            !activeCommunity ||
-            !canUseComposer ||
-            isSendingCommunityMessage
-          }
-          aria-label="Attach files to reply"
-          title="Attach files to reply"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 5v14M5 12h14" />
-          </svg>
-        </button>
+        {renderCommunityAttachmentsPreview(
+          drawerReplyAttachments,
+          removeDrawerReplyAttachment,
+          "community-attachments-preview community-interaction-reply-attachments-preview",
+        )}
         <input
           ref={(node) => {
             drawerReplyFileInputRef.current = node;
@@ -1393,75 +1406,119 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           style={{ display: "none" }}
           onChange={handleDrawerReplyFileInputChange}
         />
-        <div className="mention-composer-field">
-          <MentionComposerHighlight
-            value={drawerReplyInput}
-            mentions={drawerReplyMentions}
-          />
-          <textarea
-            ref={(node) => {
-              drawerReplyInputRef.current = node;
-            }}
-            className="chat-input"
-            placeholder={drawerReplyPlaceholder}
-            value={drawerReplyInput}
-            onChange={(event) => {
-              handleDrawerReplyInputChange(event.target.value, event.target);
-              drawerMention.syncFromTextarea(event.target);
-              syncMentionComposerHighlightScroll(event.target);
-            }}
-            onClick={(event) => drawerMention.syncFromTextarea(event.currentTarget)}
-            onBlur={() => {
-              drawerMention.close();
-              if (selectedInteractionRootId) {
-                onCommunityTypingClear?.(selectedInteractionRootId);
-              }
-            }}
-            onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
-            onPaste={handleDrawerReplyAttachmentPaste}
-            onKeyDown={(event) => {
-              if (drawerMention.handleKeyDown(event)) return;
-              if (
-                handleMentionTokenBackspace({
-                  event,
-                  mentions: drawerReplyMentions,
-                  applyText: handleDrawerReplyInputChange,
-                  setMentions: setDrawerReplyMentions,
-                })
-              ) return;
-              if (event.key === "Enter" && !event.shiftKey) {
-                event.preventDefault();
-                if (isAuthRecoveringSignedIn) return;
-                void handleSendDrawerReply();
-              }
-            }}
-            disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
-            rows={1}
-          />
+        <div className="community-composer-editor-row">
+          <div className="mention-composer-field">
+            <MentionComposerHighlight
+              value={drawerReplyInput}
+              mentions={drawerReplyMentions}
+            />
+            <textarea
+              ref={(node) => {
+                drawerReplyInputRef.current = node;
+              }}
+              className="chat-input"
+              aria-label={drawerReplyPlaceholder}
+              placeholder={drawerReplyPlaceholder}
+              value={drawerReplyInput}
+              onChange={(event) => {
+                handleDrawerReplyInputChange(event.target.value, event.target);
+                drawerMention.syncFromTextarea(event.target);
+                syncMentionComposerHighlightScroll(event.target);
+              }}
+              onClick={(event) => drawerMention.syncFromTextarea(event.currentTarget)}
+              onBlur={() => {
+                drawerMention.close();
+                if (selectedInteractionRootId) {
+                  onCommunityTypingClear?.(selectedInteractionRootId);
+                }
+              }}
+              onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
+              onPaste={handleDrawerReplyAttachmentPaste}
+              onKeyDown={(event) => {
+                if (drawerMention.handleKeyDown(event)) return;
+                if (
+                  handleMentionTokenBackspace({
+                    event,
+                    mentions: drawerReplyMentions,
+                    applyText: handleDrawerReplyInputChange,
+                    setMentions: setDrawerReplyMentions,
+                  })
+                ) return;
+                if (event.key === "Enter" && !event.shiftKey) {
+                  event.preventDefault();
+                  if (isAuthRecoveringSignedIn) return;
+                  void handleSendDrawerReply();
+                }
+              }}
+              disabled={isAuthRecoveringSignedIn || !hasSession || !activeCommunity || !canUseComposer}
+              rows={1}
+            />
+          </div>
         </div>
-        <VoiceInputButton
-          {...drawerVoiceButtonProps}
-          onClick={() => onCommunityVoiceInputClick(drawerVoiceTranscriptTarget, "drawer")}
-        />
-        <button
-          className="chat-send ask-send-btn ask-send-btn-v2"
-          onClick={() => void handleSendDrawerReply()}
-          disabled={
-            isAuthRecoveringSignedIn ||
-            !hasSession ||
-            !activeCommunity ||
-            !canUseComposer ||
-            isSendingCommunityMessage ||
-            (drawerReplyInput.trim().length === 0 && drawerReplyAttachments.length === 0)
-          }
-          type="button"
-          aria-label="Send reply"
-          title="Send reply"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
-          </svg>
-        </button>
+        <div className="community-composer-toolbar">
+          <div className="community-composer-tools" role="group" aria-label="Reply tools">
+            <button
+              className="ask-icon-btn ask-mention"
+              type="button"
+              onClick={drawerMention.begin}
+              disabled={
+                isAuthRecoveringSignedIn ||
+                !hasSession ||
+                !activeCommunity ||
+                !canUseComposer ||
+                isSendingCommunityMessage
+              }
+              aria-label="Mention someone in reply"
+              aria-haspopup="listbox"
+              aria-expanded={drawerMention.isOpen}
+              aria-controls={COMMUNITY_REPLY_MENTION_MENU_ID}
+              title="Mention someone in reply"
+            >
+              <span className="community-composer-mention-glyph" aria-hidden="true">@</span>
+            </button>
+            <button
+              className="ask-icon-btn ask-attach"
+              type="button"
+              onClick={() => drawerReplyFileInputRef.current?.click()}
+              disabled={
+                isAuthRecoveringSignedIn ||
+                !hasSession ||
+                !activeCommunity ||
+                !canUseComposer ||
+                isSendingCommunityMessage
+              }
+              aria-label="Attach files to reply"
+              title="Attach files to reply"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m21.4 11.1-9.1 9.1a6 6 0 0 1-8.5-8.5l9.2-9.1a4 4 0 0 1 5.6 5.6l-9.2 9.2a2 2 0 0 1-2.8-2.8l8.5-8.5" />
+              </svg>
+            </button>
+            <VoiceInputButton
+              {...drawerVoiceButtonProps}
+              onClick={() => onCommunityVoiceInputClick(drawerVoiceTranscriptTarget, "drawer")}
+            />
+          </div>
+          <button
+            className="chat-send ask-send-btn ask-send-btn-v2"
+            onClick={() => void handleSendDrawerReply()}
+            disabled={
+              isAuthRecoveringSignedIn ||
+              !hasSession ||
+              !activeCommunity ||
+              !canUseComposer ||
+              isSendingCommunityMessage ||
+              (drawerReplyInput.trim().length === 0 && drawerReplyAttachments.length === 0)
+            }
+            type="button"
+            aria-label="Send reply"
+            title="Send reply"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 17V8M8.5 11.5 12 8l3.5 3.5" />
+            </svg>
+          </button>
+        </div>
       </div>
     </div>
   ) : null;
