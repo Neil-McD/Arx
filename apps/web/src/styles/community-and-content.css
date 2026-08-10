@@ -4284,11 +4284,11 @@
   color: var(--accent-gold, var(--accent));
 }
 
-/* A message that tags you is community-local attention, matching replies and
-   unread navigation without conflating the message with routine selection. */
+/* A message that tags you becomes selected content, not activity chrome.
+   Selection is light in neutral dark and blue on paper, matching the active nav. */
 .community-interaction-message.is-self-mentioned {
-  background: color-mix(in srgb, var(--accent-attention) 6%, transparent);
-  border-left: 2px solid var(--accent-attention);
+  background: color-mix(in srgb, var(--accent-selection) 6%, transparent);
+  border-left: 2px solid var(--accent-selection);
   border-radius: 0 8px 8px 0;
 }
 
