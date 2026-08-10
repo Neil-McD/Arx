@@ -19,8 +19,8 @@ while (current !== target && frames < 200) {
 }
 
 assert.equal(current, target, "bounded drain must reach the final text");
-assert.ok(frames >= 12, "a medium buffered answer must remain visibly progressive");
-assert.ok(frames < 100, "the UI drain must remain bounded");
+assert.ok(frames >= 40, "a medium buffered answer must remain visibly progressive");
+assert.ok(frames < 160, "the UI drain must remain bounded");
 assert.equal(
   getNextSmoothStreamingText("", target, { reducedMotion: true }),
   target,
