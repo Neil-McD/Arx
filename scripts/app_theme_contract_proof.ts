@@ -239,6 +239,7 @@ const persistenceLifecycle = read(
   "apps/web/src/controllers/useWebUiPersistenceLifecycle.ts",
 );
 const funnelCss = read("apps/web/src/components/CommunityFunnelSurface.css");
+const visitorChromeCss = read("apps/web/src/components/CommunityVisitorChrome.css");
 const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const memberAgentComponent = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
@@ -556,36 +557,30 @@ assert.doesNotMatch(
   "the opaque launcher should not carry a visually inert backdrop filter",
 );
 
-[
-  "--cfg-selection-text: #17070c;",
-  "--cfg-alert-border: rgba(226, 75, 74, 0.4);",
-  "--cfg-alert-surface: rgba(226, 75, 74, 0.08);",
-  "--cfg-alert-text: #f0a2a2;",
-  "--cfg-primary-surface: #f1ede5;",
-  "--cfg-primary-surface-hover: #fff;",
-  "--cfg-primary-text: #0a0a0a;",
-  "--cfg-error-border: rgba(226, 75, 74, 0.4);",
-  "--cfg-error-surface: rgba(226, 75, 74, 0.07);",
-  "--cfg-gate-surface: #161619;",
-  "--cfg-gate-avatar-stroke: #161619;",
-].forEach((declaration) => {
-  assert.ok(
-    funnelCss.includes(declaration),
-    `Dark should retain funnel declaration ${declaration}`,
-  );
-});
-assert.match(
+assert.doesNotMatch(
   funnelCss,
-  /:root\[data-theme="light"\]\s*\.cfg-page\s*\{[\s\S]*?--cfg-primary-surface:\s*var\(--bg-button\);[\s\S]*?--cfg-gate-surface:\s*var\(--bg-modal\);[\s\S]*?--cfg-gate-avatar-stroke:\s*var\(--bg-modal\);[\s\S]*?\}/,
-  "Light should adapt funnel chrome through one theme-scoped role block",
+  /\.cfg-(?:page|shell|guestbar|nav|center|topic|feed|rope|mobile-ident)\b/,
+  "retired guest-shell selectors must not survive in shared conversion chrome",
 );
 assert.match(
   funnelCss,
-  /\.cfg-gatecard[^}]*background:\s*var\(--cfg-gate-surface\)/,
+  /\.cfg-alert\s*\{[^}]*var\(--accent-error,\s*#e24b4a\)/,
+  "funnel errors should consume the canonical semantic error token directly",
+);
+assert.match(
+  visitorChromeCss,
+  /\.cfg-gate\.cvs-gate\s*\{[\s\S]*?--cfg-gate-surface:\s*var\(--bg-modal,[^;]+;[\s\S]*?--cfg-primary-surface:\s*var\(--bg-button,[^;]+;/,
+  "the live visitor gate should own its theme adapter",
 );
 assert.match(
   funnelCss,
-  /\.cfg-join[^}]*background:\s*var\(--cfg-primary-surface\)/,
+  /\.cfg-join[^}]*background:\s*var\(--cfg-primary-surface,\s*var\(--bg-button,\s*#f1ede5\)\)/,
+  "shared conversion actions should fail safely to canonical button tokens",
+);
+assert.match(
+  funnelCss,
+  /\.cfg-gatecard[^}]*background:\s*var\(--cfg-gate-surface,\s*var\(--bg-modal,\s*#161619\)\)/,
+  "gate cards should retain a deterministic dark fallback",
 );
 assert.doesNotMatch(
   `${funnelCss}\n${memberAgentCss}`,

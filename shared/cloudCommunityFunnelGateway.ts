@@ -4,12 +4,6 @@ type CloudCommunityFunnelGatewayParams<SessionT> = {
   session: SessionT;
 };
 
-export type CloudCommunityPublicPresentationSaveResult<TConfig = unknown> = {
-  community_id: string;
-  updated_at: string;
-  funnel: TConfig | null;
-};
-
 export type CloudCommunityAboutSaveResult = {
   community_id: string;
   about: string | null;
@@ -102,27 +96,6 @@ export async function setCloudCommunityFunnelDraftVsl<
     },
   );
   return firstObjectRow(payload) as TConfig | null;
-}
-
-export async function saveCloudCommunityPublicPresentation<SessionT, TConfig = unknown>(
-  params: CloudCommunityFunnelGatewayParams<SessionT> & {
-    communityId: string;
-    config: TConfig;
-  },
-): Promise<CloudCommunityPublicPresentationSaveResult<TConfig> | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation("communityLifecycle:saveCommunityPublicPresentation" as any, {
-    authSubject,
-    communityId: params.communityId,
-    config: params.config,
-  });
-  const row = firstObjectRow(payload);
-  if (!row) return null;
-  return {
-    community_id: String(row.community_id ?? params.communityId).trim() || params.communityId,
-    updated_at: String(row.updated_at ?? "").trim(),
-    funnel: (row.funnel as TConfig | null | undefined) ?? null,
-  };
 }
 
 export async function saveCloudCommunityAbout<SessionT>(
