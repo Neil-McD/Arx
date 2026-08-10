@@ -447,8 +447,8 @@ assert.match(
 );
 assert.match(
   memberAgentDock,
-  /runtimeEvents\.length > 0[\s\S]*<RuntimeLiveTimeline[\s\S]*events=\{runtimeEvents\}/,
-  "mounted member-agent dock should render live resource changeset events through the retained timeline",
+  /<WebAgentLiveTurn[\s\S]*events=\{runtimeEvents\}/,
+  "mounted member-agent dock should project live resource changeset events through the canonical live-turn component",
 );
 assert.match(
   memberAgentDock,

@@ -51,6 +51,7 @@ export function buildWebCommunityResourceBuildHandler(params: {
       "List and inspect the active community builder/resources directory first, including its health summary and current categories, pages, and ready sources.",
       `Use these ready source record ids as the bounded source set: ${architectSources.map((source) => source.id).join(", ")}.`,
       "Create a small, clear draft category and page structure grounded only in those sources. Preserve source lineage, do not invent unsupported claims, do not delete or move source inbox records, and keep every created category and page in draft state.",
+      "For every new source-backed page, put the ready source id directly in create_page.source_resource_id. Do not use edit, move, delete, or link_source_to_page operations in this initial draft; those operations require exact expected_updated_at values from a prior read.",
       `Stage exactly one changeset with polynet_write and use this exact idempotency_key: ${idempotencyKey}.`,
       "Do not apply or publish anything. Stop after staging so I can review the proposal in Polynet.",
     ].join("\n");

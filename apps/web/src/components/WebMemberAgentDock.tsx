@@ -229,7 +229,6 @@ function WebMemberAgentDock(props, ref) {
   const draftTextRef = useRef("");
   const submitInFlightRef = useRef(false);
   const resourceBuildStartInFlightRef = useRef(false);
-  const resourceBuildLaunchBusyRef = useRef(false);
   const pendingResourceBuildRef = useRef<{
     communityId: string;
     prompt: string;
@@ -303,7 +302,6 @@ function WebMemberAgentDock(props, ref) {
         props.voiceButtonProps.state !== "idle" ||
         resourceBuildStartInFlightRef.current ||
         pendingResourceBuildRef.current ||
-        resourceBuildLaunchBusyRef.current ||
         draftTextRef.current.trim() ||
         attachmentsRef.current.length > 0
       ) {
@@ -348,11 +346,7 @@ function WebMemberAgentDock(props, ref) {
           setRecoveredResourceChangesetCards(pendingCards);
           return true;
         }
-        if (
-          resourceBuildLaunchBusyRef.current ||
-          draftTextRef.current.trim() ||
-          attachmentsRef.current.length > 0
-        ) {
+        if (draftTextRef.current.trim() || attachmentsRef.current.length > 0) {
           return false;
         }
         pendingResourceBuildRef.current = {
@@ -619,11 +613,6 @@ function WebMemberAgentDock(props, ref) {
   const isSending = Boolean(threadKey && sendingByThread[threadKey]);
   const turnIsActive = isSending || Boolean(streamingState);
   const composerIsBusy = turnIsActive || isUploadingAttachments || isSubmitting;
-  resourceBuildLaunchBusyRef.current =
-    composerIsBusy ||
-    isPreparing ||
-    isStartingNewChat ||
-    props.voiceButtonProps.state !== "idle";
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
   const showOnboardingAgentFocus = Boolean(

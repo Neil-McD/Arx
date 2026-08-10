@@ -22,6 +22,17 @@ const knowledgeControllerSource = readFileSync(
   ),
   "utf8",
 );
+const resourceBuildHandlerSource = readFileSync(
+  resolve(
+    process.cwd(),
+    "apps/web/src/controllers/buildWebCommunityResourceBuildHandler.ts",
+  ),
+  "utf8",
+);
+const memberAgentDockSource = readFileSync(
+  resolve(process.cwd(), "apps/web/src/components/WebMemberAgentDock.tsx"),
+  "utf8",
+);
 test("Builder knowledge setup is a required, non-dismissible step", () => {
   expect(source).toContain("Community setup · 2 of 2");
   expect(source).toContain("Add your community knowledge.");
@@ -70,4 +81,20 @@ test("onboarding recovers durable staged changesets without a second builder", (
     "buildResourceChangesetCardFromPayload",
   );
   expect(knowledgeControllerSource).toMatch(/window\.setInterval\([\s\S]*?readPendingChangeset/);
+});
+
+test("the initial builder turn is safe to queue while its community thread prepares", () => {
+  expect(resourceBuildHandlerSource).toContain(
+    "put the ready source id directly in create_page.source_resource_id",
+  );
+  expect(resourceBuildHandlerSource).toContain(
+    "Do not use edit, move, delete, or link_source_to_page operations",
+  );
+  expect(memberAgentDockSource).not.toContain("resourceBuildLaunchBusyRef");
+  expect(memberAgentDockSource).toMatch(
+    /pendingResourceBuildRef\.current = \{[\s\S]*?setResourceBuildLaunchVersion/,
+  );
+  expect(memberAgentDockSource).toMatch(
+    /const request = pendingResourceBuildRef\.current;[\s\S]*?isPreparing[\s\S]*?composerFormRef\.current\?\.requestSubmit/,
+  );
 });
