@@ -45,6 +45,7 @@ export type CommunityLike = {
   bannerFocusY?: number;
   bannerZoom?: number;
   brandingRevision?: number;
+  settingsRevision?: number;
   visibility: "published" | "unlisted";
   entryPolicy?: CommunityEntryPolicy;
   activeMemberCount?: number;

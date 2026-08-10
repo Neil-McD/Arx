@@ -87,6 +87,7 @@ test("new About and legacy launch RPCs coexist across a rolling deployment", asy
   ).resolves.toMatchObject({
     community_id: String(fixture.communityId),
     about: "Updated through the narrow contract.",
+    settings_revision: 1,
   });
 
   await expect(
@@ -99,6 +100,7 @@ test("new About and legacy launch RPCs coexist across a rolling deployment", asy
     id: String(fixture.communityId),
     name: "Rolling contract preserved",
     about: "Updated through an already-loaded client.",
+    settings_revision: 2,
   });
 
   await expect(
@@ -110,6 +112,7 @@ test("new About and legacy launch RPCs coexist across a rolling deployment", asy
     id: String(fixture.communityId),
     name: "Rolling contract preserved",
     about: "Updated through the production compatibility facade.",
+    settings_revision: 3,
   });
 
   const stagingStatus = await asOwner.query(

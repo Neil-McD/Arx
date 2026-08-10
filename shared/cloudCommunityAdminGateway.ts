@@ -85,8 +85,18 @@ export type CloudCommunitySettingsSaveResult = {
   visibility: string;
   updated_at: string;
   branding_revision?: number | null;
+  settings_revision: number;
+  pricing: {
+    mode: "free" | "monthly" | "annual";
+    monthly_amount_base_units: number | null;
+    annual_amount_base_units: number | null;
+    currency: "usd";
+    currency_decimals: 2;
+  };
   visual_identity?: import("./communityVisualIdentity").CommunityVisualIdentity | null;
 };
+
+export type CloudCommunitySettingsSnapshot = CloudCommunitySettingsSaveResult;
 
 export type CloudCommunityOneLinerSaveResult = {
   community_id: string;
@@ -1827,6 +1837,7 @@ export async function leaveCloudCommunity<SessionT>(
 export async function saveCloudCommunitySettings<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
+    expectedSettingsRevision?: number;
     name: string;
     slug: string;
     oneLiner: string | null;
@@ -1850,6 +1861,9 @@ export async function saveCloudCommunitySettings<SessionT>(
   const payload = await client.mutation("communityLifecycle:saveCommunitySettings" as any, {
     authSubject,
     communityId: params.communityId,
+    ...(params.expectedSettingsRevision === undefined
+      ? {}
+      : { expectedSettingsRevision: params.expectedSettingsRevision }),
     name: params.name,
     slug: params.slug,
     oneLiner: params.oneLiner,
@@ -1871,6 +1885,19 @@ export async function saveCloudCommunitySettings<SessionT>(
     currencyDecimals: 2,
   });
   return firstGatewayRow<CloudCommunitySettingsSaveResult>(payload);
+}
+
+export async function fetchCloudCommunitySettings<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudCommunitySettingsSnapshot | null> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  const payload = await client.query("communityLifecycle:getCommunitySettings" as any, {
+    authSubject,
+    communityId: params.communityId,
+  });
+  return firstGatewayRow<CloudCommunitySettingsSnapshot>(payload);
 }
 
 export async function saveCloudCommunityOneLiner<SessionT>(

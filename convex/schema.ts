@@ -1202,6 +1202,7 @@ export default defineSchema({
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
     brandingRevision: v.optional(v.number()),
+    settingsRevision: v.optional(v.number()),
     /* Deprecated release-compatibility field. Current product code never reads
        or writes it; legacyOnboardingMigration removes stored values. */
     memberOnboarding: v.optional(
