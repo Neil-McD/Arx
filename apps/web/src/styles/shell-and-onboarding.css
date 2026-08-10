@@ -276,6 +276,10 @@ body {
   transition: background 0.15s ease;
 }
 
+.community-rail-button:not(.community-rail-community) {
+  border-color: transparent;
+}
+
 /* Discord-style selection/hover indicator "lip" */
 .community-rail-button.community-rail-community::before {
   content: "";
