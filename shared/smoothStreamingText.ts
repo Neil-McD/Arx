@@ -16,11 +16,15 @@ function splitGraphemes(value: string): string[] {
 
 function chooseRevealBudget(backlog: number, draining: boolean): number {
   if (draining) {
-    if (backlog > 1000) return 360;
-    if (backlog > 500) return 240;
-    if (backlog > 180) return 140;
-    if (backlog > 80) return 80;
-    return 40;
+    // Runtime tool loops can finish with several SSE chunks already buffered.
+    // Keep the final drain visibly progressive instead of collapsing a short
+    // answer into one paint, while the controller's deadline still bounds the
+    // total handoff delay.
+    if (backlog > 1000) return 42;
+    if (backlog > 500) return 28;
+    if (backlog > 180) return 18;
+    if (backlog > 80) return 12;
+    return 7;
   }
   if (backlog > 1000) return 140;
   if (backlog > 500) return 90;
