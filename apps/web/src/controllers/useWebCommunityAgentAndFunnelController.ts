@@ -10,11 +10,11 @@ import {
   normalizeCommunityAgentDraftForSave,
   type CommunityAgentLanding,
 } from "../../../../shared/communityAgentLanding";
-import { normalizeCommunityFunnelConfig } from "../../../../shared/communityFunnel";
-import { saveCloudCommunityPublicPresentation } from "../../../../shared/cloudCommunityFunnelGateway";
+import { normalizeCommunityFunnelManagerConfig } from "../../../../shared/communityFunnel";
+import { saveCloudCommunityFunnelDraft } from "../../../../shared/cloudCommunityFunnelGateway";
 import type {
   CommunityAgentConfig,
-  CommunityFunnelConfig,
+  CommunityFunnelManagerConfig,
 } from "../../../../shared/communityTypes";
 import { useCommunityAgentConfigController } from "../../../../shared/useCommunityAgentDraftController";
 import { useCommunityAgentConfigLifecycle } from "../../../../shared/useCommunityAgentConfigLifecycle";
@@ -79,33 +79,24 @@ export function useWebCommunityAgentAndFunnelController(params: {
 
   const funnel = useCommunityFunnelController<
     AuthSession,
-    CommunityFunnelConfig
+    CommunityFunnelManagerConfig
   >({
     activeCommunityId: params.activeCommunityId,
     session: params.session,
     ensureSession: params.ensureSession,
     communityFunnelConfig: params.adminUi.communityFunnelConfig,
-    normalizeConfigForSave: normalizeCommunityFunnelConfig,
+    normalizeConfigForSave: normalizeCommunityFunnelManagerConfig,
     saveConfig: async ({ session, communityId, normalizedConfig }) => {
-      const saved = await saveCloudCommunityPublicPresentation<
+      const saved = await saveCloudCommunityFunnelDraft<
         AuthSession,
-        CommunityFunnelConfig
+        CommunityFunnelManagerConfig
       >({
         session,
         communityId,
-        config: normalizedConfig,
+        expectedDraftRevision: normalizedConfig.draft_revision,
+        document: normalizedConfig.draft_document_v1,
       });
-      params.setCommunities((current) =>
-        current.map((community) =>
-          community.id === communityId
-            ? {
-                ...community,
-                updated_at: saved?.updated_at || community.updated_at,
-              }
-            : community,
-        ),
-      );
-      return saved?.funnel ?? normalizedConfig;
+      return saved ?? normalizedConfig;
     },
     hydrateEditor: params.adminUi.hydrateCommunityFunnelEditor,
     setLoadedCommunityId: (communityId) => {
