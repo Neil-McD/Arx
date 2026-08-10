@@ -20,11 +20,11 @@ function chooseRevealBudget(backlog: number, draining: boolean): number {
     // Keep the final drain visibly progressive instead of collapsing a short
     // answer into one paint, while the controller's deadline still bounds the
     // total handoff delay.
-    if (backlog > 1000) return 42;
-    if (backlog > 500) return 28;
-    if (backlog > 180) return 18;
-    if (backlog > 80) return 12;
-    return 7;
+    if (backlog > 1000) return 18;
+    if (backlog > 500) return 10;
+    if (backlog > 180) return 5;
+    if (backlog > 80) return 3;
+    return 2;
   }
   if (backlog > 1000) return 140;
   if (backlog > 500) return 90;
@@ -43,7 +43,7 @@ function chooseBoundary(segments: string[], budget: number, draining: boolean): 
   const clampedBudget = Math.max(1, Math.min(segments.length, budget));
   if (clampedBudget >= segments.length) return segments.length;
 
-  const extraWindow = draining ? 18 : 10;
+  const extraWindow = draining ? 4 : 10;
   const limit = Math.min(segments.length, clampedBudget + extraWindow);
   for (let index = clampedBudget; index < limit; index += 1) {
     if (isSoftBoundary(segments[index] ?? "")) return index + 1;

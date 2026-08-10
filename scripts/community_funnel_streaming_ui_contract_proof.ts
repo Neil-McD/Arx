@@ -17,7 +17,7 @@ assert.match(dock, /<WebAgentLiveTurn[\s\S]*variant="dock"/);
 assert.match(editor, /<WebAgentLiveTurn[\s\S]*variant="funnel"/);
 assert.doesNotMatch(editor, /streamingState\?\.content \? \(/);
 assert.doesNotMatch(liveTurn, /EventSource|WebSocket|setInterval/);
-assert.match(turnRunner, /maxDelayMs = 900/);
+assert.match(turnRunner, /maxDelayMs = 1200/);
 
 // Runtime events remain authoritative for activity, while assistant text uses
 // the controller's smoothed aggregate path exactly once.
