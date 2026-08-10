@@ -71,6 +71,32 @@ export type CommunityFunnelConfig = {
   hero_media_kind: CommunityFunnelHeroMediaKind;
 };
 
+export type CommunityFunnelPillarV1 = {
+  title: string;
+  body: string;
+};
+
+export type CommunityFunnelFaqV1 = {
+  question: string;
+  answer: string;
+};
+
+export type CommunityFunnelDocumentV1 = {
+  version: 1;
+  template: "editorial_vsl";
+  headline: string;
+  subheadline: string;
+  intro_video_url: string | null;
+  pillars: [CommunityFunnelPillarV1, CommunityFunnelPillarV1, CommunityFunnelPillarV1];
+  founder_quote: string | null;
+  faq: CommunityFunnelFaqV1[];
+};
+
+export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
+  draft_document_v1: CommunityFunnelDocumentV1 | null;
+  draft_revision: number;
+};
+
 export type DiscoverCommunitySnapshot = {
   id?: string | null;
   slug: string;
