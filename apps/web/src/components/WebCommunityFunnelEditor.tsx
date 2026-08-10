@@ -31,7 +31,7 @@ import {
 } from "../../../../shared/cloudCommunityFunnelGateway";
 import {
   ensureCloudThreadRecord,
-  uploadCloudThreadAttachmentFile,
+  uploadCloudMemberAgentImageFile,
 } from "../../../../shared/cloudThreadsGateway";
 import {
   listConvexCloudNewestThreadMessagesByThreadKey,
@@ -403,18 +403,19 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       });
       let storedAttachment: Record<string, unknown> | null = null;
       if (referenceImage) {
-        const storageId = await uploadCloudThreadAttachmentFile({
+        const claimedAttachment = await uploadCloudMemberAgentImageFile({
           session,
           threadId: threadKey,
+          messageId,
           file: referenceImage.file,
         });
         storedAttachment = {
           id: crypto.randomUUID(),
-          name: referenceImage.file.name,
+          name: claimedAttachment.name,
           type: "image",
-          mime: referenceImage.file.type,
-          size: referenceImage.file.size,
-          storage_id: storageId,
+          mime: claimedAttachment.mime,
+          size: claimedAttachment.size,
+          storage_id: claimedAttachment.storage_id,
         };
       }
       const contentJson = {

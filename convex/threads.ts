@@ -13,7 +13,10 @@ import {
   mergeRuntimeWorkingStateTaskLedger,
   summarizeRuntimeWorkingStateFromEvents,
 } from "../shared/runtimeWorkingStateLedger";
-import { requireCommunityChatAccess } from "./communityCore";
+import {
+  requireCommunityChatAccess,
+  requireCommunityManager,
+} from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import {
   normalizeActiveWorkspaceRuntimeEngine,
@@ -25,6 +28,7 @@ import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
   MEMBER_AGENT_GLOBAL_SCOPE_KEY,
   buildGlobalMemberAgentEpisodeThreadKey,
+  isCommunityFunnelThreadKeyForCommunity,
   isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
   isReadOnlyLegacyMemberAgentThreadKey,
@@ -270,7 +274,7 @@ async function normalizeMemberAgentMessageContent(args: {
   contentJson: unknown;
 }): Promise<unknown> {
   const threadKey = String(args.thread.threadKey ?? "").trim();
-  if (args.role !== "user" || !isGlobalMemberAgentEpisodeThreadKey(threadKey)) {
+  if (args.role !== "user" || !isClaimedImageAttachmentThread(args.thread)) {
     return args.contentJson;
   }
   const record =
@@ -1605,6 +1609,46 @@ async function requireWritableMemberAgentThread(args: {
   }
 }
 
+function isClaimedImageAttachmentThread(thread: ThreadLike): boolean {
+  const threadKey = String(thread.threadKey ?? "").trim();
+  if (isGlobalMemberAgentEpisodeThreadKey(threadKey)) return true;
+  const communityId = String(thread.communityId ?? "").trim();
+  return Boolean(
+    communityId &&
+      isCommunityFunnelThreadKeyForCommunity(threadKey, communityId),
+  );
+}
+
+async function requireWritableClaimedImageAttachmentThread(args: {
+  ctx: any;
+  ownerId: any;
+  thread: ThreadLike;
+}): Promise<void> {
+  const threadKey = String(args.thread.threadKey ?? "").trim();
+  if (isGlobalMemberAgentEpisodeThreadKey(threadKey)) {
+    await requireWritableMemberAgentThread({
+      ctx: args.ctx,
+      ownerId: args.ownerId,
+      thread: args.thread,
+      role: "user",
+    });
+    return;
+  }
+  const communityId = String(args.thread.communityId ?? "").trim();
+  if (
+    communityId &&
+    isCommunityFunnelThreadKeyForCommunity(threadKey, communityId)
+  ) {
+    await requireCommunityManager({
+      ctx: args.ctx,
+      communityId,
+      userId: args.ownerId,
+    });
+    return;
+  }
+  throw new Error("member_agent_attachment_thread_required");
+}
+
 async function prepareActiveGlobalMemberAgentThread(args: {
   ctx: any;
   thread: ThreadLike;
@@ -2311,7 +2355,7 @@ export const generateCloudThreadAttachmentUploadUrl = mutation({
       ownerId,
       threadId: args.threadId,
     });
-    if (isGlobalMemberAgentEpisodeThreadKey(String(thread.threadKey ?? "").trim())) {
+    if (isClaimedImageAttachmentThread(thread)) {
       throw new Error("member_agent_attachment_upload_ticket_required");
     }
     return {
@@ -2332,14 +2376,10 @@ export const prepareCloudMemberAgentAttachmentUploadInternal = internalMutation(
       ownerId: args.ownerId,
       threadId: args.threadId,
     });
-    if (!isGlobalMemberAgentEpisodeThreadKey(String(thread.threadKey ?? "").trim())) {
-      throw new Error("member_agent_attachment_thread_required");
-    }
-    await requireWritableMemberAgentThread({
+    await requireWritableClaimedImageAttachmentThread({
       ctx,
       ownerId: args.ownerId,
       thread,
-      role: "user",
     });
     const messageKey = String(args.messageKey ?? "").trim();
     if (!messageKey) throw new Error("member_agent_attachment_message_key_required");
@@ -2399,14 +2439,10 @@ export const claimStoredCloudMemberAgentAttachmentInternal = internalMutation({
       ownerId: args.ownerId,
       threadId: args.threadId,
     });
-    if (!isGlobalMemberAgentEpisodeThreadKey(String(thread.threadKey ?? "").trim())) {
-      throw new Error("member_agent_attachment_thread_required");
-    }
-    await requireWritableMemberAgentThread({
+    await requireWritableClaimedImageAttachmentThread({
       ctx,
       ownerId: args.ownerId,
       thread,
-      role: "user",
     });
     const ticketKey = String(args.ticketKey ?? "").trim();
     const messageKey = String(args.messageKey ?? "").trim();

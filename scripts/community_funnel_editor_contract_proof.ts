@@ -37,6 +37,7 @@ const contextIntegrity = read("shared/runtimeContextIntegrity.ts");
 const runtimeResolution = read("convex/runtimeTurnResolution.ts");
 const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
 const backend = read("convex/communityFunnel.ts");
+const threads = read("convex/threads.ts");
 const schema = read("convex/schema.ts");
 
 // Product surface: one persistent conversation beside one trusted preview.
@@ -46,7 +47,12 @@ assert.match(editor, /invocationSurface: "community_funnel_builder"/);
 assert.match(editor, /resolveAuthPresentationIdentity\(props\.session\)/);
 assert.match(editor, /props\.ensureSession\(\s*sessionRef\.current,/);
 assert.doesNotMatch(editor, /props\.previewCommunity\.name,\s*props\.session,/);
-assert.match(editor, /uploadCloudThreadAttachmentFile/);
+assert.match(editor, /uploadCloudMemberAgentImageFile/);
+assert.match(
+  editor,
+  /uploadCloudMemberAgentImageFile\(\{[\s\S]*threadId: threadKey,[\s\S]*messageId,[\s\S]*file: referenceImage\.file/,
+);
+assert.doesNotMatch(editor, /uploadCloudThreadAttachmentFile/);
 assert.match(editor, /CommunityFunnelV1Preview/);
 assert.doesNotMatch(editor, /buildDefaultCommunityFunnelDocumentV1/);
 assert.match(
@@ -160,6 +166,32 @@ assert.match(schema, /draftVslUrl:[\s\S]*publishedVslUrl:/);
 assert.match(preview, /vslUrl\?: string \| null/);
 assert.match(preview, /section\.type === "media"\) return null/);
 assert.match(preview, /<PreviewMedia community=\{community\} vslUrl=\{props\.vslUrl\}/);
+
+// Reference images reuse the canonical claimed-image pipeline. Only the active
+// personal-agent episode or an authorized canonical manager funnel thread may
+// prepare/claim an upload; the legacy raw-storage route is rejected for both.
+assert.match(
+  threads,
+  /function isClaimedImageAttachmentThread[\s\S]*isGlobalMemberAgentEpisodeThreadKey[\s\S]*isCommunityFunnelThreadKeyForCommunity/,
+);
+assert.match(
+  threads,
+  /function requireWritableClaimedImageAttachmentThread[\s\S]*requireWritableMemberAgentThread[\s\S]*isCommunityFunnelThreadKeyForCommunity[\s\S]*requireCommunityManager/,
+);
+assert.equal(
+  (threads.match(/requireWritableClaimedImageAttachmentThread\(\{/g) ?? [])
+    .length,
+  2,
+  "both upload-ticket preparation and storage claim must share one authority boundary",
+);
+assert.match(
+  threads,
+  /generateCloudThreadAttachmentUploadUrl[\s\S]*isClaimedImageAttachmentThread\(thread\)[\s\S]*member_agent_attachment_upload_ticket_required/,
+);
+assert.match(
+  threads,
+  /normalizeMemberAgentMessageContent[\s\S]*isClaimedImageAttachmentThread\(args\.thread\)[\s\S]*member_agent_attachment_claim_required/,
+);
 
 const funnelDocumentSchema = POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call
   .inputSchema.properties?.input as {

@@ -556,8 +556,14 @@ assert.match(
 );
 assert.equal(
   (threads.match(/requireWritableMemberAgentThread\(\{/g) ?? []).length,
-  4,
-  "both message creation paths plus upload-ticket issuance and claims must reject retained legacy episodes",
+  3,
+  "both message creation paths plus the shared claimed-image authority must reject retained legacy episodes",
+);
+assert.equal(
+  (threads.match(/requireWritableClaimedImageAttachmentThread\(\{/g) ?? [])
+    .length,
+  2,
+  "upload-ticket issuance and storage claims must share the same active-episode authority",
 );
 assert.match(
   account,
