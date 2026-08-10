@@ -4,6 +4,13 @@ import { POLYNET_CANONICAL_TOOL_DEFINITIONS } from "../shared/polynetCanonicalTo
 
 const read = (path: string) => readFileSync(path, "utf8");
 const editor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
+const app = read("apps/web/src/App.tsx");
+const memberAgentDock = read(
+  "apps/web/src/components/WebMemberAgentDock.tsx",
+);
+const memberAgentDockStyles = read(
+  "apps/web/src/components/WebMemberAgentDock.css",
+);
 const secondaryPanels = read(
   "apps/web/src/components/WebCommunitySecondaryPanels.tsx",
 );
@@ -46,6 +53,8 @@ assert.match(
 );
 assert.match(editor, /disabled=\{!document\}/);
 assert.match(editor, /\{document \? \([\s\S]*<CommunityFunnelV1Preview/);
+assert.match(editor, /Nothing to preview yet\./);
+assert.match(editor, /Prompt the agent to build your funnel\./);
 assert.doesNotMatch(
   editor,
   /Save draft|Headline[\s\S]*Subheadline|custom html|custom css|script/i,
@@ -74,6 +83,15 @@ assert.match(
 assert.match(
   communityStyles,
   /\.funnel-builder-messages\s*\{[\s\S]*?overflow-y:\s*auto;/,
+);
+assert.match(
+  app,
+  /isSuppressed:[\s\S]*activePage === "community" && communityTab === "funnel"/,
+);
+assert.match(memberAgentDock, /props\.isSuppressed \? " is-suppressed"/);
+assert.match(
+  memberAgentDockStyles,
+  /\.member-agent-dock\.is-suppressed\s*\{[\s\S]*?display:\s*none;/,
 );
 
 // The model produces a bounded design document, never executable page code.

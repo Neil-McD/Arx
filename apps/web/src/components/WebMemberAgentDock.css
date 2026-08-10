@@ -53,6 +53,10 @@
   pointer-events: none;
 }
 
+.member-agent-dock.is-suppressed {
+  display: none;
+}
+
 :root[data-theme="light"] .member-agent-dock {
   --member-agent-launcher-background: var(--surface-selected);
   --member-agent-launcher-background-hover: var(--surface-selected);

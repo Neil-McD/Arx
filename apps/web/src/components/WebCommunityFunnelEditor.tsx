@@ -434,7 +434,12 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               document={document}
               primaryActionLabel={`Join ${props.previewCommunity.name}`}
             />
-          ) : null}
+          ) : (
+            <div className="funnel-builder-preview-empty">
+              <strong>Nothing to preview yet.</strong>
+              <span>Prompt the agent to build your funnel.</span>
+            </div>
+          )}
         </div>
 
         <aside

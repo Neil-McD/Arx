@@ -118,6 +118,7 @@ type MemberAgentRetryState = {
 
 export type WebMemberAgentDockProps = {
   isVisible: boolean;
+  isSuppressed?: boolean;
   canManageResources?: boolean;
   mobileShellActive?: boolean;
   onRequestOpen?: () => void;
@@ -1253,7 +1254,7 @@ function WebMemberAgentDock(props, ref) {
     <>
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
       aria-live="polite"
     >
       {!props.mobileShellActive ? (
