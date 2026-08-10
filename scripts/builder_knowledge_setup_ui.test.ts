@@ -52,6 +52,12 @@ test("Skip completes setup while Next starts the canonical resource builder", ()
   expect(source).toMatch(/const buildResources = async \(\) =>[\s\S]*?props\.onBuildResources\([\s\S]*?readySources/);
   expect(source).toMatch(/className="builder-knowledge-setup-next"[\s\S]*?disabled=\{controlsDisabled \|\| !canContinue\}[\s\S]*?onClick=\{\(\) => void buildResources\(\)\}/);
   expect(source).toMatch(/RuntimeResourceChangesetApprovalCards[\s\S]*?onInitialResourcesApplied=\{\(\) => \{[\s\S]*?void complete\(\)/);
+  expect(source).toContain(
+    "if (isCompleting || completionInFlightRef.current) return;",
+  );
+  expect(source).not.toContain(
+    "if (baseBusy || completionInFlightRef.current) return;",
+  );
 });
 
 test("a source-loading failure cannot trap the buyer in onboarding", () => {

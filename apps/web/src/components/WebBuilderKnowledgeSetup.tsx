@@ -78,7 +78,7 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
   }, [buildRequested, hasChangeset]);
 
   const complete = async () => {
-    if (baseBusy || completionInFlightRef.current) return;
+    if (isCompleting || completionInFlightRef.current) return;
     completionInFlightRef.current = true;
     setCompletionError(null);
     setIsCompleting(true);
