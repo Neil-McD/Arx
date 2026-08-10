@@ -10,6 +10,7 @@ export const COMMUNITY_EVIDENCE_SURFACES = [
   "coding_harness",
   "external_mcp",
   "community_concierge",
+  "community_funnel_builder",
 ] as const;
 
 export const COMMUNITY_MEMORY_RETRIEVAL_RECEIPT_VERSION =
@@ -136,7 +137,6 @@ export function buildCommunityInteractionEvidenceRef(args: {
   if (!objectId) throw new Error("community_interaction_evidence_id_required");
   return `interaction:${args.objectType}:${objectId}`;
 }
-
 export function parseCommunityInteractionEvidenceRef(
   raw: unknown,
 ): { objectType: CommunityInteractionEvidenceObjectType; objectId: string } | null {

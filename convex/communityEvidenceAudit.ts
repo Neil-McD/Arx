@@ -9,6 +9,7 @@ export const communityEvidenceSurfaceValidator = v.union(
   v.literal("coding_harness"),
   v.literal("external_mcp"),
   v.literal("community_concierge"),
+  v.literal("community_funnel_builder"),
 );
 
 export const communityEvidenceCapabilityValidator = v.union(
@@ -42,7 +43,6 @@ export async function resolveTrustedCommunityEvidenceUserId(args: {
   if (!actor?.dbUserId) throw new Error("authenticated_user_required");
   return actor.dbUserId;
 }
-
 export const recordCommunityEvidenceRetrievalInternal = internalMutation({
   args: {
     communityId: v.id("communities"),

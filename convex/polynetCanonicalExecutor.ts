@@ -49,9 +49,10 @@ const MEMORY_TYPES = new Set([
   "open_question",
 ]);
 
-const MEMBER_CAPABILITIES = [
-  "community.memory.record_outcome",
-] as const;
+const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
+
+const COMMUNITY_FUNNEL_UPDATE_OPERATION =
+  "community.funnel.update_draft" as const;
 
 function canonicalError(
   code: string,
@@ -89,9 +90,7 @@ function virtualDirectory(args: {
     next_cursor: null,
     truncated: false,
     skipped_incomplete: 0,
-    ...(args.searchable === undefined
-      ? {}
-      : { searchable: args.searchable }),
+    ...(args.searchable === undefined ? {} : { searchable: args.searchable }),
     ...(args.writable === undefined ? {} : { writable: args.writable }),
   };
 }
@@ -111,9 +110,7 @@ function canonicalReceipt(args: {
     community_slug: args.target.communitySlug,
     authority_lane: args.target.authority.lane,
     relation: args.target.authority.relation,
-    ...(args.idempotencyKey
-      ? { idempotency_key: args.idempotencyKey }
-      : {}),
+    ...(args.idempotencyKey ? { idempotency_key: args.idempotencyKey } : {}),
     deduped: args.deduped === true,
   };
 }
@@ -128,9 +125,7 @@ function stableRequestValue(value: unknown): unknown {
   );
 }
 
-function omitNullishObjectFields(
-  value: unknown,
-): Record<string, unknown> {
+function omitNullishObjectFields(value: unknown): Record<string, unknown> {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   return Object.fromEntries(
     Object.entries(value as Record<string, unknown>).flatMap(
@@ -437,10 +432,9 @@ function mountSearchResults(args: {
         ].some((prefix) => localPath.startsWith(prefix))
           ? localPath
           : null;
-      const path =
-        canonicalLocalPath
-          ? mountedPath(args.communitySlug, canonicalLocalPath)
-          : ref && sourceType
+      const path = canonicalLocalPath
+        ? mountedPath(args.communitySlug, canonicalLocalPath)
+        : ref && sourceType
           ? evidencePath({
               communitySlug: args.communitySlug,
               sourceType,
@@ -453,9 +447,7 @@ function mountSearchResults(args: {
       };
     }),
     truncated: args.truncated === true,
-    ...(args.retrievalId
-      ? { retrieval_id: String(args.retrievalId) }
-      : {}),
+    ...(args.retrievalId ? { retrieval_id: String(args.retrievalId) } : {}),
   };
 }
 
@@ -475,20 +467,25 @@ function canonicalJsonDocument(args: {
     ...(args.ref ? { ref: args.ref } : {}),
     total_chars: fullBody.length,
     next_offset: body.length < fullBody.length ? body.length : null,
-    ...(args.retrievalId
-      ? { retrieval_id: String(args.retrievalId) }
-      : {}),
+    ...(args.retrievalId ? { retrieval_id: String(args.retrievalId) } : {}),
   };
 }
 
 function capabilityDocument(args: {
   target: ResolvedCommunityTarget;
   operation: string;
+  evidenceSurface: CommunityEvidenceSurface;
+  principalKind: PolynetPrincipalKind;
 }): Record<string, unknown> | null {
-  const isMemberCapability = (MEMBER_CAPABILITIES as readonly string[]).includes(
-    args.operation,
-  );
-  if (!isMemberCapability) {
+  const isMemberCapability =
+    args.evidenceSurface !== "community_funnel_builder" &&
+    (MEMBER_CAPABILITIES as readonly string[]).includes(args.operation);
+  const isFunnelCapability =
+    args.operation === COMMUNITY_FUNNEL_UPDATE_OPERATION &&
+    args.evidenceSurface === "community_funnel_builder" &&
+    args.principalKind === "personal_agent" &&
+    args.target.authority.canUseBuilderProjection;
+  if (!isMemberCapability && !isFunnelCapability) {
     return null;
   }
   const operationDefinition: Record<string, unknown> = {
@@ -496,10 +493,18 @@ function capabilityDocument(args: {
     version: 1,
     tool: "polynet_call",
     target: `/communities/${args.target.communitySlug}/capabilities/${args.operation}.json`,
-    authority_lane: "member",
+    authority_lane: isFunnelCapability ? "builder" : "member",
     idempotency_required: true,
   };
-  if (args.operation === "community.memory.record_outcome") {
+  if (isFunnelCapability) {
+    operationDefinition.input = {
+      required: ["expected_revision", "document"],
+      expected_revision: "non-negative integer",
+      document_contract: "community_funnel_document:v1",
+      effects: ["replace_manager_draft"],
+      forbidden_effects: ["publish", "change_access", "change_pricing"],
+    };
+  } else if (args.operation === "community.memory.record_outcome") {
     operationDefinition.input = {
       required: ["retrieval_log_id", "node_id", "result_status"],
       result_status: ["worked", "failed", "mixed"],
@@ -610,7 +615,16 @@ async function executeCanonicalList(args: {
     };
   }
   if (target.localPath === POLYNET_CAPABILITIES_DIRECTORY_PATH) {
-    const operations = [...MEMBER_CAPABILITIES];
+    const operations = [
+      ...(args.evidenceSurface === "community_funnel_builder"
+        ? []
+        : MEMBER_CAPABILITIES),
+      ...(args.evidenceSurface === "community_funnel_builder" &&
+      args.principalKind === "personal_agent" &&
+      target.authority.canUseBuilderProjection
+        ? [COMMUNITY_FUNNEL_UPDATE_OPERATION]
+        : []),
+    ];
     return {
       ok: true,
       value: virtualDirectory({
@@ -668,40 +682,36 @@ async function executeCanonicalList(args: {
           userId: args.userId,
           communityId: target.communityId,
           limit:
-            typeof args.input.limit === "number"
-              ? args.input.limit
-              : undefined,
+            typeof args.input.limit === "number" ? args.input.limit : undefined,
         },
       )) as Record<string, unknown>;
       const resources = Array.isArray(directory.resources)
         ? directory.resources
         : [];
-      const modules = Array.isArray(directory.modules)
-        ? directory.modules
-        : [];
+      const modules = Array.isArray(directory.modules) ? directory.modules : [];
       const entries: Array<Record<string, unknown>> = [
         ...modules,
         ...resources,
       ].flatMap((row) => {
-          const record =
-            row && typeof row === "object"
-              ? (row as Record<string, unknown>)
-              : {};
-          const id = requiredString(record.id, 180);
-          return id
-            ? [
-                {
-                  ...record,
-                  path: mountedPath(
-                    target.communitySlug,
-                    `${POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH}${id}.json`,
-                  ),
-                  kind: "document",
-                  type: "builder",
-                },
-              ]
-            : [];
-        });
+        const record =
+          row && typeof row === "object"
+            ? (row as Record<string, unknown>)
+            : {};
+        const id = requiredString(record.id, 180);
+        return id
+          ? [
+              {
+                ...record,
+                path: mountedPath(
+                  target.communitySlug,
+                  `${POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH}${id}.json`,
+                ),
+                kind: "document",
+                type: "builder",
+              },
+            ]
+          : [];
+      });
       return {
         ok: true,
         value: {
@@ -717,7 +727,9 @@ async function executeCanonicalList(args: {
     } catch (error) {
       return canonicalError(
         "builder_resource_list_failed",
-        error instanceof Error ? error.message : "Builder resource list failed.",
+        error instanceof Error
+          ? error.message
+          : "Builder resource list failed.",
       );
     }
   }
@@ -843,9 +855,7 @@ async function executeCanonicalRead(args: {
     }
   }
 
-  const memoryMatch = /^\/memory\/([A-Za-z0-9_-]+)\.md$/.exec(
-    target.localPath,
-  );
+  const memoryMatch = /^\/memory\/([A-Za-z0-9_-]+)\.md$/.exec(target.localPath);
   if (memoryMatch) {
     try {
       const value = (await args.ctx.runMutation(
@@ -885,12 +895,16 @@ async function executeCanonicalRead(args: {
     }
   }
 
-  const capabilityMatch =
-    /^\/capabilities\/([a-z0-9][a-z0-9._-]*)\.json$/.exec(target.localPath);
+  const capabilityMatch = /^\/capabilities\/([a-z0-9][a-z0-9._-]*)\.json$/.exec(
+    target.localPath,
+  );
   if (capabilityMatch) {
+    const operation = capabilityMatch[1];
     const definition = capabilityDocument({
       target,
-      operation: capabilityMatch[1],
+      operation,
+      evidenceSurface: args.evidenceSurface,
+      principalKind: args.principalKind,
     });
     if (!definition) {
       return canonicalError(
@@ -898,11 +912,23 @@ async function executeCanonicalRead(args: {
         "Capability not found or not authorized.",
       );
     }
+    const currentState =
+      operation === COMMUNITY_FUNNEL_UPDATE_OPERATION
+        ? ((await args.ctx.runQuery(
+            (internal as any).communityFunnel
+              .getCommunityFunnelDraftInternal,
+            { communityId: target.communityId },
+          )) as Record<string, unknown>)
+        : null;
     return {
       ok: true,
       value: {
         path: mountedPath(target.communitySlug, target.localPath),
-        body: JSON.stringify(definition, null, 2),
+        body: JSON.stringify(
+          currentState ? { ...definition, current_state: currentState } : definition,
+          null,
+          2,
+        ),
         truncated: false,
       },
     };
@@ -1099,9 +1125,7 @@ async function executeCanonicalSearch(args: {
         query,
         limit,
         surface: args.evidenceSurface,
-        ...(Array.isArray(args.input.types)
-          ? { types: args.input.types }
-          : {}),
+        ...(Array.isArray(args.input.types) ? { types: args.input.types } : {}),
       },
     )) as Record<string, unknown>;
     if (value?.ok !== true) {
@@ -1190,8 +1214,7 @@ async function executeCanonicalWrite(args: {
       return { ok: true, value: reservation.completedValue };
     }
     try {
-      const canonicalIdempotencyKey =
-        `polynet:${args.principalKind}:${idempotencyKey}`;
+      const canonicalIdempotencyKey = `polynet:${args.principalKind}:${idempotencyKey}`;
       const mutationArgs = {
         userId: args.userId,
         authSubject: args.authSubject,
@@ -1270,10 +1293,7 @@ async function executeCanonicalWrite(args: {
         errorCode: "community_chat_write_failed",
         errorMessage,
       });
-      return canonicalError(
-        "community_chat_write_failed",
-        errorMessage,
-      );
+      return canonicalError("community_chat_write_failed", errorMessage);
     }
   }
 
@@ -1348,10 +1368,7 @@ async function executeCanonicalWrite(args: {
         errorCode: "builder_changeset_stage_failed",
         errorMessage,
       });
-      return canonicalError(
-        "builder_changeset_stage_failed",
-        errorMessage,
-      );
+      return canonicalError("builder_changeset_stage_failed", errorMessage);
     }
   }
 
@@ -1387,7 +1404,16 @@ async function executeCanonicalCall(args: {
   const { target } = resolved;
   const operation = String(args.input.operation ?? "");
   const version = Number(args.input.version ?? 0);
-  const input = omitNullishObjectFields(args.input.input);
+  const rawInput =
+    args.input.input &&
+    typeof args.input.input === "object" &&
+    !Array.isArray(args.input.input)
+      ? (args.input.input as Record<string, unknown>)
+      : {};
+  const input =
+    operation === COMMUNITY_FUNNEL_UPDATE_OPERATION
+      ? rawInput
+      : omitNullishObjectFields(rawInput);
   const idempotencyKey = String(args.input.idempotencyKey ?? "");
   if (version !== 1) {
     return canonicalError(
@@ -1395,12 +1421,95 @@ async function executeCanonicalCall(args: {
       "Only operation version 1 is supported.",
     );
   }
-  if (!capabilityDocument({ target, operation })) {
+  if (
+    !capabilityDocument({
+      target,
+      operation,
+      evidenceSurface: args.evidenceSurface,
+      principalKind: args.principalKind,
+    })
+  ) {
     return canonicalError(
       "operation_not_found",
       "Operation is not discoverable or authorized for this community.",
     );
   }
+  if (operation === COMMUNITY_FUNNEL_UPDATE_OPERATION) {
+    const expectedRevision = Number(input.expected_revision);
+    if (
+      !Number.isSafeInteger(expectedRevision) ||
+      expectedRevision < 0 ||
+      !input.document ||
+      typeof input.document !== "object" ||
+      Array.isArray(input.document)
+    ) {
+      return canonicalError(
+        "invalid_tool_args",
+        "expected_revision and a Funnel V1 document are required.",
+      );
+    }
+    const reservation = await reserveMutatingOperation({
+      ...args,
+      target,
+      toolName: "polynet_call",
+      idempotencyKey,
+    });
+    if (!reservation.ok) return reservation.result;
+    if (reservation.status === "completed") {
+      return { ok: true, value: reservation.completedValue };
+    }
+    try {
+      const result = (await args.ctx.runMutation(
+        (internal as any).communityFunnel.saveCommunityFunnelDraftInternal,
+        {
+          userId: args.userId,
+          communityId: target.communityId,
+          expectedDraftRevision: expectedRevision,
+          document: input.document,
+        },
+      )) as Record<string, unknown>;
+      const responseValue = {
+        ok: true,
+        operation,
+        result,
+        deduped: false,
+        receipt: canonicalReceipt({
+          toolName: "polynet_call",
+          principalKind: args.principalKind,
+          target,
+          idempotencyKey,
+          deduped: false,
+        }),
+      };
+      return {
+        ok: true,
+        value: await completeMutatingOperation({
+          ...args,
+          target,
+          toolName: "polynet_call",
+          idempotencyKey,
+          requestFingerprint: reservation.requestFingerprint,
+          attemptToken: reservation.attemptToken,
+          value: responseValue,
+        }),
+      };
+    } catch (error) {
+      const errorMessage =
+        error instanceof Error ? error.message : "Funnel draft update failed.";
+      await failMutatingOperation({
+        ...args,
+        target,
+        toolName: "polynet_call",
+        idempotencyKey,
+        requestFingerprint: reservation.requestFingerprint,
+        attemptToken: reservation.attemptToken,
+        errorCode: "community_funnel_update_failed",
+        errorMessage,
+      });
+      return canonicalError("community_funnel_update_failed", errorMessage);
+    }
+  }
+
   const candidate = String(input.result_status ?? "");
   if (
     candidate !== "worked" &&
@@ -1446,8 +1555,7 @@ async function executeCanonicalCall(args: {
         ...(input.notes ? { notes: String(input.notes) } : {}),
       },
     )) as Record<string, unknown>;
-    const deduped =
-      result.deduped === true || result.deduplicated === true;
+    const deduped = result.deduped === true || result.deduplicated === true;
     const responseValue = {
       ok: true,
       operation,
@@ -1486,10 +1594,7 @@ async function executeCanonicalCall(args: {
       errorCode: "polynet_call_failed",
       errorMessage,
     });
-    return canonicalError(
-      "polynet_call_failed",
-      errorMessage,
-    );
+    return canonicalError("polynet_call_failed", errorMessage);
   }
 }
 
@@ -1529,8 +1634,10 @@ export async function executePolynetCanonicalTool(args: {
     userId,
     input,
   };
-  if (args.toolName === "polynet_list") return await executeCanonicalList(common);
-  if (args.toolName === "polynet_read") return await executeCanonicalRead(common);
+  if (args.toolName === "polynet_list")
+    return await executeCanonicalList(common);
+  if (args.toolName === "polynet_read")
+    return await executeCanonicalRead(common);
   if (args.toolName === "polynet_search")
     return await executeCanonicalSearch(common);
   if (args.toolName === "polynet_write")

@@ -38,6 +38,7 @@ import {
   resolveGateDecisionForAuthenticatedActor,
 } from "./httpRuntimeSupport";
 import {
+  isCommunityFunnelThreadKeyForCommunity,
   isReadOnlyLegacyMemberAgentThreadKey,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
@@ -154,7 +155,6 @@ export type RuntimeTurnResolution = {
 function resolveRequestedAgenticTools(raw: unknown): boolean {
   return raw === true;
 }
-
 function readEnv(name: string): string {
   try {
     const value = (globalThis as any)?.process?.env?.[name];
@@ -398,17 +398,20 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     role: "user" | "assistant";
     content: string | NativeToolInputContentPart[];
   }>;
-  let hasMemberAgentImageInput = false;
-  if (invocationSurface === "member_agent_dock") {
+  let hasPersistedImageInput = false;
+  const usesPersistedConversation =
+    invocationSurface === "member_agent_dock" ||
+    invocationSurface === "community_funnel_builder";
+  if (usesPersistedConversation) {
     const expectedUserMessageKey = String(input.user_message_key ?? "").trim();
     if (!expectedUserMessageKey) {
       return {
         ok: false,
         response: fail(400, {
           ok: false,
-          code: "member_agent_user_message_key_required",
-          error: "member_agent_user_message_key_required",
-          message: "The member agent turn requires a persisted user message.",
+          code: "persisted_user_message_key_required",
+          error: "persisted_user_message_key_required",
+          message: "This agent surface requires a persisted user message.",
         }),
       };
     }
@@ -427,15 +430,15 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       });
       if (!context.ok) throw new Error(context.code);
       conversationMessages = context.messages;
-      hasMemberAgentImageInput = context.hasImageInput;
+      hasPersistedImageInput = context.hasImageInput;
     } catch {
       return {
         ok: false,
         response: fail(409, {
           ok: false,
-          code: "member_agent_context_unavailable",
-          error: "member_agent_context_unavailable",
-          message: "The member agent conversation changed before this turn could start.",
+          code: "persisted_conversation_context_unavailable",
+          error: "persisted_conversation_context_unavailable",
+          message: "The persisted conversation changed before this turn could start.",
         }),
       };
     }
@@ -468,13 +471,13 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   const requestedModelSupportsImageInput = isCommunityMemberAgentTurn
     ? COMMUNITY_OWNER_FUNDED_MODEL_SUPPORTS_IMAGE_INPUT
     : supportsModelImageInput(requestedModelId);
-  if (hasMemberAgentImageInput && !requestedModelSupportsImageInput) {
+  if (hasPersistedImageInput && !requestedModelSupportsImageInput) {
     return {
       ok: false,
       response: fail(400, {
         ok: false,
-        code: "member_agent_image_model_unsupported",
-        error: "member_agent_image_model_unsupported",
+        code: "image_model_unsupported",
+        error: "image_model_unsupported",
         message: "This model cannot inspect images. Remove the image or use an image-capable model.",
       }),
     };
@@ -500,7 +503,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  if (hasMemberAgentImageInput && requestedRuntimeEngine === "codex") {
+  if (hasPersistedImageInput && requestedRuntimeEngine === "codex") {
     return {
       ok: false,
       response: fail(400, {
@@ -642,6 +645,21 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   let runtimeCommunityLensAuthority: CommunityLensAuthority | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
   if (
+    invocationSurface === "community_funnel_builder" &&
+    (!threadCommunityId ||
+      !isCommunityFunnelThreadKeyForCommunity(threadKey, threadCommunityId))
+  ) {
+    return {
+      ok: false,
+      response: fail(403, {
+        ok: false,
+        code: "community_funnel_thread_context_required",
+        error: "community_funnel_thread_context_required",
+        message: "The funnel builder requires its canonical community thread.",
+      }),
+    };
+  }
+  if (
     invocationSurface === "member_agent_dock" &&
     isReadOnlyLegacyMemberAgentThreadKey(threadKey)
   ) {
@@ -734,6 +752,20 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       };
     }
   }
+  if (
+    invocationSurface === "community_funnel_builder" &&
+    (!runtimeCommunityId || runtimeCommunityLensAuthority?.canManage !== true)
+  ) {
+    return {
+      ok: false,
+      response: fail(403, {
+        ok: false,
+        code: "community_manager_required",
+        error: "community_manager_required",
+        message: "Only community managers can use the funnel builder.",
+      }),
+    };
+  }
 
   let communityInferenceAdmission: CommunityInferenceFundingAdmission | null = null;
   if (isCommunityMemberAgentTurn) {
@@ -791,7 +823,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     requestedAgenticTools && allowedToolNames.length > 0
       ? "agentic"
       : "chat";
-  if (hasMemberAgentImageInput && runtimeExecutionMode !== "agentic") {
+  if (hasPersistedImageInput && runtimeExecutionMode !== "agentic") {
     return {
       ok: false,
       response: fail(400, {
