@@ -2385,6 +2385,22 @@
   font-size: 12px;
   line-height: 1.45;
 }
+.funnel-builder-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 0 0 auto;
+}
+.funnel-builder-header-actions .is-primary {
+  border-color: var(--text-primary);
+  background: var(--text-primary);
+  color: var(--bg-app);
+}
+.funnel-builder-header-actions .is-primary:disabled {
+  border-color: var(--border-muted);
+  background: var(--bg-card-alt);
+  color: var(--text-muted);
+}
 .funnel-builder-layout {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(300px, 380px);
@@ -2579,6 +2595,12 @@
 @media (max-width: 560px) {
   .funnel-builder-header {
     flex-direction: column;
+  }
+  .funnel-builder-header-actions {
+    width: 100%;
+  }
+  .funnel-builder-header-actions button {
+    flex: 1;
   }
 }
 

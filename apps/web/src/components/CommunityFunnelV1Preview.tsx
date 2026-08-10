@@ -100,8 +100,12 @@ export function CommunityFunnelV1Preview(props: {
   primaryActionLabel: string;
   isLoading?: boolean;
   error?: string | null;
+  isPreview?: boolean;
+  primaryActionDisabled?: boolean;
+  onPrimaryAction?: () => void;
 }) {
   const { community, document } = props;
+  const isPreview = props.isPreview !== false;
   const faces = (community.member_faces_preview ?? [])
     .filter((face) => Boolean(face.avatar_url))
     .slice(0, 8);
@@ -222,12 +226,16 @@ export function CommunityFunnelV1Preview(props: {
       >
         <h2>{section.headline}</h2>
         {section.body ? <p>{section.body}</p> : null}
-        <button type="button" disabled>
+        <button
+          type="button"
+          disabled={isPreview || props.primaryActionDisabled}
+          onClick={isPreview ? undefined : props.onPrimaryAction}
+        >
           {props.primaryActionLabel}
         </button>
-        <small>
-          Draft preview · The live visitor action remains unchanged.
-        </small>
+        {isPreview ? (
+          <small>Draft preview · Publishing is always explicit.</small>
+        ) : null}
       </section>
     );
   };

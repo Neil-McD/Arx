@@ -108,6 +108,10 @@ assert.match(
   schema,
   /draftDocumentV1:[\s\S]*draftRevision:[\s\S]*draftUpdatedByUserId:/,
 );
+assert.match(
+  schema,
+  /publishedDocumentV1:[\s\S]*publishedDraftRevision:[\s\S]*publishedByUserId:/,
+);
 
 // Storage remains manager-authorized and revision-safe.
 assert.match(
@@ -123,6 +127,20 @@ assert.doesNotMatch(
   backend,
   /export const saveCommunityFunnelDraft = mutation/,
 );
+assert.match(
+  backend,
+  /export const publishCommunityFunnelDraft = mutation[\s\S]*requireCommunityManager[\s\S]*expectedDraftRevision[\s\S]*community_funnel_publish_conflict/,
+);
+assert.match(
+  backend,
+  /publishedDocumentV1: draftDocumentV1[\s\S]*publishedDraftRevision: currentRevision/,
+);
+assert.match(
+  gateway,
+  /communityFunnel:publishCommunityFunnelDraft/,
+);
+assert.match(editor, /community_funnel_publish/);
+assert.match(editor, /Publish funnel/);
 
 // Runtime authority is scoped twice: canonical thread + manager lens, then one
 // discoverable manager-only canonical operation.
@@ -177,18 +195,23 @@ assert.doesNotMatch(
   "runtime integrity must not require a retired feed prompt section",
 );
 
-// Preview is analytics-free and disabled; live V0 remains the independent
-// visitor surface until a later explicit publication slice.
+// Preview is analytics-free and disabled. Live V1 reads only the explicit
+// published snapshot; communities without one retain the V0 compatibility
+// surface.
 assert.match(previewController, /fetchCloudCommunityFunnelDraftPreview/);
 assert.match(
   publicFunnel,
   /isPreviewMode && publicCommunity[\s\S]*CommunityFunnelV1Preview/,
 );
 assert.match(publicFunnel, /return \([\s\S]*<WebCommunityVisitorSurface/);
+assert.match(
+  publicFunnel,
+  /funnel\?\.published_document_v1[\s\S]*document=\{funnel\.published_document_v1\}[\s\S]*isPreview=\{false\}/,
+);
 assert.match(routeController, /recordVisit: !isPublicFunnelPreviewRoute/);
-assert.match(preview, /button type="button" disabled/);
-assert.doesNotMatch(preview, /onPrimaryAction/);
+assert.match(preview, /disabled=\{isPreview \|\| props\.primaryActionDisabled\}/);
+assert.match(preview, /onPrimaryAction/);
 
 console.log(
-  "PASS: Funnel V1 is an AI-assisted, manager-only bounded draft composer with canonical revision-safe persistence; preview remains disabled and live V0 remains separate.",
+  "PASS: Funnel V1 is an AI-assisted bounded draft composer with explicit manager-only revision-safe publication; preview stays disabled, published snapshots power live V1, and unpublished communities retain V0.",
 );

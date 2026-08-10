@@ -10,6 +10,7 @@ import type {
 export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
   hero_media_url: null,
   hero_media_kind: "image",
+  published_document_v1: null,
 };
 
 export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConfig =
@@ -17,6 +18,9 @@ export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConf
     ...DEFAULT_COMMUNITY_FUNNEL_CONFIG,
     draft_document_v1: null,
     draft_revision: 0,
+    draft_updated_at: null,
+    published_draft_revision: 0,
+    published_at: null,
   };
 
 export const DEFAULT_COMMUNITY_FUNNEL_THEME: CommunityFunnelThemeV1 = {
@@ -140,6 +144,9 @@ export function normalizeCommunityFunnelConfig(
   return {
     hero_media_url: normalizeTrimmedString(value.hero_media_url, 2_000),
     hero_media_kind: normalizeHeroMediaKind(value.hero_media_kind),
+    published_document_v1: normalizeCommunityFunnelDocumentV1(
+      value.published_document_v1,
+    ),
   };
 }
 
@@ -440,11 +447,24 @@ export function normalizeCommunityFunnelManagerConfig(
       ? (raw as Record<string, unknown>)
       : {};
   const revision = Math.floor(Number(value.draft_revision));
+  const publishedRevision = Math.floor(Number(value.published_draft_revision));
+  const draftUpdatedAt = Number(value.draft_updated_at);
+  const publishedAt = Number(value.published_at);
   return {
     ...base,
     draft_document_v1: normalizeCommunityFunnelDocumentV1(
       value.draft_document_v1,
     ),
     draft_revision: Number.isFinite(revision) && revision >= 0 ? revision : 0,
+    draft_updated_at:
+      Number.isFinite(draftUpdatedAt) && draftUpdatedAt > 0
+        ? draftUpdatedAt
+        : null,
+    published_draft_revision:
+      Number.isFinite(publishedRevision) && publishedRevision >= 0
+        ? publishedRevision
+        : 0,
+    published_at:
+      Number.isFinite(publishedAt) && publishedAt > 0 ? publishedAt : null,
   };
 }
