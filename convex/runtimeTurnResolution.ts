@@ -40,6 +40,7 @@ import {
 import {
   isCommunityFunnelThreadKeyForCommunity,
   isReadOnlyLegacyMemberAgentThreadKey,
+  resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
@@ -464,7 +465,12 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   setStage("gate");
   const publicMap = loadPublicModelMap();
   const platformMap = loadPlatformModelMap();
-  const isCommunityMemberAgentTurn = invocationSurface === "member_agent_dock";
+  const invocationFundingPolicy =
+    resolveRuntimeInvocationFundingPolicy(invocationSurface);
+  const isCommunityMemberAgentTurn =
+    invocationFundingPolicy === "community_owner";
+  const isPlatformManagedTurn =
+    invocationFundingPolicy === "platform_managed";
   const requestedModelId = isCommunityMemberAgentTurn
     ? COMMUNITY_OWNER_FUNDED_MODEL_ID
     : String(input.model_id ?? "").trim() || DEFAULT_ACTIVE_MODEL_ID;
@@ -483,11 +489,12 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
   const publicRef = publicMap[requestedModelId];
-  const requestedRuntimeEngine = isCommunityMemberAgentTurn
+  const requestedRuntimeEngine =
+    isCommunityMemberAgentTurn || isPlatformManagedTurn
     ? "polynet"
     : normalizeRuntimeEngine(input.runtime_engine);
   if (
-    !isCommunityMemberAgentTurn &&
+    invocationFundingPolicy === "generic_gate" &&
     input.runtime_engine !== undefined &&
     input.runtime_engine !== null &&
     String(input.runtime_engine).trim().length > 0 &&
@@ -514,7 +521,8 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  const requestedAgenticTools = isCommunityMemberAgentTurn
+  const requestedAgenticTools =
+    isCommunityMemberAgentTurn || isPlatformManagedTurn
     ? true
     : resolveRequestedAgenticTools(input.requested_agentic_tools);
   const fallbackPublicRef = Object.values(publicMap).find(
@@ -535,6 +543,13 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   if (isCommunityMemberAgentTurn) {
     lane = "platform";
     modelRef = `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`;
+    inferenceSource = "platform";
+    entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
+      authState: "authenticated",
+    }) as RuntimeCapabilityFamily[];
+  } else if (isPlatformManagedTurn) {
+    lane = "platform";
+    modelRef = platformMap[requestedModelId] || fallbackPlatformRef;
     inferenceSource = "platform";
     entitledCapabilityFamilies = resolveEntitledCapabilityFamiliesForGate({
       authState: "authenticated",
