@@ -62,7 +62,6 @@ export function CommunityVisitorGate(props: {
         ) : null}
         {typeof action.onlineCount === "number" && action.onlineCount > 0 ? (
           <span>
-            <span className="cfg-od" aria-hidden="true" />
             <b>
               {formatCompactStat(action.onlineCount)}
               {action.onlineCountCapped ? "+" : ""}

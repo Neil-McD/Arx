@@ -18,7 +18,7 @@ type MagicLinkStatus = "idle" | "sending" | "sent";
 
 import { applyShellVariantToPublicPath, type AppShellVariant } from "../../../../shared/webAppRouteState";
 
-export type PublicCommunityFunnelCommunityLike = {
+type PublicCommunityFunnelCommunityLike = {
   id?: string;
   slug?: string;
   name: string;

@@ -10,6 +10,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
 import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
+import { renderTextWithLinks } from "../../../../shared/linkEmbedUi";
 import {
   buildWebCommunityVisitorProjection,
   type VisitorFeaturedMessageLike,
@@ -17,7 +18,6 @@ import {
 } from "../controllers/buildWebCommunityVisitorProjection";
 import {
   renderHeroMediaDefault,
-  renderTextWithLinks,
   type CommunityFunnelSurfaceAction,
 } from "./CommunityFunnelSurface";
 import {

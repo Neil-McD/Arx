@@ -9,31 +9,11 @@ export type CommunityFunnelUiFaceLike = {
 
 export type CommunityFunnelUiMode = "enter" | "join" | "request_access" | "checkout" | "private";
 
-export function getCommunityInitials(name: string): string {
-  return (
-    name
-      .trim()
-      .split(/\s+/)
-      .filter(Boolean)
-      .slice(0, 2)
-      .map((part) => part[0]?.toUpperCase() ?? "")
-      .join("") || "PN"
-  );
-}
-
-export function formatMemberCount(value: number): string {
-  return `${new Intl.NumberFormat().format(value)} members`;
-}
-
 export function formatCompactStat(value: number): string {
   return new Intl.NumberFormat(undefined, {
     notation: "compact",
     maximumFractionDigits: value >= 1000 ? 1 : 0,
   }).format(value);
-}
-
-export function formatCommunityLink(slug: string): string {
-  return `polynet.com/c/${slug}`;
 }
 
 export function buildCommunityFunnelCopy(mode: CommunityFunnelUiMode): {
