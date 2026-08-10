@@ -43,7 +43,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*--community-composer-control-size: 36px;[\s\S]*--community-composer-input-size: 48px;[\s\S]*display: grid;/,
+  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*--community-composer-control-size: 36px;[\s\S]*--community-composer-input-size: 40px;[\s\S]*display: grid;/,
   "desktop member composers should expose their control and writing-region heights",
 );
 assert.match(
@@ -53,7 +53,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 52px;/,
+  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 46px;/,
   "mobile member composers should retain touch controls and a bounded writing region",
 );
 assert.match(

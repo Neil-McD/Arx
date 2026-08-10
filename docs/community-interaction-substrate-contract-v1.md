@@ -477,9 +477,13 @@ Rules:
 - channel switching clears transient composer/reply state and cannot expose roots or pending sends from another channel
 - only community managers see Add Channel; the dialog accepts one display name and the server remains authoritative for normalization, authorization, and the ten-channel limit
 - every resolved member channel renders one canonical conversation header so the active scope remains explicit independently of sidebar or mobile-drawer state
-- main-channel and drawer-reply composers share one raised two-zone presentation: the editor owns the upper region and existing mention, attachment, dictation, and send actions occupy the lower utility row
+- main-channel and drawer-reply composers share one raised writing surface: the editor owns the upper region, an optional formatting rail stays inside the shell, and one shared utility row renders `+`, mention, emoji, and `Aa` on the left with dictation and send on the right
 - the visible mention control inserts at the current caret and opens the same authorized autocomplete used by typed `@`; reply candidates continue to exclude role broadcasts such as `@everybody`
-- reply context and queued attachments remain transient composer state inside the visual shell; formatting controls are not presented until their insertion and rendering contract is implemented
+- `+` opens the existing bounded attachment input directly; it is not a generalized add menu
+- emoji and formatting actions insert deterministic plain-text syntax at the current selection and return focus to the native textarea
+- `Aa` exposes bold, italic, strikethrough, inline code, safe labeled link, bullet list, numbered list, blockquote, indent, and outdent controls; indentation is two spaces per level and capped at the renderer's existing two nested levels
+- Enter sends, Shift+Enter inserts a newline and continues an active list marker, and Tab or Shift+Tab changes indentation only while the selection contains a list item; mention autocomplete retains priority for Enter and Tab
+- reply context, queued attachments, formatting-rail visibility, and emoji-picker visibility remain transient composer state; formatting and emoji state resets when the community or selected thread context changes
 - message overflow menus open below triggers in the top half of the viewport and above triggers in the bottom half so edit, pin, and delete actions remain clear of the floating composer
 - only community managers see the active-channel options trigger; custom-channel rename preserves the canonical slug and delete archives without deleting interaction history
 - the sidebar owns channel selection and creation only; it does not duplicate edit or delete controls on channel rows
@@ -545,7 +549,7 @@ Bounded chat formatting rules:
 - labeled links fail closed to literal text unless their target is a valid HTTP, HTTPS, `mailto`, or normalized `tel` target; raw HTML is never interpreted
 - tables, task lists, images, math, artifacts, and syntax highlighting remain outside the community-chat grammar
 - direct messages retain their existing inline-only grammar and do not opt into this community-chat slice
-- formatting and contact linking are derived presentation only; they do not mutate canonical message text, composer behavior, content blocks, mentions, or embed records
+- formatting and contact linking remain canonical plain text plus derived presentation: composer controls insert supported syntax without introducing HTML, alternate message storage, new content blocks, mention mutation, or embed records
 - fenced code protects matching standalone URL lines from in-flow embed replacement
 
 ## Current Legacy Chat Adapter Slice

@@ -3981,7 +3981,7 @@
 .community-member-chat .community-interaction-main-composer .chat-input-bar,
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
   --community-composer-control-size: 36px;
-  --community-composer-input-size: 48px;
+  --community-composer-input-size: 40px;
   display: grid;
   grid-template-columns: minmax(0, 1fr);
   gap: 0;
@@ -3996,12 +3996,12 @@
 
 .community-member-chat .community-interaction-main-composer .chat-input-bar {
   border-radius: 18px;
-  padding: 12px 12px 9px;
+  padding: 10px 12px 8px;
 }
 
 .community-member-chat .community-interaction-drawer-composer .chat-input-bar {
   border-radius: 18px;
-  padding: 12px 12px 9px;
+  padding: 10px 12px 8px;
 }
 
 .community-member-chat .community-interaction-reply-input-bar {
@@ -4010,7 +4010,7 @@
 
 .community-composer-editor-row {
   min-width: 0;
-  padding: 2px 4px 8px;
+  padding: 0 4px 6px;
 }
 
 .community-composer-editor-row .chat-input,
@@ -4029,14 +4029,25 @@
 .community-composer-tools {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 5px;
   min-width: 0;
+}
+
+.community-composer-submit-tools {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
 }
 
 .community-composer-toolbar .ask-icon-btn,
 .community-composer-toolbar .chat-send {
   width: var(--community-composer-control-size, 36px);
   height: var(--community-composer-control-size, 36px);
+}
+
+.community-composer-toolbar .ask-icon-btn {
+  color: var(--text-secondary);
 }
 
 .community-composer-toolbar .ask-icon-btn:focus-visible,
@@ -4049,6 +4060,105 @@
   font-size: 18px;
   font-weight: 600;
   line-height: 1;
+}
+
+.community-composer-format-toggle span {
+  font-size: 13px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+}
+
+.community-composer-toolbar .ask-icon-btn.is-active,
+.community-composer-format-btn:hover:not(:disabled),
+.community-composer-format-btn:focus-visible {
+  color: var(--text-primary);
+  background: var(--hover-overlay);
+}
+
+.community-composer-formatting-rail {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  min-width: 0;
+  margin: 0 2px 6px;
+  padding: 6px 2px 0;
+  overflow-x: auto;
+  border-top: 1px solid var(--border-subtle);
+}
+
+.community-composer-format-btn {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+
+.community-composer-format-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.community-composer-format-btn:focus-visible {
+  outline: 2px solid var(--composer-focus-ring);
+  outline-offset: 1px;
+}
+
+.community-composer-emoji-picker {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.community-composer-emoji-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 8px);
+  z-index: 45;
+  display: grid;
+  grid-template-columns: repeat(6, 32px);
+  gap: 2px;
+  padding: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  background: var(--bg-card-solid, var(--bg-card));
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.28);
+}
+
+.community-composer-emoji-option {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.community-composer-emoji-option:hover {
+  background: var(--hover-overlay);
+}
+
+.community-composer-emoji-option:focus-visible {
+  background: var(--hover-overlay);
+  outline: 2px solid var(--composer-focus-ring);
+  outline-offset: -2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .community-composer-format-btn {
+    transition: none;
+  }
 }
 
 .community-member-chat .chat-input-bar > .chat-replying-bar {

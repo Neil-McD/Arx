@@ -8,6 +8,7 @@ function read(relativePath: string): string {
 }
 
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const composerControls = read("apps/web/src/components/CommunityComposerControls.tsx");
 const mentionAutocomplete = read(
   "apps/web/src/components/communityMentionAutocomplete.tsx",
 );
@@ -45,32 +46,32 @@ assert.match(
 );
 assert.match(
   chatPanel,
-  /className="community-composer-editor-row"[\s\S]*className="community-composer-toolbar"[\s\S]*className="community-composer-tools"/,
+  /className="community-composer-editor-row"[\s\S]*<CommunityComposerControls/,
   "community composers should render an editor above a dedicated tool row",
 );
 assert.match(
-  chatPanel,
-  /onClick=\{mainMention\.begin\}[\s\S]*aria-label="Mention someone"[\s\S]*aria-haspopup="listbox"[\s\S]*aria-expanded=\{mainMention\.isOpen\}/,
+  composerControls,
+  /onClick=\{props\.onMention\}[\s\S]*aria-label=\{props\.mentionLabel\}[\s\S]*aria-haspopup="listbox"[\s\S]*aria-expanded=\{props\.mentionMenuOpen\}/,
   "main composer should expose a functional accessible mention control",
 );
 assert.match(
   chatPanel,
-  /onClick=\{drawerMention\.begin\}[\s\S]*aria-label="Mention someone in reply"[\s\S]*aria-expanded=\{drawerMention\.isOpen\}/,
+  /mentionLabel="Mention someone in reply"[\s\S]*mentionMenuOpen=\{drawerMention\.isOpen\}/,
   "thread composer should expose the same mention affordance",
 );
 assert.match(
-  chatPanel,
-  /className="ask-icon-btn ask-attach"[\s\S]*fileInputRef\.current\?\.click\(\)[\s\S]*<VoiceInputButton[\s\S]*className="chat-send ask-send-btn ask-send-btn-v2"/,
-  "main composer tool row should retain attachment, dictation, and send actions",
+  composerControls,
+  /community-composer-add[\s\S]*<Plus[\s\S]*ask-mention[\s\S]*community-composer-emoji[\s\S]*community-composer-format-toggle[\s\S]*community-composer-submit-tools[\s\S]*props\.voiceControl[\s\S]*props\.sendControl/,
+  "shared composer row should order add, mention, emoji, formatting, voice, and send actions",
 );
 assert.match(
   chatPanel,
-  /chat-input-bar community-interaction-reply-input-bar[\s\S]*className="ask-icon-btn ask-attach"[\s\S]*drawerReplyFileInputRef\.current\?\.click\(\)[\s\S]*<VoiceInputButton[\s\S]*aria-label="Send reply"/,
+  /chat-input-bar community-interaction-reply-input-bar[\s\S]*onAttach=\{\(\) => drawerReplyFileInputRef\.current\?\.click\(\)\}[\s\S]*<VoiceInputButton[\s\S]*aria-label="Send reply"/,
   "thread composer tool row should retain attachment, dictation, and send actions",
 );
 assert.match(
   chatPanel,
-  /<div className=\{`chat-input-bar[\s\S]*replyingToMessage[\s\S]*renderCommunityAttachmentsPreview\(communityAttachments,[\s\S]*community-composer-editor-row[\s\S]*community-composer-toolbar/,
+  /<div className=\{`chat-input-bar[\s\S]*replyingToMessage[\s\S]*renderCommunityAttachmentsPreview\(communityAttachments,[\s\S]*community-composer-editor-row[\s\S]*<CommunityComposerControls/,
   "reply context and queued attachments should live inside the main composer shell",
 );
 assert.match(
@@ -85,7 +86,7 @@ assert.match(
 );
 assert.match(
   mobileCss,
-  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 52px;[^}]*border-radius: 20px;/,
+  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 46px;[^}]*border-radius: 20px;/,
   "mobile composers should retain large controls and a bounded writing region",
 );
 assert.match(

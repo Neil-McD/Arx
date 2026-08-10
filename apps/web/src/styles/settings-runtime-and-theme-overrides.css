@@ -8324,7 +8324,7 @@ button.settings-primary-action svg {
 
 .app-root.mobile-shell .community-member-chat .chat-input-bar {
   --community-composer-control-size: 42px;
-  --community-composer-input-size: 52px;
+  --community-composer-input-size: 46px;
   border-radius: 20px;
   background: var(--composer-surface);
   border-color: var(--composer-border);

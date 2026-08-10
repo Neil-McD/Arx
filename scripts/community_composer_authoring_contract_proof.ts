@@ -1,0 +1,71 @@
+import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
+
+function read(relativePath: string): string {
+  return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+}
+
+const panel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const controls = read("apps/web/src/components/CommunityComposerControls.tsx");
+const editing = read("apps/web/src/controllers/communityComposerTextEditing.ts");
+const css = read("apps/web/src/styles/community-and-content.css");
+const contract = read("docs/community-interaction-substrate-contract-v1.md");
+
+assert.match(
+  panel,
+  /mainMention\.handleKeyDown\(event\)[\s\S]*handleMentionTokenBackspace[\s\S]*handleCommunityComposerAuthoringKeyDown\(event, handleMainCommunityComposerUserInput\)[\s\S]*event\.key === "Enter" && !event\.shiftKey/,
+  "mention selection must retain keyboard priority before formatting and send",
+);
+assert.match(
+  panel,
+  /event\.key === "Tab"[\s\S]*indentCommunityComposerList[\s\S]*event\.key === "Enter" && event\.shiftKey[\s\S]*continueCommunityComposerList/,
+  "composer keyboard handling should route list indentation and continuation through pure transforms",
+);
+assert.match(
+  panel,
+  /onAttach=\{\(\) => fileInputRef\.current\?\.click\(\)\}[\s\S]*onEmoji=\{insertMainComposerEmoji\}[\s\S]*onFormat=\{applyMainComposerFormatting\}/,
+  "main composer add, emoji, and formatting actions should preserve existing attachment input ownership",
+);
+assert.equal(
+  (panel.match(/<CommunityComposerControls/g) ?? []).length,
+  2,
+  "main and reply composers should render the same control component exactly once each",
+);
+assert.match(
+  panel,
+  /contextKey=\{`main:\$\{activeCommunity\?\.id \?\? "none"\}:\$\{activeCommunityChannelSlug \|\| "general"\}`\}/,
+  "main composer transient controls should reset across community and channel contexts",
+);
+assert.match(
+  controls,
+  /"bold"[\s\S]*"italic"[\s\S]*"strike"[\s\S]*"code"[\s\S]*"link"[\s\S]*"bullet"[\s\S]*"ordered"[\s\S]*"quote"[\s\S]*"outdent"[\s\S]*"indent"/,
+  "formatting rail should expose the bounded supported authoring grammar",
+);
+assert.match(
+  controls,
+  /useEffect\(\(\) => \{[\s\S]*setFormattingOpen\(false\);[\s\S]*setEmojiOpen\(false\);[\s\S]*\}, \[props\.contextKey\]\)/,
+  "transient composer tools should reset on context changes",
+);
+assert.match(editing, /const MAX_LIST_INDENT = 4;/, "list authoring should cap indentation at two two-space levels");
+assert.match(
+  editing,
+  /const replacement = `\[\$\{label\}\]\(https:\/\/\)`;/,
+  "link insertion should use safe labeled-link syntax",
+);
+assert.match(
+  css,
+  /\.community-composer-emoji-popover \{[^}]*bottom: calc\(100% \+ 8px\);/,
+  "composer emoji choices should open upward above the bottom composer",
+);
+assert.match(
+  contract,
+  /Enter sends, Shift\+Enter inserts a newline and continues an active list marker, and Tab or Shift\+Tab changes indentation only while the selection contains a list item/,
+  "the product contract should record authoring keyboard semantics",
+);
+assert.equal(
+  (panel.match(/<textarea/g) ?? []).length,
+  2,
+  "main and reply community composers should retain their native textareas",
+);
+
+console.log("community_composer_authoring_contract_proof: ok");
