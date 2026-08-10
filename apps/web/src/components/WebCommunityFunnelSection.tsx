@@ -22,7 +22,7 @@ export function WebCommunityFunnelSection(props: WebCommunityFunnelSectionProps)
   } = props;
 
   return (
-    <div className="settings-panel community-settings-panel">
+    <div className="settings-panel community-settings-panel community-funnel-panel">
       {!activeCommunity ? (
         <div className="chat-empty">Select a community to configure the public funnel.</div>
       ) : !hasSession ? (

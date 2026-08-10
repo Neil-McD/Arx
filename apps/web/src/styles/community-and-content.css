@@ -30,10 +30,25 @@
   overflow-y: auto;
 }
 
+.community-tab-workspace {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
 .web-community-centered-pane {
   width: min(100%, 1280px);
   margin: 0 auto;
   min-width: 0;
+}
+
+.web-community-centered-pane-workspace {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  min-height: 0;
 }
 
 .discover-panel {
@@ -2340,6 +2355,14 @@
 
 /* The funnel composer is a bounded conversation beside the trusted Funnel V1
    renderer. It never exposes arbitrary markup or live publication controls. */
+.community-funnel-panel.settings-panel {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  gap: 0;
+}
+
 .funnel-builder {
   display: flex;
   flex-direction: column;
@@ -2372,9 +2395,14 @@
 }
 .funnel-builder-preview {
   min-width: 0;
-  overflow: auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
   padding: 22px 22px 52px 0;
   background: color-mix(in srgb, var(--bg-app) 55%, transparent);
+}
+.funnel-builder-preview.is-empty {
+  padding: 0;
 }
 .funnel-builder-preview .funnel-v1-preview {
   width: min(780px, 100%);
