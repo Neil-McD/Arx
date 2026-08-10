@@ -383,7 +383,7 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?--community-channel-pinned-surface:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(23dvh, 244px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?border-bottom:\s*2px solid var\(--community-chat-surface\);[\s\S]*?background:\s*var\(--community-channel-pinned-surface\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?--community-channel-pinned-surface:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(23dvh, 196px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?border-bottom:\s*2px solid var\(--community-chat-surface\);[\s\S]*?background:\s*var\(--community-channel-pinned-surface\);/,
 );
 assertMatches(
   interactionStylesPath,

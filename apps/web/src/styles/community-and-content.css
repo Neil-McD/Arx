@@ -3536,7 +3536,7 @@
   position: relative;
   flex: 0 0 auto;
   min-width: 0;
-  max-block-size: min(23dvh, 244px);
+  max-block-size: min(23dvh, 196px);
   display: grid;
   grid-template-rows: minmax(0, 1fr);
   overflow: hidden;
