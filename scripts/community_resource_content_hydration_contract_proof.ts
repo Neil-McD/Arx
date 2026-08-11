@@ -106,8 +106,8 @@ assert.match(
 );
 assert.match(
   viewer,
-  /if \(hasDeferredBody\) \{[\s\S]*Loading page content/,
-  "viewer should show loading copy while persisted body content is being rehydrated",
+  /if \(hasDeferredBody\) \{[\s\S]*Loading lesson content/,
+  "viewer should show loading copy while persisted lesson content is being rehydrated",
 );
 
 assert.match(

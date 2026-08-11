@@ -2,7 +2,6 @@ import { useCallback, useRef, type Dispatch, type SetStateAction } from "react";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 
 import {
-  createCloudCommunityResourcePageDraftFromSource,
   deleteCloudCommunityResource,
   deleteCloudCommunityResourceModule,
   ingestCloudCommunitySources,
@@ -170,7 +169,6 @@ type UseCommunityResourceControllerArgs<
   setResourceError: Dispatch<SetStateAction<string | null>>;
   setResourceModuleError: Dispatch<SetStateAction<string | null>>;
   setShowResourceModuleModal: Dispatch<SetStateAction<boolean>>;
-  setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
   setEditingResourceModuleId: Dispatch<SetStateAction<string | null>>;
   setEditingResourceModuleBannerStorageId: Dispatch<SetStateAction<string | null>>;
@@ -300,7 +298,7 @@ export function useCommunityResourceController<
     const description = current.resourceBodyInput.trim();
     const canSaveEmptyPageDraft = Boolean(current.editingResourceId) && current.resourceRoleInput === "page";
     if (!description && !rawUrl && !canSaveEmptyPageDraft) {
-      current.setResourceError("Add content or a source URL.");
+      current.setResourceError("Add content or a link.");
       return false;
     }
 
@@ -354,7 +352,6 @@ export function useCommunityResourceController<
         payload,
       });
 
-      current.setShowResourceModal(false);
       resetResourceEditor(true);
       await loadCommunityResources(current.activeCommunityId, session);
       return true;
@@ -631,30 +628,7 @@ export function useCommunityResourceController<
     return true;
   }, [loadCommunityResources, resetResourceEditor]);
 
-  const handleCreatePageDraftFromSource = useCallback(async (resource: ResourceT): Promise<ResourceT | null> => {
-    const current = argsRef.current;
-    const session = await resolveUsableSession(current.session, current.ensureSession);
-    if (!session || !current.activeCommunityId) return null;
-
-    try {
-      const created = await createCloudCommunityResourcePageDraftFromSource<SessionT, ResourceT>({
-        session,
-        sourceResourceId: resource.id,
-      });
-      await loadCommunityResources(current.activeCommunityId, session);
-      return created;
-    } catch (error) {
-      const message = typeof error === "string"
-        ? error
-        : error instanceof Error
-          ? error.message
-          : current.saveFailureMessage;
-      current.setResourceError(message);
-      return null;
-    }
-  }, [loadCommunityResources]);
-
-  const handleCreateBlankPageDraft = useCallback(async (moduleId?: string | null): Promise<ResourceT | null> => {
+  const handleCreateBlankPageDraft = useCallback(async (moduleId: string): Promise<ResourceT | null> => {
     const current = argsRef.current;
     const session = await resolveUsableSession(current.session, current.ensureSession);
     if (!session || !current.activeCommunityId) return null;
@@ -666,11 +640,11 @@ export function useCommunityResourceController<
         community_id: current.activeCommunityId,
         type: "post",
         resource_role: "page",
-        title: "Untitled page",
+        title: "Untitled lesson",
         body_md: null,
         url: null,
         pinned: false,
-        module_id: moduleId ?? null,
+        module_id: moduleId,
       };
       if (current.includeFileKeyOnSave) {
         payload.file_key = null;
@@ -859,7 +833,6 @@ export function useCommunityResourceController<
     handleMoveCommunityResourceToModule,
     handleSaveCommunityResource,
     handleDeleteResource,
-    handleCreatePageDraftFromSource,
     handleCreateBlankPageDraft,
     handleAddCommunitySources,
   };

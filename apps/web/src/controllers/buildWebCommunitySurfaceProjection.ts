@@ -86,7 +86,6 @@ type BuildWebCommunitySurfaceProjectionParams = {
   canModerateContentActiveCommunity: boolean;
   resourceModuleModalProps: WebCommunitySecondaryPanelsProps["resourceModuleModal"];
   resourceModuleDeleteModalProps: WebCommunitySecondaryPanelsProps["resourceModuleDeleteModal"];
-  resourceModalProps: WebCommunitySecondaryPanelsProps["resourceModal"];
   canPostMessagesActiveCommunity: WebCommunityChatPanelProps["canPostMessages"];
   isProfileSetupComplete: WebCommunityChatPanelProps["isProfileSetupComplete"];
   typingPresence: WebCommunityChatPanelProps["typingPresence"];
@@ -247,7 +246,6 @@ export function buildWebCommunitySurfaceProjection(
     },
     resourceModuleModal: params.resourceModuleModalProps,
     resourceModuleDeleteModal: params.resourceModuleDeleteModalProps,
-    resourceModal: params.resourceModalProps,
   };
 
   const communityChatPanelProps: WebCommunityChatPanelProps = {

@@ -274,7 +274,6 @@ export function useWebCommunityContentController(
     resetEventsCache();
     setIsLoadingEvents(false);
     setEventsError(null);
-    resourceUi.setShowResourceModal(false);
     resourceUi.setEditingResourceId(null);
     resourceUi.setResourceTitleInput("");
     resourceUi.setResourceUrlInput("");

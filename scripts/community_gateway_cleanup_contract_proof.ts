@@ -36,17 +36,17 @@ for (const [label, source] of [
 
 assert.match(
   resourceController,
-  /const generation = \(resourceLoadGenerationRef\.current \+= 1\)[\s\S]*resourceLoadGenerationRef\.current !== generation[\s\S]*current\.setCommunityResourceModules\(directory\.modules\)/,
-  "combined resource-directory loads should guard stale results before setting module state",
+  /const generation = \(moduleLoadGenerationRef\.current \+= 1\)[\s\S]*moduleLoadGenerationRef\.current !== generation[\s\S]*argsRef\.current\.activeCommunityId !== communityId[\s\S]*current\.setCommunityResourceModules\(rows\)/,
+  "module loads should guard stale results and community changes before setting module state",
 );
 assert.match(
   resourceController,
-  /const generation = \(resourceLoadGenerationRef\.current \+= 1\)[\s\S]*resourceLoadGenerationRef\.current !== generation[\s\S]*current\.setCommunityResources\(\(previousRows\)/,
-  "combined resource-directory loads should guard stale results before setting resource state",
+  /const generation = \(resourceLoadGenerationRef\.current \+= 1\)[\s\S]*resourceLoadGenerationRef\.current !== generation[\s\S]*argsRef\.current\.activeCommunityId !== communityId[\s\S]*current\.setCommunityResources\(rows\)/,
+  "resource loads should guard stale results and community changes before setting resource state",
 );
 assert.match(
   accessController,
-  /const seq = \(loadCommunitiesSeqRef\.current \+= 1\)[\s\S]*const isCurrentRequest = \(\)[\s\S]*loadingResetKey[\s\S]*if \(!isCurrentRequest\(\)\) return;[\s\S]*latest\.setCommunities\(list\)/,
+  /const seq = \(loadCommunitiesSeqRef\.current \+= 1\)[\s\S]*const isCurrentRequest = \(\)[\s\S]*loadingResetKey[\s\S]*if \(!isCurrentRequest\(\)\) return;[\s\S]*latest\.setCommunities\(\(previous\) => reuseEquivalentValue\(previous, list\)\)/,
   "community access loads should guard stale results and identity changes before setting communities",
 );
 assert.equal(

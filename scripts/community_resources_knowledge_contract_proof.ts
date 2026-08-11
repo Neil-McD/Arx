@@ -19,7 +19,6 @@ const httpMcp = read("convex/httpMcp.ts");
 const attention = read("convex/communityAttention.ts");
 const emailDigests = read("convex/emailDigests.ts");
 const resourceDirectory = read("shared/communityResourceDirectory.ts");
-const resourceModal = read("apps/web/src/components/WebCommunityResourceModal.tsx");
 const resourceModuleModal = read("apps/web/src/components/WebCommunityResourceModuleModal.tsx");
 const resourceCourseCatalog = read("apps/web/src/components/ResourceCourseCatalog.tsx");
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
@@ -341,23 +340,13 @@ assert.match(
 );
 assert.match(
   resourceGateway,
-  /api\.communityResources\.createCommunityResourcePageDraftFromSource/,
-  "web gateway must call the canonical source-to-page draft mutation",
-);
-assert.match(
-  resourceGateway,
   /saveCloudCommunityResource<SessionT, TResult = unknown>[\s\S]*return payload as TResult/,
   "web gateway must return created resource rows from resource saves",
 );
 assert.match(
   resourceController,
-  /handleCreatePageDraftFromSource[\s\S]*createCloudCommunityResourcePageDraftFromSource/,
-  "web resource controller must expose source-to-page draft creation",
-);
-assert.match(
-  resourceController,
-  /handleCreateBlankPageDraft[\s\S]*resource_role: "page"[\s\S]*title: "Untitled page"[\s\S]*saveCloudCommunityResource<SessionT, ResourceT>/,
-  "web resource controller must create blank page drafts without opening the add-page modal",
+  /handleCreateBlankPageDraft[\s\S]*resource_role: "page"[\s\S]*title: "Untitled lesson"[\s\S]*module_id: moduleId[\s\S]*saveCloudCommunityResource<SessionT, ResourceT>/,
+  "web resource controller must create course-owned blank lesson drafts",
 );
 assert.match(
   resourceController,
@@ -366,8 +355,8 @@ assert.match(
 );
 assert.match(
   resourceContracts,
-  /handleCreateBlankPageDraft: \(moduleId\?: string \| null\) => Promise<CommunityResource \| null>/,
-  "resources panel contract must expose blank page draft creation",
+  /handleCreateBlankPageDraft: \(moduleId: string\) => Promise<CommunityResource \| null>/,
+  "resources panel contract must require a course for blank lesson creation",
 );
 assert.match(
   webResourceController,
@@ -477,90 +466,25 @@ assert.match(
   "weekly digests must not include draft modules or unusable resources",
 );
 
-assert.match(
-  resourceModal,
-  /Add page[\s\S]*Save a durable page for the community knowledge base[\s\S]*Save page/,
-  "manual add-page modal must present as page-only",
-);
 assert.doesNotMatch(
-  resourceModal,
-  /resource-kind-segment|Knowledge item kind|onChangeRole|>\s*Page\s*<[\s\S]*>\s*Source\s*</,
-  "manual add-page modal must not expose the retired page/source selector",
-);
-assert.doesNotMatch(
-  resourceModal,
-  /Only published items are visible to members and available to community search/,
-  "resource modal must not expose page-level publication controls",
-);
-assert.match(
   resourceViewer,
-  /resource\.source_resource_id/,
-  "resource viewer must surface source lineage when a page was drafted from source material",
-);
-assert.match(
-  resourceViewer,
-  /sourceLineage\?\.title/,
-  "resource viewer must show the source title when lineage can be resolved",
-);
-assert.match(
-  resourceViewer,
-  /Original source unavailable/,
-  "resource viewer must fail softly when source lineage is missing or hidden",
-);
-assert.match(
-  resourceViewer,
-  /sourceLineage\.onOpen/,
-  "resource viewer must support opening the original source when available",
-);
-assert.match(
-  resourceViewer,
-  /Open source/,
-  "resource viewer must expose a clear open-source action for resolved lineage",
+  /Drafted from|Original source unavailable|Open source|sourceLineage/,
+  "lesson reader must not expose ingestion sources as a product category",
 );
 assert.doesNotMatch(
   resourceViewer,
   /resource\.directory_uri/,
   "resource viewer must not expose stable internal directory URIs in the reader UI",
 );
-assert.match(
+assert.doesNotMatch(
   resourcesPanel,
-  /resourcesById/,
-  "resources panel must resolve source lineage from the loaded resource directory",
+  /Source Inbox|sourceResources|LEGACY_RESOURCE_MODULE_ID|Needs sorting|maintenanceCatalogItem|is_virtual/,
+  "Resources must expose only real courses and their lessons",
 );
 assert.match(
   resourcesPanel,
-  /selectedSourceLineage/,
-  "resources panel must pass resolved source lineage into the reader",
-);
-assert.match(
-  resourcesPanel,
-  /handleOpenSelectedSourceResource/,
-  "resources panel must let operators jump from a drafted page back to its source",
-);
-assert.match(
-  resourcesPanel,
-  /selectedModuleSection\?\.sourceResources[\s\S]*Source Inbox/,
-  "selected courses must keep builder sources in a separate manager-only source inbox",
-);
-assert.match(
-  resourcesPanel,
-  /return \[\s*\.\.\.modules,[\s\S]*id: LEGACY_RESOURCE_MODULE_ID/,
-  "virtual unsorted cleanup bucket must render after real modules",
-);
-assert.match(
-  resourcesPanel,
-  /name: "Needs sorting"[\s\S]*is_virtual: true/,
-  "virtual unsorted cleanup bucket must not present as a normal module",
-);
-assert.match(
-  resourcesPanel,
-  /courseCatalogItems[\s\S]*!section\.module\.is_virtual/,
-  "virtual unsorted cleanup must stay outside the normal course catalog",
-);
-assert.match(
-  resourcesPanel,
-  /maintenanceCatalogItem[\s\S]*module\.is_virtual/,
-  "virtual unsorted cleanup must use a separate maintenance entry",
+  /getResourceRole\(resource\) !== "page"[\s\S]*!resource\.module_id[\s\S]*realModuleIdLookup/,
+  "course navigation must omit ingestion sources and unowned legacy records",
 );
 assert.match(
   resourceCourseCatalog,
@@ -589,13 +513,13 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /selectedModuleSection\?\.pageResources\.map\(renderResourceRailItem\)[\s\S]*handleAddPageDraft\(selectedModule\.id\)/,
+  /selectedModuleSection\?\.lessonResources\.map\(renderResourceRailItem\)[\s\S]*handleAddPageDraft\(selectedModule\.id\)/,
   "lesson creation and ordering must stay scoped to the selected course",
 );
-assert.match(
-  webResourceController,
-  /openNewResourceModal[\s\S]*setResourceRoleInput\("page"\)[\s\S]*setResourceStatusInput\("draft"\)/,
-  "manual new-resource modal fallback must force page role and draft status",
+assert.doesNotMatch(
+  [resourcesPanel, resourceContracts, webResourceController].join("\n"),
+  /openNewResourceModal|WebCommunityResourceModal|resourceModalProps/,
+  "the retired resource modal must not remain reachable from the Resources product surface",
 );
 assert.match(
   resourceModuleModal,
@@ -633,6 +557,11 @@ assert.match(
   "the course name must replace the generic Lessons label in the outline heading",
 );
 assert.match(
+  baseCss,
+  /\.resource-course-outline-header\s*\{[^}]*grid-template-columns:\s*minmax\(0, 1fr\) auto;[^}]*overflow:\s*hidden;[\s\S]*\.resource-course-outline-title\s*\{[^}]*width:\s*100%;[^}]*text-overflow:\s*ellipsis;/,
+  "long course names must stay contained inside the lesson outline",
+);
+assert.match(
   webCss,
   /\.resources-panel\s*\{[^}]*gap:\s*10px;[^}]*padding:\s*0 24px 24px;/,
   "desktop Resources must reuse the shell top band instead of stacking blanket top padding",
@@ -654,8 +583,8 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /ResourceCourseCatalog[\s\S]*items=\{courseCatalogItems\}[\s\S]*maintenanceItem=\{maintenanceCatalogItem\}/,
-  "the Resources root must render canonical course cards and a separate cleanup entry",
+  /ResourceCourseCatalog[\s\S]*items=\{courseCatalogItems\}/,
+  "the Resources root must render canonical course cards",
 );
 assert.match(
   resourceCourseCatalog,
@@ -739,8 +668,8 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /resource-course-outline-scroll[\s\S]*knowledge-resource-list[\s\S]*resource-course-source-inbox/,
-  "course lessons and source inbox must share one bounded outline scroller",
+  /resource-course-outline-scroll[\s\S]*knowledge-resource-list[\s\S]*lessonResources\.map\(renderResourceRailItem\)/,
+  "course lessons must remain inside one bounded outline scroller",
 );
 assert.match(
   baseCss,
@@ -794,8 +723,8 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /handleMoveResource[\s\S]*moveOrderedId\(reorderableIds, resourceId, direction\)[\s\S]*actions\.handleReorderResources\(moduleId, nextIds\)/,
-  "page move commands must reuse the canonical shared page reorder action",
+  /handleMoveResource[\s\S]*moveOrderedId\(reorderableIds, resourceId, direction\)[\s\S]*actions\.handleReorderResources\(moduleSelectionId, nextIds\)/,
+  "lesson move commands must reuse the canonical shared lesson reorder action",
 );
 assert.match(
   resourcesPanel,
@@ -819,8 +748,8 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /reorderableResourceIdsByModule[\s\S]*moduleSections[\s\S]*section\.pageResources\.map\(\(resource\) => resource\.id\)/,
-  "resources panel reorder payload must be page-only because sources are intake material, not member-facing page order",
+  /reorderableResourceIdsByModule[\s\S]*moduleSections[\s\S]*section\.lessonResources\.map\(\(resource\) => resource\.id\)/,
+  "resources panel reorder payload must contain only course lessons",
 );
 assert.match(
   resources,
@@ -834,8 +763,18 @@ assert.match(
 );
 assert.match(
   resources,
-  /export const moveCommunityResourceToModule[\s\S]*requireValidResourceModule[\s\S]*destinationRows[\s\S]*resourceModuleIdentity\(row\.moduleId\) === targetModuleIdentity[\s\S]*normalizeResourceRole\(row\.role\) === "page"[\s\S]*beforeResourceId/,
+  /export const moveCommunityResourceToModule[\s\S]*requireResourceModuleForRole[\s\S]*destinationRows[\s\S]*resourceModuleIdentity\(row\.moduleId\) === targetModuleIdentity[\s\S]*normalizeResourceRole\(row\.role\) === "page"[\s\S]*beforeResourceId/,
   "cross-category resource moves must validate the target module and insert only within the target page list",
+);
+assert.match(
+  resources,
+  /requireResourceModuleForRole[\s\S]*args\.role === "page" && !moduleId[\s\S]*community_resource_course_required/,
+  "every lesson write must fail closed without a real course",
+);
+assert.match(
+  resources,
+  /export const deleteCommunityResourceModule[\s\S]*const lessons = resources\.filter[\s\S]*revokeCommunityResourceMemoryProjection[\s\S]*deleteCommunityResourceBodyContent[\s\S]*ctx\.db\.delete\(lesson\._id[\s\S]*detachedIngestionSources/,
+  "course deletion must delete lessons while preserving hidden ingestion evidence",
 );
 assert.match(
   resourceGateway,
@@ -892,15 +831,10 @@ assert.match(
   /PAGE_DRAFT_CREATION_GESTURE_LOCK_MS = 650[\s\S]*remainingGestureLockMs = Math\.max\([\s\S]*PAGE_DRAFT_CREATION_GESTURE_LOCK_MS - \(Date\.now\(\) - lockStartedAt\)[\s\S]*setTimeout\(resolve, remainingGestureLockMs\)[\s\S]*pageDraftCreationInFlightRef\.current = false/,
   "page draft creation must keep its lock through one full browser gesture even when the backend returns between clicks",
 );
-assert.match(
-  resourcesPanel,
-  /handleCreatePageDraftFromSource[\s\S]*runPageDraftCreation[\s\S]*actions\.handleCreatePageDraftFromSource\(resource\)/,
-  "resources panel must expose source-to-page draft creation from the reader",
-);
-assert.match(
-  resourcesPanel,
-  /onClick=\{\(\) => void handleCreatePageDraftFromSource\(selectedResource\)\}[\s\S]*disabled=\{isCreatingPageDraft\}[\s\S]*isCreatingPageDraft \? "Creating\.\.\." : "Draft page"/,
-  "source reader draft action must expose and enforce its single-flight state",
+assert.doesNotMatch(
+  `${resourcesPanel}\n${resourceContracts}\n${webResourceController}`,
+  /handleCreatePageDraftFromSource/,
+  "the web Resources surface must not retain source-to-lesson controls",
 );
 
 console.log("PASS: community resources knowledge contract is canonical.");

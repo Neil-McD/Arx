@@ -7,7 +7,6 @@ import {
   type MouseEvent,
 } from "react";
 import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronsDown, ChevronsUp, GripVertical, Plus } from "lucide-react";
-import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type {
   CommunityResource,
@@ -19,7 +18,6 @@ import type {
 import {
   WebCommunityResourceViewerContent,
   type WebCommunityResourceInlineEditorField,
-  type WebCommunityResourceSourceLineage,
 } from "./WebCommunityResourceViewerModal";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
 import { ResourceCourseCatalog } from "./ResourceCourseCatalog";
@@ -30,68 +28,22 @@ type CommunityResourcesPanelProps = {
   actions: CommunityResourcesActions;
 };
 
-const LEGACY_RESOURCE_MODULE_ID = "__legacy_resources__";
 const MODULE_DRAG_MIME = "application/x-polynet-community-resource-module";
 const RESOURCE_DRAG_MIME = "application/x-polynet-community-resource";
 const RESOURCE_ORIGIN_MODULE_DRAG_MIME = "application/x-polynet-community-resource-origin-module";
 const PAGE_DRAFT_CREATION_GESTURE_LOCK_MS = 650;
 type ReorderDirection = "up" | "down" | "top" | "bottom";
 
-type ResourceModuleView = CommunityResourceModule & {
-  is_virtual?: boolean;
-};
-
-function getHostLabel(rawUrl: string | null): string {
-  const url = normalizeExternalUrl(rawUrl);
-  if (!url) return "External";
-  return url.hostname.replace(/^www\./i, "");
-}
-
-function getResourceMeta(resource: CommunityResource): { primary: string; secondary: string | null } {
-  const embed = resource.url ? parseEmbedUrl(resource.url) : null;
-  if (embed?.provider === "youtube") return { primary: "Video", secondary: "YouTube" };
-  if (embed?.provider === "wistia") return { primary: "Video", secondary: "Wistia" };
-  if (resource.url) return { primary: "Link", secondary: getHostLabel(resource.url) };
-  return { primary: "Note", secondary: null };
-}
+type ResourceModuleView = CommunityResourceModule;
 
 function getResourceRole(resource: CommunityResource): "page" | "source" {
   return resource.resource_role === "source" ? "source" : "page";
-}
-
-function getResourceRoleLabel(resource: CommunityResource): string {
-  return getResourceRole(resource) === "source" ? "Source" : "Page";
-}
-
-function getResourceLineageDetail(resource: CommunityResource): string {
-  const meta = getResourceMeta(resource);
-  return [
-    getResourceRoleLabel(resource),
-    meta.primary,
-    meta.secondary,
-  ].filter(Boolean).join(" · ");
 }
 
 function resourceNeedsBodyHydration(resource: CommunityResource | null): boolean {
   if (!resource) return false;
   const bodyChars = Number(resource.body_chars ?? 0);
   return Number.isFinite(bodyChars) && bodyChars > 0 && !(resource.body_md ?? "").trim();
-}
-
-function getSourceIngestionLabel(resource: CommunityResource): string | null {
-  if (getResourceRole(resource) !== "source") return null;
-  switch (resource.source_ingestion_status) {
-    case "ready":
-      return "Ready";
-    case "failed":
-      return "Needs attention";
-    case "processing":
-      return "Reading";
-    case "queued":
-      return "Queued";
-    default:
-      return "Saved";
-  }
 }
 
 function resourceHasUsableKnowledgeContent(resource: CommunityResource): boolean {
@@ -222,7 +174,6 @@ function ResourceRailItem(props: {
     isDropTarget,
   } = props;
   const summary = (resource.body_md ?? "").trim();
-  const sourceIngestionLabel = getSourceIngestionLabel(resource);
   const isEditDisabled = resourceNeedsBodyHydration(resource);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
@@ -257,7 +208,7 @@ function ResourceRailItem(props: {
       onMouseLeave={() => setIsMenuOpen(false)}
     >
       {canReorder ? (
-        <span className="knowledge-resource-drag-handle" title="Drag to move page" aria-hidden="true">
+        <span className="knowledge-resource-drag-handle" title="Drag to move lesson" aria-hidden="true">
           <GripVertical strokeWidth={1.9} />
         </span>
       ) : null}
@@ -272,11 +223,6 @@ function ResourceRailItem(props: {
             <span className="knowledge-resource-item-title">{resource.title}</span>
             {resource.pinned ? <PinIcon /> : null}
           </span>
-          {sourceIngestionLabel ? (
-            <span className={`knowledge-resource-source-status is-${resource.source_ingestion_status ?? "saved"}`}>
-              {sourceIngestionLabel}
-            </span>
-          ) : null}
           {summary ? <span className="knowledge-resource-item-summary">{summary}</span> : null}
         </span>
       </button>
@@ -285,7 +231,7 @@ function ResourceRailItem(props: {
           <button
             className="knowledge-resource-menu-trigger"
             type="button"
-            title="Page actions"
+            title="Lesson actions"
             aria-label={`Actions for ${resource.title}`}
             aria-haspopup="menu"
             aria-expanded={isMenuOpen}
@@ -350,7 +296,7 @@ function ResourceRailItem(props: {
                 className="web-floating-menu-item"
                 type="button"
                 role="menuitem"
-                title={isEditDisabled ? "Loading page content" : "Edit page"}
+                title={isEditDisabled ? "Loading lesson content" : "Edit lesson"}
                 disabled={isEditDisabled}
                 onClick={(event) => {
                   if (isEditDisabled) return;
@@ -418,52 +364,16 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => new Set(state.modules.map((module) => module.id)),
     [state.modules],
   );
-  const getResourceModuleSelectionId = (resource: CommunityResource) =>
-    resource.module_id && realModuleIdLookup.has(resource.module_id)
-      ? resource.module_id
-      : LEGACY_RESOURCE_MODULE_ID;
-  const hasLegacyResources = useMemo(
-    () => state.resources.some((resource) => !resource.module_id || !realModuleIdLookup.has(resource.module_id)),
-    [realModuleIdLookup, state.resources],
-  );
-  const baseModuleViews = useMemo<ResourceModuleView[]>(() => {
+  const moduleViews = useMemo<ResourceModuleView[]>(() => {
     const modules = state.modules.slice().sort((a, b) => {
       const sortDelta = (a.sort_order ?? 0) - (b.sort_order ?? 0);
       if (sortDelta !== 0) return sortDelta;
       return a.name.localeCompare(b.name);
     });
-    if (!hasLegacyResources) return modules;
-    const firstLegacyResource = state.resources.find((resource) => !resource.module_id) ?? null;
-    const legacyDirectoryUri = firstLegacyResource?.directory_uri
-      ? firstLegacyResource.directory_uri.replace(/\/resources\/[^/]+$/, "")
-      : "resources://community/unknown/modules/unsorted";
-    return [
-      ...modules,
-      {
-        id: LEGACY_RESOURCE_MODULE_ID,
-        directory_uri: legacyDirectoryUri,
-        directory_path: "/unsorted",
-        module_status: "draft",
-        name: "Needs sorting",
-        description_md: "Resources that need a course. Move these into the right place.",
-        banner_url: null,
-        banner_focus_x: null,
-        banner_focus_y: null,
-        banner_zoom: null,
-        sort_order: Number.MAX_SAFE_INTEGER,
-        is_virtual: true,
-      },
-    ];
-  }, [hasLegacyResources, state.modules, state.resources]);
-  const moduleViews = useMemo(
-    () =>
-      isPreviewMode
-        ? baseModuleViews.filter((module) => !module.is_virtual && module.module_status === "live")
-        : baseModuleViews,
-    [baseModuleViews, isPreviewMode],
-  );
+    return isPreviewMode ? modules.filter((module) => module.module_status === "live") : modules;
+  }, [isPreviewMode, state.modules]);
   const reorderableModuleIds = useMemo(
-    () => moduleViews.filter((module) => !module.is_virtual).map((module) => module.id),
+    () => moduleViews.map((module) => module.id),
     [moduleViews],
   );
   const canReorderModules = canManageResources && reorderableModuleIds.length > 1;
@@ -473,14 +383,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       map.set(module.id, []);
     });
     state.resources.forEach((resource) => {
+      if (getResourceRole(resource) !== "page") return;
+      if (!resource.module_id || !realModuleIdLookup.has(resource.module_id)) return;
       if (isPreviewMode && !isMemberVisibleResource(resource)) return;
-      const selectionId =
-        resource.module_id && realModuleIdLookup.has(resource.module_id)
-          ? resource.module_id
-          : LEGACY_RESOURCE_MODULE_ID;
-      const current = map.get(selectionId) ?? [];
+      const current = map.get(resource.module_id) ?? [];
       current.push(resource);
-      map.set(selectionId, current);
+      map.set(resource.module_id, current);
     });
     map.forEach((resources, selectionId) => {
       map.set(selectionId, resources.slice().sort(compareResources));
@@ -493,45 +401,26 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         const resources = resourcesBySelectionId.get(module.id) ?? [];
         return {
           module,
-          resources,
-          pageResources: resources.filter((resource) => getResourceRole(resource) === "page"),
-          sourceResources: resources.filter((resource) => getResourceRole(resource) === "source"),
+          lessonResources: resources,
         };
       }),
     [moduleViews, resourcesBySelectionId],
   );
   const courseCatalogItems = useMemo(
     () => moduleSections
-      .filter((section) => !section.module.is_virtual)
       .map((section) => ({
         module: section.module,
-        lessonCount: section.pageResources.length,
+        lessonCount: section.lessonResources.length,
       })),
     [moduleSections],
   );
-  const maintenanceCatalogItem = useMemo(() => {
-    const section = moduleSections.find((candidate) => candidate.module.is_virtual);
-    if (!section) return null;
-    return {
-      module: section.module,
-      lessonCount: section.pageResources.length,
-    };
-  }, [moduleSections]);
-  const allPageResources = useMemo(
-    () => moduleSections.flatMap((section) => section.pageResources),
+  const allLessonResources = useMemo(
+    () => moduleSections.flatMap((section) => section.lessonResources),
     [moduleSections],
-  );
-  const allSourceResources = useMemo(
-    () => moduleSections.flatMap((section) => section.sourceResources),
-    [moduleSections],
-  );
-  const displayableResources = useMemo(
-    () => (canManageResources ? [...allPageResources, ...allSourceResources] : allPageResources),
-    [allPageResources, allSourceResources, canManageResources],
   );
   const displayableResourceIds = useMemo(
-    () => new Set(displayableResources.map((resource) => resource.id)),
-    [displayableResources],
+    () => new Set(allLessonResources.map((resource) => resource.id)),
+    [allLessonResources],
   );
   const selectedModule = useMemo(() => {
     if (!selectedModuleId) return null;
@@ -541,11 +430,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (!selectedModule) return new Set<string>();
     const section = moduleSections.find((candidate) => candidate.module.id === selectedModule.id);
     if (!section) return new Set<string>();
-    const visibleResources = canManageResources
-      ? [...section.pageResources, ...section.sourceResources]
-      : section.pageResources;
-    return new Set(visibleResources.map((resource) => resource.id));
-  }, [canManageResources, moduleSections, selectedModule]);
+    return new Set(section.lessonResources.map((resource) => resource.id));
+  }, [moduleSections, selectedModule]);
   const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
   const lastRenderableSelectedResourceRef = useRef<CommunityResource | null>(null);
   const selectedResource = useMemo(() => {
@@ -574,7 +460,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const reorderableResourceIdsByModule = useMemo(() => {
     const map = new Map<string, string[]>();
     moduleSections.forEach((section) => {
-      map.set(section.module.id, section.pageResources.map((resource) => resource.id));
+      map.set(section.module.id, section.lessonResources.map((resource) => resource.id));
     });
     return map;
   }, [moduleSections]);
@@ -582,39 +468,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (!module) return null;
     const section = moduleSections.find((candidate) => candidate.module.id === module.id);
     if (!section) return null;
-    return section.pageResources[0] ?? (canManageResources ? section.sourceResources[0] : null) ?? null;
+    return section.lessonResources[0] ?? null;
   };
   const selectedModuleFirstResource = selectedModule ? getFirstResourceForModule(selectedModule) : null;
-  const selectedSourceResource = useMemo(() => {
-    if (isPreviewMode) return null;
-    const sourceId = selectedResource?.source_resource_id?.trim();
-    if (!sourceId) return null;
-    return resourcesById.get(sourceId) ?? null;
-  }, [isPreviewMode, resourcesById, selectedResource?.source_resource_id]);
-  const selectedSourceResourceModuleId = selectedSourceResource
-    ? getResourceModuleSelectionId(selectedSourceResource)
-    : null;
-  const canOpenSelectedSourceResource = Boolean(
-    canManageResources &&
-      selectedSourceResource &&
-      selectedSourceResourceModuleId &&
-      moduleViews.some((module) => module.id === selectedSourceResourceModuleId),
-  );
-  const handleOpenSelectedSourceResource = () => {
-    if (!selectedSourceResource || !selectedSourceResourceModuleId || !canOpenSelectedSourceResource) return;
-    actions.handleSelectModule(selectedSourceResourceModuleId);
-    actions.setOpenResourceEmbedId(selectedSourceResource.id);
-  };
-  const selectedSourceLineage: WebCommunityResourceSourceLineage | null =
-    selectedResource?.source_resource_id && selectedSourceResource
-      ? {
-          title: selectedSourceResource.title,
-          detail: getResourceLineageDetail(selectedSourceResource),
-          ...(canOpenSelectedSourceResource ? { onOpen: handleOpenSelectedSourceResource } : {}),
-        }
-      : null;
   const hasResourceContent = state.modules.length > 0 || state.resources.length > 0;
-  const hasVisibleResourceContent = moduleViews.length > 0 || displayableResources.length > 0;
+  const hasVisibleResourceContent = moduleViews.length > 0 || allLessonResources.length > 0;
   const wasRefreshingResourcesRef = useRef(false);
   const hasCompletedResourceLoadRef = useRef(false);
   useEffect(() => {
@@ -710,8 +568,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   useEffect(() => {
     if (!pendingOpenResourceId) return;
     const pendingResource = resourcesById.get(pendingOpenResourceId);
-    if (!pendingResource || !displayableResourceIds.has(pendingOpenResourceId)) return;
-    actions.handleSelectModule(getResourceModuleSelectionId(pendingResource));
+    if (!pendingResource?.module_id || !displayableResourceIds.has(pendingOpenResourceId)) return;
+    actions.handleSelectModule(pendingResource.module_id);
     actions.setOpenResourceEmbedId(pendingOpenResourceId);
     setPendingOpenResourceId(null);
   }, [actions, displayableResourceIds, pendingOpenResourceId, resourcesById]);
@@ -724,7 +582,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   }, [actions.resourceEditor.editingResourceId, selectedResource]);
 
   const handleModuleDragStart = (event: DragEvent<HTMLElement>, module: ResourceModuleView) => {
-    if (!canReorderModules || module.is_virtual) {
+    if (!canReorderModules) {
       event.preventDefault();
       return;
     }
@@ -748,7 +606,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     }
 
     const draggedId = draggingModuleIdRef.current || draggingModuleId || event.dataTransfer.getData(MODULE_DRAG_MIME);
-    if (!draggedId || module.is_virtual || module.id === draggedId) return;
+    if (!draggedId || module.id === draggedId) return;
     event.preventDefault();
     event.dataTransfer.dropEffect = "move";
     setDropTargetModuleId(module.id);
@@ -772,7 +630,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       setDraggingResourceModuleId(null);
       setDropTargetResourceId(null);
       setDropTargetModuleId(null);
-      const targetModuleId = module.is_virtual || module.id === LEGACY_RESOURCE_MODULE_ID ? null : module.id;
+      const targetModuleId = module.id;
       if (draggedResourceModuleId === module.id) {
         const reorderableIds = reorderableResourceIdsByModule.get(module.id) ?? [];
         const fromIndex = reorderableIds.indexOf(draggedResourceId);
@@ -795,7 +653,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     draggingModuleIdRef.current = null;
     setDraggingModuleId(null);
     setDropTargetModuleId(null);
-    if (!draggedId || module.is_virtual || draggedId === module.id) return;
+    if (!draggedId || draggedId === module.id) return;
     const fromIndex = reorderableModuleIds.indexOf(draggedId);
     const toIndex = reorderableModuleIds.indexOf(module.id);
     if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
@@ -818,8 +676,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleResourceDragStart = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
-    const moduleSelectionId = getResourceModuleSelectionId(resource);
-    if (!canManageResources || getResourceRole(resource) !== "page") {
+    const moduleSelectionId = resource.module_id;
+    if (!canManageResources || getResourceRole(resource) !== "page" || !moduleSelectionId) {
       event.preventDefault();
       return;
     }
@@ -858,7 +716,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       draggingResourceModuleIdRef.current ||
       draggingResourceModuleId ||
       event.dataTransfer.getData(RESOURCE_ORIGIN_MODULE_DRAG_MIME);
-    const moduleSelectionId = getResourceModuleSelectionId(resource);
+    const moduleSelectionId = resource.module_id;
     draggingResourceIdRef.current = null;
     draggingResourceModuleIdRef.current = null;
     setDraggingResourceId(null);
@@ -866,8 +724,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setDropTargetResourceId(null);
     setDropTargetModuleId(null);
     if (!draggedId || draggedId === resource.id) return;
-    if (getResourceRole(resource) !== "page") return;
-    const moduleId = moduleSelectionId === LEGACY_RESOURCE_MODULE_ID ? null : moduleSelectionId;
+    if (getResourceRole(resource) !== "page" || !moduleSelectionId) return;
+    const moduleId = moduleSelectionId;
     if (draggedResourceModuleId !== moduleSelectionId) {
       void actions.handleMoveResourceToModule(draggedId, moduleId, resource.id);
       return;
@@ -895,8 +753,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     const reorderableIds = reorderableResourceIdsByModule.get(moduleSelectionId) ?? [];
     const nextIds = moveOrderedId(reorderableIds, resourceId, direction);
     if (!nextIds) return;
-    const moduleId = moduleSelectionId === LEGACY_RESOURCE_MODULE_ID ? null : moduleSelectionId;
-    void actions.handleReorderResources(moduleId, nextIds);
+    void actions.handleReorderResources(moduleSelectionId, nextIds);
   };
 
   const handleOpenCourse = (module: ResourceModuleView) => {
@@ -913,7 +770,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleSelectResource = (resource: CommunityResource) => {
-    actions.handleSelectModule(getResourceModuleSelectionId(resource));
+    if (!resource.module_id) return;
+    actions.handleSelectModule(resource.module_id);
     actions.setOpenResourceEmbedId(resource.id);
     if (window.matchMedia("(max-width: 900px)").matches) {
       setIsCourseOutlineOpen(false);
@@ -954,25 +812,16 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     }
   };
 
-  const handleAddPageDraft = async (moduleId: string | null) => {
+  const handleAddPageDraft = async (moduleId: string) => {
     const created = await runPageDraftCreation(
       () => actions.handleCreateBlankPageDraft(moduleId),
     );
     if (!created) return;
     setPendingOpenResourceId(created.id);
-    actions.handleSelectModule(getResourceModuleSelectionId(created));
+    actions.handleSelectModule(created.module_id);
     actions.setOpenResourceEmbedId(created.id);
     actions.resourceEditor.beginInlineEditResource(created);
     setActiveResourceEditField("title");
-  };
-
-  const handleCreatePageDraftFromSource = async (resource: CommunityResource) => {
-    const created = await runPageDraftCreation(
-      () => actions.handleCreatePageDraftFromSource(resource),
-    );
-    if (created) {
-      setPendingOpenResourceId(created.id);
-    }
   };
 
   const cancelResourceInlineEdit = () => {
@@ -987,7 +836,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const renderResourceRailItem = (resource: CommunityResource) => {
-    const moduleSelectionId = getResourceModuleSelectionId(resource);
+    const moduleSelectionId = resource.module_id;
+    if (!moduleSelectionId) return null;
     const reorderableIds = reorderableResourceIdsByModule.get(moduleSelectionId) ?? [];
     const resourceOrderIndex = reorderableIds.indexOf(resource.id);
     const canMoveAcrossModules = moduleViews.some((module) => module.id !== moduleSelectionId);
@@ -1125,7 +975,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             <div className="community-chat-page-loading-card" aria-busy="true" aria-live="polite">
               <div className="community-chat-page-loading-title">Loading knowledge…</div>
               <div className="community-chat-page-loading-copy">
-                {`Preparing references and source material for ${capabilities.activeCommunityName ?? "this community"}.`}
+                {`Preparing courses and lessons for ${capabilities.activeCommunityName ?? "this community"}.`}
               </div>
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
@@ -1143,14 +993,13 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 Welcome to {capabilities.activeCommunityName ?? "your"} resources
               </div>
               <div className="chat-empty-text">
-                Courses and resources shared by the community team will show up here.
+                Courses and lessons shared by the community team will show up here.
               </div>
             </div>
           </div>
         ) : !selectedModule ? (
           <ResourceCourseCatalog
             items={courseCatalogItems}
-            maintenanceItem={maintenanceCatalogItem}
             canManage={canManageResources}
             canReorder={canReorderModules}
             draggingModuleId={draggingModuleId}
@@ -1186,7 +1035,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   {selectedModule.name}
                 </span>
                 <span className="resource-course-outline-count">
-                  {selectedModuleSection?.pageResources.length ?? 0}
+                  {selectedModuleSection?.lessonResources.length ?? 0}
                   <ChevronDown aria-hidden="true" />
                 </span>
               </button>
@@ -1199,8 +1048,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   className="knowledge-resource-list"
                   aria-label={`${selectedModule.name} lesson navigation`}
                 >
-                  {selectedModuleSection?.pageResources.map(renderResourceRailItem)}
-                  {canManageResources && !selectedModule.is_virtual ? (
+                  {selectedModuleSection?.lessonResources.map(renderResourceRailItem)}
+                  {canManageResources ? (
                     <button
                       className="knowledge-resource-inline-add"
                       type="button"
@@ -1212,15 +1061,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                     </button>
                   ) : null}
                 </nav>
-                {canManageResources && (selectedModuleSection?.sourceResources.length ?? 0) > 0 ? (
-                  <div className="knowledge-source-inbox-section resource-course-source-inbox">
-                    <div className="knowledge-resource-section-header">
-                      <span>Source Inbox</span>
-                      <span>{selectedModuleSection?.sourceResources.length ?? 0}</span>
-                    </div>
-                    {selectedModuleSection?.sourceResources.map(renderResourceRailItem)}
-                  </div>
-                ) : null}
               </div>
             </aside>
             <div className="knowledge-resource-reader">
@@ -1228,21 +1068,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 <>
                   <WebCommunityResourceViewerContent
                     resource={readerResource}
-                    sourceLineage={isReaderShowingRefreshSnapshot ? null : selectedSourceLineage}
                     editor={isReaderShowingRefreshSnapshot ? null : selectedResourceInlineEditor}
                   />
-                  {selectedResource && canManageResources && getResourceRole(selectedResource) === "source" ? (
-                    <div className="resource-reader-inline-actions">
-                      <button
-                        className="resources-add-choice"
-                        type="button"
-                        onClick={() => void handleCreatePageDraftFromSource(selectedResource)}
-                        disabled={isCreatingPageDraft}
-                      >
-                        {isCreatingPageDraft ? "Creating..." : "Draft page"}
-                      </button>
-                    </div>
-                  ) : null}
                 </>
               ) : (
                 <div className="community-panel-state-shell">

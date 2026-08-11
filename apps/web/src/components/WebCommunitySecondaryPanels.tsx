@@ -9,7 +9,6 @@ import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
-import { WebCommunityResourceModal } from "./WebCommunityResourceModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import { WebCommunityResourcesSection } from "./WebCommunityResourcesSection";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
@@ -52,7 +51,6 @@ export type WebCommunitySecondaryPanelsProps = {
   events: ComponentProps<typeof WebCommunityEventsSection>;
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
-  resourceModal: ComponentProps<typeof WebCommunityResourceModal>;
 };
 
 function renderCenteredPane(children: ReactNode) {
@@ -115,7 +113,6 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
           {renderCenteredPane(<WebCommunityResourcesSection {...props.resources} />)}
           <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
           <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
-          <WebCommunityResourceModal {...props.resourceModal} />
         </>
       ) : null}
 

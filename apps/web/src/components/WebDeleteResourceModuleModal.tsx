@@ -1,7 +1,7 @@
 type WebDeleteResourceModuleModalProps = {
   isOpen: boolean;
   moduleName: string | null;
-  resourceCount: number;
+  lessonCount: number;
   moduleNameInput: string;
   deleteInput: string;
   isDeleting: boolean;
@@ -16,7 +16,7 @@ export function WebDeleteResourceModuleModal(props: WebDeleteResourceModuleModal
   const {
     isOpen,
     moduleName,
-    resourceCount,
+    lessonCount,
     moduleNameInput,
     deleteInput,
     isDeleting,
@@ -34,17 +34,17 @@ export function WebDeleteResourceModuleModal(props: WebDeleteResourceModuleModal
     normalizedModuleName.length > 0 &&
     moduleNameInput.trim() === normalizedModuleName &&
     deleteInput.trim() === "delete";
-  const visibleResourceLabel = `${resourceCount} loaded resource${resourceCount === 1 ? "" : "s"}`;
+  const lessonLabel = `${lessonCount} lesson${lessonCount === 1 ? "" : "s"}`;
 
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal resource-modal delete-resource-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header resource-delete-header">
           <div className="resource-delete-copy">
-            <div className="resource-viewer-eyebrow">Delete category</div>
-            <h2 className="resource-delete-title">Delete this category?</h2>
+            <div className="resource-viewer-eyebrow">Delete course</div>
+            <h2 className="resource-delete-title">Delete this course?</h2>
             <div className="resource-modal-subtitle">
-              This removes the category container. Its resources stay in the community.
+              This permanently deletes the course and all of its lessons.
             </div>
           </div>
           <button className="modal-close" type="button" onClick={onClose} title="Close" disabled={isDeleting}>
@@ -53,11 +53,10 @@ export function WebDeleteResourceModuleModal(props: WebDeleteResourceModuleModal
         </div>
         <div className="modal-body resource-delete-body">
           <div className="resource-delete-surface">
-            <div className="resource-delete-label">Category</div>
-            <div className="resource-delete-name">{moduleName || "This category"}</div>
+            <div className="resource-delete-label">Course</div>
+            <div className="resource-delete-name">{moduleName || "This course"}</div>
             <div className="resource-delete-note">
-              Resources inside this category will move back to the default Resources section. This cannot be undone.
-              {resourceCount > 0 ? ` Currently visible here: ${visibleResourceLabel}.` : ""}
+              This cannot be undone.{lessonCount > 0 ? ` ${lessonLabel} will also be deleted.` : ""}
             </div>
           </div>
           <div className="resource-delete-confirm-fields">
@@ -66,7 +65,7 @@ export function WebDeleteResourceModuleModal(props: WebDeleteResourceModuleModal
               <input
                 value={moduleNameInput}
                 onChange={(event) => onChangeModuleNameInput(event.target.value)}
-                placeholder={moduleName ?? "Category name"}
+                placeholder={moduleName ?? "Course name"}
                 disabled={isDeleting}
               />
             </label>
@@ -93,7 +92,7 @@ export function WebDeleteResourceModuleModal(props: WebDeleteResourceModuleModal
               onClick={() => void onConfirm()}
               disabled={isDeleting || !canDelete}
             >
-              {isDeleting ? "Deleting..." : "Delete category"}
+              {isDeleting ? "Deleting..." : "Delete course"}
             </button>
           </div>
         </div>

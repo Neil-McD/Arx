@@ -82,7 +82,6 @@ export type CommunityResourcesActions = {
     targetModuleId: string | null,
     beforeResourceId?: string | null,
   ) => Promise<boolean> | boolean;
-  openNewResourceModal: (moduleId?: string | null) => void;
   handleAddCommunitySources: (input: {
     links: string[];
     files: File[];
@@ -114,7 +113,6 @@ export type CommunityResourcesActions = {
     onChangePinned: (value: boolean) => void;
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
-  handleCreatePageDraftFromSource: (resource: CommunityResource) => Promise<CommunityResource | null>;
-  handleCreateBlankPageDraft: (moduleId?: string | null) => Promise<CommunityResource | null>;
+  handleCreateBlankPageDraft: (moduleId: string) => Promise<CommunityResource | null>;
   reloadResources?: () => Promise<void> | void;
 };

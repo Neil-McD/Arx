@@ -8,7 +8,6 @@ import {
 } from "../../../../shared/useCommunityResourceController";
 import { useCommunityResourceEditorController } from "../../../../shared/useCommunityResourceEditorController";
 import { WebDeleteResourceModuleModal } from "../components/WebDeleteResourceModuleModal";
-import { WebCommunityResourceModal } from "../components/WebCommunityResourceModal";
 import { WebCommunityResourceModuleModal } from "../components/WebCommunityResourceModuleModal";
 
 type SessionLike = unknown;
@@ -64,7 +63,6 @@ export type UseWebCommunityResourceUiControllerResult<
   ResourceT extends ResourceLike,
   ResourceModuleT extends ResourceModuleLike,
 > = {
-  setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   setEditingResourceId: Dispatch<SetStateAction<string | null>>;
   setResourceTitleInput: Dispatch<SetStateAction<string>>;
   setResourceUrlInput: Dispatch<SetStateAction<string>>;
@@ -84,7 +82,6 @@ export type UseWebCommunityResourceUiControllerResult<
     targetModuleId: string | null,
     beforeResourceId?: string | null,
   ) => Promise<boolean>;
-  openNewResourceModal: (moduleId?: string | null) => void;
   handleAddCommunitySources: (input: {
     links: string[];
     files: File[];
@@ -109,11 +106,9 @@ export type UseWebCommunityResourceUiControllerResult<
     onChangePinned: (value: boolean) => void;
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean>;
-  handleCreatePageDraftFromSource: (resource: ResourceT) => Promise<ResourceT | null>;
-  handleCreateBlankPageDraft: (moduleId?: string | null) => Promise<ResourceT | null>;
+  handleCreateBlankPageDraft: (moduleId: string) => Promise<ResourceT | null>;
   resourceModuleModalProps: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModalProps: ComponentProps<typeof WebDeleteResourceModuleModal>;
-  resourceModalProps: ComponentProps<typeof WebCommunityResourceModal>;
   loadCommunityResourceModules: (communityId: string, session: SessionT) => Promise<void>;
   loadCommunityResources: (communityId: string, session: SessionT) => Promise<void>;
 };
@@ -125,7 +120,6 @@ export function useWebCommunityResourceUiController<
 >(
   params: UseWebCommunityResourceUiControllerParams<SessionT, ResourceT, ResourceModuleT>,
 ): UseWebCommunityResourceUiControllerResult<SessionT, ResourceT, ResourceModuleT> {
-  const [showResourceModal, setShowResourceModal] = useState(false);
   const [showResourceModuleModal, setShowResourceModuleModal] = useState(false);
   const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [editingResourceModuleId, setEditingResourceModuleId] = useState<string | null>(null);
@@ -170,7 +164,6 @@ export function useWebCommunityResourceUiController<
     handleMoveCommunityResourceToModule,
     handleSaveCommunityResource,
     handleDeleteResource,
-    handleCreatePageDraftFromSource,
     handleCreateBlankPageDraft,
     handleAddCommunitySources,
   } = useCommunityResourceController<SessionT, ResourceT, ResourceModuleT>({
@@ -210,7 +203,6 @@ export function useWebCommunityResourceUiController<
     setResourceError,
     setResourceModuleError,
     setShowResourceModuleModal,
-    setShowResourceModal,
     setEditingResourceId,
     setEditingResourceModuleId,
     setEditingResourceModuleBannerStorageId,
@@ -232,8 +224,6 @@ export function useWebCommunityResourceUiController<
 
   const {
     resetResourceForm,
-    openNewResourceModal: rawOpenNewResourceModal,
-    closeResourceModal,
     handleEditResource,
   } = useCommunityResourceEditorController<ResourceT>({
     setEditingResourceId,
@@ -244,26 +234,16 @@ export function useWebCommunityResourceUiController<
     setResourceRoleInput,
     setResourceStatusInput,
     setResourceError,
-    setShowResourceModal,
     onReset: () => setResourceModuleIdInput(null),
     onEdit: (resource) => setResourceModuleIdInput(resource.module_id ?? null),
   });
 
-  const openNewResourceModal = (moduleId?: string | null) => {
-    rawOpenNewResourceModal();
-    setResourceRoleInput("page");
-    setResourceStatusInput("draft");
-    setResourceModuleIdInput(moduleId ?? null);
-  };
-
   const beginInlineEditResource = (resource: ResourceT) => {
     handleEditResource(resource);
-    setShowResourceModal(false);
   };
 
   const cancelInlineEditResource = () => {
     resetResourceForm();
-    setShowResourceModal(false);
   };
 
   const saveInlineEditResource = async () => {
@@ -334,8 +314,11 @@ export function useWebCommunityResourceUiController<
 
   const pendingDeleteResourceModule =
     params.communityResourceModules.find((module) => module.id === pendingDeleteResourceModuleId) ?? null;
-  const pendingDeleteResourceModuleResourceCount = pendingDeleteResourceModuleId
-    ? params.communityResources.filter((resource) => resource.module_id === pendingDeleteResourceModuleId).length
+  const pendingDeleteResourceModuleLessonCount = pendingDeleteResourceModuleId
+    ? params.communityResources.filter(
+        (resource) =>
+          resource.module_id === pendingDeleteResourceModuleId && resource.resource_role !== "source",
+      ).length
     : 0;
 
   const resetModuleDeleteState = () => {
@@ -379,7 +362,6 @@ export function useWebCommunityResourceUiController<
   };
 
   return {
-    setShowResourceModal,
     setEditingResourceId,
     setResourceTitleInput,
     setResourceUrlInput,
@@ -395,7 +377,6 @@ export function useWebCommunityResourceUiController<
     handleReorderModules: handleReorderCommunityResourceModules,
     handleReorderResources: handleReorderCommunityResources,
     handleMoveResourceToModule: handleMoveCommunityResourceToModule,
-    openNewResourceModal,
     handleAddCommunitySources,
     resourceEditor: {
       editingResourceId,
@@ -415,7 +396,6 @@ export function useWebCommunityResourceUiController<
       onChangePinned: setResourcePinnedInput,
     },
     handleDeleteResource,
-    handleCreatePageDraftFromSource,
     handleCreateBlankPageDraft,
     resourceModuleModalProps: {
       isOpen: showResourceModuleModal,
@@ -476,7 +456,7 @@ export function useWebCommunityResourceUiController<
     resourceModuleDeleteModalProps: {
       isOpen: Boolean(pendingDeleteResourceModule),
       moduleName: pendingDeleteResourceModule?.name ?? null,
-      resourceCount: pendingDeleteResourceModuleResourceCount,
+      lessonCount: pendingDeleteResourceModuleLessonCount,
       moduleNameInput: moduleDeleteNameInput,
       deleteInput: moduleDeleteWordInput,
       isDeleting: isDeletingResourceModule,
@@ -488,27 +468,6 @@ export function useWebCommunityResourceUiController<
         resetModuleDeleteState();
       },
       onConfirm: confirmDeleteModule,
-    },
-    resourceModalProps: {
-      isOpen: showResourceModal,
-      hasActiveCommunity: Boolean(params.activeCommunityId),
-      editingResourceId,
-      resourceTitleInput,
-      resourceUrlInput,
-      resourceBodyInput,
-      resourcePinnedInput,
-      resourceError,
-      isSavingResource,
-      onClose: closeResourceModal,
-      onCancel: () => {
-        resetResourceForm();
-        closeResourceModal();
-      },
-      onSave: handleSaveCommunityResource,
-      onChangeTitle: setResourceTitleInput,
-      onChangeUrl: setResourceUrlInput,
-      onChangeBody: setResourceBodyInput,
-      onChangePinned: setResourcePinnedInput,
     },
     loadCommunityResourceModules,
     loadCommunityResources,

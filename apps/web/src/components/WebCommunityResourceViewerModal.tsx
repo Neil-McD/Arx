@@ -16,15 +16,8 @@ type WebCommunityResourceViewerModalProps = {
   onClose: () => void;
 };
 
-export type WebCommunityResourceSourceLineage = {
-  title: string;
-  detail: string | null;
-  onOpen?: () => void;
-};
-
 type WebCommunityResourceViewerContentProps = {
   resource: CommunityResource;
-  sourceLineage?: WebCommunityResourceSourceLineage | null;
   editor?: WebCommunityResourceInlineEditor | null;
 };
 
@@ -108,7 +101,7 @@ function ExternalArrowIcon() {
 }
 
 export function WebCommunityResourceViewerContent(props: WebCommunityResourceViewerContentProps) {
-  const { resource, sourceLineage = null, editor = null } = props;
+  const { resource, editor = null } = props;
   const currentUrl = resource.url;
   const embed = currentUrl ? parseEmbedUrl(currentUrl) : null;
   const sourceUrl = normalizeExternalUrl(currentUrl);
@@ -128,7 +121,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
       }
     : null;
   const isEmpty = !embed && !hasBody && !hasDeferredBody && !verificationLink;
-  const hasLineage = Boolean(resource.source_resource_id);
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const canEdit = Boolean(editor?.canEdit);
@@ -226,7 +218,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           className="resource-viewer-title-input"
           value={editor.titleInput}
           disabled={editor.isSaving}
-          placeholder="Resource title"
+          placeholder="Lesson title"
           onChange={(event) => editor.onChangeTitle(event.target.value)}
           onFocus={() => editor.onSetActiveField("title")}
           onKeyDown={handleEditableKeyDown}
@@ -242,7 +234,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           disabled={editor?.isSaving}
           onClick={() => beginEdit("title")}
         >
-          <span>{titleText.trim() || "Untitled resource"}</span>
+          <span>{titleText.trim() || "Untitled lesson"}</span>
         </button>
       );
     }
@@ -268,7 +260,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           type="button"
           disabled={editor.isSaving}
           aria-pressed={isPinned}
-          title={isPinned ? "Unpin resource" : "Pin resource"}
+          title={isPinned ? "Unpin lesson" : "Pin lesson"}
           onClick={togglePinned}
         >
           <PinIcon />
@@ -287,7 +279,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           className="resource-viewer-prose resource-viewer-prose-input"
           value={editor.bodyInput}
           disabled={editor.isSaving}
-          placeholder="Write the page content, context, or takeaway."
+          placeholder="Write the lesson content, context, or takeaway."
           onChange={(event) => {
             editor.onChangeBody(event.target.value);
             event.currentTarget.style.height = "auto";
@@ -318,7 +310,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
     }
 
     if (hasDeferredBody) {
-      return <div className="resource-viewer-empty">Loading page content...</div>;
+      return <div className="resource-viewer-empty">Loading lesson content...</div>;
     }
 
     if (canEdit) {
@@ -329,29 +321,12 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           disabled={editor?.isSaving}
           onClick={() => beginEdit("body")}
         >
-          This page has no body text. Click to write it.
+          This lesson has no body text. Click to write it.
         </button>
       );
     }
 
-    return isEmpty ? <div className="resource-viewer-empty">This page hasn't been written yet.</div> : null;
-  };
-
-  const renderSourceLineage = () => {
-    if (!hasLineage) return null;
-    return (
-      <div className="resource-viewer-lineage">
-        <span>Drafted from</span>
-        {sourceLineage && sourceLineage.onOpen ? (
-          <button type="button" onClick={sourceLineage.onOpen} title="Open source">
-            {sourceLineage?.title}
-          </button>
-        ) : (
-          <strong>{sourceLineage?.title ?? "Original source unavailable"}</strong>
-        )}
-        {sourceLineage?.detail ? <span>{sourceLineage.detail}</span> : null}
-      </div>
-    );
+    return isEmpty ? <div className="resource-viewer-empty">This lesson hasn't been written yet.</div> : null;
   };
 
   return (
@@ -414,8 +389,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
               <ExternalArrowIcon />
             </a>
           ) : null}
-
-          {renderSourceLineage()}
         </div>
       </div>
     </div>

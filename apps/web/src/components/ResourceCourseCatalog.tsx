@@ -10,7 +10,6 @@ import {
   Pencil,
   Plus,
   Trash2,
-  Wrench,
 } from "lucide-react";
 
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
@@ -25,7 +24,6 @@ export type ResourceCourseCatalogItem = {
 
 type ResourceCourseCatalogProps = {
   items: ResourceCourseCatalogItem[];
-  maintenanceItem?: ResourceCourseCatalogItem | null;
   canManage: boolean;
   canReorder: boolean;
   draggingModuleId: string | null;
@@ -198,7 +196,6 @@ function ResourceCourseCard(props: {
 export function ResourceCourseCatalog(props: ResourceCourseCatalogProps) {
   const {
     items,
-    maintenanceItem,
     canManage,
     canReorder,
     draggingModuleId,
@@ -256,21 +253,6 @@ export function ResourceCourseCatalog(props: ResourceCourseCatalogProps) {
         ) : null}
       </div>
 
-      {canManage && maintenanceItem ? (
-        <button
-          className="resource-course-maintenance"
-          type="button"
-          onClick={() => onOpen(maintenanceItem.module)}
-        >
-          <Wrench aria-hidden="true" />
-          <span>
-            <strong>Needs sorting</strong>
-            <small>
-              {maintenanceItem.lessonCount} unassigned {maintenanceItem.lessonCount === 1 ? "page" : "pages"}
-            </small>
-          </span>
-        </button>
-      ) : null}
     </section>
   );
 }
