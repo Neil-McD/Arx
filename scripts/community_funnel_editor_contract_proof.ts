@@ -58,6 +58,9 @@ assert.match(
 );
 assert.doesNotMatch(editor, /uploadCloudThreadAttachmentFile/);
 assert.match(editor, /CommunityFunnelV1Preview/);
+assert.match(editor, /fetchCloudPublicFunnelStats/);
+assert.match(editor, /community_funnel_member_proof_load_failed/);
+assert.match(editor, /community={hydratedPreviewCommunity}/);
 assert.doesNotMatch(editor, /buildDefaultCommunityFunnelDocumentV1/);
 assert.match(
   editor,
@@ -71,6 +74,11 @@ assert.doesNotMatch(
   editor,
   /Save draft|Headline[\s\S]*Subheadline|custom html|custom css|script/i,
 );
+assert.match(preview, /resolveCommunityFunnelMemberProofInsertIndex/);
+assert.match(preview, /buildCommunityFunnelMemberProofView/);
+assert.match(preview, /automaticMemberProofInsertIndex/);
+assert.match(preview, /<UserAvatar/);
+assert.doesNotMatch(preview, /<img key=\{face\.user_id\}/);
 
 // The builder owns one viewport-height workspace. The outer community page is
 // locked; only the preview and conversation history may scroll independently.

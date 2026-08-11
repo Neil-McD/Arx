@@ -8,18 +8,18 @@ import {
 import { Fragment } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
+import { UserAvatar } from "../../../../shared/UserAvatar";
+import {
+  buildCommunityFunnelMemberProofView,
+  resolveCommunityFunnelMemberProofInsertIndex,
+} from "../../../../shared/communityFunnelUi";
 import type {
   CommunityFunnelDocumentV1,
   CommunityFunnelSectionV1,
+  CommunityPublicFace,
 } from "../../../../shared/communityTypes";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import "./CommunityFunnelV1Preview.css";
-
-type Face = {
-  user_id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-};
 
 type PreviewCommunity = {
   id?: string;
@@ -29,7 +29,7 @@ type PreviewCommunity = {
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
   member_count?: number | null;
-  member_faces_preview?: Face[] | null;
+  member_faces_preview?: CommunityPublicFace[] | null;
   host?: {
     display_name: string | null;
     avatar_url: string | null;
@@ -72,11 +72,13 @@ export function CommunityFunnelV1Preview(props: {
 }) {
   const { community, document } = props;
   const isPreview = props.isPreview !== false;
-  const faces = (community.member_faces_preview ?? [])
-    .filter((face) => Boolean(face.avatar_url))
-    .slice(0, 8);
-  const memberCount =
-    typeof community.member_count === "number" ? community.member_count : null;
+  const memberProof = buildCommunityFunnelMemberProofView({
+    memberCount: community.member_count,
+    faces: community.member_faces_preview,
+  });
+  const automaticMemberProofInsertIndex = document
+    ? resolveCommunityFunnelMemberProofInsertIndex(document.sections)
+    : null;
 
   if (!document) {
     return (
@@ -89,6 +91,49 @@ export function CommunityFunnelV1Preview(props: {
       </div>
     );
   }
+
+  const renderMemberProof = (params: {
+    key: string;
+    headline?: string | null;
+    body?: string | null;
+  }) => {
+    if (!memberProof) return null;
+    return (
+      <section key={params.key} className="funnel-v1-member-proof">
+        {memberProof.faces.length ? (
+          <div
+            className="funnel-v1-facepile"
+            role="img"
+            aria-label={memberProof.ariaLabel}
+          >
+            {memberProof.faces.map((face) => (
+              <UserAvatar
+                key={face.user_id}
+                name={face.display_name ?? "Community member"}
+                imageUrl={face.avatar_url}
+                focusX={face.avatar_focus_x}
+                focusY={face.avatar_focus_y}
+                zoom={face.avatar_zoom}
+                className="funnel-v1-face"
+                imageClassName="funnel-v1-face-image"
+                loading="lazy"
+                alt=""
+                aria-hidden={true}
+              />
+            ))}
+            {memberProof.hiddenFaceCount > 0 ? (
+              <span aria-hidden="true">+{memberProof.hiddenFaceCount}</span>
+            ) : null}
+          </div>
+        ) : null}
+        <div className="funnel-v1-member-proof-copy">
+          {params.headline ? <h2>{params.headline}</h2> : null}
+          <p>{memberProof.label}</p>
+          {params.body ? <span>{params.body}</span> : null}
+        </div>
+      </section>
+    );
+  };
 
   const renderSection = (section: CommunityFunnelSectionV1, index: number) => {
     if (section.type === "hero") {
@@ -132,34 +177,11 @@ export function CommunityFunnelV1Preview(props: {
       );
     }
     if (section.type === "social_proof") {
-      if (
-        !section.headline &&
-        !section.body &&
-        !faces.length &&
-        memberCount === null
-      )
-        return null;
-      return (
-        <section key={section.id} className="funnel-v1-member-proof">
-          {section.headline ? <h2>{section.headline}</h2> : null}
-          {faces.length ? (
-            <div className="funnel-v1-facepile" aria-label="Community members">
-              {faces.map((face) => (
-                <img key={face.user_id} src={face.avatar_url ?? ""} alt="" />
-              ))}
-              {memberCount !== null && memberCount > faces.length ? (
-                <span>+{memberCount - faces.length}</span>
-              ) : null}
-            </div>
-          ) : null}
-          <p>
-            {section.body ??
-              (memberCount !== null
-                ? `${memberCount.toLocaleString()} members and counting`
-                : "Members and counting")}
-          </p>
-        </section>
-      );
+      return renderMemberProof({
+        key: section.id,
+        headline: section.headline,
+        body: section.body,
+      });
     }
     if (section.type === "testimonial") {
       return (
@@ -241,7 +263,17 @@ export function CommunityFunnelV1Preview(props: {
         {props.error ? (
           <div className="funnel-v1-preview-error">{props.error}</div>
         ) : null}
-        {document.sections.map(renderSection)}
+        {document.sections.map((section, index) => (
+          <Fragment key={section.id}>
+            {automaticMemberProofInsertIndex === index
+              ? renderMemberProof({ key: "automatic-member-proof" })
+              : null}
+            {renderSection(section, index)}
+          </Fragment>
+        ))}
+        {automaticMemberProofInsertIndex === document.sections.length
+          ? renderMemberProof({ key: "automatic-member-proof" })
+          : null}
       </main>
     </div>
   );

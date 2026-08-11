@@ -58,6 +58,7 @@ import {
   listAllActiveChannelReadableRows,
 } from "./communityChannelCore";
 import { communityIsActive } from "../shared/communityLifecycle";
+import type { CommunityPublicFace } from "../shared/communityTypes";
 import {
   requireCommunityBuilderAccess,
   resolveCommunityBuilderAccess,
@@ -66,17 +67,7 @@ import { requireAccountSetupCompleteForUser } from "./accountSetupCore";
 
 const FUNNEL_VISIT_DEDUPE_WINDOW_MS = 30 * 60 * 1000;
 
-type PublicCommunityFace = {
-  user_id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-  avatar_storage_id?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-};
-
-async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Omit<PublicCommunityFace, "user_id">> {
+async function resolvePublicProfileFaceFields(ctx: any, userId: any): Promise<Omit<CommunityPublicFace, "user_id">> {
   return await resolveUserProfileDisplayProjection(ctx, userId);
 }
 
@@ -205,9 +196,9 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   adminCount: number;
   onlineCount: number;
   onlineCountCapped: boolean;
-  onlineFaces: PublicCommunityFace[];
+  onlineFaces: CommunityPublicFace[];
   joinedLast30dCount: number;
-  memberFacesPreview: PublicCommunityFace[];
+  memberFacesPreview: CommunityPublicFace[];
 }> {
   const { rows: activeMemberships } = await listCanonicalCommunityMemberMembershipRows({
     ctx,
@@ -232,7 +223,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
     await Promise.all(
       presenceWindow.entries
         .slice(0, COMMUNITY_PRESENCE_FACE_LIMIT)
-        .map(async ({ userId }): Promise<PublicCommunityFace | null> => {
+        .map(async ({ userId }): Promise<CommunityPublicFace | null> => {
           const user = await ctx.db.get(userId);
           if (!user) return null;
           return {
@@ -243,7 +234,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
           };
         }),
     )
-  ).filter(Boolean) as PublicCommunityFace[];
+  ).filter(Boolean) as CommunityPublicFace[];
 
   const joinedSinceMs = Date.now() - PUBLIC_JOINED_RECENTLY_WINDOW_MS;
   const joinedLast30dCount = activeMemberships.reduce(
@@ -265,7 +256,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
   const memberFacesPreview = (
     await Promise.all(
       previewUserIds.slice(0, PUBLIC_MEMBER_FACES_PREVIEW_LIMIT).map(
-        async (userId): Promise<PublicCommunityFace | null> => {
+        async (userId): Promise<CommunityPublicFace | null> => {
           const user = await ctx.db.get(userId);
           if (!user) return null;
           return {
@@ -275,7 +266,7 @@ async function resolvePublicCommunityStats(ctx: any, community: CommunityLike): 
         },
       ),
     )
-  ).filter(Boolean) as PublicCommunityFace[];
+  ).filter(Boolean) as CommunityPublicFace[];
 
   return {
     memberCount,
@@ -293,9 +284,9 @@ function mapPublicCommunityStats(stats: {
   adminCount: number;
   onlineCount: number;
   onlineCountCapped: boolean;
-  onlineFaces: PublicCommunityFace[];
+  onlineFaces: CommunityPublicFace[];
   joinedLast30dCount: number;
-  memberFacesPreview: PublicCommunityFace[];
+  memberFacesPreview: CommunityPublicFace[];
 }) {
   return {
     member_count: stats.memberCount,

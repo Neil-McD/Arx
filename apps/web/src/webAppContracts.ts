@@ -1,5 +1,6 @@
 import type {
   CommunityFunnelConfig,
+  CommunityPublicFace,
   UserProfile,
 } from "../../../shared/communityTypes";
 import type { NavSnapshotBase } from "../../../shared/navSnapshot";
@@ -51,17 +52,11 @@ export type WebPublicCommunityRecord = {
   updated_at: string;
   funnel?: CommunityFunnelConfig | null;
   member_count?: number | null;
+  member_faces_preview?: CommunityPublicFace[] | null;
   admin_count?: number | null;
   online_count?: number | null;
   online_count_capped?: boolean | null;
-  online_faces?: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-    avatar_focus_x?: number | null;
-    avatar_focus_y?: number | null;
-    avatar_zoom?: number | null;
-  }> | null;
+  online_faces?: CommunityPublicFace[] | null;
   branding_revision?: number | null;
   visual_identity?: CommunityVisualIdentity | null;
 };

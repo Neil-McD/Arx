@@ -9,7 +9,10 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { CloudCommunityPolynetOverview } from "../../../../shared/cloudCommunityPolynetGateway";
 import { formatCompactStat } from "../../../../shared/communityFunnelUi";
-import type { CommunityFunnelHeroMediaKind } from "../../../../shared/communityTypes";
+import type {
+  CommunityFunnelHeroMediaKind,
+  CommunityPublicFace,
+} from "../../../../shared/communityTypes";
 import { renderTextWithLinks } from "../../../../shared/linkEmbedUi";
 import {
   buildWebCommunityVisitorProjection,
@@ -33,20 +36,14 @@ import { WebCommunityInteractionProjection } from "./WebCommunityInteractionProj
 import { WebMobileDrawer } from "./WebMobileDrawer";
 import "./CommunityVisitorChrome.css";
 
-type VisitorPublicFace = {
-  user_id: string;
-  display_name: string | null;
-  avatar_url: string | null;
-};
-
 export type WebCommunityVisitorSurfaceStats = {
   onlineCount: number | null;
   onlineCountCapped: boolean;
-  onlineFaces: VisitorPublicFace[];
+  onlineFaces: CommunityPublicFace[];
   memberCount: number | null;
   memoryNoteCount: number | null;
   messagesTodayCount: number | null;
-  memberFacesPreview: VisitorPublicFace[];
+  memberFacesPreview: CommunityPublicFace[];
 };
 
 type WebCommunityVisitorSurfaceProps = {

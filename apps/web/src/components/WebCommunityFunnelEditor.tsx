@@ -29,6 +29,7 @@ import {
   publishCloudCommunityFunnelDraft,
   setCloudCommunityFunnelDraftVsl,
 } from "../../../../shared/cloudCommunityFunnelGateway";
+import { fetchCloudPublicFunnelStats } from "../../../../shared/cloudPublicFunnelGateway";
 import {
   ensureCloudThreadRecord,
   uploadCloudMemberAgentImageFile,
@@ -39,7 +40,11 @@ import {
 } from "../../../../shared/cloudThreadsRead";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
 import { buildCommunityFunnelThreadKey } from "../../../../shared/runtimeInvocationSurface";
-import type { CommunityFunnelManagerConfig } from "../../../../shared/communityTypes";
+import type {
+  CommunityFunnelManagerConfig,
+  CommunityMemberProof,
+  CommunityPublicFace,
+} from "../../../../shared/communityTypes";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import type {
@@ -52,6 +57,7 @@ import { WebAgentLiveTurn } from "./WebAgentLiveTurn";
 
 type PreviewCommunityLike = {
   id: string;
+  slug?: string | null;
   name: string;
   avatar_url?: string | null;
   avatar_focus_x?: number | null;
@@ -61,6 +67,8 @@ type PreviewCommunityLike = {
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
+  member_count?: number | null;
+  member_faces_preview?: CommunityPublicFace[] | null;
 };
 
 type FunnelBuilderMessage = Omit<CloudMessageTransportRow, "role"> & {
@@ -137,6 +145,52 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const threadKey = useMemo(
     () => buildCommunityFunnelThreadKey(props.previewCommunity.id),
     [props.previewCommunity.id],
+  );
+  const [memberProof, setMemberProof] = useState<CommunityMemberProof>({
+    member_count: props.previewCommunity.member_count ?? null,
+    member_faces_preview: props.previewCommunity.member_faces_preview ?? null,
+  });
+  useEffect(() => {
+    let cancelled = false;
+    const slug = props.previewCommunity.slug?.trim() ?? "";
+    setMemberProof({
+      member_count: props.previewCommunity.member_count ?? null,
+      member_faces_preview:
+        props.previewCommunity.member_faces_preview ?? null,
+    });
+    if (!slug) {
+      return () => {
+        cancelled = true;
+      };
+    }
+    void fetchCloudPublicFunnelStats<AuthSession, CommunityMemberProof>({
+      communitySlug: slug,
+    })
+      .then((payload) => {
+        if (cancelled || !payload?.ok || !payload.community) return;
+        setMemberProof({
+          member_count: payload.community.member_count ?? null,
+          member_faces_preview:
+            payload.community.member_faces_preview ?? null,
+        });
+      })
+      .catch((error) => {
+        if (!cancelled) {
+          console.warn("community_funnel_member_proof_load_failed", error);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    props.previewCommunity.id,
+    props.previewCommunity.member_count,
+    props.previewCommunity.member_faces_preview,
+    props.previewCommunity.slug,
+  ]);
+  const hydratedPreviewCommunity = useMemo(
+    () => ({ ...props.previewCommunity, ...memberProof }),
+    [memberProof, props.previewCommunity],
   );
   const [messages, setMessages] = useState<FunnelBuilderMessage[]>([]);
   const [input, setInput] = useState("");
@@ -628,7 +682,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         >
           {document ? (
             <CommunityFunnelV1Preview
-              community={props.previewCommunity}
+              community={hydratedPreviewCommunity}
               document={document}
               vslUrl={savedVslUrl}
               primaryActionLabel={`Join ${props.previewCommunity.name}`}
