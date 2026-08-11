@@ -108,7 +108,6 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 - Remaining severity: no P0, P1, P2, or P3 findings remain for this responsive composition slice.
 
 final result: passed
-
 ---
 
 # Funnel editor workspace QA
@@ -183,5 +182,45 @@ final result: passed
 - Browser console: no warnings or errors on any reviewed surface.
 - Required account setup remained visible after Escape; `#root` was inert while the dialog was open.
 - TypeScript, focused UI contracts, account/continuation contracts, Builder surface contract, launcher retirement proof, and production web build passed.
+
+final result: passed
+
+---
+
+# Deterministic default funnel cover QA
+
+## Reference and implementation
+
+- Reference: `/Users/neilmcdevitt/.codex/generated_images/019fdd6d-2606-7572-a1b9-2ae9a91d7375/exec-3d09303d-0e98-43bb-88cb-ce8dcf57568b.png`.
+- Implemented desktop capture: `/Users/neilmcdevitt/code/arx-funnel-variants-authority-v1/design-qa-default-funnel-dark.png`.
+- Focused funnel capture: `/Users/neilmcdevitt/code/arx-funnel-variants-authority-v1/design-qa-default-funnel-dark-crop.png`.
+- Side-by-side comparison: `/Users/neilmcdevitt/code/arx-funnel-variants-authority-v1/design-qa-default-funnel-comparison.png`.
+- Mobile capture: `/Users/neilmcdevitt/code/arx-funnel-variants-authority-v1/design-qa-default-funnel-mobile-final.png`.
+
+## Capture state
+
+- Reference pixels: 1469 x 1071.
+- Desktop CSS viewport request: 1469 x 1071; browser capture surface: 1281 x 1071.
+- Focused implementation pixels: 1157 x 1053.
+- Mobile CSS viewport and capture: 390 x 844.
+- Route: `http://127.0.0.1:5184/c/builder-knowledge-c1dbd2`.
+- Theme: canonical Dark. Light behavior is protected by semantic theme-token ownership and the existing theme contract; authenticated visual theme switching was unavailable in this local public-route session.
+- Data state: deterministic fallback, one member, free join action, no optional body copy.
+
+## Comparison
+
+- The implementation preserves the selected centered-cover composition: canonical identity, large deterministic headline, quiet member proof, divider, and one dominant CTA.
+- Vertical rhythm, headline measure, neutral depth, and CTA hierarchy match the reference closely.
+- The implementation intentionally adds the canonical member avatar stack next to the member count because that is a product invariant established for funnel social proof.
+- The community avatar remains canonical and data-driven. The test community has no uploaded avatar, so the capture correctly shows its initials fallback instead of fabricating the reference artwork.
+- The first mobile pass made the headline too large for the available width. The mobile type clamp was reduced from `13vw / 58px` to `11vw / 48px`, then recaptured.
+- The final 390 x 844 state preserves hierarchy, readable line lengths, a full-width CTA, and safe spacing without horizontal overflow.
+- The editor and public deterministic fallback share `CommunityFunnelV1Preview`; custom AI-authored funnel documents retain their existing rendering path.
+
+## Findings
+
+- No actionable P0, P1, or P2 fidelity findings remain.
+- P3: the local unauthenticated shell shows a session-recovery notice below the funnel; this is outside the funnel component and does not alter its layout contract.
+- P3: the development console reports the existing React `fetchPriority` warning from the canonical shared avatar component. It does not affect rendering or this slice's behavior.
 
 final result: passed
