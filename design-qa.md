@@ -230,3 +230,63 @@ The catalog comparison verifies card/add-card parity, dashed creation treatment,
 - [x] Pass the full release gate and publish through GitHub to the canonical Polynet production project.
 
 final result: passed
+
+## Resources shell compaction production addendum
+
+### Evidence
+
+- Source visual truth, catalog: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_mJoXQ8/Screenshot 2026-08-10 at 11.00.50 PM.png`
+- Source visual truth, selected course: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_pMrTzb/Screenshot 2026-08-10 at 11.00.41 PM.png`
+- Browser-rendered catalog: `/tmp/polynet-resources-shell-compaction-catalog.png`
+- Browser-rendered selected course: `/tmp/polynet-resources-shell-compaction-course.png`
+- Combined full-view comparisons: `/tmp/polynet-resources-shell-compaction-catalog-comparison.png` and `/tmp/polynet-resources-shell-compaction-course-comparison.png`
+- Production identity: `https://www.polynet.ai/version.json` returned build `691b989b7924502a0be8f6cb2d8d47f44b31b6ed` in `production`.
+- Source dimensions: both supplied screenshots are `3024 x 1964` pixels. They include desktop and browser chrome, so each was proportionally normalized to `1243 x 808` for the combined comparisons.
+- Implementation viewport and density: `1243 x 707` CSS pixels, Chrome DPR 2, and `1243 x 707` screenshot pixels. Chrome's screenshot output is normalized to one image pixel per CSS pixel.
+- State: authenticated owner/manager, production, dark theme, preview mode off, Resources catalog and selected course.
+
+### Full-view comparison
+
+The source and production captures were stacked into the same comparison images before judgment. The revised catalog replaces the prior approximately 66px blank shell band plus nested catalog indent with one 48px utility row and an 8px content offset. The course card now begins at `y=75`, while the heading and catalog share the same `x=345.59` alignment. In the selected course, the lesson outline and reader begin together at `y=67`; the previous repeated course-description block is gone.
+
+### Focused-region comparison
+
+A separate crop was not needed because the browser-rendered panel occupies the full `1243 x 707` capture and all affected controls are readable. DOM measurements were used to verify the exact alignment and collision boundaries: the header is 48px high, panel padding is `0 24px 24px`, the panel gap is 10px, the DM safe inset is 62px, and the preview control ends 47px before the floating DM button begins.
+
+### Findings
+
+- No actionable P0, P1, or P2 findings remain.
+- Residual P3 test gap: this geometry-only slice was visually checked in the supplied dark-theme state. The light-theme token path and mobile Resources override were unchanged and passed the existing theme and release contracts, but no additional light or mobile screenshot was needed for this desktop spacing target.
+
+### Required fidelity surfaces
+
+- Fonts and typography: IBM Plex Sans and the existing heading, metadata, and lesson weights are unchanged. The compact course context truncates safely and remains optically secondary to the lesson title.
+- Spacing and layout rhythm: header, catalog, outline, and reader now share one left edge; the course workspace starts 10px below the shell utility row; no horizontal overflow is present.
+- Colors and visual tokens: no color token changed. The existing dark surfaces, selected-lesson tokens, borders, and muted metadata remain coherent.
+- Image quality and asset fidelity: real course-cover and YouTube assets retain their existing crop, sharpness, and framing. No placeholder or replacement art was introduced.
+- Copy and content: the catalog description remains on the course card, while the selected-course header keeps only `Resources` and the course name. Preview, lesson, and manager copy are unchanged.
+
+### Primary interactions and console
+
+- Opened the real production course from the catalog and verified the selected lesson, video, and lesson outline.
+- Verified the preview control and floating DM button have 47px of horizontal separation at the tested viewport.
+- Verified the document and body have zero horizontal overflow.
+- Chrome console was checked after catalog and course navigation; no warnings or errors were present.
+
+### Comparison history
+
+1. The supplied screenshots exposed large unused top space and a redundant catalog gutter.
+2. The implementation reused the canonical 48px shell band, preserved the canonical 62px DM safe inset, reduced panel-to-content spacing, aligned the catalog to the heading, and collapsed selected-course context into one line.
+3. The first matched production comparison found no P0, P1, or P2 issue, so no post-release correction iteration was required.
+
+### Implementation checklist
+
+- [x] Reuse the existing shell band instead of adding absolute positioning or negative margins.
+- [x] Preserve an explicit DM-button collision boundary.
+- [x] Align catalog cards and selected-course workspace to the Resources heading.
+- [x] Remove repeated selected-course description copy without deleting course metadata.
+- [x] Preserve preview mode, course cards, lesson content, backend authority, and mobile overrides.
+- [x] Pass focused contracts, typecheck, production build, and the full release gate.
+- [x] Capture and compare the authenticated production catalog and selected-course states in Chrome.
+
+final result: passed
