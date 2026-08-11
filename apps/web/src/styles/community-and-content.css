@@ -9212,6 +9212,7 @@ button.chat-reply-quote:hover {
 .resource-course-outline .knowledge-resource-item {
   align-items: center;
   gap: 7px;
+  min-height: 52px;
   border-radius: 8px;
   padding: 8px 9px;
 }
@@ -10273,6 +10274,10 @@ button.chat-reply-quote:hover {
 }
 
 .resource-course-outline .knowledge-resource-item-title {
+  display: -webkit-box;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
   white-space: normal;
   line-height: 1.35;
 }
@@ -11012,6 +11017,20 @@ button.chat-reply-quote:hover {
 .resource-viewer-prose .md-list {
   margin: 0 0 16px;
   padding-left: 22px;
+  list-style-position: outside;
+}
+
+.resource-viewer-prose .md-list .md-list {
+  margin: 6px 0;
+  padding-left: 22px;
+}
+
+.resource-viewer-prose ul.md-list ul.md-list {
+  list-style-type: circle;
+}
+
+.resource-viewer-prose ol.md-list ol.md-list {
+  list-style-type: lower-alpha;
 }
 
 .resource-viewer-prose .md-list .md-paragraph {

@@ -130,7 +130,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const isBodyEditing = isEditing && activeField === "body";
   const isPinned = editor?.isEditing ? editor.pinnedInput : resource.pinned;
   const renderedBodyMarkdown = useMemo(
-    () => (hasBody ? renderMarkdown(trimmedBody, { embedStandaloneMedia: true }) : null),
+    () => (hasBody ? renderMarkdown(trimmedBody, { embedStandaloneMedia: true, headingLevelOffset: 1 }) : null),
     [hasBody, trimmedBody],
   );
 

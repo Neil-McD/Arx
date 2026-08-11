@@ -220,7 +220,9 @@ function ResourceRailItem(props: {
       >
         <span className="knowledge-resource-item-copy">
           <span className="knowledge-resource-item-topline">
-            <span className="knowledge-resource-item-title">{resource.title}</span>
+            <span className="knowledge-resource-item-title" title={resource.title}>
+              {resource.title}
+            </span>
             {resource.pinned ? <PinIcon /> : null}
           </span>
           {summary ? <span className="knowledge-resource-item-summary">{summary}</span> : null}

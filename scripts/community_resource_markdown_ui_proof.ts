@@ -28,6 +28,11 @@ assert.match(
 );
 assert.match(
   markdown,
+  /headingLevelOffset\?: number/,
+  "markdown renderer should expose an opt-in heading hierarchy offset",
+);
+assert.match(
+  markdown,
   /standaloneMediaEmbedFromChildren[\s\S]*parseEmbedUrl\(href\)/,
   "markdown renderer should embed only standalone supported media links",
 );
@@ -38,8 +43,8 @@ assert.match(
 );
 assert.match(
   resourceViewer,
-  /renderMarkdown\(trimmedBody,\s*\{\s*embedStandaloneMedia: true\s*\}\)/,
-  "Resources viewer should opt into standalone media embeds",
+  /renderMarkdown\(trimmedBody,\s*\{\s*embedStandaloneMedia: true,\s*headingLevelOffset: 1\s*\}\)/,
+  "Resources viewer should opt into media embeds while keeping the lesson title as its only h1",
 );
 assert.match(
   resourceViewer,
@@ -73,8 +78,23 @@ assert.match(
 );
 assert.match(
   css,
-  /\.resource-course-outline \.knowledge-resource-item \{[\s\S]*padding: 8px 9px[\s\S]*\.resource-course-outline \.knowledge-resource-item-title \{[\s\S]*font-size: 12\.5px/,
-  "lesson outline rows should remain compact while preserving readable labels",
+  /\.resource-course-outline \.knowledge-resource-item \{[\s\S]*min-height: 52px;[\s\S]*padding: 8px 9px[\s\S]*\.resource-course-outline \.knowledge-resource-item-title \{[\s\S]*font-size: 12\.5px/,
+  "lesson outline rows should share a compact two-line height",
+);
+assert.match(
+  css,
+  /\.resource-course-outline \.knowledge-resource-item-title \{[\s\S]*display: -webkit-box;[\s\S]*-webkit-line-clamp: 2;[\s\S]*white-space: normal/,
+  "lesson outline labels should clamp cleanly after two lines",
+);
+assert.match(
+  read("apps/web/src/components/CommunityResourcesPanel.tsx"),
+  /className="knowledge-resource-item-title" title=\{resource\.title\}/,
+  "clamped lesson labels should retain their complete title on hover",
+);
+assert.match(
+  css,
+  /\.resource-viewer-prose \.md-list \.md-list \{[\s\S]*margin: 6px 0;[\s\S]*padding-left: 22px;[\s\S]*\.resource-viewer-prose ul\.md-list ul\.md-list \{[\s\S]*list-style-type: circle;/,
+  "nested lesson lists should preserve readable indentation and hierarchy",
 );
 assert.match(
   css,
@@ -98,8 +118,8 @@ assert.match(
 );
 assert.match(
   packageJson,
-  /"check:community-resource-markdown-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_resource_markdown_ui_proof\.ts"/,
-  "community resource markdown UI proof should be wired into package scripts",
+  /"check:community-resource-markdown-ui-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_resource_markdown_ui_proof\.ts && vitest run scripts\/community_resource_markdown_rendering\.test\.ts"/,
+  "community resource markdown UI and behavior proofs should be wired into package scripts",
 );
 
 console.log("community_resource_markdown_ui_proof: ok");

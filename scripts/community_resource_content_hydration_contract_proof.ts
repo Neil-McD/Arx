@@ -157,8 +157,8 @@ assert.match(
 );
 assert.match(
   viewer,
-  /const renderedBodyMarkdown = useMemo\([\s\S]*renderMarkdown\(trimmedBody, \{ embedStandaloneMedia: true \}\)[\s\S]*\[hasBody, trimmedBody\]/,
-  "resource body markdown should be memoized so unrelated reader state changes do not rebuild the media subtree",
+  /const renderedBodyMarkdown = useMemo\([\s\S]*renderMarkdown\(trimmedBody, \{ embedStandaloneMedia: true, headingLevelOffset: 1 \}\)[\s\S]*\[hasBody, trimmedBody\]/,
+  "resource body markdown should be memoized and hierarchy-scoped so unrelated reader state changes do not rebuild the media subtree",
 );
 assert.match(
   panel,
