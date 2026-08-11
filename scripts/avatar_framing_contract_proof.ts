@@ -30,6 +30,8 @@ const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const communityContextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+const communityFunnelPreview = read("apps/web/src/components/CommunityFunnelV1Preview.tsx");
+const communityFunnelPreviewCss = read("apps/web/src/components/CommunityFunnelV1Preview.css");
 const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const baseCss = [
@@ -76,6 +78,26 @@ assert.match(baseCss, /:where\(\.stable-framed-media\)\s*\{[\s\S]*position:\s*re
 assert.match(stableAvatar, /<StableFramedMedia/);
 assert.match(stableAvatar, /loading\?: "eager" \| "lazy"/);
 assert.match(stableAvatar, /fetchPriority\?: ImageFetchPriority/);
+assert.match(
+  communityFunnelPreview,
+  /className="community-context-member-avatar"/,
+  "funnel member proof must use the canonical member avatar holder",
+);
+assert.match(
+  communityFunnelPreview,
+  /className="community-context-member-avatar-media"/,
+  "funnel member proof must use the canonical member avatar media frame",
+);
+assert.doesNotMatch(
+  communityFunnelPreview,
+  /imageClassName="funnel-v1-face-image"/,
+  "funnel member proof must not replace canonical avatar image geometry",
+);
+assert.doesNotMatch(
+  communityFunnelPreviewCss,
+  /\.funnel-v1-face(?:pile|-image)?\b/,
+  "funnel member proof must not recreate a custom facepile or avatar crop",
+);
 assert.match(
   communityAvatar,
   /className=\{`community-avatar-frame \$\{props\.className\}`\}/,
