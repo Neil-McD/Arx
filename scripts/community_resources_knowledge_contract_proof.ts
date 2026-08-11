@@ -617,10 +617,20 @@ assert.doesNotMatch(
   /selectedModule\.description_md\?\.trim\(\)/,
   "selected course headers must not repeat catalog description copy above the lesson workspace",
 );
+assert.doesNotMatch(
+  resourcesPanel,
+  /Courses and durable knowledge for|resources-course-context|resource-module-status-line/,
+  "Resources must not repeat catalog explanation, course identity, or status in the shell utility row",
+);
 assert.match(
   resourcesPanel,
-  /resources-course-context[\s\S]*resources-back-btn[\s\S]*resources-course-context-name/,
-  "selected courses must keep back navigation and course context in one compact utility row",
+  /selectedModule \? \([\s\S]*resources-back-btn[\s\S]*<span>Resources<\/span>[\s\S]*\) : \([\s\S]*resources-header">Resources<\/div>/,
+  "the Resources utility row must contain only Resources context before preview controls",
+);
+assert.match(
+  resourcesPanel,
+  /resource-course-outline-header[\s\S]*resource-course-outline-title[\s\S]*\{selectedModule\.name\}[\s\S]*resource-course-outline-count/,
+  "the course name must replace the generic Lessons label in the outline heading",
 );
 assert.match(
   webCss,

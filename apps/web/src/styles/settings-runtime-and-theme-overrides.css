@@ -8603,8 +8603,7 @@ button.settings-primary-action svg {
   gap: 12px;
 }
 
-.app-root.mobile-shell .feed-header-row,
-.app-root.mobile-shell .resources-header-row {
+.app-root.mobile-shell .feed-header-row {
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
@@ -8616,8 +8615,7 @@ button.settings-primary-action svg {
   justify-content: space-between;
 }
 
-.app-root.mobile-shell .feed-header-subtitle,
-.app-root.mobile-shell .resources-header-subtitle {
+.app-root.mobile-shell .feed-header-subtitle {
   font-size: 12px;
   line-height: 1.45;
 }

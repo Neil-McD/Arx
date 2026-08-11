@@ -8516,19 +8516,6 @@ button.chat-reply-quote:hover {
   color: var(--text-faint);
 }
 
-.resources-header-row {
-  display: flex;
-  align-items: flex-start;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.resources-header-copy {
-  display: grid;
-  gap: 4px;
-  min-width: 0;
-}
-
 .resources-header {
   font-size: 12px;
   text-transform: uppercase;
@@ -8568,34 +8555,6 @@ button.chat-reply-quote:hover {
 
 .resources-back-btn:hover {
   color: var(--text-primary);
-}
-
-.resources-course-context {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  min-width: 0;
-}
-
-.resources-course-context-name {
-  flex: 1 1 auto;
-  min-width: 0;
-  overflow: hidden;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: 0.1em;
-  line-height: 1;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.resources-header-subtitle {
-  font-size: 13px;
-  line-height: 1.5;
-  color: var(--text-secondary);
-  max-width: 48ch;
 }
 
 .resources-header-actions {
@@ -10196,34 +10155,6 @@ button.chat-reply-quote:hover {
   align-items: stretch;
 }
 
-.resource-module-status-line {
-  display: inline-flex;
-  align-items: center;
-  width: fit-content;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 750;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.resource-module-status-line.is-draft {
-  color: var(--text-muted);
-}
-
-.resource-module-status-line.is-cleanup {
-  color: var(--text-muted);
-}
-
-.resource-module-status-line {
-  margin-top: 6px;
-}
-
-.resources-course-context .resource-module-status-line {
-  flex: 0 0 auto;
-  margin-top: 0;
-}
-
 .resource-course-catalog {
   width: min(100%, 1080px);
   margin: 0;
@@ -10580,6 +10511,14 @@ button.chat-reply-quote:hover {
   display: inline-flex;
   align-items: center;
   gap: 5px;
+  flex: 0 0 auto;
+}
+
+.resource-course-outline-title {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .resource-course-outline-count svg {

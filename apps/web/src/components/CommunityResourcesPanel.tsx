@@ -1061,7 +1061,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     );
   };
 
-  const selectedModuleStatus = selectedModule?.module_status === "live" ? "live" : "draft";
   const isSelectedResourceEditing =
     Boolean(selectedResource) && actions.resourceEditor.editingResourceId === selectedResource?.id;
   const selectedResourceEditorDirty = Boolean(
@@ -1115,27 +1114,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         <div className="feed-header-row">
           <div className="feed-header-copy">
             {selectedModule ? (
-              <div className="resources-course-context">
-                <button className="resources-back-btn" type="button" onClick={handleBackToCatalog}>
-                  <ArrowLeft aria-hidden="true" />
-                  <span>Resources</span>
-                </button>
-                <div className="resources-course-context-name" title={selectedModule.name}>
-                  {selectedModule.name}
-                </div>
-                {selectedModule.is_virtual ? (
-                  <div className="resource-module-status-line is-cleanup">Needs sorting</div>
-                ) : canManageResources && selectedModuleStatus === "draft" ? (
-                  <div className="resource-module-status-line is-draft">Draft course</div>
-                ) : null}
-              </div>
+              <button className="resources-back-btn" type="button" onClick={handleBackToCatalog}>
+                <ArrowLeft aria-hidden="true" />
+                <span>Resources</span>
+              </button>
             ) : (
-              <>
-                <div className="resources-header">Resources</div>
-                <div className="feed-header-subtitle">
-                  {`Courses and durable knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
-                </div>
-              </>
+              <div className="resources-header">Resources</div>
             )}
           </div>
           <div
@@ -1237,7 +1221,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 aria-controls="resource-course-lesson-navigation"
                 onClick={() => setIsCourseOutlineOpen((current) => !current)}
               >
-                <span>Lessons</span>
+                <span className="resource-course-outline-title" title={selectedModule.name}>
+                  {selectedModule.name}
+                </span>
                 <span className="resource-course-outline-count">
                   {selectedModuleSection?.pageResources.length ?? 0}
                   <ChevronDown aria-hidden="true" />
