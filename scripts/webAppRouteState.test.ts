@@ -6,9 +6,12 @@ import {
   buildCommunityHomePath,
   buildCommunityMembersPath,
   buildCommunityTabPath,
+  deriveWebDestinationFromAppRoute,
+  deriveWebDestinationFromPath,
   parseAppRouteFromPathname,
   readPublicRouteFromLocation,
   resolveInitialAppShellVariant,
+  webDestinationHasCommunityNavSelection,
 } from "../shared/webAppRouteState";
 
 afterEach(() => {
@@ -196,5 +199,113 @@ describe("community channel routes", () => {
       communityResourceModuleId: "module-1",
       }),
     ).toBe("/c/polynet/resources/module-1");
+  });
+});
+
+describe("canonical web destinations", () => {
+  it.each([
+    ["/", { kind: "platform_entry" }],
+    ["/m", { kind: "platform_entry" }],
+    ["/onboarding", { kind: "onboarding" }],
+    ["/m/onboarding", { kind: "onboarding" }],
+    ["/discover", { kind: "discover" }],
+    ["/m/discover", { kind: "discover" }],
+    ["/docs", { kind: "docs", slug: null }],
+    ["/m/docs/getting-started/intro", { kind: "docs", slug: "getting-started/intro" }],
+    ["/operator", { kind: "operator", tab: "platform" }],
+    ["/m/operator/business", { kind: "operator", tab: "business" }],
+    ["/settings", { kind: "global_settings", index: true }],
+    ["/m/settings/profile", { kind: "global_settings", page: "profile", index: false }],
+    ["/c/polynet", { kind: "community_funnel", slug: "polynet" }],
+    ["/m/c/polynet", { kind: "community_funnel", slug: "polynet" }],
+    ["/c/polynet/preview", { kind: "community_funnel_preview", slug: "polynet" }],
+    ["/m/c/polynet/onboarding/preview", { kind: "community_onboarding_preview", slug: "polynet" }],
+    ["/m/c/polynet/home", { kind: "community_home", slug: "polynet" }],
+    ["/m/c/polynet/members", { kind: "community_members", slug: "polynet" }],
+    ["/m/c/polynet/chat", { kind: "community_chat", slug: "polynet", channelSlug: null }],
+    ["/m/c/polynet/chat/wins", { kind: "community_chat", slug: "polynet", channelSlug: "wins" }],
+    ["/m/c/polynet/resources/module-1", { kind: "community_resources", slug: "polynet", moduleId: "module-1" }],
+    ["/m/c/polynet/events", { kind: "community_events", slug: "polynet" }],
+    ["/m/c/polynet/settings/agent", { kind: "community_settings", slug: "polynet", pane: "agent" }],
+    ["/m/c/polynet/funnel", { kind: "community_funnel_editor", slug: "polynet" }],
+    ["/m/c/polynet/analytics", { kind: "community_analytics", slug: "polynet" }],
+  ] as const)("derives %s without changing desktop/mobile semantics", (path, expected) => {
+    expect(deriveWebDestinationFromPath(path)).toMatchObject(expected);
+  });
+
+  it.each([
+    ["/", "/m"],
+    ["/onboarding", "/m/onboarding"],
+    ["/discover", "/m/discover"],
+    ["/docs/getting-started", "/m/docs/getting-started"],
+    ["/operator/communities", "/m/operator/communities"],
+    ["/settings/appearance", "/m/settings/appearance"],
+    ["/c/polynet", "/m/c/polynet"],
+    ["/c/polynet/preview", "/m/c/polynet/preview"],
+    ["/c/polynet/onboarding/preview", "/m/c/polynet/onboarding/preview"],
+    ["/c/polynet/home", "/m/c/polynet/home"],
+    ["/c/polynet/members", "/m/c/polynet/members"],
+    ["/c/polynet/chat/wins", "/m/c/polynet/chat/wins"],
+    ["/c/polynet/resources/module-1", "/m/c/polynet/resources/module-1"],
+    ["/c/polynet/events", "/m/c/polynet/events"],
+    ["/c/polynet/settings/agent", "/m/c/polynet/settings/agent"],
+    ["/c/polynet/funnel", "/m/c/polynet/funnel"],
+    ["/c/polynet/analytics", "/m/c/polynet/analytics"],
+  ] as const)("keeps %s and %s semantically identical", (desktopPath, mobilePath) => {
+    expect(deriveWebDestinationFromPath(mobilePath)).toEqual(
+      deriveWebDestinationFromPath(desktopPath),
+    );
+  });
+
+  it.each(["/unknown", "/m/unknown", "/operator/platform/extra", "/c"])(
+    "rejects unknown route %s",
+    (path) => {
+      expect(deriveWebDestinationFromPath(path)).toBeNull();
+    },
+  );
+
+  it("lets the durable view outrank compatibility tab state", () => {
+    expect(deriveWebDestinationFromAppRoute({
+      page: "community",
+      view: "community_members",
+      settingsPage: "profile",
+      communitySlug: "polynet",
+      communityTab: "chat",
+    })).toEqual({ kind: "community_members", slug: "polynet" });
+  });
+
+  it("selects navigation only for an actual community destination", () => {
+    expect(webDestinationHasCommunityNavSelection({
+      kind: "community_home",
+      slug: "polynet",
+    })).toBe(false);
+    expect(webDestinationHasCommunityNavSelection({
+      kind: "community_members",
+      slug: "polynet",
+    })).toBe(false);
+    expect(webDestinationHasCommunityNavSelection({
+      kind: "community_chat",
+      slug: "polynet",
+      channelSlug: null,
+    })).toBe(true);
+    expect(webDestinationHasCommunityNavSelection({
+      kind: "community_resources",
+      slug: "polynet",
+      moduleId: null,
+    })).toBe(true);
+    expect(webDestinationHasCommunityNavSelection({
+      kind: "community_events",
+      slug: "polynet",
+    })).toBe(true);
+  });
+
+  it("keeps public completion tokens in the semantic destination", () => {
+    expect(
+      deriveWebDestinationFromPath("/m/checkout/success?session_id=cs_123"),
+    ).toEqual({ kind: "checkout_success", sessionId: "cs_123" });
+    expect(deriveWebDestinationFromPath("/m/claim?token=claim_123")).toEqual({
+      kind: "claim",
+      token: "claim_123",
+    });
   });
 });

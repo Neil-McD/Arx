@@ -109,6 +109,7 @@ import {
   buildCommunityTabPath,
   buildSettingsIndexPath,
   buildSettingsPath,
+  deriveWebDestination,
 } from "../../../shared/webAppRouteState";
 import { shouldHydrateWebRouteAccountSetup } from "../../../shared/webRouteAccess";
 import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
@@ -1845,12 +1846,29 @@ export default function App() {
   });
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
+  const webDestination = deriveWebDestination({
+    publicRoute: shellPublicRoute,
+    appRoute: {
+      page: activePage,
+      view: activeView,
+      settingsPage,
+      ...(activePage === "settings" && mobileSettingsView === "index"
+        ? { settingsIndex: true }
+        : {}),
+      communitySlug: selectedActiveCommunitySlug,
+      communityTab,
+      communityExperienceMode,
+      communityChannelSlug,
+      communityResourceModuleId,
+      communitySettingsPane,
+      docsSlug: selectedProductDocSlug,
+      operatorTab: activeOperatorTab,
+    },
+  });
   const shellProjection = buildWebShellProjection({
     publicRouteKind: shellPublicRoute.kind,
     shellVariant,
-    activePage,
-    activeView,
-    communityTab,
+    destination: webDestination,
     mobileRootPage,
     mobileSettingsView,
     isPublicCommunityFunnel,
@@ -2925,6 +2943,7 @@ export default function App() {
     forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
     showMobileSettingsIndex,
     activePage,
+    destination: webDestination,
     activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
     activeCommunityAttentionCount,
     activeCommunityMemberFaces:
@@ -2954,7 +2973,6 @@ export default function App() {
     hasBackTargetSnapshot:
       !isPublicFunnelPreviewRoute && Boolean(backTargetSnapshot),
     backTargetLabel: effectiveBackTargetLabel ?? null,
-    activeView,
     directMessagesButton,
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromSettings,

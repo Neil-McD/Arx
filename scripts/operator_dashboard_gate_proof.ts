@@ -65,7 +65,7 @@ if (originalWindow === undefined) {
 const operatorProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "standard",
-  activePage: "operator",
+  destination: { kind: "operator", tab: "platform" },
   mobileSettingsView: "detail",
   isPublicCommunityFunnel: false,
 });

@@ -6,7 +6,6 @@ import type {
 } from "react";
 import type {
   AppPage,
-  AppView,
   CommunityTab,
   SettingsGroup,
   SettingsPage,
@@ -15,6 +14,7 @@ import type {
   CommunityPresenceFace,
   CommunityShellCommunity,
 } from "../../../../shared/communityTypes";
+import type { WebDestination } from "../../../../shared/webAppRouteState";
 
 export type MobileOverlay =
   | "community_selector"
@@ -53,6 +53,7 @@ export type WebCommunityShellProps = {
   setMobileOverlay: (value: MobileOverlay) => void;
   onSelectMobileRootPage: (page: MobileRootPage) => void;
   activeCommunity: CommunityLike | null;
+  destination: WebDestination;
   communityTab: CommunityTab;
   communityTabIndicators: Partial<Record<CommunityTab, boolean>>;
   communityChannels: Array<{
@@ -103,7 +104,6 @@ export type WebCommunityShellProps = {
   communityRailAttentionById: Record<string, boolean>;
   isLoadingCommunities: boolean;
   selectedActiveCommunitySlug: string | null;
-  activePage: AppPage;
   onSelectActiveCommunity: (community: CommunityLike) => boolean;
   onOpenCommunityChat: (slug: string) => void;
   onOpenCommunityHome: (slug: string) => void;
@@ -118,7 +118,6 @@ export type WebCommunityShellProps = {
   onOpenCommunityCreateCta: () => void;
   communityCreateCtaLabel: string;
   communityCreateCtaTitle: string;
-  activeView: AppView;
   onOpenGlobalSettings: () => void;
 };
 

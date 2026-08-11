@@ -1,4 +1,5 @@
 import { CommunityNav } from "../../../../shared/CommunityNav";
+import { webDestinationHasCommunityNavSelection } from "../../../../shared/webAppRouteState";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebCommunityNavSurfaceProps = {
@@ -12,7 +13,8 @@ export function WebCommunityNavSurface({
 }: WebCommunityNavSurfaceProps) {
   const isMobileHome = presentation === "mobile-home";
   const hasDestinationSelection =
-    !isMobileHome && communityShell.activeView !== "community_members";
+    !isMobileHome &&
+    webDestinationHasCommunityNavSelection(communityShell.destination);
 
   return (
     <CommunityNav
