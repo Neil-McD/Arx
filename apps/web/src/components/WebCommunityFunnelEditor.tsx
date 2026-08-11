@@ -144,16 +144,15 @@ function resolveFunnelSlotStatus(params: {
   activeSlot: CommunityFunnelSlot;
   variant: CommunityFunnelVariantConfig | null;
 }): string | null {
-  if (params.slot === params.activeSlot) return "Live";
-  if (params.slot === "default") return null;
-  if (!params.variant?.draft_document_v1) return "Empty";
-  if (
-    params.variant.published_document_v1 &&
-    params.variant.published_draft_revision === params.variant.draft_revision
-  ) {
-    return "Published";
+  if (params.slot === "default") {
+    return params.slot === params.activeSlot ? "Live" : null;
   }
-  return "Draft";
+  if (!params.variant?.draft_document_v1) return "Empty";
+  const isPublishedCurrentDraft =
+    params.variant.published_document_v1 &&
+    params.variant.published_draft_revision === params.variant.draft_revision;
+  if (!isPublishedCurrentDraft) return "Draft";
+  return params.slot === params.activeSlot ? "Live" : "Published";
 }
 
 function normalizeMessages(
@@ -852,6 +851,13 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const visibleMessages = messages.filter(
     (message) => message.role !== "system",
   );
+  const shouldShowPublish =
+    selectedCustomSlot !== null &&
+    Boolean(document) &&
+    !isPublishedCurrentDraft;
+  const shouldShowActivate =
+    !selectedSlotIsLive &&
+    (selectedSlot === "default" || isPublishedCurrentDraft);
 
   return (
     <section className="funnel-builder" aria-labelledby="funnel-builder-title">
@@ -873,8 +879,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           </div>
           <p>
             {selectedSlot === "default"
-              ? "Your reliable fallback, generated from canonical community information."
-              : "Describe the page you want. The agent revises this private draft, never the live funnel."}
+              ? "Built automatically from your community profile. Always available."
+              : "Describe what you want. Changes stay private until you publish."}
           </p>
         </div>
         <div className="funnel-builder-header-actions">
@@ -885,10 +891,11 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           >
             Open full preview
           </button>
-          {selectedCustomSlot ? (
-          <button
-            type="button"
-            onClick={() => void handlePublish()}
+          {shouldShowPublish ? (
+            <button
+              type="button"
+              className="is-primary"
+              onClick={() => void handlePublish()}
               disabled={
                 !document ||
                 isBusy ||
@@ -900,17 +907,11 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                   ? "Save the Video Sales Letter before publishing."
                   : "Publish the current draft"
               }
-          >
-            {isPublishing
-              ? "Publishing…"
-              : isPublishedCurrentDraft
-                ? "Published"
-                  : "Publish changes"}
+            >
+              {isPublishing ? "Publishing…" : "Publish changes"}
             </button>
           ) : null}
-          {selectedSlotIsLive ? (
-            <span className="funnel-builder-live-state">Live</span>
-          ) : (
+          {shouldShowActivate ? (
             <button
               type="button"
               className="is-primary"
@@ -929,17 +930,17 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               }
             >
               {isActivating ? "Making live…" : "Make live"}
-          </button>
-          )}
+            </button>
+          ) : null}
         </div>
       </header>
 
-        <div
+      <div
         id={platformTabPanelId("community-funnel", selectedSlot)}
         role="tabpanel"
         aria-labelledby={platformTabId("community-funnel", selectedSlot)}
-        className="funnel-builder-layout"
-        >
+        className={`funnel-builder-layout is-${selectedSlot === "default" ? "default" : "custom"}`}
+      >
         <div
           className={`funnel-builder-preview${selectedSlot === "default" || document ? "" : " is-empty"}`}
           aria-label={`${resolveFunnelSlotName(selectedSlot)} preview`}
@@ -971,215 +972,189 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           )}
         </div>
 
-        <aside
-          className={`funnel-builder-conversation${selectedSlot === "default" ? " is-readonly" : ""}`}
-          aria-label={
-            selectedSlot === "default"
-              ? "Default funnel information"
-              : "Funnel composer conversation"
-          }
-        >
-          {selectedSlot === "default" ? (
-            <div className="funnel-builder-empty funnel-builder-default-guidance">
-              <Sparkles aria-hidden="true" />
-              <strong>The default funnel stays reliable.</strong>
-              <span>
-                It uses your community profile and always remains available.
-                Choose Funnel 1 or Funnel 2 to build a custom version.
-              </span>
-            </div>
-          ) : (
-            <>
-          <div
-            className="funnel-builder-messages"
-            ref={messagesRef}
-            onScroll={handleMessagesScroll}
+        {selectedCustomSlot ? (
+          <aside
+            className="funnel-builder-conversation"
+            aria-label="Funnel composer conversation"
           >
-            {isPreparing ? (
-              <div className="funnel-builder-empty">
-                <LoaderCircle className="is-spinning" />
-                Opening composer…
-              </div>
-            ) : visibleMessages.length === 0 ? (
-              <div className="funnel-builder-empty">
-                <Sparkles aria-hidden="true" />
-                <strong>Build from a conversation.</strong>
-                <span>
-                      Tell the agent who this community is for, the
-                      transformation, offer, proof, and desired visual mood.
-                </span>
-              </div>
-            ) : (
-              visibleMessages.map((message) => (
-                <article
-                  key={message.id}
-                  className={`funnel-builder-message is-${message.role}`}
-                >
-                      <span>
-                        {message.role === "user" ? "You" : "Composer"}
-                      </span>
-                  {message.role === "assistant" ? (
-                    <div className="funnel-builder-message-content message-text">
-                      {renderMarkdown(
-                        extractTextFromContentJson(message.content_json),
-                      )}
-                    </div>
-                  ) : (
-                        <p>
-                          {extractTextFromContentJson(message.content_json)}
-                        </p>
-                  )}
-                </article>
-              ))
-            )}
-            <WebAgentLiveTurn
-              events={runtimeEvents}
-              streamedText={streamedText}
-              isActive={turnIsActive || isAwaitingStream}
-              session={props.session}
-              renderMarkdown={renderMarkdown}
-              fallbackLabel="Understanding your direction"
-              variant="funnel"
-            />
-          </div>
-
-          {referenceImage ? (
-            <div className="funnel-builder-reference">
-                  <img
-                    src={referenceImage.previewUrl}
-                    alt="Reference preview"
-                  />
-              <span>{referenceImage.file.name}</span>
-              <button
-                type="button"
-                onClick={removeReferenceImage}
-                aria-label="Remove reference image"
-              >
-                <X />
-              </button>
-            </div>
-          ) : null}
-          <form
-            className="funnel-builder-vsl"
-            onSubmit={(event) => {
-              event.preventDefault();
-              void handleSaveVsl(vslInput);
-            }}
-          >
-            <label htmlFor="community-funnel-vsl-url">
-                  <span>Video Sales Letter</span>
-              <small>YouTube, Vimeo, Loom, or Wistia</small>
-            </label>
-            <div className="funnel-builder-vsl-control">
-              <Link2 aria-hidden="true" />
-              <input
-                id="community-funnel-vsl-url"
-                type="url"
-                inputMode="url"
-                value={vslInput}
-                maxLength={2_000}
-                placeholder="Paste the VSL link…"
-                onChange={(event) => {
-                  setVslInput(event.target.value);
-                  setVslError(null);
-                }}
-                disabled={isBusy}
+            <div
+              className="funnel-builder-messages"
+              ref={messagesRef}
+              onScroll={handleMessagesScroll}
+            >
+              {isPreparing ? (
+                <div className="funnel-builder-empty">
+                  <LoaderCircle className="is-spinning" />
+                  Opening composer…
+                </div>
+              ) : visibleMessages.length === 0 ? (
+                <div className="funnel-builder-empty">
+                  <Sparkles aria-hidden="true" />
+                  <strong>Build from a conversation.</strong>
+                  <span>
+                    Tell the agent who this community is for, the
+                    transformation, offer, proof, and desired visual mood.
+                  </span>
+                </div>
+              ) : (
+                visibleMessages.map((message) => (
+                  <article
+                    key={message.id}
+                    className={`funnel-builder-message is-${message.role}`}
+                  >
+                    <span>{message.role === "user" ? "You" : "Composer"}</span>
+                    {message.role === "assistant" ? (
+                      <div className="funnel-builder-message-content message-text">
+                        {renderMarkdown(
+                          extractTextFromContentJson(message.content_json),
+                        )}
+                      </div>
+                    ) : (
+                      <p>{extractTextFromContentJson(message.content_json)}</p>
+                    )}
+                  </article>
+                ))
+              )}
+              <WebAgentLiveTurn
+                events={runtimeEvents}
+                streamedText={streamedText}
+                isActive={turnIsActive || isAwaitingStream}
+                session={props.session}
+                renderMarkdown={renderMarkdown}
+                fallbackLabel="Understanding your direction"
+                variant="funnel"
               />
-              <button
-                type="submit"
-                    disabled={isBusy || !vslInput.trim() || !isVslInputDirty}
-              >
-                    {isSavingVsl ? "Saving…" : savedVslUrl ? "Replace" : "Save"}
-              </button>
-              {savedVslUrl ? (
+            </div>
+
+            {referenceImage ? (
+              <div className="funnel-builder-reference">
+                <img src={referenceImage.previewUrl} alt="Reference preview" />
+                <span>{referenceImage.file.name}</span>
                 <button
                   type="button"
-                  className="funnel-builder-vsl-remove"
-                  onClick={() => void handleSaveVsl(null)}
-                      aria-label="Remove Video Sales Letter"
-                      title="Remove Video Sales Letter"
-                  disabled={isBusy}
+                  onClick={removeReferenceImage}
+                  aria-label="Remove reference image"
                 >
-                  <X aria-hidden="true" />
+                  <X />
                 </button>
-              ) : null}
-            </div>
-            {vslError ? (
-              <span className="funnel-builder-vsl-error">{vslError}</span>
-            ) : isVslInputDirty ? (
-              <span className="funnel-builder-vsl-status">
-                Save to update this private draft.
-              </span>
-            ) : savedVslUrl ? (
-              <span className="funnel-builder-vsl-status">
-                Saved to this private draft.
-              </span>
+              </div>
             ) : null}
-          </form>
-          {localError || inferenceIssue ? (
-            <div className="auth-error">
-              {localError ?? formatInferenceIssue(inferenceIssue)}
-            </div>
-          ) : null}
-          <form className="funnel-builder-composer" onSubmit={handleSubmit}>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/png,image/jpeg,image/webp"
-              hidden
-              onChange={selectReferenceImage}
-            />
-            <button
-              type="button"
-              onClick={() => fileInputRef.current?.click()}
-              aria-label="Add reference image"
-              title="Add reference image"
-              disabled={isBusy}
-            >
-              <ImagePlus aria-hidden="true" />
-            </button>
-            <textarea
-              rows={3}
-              value={input}
-              maxLength={4_000}
-              placeholder="Describe the funnel or ask for a revision…"
-              onChange={(event) => setInput(event.target.value)}
-              disabled={isBusy}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" && !event.shiftKey) {
-                  event.preventDefault();
-                  event.currentTarget.form?.requestSubmit();
-                }
+            <form
+              className="funnel-builder-vsl"
+              onSubmit={(event) => {
+                event.preventDefault();
+                void handleSaveVsl(vslInput);
               }}
-            />
-            {turnIsActive ? (
+            >
+              <label htmlFor="community-funnel-vsl-url">
+                <span>Video Sales Letter</span>
+                <small>YouTube, Vimeo, Loom, or Wistia</small>
+              </label>
+              <div className="funnel-builder-vsl-control">
+                <Link2 aria-hidden="true" />
+                <input
+                  id="community-funnel-vsl-url"
+                  type="url"
+                  inputMode="url"
+                  value={vslInput}
+                  maxLength={2_000}
+                  placeholder="Paste the VSL link…"
+                  onChange={(event) => {
+                    setVslInput(event.target.value);
+                    setVslError(null);
+                  }}
+                  disabled={isBusy}
+                />
+                <button
+                  type="submit"
+                  disabled={isBusy || !vslInput.trim() || !isVslInputDirty}
+                >
+                  {isSavingVsl ? "Saving…" : savedVslUrl ? "Replace" : "Save"}
+                </button>
+                {savedVslUrl ? (
+                  <button
+                    type="button"
+                    className="funnel-builder-vsl-remove"
+                    onClick={() => void handleSaveVsl(null)}
+                    aria-label="Remove Video Sales Letter"
+                    title="Remove Video Sales Letter"
+                    disabled={isBusy}
+                  >
+                    <X aria-hidden="true" />
+                  </button>
+                ) : null}
+              </div>
+              {vslError ? (
+                <span className="funnel-builder-vsl-error">{vslError}</span>
+              ) : isVslInputDirty ? (
+                <span className="funnel-builder-vsl-status">
+                  Save to update this private draft.
+                </span>
+              ) : savedVslUrl ? (
+                <span className="funnel-builder-vsl-status">
+                  Saved to this private draft.
+                </span>
+              ) : null}
+            </form>
+            {localError || inferenceIssue ? (
+              <div className="auth-error">
+                {localError ?? formatInferenceIssue(inferenceIssue)}
+              </div>
+            ) : null}
+            <form className="funnel-builder-composer" onSubmit={handleSubmit}>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/png,image/jpeg,image/webp"
+                hidden
+                onChange={selectReferenceImage}
+              />
               <button
                 type="button"
-                className="funnel-builder-send"
-                onClick={() => stopStreamingTurn(threadKey)}
-                aria-label="Stop"
-                title="Stop"
+                onClick={() => fileInputRef.current?.click()}
+                aria-label="Add reference image"
+                title="Add reference image"
+                disabled={isBusy}
               >
-                <Square aria-hidden="true" />
+                <ImagePlus aria-hidden="true" />
               </button>
-            ) : (
-              <button
-                type="submit"
-                className="funnel-builder-send"
-                aria-label="Send"
-                disabled={isBusy || (!input.trim() && !referenceImage)}
-              >
-                    {isBusy ? (
-                      <LoaderCircle className="is-spinning" />
-                    ) : (
-                      <Send />
-                    )}
-              </button>
-            )}
-          </form>
-            </>
-          )}
-        </aside>
+              <textarea
+                rows={3}
+                value={input}
+                maxLength={4_000}
+                placeholder="Describe the funnel or ask for a revision…"
+                onChange={(event) => setInput(event.target.value)}
+                disabled={isBusy}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" && !event.shiftKey) {
+                    event.preventDefault();
+                    event.currentTarget.form?.requestSubmit();
+                  }
+                }}
+              />
+              {turnIsActive ? (
+                <button
+                  type="button"
+                  className="funnel-builder-send"
+                  onClick={() => stopStreamingTurn(threadKey)}
+                  aria-label="Stop"
+                  title="Stop"
+                >
+                  <Square aria-hidden="true" />
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  className="funnel-builder-send"
+                  aria-label="Send"
+                  disabled={isBusy || (!input.trim() && !referenceImage)}
+                >
+                  {isBusy ? <LoaderCircle className="is-spinning" /> : <Send />}
+                </button>
+              )}
+            </form>
+          </aside>
+        ) : null}
       </div>
     </section>
   );
