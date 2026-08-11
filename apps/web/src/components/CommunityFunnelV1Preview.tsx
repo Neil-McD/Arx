@@ -80,7 +80,7 @@ export function CommunityFunnelV1Preview(props: {
 
   if (!document) {
     return (
-      <div className="funnel-v1-preview is-dark is-editorial accent-blue density-balanced radius-soft">
+      <div className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft">
         <main className="funnel-v1-preview-main funnel-v1-preview-empty">
           <Sparkles aria-hidden="true" />
           <strong>Nothing to preview yet.</strong>
@@ -217,7 +217,6 @@ export function CommunityFunnelV1Preview(props: {
     <div
       className={[
         "funnel-v1-preview",
-        `is-${document.theme.appearance}`,
         `is-${document.theme.character}`,
         `accent-${document.theme.accent}`,
         `density-${document.theme.density}`,

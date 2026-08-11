@@ -1,7 +1,13 @@
 import { v } from "convex/values";
 
 export const communityFunnelThemeV1Validator = v.object({
-  appearance: v.union(v.literal("light"), v.literal("dark")),
+  // Legacy light/dark snapshots remain schema-readable until their next
+  // validated write canonicalizes them to inherit.
+  appearance: v.union(
+    v.literal("inherit"),
+    v.literal("light"),
+    v.literal("dark"),
+  ),
   character: v.union(
     v.literal("minimal"),
     v.literal("editorial"),

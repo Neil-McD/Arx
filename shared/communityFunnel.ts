@@ -26,7 +26,7 @@ export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConf
   };
 
 export const DEFAULT_COMMUNITY_FUNNEL_THEME: CommunityFunnelThemeV1 = {
-  appearance: "dark",
+  appearance: "inherit",
   character: "editorial",
   accent: "blue",
   density: "balanced",
@@ -216,11 +216,9 @@ function normalizeTheme(raw: unknown): CommunityFunnelThemeV1 {
       ? (raw as Record<string, unknown>)
       : {};
   return {
-    appearance: normalizeEnum(
-      value.appearance,
-      ["light", "dark"],
-      DEFAULT_COMMUNITY_FUNNEL_THEME.appearance,
-    ),
+    // Polynet owns appearance. Accepting a legacy light/dark value here is
+    // intentionally a read-compatibility behavior, never a second authority.
+    appearance: "inherit",
     character: normalizeEnum(
       value.character,
       ["minimal", "editorial", "cinematic"],

@@ -327,7 +327,7 @@ const CALL_OPERATION_INPUT_SCHEMA: PlatformOperationJsonSchema = {
             "radius",
           ],
           properties: {
-            appearance: { type: "string", enum: ["light", "dark"] },
+            appearance: { type: "string", enum: ["inherit"] },
             character: {
               type: "string",
               enum: ["minimal", "editorial", "cinematic"],

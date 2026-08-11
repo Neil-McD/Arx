@@ -35,6 +35,7 @@ const previewController = read(
 );
 const gateway = read("shared/cloudCommunityFunnelGateway.ts");
 const documentContract = read("shared/communityFunnel.ts");
+const funnelValidators = read("convex/communityFunnelValidators.ts");
 const invocationSurface = read("shared/runtimeInvocationSurface.ts");
 const contextIntegrity = read("shared/runtimeContextIntegrity.ts");
 const runtimeResolution = read("convex/runtimeTurnResolution.ts");
@@ -242,7 +243,7 @@ assert.match(
 );
 assert.match(
   assembledFunnelPrompt.text,
-  /Do not default every funnel to a dark theme or rose accent/,
+  /Appearance always inherits the manager's canonical Polynet theme/,
 );
 assert.match(
   assembledFunnelPrompt.text,
@@ -285,6 +286,17 @@ assert.ok(
 assert.ok(
   funnelCallInput.properties?.document,
   "polynet_call must expose the bounded Funnel V1 document inside operation input",
+);
+const funnelDocumentInput = funnelCallInput.properties?.document as {
+  properties?: Record<string, unknown>;
+};
+const funnelThemeInput = funnelDocumentInput.properties?.theme as {
+  properties?: Record<string, unknown>;
+};
+assert.deepEqual(
+  funnelThemeInput.properties?.appearance,
+  { type: "string", enum: ["inherit"] },
+  "the funnel agent must inherit Polynet appearance instead of selecting a second theme",
 );
 assert.equal(
   POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call.inputSchema.properties
@@ -352,17 +364,24 @@ assert.match(preview, /disabled=\{isPreview \|\| props\.primaryActionDisabled\}/
 assert.match(preview, /onPrimaryAction/);
 assert.match(
   documentContract,
-  /DEFAULT_COMMUNITY_FUNNEL_THEME[\s\S]*accent: "blue"/,
+  /DEFAULT_COMMUNITY_FUNNEL_THEME[\s\S]*appearance: "inherit"[\s\S]*accent: "blue"/,
+);
+assert.match(
+  funnelValidators,
+  /appearance: v\.union\([\s\S]*v\.literal\("inherit"\)[\s\S]*v\.literal\("light"\)[\s\S]*v\.literal\("dark"\)/,
+  "legacy published snapshots must remain schema-readable while canonical writes inherit",
 );
 assert.match(
   previewStyles,
-  /--funnel-v1-accent: #72a7ff;[\s\S]*color-mix\(in srgb, var\(--funnel-v1-accent\) 9%, transparent\)/,
+  /--funnel-v1-accent: var\(--accent-attention\);[\s\S]*--funnel-v1-page: var\(--surface-app\);/,
 );
 assert.match(
   previewStyles,
   /box-shadow:[\s\S]*color-mix\(in srgb, var\(--funnel-v1-accent\) 72%, transparent\)/,
 );
 assert.doesNotMatch(previewStyles, /rgba\(255,\s*59,\s*120/);
+assert.doesNotMatch(preview, /`is-\$\{document\.theme\.appearance\}`/);
+assert.doesNotMatch(previewStyles, /\.funnel-v1-preview\.is-light/);
 
 console.log(
   "PASS: Funnel V1 is an AI-assisted bounded draft composer with explicit manager-only revision-safe publication; preview stays disabled, published snapshots power live V1, and unpublished communities retain V0.",

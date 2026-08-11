@@ -23,10 +23,10 @@
   min-width: 44px;
   min-height: 44px;
   padding: 0 14px 0 12px;
-  border: 1px solid rgba(255, 255, 255, 0.16);
+  border: 1px solid var(--stroke-default);
   border-radius: 11px;
-  background: rgba(17, 17, 19, 0.82);
-  color: #f7f5f2;
+  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
+  color: var(--text-primary);
   font: inherit;
   font-size: 13px;
   font-weight: 650;
@@ -40,12 +40,12 @@
 }
 
 .funnel-preview-back:hover {
-  border-color: rgba(255, 255, 255, 0.26);
-  background: rgba(28, 28, 31, 0.9);
+  border-color: var(--stroke-strong);
+  background: color-mix(in srgb, var(--surface-card-hover) 94%, transparent);
 }
 
 .funnel-preview-back:focus-visible {
-  outline: 2px solid #72a7ff;
+  outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
 }
 
@@ -61,11 +61,12 @@
 }
 
 .funnel-v1-preview {
-  --funnel-v1-accent: #72a7ff;
-  --funnel-v1-text: #f7f5f2;
-  --funnel-v1-muted: #aaa7a4;
-  --funnel-v1-divider: #28282d;
-  --funnel-v1-page: #09090b;
+  --funnel-v1-accent: var(--accent-attention);
+  --funnel-v1-on-accent: var(--text-on-attention);
+  --funnel-v1-text: var(--text-primary);
+  --funnel-v1-muted: var(--text-secondary);
+  --funnel-v1-divider: var(--stroke-divider-accent);
+  --funnel-v1-page: var(--surface-app);
   --funnel-v1-radius: 14px;
   --funnel-v1-section-gap: 38px;
   min-height: 100%;
@@ -95,33 +96,41 @@
   }
 }
 
-.funnel-v1-preview.is-light {
-  --funnel-v1-text: #171719;
-  --funnel-v1-muted: #626268;
-  --funnel-v1-divider: #dedee2;
-  --funnel-v1-page: #f7f7f5;
-  background:
-    radial-gradient(
-      circle at 50% 19%,
-      color-mix(in srgb, var(--funnel-v1-accent) 9%, transparent),
-      transparent 25rem
-    ),
-    var(--funnel-v1-page);
-}
 .funnel-v1-preview.accent-blue {
-  --funnel-v1-accent: #72a7ff;
+  --funnel-v1-accent: var(--accent-attention);
+  --funnel-v1-on-accent: var(--text-on-attention);
 }
 .funnel-v1-preview.accent-violet {
-  --funnel-v1-accent: #9b87ff;
+  --funnel-v1-accent: #a78bfa;
+  --funnel-v1-on-accent: #171719;
 }
 .funnel-v1-preview.accent-rose {
-  --funnel-v1-accent: #ff3b78;
+  --funnel-v1-accent: #d66a8a;
+  --funnel-v1-on-accent: #171719;
 }
 .funnel-v1-preview.accent-amber {
-  --funnel-v1-accent: #e7a93d;
+  --funnel-v1-accent: #d6a84d;
+  --funnel-v1-on-accent: #171719;
 }
 .funnel-v1-preview.accent-emerald {
   --funnel-v1-accent: #35b98a;
+  --funnel-v1-on-accent: #171719;
+}
+:root[data-theme="light"] .funnel-v1-preview.accent-violet {
+  --funnel-v1-accent: #6d4aff;
+  --funnel-v1-on-accent: #ffffff;
+}
+:root[data-theme="light"] .funnel-v1-preview.accent-rose {
+  --funnel-v1-accent: #b42358;
+  --funnel-v1-on-accent: #ffffff;
+}
+:root[data-theme="light"] .funnel-v1-preview.accent-amber {
+  --funnel-v1-accent: #8a5a00;
+  --funnel-v1-on-accent: #ffffff;
+}
+:root[data-theme="light"] .funnel-v1-preview.accent-emerald {
+  --funnel-v1-accent: #147a4b;
+  --funnel-v1-on-accent: #ffffff;
 }
 .funnel-v1-preview.radius-subtle {
   --funnel-v1-radius: 8px;
@@ -195,9 +204,10 @@
   position: relative;
   aspect-ratio: 16 / 9;
   overflow: hidden;
-  border: 1px solid color-mix(in srgb, var(--funnel-v1-accent) 32%, #26262b);
+  border: 1px solid
+    color-mix(in srgb, var(--funnel-v1-accent) 32%, var(--funnel-v1-divider));
   border-radius: var(--funnel-v1-radius);
-  background: #111114;
+  background: var(--surface-card);
   box-shadow: 0 26px 85px -42px
     color-mix(in srgb, var(--funnel-v1-accent) 72%, transparent);
 }
@@ -226,7 +236,7 @@
   border: 0;
   border-radius: calc(var(--funnel-v1-radius) * 0.65);
   background: var(--funnel-v1-accent);
-  color: white;
+  color: var(--funnel-v1-on-accent);
   font: inherit;
   font-size: 18px;
   font-weight: 650;
@@ -358,7 +368,7 @@
 .funnel-v1-facepile span {
   display: grid;
   place-items: center;
-  background: #232328;
+  background: var(--surface-card);
   color: var(--funnel-v1-text);
   font-size: 11px;
 }
@@ -403,10 +413,10 @@
 }
 .funnel-v1-preview-error {
   margin: 0 0 18px;
-  border: 1px solid rgba(226, 75, 74, 0.45);
+  border: 1px solid color-mix(in srgb, var(--accent-error) 45%, transparent);
   border-radius: 8px;
   padding: 12px 14px;
-  color: #f1a2a2;
+  color: var(--accent-error);
 }
 
 .funnel-v1-preview-empty {
