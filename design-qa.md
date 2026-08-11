@@ -166,3 +166,67 @@ Blocked for the same reason. The implementation screenshot needed to compare car
 - [ ] Capture and compare the exact implementation in Chrome after an authorized release.
 
 final result: blocked
+
+## Resources course simplification production addendum
+
+### Evidence
+
+- Source visual truth, catalog: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_CoynQW/Screenshot 2026-08-10 at 10.19.46 PM.png`
+- Source visual truth, selected course: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_eNy8LY/Screenshot 2026-08-10 at 10.20.37 PM.png`
+- Browser-rendered catalog, dark: `/tmp/polynet-resources-design-qa/resources-production-dark.png`
+- Browser-rendered catalog hover and menu: `/tmp/polynet-resources-design-qa/resources-production-hover.png` and `/tmp/polynet-resources-design-qa/resources-production-menu-open.png`
+- Browser-rendered selected course, dark: `/tmp/polynet-resources-design-qa/resources-production-course.png`
+- Browser-rendered catalog and selected course, light: `/tmp/polynet-resources-design-qa/resources-production-light-hydrated.png` and `/tmp/polynet-resources-design-qa/resources-production-light-course.png`
+- Full-view comparison evidence: `/tmp/polynet-resources-design-qa/catalog-comparison.png` and `/tmp/polynet-resources-design-qa/course-comparison.png`
+- Production identity: `https://www.polynet.ai/version.json` returned build `ed41c615e1b27146cd4f67e6cbacd06cb048e118`.
+- Viewport and density: implementation captured at `1243 x 707` CSS pixels and `1243 x 707` image pixels. Chrome reported DPR 2, while the browser screenshot API normalized output to one image pixel per CSS pixel. The catalog source is `2078 x 996` and was normalized to `1243 x 596`; the selected-course source is `2388 x 1282` and was normalized to `1243 x 667` with Lanczos scaling. The source crops exclude parts of the Polynet shell, so comparison is component-level rather than falsely pixel-exact across browser chrome.
+- State: authenticated owner/manager, production, dark and light themes, Resources catalog, card hover, card action menu, selected course, and member preview mode.
+
+### Full-view comparison
+
+The catalog now has one primary object and one primary creation affordance: the real course card and a same-track, same-height add-course card. The top header is reduced to Resources context plus preview mode; source intake, the count badge, and duplicate add/edit/status actions are absent. The selected-course view preserves Polynet's shell while matching the reference's left lesson sequence and right lesson content hierarchy.
+
+### Focused-region comparison
+
+The catalog comparison verifies card/add-card parity, dashed creation treatment, real cover imagery, and removal of header action clutter. The selected-course comparison verifies the narrower lesson rail, high-salience selected row, title/media hierarchy, and retained add-lesson affordance. Separate hover and open-menu captures verify that course management is hidden until intent and that the menu contains only `Edit course`, `Move to draft`, and `Delete` for the one-course state.
+
+### Findings
+
+- No actionable P0, P1, or P2 findings remain.
+- Residual test gap: the Chrome extension retained the user's `1243 x 707` viewport when a temporary narrow-viewport override was requested, so this production pass does not claim a separate responsive screenshot. Existing responsive CSS, TypeScript, production build, and Resources contract proofs passed; the supplied visual targets are desktop-only.
+
+### Required fidelity surfaces
+
+- Fonts and typography: IBM Plex Sans, course-card hierarchy, lesson labels, small metadata, wrapping, and optical weights are consistent across dark and light production states.
+- Spacing and layout rhythm: the two-column catalog grid, equal card heights, 20px peer gap, reduced header density, lesson-rail width, selected-row padding, and reader balance match the intended simple course model without clipping at the verified viewport.
+- Colors and visual tokens: dark and light surfaces use existing Polynet tokens. The selected lesson reuses the canonical `--surface-selected`, `--stroke-selected`, and `--text-selected` contract rather than introducing a Resources-only accent.
+- Image quality and asset fidelity: the production course uses its real framed community cover and real YouTube media. No placeholder artwork, generated substitute, custom SVG art, or CSS illustration was introduced.
+- Copy and content: `Add course`, lesson counts, course description, draft/live language, add-lesson copy, and preview labels are concise and coherent. The removed `Add sources` action is no longer promised by builder copy.
+- Icons and affordances: Lucide controls have consistent stroke weight and alignment. The overflow menu appears on hover/focus; touch CSS keeps management controls visible where hover does not exist.
+
+### Primary interactions and console
+
+- Hover revealed the course overflow control; the one-course menu exposed only Edit course, Move to draft, and Delete.
+- Opening the course selected the first lesson and preserved all three lesson entries plus Add lesson.
+- Preview mode hid the add-course card and manager menu, then restored them when switched off.
+- Light theme rendered both catalog and selected-course states correctly; the user's dark theme was restored afterward.
+- Final production state was left on `/c/polynet/resources`, dark theme, preview off.
+- Chrome console was checked after catalog and selected-course interactions; no warnings or errors were present.
+
+### Comparison history
+
+1. The earlier Resources presentation QA was blocked because the implementation had not been browser-rendered.
+2. The approved simplification removed source intake and duplicated header controls, added the peer add-course card, consolidated management into the course-card overflow, removed redundant top/bottom ordering accelerators, and applied canonical selection tokens to lessons.
+3. Production build `ed41c615e1b27146cd4f67e6cbacd06cb048e118` was captured in authenticated Chrome and compared in combined catalog and selected-course evidence. No post-deployment P0, P1, or P2 correction was required.
+
+### Implementation checklist
+
+- [x] Replace the header add-course control with a same-sized catalog card.
+- [x] Remove primary Resources source intake and stale builder copy.
+- [x] Move edit, status, and delete management into the hover/focus overflow.
+- [x] Keep canonical source lineage and existing-source recovery paths intact.
+- [x] Reuse canonical selected-navigation tokens for lesson rows.
+- [x] Verify manager preview behavior, dark and light themes, hover/menu state, course navigation, console health, and exact production identity.
+- [x] Pass the full release gate and publish through GitHub to the canonical Polynet production project.
+
+final result: passed
