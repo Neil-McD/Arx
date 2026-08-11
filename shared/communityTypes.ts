@@ -5,15 +5,23 @@ import type { CommunityVisualIdentity } from "./communityVisualIdentity";
 export type CommunityEntryPolicy = "open" | "approval" | "paid_subscription";
 export type CommunityBillingPeriod = "monthly" | "annual";
 
-export type CommunityPresenceFace = {
+export type CommunityPublicFace = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
+  avatar_storage_id?: string | null;
   avatar_color?: string | null;
   initials?: string | null;
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
+};
+
+export type CommunityPresenceFace = CommunityPublicFace;
+
+export type CommunityMemberProof = {
+  member_count?: number | null;
+  member_faces_preview?: CommunityPublicFace[] | null;
 };
 
 export type CommunityPresenceSummary = {

@@ -1,6 +1,7 @@
 import type {
   CommunityFunnelConfig,
   CommunityFunnelDocumentV1,
+  CommunityPublicFace,
 } from "../../../../shared/communityTypes";
 import {
   buildCommunityFunnelCopy,
@@ -40,20 +41,9 @@ type PublicCommunityFunnelCommunityLike = {
   memory_note_count?: number | null;
   resource_count?: number | null;
   created_at?: string | null;
-  member_faces_preview?: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-  }> | null;
+  member_faces_preview?: CommunityPublicFace[] | null;
   memory_overview?: unknown;
-  online_faces?: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-    avatar_focus_x?: number | null;
-    avatar_focus_y?: number | null;
-    avatar_zoom?: number | null;
-  }> | null;
+  online_faces?: CommunityPublicFace[] | null;
   host?: {
     display_name: string | null;
     avatar_url: string | null;

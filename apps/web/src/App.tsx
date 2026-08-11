@@ -2202,6 +2202,7 @@ export default function App() {
         hydrateCommunityFunnelEditor,
         previewCommunity: {
           id: activeCommunity?.id ?? "",
+          slug: activeCommunity?.slug ?? null,
           name: activeCommunity?.name ?? "Community",
           avatar_url: activeCommunity?.avatar_url ?? null,
           avatar_focus_x: activeCommunity?.avatar_focus_x ?? null,
@@ -2211,6 +2212,8 @@ export default function App() {
           banner_focus_x: activeCommunity?.banner_focus_x ?? null,
           banner_focus_y: activeCommunity?.banner_focus_y ?? null,
           banner_zoom: activeCommunity?.banner_zoom ?? null,
+          member_count:
+            activeCommunityPresenceSummary?.member_count ?? null,
         },
       },
       canViewActiveCommunityAnalytics,
