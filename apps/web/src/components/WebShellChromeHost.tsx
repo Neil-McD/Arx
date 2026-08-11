@@ -48,8 +48,12 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const showMobileGlobalShell =
     props.communityShell.showMobileGlobalShell &&
     !props.communityShell.forceMobileCommunityRoot;
+  const isMobileDiscoverRoot =
+    props.showMobileAppShell &&
+    showMobileGlobalShell &&
+    props.communityShell.activePage === "discover";
   const shellHeader = props.showMobileAppShell ? (
-    isMobileDedicatedRoot ? null : (
+    isMobileDedicatedRoot || isMobileDiscoverRoot ? null : (
       <WebMobileTopBar
         {...props.mobileTopBarProps}
         hasCommunityRail={showMobileGlobalShell}

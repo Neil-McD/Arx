@@ -175,6 +175,16 @@ assert.match(
   "forced visitor roots should retain the top-left selector while the authenticated rail removes it",
 );
 assert.match(
+  shellHost,
+  /const isMobileDiscoverRoot =[\s\S]*showMobileGlobalShell[\s\S]*activePage === "discover";[\s\S]*isMobileDedicatedRoot \|\| isMobileDiscoverRoot \? null/,
+  "Discover should omit the mobile top bar when the authenticated community rail is present",
+);
+assert.doesNotMatch(
+  topBar,
+  /isDiscover|selectorLabel/,
+  "the shared top bar should not retain a second Discover navigation identity",
+);
+assert.match(
   topBar,
   /isCommunityHome && canOpenCommunitySettings[\s\S]*mobile-topbar-settings[\s\S]*onClick=\{onOpenCommunitySettings\}/,
   "authorized community settings should occupy the top-right home action",
@@ -432,6 +442,11 @@ assert.match(
   indexCss,
   /--mobile-community-rail-width: 60px;[\s\S]*\.mobile-global-shell \{[\s\S]*grid-template-columns: var\(--mobile-community-rail-width\) minmax\(0, 1fr\);[\s\S]*\.mobile-global-shell-surface \{[\s\S]*border: 1px solid var\(--community-shell-stroke\);[\s\S]*border-radius: var\(--community-shell-radius\);/,
   "authenticated global roots should preserve a narrow rail around one inset framed surface",
+);
+assert.match(
+  baseCss,
+  /\.app-root\.mobile-shell\.mobile-global-shell-active \.discover-hero \{[\s\S]*padding-top: 18px;/,
+  "Discover should reclaim the header space after its redundant selector is removed",
 );
 assert.match(
   indexCss,

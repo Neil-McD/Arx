@@ -8426,6 +8426,10 @@ button.settings-primary-action svg {
   gap: 10px;
 }
 
+.app-root.mobile-shell.mobile-global-shell-active .discover-hero {
+  padding-top: 18px;
+}
+
 .app-root.mobile-shell .discover-hero-copy {
   gap: 3px;
 }

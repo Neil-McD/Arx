@@ -73,9 +73,7 @@ export function WebMobileTopBar({
 }: WebMobileTopBarProps) {
   const communityLabel = (activeCommunityName ?? "").trim() || "Community";
   const isAgent = mode === "agent";
-  const isDiscover = mode === "discover";
   const isSettings = mode === "settings";
-  const selectorLabel = isDiscover ? "Discover" : communityLabel;
   const memberCountLabel = formatMemberCount(memberCount);
   const showMembers =
     isCommunityHome &&
@@ -83,9 +81,10 @@ export function WebMobileTopBar({
     !isThreadPage &&
     rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
   const drawerLabel = isAgent ? "Open threads" : "Open community navigation";
+
   const communitySelectorContent = (
     <>
-      {hasActiveCommunity && !isDiscover ? (
+      {hasActiveCommunity ? (
         <CommunityAvatar
           communityId={activeCommunityId}
           visualIdentity={activeCommunityVisualIdentity}
@@ -104,13 +103,13 @@ export function WebMobileTopBar({
           <path d="m15.8 8.2-2.5 5.1-5.1 2.5 2.5-5.1 5.1-2.5z" />
         </svg>
       )}
-      <span className="mobile-topbar-community-name">{selectorLabel}</span>
+      <span className="mobile-topbar-community-name">{communityLabel}</span>
       {canOpenCommunitySelector ? (
         <svg className="mobile-topbar-community-chevron" viewBox="0 0 24 24" aria-hidden="true">
           <path d="m7 9.5 5 5 5-5" />
         </svg>
       ) : null}
-      {activeCommunityAttentionCount > 0 && !isDiscover ? (
+      {activeCommunityAttentionCount > 0 ? (
         <span className="mobile-topbar-attention" aria-label={`${activeCommunityAttentionCount} updates`}>
           {activeCommunityAttentionCount > 99 ? "99+" : activeCommunityAttentionCount}
         </span>
