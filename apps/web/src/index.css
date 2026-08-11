@@ -2224,12 +2224,12 @@
 }
 
 .mobile-topbar-members .community-context-facepile {
-  --community-presence-face-size: 24px;
+  --member-avatar-stack-face-size: 24px;
   padding: 0 0 0 4px;
   border: 0;
 }
 
-.mobile-topbar-members .community-context-face {
+.mobile-topbar-members .member-avatar-stack-face {
   background: var(--surface-panel);
   font-size: 8px;
 }

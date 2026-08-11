@@ -30,6 +30,7 @@ const profileSettings = read("apps/web/src/components/WebProfileSettingsSection.
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const communityContextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
 const communityFunnelPreview = read("apps/web/src/components/CommunityFunnelV1Preview.tsx");
 const communityFunnelPreviewCss = read("apps/web/src/components/CommunityFunnelV1Preview.css");
 const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
@@ -80,13 +81,18 @@ assert.match(stableAvatar, /loading\?: "eager" \| "lazy"/);
 assert.match(stableAvatar, /fetchPriority\?: ImageFetchPriority/);
 assert.match(
   communityFunnelPreview,
-  /className="community-context-member-avatar"/,
-  "funnel member proof must use the canonical member avatar holder",
+  /<MemberAvatarStack/,
+  "funnel member proof must use the canonical member avatar stack",
 );
 assert.match(
-  communityFunnelPreview,
-  /className="community-context-member-avatar-media"/,
-  "funnel member proof must use the canonical member avatar media frame",
+  communityPresenceFacepile,
+  /<MemberAvatarStack/,
+  "community presence must use the canonical member avatar stack",
+);
+assert.match(
+  memberAvatarStack,
+  /className="member-avatar-stack-face"/,
+  "the canonical member avatar stack must own avatar presentation",
 );
 assert.doesNotMatch(
   communityFunnelPreview,
@@ -209,11 +215,11 @@ assert.doesNotMatch(
 );
 assert.match(
   baseCss,
-  /\.community-context-face \+ \.community-context-face\s*\{[\s\S]*margin-left:\s*calc\(var\(--community-presence-face-size\) \* -0\.22\)/,
+  /\.member-avatar-stack-face \+ \.member-avatar-stack-face\s*\{[\s\S]*margin-left:\s*calc\(var\(--member-avatar-stack-face-size\) \* -0\.22\)/,
   "the canonical facepile must overlap by a proportional amount",
 );
 assert.match(
-  communityPresenceFacepile,
+  memberAvatarStack,
   /style=\{\{ zIndex: visibleFaces\.length - index \}\}/,
   "the leftmost face must remain visually highest",
 );
