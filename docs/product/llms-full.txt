@@ -520,6 +520,14 @@ Custom work remains private until explicitly published, and publishing does not
 change which funnel is live. One explicit active-funnel selector determines
 whether the fallback, Custom 1, or Custom 2 is served publicly.
 
+Custom funnels use one platform-owned composition: community identity,
+outcome-focused headline and subheadline, an optional founder-managed Video
+Sales Letter, a canonical join action, exactly three benefit pillars, a
+long-form narrative, canonical live member proof, and the same join action
+again. The agent edits only the headline, subheadline, pillars, and narrative.
+Polynet owns theme, layout, media placement, member proof, pricing, access
+language, and both actions.
+
 ## Rules
 
 1. The funnel is the canonical public entry surface for join and gate flows.
@@ -534,6 +542,10 @@ whether the fallback, Custom 1, or Custom 2 is served publicly.
    revision is still current.
 10. AI may revise bounded funnel content, but cannot grant access, set payment
     authority, silently publish, or silently change the active funnel.
+11. Funnel V2 content cannot carry theme, layout, media, member, pricing,
+    access, or CTA authority.
+12. Long-form copy is bounded Markdown; raw HTML, links, images, code, and
+    executable content are not rendered.
 
 ## Non-Goals
 

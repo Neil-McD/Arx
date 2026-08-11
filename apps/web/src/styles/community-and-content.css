@@ -1684,14 +1684,14 @@
 .funnel-builder-preview-empty span {
   font-size: 12px;
 }
-.funnel-builder-preview .funnel-v1-preview {
+.funnel-builder-preview .community-funnel-preview {
   width: min(780px, 100%);
   min-height: 100%;
   margin: 0 auto;
   border: 1px solid var(--border-muted);
   overflow: hidden;
 }
-.funnel-builder-layout.is-default .funnel-v1-preview {
+.funnel-builder-layout.is-default .community-funnel-preview {
   width: min(920px, 100%);
 }
 .funnel-builder-conversation {
@@ -1764,33 +1764,6 @@
   background: var(--bg-card-alt);
   padding: 10px 12px;
   color: var(--text-primary);
-}
-.funnel-builder-reference {
-  display: grid;
-  grid-template-columns: 42px 1fr auto;
-  align-items: center;
-  gap: 9px;
-  margin: 0 14px 8px;
-  border: 1px solid var(--border-muted);
-  border-radius: 9px;
-  padding: 7px;
-  color: var(--text-secondary);
-  font-size: 11px;
-}
-.funnel-builder-reference img {
-  width: 42px;
-  height: 34px;
-  border-radius: 6px;
-  object-fit: cover;
-}
-.funnel-builder-reference button {
-  width: 30px;
-  height: 30px;
-  padding: 0;
-}
-.funnel-builder-reference svg {
-  width: 14px;
-  height: 14px;
 }
 .funnel-builder-conversation > .auth-error {
   margin: 0 14px 8px;

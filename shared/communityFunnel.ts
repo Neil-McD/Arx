@@ -1,6 +1,7 @@
 import type {
   CommunityCustomFunnelSlot,
   CommunityFunnelConfig,
+  CommunityFunnelContentV2,
   CommunityFunnelDocumentV1,
   CommunityFunnelHeroMediaKind,
   CommunityFunnelManagerConfig,
@@ -34,6 +35,7 @@ export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
   hero_media_url: null,
   hero_media_kind: "image",
   published_vsl_url: null,
+  published_content_v2: null,
   published_document_v1: null,
 };
 
@@ -46,6 +48,7 @@ export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConf
       custom_2: null,
     },
     draft_vsl_url: null,
+    draft_content_v2: null,
     draft_document_v1: null,
     draft_revision: 0,
     draft_updated_at: null,
@@ -209,6 +212,9 @@ export function normalizeCommunityFunnelConfig(
   const publishedDocumentV1 = normalizeCommunityFunnelDocumentV1(
     value.published_document_v1,
   );
+  const publishedContentV2 = normalizeCommunityFunnelContentV2(
+    value.published_content_v2,
+  );
   let publishedVslUrl: string | null = null;
   try {
     publishedVslUrl = normalizeCommunityFunnelVslUrl(
@@ -234,6 +240,7 @@ export function normalizeCommunityFunnelConfig(
     hero_media_url: heroMediaUrl,
     hero_media_kind: heroMediaKind,
     published_vsl_url: publishedVslUrl,
+    published_content_v2: publishedContentV2,
     published_document_v1: publishedDocumentV1,
   };
 }
@@ -460,6 +467,69 @@ export function normalizeCommunityFunnelDocumentV1(
   }
 }
 
+export function validateCommunityFunnelContentV2(
+  raw: unknown,
+): CommunityFunnelContentV2 {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) {
+    throw new Error("community_funnel_content_invalid");
+  }
+  const value = raw as Record<string, unknown>;
+  if (Number(value.version) !== 2) {
+    throw new Error("community_funnel_content_version_invalid");
+  }
+  const rawPillars = Array.isArray(value.pillars) ? value.pillars : [];
+  if (rawPillars.length !== 3) {
+    throw new Error("community_funnel_content_requires_three_pillars");
+  }
+  const pillars = rawPillars.map((rawPillar) => {
+    if (!rawPillar || typeof rawPillar !== "object" || Array.isArray(rawPillar)) {
+      throw new Error("community_funnel_pillar_invalid");
+    }
+    const pillar = rawPillar as Record<string, unknown>;
+    return {
+      title: normalizeRequiredText(
+        pillar.title,
+        90,
+        "community_funnel_pillar_title_required",
+      ),
+      body: normalizeRequiredText(
+        pillar.body,
+        320,
+        "community_funnel_pillar_body_required",
+      ),
+    };
+  }) as CommunityFunnelContentV2["pillars"];
+  return {
+    version: 2,
+    headline: normalizeRequiredText(
+      value.headline,
+      180,
+      "community_funnel_headline_required",
+    ),
+    subheadline: normalizeRequiredText(
+      value.subheadline,
+      480,
+      "community_funnel_subheadline_required",
+    ),
+    pillars,
+    long_form_markdown: normalizeRequiredText(
+      value.long_form_markdown,
+      12_000,
+      "community_funnel_long_form_required",
+    ),
+  };
+}
+
+export function normalizeCommunityFunnelContentV2(
+  raw: unknown,
+): CommunityFunnelContentV2 | null {
+  try {
+    return validateCommunityFunnelContentV2(raw);
+  } catch {
+    return null;
+  }
+}
+
 export function normalizeCommunityFunnelManagerConfig(
   raw: unknown,
 ): CommunityFunnelManagerConfig {
@@ -474,6 +544,9 @@ export function normalizeCommunityFunnelManagerConfig(
   const publishedAt = Number(value.published_at);
   const draftDocumentV1 = normalizeCommunityFunnelDocumentV1(
     value.draft_document_v1,
+  );
+  const draftContentV2 = normalizeCommunityFunnelContentV2(
+    value.draft_content_v2,
   );
   let draftVslUrl: string | null = null;
   try {
@@ -495,10 +568,16 @@ export function normalizeCommunityFunnelManagerConfig(
         : null);
   }
   const legacyVariant: CommunityFunnelVariantConfig | null =
-    draftDocumentV1 || base.published_document_v1 || draftVslUrl || base.published_vsl_url
+    draftContentV2 ||
+    base.published_content_v2 ||
+    draftDocumentV1 ||
+    base.published_document_v1 ||
+    draftVslUrl ||
+    base.published_vsl_url
       ? {
           slot: "custom_1",
           draft_vsl_url: draftVslUrl,
+          draft_content_v2: draftContentV2,
           draft_document_v1: draftDocumentV1,
           draft_revision:
             Number.isFinite(revision) && revision >= 0 ? revision : 0,
@@ -507,6 +586,7 @@ export function normalizeCommunityFunnelManagerConfig(
               ? draftUpdatedAt
               : null,
           published_vsl_url: base.published_vsl_url,
+          published_content_v2: base.published_content_v2,
           published_document_v1: base.published_document_v1,
           published_draft_revision:
             Number.isFinite(publishedRevision) && publishedRevision >= 0
@@ -531,6 +611,9 @@ export function normalizeCommunityFunnelManagerConfig(
     const candidateBase = normalizeCommunityFunnelConfig(candidate);
     const candidateDraftDocument = normalizeCommunityFunnelDocumentV1(
       candidate.draft_document_v1,
+    );
+    const candidateDraftContent = normalizeCommunityFunnelContentV2(
+      candidate.draft_content_v2,
     );
     let candidateDraftVsl: string | null = null;
     let candidatePublishedVsl: string | null = null;
@@ -557,6 +640,7 @@ export function normalizeCommunityFunnelManagerConfig(
     return {
       slot,
       draft_vsl_url: candidateDraftVsl,
+      draft_content_v2: candidateDraftContent,
       draft_document_v1: candidateDraftDocument,
       draft_revision:
         Number.isFinite(candidateRevision) && candidateRevision >= 0
@@ -568,6 +652,7 @@ export function normalizeCommunityFunnelManagerConfig(
           : null,
       published_vsl_url:
         candidatePublishedVsl ?? candidateBase.published_vsl_url,
+      published_content_v2: candidateBase.published_content_v2,
       published_document_v1: candidateBase.published_document_v1,
       published_draft_revision:
         Number.isFinite(candidatePublishedRevision) &&
@@ -601,6 +686,7 @@ export function normalizeCommunityFunnelManagerConfig(
     active_slot: normalizeCommunityFunnelSlot(value.active_slot),
     custom_funnels: customFunnels,
     draft_vsl_url: draftVslUrl,
+    draft_content_v2: draftContentV2,
     draft_document_v1: draftDocumentV1,
     draft_revision: Number.isFinite(revision) && revision >= 0 ? revision : 0,
     draft_updated_at:

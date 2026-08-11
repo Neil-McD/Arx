@@ -31,8 +31,8 @@ const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
 const communityContextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
-const communityFunnelPreview = read("apps/web/src/components/CommunityFunnelV1Preview.tsx");
-const communityFunnelPreviewCss = read("apps/web/src/components/CommunityFunnelV1Preview.css");
+const communityFunnelPreview = read("apps/web/src/components/CommunityFunnelPreview.tsx");
+const communityFunnelPreviewCss = read("apps/web/src/components/CommunityFunnelPreview.css");
 const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const baseCss = [
@@ -96,12 +96,12 @@ assert.match(
 );
 assert.doesNotMatch(
   communityFunnelPreview,
-  /imageClassName="funnel-v1-face-image"/,
+  /imageClassName="community-funnel-face-image"/,
   "funnel member proof must not replace canonical avatar image geometry",
 );
 assert.doesNotMatch(
   communityFunnelPreviewCss,
-  /\.funnel-v1-face(?:pile|-image)?\b/,
+  /\.community-funnel-face(?:pile|-image)?\b/,
   "funnel member proof must not recreate a custom facepile or avatar crop",
 );
 assert.match(

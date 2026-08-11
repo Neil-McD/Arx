@@ -22,11 +22,11 @@ assert.doesNotMatch(
   "the funnel base load must not do a bare object-literal replace of the community — that drops merged memory/stats and flickers the panel",
 );
 
-// --- The funnel load must re-fire on sign-in/out only, not session identity churn ---
+// --- The funnel load must re-fire on subject changes, not session identity churn ---
 assert.match(
   app,
-  /sessionDependency: Boolean\(session\)/,
-  "the funnel load effect dependency must be a stable boolean (isSignedIn), not the session object",
+  /sessionDependency: resolveAuthSubject\(session\)/,
+  "the funnel load effect dependency must be the stable authenticated subject, not the session object",
 );
 assert.doesNotMatch(
   app,
@@ -34,4 +34,4 @@ assert.doesNotMatch(
   "the funnel load must not depend on the raw session object identity — it re-hammers the load + stats query and blinks the panel",
 );
 
-console.log("community funnel load contract proof passed: base load merges (no flicker), effect re-fires on auth flip only.");
+console.log("community funnel load contract proof passed: base load merges (no flicker), effect re-fires on subject changes only.");

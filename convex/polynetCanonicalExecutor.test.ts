@@ -7,7 +7,7 @@ import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import schema from "./schema";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
-import { buildCommunityFunnelDocumentTestFixture } from "../scripts/community_funnel_test_fixture";
+import { buildCommunityFunnelContentTestFixture } from "../scripts/community_funnel_test_fixture";
 
 const modules = import.meta.glob([
   "./authActor.ts",
@@ -572,7 +572,7 @@ test("funnel draft capability is visible and executable only on the manager funn
   if (!initialCapability.ok) throw new Error("owner funnel capability unavailable");
   expect(JSON.parse(String(initialCapability.value.body))).toMatchObject({
     operation: "community.funnel.update_draft",
-    current_state: { draft_revision: 0, draft_document_v1: null },
+    current_state: { draft_revision: 0, draft_content_v2: null },
   });
   await expect(
     executePolynetCanonicalTool({
@@ -625,7 +625,7 @@ test("funnel draft capability is visible and executable only on the manager funn
     });
   }
 
-  const document = buildCommunityFunnelDocumentTestFixture({
+  const content = buildCommunityFunnelContentTestFixture({
     headline: "Build together with a shared operating memory.",
   });
   const creatorVslUrl = "https://www.youtube.com/watch?v=abcdefghijk";
@@ -644,7 +644,7 @@ test("funnel draft capability is visible and executable only on the manager funn
     target: capabilityPath,
     input: {
       expected_revision: 0,
-      document,
+      content,
     },
     idempotency_key: "funnel-draft-update-1",
   };
@@ -693,7 +693,7 @@ test("funnel draft capability is visible and executable only on the manager funn
     current_state: {
       draft_revision: 1,
       draft_vsl_url: creatorVslUrl,
-      draft_document_v1: document,
+      draft_content_v2: content,
     },
   });
   await t.run(async (ctx) => {
@@ -703,7 +703,7 @@ test("funnel draft capability is visible and executable only on the manager funn
       communityId: fixture.communityId,
       draftVslUrl: creatorVslUrl,
       draftRevision: 1,
-      draftDocumentV1: document,
+      draftContentV2: content,
     });
   });
 });
@@ -716,16 +716,16 @@ test("funnel composer isolates custom slots and namespaces retry receipts", asyn
   );
   const capabilityPath =
     "/communities/canonical-community/capabilities/community.funnel.update_draft.json";
-  const customOneDocument = buildCommunityFunnelDocumentTestFixture({
+  const customOneContent = buildCommunityFunnelContentTestFixture({
     headline: "Custom one remains independent.",
   });
-  const customTwoDocument = buildCommunityFunnelDocumentTestFixture({
+  const customTwoContent = buildCommunityFunnelContentTestFixture({
     headline: "Custom two receives its own revision.",
   });
   const sharedModelIdempotencyKey = "same-model-retry-key";
   const update = async (
     slot: "custom_1" | "custom_2",
-    document: ReturnType<typeof buildCommunityFunnelDocumentTestFixture>,
+    content: ReturnType<typeof buildCommunityFunnelContentTestFixture>,
   ) =>
     await executePolynetCanonicalTool({
       ctx: ownerCtx,
@@ -739,22 +739,22 @@ test("funnel composer isolates custom slots and namespaces retry receipts", asyn
         operation: "community.funnel.update_draft",
         version: 1,
         target: capabilityPath,
-        input: { expected_revision: 0, document },
+        input: { expected_revision: 0, content },
         idempotency_key: sharedModelIdempotencyKey,
       },
     });
 
-  await expect(update("custom_1", customOneDocument)).resolves.toMatchObject({
+  await expect(update("custom_1", customOneContent)).resolves.toMatchObject({
     ok: true,
     value: { result: { draft_revision: 1 }, deduped: false },
   });
-  await expect(update("custom_2", customTwoDocument)).resolves.toMatchObject({
+  await expect(update("custom_2", customTwoContent)).resolves.toMatchObject({
     ok: true,
     value: {
       result: {
         selected_slot: "custom_2",
         draft_revision: 1,
-        draft_document_v1: customTwoDocument,
+        draft_content_v2: customTwoContent,
       },
       deduped: false,
     },
@@ -779,12 +779,12 @@ test("funnel composer isolates custom slots and namespaces retry receipts", asyn
   expect(customOneState.current_state).toMatchObject({
     selected_slot: "custom_1",
     draft_revision: 1,
-    draft_document_v1: customOneDocument,
+    draft_content_v2: customOneContent,
   });
   expect(customTwoState.current_state).toMatchObject({
     selected_slot: "custom_2",
     draft_revision: 1,
-    draft_document_v1: customTwoDocument,
+    draft_content_v2: customTwoContent,
   });
   expect(customOneState.current_state).not.toHaveProperty("custom_funnels");
   expect(customTwoState.current_state).not.toHaveProperty("custom_funnels");
@@ -797,12 +797,12 @@ test("funnel composer isolates custom slots and namespaces retry receipts", asyn
     rows.find((row) => (row.slot ?? "custom_1") === "custom_1"),
   ).toMatchObject({
     draftRevision: 1,
-    draftDocumentV1: customOneDocument,
+    draftContentV2: customOneContent,
   });
   expect(rows.find((row) => row.slot === "custom_2")).toMatchObject({
     slot: "custom_2",
     draftRevision: 1,
-    draftDocumentV1: customTwoDocument,
+    draftContentV2: customTwoContent,
   });
 });
 

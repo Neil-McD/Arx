@@ -10,8 +10,10 @@ import {
   normalizeCommunityCustomFunnelSlot,
   normalizeCommunityFunnelSlot,
   normalizeCommunityFunnelVslUrl,
+  normalizeCommunityFunnelContentV2,
   normalizeCommunityFunnelDocumentV1,
   resolveCommunityFunnelDocumentVslUrl,
+  validateCommunityFunnelContentV2,
   validateCommunityFunnelDocumentV1,
   withoutCommunityFunnelMediaSections,
 } from "../shared/communityFunnel";
@@ -23,7 +25,7 @@ import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
-import { communityFunnelDocumentV1Validator } from "./communityFunnelValidators";
+import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 
 type CommunityFunnelRowLike = {
   _id: unknown;
@@ -33,6 +35,8 @@ type CommunityFunnelRowLike = {
   heroMediaKind?: "image" | "video" | null;
   draftVslUrl?: string | null;
   publishedVslUrl?: string | null;
+  draftContentV2?: unknown;
+  publishedContentV2?: unknown;
   draftDocumentV1?: unknown;
   draftRevision?: number | null;
   draftUpdatedAt?: number | null;
@@ -114,6 +118,9 @@ function buildCommunityFunnelConfig(row: CommunityFunnelRowLike | null) {
     hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
     hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
     published_vsl_url: resolvePublishedVslUrl(row),
+    published_content_v2: normalizeCommunityFunnelContentV2(
+      row?.publishedContentV2,
+    ),
     published_document_v1: normalizeCommunityFunnelDocumentV1(
       row?.publishedDocumentV1,
     ),
@@ -128,12 +135,16 @@ function buildCommunityFunnelVariantConfig(
   return {
     slot,
     draft_vsl_url: resolveDraftVslUrl(row),
+    draft_content_v2: normalizeCommunityFunnelContentV2(row.draftContentV2),
     draft_document_v1: normalizeCommunityFunnelDocumentV1(
       row.draftDocumentV1,
     ),
     draft_revision: Math.max(0, Math.floor(Number(row.draftRevision ?? 0))),
     draft_updated_at: row.draftUpdatedAt ?? null,
     published_vsl_url: resolvePublishedVslUrl(row),
+    published_content_v2: normalizeCommunityFunnelContentV2(
+      row.publishedContentV2,
+    ),
     published_document_v1: normalizeCommunityFunnelDocumentV1(
       row.publishedDocumentV1,
     ),
@@ -150,9 +161,13 @@ function buildLegacyManagerProjection(row: CommunityFunnelRowLike | null) {
     hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
     hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
     published_vsl_url: resolvePublishedVslUrl(row),
+    published_content_v2: normalizeCommunityFunnelContentV2(
+      row?.publishedContentV2,
+    ),
     published_document_v1: normalizeCommunityFunnelDocumentV1(
       row?.publishedDocumentV1,
     ),
+    draft_content_v2: normalizeCommunityFunnelContentV2(row?.draftContentV2),
     draft_document_v1: normalizeCommunityFunnelDocumentV1(
       row?.draftDocumentV1,
     ),
@@ -250,7 +265,7 @@ async function getCommunityFunnelRow(
 }
 
 function rowHasPublishedFunnel(row: CommunityFunnelRowLike | null): boolean {
-  return Boolean(normalizeCommunityFunnelDocumentV1(row?.publishedDocumentV1));
+  return Boolean(normalizeCommunityFunnelContentV2(row?.publishedContentV2));
 }
 
 function resolveActiveCommunityFunnelSlot(params: {
@@ -296,6 +311,8 @@ export async function saveCommunityFunnelConfigInternal(
   if (!hasHeroMedia) {
     if (
       existing &&
+      !existing.draftContentV2 &&
+      !existing.publishedContentV2 &&
       !existing.draftDocumentV1 &&
       !existing.publishedDocumentV1 &&
       !resolveDraftVslUrl(existing) &&
@@ -432,7 +449,7 @@ async function saveCommunityFunnelDraftForManager(args: {
   communityId: any;
   slot: CommunityCustomFunnelSlot;
   expectedDraftRevision: number;
-  document: unknown;
+  content: unknown;
 }) {
   const { community } = await requireCommunityManager({
     ctx: args.ctx,
@@ -457,13 +474,10 @@ async function saveCommunityFunnelDraftForManager(args: {
   }
   const nowMs = Date.now();
   const nextRevision = currentRevision + 1;
-  const draftDocumentV1 = validateCommunityFunnelDocumentV1(args.document);
-  const boundedDraftDocumentV1 = withoutCommunityFunnelMediaSections(
-    draftDocumentV1,
-  );
+  const draftContentV2 = validateCommunityFunnelContentV2(args.content);
   const draftFields = {
     slot: args.slot,
-    draftDocumentV1: boundedDraftDocumentV1,
+    draftContentV2,
     ...(existing?.draftVslUrl === undefined
       ? { draftVslUrl: resolveDraftVslUrl(existing) }
       : {}),
@@ -497,7 +511,7 @@ export const saveCommunityFunnelDraftInternal = internalMutation({
     communityId: v.id("communities"),
     slot: v.optional(communityCustomFunnelSlotValidator),
     expectedDraftRevision: v.number(),
-    document: communityFunnelDocumentV1Validator,
+    content: communityFunnelContentV2Validator,
   },
   handler: async (ctx, args) => {
     const slot = normalizeCommunityCustomFunnelSlot(args.slot);
@@ -507,7 +521,7 @@ export const saveCommunityFunnelDraftInternal = internalMutation({
       communityId: args.communityId,
       slot,
       expectedDraftRevision: args.expectedDraftRevision,
-      document: args.document,
+      content: args.content,
     });
     return {
       ...managerConfig,
@@ -631,7 +645,7 @@ export const publishCommunityFunnelDraft = mutation({
     const legacySingletonPublish = args.slot === undefined;
     const slot = normalizeCommunityCustomFunnelSlot(args.slot);
     const existing = await getCommunityFunnelRow(ctx, args.communityId, slot);
-    if (!existing?.draftDocumentV1) {
+    if (!existing?.draftContentV2) {
       throw new ConvexError({ code: "community_funnel_draft_missing" });
     }
     const currentRevision = Math.max(
@@ -645,11 +659,11 @@ export const publishCommunityFunnelDraft = mutation({
         current_revision: currentRevision,
       });
     }
-    const draftDocumentV1 = withoutCommunityFunnelMediaSections(
-      validateCommunityFunnelDocumentV1(existing.draftDocumentV1),
+    const draftContentV2 = validateCommunityFunnelContentV2(
+      existing.draftContentV2,
     );
     if (
-      existing.publishedDocumentV1 &&
+      existing.publishedContentV2 &&
       Math.floor(Number(existing.publishedDraftRevision ?? 0)) ===
         currentRevision
     ) {
@@ -672,7 +686,14 @@ export const publishCommunityFunnelDraft = mutation({
     }
     const nowMs = Date.now();
     await ctx.db.patch(existing._id as any, {
-      publishedDocumentV1: draftDocumentV1,
+      publishedContentV2: draftContentV2,
+      ...(existing.draftDocumentV1
+        ? {
+            publishedDocumentV1: withoutCommunityFunnelMediaSections(
+              validateCommunityFunnelDocumentV1(existing.draftDocumentV1),
+            ),
+          }
+        : {}),
       publishedVslUrl: resolveDraftVslUrl(existing),
       publishedDraftRevision: currentRevision,
       publishedAt: nowMs,

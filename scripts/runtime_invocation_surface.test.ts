@@ -115,15 +115,15 @@ describe("community funnel runtime surface", () => {
     expect(bundle.text).toContain("bounded community funnel composer");
     expect(bundle.text).toContain("Never invent an audience, offer, price");
     expect(bundle.text).toContain(
-      "saved Video Sales Letter (VSL) immediately after the hero",
-    );
-    expect(bundle.text).toContain("Do not create social_proof sections");
-    expect(bundle.text).toContain(
-      "Polynet supplies the canonical action label",
+      "exactly three concise benefit pillars",
     );
     expect(bundle.text).toContain(
-      "Appearance always inherits the manager's canonical Polynet theme",
+      "Polynet owns the page structure",
     );
+    expect(bundle.text).toContain(
+      "Never propose custom HTML, CSS, JavaScript",
+    );
+    expect(bundle.text).not.toContain("reference images only as inspiration");
     expect(bundle.text).toContain("Never publish, change pricing, change access policy");
     expect(bundle.sections.some((section) => section.id === "current_surface")).toBe(false);
     expect(

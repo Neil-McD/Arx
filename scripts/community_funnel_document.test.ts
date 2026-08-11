@@ -3,10 +3,53 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeCommunityFunnelManagerConfig,
   normalizeCommunityFunnelVslUrl,
+  validateCommunityFunnelContentV2,
   validateCommunityFunnelDocumentV1,
   withoutCommunityFunnelMediaSections,
 } from "../shared/communityFunnel";
-import { buildCommunityFunnelDocumentTestFixture } from "./community_funnel_test_fixture";
+import {
+  buildCommunityFunnelContentTestFixture,
+  buildCommunityFunnelDocumentTestFixture,
+} from "./community_funnel_test_fixture";
+
+describe("Community Funnel V2 content", () => {
+  it("accepts the fixed content contract with exactly three pillars", () => {
+    const content = buildCommunityFunnelContentTestFixture();
+    expect(validateCommunityFunnelContentV2(content)).toEqual(content);
+    expect(content.pillars).toHaveLength(3);
+  });
+
+  it("rejects incomplete or non-canonical pillar sets", () => {
+    const content = buildCommunityFunnelContentTestFixture();
+    for (const pillars of [
+      content.pillars.slice(0, 2),
+      [...content.pillars, content.pillars[0]],
+    ]) {
+      expect(() =>
+        validateCommunityFunnelContentV2({ ...content, pillars }),
+      ).toThrow("community_funnel_content_requires_three_pillars");
+    }
+    expect(() =>
+      validateCommunityFunnelContentV2({
+        ...content,
+        pillars: [{ title: "", body: "Body" }, ...content.pillars.slice(1)],
+      }),
+    ).toThrow("community_funnel_pillar_title_required");
+  });
+
+  it("requires core copy and bounds the long-form narrative", () => {
+    const content = buildCommunityFunnelContentTestFixture();
+    expect(() =>
+      validateCommunityFunnelContentV2({ ...content, headline: "" }),
+    ).toThrow("community_funnel_headline_required");
+    expect(
+      validateCommunityFunnelContentV2({
+        ...content,
+        long_form_markdown: "x".repeat(13_000),
+      }).long_form_markdown,
+    ).toHaveLength(12_000);
+  });
+});
 
 describe("Community Funnel V1 document", () => {
   it("accepts a minimal valid bounded document", () => {

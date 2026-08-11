@@ -1,6 +1,9 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { communityFunnelDocumentV1Validator } from "./communityFunnelValidators";
+import {
+  communityFunnelContentV2Validator,
+  communityFunnelDocumentV1Validator,
+} from "./communityFunnelValidators";
 
 export default defineSchema({
   users: defineTable({
@@ -1384,6 +1387,8 @@ export default defineSchema({
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
     draftVslUrl: v.optional(v.union(v.string(), v.null())),
     publishedVslUrl: v.optional(v.union(v.string(), v.null())),
+    draftContentV2: v.optional(communityFunnelContentV2Validator),
+    publishedContentV2: v.optional(communityFunnelContentV2Validator),
     // Read compatibility for the short-lived manual V1 draft plus the
     // canonical bounded design grammar. New writes accept only the latter.
     draftDocumentV1: v.optional(v.union(

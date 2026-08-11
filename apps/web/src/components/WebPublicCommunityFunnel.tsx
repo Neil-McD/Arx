@@ -1,6 +1,6 @@
 import type {
   CommunityFunnelConfig,
-  CommunityFunnelDocumentV1,
+  CommunityFunnelContentV2,
   CommunityFunnelSlot,
   CommunityPublicFace,
   PublicPlanSummary,
@@ -14,7 +14,7 @@ import {
   WebCommunityBridgeCard,
   type WebCommunityBridgeCardProps,
 } from "./WebCommunityBridgeCard";
-import { CommunityFunnelV1Preview } from "./CommunityFunnelV1Preview";
+import { CommunityFunnelPreview } from "./CommunityFunnelPreview";
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 
@@ -40,7 +40,7 @@ type WebPublicCommunityFunnelProps = {
   isPreviewMode?: boolean;
   previewSlot?: CommunityFunnelSlot;
   previewExitPath?: string | null;
-  previewDocument?: CommunityFunnelDocumentV1 | null;
+  previewDocument?: CommunityFunnelContentV2 | null;
   previewVslUrl?: string | null;
   previewDocumentIsLoading?: boolean;
   previewDocumentError?: string | null;
@@ -137,10 +137,10 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   if (isLoadingPublicCommunity && !publicCommunity) {
     return (
       <div
-        className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft"
+        className="community-funnel-preview"
         aria-busy="true"
       >
-        <main className="funnel-v1-preview-main funnel-v1-preview-empty">
+        <main className="community-funnel-preview-main community-funnel-preview-empty">
           <strong>Loading community…</strong>
         </main>
       </div>
@@ -160,9 +160,9 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
           </svg>
           <span>Back to builder</span>
         </a>
-        <CommunityFunnelV1Preview
+        <CommunityFunnelPreview
           community={publicCommunity}
-          document={props.previewDocument ?? null}
+          content={props.previewDocument ?? null}
           deterministicContent={
             props.previewSlot === "default"
               ? {
@@ -180,11 +180,11 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     );
   }
 
-  if (publicCommunity && funnel?.published_document_v1) {
+  if (publicCommunity && funnel?.published_content_v2) {
     return renderWithBridge(
-      <CommunityFunnelV1Preview
+      <CommunityFunnelPreview
         community={publicCommunity}
-        document={funnel.published_document_v1}
+        content={funnel.published_content_v2}
         vslUrl={funnel.published_vsl_url}
         primaryActionLabel={primaryAction.label}
         isPreview={false}
@@ -197,9 +197,9 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
 
   if (publicCommunity) {
     return renderWithBridge(
-      <CommunityFunnelV1Preview
+      <CommunityFunnelPreview
         community={publicCommunity}
-        document={null}
+        content={null}
         deterministicContent={{
           headline: publicCommunity.one_liner?.trim() || communityName,
           body: publicCommunity.about?.trim() || null,
@@ -214,8 +214,8 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   }
 
   return (
-    <div className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft">
-      <main className="funnel-v1-preview-main funnel-v1-preview-empty">
+    <div className="community-funnel-preview">
+      <main className="community-funnel-preview-main community-funnel-preview-empty">
         <strong role="alert">
           {funnelErrors[0] ?? "Community unavailable."}
         </strong>

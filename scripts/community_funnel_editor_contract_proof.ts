@@ -18,9 +18,9 @@ const funnelSection = read(
   "apps/web/src/components/WebCommunityFunnelSection.tsx",
 );
 const communityStyles = read("apps/web/src/styles/community-and-content.css");
-const preview = read("apps/web/src/components/CommunityFunnelV1Preview.tsx");
+const preview = read("apps/web/src/components/CommunityFunnelPreview.tsx");
 const previewStyles = read(
-  "apps/web/src/components/CommunityFunnelV1Preview.css",
+  "apps/web/src/components/CommunityFunnelPreview.css",
 );
 const publicFunnel = read(
   "apps/web/src/components/WebPublicCommunityFunnel.tsx",
@@ -61,8 +61,8 @@ assert.match(editor, /invocationSurface: "community_funnel_builder"/);
 assert.match(editor, /resolveAuthPresentationIdentity\(props\.session\)/);
 assert.match(editor, /props\.ensureSession\(\s*sessionRef\.current,/);
 assert.doesNotMatch(editor, /props\.previewCommunity\.name,\s*props\.session,/);
-assert.match(editor, /uploadCloudThreadAttachmentFile/);
-assert.match(editor, /CommunityFunnelV1Preview/);
+assert.doesNotMatch(editor, /uploadCloudThreadAttachmentFile/);
+assert.match(editor, /CommunityFunnelPreview/);
 assert.match(editor, /fetchCloudPublicFunnelStats/);
 assert.match(editor, /community_funnel_member_proof_load_failed/);
 assert.match(editor, /community={hydratedPreviewCommunity}/);
@@ -70,15 +70,15 @@ assert.match(editor, /primaryActionLabel={props\.previewPrimaryActionLabel}/);
 assert.doesNotMatch(editor, /buildDefaultCommunityFunnelDocumentV1/);
 assert.match(
   editor,
-  /const document = selectedVariant\?\.draft_document_v1 \?\? null;/,
+  /const content = selectedVariant\?\.draft_content_v2 \?\? null;/,
 );
 assert.match(
   editor,
-  /disabled=\{isBusy \|\| \(selectedSlot !== "default" && !document\)\}/,
+  /disabled=\{isBusy \|\| \(selectedSlot !== "default" && !content\)\}/,
 );
 assert.match(
   editor,
-  /selectedSlot === "default" \? \([\s\S]*deterministicContent[\s\S]*\) : document \? \(/,
+  /selectedSlot === "default" \? \([\s\S]*deterministicContent[\s\S]*\) : content \? \(/,
 );
 assert.match(editor, /Nothing to preview yet\./);
 assert.match(editor, /Prompt the agent to build your funnel\./);
@@ -91,37 +91,34 @@ assert.doesNotMatch(preview, /resolveCommunityFunnelMemberProofInsertIndex/);
 assert.doesNotMatch(preview, /automaticMemberProofInsertIndex/);
 assert.match(preview, /<MemberAvatarStack/);
 assert.doesNotMatch(preview, /<img key=\{face\.user_id\}/);
-assert.match(preview, /renderBrand\("default"\)/);
-assert.match(preview, /renderConversionSpine/);
-assert.match(preview, /className="funnel-v1-member-proof-row"/);
-assert.match(preview, /section\.type === "social_proof"[\s\S]*return null/);
-assert.equal(
-  preview.match(/\{renderMemberProof\(\)\}/g)?.length,
-  1,
-  "the canonical member proof must have exactly one render call inside the shared conversion spine",
+assert.match(preview, /renderBrand\(true\)/);
+assert.match(preview, /className="community-funnel-member-proof-row"/);
+assert.doesNotMatch(preview, /section\.type|social_proof|testimonial|faq/);
+assert.match(
+  preview,
+  /community-funnel-long-form[\s\S]*community-funnel-final-conversion[\s\S]*renderMemberProof\(\)[\s\S]*renderPrimaryAction\("final"\)/,
 );
-assert.match(preview, /variant: "default"/);
-assert.match(preview, /variant: "document"/);
+assert.equal(
+  preview.match(/renderPrimaryAction\("first"\)/g)?.length,
+  2,
+  "default and custom funnels must each use the canonical first action",
+);
 assert.match(
   previewStyles,
-  /\.funnel-v1-brand\.is-default[\s\S]*\.funnel-v1-default-hero h1[\s\S]*\.funnel-v1-conversion-spine\.is-default/,
+  /\.community-funnel-brand\.is-default[\s\S]*\.community-funnel-default-hero h1[\s\S]*\.community-funnel-conversion-spine\.is-default/,
   "the deterministic fallback must retain the selected centered-cover hierarchy",
 );
 assert.match(
   previewStyles,
-  /\.funnel-v1-conversion-spine\.is-default[\s\S]*button \{[\s\S]*background: var\(--accent-selection\);[\s\S]*color: var\(--bg-button-text\);/,
+  /\.community-funnel-canonical-action button \{[\s\S]*background: var\(--accent-selection\);[\s\S]*color: var\(--bg-button-text\);/,
   "the deterministic fallback action must inherit the canonical Dark and Light selection palette",
 );
 assert.doesNotMatch(
   previewStyles,
-  /\.funnel-v1-member-proof-copy|\.funnel-v1-member-proof\s*\{/,
+  /\.community-funnel-member-proof-copy|\.community-funnel-member-proof\s*\{/,
   "the deterministic fallback must not restore the legacy bordered member-proof card",
 );
-assert.match(
-  previewStyles,
-  /\.funnel-v1-conversion-spine\.is-document \.funnel-v1-conversion-action[\s\S]*border-top: 1px solid var\(--funnel-v1-divider\);/,
-  "generated funnels must use one quiet canonical conversion spine",
-);
+assert.doesNotMatch(previewStyles, /accent-(?:violet|rose|amber|emerald)|density-(?:compact|airy)|radius-subtle/);
 
 // The builder owns one viewport-height workspace. The outer community page is
 // locked; only the preview and conversation history may scroll independently.
@@ -157,23 +154,16 @@ assert.match(
   /\.member-agent-dock\.is-suppressed\s*\{[\s\S]*?display:\s*none;/,
 );
 
-// The model produces a bounded design document, never executable page code.
-assert.match(documentContract, /FUNNEL_SECTION_TYPES/);
-assert.match(
-  documentContract,
-  /hero[\s\S]*media[\s\S]*benefits[\s\S]*social_proof[\s\S]*testimonial[\s\S]*faq[\s\S]*cta/,
-);
-assert.match(documentContract, /rawSections\.length > 10/);
-assert.match(documentContract, /section\.type === "hero"\)\.length !== 1/);
-assert.match(documentContract, /section\.type === "cta"\)\.length !== 1/);
-assert.match(documentContract, /isSupportedCommunityFunnelVideoUrl/);
+// The model produces bounded conversion content, never page structure or code.
+assert.match(documentContract, /validateCommunityFunnelContentV2/);
+assert.match(documentContract, /rawPillars\.length !== 3/);
 assert.match(
   schema,
-  /draftDocumentV1:[\s\S]*draftRevision:[\s\S]*draftUpdatedByUserId:/,
+  /draftContentV2:[\s\S]*draftRevision:[\s\S]*draftUpdatedByUserId:/,
 );
 assert.match(
   schema,
-  /publishedDocumentV1:[\s\S]*publishedDraftRevision:[\s\S]*publishedByUserId:/,
+  /publishedContentV2:[\s\S]*publishedDraftRevision:[\s\S]*publishedByUserId:/,
 );
 assert.match(
   schema,
@@ -189,7 +179,7 @@ assert.match(
   backend,
   /requireCommunityManager[\s\S]*expectedDraftRevision[\s\S]*community_funnel_draft_conflict/,
 );
-assert.match(backend, /validateCommunityFunnelDocumentV1/);
+assert.match(backend, /validateCommunityFunnelContentV2/);
 assert.match(backend, /getCommunityFunnelDraftInternal/);
 assert.match(backend, /saveCommunityFunnelDraftInternal/);
 assert.match(gateway, /communityFunnel:getCommunityFunnelDraftPreview/);
@@ -204,7 +194,7 @@ assert.match(
 );
 assert.match(
   backend,
-  /publishedDocumentV1: draftDocumentV1[\s\S]*publishedDraftRevision: currentRevision/,
+  /publishedContentV2: draftContentV2[\s\S]*publishedDraftRevision: currentRevision/,
 );
 assert.match(gateway, /communityFunnel:publishCommunityFunnelDraft/);
 assert.match(backend, /export const setActiveCommunityFunnel = mutation/);
@@ -245,7 +235,7 @@ assert.match(
 assert.match(communityStyles, /\.funnel-builder-layout\.is-default\s*\{/);
 assert.match(
   communityStyles,
-  /\.funnel-builder-layout\.is-default \.funnel-v1-preview\s*\{[\s\S]*?width:\s*min\(920px, 100%\)/,
+  /\.funnel-builder-layout\.is-default \.community-funnel-preview\s*\{[\s\S]*?width:\s*min\(920px, 100%\)/,
 );
 assert.match(editor, /Video Sales Letter/);
 assert.match(
@@ -281,27 +271,25 @@ assert.match(
 );
 assert.match(
   backend,
-  /publishedVslUrl: resolveDraftVslUrl\(existing\)[\s\S]*publishedDocumentV1: draftDocumentV1|publishedDocumentV1: draftDocumentV1[\s\S]*publishedVslUrl: resolveDraftVslUrl\(existing\)/,
+  /publishedVslUrl: resolveDraftVslUrl\(existing\)[\s\S]*publishedContentV2: draftContentV2|publishedContentV2: draftContentV2[\s\S]*publishedVslUrl: resolveDraftVslUrl\(existing\)/,
 );
 assert.match(gateway, /communityFunnel:setCommunityFunnelDraftVsl/);
 assert.match(schema, /draftVslUrl:[\s\S]*publishedVslUrl:/);
 assert.match(preview, /vslUrl\?: string \| null/);
-assert.match(preview, /section\.type === "media"\) return null/);
+assert.doesNotMatch(preview, /section\.type === "media"/);
 assert.match(
   preview,
   /<PreviewMedia community=\{community\} vslUrl=\{props\.vslUrl\}/,
 );
 
-const funnelDocumentSchema = POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call
+const funnelContentSchema = POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call
   .inputSchema.properties?.input as {
-  properties?: { document?: { properties?: { sections?: unknown } } };
+  properties?: { content?: { properties?: Record<string, unknown> } };
 };
 assert.doesNotMatch(
-  JSON.stringify(
-    funnelDocumentSchema.properties?.document?.properties?.sections,
-  ),
-  /media_url|"media"/,
-  "the agent tool must not advertise creator-owned VSL authority",
+  JSON.stringify(funnelContentSchema.properties?.content),
+  /theme|appearance|accent|density|radius|media|testimonial|faq|cta/i,
+  "the agent tool must expose content only, never layout, VSL, proof, or CTA authority",
 );
 
 // Runtime authority is scoped twice: canonical thread + manager lens, then one
@@ -339,16 +327,16 @@ assert.match(
 );
 assert.match(
   assembledFunnelPrompt.text,
-  /saved Video Sales Letter \(VSL\) immediately after the hero/,
+  /Video Sales Letter placement, both canonical join actions/,
 );
-assert.match(assembledFunnelPrompt.text, /Do not create social_proof sections/);
+assert.match(assembledFunnelPrompt.text, /exactly three concise benefit pillars/);
 assert.match(
   assembledFunnelPrompt.text,
-  /Polynet supplies the canonical action label/,
+  /Polynet owns the page structure, application theme/,
 );
 assert.match(
   assembledFunnelPrompt.text,
-  /Appearance always inherits the manager's canonical Polynet theme/,
+  /Never propose custom HTML, CSS, JavaScript, external hosting, theme tokens/,
 );
 assert.match(
   assembledFunnelPrompt.text,
@@ -406,19 +394,29 @@ assert.ok(
   "polynet_call must expose the funnel draft revision inside operation input",
 );
 assert.ok(
-  funnelCallInput.properties?.document,
-  "polynet_call must expose the bounded Funnel V1 document inside operation input",
+  funnelCallInput.properties?.content,
+  "polynet_call must expose bounded Funnel V2 content inside operation input",
 );
-const funnelDocumentInput = funnelCallInput.properties?.document as {
-  properties?: Record<string, unknown>;
-};
-const funnelThemeInput = funnelDocumentInput.properties?.theme as {
+const funnelContentInput = funnelCallInput.properties?.content as {
   properties?: Record<string, unknown>;
 };
 assert.deepEqual(
-  funnelThemeInput.properties?.appearance,
-  { type: "string", enum: ["inherit"] },
-  "the funnel agent must inherit Polynet appearance instead of selecting a second theme",
+  (funnelContentInput.properties?.pillars as { minItems?: number; maxItems?: number }),
+  {
+    type: "array",
+    minItems: 3,
+    maxItems: 3,
+    items: {
+      type: "object",
+      additionalProperties: false,
+      required: ["title", "body"],
+      properties: {
+        title: { type: "string", minLength: 1, maxLength: 90 },
+        body: { type: "string", minLength: 1, maxLength: 320 },
+      },
+    },
+  },
+  "the funnel agent must provide exactly three bounded pillars",
 );
 assert.equal(
   POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call.inputSchema.properties
@@ -432,9 +430,8 @@ assert.doesNotMatch(
   "runtime integrity must not require a retired feed prompt section",
 );
 
-// Preview is analytics-free and disabled. Live V1 reads only the explicit
-// published snapshot; communities without one retain the V0 compatibility
-// surface.
+// Preview is analytics-free and disabled. Live custom funnels read only the
+// explicit V2 publication snapshot; all others use the deterministic default.
 assert.match(previewController, /fetchCloudCommunityFunnelDraftPreview/);
 assert.match(previewController, /setAccessState\("allowed"\)/);
 assert.match(
@@ -457,7 +454,7 @@ assert.match(
 );
 assert.match(
   publicFunnel,
-  /isPreviewMode && publicCommunity[\s\S]*CommunityFunnelV1Preview/,
+  /isPreviewMode && publicCommunity[\s\S]*CommunityFunnelPreview/,
 );
 assert.match(
   publicFunnel,
@@ -475,18 +472,18 @@ assert.doesNotMatch(
   "full preview must render the private draft exactly, not synthesize a fallback page",
 );
 assert.match(preview, /Nothing to preview yet\./);
-assert.match(preview, /Prompt the agent to build your funnel\./);
+assert.match(preview, /Prompt the agent to write your funnel\./);
 assert.doesNotMatch(publicFunnel, /WebCommunityVisitorSurface/);
 assert.match(
   publicFunnel,
-  /document=\{null\}[\s\S]*deterministicContent=\{\{[\s\S]*headline: publicCommunity\.one_liner\?\.trim\(\) \|\| communityName,[\s\S]*body: publicCommunity\.about\?\.trim\(\) \|\| null/,
+  /content=\{null\}[\s\S]*deterministicContent=\{\{[\s\S]*headline: publicCommunity\.one_liner\?\.trim\(\) \|\| communityName,[\s\S]*body: publicCommunity\.about\?\.trim\(\) \|\| null/,
   "unpublished communities must render only canonical deterministic content",
 );
 assert.match(publicFunnel, /buildCommunityFunnelPrimaryActionView/);
 assert.doesNotMatch(publicFunnel, /formatCtaPriceLabel|Join now/);
 assert.match(
   publicFunnel,
-  /funnel\?\.published_document_v1[\s\S]*document=\{funnel\.published_document_v1\}[\s\S]*isPreview=\{false\}/,
+  /funnel\?\.published_content_v2[\s\S]*content=\{funnel\.published_content_v2\}[\s\S]*isPreview=\{false\}/,
 );
 assert.match(routeController, /recordVisit: !isPublicFunnelPreviewRoute/);
 assert.match(
@@ -505,16 +502,16 @@ assert.match(
 );
 assert.match(
   previewStyles,
-  /--funnel-v1-accent: var\(--accent-attention\);[\s\S]*--funnel-v1-page: var\(--surface-app\);/,
+  /--community-funnel-accent: var\(--accent-attention\);[\s\S]*--community-funnel-page: var\(--surface-app\);/,
 );
 assert.match(
   previewStyles,
-  /box-shadow:[\s\S]*color-mix\(in srgb, var\(--funnel-v1-accent\) 72%, transparent\)/,
+  /box-shadow:[\s\S]*color-mix\(in srgb, var\(--community-funnel-accent\) 72%, transparent\)/,
 );
 assert.doesNotMatch(previewStyles, /rgba\(255,\s*59,\s*120/);
-assert.doesNotMatch(preview, /`is-\$\{document\.theme\.appearance\}`/);
-assert.doesNotMatch(previewStyles, /\.funnel-v1-preview\.is-light/);
+assert.doesNotMatch(preview, /theme\.appearance|theme\.accent|theme\.density|theme\.radius/);
+assert.doesNotMatch(previewStyles, /\.community-funnel-preview\.is-light/);
 
 console.log(
-  "PASS: Funnel V1 keeps private AI drafts and explicit publication separate; published snapshots power custom funnels while unpublished communities render the canonical deterministic fallback.",
+  "PASS: Funnel V2 fixes page structure in Polynet while private AI content drafts, publication, activation, VSL, pricing, access, and canonical actions remain separately authoritative.",
 );
