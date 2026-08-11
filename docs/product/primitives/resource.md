@@ -18,7 +18,7 @@ Resources let communities store reusable knowledge instead of relying only on ch
 
 ## User Mental Model
 
-Members enter Resources through course cards, then read the ordered lessons inside a selected course. Builders see the same course presentation plus manager-only source intake and authoring controls.
+Members enter Resources through course cards, then read the ordered lessons inside a selected course. Builders see the same course presentation plus manager-only course and lesson authoring controls. Source ingestion belongs to builder knowledge setup rather than the primary course presentation.
 
 ## System Mental Model
 

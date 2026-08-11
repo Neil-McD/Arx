@@ -8626,13 +8626,6 @@ button.chat-reply-quote:hover {
   cursor: not-allowed;
 }
 
-.resources-add-split {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  min-height: 32px;
-}
-
 .resources-add-choice {
   min-width: 78px;
   height: 32px;
@@ -8655,52 +8648,6 @@ button.chat-reply-quote:hover {
 .resources-add-choice:hover {
   border-color: color-mix(in srgb, var(--accent-gold) 66%, var(--border-default));
   background: color-mix(in srgb, var(--accent-gold) 14%, var(--bg-card));
-}
-
-.resources-source-intake-action {
-  height: 32px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 86%, transparent);
-  border-radius: 9px;
-  background: color-mix(in srgb, var(--bg-card-alt) 58%, transparent);
-  color: var(--text-primary);
-  padding: 0 11px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 750;
-  cursor: pointer;
-}
-
-.resources-source-intake-action:hover {
-  border-color: color-mix(in srgb, var(--accent-gold) 48%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-gold) 8%, var(--bg-card-alt));
-}
-
-.resources-module-status-action {
-  height: 32px;
-  border: 0;
-  border-radius: 0;
-  background: transparent;
-  color: var(--text-secondary);
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 8px;
-  font-size: 12px;
-  font-weight: 750;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.resources-module-status-action:hover {
-  color: var(--text-primary);
-}
-
-.resources-module-status-action.is-live {
-  color: color-mix(in srgb, var(--accent-pink) 88%, var(--text-primary));
-}
-
-.resources-module-status-action.is-draft {
-  color: var(--text-muted);
 }
 
 .resource-form {
@@ -9462,6 +9409,17 @@ button.chat-reply-quote:hover {
   background: color-mix(in srgb, var(--bg-card-alt) 82%, transparent);
 }
 
+.resource-course-outline .knowledge-resource-item.is-active {
+  border-color: var(--stroke-selected);
+  background: var(--surface-selected);
+  color: var(--text-selected);
+}
+
+.resource-course-outline .knowledge-resource-item.is-active .knowledge-resource-item-title,
+.resource-course-outline .knowledge-resource-item.is-active .knowledge-resource-item-icon {
+  color: var(--text-selected);
+}
+
 .knowledge-resource-item-main:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--border-active) 58%, transparent);
   outline-offset: 2px;
@@ -10164,22 +10122,17 @@ button.chat-reply-quote:hover {
 .resources-panel .feed-header-actions.has-preview-mode {
   flex: 1 1 auto;
   flex-wrap: wrap;
-  justify-content: space-between;
+  justify-content: flex-end;
   min-width: 0;
   column-gap: 18px;
   row-gap: 8px;
 }
 
-.resources-header-admin-actions,
 .resources-header-view-actions {
   display: inline-flex;
   align-items: center;
   gap: 12px;
   min-height: 32px;
-}
-
-.resources-header-admin-actions {
-  min-width: 0;
 }
 
 .resources-header-view-actions {
@@ -10244,8 +10197,7 @@ button.chat-reply-quote:hover {
   margin-top: 6px;
 }
 
-.resource-course-catalog,
-.resource-course-intake {
+.resource-course-catalog {
   width: min(100%, 1080px);
   margin: 0 auto;
   padding: 18px 48px 34px;
@@ -10256,6 +10208,54 @@ button.chat-reply-quote:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 20px;
   align-items: stretch;
+}
+
+.resource-course-card,
+.resource-course-create-card {
+  min-height: calc(clamp(118px, 17vw, 158px) + 132px);
+}
+
+.resource-course-create-card {
+  width: 100%;
+  display: grid;
+  place-items: center;
+  border: 1px dashed color-mix(in srgb, var(--border-default) 90%, transparent);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--bg-card) 38%, transparent);
+  color: var(--text-muted);
+  padding: 24px;
+  font: inherit;
+  cursor: pointer;
+  transition: border-color 140ms ease, background 140ms ease, color 140ms ease, transform 140ms ease;
+}
+
+.resource-course-create-card:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
+  color: var(--text-primary);
+  transform: translateY(-1px);
+}
+
+.resource-course-create-card:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 3px;
+  border-color: var(--border-active);
+  color: var(--text-primary);
+}
+
+.resource-course-create-card-label {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 15px;
+  font-weight: 650;
+}
+
+.resource-course-create-card-label svg {
+  width: 22px;
+  height: 22px;
+  stroke-width: 1.7;
 }
 
 .resource-course-card {
@@ -10386,6 +10386,17 @@ button.chat-reply-quote:hover {
   position: absolute;
   top: 10px;
   z-index: 5;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.resource-course-card:hover .resource-course-card-menu,
+.resource-course-card:hover .resource-course-card-drag,
+.resource-course-card:focus-within .resource-course-card-menu,
+.resource-course-card:focus-within .resource-course-card-drag {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .resource-course-card-menu {
@@ -10561,43 +10572,6 @@ button.chat-reply-quote:hover {
 .resource-course-outline .knowledge-resource-item-title {
   white-space: normal;
   line-height: 1.35;
-}
-
-.resources-add-course-action,
-.resources-course-edit-action,
-.resources-empty-add-course {
-  min-height: 32px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
-  border: 1px solid var(--border-default);
-  border-radius: 9px;
-  background: transparent;
-  color: var(--text-secondary);
-  padding: 0 10px;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 650;
-  cursor: pointer;
-}
-
-.resources-add-course-action:hover,
-.resources-course-edit-action:hover,
-.resources-empty-add-course:hover {
-  border-color: var(--border-strong);
-  background: var(--bg-card-alt);
-  color: var(--text-primary);
-}
-
-.resources-add-course-action svg,
-.resources-empty-add-course svg {
-  width: 14px;
-  height: 14px;
-}
-
-.resources-empty-add-course {
-  margin-top: 6px;
 }
 
 .resource-card {
@@ -11600,8 +11574,7 @@ button.chat-reply-quote:hover {
     padding-inline: 0;
   }
 
-  .resource-course-catalog,
-  .resource-course-intake {
+  .resource-course-catalog {
     padding: 16px 20px 28px;
   }
 
@@ -11628,13 +11601,16 @@ button.chat-reply-quote:hover {
     gap: 14px;
   }
 
-  .resource-course-catalog,
-  .resource-course-intake {
+  .resource-course-catalog {
     padding: 12px 12px 24px;
   }
 
   .resource-course-card-cover {
     height: 132px;
+  }
+
+  .resource-course-create-card {
+    min-height: 264px;
   }
 
   .knowledge-source-intake {
@@ -11666,6 +11642,14 @@ button.chat-reply-quote:hover {
 
   .knowledge-source-build-action button {
     width: 100%;
+  }
+}
+
+@media (hover: none) {
+  .resource-course-card-menu,
+  .resource-course-card-drag {
+    opacity: 1;
+    pointer-events: auto;
   }
 }
 

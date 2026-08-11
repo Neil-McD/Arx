@@ -3,13 +3,12 @@ import {
   ArrowDown,
   ArrowUp,
   BookOpen,
-  ChevronsDown,
-  ChevronsUp,
   Eye,
   EyeOff,
   GripVertical,
   MoreHorizontal,
   Pencil,
+  Plus,
   Trash2,
   Wrench,
 } from "lucide-react";
@@ -17,7 +16,7 @@ import {
 import { StableFramedMedia } from "../../../../shared/StableFramedMedia";
 import type { CommunityResourceModule } from "./communityResourcesContracts";
 
-type ReorderDirection = "up" | "down" | "top" | "bottom";
+type ReorderDirection = "up" | "down";
 
 export type ResourceCourseCatalogItem = {
   module: CommunityResourceModule;
@@ -31,6 +30,7 @@ type ResourceCourseCatalogProps = {
   canReorder: boolean;
   draggingModuleId: string | null;
   dropTargetModuleId: string | null;
+  onCreate: (() => void) | null;
   onOpen: (module: CommunityResourceModule) => void;
   onEdit: (module: CommunityResourceModule) => void;
   onSetStatus: (module: CommunityResourceModule, status: "draft" | "live") => void;
@@ -130,28 +130,16 @@ function ResourceCourseCard(props: {
           {isMenuOpen ? (
             <div className="resource-course-card-menu-popover web-floating-menu" role="menu">
               {canReorder && canMoveUp ? (
-                <>
-                  <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, () => onMove("up"))}>
-                    <ArrowUp />
-                    <span>Move up</span>
-                  </button>
-                  <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, () => onMove("top"))}>
-                    <ChevronsUp />
-                    <span>Move to top</span>
-                  </button>
-                </>
+                <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, () => onMove("up"))}>
+                  <ArrowUp />
+                  <span>Move up</span>
+                </button>
               ) : null}
               {canReorder && canMoveDown ? (
-                <>
-                  <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, () => onMove("down"))}>
-                    <ArrowDown />
-                    <span>Move down</span>
-                  </button>
-                  <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, () => onMove("bottom"))}>
-                    <ChevronsDown />
-                    <span>Move to bottom</span>
-                  </button>
-                </>
+                <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, () => onMove("down"))}>
+                  <ArrowDown />
+                  <span>Move down</span>
+                </button>
               ) : null}
               <button type="button" role="menuitem" onClick={(event) => closeAndRun(event, onEdit)}>
                 <Pencil />
@@ -215,6 +203,7 @@ export function ResourceCourseCatalog(props: ResourceCourseCatalogProps) {
     canReorder,
     draggingModuleId,
     dropTargetModuleId,
+    onCreate,
     onOpen,
     onEdit,
     onSetStatus,
@@ -252,6 +241,19 @@ export function ResourceCourseCatalog(props: ResourceCourseCatalogProps) {
             onDragEnd={onDragEnd}
           />
         ))}
+        {canManage && onCreate ? (
+          <button
+            className="resource-course-create-card"
+            type="button"
+            aria-label="Add course"
+            onClick={onCreate}
+          >
+            <span className="resource-course-create-card-label">
+              <Plus aria-hidden="true" />
+              <span>Add course</span>
+            </span>
+          </button>
+        ) : null}
       </div>
 
       {canManage && maintenanceItem ? (

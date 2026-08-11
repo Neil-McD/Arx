@@ -25,6 +25,7 @@ const resourceCourseCatalog = read("apps/web/src/components/ResourceCourseCatalo
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const knowledgeSourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
+const builderKnowledgeSetup = read("apps/web/src/components/WebBuilderKnowledgeSetup.tsx");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const resourceContracts = read("apps/web/src/components/communityResourcesContracts.ts");
 const resourceController = read("shared/useCommunityResourceController.ts");
@@ -561,9 +562,19 @@ assert.match(
   "virtual unsorted cleanup must use a separate maintenance entry",
 );
 assert.match(
+  resourceCourseCatalog,
+  /resource-course-grid[\s\S]*resource-course-create-card[\s\S]*aria-label="Add course"/,
+  "manager course creation must appear as a peer card inside the course grid",
+);
+assert.match(
   resourcesPanel,
-  /resources-add-course-action[\s\S]*openNewModuleModal[\s\S]*Add course/,
-  "course creation must have one explicit Resources header action",
+  /onCreate=\{canManageResources \? actions\.openNewModuleModal : null\}/,
+  "the Resources catalog must gate course creation through manager mode",
+);
+assert.doesNotMatch(
+  resourcesPanel,
+  /resources-add-course-action|resources-course-edit-action|resources-module-status-action|feed-header-badge/,
+  "the Resources header must not duplicate catalog or course management actions",
 );
 assert.doesNotMatch(
   resourcesPanel,
@@ -626,6 +637,11 @@ assert.doesNotMatch(
   "course cards must not nest manager controls inside the navigation button",
 );
 assert.doesNotMatch(
+  resourceCourseCatalog,
+  /Move to top|Move to bottom|ChevronsUp|ChevronsDown/,
+  "course ordering must not retain redundant top and bottom accelerators",
+);
+assert.doesNotMatch(
   `${webResourceController}\n${resourceContracts}\n${resourcesPanel}`,
   /openNewSourceModal/,
   "resources must not keep the retired modal-based source intake path",
@@ -635,25 +651,30 @@ assert.match(
   /handleAddCommunitySources[\s\S]*uploadCloudCommunityResourceSourceFile[\s\S]*saveCloudCommunityResource[\s\S]*ingestCloudCommunitySources/,
   "source intake must reuse the canonical upload, resource save, and ingestion gateways",
 );
-assert.match(
+assert.doesNotMatch(
   resourcesPanel,
-  /WebCommunityKnowledgeSourceIntake[\s\S]*onAddSources=\{actions\.handleAddCommunitySources\}/,
-  "manager-empty resources must wire the canonical source intake to the resource controller",
+  /WebCommunityKnowledgeSourceIntake|showSourceIntake|resources-source-intake-action/,
+  "the course presentation must not expose source intake as a primary Resources action",
+);
+assert.match(
+  builderKnowledgeSetup,
+  /WebCommunityKnowledgeSourceIntake[\s\S]*onAddSources=\{props\.onAddSources\}/,
+  "builder onboarding must retain the canonical source intake path",
 );
 assert.match(
   knowledgeSourceIntake,
   /Seed your knowledge[\s\S]*Add and read sources/,
-  "manager-empty resources must expose one canonical link and file source intake",
+  "builder onboarding source intake must support canonical links and files",
 );
 assert.match(
   knowledgeSourceIntake,
   /readySources\.length > 0[\s\S]*Build my resources/,
-  "ready sources must expose one explicit Resources Architect launch action",
+  "the shared source intake must preserve its explicit architect launch capability",
 );
-assert.match(
-  resourcesPanel,
-  /readySources=\{readySources\}[\s\S]*onBuildResources=\{actions\.handleBuildCommunityResources\}/,
-  "resource launch must receive only canonical ready source records",
+assert.doesNotMatch(
+  builderKnowledgeSetup,
+  /later from Resources/,
+  "builder onboarding must not promise a source intake action removed from Resources",
 );
 assert.match(
   resourceContracts,
@@ -676,9 +697,14 @@ assert.doesNotMatch(
   "source reader must not expose a page-level Publish action",
 );
 assert.match(
-  resourcesPanel,
-  /actions\.handleSetModuleStatus\(selectedModule, selectedModuleNextStatus\)/,
-  "resources panel must expose course-level live/draft changes through the canonical module status action",
+  resourceCourseCatalog,
+  /onSetStatus\(isDraft \? "live" : "draft"\)[\s\S]*Make live[\s\S]*Move to draft/,
+  "the course card menu must own the canonical module status action",
+);
+assert.match(
+  baseCss,
+  /\.resource-course-outline \.knowledge-resource-item\.is-active[\s\S]*var\(--stroke-selected\)[\s\S]*var\(--surface-selected\)[\s\S]*var\(--text-selected\)/,
+  "selected lessons must reuse the canonical navigation selection tokens",
 );
 assert.match(
   resourcesPanel,

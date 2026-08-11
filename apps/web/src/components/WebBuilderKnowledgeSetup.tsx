@@ -77,7 +77,7 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
         <div className="builder-knowledge-setup-step">Community setup · 2 of 2</div>
         <h1 id="builder-knowledge-setup-title">Add your community knowledge.</h1>
         <p className="builder-knowledge-setup-intro">
-          Add links or files now, or skip and do this later from Resources.
+          Add links or files now, or skip for now and build your courses manually.
         </p>
 
         <WebCommunityKnowledgeSourceIntake

@@ -22,7 +22,6 @@ import {
   type WebCommunityResourceSourceLineage,
 } from "./WebCommunityResourceViewerModal";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
-import { WebCommunityKnowledgeSourceIntake } from "./WebCommunityKnowledgeSourceIntake";
 import { ResourceCourseCatalog } from "./ResourceCourseCatalog";
 
 type CommunityResourcesPanelProps = {
@@ -436,7 +435,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const [activeResourceEditField, setActiveResourceEditField] =
     useState<WebCommunityResourceInlineEditorField | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
-  const [showSourceIntake, setShowSourceIntake] = useState(false);
   const [isCourseOutlineOpen, setIsCourseOutlineOpen] = useState(true);
   const [isCreatingPageDraft, setIsCreatingPageDraft] = useState(false);
   const pageDraftCreationInFlightRef = useRef(false);
@@ -566,19 +564,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => moduleSections.flatMap((section) => section.sourceResources),
     [moduleSections],
   );
-  const failedSourceCount = useMemo(
-    () => allSourceResources.filter((resource) => resource.source_ingestion_status === "failed").length,
-    [allSourceResources],
-  );
-  const readySources = useMemo(
-    () => allSourceResources
-      .filter((resource) => resource.source_ingestion_status === "ready")
-      .map((resource) => ({
-        id: resource.id,
-        ingestedAt: resource.source_ingested_at ?? null,
-      })),
-    [allSourceResources],
-  );
   const displayableResources = useMemo(
     () => (canManageResources ? [...allPageResources, ...allSourceResources] : allPageResources),
     [allPageResources, allSourceResources, canManageResources],
@@ -695,7 +680,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   }, [capabilities.canOperateResources, isPreviewMode]);
 
   useEffect(() => {
-    setShowSourceIntake(false);
     setIsCourseOutlineOpen(true);
   }, [capabilities.activeCommunityId]);
 
@@ -955,14 +939,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleOpenCourse = (module: ResourceModuleView) => {
-    setShowSourceIntake(false);
     actions.handleSelectModule(module.id);
     const firstResource = getFirstResourceForModule(module);
     actions.setOpenResourceEmbedId(firstResource?.id ?? null);
   };
 
   const handleBackToCatalog = () => {
-    setShowSourceIntake(false);
     actions.resourceEditor.cancelInlineEditResource();
     setActiveResourceEditField(null);
     actions.setOpenResourceEmbedId(null);
@@ -970,7 +952,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleSelectResource = (resource: CommunityResource) => {
-    setShowSourceIntake(false);
     actions.handleSelectModule(getResourceModuleSelectionId(resource));
     actions.setOpenResourceEmbedId(resource.id);
     if (window.matchMedia("(max-width: 900px)").matches) {
@@ -1081,7 +1062,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const selectedModuleStatus = selectedModule?.module_status === "live" ? "live" : "draft";
-  const selectedModuleNextStatus = selectedModuleStatus === "live" ? "draft" : "live";
   const isSelectedResourceEditing =
     Boolean(selectedResource) && actions.resourceEditor.editingResourceId === selectedResource?.id;
   const selectedResourceEditorDirty = Boolean(
@@ -1157,55 +1137,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               capabilities.canOperateResources ? " has-preview-mode" : ""
             }`}
           >
-            <div className="resources-header-admin-actions">
-              <div
-                className="feed-header-badge"
-                aria-label={selectedModule
-                  ? `${selectedModuleSection?.pageResources.length ?? 0} lessons`
-                  : `${courseCatalogItems.length} courses`}
-              >
-                {selectedModule ? selectedModuleSection?.pageResources.length ?? 0 : courseCatalogItems.length}
-              </div>
-              {capabilities.hasActiveCommunity && canManageResources ? (
-                <div className="resources-add-split" role="group" aria-label="Resource actions">
-                  <button
-                    className="resources-source-intake-action"
-                    type="button"
-                    onClick={() => setShowSourceIntake((current) => !current)}
-                  >
-                    {showSourceIntake
-                      ? selectedModule
-                        ? "Back to course"
-                        : "Back to courses"
-                      : "Add sources"}
-                  </button>
-                  {selectedModule && !selectedModule.is_virtual ? (
-                    <>
-                      <button
-                        className="resources-course-edit-action"
-                        type="button"
-                        onClick={() => actions.handleEditModule(selectedModule)}
-                      >
-                        Edit course
-                      </button>
-                      <button
-                        className={`resources-module-status-action is-${selectedModuleNextStatus}`}
-                        type="button"
-                        onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
-                        title={selectedModuleStatus === "live" ? "Move course to draft" : "Make course live"}
-                      >
-                        {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
-                      </button>
-                    </>
-                  ) : !selectedModule ? (
-                    <button className="resources-add-course-action" type="button" onClick={() => actions.openNewModuleModal()}>
-                      <Plus aria-hidden="true" />
-                      <span>Add course</span>
-                    </button>
-                  ) : null}
-                </div>
-              ) : null}
-            </div>
             {capabilities.canOperateResources ? (
               <div className="resources-header-view-actions">
                 <div className="resources-preview-mode-control">
@@ -1248,17 +1179,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
           </div>
-        ) : canManageResources && showSourceIntake ? (
-          <div className="resource-course-intake">
-            <WebCommunityKnowledgeSourceIntake
-              communityId={capabilities.activeCommunityId}
-              communityName={capabilities.activeCommunityName}
-              failedSourceCount={failedSourceCount}
-              readySources={readySources}
-              onAddSources={actions.handleAddCommunitySources}
-              onBuildResources={actions.handleBuildCommunityResources}
-            />
-          </div>
         ) : !hasVisibleResourceContent && !canManageResources ? (
           <div className="community-panel-state-shell">
             <div className="chat-empty-state">
@@ -1277,43 +1197,27 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             </div>
           </div>
         ) : !selectedModule ? (
-          courseCatalogItems.length > 0 || maintenanceCatalogItem ? (
-            <ResourceCourseCatalog
-              items={courseCatalogItems}
-              maintenanceItem={maintenanceCatalogItem}
-              canManage={canManageResources}
-              canReorder={canReorderModules}
-              draggingModuleId={draggingModuleId}
-              dropTargetModuleId={dropTargetModuleId}
-              onOpen={handleOpenCourse}
-              onEdit={actions.handleEditModule}
-              onSetStatus={(module, status) => void actions.handleSetModuleStatus(module, status)}
-              onDelete={(module) => void actions.handleDeleteModule(module.id)}
-              onMove={(module, direction) => handleMoveModule(module.id, direction)}
-              onDragStart={handleModuleDragStart}
-              onDragOver={handleModuleDragOver}
-              onDragLeave={(module) => {
-                if (dropTargetModuleId === module.id) setDropTargetModuleId(null);
-              }}
-              onDrop={handleModuleDrop}
-              onDragEnd={handleModuleDragEnd}
-            />
-          ) : (
-            <div className="community-panel-state-shell">
-              <div className="chat-empty-state">
-                <div className="chat-empty-title">Create your first course</div>
-                <div className="chat-empty-text">
-                  Courses organize durable community knowledge into a clear sequence of lessons.
-                </div>
-                {canManageResources ? (
-                  <button className="resources-empty-add-course" type="button" onClick={() => actions.openNewModuleModal()}>
-                    <Plus aria-hidden="true" />
-                    <span>Add course</span>
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          )
+          <ResourceCourseCatalog
+            items={courseCatalogItems}
+            maintenanceItem={maintenanceCatalogItem}
+            canManage={canManageResources}
+            canReorder={canReorderModules}
+            draggingModuleId={draggingModuleId}
+            dropTargetModuleId={dropTargetModuleId}
+            onCreate={canManageResources ? actions.openNewModuleModal : null}
+            onOpen={handleOpenCourse}
+            onEdit={actions.handleEditModule}
+            onSetStatus={(module, status) => void actions.handleSetModuleStatus(module, status)}
+            onDelete={(module) => void actions.handleDeleteModule(module.id)}
+            onMove={(module, direction) => handleMoveModule(module.id, direction)}
+            onDragStart={handleModuleDragStart}
+            onDragOver={handleModuleDragOver}
+            onDragLeave={(module) => {
+              if (dropTargetModuleId === module.id) setDropTargetModuleId(null);
+            }}
+            onDrop={handleModuleDrop}
+            onDragEnd={handleModuleDragEnd}
+          />
         ) : (
           <div className="knowledge-workspace resource-course-workspace" aria-busy={isRefreshingResources}>
             <aside
