@@ -325,6 +325,16 @@ assert.match(
   publicFunnel,
   /isPreviewMode && publicCommunity[\s\S]*CommunityFunnelV1Preview/,
 );
+assert.match(
+  publicFunnel,
+  /className="funnel-preview-presentation"[\s\S]*className="funnel-preview-back"[\s\S]*href=\{props\.previewExitPath \?\? "\/discover"\}/,
+  "private preview must own its full-canvas presentation and native builder return link",
+);
+assert.match(
+  previewStyles,
+  /\.funnel-preview-presentation \{[\s\S]*height: 100%;[\s\S]*overflow: hidden;[\s\S]*\.funnel-preview-back \{[\s\S]*position: absolute;/,
+  "preview chrome must remain fixed while only funnel content scrolls",
+);
 assert.doesNotMatch(
   publicFunnel,
   /buildDefaultCommunityFunnelDocumentV1/,

@@ -104,8 +104,13 @@ assert.match(
 );
 assert.match(
   app,
-  /forceCommunityRoot:[\s\S]*showMobileShell[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*shellPublicRoute\.kind === "community_funnel_preview"/,
-  "public community funnels should remain forced to the Community root",
+  /forceCommunityRoot:\s*showMobileShell &&\s*shellPublicRoute\.kind === "community_funnel"/,
+  "the published public community funnel should remain forced to the Community root",
+);
+assert.doesNotMatch(
+  app,
+  /forceCommunityRoot:[\s\S]{0,180}community_funnel_preview/,
+  "the private funnel preview must not inherit the mobile community shell",
 );
 
 assert.match(

@@ -3,8 +3,7 @@ import { isDesktopShellContextualBackPage } from "../../../../shared/appShellNav
 
 export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
   const hasPublicFunnelBack =
-    props.isPublicCommunityFunnel &&
-    (props.isPublicFunnelPreviewRoute || props.hasBackTargetSnapshot);
+    props.isPublicCommunityFunnel && props.hasBackTargetSnapshot;
   const hasTopbarRightActions =
     !props.isPublicCommunityFunnel &&
     Boolean(props.directMessagesButton);
@@ -27,18 +26,7 @@ export function WebDesktopShellHeader(props: WebDesktopShellHeaderProps) {
     <header className="app-topbar">
       <div className="topbar-left">
         {props.isPublicCommunityFunnel ? (
-          props.isPublicFunnelPreviewRoute ? (
-            <a
-              className="back-to-workspace"
-              href={props.publicFunnelPreviewExitPath ?? "/"}
-              title="Exit preview"
-            >
-              <svg viewBox="0 0 24 24" className="back-icon">
-                <path d="M19 12H5M12 19l-7-7 7-7" />
-              </svg>
-              <span className="back-path">exit preview</span>
-            </a>
-          ) : props.hasBackTargetSnapshot ? (
+          props.hasBackTargetSnapshot ? (
             <button
               className="back-to-workspace"
               onClick={props.onBackFromPublicFunnel}

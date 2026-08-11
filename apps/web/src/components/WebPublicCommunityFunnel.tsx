@@ -83,6 +83,7 @@ type WebPublicCommunityFunnelProps = {
   isMobile?: boolean;
   shellVariant?: AppShellVariant;
   isPreviewMode?: boolean;
+  previewExitPath?: string | null;
   previewDocument?: CommunityFunnelDocumentV1 | null;
   previewVslUrl?: string | null;
   previewDocumentIsLoading?: boolean;
@@ -315,14 +316,26 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
 
   if (isPreviewMode && publicCommunity) {
     return (
-      <CommunityFunnelV1Preview
-        community={publicCommunity}
-        document={props.previewDocument ?? null}
-        vslUrl={props.previewVslUrl}
-        primaryActionLabel={primaryActionLabel}
-        isLoading={props.previewDocumentIsLoading}
-        error={props.previewDocumentError}
-      />
+      <div className="funnel-preview-presentation">
+        <a
+          className="funnel-preview-back"
+          href={props.previewExitPath ?? "/discover"}
+          aria-label="Back to funnel builder"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M19 12H5M12 19l-7-7 7-7" />
+          </svg>
+          <span>Back to builder</span>
+        </a>
+        <CommunityFunnelV1Preview
+          community={publicCommunity}
+          document={props.previewDocument ?? null}
+          vslUrl={props.previewVslUrl}
+          primaryActionLabel={primaryActionLabel}
+          isLoading={props.previewDocumentIsLoading}
+          error={props.previewDocumentError}
+        />
+      </div>
     );
   }
 

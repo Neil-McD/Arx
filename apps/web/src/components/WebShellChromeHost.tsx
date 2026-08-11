@@ -112,8 +112,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     reserveCommunityNavTopbarSpace:
       !props.showMobileAppShell &&
       props.desktopHeader.isPublicCommunityFunnel &&
-      (props.desktopHeader.isPublicFunnelPreviewRoute ||
-        props.desktopHeader.hasBackTargetSnapshot),
+      props.desktopHeader.hasBackTargetSnapshot,
   });
 
   return (
