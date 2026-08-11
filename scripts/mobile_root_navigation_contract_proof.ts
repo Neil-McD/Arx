@@ -230,6 +230,11 @@ assert.match(
   "the authenticated rail home should move Members out of the header while preserving the visitor affordance",
 );
 assert.match(
+  shellChromeProps,
+  /const isMobileCommunityHome =[\s\S]*destination\.kind === "community_home" \|\| params\.isPublicCommunityFunnel/,
+  "the public community funnel should project as the visitor home so its Members affordance remains reachable",
+);
+assert.match(
   topBar,
   /className="mobile-topbar-members"[\s\S]*onClick=\{onOpenMembers\}/,
   "Members should have an explicit header-right affordance",

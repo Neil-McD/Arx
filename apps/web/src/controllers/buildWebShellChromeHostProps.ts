@@ -103,9 +103,8 @@ export function buildWebShellChromeHostProps(params: {
   const isMobileCommunityHome =
     params.showMobileAppShell &&
     !params.showMobileSettingsShell &&
-    params.destination.kind === "community_home" &&
     params.mobileRootPage === "community" &&
-    !params.isPublicCommunityFunnel;
+    (params.destination.kind === "community_home" || params.isPublicCommunityFunnel);
   const isMobileCommunityDetail =
     params.showMobileAppShell &&
     !params.showMobileSettingsShell &&
