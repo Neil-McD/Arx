@@ -18,7 +18,7 @@
   --mobile-topbar-top-offset: 8px;
   --mobile-topbar-clearance: calc(env(safe-area-inset-top, 0px) + 54px);
   --mobile-floating-chrome-bg: var(--web-floating-chrome-surface);
-  --mobile-bottom-rail-height: 62px;
+  --mobile-bottom-rail-height: 54px;
   --mobile-community-rail-width: 60px;
   --mobile-community-rail-target-size: 44px;
   --mobile-left-panel-width: min(74vw, 304px);
@@ -2564,8 +2564,7 @@
 
 .mobile-bottom-rail-action {
   min-width: 0;
-  min-height: 48px;
-  height: 54px;
+  height: 48px;
   padding: 0 4px;
   border: 0;
   border-radius: 14px;

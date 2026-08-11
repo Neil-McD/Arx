@@ -435,8 +435,8 @@ assert.doesNotMatch(
 
 assert.match(
   indexCss,
-  /--mobile-bottom-rail-height: 62px;[\s\S]*\.mobile-bottom-rail-inner \{[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);[\s\S]*align-items: center;/,
-  "mobile CSS should reserve one restrained three-column rail",
+  /--mobile-bottom-rail-height: 54px;[\s\S]*\.mobile-bottom-rail-inner \{[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);[\s\S]*align-items: center;[\s\S]*\.mobile-bottom-rail-action \{[\s\S]*height: 48px;/,
+  "mobile CSS should reserve one compact three-column rail with accessible touch targets",
 );
 assert.match(
   indexCss,
