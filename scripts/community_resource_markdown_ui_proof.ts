@@ -48,8 +48,33 @@ assert.match(
 );
 assert.match(
   css,
-  /\.resource-course-workspace \{[\s\S]*grid-template-columns: minmax\(220px, 270px\) minmax\(0, 1fr\)/,
+  /\.resource-course-workspace \{[\s\S]*grid-template-columns: minmax\(196px, 232px\) minmax\(0, 1fr\)/,
   "selected courses should reserve a compact lesson outline beside the reader",
+);
+assert.match(
+  css,
+  /\.resource-course-outline \{[\s\S]*position: sticky;[\s\S]*top: 12px;[\s\S]*max-height: calc\(100dvh - 24px\)/,
+  "the lesson outline should stay available while the lesson reader scrolls",
+);
+assert.match(
+  css,
+  /\.knowledge-resource-reader \.resource-viewer-column \{[\s\S]*max-width: min\(100%, 860px\);[\s\S]*margin-inline: 0/,
+  "lesson media and content should share a left-aligned reading spine",
+);
+assert.match(
+  css,
+  /\.knowledge-resource-reader \.resource-viewer-prose \{[\s\S]*max-width: 680px/,
+  "lesson prose should keep a readable measure independently of wider media",
+);
+assert.match(
+  css,
+  /\.knowledge-resource-reader \.resource-viewer-title \{[\s\S]*font-size: clamp\(28px, 2\.5vw, 36px\)/,
+  "lesson titles should remain prominent without overpowering the reader",
+);
+assert.match(
+  css,
+  /\.resource-course-outline \.knowledge-resource-item \{[\s\S]*padding: 8px 9px[\s\S]*\.resource-course-outline \.knowledge-resource-item-title \{[\s\S]*font-size: 12\.5px/,
+  "lesson outline rows should remain compact while preserving readable labels",
 );
 assert.match(
   css,
