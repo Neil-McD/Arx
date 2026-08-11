@@ -1115,22 +1115,28 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         <div className="feed-header-row">
           <div className="feed-header-copy">
             {selectedModule ? (
-              <button className="resources-back-btn" type="button" onClick={handleBackToCatalog}>
-                <ArrowLeft aria-hidden="true" />
-                <span>Resources</span>
-              </button>
-            ) : null}
-            <div className="resources-header">{selectedModule?.name ?? "Resources"}</div>
-            <div className="feed-header-subtitle">
-              {selectedModule
-                ? selectedModule.description_md?.trim() || "A guided collection of community lessons."
-                : `Courses and durable knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
-            </div>
-            {selectedModule?.is_virtual ? (
-              <div className="resource-module-status-line is-cleanup">Needs sorting</div>
-            ) : canManageResources && selectedModule && selectedModuleStatus === "draft" ? (
-              <div className="resource-module-status-line is-draft">Draft course</div>
-            ) : null}
+              <div className="resources-course-context">
+                <button className="resources-back-btn" type="button" onClick={handleBackToCatalog}>
+                  <ArrowLeft aria-hidden="true" />
+                  <span>Resources</span>
+                </button>
+                <div className="resources-course-context-name" title={selectedModule.name}>
+                  {selectedModule.name}
+                </div>
+                {selectedModule.is_virtual ? (
+                  <div className="resource-module-status-line is-cleanup">Needs sorting</div>
+                ) : canManageResources && selectedModuleStatus === "draft" ? (
+                  <div className="resource-module-status-line is-draft">Draft course</div>
+                ) : null}
+              </div>
+            ) : (
+              <>
+                <div className="resources-header">Resources</div>
+                <div className="feed-header-subtitle">
+                  {`Courses and durable knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
+                </div>
+              </>
+            )}
           </div>
           <div
             className={`feed-header-actions resources-header-actions${

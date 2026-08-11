@@ -276,17 +276,32 @@
   padding-top: var(--web-topbar-height);
 }
 
-/* Community tabs with their own headers on the right panel need a top safe area. */
-.resources-panel,
+/* Feed content starts below the floating shell actions. Resources instead uses
+   that 48px band as its own compact utility row. */
 .feed-panel {
   padding-top: calc(16px + var(--web-topbar-height));
 }
 
 @media (max-width: 700px) {
-  .resources-panel,
   .feed-panel {
     padding-top: calc(12px + var(--web-topbar-height));
   }
+}
+
+.resources-panel {
+  gap: 10px;
+  padding: 0 24px 24px;
+}
+
+.resources-panel > .feed-header-row {
+  min-height: var(--web-topbar-height);
+  align-items: center;
+  padding-right: var(--web-topbar-right-action-safe-inset);
+}
+
+.app-root.mobile-shell .resources-panel > .feed-header-row {
+  min-height: auto;
+  padding-right: 0;
 }
 
 /* Web: remove the dedicated header row from the grid and offset content manually. */

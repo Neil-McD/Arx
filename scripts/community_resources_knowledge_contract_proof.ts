@@ -24,6 +24,7 @@ const resourceModuleModal = read("apps/web/src/components/WebCommunityResourceMo
 const resourceCourseCatalog = read("apps/web/src/components/ResourceCourseCatalog.tsx");
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
+const webCss = read("apps/web/src/index.css");
 const knowledgeSourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
 const builderKnowledgeSetup = read("apps/web/src/components/WebBuilderKnowledgeSetup.tsx");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
@@ -611,10 +612,30 @@ assert.match(
   /prepareCloudCommunityBrandingField[\s\S]*description_md: current\.moduleDescriptionInput\.trim\(\) \|\| null[\s\S]*banner_storage_id: bannerField\.storageId \?\? null/,
   "course saves must persist description and canonicalized cover metadata",
 );
-assert.match(
+assert.doesNotMatch(
   resourcesPanel,
   /selectedModule\.description_md\?\.trim\(\)/,
-  "selected course headers must surface the course description",
+  "selected course headers must not repeat catalog description copy above the lesson workspace",
+);
+assert.match(
+  resourcesPanel,
+  /resources-course-context[\s\S]*resources-back-btn[\s\S]*resources-course-context-name/,
+  "selected courses must keep back navigation and course context in one compact utility row",
+);
+assert.match(
+  webCss,
+  /\.resources-panel\s*\{[^}]*gap:\s*10px;[^}]*padding:\s*0 24px 24px;/,
+  "desktop Resources must reuse the shell top band instead of stacking blanket top padding",
+);
+assert.match(
+  webCss,
+  /\.resources-panel > \.feed-header-row\s*\{[^}]*min-height:\s*var\(--web-topbar-height\);[^}]*padding-right:\s*var\(--web-topbar-right-action-safe-inset\);/,
+  "the Resources utility row must reserve the canonical floating DM action inset",
+);
+assert.match(
+  baseCss,
+  /\.resource-course-catalog\s*\{[^}]*margin:\s*0;[^}]*padding:\s*8px 0 34px;/,
+  "the course catalog must align to the Resources heading without redundant nested gutters",
 );
 assert.match(
   resourcesPanel,

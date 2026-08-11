@@ -8551,6 +8551,7 @@ button.chat-reply-quote:hover {
   letter-spacing: 0.02em;
   line-height: 1;
   cursor: pointer;
+  flex: 0 0 auto;
   width: fit-content;
   transition: color 0.15s ease;
 }
@@ -8567,6 +8568,27 @@ button.chat-reply-quote:hover {
 
 .resources-back-btn:hover {
   color: var(--text-primary);
+}
+
+.resources-course-context {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.resources-course-context-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  line-height: 1;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .resources-header-subtitle {
@@ -10197,10 +10219,15 @@ button.chat-reply-quote:hover {
   margin-top: 6px;
 }
 
+.resources-course-context .resource-module-status-line {
+  flex: 0 0 auto;
+  margin-top: 0;
+}
+
 .resource-course-catalog {
   width: min(100%, 1080px);
-  margin: 0 auto;
-  padding: 18px 48px 34px;
+  margin: 0;
+  padding: 8px 0 34px;
 }
 
 .resource-course-grid {
