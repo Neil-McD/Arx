@@ -5,6 +5,7 @@ import type {
   CommunityPublicFace,
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
+import { getAvatarColor } from "../../../../shared/chatUi";
 import {
   buildCommunityFunnelPrimaryActionView,
   type CommunityFunnelUiMode,
@@ -14,7 +15,9 @@ import {
   WebCommunityBridgeCard,
   type WebCommunityBridgeCardProps,
 } from "./WebCommunityBridgeCard";
+import { CommunityContextPanel } from "./CommunityContextPanel";
 import { CommunityFunnelPreview } from "./CommunityFunnelPreview";
+import { WebMobileDrawer } from "./WebMobileDrawer";
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 
@@ -31,6 +34,9 @@ type PublicCommunityFunnelCommunityLike = {
   host?: Omit<CommunityPublicFace, "user_id"> | null;
   member_count?: number | null;
   member_faces_preview?: CommunityPublicFace[] | null;
+  online_count?: number | null;
+  online_count_capped?: boolean | null;
+  online_faces?: CommunityPublicFace[] | null;
   funnel?: CommunityFunnelConfig | null;
 };
 
@@ -59,8 +65,17 @@ type WebPublicCommunityFunnelProps = {
   publicCommunityError: string | null;
   publicJoinError: string | null;
   checkoutError: string | null;
+  mobileMembersOverlayOpen?: boolean;
+  onCloseMobileMembersOverlay?: () => void;
   bridge?: WebCommunityBridgeCardProps | null;
 };
+
+function getInitialsFromLabel(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
 
 function deriveFunnelMode(args: {
   canEnterCommunity: boolean;
@@ -124,9 +139,55 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const funnelErrors = [publicCommunityError, publicJoinError, checkoutError].filter(
     Boolean,
   ) as string[];
+  const publicMemberFaces = publicCommunity?.member_faces_preview ?? [];
+  const publicOnlineFaces = publicCommunity?.online_faces ?? [];
+  const closeMobileMembersOverlay = props.onCloseMobileMembersOverlay ?? (() => {});
+  const mobileMembersDrawer = publicCommunity ? (
+    <WebMobileDrawer
+      isOpen={Boolean(props.mobileMembersOverlayOpen)}
+      ariaLabel={`${communityName} members`}
+      title="Members"
+      side="right"
+      className="mobile-members-drawer public-funnel-members-drawer"
+      footer={(
+        <button
+          className="cfg-join public-funnel-members-join"
+          type="button"
+          disabled={isPrimaryActionDisabled}
+          onClick={() => {
+            closeMobileMembersOverlay();
+            onPrimaryJoinAction();
+          }}
+        >
+          {primaryAction.label}
+        </button>
+      )}
+      onClose={closeMobileMembersOverlay}
+    >
+      <CommunityContextPanel
+        communityName={communityName}
+        onlineFaces={publicOnlineFaces}
+        onlineCount={publicCommunity.online_count ?? null}
+        onlineCountCapped={Boolean(publicCommunity.online_count_capped)}
+        memberCount={publicCommunity.member_count ?? null}
+        lockedSections={{ members: true }}
+        membersPreview={publicMemberFaces}
+        onLockedSectionActivate={closeMobileMembersOverlay}
+        displayName={(userId) =>
+          [...publicOnlineFaces, ...publicMemberFaces].find(
+            (face) => face.user_id === userId,
+          )?.display_name ?? "Member"
+        }
+        getInitials={getInitialsFromLabel}
+        getAvatarColor={getAvatarColor}
+        sectionMode="members"
+      />
+    </WebMobileDrawer>
+  ) : null;
   const renderWithBridge = (content: ReactNode) => (
     <>
       {content}
+      {mobileMembersDrawer}
       {props.bridge ? (
         <div className="cfg-gate cvs-gate cvs-gate-bridge">
           <WebCommunityBridgeCard {...props.bridge} />

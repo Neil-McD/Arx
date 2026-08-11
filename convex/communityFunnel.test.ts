@@ -3,7 +3,7 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 import {
   buildCommunityFunnelContentTestFixture,
@@ -220,6 +220,37 @@ test("a newer private draft cannot mutate the published snapshot", async () => {
   expect(publicResult.community?.funnel.published_content_v2).not.toEqual(
     nextDraft,
   );
+});
+
+test("overlong draft content fails without changing draft or published state", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  await asOwner.mutation(api.communityFunnel.publishCommunityFunnelDraft, {
+    communityId: fixture.communityId,
+    expectedDraftRevision: 1,
+  });
+
+  await expect(
+    t.mutation(internal.communityFunnel.saveCommunityFunnelDraftInternal, {
+      userId: fixture.ownerId,
+      communityId: fixture.communityId,
+      slot: "custom_1",
+      expectedDraftRevision: 1,
+      content: {
+        ...fixture.draft,
+        long_form_markdown: "x".repeat(12_001),
+      },
+    }),
+  ).rejects.toThrow("community_funnel_long_form_too_long");
+
+  const row = await t.run(async (ctx) => ctx.db.get(fixture.funnelId));
+  expect(row).toMatchObject({
+    draftRevision: 1,
+    draftContentV2: fixture.draft,
+    publishedDraftRevision: 1,
+    publishedContentV2: fixture.draft,
+  });
 });
 
 test("removing legacy hero media cannot delete or hide a published V1 snapshot", async () => {

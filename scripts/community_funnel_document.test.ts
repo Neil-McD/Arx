@@ -37,17 +37,69 @@ describe("Community Funnel V2 content", () => {
     ).toThrow("community_funnel_pillar_title_required");
   });
 
-  it("requires core copy and bounds the long-form narrative", () => {
+  it("requires core copy and rejects every overlong V2 field", () => {
     const content = buildCommunityFunnelContentTestFixture();
     expect(() =>
       validateCommunityFunnelContentV2({ ...content, headline: "" }),
     ).toThrow("community_funnel_headline_required");
+
     expect(
       validateCommunityFunnelContentV2({
         ...content,
-        long_form_markdown: "x".repeat(13_000),
-      }).long_form_markdown,
-    ).toHaveLength(12_000);
+        headline: "h".repeat(180),
+        subheadline: "s".repeat(480),
+        pillars: content.pillars.map((pillar) => ({
+          ...pillar,
+          title: "t".repeat(90),
+          body: "b".repeat(320),
+        })),
+        long_form_markdown: "l".repeat(12_000),
+      }),
+    ).toMatchObject({
+      headline: "h".repeat(180),
+      subheadline: "s".repeat(480),
+      long_form_markdown: "l".repeat(12_000),
+    });
+
+    const overlongCases = [
+      {
+        value: { ...content, headline: "h".repeat(181) },
+        code: "community_funnel_headline_too_long",
+      },
+      {
+        value: { ...content, subheadline: "s".repeat(481) },
+        code: "community_funnel_subheadline_too_long",
+      },
+      {
+        value: {
+          ...content,
+          pillars: [
+            { ...content.pillars[0], title: "t".repeat(91) },
+            ...content.pillars.slice(1),
+          ],
+        },
+        code: "community_funnel_pillar_title_too_long",
+      },
+      {
+        value: {
+          ...content,
+          pillars: [
+            { ...content.pillars[0], body: "b".repeat(321) },
+            ...content.pillars.slice(1),
+          ],
+        },
+        code: "community_funnel_pillar_body_too_long",
+      },
+      {
+        value: { ...content, long_form_markdown: "l".repeat(12_001) },
+        code: "community_funnel_long_form_too_long",
+      },
+    ];
+    for (const testCase of overlongCases) {
+      expect(() => validateCommunityFunnelContentV2(testCase.value)).toThrow(
+        testCase.code,
+      );
+    }
   });
 });
 

@@ -94,6 +94,19 @@ function normalizeRequiredText(
   return value;
 }
 
+function validateRequiredText(
+  raw: unknown,
+  maxLength: number,
+  requiredCode: string,
+  tooLongCode: string,
+): string {
+  if (typeof raw !== "string") throw new Error(requiredCode);
+  const value = raw.trim();
+  if (!value) throw new Error(requiredCode);
+  if (value.length > maxLength) throw new Error(tooLongCode);
+  return value;
+}
+
 function normalizeHeroMediaKind(raw: unknown): CommunityFunnelHeroMediaKind {
   return raw === "video" ? "video" : "image";
 }
@@ -487,35 +500,40 @@ export function validateCommunityFunnelContentV2(
     }
     const pillar = rawPillar as Record<string, unknown>;
     return {
-      title: normalizeRequiredText(
+      title: validateRequiredText(
         pillar.title,
         90,
         "community_funnel_pillar_title_required",
+        "community_funnel_pillar_title_too_long",
       ),
-      body: normalizeRequiredText(
+      body: validateRequiredText(
         pillar.body,
         320,
         "community_funnel_pillar_body_required",
+        "community_funnel_pillar_body_too_long",
       ),
     };
   }) as CommunityFunnelContentV2["pillars"];
   return {
     version: 2,
-    headline: normalizeRequiredText(
+    headline: validateRequiredText(
       value.headline,
       180,
       "community_funnel_headline_required",
+      "community_funnel_headline_too_long",
     ),
-    subheadline: normalizeRequiredText(
+    subheadline: validateRequiredText(
       value.subheadline,
       480,
       "community_funnel_subheadline_required",
+      "community_funnel_subheadline_too_long",
     ),
     pillars,
-    long_form_markdown: normalizeRequiredText(
+    long_form_markdown: validateRequiredText(
       value.long_form_markdown,
       12_000,
       "community_funnel_long_form_required",
+      "community_funnel_long_form_too_long",
     ),
   };
 }

@@ -2809,6 +2809,11 @@
   align-items: flex-end;
 }
 
+.public-funnel-members-join {
+  width: 100%;
+  min-height: 44px;
+}
+
 .mobile-agent-drawer-google {
   border-radius: 14px;
 }

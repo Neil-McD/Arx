@@ -2747,6 +2747,11 @@ export default function App() {
       publicCommunityError: publicCommunityUi.publicCommunityError,
       publicJoinError: publicCommunityUi.publicJoinError,
       checkoutError,
+      mobileMembersOverlayOpen:
+        showMobileShell &&
+        publicRoute.kind === "community_funnel" &&
+        mobileOverlay === "members",
+      onCloseMobileMembersOverlay: () => setMobileOverlay(null),
       bridge:
         /* The pitch converts first: the bridge opens on an entry ATTEMPT
            (join/enter/claim), never on arrival. */
