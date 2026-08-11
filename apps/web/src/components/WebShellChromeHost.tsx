@@ -43,15 +43,14 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     props.showMobileAppShell &&
     !props.showMobileSettingsShell &&
     props.communityShell.mobileRootPage === "community" &&
-    props.communityShell.activePage === "community" &&
-    props.communityShell.activeView === "community_home";
+    props.communityShell.destination.kind === "community_home";
   const showMobileGlobalShell =
     props.communityShell.showMobileGlobalShell &&
     !props.communityShell.forceMobileCommunityRoot;
   const isMobileDiscoverRoot =
     props.showMobileAppShell &&
     showMobileGlobalShell &&
-    props.communityShell.activePage === "discover";
+    props.communityShell.destination.kind === "discover";
   const shellHeader = props.showMobileAppShell ? (
     isMobileDedicatedRoot || isMobileDiscoverRoot ? null : (
       <WebMobileTopBar
@@ -81,12 +80,11 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       ? "Polynet AI"
       : props.communityShell.mobileRootPage === "messages"
         ? "Direct messages"
-        : props.communityShell.activePage === "settings"
+        : props.communityShell.destination.kind === "global_settings"
           ? "Settings"
-          : props.communityShell.activePage === "community" &&
-              props.communityShell.communityTab === "settings"
+          : props.communityShell.destination.kind === "community_settings"
             ? "Community settings"
-          : props.communityShell.activePage === "discover"
+          : props.communityShell.destination.kind === "discover"
             ? "Discover"
             : "Polynet";
   const mainSurface = showMobileGlobalShell ? (

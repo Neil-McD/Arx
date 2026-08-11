@@ -1,9 +1,9 @@
-import type {
-  AppPage,
-  AppView,
-  CommunityTab,
-} from "../../../../shared/appShellNavigation";
-import type { AppShellVariant, PublicRoute } from "../../../../shared/webAppRouteState";
+import {
+  isWebCommunityAppDestination,
+  type AppShellVariant,
+  type PublicRoute,
+  type WebDestination,
+} from "../../../../shared/webAppRouteState";
 
 type MobileSettingsView = "index" | "detail";
 type MobileShellMode = "agent" | "discover" | "community" | "settings";
@@ -25,24 +25,25 @@ export type WebShellProjection = {
 export function buildWebShellProjection(params: {
   publicRouteKind: PublicRoute["kind"];
   shellVariant: AppShellVariant;
-  activePage: AppPage;
-  activeView: AppView;
-  communityTab: CommunityTab;
+  destination: WebDestination;
   mobileRootPage: "agent" | "community" | "messages";
   mobileSettingsView: MobileSettingsView;
   isPublicCommunityFunnel: boolean;
 }): WebShellProjection {
   const isAppRoute = params.publicRouteKind === "app";
-  const isGlobalSettings = isAppRoute && params.activePage === "settings";
+  const isGlobalSettings =
+    isAppRoute && params.destination.kind === "global_settings";
   const isCommunitySettings =
-    isAppRoute &&
-    params.activePage === "community" &&
-    params.activeView === "home" &&
-    params.communityTab === "settings";
-  const isLandingPage = isAppRoute && params.activePage === "landing";
-  const isOnboardingPage = isAppRoute && params.activePage === "onboarding";
-  const isOperatorPage = isAppRoute && params.activePage === "operator";
+    isAppRoute && params.destination.kind === "community_settings";
+  const isLandingPage =
+    isAppRoute && params.destination.kind === "platform_entry";
+  const isOnboardingPage =
+    isAppRoute && params.destination.kind === "onboarding";
+  const isOperatorPage = isAppRoute && params.destination.kind === "operator";
   const isPublicAppPage = isLandingPage || isOnboardingPage;
+  const isCommunityAppDestination = isWebCommunityAppDestination(
+    params.destination,
+  );
   /* The visitor lens on mobile: /c/:slug gets the SAME mobile community
      shell a member gets — one column, the middle panel is the page. */
   const isVisitorCommunityRoute =
@@ -55,11 +56,11 @@ export function buildWebShellProjection(params: {
       isAppRoute &&
       !isPublicAppPage &&
       !params.isPublicCommunityFunnel &&
-      (params.activePage === "settings" ||
-        params.activePage === "community" ||
-        params.activePage === "discover" ||
-        params.activePage === "operator" ||
-        params.activePage === "docs")) ||
+      (isGlobalSettings ||
+        isCommunityAppDestination ||
+        params.destination.kind === "discover" ||
+        params.destination.kind === "operator" ||
+        params.destination.kind === "docs")) ||
     isMobileVisitorCommunity;
   const showMobileSettingsShell =
     showMobileAppShell && isGlobalSettings && !isMobileVisitorCommunity;
@@ -68,8 +69,8 @@ export function buildWebShellProjection(params: {
     showMobileAppShell &&
     !isMobileVisitorCommunity &&
     (params.mobileRootPage !== "community" ||
-      params.activePage !== "community" ||
-      params.activeView === "community_home" ||
+      !isCommunityAppDestination ||
+      params.destination.kind === "community_home" ||
       isCommunitySettings);
   const showMobileSettingsIndex =
     showMobileSettingsShell && params.mobileSettingsView === "index";
@@ -85,7 +86,7 @@ export function buildWebShellProjection(params: {
     isVisitorCommunityRoute && params.shellVariant !== "mobile";
   const showDesktopCommunityNav =
     (isAppRoute &&
-      params.activePage === "community" &&
+      isCommunityAppDestination &&
       !showMobileAppShell &&
       !showMobilePublicFunnel) ||
     showDesktopPublicFunnelNav;
@@ -100,11 +101,11 @@ export function buildWebShellProjection(params: {
     (isGlobalSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
   const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
     ? "community"
-    : params.activePage === "settings" || isCommunitySettings
+    : isGlobalSettings || isCommunitySettings
       ? "settings"
-      : params.activePage === "discover" ||
-        params.activePage === "operator" ||
-        params.activePage === "docs"
+      : params.destination.kind === "discover" ||
+        params.destination.kind === "operator" ||
+        params.destination.kind === "docs"
       ? "discover"
       : "community";
   return {

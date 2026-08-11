@@ -101,9 +101,7 @@ if (originalWindow === undefined) {
 const desktopProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "standard",
-  activePage: "settings",
-  activeView: "home",
-  communityTab: "chat",
+  destination: { kind: "global_settings", page: "profile", index: false },
   mobileRootPage: "community",
   mobileSettingsView: "detail",
   isPublicCommunityFunnel: false,
@@ -115,9 +113,7 @@ assert.equal(desktopProjection.hasLeftPanel, true);
 const mobileProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "mobile",
-  activePage: "settings",
-  activeView: "home",
-  communityTab: "chat",
+  destination: { kind: "global_settings", page: "profile", index: true },
   mobileRootPage: "community",
   mobileSettingsView: "index",
   isPublicCommunityFunnel: false,
@@ -132,9 +128,7 @@ assert.equal(mobileProjection.showMobileGlobalShell, true);
 const mobileCommunitySettingsProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "mobile",
-  activePage: "community",
-  activeView: "home",
-  communityTab: "settings",
+  destination: { kind: "community_settings", slug: "polynet", pane: "community" },
   mobileRootPage: "community",
   mobileSettingsView: "detail",
   isPublicCommunityFunnel: false,
@@ -147,12 +141,15 @@ assert.equal(
 assert.equal(mobileCommunitySettingsProjection.mobileShellMode, "settings");
 
 for (const communityTab of ["chat", "resources", "events"] as const) {
+  const destination = communityTab === "chat"
+    ? { kind: "community_chat" as const, slug: "polynet", channelSlug: null }
+    : communityTab === "resources"
+      ? { kind: "community_resources" as const, slug: "polynet", moduleId: null }
+      : { kind: "community_events" as const, slug: "polynet" };
   const contentProjection = buildWebShellProjection({
     publicRouteKind: "app",
     shellVariant: "mobile",
-    activePage: "community",
-    activeView: "home",
-    communityTab,
+    destination,
     mobileRootPage: "community",
     mobileSettingsView: "detail",
     isPublicCommunityFunnel: false,

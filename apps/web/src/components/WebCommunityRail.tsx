@@ -29,7 +29,7 @@ export function WebCommunityRail({
         <button
           type="button"
           className={`community-rail-button${
-            communityShell.activePage === "discover" ? " active" : ""
+            communityShell.destination.kind === "discover" ? " active" : ""
           }`}
           onClick={communityShell.onOpenDiscover}
           title="Discover communities"
@@ -98,7 +98,7 @@ export function WebCommunityRail({
                     return;
                   }
                   if (!changed) return;
-                  if (communityShell.activePage === "discover") {
+                  if (communityShell.destination.kind === "discover") {
                     if (communitySlug) {
                       communityShell.onOpenCommunityChat(communitySlug);
                     }
@@ -146,7 +146,7 @@ export function WebCommunityRail({
         <button
           type="button"
           className={`community-rail-button${
-            communityShell.activePage === "settings" ? " active" : ""
+            communityShell.destination.kind === "global_settings" ? " active" : ""
           }`}
           onClick={communityShell.onOpenGlobalSettings}
           title="Settings"

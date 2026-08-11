@@ -186,17 +186,17 @@ assert.match(
 );
 assert.match(
   shellHost,
-  /const isMobileDiscoverRoot =[\s\S]*showMobileGlobalShell[\s\S]*activePage === "discover";[\s\S]*isMobileDedicatedRoot \|\| isMobileDiscoverRoot \? null/,
+  /const isMobileDiscoverRoot =[\s\S]*showMobileGlobalShell[\s\S]*destination\.kind === "discover";[\s\S]*isMobileDedicatedRoot \|\| isMobileDiscoverRoot \? null/,
   "Discover should omit the mobile top bar when the authenticated community rail is present",
 );
 assert.match(
   shellProjection,
-  /const isCommunitySettings =[\s\S]*params\.activePage === "community"[\s\S]*params\.communityTab === "settings"[\s\S]*showMobileGlobalShell =[\s\S]*isCommunitySettings/,
+  /const isCommunitySettings =[\s\S]*params\.destination\.kind === "community_settings"[\s\S]*showMobileGlobalShell =[\s\S]*isCommunitySettings/,
   "community settings should be the explicit community-detail exception that retains the outer shell",
 );
 assert.match(
   shellProjection,
-  /params\.activePage === "settings" \|\| isCommunitySettings[\s\S]*\? "settings"/,
+  /isGlobalSettings \|\| isCommunitySettings[\s\S]*\? "settings"/,
   "global and community settings should share the settings header presentation",
 );
 assert.doesNotMatch(
@@ -211,7 +211,7 @@ assert.match(
 );
 assert.match(
   shellChromeProps,
-  /selectedMobileChannel[\s\S]*params\.communityTab === "chat"[\s\S]*channel\.slug === params\.selectedCommunityChannelSlug[\s\S]*mobileChannelLabel[\s\S]*communityDetailLabel: isMobileCommunityMembers \? "Members" : mobileChannelLabel/,
+  /mobileChannelSlug = params\.destination\.kind === "community_chat"[\s\S]*params\.destination\.channelSlug[\s\S]*selectedMobileChannel[\s\S]*channel\.slug === mobileChannelSlug[\s\S]*communityDetailLabel: isMobileCommunityMembers \? "Members" : mobileChannelLabel/,
   "mobile chat detail should derive its label from the selected canonical channel",
 );
 assert.match(
@@ -358,7 +358,7 @@ assert.match(
 );
 assert.match(
   communityNavSurface,
-  /const hasDestinationSelection =[\s\S]*communityShell\.activeView !== "community_members"[\s\S]*hideIdentitySettings=\{isMobileHome\}[\s\S]*activeSelectionMode=\{hasDestinationSelection \? "route" : "none"\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
+  /const hasDestinationSelection =[\s\S]*!isMobileHome &&[\s\S]*webDestinationHasCommunityNavSelection\(communityShell\.destination\)[\s\S]*hideIdentitySettings=\{isMobileHome\}[\s\S]*activeSelectionMode=\{hasDestinationSelection \? "route" : "none"\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
   "mobile home should keep community identity without claiming an active destination or exposing reorder controls",
 );
 assert.match(
@@ -382,6 +382,16 @@ assert.match(
   "the mobile community directory and Members destination should have durable route states",
 );
 assert.match(
+  routeState,
+  /export type WebDestination =[\s\S]*kind: "platform_entry"[\s\S]*kind: "community_funnel"[\s\S]*kind: "community_home"[\s\S]*kind: "community_members"[\s\S]*kind: "community_chat"[\s\S]*deriveWebDestinationFromPath/,
+  "one discriminated destination contract should cover platform, funnel, and community routes",
+);
+assert.doesNotMatch(
+  shellProjection + shellChromeProps + shellHost + communityNavSurface + communityRail,
+  /activeView/,
+  "mobile shell consumers should not reconstruct destination semantics from activeView",
+);
+assert.match(
   communityRouteController,
   /const openCommunityMembers[\s\S]*buildCommunityMembersPath[\s\S]*navigateTo\(path\)/,
   "authenticated Members should navigate through the canonical community route controller",
@@ -398,12 +408,12 @@ assert.doesNotMatch(
 );
 assert.match(
   shellHost,
-  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*activeView === "community_home"[\s\S]*const showMobileGlobalShell =[\s\S]*!props\.communityShell\.forceMobileCommunityRoot[\s\S]*<WebMobileGlobalShell/,
+  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*destination\.kind === "community_home"[\s\S]*const showMobileGlobalShell =[\s\S]*!props\.communityShell\.forceMobileCommunityRoot[\s\S]*<WebMobileGlobalShell/,
   "AI, Messages, Discover, Settings, and the community directory should share one global mobile frame",
 );
 assert.match(
   shellProjection,
-  /const showMobileShell = showMobileAppShell;[\s\S]*const showMobileGlobalShell =[\s\S]*!isMobileVisitorCommunity[\s\S]*params\.mobileRootPage !== "community"[\s\S]*params\.activePage !== "community"[\s\S]*params\.activeView === "community_home"/,
+  /const showMobileShell = showMobileAppShell;[\s\S]*const showMobileGlobalShell =[\s\S]*!isMobileVisitorCommunity[\s\S]*params\.mobileRootPage !== "community"[\s\S]*!isCommunityAppDestination[\s\S]*params\.destination\.kind === "community_home"/,
   "the route projection should frame global roots while leaving community detail routes focused",
 );
 assert.match(

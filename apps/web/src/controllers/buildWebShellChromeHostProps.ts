@@ -1,9 +1,12 @@
 import type { ReactNode } from "react";
 import type {
   AppPage,
-  AppView,
   SettingsGroup,
 } from "../../../../shared/appShellNavigation";
+import {
+  isWebCommunityDetailDestination,
+  type WebDestination,
+} from "../../../../shared/webAppRouteState";
 import type { WebShellChromeHostProps } from "../components/WebShellChromeHost";
 import type { MobileMemberFace, MobileOverlay } from "../components/webShellChromeShared";
 import type { CommunityShellCommunity } from "../../../../shared/communityTypes";
@@ -25,6 +28,7 @@ export function buildWebShellChromeHostProps(params: {
   forceMobileCommunityRoot: boolean;
   showMobileSettingsIndex: boolean;
   activePage: AppPage;
+  destination: WebDestination;
   activeCommunity: CommunityLike | null;
   activeCommunityAttentionCount: number;
   activeCommunityMemberFaces: MobileMemberFace[];
@@ -39,7 +43,6 @@ export function buildWebShellChromeHostProps(params: {
   isPublicFunnelPreviewRoute: boolean;
   hasBackTargetSnapshot: boolean;
   backTargetLabel: string | null;
-  activeView: AppView;
   directMessagesButton: ReactNode;
   publicFunnelPreviewExitPath: string | null;
   handleTopbarBackFromPublicFunnel: () => void;
@@ -102,34 +105,34 @@ export function buildWebShellChromeHostProps(params: {
   const isMobileCommunityHome =
     params.showMobileAppShell &&
     !params.showMobileSettingsShell &&
-    params.activePage === "community" &&
-    params.activeView === "community_home" &&
+    params.destination.kind === "community_home" &&
     params.mobileRootPage === "community" &&
     !params.isPublicCommunityFunnel;
   const isMobileCommunityDetail =
     params.showMobileAppShell &&
     !params.showMobileSettingsShell &&
-    params.activePage === "community" &&
-    params.activeView === "home" &&
+    isWebCommunityDetailDestination(params.destination) &&
     params.mobileRootPage === "community" &&
     !params.isPublicCommunityFunnel;
   const isMobileCommunityMembers =
     params.showMobileAppShell &&
     !params.showMobileSettingsShell &&
-    params.activePage === "community" &&
-    params.activeView === "community_members" &&
+    params.destination.kind === "community_members" &&
     params.mobileRootPage === "community" &&
     !params.isPublicCommunityFunnel;
-  const selectedMobileChannel = isMobileCommunityDetail && params.communityTab === "chat"
+  const mobileChannelSlug = params.destination.kind === "community_chat"
+    ? params.destination.channelSlug ?? "general"
+    : null;
+  const selectedMobileChannel = mobileChannelSlug
     ? params.communityChannels.find(
-        (channel) => channel.slug === params.selectedCommunityChannelSlug,
+        (channel) => channel.slug === mobileChannelSlug,
       ) ?? null
     : null;
-  const mobileChannelLabel = isMobileCommunityDetail && params.communityTab === "chat"
+  const mobileChannelLabel = mobileChannelSlug
     ? selectedMobileChannel?.name ?? (
-        params.selectedCommunityChannelSlug === "general"
+        mobileChannelSlug === "general"
           ? "General"
-          : params.selectedCommunityChannelSlug.replace(/[-_]+/g, " ")
+          : mobileChannelSlug.replace(/[-_]+/g, " ")
       )
     : null;
   return {
@@ -224,6 +227,7 @@ export function buildWebShellChromeHostProps(params: {
       setMobileOverlay: params.setMobileOverlay,
       onSelectMobileRootPage: params.handleSelectMobileRootPage,
       activeCommunity: params.activeCommunity,
+      destination: params.destination,
       communityTab: params.communityTab,
       communityTabIndicators: params.communityTabIndicators,
       communityChannels: params.communityChannels,
@@ -269,7 +273,6 @@ export function buildWebShellChromeHostProps(params: {
       communityRailAttentionById: params.communityRailAttentionById,
       isLoadingCommunities: params.isLoadingCommunities,
       selectedActiveCommunitySlug: params.selectedActiveCommunitySlug,
-      activePage: params.activePage,
       onSelectActiveCommunity: params.handleSelectActiveCommunity,
       onOpenCommunityChat: params.openCommunityChat,
       onOpenCommunityHome: (communitySlug) => {
@@ -290,7 +293,6 @@ export function buildWebShellChromeHostProps(params: {
       },
       communityCreateCtaLabel: "+",
       communityCreateCtaTitle: "Create community",
-      activeView: params.activeView,
       onOpenGlobalSettings: () => {
         if (params.showMobileGlobalShell) params.prepareMobileGlobalNavigation();
         params.handleOpenGlobalSettings();

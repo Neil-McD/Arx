@@ -51,6 +51,35 @@ export type AppRoutePathState = {
   operatorTab?: OperatorTab | null;
 };
 
+/**
+ * The canonical semantic destination derived from a route.
+ *
+ * AppRoutePathState remains the compatibility adapter for the existing shell
+ * state while consumers migrate. New shell decisions should use this union so
+ * impossible combinations such as `community_members + communityTab: chat`
+ * are not re-interpreted independently in each component.
+ */
+export type WebDestination =
+  | { kind: "platform_entry" }
+  | { kind: "onboarding" }
+  | { kind: "discover" }
+  | { kind: "docs"; slug: string | null }
+  | { kind: "operator"; tab: OperatorTab }
+  | { kind: "global_settings"; page: SettingsPage; index: boolean }
+  | { kind: "community_funnel"; slug: string }
+  | { kind: "community_funnel_preview"; slug: string }
+  | { kind: "community_onboarding_preview"; slug: string }
+  | { kind: "community_home"; slug: string }
+  | { kind: "community_members"; slug: string }
+  | { kind: "community_chat"; slug: string; channelSlug: string | null }
+  | { kind: "community_resources"; slug: string; moduleId: string | null }
+  | { kind: "community_events"; slug: string }
+  | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
+  | { kind: "community_funnel_editor"; slug: string }
+  | { kind: "community_analytics"; slug: string }
+  | { kind: "checkout_success"; sessionId: string }
+  | { kind: "claim"; token: string };
+
 export const DEFAULT_POST_SIGN_IN_PATH = "/";
 export const MOBILE_SHELL_PATH_PREFIX = "/m";
 export const STANDALONE_APP_LAUNCH_SEARCH_PARAM = "launch";
@@ -524,19 +553,169 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
   return null;
 }
 
-export function readPublicRouteFromLocation(): PublicRoute {
-  const path = stripShellVariantFromPathname(window.location.pathname || "/");
+export function deriveWebDestinationFromAppRoute(
+  route: AppRoutePathState,
+): WebDestination {
+  switch (route.page) {
+    case "landing":
+      return { kind: "platform_entry" };
+    case "onboarding":
+      return { kind: "onboarding" };
+    case "discover":
+      return { kind: "discover" };
+    case "docs":
+      return { kind: "docs", slug: route.docsSlug ?? null };
+    case "operator":
+      return { kind: "operator", tab: route.operatorTab ?? "platform" };
+    case "settings":
+      return {
+        kind: "global_settings",
+        page: route.settingsPage,
+        index: route.settingsIndex === true,
+      };
+    case "community": {
+      const slug = String(route.communitySlug ?? "").trim();
+      if (!slug) return { kind: "platform_entry" };
+      if (route.communityExperienceMode === "onboarding_preview") {
+        return { kind: "community_onboarding_preview", slug };
+      }
+      if (route.view === "community_home") {
+        return { kind: "community_home", slug };
+      }
+      if (route.view === "community_members") {
+        return { kind: "community_members", slug };
+      }
+      switch (route.communityTab) {
+        case "chat":
+          return {
+            kind: "community_chat",
+            slug,
+            channelSlug: route.communityChannelSlug ?? null,
+          };
+        case "resources":
+          return {
+            kind: "community_resources",
+            slug,
+            moduleId: route.communityResourceModuleId ?? null,
+          };
+        case "events":
+          return { kind: "community_events", slug };
+        case "settings":
+          return {
+            kind: "community_settings",
+            slug,
+            pane: parseCommunitySettingsPane(route.communitySettingsPane),
+          };
+        case "funnel":
+          return { kind: "community_funnel_editor", slug };
+        case "analytics":
+          return { kind: "community_analytics", slug };
+      }
+    }
+  }
+}
+
+function derivePublicWebDestination(
+  route: Exclude<PublicRoute, { kind: "app" }>,
+): WebDestination {
+  switch (route.kind) {
+    case "community_funnel":
+      return { kind: "community_funnel", slug: route.slug };
+    case "community_funnel_preview":
+      return { kind: "community_funnel_preview", slug: route.slug };
+    case "checkout_success":
+      return { kind: "checkout_success", sessionId: route.sessionId };
+    case "claim":
+      return { kind: "claim", token: route.token };
+  }
+}
+
+export function deriveWebDestination(params: {
+  publicRoute: PublicRoute;
+  appRoute: AppRoutePathState;
+}): WebDestination {
+  return params.publicRoute.kind === "app"
+    ? deriveWebDestinationFromAppRoute(params.appRoute)
+    : derivePublicWebDestination(params.publicRoute);
+}
+
+export function deriveWebDestinationFromPath(
+  pathWithSearch: string,
+): WebDestination | null {
+  const publicRoute = parsePublicRouteFromPath(pathWithSearch);
+  if (publicRoute.kind !== "app") return derivePublicWebDestination(publicRoute);
+  const parsed = new URL(String(pathWithSearch || "/"), "http://local.arx");
+  const stripped = stripShellVariantFromPathname(parsed.pathname || "/");
+  const pathname = new URL(stripped, "http://local.arx").pathname || "/";
+  const route = parseAppRouteFromPathname(pathname);
+  return route ? deriveWebDestinationFromAppRoute(route) : null;
+}
+
+export function isWebCommunityDetailDestination(
+  destination: WebDestination,
+): boolean {
+  switch (destination.kind) {
+    case "community_onboarding_preview":
+    case "community_chat":
+    case "community_resources":
+    case "community_events":
+    case "community_settings":
+    case "community_funnel_editor":
+    case "community_analytics":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function isWebCommunityAppDestination(
+  destination: WebDestination,
+): boolean {
+  return (
+    destination.kind === "community_home" ||
+    destination.kind === "community_members" ||
+    isWebCommunityDetailDestination(destination)
+  );
+}
+
+export function webDestinationHasCommunityNavSelection(
+  destination: WebDestination,
+): boolean {
+  switch (destination.kind) {
+    case "community_funnel":
+    case "community_funnel_preview":
+    case "community_onboarding_preview":
+    case "community_chat":
+    case "community_resources":
+    case "community_events":
+    case "community_settings":
+    case "community_funnel_editor":
+    case "community_analytics":
+      return true;
+    default:
+      return false;
+  }
+}
+
+export function parsePublicRouteFromPath(pathWithSearch: string): PublicRoute {
+  const parsed = new URL(String(pathWithSearch || "/"), "http://local.arx");
+  const stripped = stripShellVariantFromPathname(
+    joinPathWithQueryAndHash(parsed.pathname || "/", parsed.search, parsed.hash),
+  );
+  const normalized = new URL(stripped, "http://local.arx");
+  const path = normalized.pathname || "/";
   if (path === "/checkout/success") {
-    const params = new URLSearchParams(window.location.search);
-    const sessionId = (params.get("session_id") ?? "").trim();
-    return { kind: "checkout_success", sessionId };
+    return {
+      kind: "checkout_success",
+      sessionId: normalized.searchParams.get("session_id")?.trim() ?? "",
+    };
   }
   if (path === "/claim") {
-    const params = new URLSearchParams(window.location.search);
-    const token = (params.get("token") ?? "").trim();
-    return { kind: "claim", token };
+    return {
+      kind: "claim",
+      token: normalized.searchParams.get("token")?.trim() ?? "",
+    };
   }
-
   const segments = splitPathSegments(path);
   if (segments[0] === "c" && segments.length === 3 && segments[2] === "preview") {
     const slug = String(segments[1] ?? "").trim();
@@ -548,6 +727,16 @@ export function readPublicRouteFromLocation(): PublicRoute {
   }
 
   return { kind: "app" };
+}
+
+export function readPublicRouteFromLocation(): PublicRoute {
+  return parsePublicRouteFromPath(
+    joinPathWithQueryAndHash(
+      window.location.pathname || "/",
+      window.location.search,
+      window.location.hash,
+    ),
+  );
 }
 
 export function readAppRouteFromLocation(): AppRouteState {
