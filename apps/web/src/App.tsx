@@ -107,6 +107,7 @@ import {
   applyShellVariantToAppPath,
   buildAppRoutePath,
   buildCommunityTabPath,
+  buildSettingsIndexPath,
   buildSettingsPath,
 } from "../../../shared/webAppRouteState";
 import { shouldHydrateWebRouteAccountSetup } from "../../../shared/webRouteAccess";
@@ -457,6 +458,8 @@ export default function App() {
     setActiveView,
     settingsPage,
     setSettingsPage,
+    mobileSettingsView,
+    setMobileSettingsView,
     selectedProductDocSlug,
     setSelectedProductDocSlug,
     activeOperatorTab,
@@ -1818,6 +1821,7 @@ export default function App() {
     shellVariant,
     activePage,
     activeView,
+    communityTab,
     mobileRootPage,
     mobileSettingsView,
     isPublicCommunityFunnel,
@@ -2682,10 +2686,9 @@ export default function App() {
       showMobileSettingsShell,
       showMobileSettingsIndex,
       onSelectMobileSettingsPage: (page) => {
-        setSettingsPage(page);
-        setMobileSettingsView("detail");
+        navigateTo(buildSettingsPath(page));
       },
-      onShowMobileSettingsIndex: () => setMobileSettingsView("index"),
+      onShowMobileSettingsIndex: () => navigateTo(buildSettingsIndexPath()),
       settingsPanelsProps,
     },
     publicCommunityFunnelProps: {
@@ -3031,7 +3034,9 @@ export default function App() {
     getCommunityRailItemBindings,
     handleOpenGlobalSettings: isVisitorCommunitySurface
       ? () => navigateTo(buildSettingsPath("profile"))
-      : () => openGlobalSettings("profile"),
+      : shellVariant === "mobile"
+        ? () => navigateTo(buildSettingsIndexPath())
+        : () => openGlobalSettings("profile"),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     hasLeftPanel,

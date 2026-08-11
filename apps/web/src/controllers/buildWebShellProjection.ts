@@ -1,4 +1,8 @@
-import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
+import type {
+  AppPage,
+  AppView,
+  CommunityTab,
+} from "../../../../shared/appShellNavigation";
 import type { AppShellVariant, PublicRoute } from "../../../../shared/webAppRouteState";
 
 type MobileSettingsView = "index" | "detail";
@@ -23,12 +27,18 @@ export function buildWebShellProjection(params: {
   shellVariant: AppShellVariant;
   activePage: AppPage;
   activeView: AppView;
+  communityTab: CommunityTab;
   mobileRootPage: "agent" | "community" | "messages";
   mobileSettingsView: MobileSettingsView;
   isPublicCommunityFunnel: boolean;
 }): WebShellProjection {
   const isAppRoute = params.publicRouteKind === "app";
   const isGlobalSettings = isAppRoute && params.activePage === "settings";
+  const isCommunitySettings =
+    isAppRoute &&
+    params.activePage === "community" &&
+    params.activeView === "home" &&
+    params.communityTab === "settings";
   const isLandingPage = isAppRoute && params.activePage === "landing";
   const isOnboardingPage = isAppRoute && params.activePage === "onboarding";
   const isOperatorPage = isAppRoute && params.activePage === "operator";
@@ -59,7 +69,8 @@ export function buildWebShellProjection(params: {
     !isMobileVisitorCommunity &&
     (params.mobileRootPage !== "community" ||
       params.activePage !== "community" ||
-      params.activeView === "community_home");
+      params.activeView === "community_home" ||
+      isCommunitySettings);
   const showMobileSettingsIndex =
     showMobileSettingsShell && params.mobileSettingsView === "index";
   const showMobilePublicFunnel =
@@ -89,7 +100,7 @@ export function buildWebShellProjection(params: {
     (isGlobalSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
   const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
     ? "community"
-    : params.activePage === "settings"
+    : params.activePage === "settings" || isCommunitySettings
       ? "settings"
       : params.activePage === "discover" ||
         params.activePage === "operator" ||

@@ -193,7 +193,7 @@ assert.match(
 );
 assert.match(
   shellState,
-  /readOAuthCallbackShellVariantFromLocation\(\)[\s\S]*readShellVariantFromPathname\(window\.location\.pathname[\s\S]*readPublicRouteFromLocation\(\)[\s\S]*readAppRouteFromLocation\(\)/,
+  /resolveInitialAppShellVariant\(\{[\s\S]*pathname: window\.location\.pathname[\s\S]*oauthShellVariant: readOAuthCallbackShellVariantFromLocation\(\)[\s\S]*readPublicRouteFromLocation\(\)[\s\S]*readAppRouteFromLocation\(\)/,
   "the shell state controller must own initial route and shell-variant hydration",
 );
 assert.match(

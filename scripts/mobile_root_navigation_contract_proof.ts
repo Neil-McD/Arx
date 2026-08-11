@@ -179,6 +179,16 @@ assert.match(
   /const isMobileDiscoverRoot =[\s\S]*showMobileGlobalShell[\s\S]*activePage === "discover";[\s\S]*isMobileDedicatedRoot \|\| isMobileDiscoverRoot \? null/,
   "Discover should omit the mobile top bar when the authenticated community rail is present",
 );
+assert.match(
+  shellProjection,
+  /const isCommunitySettings =[\s\S]*params\.activePage === "community"[\s\S]*params\.communityTab === "settings"[\s\S]*showMobileGlobalShell =[\s\S]*isCommunitySettings/,
+  "community settings should be the explicit community-detail exception that retains the outer shell",
+);
+assert.match(
+  shellProjection,
+  /params\.activePage === "settings" \|\| isCommunitySettings[\s\S]*\? "settings"/,
+  "global and community settings should share the settings header presentation",
+);
 assert.doesNotMatch(
   topBar,
   /isDiscover|selectorLabel/,

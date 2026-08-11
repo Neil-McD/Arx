@@ -25,6 +25,7 @@ export type AppRouteState = {
   page: AppPage;
   view: AppView;
   settingsPage: SettingsPage;
+  settingsIndex?: boolean;
   communitySlug: string | null;
   communityTab: CommunityTab;
   communityExperienceMode?: CommunityExperienceMode;
@@ -39,6 +40,7 @@ export type AppRoutePathState = {
   page: AppPage;
   view: AppView;
   settingsPage: SettingsPage;
+  settingsIndex?: boolean;
   communitySlug: string | null;
   communityTab: CommunityTab;
   communityExperienceMode?: CommunityExperienceMode;
@@ -175,6 +177,10 @@ export function applyShellVariantToKnownPath(path: string, shellVariant: AppShel
 
 export function buildSettingsPath(settingsPage: SettingsPage): string {
   return `/settings/${encodeURIComponent(settingsPage)}`;
+}
+
+export function buildSettingsIndexPath(): string {
+  return "/settings";
 }
 
 export function buildCommunityTabPath(
@@ -414,6 +420,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       page: "settings",
       view: "home",
       settingsPage: parseSettingsPage(segments[1] ?? null),
+      ...(segments.length === 1 ? { settingsIndex: true } : {}),
       communitySlug: null,
       communityTab: "chat",
     };
@@ -526,6 +533,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       page: fromPath.page,
       view: fromPath.view,
       settingsPage: fromPath.settingsPage,
+      ...(fromPath.settingsIndex ? { settingsIndex: true } : {}),
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
       ...(fromPath.communityExperienceMode === "onboarding_preview"
@@ -551,7 +559,9 @@ export function readAppRouteFromLocation(): AppRouteState {
 
 export function buildAppRoutePath(state: AppRoutePathState): string | null {
   if (state.page === "settings") {
-    return buildSettingsPath(state.settingsPage);
+    return state.settingsIndex
+      ? buildSettingsIndexPath()
+      : buildSettingsPath(state.settingsPage);
   }
 
   if (state.page === "discover") {

@@ -70,7 +70,11 @@ export function useWebShellState() {
     setCommunityOnboardingFirstPostFocusRequest,
   ] = useState(0);
   const [mobileSettingsView, setMobileSettingsView] =
-    useState<"index" | "detail">("detail");
+    useState<"index" | "detail">(
+      initialAppRoute?.page === "settings" && initialAppRoute.settingsIndex
+        ? "index"
+        : "detail",
+    );
   const [mobileChromeReadingMode, setMobileChromeReadingMode] = useState(false);
   const [stripeConnectReturn, setStripeConnectReturn] =
     useState<StripeConnectReturn | null>(null);

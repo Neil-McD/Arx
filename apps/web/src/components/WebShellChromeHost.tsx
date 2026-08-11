@@ -83,6 +83,9 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
         ? "Direct messages"
         : props.communityShell.activePage === "settings"
           ? "Settings"
+          : props.communityShell.activePage === "community" &&
+              props.communityShell.communityTab === "settings"
+            ? "Community settings"
           : props.communityShell.activePage === "discover"
             ? "Discover"
             : "Polynet";
