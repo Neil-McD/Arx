@@ -1,61 +1,11 @@
 import { describe, expect, it } from "vitest";
 
-import type { CommunityFunnelSectionV1 } from "../shared/communityTypes";
 import {
   buildCommunityFunnelPrimaryActionView,
   buildCommunityFunnelMemberProofView,
-  resolveCommunityFunnelMemberProofInsertIndex,
 } from "../shared/communityFunnelUi";
 
 describe("community funnel member proof", () => {
-  it("places implicit proof directly after benefits", () => {
-    const sections: CommunityFunnelSectionV1[] = [
-      {
-        id: "benefits",
-        type: "benefits",
-        heading: null,
-        items: [],
-      },
-      { id: "cta", type: "cta", headline: "Join", body: null },
-    ];
-    const benefitsIndex = sections.findIndex(
-      (section) => section.type === "benefits",
-    );
-    expect(resolveCommunityFunnelMemberProofInsertIndex(sections)).toBe(
-      benefitsIndex + 1,
-    );
-  });
-
-  it("preserves the explicit position of authored proof sections", () => {
-    const sections: CommunityFunnelSectionV1[] = [
-      {
-        id: "proof",
-        type: "social_proof",
-        headline: null,
-        body: null,
-      },
-      { id: "cta", type: "cta", headline: "Join", body: null },
-    ];
-    expect(resolveCommunityFunnelMemberProofInsertIndex(sections)).toBeNull();
-  });
-
-  it("falls back to immediately before the CTA when benefits are absent", () => {
-    const sections: CommunityFunnelSectionV1[] = [
-      {
-        id: "hero",
-        type: "hero",
-        eyebrow: null,
-        headline: "Build together",
-        body: "A community",
-        alignment: "center",
-      },
-      { id: "cta", type: "cta", headline: "Join", body: null },
-    ];
-    expect(resolveCommunityFunnelMemberProofInsertIndex(sections)).toBe(
-      sections.findIndex((section) => section.type === "cta"),
-    );
-  });
-
   it("hides missing and zero-count proof without reserving space", () => {
     expect(
       buildCommunityFunnelMemberProofView({ memberCount: null, faces: [] }),
@@ -104,7 +54,6 @@ describe("community funnel member proof", () => {
     ]);
     expect(proof?.faces[0]?.avatar_focus_x).toBe(0.25);
     expect(proof?.hiddenFaceCount).toBe(18);
-    expect(proof?.headline).toBe("Join 20+ members");
     expect(proof?.label).toBe("20 members and growing");
     expect(proof?.ariaLabel).toBe("20 community members");
   });
@@ -127,7 +76,6 @@ describe("community funnel member proof", () => {
     });
     expect(proof?.faces).toHaveLength(1);
     expect(proof?.hiddenFaceCount).toBe(0);
-    expect(proof?.headline).toBe("Join the community");
     expect(proof?.label).toBe("1 member");
     expect(proof?.ariaLabel).toBe("1 community member");
   });

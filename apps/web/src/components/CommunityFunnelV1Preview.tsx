@@ -8,10 +8,7 @@ import {
 import { Fragment } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
-import {
-  buildCommunityFunnelMemberProofView,
-  resolveCommunityFunnelMemberProofInsertIndex,
-} from "../../../../shared/communityFunnelUi";
+import { buildCommunityFunnelMemberProofView } from "../../../../shared/communityFunnelUi";
 import type {
   CommunityFunnelDocumentV1,
   CommunityFunnelSectionV1,
@@ -77,31 +74,23 @@ export function CommunityFunnelV1Preview(props: {
     memberCount: community.member_count,
     faces: community.member_faces_preview,
   });
-  const automaticMemberProofInsertIndex = document
-    ? resolveCommunityFunnelMemberProofInsertIndex(document.sections)
-    : null;
 
-  const renderMemberProof = (params: { key: string; body?: string | null }) => {
+  const renderMemberProof = () => {
     if (!memberProof) return null;
     return (
       <section
-        key={params.key}
-        className="funnel-v1-member-proof"
+        className="funnel-v1-member-proof-row"
         aria-label={memberProof.ariaLabel}
       >
         <MemberAvatarStack
-          className="funnel-v1-member-avatars"
+          className="funnel-v1-member-proof-avatars"
           faces={memberProof.faces}
           totalCount={memberProof.memberCount}
           limit={5}
           decorative={true}
           imageLoading="lazy"
         />
-        <div className="funnel-v1-member-proof-copy">
-          <h2>{memberProof.headline}</h2>
-          <p>{memberProof.label}</p>
-          {params.body?.trim() ? <span>{params.body.trim()}</span> : null}
-        </div>
+        <span>{memberProof.label}</span>
       </section>
     );
   };
@@ -131,22 +120,37 @@ export function CommunityFunnelV1Preview(props: {
     </header>
   );
 
-  const renderDefaultMemberProof = () => {
-    if (!memberProof) return null;
+  const renderConversionSpine = (params: {
+    key?: string;
+    variant: "default" | "document";
+    headline?: string;
+    body?: string | null;
+  }) => {
+    const isDefault = params.variant === "default";
     return (
       <section
-        className="funnel-v1-default-member-proof"
-        aria-label={memberProof.ariaLabel}
+        key={params.key}
+        className={
+          isDefault
+            ? "funnel-v1-conversion-spine is-default"
+            : "funnel-v1-conversion-spine is-document funnel-v1-final-cta"
+        }
       >
-        <MemberAvatarStack
-          className="funnel-v1-default-member-avatars"
-          faces={memberProof.faces}
-          totalCount={memberProof.memberCount}
-          limit={5}
-          decorative={true}
-          imageLoading="lazy"
-        />
-        <span>{memberProof.label}</span>
+        {!isDefault && params.headline ? <h2>{params.headline}</h2> : null}
+        {!isDefault && params.body ? <p>{params.body}</p> : null}
+        <div className="funnel-v1-conversion-action">
+          {renderMemberProof()}
+          <button
+            type="button"
+            disabled={isPreview || props.primaryActionDisabled}
+            onClick={isPreview ? undefined : props.onPrimaryAction}
+          >
+            {props.primaryActionLabel}
+          </button>
+          {!isDefault && isPreview ? (
+            <small>Draft preview · Publishing is always explicit.</small>
+          ) : null}
+        </div>
       </section>
     );
   };
@@ -176,24 +180,13 @@ export function CommunityFunnelV1Preview(props: {
               <p>{props.deterministicContent.body}</p>
             ) : null}
           </section>
-          <div className="funnel-v1-default-conversion">
-            {renderDefaultMemberProof()}
-            <section className="funnel-v1-conversion">
-              <button
-                type="button"
-                disabled={isPreview || props.primaryActionDisabled}
-                onClick={isPreview ? undefined : props.onPrimaryAction}
-              >
-                {props.primaryActionLabel}
-              </button>
-            </section>
-          </div>
+          {renderConversionSpine({ variant: "default" })}
         </main>
       </div>
     );
   }
 
-  const renderSection = (section: CommunityFunnelSectionV1, index: number) => {
+  const renderSection = (section: CommunityFunnelSectionV1) => {
     if (section.type === "hero") {
       return (
         <Fragment key={section.id}>
@@ -235,7 +228,7 @@ export function CommunityFunnelV1Preview(props: {
       );
     }
     if (section.type === "social_proof") {
-      return renderMemberProof({ key: section.id, body: section.body });
+      return null;
     }
     if (section.type === "testimonial") {
       return (
@@ -268,25 +261,12 @@ export function CommunityFunnelV1Preview(props: {
         </section>
       );
     }
-    return (
-      <section
-        key={section.id}
-        className={`funnel-v1-final-cta ${index === 0 ? "is-first" : ""}`}
-      >
-        <h2>{section.headline}</h2>
-        {section.body ? <p>{section.body}</p> : null}
-        <button
-          type="button"
-          disabled={isPreview || props.primaryActionDisabled}
-          onClick={isPreview ? undefined : props.onPrimaryAction}
-        >
-          {props.primaryActionLabel}
-        </button>
-        {isPreview ? (
-          <small>Draft preview · Publishing is always explicit.</small>
-        ) : null}
-      </section>
-    );
+    return renderConversionSpine({
+      key: section.id,
+      variant: "document",
+      headline: section.headline,
+      body: section.body,
+    });
   };
 
   return (
@@ -305,17 +285,7 @@ export function CommunityFunnelV1Preview(props: {
         {props.error ? (
           <div className="funnel-v1-preview-error">{props.error}</div>
         ) : null}
-        {document.sections.map((section, index) => (
-          <Fragment key={section.id}>
-            {automaticMemberProofInsertIndex === index
-              ? renderMemberProof({ key: "automatic-member-proof" })
-              : null}
-            {renderSection(section, index)}
-          </Fragment>
-        ))}
-        {automaticMemberProofInsertIndex === document.sections.length
-          ? renderMemberProof({ key: "automatic-member-proof" })
-          : null}
+        {document.sections.map((section) => renderSection(section))}
       </main>
     </div>
   );

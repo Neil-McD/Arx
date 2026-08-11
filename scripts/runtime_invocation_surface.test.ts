@@ -114,7 +114,13 @@ describe("community funnel runtime surface", () => {
     ).toMatchObject({ rendered: true, layer: "scoped", owner: "runtime" });
     expect(bundle.text).toContain("bounded community funnel composer");
     expect(bundle.text).toContain("Never invent an audience, offer, price");
-    expect(bundle.text).toContain("saved intro video immediately after the hero");
+    expect(bundle.text).toContain(
+      "saved Video Sales Letter (VSL) immediately after the hero",
+    );
+    expect(bundle.text).toContain("Do not create social_proof sections");
+    expect(bundle.text).toContain(
+      "Polynet supplies the canonical action label",
+    );
     expect(bundle.text).toContain(
       "Appearance always inherits the manager's canonical Polynet theme",
     );
