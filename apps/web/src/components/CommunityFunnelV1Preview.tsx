@@ -48,7 +48,7 @@ function PreviewMedia(props: { community: PreviewCommunity; vslUrl: string }) {
     <section className="funnel-v1-media" aria-label="Community media">
       <iframe
         src={embed.src}
-        title={`${props.community.name} intro video`}
+        title={`${props.community.name} Video Sales Letter`}
         allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; fullscreen"
         allowFullScreen
       />

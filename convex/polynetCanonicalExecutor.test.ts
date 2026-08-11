@@ -708,6 +708,104 @@ test("funnel draft capability is visible and executable only on the manager funn
   });
 });
 
+test("funnel composer isolates custom slots and namespaces retry receipts", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const ownerCtx = executionContext(
+    t.withIdentity({ subject: fixture.ownerSubject }),
+  );
+  const capabilityPath =
+    "/communities/canonical-community/capabilities/community.funnel.update_draft.json";
+  const customOneDocument = buildCommunityFunnelDocumentTestFixture({
+    headline: "Custom one remains independent.",
+  });
+  const customTwoDocument = buildCommunityFunnelDocumentTestFixture({
+    headline: "Custom two receives its own revision.",
+  });
+  const sharedModelIdempotencyKey = "same-model-retry-key";
+  const update = async (
+    slot: "custom_1" | "custom_2",
+    document: ReturnType<typeof buildCommunityFunnelDocumentTestFixture>,
+  ) =>
+    await executePolynetCanonicalTool({
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "personal_agent",
+      evidenceSurface: "community_funnel_builder",
+      funnelDraftSlot: slot,
+      toolName: "polynet_call",
+      input: {
+        operation: "community.funnel.update_draft",
+        version: 1,
+        target: capabilityPath,
+        input: { expected_revision: 0, document },
+        idempotency_key: sharedModelIdempotencyKey,
+      },
+    });
+
+  await expect(update("custom_1", customOneDocument)).resolves.toMatchObject({
+    ok: true,
+    value: { result: { draft_revision: 1 }, deduped: false },
+  });
+  await expect(update("custom_2", customTwoDocument)).resolves.toMatchObject({
+    ok: true,
+    value: {
+      result: {
+        selected_slot: "custom_2",
+        draft_revision: 1,
+        draft_document_v1: customTwoDocument,
+      },
+      deduped: false,
+    },
+  });
+
+  const readSlot = async (slot: "custom_1" | "custom_2") => {
+    const result = await executePolynetCanonicalTool({
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "personal_agent",
+      evidenceSurface: "community_funnel_builder",
+      funnelDraftSlot: slot,
+      toolName: "polynet_read",
+      input: { path: capabilityPath },
+    });
+    if (!result.ok) throw new Error(`could not read ${slot}`);
+    return JSON.parse(String(result.value.body));
+  };
+  const customOneState = await readSlot("custom_1");
+  const customTwoState = await readSlot("custom_2");
+  expect(customOneState.current_state).toMatchObject({
+    selected_slot: "custom_1",
+    draft_revision: 1,
+    draft_document_v1: customOneDocument,
+  });
+  expect(customTwoState.current_state).toMatchObject({
+    selected_slot: "custom_2",
+    draft_revision: 1,
+    draft_document_v1: customTwoDocument,
+  });
+  expect(customOneState.current_state).not.toHaveProperty("custom_funnels");
+  expect(customTwoState.current_state).not.toHaveProperty("custom_funnels");
+
+  const rows = await t.run(async (ctx) =>
+    ctx.db.query("communityFunnels").collect(),
+  );
+  expect(rows).toHaveLength(2);
+  expect(
+    rows.find((row) => (row.slot ?? "custom_1") === "custom_1"),
+  ).toMatchObject({
+    draftRevision: 1,
+    draftDocumentV1: customOneDocument,
+  });
+  expect(rows.find((row) => row.slot === "custom_2")).toMatchObject({
+    slot: "custom_2",
+    draftRevision: 1,
+    draftDocumentV1: customTwoDocument,
+  });
+});
+
 test("retired AI Feed paths are uniformly absent across canonical operations", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);

@@ -77,10 +77,10 @@ for (const [activePage, pathname] of [
     }),
     { kind: "hold", requirement: "authenticated" },
   );
-  assert.deepEqual(
-    project({ activePage, pathname, authState: "signed_in" }),
-    { kind: "render_authenticated", requirement: "authenticated" },
-  );
+  assert.deepEqual(project({ activePage, pathname, authState: "signed_in" }), {
+    kind: "render_authenticated",
+    requirement: "authenticated",
+  });
 }
 
 for (const [publicRoute, activePage, pathname] of [
@@ -98,7 +98,11 @@ for (const [publicRoute, activePage, pathname] of [
 for (const [publicRoute, activePage, pathname] of [
   [{ kind: "app" }, "onboarding", "/onboarding"],
   [{ kind: "app" }, "community", "/c/polynet/chat"],
-  [{ kind: "community_funnel_preview", slug: "polynet" }, "landing", "/c/polynet/preview"],
+  [
+    { kind: "community_funnel_preview", slug: "polynet", slot: "custom_1" },
+    "landing",
+    "/c/polynet/preview",
+  ],
   [{ kind: "app" }, "operator", "/operator/platform"],
 ] satisfies Array<[PublicRoute, AppPage, string]>) {
   assert.equal(
@@ -108,10 +112,13 @@ for (const [publicRoute, activePage, pathname] of [
   );
 }
 
-assert.deepEqual(project({ activePage: "onboarding", pathname: "/onboarding" }), {
+assert.deepEqual(
+  project({ activePage: "onboarding", pathname: "/onboarding" }),
+  {
   kind: "redirect_landing",
   requirement: "account_setup",
-});
+  },
+);
 assert.deepEqual(
   project({
     activePage: "onboarding",
@@ -210,6 +217,7 @@ for (const publicRoute of [
 const previewRoute: PublicRoute = {
   kind: "community_funnel_preview",
   slug: "polynet",
+  slot: "custom_1",
 };
 assert.deepEqual(project({ publicRoute: previewRoute }), {
   kind: "redirect_community_funnel",
@@ -273,10 +281,10 @@ assert.deepEqual(
   { kind: "redirect_member_entry", requirement: "operator" },
 );
 
-assert.deepEqual(
-  project({ pathname: "/workspace", authState: "signed_in" }),
-  { kind: "hold", requirement: "legacy_entry" },
-);
+assert.deepEqual(project({ pathname: "/workspace", authState: "signed_in" }), {
+  kind: "hold",
+  requirement: "legacy_entry",
+});
 
 const app = read("apps/web/src/App.tsx");
 const boundary = read(
@@ -330,7 +338,10 @@ assert.match(
   /useWebMemberAgentSurfaceController[\s\S]*if \(shouldHoldRouteForAccess\) \{[\s\S]*landing-auth-hold/,
   "the composition root must hold before rendering unauthorized chrome",
 );
-assert.match(boundary, /params\.navigateTo\(destination, \{ replace: true \}\)/);
+assert.match(
+  boundary,
+  /params\.navigateTo\(destination, \{ replace: true \}\)/,
+);
 assert.match(boundary, /setCommunityResolution\(\{ slug, state: "denied" \}\)/);
 assert.doesNotMatch(
   onboarding,

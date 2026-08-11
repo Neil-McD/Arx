@@ -393,3 +393,245 @@ test("legacy document media is read once, then removed by the canonical VSL path
     ),
   ).toBe(false);
 });
+
+test("legacy singleton publication remains live and is promoted to custom one", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+
+  const result = await asOwner.mutation(
+    api.communityFunnel.publishCommunityFunnelDraft,
+    {
+      communityId: fixture.communityId,
+      expectedDraftRevision: 1,
+    },
+  );
+
+  expect(result.active_slot).toBe("custom_1");
+  expect(result.custom_funnels.custom_1?.published_document_v1).toEqual(
+    fixture.draft,
+  );
+  const community = await t.run(async (ctx) =>
+    ctx.db.get(fixture.communityId),
+  );
+  expect(community?.activeFunnelSlot).toBe("custom_1");
+});
+
+test("slot-aware publication is private until the published slot is activated", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const customTwoDraft = buildCommunityFunnelDocumentTestFixture({
+    headline: "Custom funnel two",
+  });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.communityId, { activeFunnelSlot: "default" });
+    await ctx.db.insert("communityFunnels", {
+      communityId: fixture.communityId,
+      slot: "custom_2",
+      draftDocumentV1: customTwoDraft,
+      draftRevision: 1,
+      draftUpdatedAt: 1_750_000_000_010,
+      draftUpdatedByUserId: fixture.ownerId,
+      createdAt: 1_750_000_000_010,
+      updatedAt: 1_750_000_000_010,
+    });
+  });
+
+  const published = await asOwner.mutation(
+    api.communityFunnel.publishCommunityFunnelDraft,
+    {
+      communityId: fixture.communityId,
+      slot: "custom_2",
+      expectedDraftRevision: 1,
+    },
+  );
+  expect(published.active_slot).toBe("default");
+  expect(published.custom_funnels.custom_2?.published_document_v1).toEqual(
+    customTwoDraft,
+  );
+  const beforeActivation = await t.query(
+    api.communityPublic.resolvePublicFunnelBySlug,
+    { communitySlug: "community-funnel-publish" },
+  );
+  expect(beforeActivation.community?.funnel.published_document_v1).toBeNull();
+
+  const activated = await asOwner.mutation(
+    api.communityFunnel.setActiveCommunityFunnel,
+    {
+      communityId: fixture.communityId,
+      target: {
+        slot: "custom_2",
+        expectedPublishedDraftRevision: 1,
+      },
+    },
+  );
+  expect(activated.active_slot).toBe("custom_2");
+  const afterActivation = await t.query(
+    api.communityPublic.resolvePublicFunnelBySlug,
+    { communitySlug: "community-funnel-publish" },
+  );
+  expect(afterActivation.community?.funnel.published_document_v1).toEqual(
+    customTwoDraft,
+  );
+
+  await asOwner.mutation(api.communityFunnel.setActiveCommunityFunnel, {
+    communityId: fixture.communityId,
+    target: { slot: "default" },
+  });
+  const afterDefault = await t.query(
+    api.communityPublic.resolvePublicFunnelBySlug,
+    { communitySlug: "community-funnel-publish" },
+  );
+  expect(afterDefault.community?.funnel.published_document_v1).toBeNull();
+});
+
+test("custom funnel revisions and VSL state are isolated by slot", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityFunnels", {
+      communityId: fixture.communityId,
+      slot: "custom_2",
+      draftDocumentV1: buildCommunityFunnelDocumentTestFixture({
+        headline: "Second isolated draft",
+      }),
+      draftRevision: 1,
+      draftUpdatedAt: 1_750_000_000_010,
+      draftUpdatedByUserId: fixture.ownerId,
+      createdAt: 1_750_000_000_010,
+      updatedAt: 1_750_000_000_010,
+    });
+  });
+
+  const saved = await asOwner.mutation(
+    api.communityFunnel.setCommunityFunnelDraftVsl,
+    {
+      communityId: fixture.communityId,
+      slot: "custom_2",
+      expectedDraftRevision: 1,
+      url: "https://vimeo.com/123456789",
+    },
+  );
+  expect(saved.custom_funnels.custom_1?.draft_revision).toBe(1);
+  expect(saved.custom_funnels.custom_1?.draft_vsl_url).toBe(VSL_URL);
+  expect(saved.custom_funnels.custom_2?.draft_revision).toBe(2);
+  expect(saved.custom_funnels.custom_2?.draft_vsl_url).toBe(
+    "https://vimeo.com/123456789",
+  );
+
+  await expect(
+    asOwner.mutation(api.communityFunnel.setCommunityFunnelDraftVsl, {
+      communityId: fixture.communityId,
+      slot: "custom_2",
+      expectedDraftRevision: 1,
+      url: null,
+    }),
+  ).rejects.toThrow("community_funnel_draft_conflict");
+});
+
+test("activation requires manager authority and a published custom slot", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+
+  await expect(
+    asMember.mutation(api.communityFunnel.setActiveCommunityFunnel, {
+      communityId: fixture.communityId,
+      target: { slot: "default" },
+    }),
+  ).rejects.toThrow("community_forbidden");
+  await expect(
+    asOwner.mutation(api.communityFunnel.setActiveCommunityFunnel, {
+      communityId: fixture.communityId,
+      target: {
+        slot: "custom_1",
+        expectedPublishedDraftRevision: 0,
+      },
+    }),
+  ).rejects.toThrow("community_funnel_activation_requires_published");
+});
+
+test("activation rejects a stale published revision without moving the live slot", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const publishedDocument = buildCommunityFunnelDocumentTestFixture({
+    headline: "Newer published funnel",
+  });
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.communityId, { activeFunnelSlot: "default" });
+    await ctx.db.insert("communityFunnels", {
+      communityId: fixture.communityId,
+      slot: "custom_2",
+      draftDocumentV1: publishedDocument,
+      draftRevision: 2,
+      draftUpdatedAt: 1_750_000_000_020,
+      draftUpdatedByUserId: fixture.ownerId,
+      publishedDocumentV1: publishedDocument,
+      publishedDraftRevision: 2,
+      publishedAt: 1_750_000_000_020,
+      publishedByUserId: fixture.ownerId,
+      createdAt: 1_750_000_000_010,
+      updatedAt: 1_750_000_000_020,
+    });
+  });
+
+  await expect(
+    asOwner.mutation(api.communityFunnel.setActiveCommunityFunnel, {
+      communityId: fixture.communityId,
+      target: {
+        slot: "custom_2",
+        expectedPublishedDraftRevision: 1,
+      },
+    }),
+  ).rejects.toThrow("community_funnel_activation_conflict");
+  await expect(
+    asOwner.mutation(api.communityFunnel.setActiveCommunityFunnel, {
+      communityId: fixture.communityId,
+      target: {
+        slot: "custom_2",
+        expectedPublishedDraftRevision: 2.5,
+      },
+    }),
+  ).rejects.toThrow("community_funnel_activation_conflict");
+  const afterConflict = await t.run(async (ctx) =>
+    ctx.db.get(fixture.communityId),
+  );
+  expect(afterConflict?.activeFunnelSlot).toBe("default");
+
+  const activated = await asOwner.mutation(
+    api.communityFunnel.setActiveCommunityFunnel,
+    {
+      communityId: fixture.communityId,
+      target: {
+        slot: "custom_2",
+        expectedPublishedDraftRevision: 2,
+      },
+    },
+  );
+  expect(activated.active_slot).toBe("custom_2");
+});
+
+test("duplicate persisted rows for one funnel slot fail closed", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityFunnels", {
+      communityId: fixture.communityId,
+      slot: "custom_1",
+      draftRevision: 0,
+      createdAt: 1_750_000_000_010,
+      updatedAt: 1_750_000_000_010,
+    });
+  });
+
+  await expect(
+    asOwner.query(api.communityFunnel.getCommunityFunnelConfig, {
+      communityId: fixture.communityId,
+    }),
+  ).rejects.toThrow("community_funnel_slot_duplicate");
+});

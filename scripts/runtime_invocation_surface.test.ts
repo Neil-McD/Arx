@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCommunityFunnelThreadKey,
   isCommunityFunnelThreadKeyForCommunity,
+  resolveCommunityFunnelThreadSlotForCommunity,
   resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
   restrictToolNamesForInvocationSurface,
@@ -18,19 +19,53 @@ const promptBudget = {
 };
 
 describe("community funnel runtime surface", () => {
-  it("binds one canonical thread to one community", () => {
-    const threadKey = buildCommunityFunnelThreadKey("community-1");
-    expect(threadKey).toBe("community-funnel:community-1");
+  it("binds each custom funnel slot to one canonical community thread", () => {
+    const legacyCustomOneKey = buildCommunityFunnelThreadKey(
+      "community-1",
+      "custom_1",
+    );
+    const customTwoKey = buildCommunityFunnelThreadKey(
+      "community-1",
+      "custom_2",
+    );
+    expect(legacyCustomOneKey).toBe("community-funnel:community-1");
+    expect(customTwoKey).toBe(
+      "community-funnel:community-1:custom_2",
+    );
     expect(
-      isCommunityFunnelThreadKeyForCommunity(threadKey, "community-1"),
+      resolveCommunityFunnelThreadSlotForCommunity(
+        legacyCustomOneKey,
+        "community-1",
+      ),
+    ).toBe("custom_1");
+    expect(
+      resolveCommunityFunnelThreadSlotForCommunity(
+        customTwoKey,
+        "community-1",
+      ),
+    ).toBe("custom_2");
+    expect(
+      isCommunityFunnelThreadKeyForCommunity(customTwoKey, "community-1"),
     ).toBe(true);
     expect(
-      isCommunityFunnelThreadKeyForCommunity(threadKey, "community-2"),
+      isCommunityFunnelThreadKeyForCommunity(customTwoKey, "community-2"),
     ).toBe(false);
+    expect(
+      resolveCommunityFunnelThreadSlotForCommunity(
+        "community-funnel:community-1:custom_3",
+        "community-1",
+      ),
+    ).toBeNull();
+    expect(
+      resolveCommunityFunnelThreadSlotForCommunity(
+        "community-funnel:community-1:custom_2:extra",
+        "community-1",
+      ),
+    ).toBeNull();
     expect(
       resolveRuntimeInvocationSurfaceForThread({
         requestedSurface: "workspace",
-        threadKey,
+        threadKey: customTwoKey,
       }),
     ).toBe("community_funnel_builder");
   });

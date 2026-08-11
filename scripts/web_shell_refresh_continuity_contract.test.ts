@@ -40,6 +40,7 @@ describe("web shell refresh continuity contract", () => {
     const nav = read("shared/CommunityNav.tsx");
     const context = read("apps/web/src/components/CommunityContextPanel.tsx");
     const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+    const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
     const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
     const app = read("apps/web/src/App.tsx");
 
@@ -48,7 +49,8 @@ describe("web shell refresh continuity contract", () => {
     expect(context).toContain("community-context-member-skeleton");
     expect(context).not.toContain("Loading members...");
     expect(context).not.toContain("Loading memory...");
-    expect(facepile).toContain("visibleFaces.length === 0 && props.isLoading");
+    expect(facepile).toContain("isLoading={props.isLoading}");
+    expect(memberAvatarStack).toContain("visibleFaces.length === 0 && props.isLoading");
     expect(interaction).toMatch(
       /isLoadingRoots:[\s\S]*!requestedBoundary \|\| !isPresentationScopedToBoundary \|\| isLoadingRoots/,
     );

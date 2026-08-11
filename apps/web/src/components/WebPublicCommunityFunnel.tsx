@@ -1,6 +1,7 @@
 import type {
   CommunityFunnelConfig,
   CommunityFunnelDocumentV1,
+  CommunityFunnelSlot,
   CommunityPublicFace,
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
@@ -37,6 +38,7 @@ type WebPublicCommunityFunnelProps = {
   publicCommunity: PublicCommunityFunnelCommunityLike | null;
   publicRouteSlug?: string;
   isPreviewMode?: boolean;
+  previewSlot?: CommunityFunnelSlot;
   previewExitPath?: string | null;
   previewDocument?: CommunityFunnelDocumentV1 | null;
   previewVslUrl?: string | null;
@@ -161,6 +163,14 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
         <CommunityFunnelV1Preview
           community={publicCommunity}
           document={props.previewDocument ?? null}
+          deterministicContent={
+            props.previewSlot === "default"
+              ? {
+                  headline: publicCommunity.one_liner?.trim() || communityName,
+                  body: publicCommunity.about?.trim() || null,
+                }
+              : null
+          }
           vslUrl={props.previewVslUrl}
           primaryActionLabel={primaryAction.label}
           isLoading={props.previewDocumentIsLoading}

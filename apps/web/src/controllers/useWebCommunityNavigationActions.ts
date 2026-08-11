@@ -10,6 +10,7 @@ import type {
 } from "../../../../shared/appShellNavigation";
 import { isCommunityRouteManagedTab } from "../../../../shared/appShellNavigation";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../../shared/communityUnsavedGuard";
+import type { CommunityFunnelSlot } from "../../../../shared/communityTypes";
 import {
   applyShellVariantToPublicPath,
   buildCommunityFunnelPreviewPath,
@@ -92,22 +93,25 @@ export function useWebCommunityNavigationActions(params: {
     params.communitySettingsDirtyRef,
   ]);
 
-  const handlePreviewCommunityFunnel = useCallback(() => {
-    const slug = String(params.activeCommunity?.slug ?? "").trim();
-    if (!slug) return;
-    const path = applyShellVariantToPublicPath(
-      buildCommunityFunnelPreviewPath(slug) ?? "",
+  const handlePreviewCommunityFunnel = useCallback(
+    (slot: CommunityFunnelSlot) => {
+      const slug = String(params.activeCommunity?.slug ?? "").trim();
+      if (!slug) return;
+      const path = applyShellVariantToPublicPath(
+        buildCommunityFunnelPreviewPath(slug, slot) ?? "",
+        params.shellVariant,
+      );
+      if (!path) return;
+      params.pushNavSnapshot();
+      params.navigateTo(path);
+    },
+    [
+      params.activeCommunity?.slug,
+      params.navigateTo,
+      params.pushNavSnapshot,
       params.shellVariant,
-    );
-    if (!path) return;
-    params.pushNavSnapshot();
-    params.navigateTo(path);
-  }, [
-    params.activeCommunity?.slug,
-    params.navigateTo,
-    params.pushNavSnapshot,
-    params.shellVariant,
-  ]);
+    ],
+  );
 
   const handleSelectActiveCommunity = useCallback(
     (community: WebCommunityRecord): boolean => {

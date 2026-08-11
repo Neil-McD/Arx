@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  normalizeCommunityFunnelManagerConfig,
   normalizeCommunityFunnelVslUrl,
   validateCommunityFunnelDocumentV1,
   withoutCommunityFunnelMediaSections,
@@ -167,5 +168,41 @@ describe("Community Funnel V1 document", () => {
         ],
       }),
     ).toThrow("community_funnel_benefits_limit_exceeded");
+  });
+
+  it("normalizes two custom slots without duplicating legacy singleton state", () => {
+    const customOne = buildCommunityFunnelDocumentTestFixture({
+      headline: "Custom one",
+    });
+    const customTwo = buildCommunityFunnelDocumentTestFixture({
+      headline: "Custom two",
+    });
+    const normalized = normalizeCommunityFunnelManagerConfig({
+      active_slot: "custom_2",
+      draft_document_v1: customOne,
+      draft_revision: 3,
+      custom_funnels: {
+        custom_1: {
+          slot: "custom_1",
+          draft_document_v1: customOne,
+          draft_revision: 3,
+        },
+        custom_2: {
+          slot: "custom_2",
+          draft_document_v1: customTwo,
+          draft_revision: 7,
+          published_document_v1: customTwo,
+          published_draft_revision: 7,
+        },
+      },
+    });
+
+    expect(normalized.active_slot).toBe("custom_2");
+    expect(normalized.draft_document_v1).toEqual(customOne);
+    expect(normalized.custom_funnels.custom_1?.draft_revision).toBe(3);
+    expect(normalized.custom_funnels.custom_2?.draft_revision).toBe(7);
+    expect(
+      normalized.custom_funnels.custom_2?.published_document_v1,
+    ).toEqual(customTwo);
   });
 });

@@ -1229,6 +1229,13 @@ export default defineSchema({
       v.literal("approval"),
       v.literal("paid_subscription"),
     ),
+    activeFunnelSlot: v.optional(
+      v.union(
+        v.literal("default"),
+        v.literal("custom_1"),
+        v.literal("custom_2"),
+      ),
+    ),
     activeMemberCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1368,6 +1375,10 @@ export default defineSchema({
 
   communityFunnels: defineTable({
     communityId: v.id("communities"),
+    // Slotless rows are legacy Custom 1 rows until the bounded backfill runs.
+    slot: v.optional(
+      v.union(v.literal("custom_1"), v.literal("custom_2")),
+    ),
     heroMediaUrl: v.optional(v.string()),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
     draftVslUrl: v.optional(v.union(v.string(), v.null())),
@@ -1402,7 +1413,9 @@ export default defineSchema({
     publishedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_community", ["communityId"]),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_slot", ["communityId", "slot"]),
 
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),
