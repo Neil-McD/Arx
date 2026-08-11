@@ -1190,37 +1190,38 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                   <ChevronDown aria-hidden="true" />
                 </span>
               </button>
-              <nav
+              <div
                 id="resource-course-lesson-navigation"
-                className="knowledge-resource-list"
-                aria-label={`${selectedModule.name} lesson navigation`}
+                className="resource-course-outline-scroll"
                 hidden={!isCourseOutlineOpen}
               >
-                {selectedModuleSection?.pageResources.map(renderResourceRailItem)}
-                {canManageResources && !selectedModule.is_virtual ? (
-                  <button
-                    className="knowledge-resource-inline-add"
-                    type="button"
-                    disabled={isCreatingPageDraft}
-                    onClick={() => void handleAddPageDraft(selectedModule.id)}
-                  >
-                    <Plus aria-hidden="true" />
-                    <span>{isCreatingPageDraft ? "Adding…" : "Add lesson"}</span>
-                  </button>
-                ) : null}
-              </nav>
-              {canManageResources && (selectedModuleSection?.sourceResources.length ?? 0) > 0 ? (
-                <div
-                  className="knowledge-source-inbox-section resource-course-source-inbox"
-                  hidden={!isCourseOutlineOpen}
+                <nav
+                  className="knowledge-resource-list"
+                  aria-label={`${selectedModule.name} lesson navigation`}
                 >
-                  <div className="knowledge-resource-section-header">
-                    <span>Source Inbox</span>
-                    <span>{selectedModuleSection?.sourceResources.length ?? 0}</span>
+                  {selectedModuleSection?.pageResources.map(renderResourceRailItem)}
+                  {canManageResources && !selectedModule.is_virtual ? (
+                    <button
+                      className="knowledge-resource-inline-add"
+                      type="button"
+                      disabled={isCreatingPageDraft}
+                      onClick={() => void handleAddPageDraft(selectedModule.id)}
+                    >
+                      <Plus aria-hidden="true" />
+                      <span>{isCreatingPageDraft ? "Adding…" : "Add lesson"}</span>
+                    </button>
+                  ) : null}
+                </nav>
+                {canManageResources && (selectedModuleSection?.sourceResources.length ?? 0) > 0 ? (
+                  <div className="knowledge-source-inbox-section resource-course-source-inbox">
+                    <div className="knowledge-resource-section-header">
+                      <span>Source Inbox</span>
+                      <span>{selectedModuleSection?.sourceResources.length ?? 0}</span>
+                    </div>
+                    {selectedModuleSection?.sourceResources.map(renderResourceRailItem)}
                   </div>
-                  {selectedModuleSection?.sourceResources.map(renderResourceRailItem)}
-                </div>
-              ) : null}
+                ) : null}
+              </div>
             </aside>
             <div className="knowledge-resource-reader">
               {readerResource ? (

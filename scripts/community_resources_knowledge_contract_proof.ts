@@ -739,6 +739,36 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
+  /resource-course-outline-scroll[\s\S]*knowledge-resource-list[\s\S]*resource-course-source-inbox/,
+  "course lessons and source inbox must share one bounded outline scroller",
+);
+assert.match(
+  baseCss,
+  /\.resource-course-workspace\s*\{[^}]*grid-template-columns:\s*minmax\(196px,\s*232px\)\s*minmax\(0,\s*1fr\)/,
+  "desktop course layout must prioritize lesson content over outline width",
+);
+assert.match(
+  baseCss,
+  /\.resource-course-outline\s*\{[^}]*position:\s*sticky;[^}]*top:\s*12px;[^}]*max-height:\s*calc\(100dvh - 24px\)/,
+  "desktop course outline must remain reachable through native sticky positioning",
+);
+assert.match(
+  baseCss,
+  /\.resource-course-outline-scroll\s*\{[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain/,
+  "long course outlines must scroll within their bounded sticky rail",
+);
+assert.match(
+  baseCss,
+  /@media \(max-width:\s*900px\)[\s\S]*\.resource-course-outline\s*\{[^}]*position:\s*static;[^}]*max-height:\s*none;[\s\S]*\.resource-course-outline-scroll\s*\{[^}]*overflow:\s*visible;/,
+  "mobile course outlines must preserve the existing static single-column flow",
+);
+assert.doesNotMatch(
+  resourcesPanel,
+  /addEventListener\(["']scroll["']|onscroll\s*=|position:\s*fixed/,
+  "course outline reachability must not introduce JavaScript scroll state or fixed positioning",
+);
+assert.match(
+  resourcesPanel,
   /MODULE_DRAG_MIME[\s\S]*RESOURCE_DRAG_MIME[\s\S]*RESOURCE_ORIGIN_MODULE_DRAG_MIME/,
   "resources panel drag/drop must use explicit internal drag metadata, not only a generic text payload",
 );

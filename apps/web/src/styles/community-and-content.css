@@ -10430,7 +10430,23 @@ button.chat-reply-quote:hover {
 }
 
 .resource-course-workspace {
-  grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+  grid-template-columns: minmax(196px, 232px) minmax(0, 1fr);
+}
+
+.resource-course-outline {
+  position: sticky;
+  top: 12px;
+  grid-template-rows: auto minmax(0, 1fr);
+  max-height: calc(100dvh - 24px);
+}
+
+.resource-course-outline-scroll {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .resource-course-outline-header {
@@ -11495,9 +11511,17 @@ button.chat-reply-quote:hover {
   }
 
   .resource-course-outline {
+    position: static;
+    grid-template-rows: auto;
+    max-height: none;
     border-right: 0;
     border-bottom: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
     padding: 0 0 12px;
+  }
+
+  .resource-course-outline-scroll {
+    overflow: visible;
+    overscroll-behavior: auto;
   }
 
   .resource-course-outline .knowledge-resource-list {
