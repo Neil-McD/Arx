@@ -12,8 +12,8 @@ const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 
 assert.match(
   baseCss,
-  /--composer-surface: var\(--bg-card-solid, #2a2a2a\);[\s\S]*--composer-radius: 24px;/,
-  "canonical composer material should be opaque and pill-shaped",
+  /--composer-surface: var\(--bg-card-solid, #2a2a2a\);[\s\S]*--composer-elevation: 0 10px 28px/,
+  "canonical composer material should expose an opaque surface and restrained elevation",
 );
 assert.match(
   baseCss,
@@ -27,8 +27,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*align-items: flex-end;/,
-  "community composer controls should remain bottom-aligned as the input grows",
+  /\.community-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*align-items: stretch;/,
+  "community composer shell should stretch its stacked regions",
 );
 assert.match(
   baseCss,
@@ -37,23 +37,23 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*align-items: flex-end;/,
-  "thread composer controls should remain bottom-aligned as the input grows",
+  /\.community-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*align-items: stretch;/,
+  "thread composer shell should stretch its stacked regions",
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*--community-composer-control-size: 36px;[\s\S]*--community-composer-input-size: 24px;/,
-  "desktop member composers should expose their control and one-line input heights",
+  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar,[\s\S]*--community-composer-control-size: 36px;[\s\S]*--community-composer-input-size: 40px;[\s\S]*display: grid;/,
+  "desktop member composers should expose their control and writing-region heights",
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.mention-composer-field \{[^}]*padding-bottom: calc\([\s\S]*var\(--community-composer-control-size\) - var\(--community-composer-input-size\)[\s\S]*\/ 2[\s\S]*\);/,
-  "member composer text should be optically centered while retaining its natural one-line height",
+  /\.community-member-chat \.mention-composer-field \{[^}]*min-height: var\(--community-composer-input-size\);/,
+  "member composer editor should retain its dedicated writing region",
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 28px;/,
-  "mobile member composers should center text against their larger controls",
+  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 46px;/,
+  "mobile member composers should retain touch controls and a bounded writing region",
 );
 assert.match(
   chatPanel,
@@ -118,13 +118,13 @@ const desktopMemberComposerMaterialRule = baseCss.match(
 )?.[0] ?? "";
 assert.match(
   desktopMemberComposerMaterialRule,
-  /box-shadow:\s*none;/,
-  "persistent community and thread composers should not use resting drop shadows",
+  /box-shadow:\s*var\(--composer-elevation\);/,
+  "persistent community and thread composers should use the restrained elevation token",
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*border-radius: var\(--radius-md\);[\s\S]*\.community-member-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*border-radius: var\(--radius-md\);/,
-  "main and thread community composers should share the same medium-radius shape",
+  /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*border-radius: 18px;[\s\S]*\.community-member-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*border-radius: 18px;/,
+  "main and thread community composers should share the same raised-shell shape",
 );
 assert.doesNotMatch(
   baseCss,

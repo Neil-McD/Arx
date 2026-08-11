@@ -3,9 +3,12 @@
 import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
-import { buildCommunityFunnelDocumentTestFixture } from "../scripts/community_funnel_test_fixture";
+import {
+  buildCommunityFunnelContentTestFixture,
+  buildCommunityFunnelDocumentTestFixture,
+} from "../scripts/community_funnel_test_fixture";
 import { saveCommunityFunnelConfigInternal } from "./communityFunnel";
 
 const modules = import.meta.glob([
@@ -59,12 +62,12 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    const draft = buildCommunityFunnelDocumentTestFixture({
+    const draft = buildCommunityFunnelContentTestFixture({
       headline: "Private draft one",
     });
     const funnelId = await ctx.db.insert("communityFunnels", {
       communityId,
-      draftDocumentV1: draft,
+      draftContentV2: draft,
       draftVslUrl: VSL_URL,
       draftRevision: 1,
       draftUpdatedAt: nowMs,
@@ -84,7 +87,7 @@ test("manager publication snapshots one exact draft revision for public use", as
   const before = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
     communitySlug: "community-funnel-publish",
   });
-  expect(before.community?.funnel.published_document_v1).toBeNull();
+  expect(before.community?.funnel.published_content_v2).toBeNull();
 
   const published = await asOwner.mutation(
     api.communityFunnel.publishCommunityFunnelDraft,
@@ -102,9 +105,9 @@ test("manager publication snapshots one exact draft revision for public use", as
   const after = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
     communitySlug: "community-funnel-publish",
   });
-  expect(after.community?.funnel.published_document_v1).toEqual(fixture.draft);
+  expect(after.community?.funnel.published_content_v2).toEqual(fixture.draft);
   expect(after.community?.funnel.published_vsl_url).toBe(VSL_URL);
-  expect(after.community?.funnel).not.toHaveProperty("draft_document_v1");
+  expect(after.community?.funnel).not.toHaveProperty("draft_content_v2");
   expect(after.community?.funnel).not.toHaveProperty("published_at");
 });
 
@@ -140,7 +143,7 @@ test("public funnel descriptor exposes only renderer and admission inputs", asyn
         display_name: "Funnel owner",
       },
       funnel: {
-        published_document_v1: null,
+        published_content_v2: null,
       },
     },
     active_plan: {
@@ -195,12 +198,12 @@ test("a newer private draft cannot mutate the published snapshot", async () => {
     communityId: fixture.communityId,
     expectedDraftRevision: 1,
   });
-  const nextDraft = buildCommunityFunnelDocumentTestFixture({
+  const nextDraft = buildCommunityFunnelContentTestFixture({
     headline: "Private draft two",
   });
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.funnelId, {
-      draftDocumentV1: nextDraft,
+      draftContentV2: nextDraft,
       draftRevision: 2,
       draftUpdatedAt: 1_750_000_000_100,
       updatedAt: 1_750_000_000_100,
@@ -211,12 +214,43 @@ test("a newer private draft cannot mutate the published snapshot", async () => {
     api.communityPublic.resolvePublicFunnelBySlug,
     { communitySlug: "community-funnel-publish" },
   );
-  expect(publicResult.community?.funnel.published_document_v1).toEqual(
+  expect(publicResult.community?.funnel.published_content_v2).toEqual(
     fixture.draft,
   );
-  expect(publicResult.community?.funnel.published_document_v1).not.toEqual(
+  expect(publicResult.community?.funnel.published_content_v2).not.toEqual(
     nextDraft,
   );
+});
+
+test("overlong draft content fails without changing draft or published state", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  await asOwner.mutation(api.communityFunnel.publishCommunityFunnelDraft, {
+    communityId: fixture.communityId,
+    expectedDraftRevision: 1,
+  });
+
+  await expect(
+    t.mutation(internal.communityFunnel.saveCommunityFunnelDraftInternal, {
+      userId: fixture.ownerId,
+      communityId: fixture.communityId,
+      slot: "custom_1",
+      expectedDraftRevision: 1,
+      content: {
+        ...fixture.draft,
+        long_form_markdown: "x".repeat(12_001),
+      },
+    }),
+  ).rejects.toThrow("community_funnel_long_form_too_long");
+
+  const row = await t.run(async (ctx) => ctx.db.get(fixture.funnelId));
+  expect(row).toMatchObject({
+    draftRevision: 1,
+    draftContentV2: fixture.draft,
+    publishedDraftRevision: 1,
+    publishedContentV2: fixture.draft,
+  });
 });
 
 test("removing legacy hero media cannot delete or hide a published V1 snapshot", async () => {
@@ -235,9 +269,9 @@ test("removing legacy hero media cannot delete or hide a published V1 snapshot",
       1_750_000_000_200,
     ),
   );
-  expect(config.published_document_v1).toEqual(fixture.draft);
+  expect(config.published_content_v2).toEqual(fixture.draft);
   const row = await t.run(async (ctx) => ctx.db.get(fixture.funnelId));
-  expect(row?.publishedDocumentV1).toEqual(fixture.draft);
+  expect(row?.publishedContentV2).toEqual(fixture.draft);
 });
 
 test("creator VSL writes are manager-only, provider-bounded, and revision-safe", async () => {
@@ -333,17 +367,18 @@ test("legacy document media is read once, then removed by the canonical VSL path
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
   const legacyVslUrl = "https://youtu.be/abcdefghijk";
+  const legacyBase = buildCommunityFunnelDocumentTestFixture();
   const legacyDocument = {
-    ...fixture.draft,
+    ...legacyBase,
     sections: [
-      fixture.draft.sections[0],
+      legacyBase.sections[0],
       {
         id: "legacy-media",
         type: "media" as const,
         media_url: legacyVslUrl,
         caption: null,
       },
-      ...fixture.draft.sections.slice(1),
+      ...legacyBase.sections.slice(1),
     ],
   };
   await t.run(async (ctx) => {
@@ -408,7 +443,7 @@ test("legacy singleton publication remains live and is promoted to custom one", 
   );
 
   expect(result.active_slot).toBe("custom_1");
-  expect(result.custom_funnels.custom_1?.published_document_v1).toEqual(
+  expect(result.custom_funnels.custom_1?.published_content_v2).toEqual(
     fixture.draft,
   );
   const community = await t.run(async (ctx) =>
@@ -421,7 +456,7 @@ test("slot-aware publication is private until the published slot is activated", 
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const customTwoDraft = buildCommunityFunnelDocumentTestFixture({
+  const customTwoDraft = buildCommunityFunnelContentTestFixture({
     headline: "Custom funnel two",
   });
   await t.run(async (ctx) => {
@@ -429,7 +464,7 @@ test("slot-aware publication is private until the published slot is activated", 
     await ctx.db.insert("communityFunnels", {
       communityId: fixture.communityId,
       slot: "custom_2",
-      draftDocumentV1: customTwoDraft,
+      draftContentV2: customTwoDraft,
       draftRevision: 1,
       draftUpdatedAt: 1_750_000_000_010,
       draftUpdatedByUserId: fixture.ownerId,
@@ -447,14 +482,14 @@ test("slot-aware publication is private until the published slot is activated", 
     },
   );
   expect(published.active_slot).toBe("default");
-  expect(published.custom_funnels.custom_2?.published_document_v1).toEqual(
+  expect(published.custom_funnels.custom_2?.published_content_v2).toEqual(
     customTwoDraft,
   );
   const beforeActivation = await t.query(
     api.communityPublic.resolvePublicFunnelBySlug,
     { communitySlug: "community-funnel-publish" },
   );
-  expect(beforeActivation.community?.funnel.published_document_v1).toBeNull();
+  expect(beforeActivation.community?.funnel.published_content_v2).toBeNull();
 
   const activated = await asOwner.mutation(
     api.communityFunnel.setActiveCommunityFunnel,
@@ -471,7 +506,7 @@ test("slot-aware publication is private until the published slot is activated", 
     api.communityPublic.resolvePublicFunnelBySlug,
     { communitySlug: "community-funnel-publish" },
   );
-  expect(afterActivation.community?.funnel.published_document_v1).toEqual(
+  expect(afterActivation.community?.funnel.published_content_v2).toEqual(
     customTwoDraft,
   );
 
@@ -483,7 +518,7 @@ test("slot-aware publication is private until the published slot is activated", 
     api.communityPublic.resolvePublicFunnelBySlug,
     { communitySlug: "community-funnel-publish" },
   );
-  expect(afterDefault.community?.funnel.published_document_v1).toBeNull();
+  expect(afterDefault.community?.funnel.published_content_v2).toBeNull();
 });
 
 test("custom funnel revisions and VSL state are isolated by slot", async () => {
@@ -494,7 +529,7 @@ test("custom funnel revisions and VSL state are isolated by slot", async () => {
     await ctx.db.insert("communityFunnels", {
       communityId: fixture.communityId,
       slot: "custom_2",
-      draftDocumentV1: buildCommunityFunnelDocumentTestFixture({
+      draftContentV2: buildCommunityFunnelContentTestFixture({
         headline: "Second isolated draft",
       }),
       draftRevision: 1,
@@ -558,7 +593,7 @@ test("activation rejects a stale published revision without moving the live slot
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const publishedDocument = buildCommunityFunnelDocumentTestFixture({
+  const publishedDocument = buildCommunityFunnelContentTestFixture({
     headline: "Newer published funnel",
   });
   await t.run(async (ctx) => {
@@ -566,11 +601,11 @@ test("activation rejects a stale published revision without moving the live slot
     await ctx.db.insert("communityFunnels", {
       communityId: fixture.communityId,
       slot: "custom_2",
-      draftDocumentV1: publishedDocument,
+      draftContentV2: publishedDocument,
       draftRevision: 2,
       draftUpdatedAt: 1_750_000_000_020,
       draftUpdatedByUserId: fixture.ownerId,
-      publishedDocumentV1: publishedDocument,
+      publishedContentV2: publishedDocument,
       publishedDraftRevision: 2,
       publishedAt: 1_750_000_000_020,
       publishedByUserId: fixture.ownerId,

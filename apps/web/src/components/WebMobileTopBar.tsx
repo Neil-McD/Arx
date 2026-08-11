@@ -1,13 +1,17 @@
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Hash, Settings, Users } from "lucide-react";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { CommunityPresenceFacepile } from "./CommunityPresenceFacepile";
 import type { MobileMemberFace, MobileRootPage } from "./webShellChromeShared";
 import type { CommunityVisualIdentity } from "../../../../shared/communityVisualIdentity";
 
 type WebMobileTopBarProps = {
-  mode: "agent" | "discover" | "community";
+  mode: "agent" | "discover" | "community" | "settings";
   rootPage: MobileRootPage;
   isThreadPage?: boolean;
+  isCommunityHome?: boolean;
+  hasCommunityRail?: boolean;
+  communityDetailLabel?: string | null;
+  communityDetailIcon?: "channel" | "members";
   showDrawerButton?: boolean;
   showBackButton?: boolean;
   hasActiveCommunity: boolean;
@@ -28,6 +32,8 @@ type WebMobileTopBarProps = {
   canOpenCommunitySelector: boolean;
   onOpenCommunitySelector: () => void;
   onOpenMembers: () => void;
+  canOpenCommunitySettings?: boolean;
+  onOpenCommunitySettings?: (() => void) | null;
 };
 
 function formatMemberCount(value: number | null): string | null {
@@ -40,6 +46,10 @@ export function WebMobileTopBar({
   mode,
   rootPage,
   isThreadPage = false,
+  isCommunityHome = false,
+  hasCommunityRail = false,
+  communityDetailLabel = null,
+  communityDetailIcon = "channel",
   showDrawerButton = true,
   showBackButton = false,
   hasActiveCommunity,
@@ -60,19 +70,23 @@ export function WebMobileTopBar({
   canOpenCommunitySelector,
   onOpenCommunitySelector,
   onOpenMembers,
+  canOpenCommunitySettings = false,
+  onOpenCommunitySettings = null,
 }: WebMobileTopBarProps) {
   const communityLabel = (activeCommunityName ?? "").trim() || "Community";
   const isAgent = mode === "agent";
-  const isDiscover = mode === "discover";
-  const selectorLabel = isDiscover ? "Discover" : communityLabel;
+  const isSettings = mode === "settings";
   const memberCountLabel = formatMemberCount(memberCount);
   const showMembers =
+    isCommunityHome &&
+    !hasCommunityRail &&
     !isThreadPage &&
     rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
   const drawerLabel = isAgent ? "Open threads" : "Open community navigation";
+
   const communitySelectorContent = (
     <>
-      {hasActiveCommunity && !isDiscover ? (
+      {hasActiveCommunity ? (
         <CommunityAvatar
           communityId={activeCommunityId}
           visualIdentity={activeCommunityVisualIdentity}
@@ -91,13 +105,13 @@ export function WebMobileTopBar({
           <path d="m15.8 8.2-2.5 5.1-5.1 2.5 2.5-5.1 5.1-2.5z" />
         </svg>
       )}
-      <span className="mobile-topbar-community-name">{selectorLabel}</span>
+      <span className="mobile-topbar-community-name">{communityLabel}</span>
       {canOpenCommunitySelector ? (
         <svg className="mobile-topbar-community-chevron" viewBox="0 0 24 24" aria-hidden="true">
           <path d="m7 9.5 5 5 5-5" />
         </svg>
       ) : null}
-      {activeCommunityAttentionCount > 0 && !isDiscover ? (
+      {activeCommunityAttentionCount > 0 ? (
         <span className="mobile-topbar-attention" aria-label={`${activeCommunityAttentionCount} updates`}>
           {activeCommunityAttentionCount > 99 ? "99+" : activeCommunityAttentionCount}
         </span>
@@ -106,9 +120,19 @@ export function WebMobileTopBar({
   );
 
   return (
-    <header className={`mobile-topbar${showMembers ? " has-members" : ""}${isThreadPage ? " is-thread-page" : ""}`}>
+    <header className={`mobile-topbar${showMembers ? " has-members" : ""}${isThreadPage ? " is-thread-page" : ""}${isCommunityHome ? " is-community-home" : ""}${hasCommunityRail ? " has-community-rail" : ""}`}>
       <div className="mobile-topbar-left">
-        {showBackButton && onBack ? (
+        {isCommunityHome && !hasCommunityRail ? (
+          <button
+            type="button"
+            className="mobile-topbar-community-selector mobile-topbar-community-home-selector"
+            aria-label="Switch community"
+            title="Switch community"
+            onClick={onOpenCommunitySelector}
+          >
+            {communitySelectorContent}
+          </button>
+        ) : showBackButton && onBack ? (
           <button
             type="button"
             className="mobile-topbar-icon mobile-topbar-back"
@@ -118,7 +142,7 @@ export function WebMobileTopBar({
           >
             <ArrowLeft aria-hidden="true" />
           </button>
-        ) : showDrawerButton ? (
+        ) : showDrawerButton && !hasCommunityRail ? (
           <button
             type="button"
             className="mobile-topbar-icon"
@@ -134,10 +158,21 @@ export function WebMobileTopBar({
       </div>
 
       <div className="mobile-topbar-center">
-        {isThreadPage ? (
+        {isCommunityHome ? null : isThreadPage ? (
           <span className="mobile-topbar-context-label">Thread</span>
         ) : isAgent ? (
           <span className="mobile-topbar-context-label">Polynet AI</span>
+        ) : isSettings ? (
+          <span className="mobile-topbar-context-label">Settings</span>
+        ) : communityDetailLabel ? (
+          <span className="mobile-topbar-context-label mobile-topbar-channel-label">
+            {communityDetailIcon === "members" ? (
+              <Users aria-hidden="true" />
+            ) : (
+              <Hash aria-hidden="true" />
+            )}
+            <span>{communityDetailLabel}</span>
+          </span>
         ) : (
           canOpenCommunitySelector ? (
             <button
@@ -161,6 +196,17 @@ export function WebMobileTopBar({
       </div>
 
       <div className="mobile-topbar-right">
+        {isCommunityHome && canOpenCommunitySettings && onOpenCommunitySettings ? (
+          <button
+            type="button"
+            className="mobile-topbar-icon mobile-topbar-settings"
+            aria-label={`Open ${communityLabel} settings`}
+            title="Community settings"
+            onClick={onOpenCommunitySettings}
+          >
+            <Settings aria-hidden="true" />
+          </button>
+        ) : null}
         {showMembers ? (
           <button
             type="button"

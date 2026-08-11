@@ -3,16 +3,80 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   buildAppRoutePath,
   buildCommunityFunnelPreviewPath,
+  buildCommunityHomePath,
+  buildCommunityMembersPath,
   buildCommunityTabPath,
   parseAppRouteFromPathname,
   readPublicRouteFromLocation,
+  resolveInitialAppShellVariant,
 } from "../shared/webAppRouteState";
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe("installed app shell selection", () => {
+  it("opens new standalone installs in the mobile shell", () => {
+    expect(resolveInitialAppShellVariant({
+      pathname: "/m",
+      search: "?launch=app",
+      standalone: true,
+    })).toBe("mobile");
+  });
+
+  it("keeps already-installed legacy launch URLs in the mobile shell", () => {
+    expect(resolveInitialAppShellVariant({
+      pathname: "/workspace",
+      search: "?launch=app",
+      standalone: true,
+    })).toBe("mobile");
+  });
+
+  it("does not turn an ordinary browser workspace route into mobile", () => {
+    expect(resolveInitialAppShellVariant({
+      pathname: "/workspace",
+      search: "?launch=app",
+      standalone: false,
+    })).toBe("standard");
+  });
+
+  it("preserves the OAuth callback shell authority", () => {
+    expect(resolveInitialAppShellVariant({
+      pathname: "/m",
+      search: "?launch=app",
+      oauthShellVariant: "standard",
+      standalone: true,
+    })).toBe("standard");
+  });
+});
+
 describe("community channel routes", () => {
+  it("round-trips the mobile community directory route", () => {
+    const path = buildCommunityHomePath("polynet");
+    expect(path).toBe("/c/polynet/home");
+    expect(parseAppRouteFromPathname(path ?? "")).toMatchObject({
+      page: "community",
+      view: "community_home",
+      communitySlug: "polynet",
+      communityTab: "chat",
+      communityChannelSlug: null,
+    });
+  });
+
+  it("round-trips the durable mobile Members route", () => {
+    const path = buildCommunityMembersPath("polynet");
+    expect(path).toBe("/c/polynet/members");
+    const parsed = parseAppRouteFromPathname(path ?? "");
+    expect(parsed).toMatchObject({
+      page: "community",
+      view: "community_members",
+      communitySlug: "polynet",
+      communityTab: "chat",
+      communityChannelSlug: null,
+    });
+    expect(buildAppRoutePath(parsed!)).toBe(path);
+  });
+
   it("keeps General on the backward-compatible chat route", () => {
     expect(buildCommunityTabPath("polynet", "chat")).toBe("/c/polynet/chat");
     expect(

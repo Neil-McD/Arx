@@ -266,7 +266,7 @@ body {
   height: 44px;
   border-radius: var(--radius-sm);
   border: var(--community-rail-button-border);
-  background: var(--surface-card);
+  background: var(--community-rail-control-bg);
   color: var(--text-ink-primary);
   display: grid;
   place-items: center;

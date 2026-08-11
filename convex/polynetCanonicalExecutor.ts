@@ -75,11 +75,11 @@ function projectSelectedFunnelCurrentState(
     selected_slot: slot,
     active_slot: value.active_slot ?? "default",
     draft_vsl_url: selected.draft_vsl_url ?? null,
-    draft_document_v1: selected.draft_document_v1 ?? null,
+    draft_content_v2: selected.draft_content_v2 ?? null,
     draft_revision: Number(selected.draft_revision ?? 0),
     draft_updated_at: selected.draft_updated_at ?? null,
     published_vsl_url: selected.published_vsl_url ?? null,
-    published_document_v1: selected.published_document_v1 ?? null,
+    published_content_v2: selected.published_content_v2 ?? null,
     published_draft_revision: Number(
       selected.published_draft_revision ?? 0,
     ),
@@ -531,9 +531,9 @@ function capabilityDocument(args: {
   };
   if (isFunnelCapability) {
     operationDefinition.input = {
-      required: ["expected_revision", "document"],
+      required: ["expected_revision", "content"],
       expected_revision: "non-negative integer",
-      document_contract: "community_funnel_document:v1",
+      content_contract: "community_funnel_content:v2",
       effects: ["replace_manager_draft"],
       forbidden_effects: ["publish", "change_access", "change_pricing"],
     };
@@ -1484,13 +1484,13 @@ async function executeCanonicalCall(args: {
     if (
       !Number.isSafeInteger(expectedRevision) ||
       expectedRevision < 0 ||
-      !input.document ||
-      typeof input.document !== "object" ||
-      Array.isArray(input.document)
+      !input.content ||
+      typeof input.content !== "object" ||
+      Array.isArray(input.content)
     ) {
       return canonicalError(
         "invalid_tool_args",
-        "expected_revision and a Funnel V1 document are required.",
+        "expected_revision and Funnel V2 content are required.",
       );
     }
     const reservation = await reserveMutatingOperation({
@@ -1511,7 +1511,7 @@ async function executeCanonicalCall(args: {
           communityId: target.communityId,
           slot: funnelDraftSlot,
           expectedDraftRevision: expectedRevision,
-          document: input.document,
+          content: input.content,
         },
       )) as Record<string, unknown>;
       const responseValue = {

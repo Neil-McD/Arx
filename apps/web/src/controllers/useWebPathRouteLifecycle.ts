@@ -37,6 +37,7 @@ export function useWebPathRouteLifecycle(params: {
   activePage: AppPage;
   activeView: AppView;
   settingsPage: SettingsPage;
+  settingsIndex: boolean;
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
   communityChannelSlug: string | null;
@@ -51,6 +52,7 @@ export function useWebPathRouteLifecycle(params: {
     page: AppPage;
     view: AppView;
     settingsPage: SettingsPage;
+    settingsIndex?: boolean;
     communitySlug: string | null;
     communityTab: CommunityTab;
     communityExperienceMode?: CommunityExperienceMode;
@@ -91,6 +93,7 @@ export function useWebPathRouteLifecycle(params: {
       page: params.activePage,
       view: params.activeView,
       settingsPage: params.settingsPage,
+      settingsIndex: params.settingsIndex,
       communitySlug: params.activeCommunitySlug,
       communityTab: params.communityTab,
       communityChannelSlug:
@@ -120,6 +123,7 @@ export function useWebPathRouteLifecycle(params: {
     params.activePage,
     params.activeView,
     params.settingsPage,
+    params.settingsIndex,
     params.activeCommunitySlug,
     params.communityTab,
     params.communityChannelSlug,

@@ -67,6 +67,8 @@ export function useWebShellNavigationController(params: {
   setActiveView: Dispatch<SetStateAction<AppView>>;
   settingsPage: SettingsPage;
   setSettingsPage: Dispatch<SetStateAction<SettingsPage>>;
+  mobileSettingsView: "index" | "detail";
+  setMobileSettingsView: Dispatch<SetStateAction<"index" | "detail">>;
   selectedProductDocSlug: string | null;
   setSelectedProductDocSlug: Dispatch<SetStateAction<string | null>>;
   activeOperatorTab: OperatorTab;
@@ -103,8 +105,13 @@ export function useWebShellNavigationController(params: {
     const communitySlug =
       String(nextAppRoute.communitySlug ?? "").trim() || null;
     current.setActivePage(nextAppRoute.page);
-    current.setActiveView("home");
+    current.setActiveView(nextAppRoute.view);
     current.setSettingsPage(nextAppRoute.settingsPage);
+    current.setMobileSettingsView(
+      nextAppRoute.page === "settings" && nextAppRoute.settingsIndex
+        ? "index"
+        : "detail",
+    );
     if (nextAppRoute.page === "docs") {
       current.setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);
     }
@@ -190,6 +197,10 @@ export function useWebShellNavigationController(params: {
           page: current.activePage,
           view: current.activeView,
           settingsPage: current.settingsPage,
+          settingsIndex:
+            current.activePage === "settings" &&
+            current.shellVariant === "mobile" &&
+            current.mobileSettingsView === "index",
           communitySlug: current.selectedActiveCommunitySlug,
           communityTab: current.communityTab,
           communityChannelSlug:
@@ -332,6 +343,10 @@ export function useWebShellNavigationController(params: {
     activePage: params.activePage,
     activeView: params.activeView,
     settingsPage: params.settingsPage,
+    settingsIndex:
+      params.activePage === "settings" &&
+      params.shellVariant === "mobile" &&
+      params.mobileSettingsView === "index",
     activeCommunitySlug: params.selectedActiveCommunitySlug,
     communityTab: params.communityTab,
     communityChannelSlug: params.communityChannelSlug,

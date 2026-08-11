@@ -16,10 +16,10 @@ export function WebDeleteResourceModal(props: WebDeleteResourceModalProps) {
       <div className="modal resource-modal delete-resource-modal" onClick={(event) => event.stopPropagation()}>
         <div className="modal-header resource-delete-header">
           <div className="resource-delete-copy">
-            <div className="resource-viewer-eyebrow">Delete resource</div>
-            <h2 className="resource-delete-title">Remove this from the library?</h2>
+            <div className="resource-viewer-eyebrow">Delete lesson</div>
+            <h2 className="resource-delete-title">Delete this lesson?</h2>
             <div className="resource-modal-subtitle">
-              This will remove the resource for everyone in the community.
+              This will remove the lesson for everyone in the community.
             </div>
           </div>
           <button className="modal-close" onClick={onClose} title="Close">
@@ -28,10 +28,10 @@ export function WebDeleteResourceModal(props: WebDeleteResourceModalProps) {
         </div>
         <div className="modal-body resource-delete-body">
           <div className="resource-delete-surface">
-            <div className="resource-delete-label">Resource</div>
-            <div className="resource-delete-name">{resourceTitle || "This resource"}</div>
+            <div className="resource-delete-label">Lesson</div>
+            <div className="resource-delete-name">{resourceTitle || "This lesson"}</div>
             <div className="resource-delete-note">
-              Members will no longer be able to find or open it from the resource library.
+              Members will no longer be able to find or open it from this course.
             </div>
           </div>
         </div>
@@ -41,7 +41,7 @@ export function WebDeleteResourceModal(props: WebDeleteResourceModalProps) {
               Cancel
             </button>
             <button className="resource-delete-confirm" onClick={() => void onConfirm()} disabled={isDeleting}>
-              {isDeleting ? "Deleting..." : "Delete resource"}
+              {isDeleting ? "Deleting..." : "Delete lesson"}
             </button>
           </div>
         </div>

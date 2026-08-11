@@ -15,6 +15,7 @@ export function WebMobileBottomRail({
     return null;
 
   const activeRoot = communityShell.mobileRootPage;
+  const hasCommunityRail = communityShell.showMobileGlobalShell;
   const unreadDisplay =
     communityShell.directMessagesUnreadCount > 99
       ? "99+"
@@ -27,7 +28,10 @@ export function WebMobileBottomRail({
   );
 
   return (
-    <nav className="mobile-bottom-rail" aria-label="Primary navigation">
+    <nav
+      className={`mobile-bottom-rail${hasCommunityRail ? " has-community-rail" : ""}`}
+      aria-label="Primary navigation"
+    >
       <div className="mobile-bottom-rail-inner">
         <button
           type="button"

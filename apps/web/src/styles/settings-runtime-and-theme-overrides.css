@@ -8189,14 +8189,59 @@ button.settings-primary-action svg {
 }
 
 .app-root.mobile-shell .community-chat .community-channel-header {
-  flex-basis: auto;
-  height: auto;
-  min-height: calc(var(--mobile-topbar-clearance) + 44px);
-  padding: var(--mobile-topbar-clearance) 10px 0 14px;
+  flex: 0 0 var(--mobile-topbar-clearance);
+  height: var(--mobile-topbar-clearance);
+  min-height: var(--mobile-topbar-clearance);
+  padding: 0;
+  border-bottom: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.app-root.mobile-shell .community-chat .community-channel-header-identity {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+.app-root.mobile-shell .community-chat .community-channel-header-actions {
+  position: fixed;
+  top: calc(env(safe-area-inset-top, 0px) + var(--mobile-topbar-top-offset) + 4px);
+  right: var(--mobile-topbar-side-inset);
+  z-index: 31;
+  padding: 4px;
+  border-radius: 12px;
+  background: var(--mobile-floating-chrome-bg);
+  box-shadow: var(--web-floating-chrome-shadow), inset 0 1px 0 var(--web-floating-chrome-highlight);
+  backdrop-filter: blur(14px) saturate(120%);
+  -webkit-backdrop-filter: blur(14px) saturate(120%);
+  pointer-events: auto;
+  transition:
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 140ms ease;
+}
+
+.app-root.mobile-shell .community-chat .community-channel-header-menu-trigger {
+  width: 30px;
+  height: 30px;
+}
+
+.app-root.mobile-shell.mobile-reading-mode .community-chat .community-channel-header-actions {
+  transform: translateY(calc(-100% - env(safe-area-inset-top, 0px) - 8px));
+  opacity: 0;
+  pointer-events: none;
 }
 
 .app-root.mobile-shell .community-chat .community-interaction-feed-scroll {
   padding: 8px 12px 18px;
+  overscroll-behavior-y: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 .app-root.mobile-shell .community-chat .community-interaction-projection.has-drawer {
@@ -8306,6 +8351,10 @@ button.settings-primary-action svg {
   margin-bottom: calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
 }
 
+.app-root.mobile-shell .community-chat .community-interaction-main-composer:focus-within .chat-input-bar {
+  margin-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+}
+
 .app-root.mobile-shell .community-chat .community-interaction-bootstrap-composer {
   height: 66px;
   margin: 0 12px calc(env(safe-area-inset-bottom, 0px) + var(--mobile-bottom-rail-height) + 8px);
@@ -8313,7 +8362,7 @@ button.settings-primary-action svg {
 
 .app-root.mobile-shell .community-chat .community-interaction-reply-input-bar {
   margin: 0;
-  border-radius: 18px;
+  border-radius: 20px;
 }
 
 .app-root.mobile-shell .community-member-chat .community-interaction-thread-page .community-interaction-drawer-composer {
@@ -8322,16 +8371,33 @@ button.settings-primary-action svg {
   background: transparent;
 }
 
+.app-root.mobile-shell .community-member-chat .community-interaction-thread-page .community-interaction-drawer-composer:focus-within {
+  padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 8px);
+}
+
 .app-root.mobile-shell .community-member-chat .chat-input-bar {
   --community-composer-control-size: 42px;
-  --community-composer-input-size: 28px;
-  border-radius: var(--composer-radius);
+  --community-composer-input-size: 46px;
+  border-radius: 20px;
   background: var(--composer-surface);
   border-color: var(--composer-border);
 }
 
 .app-root.mobile-shell .community-member-chat .community-interaction-reply-input-bar {
-  border-radius: var(--composer-radius);
+  border-radius: 20px;
+}
+
+.app-root.mobile-shell .community-member-chat .community-composer-editor-row .chat-input,
+.app-root.mobile-shell .community-member-chat .community-composer-editor-row .mention-composer-highlight {
+  min-height: var(--community-composer-input-size);
+}
+
+.app-root.mobile-shell .community-member-chat .chat-input-bar > .chat-replying-bar {
+  margin-inline: -2px;
+}
+
+.app-root.mobile-shell .community-member-chat .chat-input-bar > .community-attachments-preview {
+  margin-inline: 0;
 }
 
 .app-root.mobile-shell .community-chat .chat-input {
@@ -8358,6 +8424,10 @@ button.settings-primary-action svg {
   flex-direction: column;
   align-items: stretch;
   gap: 10px;
+}
+
+.app-root.mobile-shell.mobile-global-shell-active .discover-hero {
+  padding-top: 18px;
 }
 
 .app-root.mobile-shell .discover-hero-copy {
@@ -8590,8 +8660,7 @@ button.settings-primary-action svg {
   gap: 12px;
 }
 
-.app-root.mobile-shell .feed-header-row,
-.app-root.mobile-shell .resources-header-row {
+.app-root.mobile-shell .feed-header-row {
   flex-direction: column;
   align-items: flex-start;
   gap: 10px;
@@ -8603,8 +8672,7 @@ button.settings-primary-action svg {
   justify-content: space-between;
 }
 
-.app-root.mobile-shell .feed-header-subtitle,
-.app-root.mobile-shell .resources-header-subtitle {
+.app-root.mobile-shell .feed-header-subtitle {
   font-size: 12px;
   line-height: 1.45;
 }

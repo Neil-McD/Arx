@@ -194,6 +194,7 @@ const AUTH_GATEWAY_BEGIN_PATH = "/api/auth/google/start";
 const AUTH_GATEWAY_SESSION_PATH = "/api/auth/session";
 const AUTH_GATEWAY_REFRESH_PATH = "/api/auth/refresh";
 const AUTH_GATEWAY_LOGOUT_PATH = "/api/auth/logout";
+const AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS = 10_000;
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
@@ -213,17 +214,28 @@ async function callSameOriginAuthEndpoint(params: {
   path: string;
   method?: "GET" | "POST";
   payload?: Record<string, unknown>;
+  timeoutMs?: number;
 }): Promise<Response | null> {
   const hasBody = params.method !== "GET" && typeof params.payload === "object" && params.payload !== null;
+  const controller =
+    typeof params.timeoutMs === "number" && params.timeoutMs > 0
+      ? new AbortController()
+      : null;
+  const timeoutId = controller
+    ? window.setTimeout(() => controller.abort(), params.timeoutMs)
+    : null;
   try {
     return await fetch(buildSameOriginAuthUrl(params.path), {
       method: params.method ?? "POST",
       credentials: "include",
       headers: hasBody ? { "Content-Type": "application/json" } : undefined,
+      ...(controller ? { signal: controller.signal } : null),
       ...(hasBody ? { body: JSON.stringify(params.payload) } : null),
     });
   } catch {
     return null;
+  } finally {
+    if (timeoutId !== null) window.clearTimeout(timeoutId);
   }
 }
 
@@ -496,6 +508,7 @@ export async function bootstrapSessionDetailed(): Promise<AuthSessionBootstrapRe
   const response = await callSameOriginAuthEndpoint({
     path: AUTH_GATEWAY_SESSION_PATH,
     method: "GET",
+    timeoutMs: AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS,
   });
   if (!response) throw new Error("Auth gateway is unavailable.");
   if (!response.ok) throw new Error(await readAuthError(response));

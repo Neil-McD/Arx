@@ -76,8 +76,23 @@ const CODE_BLOCK_LANGUAGES = new Set([
 
 export type MarkdownRenderOptions = {
   embedStandaloneMedia?: boolean;
+  headingLevelOffset?: number;
   onCopyCode?: (text: string) => Promise<void> | void;
 };
+
+type MarkdownHeadingProps = {
+  children: ReactNode;
+  level: number;
+};
+
+function MarkdownHeading({ children, level }: MarkdownHeadingProps) {
+  if (level <= 1) return <h1 className="md-header">{children}</h1>;
+  if (level === 2) return <h2 className="md-header">{children}</h2>;
+  if (level === 3) return <h3 className="md-header">{children}</h3>;
+  if (level === 4) return <h4 className="md-header">{children}</h4>;
+  if (level === 5) return <h5 className="md-header">{children}</h5>;
+  return <h6 className="md-header">{children}</h6>;
+}
 
 type CodeBlockProps = {
   code: string;
@@ -572,6 +587,13 @@ function normalizeMathMarkdown(text: string): string {
 }
 
 export function renderMarkdown(text: string, options?: MarkdownRenderOptions): ReactNode {
+  const requestedHeadingLevelOffset = options?.headingLevelOffset ?? 0;
+  const headingLevelOffset = Number.isFinite(requestedHeadingLevelOffset)
+    ? Math.max(0, Math.min(5, Math.floor(requestedHeadingLevelOffset)))
+    : 0;
+  const renderHeading = (level: number, children: ReactNode) => (
+    <MarkdownHeading level={Math.min(6, level + headingLevelOffset)}>{children}</MarkdownHeading>
+  );
   const components: Components = {
     a({ href, children }) {
       const safeHref =
@@ -620,22 +642,22 @@ export function renderMarkdown(text: string, options?: MarkdownRenderOptions): R
       );
     },
     h1({ children }) {
-      return <h1 className="md-header">{children}</h1>;
+      return renderHeading(1, children);
     },
     h2({ children }) {
-      return <h2 className="md-header">{children}</h2>;
+      return renderHeading(2, children);
     },
     h3({ children }) {
-      return <h3 className="md-header">{children}</h3>;
+      return renderHeading(3, children);
     },
     h4({ children }) {
-      return <h4 className="md-header">{children}</h4>;
+      return renderHeading(4, children);
     },
     h5({ children }) {
-      return <h5 className="md-header">{children}</h5>;
+      return renderHeading(5, children);
     },
     h6({ children }) {
-      return <h6 className="md-header">{children}</h6>;
+      return renderHeading(6, children);
     },
     hr() {
       return <hr className="md-hr" />;

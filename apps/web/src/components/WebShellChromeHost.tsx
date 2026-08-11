@@ -2,12 +2,13 @@ import type {
   ComponentProps,
   ReactNode,
 } from "react";
-import { CommunityNav } from "../../../../shared/CommunityNav";
 import { WebMobileTopBar } from "./WebMobileTopBar";
 import { buildWebShellChromeClassNames } from "../controllers/buildWebShellChromeClassNames";
 import { WebDesktopShellHeader } from "./WebDesktopShellHeader";
-import { WebDesktopCommunityRail } from "./WebDesktopCommunityRail";
+import { WebCommunityRail } from "./WebCommunityRail";
 import { WebMobileCommunityShell } from "./WebMobileCommunityShell";
+import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
+import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
 import { WebSettingsSidebar } from "./WebSettingsSidebar";
 import type {
   MobileOverlay,
@@ -36,59 +37,67 @@ export type WebShellChromeHostProps = {
 export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const isMobileDedicatedRoot =
     props.showMobileAppShell &&
-    !props.showMobileSettingsShell &&
     (props.communityShell.mobileRootPage === "agent" ||
       props.communityShell.mobileRootPage === "messages");
+  const isMobileCommunityHome =
+    props.showMobileAppShell &&
+    !props.showMobileSettingsShell &&
+    props.communityShell.mobileRootPage === "community" &&
+    props.communityShell.activePage === "community" &&
+    props.communityShell.activeView === "community_home";
+  const showMobileGlobalShell =
+    props.communityShell.showMobileGlobalShell &&
+    !props.communityShell.forceMobileCommunityRoot;
+  const isMobileDiscoverRoot =
+    props.showMobileAppShell &&
+    showMobileGlobalShell &&
+    props.communityShell.activePage === "discover";
   const shellHeader = props.showMobileAppShell ? (
-    isMobileDedicatedRoot ? null : (
-      <WebMobileTopBar {...props.mobileTopBarProps} />
+    isMobileDedicatedRoot || isMobileDiscoverRoot ? null : (
+      <WebMobileTopBar
+        {...props.mobileTopBarProps}
+        hasCommunityRail={showMobileGlobalShell}
+      />
     )
   ) : (
     <WebDesktopShellHeader {...props.desktopHeader} />
   );
 
   const desktopCommunityNav = props.communityShell.showDesktopCommunityNav ? (
-    <CommunityNav
-      activeCommunity={props.communityShell.activeCommunity}
-      communityTab={props.communityShell.communityTab}
-      tabIndicators={props.communityShell.communityTabIndicators}
-      channels={props.communityShell.communityChannels}
-      isLoadingChannels={props.communityShell.isLoadingCommunityChannels}
-      selectedChannelSlug={props.communityShell.selectedCommunityChannelSlug}
-      channelIndicators={props.communityShell.communityChannelIndicators}
-      onSelectChannel={props.communityShell.onSelectCommunityChannel}
-      onCreateChannel={props.communityShell.onCreateCommunityChannel}
-      isCreatingChannel={props.communityShell.isCreatingCommunityChannel}
-      createChannelError={props.communityShell.communityChannelCreateError}
-      clearCreateChannelError={
-        props.communityShell.clearCommunityChannelCreateError
-      }
-      isAtChannelLimit={props.communityShell.isAtCommunityChannelLimit}
-      maxActiveChannels={props.communityShell.maxActiveCommunityChannels}
-      onReorderChannels={props.communityShell.onReorderCommunityChannels}
-      isReorderingChannels={props.communityShell.isReorderingCommunityChannels}
-      reorderChannelsError={props.communityShell.communityChannelReorderError}
-      clearReorderChannelsError={
-        props.communityShell.clearCommunityChannelReorderError
-      }
-      canViewMembersActiveCommunity={
-        props.communityShell.canViewMembersActiveCommunity
-      }
-      canViewActiveCommunitySettings={
-        props.communityShell.canViewActiveCommunitySettings
-      }
-      canManageMembersActiveCommunity={
-        props.communityShell.canManageMembersActiveCommunity
-      }
-      canViewActiveCommunityAnalytics={
-        props.communityShell.canViewActiveCommunityAnalytics
-      }
-      isLoadingAccess={props.communityShell.isLoadingCommunityAccess}
-      lockedTabs={props.communityShell.lockedCommunityNavTabs ?? undefined}
-      onCopyCommunityJoinLink={props.communityShell.onCopyCommunityJoinLink}
-      onSelectTab={props.communityShell.onSelectCommunityTab}
+    <WebCommunityNavSurface
+      communityShell={props.communityShell}
+      presentation="desktop"
     />
   ) : null;
+  const mobileGlobalShellContent = isMobileCommunityHome ? (
+    <WebCommunityNavSurface
+      communityShell={props.communityShell}
+      presentation="mobile-home"
+    />
+  ) : isMobileDedicatedRoot ? null : props.mainSurface;
+  const mobileGlobalShellLabel = isMobileCommunityHome
+    ? "Community home"
+    : props.communityShell.mobileRootPage === "agent"
+      ? "Polynet AI"
+      : props.communityShell.mobileRootPage === "messages"
+        ? "Direct messages"
+        : props.communityShell.activePage === "settings"
+          ? "Settings"
+          : props.communityShell.activePage === "community" &&
+              props.communityShell.communityTab === "settings"
+            ? "Community settings"
+          : props.communityShell.activePage === "discover"
+            ? "Discover"
+            : "Polynet";
+  const mainSurface = showMobileGlobalShell ? (
+    <WebMobileGlobalShell
+      communityShell={props.communityShell}
+      isCommunityHome={isMobileCommunityHome}
+      label={mobileGlobalShellLabel}
+    >
+      {mobileGlobalShellContent}
+    </WebMobileGlobalShell>
+  ) : props.mainSurface;
   const desktopSettingsSidebar = (
     <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
   );
@@ -101,6 +110,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const { rootClassName, shellClassName } = buildWebShellChromeClassNames({
     showMobileAppShell: props.showMobileAppShell,
     showMobileSettingsShell: props.showMobileSettingsShell,
+    showMobileGlobalShell,
     showMobilePublicFunnel: props.showMobilePublicFunnel,
     mobileOverlay: Boolean(props.mobileOverlay),
     mobileChromeAutoHideEnabled: props.mobileChromeAutoHideEnabled,
@@ -121,24 +131,27 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       <WebMobileCommunityShell communityShell={props.communityShell} />
 
       <div className={shellClassName}>
-        <WebDesktopCommunityRail communityShell={props.communityShell} />
+        <WebCommunityRail
+          communityShell={props.communityShell}
+          presentation="desktop"
+        />
         {props.communityShell.showDesktopCommunityRail ? (
           <div
             className={`product-shell-surface product-shell-surface--${desktopFrameMode}`}
           >
             {desktopFrameMode === "settings" ? desktopSettingsSidebar : null}
             {desktopCommunityNav}
-            {isMobileDedicatedRoot ? null : props.mainSurface}
+            {mainSurface}
           </div>
         ) : desktopCommunityNav ? (
           <div className="product-shell-surface product-shell-surface--community">
             {desktopCommunityNav}
-            {isMobileDedicatedRoot ? null : props.mainSurface}
+            {mainSurface}
           </div>
         ) : (
           <>
             {desktopSettingsSidebar}
-            {isMobileDedicatedRoot ? null : props.mainSurface}
+            {mainSurface}
           </>
         )}
       </div>

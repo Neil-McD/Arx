@@ -3,7 +3,7 @@
   "name": "Polynet",
   "short_name": "Polynet",
   "scope": "/",
-  "start_url": "/workspace?launch=app",
+  "start_url": "/m?launch=app",
   "display": "standalone",
   "background_color": "#1A1A1A",
   "theme_color": "#1A1A1A",

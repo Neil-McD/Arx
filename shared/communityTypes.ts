@@ -89,6 +89,8 @@ export type CommunityFunnelConfig = {
   hero_media_url: string | null;
   hero_media_kind: CommunityFunnelHeroMediaKind;
   published_vsl_url: string | null;
+  published_content_v2: CommunityFunnelContentV2 | null;
+  /** Temporary read compatibility for pre-V2 drafts. */
   published_document_v1: CommunityFunnelDocumentV1 | null;
 };
 
@@ -167,13 +169,38 @@ export type CommunityFunnelDocumentV1 = {
   sections: CommunityFunnelSectionV1[];
 };
 
+export type CommunityFunnelPillarV2 = {
+  title: string;
+  body: string;
+};
+
+/**
+ * Funnel V2 is content, not page structure. Polynet owns the layout, theme,
+ * media placement, member proof, pricing, access language, and both CTAs.
+ */
+export type CommunityFunnelContentV2 = {
+  version: 2;
+  headline: string;
+  subheadline: string;
+  pillars: [
+    CommunityFunnelPillarV2,
+    CommunityFunnelPillarV2,
+    CommunityFunnelPillarV2,
+  ];
+  long_form_markdown: string;
+};
+
 export type CommunityFunnelVariantConfig = {
   slot: CommunityCustomFunnelSlot;
   draft_vsl_url: string | null;
+  draft_content_v2: CommunityFunnelContentV2 | null;
+  /** Temporary read compatibility for pre-V2 drafts. */
   draft_document_v1: CommunityFunnelDocumentV1 | null;
   draft_revision: number;
   draft_updated_at: number | null;
   published_vsl_url: string | null;
+  published_content_v2: CommunityFunnelContentV2 | null;
+  /** Temporary read compatibility for pre-V2 drafts. */
   published_document_v1: CommunityFunnelDocumentV1 | null;
   published_draft_revision: number;
   published_at: number | null;
@@ -186,6 +213,8 @@ export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
     CommunityFunnelVariantConfig | null
   >;
   draft_vsl_url: string | null;
+  draft_content_v2: CommunityFunnelContentV2 | null;
+  /** Temporary read compatibility for pre-V2 drafts. */
   draft_document_v1: CommunityFunnelDocumentV1 | null;
   draft_revision: number;
   draft_updated_at: number | null;

@@ -108,119 +108,276 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 - Remaining severity: no P0, P1, P2, or P3 findings remain for this responsive composition slice.
 
 final result: passed
----
 
-# Funnel editor workspace QA
+## Resources course presentation addendum
 
-## Evidence
+### Evidence
 
-- Source visual truth: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_pLDah6/Screenshot 2026-08-11 at 2.24.20 PM.png` (`1568 x 1227`).
-- Browser implementation: `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-default-dark.png`, `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-default-light.png`, `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-custom-dark.png`, and `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-custom-narrow-fixed.png`.
-- Combined comparison: `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-comparison-normalized.png`.
-- Desktop capture: `1281 x 1000` image pixels at a `1280 x 1000` CSS viewport and 1x density.
-- Narrow capture: `900 x 900` image and CSS pixels at 1x density.
-- States: default/live in both themes; custom/draft desktop and below 980px; empty, published, live, and inactive-default action states inspected in the rendered DOM.
+- Source visual truth, course catalog: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_j0eN1H/Screenshot 2026-08-10 at 5.55.21 PM.png`
+- Source visual truth, selected course: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_wLId5c/Screenshot 2026-08-10 at 5.55.43 PM.png`
+- Existing Polynet surface baseline: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_R37OCC/Screenshot 2026-08-10 at 5.55.04 PM.png`
+- Browser-rendered implementation screenshot: unavailable; this code state has not been staged or published, and local browser rendering is not an available verification path for this task.
+- Source image dimensions: all three supplied captures are `3024 x 1964` pixels. They represent desktop Chrome at Retina density; exact CSS viewport and device scale factor were not recorded in the source files.
+- Implementation viewport, pixel dimensions, CSS size, and density normalization: unavailable until the code is reachable in the authorized Chrome staging or production surface.
+- State: dark-theme Resources root and selected course, manager access.
 
-## Full-view and focused comparison
+### Full-view comparison
 
-The normalized full-view comparison shows the intentional change: the default funnel no longer reserves a dead guidance rail, the deterministic preview occupies the workspace, and the header has one secondary preview action with no duplicate live badge. Focused captures confirm the default header and full-width preview in both themes, the bounded custom conversation rail, and the sequential narrow custom layout.
+The three source images were opened and reviewed together. They establish the intended shift from Polynet's current wiki-like resource rail to a course catalog followed by a selected-course lesson outline and reader. A valid full-view comparison against the implementation cannot be made until this code is browser-rendered in the same authenticated product shell.
 
-## Required fidelity surfaces
+### Focused-region comparison
 
-- Fonts and typography: existing IBM Plex Sans and funnel display hierarchy are preserved; new helper copy uses the existing 12px muted treatment.
-- Spacing and layout rhythm: header spacing is 12px, default preview caps at 920px, custom rail stays within 320-380px, and no shadows or decorative cards were added.
-- Colors and tokens: existing semantic tokens are preserved; dark and light renders remain legible.
-- Image quality and assets: no asset was added, regenerated, substituted, or transformed.
-- Copy and content: default copy explains its deterministic source and permanence; custom copy states that changes remain private until publication.
+Blocked for the same reason. The implementation screenshot needed to compare card crop, course metadata density, header hierarchy, lesson-outline width, reader balance, and manager controls does not exist yet.
 
-## Comparison history
+### Findings
 
-1. Initial desktop comparison found no actionable P0/P1/P2 issue.
-2. Initial 900px capture found a P1 overlap: the grid allocated 520px to the composer while preview content overflowed behind it.
-3. Fix: below 980px, only the custom workspace now uses normal block flow inside the existing scroll container.
-4. Post-fix measurement: preview bottom and composer top both equal `1230.3125px`; `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-custom-narrow-fixed.png` confirms no overlap.
+- [P2] Browser-rendered visual acceptance remains unverified.
+  Location: Resources catalog, selected course shell, and course editor.
+  Evidence: source screenshots are available, but no rendered implementation screenshot exists at a matched viewport and state.
+  Impact: production build and contract proofs establish structural correctness, but cannot prove card proportions, responsive wrapping, light/dark polish, or authenticated interaction behavior.
+  Fix: publish or stage this exact code state through the canonical GitHub workflow, then capture the Resources root, selected course, and course editor in the user's Chrome session in dark and light themes.
 
-## Interaction and console
+### Required fidelity surfaces
 
-- ArrowRight and End move both selection and focus across tabs.
-- Draft exposes `Publish changes`; published inactive exposes `Make live`; live exposes no primary mutation action; empty exposes only a disabled preview action.
-- Inactive default exposes `Make live` and never mounts the conversation rail.
-- A clean browser load produced no console warnings or errors.
+- Fonts and typography: code reuses the product font and text tokens; browser-rendered weights, wrapping, and optical hierarchy remain unverified.
+- Spacing and layout rhythm: catalog and course-shell tracks have explicit desktop and narrow breakpoints; rendered proportions remain unverified.
+- Colors and visual tokens: all new UI uses existing semantic theme tokens; dark/light browser output remains unverified.
+- Image quality and asset fidelity: course covers use canonical `StableFramedMedia` focus and zoom metadata; real cover crops remain unverified.
+- Copy and content: course, lesson, source inbox, draft/live, empty, and manager-action terminology is implemented and contract-protected.
 
-## Findings
+### Primary interactions and console
+
+- Code and contract coverage confirm catalog selection, back navigation, lesson selection, outline collapse, course editing, cover upload/focus/removal, manager menus, source intake, and responsive structure.
+- Browser interaction and console checks are blocked until this exact code state is reachable in Chrome.
+
+### Comparison history
+
+- No visual fix iteration has been claimed. The source references were opened, the code was built and reviewed, and the remaining gate is the first matched browser capture.
+
+### Implementation checklist
+
+- [x] Build course catalog over canonical resource modules.
+- [x] Keep legacy unassigned pages in a separate manager maintenance entry.
+- [x] Build selected-course lesson outline over canonical page resources.
+- [x] Preserve the existing resource reader and source lineage.
+- [x] Restore course name, description, cover, crop, ordering, and draft/live authoring.
+- [x] Add responsive and keyboard-accessible structures.
+- [x] Pass production build and focused Resources contracts.
+- [ ] Capture and compare the exact implementation in Chrome after an authorized release.
+
+final result: blocked
+
+## Mobile global-root shell expansion addendum
+
+### Evidence
+
+- Interaction model: authenticated mobile global destinations retain one continuous community rail, inset content surface, and bottom navigation shell.
+- Framed destinations: Community Home, Discover, Global Settings, Polynet AI, Direct Messages, and community switching.
+- Focused destinations: channels, Resources, Events, community settings, and other community-detail routes intentionally omit the global wraparound frame.
+- Browser-rendered implementation capture: unavailable. This exact revision has not been deployed, and local-browser review is intentionally excluded for this product workflow.
+
+### Full-view comparison
+
+Blocked until this exact revision is deployed and captured in authenticated iPhone Safari or the home-screen PWA. The implementation review establishes the route boundary and shell geometry, but does not claim pixel-level visual acceptance.
+
+### Focused-region comparison
+
+Blocked for the same reason. Required focused regions are the Discover and Settings frame edges, the AI and DM panel junction with the community rail, the bottom-left rail continuity, and the transition from a framed global root into an unframed community detail.
+
+### Findings
+
+- No source-level P0 or P1 issue remains in the canonical global-shell projection.
+- Dedicated AI and DM roots are bounded inside the shell geometry rather than covering the community rail or bottom navigation.
+- Global rail actions reset thread, DM, overlay, and mobile-root state before routing, preventing stale overlays from surviving a destination change.
+- P2 verification gap: iPhone safe-area behavior, long-page scrolling, and light-theme shell contrast remain unverified until the exact revision is deployed.
+
+### Implementation checklist
+
+- [x] Use one route predicate for framed global roots.
+- [x] Preserve focused, unframed community-detail routes.
+- [x] Reuse one mobile community rail component across every framed root.
+- [x] Constrain Discover and Settings workspaces to the inset shell surface.
+- [x] Keep AI and DM panels clear of both the community rail and bottom navigation.
+- [x] Exit incompatible overlay state atomically before global navigation.
+- [x] Delete the superseded Community-Home-only wrapper.
+- [ ] Capture and compare the exact deployed state in iPhone Safari and the home-screen PWA.
+
+final result: blocked
+
+## Resources course simplification production addendum
+
+### Evidence
+
+- Source visual truth, catalog: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_CoynQW/Screenshot 2026-08-10 at 10.19.46 PM.png`
+- Source visual truth, selected course: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_eNy8LY/Screenshot 2026-08-10 at 10.20.37 PM.png`
+- Browser-rendered catalog, dark: `/tmp/polynet-resources-design-qa/resources-production-dark.png`
+- Browser-rendered catalog hover and menu: `/tmp/polynet-resources-design-qa/resources-production-hover.png` and `/tmp/polynet-resources-design-qa/resources-production-menu-open.png`
+- Browser-rendered selected course, dark: `/tmp/polynet-resources-design-qa/resources-production-course.png`
+- Browser-rendered catalog and selected course, light: `/tmp/polynet-resources-design-qa/resources-production-light-hydrated.png` and `/tmp/polynet-resources-design-qa/resources-production-light-course.png`
+- Full-view comparison evidence: `/tmp/polynet-resources-design-qa/catalog-comparison.png` and `/tmp/polynet-resources-design-qa/course-comparison.png`
+- Production identity: `https://www.polynet.ai/version.json` returned build `ed41c615e1b27146cd4f67e6cbacd06cb048e118`.
+- Viewport and density: implementation captured at `1243 x 707` CSS pixels and `1243 x 707` image pixels. Chrome reported DPR 2, while the browser screenshot API normalized output to one image pixel per CSS pixel. The catalog source is `2078 x 996` and was normalized to `1243 x 596`; the selected-course source is `2388 x 1282` and was normalized to `1243 x 667` with Lanczos scaling. The source crops exclude parts of the Polynet shell, so comparison is component-level rather than falsely pixel-exact across browser chrome.
+- State: authenticated owner/manager, production, dark and light themes, Resources catalog, card hover, card action menu, selected course, and member preview mode.
+
+### Full-view comparison
+
+The catalog now has one primary object and one primary creation affordance: the real course card and a same-track, same-height add-course card. The top header is reduced to Resources context plus preview mode; source intake, the count badge, and duplicate add/edit/status actions are absent. The selected-course view preserves Polynet's shell while matching the reference's left lesson sequence and right lesson content hierarchy.
+
+### Focused-region comparison
+
+The catalog comparison verifies card/add-card parity, dashed creation treatment, real cover imagery, and removal of header action clutter. The selected-course comparison verifies the narrower lesson rail, high-salience selected row, title/media hierarchy, and retained add-lesson affordance. Separate hover and open-menu captures verify that course management is hidden until intent and that the menu contains only `Edit course`, `Move to draft`, and `Delete` for the one-course state.
+
+### Findings
 
 - No actionable P0, P1, or P2 findings remain.
-- P3: run one authenticated staging pass with real community data after deployment; local authentication was intentionally not bypassed.
+- Residual test gap: the Chrome extension retained the user's `1243 x 707` viewport when a temporary narrow-viewport override was requested, so this production pass does not claim a separate responsive screenshot. Existing responsive CSS, TypeScript, production build, and Resources contract proofs passed; the supplied visual targets are desktop-only.
+
+### Required fidelity surfaces
+
+- Fonts and typography: IBM Plex Sans, course-card hierarchy, lesson labels, small metadata, wrapping, and optical weights are consistent across dark and light production states.
+- Spacing and layout rhythm: the two-column catalog grid, equal card heights, 20px peer gap, reduced header density, lesson-rail width, selected-row padding, and reader balance match the intended simple course model without clipping at the verified viewport.
+- Colors and visual tokens: dark and light surfaces use existing Polynet tokens. The selected lesson reuses the canonical `--surface-selected`, `--stroke-selected`, and `--text-selected` contract rather than introducing a Resources-only accent.
+- Image quality and asset fidelity: the production course uses its real framed community cover and real YouTube media. No placeholder artwork, generated substitute, custom SVG art, or CSS illustration was introduced.
+- Copy and content: `Add course`, lesson counts, course description, draft/live language, add-lesson copy, and preview labels are concise and coherent. The removed `Add sources` action is no longer promised by builder copy.
+- Icons and affordances: Lucide controls have consistent stroke weight and alignment. The overflow menu appears on hover/focus; touch CSS keeps management controls visible where hover does not exist.
+
+### Primary interactions and console
+
+- Hover revealed the course overflow control; the one-course menu exposed only Edit course, Move to draft, and Delete.
+- Opening the course selected the first lesson and preserved all three lesson entries plus Add lesson.
+- Preview mode hid the add-course card and manager menu, then restored them when switched off.
+- Light theme rendered both catalog and selected-course states correctly; the user's dark theme was restored afterward.
+- Final production state was left on `/c/polynet/resources`, dark theme, preview off.
+- Chrome console was checked after catalog and selected-course interactions; no warnings or errors were present.
+
+### Comparison history
+
+1. The earlier Resources presentation QA was blocked because the implementation had not been browser-rendered.
+2. The approved simplification removed source intake and duplicated header controls, added the peer add-course card, consolidated management into the course-card overflow, removed redundant top/bottom ordering accelerators, and applied canonical selection tokens to lessons.
+3. Production build `ed41c615e1b27146cd4f67e6cbacd06cb048e118` was captured in authenticated Chrome and compared in combined catalog and selected-course evidence. No post-deployment P0, P1, or P2 correction was required.
+
+### Implementation checklist
+
+- [x] Replace the header add-course control with a same-sized catalog card.
+- [x] Remove primary Resources source intake and stale builder copy.
+- [x] Move edit, status, and delete management into the hover/focus overflow.
+- [x] Keep canonical source lineage and existing-source recovery paths intact.
+- [x] Reuse canonical selected-navigation tokens for lesson rows.
+- [x] Verify manager preview behavior, dark and light themes, hover/menu state, course navigation, console health, and exact production identity.
+- [x] Pass the full release gate and publish through GitHub to the canonical Polynet production project.
 
 final result: passed
 
----
+## Resources shell compaction production addendum
 
-# Onboarding setup overlay QA
+### Evidence
 
-## Scope
+- Source visual truth, catalog: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_mJoXQ8/Screenshot 2026-08-10 at 11.00.50 PM.png`
+- Source visual truth, selected course: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_pMrTzb/Screenshot 2026-08-10 at 11.00.41 PM.png`
+- Browser-rendered catalog: `/tmp/polynet-resources-shell-compaction-catalog.png`
+- Browser-rendered selected course: `/tmp/polynet-resources-shell-compaction-course.png`
+- Combined full-view comparisons: `/tmp/polynet-resources-shell-compaction-catalog-comparison.png` and `/tmp/polynet-resources-shell-compaction-course-comparison.png`
+- Production identity: `https://www.polynet.ai/version.json` returned build `691b989b7924502a0be8f6cb2d8d47f44b31b6ed` in `production`.
+- Source dimensions: both supplied screenshots are `3024 x 1964` pixels. They include desktop and browser chrome, so each was proportionally normalized to `1243 x 808` for the combined comparisons.
+- Implementation viewport and density: `1243 x 707` CSS pixels, Chrome DPR 2, and `1243 x 707` screenshot pixels. Chrome's screenshot output is normalized to one image pixel per CSS pixel.
+- State: authenticated owner/manager, production, dark theme, preview mode off, Resources catalog and selected course.
 
-- Reference: the existing paid community identity modal shown in the product and the user-provided onboarding screenshots.
-- Implementation: the canonical blocking setup shell across account setup, paid community identity, and community knowledge setup.
-- Behavior intentionally unchanged: account completion, community creation, knowledge ingestion, skip/next completion, and backend authority.
+### Full-view comparison
 
-## Visual comparison
+The source and production captures were stacked into the same comparison images before judgment. The revised catalog replaces the prior approximately 66px blank shell band plus nested catalog indent with one 48px utility row and an 8px content offset. The course card now begins at `y=75`, while the heading and catalog share the same `x=345.59` alignment. In the selected course, the lesson outline and reader begin together at `y=67`; the previous repeated course-description block is gone.
 
-- Desktop: all three surfaces render as one centered dark card over the visible, dimmed, blurred Polynet workspace.
-- Mobile (390 x 844): compact account setup remains centered; tall community and knowledge forms remain bounded to the viewport and scroll inside the card.
-- Hierarchy: kicker, title, supporting copy, task controls, and terminal action use the same order across setup steps.
-- Interaction: required surfaces expose no close control, backdrop dismissal, or Escape dismissal. Focus is contained and the underlying workspace is inert.
+### Focused-region comparison
 
-## Defects found and fixed
+A separate crop was not needed because the browser-rendered panel occupies the full `1243 x 707` capture and all affected controls are readable. DOM measurements were used to verify the exact alignment and collision boundaries: the header is 48px high, panel padding is `0 24px 24px`, the panel gap is 10px, the DM safe inset is 62px, and the preview control ends 47px before the floating DM button begins.
 
-- Account setup initially overflowed horizontally by four pixels because the bridge card's later-loaded width rule beat the modal override. Increased the canonical selector specificity and constrained the child to the modal content width.
-- Mobile compact account setup initially inherited bottom-sheet alignment. Removed that exception so every setup card follows the selected centered-card philosophy.
+### Findings
 
-## Verification
+- No actionable P0, P1, or P2 findings remain.
+- Residual P3 test gap: this geometry-only slice was visually checked in the supplied dark-theme state. The light-theme token path and mobile Resources override were unchanged and passed the existing theme and release contracts, but no additional light or mobile screenshot was needed for this desktop spacing target.
 
-- Browser-rendered desktop and mobile screenshots reviewed for community identity, account setup, and knowledge setup.
-- Browser console: no warnings or errors on any reviewed surface.
-- Required account setup remained visible after Escape; `#root` was inert while the dialog was open.
-- TypeScript, focused UI contracts, account/continuation contracts, Builder surface contract, launcher retirement proof, and production web build passed.
+### Required fidelity surfaces
 
-final result: passed
+- Fonts and typography: IBM Plex Sans and the existing heading, metadata, and lesson weights are unchanged. The compact course context truncates safely and remains optically secondary to the lesson title.
+- Spacing and layout rhythm: header, catalog, outline, and reader now share one left edge; the course workspace starts 10px below the shell utility row; no horizontal overflow is present.
+- Colors and visual tokens: no color token changed. The existing dark surfaces, selected-lesson tokens, borders, and muted metadata remain coherent.
+- Image quality and asset fidelity: real course-cover and YouTube assets retain their existing crop, sharpness, and framing. No placeholder or replacement art was introduced.
+- Copy and content: the catalog description remains on the course card, while the selected-course header keeps only `Resources` and the course name. Preview, lesson, and manager copy are unchanged.
 
----
+### Primary interactions and console
 
-# Deterministic default funnel cover QA
+- Opened the real production course from the catalog and verified the selected lesson, video, and lesson outline.
+- Verified the preview control and floating DM button have 47px of horizontal separation at the tested viewport.
+- Verified the document and body have zero horizontal overflow.
+- Chrome console was checked after catalog and course navigation; no warnings or errors were present.
 
-## Reference and implementation
+### Comparison history
 
-- Reference: `/Users/neilmcdevitt/.codex/generated_images/019fdd6d-2606-7572-a1b9-2ae9a91d7375/exec-3d09303d-0e98-43bb-88cb-ce8dcf57568b.png`.
-- Implemented desktop capture: `/Users/neilmcdevitt/code/arx-funnel-variants-authority-v1/design-qa-default-funnel-dark.png`.
-- Focused funnel capture: `/Users/neilmcdevitt/code/arx-funnel-variants-authority-v1/design-qa-default-funnel-dark-crop.png`.
-- Side-by-side comparison: `/Users/neilmcdevitt/code/arx-funnel-variants-authority-v1/design-qa-default-funnel-comparison.png`.
-- Mobile capture: `/Users/neilmcdevitt/code/arx-funnel-variants-authority-v1/design-qa-default-funnel-mobile-final.png`.
+1. The supplied screenshots exposed large unused top space and a redundant catalog gutter.
+2. The implementation reused the canonical 48px shell band, preserved the canonical 62px DM safe inset, reduced panel-to-content spacing, aligned the catalog to the heading, and collapsed selected-course context into one line.
+3. The first matched production comparison found no P0, P1, or P2 issue, so no post-release correction iteration was required.
 
-## Capture state
+### Implementation checklist
 
-- Reference pixels: 1469 x 1071.
-- Desktop CSS viewport request: 1469 x 1071; browser capture surface: 1281 x 1071.
-- Focused implementation pixels: 1157 x 1053.
-- Mobile CSS viewport and capture: 390 x 844.
-- Route: `http://127.0.0.1:5184/c/builder-knowledge-c1dbd2`.
-- Theme: canonical Dark. Light behavior is protected by semantic theme-token ownership and the existing theme contract; authenticated visual theme switching was unavailable in this local public-route session.
-- Data state: deterministic fallback, one member, free join action, no optional body copy.
-
-## Comparison
-
-- The implementation preserves the selected centered-cover composition: canonical identity, large deterministic headline, quiet member proof, divider, and one dominant CTA.
-- Vertical rhythm, headline measure, neutral depth, and CTA hierarchy match the reference closely.
-- The implementation intentionally adds the canonical member avatar stack next to the member count because that is a product invariant established for funnel social proof.
-- The community avatar remains canonical and data-driven. The test community has no uploaded avatar, so the capture correctly shows its initials fallback instead of fabricating the reference artwork.
-- The first mobile pass made the headline too large for the available width. The mobile type clamp was reduced from `13vw / 58px` to `11vw / 48px`, then recaptured.
-- The final 390 x 844 state preserves hierarchy, readable line lengths, a full-width CTA, and safe spacing without horizontal overflow.
-- The editor and public deterministic fallback share `CommunityFunnelV1Preview`; custom AI-authored funnel documents retain their existing rendering path.
-
-## Findings
-
-- No actionable P0, P1, or P2 fidelity findings remain.
-- P3: the local unauthenticated shell shows a session-recovery notice below the funnel; this is outside the funnel component and does not alter its layout contract.
-- P3: the development console reports the existing React `fetchPriority` warning from the canonical shared avatar component. It does not affect rendering or this slice's behavior.
+- [x] Reuse the existing shell band instead of adding absolute positioning or negative margins.
+- [x] Preserve an explicit DM-button collision boundary.
+- [x] Align catalog cards and selected-course workspace to the Resources heading.
+- [x] Remove repeated selected-course description copy without deleting course metadata.
+- [x] Preserve preview mode, course cards, lesson content, backend authority, and mobile overrides.
+- [x] Pass focused contracts, typecheck, production build, and the full release gate.
+- [x] Capture and compare the authenticated production catalog and selected-course states in Chrome.
 
 final result: passed
+
+## Mobile community shell continuity implementation addendum
+
+### Evidence
+
+- Source visual truth: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/codex-clipboard-b471b202-b412-4357-9ad2-5c534223e8a2.png`
+- Source dimensions: `1320 x 2868` pixels.
+- Intended state: authenticated mobile Community Home, dark theme, community rail visible, member-view permission available.
+- Browser-rendered implementation capture: unavailable. The exact local revision has not been deployed, and local-browser review is intentionally excluded for this product workflow.
+
+### Full-view comparison
+
+Blocked until this exact revision is deployed and captured in the authenticated iPhone Safari or home-screen PWA state. No visual-pass claim is made from source inspection alone.
+
+### Focused-region comparison
+
+Blocked for the same reason. The required focused regions are the banner action corner, the new Members navigation row above Resources, and the junction between the left community rail and bottom navigation rail.
+
+### Findings
+
+- No source-level P0 or P1 issue was found in the implementation review.
+- P2 verification gap: pixel-level shell continuity, safe-area behavior, and top-right settings placement remain unverified in a real iPhone/PWA render until deployment is authorized.
+
+### Required fidelity surfaces
+
+- Fonts and typography: unchanged; the existing mobile Community Home typography remains authoritative.
+- Spacing and layout rhythm: the authenticated header removes the duplicate member pill, leaving Settings as the sole banner action. Members is inserted immediately above Resources in the community navigation.
+- Colors and visual tokens: the bottom navigation uses the canonical rail surface token, and its active-icon cutout and notification-dot border inherit that same surface.
+- Image quality and asset fidelity: community banner and community avatars are unchanged.
+- Copy and content: only the canonical `Members` navigation label and optional count are added.
+
+### Primary interactions and console
+
+- The Members row reuses the existing permission-gated `members` overlay and introduces no new route or state machine.
+- Visitor funnel behavior retains the existing header member affordance because that state has no community navigation replacement.
+- Authenticated Chrome/PWA interaction and console verification remain blocked until the exact revision is deployed.
+
+### Comparison history
+
+1. The supplied production screenshot established the current shell seam and duplicated member control.
+2. The implementation removes the authenticated header duplication, adds one mobile-only Members row, and unifies the bottom navigation material with the community rail.
+3. No post-render correction iteration is claimed because an implementation capture does not yet exist.
+
+### Implementation checklist
+
+- [x] Keep one stable Home root in the bottom navigation.
+- [x] Move authenticated member access into the community navigation above Resources.
+- [x] Preserve visitor-funnel member access.
+- [x] Reuse the existing permission gate and members overlay.
+- [x] Join the bottom navigation to the rail through canonical surface tokens without covering the lower-left Settings control.
+- [x] Pass web typecheck and focused mobile navigation/reading-mode contracts.
+- [ ] Capture and compare the exact deployed state in iPhone Safari and the home-screen PWA.
+
+final result: blocked

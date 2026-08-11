@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { existsSync, readFileSync } from "node:fs";
 import {
   buildAppRoutePath,
+  buildSettingsIndexPath,
   readAppRouteFromLocation,
 } from "../shared/webAppRouteState.ts";
 import { buildWebShellProjection } from "../apps/web/src/controllers/buildWebShellProjection.ts";
@@ -44,6 +45,35 @@ assert.equal(
   "/settings/account",
 );
 
+assert.equal(buildSettingsIndexPath(), "/settings");
+assert.equal(
+  buildAppRoutePath({
+    page: "settings",
+    view: "home",
+    settingsPage: "profile",
+    settingsIndex: true,
+    communitySlug: null,
+    communityTab: "chat",
+  }),
+  "/settings",
+  "the settings index must have a durable route distinct from Profile detail",
+);
+
+Object.defineProperty(globalThis, "window", {
+  configurable: true,
+  value: {
+    location: {
+      pathname: "/m/settings",
+      search: "",
+    },
+  },
+});
+assert.equal(
+  readAppRouteFromLocation().settingsIndex,
+  true,
+  "the mobile settings index must survive refresh and popstate",
+);
+
 Object.defineProperty(globalThis, "window", {
   configurable: true,
   value: {
@@ -72,6 +102,9 @@ const desktopProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "standard",
   activePage: "settings",
+  activeView: "home",
+  communityTab: "chat",
+  mobileRootPage: "community",
   mobileSettingsView: "detail",
   isPublicCommunityFunnel: false,
 });
@@ -83,6 +116,9 @@ const mobileProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "mobile",
   activePage: "settings",
+  activeView: "home",
+  communityTab: "chat",
+  mobileRootPage: "community",
   mobileSettingsView: "index",
   isPublicCommunityFunnel: false,
 });
@@ -90,7 +126,43 @@ assert.equal(mobileProjection.isGlobalSettings, true);
 assert.equal(mobileProjection.showMobileAppShell, true);
 assert.equal(mobileProjection.showMobileSettingsShell, true);
 assert.equal(mobileProjection.showMobileSettingsIndex, true);
-assert.equal(mobileProjection.showMobileShell, false);
+assert.equal(mobileProjection.showMobileShell, true);
+assert.equal(mobileProjection.showMobileGlobalShell, true);
+
+const mobileCommunitySettingsProjection = buildWebShellProjection({
+  publicRouteKind: "app",
+  shellVariant: "mobile",
+  activePage: "community",
+  activeView: "home",
+  communityTab: "settings",
+  mobileRootPage: "community",
+  mobileSettingsView: "detail",
+  isPublicCommunityFunnel: false,
+});
+assert.equal(
+  mobileCommunitySettingsProjection.showMobileGlobalShell,
+  true,
+  "community settings must retain the authenticated outer shell",
+);
+assert.equal(mobileCommunitySettingsProjection.mobileShellMode, "settings");
+
+for (const communityTab of ["chat", "resources", "events"] as const) {
+  const contentProjection = buildWebShellProjection({
+    publicRouteKind: "app",
+    shellVariant: "mobile",
+    activePage: "community",
+    activeView: "home",
+    communityTab,
+    mobileRootPage: "community",
+    mobileSettingsView: "detail",
+    isPublicCommunityFunnel: false,
+  });
+  assert.equal(
+    contentProjection.showMobileGlobalShell,
+    false,
+    `${communityTab} must remain an immersive community-content route`,
+  );
+}
 
 const navigation = read("shared/appShellNavigation.ts");
 const settingsNav = read("shared/SettingsNavList.tsx");
@@ -108,6 +180,7 @@ const onboardingProfile = read(
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
+const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
 const globalOverlays = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 
 assert.match(navigation, /\| "settings"/);
@@ -137,6 +210,16 @@ assert.doesNotMatch(mainSurface, /WebWorkspaceSurfaceHost|workspaceSurfaceHostPr
 assert.match(
   shellNavigation,
   /const openGlobalSettings = useCallback[\s\S]*current\.activePage === "settings" && current\.settingsPage === page[\s\S]*pushNavSnapshot\(\)[\s\S]*navigateTo\(buildSettingsPath\(page\)\)/,
+);
+assert.match(
+  shellNavigation,
+  /current\.setMobileSettingsView\([\s\S]*nextAppRoute\.page === "settings" && nextAppRoute\.settingsIndex[\s\S]*\? "index"[\s\S]*: "detail"/,
+  "settings index and detail state must hydrate from the canonical route",
+);
+assert.match(
+  app,
+  /shellVariant === "mobile"[\s\S]*navigateTo\(buildSettingsIndexPath\(\)\)[\s\S]*openGlobalSettings\("profile"\)/,
+  "the mobile global gear must enter the settings index while desktop retains Profile detail",
 );
 assert.equal(
   existsSync("apps/web/src/controllers/useWebSkillsModel.ts"),
@@ -170,7 +253,11 @@ assert.match(
 );
 assert.doesNotMatch(app, /setActiveView\("settings"\)/);
 assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);
-assert.match(mobileController, /params\.openGlobalSettings\("profile"\)/);
+assert.match(
+  mobileCommunityShell,
+  /communityShell\.onOpenGlobalSettings\(\)[\s\S]*mobile-community-selector-name">Settings</,
+  "global Settings should remain reachable from the mobile community selector",
+);
 assert.doesNotMatch(mobileController, /setActivePage\("workspace"\)/);
 assert.doesNotMatch(globalOverlays, /Premium|onOpenPremiumBilling/);
 

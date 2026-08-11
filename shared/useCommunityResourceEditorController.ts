@@ -20,7 +20,6 @@ type UseCommunityResourceEditorControllerArgs = {
   setResourceRoleInput?: Dispatch<SetStateAction<"page" | "source">>;
   setResourceStatusInput?: Dispatch<SetStateAction<"draft" | "review" | "published" | "processing" | "failed">>;
   setResourceError: Dispatch<SetStateAction<string | null>>;
-  setShowResourceModal: Dispatch<SetStateAction<boolean>>;
   onReset?: () => void;
   onEdit?: (resource: ResourceLike) => void;
 };
@@ -44,18 +43,6 @@ export function useCommunityResourceEditorController<ResourceT extends ResourceL
     current.onReset?.();
   }, []);
 
-  const openNewResourceModal = useCallback(() => {
-    const current = argsRef.current;
-    resetResourceForm();
-    current.setShowResourceModal(true);
-  }, [resetResourceForm]);
-
-  const closeResourceModal = useCallback(() => {
-    const current = argsRef.current;
-    current.setShowResourceModal(false);
-    resetResourceForm();
-  }, [resetResourceForm]);
-
   const handleEditResource = useCallback((resource: ResourceT) => {
     const current = argsRef.current;
     const resourceRole = resource.resource_role ?? "page";
@@ -71,13 +58,10 @@ export function useCommunityResourceEditorController<ResourceT extends ResourceL
     current.setResourceStatusInput?.(resourceStatus);
     current.onEdit?.(resource);
     current.setResourceError(null);
-    current.setShowResourceModal(true);
   }, []);
 
   return {
     resetResourceForm,
-    openNewResourceModal,
-    closeResourceModal,
     handleEditResource,
   };
 }

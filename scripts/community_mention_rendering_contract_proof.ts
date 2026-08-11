@@ -187,8 +187,8 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
   );
 }
 
-// A self-mention should stay as legible as any other human mention. Attention
-// belongs to the message-level edge and wash, not a filled inline name chip.
+// Viewer-targeted direct and @everybody mentions share the same community-local
+// attention family as their root/reply container.
 {
   const { readFileSync } = await import("node:fs");
   const styles = [
@@ -198,15 +198,43 @@ assert.deepEqual(splitBodyIntoMentionSegments("text", [mention({ label: "  " })]
       "utf8",
     ),
   ].join("\n");
-  assert.doesNotMatch(
+  assert.match(
     styles,
-    /\.community-mention-chip\.is-self\s*\{/,
-    "self mentions must not replace the readable human-mention treatment with a filled accent",
+    /\.community-mention-chip\.is-self,[\s\S]*?\.community-mention-chip\.is-role\s*\{[\s\S]*?var\(--accent-attention\)/,
+    "viewer and everybody mention chips should use community-local attention",
   );
   assert.match(
     styles,
-    /\.community-interaction-message\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent-selection\);/,
-    "self-mention selection should remain on the message container",
+    /\.community-interaction-message\.is-self-mentioned,[\s\S]*?\.community-interaction-reply\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent-attention\);/,
+    "viewer-targeted roots and replies should share the community-local attention edge",
+  );
+
+  const feedSource = readFileSync(
+    new URL("../apps/web/src/components/communityInteractionFeed.tsx", import.meta.url),
+    "utf8",
+  );
+  const attentionSource = readFileSync(
+    new URL("../apps/web/src/controllers/communityMentionAttention.ts", import.meta.url),
+    "utf8",
+  );
+  const projectionSource = readFileSync(
+    new URL("../apps/web/src/components/WebCommunityInteractionProjection.tsx", import.meta.url),
+    "utf8",
+  );
+  assert.match(
+    attentionSource,
+    /export function interactionMentionsViewer\([\s\S]*?actorUserId === currentUserId[\s\S]*?mentioned_user_id === currentUserId[\s\S]*?mentioned_role_key[\s\S]*?=== "everybody"/,
+    "viewer attention should include direct and everybody mentions while excluding the author",
+  );
+  assert.match(
+    feedSource,
+    /import \{ interactionMentionsViewer \} from "\.\.\/controllers\/communityMentionAttention";[\s\S]*?interactionMentionsViewer\(bundle\.mentions, props\.currentUserId, root\.actor_user_id\)/,
+    "root messages should derive viewer attention from canonical mention rows",
+  );
+  assert.match(
+    projectionSource,
+    /import \{ interactionMentionsViewer \} from "\.\.\/controllers\/communityMentionAttention";[\s\S]*?interactionMentionsViewer\(bundle\.mentions, props\.currentUserId, reply\.actor_user_id\)/,
+    "thread replies should derive viewer attention from canonical mention rows",
   );
 }
 

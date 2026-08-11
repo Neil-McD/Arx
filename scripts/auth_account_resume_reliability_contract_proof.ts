@@ -21,6 +21,7 @@ const pendingAuthIntentController = read(
 const authController = read(
   "apps/web/src/controllers/useWebAppAuthController.ts",
 );
+const authCore = read("shared/authCore.ts");
 const onboardingController = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
@@ -49,6 +50,36 @@ assert.match(
   authController,
   /type UsableAuthSessionResult =[\s\S]*"ready"[\s\S]*"missing"[\s\S]*"transient_failure"[\s\S]*"terminal_failure"/,
   "auth verification must preserve terminal versus transient outcomes",
+);
+const sameOriginAuthCall = sliceBetween(
+  authCore,
+  "async function callSameOriginAuthEndpoint",
+  "function asObject",
+);
+assert.match(
+  sameOriginAuthCall,
+  /new AbortController\(\)[\s\S]*window\.setTimeout\(\(\) => controller\.abort\(\), params\.timeoutMs\)/,
+  "same-origin auth calls must support a bounded request lifetime",
+);
+assert.match(
+  sameOriginAuthCall,
+  /signal: controller\.signal[\s\S]*window\.clearTimeout\(timeoutId\)/,
+  "bounded auth calls must pass and clear their abort signal",
+);
+const bootstrapSession = sliceBetween(
+  authCore,
+  "export async function bootstrapSessionDetailed",
+  "export async function bootstrapSession()",
+);
+assert.match(
+  authCore,
+  /AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS = 10_000/,
+  "session bootstrap must define a finite recovery boundary",
+);
+assert.match(
+  bootstrapSession,
+  /timeoutMs: AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS/,
+  "session bootstrap must use the bounded auth request",
 );
 assert.match(
   authController,

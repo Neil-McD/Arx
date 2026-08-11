@@ -30,6 +30,7 @@ export type AppRouteState = {
   page: AppPage;
   view: AppView;
   settingsPage: SettingsPage;
+  settingsIndex?: boolean;
   communitySlug: string | null;
   communityTab: CommunityTab;
   communityExperienceMode?: CommunityExperienceMode;
@@ -44,6 +45,7 @@ export type AppRoutePathState = {
   page: AppPage;
   view: AppView;
   settingsPage: SettingsPage;
+  settingsIndex?: boolean;
   communitySlug: string | null;
   communityTab: CommunityTab;
   communityExperienceMode?: CommunityExperienceMode;
@@ -95,6 +97,23 @@ function isPublicRoutePath(pathname: string): boolean {
 export function readShellVariantFromPathname(pathname: string): AppShellVariant {
   const segments = splitPathSegments(pathname);
   return segments[0] === "m" ? "mobile" : "standard";
+}
+
+export function resolveInitialAppShellVariant(params: {
+  pathname: string | null | undefined;
+  search?: string | null;
+  oauthShellVariant?: AppShellVariant | null;
+  standalone?: boolean;
+}): AppShellVariant {
+  if (params.oauthShellVariant) return params.oauthShellVariant;
+  const isStandaloneLaunch =
+    params.standalone === true
+    && new URLSearchParams(String(params.search ?? "")).get(
+      STANDALONE_APP_LAUNCH_SEARCH_PARAM,
+    ) === STANDALONE_APP_LAUNCH_SEARCH_VALUE;
+  return isStandaloneLaunch
+    ? "mobile"
+    : readShellVariantFromPathname(String(params.pathname || "/"));
 }
 
 export function stripShellVariantFromPathname(pathname: string): string {
@@ -165,6 +184,10 @@ export function buildSettingsPath(settingsPage: SettingsPage): string {
   return `/settings/${encodeURIComponent(settingsPage)}`;
 }
 
+export function buildSettingsIndexPath(): string {
+  return "/settings";
+}
+
 export function buildCommunityTabPath(
   communitySlug: string | null | undefined,
   communityTab: CommunityTab,
@@ -188,6 +211,22 @@ export function buildCommunityTabPath(
     return `/c/${encodeURIComponent(slug)}/${tabSegment}/${encodeURIComponent(settingsPane)}`;
   }
   return `/c/${encodeURIComponent(slug)}/${tabSegment}`;
+}
+
+export function buildCommunityHomePath(
+  communitySlug: string | null | undefined,
+): string | null {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return null;
+  return `/c/${encodeURIComponent(slug)}/home`;
+}
+
+export function buildCommunityMembersPath(
+  communitySlug: string | null | undefined,
+): string | null {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return null;
+  return `/c/${encodeURIComponent(slug)}/members`;
 }
 
 export function buildCommunityFunnelPreviewPath(
@@ -398,6 +437,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       page: "settings",
       view: "home",
       settingsPage: parseSettingsPage(segments[1] ?? null),
+      ...(segments.length === 1 ? { settingsIndex: true } : {}),
       communitySlug: null,
       communityTab: "chat",
     };
@@ -418,6 +458,38 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       communitySlug: slug,
       communityTab: "chat",
       communityExperienceMode: "onboarding_preview",
+    };
+  }
+
+  if (segments[0] === "c" && segments.length === 3 && segments[2] === "home") {
+    const slug = String(segments[1] ?? "").trim() || null;
+    if (!slug) return null;
+    return {
+      page: "community",
+      view: "community_home",
+      settingsPage: "profile",
+      communitySlug: slug,
+      communityTab: "chat",
+      communityExperienceMode: "standard",
+      communityChannelSlug: null,
+      communityResourceModuleId: null,
+      communitySettingsPane: null,
+    };
+  }
+
+  if (segments[0] === "c" && segments.length === 3 && segments[2] === "members") {
+    const slug = String(segments[1] ?? "").trim() || null;
+    if (!slug) return null;
+    return {
+      page: "community",
+      view: "community_members",
+      settingsPage: "profile",
+      communitySlug: slug,
+      communityTab: "chat",
+      communityExperienceMode: "standard",
+      communityChannelSlug: null,
+      communityResourceModuleId: null,
+      communitySettingsPane: null,
     };
   }
 
@@ -508,6 +580,7 @@ export function readAppRouteFromLocation(): AppRouteState {
       page: fromPath.page,
       view: fromPath.view,
       settingsPage: fromPath.settingsPage,
+      ...(fromPath.settingsIndex ? { settingsIndex: true } : {}),
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
       ...(fromPath.communityExperienceMode === "onboarding_preview"
@@ -533,7 +606,9 @@ export function readAppRouteFromLocation(): AppRouteState {
 
 export function buildAppRoutePath(state: AppRoutePathState): string | null {
   if (state.page === "settings") {
-    return buildSettingsPath(state.settingsPage);
+    return state.settingsIndex
+      ? buildSettingsIndexPath()
+      : buildSettingsPath(state.settingsPage);
   }
 
   if (state.page === "discover") {
@@ -543,6 +618,12 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   if (state.page === "community") {
     if (state.communityExperienceMode === "onboarding_preview") {
       return buildCommunityOnboardingPreviewPath(state.communitySlug);
+    }
+    if (state.view === "community_home") {
+      return buildCommunityHomePath(state.communitySlug);
+    }
+    if (state.view === "community_members") {
+      return buildCommunityMembersPath(state.communitySlug);
     }
     return buildCommunityTabPath(
       state.communitySlug,

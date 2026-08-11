@@ -1,14 +1,19 @@
-import type { AppPage } from "../../../../shared/appShellNavigation";
+import type {
+  AppPage,
+  AppView,
+  CommunityTab,
+} from "../../../../shared/appShellNavigation";
 import type { AppShellVariant, PublicRoute } from "../../../../shared/webAppRouteState";
 
 type MobileSettingsView = "index" | "detail";
-type MobileShellMode = "agent" | "discover" | "community";
+type MobileShellMode = "agent" | "discover" | "community" | "settings";
 
 export type WebShellProjection = {
   isGlobalSettings: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobileShell: boolean;
+  showMobileGlobalShell: boolean;
   showMobileSettingsIndex: boolean;
   showMobilePublicFunnel: boolean;
   showDesktopCommunityRail: boolean;
@@ -21,11 +26,19 @@ export function buildWebShellProjection(params: {
   publicRouteKind: PublicRoute["kind"];
   shellVariant: AppShellVariant;
   activePage: AppPage;
+  activeView: AppView;
+  communityTab: CommunityTab;
+  mobileRootPage: "agent" | "community" | "messages";
   mobileSettingsView: MobileSettingsView;
   isPublicCommunityFunnel: boolean;
 }): WebShellProjection {
   const isAppRoute = params.publicRouteKind === "app";
   const isGlobalSettings = isAppRoute && params.activePage === "settings";
+  const isCommunitySettings =
+    isAppRoute &&
+    params.activePage === "community" &&
+    params.activeView === "home" &&
+    params.communityTab === "settings";
   const isLandingPage = isAppRoute && params.activePage === "landing";
   const isOperatorPage = isAppRoute && params.activePage === "operator";
   const isPublicAppPage = isLandingPage;
@@ -50,7 +63,14 @@ export function buildWebShellProjection(params: {
     isMobileVisitorCommunity;
   const showMobileSettingsShell =
     showMobileAppShell && isGlobalSettings && !isMobileVisitorCommunity;
-  const showMobileShell = showMobileAppShell && !showMobileSettingsShell;
+  const showMobileShell = showMobileAppShell;
+  const showMobileGlobalShell =
+    showMobileAppShell &&
+    !isMobileVisitorCommunity &&
+    (params.mobileRootPage !== "community" ||
+      params.activePage !== "community" ||
+      params.activeView === "community_home" ||
+      isCommunitySettings);
   const showMobileSettingsIndex =
     showMobileSettingsShell && params.mobileSettingsView === "index";
   const showMobilePublicFunnel =
@@ -80,7 +100,9 @@ export function buildWebShellProjection(params: {
     (isGlobalSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
   const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
     ? "community"
-    : params.activePage === "discover" ||
+    : params.activePage === "settings" || isCommunitySettings
+      ? "settings"
+      : params.activePage === "discover" ||
         params.activePage === "operator" ||
         params.activePage === "docs"
       ? "discover"
@@ -90,6 +112,7 @@ export function buildWebShellProjection(params: {
     showMobileAppShell,
     showMobileSettingsShell,
     showMobileShell,
+    showMobileGlobalShell,
     showMobileSettingsIndex,
     showMobilePublicFunnel,
     showDesktopCommunityRail: shouldShowDesktopCommunityRail,

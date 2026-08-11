@@ -3,10 +3,105 @@ import { describe, expect, it } from "vitest";
 import {
   normalizeCommunityFunnelManagerConfig,
   normalizeCommunityFunnelVslUrl,
+  validateCommunityFunnelContentV2,
   validateCommunityFunnelDocumentV1,
   withoutCommunityFunnelMediaSections,
 } from "../shared/communityFunnel";
-import { buildCommunityFunnelDocumentTestFixture } from "./community_funnel_test_fixture";
+import {
+  buildCommunityFunnelContentTestFixture,
+  buildCommunityFunnelDocumentTestFixture,
+} from "./community_funnel_test_fixture";
+
+describe("Community Funnel V2 content", () => {
+  it("accepts the fixed content contract with exactly three pillars", () => {
+    const content = buildCommunityFunnelContentTestFixture();
+    expect(validateCommunityFunnelContentV2(content)).toEqual(content);
+    expect(content.pillars).toHaveLength(3);
+  });
+
+  it("rejects incomplete or non-canonical pillar sets", () => {
+    const content = buildCommunityFunnelContentTestFixture();
+    for (const pillars of [
+      content.pillars.slice(0, 2),
+      [...content.pillars, content.pillars[0]],
+    ]) {
+      expect(() =>
+        validateCommunityFunnelContentV2({ ...content, pillars }),
+      ).toThrow("community_funnel_content_requires_three_pillars");
+    }
+    expect(() =>
+      validateCommunityFunnelContentV2({
+        ...content,
+        pillars: [{ title: "", body: "Body" }, ...content.pillars.slice(1)],
+      }),
+    ).toThrow("community_funnel_pillar_title_required");
+  });
+
+  it("requires core copy and rejects every overlong V2 field", () => {
+    const content = buildCommunityFunnelContentTestFixture();
+    expect(() =>
+      validateCommunityFunnelContentV2({ ...content, headline: "" }),
+    ).toThrow("community_funnel_headline_required");
+
+    expect(
+      validateCommunityFunnelContentV2({
+        ...content,
+        headline: "h".repeat(180),
+        subheadline: "s".repeat(480),
+        pillars: content.pillars.map((pillar) => ({
+          ...pillar,
+          title: "t".repeat(90),
+          body: "b".repeat(320),
+        })),
+        long_form_markdown: "l".repeat(12_000),
+      }),
+    ).toMatchObject({
+      headline: "h".repeat(180),
+      subheadline: "s".repeat(480),
+      long_form_markdown: "l".repeat(12_000),
+    });
+
+    const overlongCases = [
+      {
+        value: { ...content, headline: "h".repeat(181) },
+        code: "community_funnel_headline_too_long",
+      },
+      {
+        value: { ...content, subheadline: "s".repeat(481) },
+        code: "community_funnel_subheadline_too_long",
+      },
+      {
+        value: {
+          ...content,
+          pillars: [
+            { ...content.pillars[0], title: "t".repeat(91) },
+            ...content.pillars.slice(1),
+          ],
+        },
+        code: "community_funnel_pillar_title_too_long",
+      },
+      {
+        value: {
+          ...content,
+          pillars: [
+            { ...content.pillars[0], body: "b".repeat(321) },
+            ...content.pillars.slice(1),
+          ],
+        },
+        code: "community_funnel_pillar_body_too_long",
+      },
+      {
+        value: { ...content, long_form_markdown: "l".repeat(12_001) },
+        code: "community_funnel_long_form_too_long",
+      },
+    ];
+    for (const testCase of overlongCases) {
+      expect(() => validateCommunityFunnelContentV2(testCase.value)).toThrow(
+        testCase.code,
+      );
+    }
+  });
+});
 
 describe("Community Funnel V1 document", () => {
   it("accepts a minimal valid bounded document", () => {

@@ -37,8 +37,8 @@ assert.doesNotMatch(
 );
 assert.match(
   directoryPredicate,
-  /activePage === "community" && communityTab === "chat"/,
-  "chat right rail must hydrate the member-facing community directory",
+  /activePage === "community"[\s\S]*activeView === "community_members"[\s\S]*communityTab === "chat"/,
+  "chat context and the durable mobile Members view must hydrate the member-facing community directory",
 );
 assert.doesNotMatch(
   directoryPredicate,

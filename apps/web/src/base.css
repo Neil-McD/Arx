@@ -130,6 +130,7 @@
   --stroke-panel-edge: var(--stroke-divider-accent);
   --composer-surface: var(--bg-card-solid, #2a2a2a);
   --composer-border: color-mix(in srgb, var(--stroke-default) 88%, transparent);
+  --composer-elevation: 0 10px 28px rgba(0, 0, 0, 0.24), 0 1px 2px rgba(0, 0, 0, 0.2);
   --composer-focus-ring: color-mix(in srgb, var(--text-ink-primary) 44%, transparent);
   --composer-radius: 24px;
   --text-ink-primary: var(--text-primary);
@@ -140,6 +141,7 @@
   --rail-width: 72px;
   --rail-control-size: 44px;
   --rail-control-anchor-inset: calc((var(--rail-width) - var(--rail-control-size)) / 2);
+  --community-rail-control-bg: var(--surface-card);
   --community-rail-button-border: 0;
   --scrollbar-size: 6px;
   --scrollbar-radius: 3px;
@@ -184,7 +186,7 @@
   --bg-button-hover: color-mix(in srgb, #171719 88%, #FFFFFF 12%);
   --bg-button-text: #FFFFFF;
 
-  /* === INTELLIGENCE: One active blue === */
+  /* === SEMANTIC COLOR: intelligence selection + community attention === */
   --accent-gold: #2F55FF;
   --accent-gold-subtle: color-mix(in srgb, #2F55FF 84%, #171719 16%);
   --accent-gold-glow: rgba(47, 85, 255, 0.18);
@@ -194,7 +196,7 @@
   --accent-agent-strong: color-mix(in srgb, #2F55FF 84%, #171719 16%);
   --accent-agent-foreground: #2F55FF;
   --accent-agent-surface: rgba(47, 85, 255, 0.1);
-  --accent-attention: #2F55FF;
+  --accent-attention: #326FAD;
   --text-on-attention: #FFFFFF;
   --accent-global-attention: #B42318;
   --text-on-global-attention: #FFFFFF;
@@ -243,6 +245,7 @@
   /* === COMPOSER: Raised white work surface === */
   --composer-surface: #FFFFFF;
   --composer-border: rgba(23, 23, 25, 0.1);
+  --composer-elevation: 0 10px 26px rgba(23, 23, 25, 0.09), 0 1px 2px rgba(23, 23, 25, 0.08);
   --composer-focus-ring: rgba(47, 85, 255, 0.42);
 
   /* === STATUS: Light semantic surfaces === */
@@ -251,6 +254,7 @@
   --status-approved: color-mix(in srgb, #147A4B 12%, #FFFFFF 88%);
   --status-executed: rgba(47, 85, 255, 0.1);
 
+  --community-rail-control-bg: var(--surface-nav);
   --community-rail-button-border: 1px solid rgba(23, 23, 25, 0.1);
   --scrollbar-thumb: rgba(23, 23, 25, 0.22);
   --scrollbar-thumb-hover: #6B6974;

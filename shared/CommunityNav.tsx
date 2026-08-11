@@ -1,5 +1,16 @@
 import { memo, useEffect, useRef, useState, type FormEvent } from "react";
-import { Check, ChevronDown, ChevronUp, GripVertical, Hash, Plus, Settings, UserPlus, X } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ChevronUp,
+  GripVertical,
+  Hash,
+  Plus,
+  Settings,
+  UserPlus,
+  Users,
+  X,
+} from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 import { usePointerSortableList } from "./usePointerSortableList";
@@ -23,12 +34,17 @@ type CommunityNavChannel = {
 
 type CommunityNavProps = {
   activeCommunity: CommunityNavCommunityLike;
+  hideIdentity?: boolean;
+  hideIdentitySettings?: boolean;
   communityTab: CommunityTab;
+  activeSelectionMode?: "route" | "none";
   tabIndicators?: Partial<Record<CommunityTab, boolean>> & { mentions?: boolean };
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;
+  memberCount?: number | null;
+  onOpenMembers?: () => void;
   isLoadingAccess?: boolean;
   onSelectTab: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink?: (joinUrl: string) => Promise<void> | void;
@@ -133,14 +149,24 @@ function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | n
   return new URL(joinPath, window.location.origin).toString();
 }
 
+function formatMemberCount(value: number | null | undefined): string | null {
+  if (value === null || value === undefined || !Number.isFinite(value)) return null;
+  return Math.max(0, Math.floor(value)).toLocaleString();
+}
+
 export const CommunityNav = memo(function CommunityNav({
   activeCommunity,
+  hideIdentity = false,
+  hideIdentitySettings = false,
   communityTab,
+  activeSelectionMode = "route",
   tabIndicators = {},
   canViewMembersActiveCommunity,
   canViewActiveCommunitySettings,
   canManageMembersActiveCommunity,
   canViewActiveCommunityAnalytics,
+  memberCount = null,
+  onOpenMembers,
   isLoadingAccess = false,
   onSelectTab,
   onCopyCommunityJoinLink,
@@ -174,10 +200,13 @@ export const CommunityNav = memo(function CommunityNav({
   const addChannelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const addChannelDialogRef = useRef<HTMLFormElement | null>(null);
   const [isCommunityIdentityCondensed, setIsCommunityIdentityCondensed] = useState(false);
-  const showSettingsButton = canViewActiveCommunitySettings;
+  const showSettingsButton = canViewActiveCommunitySettings && !hideIdentitySettings;
+  const showActiveSelection = activeSelectionMode === "route";
   const showManagementSection =
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
+  const memberCountLabel = formatMemberCount(memberCount);
+  const showMembersItem = Boolean(canViewMembersActiveCommunity && onOpenMembers);
   const activeCommunityName = activeCommunity?.name?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
@@ -282,7 +311,7 @@ export const CommunityNav = memo(function CommunityNav({
   useEffect(() => {
     const nav = communityNavRef.current;
     const bannerHeader = communityBannerHeaderRef.current;
-    if (!nav || !activeCommunityBannerUrl || !bannerHeader) {
+    if (hideIdentity || !nav || !activeCommunityBannerUrl || !bannerHeader) {
       setIsCommunityIdentityCondensed(false);
       return;
     }
@@ -313,7 +342,7 @@ export const CommunityNav = memo(function CommunityNav({
         communityIdentityFrameRef.current = null;
       }
     };
-  }, [activeCommunityBannerUrl]);
+  }, [activeCommunityBannerUrl, hideIdentity]);
 
   const handleCopyJoinLink = async () => {
     if (!joinUrl || !onCopyCommunityJoinLink) return;
@@ -354,7 +383,7 @@ export const CommunityNav = memo(function CommunityNav({
 
   return (
     <aside className="community-nav" ref={communityNavRef}>
-      {activeCommunityName ? (
+      {activeCommunityName && !hideIdentity ? (
         <div
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
         >
@@ -363,7 +392,7 @@ export const CommunityNav = memo(function CommunityNav({
           </span>
           {showSettingsButton ? (
             <button
-              className={`community-nav-settings${communityTab === "settings" ? " active" : ""}`}
+              className={`community-nav-settings${showActiveSelection && communityTab === "settings" ? " active" : ""}`}
               type="button"
               onClick={() => onSelectTab("settings")}
               title="Community settings"
@@ -404,6 +433,7 @@ export const CommunityNav = memo(function CommunityNav({
           </div>
         ) : channels.map((channel) => {
           const isSelected =
+            showActiveSelection &&
             communityTab === "chat" &&
             (selectedChannelSlug ?? "general") === channel.slug;
           const indicator = channelIndicators[channel.slug];
@@ -521,8 +551,25 @@ export const CommunityNav = memo(function CommunityNav({
         ) : null}
       </div>
       <div className="community-nav-divider" aria-hidden="true" />
+      {showMembersItem ? (
+        <button
+          className="nav-item community-nav-members"
+          type="button"
+          onClick={onOpenMembers}
+          title="Members"
+          aria-label={memberCountLabel ? `Members, ${memberCountLabel}` : "Members"}
+        >
+          <span className="nav-icon" aria-hidden="true">
+            <Users size={18} strokeWidth={1.7} />
+          </span>
+          <span className="nav-item-label">Members</span>
+          {memberCountLabel ? (
+            <span className="community-nav-members-count">{memberCountLabel}</span>
+          ) : null}
+        </button>
+      ) : null}
       <button
-        className={communityTab === "resources" ? "nav-item active" : "nav-item"}
+        className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
         type="button"
         onClick={() => onSelectTab("resources")}
         title="Resources"
@@ -537,7 +584,7 @@ export const CommunityNav = memo(function CommunityNav({
         {lockedTabs.resources ? <NavLockGlyph /> : communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       <button
-        className={communityTab === "events" ? "nav-item active" : "nav-item"}
+        className={showActiveSelection && communityTab === "events" ? "nav-item active" : "nav-item"}
         type="button"
         onClick={() => onSelectTab("events")}
         title="Events"
@@ -570,7 +617,7 @@ export const CommunityNav = memo(function CommunityNav({
           <div className="community-nav-divider" />
           {canManageMembersActiveCommunity && (
             <button
-              className={communityTab === "funnel" ? "nav-item active" : "nav-item"}
+              className={showActiveSelection && communityTab === "funnel" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => onSelectTab("funnel")}
               title="Funnel"
@@ -587,7 +634,7 @@ export const CommunityNav = memo(function CommunityNav({
           )}
           {canViewActiveCommunityAnalytics && (
             <button
-              className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
+              className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => onSelectTab("analytics")}
               title="Analytics"

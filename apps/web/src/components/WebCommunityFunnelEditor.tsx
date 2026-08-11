@@ -1,5 +1,4 @@
 import {
-  ImagePlus,
   Link2,
   LoaderCircle,
   Send,
@@ -14,7 +13,6 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type ChangeEvent,
   type FormEvent,
 } from "react";
 
@@ -32,10 +30,7 @@ import {
   setCloudCommunityFunnelDraftVsl,
 } from "../../../../shared/cloudCommunityFunnelGateway";
 import { fetchCloudPublicFunnelStats } from "../../../../shared/cloudPublicFunnelGateway";
-import {
-  ensureCloudThreadRecord,
-  uploadCloudMemberAgentImageFile,
-} from "../../../../shared/cloudThreadsGateway";
+import { ensureCloudThreadRecord } from "../../../../shared/cloudThreadsGateway";
 import {
   listConvexCloudNewestThreadMessagesByThreadKey,
   type CloudMessageTransportRow,
@@ -57,7 +52,7 @@ import type {
   ThreadStreamingRuntimeEvent,
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
-import { CommunityFunnelV1Preview } from "./CommunityFunnelV1Preview";
+import { CommunityFunnelPreview } from "./CommunityFunnelPreview";
 import { WebAgentLiveTurn } from "./WebAgentLiveTurn";
 import {
   platformTabId,
@@ -85,11 +80,6 @@ type PreviewCommunityLike = {
 
 type FunnelBuilderMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
-};
-
-type ReferenceImageDraft = {
-  file: File;
-  previewUrl: string;
 };
 
 export type WebCommunityFunnelEditorProps = {
@@ -147,9 +137,9 @@ function resolveFunnelSlotStatus(params: {
   if (params.slot === "default") {
     return params.slot === params.activeSlot ? "Live" : null;
   }
-  if (!params.variant?.draft_document_v1) return "Empty";
+  if (!params.variant?.draft_content_v2) return "Empty";
   const isPublishedCurrentDraft =
-    params.variant.published_document_v1 &&
+    params.variant.published_content_v2 &&
     params.variant.published_draft_revision === params.variant.draft_revision;
   if (!isPublishedCurrentDraft) return "Draft";
   return params.slot === params.activeSlot ? "Live" : "Published";
@@ -272,8 +262,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   );
   const [messages, setMessages] = useState<FunnelBuilderMessage[]>([]);
   const [input, setInput] = useState("");
-  const [referenceImage, setReferenceImage] =
-    useState<ReferenceImageDraft | null>(null);
   const [isPreparing, setIsPreparing] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAwaitingStream, setIsAwaitingStream] = useState(false);
@@ -296,7 +284,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const [, setRuntimeEventsByRunId] = useState<
     Record<string, ThreadStreamingRuntimeEvent[]>
   >({});
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const messagesRef = useRef<HTMLDivElement | null>(null);
   const followStreamingRef = useRef(true);
   const sessionRef = useRef(props.session);
@@ -308,12 +295,12 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   activeCommunityIdRef.current = props.previewCommunity.id;
   const sessionIdentity = resolveAuthPresentationIdentity(props.session);
 
-  const document = selectedVariant?.draft_document_v1 ?? null;
+  const content = selectedVariant?.draft_content_v2 ?? null;
   const savedVslUrl = selectedVariant?.draft_vsl_url ?? null;
   const isVslInputDirty = vslInput.trim() !== (savedVslUrl ?? "");
   const isPublishedCurrentDraft =
-    Boolean(document) &&
-    Boolean(selectedVariant?.published_document_v1) &&
+    Boolean(content) &&
+    Boolean(selectedVariant?.published_content_v2) &&
     (selectedVariant?.draft_revision ?? 0) > 0 &&
     selectedVariant?.published_draft_revision ===
       selectedVariant?.draft_revision;
@@ -465,12 +452,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     threadKey,
   ]);
 
-  useEffect(() => {
-    return () => {
-      if (referenceImage) URL.revokeObjectURL(referenceImage.previewUrl);
-    };
-  }, [referenceImage]);
-
   const streamingState = streamingByThread[threadKey] ?? null;
   const runtimeEvents = streamingState?.runtimeEvents ?? [];
   const streamedText = streamingState?.content ?? "";
@@ -495,39 +476,12 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     followStreamingRef.current = distanceFromBottom <= 48;
   };
 
-  const selectReferenceImage = (event: ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0] ?? null;
-    event.target.value = "";
-    if (!file) return;
-    const allowedImageTypes = new Set([
-      "image/png",
-      "image/jpeg",
-      "image/webp",
-    ]);
-    if (!allowedImageTypes.has(file.type) || file.size > 10 * 1024 * 1024) {
-      setLocalError("Use one PNG, JPEG, or WebP reference image under 10 MB.");
-      return;
-    }
-    setReferenceImage((current) => {
-      if (current) URL.revokeObjectURL(current.previewUrl);
-      return { file, previewUrl: URL.createObjectURL(file) };
-    });
-    setLocalError(null);
-  };
-
-  const removeReferenceImage = () => {
-    setReferenceImage((current) => {
-      if (current) URL.revokeObjectURL(current.previewUrl);
-      return null;
-    });
-  };
-
   const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
     const text = input.trim();
     if (
       !selectedCustomSlot ||
-      (!text && !referenceImage) ||
+      !text ||
       submitInFlightRef.current
     )
       return;
@@ -555,28 +509,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           contextVersion: 0,
         },
       });
-      let storedAttachment: Record<string, unknown> | null = null;
-      if (referenceImage) {
-        const claimedAttachment = await uploadCloudMemberAgentImageFile({
-          session,
-          threadId: threadKey,
-          messageId,
-          file: referenceImage.file,
-        });
-        storedAttachment = {
-          id: crypto.randomUUID(),
-          name: claimedAttachment.name,
-          type: "image",
-          mime: claimedAttachment.mime,
-          size: claimedAttachment.size,
-          storage_id: claimedAttachment.storage_id,
-        };
-      }
       const contentJson = {
-        text:
-          text ||
-          "Use this reference image as visual inspiration and revise the funnel draft.",
-        ...(storedAttachment ? { attachments: [storedAttachment] } : null),
+        text,
       };
       await createThreadMessage(session, {
         id: messageId,
@@ -597,7 +531,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       };
       setMessages((current) => [...current, optimisticMessage]);
       setInput("");
-      removeReferenceImage();
       const result = await runAgentTurn(session, threadKey, {
         preferredModelId: DEFAULT_ACTIVE_MODEL_ID,
         mode: "respond",
@@ -634,7 +567,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const handlePublish = async () => {
     if (
       !selectedCustomSlot ||
-      !document ||
+      !content ||
       isPublishing ||
       isPreparing ||
       isSubmitting ||
@@ -829,14 +762,13 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const handleSelectSlot = (nextSlot: CommunityFunnelSlot) => {
     if (nextSlot === selectedSlot || isBusy) return;
     const hasUnsentChanges =
-      Boolean(input.trim()) || Boolean(referenceImage) || isVslInputDirty;
+      Boolean(input.trim()) || isVslInputDirty;
     if (
       hasUnsentChanges &&
       !window.confirm("Discard unsent changes and switch funnels?")
     )
       return;
     setInput("");
-    removeReferenceImage();
     setVslError(null);
     setLocalError(null);
     setSelectedSlot(nextSlot);
@@ -854,7 +786,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   );
   const shouldShowPublish =
     selectedCustomSlot !== null &&
-    Boolean(document) &&
+    Boolean(content) &&
     !isPublishedCurrentDraft;
   const shouldShowActivate =
     !selectedSlotIsLive &&
@@ -888,7 +820,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           <button
             type="button"
             onClick={() => props.handlePreviewCommunityFunnel(selectedSlot)}
-            disabled={isBusy || (selectedSlot !== "default" && !document)}
+            disabled={isBusy || (selectedSlot !== "default" && !content)}
           >
             Open full preview
           </button>
@@ -898,7 +830,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               className="is-primary"
               onClick={() => void handlePublish()}
               disabled={
-                !document ||
+                !content ||
                 isBusy ||
                 isVslInputDirty ||
                 isPublishedCurrentDraft
@@ -943,13 +875,13 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         className={`funnel-builder-layout is-${selectedSlot === "default" ? "default" : "custom"}`}
       >
         <div
-          className={`funnel-builder-preview${selectedSlot === "default" || document ? "" : " is-empty"}`}
+          className={`funnel-builder-preview${selectedSlot === "default" || content ? "" : " is-empty"}`}
           aria-label={`${resolveFunnelSlotName(selectedSlot)} preview`}
         >
           {selectedSlot === "default" ? (
-            <CommunityFunnelV1Preview
+            <CommunityFunnelPreview
               community={hydratedPreviewCommunity}
-              document={null}
+              content={null}
               deterministicContent={{
                 headline:
                   props.previewCommunity.one_liner?.trim() ||
@@ -958,10 +890,10 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               }}
               primaryActionLabel={props.previewPrimaryActionLabel}
             />
-          ) : document ? (
-            <CommunityFunnelV1Preview
+          ) : content ? (
+            <CommunityFunnelPreview
               community={hydratedPreviewCommunity}
-              document={document}
+              content={content}
               vslUrl={savedVslUrl}
               primaryActionLabel={props.previewPrimaryActionLabel}
             />
@@ -994,7 +926,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                   <strong>Build from a conversation.</strong>
                   <span>
                     Tell the agent who this community is for, the
-                    transformation, offer, proof, and desired visual mood.
+                    audience, transformation, offer, proof, and desired tone.
                   </span>
                 </div>
               ) : (
@@ -1027,19 +959,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               />
             </div>
 
-            {referenceImage ? (
-              <div className="funnel-builder-reference">
-                <img src={referenceImage.previewUrl} alt="Reference preview" />
-                <span>{referenceImage.file.name}</span>
-                <button
-                  type="button"
-                  onClick={removeReferenceImage}
-                  aria-label="Remove reference image"
-                >
-                  <X />
-                </button>
-              </div>
-            ) : null}
             <form
               className="funnel-builder-vsl"
               onSubmit={(event) => {
@@ -1103,22 +1022,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               </div>
             ) : null}
             <form className="funnel-builder-composer" onSubmit={handleSubmit}>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/png,image/jpeg,image/webp"
-                hidden
-                onChange={selectReferenceImage}
-              />
-              <button
-                type="button"
-                onClick={() => fileInputRef.current?.click()}
-                aria-label="Add reference image"
-                title="Add reference image"
-                disabled={isBusy}
-              >
-                <ImagePlus aria-hidden="true" />
-              </button>
               <textarea
                 rows={3}
                 value={input}
@@ -1148,7 +1051,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                   type="submit"
                   className="funnel-builder-send"
                   aria-label="Send"
-                  disabled={isBusy || (!input.trim() && !referenceImage)}
+                  disabled={isBusy || !input.trim()}
                 >
                   {isBusy ? <LoaderCircle className="is-spinning" /> : <Send />}
                 </button>

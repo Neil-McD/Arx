@@ -107,6 +107,7 @@ import {
   applyShellVariantToAppPath,
   buildAppRoutePath,
   buildCommunityTabPath,
+  buildSettingsIndexPath,
   buildSettingsPath,
 } from "../../../shared/webAppRouteState";
 import { shouldHydrateWebRouteAccountSetup } from "../../../shared/webRouteAccess";
@@ -481,6 +482,8 @@ export default function App() {
     setActiveView,
     settingsPage,
     setSettingsPage,
+    mobileSettingsView,
+    setMobileSettingsView,
     selectedProductDocSlug,
     setSelectedProductDocSlug,
     activeOperatorTab,
@@ -510,6 +513,7 @@ export default function App() {
   } = shellNavigation;
   const memberEntry = useWebMemberEntryController({
     session,
+    shellVariant,
     getSession: () => sessionRef.current ?? session,
     navigateTo,
     applyCommunityShellState,
@@ -593,7 +597,10 @@ export default function App() {
     activeChannelId,
     canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
-    isCommunityChatActive: activePage === "community" && communityTab === "chat",
+    isCommunityChatActive:
+      activePage === "community" &&
+      activeView === "home" &&
+      communityTab === "chat",
     session,
   });
   const {
@@ -701,8 +708,6 @@ export default function App() {
     modules: communityResourceModules,
     isLoadingResources,
     isLoadingModules: isLoadingResourceModules,
-    openResourceEmbedId,
-    setOpenResourceEmbedId,
     events: communityEvents,
     hasLoadedVisibleEventsRange: hasLoadedActiveCommunityEventsRange,
     isLoadingEvents: isLoadingCommunityEvents,
@@ -721,17 +726,13 @@ export default function App() {
     handleReorderModules,
     handleReorderResources,
     handleMoveResourceToModule,
-    openNewResourceModal,
     handleAddCommunitySources,
     resourceEditor,
     handleDeleteResource,
-    handleCreatePageDraftFromSource,
     handleCreateBlankPageDraft,
-    resourceModalProps,
     resourceModuleModalProps,
     resourceModuleDeleteModalProps,
     loadCommunityEvents,
-    reloadActiveResources,
     reloadActiveEvents,
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,
@@ -816,15 +817,18 @@ export default function App() {
 
   useWebCommunityTabAccessGuard({
     activePage,
+    activeView,
     activeCommunityId,
     activeCommunityAccessId:
       activeCommunityAccess?.community_id ?? null,
     isLoadingCommunityAccess,
     communityTab,
     canViewSettings: canViewActiveCommunitySettings,
+    canViewMembers: canViewMembersActiveCommunity,
     canManageMembers: canManageMembersActiveCommunity,
     canViewAnalytics: canViewActiveCommunityAnalytics,
     setCommunityResourceModuleId,
+    setActiveView,
     applyCommunityShellState,
   });
 
@@ -947,6 +951,8 @@ export default function App() {
     syncCommunitySelection,
     openPublicCommunityFunnel,
     openCommunityTab,
+    openCommunityHome,
+    openCommunityMembers,
     openCommunityChat,
     openCommunityBySlug,
   } = useWebCommunityRouteController<CommunityRecord>({
@@ -982,6 +988,7 @@ export default function App() {
   });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,
+    shellVariant,
     sessionRef,
     resolveKnownCommunitySlugById,
     syncCommunitySelection,
@@ -1340,6 +1347,7 @@ export default function App() {
   }, [activeCommunityId, attentionByCommunityId]);
   useCommunityDirectoryLifecycle<AuthSession>({
     activePage,
+    activeView,
     communityTab,
     ...sessionArg,
     resumeEpoch: appActivity.resumeEpoch,
@@ -1841,6 +1849,9 @@ export default function App() {
     publicRouteKind: shellPublicRoute.kind,
     shellVariant,
     activePage,
+    activeView,
+    communityTab,
+    mobileRootPage,
     mobileSettingsView,
     isPublicCommunityFunnel,
   });
@@ -1849,6 +1860,7 @@ export default function App() {
     showMobileAppShell,
     showMobileSettingsShell,
     showMobileShell,
+    showMobileGlobalShell,
     showMobileSettingsIndex,
     showMobilePublicFunnel,
     showDesktopCommunityRail,
@@ -1859,6 +1871,7 @@ export default function App() {
   const mobileThreadPageOpen = Boolean(
     showMobileShell
     && mobileRootPage === "community"
+    && activeView === "home"
     && selectedCommunityInteractionRootId,
   );
   const mobileCommunityDetailOpen = Boolean(
@@ -1868,6 +1881,7 @@ export default function App() {
     showMobileAppShell
     && shellPublicRoute.kind === "app"
     && activePage === "community"
+    && activeView === "home"
     && communityTab === "chat"
     && mobileRootPage === "community"
     && !mobileCommunityDetailOpen
@@ -1983,15 +1997,13 @@ export default function App() {
   });
     const {
       handleSelectMobileRootPage,
-      openMobileAgentSettings,
       handleExitMobileSettings,
       openMobileCreateCommunity,
-      openMobileDrawer,
+      prepareMobileGlobalNavigation,
     } = useWebMobileShellController({
       activeCommunitySlug: String(activeCommunity?.slug ?? "").trim() || null,
       selectedActiveCommunitySlug,
       mobileRootPage,
-      hasSelectedCommunity,
       canViewMembers:
         (hasSelectedCommunity && canViewMembersActiveCommunity) ||
         (shellPublicRoute.kind === "community_funnel" &&
@@ -2008,8 +2020,7 @@ export default function App() {
       setMobileOverlay,
       setMobileRootPage,
       setMobileSettingsView,
-      openGlobalSettings,
-      openCommunityChat,
+      openCommunityHome,
       handleOpenDiscover,
       openDirectMessages: handleOpenDirectMessages,
       closeDirectMessages: handleCloseDirectMessages,
@@ -2265,10 +2276,8 @@ export default function App() {
         modules: communityResourceModules,
         resources: communityResources,
         selectedModuleId: communityResourceModuleId,
-        openResourceEmbedId,
       },
       resourcesActions: {
-        setOpenResourceEmbedId,
         handleSelectModule: setCommunityResourceModuleId,
         openNewModuleModal,
         handleEditModule,
@@ -2277,14 +2286,11 @@ export default function App() {
         handleReorderModules,
         handleReorderResources,
         handleMoveResourceToModule,
-        openNewResourceModal,
         handleAddCommunitySources,
         handleBuildCommunityResources,
         resourceEditor,
         handleDeleteResource,
-        handleCreatePageDraftFromSource,
         handleCreateBlankPageDraft,
-        reloadResources: reloadActiveResources,
       },
       eventsState: {
         events: communityEvents,
@@ -2303,7 +2309,6 @@ export default function App() {
       canModerateContentActiveCommunity,
       resourceModuleModalProps,
       resourceModuleDeleteModalProps,
-      resourceModalProps,
       canPostMessagesActiveCommunity: canPostMessagesActiveChannel,
       isProfileSetupComplete: isProfileSetupCompleteForPublicActions,
       typingPresence: communityTypingUsers,
@@ -2720,10 +2725,9 @@ export default function App() {
       showMobileSettingsShell,
       showMobileSettingsIndex,
       onSelectMobileSettingsPage: (page) => {
-        setSettingsPage(page);
-        setMobileSettingsView("detail");
+        navigateTo(buildSettingsPath(page));
       },
-      onShowMobileSettingsIndex: () => setMobileSettingsView("index"),
+      onShowMobileSettingsIndex: () => navigateTo(buildSettingsIndexPath()),
       settingsPanelsProps,
     },
     publicCommunityFunnelProps: {
@@ -2769,6 +2773,11 @@ export default function App() {
       publicCommunityError: publicCommunityUi.publicCommunityError,
       publicJoinError: publicCommunityUi.publicJoinError,
       checkoutError,
+      mobileMembersOverlayOpen:
+        showMobileShell &&
+        publicRoute.kind === "community_funnel" &&
+        mobileOverlay === "members",
+      onCloseMobileMembersOverlay: () => setMobileOverlay(null),
       bridge:
         /* The pitch converts first: the bridge opens on an entry ATTEMPT
            (join/enter/claim), never on arrival. */
@@ -2798,13 +2807,12 @@ export default function App() {
           : null,
     },
     communityHostProps: {
+      activeView,
       communityTab,
       onSelectCommunityTab: handleSelectCommunityTab,
       firstPostFocusRequest: communityOnboardingFirstPostFocusRequest,
       chatPanelProps: {
         ...communityChatPanelProps,
-        mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members",
-        onCloseMobileMembersOverlay: () => setMobileOverlay(null),
       },
       secondaryPanelsProps: communitySecondarySurfaceProps,
     },
@@ -2910,6 +2918,7 @@ export default function App() {
     mobileChromeAutoHideEnabled,
     mobileChromeReadingMode: mobileChromeReadingModeActive,
     showMobileShell,
+    showMobileGlobalShell,
     mobileShellMode,
     mobileRootPage,
     mobileThreadPageOpen,
@@ -2936,10 +2945,10 @@ export default function App() {
       isVisitorCommunitySurface
         ? Boolean(resolvedPublicCommunity)
         : canViewMembersActiveCommunity,
-    openMobileDrawer,
     handleExitMobileSettings,
     handleCloseMobileThreadPage: handleCloseCommunityInteractionDrawer,
     handleSelectMobileRootPage,
+    prepareMobileGlobalNavigation,
     setMobileOverlay,
     isPublicCommunityFunnel,
     hasBackTargetSnapshot:
@@ -3016,7 +3025,6 @@ export default function App() {
         }
       : handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,
-    openMobileAgentSettings,
     canOpenDirectMessages: Boolean(session),
     directMessagesUnreadCount,
     /* Rail bridge: on the visitor route, app state changes don't render
@@ -3045,6 +3053,8 @@ export default function App() {
           return nextCommunity ? handleSelectActiveCommunity(nextCommunity) : false;
         },
     openCommunityChat,
+    openCommunityHome,
+    openCommunityMembers,
     communityInitials,
     showDesktopCommunityRail,
     showDesktopCommunityNav,
@@ -3055,7 +3065,9 @@ export default function App() {
     getCommunityRailItemBindings,
     handleOpenGlobalSettings: isVisitorCommunitySurface
       ? () => navigateTo(buildSettingsPath("profile"))
-      : () => openGlobalSettings("profile"),
+      : shellVariant === "mobile"
+        ? () => navigateTo(buildSettingsIndexPath())
+        : () => openGlobalSettings("profile"),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     hasLeftPanel,

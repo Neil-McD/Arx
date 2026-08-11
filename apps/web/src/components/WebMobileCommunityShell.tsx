@@ -1,7 +1,5 @@
-import { CommunityNav } from "../../../../shared/CommunityNav";
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { WebMobileBottomRail } from "./WebMobileBottomRail";
-import { WebMobileDrawer } from "./WebMobileDrawer";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebMobileCommunityShellProps = {
@@ -15,65 +13,6 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
 
   return (
     <>
-      <WebMobileDrawer
-        isOpen={communityShell.mobileOverlay === "community"}
-        ariaLabel="Community navigation"
-        className="mobile-community-drawer"
-        hideHeader
-        footer={
-          <div className="mobile-agent-drawer-footer">
-            <button
-              type="button"
-              className="mobile-agent-drawer-settings-link"
-              onClick={communityShell.onOpenMobileAgentSettings}
-            >
-              <svg viewBox="0 0 24 24" aria-hidden="true">
-                <circle cx="12" cy="12" r="3" />
-                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
-              </svg>
-              Settings
-            </button>
-          </div>
-        }
-        onClose={() => communityShell.setMobileOverlay(null)}
-      >
-        <CommunityNav
-          activeCommunity={communityShell.activeCommunity}
-          communityTab={communityShell.communityTab}
-          tabIndicators={communityShell.communityTabIndicators}
-          channels={communityShell.communityChannels}
-          isLoadingChannels={communityShell.isLoadingCommunityChannels}
-          selectedChannelSlug={communityShell.selectedCommunityChannelSlug}
-          channelIndicators={communityShell.communityChannelIndicators}
-          onSelectChannel={(channel) => {
-            communityShell.setMobileOverlay(null);
-            communityShell.onSelectCommunityChannel(channel);
-          }}
-          onCreateChannel={async (name) => {
-            const created = await communityShell.onCreateCommunityChannel(name);
-            if (created) communityShell.setMobileOverlay(null);
-            return created;
-          }}
-          isCreatingChannel={communityShell.isCreatingCommunityChannel}
-          createChannelError={communityShell.communityChannelCreateError}
-          clearCreateChannelError={communityShell.clearCommunityChannelCreateError}
-          isAtChannelLimit={communityShell.isAtCommunityChannelLimit}
-          maxActiveChannels={communityShell.maxActiveCommunityChannels}
-          onReorderChannels={communityShell.onReorderCommunityChannels}
-          isReorderingChannels={communityShell.isReorderingCommunityChannels}
-          reorderChannelsError={communityShell.communityChannelReorderError}
-          clearReorderChannelsError={communityShell.clearCommunityChannelReorderError}
-          canViewMembersActiveCommunity={communityShell.canViewMembersActiveCommunity}
-          canViewActiveCommunitySettings={communityShell.canViewActiveCommunitySettings}
-          canManageMembersActiveCommunity={communityShell.canManageMembersActiveCommunity}
-          canViewActiveCommunityAnalytics={communityShell.canViewActiveCommunityAnalytics}
-          isLoadingAccess={communityShell.isLoadingCommunityAccess}
-          lockedTabs={communityShell.lockedCommunityNavTabs ?? undefined}
-          onCopyCommunityJoinLink={communityShell.onCopyCommunityJoinLink}
-          onSelectTab={communityShell.onSelectCommunityTabFromMobile}
-        />
-      </WebMobileDrawer>
-
       {communityShell.mobileOverlay === "community_selector" ? (
         <div className="mobile-community-menu-shell" aria-hidden={false}>
           <button
@@ -119,6 +58,22 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
                   </span>
                   <span className="mobile-community-selector-name">Create</span>
                 </button>
+                <button
+                  type="button"
+                  className="mobile-community-selector-item mobile-community-selector-item-action"
+                  onClick={() => {
+                    communityShell.setMobileOverlay(null);
+                    communityShell.onOpenGlobalSettings();
+                  }}
+                >
+                  <span className="mobile-community-selector-action-avatar" aria-hidden="true">
+                    <svg viewBox="0 0 24 24">
+                      <circle cx="12" cy="12" r="3" />
+                      <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1.08-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1.08 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z" />
+                    </svg>
+                  </span>
+                  <span className="mobile-community-selector-name">Settings</span>
+                </button>
               </div>
               <div className="mobile-community-selector-section">
                 <div className="mobile-community-selector-divider" aria-hidden="true" />
@@ -139,14 +94,12 @@ export function WebMobileCommunityShell(props: WebMobileCommunityShellProps) {
                         }`}
                         onClick={() => {
                           communityShell.setMobileOverlay(null);
-                          const changed =
-                            communityShell.onSelectActiveCommunity(community);
-                          if (!changed) return;
+                          communityShell.onSelectActiveCommunity(community);
                           const nextCommunitySlug = String(
                             community.slug ?? "",
                           ).trim();
                           if (nextCommunitySlug) {
-                            communityShell.onOpenCommunityChat(nextCommunitySlug);
+                            communityShell.onOpenCommunityHome(nextCommunitySlug);
                           }
                         }}
                       >

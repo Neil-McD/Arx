@@ -191,6 +191,7 @@ import {
   sortedBlocks,
   stripSharedAttachmentSummary,
 } from "./communityInteractionFeed";
+import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
 import { CommunityPinnedRootSurface } from "./CommunityPinnedRootSurface";
 import { CommunityMemoryGraph } from "./CommunityMemoryGraph";
 
@@ -252,12 +253,14 @@ type CommunityContextProjectionProps = Pick<
 > & {
   containerClassName?: string;
   ariaLabel?: string;
+  sectionMode?: "all" | "members";
 };
 
 function pickCommunityContextProjection(
   props: WebCommunityInteractionProjectionProps & {
     containerClassName?: string;
     ariaLabel?: string;
+    sectionMode?: "all" | "members";
   },
 ): CommunityContextProjectionProps {
   return {
@@ -266,6 +269,7 @@ function pickCommunityContextProjection(
     ) as Pick<WebCommunityInteractionProjectionProps, (typeof COMMUNITY_CONTEXT_PROJECTION_KEYS)[number]>,
     containerClassName: props.containerClassName,
     ariaLabel: props.ariaLabel,
+    sectionMode: props.sectionMode,
   };
 }
 
@@ -308,6 +312,7 @@ const StableCommunityInteractionContextPanelSurface = memo(function StableCommun
         aria-label={props.ariaLabel ?? "Community"}
       >
         <CommunityContextPanel
+          sectionMode={props.sectionMode}
           communityName={props.activeCommunityName}
           onlineFaces={props.presenceSummary?.online_faces ?? null}
           onlineCount={props.presenceSummary?.online_count ?? null}
@@ -385,6 +390,7 @@ export function CommunityInteractionContextPanelSurface(
   props: WebCommunityInteractionProjectionProps & {
     containerClassName?: string;
     ariaLabel?: string;
+    sectionMode?: "all" | "members";
   },
 ) {
   return <StableCommunityInteractionContextPanelSurface {...pickCommunityContextProjection(props)} />;
@@ -1064,7 +1070,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
                   const isEditingReply = editing?.type === "reply" && editing.id === reply.id;
                   const isNewReply = repliesLoadedOnce.current && !seenReplyIds.current.has(reply.id);
                   return (
-                    <div key={reply.id} className={`community-interaction-reply${isNewReply ? " is-new" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}>
+                    <div key={reply.id} className={`community-interaction-reply${isNewReply ? " is-new" : ""}${interactionMentionsViewer(bundle.mentions, props.currentUserId, reply.actor_user_id) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}>
                       {bundle.pending ? null : (
                         <MessageActions
                           onReact={(emoji) => props.onToggleReaction?.("reply", reply.id, emoji)}

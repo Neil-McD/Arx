@@ -127,7 +127,7 @@ describe("web shell refresh continuity contract", () => {
 
   it("reserves permission-dependent navigation geometry during initial access loading", () => {
     const nav = read("shared/CommunityNav.tsx");
-    const shell = read("apps/web/src/components/WebShellChromeHost.tsx");
+    const navSurface = read("apps/web/src/components/WebCommunityNavSurface.tsx");
 
     expect(nav).toContain("isLoadingAccess = false");
     expect(nav).toMatch(
@@ -136,7 +136,7 @@ describe("web shell refresh continuity contract", () => {
     expect(nav).toContain("!showChannelLoadingSkeleton && canManageMembersActiveCommunity");
     expect(nav).toContain('className="community-nav-access-loading"');
     expect(nav).toContain('className="community-nav-invite-loading web-skeleton-block"');
-    expect(shell).toContain("isLoadingAccess={props.communityShell.isLoadingCommunityAccess}");
+    expect(navSurface).toContain("isLoadingAccess={communityShell.isLoadingCommunityAccess}");
   });
 
   it("hydrates the account graph once per signed-in identity, not once per token", () => {

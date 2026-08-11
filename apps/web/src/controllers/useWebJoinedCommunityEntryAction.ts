@@ -4,10 +4,12 @@ import {
 } from "react";
 
 import type { AuthSession } from "../auth";
-import type { CommunityTab } from "../../../../shared/appShellNavigation";
+import type { AppView, CommunityTab } from "../../../../shared/appShellNavigation";
+import type { AppShellVariant } from "../../../../shared/webAppRouteState";
 
 export function useWebJoinedCommunityEntryAction(params: {
   session: AuthSession | null;
+  shellVariant: AppShellVariant;
   sessionRef: MutableRefObject<AuthSession | null>;
   resolveKnownCommunitySlugById: (
     communityId: string,
@@ -19,7 +21,7 @@ export function useWebJoinedCommunityEntryAction(params: {
   setPublicRoute: (route: { kind: "app" }) => void;
   applyAppRouteState: (route: {
     page: "community";
-    view: "home";
+    view: AppView;
     settingsPage: "profile";
     communitySlug: string | null;
     communityTab: CommunityTab;
@@ -47,7 +49,7 @@ export function useWebJoinedCommunityEntryAction(params: {
       params.setPublicRoute({ kind: "app" });
       params.applyAppRouteState({
         page: "community",
-        view: "home",
+        view: params.shellVariant === "mobile" ? "community_home" : "home",
         settingsPage: "profile",
         communitySlug: slug || null,
         communityTab: options.communityTab ?? "chat",
@@ -64,6 +66,7 @@ export function useWebJoinedCommunityEntryAction(params: {
       params.loadCommunities,
       params.resolveKnownCommunitySlugById,
       params.session,
+      params.shellVariant,
       params.sessionRef,
       params.applyAppRouteState,
       params.setPublicRoute,

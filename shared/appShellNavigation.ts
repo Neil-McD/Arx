@@ -15,7 +15,7 @@ export type AppPage =
   | "discover"
   | "docs";
 
-export type AppView = "home";
+export type AppView = "home" | "community_home" | "community_members";
 
 export type DesktopShellContextualBackPage = "settings" | "operator";
 

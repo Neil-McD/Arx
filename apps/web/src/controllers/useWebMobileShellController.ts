@@ -4,7 +4,6 @@ import {
   type Dispatch,
   type SetStateAction,
 } from "react";
-import type { SettingsPage } from "../../../../shared/appShellNavigation";
 import type {
   MobileOverlay,
   MobileRootPage,
@@ -16,7 +15,6 @@ export function useWebMobileShellController(params: {
   activeCommunitySlug: string | null;
   selectedActiveCommunitySlug: string | null;
   mobileRootPage: MobileRootPage;
-  hasSelectedCommunity: boolean;
   canViewMembers: boolean;
   forceCommunityRoot: boolean;
   mobileOverlay: MobileOverlay | null;
@@ -28,8 +26,7 @@ export function useWebMobileShellController(params: {
   setMobileOverlay: Dispatch<SetStateAction<MobileOverlay | null>>;
   setMobileRootPage: Dispatch<SetStateAction<MobileRootPage>>;
   setMobileSettingsView: Dispatch<SetStateAction<MobileSettingsView>>;
-  openGlobalSettings: (page: SettingsPage) => void;
-  openCommunityChat: (
+  openCommunityHome: (
     communitySlug: string,
     opts?: { pushSnapshot?: boolean },
   ) => void;
@@ -44,27 +41,38 @@ export function useWebMobileShellController(params: {
       params.selectedActiveCommunitySlug ?? params.activeCommunitySlug ?? "",
     ).trim();
     if (nextCommunitySlug) {
-      params.openCommunityChat(nextCommunitySlug);
+      params.openCommunityHome(nextCommunitySlug);
       return;
     }
     params.handleOpenDiscover();
   }, [
     params.activeCommunitySlug,
     params.handleOpenDiscover,
-    params.openCommunityChat,
+    params.openCommunityHome,
     params.selectedActiveCommunitySlug,
+  ]);
+
+  const prepareMobileGlobalNavigation = useCallback(() => {
+    if (params.isThreadPageOpen) params.closeThreadPage();
+    params.closeDirectMessages();
+    params.setMobileOverlay(null);
+    params.setMobileRootPage("community");
+  }, [
+    params.closeDirectMessages,
+    params.closeThreadPage,
+    params.isThreadPageOpen,
+    params.setMobileOverlay,
+    params.setMobileRootPage,
   ]);
 
   const handleSelectMobileRootPage = useCallback(
     (nextRootPage: MobileRootPage) => {
-      if (params.isThreadPageOpen) params.closeThreadPage();
-
       if (params.forceCommunityRoot) {
-        params.closeDirectMessages();
-        params.setMobileRootPage("community");
-        params.setMobileOverlay(nextRootPage === "community" ? null : "community");
+        prepareMobileGlobalNavigation();
         return;
       }
+
+      if (params.isThreadPageOpen) params.closeThreadPage();
 
       if (nextRootPage === "messages") {
         if (!params.canOpenDirectMessages) return;
@@ -74,15 +82,14 @@ export function useWebMobileShellController(params: {
         return;
       }
 
-      params.closeDirectMessages();
-      params.setMobileOverlay(null);
-
       if (nextRootPage === "agent") {
+        params.closeDirectMessages();
+        params.setMobileOverlay(null);
         params.setMobileRootPage("agent");
         return;
       }
 
-      params.setMobileRootPage("community");
+      prepareMobileGlobalNavigation();
       openMobileCommunitySurface();
     },
     [
@@ -95,20 +102,9 @@ export function useWebMobileShellController(params: {
       params.setMobileOverlay,
       params.setMobileRootPage,
       openMobileCommunitySurface,
+      prepareMobileGlobalNavigation,
     ],
   );
-
-  const openMobileAgentSettings = useCallback(() => {
-    params.closeDirectMessages();
-    params.setMobileOverlay(null);
-    params.openGlobalSettings("profile");
-    params.setMobileSettingsView("index");
-  }, [
-    params.closeDirectMessages,
-    params.openGlobalSettings,
-    params.setMobileOverlay,
-    params.setMobileSettingsView,
-  ]);
 
   const handleExitMobileSettings = useCallback(() => {
     params.setMobileOverlay(null);
@@ -117,22 +113,11 @@ export function useWebMobileShellController(params: {
   }, [openMobileCommunitySurface, params.setMobileOverlay, params.setMobileRootPage]);
 
   const openMobileCreateCommunity = useCallback(() => {
-    params.setMobileOverlay(null);
+    prepareMobileGlobalNavigation();
     params.openCommunityCreateFlow();
   }, [
     params.openCommunityCreateFlow,
-    params.setMobileOverlay,
-  ]);
-
-  const openMobileDrawer = useCallback(() => {
-    if (params.mobileRootPage !== "community") return;
-    params.setMobileOverlay(
-      params.hasSelectedCommunity ? "community" : "community_selector",
-    );
-  }, [
-    params.hasSelectedCommunity,
-    params.mobileRootPage,
-    params.setMobileOverlay,
+    prepareMobileGlobalNavigation,
   ]);
 
   useEffect(() => {
@@ -198,9 +183,8 @@ export function useWebMobileShellController(params: {
 
   return {
     handleSelectMobileRootPage,
-    openMobileAgentSettings,
     handleExitMobileSettings,
     openMobileCreateCommunity,
-    openMobileDrawer,
+    prepareMobileGlobalNavigation,
   };
 }

@@ -9,22 +9,11 @@ import {
 
 import { normalizeExternalUrl, parseEmbedUrl, StableMediaEmbedFrame } from "../../../../shared/linkEmbedUi";
 import { renderMarkdown } from "../../../../shared/markdownUi";
+import { DeferredYouTubeEmbed } from "./DeferredYouTubeEmbed";
 import type { CommunityResource } from "./communityResourcesContracts";
-
-type WebCommunityResourceViewerModalProps = {
-  resource: CommunityResource | null;
-  onClose: () => void;
-};
-
-export type WebCommunityResourceSourceLineage = {
-  title: string;
-  detail: string | null;
-  onOpen?: () => void;
-};
 
 type WebCommunityResourceViewerContentProps = {
   resource: CommunityResource;
-  sourceLineage?: WebCommunityResourceSourceLineage | null;
   editor?: WebCommunityResourceInlineEditor | null;
 };
 
@@ -83,11 +72,6 @@ const RESOURCE_BODY_INTERACTIVE_SELECTOR = [
   ".resource-viewer-embed",
 ].join(", ");
 
-function hasStoredBodyContent(resource: CommunityResource): boolean {
-  const bodyChars = Number(resource.body_chars ?? 0);
-  return Number.isFinite(bodyChars) && bodyChars > 0;
-}
-
 function PinIcon() {
   return (
     <svg className="resource-viewer-pin-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -108,7 +92,7 @@ function ExternalArrowIcon() {
 }
 
 export function WebCommunityResourceViewerContent(props: WebCommunityResourceViewerContentProps) {
-  const { resource, sourceLineage = null, editor = null } = props;
+  const { resource, editor = null } = props;
   const currentUrl = resource.url;
   const embed = currentUrl ? parseEmbedUrl(currentUrl) : null;
   const sourceUrl = normalizeExternalUrl(currentUrl);
@@ -118,7 +102,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const titleText = editor?.isEditing ? editor.titleInput : resource.title;
   const bodyText = editor?.isEditing ? editor.bodyInput : persistedBody;
   const hasBody = trimmedBody.length > 0;
-  const hasDeferredBody = !editor?.isEditing && !hasBody && hasStoredBodyContent(resource);
   const verificationLink: { label: string; href: string } | null = sourceUrl
     ? {
         label: embed
@@ -127,8 +110,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
         href: sourceUrl.toString(),
       }
     : null;
-  const isEmpty = !embed && !hasBody && !hasDeferredBody && !verificationLink;
-  const hasLineage = Boolean(resource.source_resource_id);
+  const isEmpty = !embed && !hasBody && !verificationLink;
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const canEdit = Boolean(editor?.canEdit);
@@ -138,7 +120,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const isBodyEditing = isEditing && activeField === "body";
   const isPinned = editor?.isEditing ? editor.pinnedInput : resource.pinned;
   const renderedBodyMarkdown = useMemo(
-    () => (hasBody ? renderMarkdown(trimmedBody, { embedStandaloneMedia: true }) : null),
+    () => (hasBody ? renderMarkdown(trimmedBody, { embedStandaloneMedia: true, headingLevelOffset: 1 }) : null),
     [hasBody, trimmedBody],
   );
 
@@ -226,7 +208,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           className="resource-viewer-title-input"
           value={editor.titleInput}
           disabled={editor.isSaving}
-          placeholder="Resource title"
+          placeholder="Lesson title"
           onChange={(event) => editor.onChangeTitle(event.target.value)}
           onFocus={() => editor.onSetActiveField("title")}
           onKeyDown={handleEditableKeyDown}
@@ -242,7 +224,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           disabled={editor?.isSaving}
           onClick={() => beginEdit("title")}
         >
-          <span>{titleText.trim() || "Untitled resource"}</span>
+          <span>{titleText.trim() || "Untitled lesson"}</span>
         </button>
       );
     }
@@ -268,7 +250,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           type="button"
           disabled={editor.isSaving}
           aria-pressed={isPinned}
-          title={isPinned ? "Unpin resource" : "Pin resource"}
+          title={isPinned ? "Unpin lesson" : "Pin lesson"}
           onClick={togglePinned}
         >
           <PinIcon />
@@ -287,7 +269,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           className="resource-viewer-prose resource-viewer-prose-input"
           value={editor.bodyInput}
           disabled={editor.isSaving}
-          placeholder="Write the page content, context, or takeaway."
+          placeholder="Write the lesson content, context, or takeaway."
           onChange={(event) => {
             editor.onChangeBody(event.target.value);
             event.currentTarget.style.height = "auto";
@@ -317,10 +299,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
       return <div className="resource-viewer-prose">{prose}</div>;
     }
 
-    if (hasDeferredBody) {
-      return <div className="resource-viewer-empty">Loading page content...</div>;
-    }
-
     if (canEdit) {
       return (
         <button
@@ -329,29 +307,12 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
           disabled={editor?.isSaving}
           onClick={() => beginEdit("body")}
         >
-          This page has no body text. Click to write it.
+          This lesson has no body text. Click to write it.
         </button>
       );
     }
 
-    return isEmpty ? <div className="resource-viewer-empty">This page hasn't been written yet.</div> : null;
-  };
-
-  const renderSourceLineage = () => {
-    if (!hasLineage) return null;
-    return (
-      <div className="resource-viewer-lineage">
-        <span>Drafted from</span>
-        {sourceLineage && sourceLineage.onOpen ? (
-          <button type="button" onClick={sourceLineage.onOpen} title="Open source">
-            {sourceLineage?.title}
-          </button>
-        ) : (
-          <strong>{sourceLineage?.title ?? "Original source unavailable"}</strong>
-        )}
-        {sourceLineage?.detail ? <span>{sourceLineage.detail}</span> : null}
-      </div>
-    );
+    return isEmpty ? <div className="resource-viewer-empty">This lesson hasn't been written yet.</div> : null;
   };
 
   return (
@@ -394,10 +355,18 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
         <div className="resource-viewer-column">
           {embed ? (
             <div className="resource-viewer-embed" data-resource-media="true">
-              <StableMediaEmbedFrame
-                src={embed.src}
-                title={`${resource.title} embed`}
-              />
+              {embed.provider === "youtube" ? (
+                <DeferredYouTubeEmbed
+                  key={embed.id}
+                  embed={embed}
+                  title={`${resource.title} video`}
+                />
+              ) : (
+                <StableMediaEmbedFrame
+                  src={embed.src}
+                  title={`${resource.title} embed`}
+                />
+              )}
             </div>
           ) : null}
 
@@ -414,25 +383,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
               <ExternalArrowIcon />
             </a>
           ) : null}
-
-          {renderSourceLineage()}
         </div>
-      </div>
-    </div>
-  );
-}
-
-export function WebCommunityResourceViewerModal(props: WebCommunityResourceViewerModalProps) {
-  const { resource, onClose } = props;
-
-  if (!resource) return null;
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal resource-viewer-modal" onClick={(event) => event.stopPropagation()}>
-        <WebCommunityResourceViewerContent
-          resource={resource}
-        />
       </div>
     </div>
   );

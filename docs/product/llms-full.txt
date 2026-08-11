@@ -520,6 +520,14 @@ Custom work remains private until explicitly published, and publishing does not
 change which funnel is live. One explicit active-funnel selector determines
 whether the fallback, Custom 1, or Custom 2 is served publicly.
 
+Custom funnels use one platform-owned composition: community identity,
+outcome-focused headline and subheadline, an optional founder-managed Video
+Sales Letter, a canonical join action, exactly three benefit pillars, a
+long-form narrative, canonical live member proof, and the same join action
+again. The agent edits only the headline, subheadline, pillars, and narrative.
+Polynet owns theme, layout, media placement, member proof, pricing, access
+language, and both actions.
+
 ## Rules
 
 1. The funnel is the canonical public entry surface for join and gate flows.
@@ -534,6 +542,10 @@ whether the fallback, Custom 1, or Custom 2 is served publicly.
    revision is still current.
 10. AI may revise bounded funnel content, but cannot grant access, set payment
     authority, silently publish, or silently change the active funnel.
+11. Funnel V2 content cannot carry theme, layout, media, member, pricing,
+    access, or CTA authority.
+12. Long-form copy is bounded Markdown; raw HTML, links, images, code, and
+    executable content are not rendered.
 
 ## Non-Goals
 
@@ -712,11 +724,19 @@ Resources let communities store reusable knowledge instead of relying only on ch
 
 ## User Mental Model
 
-Members see resources as useful community materials. Builders see resources as the durable knowledge base of the community.
+Members enter Resources through course cards, then read the ordered lessons inside a selected course. Builders see the same course presentation plus manager-only course and lesson authoring controls. Source ingestion belongs to builder knowledge setup rather than the primary course presentation.
 
 ## System Mental Model
 
 Resources are community-scoped artifacts. Access to resources should follow community membership and role rules.
+
+The course UI is a presentation model over the existing resource primitives:
+
+- a resource module is presented as a course
+- a member-visible page inside that module is presented as a lesson
+- source resources remain manager-only intake material and are not lessons
+
+No separate course, lesson, progress, or completion schema is implied by this presentation.
 
 ## Rules
 
@@ -725,6 +745,7 @@ Resources are community-scoped artifacts. Access to resources should follow comm
 3. Resources should not become a dumping ground for private user data.
 4. Resource context should be explicitly selected, retrieved, or bounded.
 5. Resources should be easier to audit than hidden prompt text.
+6. Course visibility remains module-level `draft` or `live`; individual lesson publication is not a separate member-facing control.
 
 ## Related Concepts
 
@@ -1121,6 +1142,12 @@ Use resources for information that should remain useful after the original conve
 ## Current Alpha Behavior
 
 Community resources are scoped to a community. Members with access can read resources. Resource write actions are manager-gated, which currently means owner/admin authority.
+
+The Resources root presents each resource module as a course card. Managers create courses through the add-course card and manage an existing course through its card menu. Opening a course shows its ordered member-visible pages as lessons beside the existing resource reader. Course name, description, cover, ordering, and `draft` or `live` state are manager-controlled. Managers can also create, reorder, edit, and delete lessons.
+
+Raw links and uploaded files enter during builder knowledge setup. Sources remain separate from the member course outline until a manager turns them into a lesson draft. Existing sources stay available in a manager-only source inbox, and unassigned legacy pages appear in a manager-only maintenance entry rather than as a normal course.
+
+This course presentation does not currently track member progress, completion, certificates, drip schedules, or lesson-specific routes.
 
 Resources can also feed community retrieval paths where the backend supports
 it, but resources remain curated knowledge rather than accepted community

@@ -5,7 +5,7 @@ import {
 } from "../../../../shared/communityFunnel";
 import { fetchCloudCommunityFunnelDraftPreview } from "../../../../shared/cloudCommunityFunnelGateway";
 import type {
-  CommunityFunnelDocumentV1,
+  CommunityFunnelContentV2,
   CommunityFunnelManagerConfig,
   CommunityFunnelSlot,
 } from "../../../../shared/communityTypes";
@@ -55,7 +55,7 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
   session: AuthSession | null;
   ensureSession: EnsureSession;
 }) {
-  const [document, setDocument] = useState<CommunityFunnelDocumentV1 | null>(null);
+  const [document, setDocument] = useState<CommunityFunnelContentV2 | null>(null);
   const [vslUrl, setVslUrl] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -108,7 +108,7 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
         const config = normalizeCommunityFunnelManagerConfig(result);
         const selectedVariant =
           params.slot === "default" ? null : config.custom_funnels[params.slot];
-        setDocument(selectedVariant?.draft_document_v1 ?? null);
+        setDocument(selectedVariant?.draft_content_v2 ?? null);
         setVslUrl(selectedVariant?.draft_vsl_url ?? null);
         setAccessState("allowed");
       } catch (cause) {

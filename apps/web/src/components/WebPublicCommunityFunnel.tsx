@@ -1,10 +1,11 @@
 import type {
   CommunityFunnelConfig,
-  CommunityFunnelDocumentV1,
+  CommunityFunnelContentV2,
   CommunityFunnelSlot,
   CommunityPublicFace,
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
+import { getAvatarColor } from "../../../../shared/chatUi";
 import {
   buildCommunityFunnelPrimaryActionView,
   type CommunityFunnelUiMode,
@@ -14,7 +15,9 @@ import {
   WebCommunityBridgeCard,
   type WebCommunityBridgeCardProps,
 } from "./WebCommunityBridgeCard";
-import { CommunityFunnelV1Preview } from "./CommunityFunnelV1Preview";
+import { CommunityContextPanel } from "./CommunityContextPanel";
+import { CommunityFunnelPreview } from "./CommunityFunnelPreview";
+import { WebMobileDrawer } from "./WebMobileDrawer";
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 
@@ -31,6 +34,9 @@ type PublicCommunityFunnelCommunityLike = {
   host?: Omit<CommunityPublicFace, "user_id"> | null;
   member_count?: number | null;
   member_faces_preview?: CommunityPublicFace[] | null;
+  online_count?: number | null;
+  online_count_capped?: boolean | null;
+  online_faces?: CommunityPublicFace[] | null;
   funnel?: CommunityFunnelConfig | null;
 };
 
@@ -40,7 +46,7 @@ type WebPublicCommunityFunnelProps = {
   isPreviewMode?: boolean;
   previewSlot?: CommunityFunnelSlot;
   previewExitPath?: string | null;
-  previewDocument?: CommunityFunnelDocumentV1 | null;
+  previewDocument?: CommunityFunnelContentV2 | null;
   previewVslUrl?: string | null;
   previewDocumentIsLoading?: boolean;
   previewDocumentError?: string | null;
@@ -59,8 +65,17 @@ type WebPublicCommunityFunnelProps = {
   publicCommunityError: string | null;
   publicJoinError: string | null;
   checkoutError: string | null;
+  mobileMembersOverlayOpen?: boolean;
+  onCloseMobileMembersOverlay?: () => void;
   bridge?: WebCommunityBridgeCardProps | null;
 };
+
+function getInitialsFromLabel(label: string): string {
+  const parts = label.trim().split(/\s+/).filter(Boolean);
+  if (parts.length === 0) return "?";
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+}
 
 function deriveFunnelMode(args: {
   canEnterCommunity: boolean;
@@ -124,9 +139,55 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const funnelErrors = [publicCommunityError, publicJoinError, checkoutError].filter(
     Boolean,
   ) as string[];
+  const publicMemberFaces = publicCommunity?.member_faces_preview ?? [];
+  const publicOnlineFaces = publicCommunity?.online_faces ?? [];
+  const closeMobileMembersOverlay = props.onCloseMobileMembersOverlay ?? (() => {});
+  const mobileMembersDrawer = publicCommunity ? (
+    <WebMobileDrawer
+      isOpen={Boolean(props.mobileMembersOverlayOpen)}
+      ariaLabel={`${communityName} members`}
+      title="Members"
+      side="right"
+      className="mobile-members-drawer public-funnel-members-drawer"
+      footer={(
+        <button
+          className="cfg-join public-funnel-members-join"
+          type="button"
+          disabled={isPrimaryActionDisabled}
+          onClick={() => {
+            closeMobileMembersOverlay();
+            onPrimaryJoinAction();
+          }}
+        >
+          {primaryAction.label}
+        </button>
+      )}
+      onClose={closeMobileMembersOverlay}
+    >
+      <CommunityContextPanel
+        communityName={communityName}
+        onlineFaces={publicOnlineFaces}
+        onlineCount={publicCommunity.online_count ?? null}
+        onlineCountCapped={Boolean(publicCommunity.online_count_capped)}
+        memberCount={publicCommunity.member_count ?? null}
+        lockedSections={{ members: true }}
+        membersPreview={publicMemberFaces}
+        onLockedSectionActivate={closeMobileMembersOverlay}
+        displayName={(userId) =>
+          [...publicOnlineFaces, ...publicMemberFaces].find(
+            (face) => face.user_id === userId,
+          )?.display_name ?? "Member"
+        }
+        getInitials={getInitialsFromLabel}
+        getAvatarColor={getAvatarColor}
+        sectionMode="members"
+      />
+    </WebMobileDrawer>
+  ) : null;
   const renderWithBridge = (content: ReactNode) => (
     <>
       {content}
+      {mobileMembersDrawer}
       {props.bridge ? (
         <div className="cfg-gate cvs-gate cvs-gate-bridge">
           <WebCommunityBridgeCard {...props.bridge} />
@@ -137,10 +198,10 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   if (isLoadingPublicCommunity && !publicCommunity) {
     return (
       <div
-        className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft"
+        className="community-funnel-preview"
         aria-busy="true"
       >
-        <main className="funnel-v1-preview-main funnel-v1-preview-empty">
+        <main className="community-funnel-preview-main community-funnel-preview-empty">
           <strong>Loading community…</strong>
         </main>
       </div>
@@ -160,9 +221,9 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
           </svg>
           <span>Back to builder</span>
         </a>
-        <CommunityFunnelV1Preview
+        <CommunityFunnelPreview
           community={publicCommunity}
-          document={props.previewDocument ?? null}
+          content={props.previewDocument ?? null}
           deterministicContent={
             props.previewSlot === "default"
               ? {
@@ -180,11 +241,11 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     );
   }
 
-  if (publicCommunity && funnel?.published_document_v1) {
+  if (publicCommunity && funnel?.published_content_v2) {
     return renderWithBridge(
-      <CommunityFunnelV1Preview
+      <CommunityFunnelPreview
         community={publicCommunity}
-        document={funnel.published_document_v1}
+        content={funnel.published_content_v2}
         vslUrl={funnel.published_vsl_url}
         primaryActionLabel={primaryAction.label}
         isPreview={false}
@@ -197,9 +258,9 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
 
   if (publicCommunity) {
     return renderWithBridge(
-      <CommunityFunnelV1Preview
+      <CommunityFunnelPreview
         community={publicCommunity}
-        document={null}
+        content={null}
         deterministicContent={{
           headline: publicCommunity.one_liner?.trim() || communityName,
           body: publicCommunity.about?.trim() || null,
@@ -214,8 +275,8 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   }
 
   return (
-    <div className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft">
-      <main className="funnel-v1-preview-main funnel-v1-preview-empty">
+    <div className="community-funnel-preview">
+      <main className="community-funnel-preview-main community-funnel-preview-empty">
         <strong role="alert">
           {funnelErrors[0] ?? "Community unavailable."}
         </strong>

@@ -53,22 +53,13 @@ const communityNav = read("shared/CommunityNav.tsx");
 const communityAccessViewModel = read("shared/communityAccessViewModel.ts");
 const chromeShared = read("apps/web/src/components/webShellChromeShared.ts");
 const chromeHost = read("apps/web/src/components/WebShellChromeHost.tsx");
-const mobileCommunityShell = read(
-  "apps/web/src/components/WebMobileCommunityShell.tsx",
-);
-const chromeHostPropsBuilder = read(
-  "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
-);
+const communityNavSurface = read("apps/web/src/components/WebCommunityNavSurface.tsx");
+const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
+const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
-const youtubeEmbed = read(
-  "apps/web/src/components/CommunityInteractionYouTubeEmbed.tsx",
-);
-const directMessages = read(
-  "apps/web/src/components/WebDirectMessagePanel.tsx",
-);
-const surfaceProjection = read(
-  "apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts",
-);
+const youtubeEmbed = read("apps/web/src/components/DeferredYouTubeEmbed.tsx");
+const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
+const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const directoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
@@ -287,7 +278,7 @@ assert.match(
 );
 assert.match(
   feed,
-  /export function InteractionContent[\s\S]*firstYouTubeEmbedInText\(props\.text\)[\s\S]*<InteractionBody[\s\S]*<CommunityInteractionYouTubeEmbed[\s\S]*props\.afterBody/,
+  /export function InteractionContent[\s\S]*firstYouTubeEmbedInText\(props\.text\)[\s\S]*<InteractionBody[\s\S]*<DeferredYouTubeEmbed[\s\S]*props\.afterBody/,
   "interaction content should preserve authored text, add one deterministic YouTube enhancement, and preserve attachments",
 );
 assert.doesNotMatch(
@@ -297,7 +288,7 @@ assert.doesNotMatch(
 );
 assert.match(
   youtubeEmbed,
-  /data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*setActive\(true\)/,
+  /data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*setIsActive\(true\)/,
   "YouTube should use one click-activated, sandboxed deterministic media component",
 );
 assert.match(
@@ -341,14 +332,14 @@ assert.match(
   "web shell shared props should expose the invite copy callback explicitly",
 );
 assert.match(
-  chromeHost,
-  /<CommunityNav[\s\S]*onCopyCommunityJoinLink=\{props\.communityShell\.onCopyCommunityJoinLink\}/,
-  "desktop community nav should receive the invite copy callback",
-);
-assert.match(
-  mobileCommunityShell,
+  communityNavSurface,
   /<CommunityNav[\s\S]*onCopyCommunityJoinLink=\{communityShell\.onCopyCommunityJoinLink\}/,
-  "mobile community drawer nav should receive the invite copy callback",
+  "the canonical community nav adapter should receive the invite copy callback",
+);
+assert.doesNotMatch(
+  mobileCommunityShell,
+  /<CommunityNav/,
+  "the retired mobile community drawer should not duplicate community navigation",
 );
 assert.match(
   chromeHostPropsBuilder,
@@ -1039,7 +1030,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-meta-row\s*\{[^}]*color:\s*var\(--chat-meta-text\);[\s\S]*?\.community-interaction-author\s*\{[^}]*color:\s*var\(--chat-author-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*600;[\s\S]*?\.community-interaction-body\s*\{[^}]*margin-top:\s*2px;[^}]*color:\s*var\(--chat-body-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*400;[^}]*line-height:\s*1\.48;/,
+  /\.community-interaction-meta-row\s*\{[^}]*color:\s*var\(--chat-meta-text\);[\s\S]*?\.community-interaction-author\s*\{[^}]*color:\s*color-mix\(in srgb, var\(--text-primary\) 93%, var\(--surface-workspace\) 7%\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*600;[\s\S]*?\.community-interaction-body\s*\{[^}]*margin-top:\s*2px;[^}]*color:\s*var\(--chat-body-text\);[^}]*font-size:\s*15px;[^}]*font-weight:\s*400;[^}]*line-height:\s*1\.48;/,
   "community chat should scan author first, body second, and metadata third",
 );
 assert.match(
@@ -1064,7 +1055,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-youtube-wrap\s*\{[\s\S]*width:\s*min\(100%,\s*480px\);[\s\S]*\.community-interaction-youtube[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-youtube-play:focus-visible[\s\S]*outline:\s*2px solid var\(--chat-link\);/,
+  /\.community-interaction-youtube-wrap\s*\{[\s\S]*width:\s*min\(100%,\s*480px\);[\s\S]*\.deferred-youtube[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.deferred-youtube-play:focus-visible[\s\S]*outline:\s*2px solid var\(--chat-link\);/,
   "YouTube media should use one bounded 16:9 surface with the semantic chat-link focus treatment",
 );
 assert.doesNotMatch(
@@ -1084,8 +1075,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-channel-header\s*\{[\s\S]*min-height:\s*calc\(var\(--mobile-topbar-clearance\)\s*\+\s*44px\);/,
-  "mobile active-channel identity should render below the fixed mobile topbar",
+  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-channel-header\s*\{[\s\S]*flex:\s*0 0 var\(--mobile-topbar-clearance\);[\s\S]*min-height:\s*var\(--mobile-topbar-clearance\);[\s\S]*\.community-channel-header-identity\s*\{[\s\S]*clip:\s*rect\(0, 0, 0, 0\);/,
+  "mobile chat should reserve one fixed top band while keeping duplicate channel identity visually hidden and accessible",
 );
 assert.match(
   baseCss,

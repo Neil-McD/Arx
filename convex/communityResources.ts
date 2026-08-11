@@ -1928,6 +1928,19 @@ async function requireValidResourceModule(args: {
   return module._id;
 }
 
+async function requireResourceModuleForRole(args: {
+  ctx: any;
+  communityId: any;
+  moduleId: string | null;
+  role: "page" | "source";
+}): Promise<any | undefined> {
+  const moduleId = await requireValidResourceModule(args);
+  if (args.role === "page" && !moduleId) {
+    throw new Error("community_resource_course_required");
+  }
+  return moduleId;
+}
+
 async function canManageCommunityResources(args: {
   ctx: any;
   communityId: any;
@@ -2917,10 +2930,11 @@ async function createPageFromChangesetOperation(args: {
     operation: args.operation,
     createdModuleIdsByKey: args.createdModuleIdsByKey,
   });
-  await requireValidResourceModule({
+  const validatedModuleId = await requireResourceModuleForRole({
     ctx: args.ctx,
     communityId: args.communityId,
     moduleId: normalizeOptionalModuleId(moduleId),
+    role: "page",
   });
   const sourceResourceId = normalizeOptionalModuleId(args.operation.source_resource_id);
   if (sourceResourceId) {
@@ -2934,11 +2948,11 @@ async function createPageFromChangesetOperation(args: {
   const sortOrder = await getNextResourceSortOrder({
     ctx: args.ctx,
     communityId: args.communityId,
-    moduleId,
+    moduleId: validatedModuleId,
   });
   const id = await args.ctx.db.insert("communityResources" as any, {
     communityId: args.communityId,
-    ...(moduleId ? { moduleId } : {}),
+    moduleId: validatedModuleId,
     createdByUserId: args.userId,
     type: args.operation.type ? normalizeResourceType(args.operation.type) : "post",
     role: "page",
@@ -2989,12 +3003,14 @@ async function editPageFromChangesetOperation(args: {
     expectedUpdatedAt: args.operation.expected_updated_at,
   });
   const nextModuleId = hasOwnField(args.operation as any, "module_id")
-    ? await requireValidResourceModule({
+    ? await requireResourceModuleForRole({
         ctx: args.ctx,
         communityId: args.communityId,
         moduleId: normalizeOptionalModuleId(args.operation.module_id),
+        role: "page",
       })
     : existing.moduleId;
+  if (!nextModuleId) throw new Error("community_resource_course_required");
   const nextSourceResourceId = hasOwnField(args.operation as any, "source_resource_id")
     ? normalizeOptionalModuleId(args.operation.source_resource_id)
     : normalizeIdValue(existing.sourceResourceId ?? "");
@@ -3017,7 +3033,7 @@ async function editPageFromChangesetOperation(args: {
     : existing.sortOrder;
   const bodyChanged = hasOwnField(args.operation as any, "body_md");
   await args.ctx.db.patch(existing._id as any, {
-    ...(nextModuleId ? { moduleId: nextModuleId } : { moduleId: undefined }),
+    moduleId: nextModuleId,
     ...(hasOwnField(args.operation as any, "type") ? { type: normalizeResourceType(args.operation.type) } : {}),
     ...(hasOwnField(args.operation as any, "resource_status")
       ? {
@@ -3190,10 +3206,11 @@ async function applyCommunityResourceBuilderChangesetOperations(args: {
         resourceId: operation.resource_id,
         expectedUpdatedAt: operation.expected_updated_at,
       });
-      const moduleId = await requireValidResourceModule({
+      const moduleId = await requireResourceModuleForRole({
         ctx: args.ctx,
         communityId: args.communityId,
         moduleId: normalizeOptionalModuleId(operation.module_id),
+        role: normalizeResourceRole(resource.role),
       });
       const sortOrder = await getNextResourceSortOrder({
         ctx: args.ctx,
@@ -6475,38 +6492,42 @@ export const deleteCommunityResourceModule = mutation({
       userId: args.userId,
     });
 
-    const nowMs = Date.now();
     const resources = (await ctx.db
       .query("communityResources" as any)
       .withIndex("by_community_module", (q: any) =>
         q.eq("communityId", module.communityId).eq("moduleId", module._id),
       )
       .collect()) as CommunityResourceLike[];
+    const lessons = resources.filter((resource) => normalizeResourceRole(resource.role) === "page");
+    const ingestionSources = resources.filter((resource) => normalizeResourceRole(resource.role) === "source");
 
-    const movedResources = resources.slice().sort(compareCommunityResources);
-    const nextLegacySortOrder = await getNextResourceSortOrder({
-      ctx,
-      communityId: module.communityId,
-      moduleId: null,
-    });
+    for (const lesson of lessons) {
+      await revokeCommunityResourceMemoryProjection(ctx, lesson);
+      await deleteCommunitySourceUnitsForSourceResource(ctx, lesson._id);
+      await deleteCommunityResourceBodyContent(ctx, lesson._id);
+      await ctx.db.delete(lesson._id as any);
+    }
 
-    await Promise.all(
-      movedResources.map(async (resource, index) => {
-        await ctx.db.patch(resource._id as any, {
-          moduleId: undefined,
-          sortOrder: nextLegacySortOrder + index * 1000,
-          updatedAt: nowMs,
-        });
-        const updated = (await ctx.db.get(resource._id as any)) as CommunityResourceLike | null;
-        if (updated) await syncCommunityResourceMemoryProjection(ctx, updated, nowMs);
-      }),
-    );
+    const nowMs = Date.now();
+    for (const source of ingestionSources) {
+      await ctx.db.patch(source._id as any, {
+        moduleId: undefined,
+        updatedAt: nowMs,
+      });
+      const updated = (await ctx.db.get(source._id as any)) as CommunityResourceLike | null;
+      if (updated) await syncCommunityResourceMemoryProjection(ctx, updated, nowMs);
+    }
 
     if (module.bannerStorageId) {
       await maybeDeleteStorageAsset(ctx, module.bannerStorageId);
     }
     await ctx.db.delete(module._id as any);
-    return { ok: true, movedResources: resources.length };
+    return {
+      ok: true,
+      movedResources: 0,
+      deletedLessons: lessons.length,
+      detachedIngestionSources: ingestionSources.length,
+    };
   },
 });
 
@@ -10010,10 +10031,11 @@ export const saveCommunityResource = mutation({
                   url: nextUrl,
                   fileKey: nextFileKey,
                 });
-      const nextModuleId = await requireValidResourceModule({
+      const nextModuleId = await requireResourceModuleForRole({
         ctx,
         communityId: existing.communityId,
         moduleId: normalizeOptionalModuleId(nextModuleIdRaw),
+        role: nextRole,
       });
       const moduleChanged = resourceModuleIdentity(existing.moduleId) !== resourceModuleIdentity(nextModuleId);
       const nextSortOrder = moduleChanged
@@ -10111,10 +10133,11 @@ export const saveCommunityResource = mutation({
           ? "file"
           : "manual";
     const pinned = Boolean(payload.pinned);
-    const moduleId = await requireValidResourceModule({
+    const moduleId = await requireResourceModuleForRole({
       ctx,
       communityId: community._id,
       moduleId: normalizeOptionalModuleId(payload.module_id),
+      role,
     });
     const nextSortOrder = await getNextResourceSortOrder({
       ctx,
@@ -10224,15 +10247,21 @@ export const createCommunityResourcePageDraftFromSource = mutation({
       throw new Error("community_source_resource_not_ready");
     }
 
+    const moduleId = await requireResourceModuleForRole({
+      ctx,
+      communityId: source.communityId,
+      moduleId: normalizeOptionalModuleId(source.moduleId),
+      role: "page",
+    });
     const nowMs = Date.now();
     const sortOrder = await getNextResourceSortOrder({
       ctx,
       communityId: source.communityId,
-      moduleId: source.moduleId ?? null,
+      moduleId,
     });
     const id = await ctx.db.insert("communityResources" as any, {
       communityId: source.communityId,
-      ...(source.moduleId ? { moduleId: source.moduleId } : {}),
+      moduleId,
       createdByUserId: args.userId,
       type: "post",
       role: "page",
@@ -10359,10 +10388,11 @@ export const moveCommunityResourceToModule = mutation({
       throw new Error("community_resource_move_requires_page");
     }
 
-    const targetModuleId = await requireValidResourceModule({
+    const targetModuleId = await requireResourceModuleForRole({
       ctx,
       communityId: args.communityId,
       moduleId: normalizeOptionalModuleId(args.targetModuleId ?? null),
+      role: "page",
     });
     const targetModuleIdentity = resourceModuleIdentity(targetModuleId);
     const resourceId = normalizeIdValue(resource._id);

@@ -9,9 +9,8 @@ import { WebCommunityBannerEditorModal } from "./WebCommunityBannerEditorModal";
 import { WebCommunityFunnelSection } from "./WebCommunityFunnelSection";
 import { WebCommunityEventsSection } from "./WebCommunityEventsSection";
 import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
-import { WebCommunityResourceModal } from "./WebCommunityResourceModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
-import { WebCommunityResourcesSection } from "./WebCommunityResourcesSection";
+import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
 
 export type WebCommunitySecondaryPanelsProps = {
@@ -48,11 +47,10 @@ export type WebCommunitySecondaryPanelsProps = {
   aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
   funnel: ComponentProps<typeof WebCommunityFunnelSection>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
-  resources: ComponentProps<typeof WebCommunityResourcesSection>;
+  resources: ComponentProps<typeof CommunityResourcesPanel>;
   events: ComponentProps<typeof WebCommunityEventsSection>;
   resourceModuleModal: ComponentProps<typeof WebCommunityResourceModuleModal>;
   resourceModuleDeleteModal: ComponentProps<typeof WebDeleteResourceModuleModal>;
-  resourceModal: ComponentProps<typeof WebCommunityResourceModal>;
 };
 
 function renderCenteredPane(children: ReactNode) {
@@ -122,10 +120,9 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "resources" ? (
         <>
-          {renderCenteredPane(<WebCommunityResourcesSection {...props.resources} />)}
+          {renderCenteredPane(<CommunityResourcesPanel {...props.resources} />)}
           <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
           <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
-          <WebCommunityResourceModal {...props.resourceModal} />
         </>
       ) : null}
 

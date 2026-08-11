@@ -4,7 +4,7 @@ import { existsSync, readFileSync } from "node:fs";
 const read = (path) => readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
 
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
-const youtube = read("apps/web/src/components/CommunityInteractionYouTubeEmbed.tsx");
+const youtube = read("apps/web/src/components/DeferredYouTubeEmbed.tsx");
 const css = [
   read("apps/web/src/base.css"),
   read("apps/web/src/styles/community-and-content.css"),
@@ -17,12 +17,12 @@ const fetcher = read("api/source-url-fetch.js");
 const contract = read("docs/community-interaction-substrate-contract-v1.md");
 
 assert.match(feed, /firstYouTubeEmbedInText\(props\.text\)/);
-assert.match(feed, /<InteractionBody[\s\S]*<CommunityInteractionYouTubeEmbed/);
+assert.match(feed, /<InteractionBody[\s\S]*<DeferredYouTubeEmbed/);
 assert.doesNotMatch(feed, /CommunityInteractionLinkPreview|GenericLinkPreview|SocialPostLinkPreview|EmbedCards/);
 assert.match(youtube, /data-community-youtube-embed[\s\S]*loading="lazy"[\s\S]*sandbox=/);
 assert.match(css, /--chat-link:\s*var\(--accent-cyan\)/);
 assert.match(css, /\.chat-link\s*\{[\s\S]*color:\s*var\(--chat-link\)/);
-assert.match(css, /\.community-interaction-youtube-wrap[\s\S]*aspect-ratio: 16 \/ 9/);
+assert.match(css, /\.community-interaction-youtube-wrap[\s\S]*\.deferred-youtube[\s\S]*aspect-ratio: 16 \/ 9/);
 assert.doesNotMatch(css, /\.community-interaction-embed(?:\s|[.:,{])/);
 assert.doesNotMatch(controller, /optimisticLinkEmbeds|pending-link:/);
 assert.doesNotMatch(interactions, /enrichInteractionEmbed|scheduleEmbedEnrichment|preview_mode: "interaction_embed_v2"/);

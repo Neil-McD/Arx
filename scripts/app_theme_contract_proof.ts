@@ -287,6 +287,7 @@ assert.equal(
   "--bg-workspace: #F8F8F4;",
   "--bg-panel: #F0F0EE;",
   "--surface-rail: #F8F8F4;",
+  "--community-rail-control-bg: var(--surface-nav);",
   "--surface-nav: #F0F0EE;",
   "--bg-card: #FFFFFF;",
   "--bg-card-hover: #ECECEA;",
@@ -302,7 +303,7 @@ assert.equal(
   "--accent-brand: #2F55FF;",
   "--accent-selection: #2F55FF;",
   "--accent-agent: #2F55FF;",
-  "--accent-attention: #2F55FF;",
+  "--accent-attention: #326FAD;",
   "--text-on-attention: #FFFFFF;",
   "--accent-global-attention: #B42318;",
   "--text-on-global-attention: #FFFFFF;",
@@ -312,6 +313,19 @@ assert.equal(
 ].forEach((token) => {
   assert.ok(lightThemeBlock.includes(token), `Light should define ${token}`);
 });
+assert.match(
+  baseCss,
+  /\.community-rail-button\s*\{[\s\S]*?background:\s*var\(--community-rail-control-bg\);/,
+  "community rail utility controls should consume the theme-specific rail control surface",
+);
+const lightSelection = lightThemeBlock.match(/--accent-selection:\s*([^;]+);/)?.[1]?.trim();
+const lightAttention = lightThemeBlock.match(/--accent-attention:\s*([^;]+);/)?.[1]?.trim();
+assert.ok(lightSelection && lightAttention, "Light should expose selection and attention roles");
+assert.notEqual(
+  lightSelection,
+  lightAttention,
+  "Light routine selection and community-local attention must stay visually distinct",
+);
 for (const removedLavender of ["#EBE9FB", "#DCD8F7"]) {
   assert.ok(
     !lightThemeBlock.includes(removedLavender),
@@ -350,8 +364,8 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*<button\s*className=\{communityTab === "resources"/,
-  "community navigation should separate the channel list from utility navigation",
+  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*\{showMembersItem \? \([\s\S]*?\) : null\}\s*<button\s*className=\{showActiveSelection && communityTab === "resources"/,
+  "community navigation should separate channels from the Members and Resources utility rows",
 );
 assert.doesNotMatch(
   baseCss,
@@ -367,6 +381,7 @@ assert.match(
   /\.community-interaction-reply-pill\s*\{[\s\S]*?color:\s*var\(--accent-attention\);/,
   /\.community-interaction-unread-divider::before\s*\{[\s\S]*?var\(--accent-attention\)/,
   /\.community-interaction-unread-dot\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
+  /\.community-interaction-message\.is-self-mentioned,[\s\S]*?\.community-interaction-reply\.is-self-mentioned\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--accent-attention\) 6%, transparent\);[\s\S]*?border-left:\s*2px solid var\(--accent-attention\);/,
   /\.nav-item-dot\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
   /\.mobile-topbar-attention\s*\{[\s\S]*?background:\s*var\(--accent-attention\);[\s\S]*?color:\s*var\(--text-on-attention\);/,
 ].forEach((activitySelector) => {
@@ -468,7 +483,8 @@ assert.doesNotMatch(
   "theme family must not survive as a second styling authority",
 );
 assert.match(indexHtml, /<meta name="theme-color" content="#1A1A1A"/);
-assert.match(indexHtml, /manifest\.webmanifest\?v=20260808a/);
+assert.match(indexHtml, /manifest\.webmanifest\?v=20260811a/);
+assert.match(manifest, /"start_url": "\/m\?launch=app"/);
 assert.match(manifest, /"background_color": "#1A1A1A"/);
 assert.match(manifest, /"theme_color": "#1A1A1A"/);
 const genericSettingsButtonSelector =
@@ -686,9 +702,10 @@ assert.match(
 
 const accessiblePairs = [
   ["Dark activity blue on canvas", "#7BAAD6", "#1E1E1E"],
-  ["Light activity blue on canvas", "#2F55FF", "#F8F8F4"],
+  ["Light activity blue on canvas", "#326FAD", "#F8F8F4"],
+  ["Light activity blue on navigation", "#326FAD", "#F0F0EE"],
   ["Dark unread count on activity fill", "#171719", "#7BAAD6"],
-  ["Light unread count on activity fill", "#FFFFFF", "#2F55FF"],
+  ["Light unread count on activity fill", "#FFFFFF", "#326FAD"],
   ["Dark global attention count", "#171719", "#EF4444"],
   ["Light global attention count", "#FFFFFF", "#B42318"],
   ["Primary ink on canvas", "#171719", "#F8F8F4"],

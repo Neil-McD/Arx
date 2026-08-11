@@ -6,6 +6,7 @@ import {
   textContainsMentionToken,
   type ResolvedMentionForRendering,
 } from "../../../../shared/communityMentionRendering";
+import { buildCommunityComposerMentionInsertion } from "../controllers/communityComposerMentionInsertion";
 
 export type MentionCandidate = {
   userId: string;
@@ -222,6 +223,8 @@ export type MentionAutocomplete = {
   highlightedIndex: number;
   /** Recompute the active query from the textarea's current value + caret. */
   syncFromTextarea: (textarea: HTMLTextAreaElement) => void;
+  /** Insert an @ token at the current selection and open the picker. */
+  begin: () => void;
   /** Close the menu (e.g. on blur or after send). */
   close: () => void;
   /** Handle a keydown; returns true when the event was consumed by the menu. */
@@ -265,6 +268,30 @@ export function useMentionAutocomplete(params: {
     setHighlightedIndex(0);
     onActiveQueryChange?.(next?.query ?? null);
   }, [onActiveQueryChange]);
+
+  const begin = useCallback(() => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+
+    const value = textarea.value;
+    const insertion = buildCommunityComposerMentionInsertion(
+      value,
+      textarea.selectionStart ?? value.length,
+      textarea.selectionEnd ?? textarea.selectionStart ?? value.length,
+    );
+
+    applyText(insertion.value, textarea);
+    setActive({ atIndex: insertion.atIndex, query: "" });
+    setHighlightedIndex(0);
+    onActiveQueryChange?.("");
+
+    requestAnimationFrame(() => {
+      const node = textareaRef.current;
+      if (!node) return;
+      node.focus();
+      node.setSelectionRange(insertion.caret, insertion.caret);
+    });
+  }, [applyText, onActiveQueryChange, textareaRef]);
 
   const pick = useCallback(
     (candidate: MentionCandidate) => {
@@ -335,6 +362,7 @@ export function useMentionAutocomplete(params: {
     results,
     highlightedIndex,
     syncFromTextarea,
+    begin,
     close,
     handleKeyDown,
     pick,
@@ -346,6 +374,7 @@ export function MentionAutocompleteMenu(props: {
   autocomplete: MentionAutocomplete;
   getAvatarColor: (seed: string) => string;
   getInitials: (value: string) => string;
+  id?: string;
 }) {
   const { autocomplete, getAvatarColor, getInitials } = props;
   const { isOpen, results, highlightedIndex, pick, setHighlightedIndex } = autocomplete;
@@ -354,6 +383,7 @@ export function MentionAutocompleteMenu(props: {
 
   return (
     <div
+      id={props.id}
       className="mention-autocomplete"
       role="listbox"
       onMouseDown={(event) => {

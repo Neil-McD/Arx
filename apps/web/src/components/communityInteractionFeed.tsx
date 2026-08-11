@@ -1,4 +1,4 @@
-import { Fragment, useEffect, useRef, useState, type ReactNode } from "react";
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import {
   MessageCircle,
   MessageSquare,
@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmojiPickerButton, QUICK_REACTIONS, ReactionSummary } from "./communityInteractionRowParts";
-import { CommunityInteractionYouTubeEmbed } from "./CommunityInteractionYouTubeEmbed";
+import { DeferredYouTubeEmbed } from "./DeferredYouTubeEmbed";
 import { groupInteractionFeed } from "./groupInteractionFeed";
 import type { WebCommunityInteractionProjectionProps } from "./WebCommunityInteractionProjection";
 import type {
@@ -31,6 +31,8 @@ import { CommunityChatMediaGrid, type CommunityChatMediaImage } from "../../../.
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import type { CommunityTypingPresenceUser, UserProfile } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
+import { interactionMentionsViewer } from "../controllers/communityMentionAttention";
+import { resolveCommunityInteractionOverflowMenuPlacement } from "../controllers/resolveCommunityInteractionOverflowMenuPlacement";
 
 export function actorLabel(
   actor: {
@@ -134,29 +136,58 @@ export function OverflowMenu(props: {
   isPinned?: boolean;
 }) {
   const [open, setOpen] = useState(false);
+  const [placement, setPlacement] = useState<"above" | "below">("below");
   const ref = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const updatePlacement = useCallback(() => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    setPlacement(
+      resolveCommunityInteractionOverflowMenuPlacement(
+        trigger.getBoundingClientRect(),
+        window.innerHeight,
+      ),
+    );
+  }, []);
   useEffect(() => {
     if (!open) return;
     const onDown = (event: MouseEvent) => {
       if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
     };
+    updatePlacement();
     document.addEventListener("mousedown", onDown);
-    return () => document.removeEventListener("mousedown", onDown);
-  }, [open]);
+    window.addEventListener("resize", updatePlacement);
+    window.addEventListener("scroll", updatePlacement, true);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      window.removeEventListener("resize", updatePlacement);
+      window.removeEventListener("scroll", updatePlacement, true);
+    };
+  }, [open, updatePlacement]);
   if (!props.onEdit && !props.onDelete && !props.onPin) return null;
   return (
     <div className="community-interaction-emoji-picker" ref={ref}>
       <button
+        ref={triggerRef}
         type="button"
         className="community-interaction-msg-action"
         aria-label="More actions"
+        aria-haspopup="menu"
+        aria-expanded={open}
         title="More actions"
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (!open) updatePlacement();
+          setOpen((value) => !value);
+        }}
       >
         <MoreHorizontal size={15} aria-hidden="true" />
       </button>
       {open ? (
-        <div className="community-interaction-overflow-menu" role="menu">
+        <div
+          className={`community-interaction-overflow-menu is-${placement}`}
+          data-placement={placement}
+          role="menu"
+        >
           {props.onPin ? (
             <button
               type="button"
@@ -578,14 +609,6 @@ export type InteractionMentionContext = {
   communityAgentDisplayName?: string;
 };
 
-export function interactionMentionsSelf(
-  mentions: CommunityInteractionMention[] | undefined,
-  currentUserId: string | null | undefined,
-): boolean {
-  if (!currentUserId || !Array.isArray(mentions)) return false;
-  return mentions.some((mention) => mention.mentioned_user_id === currentUserId);
-}
-
 function resolveMentionsForRendering(
   context: InteractionMentionContext,
 ): ResolvedMentionForRendering[] {
@@ -736,7 +759,7 @@ export function InteractionContent(
       />
       {youtube ? (
         <div className="community-interaction-youtube-wrap">
-          <CommunityInteractionYouTubeEmbed embed={youtube.embed} />
+          <DeferredYouTubeEmbed key={youtube.embed.id} embed={youtube.embed} />
         </div>
       ) : null}
       {props.afterBody}
@@ -974,7 +997,7 @@ export function CommunityInteractionFeedList(
                         return (
                           <div
                             key={root.id}
-                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${interactionMentionsSelf(bundle.mentions, props.currentUserId) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
+                            className={`community-interaction-message${selected ? " selected" : ""}${isNewRoot ? " is-new" : ""}${interactionMentionsViewer(bundle.mentions, props.currentUserId, root.actor_user_id) ? " is-self-mentioned" : ""}${bundle.pending ? ` is-pending is-pending-${bundle.pending}` : ""}`}
                           >
                             {bundle.pending ? null : (
                               <MessageActions

@@ -1,6 +1,7 @@
 type BuildWebShellChromeClassNamesParams = {
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
+  showMobileGlobalShell: boolean;
   showMobilePublicFunnel: boolean;
   mobileOverlay: boolean;
   mobileChromeAutoHideEnabled: boolean;
@@ -20,6 +21,8 @@ export function buildWebShellChromeClassNames(
   }${
     params.showMobileAppShell ? " mobile-shell" : ""
   }${params.showMobileSettingsShell ? " mobile-settings-shell" : ""}${
+    params.showMobileGlobalShell ? " mobile-global-shell-active" : ""
+  }${
     params.showMobilePublicFunnel ? " public-funnel-mobile" : ""
   }${params.mobileOverlay ? " mobile-overlay-open" : ""}${
     params.mobileChromeAutoHideEnabled ? " mobile-chrome-auto-hide" : ""
