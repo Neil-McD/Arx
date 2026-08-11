@@ -74,7 +74,12 @@ export type CommunityFunnelConfig = {
 };
 
 export type CommunityFunnelThemeV1 = {
-  appearance: "light" | "dark";
+  /**
+   * Funnels inherit the canonical Polynet application theme. The legacy
+   * light/dark values remain readable at the persistence boundary only and
+   * normalize to `inherit` before entering product state.
+   */
+  appearance: "inherit";
   character: "minimal" | "editorial" | "cinematic";
   accent: "blue" | "violet" | "rose" | "amber" | "emerald";
   density: "compact" | "balanced" | "airy";

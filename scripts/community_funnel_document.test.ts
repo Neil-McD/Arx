@@ -14,11 +14,26 @@ describe("Community Funnel V1 document", () => {
       oneLiner: "Build compounding systems together.",
     });
     expect(validateCommunityFunnelDocumentV1(document)).toEqual(document);
+    expect(document.theme.appearance).toBe("inherit");
     expect(document.theme.accent).toBe("blue");
     expect(document.sections).toHaveLength(4);
     expect(document.sections.some((section) => section.type === "media")).toBe(
       false,
     );
+  });
+
+  it("canonicalizes legacy funnel appearances to the Polynet theme", () => {
+    const document = buildDefaultCommunityFunnelDocumentV1({
+      communityName: "Builders",
+    });
+    for (const appearance of ["light", "dark", "inherit"] as const) {
+      expect(
+        validateCommunityFunnelDocumentV1({
+          ...document,
+          theme: { ...document.theme, appearance },
+        }).theme.appearance,
+      ).toBe("inherit");
+    }
   });
 
   it("rejects documents that exceed the section budget", () => {

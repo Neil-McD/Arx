@@ -80,7 +80,9 @@ describe("community funnel runtime surface", () => {
     expect(bundle.text).toContain("bounded community funnel composer");
     expect(bundle.text).toContain("Never invent an audience, offer, price");
     expect(bundle.text).toContain("saved intro video immediately after the hero");
-    expect(bundle.text).toContain("Do not default every funnel to a dark theme or rose accent");
+    expect(bundle.text).toContain(
+      "Appearance always inherits the manager's canonical Polynet theme",
+    );
     expect(bundle.text).toContain("Never publish, change pricing, change access policy");
     expect(bundle.sections.some((section) => section.id === "current_surface")).toBe(false);
     expect(
