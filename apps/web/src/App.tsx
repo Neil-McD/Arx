@@ -109,7 +109,6 @@ import {
   buildCommunityTabPath,
   buildSettingsIndexPath,
   buildSettingsPath,
-  deriveWebDestination,
 } from "../../../shared/webAppRouteState";
 import { shouldHydrateWebRouteAccountSetup } from "../../../shared/webRouteAccess";
 import { PRODUCT_DOCS_DEFAULT_SLUG } from "./docs/productDocsMeta";
@@ -173,6 +172,7 @@ import { useWebPublicCommunityRouteController } from "./controllers/useWebPublic
 import { useWebCommunityFunnelDraftPreviewController } from "./controllers/useWebCommunityFunnelDraftPreviewController";
 import { useWebUiPersistenceLifecycle } from "./controllers/useWebUiPersistenceLifecycle";
 import { buildWebShellProjection } from "./controllers/buildWebShellProjection";
+import { buildWebDestinationFromShellState } from "./controllers/buildWebDestinationFromShellState";
 import { buildWebAuthShellProjection } from "./controllers/buildWebAuthShellProjection";
 import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommunitySurfaceProjection";
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
@@ -1846,24 +1846,10 @@ export default function App() {
   });
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
-  const webDestination = deriveWebDestination({
+  const webDestination = buildWebDestinationFromShellState({
     publicRoute: shellPublicRoute,
-    appRoute: {
-      page: activePage,
-      view: activeView,
-      settingsPage,
-      ...(activePage === "settings" && mobileSettingsView === "index"
-        ? { settingsIndex: true }
-        : {}),
-      communitySlug: selectedActiveCommunitySlug,
-      communityTab,
-      communityExperienceMode,
-      communityChannelSlug,
-      communityResourceModuleId,
-      communitySettingsPane,
-      docsSlug: selectedProductDocSlug,
-      operatorTab: activeOperatorTab,
-    },
+    shellState,
+    selectedCommunitySlug: selectedActiveCommunitySlug,
   });
   const shellProjection = buildWebShellProjection({
     publicRouteKind: shellPublicRoute.kind,
