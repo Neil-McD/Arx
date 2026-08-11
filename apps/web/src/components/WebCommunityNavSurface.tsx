@@ -37,6 +37,8 @@ export function WebCommunityNavSurface({
       canViewActiveCommunitySettings={communityShell.canViewActiveCommunitySettings}
       canManageMembersActiveCommunity={communityShell.canManageMembersActiveCommunity}
       canViewActiveCommunityAnalytics={communityShell.canViewActiveCommunityAnalytics}
+      memberCount={isMobileHome ? communityShell.activeCommunityMemberCount : null}
+      onOpenMembers={isMobileHome ? communityShell.onOpenMembers : undefined}
       isLoadingAccess={communityShell.isLoadingCommunityAccess}
       lockedTabs={communityShell.lockedCommunityNavTabs ?? undefined}
       onCopyCommunityJoinLink={communityShell.onCopyCommunityJoinLink}

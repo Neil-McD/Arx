@@ -15,10 +15,7 @@ export function WebMobileBottomRail({
     return null;
 
   const activeRoot = communityShell.mobileRootPage;
-  const hasCommunityRail =
-    activeRoot === "community" &&
-    communityShell.activePage === "community" &&
-    communityShell.activeView === "community_home";
+  const hasCommunityRail = communityShell.showMobileGlobalShell;
   const unreadDisplay =
     communityShell.directMessagesUnreadCount > 99
       ? "99+"

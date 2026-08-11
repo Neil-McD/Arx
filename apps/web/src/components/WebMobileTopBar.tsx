@@ -5,7 +5,7 @@ import type { MobileMemberFace, MobileRootPage } from "./webShellChromeShared";
 import type { CommunityVisualIdentity } from "../../../../shared/communityVisualIdentity";
 
 type WebMobileTopBarProps = {
-  mode: "agent" | "discover" | "community";
+  mode: "agent" | "discover" | "community" | "settings";
   rootPage: MobileRootPage;
   isThreadPage?: boolean;
   isCommunityHome?: boolean;
@@ -74,10 +74,12 @@ export function WebMobileTopBar({
   const communityLabel = (activeCommunityName ?? "").trim() || "Community";
   const isAgent = mode === "agent";
   const isDiscover = mode === "discover";
+  const isSettings = mode === "settings";
   const selectorLabel = isDiscover ? "Discover" : communityLabel;
   const memberCountLabel = formatMemberCount(memberCount);
   const showMembers =
     isCommunityHome &&
+    !hasCommunityRail &&
     !isThreadPage &&
     rootPage === "community" && mode === "community" && hasActiveCommunity && canViewMembers;
   const drawerLabel = isAgent ? "Open threads" : "Open community navigation";
@@ -139,7 +141,7 @@ export function WebMobileTopBar({
           >
             <ArrowLeft aria-hidden="true" />
           </button>
-        ) : showDrawerButton ? (
+        ) : showDrawerButton && !hasCommunityRail ? (
           <button
             type="button"
             className="mobile-topbar-icon"
@@ -159,6 +161,8 @@ export function WebMobileTopBar({
           <span className="mobile-topbar-context-label">Thread</span>
         ) : isAgent ? (
           <span className="mobile-topbar-context-label">Polynet AI</span>
+        ) : isSettings ? (
+          <span className="mobile-topbar-context-label">Settings</span>
         ) : communityDetailLabel ? (
           <span className="mobile-topbar-context-label mobile-topbar-channel-label">
             <Hash aria-hidden="true" />

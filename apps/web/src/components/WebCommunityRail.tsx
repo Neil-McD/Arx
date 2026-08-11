@@ -3,17 +3,17 @@ import type { WebCommunityShellProps } from "./webShellChromeShared";
 
 type WebCommunityRailProps = {
   communityShell: WebCommunityShellProps;
-  presentation: "desktop" | "mobile-home";
+  presentation: "desktop" | "mobile-shell";
 };
 
 export function WebCommunityRail({
   communityShell,
   presentation,
 }: WebCommunityRailProps) {
-  const isMobileHome = presentation === "mobile-home";
+  const isMobileShell = presentation === "mobile-shell";
 
   if (
-    isMobileHome
+    isMobileShell
       ? !communityShell.showMobileShell ||
         communityShell.forceMobileCommunityRoot
       : !communityShell.showDesktopCommunityRail
@@ -22,7 +22,7 @@ export function WebCommunityRail({
 
   return (
     <aside
-      className={`rail community-rail${isMobileHome ? " mobile-community-rail" : ""}`}
+      className={`rail community-rail${isMobileShell ? " mobile-community-rail" : ""}`}
       aria-label="Communities"
     >
       <div className="rail-main">
@@ -63,13 +63,13 @@ export function WebCommunityRail({
         <div
           className="community-rail-list"
           ref={
-            isMobileHome
+            isMobileShell
               ? undefined
               : communityShell.setCommunityRailListElement
           }
         >
           {communityShell.railCommunities.map((community) => {
-            const bindings = isMobileHome
+            const bindings = isMobileShell
               ? null
               : communityShell.getCommunityRailItemBindings(community.id);
             const communitySlug = String(community.slug ?? "").trim();
@@ -83,15 +83,15 @@ export function WebCommunityRail({
                     ? " active"
                     : ""
                 }${
-                  !isMobileHome &&
+                  !isMobileShell &&
                   community.id === communityShell.draggingCommunityId
                     ? " is-dragging"
                     : ""
-                }${!isMobileHome && communityShell.canReorderCommunities ? " reorder-enabled" : ""}`}
+                }${!isMobileShell && communityShell.canReorderCommunities ? " reorder-enabled" : ""}`}
                 onClick={() => {
                   const changed =
                     communityShell.onSelectActiveCommunity(community);
-                  if (isMobileHome) {
+                  if (isMobileShell) {
                     if (communitySlug) {
                       communityShell.onOpenCommunityHome(communitySlug);
                     }

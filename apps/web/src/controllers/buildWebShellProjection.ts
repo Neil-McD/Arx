@@ -1,14 +1,15 @@
-import type { AppPage } from "../../../../shared/appShellNavigation";
+import type { AppPage, AppView } from "../../../../shared/appShellNavigation";
 import type { AppShellVariant, PublicRoute } from "../../../../shared/webAppRouteState";
 
 type MobileSettingsView = "index" | "detail";
-type MobileShellMode = "agent" | "discover" | "community";
+type MobileShellMode = "agent" | "discover" | "community" | "settings";
 
 export type WebShellProjection = {
   isGlobalSettings: boolean;
   showMobileAppShell: boolean;
   showMobileSettingsShell: boolean;
   showMobileShell: boolean;
+  showMobileGlobalShell: boolean;
   showMobileSettingsIndex: boolean;
   showMobilePublicFunnel: boolean;
   showDesktopCommunityRail: boolean;
@@ -21,6 +22,8 @@ export function buildWebShellProjection(params: {
   publicRouteKind: PublicRoute["kind"];
   shellVariant: AppShellVariant;
   activePage: AppPage;
+  activeView: AppView;
+  mobileRootPage: "agent" | "community" | "messages";
   mobileSettingsView: MobileSettingsView;
   isPublicCommunityFunnel: boolean;
 }): WebShellProjection {
@@ -50,7 +53,13 @@ export function buildWebShellProjection(params: {
     isMobileVisitorCommunity;
   const showMobileSettingsShell =
     showMobileAppShell && isGlobalSettings && !isMobileVisitorCommunity;
-  const showMobileShell = showMobileAppShell && !showMobileSettingsShell;
+  const showMobileShell = showMobileAppShell;
+  const showMobileGlobalShell =
+    showMobileAppShell &&
+    !isMobileVisitorCommunity &&
+    (params.mobileRootPage !== "community" ||
+      params.activePage !== "community" ||
+      params.activeView === "community_home");
   const showMobileSettingsIndex =
     showMobileSettingsShell && params.mobileSettingsView === "index";
   const showMobilePublicFunnel =
@@ -80,7 +89,9 @@ export function buildWebShellProjection(params: {
     (isGlobalSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
   const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
     ? "community"
-    : params.activePage === "discover" ||
+    : params.activePage === "settings"
+      ? "settings"
+      : params.activePage === "discover" ||
         params.activePage === "operator" ||
         params.activePage === "docs"
       ? "discover"
@@ -90,6 +101,7 @@ export function buildWebShellProjection(params: {
     showMobileAppShell,
     showMobileSettingsShell,
     showMobileShell,
+    showMobileGlobalShell,
     showMobileSettingsIndex,
     showMobilePublicFunnel,
     showDesktopCommunityRail: shouldShowDesktopCommunityRail,

@@ -7199,19 +7199,23 @@
   }
 
   .web-direct-messages-host.mobile-root .community-dm-panel {
-    top: 0;
-    right: 0;
-    bottom: calc(var(--mobile-bottom-rail-height) + env(safe-area-inset-bottom, 0px));
-    left: 0;
+    top: calc(env(safe-area-inset-top, 0px) + var(--community-shell-inset));
+    right: var(--community-shell-inset);
+    bottom: calc(
+      var(--mobile-bottom-rail-height) +
+      env(safe-area-inset-bottom, 0px) +
+      var(--community-shell-inset)
+    );
+    left: var(--mobile-community-rail-width);
     z-index: 30;
-    width: 100%;
+    width: auto;
     height: auto;
     min-height: 0;
     max-height: none;
-    padding: calc(env(safe-area-inset-top, 0px) + 14px) 14px 12px;
-    border: 0;
-    border-radius: 0;
-    background: var(--bg-app, #1a1a1a);
+    padding: 14px 14px 12px;
+    border: 1px solid var(--community-shell-stroke);
+    border-radius: var(--community-shell-radius);
+    background: var(--surface-workspace, var(--bg-app, #1a1a1a));
     box-shadow: none;
     backdrop-filter: none;
     -webkit-backdrop-filter: none;

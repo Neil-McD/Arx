@@ -48,6 +48,7 @@ export type WebDesktopShellHeaderProps = {
 
 export type WebCommunityShellProps = {
   showMobileShell: boolean;
+  showMobileGlobalShell: boolean;
   mobileOverlay: MobileOverlay;
   mobileRootPage: MobileRootPage;
   forceMobileCommunityRoot: boolean;
@@ -84,6 +85,8 @@ export type WebCommunityShellProps = {
   communityChannelReorderError: string | null;
   clearCommunityChannelReorderError: () => void;
   canViewMembersActiveCommunity: boolean;
+  activeCommunityMemberCount: number | null;
+  onOpenMembers: () => void;
   canViewActiveCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   canViewActiveCommunityAnalytics: boolean;

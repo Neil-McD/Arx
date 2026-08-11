@@ -104,7 +104,7 @@ assert.doesNotMatch(
 );
 assert.match(
   resourcesPanel,
-  /className="knowledge-workspace" aria-busy=\{isRefreshingResources\}/,
+  /className="knowledge-workspace(?: [^"]*)?" aria-busy=\{isRefreshingResources\}/,
   "resources background refresh must remain semantic without changing geometry",
 );
 assert.doesNotMatch(

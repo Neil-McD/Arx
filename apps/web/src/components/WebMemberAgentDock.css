@@ -653,7 +653,14 @@
   }
 
   .member-agent-dock.mobile-root {
-    inset: 0 0 calc(var(--mobile-bottom-rail-height) + env(safe-area-inset-bottom, 0px));
+    top: calc(env(safe-area-inset-top, 0px) + var(--community-shell-inset));
+    right: var(--community-shell-inset);
+    bottom: calc(
+      var(--mobile-bottom-rail-height) +
+      env(safe-area-inset-bottom, 0px) +
+      var(--community-shell-inset)
+    );
+    left: var(--mobile-community-rail-width);
     z-index: 30;
     pointer-events: auto;
   }
@@ -670,16 +677,16 @@
   .member-agent-dock.mobile-root .member-agent-dock-panel {
     width: 100%;
     height: 100%;
-    border: 0;
-    border-radius: 0;
-    background: var(--bg-app, #1a1a1a);
+    border: 1px solid var(--community-shell-stroke);
+    border-radius: var(--community-shell-radius);
+    background: var(--surface-workspace, var(--bg-app, #1a1a1a));
     opacity: 1;
     pointer-events: auto;
     transform: none;
   }
 
   .member-agent-dock.mobile-root .member-agent-dock-header {
-    padding-top: calc(10px + env(safe-area-inset-top, 0px));
+    padding-top: 10px;
   }
 
   .member-agent-dock.mobile-root .member-agent-dock-header-actions > button {

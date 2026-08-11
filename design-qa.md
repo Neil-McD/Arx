@@ -167,6 +167,43 @@ Blocked for the same reason. The implementation screenshot needed to compare car
 
 final result: blocked
 
+## Mobile global-root shell expansion addendum
+
+### Evidence
+
+- Interaction model: authenticated mobile global destinations retain one continuous community rail, inset content surface, and bottom navigation shell.
+- Framed destinations: Community Home, Discover, Global Settings, Polynet AI, Direct Messages, and community switching.
+- Focused destinations: channels, Resources, Events, community settings, and other community-detail routes intentionally omit the global wraparound frame.
+- Browser-rendered implementation capture: unavailable. This exact revision has not been deployed, and local-browser review is intentionally excluded for this product workflow.
+
+### Full-view comparison
+
+Blocked until this exact revision is deployed and captured in authenticated iPhone Safari or the home-screen PWA. The implementation review establishes the route boundary and shell geometry, but does not claim pixel-level visual acceptance.
+
+### Focused-region comparison
+
+Blocked for the same reason. Required focused regions are the Discover and Settings frame edges, the AI and DM panel junction with the community rail, the bottom-left rail continuity, and the transition from a framed global root into an unframed community detail.
+
+### Findings
+
+- No source-level P0 or P1 issue remains in the canonical global-shell projection.
+- Dedicated AI and DM roots are bounded inside the shell geometry rather than covering the community rail or bottom navigation.
+- Global rail actions reset thread, DM, overlay, and mobile-root state before routing, preventing stale overlays from surviving a destination change.
+- P2 verification gap: iPhone safe-area behavior, long-page scrolling, and light-theme shell contrast remain unverified until the exact revision is deployed.
+
+### Implementation checklist
+
+- [x] Use one route predicate for framed global roots.
+- [x] Preserve focused, unframed community-detail routes.
+- [x] Reuse one mobile community rail component across every framed root.
+- [x] Constrain Discover and Settings workspaces to the inset shell surface.
+- [x] Keep AI and DM panels clear of both the community rail and bottom navigation.
+- [x] Exit incompatible overlay state atomically before global navigation.
+- [x] Delete the superseded Community-Home-only wrapper.
+- [ ] Capture and compare the exact deployed state in iPhone Safari and the home-screen PWA.
+
+final result: blocked
+
 ## Resources course simplification production addendum
 
 ### Evidence
@@ -290,3 +327,57 @@ A separate crop was not needed because the browser-rendered panel occupies the f
 - [x] Capture and compare the authenticated production catalog and selected-course states in Chrome.
 
 final result: passed
+
+## Mobile community shell continuity implementation addendum
+
+### Evidence
+
+- Source visual truth: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/codex-clipboard-b471b202-b412-4357-9ad2-5c534223e8a2.png`
+- Source dimensions: `1320 x 2868` pixels.
+- Intended state: authenticated mobile Community Home, dark theme, community rail visible, member-view permission available.
+- Browser-rendered implementation capture: unavailable. The exact local revision has not been deployed, and local-browser review is intentionally excluded for this product workflow.
+
+### Full-view comparison
+
+Blocked until this exact revision is deployed and captured in the authenticated iPhone Safari or home-screen PWA state. No visual-pass claim is made from source inspection alone.
+
+### Focused-region comparison
+
+Blocked for the same reason. The required focused regions are the banner action corner, the new Members navigation row above Resources, and the junction between the left community rail and bottom navigation rail.
+
+### Findings
+
+- No source-level P0 or P1 issue was found in the implementation review.
+- P2 verification gap: pixel-level shell continuity, safe-area behavior, and top-right settings placement remain unverified in a real iPhone/PWA render until deployment is authorized.
+
+### Required fidelity surfaces
+
+- Fonts and typography: unchanged; the existing mobile Community Home typography remains authoritative.
+- Spacing and layout rhythm: the authenticated header removes the duplicate member pill, leaving Settings as the sole banner action. Members is inserted immediately above Resources in the community navigation.
+- Colors and visual tokens: the bottom navigation uses the canonical rail surface token, and its active-icon cutout and notification-dot border inherit that same surface.
+- Image quality and asset fidelity: community banner and community avatars are unchanged.
+- Copy and content: only the canonical `Members` navigation label and optional count are added.
+
+### Primary interactions and console
+
+- The Members row reuses the existing permission-gated `members` overlay and introduces no new route or state machine.
+- Visitor funnel behavior retains the existing header member affordance because that state has no community navigation replacement.
+- Authenticated Chrome/PWA interaction and console verification remain blocked until the exact revision is deployed.
+
+### Comparison history
+
+1. The supplied production screenshot established the current shell seam and duplicated member control.
+2. The implementation removes the authenticated header duplication, adds one mobile-only Members row, and unifies the bottom navigation material with the community rail.
+3. No post-render correction iteration is claimed because an implementation capture does not yet exist.
+
+### Implementation checklist
+
+- [x] Keep one stable Home root in the bottom navigation.
+- [x] Move authenticated member access into the community navigation above Resources.
+- [x] Preserve visitor-funnel member access.
+- [x] Reuse the existing permission gate and members overlay.
+- [x] Join the bottom navigation to the rail through canonical surface tokens without covering the lower-left Settings control.
+- [x] Pass web typecheck and focused mobile navigation/reading-mode contracts.
+- [ ] Capture and compare the exact deployed state in iPhone Safari and the home-screen PWA.
+
+final result: blocked

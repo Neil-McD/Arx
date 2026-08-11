@@ -7,7 +7,7 @@ import { buildWebShellChromeClassNames } from "../controllers/buildWebShellChrom
 import { WebDesktopShellHeader } from "./WebDesktopShellHeader";
 import { WebCommunityRail } from "./WebCommunityRail";
 import { WebMobileCommunityShell } from "./WebMobileCommunityShell";
-import { WebMobileCommunityHome } from "./WebMobileCommunityHome";
+import { WebMobileGlobalShell } from "./WebMobileGlobalShell";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
 import { WebSettingsSidebar } from "./WebSettingsSidebar";
 import type {
@@ -37,7 +37,6 @@ export type WebShellChromeHostProps = {
 export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const isMobileDedicatedRoot =
     props.showMobileAppShell &&
-    !props.showMobileSettingsShell &&
     (props.communityShell.mobileRootPage === "agent" ||
       props.communityShell.mobileRootPage === "messages");
   const isMobileCommunityHome =
@@ -46,13 +45,14 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     props.communityShell.mobileRootPage === "community" &&
     props.communityShell.activePage === "community" &&
     props.communityShell.activeView === "community_home";
-  const showMobileCommunityRail =
-    isMobileCommunityHome && !props.communityShell.forceMobileCommunityRoot;
+  const showMobileGlobalShell =
+    props.communityShell.showMobileGlobalShell &&
+    !props.communityShell.forceMobileCommunityRoot;
   const shellHeader = props.showMobileAppShell ? (
     isMobileDedicatedRoot ? null : (
       <WebMobileTopBar
         {...props.mobileTopBarProps}
-        hasCommunityRail={showMobileCommunityRail}
+        hasCommunityRail={showMobileGlobalShell}
       />
     )
   ) : (
@@ -65,11 +65,31 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       presentation="desktop"
     />
   ) : null;
-  const mainSurface = isMobileCommunityHome ? (
-    <WebMobileCommunityHome
+  const mobileGlobalShellContent = isMobileCommunityHome ? (
+    <WebCommunityNavSurface
       communityShell={props.communityShell}
-      hasCommunityRail={showMobileCommunityRail}
+      presentation="mobile-home"
     />
+  ) : isMobileDedicatedRoot ? null : props.mainSurface;
+  const mobileGlobalShellLabel = isMobileCommunityHome
+    ? "Community home"
+    : props.communityShell.mobileRootPage === "agent"
+      ? "Polynet AI"
+      : props.communityShell.mobileRootPage === "messages"
+        ? "Direct messages"
+        : props.communityShell.activePage === "settings"
+          ? "Settings"
+          : props.communityShell.activePage === "discover"
+            ? "Discover"
+            : "Polynet";
+  const mainSurface = showMobileGlobalShell ? (
+    <WebMobileGlobalShell
+      communityShell={props.communityShell}
+      isCommunityHome={isMobileCommunityHome}
+      label={mobileGlobalShellLabel}
+    >
+      {mobileGlobalShellContent}
+    </WebMobileGlobalShell>
   ) : props.mainSurface;
   const desktopSettingsSidebar = (
     <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
@@ -83,6 +103,7 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
   const { rootClassName, shellClassName } = buildWebShellChromeClassNames({
     showMobileAppShell: props.showMobileAppShell,
     showMobileSettingsShell: props.showMobileSettingsShell,
+    showMobileGlobalShell,
     showMobilePublicFunnel: props.showMobilePublicFunnel,
     mobileOverlay: Boolean(props.mobileOverlay),
     mobileChromeAutoHideEnabled: props.mobileChromeAutoHideEnabled,
@@ -114,17 +135,17 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
           >
             {desktopFrameMode === "settings" ? desktopSettingsSidebar : null}
             {desktopCommunityNav}
-            {isMobileDedicatedRoot ? null : mainSurface}
+            {mainSurface}
           </div>
         ) : desktopCommunityNav ? (
           <div className="product-shell-surface product-shell-surface--community">
             {desktopCommunityNav}
-            {isMobileDedicatedRoot ? null : mainSurface}
+            {mainSurface}
           </div>
         ) : (
           <>
             {desktopSettingsSidebar}
-            {isMobileDedicatedRoot ? null : mainSurface}
+            {mainSurface}
           </>
         )}
       </div>

@@ -19,15 +19,19 @@ const shellChromeProps = read(
 const shellClassNames = read(
   "apps/web/src/controllers/buildWebShellChromeClassNames.ts",
 );
+const shellProjection = read(
+  "apps/web/src/controllers/buildWebShellProjection.ts",
+);
 const communityShell = read(
   "apps/web/src/components/WebMobileCommunityShell.tsx",
 );
-const communityHome = read(
-  "apps/web/src/components/WebMobileCommunityHome.tsx",
+const mobileGlobalShell = read(
+  "apps/web/src/components/WebMobileGlobalShell.tsx",
 );
 const communityNavSurface = read(
   "apps/web/src/components/WebCommunityNavSurface.tsx",
 );
+const communityNav = read("shared/CommunityNav.tsx");
 const communityRail = read(
   "apps/web/src/components/WebCommunityRail.tsx",
 );
@@ -136,7 +140,7 @@ assert.doesNotMatch(
 );
 assert.match(
   controller,
-  /params\.setMobileRootPage\("community"\);[\s\S]*openMobileCommunitySurface\(\);/,
+  /prepareMobileGlobalNavigation\(\);[\s\S]*openMobileCommunitySurface\(\);/,
   "Community should open the selected community home or fall back to Discover",
 );
 assert.match(
@@ -151,8 +155,8 @@ assert.doesNotMatch(
 );
 assert.match(
   controller,
-  /if \(params\.isThreadPageOpen\) params\.closeThreadPage\(\);[\s\S]*if \(params\.forceCommunityRoot\)/,
-  "selecting any persistent mobile root should exit the transient thread page first",
+  /const prepareMobileGlobalNavigation = useCallback\(\(\) => \{[\s\S]*if \(params\.isThreadPageOpen\) params\.closeThreadPage\(\);[\s\S]*params\.closeDirectMessages\(\);[\s\S]*params\.setMobileOverlay\(null\);[\s\S]*params\.setMobileRootPage\("community"\);/,
+  "global navigation should atomically exit threads, DMs, and transient overlays before changing routes",
 );
 assert.match(
   controller,
@@ -187,8 +191,8 @@ assert.match(
 );
 assert.match(
   topBar,
-  /const showMembers =[\s\S]*isCommunityHome &&[\s\S]*rootPage === "community"/,
-  "member context should stay on the community directory instead of crowding chat detail",
+  /const showMembers =[\s\S]*isCommunityHome &&[\s\S]*!hasCommunityRail &&[\s\S]*rootPage === "community"/,
+  "the authenticated rail home should move Members out of the header while preserving the visitor affordance",
 );
 assert.match(
   topBar,
@@ -207,8 +211,8 @@ assert.doesNotMatch(
 );
 assert.match(
   shellChromeProps,
-  /activeCommunityMemberCount: number \| null;[\s\S]*memberFaces: params\.activeCommunityMemberFaces,[\s\S]*memberCount: params\.activeCommunityMemberCount,/,
-  "the mobile top bar should receive total membership independently from online faces",
+  /activeCommunityMemberCount: number \| null;[\s\S]*memberFaces: params\.activeCommunityMemberFaces,[\s\S]*memberCount: params\.activeCommunityMemberCount,[\s\S]*communityShell:[\s\S]*activeCommunityMemberCount: params\.activeCommunityMemberCount,[\s\S]*onOpenMembers: \(\) => params\.setMobileOverlay\("members"\)/,
+  "the visitor header and authenticated mobile directory should share the canonical member total and overlay",
 );
 assert.match(
   app,
@@ -308,18 +312,18 @@ assert.doesNotMatch(
   "the community directory should no longer be duplicated inside a drawer",
 );
 assert.match(
-  communityHome + communityNavSurface + communityRail,
-  /mobile-community-home[\s\S]*WebCommunityRail[\s\S]*presentation="mobile-home"[\s\S]*WebCommunityNavSurface[\s\S]*presentation="mobile-home"[\s\S]*<CommunityNav/,
-  "the mobile home should compose the canonical community rail and CommunityNav adapter",
+  mobileGlobalShell + shellHost + communityNavSurface + communityRail,
+  /mobile-global-shell[\s\S]*WebCommunityRail[\s\S]*presentation="mobile-shell"[\s\S]*WebCommunityNavSurface[\s\S]*presentation="mobile-home"[\s\S]*<CommunityNav/,
+  "one global mobile frame should compose the canonical community rail and CommunityNav adapter",
 );
 assert.match(
   communityRail,
-  /presentation: "desktop" \| "mobile-home";[\s\S]*isMobileHome[\s\S]*communityShell\.forceMobileCommunityRoot[\s\S]*onOpenCommunityHome\(communitySlug\)/,
-  "one canonical rail should serve desktop and authenticated mobile home while failing closed for visitor roots",
+  /presentation: "desktop" \| "mobile-shell";[\s\S]*isMobileShell[\s\S]*communityShell\.forceMobileCommunityRoot[\s\S]*onOpenCommunityHome\(communitySlug\)/,
+  "one canonical rail should serve desktop and authenticated global mobile roots while failing closed for visitor roots",
 );
 assert.match(
   communityRail,
-  /const bindings = isMobileHome[\s\S]*\? null[\s\S]*getCommunityRailItemBindings[\s\S]*!isMobileHome && communityShell\.canReorderCommunities/,
+  /const bindings = isMobileShell[\s\S]*\? null[\s\S]*getCommunityRailItemBindings[\s\S]*!isMobileShell && communityShell\.canReorderCommunities/,
   "mobile community switching should not inherit desktop drag reordering",
 );
 assert.match(
@@ -328,14 +332,39 @@ assert.match(
   "mobile home should keep community identity while deleting duplicate settings and reorder affordances",
 );
 assert.match(
+  communityNavSurface,
+  /memberCount=\{isMobileHome \? communityShell\.activeCommunityMemberCount : null\}[\s\S]*onOpenMembers=\{isMobileHome \? communityShell\.onOpenMembers : undefined\}/,
+  "the mobile adapter should expose the canonical member total and overlay only on community home",
+);
+assert.match(
+  communityNav,
+  /showMembersItem[\s\S]*community-nav-members[\s\S]*<Users[\s\S]*Members[\s\S]*community-nav-members-count/,
+  "Members should appear once above Resources with the canonical total when the mobile adapter supplies its handler",
+);
+assert.match(
   routeState,
   /buildCommunityHomePath[\s\S]*\/home[\s\S]*segments\[2\] === "home"[\s\S]*view: "community_home"/,
   "the mobile community directory should have a durable route state",
 );
 assert.match(
   shellHost,
-  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*activeView === "community_home"[\s\S]*const showMobileCommunityRail =[\s\S]*!props\.communityShell\.forceMobileCommunityRoot[\s\S]*<WebMobileCommunityHome/,
-  "AI, Messages, and the community directory should each own one mobile root surface",
+  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*activeView === "community_home"[\s\S]*const showMobileGlobalShell =[\s\S]*!props\.communityShell\.forceMobileCommunityRoot[\s\S]*<WebMobileGlobalShell/,
+  "AI, Messages, Discover, Settings, and the community directory should share one global mobile frame",
+);
+assert.match(
+  shellProjection,
+  /const showMobileShell = showMobileAppShell;[\s\S]*const showMobileGlobalShell =[\s\S]*!isMobileVisitorCommunity[\s\S]*params\.mobileRootPage !== "community"[\s\S]*params\.activePage !== "community"[\s\S]*params\.activeView === "community_home"/,
+  "the route projection should frame global roots while leaving community detail routes focused",
+);
+assert.match(
+  shellChromeProps,
+  /onOpenDiscover: \(\) => \{[\s\S]*prepareMobileGlobalNavigation[\s\S]*handleOpenDiscover[\s\S]*onOpenCommunityHome: \(communitySlug\) => \{[\s\S]*prepareMobileGlobalNavigation[\s\S]*openCommunityHome\(communitySlug\)[\s\S]*onOpenGlobalSettings: \(\) => \{[\s\S]*prepareMobileGlobalNavigation[\s\S]*handleOpenGlobalSettings/,
+  "global rail actions should dismiss dedicated mobile roots before navigating",
+);
+assert.equal(
+  existsSync("apps/web/src/components/WebMobileCommunityHome.tsx"),
+  false,
+  "the Community-Home-only shell wrapper should stay deleted",
 );
 
 assert.match(
@@ -350,8 +379,8 @@ assert.match(
 );
 assert.match(
   memberAgentDockCss,
-  /\.member-agent-dock\.mobile-root \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*\.member-agent-dock\.mobile-root \.member-agent-dock-panel \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*border-radius: 0;/,
-  "the member-agent root should fill the viewport above the persistent rail",
+  /\.member-agent-dock\.mobile-root \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*\.member-agent-dock\.mobile-root \.member-agent-dock-panel \{[\s\S]*width: 100%;[\s\S]*height: 100%;[\s\S]*border-radius: var\(--community-shell-radius\);/,
+  "the member-agent root should fit the canonical framed surface beside the rail",
 );
 assert.match(
   directMessagesHost,
@@ -401,13 +430,13 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /--mobile-community-rail-width: 60px;[\s\S]*\.mobile-community-home\.has-community-rail \{[\s\S]*grid-template-columns: var\(--mobile-community-rail-width\) minmax\(0, 1fr\);[\s\S]*\.mobile-community-home\.has-community-rail \.mobile-community-home-surface \{[\s\S]*border: 1px solid var\(--community-shell-stroke\);[\s\S]*border-radius: var\(--community-shell-radius\);/,
-  "authenticated community home should preserve a narrow rail around one inset framed directory surface",
+  /--mobile-community-rail-width: 60px;[\s\S]*\.mobile-global-shell \{[\s\S]*grid-template-columns: var\(--mobile-community-rail-width\) minmax\(0, 1fr\);[\s\S]*\.mobile-global-shell-surface \{[\s\S]*border: 1px solid var\(--community-shell-stroke\);[\s\S]*border-radius: var\(--community-shell-radius\);/,
+  "authenticated global roots should preserve a narrow rail around one inset framed surface",
 );
 assert.match(
   indexCss,
-  /\.mobile-community-home\.has-community-rail \.community-nav \.nav-item \{[\s\S]*min-height: 44px;[\s\S]*\.mobile-bottom-rail\.has-community-rail \{[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*@media \(max-width: 360px\) \{[\s\S]*--mobile-community-rail-width: 56px;/,
-  "mobile directory rows and persistent chrome should remain compact and bounded at narrow widths",
+  /\.mobile-community-home\.has-community-rail \.community-nav \.nav-item \{[\s\S]*min-height: 44px;[\s\S]*\.mobile-bottom-rail\.has-community-rail \{[\s\S]*--mobile-bottom-rail-surface: var\(--surface-rail\);[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*border-top-color: transparent;[\s\S]*@media \(max-width: 360px\) \{[\s\S]*--mobile-community-rail-width: 56px;/,
+  "mobile directory rows and the continuous rail shell should remain compact and bounded at narrow widths",
 );
 assert.match(
   baseCss,
@@ -426,7 +455,7 @@ assert.match(
 );
 assert.match(
   indexCss,
-  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community-cutout \{[\s\S]*position: absolute;[\s\S]*display: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > \.mobile-bottom-rail-community-cutout \{[\s\S]*display: block;[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-community-cutout > path:first-child \{[\s\S]*fill: color-mix[\s\S]*stroke: color-mix[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-global-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*background: var\(--accent-global-attention\);/,
+  /\.mobile-bottom-rail-action\.active \{[\s\S]*color: var\(--text-primary\);[\s\S]*\.mobile-bottom-rail-action\.active \.mobile-bottom-rail-icon-wrap > svg \{[\s\S]*fill: currentColor;[\s\S]*\.mobile-bottom-rail-community-cutout \{[\s\S]*position: absolute;[\s\S]*display: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-icon-wrap > \.mobile-bottom-rail-community-cutout \{[\s\S]*display: block;[\s\S]*fill: none;[\s\S]*\.mobile-bottom-rail-community\.active \.mobile-bottom-rail-community-cutout > path:first-child \{[\s\S]*fill: var\(--mobile-bottom-rail-surface\);[\s\S]*stroke: var\(--mobile-bottom-rail-surface\);[\s\S]*\.mobile-bottom-rail-unread \{[\s\S]*background: var\(--accent-global-attention\);[\s\S]*\.mobile-bottom-rail-dot \{[\s\S]*border: 2px solid var\(--mobile-bottom-rail-surface\);[\s\S]*background: var\(--accent-global-attention\);/,
   "routine selection should use solid white icon forms while outer-context attention uses the global red role",
 );
 assert.match(
@@ -541,8 +570,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.web-direct-messages-host\.mobile-root \.community-dm-panel \{[\s\S]*bottom: calc\(var\(--mobile-bottom-rail-height\) \+ env\(safe-area-inset-bottom, 0px\)\);[\s\S]*border-radius: 0;/,
-  "Messages root should fill the mobile workspace above the persistent rail",
+  /\.web-direct-messages-host\.mobile-root \.community-dm-panel \{[\s\S]*var\(--mobile-bottom-rail-height\)[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*border-radius: var\(--community-shell-radius\);/,
+  "Messages root should fit the canonical framed surface beside the rail",
 );
 assert.doesNotMatch(
   indexCss + baseCss,
