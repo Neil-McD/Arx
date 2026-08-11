@@ -142,14 +142,6 @@ function moveOrderedId(ids: string[], id: string, direction: ReorderDirection): 
   return nextIds;
 }
 
-function PlayIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M9 7.5v9l7-4.5z" />
-    </svg>
-  );
-}
-
 function PinIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -189,34 +181,6 @@ function MoreIcon() {
       <path d="M5 13a1 1 0 1 0 0-2 1 1 0 0 0 0 2z" />
     </svg>
   );
-}
-
-function LinkIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
-      <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
-    </svg>
-  );
-}
-
-function NoteIcon() {
-  return (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6 4h9l3 3v13H6z" />
-      <path d="M15 4v4h4" />
-      <path d="M9 12h6" />
-      <path d="M9 16h5" />
-    </svg>
-  );
-}
-
-function ResourceKindIcon(props: { resource: CommunityResource }) {
-  const { resource } = props;
-  const embed = resource.url ? parseEmbedUrl(resource.url) : null;
-  if (embed) return <PlayIcon />;
-  if (resource.url) return <LinkIcon />;
-  return <NoteIcon />;
 }
 
 function ResourceRailItem(props: {
@@ -303,9 +267,6 @@ function ResourceRailItem(props: {
         aria-current={isActive ? "page" : undefined}
         onClick={onSelect}
       >
-        <span className="knowledge-resource-item-icon" aria-hidden="true">
-          <ResourceKindIcon resource={resource} />
-        </span>
         <span className="knowledge-resource-item-copy">
           <span className="knowledge-resource-item-topline">
             <span className="knowledge-resource-item-title">{resource.title}</span>

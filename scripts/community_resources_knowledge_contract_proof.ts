@@ -772,6 +772,21 @@ assert.match(
   />Move up<[\s\S]*>Move to top<[\s\S]*>Move down<[\s\S]*>Move to bottom</,
   "owner menus must expose reliable non-drag reorder controls",
 );
+assert.doesNotMatch(
+  resourcesPanel,
+  /knowledge-resource-item-icon|function PlayIcon|function ResourceKindIcon/,
+  "lesson rows must stay irreducibly simple without decorative media-kind icons",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.knowledge-resource-item-icon/,
+  "lesson-row styles must not reserve a hidden icon column",
+);
+assert.match(
+  baseCss,
+  /\.knowledge-resource-item-main \{[\s\S]*display: block/,
+  "lesson-row main controls must collapse to a single copy column after icon removal",
+);
 assert.match(
   resourcesPanel,
   /reorderableResourceIdsByModule[\s\S]*moduleSections[\s\S]*section\.pageResources\.map\(\(resource\) => resource\.id\)/,

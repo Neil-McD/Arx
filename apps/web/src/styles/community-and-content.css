@@ -9396,8 +9396,7 @@ button.chat-reply-quote:hover {
   color: var(--text-selected);
 }
 
-.resource-course-outline .knowledge-resource-item.is-active .knowledge-resource-item-title,
-.resource-course-outline .knowledge-resource-item.is-active .knowledge-resource-item-icon {
+.resource-course-outline .knowledge-resource-item.is-active .knowledge-resource-item-title {
   color: var(--text-selected);
 }
 
@@ -9425,10 +9424,7 @@ button.chat-reply-quote:hover {
 .knowledge-resource-item-main {
   appearance: none;
   min-width: 0;
-  display: grid;
-  grid-template-columns: 30px minmax(0, 1fr);
-  align-items: start;
-  gap: 10px;
+  display: block;
   border: 0;
   border-radius: 8px;
   background: transparent;
@@ -9439,13 +9435,6 @@ button.chat-reply-quote:hover {
   cursor: pointer;
 }
 
-.resource-course-outline .knowledge-resource-item-main,
-.knowledge-source-inbox-section .knowledge-resource-item-main {
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  gap: 7px;
-}
-
 .knowledge-resource-item.is-dragging {
   opacity: 0.58;
   transform: scale(0.985);
@@ -9454,49 +9443,6 @@ button.chat-reply-quote:hover {
 .knowledge-resource-item.is-drop-target {
   border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--border-strong));
   box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-gold) 34%, transparent);
-}
-
-.knowledge-resource-item-icon {
-  width: 30px;
-  height: 30px;
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-workspace, var(--bg-app)) 84%, transparent);
-  color: var(--text-secondary);
-  display: grid;
-  place-items: center;
-}
-
-.resource-course-outline .knowledge-resource-item-icon,
-.knowledge-source-inbox-section .knowledge-resource-item-icon {
-  width: 18px;
-  height: 18px;
-  border-radius: 6px;
-}
-
-.knowledge-resource-item.is-active .knowledge-resource-item-icon {
-  color: var(--text-primary);
-  background: color-mix(in srgb, var(--accent-gold) 14%, var(--bg-workspace, var(--bg-app)));
-}
-
-.knowledge-resource-item-icon svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.resource-course-outline .knowledge-resource-item-icon svg,
-.knowledge-source-inbox-section .knowledge-resource-item-icon svg {
-  width: 13px;
-  height: 13px;
-}
-
-.knowledge-resource-item-icon svg path[d="M9 7.5v9l7-4.5z"] {
-  fill: currentColor;
-  stroke: none;
 }
 
 .knowledge-resource-item-copy {
