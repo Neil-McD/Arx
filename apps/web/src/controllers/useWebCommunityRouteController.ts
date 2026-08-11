@@ -2,6 +2,7 @@ import { useCallback, useRef } from "react";
 import type { Dispatch, SetStateAction } from "react";
 import type { AppPage, AppView, CommunityTab } from "../../../../shared/appShellNavigation";
 import { deriveOpenCommunityTabTransition } from "../../../../shared/appNavTransitions";
+import { buildCommunityHomePath } from "../../../../shared/webAppRouteState";
 
 type NavigateFn = (path: string, opts?: { replace?: boolean }) => void;
 
@@ -117,6 +118,28 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     [openCommunityTab],
   );
 
+  const openCommunityHome = useCallback(
+    (nextCommunitySlug: string, opts?: { pushSnapshot?: boolean }) => {
+      const current = paramsRef.current;
+      const normalizedSlug = String(nextCommunitySlug ?? "").trim();
+      if (!normalizedSlug) return;
+      const matchedCommunity = resolveCommunityBySlug(normalizedSlug);
+      if (!matchedCommunity) {
+        openPublicCommunityFunnel(normalizedSlug, opts);
+        return;
+      }
+      const path = buildCommunityHomePath(matchedCommunity.slug);
+      if (!path) return;
+      const isAlreadyOpen =
+        current.activePage === "community" &&
+        current.activeView === "community_home" &&
+        current.activeCommunityId === matchedCommunity.id;
+      if ((opts?.pushSnapshot ?? true) && !isAlreadyOpen) current.pushNavSnapshot();
+      current.navigateTo(path);
+    },
+    [openPublicCommunityFunnel, resolveCommunityBySlug],
+  );
+
   const openCommunityBySlug = useCallback(
     (communitySlug: string, opts?: { pushSnapshot?: boolean }) => {
       const slug = String(communitySlug ?? "").trim();
@@ -145,6 +168,7 @@ export function useWebCommunityRouteController<TCommunity extends CommunityLike>
     clearCommunitySelection,
     openPublicCommunityFunnel,
     openCommunityTab,
+    openCommunityHome,
     openCommunityChat,
     openCommunityBySlug,
     openJoinedCommunityBySlug,

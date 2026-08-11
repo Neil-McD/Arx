@@ -17,7 +17,6 @@ import type {
 } from "../../../../shared/communityTypes";
 
 export type MobileOverlay =
-  | "community"
   | "community_selector"
   | "members"
   | null;
@@ -94,7 +93,6 @@ export type WebCommunityShellProps = {
   onSelectCommunityTab: (tab: CommunityTab) => void;
   onSelectCommunityTabFromMobile: (tab: CommunityTab) => void;
   onCopyCommunityJoinLink: (joinUrl: string) => Promise<void> | void;
-  onOpenMobileAgentSettings: () => void;
   canOpenDirectMessages: boolean;
   directMessagesUnreadCount: number;
   onOpenDiscover: () => void;
@@ -107,6 +105,7 @@ export type WebCommunityShellProps = {
   activePage: AppPage;
   onSelectActiveCommunity: (community: CommunityLike) => boolean;
   onOpenCommunityChat: (slug: string) => void;
+  onOpenCommunityHome: (slug: string) => void;
   communityInitials: (value: string) => string;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;

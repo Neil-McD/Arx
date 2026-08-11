@@ -22,6 +22,13 @@ const shellClassNames = read(
 const communityShell = read(
   "apps/web/src/components/WebMobileCommunityShell.tsx",
 );
+const communityHome = read(
+  "apps/web/src/components/WebMobileCommunityHome.tsx",
+);
+const communityNavSurface = read(
+  "apps/web/src/components/WebCommunityNavSurface.tsx",
+);
+const routeState = read("shared/webAppRouteState.ts");
 const topBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const bottomRail = read("apps/web/src/components/WebMobileBottomRail.tsx");
 const presenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
@@ -43,6 +50,7 @@ const interactionProjectionController = read(
 const mobileReadingModePolicy = read(
   "apps/web/src/components/mobileReadingModePolicy.ts",
 );
+const indexHtml = read("apps/web/index.html");
 const indexCss = read("apps/web/src/index.css");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const packageJson = read("package.json");
@@ -54,8 +62,8 @@ assert.match(
 );
 assert.match(
   shared,
-  /export type MobileOverlay =[\s\S]*\| "community"[\s\S]*\| "community_selector"[\s\S]*\| "members"[\s\S]*\| null;/,
-  "community navigation, the selector, and Members should remain dismissible overlays",
+  /export type MobileOverlay =[\s\S]*\| "community_selector"[\s\S]*\| "members"[\s\S]*\| null;/,
+  "only the community selector and Members should remain dismissible overlays",
 );
 assert.match(
   shellState,
@@ -126,7 +134,17 @@ assert.doesNotMatch(
 assert.match(
   controller,
   /params\.setMobileRootPage\("community"\);[\s\S]*openMobileCommunitySurface\(\);/,
-  "Community should open the selected community or fall back to Discover",
+  "Community should open the selected community home or fall back to Discover",
+);
+assert.match(
+  controller,
+  /params\.openCommunityHome\(nextCommunitySlug\);/,
+  "the Community root should target the route-backed directory instead of General chat",
+);
+assert.doesNotMatch(
+  controller,
+  /openMobileDrawer|"community"\s*:\s*"community_selector"/,
+  "the deleted community drawer path should not survive in the mobile controller",
 );
 assert.match(
   controller,
@@ -146,8 +164,28 @@ assert.doesNotMatch(
 
 assert.match(
   topBar,
-  /className="mobile-topbar-community-selector"[\s\S]*onClick=\{onOpenCommunitySelector\}/,
-  "the centered community identity should own community switching and Discover access",
+  /isCommunityHome \? \([\s\S]*mobile-topbar-community-home-selector[\s\S]*onClick=\{onOpenCommunitySelector\}/,
+  "the community home should put its switcher in the top-left identity control",
+);
+assert.match(
+  topBar,
+  /isCommunityHome && canOpenCommunitySettings[\s\S]*mobile-topbar-settings[\s\S]*onClick=\{onOpenCommunitySettings\}/,
+  "authorized community settings should occupy the top-right home action",
+);
+assert.match(
+  shellChromeProps,
+  /selectedMobileChannel[\s\S]*params\.communityTab === "chat"[\s\S]*channel\.slug === params\.selectedCommunityChannelSlug[\s\S]*mobileChannelLabel[\s\S]*communityDetailLabel: mobileChannelLabel/,
+  "mobile chat detail should derive its label from the selected canonical channel",
+);
+assert.match(
+  topBar,
+  /communityDetailLabel \? \([\s\S]*mobile-topbar-channel-label[\s\S]*<Hash aria-hidden="true" \/>[\s\S]*\{communityDetailLabel\}/,
+  "mobile chat detail should put the channel name in the route-level top bar",
+);
+assert.match(
+  topBar,
+  /const showMembers =[\s\S]*isCommunityHome &&[\s\S]*rootPage === "community"/,
+  "member context should stay on the community directory instead of crowding chat detail",
 );
 assert.match(
   topBar,
@@ -196,8 +234,8 @@ assert.match(
 );
 assert.match(
   shellChromeProps,
-  /isThreadPage: params\.mobileThreadPageOpen,[\s\S]*showBackButton: params\.showMobileSettingsIndex \|\| params\.mobileThreadPageOpen,[\s\S]*onBack: params\.mobileThreadPageOpen[\s\S]*params\.handleCloseMobileThreadPage/,
-  "the shared mobile header should own thread Back navigation",
+  /isThreadPage: params\.mobileThreadPageOpen,[\s\S]*showBackButton:[\s\S]*params\.mobileThreadPageOpen[\s\S]*isMobileCommunityDetail,[\s\S]*onBack: params\.mobileThreadPageOpen[\s\S]*params\.handleCloseMobileThreadPage[\s\S]*params\.openCommunityHome/,
+  "the shared mobile header should own thread and community-detail Back navigation",
 );
 assert.doesNotMatch(
   topBar,
@@ -257,9 +295,29 @@ assert.doesNotMatch(
   "Messages should not be duplicated inside the community selector",
 );
 assert.match(
+  communityShell,
+  /communityShell\.onOpenCommunityHome\(nextCommunitySlug\)/,
+  "community switching should land on the selected community home",
+);
+assert.doesNotMatch(
+  communityShell,
+  /<CommunityNav|mobile-community-drawer|mobileOverlay === "community"/,
+  "the community directory should no longer be duplicated inside a drawer",
+);
+assert.match(
+  communityHome + communityNavSurface,
+  /mobile-community-home[\s\S]*WebCommunityNavSurface[\s\S]*presentation="mobile-home"[\s\S]*<CommunityNav/,
+  "the mobile home and desktop shell should share one canonical CommunityNav adapter",
+);
+assert.match(
+  routeState,
+  /buildCommunityHomePath[\s\S]*\/home[\s\S]*segments\[2\] === "home"[\s\S]*view: "community_home"/,
+  "the mobile community directory should have a durable route state",
+);
+assert.match(
   shellHost,
-  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*isMobileDedicatedRoot \? null : props\.mainSurface/,
-  "AI and Messages should replace, not stack over, the inactive community surface",
+  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*activeView === "community_home"[\s\S]*<WebMobileCommunityHome/,
+  "AI, Messages, and the community directory should each own one mobile root surface",
 );
 
 assert.match(
@@ -400,7 +458,7 @@ assert.match(
 );
 assert.match(
   topBar,
-  /import \{ ArrowLeft \} from "lucide-react";[\s\S]*<ArrowLeft aria-hidden="true" \/>/,
+  /import \{ ArrowLeft, Hash, Settings \} from "lucide-react";[\s\S]*<ArrowLeft aria-hidden="true" \/>/,
   "thread navigation should use the canonical shafted Back icon",
 );
 assert.match(
@@ -425,8 +483,23 @@ assert.doesNotMatch(
 );
 assert.match(
   indexCss,
-  /\.mobile-community-menu \{[\s\S]*left: 50%;[\s\S]*transform: translateX\(-50%\);/,
-  "the selector sheet should be anchored to the centered community trigger",
+  /\.mobile-community-menu \{[\s\S]*left: var\(--mobile-topbar-side-inset\);/,
+  "the selector sheet should be anchored to the top-left community trigger",
+);
+assert.match(
+  baseCss,
+  /\.app-root\.mobile-shell \.community-chat \.community-channel-header \{[\s\S]*flex:\s*0 0 var\(--mobile-topbar-clearance\);[\s\S]*height:\s*var\(--mobile-topbar-clearance\);[\s\S]*\.community-channel-header-identity \{[\s\S]*clip:\s*rect\(0, 0, 0, 0\);[\s\S]*\.community-channel-header-actions \{[\s\S]*position:\s*fixed;/,
+  "mobile chat should reserve one top band, remove the duplicate channel title, and retain manager actions",
+);
+assert.match(
+  indexHtml,
+  /name="viewport" content="[^"]*viewport-fit=cover[^"]*interactive-widget=resizes-content[^"]*"/,
+  "the web viewport should expose iPhone safe areas and resize content around the software keyboard",
+);
+assert.match(
+  indexCss + baseCss,
+  /:has\(\.community-chat \.chat-input-bar:focus-within\) \.mobile-bottom-rail \{[\s\S]*transform:\s*translateY\(100%\);[\s\S]*\.community-interaction-main-composer:focus-within \.chat-input-bar \{[\s\S]*margin-bottom:\s*calc\(env\(safe-area-inset-bottom, 0px\) \+ 8px\);/,
+  "focused chat composers should reclaim the bottom rail while retaining safe-area spacing",
 );
 assert.match(
   baseCss,

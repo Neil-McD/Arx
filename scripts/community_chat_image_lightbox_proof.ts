@@ -8,7 +8,10 @@ const attachmentUi = readFileSync(join(root, "shared/communityAttachmentUi.ts"),
 const mediaGrid = readFileSync(join(root, "shared/CommunityChatMediaGrid.tsx"), "utf8");
 const messageRow = readFileSync(join(root, "shared/CommunityChatMessageRow.tsx"), "utf8");
 const lightbox = readFileSync(join(root, "apps/web/src/components/WebCommunityChatLightboxModal.tsx"), "utf8");
-const css = readFileSync(join(root, "apps/web/src/base.css"), "utf8");
+const css = [
+  readFileSync(join(root, "apps/web/src/base.css"), "utf8"),
+  readFileSync(join(root, "apps/web/src/styles/community-and-content.css"), "utf8"),
+].join("\n");
 
 assert.match(
   packageJson,

@@ -6,7 +6,11 @@ import {
   resolveCloudMemberEntryDestination,
   type CloudMemberEntryDestination,
 } from "../../../../shared/cloudMemberEntryDestinationGateway";
-import { buildCommunityTabPath } from "../../../../shared/webAppRouteState";
+import {
+  buildCommunityHomePath,
+  buildCommunityTabPath,
+  type AppShellVariant,
+} from "../../../../shared/webAppRouteState";
 
 type NavigateOptions = {
   replace?: boolean;
@@ -14,6 +18,7 @@ type NavigateOptions = {
 
 export function useWebMemberEntryController(params: {
   session: AuthSession | null;
+  shellVariant: AppShellVariant;
   getSession: () => AuthSession | null;
   navigateTo: (path: string, options?: NavigateOptions) => void;
   applyCommunityShellState: (options: {
@@ -94,7 +99,9 @@ export function useWebMemberEntryController(params: {
         return;
       }
 
-      const path = buildCommunityTabPath(destination.community_slug, "chat");
+      const path = current.shellVariant === "mobile"
+        ? buildCommunityHomePath(destination.community_slug)
+        : buildCommunityTabPath(destination.community_slug, "chat");
       if (!path) throw new Error("community_destination_path_required");
       current.applyCommunityShellState({
         communityId: destination.community_id,

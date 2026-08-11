@@ -29,7 +29,6 @@ export function buildWebShellChromeHostProps(params: {
   activeCommunityMemberFaces: MobileMemberFace[];
   activeCommunityMemberCount: number | null;
   canOpenMobileMembers: boolean;
-  openMobileDrawer: () => void;
   handleExitMobileSettings: () => void;
   handleCloseMobileThreadPage: () => void;
   handleSelectMobileRootPage: WebShellChromeHostProps["communityShell"]["onSelectMobileRootPage"];
@@ -70,7 +69,6 @@ export function buildWebShellChromeHostProps(params: {
   handleSelectCommunityTab: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   handleSelectCommunityTabFromMobile: (tab: WebShellChromeHostProps["communityShell"]["communityTab"]) => void;
   onCopyCommunityJoinLink: WebShellChromeHostProps["communityShell"]["onCopyCommunityJoinLink"];
-  openMobileAgentSettings: () => void;
   canOpenDirectMessages: boolean;
   directMessagesUnreadCount: number;
   handleOpenDiscover: () => void;
@@ -83,6 +81,7 @@ export function buildWebShellChromeHostProps(params: {
   selectedActiveCommunitySlug: string | null;
   handleSelectActiveCommunity: (community: CommunityLike) => boolean;
   openCommunityChat: (slug: string) => void;
+  openCommunityHome: (slug: string) => void;
   communityInitials: (value: string) => string;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
@@ -97,6 +96,32 @@ export function buildWebShellChromeHostProps(params: {
   hasLeftPanel: boolean;
   isGlobalSettings: boolean;
 }): Omit<WebShellChromeHostProps, "mainSurface" | "globalOverlays"> {
+  const isMobileCommunityHome =
+    params.showMobileAppShell &&
+    !params.showMobileSettingsShell &&
+    params.activePage === "community" &&
+    params.activeView === "community_home" &&
+    params.mobileRootPage === "community" &&
+    !params.isPublicCommunityFunnel;
+  const isMobileCommunityDetail =
+    params.showMobileAppShell &&
+    !params.showMobileSettingsShell &&
+    params.activePage === "community" &&
+    params.activeView === "home" &&
+    params.mobileRootPage === "community" &&
+    !params.isPublicCommunityFunnel;
+  const selectedMobileChannel = isMobileCommunityDetail && params.communityTab === "chat"
+    ? params.communityChannels.find(
+        (channel) => channel.slug === params.selectedCommunityChannelSlug,
+      ) ?? null
+    : null;
+  const mobileChannelLabel = isMobileCommunityDetail && params.communityTab === "chat"
+    ? selectedMobileChannel?.name ?? (
+        params.selectedCommunityChannelSlug === "general"
+          ? "General"
+          : params.selectedCommunityChannelSlug.replace(/[-_]+/g, " ")
+      )
+    : null;
   return {
     showMobileAppShell: params.showMobileAppShell,
     showMobileSettingsShell: params.showMobileSettingsShell,
@@ -110,11 +135,18 @@ export function buildWebShellChromeHostProps(params: {
           ? "community"
           : params.mobileRootPage,
       isThreadPage: params.mobileThreadPageOpen,
-      showBackButton: params.showMobileSettingsIndex || params.mobileThreadPageOpen,
+      isCommunityHome: isMobileCommunityHome,
+      communityDetailLabel: mobileChannelLabel,
+      showBackButton:
+        params.showMobileSettingsIndex ||
+        params.mobileThreadPageOpen ||
+        isMobileCommunityDetail,
       showDrawerButton:
         !params.isPublicCommunityFunnel &&
         !params.showMobileSettingsShell &&
-        !params.mobileThreadPageOpen,
+        !params.mobileThreadPageOpen &&
+        !isMobileCommunityHome &&
+        !isMobileCommunityDetail,
       hasActiveCommunity: Boolean(params.activeCommunity),
       activeCommunityId: params.activeCommunity?.id ?? null,
       activeCommunityVisualIdentity:
@@ -133,15 +165,25 @@ export function buildWebShellChromeHostProps(params: {
       canViewMembers: params.canOpenMobileMembers,
       memberFaces: params.activeCommunityMemberFaces,
       memberCount: params.activeCommunityMemberCount,
-      onOpenDrawer: params.openMobileDrawer,
+      onOpenDrawer: () => params.setMobileOverlay("community_selector"),
       onBack: params.mobileThreadPageOpen
         ? params.handleCloseMobileThreadPage
         : params.showMobileSettingsIndex
           ? params.handleExitMobileSettings
+          : isMobileCommunityDetail
+            ? () => {
+                const slug = String(params.activeCommunity?.slug ?? "").trim();
+                if (slug) params.openCommunityHome(slug);
+              }
           : null,
       canOpenCommunitySelector: !params.isPublicCommunityFunnel,
       onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
       onOpenMembers: () => params.setMobileOverlay("members"),
+      canOpenCommunitySettings:
+        isMobileCommunityHome && params.canViewActiveCommunitySettings,
+      onOpenCommunitySettings: isMobileCommunityHome
+        ? () => params.handleSelectCommunityTabFromMobile("settings")
+        : null,
     },
     desktopHeader: {
       isPublicCommunityFunnel: params.isPublicCommunityFunnel,
@@ -189,7 +231,6 @@ export function buildWebShellChromeHostProps(params: {
       onSelectCommunityTab: params.handleSelectCommunityTab,
       onSelectCommunityTabFromMobile: params.handleSelectCommunityTabFromMobile,
       onCopyCommunityJoinLink: params.onCopyCommunityJoinLink,
-      onOpenMobileAgentSettings: params.openMobileAgentSettings,
       canOpenDirectMessages: params.canOpenDirectMessages,
       directMessagesUnreadCount: params.directMessagesUnreadCount,
       onOpenDiscover: params.handleOpenDiscover,
@@ -202,6 +243,7 @@ export function buildWebShellChromeHostProps(params: {
       activePage: params.activePage,
       onSelectActiveCommunity: params.handleSelectActiveCommunity,
       onOpenCommunityChat: params.openCommunityChat,
+      onOpenCommunityHome: params.openCommunityHome,
       communityInitials: params.communityInitials,
       showDesktopCommunityRail: params.showDesktopCommunityRail,
       showDesktopCommunityNav: params.showDesktopCommunityNav,

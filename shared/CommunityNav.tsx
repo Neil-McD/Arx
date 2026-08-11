@@ -23,6 +23,7 @@ type CommunityNavChannel = {
 
 type CommunityNavProps = {
   activeCommunity: CommunityNavCommunityLike;
+  hideIdentity?: boolean;
   communityTab: CommunityTab;
   tabIndicators?: Partial<Record<CommunityTab, boolean>> & { mentions?: boolean };
   canViewMembersActiveCommunity: boolean;
@@ -135,6 +136,7 @@ function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | n
 
 export const CommunityNav = memo(function CommunityNav({
   activeCommunity,
+  hideIdentity = false,
   communityTab,
   tabIndicators = {},
   canViewMembersActiveCommunity,
@@ -282,7 +284,7 @@ export const CommunityNav = memo(function CommunityNav({
   useEffect(() => {
     const nav = communityNavRef.current;
     const bannerHeader = communityBannerHeaderRef.current;
-    if (!nav || !activeCommunityBannerUrl || !bannerHeader) {
+    if (hideIdentity || !nav || !activeCommunityBannerUrl || !bannerHeader) {
       setIsCommunityIdentityCondensed(false);
       return;
     }
@@ -313,7 +315,7 @@ export const CommunityNav = memo(function CommunityNav({
         communityIdentityFrameRef.current = null;
       }
     };
-  }, [activeCommunityBannerUrl]);
+  }, [activeCommunityBannerUrl, hideIdentity]);
 
   const handleCopyJoinLink = async () => {
     if (!joinUrl || !onCopyCommunityJoinLink) return;
@@ -354,7 +356,7 @@ export const CommunityNav = memo(function CommunityNav({
 
   return (
     <aside className="community-nav" ref={communityNavRef}>
-      {activeCommunityName ? (
+      {activeCommunityName && !hideIdentity ? (
         <div
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
         >

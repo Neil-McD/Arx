@@ -50,6 +50,7 @@ const communityNav = read("shared/CommunityNav.tsx");
 const communityAccessViewModel = read("shared/communityAccessViewModel.ts");
 const chromeShared = read("apps/web/src/components/webShellChromeShared.ts");
 const chromeHost = read("apps/web/src/components/WebShellChromeHost.tsx");
+const communityNavSurface = read("apps/web/src/components/WebCommunityNavSurface.tsx");
 const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
 const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
@@ -326,14 +327,14 @@ assert.match(
   "web shell shared props should expose the invite copy callback explicitly",
 );
 assert.match(
-  chromeHost,
-  /<CommunityNav[\s\S]*onCopyCommunityJoinLink=\{props\.communityShell\.onCopyCommunityJoinLink\}/,
-  "desktop community nav should receive the invite copy callback",
-);
-assert.match(
-  mobileCommunityShell,
+  communityNavSurface,
   /<CommunityNav[\s\S]*onCopyCommunityJoinLink=\{communityShell\.onCopyCommunityJoinLink\}/,
-  "mobile community drawer nav should receive the invite copy callback",
+  "the canonical community nav adapter should receive the invite copy callback",
+);
+assert.doesNotMatch(
+  mobileCommunityShell,
+  /<CommunityNav/,
+  "the retired mobile community drawer should not duplicate community navigation",
 );
 assert.match(
   chromeHostPropsBuilder,
@@ -1067,8 +1068,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-channel-header\s*\{[\s\S]*min-height:\s*calc\(var\(--mobile-topbar-clearance\)\s*\+\s*44px\);/,
-  "mobile active-channel identity should render below the fixed mobile topbar",
+  /\.app-root\.mobile-shell\s+\.community-chat\s+\.community-channel-header\s*\{[\s\S]*flex:\s*0 0 var\(--mobile-topbar-clearance\);[\s\S]*min-height:\s*var\(--mobile-topbar-clearance\);[\s\S]*\.community-channel-header-identity\s*\{[\s\S]*clip:\s*rect\(0, 0, 0, 0\);/,
+  "mobile chat should reserve one fixed top band while keeping duplicate channel identity visually hidden and accessible",
 );
 assert.match(
   baseCss,

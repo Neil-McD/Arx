@@ -108,6 +108,7 @@ const onboardingProfile = read(
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
 const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
+const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
 const globalOverlays = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
 
 assert.match(navigation, /\| "settings"/);
@@ -170,7 +171,11 @@ assert.match(
 );
 assert.doesNotMatch(app, /setActiveView\("settings"\)/);
 assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);
-assert.match(mobileController, /params\.openGlobalSettings\("profile"\)/);
+assert.match(
+  mobileCommunityShell,
+  /communityShell\.onOpenGlobalSettings\(\)[\s\S]*mobile-community-selector-name">Settings</,
+  "global Settings should remain reachable from the mobile community selector",
+);
 assert.doesNotMatch(mobileController, /setActivePage\("workspace"\)/);
 assert.doesNotMatch(globalOverlays, /Premium|onOpenPremiumBilling/);
 

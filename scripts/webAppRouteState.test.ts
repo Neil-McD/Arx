@@ -2,11 +2,24 @@ import { describe, expect, it } from "vitest";
 
 import {
   buildAppRoutePath,
+  buildCommunityHomePath,
   buildCommunityTabPath,
   parseAppRouteFromPathname,
 } from "../shared/webAppRouteState";
 
 describe("community channel routes", () => {
+  it("round-trips the mobile community directory route", () => {
+    const path = buildCommunityHomePath("polynet");
+    expect(path).toBe("/c/polynet/home");
+    expect(parseAppRouteFromPathname(path ?? "")).toMatchObject({
+      page: "community",
+      view: "community_home",
+      communitySlug: "polynet",
+      communityTab: "chat",
+      communityChannelSlug: null,
+    });
+  });
+
   it("keeps General on the backward-compatible chat route", () => {
     expect(buildCommunityTabPath("polynet", "chat")).toBe("/c/polynet/chat");
     expect(buildCommunityTabPath("polynet", "chat", null, null, "general")).toBe(

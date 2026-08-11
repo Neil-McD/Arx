@@ -486,6 +486,7 @@ export default function App() {
   } = shellNavigation;
   const memberEntry = useWebMemberEntryController({
     session,
+    shellVariant,
     getSession: () => sessionRef.current ?? session,
     navigateTo,
     applyCommunityShellState,
@@ -925,6 +926,7 @@ export default function App() {
     syncCommunitySelection,
     openPublicCommunityFunnel,
     openCommunityTab,
+    openCommunityHome,
     openCommunityChat,
     openCommunityBySlug,
   } = useWebCommunityRouteController<CommunityRecord>({
@@ -960,6 +962,7 @@ export default function App() {
   });
   const enterJoinedCommunity = useWebJoinedCommunityEntryAction({
     session,
+    shellVariant,
     sessionRef,
     resolveKnownCommunitySlugById,
     syncCommunitySelection,
@@ -1832,6 +1835,7 @@ export default function App() {
   const mobileThreadPageOpen = Boolean(
     showMobileShell
     && mobileRootPage === "community"
+    && activeView === "home"
     && selectedCommunityInteractionRootId,
   );
   const mobileCommunityDetailOpen = Boolean(
@@ -1841,6 +1845,7 @@ export default function App() {
     showMobileAppShell
     && shellPublicRoute.kind === "app"
     && activePage === "community"
+    && activeView === "home"
     && communityTab === "chat"
     && mobileRootPage === "community"
     && !mobileCommunityDetailOpen
@@ -1949,15 +1954,12 @@ export default function App() {
   });
     const {
       handleSelectMobileRootPage,
-      openMobileAgentSettings,
       handleExitMobileSettings,
       openMobileCreateCommunity,
-      openMobileDrawer,
     } = useWebMobileShellController({
       activeCommunitySlug: String(activeCommunity?.slug ?? "").trim() || null,
       selectedActiveCommunitySlug,
       mobileRootPage,
-      hasSelectedCommunity,
       canViewMembers:
         (hasSelectedCommunity && canViewMembersActiveCommunity) ||
         ((shellPublicRoute.kind === "community_funnel" ||
@@ -1976,8 +1978,7 @@ export default function App() {
       setMobileOverlay,
       setMobileRootPage,
       setMobileSettingsView,
-      openGlobalSettings,
-      openCommunityChat,
+      openCommunityHome,
       handleOpenDiscover,
       openDirectMessages: handleOpenDirectMessages,
       closeDirectMessages: handleCloseDirectMessages,
@@ -2896,7 +2897,6 @@ export default function App() {
       isVisitorCommunitySurface
         ? Boolean(resolvedPublicCommunity)
         : canViewMembersActiveCommunity,
-    openMobileDrawer,
     handleExitMobileSettings,
     handleCloseMobileThreadPage: handleCloseCommunityInteractionDrawer,
     handleSelectMobileRootPage,
@@ -2986,7 +2986,6 @@ export default function App() {
         }
       : handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,
-    openMobileAgentSettings,
     canOpenDirectMessages: Boolean(session),
     directMessagesUnreadCount,
     /* Rail bridge: on the visitor route, app state changes don't render
@@ -3015,6 +3014,7 @@ export default function App() {
           return nextCommunity ? handleSelectActiveCommunity(nextCommunity) : false;
         },
     openCommunityChat,
+    openCommunityHome,
     communityInitials,
     showDesktopCommunityRail,
     showDesktopCommunityNav,

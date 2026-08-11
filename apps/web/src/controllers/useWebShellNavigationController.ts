@@ -103,7 +103,7 @@ export function useWebShellNavigationController(params: {
     const communitySlug =
       String(nextAppRoute.communitySlug ?? "").trim() || null;
     current.setActivePage(nextAppRoute.page);
-    current.setActiveView("home");
+    current.setActiveView(nextAppRoute.view);
     current.setSettingsPage(nextAppRoute.settingsPage);
     if (nextAppRoute.page === "docs") {
       current.setSelectedProductDocSlug(nextAppRoute.docsSlug ?? null);

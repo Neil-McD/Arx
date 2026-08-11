@@ -8,7 +8,6 @@ import type {
   CommunitySettingsPane,
   CommunityTab,
 } from "../../../../shared/appShellNavigation";
-import { isCommunityRouteManagedTab } from "../../../../shared/appShellNavigation";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../../shared/communityUnsavedGuard";
 import {
   applyShellVariantToPublicPath,
@@ -196,18 +195,16 @@ export function useWebCommunityNavigationActions(params: {
   const handleSelectCommunityTab = useCallback(
     (tab: CommunityTab) => {
       params.setCommunityResourceModuleId(null);
-      if (isCommunityRouteManagedTab(tab)) {
-        const slug = String(
-          params.selectedActiveCommunitySlug ??
-            params.activeCommunity?.slug ??
-            "",
-        ).trim();
-        if (slug) {
-          params.openCommunityTab(slug, tab, {
-            pushSnapshot: false,
-          });
-          return;
-        }
+      const slug = String(
+        params.selectedActiveCommunitySlug ??
+          params.activeCommunity?.slug ??
+          "",
+      ).trim();
+      if (slug) {
+        params.openCommunityTab(slug, tab, {
+          pushSnapshot: false,
+        });
+        return;
       }
       params.applyCommunityShellState({ communityTab: tab });
     },
@@ -223,9 +220,27 @@ export function useWebCommunityNavigationActions(params: {
   const handleSelectCommunityTabFromMobile = useCallback(
     (tab: CommunityTab) => {
       params.setMobileOverlay(null);
+      params.setCommunityResourceModuleId(null);
+      const slug = String(
+        params.selectedActiveCommunitySlug ??
+          params.activeCommunity?.slug ??
+          "",
+      ).trim();
+      const path = buildCommunityTabPath(slug, tab);
+      if (path) {
+        params.navigateTo(path);
+        return;
+      }
       handleSelectCommunityTab(tab);
     },
-    [handleSelectCommunityTab, params.setMobileOverlay],
+    [
+      handleSelectCommunityTab,
+      params.activeCommunity?.slug,
+      params.navigateTo,
+      params.selectedActiveCommunitySlug,
+      params.setCommunityResourceModuleId,
+      params.setMobileOverlay,
+    ],
   );
 
   const handleCommunityOnboardingOrientationCompleted =
