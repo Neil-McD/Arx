@@ -200,6 +200,22 @@
   text-wrap: balance;
 }
 
+.funnel-v1-default {
+  display: flex;
+  min-height: 100%;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.funnel-v1-default-hero {
+  margin-bottom: 0;
+}
+
+.funnel-v1-default .funnel-v1-member-proof {
+  width: min(620px, 100%);
+  margin: 0 auto;
+}
+
 .funnel-v1-media {
   position: relative;
   aspect-ratio: 16 / 9;
@@ -337,44 +353,61 @@
 }
 
 .funnel-v1-member-proof {
+  width: min(720px, 100%);
+  margin: var(--funnel-v1-section-gap) auto 0;
   display: flex;
   align-items: center;
-  justify-content: center;
-  gap: 22px;
-  padding: var(--funnel-v1-section-gap) 0;
-  border-bottom: 1px solid var(--funnel-v1-divider);
+  justify-content: space-between;
+  gap: clamp(20px, 4vw, 34px);
+  padding: clamp(20px, 3vw, 28px);
+  border: 1px solid var(--funnel-v1-divider);
+  border-radius: var(--funnel-v1-radius);
+  background: color-mix(in srgb, var(--surface-card) 92%, transparent);
 }
 .funnel-v1-member-proof-copy {
   display: grid;
-  gap: 4px;
+  flex: 1 1 auto;
+  gap: 5px;
 }
 .funnel-v1-member-proof-copy h2 {
   margin: 0;
-  font-size: 20px;
+  font-size: clamp(20px, 2.8vw, 24px);
+  line-height: 1.15;
+  letter-spacing: -0.025em;
 }
 .funnel-v1-member-proof-copy p {
   margin: 0;
-  color: var(--funnel-v1-muted);
-  font-size: 14px;
+  color: var(--funnel-v1-text);
+  font-size: 13px;
+  font-weight: 650;
 }
 .funnel-v1-member-proof-copy span {
   color: var(--funnel-v1-muted);
   font-size: 13px;
+  line-height: 1.45;
 }
 .funnel-v1-facepile {
   display: flex;
-  padding-left: 10px;
+  flex: 0 0 auto;
+  padding-left: 12px;
 }
 .funnel-v1-facepile .funnel-v1-face,
 .funnel-v1-facepile span {
-  width: 36px;
-  height: 36px;
-  margin-left: -10px;
-  border: 2px solid var(--funnel-v1-page);
+  width: 44px;
+  height: 44px;
+  margin-left: -12px;
+  border: 2px solid var(--surface-card);
   border-radius: 50%;
   object-fit: cover;
   overflow: hidden;
   background: var(--surface-card);
+}
+.funnel-v1-facepile .funnel-v1-face.has-fallback {
+  display: grid;
+  place-items: center;
+  color: var(--funnel-v1-text);
+  font-size: 12px;
+  font-weight: 700;
 }
 .funnel-v1-face-image {
   width: 100%;
@@ -387,6 +420,18 @@
   background: var(--surface-card);
   color: var(--funnel-v1-text);
   font-size: 11px;
+}
+
+@media (max-width: 560px) {
+  .funnel-v1-member-proof {
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+  }
+
+  .funnel-v1-member-proof-copy {
+    justify-items: center;
+  }
 }
 
 .funnel-v1-faq {

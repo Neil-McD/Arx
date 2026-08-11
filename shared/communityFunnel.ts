@@ -432,59 +432,6 @@ export function normalizeCommunityFunnelDocumentV1(
   }
 }
 
-export function buildDefaultCommunityFunnelDocumentV1(params: {
-  communityName: string;
-  oneLiner?: string | null;
-  about?: string | null;
-}): CommunityFunnelDocumentV1 {
-  const communityName =
-    normalizeTrimmedString(params.communityName, 80) || "this community";
-  const oneLiner = normalizeTrimmedString(params.oneLiner, 180);
-  const about = normalizeTrimmedString(params.about, 480);
-  return {
-    version: 1,
-    theme: { ...DEFAULT_COMMUNITY_FUNNEL_THEME },
-    sections: [
-      {
-        id: "hero",
-        type: "hero",
-        eyebrow: communityName,
-        headline: oneLiner || `Join ${communityName}`,
-        body:
-          about ||
-          `Meet the people, knowledge, and agents inside ${communityName}.`,
-        alignment: "center",
-      },
-      {
-        id: "benefits",
-        type: "benefits",
-        heading: "What happens inside",
-        items: [
-          {
-            title: "Think together",
-            body: "Collaborate with people who care about the same problems and outcomes.",
-          },
-          {
-            title: "Remember everything",
-            body: "Turn conversations and resources into shared intelligence that compounds.",
-          },
-          {
-            title: "Act with agents",
-            body: "Use community intelligence to plan, execute, and deliver better outcomes.",
-          },
-        ],
-      },
-      { id: "proof", type: "social_proof", headline: null, body: null },
-      {
-        id: "cta",
-        type: "cta",
-        headline: `Build with ${communityName}`,
-        body: oneLiner,
-      },
-    ],
-  };
-}
-
 export function normalizeCommunityFunnelManagerConfig(
   raw: unknown,
 ): CommunityFunnelManagerConfig {

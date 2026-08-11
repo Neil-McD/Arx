@@ -8,7 +8,6 @@ function read(relativePath: string): string {
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
-const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
 const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 
 assert.match(
@@ -66,17 +65,6 @@ assert.match(
   /<WebCommunityInteractionProjection[\s\S]*floatingComposers/,
   "member chat should opt into the floating composer structure",
 );
-assert.doesNotMatch(
-  visitorSurface,
-  /community-member-chat|floatingComposers/,
-  "the visitor funnel must not opt into member composer behavior",
-);
-assert.match(
-  visitorSurface,
-  /className="community-chat cvs-chat"/,
-  "the visitor funnel should retain its existing root boundary",
-);
-
 assert.match(
   baseCss,
   /\.community-member-chat \.community-interaction-main-composer \{[\s\S]*position: absolute;[\s\S]*bottom: 0;[\s\S]*background: transparent;/,

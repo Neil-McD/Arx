@@ -1,11 +1,102 @@
 import type {
   CommunityFunnelSectionV1,
   CommunityPublicFace,
+  PublicPlanSummary,
 } from "./communityTypes";
 
 export type CommunityFunnelUiFaceLike = CommunityPublicFace;
 
-export type CommunityFunnelUiMode = "enter" | "join" | "request_access" | "checkout" | "private";
+export type CommunityFunnelUiMode =
+  | "enter"
+  | "join"
+  | "request_access"
+  | "checkout"
+  | "private";
+
+export type CommunityFunnelPrimaryActionView = {
+  label: string;
+  hasValidPaidPlan: boolean;
+};
+
+function formatPublicPlanJoinPrice(
+  plan: PublicPlanSummary | null | undefined,
+): string | null {
+  if (!plan) return null;
+  const rawAmount = String(plan.amount_base_units ?? "").trim();
+  const amount = Number(rawAmount);
+  const decimals = Number(plan.currency_decimals);
+  const currency = String(plan.currency ?? "")
+    .trim()
+    .toUpperCase();
+  if (
+    rawAmount.length === 0 ||
+    !Number.isFinite(amount) ||
+    amount <= 0 ||
+    !Number.isInteger(decimals) ||
+    decimals < 0 ||
+    decimals > 6 ||
+    !/^[A-Z]{3}$/.test(currency) ||
+    (plan.billing_period !== "monthly" && plan.billing_period !== "annual")
+  ) {
+    return null;
+  }
+  const value = amount / Math.pow(10, decimals);
+  try {
+    const formatted = new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: Number.isInteger(value)
+        ? 0
+        : Math.min(decimals, 2),
+      maximumFractionDigits: Math.min(decimals, 2),
+    }).format(value);
+    return `${formatted}/${plan.billing_period === "monthly" ? "month" : "year"}`;
+  } catch {
+    return null;
+  }
+}
+
+export function buildCommunityFunnelPrimaryActionView(params: {
+  mode: CommunityFunnelUiMode;
+  plan?: PublicPlanSummary | null;
+  isBusy?: boolean;
+  approvalPending?: boolean;
+  approvalDenied?: boolean;
+  canRequestAgain?: boolean;
+}): CommunityFunnelPrimaryActionView {
+  const formattedPaidPrice = formatPublicPlanJoinPrice(params.plan);
+  const hasValidPaidPlan = Boolean(formattedPaidPrice);
+  if (params.mode === "enter") {
+    return { label: "Enter community", hasValidPaidPlan };
+  }
+  if (params.isBusy) {
+    return { label: "Joining…", hasValidPaidPlan };
+  }
+  if (params.mode === "request_access") {
+    if (params.approvalPending) {
+      return { label: "Request pending", hasValidPaidPlan };
+    }
+    if (params.approvalDenied) {
+      return {
+        label: params.canRequestAgain ? "Request again" : "Request denied",
+        hasValidPaidPlan,
+      };
+    }
+    return { label: "Join free", hasValidPaidPlan };
+  }
+  if (params.mode === "join") {
+    return { label: "Join free", hasValidPaidPlan };
+  }
+  if (params.mode === "checkout") {
+    return {
+      label: formattedPaidPrice
+        ? `Join ${formattedPaidPrice}`
+        : "Join unavailable",
+      hasValidPaidPlan,
+    };
+  }
+  return { label: "Private community", hasValidPaidPlan };
+}
 
 export function formatCompactStat(value: number): string {
   return new Intl.NumberFormat(undefined, {
@@ -14,36 +105,21 @@ export function formatCompactStat(value: number): string {
   }).format(value);
 }
 
-export function buildCommunityFunnelCopy(mode: CommunityFunnelUiMode): {
-  eyebrow: string;
-  body: string;
-} {
-  if (mode === "enter") {
-    return { eyebrow: "Member access", body: "You already have access. Enter the community to continue." };
-  }
-  if (mode === "checkout") {
-    return { eyebrow: "Paid access", body: "Unlock access and continue into the community." };
-  }
-  if (mode === "request_access") {
-    return { eyebrow: "Approval required", body: "Join to enter the pending approvals queue." };
-  }
-  if (mode === "join") {
-    return { eyebrow: "Open access", body: "Enter immediately and start participating." };
-  }
-  return { eyebrow: "Private community", body: "Reach out to the owner for access." };
+export function filterOnlineAvatarFaces<
+  TFace extends CommunityFunnelUiFaceLike,
+>(faces: TFace[] | null | undefined, max = 4): TFace[] {
+  return (faces ?? [])
+    .filter((face) => Boolean(face?.avatar_url))
+    .slice(0, max);
 }
 
-export function filterOnlineAvatarFaces<TFace extends CommunityFunnelUiFaceLike>(
-  faces: TFace[] | null | undefined,
-  max = 4,
-): TFace[] {
-  return (faces ?? []).filter((face) => Boolean(face?.avatar_url)).slice(0, max);
-}
-
-export type CommunityFunnelMemberProofView<TFace extends CommunityFunnelUiFaceLike> = {
+export type CommunityFunnelMemberProofView<
+  TFace extends CommunityFunnelUiFaceLike,
+> = {
   memberCount: number;
   faces: TFace[];
   hiddenFaceCount: number;
+  headline: string;
   label: string;
   ariaLabel: string;
 };
@@ -68,7 +144,6 @@ export function buildCommunityFunnelMemberProofView<
   const seenUserIds = new Set<string>();
   const faces = (params.faces ?? [])
     .filter((face) => {
-      if (!face?.avatar_url) return false;
       const userId = String(face.user_id ?? "").trim();
       if (!userId || seenUserIds.has(userId)) return false;
       seenUserIds.add(userId);
@@ -81,6 +156,10 @@ export function buildCommunityFunnelMemberProofView<
     memberCount,
     faces,
     hiddenFaceCount: Math.max(0, memberCount - faces.length),
+    headline:
+      memberCount === 1
+        ? "Join the community"
+        : `Join ${formatCompactStat(memberCount)}+ members`,
     label:
       memberCount === 1
         ? "1 member"

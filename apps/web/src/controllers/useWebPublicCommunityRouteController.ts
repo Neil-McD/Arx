@@ -2,10 +2,6 @@ import { useEffect } from "react";
 import type { PublicPlanSummary } from "../../../../shared/communityTypes";
 import { type PublicRoute } from "../../../../shared/webAppRouteState";
 import {
-  formatCommunityVisibilityLabel,
-  toCanonicalCommunityVisibility,
-} from "../../../../shared/communityVisibility";
-import {
   deriveCommunityFunnelAction,
   derivePublicCommunityAdmissionProjection,
   type CommunityFunnelAction,
@@ -62,8 +58,6 @@ export function useWebPublicCommunityRouteController<
     params.publicCommunityPlans.find((plan) => plan.billing_period === "annual") ??
     params.publicCommunityPlans[0] ??
     null;
-  const publicVisibility = toCanonicalCommunityVisibility(params.publicCommunity?.visibility, "unlisted");
-  const publicVisibilityLabel = formatCommunityVisibilityLabel(publicVisibility);
   const publicFunnelAction: CommunityFunnelAction | null = params.publicCommunity
     ? deriveCommunityFunnelAction({
         entry_policy: params.publicCommunity.entry_policy,
@@ -83,13 +77,6 @@ export function useWebPublicCommunityRouteController<
   const approvalPending = admission.approvalPending;
   const approvalDenied = admission.approvalDenied;
   const canRequestAgain = admission.canRequestAgain;
-  const approvalReapplyLabel =
-    approvalDenied && admission.approvalReapplyAtMs !== null
-      ? new Intl.DateTimeFormat(undefined, {
-          month: "short",
-          day: "numeric",
-        }).format(new Date(admission.approvalReapplyAtMs))
-      : null;
   return {
     publicFunnelSlug,
     isPublicFunnelPreviewRoute,
@@ -98,7 +85,6 @@ export function useWebPublicCommunityRouteController<
     isPublicCommunityFunnel,
     showPublicSignIn: !params.isSignedIn,
     selectedPublicCommunityPlan,
-    publicVisibilityLabel,
     resolvedPublicCommunity,
     canEnterPublicCommunity,
     canJoinForFree,
@@ -107,6 +93,5 @@ export function useWebPublicCommunityRouteController<
     approvalPending,
     approvalDenied,
     canRequestAgain,
-    approvalReapplyLabel,
   };
 }

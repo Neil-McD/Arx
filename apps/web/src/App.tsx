@@ -138,6 +138,7 @@ import { useCommunityMembersReviewController } from "../../../shared/useCommunit
 import { useCommunityAdminAnalyticsLifecycle } from "../../../shared/useCommunityAdminAnalyticsLifecycle";
 import { useCommunityMembersReviewLifecycle } from "../../../shared/useCommunityMembersReviewLifecycle";
 import { truncateReplyPreview } from "../../../shared/communityMessageParsing";
+import { buildCommunityFunnelPrimaryActionView } from "../../../shared/communityFunnelUi";
 import {
   formatCommunityVisibilityLabel,
   toCanonicalCommunityVisibility,
@@ -218,6 +219,28 @@ type UserProfileDetail = SharedUserProfileDetail;
 type CommunityJoinRequest = WebCommunityJoinRequest;
 type PersonalMemoryItem = WebPersonalMemoryItem;
 type PublicPlanSummary = SharedPublicPlanSummary;
+
+function buildCommunityFunnelPreviewPlan(params: {
+  pricingMode: "free" | "monthly" | "annual";
+  monthlyUsd: string;
+  annualUsd: string;
+}): PublicPlanSummary | null {
+  if (params.pricingMode === "free") return null;
+  const rawAmount = params.pricingMode === "monthly"
+    ? params.monthlyUsd
+    : params.annualUsd;
+  const amountUsd = Number(rawAmount);
+  if (!Number.isFinite(amountUsd) || amountUsd <= 0) return null;
+  return {
+    name: "Community access",
+    description: null,
+    amount_base_units: String(Math.round(amountUsd * 100)),
+    currency: "USD",
+    currency_decimals: 2,
+    billing_period: params.pricingMode,
+  };
+}
+
 export default function App() {
   const appActivity = useWebAppActivityController();
   const directMessages = useWebDirectMessagesController();
@@ -1585,7 +1608,6 @@ export default function App() {
     isPublicCommunityFunnel,
     showPublicSignIn,
     selectedPublicCommunityPlan,
-    publicVisibilityLabel,
     resolvedPublicCommunity,
     canEnterPublicCommunity,
     canJoinForFree,
@@ -1594,7 +1616,6 @@ export default function App() {
     approvalPending,
     approvalDenied,
     canRequestAgain,
-    approvalReapplyLabel,
   } = useWebPublicCommunityRouteController<PublicCommunityRecord>({
     publicRoute: shellPublicRoute,
     publicCommunity: publicCommunityUi.publicCommunity,
@@ -1874,6 +1895,15 @@ export default function App() {
   const funnelPreviewAction = deriveCommunityFunnelAction({
     entry_policy: activeCommunity?.entry_policy,
   });
+  const funnelPreviewPlan = buildCommunityFunnelPreviewPlan({
+    pricingMode: communitySettingsPricingMode,
+    monthlyUsd: communitySettingsPriceUsdMonthly,
+    annualUsd: communitySettingsPriceUsdAnnual,
+  });
+  const funnelPreviewPrimaryActionLabel = buildCommunityFunnelPrimaryActionView({
+    mode: funnelPreviewAction,
+    plan: funnelPreviewPlan,
+  }).label;
   const activeCommunitySocialMemberCount = activeCommunity && typeof communitySocialSummary.memberCount === "number"
     ? communitySocialSummary.memberCount
     : null;
@@ -1893,8 +1923,6 @@ export default function App() {
     handlePrimaryAction: handlePublicLandingPrimaryAction,
     handleCheckoutContinue: handlePublicCheckoutContinue,
     handleClaimContinue: handlePublicClaimContinue,
-    handleCancelPendingJoinRequest:
-      handleCancelPendingPublicJoinRequest,
   } = useWebPublicFunnelEntryController({
     checkoutClaimToken,
     publicRouteClaimToken:
@@ -2195,6 +2223,7 @@ export default function App() {
         handlePreviewCommunityFunnel,
         communityFunnelConfig,
         hydrateCommunityFunnelEditor,
+        previewPrimaryActionLabel: funnelPreviewPrimaryActionLabel,
         previewCommunity: {
           id: activeCommunity?.id ?? "",
           slug: activeCommunity?.slug ?? null,
@@ -2703,8 +2732,6 @@ export default function App() {
             slug: resolvedPublicCommunity.slug ?? undefined,
           }
         : null,
-      isMobile: showMobilePublicFunnel,
-      shellVariant,
       isPreviewMode: isPublicFunnelPreviewRoute,
       previewExitPath:
         publicRoute.kind === "community_funnel_preview"
@@ -2717,17 +2744,7 @@ export default function App() {
       previewVslUrl: funnelDraftPreview.vslUrl,
       previewDocumentIsLoading: funnelDraftPreview.isLoading,
       previewDocumentError: funnelDraftPreview.error,
-      gateOpenNonce: publicCommunityUi.visitorGateNonce,
-      mobileMembersOverlayOpen:
-        showMobileShell &&
-        publicRoute.kind === "community_funnel" &&
-        mobileOverlay === "members",
-      onCloseMobileMembersOverlay: () => setMobileOverlay(null),
-      publicVisibilityLabel,
-      selectedPublicCommunityPlanLabel: selectedPublicCommunityPlan
-        ? formatPlanPrice(selectedPublicCommunityPlan)
-        : null,
-      hasSelectedPublicCommunityPlan: Boolean(selectedPublicCommunityPlan),
+      selectedPublicCommunityPlan,
       isLoadingPublicCommunity: publicCommunityUi.isLoadingPublicCommunity,
       canEnterCommunity: canEnterPublicCommunity,
       canJoinForFree,
@@ -2735,18 +2752,13 @@ export default function App() {
       canJoinWithCheckout,
       checkoutStatus,
       isJoiningPublicCommunity: publicCommunityUi.isJoiningPublicCommunity,
-      isCancellingPublicCommunityJoinRequest:
-        publicCommunityUi.isCancellingPublicCommunityJoinRequest,
       approvalPending,
       approvalDenied,
       canRequestAgain,
-      approvalReapplyLabel,
       onPrimaryJoinAction: handlePublicLandingPrimaryAction,
-      onCancelPendingJoinRequest: handleCancelPendingPublicJoinRequest,
       publicCommunityError: publicCommunityUi.publicCommunityError,
       publicJoinError: publicCommunityUi.publicJoinError,
       checkoutError,
-      showSignIn: showPublicSignIn,
       bridge:
         /* The pitch converts first: the bridge opens on an entry ATTEMPT
            (join/enter/claim), never on arrival. */

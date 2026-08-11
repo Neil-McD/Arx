@@ -1,0 +1,425 @@
+/* The account bridge owns this conversion card vocabulary. It is shared by
+   the public funnel gate and the platform setup modal, not by visitor chat. */
+.cfg-fill,
+.cfg-fill img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.cfg-join {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--cfg-primary-surface, var(--bg-button, #f1ede5));
+  color: var(--cfg-primary-text, var(--bg-button-text, #0a0a0a));
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 13.5px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, box-shadow 0.2s;
+}
+
+.cfg-join:hover:not(:disabled) {
+  background: var(--cfg-primary-surface-hover, var(--bg-button-hover, #fff));
+  box-shadow: 0 4px 22px -6px var(--accent-gold-glow, rgba(214, 106, 138, 0.18));
+}
+
+.cfg-join:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.cfg-gate {
+  position: absolute;
+  inset: 0;
+  z-index: 30;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  background: rgba(10, 10, 12, 0.55);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.cfg-gate.cvs-gate {
+  position: fixed;
+  z-index: 120;
+  --cfg-gate-surface: var(--bg-modal, rgba(20, 20, 20, 0.98));
+  --cfg-gate-avatar-stroke: var(--bg-modal, rgba(20, 20, 20, 0.98));
+  --cfg-primary-surface: var(--bg-button, #f1ede5);
+  --cfg-primary-surface-hover: var(--bg-button-hover, #ffffff);
+  --cfg-primary-text: var(--bg-button-text, #0a0a0a);
+  --cvs-gate-border: color-mix(in srgb, var(--text-primary, #fcf8f0) 14%, transparent);
+  --cvs-gate-shadow:
+    0 32px 90px -30px rgba(0, 0, 0, 0.72),
+    0 10px 28px -18px rgba(0, 0, 0, 0.56);
+}
+
+:root[data-theme="light"] .cfg-gate.cvs-gate {
+  --cvs-gate-border: rgba(23, 23, 25, 0.18);
+  --cvs-gate-shadow:
+    0 32px 90px -30px rgba(23, 23, 25, 0.46),
+    0 10px 28px -18px rgba(23, 23, 25, 0.32);
+}
+
+.cfg-gate.cvs-gate-bridge {
+  align-items: center;
+  overflow-y: auto;
+  padding: 24px 20px;
+}
+
+.cfg-gatecard {
+  width: min(400px, 94vw);
+  padding: 0 26px 22px;
+  overflow: hidden;
+  border: 1px solid var(--border-default, #3a3a3a);
+  border-radius: 14px;
+  background: var(--cfg-gate-surface, var(--bg-modal, #161619));
+  box-shadow:
+    0 50px 140px -40px #000,
+    0 0 70px -40px var(--accent-gold-glow, rgba(214, 106, 138, 0.18));
+  text-align: center;
+}
+
+.cfg-gbanner {
+  position: relative;
+  height: 78px;
+  margin: 0 -26px;
+  background: var(--cfg-gate-banner, var(--surface-selected, var(--bg-card-alt, #17121a)));
+}
+
+.cfg-gav {
+  position: relative;
+  width: 54px;
+  height: 54px;
+  margin: -27px auto 0;
+  overflow: hidden;
+  border: 3px solid var(--cfg-gate-avatar-stroke, var(--bg-modal, #161619));
+  border-radius: 13px;
+  background: var(--bg-card, rgba(23, 23, 26, 0.9));
+}
+
+.cfg-gname {
+  margin-top: 9px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.cfg-gpromise {
+  margin: 10px 0 0;
+  color: var(--text-secondary, #d6d0c6);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.cfg-gatecard .cfg-join {
+  width: 100%;
+  margin-top: 16px;
+  padding: 12px;
+  border-radius: 9px;
+  font-size: 14px;
+}
+
+.cfg-gmicro {
+  margin-top: 8px;
+  color: var(--text-muted, #b3ad9f);
+  font-size: 11px;
+}
+
+.cvs-bridge-platform .cfg-gav {
+  margin-top: 22px;
+  border-color: transparent;
+}
+
+.cfg-gatecard.cvs-bridge-card {
+  width: min(440px, 94vw);
+  max-height: calc(100vh - 48px);
+  overflow-y: auto;
+  border-color: var(--cvs-gate-border, var(--border-default, #3a3a3a));
+  box-shadow: var(
+    --cvs-gate-shadow,
+    0 50px 140px -40px #000,
+    0 0 70px -40px var(--accent-gold-glow, rgba(214, 106, 138, 0.18))
+  );
+  text-align: left;
+}
+
+.cvs-bridge-card .cfg-gname,
+.cvs-bridge-card .cfg-gpromise {
+  text-align: center;
+}
+
+.cvs-bridge-paid {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  margin-top: 6px;
+  color: var(--text-muted, #b3ad9f);
+  font-size: 11.5px;
+}
+
+.cvs-bridge-paid-dot {
+  width: 5px;
+  height: 5px;
+  flex: none;
+  border-radius: 50%;
+  background: #43c37a;
+}
+
+.cvs-bridge-section {
+  margin-top: 20px;
+}
+
+.cvs-bridge-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 11px;
+}
+
+.cvs-bridge-label span {
+  flex: none;
+  color: var(--text-faint, #9c968a);
+  font-size: 10.5px;
+  font-weight: 650;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.cvs-bridge-label i {
+  height: 1px;
+  flex: 1;
+  background: var(--border-default, #3a3a3a);
+}
+
+.cvs-bridge-idgrid {
+  display: flex;
+  gap: 16px;
+}
+
+.cvs-bridge-avblock {
+  width: 86px;
+  flex: none;
+  text-align: center;
+}
+
+.cvs-bridge-avatar {
+  width: 78px;
+  height: 78px;
+  margin: 0 auto;
+  border: 1.5px dashed var(--border-strong, #35353b);
+  background: var(--bg-card, rgba(23, 23, 26, 0.9));
+  color: var(--text-faint, #9c968a);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.cvs-bridge-avatar:hover {
+  border-color: var(--accent-gold, #d66a8a);
+  color: var(--text-muted, #b3ad9f);
+}
+
+.cvs-bridge-avatar.has-image {
+  border-style: solid;
+}
+
+.cvs-bridge-avcap {
+  display: inline-block;
+  margin-top: 7px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--text-faint, #9c968a);
+  font-family: inherit;
+  font-size: 10.5px;
+  line-height: 1.4;
+  cursor: pointer;
+}
+
+.cvs-bridge-avcap:hover {
+  color: var(--text-muted, #b3ad9f);
+}
+
+.cvs-bridge-avcap.done,
+.cvs-bridge-avail.ok {
+  color: #43c37a;
+}
+
+.cvs-bridge-fields {
+  display: flex;
+  flex: 1;
+  min-width: 0;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.cvs-bridge-socials {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.cvs-bridge-socials-label,
+.cvs-bridge-field {
+  color: var(--text-muted, #b3ad9f);
+  font-size: 11.5px;
+}
+
+.cvs-bridge-field {
+  display: block;
+}
+
+.cvs-bridge-field input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  margin-top: 5px;
+  padding: 9px 11px;
+  border: 1px solid var(--border-default, #3a3a3a);
+  border-radius: 9px;
+  outline: none;
+  background: var(--bg-app, #1a1a1a);
+  color: var(--text-primary, #fcf8f0);
+  font-family: inherit;
+  font-size: 13.5px;
+}
+
+.cvs-bridge-field input:focus {
+  border-color: var(--accent-gold, #d66a8a);
+}
+
+.cvs-bridge-handle {
+  position: relative;
+  display: block;
+}
+
+.cvs-bridge-handle > span {
+  position: absolute;
+  top: 50%;
+  left: 11px;
+  transform: translateY(calc(-50% + 2px));
+  color: var(--text-faint, #9c968a);
+  font-size: 13.5px;
+  pointer-events: none;
+}
+
+.cvs-bridge-handle input {
+  padding-left: 25px;
+}
+
+.cvs-bridge-avail {
+  display: block;
+  min-height: 14px;
+  margin-top: 4px;
+  color: var(--text-faint, #9c968a);
+  font-size: 11px;
+}
+
+.cvs-bridge-legal {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-top: 18px;
+  cursor: pointer;
+}
+
+.cvs-bridge-legal input {
+  width: 14px;
+  height: 14px;
+  flex: none;
+  margin: 2px 0 0;
+  accent-color: var(--accent-gold, #d66a8a);
+}
+
+.cvs-bridge-legal span {
+  color: var(--text-muted, #b3ad9f);
+  font-size: 11.5px;
+  line-height: 1.55;
+}
+
+.cvs-bridge-legal span button {
+  padding: 0;
+  border: 0;
+  border-bottom: 1px solid var(--border-default, #3a3a3a);
+  background: none;
+  color: var(--text-secondary, #d6d0c6);
+  font: inherit;
+  cursor: pointer;
+}
+
+.cvs-bridge-legal span button:hover {
+  color: var(--text-primary, #fcf8f0);
+}
+
+.cvs-bridge-error {
+  margin: 10px 0 0;
+  color: #f0a2a2;
+  font-size: 12px;
+}
+
+.cvs-bridge-card .cfg-join {
+  border: 1px solid var(--border-strong, #35353b);
+  background: rgba(255, 255, 255, 0.055);
+  color: var(--text-secondary, #d6d0c6);
+  box-shadow: none;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease,
+    box-shadow 180ms ease, transform 150ms ease;
+}
+
+.cvs-bridge-card .cfg-join.cvs-bridge-enter-ready,
+.cvs-bridge-card .cfg-join.cvs-bridge-enter-ready:hover {
+  border-color: #ffffff;
+  background: #ffffff;
+  color: #111113;
+}
+
+.cvs-bridge-card .cfg-join.cvs-bridge-enter-ready {
+  box-shadow: 0 10px 26px -16px rgba(255, 255, 255, 0.72);
+}
+
+.cvs-bridge-card .cfg-join.cvs-bridge-enter-ready:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 12px 30px -14px rgba(255, 255, 255, 0.82);
+}
+
+.cvs-bridge-trust {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 13px;
+  color: var(--text-faint, #9c968a);
+  font-size: 10.5px;
+  text-align: center;
+}
+
+@keyframes cvs-bridge-miss-pulse {
+  0% { box-shadow: 0 0 0 0 var(--accent-gold-glow, rgba(214, 106, 138, 0.18)); }
+  70% { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+
+.cvs-bridge-card .cvs-bridge-miss {
+  border-color: var(--accent-gold, #d66a8a) !important;
+  animation: cvs-bridge-miss-pulse 0.9s ease-out 1;
+}
+
+.cvs-bridge-miss-text,
+.cvs-bridge-miss-text span,
+.cfg-gmicro.cvs-bridge-miss-text {
+  color: var(--accent-gold, #d66a8a) !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .cvs-bridge-card .cvs-bridge-miss {
+    animation: none;
+  }
+}

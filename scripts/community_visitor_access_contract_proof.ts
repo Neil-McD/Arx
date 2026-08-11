@@ -9,8 +9,6 @@ const communityPublic = read("convex/communityPublic.ts");
 const communityCore = read("convex/communityCore.ts");
 const communityChannelCore = read("convex/communityChannelCore.ts");
 const appSource = read("apps/web/src/App.tsx");
-const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
-const visitorChrome = read("apps/web/src/components/CommunityVisitorChrome.tsx");
 const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 
 function sliceExport(source: string, name: string): string {
@@ -134,28 +132,13 @@ assert.match(
 );
 assert.match(
   publicFunnel,
-  /mobileMembersOverlayOpen=\{props\.mobileMembersOverlayOpen\}[\s\S]*onCloseMobileMembersOverlay=\{props\.onCloseMobileMembersOverlay\}/,
-  "the public funnel must carry the shared mobile overlay state into the visitor surface",
+  /document=\{null\}[\s\S]*deterministicContent=\{\{[\s\S]*primaryActionLabel=\{primaryAction\.label\}/,
+  "an unpublished public funnel must use the deterministic conversion surface instead of the legacy visitor lens",
 );
-assert.match(
-  visitorSurface,
-  /<WebMobileDrawer[\s\S]*className="mobile-members-drawer cvs-members-drawer"[\s\S]*lockedSections=\{\{ members: true \}\}[\s\S]*membersPreview=\{memberPreviewFaces\}/,
-  "the visitor Members drawer must reuse the canonical drawer and render only locked public member preview data",
-);
-assert.match(
-  visitorSurface,
-  /firstRootBodyExpansion=\{props\.isMobileLayout/,
-  "the mobile visitor funnel must bound the host-intro preview",
-);
-assert.match(
-  visitorSurface,
-  /<CommunityVisitorMobileJoinDock/,
-  "the mobile visitor funnel must expose one persistent join dock",
-);
-assert.match(
-  visitorChrome,
-  /className="cvs-mobile-join-dock"[\s\S]*action\.primaryActionLabel/,
-  "the persistent mobile conversion action must use the canonical funnel action label and handler",
+assert.doesNotMatch(
+  publicFunnel,
+  /WebCommunityVisitorSurface|CommunityVisitorChrome/,
+  "the canonical public funnel must not retain the deleted visitor-chat lens",
 );
 assert.match(
   communityPublic,
