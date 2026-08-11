@@ -198,6 +198,30 @@ assert.match(
 assert.match(editor, /community_funnel_publish/);
 assert.match(editor, /Publish changes/);
 assert.match(editor, /Make live/);
+assert.match(
+  editor,
+  /Built automatically from your community profile\. Always available\./,
+);
+assert.match(
+  editor,
+  /Describe what you want\. Changes stay private until you publish\./,
+);
+assert.match(editor, /className="funnel-builder-conversation"/);
+assert.match(
+  editor,
+  /\{selectedCustomSlot \? \([\s\S]*?<aside[\s\S]*?className="funnel-builder-conversation"/,
+);
+assert.doesNotMatch(editor, /funnel-builder-default-guidance/);
+assert.doesNotMatch(editor, /funnel-builder-live-state/);
+assert.match(
+  editor,
+  /if \(!isPublishedCurrentDraft\) return "Draft";[\s\S]*?params\.slot === params\.activeSlot \? "Live" : "Published"/,
+);
+assert.match(communityStyles, /\.funnel-builder-layout\.is-default\s*\{/);
+assert.match(
+  communityStyles,
+  /\.funnel-builder-layout\.is-default \.funnel-v1-preview\s*\{[\s\S]*?width:\s*min\(920px, 100%\)/,
+);
 assert.match(editor, /Video Sales Letter/);
 assert.match(
   editor,

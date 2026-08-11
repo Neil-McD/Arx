@@ -111,6 +111,52 @@ final result: passed
 
 ---
 
+# Funnel editor workspace QA
+
+## Evidence
+
+- Source visual truth: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_pLDah6/Screenshot 2026-08-11 at 2.24.20 PM.png` (`1568 x 1227`).
+- Browser implementation: `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-default-dark.png`, `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-default-light.png`, `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-custom-dark.png`, and `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-custom-narrow-fixed.png`.
+- Combined comparison: `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-comparison-normalized.png`.
+- Desktop capture: `1281 x 1000` image pixels at a `1280 x 1000` CSS viewport and 1x density.
+- Narrow capture: `900 x 900` image and CSS pixels at 1x density.
+- States: default/live in both themes; custom/draft desktop and below 980px; empty, published, live, and inactive-default action states inspected in the rendered DOM.
+
+## Full-view and focused comparison
+
+The normalized full-view comparison shows the intentional change: the default funnel no longer reserves a dead guidance rail, the deterministic preview occupies the workspace, and the header has one secondary preview action with no duplicate live badge. Focused captures confirm the default header and full-width preview in both themes, the bounded custom conversation rail, and the sequential narrow custom layout.
+
+## Required fidelity surfaces
+
+- Fonts and typography: existing IBM Plex Sans and funnel display hierarchy are preserved; new helper copy uses the existing 12px muted treatment.
+- Spacing and layout rhythm: header spacing is 12px, default preview caps at 920px, custom rail stays within 320-380px, and no shadows or decorative cards were added.
+- Colors and tokens: existing semantic tokens are preserved; dark and light renders remain legible.
+- Image quality and assets: no asset was added, regenerated, substituted, or transformed.
+- Copy and content: default copy explains its deterministic source and permanence; custom copy states that changes remain private until publication.
+
+## Comparison history
+
+1. Initial desktop comparison found no actionable P0/P1/P2 issue.
+2. Initial 900px capture found a P1 overlap: the grid allocated 520px to the composer while preview content overflowed behind it.
+3. Fix: below 980px, only the custom workspace now uses normal block flow inside the existing scroll container.
+4. Post-fix measurement: preview bottom and composer top both equal `1230.3125px`; `/tmp/polynet-funnel-editor-qa-20260811/funnel-editor-custom-narrow-fixed.png` confirms no overlap.
+
+## Interaction and console
+
+- ArrowRight and End move both selection and focus across tabs.
+- Draft exposes `Publish changes`; published inactive exposes `Make live`; live exposes no primary mutation action; empty exposes only a disabled preview action.
+- Inactive default exposes `Make live` and never mounts the conversation rail.
+- A clean browser load produced no console warnings or errors.
+
+## Findings
+
+- No actionable P0, P1, or P2 findings remain.
+- P3: run one authenticated staging pass with real community data after deployment; local authentication was intentionally not bypassed.
+
+final result: passed
+
+---
+
 # Onboarding setup overlay QA
 
 ## Scope
