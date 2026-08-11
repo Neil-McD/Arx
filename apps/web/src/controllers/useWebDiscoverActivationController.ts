@@ -83,16 +83,11 @@ export function useWebDiscoverActivationController(params: {
         banner_zoom: community.banner_zoom ?? null,
         visibility: community.visibility,
         entry_policy: community.entry_policy ?? null,
-        created_at: community.created_at,
-        updated_at: community.updated_at,
         funnel: community.funnel ?? null,
         member_count:
           typeof community.member_count === "number"
             ? community.member_count
             : null,
-        admin_count: null,
-        online_count: null,
-        online_faces: null,
       });
       params.publicCommunityUi.setPublicCommunityPlans(
         community.active_plan ? [community.active_plan] : [],

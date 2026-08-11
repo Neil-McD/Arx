@@ -238,8 +238,7 @@ const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const persistenceLifecycle = read(
   "apps/web/src/controllers/useWebUiPersistenceLifecycle.ts",
 );
-const funnelCss = read("apps/web/src/components/CommunityFunnelSurface.css");
-const visitorChromeCss = read("apps/web/src/components/CommunityVisitorChrome.css");
+const bridgeCss = read("apps/web/src/components/WebCommunityBridgeCard.css");
 const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const memberAgentComponent = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
@@ -479,7 +478,7 @@ assert.match(baseCss, /data-preview-theme="light"/);
 assert.match(baseCss, /data-preview-theme="dark"/);
 assert.doesNotMatch(baseCss, /data-preview-theme="polynet"|data-theme="polynet"/);
 assert.doesNotMatch(
-  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${funnelCss}\n${memberAgentCss}`,
+  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${bridgeCss}\n${memberAgentCss}`,
   /data-theme-family/,
   "theme family must not survive as a second styling authority",
 );
@@ -574,32 +573,27 @@ assert.doesNotMatch(
 );
 
 assert.doesNotMatch(
-  funnelCss,
+  bridgeCss,
   /\.cfg-(?:page|shell|guestbar|nav|center|topic|feed|rope|mobile-ident)\b/,
-  "retired guest-shell selectors must not survive in shared conversion chrome",
+  "retired guest-shell selectors must not survive in the account bridge",
 );
 assert.match(
-  funnelCss,
-  /\.cfg-alert\s*\{[^}]*var\(--accent-error,\s*#e24b4a\)/,
-  "funnel errors should consume the canonical semantic error token directly",
-);
-assert.match(
-  visitorChromeCss,
+  bridgeCss,
   /\.cfg-gate\.cvs-gate\s*\{[\s\S]*?--cfg-gate-surface:\s*var\(--bg-modal,[^;]+;[\s\S]*?--cfg-primary-surface:\s*var\(--bg-button,[^;]+;/,
-  "the live visitor gate should own its theme adapter",
+  "the live account bridge should own its theme adapter",
 );
 assert.match(
-  funnelCss,
+  bridgeCss,
   /\.cfg-join[^}]*background:\s*var\(--cfg-primary-surface,\s*var\(--bg-button,\s*#f1ede5\)\)/,
-  "shared conversion actions should fail safely to canonical button tokens",
+  "bridge conversion actions should fail safely to canonical button tokens",
 );
 assert.match(
-  funnelCss,
+  bridgeCss,
   /\.cfg-gatecard[^}]*background:\s*var\(--cfg-gate-surface,\s*var\(--bg-modal,\s*#161619\)\)/,
-  "gate cards should retain a deterministic dark fallback",
+  "bridge cards should retain a deterministic dark fallback",
 );
 assert.doesNotMatch(
-  `${funnelCss}\n${memberAgentCss}`,
+  `${bridgeCss}\n${memberAgentCss}`,
   /:root\[data-theme="dark"\]/,
   "Dark component preservation should come from canonical root defaults, not new component overrides",
 );

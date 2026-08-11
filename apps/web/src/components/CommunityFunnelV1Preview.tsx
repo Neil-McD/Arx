@@ -41,10 +41,7 @@ type PreviewCommunity = {
 
 const BENEFIT_ICONS: LucideIcon[] = [UsersRound, Brain, Sparkles, UsersRound];
 
-function PreviewMedia(props: {
-  community: PreviewCommunity;
-  vslUrl: string;
-}) {
+function PreviewMedia(props: { community: PreviewCommunity; vslUrl: string }) {
   const embed = parseEmbedUrl(props.vslUrl);
   if (!embed) return null;
   return (
@@ -62,6 +59,10 @@ function PreviewMedia(props: {
 export function CommunityFunnelV1Preview(props: {
   community: PreviewCommunity;
   document: CommunityFunnelDocumentV1 | null;
+  deterministicContent?: {
+    headline: string;
+    body: string | null;
+  } | null;
   vslUrl?: string | null;
   primaryActionLabel: string;
   isLoading?: boolean;
@@ -80,42 +81,34 @@ export function CommunityFunnelV1Preview(props: {
     ? resolveCommunityFunnelMemberProofInsertIndex(document.sections)
     : null;
 
-  if (!document) {
-    return (
-      <div className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft">
-        <main className="funnel-v1-preview-main funnel-v1-preview-empty">
-          <Sparkles aria-hidden="true" />
-          <strong>Nothing to preview yet.</strong>
-          <span>Prompt the agent to build your funnel.</span>
-        </main>
-      </div>
-    );
-  }
-
-  const renderMemberProof = (params: {
-    key: string;
-    headline?: string | null;
-    body?: string | null;
-  }) => {
+  const renderMemberProof = (params: { key: string; body?: string | null }) => {
     if (!memberProof) return null;
     return (
-      <section key={params.key} className="funnel-v1-member-proof">
+      <section
+        key={params.key}
+        className="funnel-v1-member-proof"
+        aria-label={memberProof.ariaLabel}
+      >
         {memberProof.faces.length ? (
-          <div
-            className="funnel-v1-facepile"
-            role="img"
-            aria-label={memberProof.ariaLabel}
-          >
+          <div className="funnel-v1-facepile" aria-hidden="true">
             {memberProof.faces.map((face) => (
               <UserAvatar
                 key={face.user_id}
-                name={face.display_name ?? "Community member"}
+                name={face.display_name?.trim() || "Community member"}
                 imageUrl={face.avatar_url}
                 focusX={face.avatar_focus_x}
                 focusY={face.avatar_focus_y}
                 zoom={face.avatar_zoom}
                 className="funnel-v1-face"
+                readyClassName="has-image"
+                fallbackClassName="has-fallback"
                 imageClassName="funnel-v1-face-image"
+                fallback={face.initials?.trim() || undefined}
+                fallbackStyle={
+                  face.avatar_color
+                    ? { backgroundColor: face.avatar_color }
+                    : undefined
+                }
                 loading="lazy"
                 alt=""
                 aria-hidden={true}
@@ -127,13 +120,72 @@ export function CommunityFunnelV1Preview(props: {
           </div>
         ) : null}
         <div className="funnel-v1-member-proof-copy">
-          {params.headline ? <h2>{params.headline}</h2> : null}
+          <h2>{memberProof.headline}</h2>
           <p>{memberProof.label}</p>
-          {params.body ? <span>{params.body}</span> : null}
+          <span>
+            {params.body?.trim() ||
+              `Build alongside the people already inside ${community.name}.`}
+          </span>
         </div>
       </section>
     );
   };
+
+  const renderBrand = () => (
+    <header className="funnel-v1-brand">
+      <CommunityAvatar
+        communityId={community.id}
+        name={community.name}
+        imageUrl={community.avatar_url ?? null}
+        focusX={community.avatar_focus_x}
+        focusY={community.avatar_focus_y}
+        zoom={community.avatar_zoom}
+        className="funnel-v1-brand-avatar"
+        style={{ width: 28, height: 28 }}
+      />
+      <span>{community.name}</span>
+    </header>
+  );
+
+  if (!document) {
+    if (!props.deterministicContent) {
+      return (
+        <div className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft">
+          <main className="funnel-v1-preview-main funnel-v1-preview-empty">
+            <Sparkles aria-hidden="true" />
+            <strong>Nothing to preview yet.</strong>
+            <span>Prompt the agent to build your funnel.</span>
+          </main>
+        </div>
+      );
+    }
+    return (
+      <div className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft">
+        <main className="funnel-v1-preview-main funnel-v1-default">
+          {renderBrand()}
+          {props.error ? (
+            <div className="funnel-v1-preview-error">{props.error}</div>
+          ) : null}
+          <section className="funnel-v1-hero funnel-v1-default-hero">
+            <h1>{props.deterministicContent.headline}</h1>
+            {props.deterministicContent.body ? (
+              <p>{props.deterministicContent.body}</p>
+            ) : null}
+          </section>
+          {renderMemberProof({ key: "deterministic-member-proof" })}
+          <section className="funnel-v1-conversion">
+            <button
+              type="button"
+              disabled={isPreview || props.primaryActionDisabled}
+              onClick={isPreview ? undefined : props.onPrimaryAction}
+            >
+              {props.primaryActionLabel}
+            </button>
+          </section>
+        </main>
+      </div>
+    );
+  }
 
   const renderSection = (section: CommunityFunnelSectionV1, index: number) => {
     if (section.type === "hero") {
@@ -179,7 +231,6 @@ export function CommunityFunnelV1Preview(props: {
     if (section.type === "social_proof") {
       return renderMemberProof({
         key: section.id,
-        headline: section.headline,
         body: section.body,
       });
     }
@@ -247,19 +298,7 @@ export function CommunityFunnelV1Preview(props: {
       aria-busy={props.isLoading || undefined}
     >
       <main className="funnel-v1-preview-main">
-        <header className="funnel-v1-brand">
-          <CommunityAvatar
-            communityId={community.id}
-            name={community.name}
-            imageUrl={community.avatar_url ?? null}
-            focusX={community.avatar_focus_x}
-            focusY={community.avatar_focus_y}
-            zoom={community.avatar_zoom}
-            className="funnel-v1-brand-avatar"
-            style={{ width: 28, height: 28 }}
-          />
-          <span>{community.name}</span>
-        </header>
+        {renderBrand()}
         {props.error ? (
           <div className="funnel-v1-preview-error">{props.error}</div>
         ) : null}

@@ -31,9 +31,7 @@ const controller = read(
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const webAppContracts = read("apps/web/src/webAppContracts.ts");
-const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
-const funnelSurface = read("apps/web/src/components/CommunityFunnelSurface.tsx");
-const visitorChrome = read("apps/web/src/components/CommunityVisitorChrome.tsx");
+const app = read("apps/web/src/App.tsx");
 
 const presenceSchema = sectionBetween(
   schema,
@@ -68,7 +66,7 @@ const publicStatsResolver = sectionBetween(
 const publicStatsMapper = sectionBetween(
   communityPublic,
   "function mapPublicCommunityStats",
-  "const PUBLIC_FEATURED_MESSAGE_LIMIT",
+  "export const resolvePublicFunnelBySlug",
 );
 const presenceEffect = sectionBetween(
   controller,
@@ -257,19 +255,14 @@ assert.match(
   "the facepile must not present a capped count as exact",
 );
 assert.match(
-  webAppContracts + funnelSurface,
-  /online_count_capped\?: boolean \| null[\s\S]*onlineCountCapped: boolean/,
-  "the public frontend types must retain the conservative count state",
+  webAppContracts,
+  /online_count_capped\?: boolean \| null/,
+  "the public frontend contract must retain the conservative count state",
 );
 assert.match(
-  publicFunnel,
-  /onlineCountCapped = Boolean\(publicCommunity\?\.online_count_capped\)[\s\S]*onlineCountCapped,[\s\S]*stats=\{\{[\s\S]*onlineCountCapped,/,
-  "the public funnel must carry the conservative count state into its visitor projections",
-);
-assert.match(
-  visitorChrome,
-  /formatCompactStat\(action\.onlineCount\)[\s\S]*action\.onlineCountCapped \? "\+" : ""/,
-  "the public gate must visibly label a capped online count as a lower bound",
+  app,
+  /isVisitorCommunitySurface[\s\S]*resolvedPublicCommunity\?\.online_faces \?\? \[\][\s\S]*resolvedPublicCommunity\?\.member_count \?\? null/,
+  "the visitor shell must use public presence faces without inflating the total member count",
 );
 
 console.log("community_presence_lease_contract_proof: ok");

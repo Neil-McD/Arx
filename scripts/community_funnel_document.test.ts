@@ -1,31 +1,26 @@
 import { describe, expect, it } from "vitest";
 
 import {
-  buildDefaultCommunityFunnelDocumentV1,
   normalizeCommunityFunnelVslUrl,
   validateCommunityFunnelDocumentV1,
   withoutCommunityFunnelMediaSections,
 } from "../shared/communityFunnel";
+import { buildCommunityFunnelDocumentTestFixture } from "./community_funnel_test_fixture";
 
 describe("Community Funnel V1 document", () => {
-  it("builds a valid bounded default document", () => {
-    const document = buildDefaultCommunityFunnelDocumentV1({
-      communityName: "Builders",
-      oneLiner: "Build compounding systems together.",
-    });
+  it("accepts a minimal valid bounded document", () => {
+    const document = buildCommunityFunnelDocumentTestFixture();
     expect(validateCommunityFunnelDocumentV1(document)).toEqual(document);
     expect(document.theme.appearance).toBe("inherit");
     expect(document.theme.accent).toBe("blue");
-    expect(document.sections).toHaveLength(4);
+    expect(document.sections).toHaveLength(2);
     expect(document.sections.some((section) => section.type === "media")).toBe(
       false,
     );
   });
 
   it("canonicalizes legacy funnel appearances to the Polynet theme", () => {
-    const document = buildDefaultCommunityFunnelDocumentV1({
-      communityName: "Builders",
-    });
+    const document = buildCommunityFunnelDocumentTestFixture();
     for (const appearance of ["light", "dark", "inherit"] as const) {
       expect(
         validateCommunityFunnelDocumentV1({
@@ -37,15 +32,13 @@ describe("Community Funnel V1 document", () => {
   });
 
   it("rejects documents that exceed the section budget", () => {
-    const document = buildDefaultCommunityFunnelDocumentV1({
-      communityName: "Builders",
-    });
+    const document = buildCommunityFunnelDocumentTestFixture();
     expect(() =>
       validateCommunityFunnelDocumentV1({
         ...document,
         sections: [
           ...document.sections,
-          ...Array.from({ length: 7 }, (_, index) => ({
+          ...Array.from({ length: 9 }, (_, index) => ({
             id: `proof-${index}`,
             type: "social_proof",
             headline: null,
@@ -57,9 +50,13 @@ describe("Community Funnel V1 document", () => {
   });
 
   it("rejects duplicate IDs and requires exactly one hero and CTA", () => {
-    const document = buildDefaultCommunityFunnelDocumentV1({
-      communityName: "Builders",
-    });
+    const document = buildCommunityFunnelDocumentTestFixture();
+    const neutralProof = {
+      id: "proof",
+      type: "social_proof" as const,
+      headline: null,
+      body: null,
+    };
     expect(() =>
       validateCommunityFunnelDocumentV1({
         ...document,
@@ -71,23 +68,25 @@ describe("Community Funnel V1 document", () => {
     expect(() =>
       validateCommunityFunnelDocumentV1({
         ...document,
-        sections: document.sections.filter(
-          (section) => section.type !== "hero",
-        ),
+        sections: [
+          neutralProof,
+          ...document.sections.filter((section) => section.type !== "hero"),
+        ],
       }),
     ).toThrow("community_funnel_document_requires_one_hero");
     expect(() =>
       validateCommunityFunnelDocumentV1({
         ...document,
-        sections: document.sections.filter((section) => section.type !== "cta"),
+        sections: [
+          ...document.sections.filter((section) => section.type !== "cta"),
+          neutralProof,
+        ],
       }),
     ).toThrow("community_funnel_document_requires_one_cta");
   });
 
   it("rejects executable or untrusted media origins", () => {
-    const document = buildDefaultCommunityFunnelDocumentV1({
-      communityName: "Builders",
-    });
+    const document = buildCommunityFunnelDocumentTestFixture();
     const withMedia = (mediaUrl: string) => ({
       ...document,
       sections: [
@@ -127,9 +126,7 @@ describe("Community Funnel V1 document", () => {
       normalizeCommunityFunnelVslUrl("https://attacker.example/video"),
     ).toThrow("community_funnel_vsl_url_unsupported");
 
-    const document = buildDefaultCommunityFunnelDocumentV1({
-      communityName: "Builders",
-    });
+    const document = buildCommunityFunnelDocumentTestFixture();
     const legacyDocument = validateCommunityFunnelDocumentV1({
       ...document,
       sections: [
@@ -151,23 +148,23 @@ describe("Community Funnel V1 document", () => {
   });
 
   it("rejects oversized section contents instead of silently truncating them", () => {
-    const document = buildDefaultCommunityFunnelDocumentV1({
-      communityName: "Builders",
-    });
+    const document = buildCommunityFunnelDocumentTestFixture();
     expect(() =>
       validateCommunityFunnelDocumentV1({
         ...document,
-        sections: document.sections.map((section) =>
-          section.type === "benefits"
-            ? {
-                ...section,
-                items: Array.from({ length: 5 }, (_, index) => ({
-                  title: `Benefit ${index + 1}`,
-                  body: "Bounded benefit",
-                })),
-              }
-            : section,
-        ),
+        sections: [
+          document.sections[0],
+          {
+            id: "benefits",
+            type: "benefits",
+            heading: "Benefits",
+            items: Array.from({ length: 5 }, (_, index) => ({
+              title: `Benefit ${index + 1}`,
+              body: "Bounded benefit",
+            })),
+          },
+          document.sections[1],
+        ],
       }),
     ).toThrow("community_funnel_benefits_limit_exceeded");
   });

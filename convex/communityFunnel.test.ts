@@ -5,7 +5,7 @@ import { expect, test } from "vitest";
 
 import { api } from "./_generated/api";
 import schema from "./schema";
-import { buildDefaultCommunityFunnelDocumentV1 } from "../shared/communityFunnel";
+import { buildCommunityFunnelDocumentTestFixture } from "../scripts/community_funnel_test_fixture";
 import { saveCommunityFunnelConfigInternal } from "./communityFunnel";
 
 const modules = import.meta.glob([
@@ -59,9 +59,8 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    const draft = buildDefaultCommunityFunnelDocumentV1({
-      communityName: "Community funnel publish",
-      oneLiner: "Private draft one",
+    const draft = buildCommunityFunnelDocumentTestFixture({
+      headline: "Private draft one",
     });
     const funnelId = await ctx.db.insert("communityFunnels", {
       communityId,
@@ -109,6 +108,55 @@ test("manager publication snapshots one exact draft revision for public use", as
   expect(after.community?.funnel).not.toHaveProperty("published_at");
 });
 
+test("public funnel descriptor exposes only renderer and admission inputs", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityPricePoints", {
+      communityId: fixture.communityId,
+      billingPeriod: "monthly",
+      name: "Monthly access",
+      amountBaseUnits: 2900,
+      currency: "usd",
+      currencyDecimals: 2,
+      isCurrent: true,
+      createdAt: 1_750_000_000_000,
+      updatedAt: 1_750_000_000_000,
+    });
+  });
+
+  const result = await t.query(api.communityPublic.resolvePublicFunnelBySlug, {
+    communitySlug: "community-funnel-publish",
+  });
+
+  expect(result).toMatchObject({
+    ok: true,
+    community: {
+      slug: "community-funnel-publish",
+      name: "Community funnel publish",
+      visibility: "published",
+      entry_policy: "open",
+      host: {
+        display_name: "Funnel owner",
+      },
+      funnel: {
+        published_document_v1: null,
+      },
+    },
+    active_plan: {
+      billing_period: "monthly",
+      amount_base_units: "2900",
+      currency: "usd",
+    },
+  });
+  expect(result.community).toHaveProperty("avatar_url");
+  expect(result.community).toHaveProperty("banner_url");
+  expect(result.community).not.toHaveProperty("featured_messages");
+  expect(result.community).not.toHaveProperty("availability");
+  expect(result.community).not.toHaveProperty("created_at");
+  expect(result.community).not.toHaveProperty("updated_at");
+});
+
 test("publication is manager-only, revision-safe, and idempotent", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
@@ -147,9 +195,8 @@ test("a newer private draft cannot mutate the published snapshot", async () => {
     communityId: fixture.communityId,
     expectedDraftRevision: 1,
   });
-  const nextDraft = buildDefaultCommunityFunnelDocumentV1({
-    communityName: "Community funnel publish",
-    oneLiner: "Private draft two",
+  const nextDraft = buildCommunityFunnelDocumentTestFixture({
+    headline: "Private draft two",
   });
   await t.run(async (ctx) => {
     await ctx.db.patch(fixture.funnelId, {

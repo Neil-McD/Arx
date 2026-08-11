@@ -43,6 +43,12 @@ const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
 const backend = read("convex/communityFunnel.ts");
 const schema = read("convex/schema.ts");
 
+assert.doesNotMatch(
+  documentContract,
+  /buildDefaultCommunityFunnelDocumentV1/,
+  "production funnel contracts must not synthesize an authored default document",
+);
+
 // Product surface: one persistent conversation beside one trusted preview.
 assert.match(editor, /buildCommunityFunnelThreadKey/);
 assert.match(editor, /useWebTurnRunnerController/);
@@ -55,6 +61,7 @@ assert.match(editor, /CommunityFunnelV1Preview/);
 assert.match(editor, /fetchCloudPublicFunnelStats/);
 assert.match(editor, /community_funnel_member_proof_load_failed/);
 assert.match(editor, /community={hydratedPreviewCommunity}/);
+assert.match(editor, /primaryActionLabel={props\.previewPrimaryActionLabel}/);
 assert.doesNotMatch(editor, /buildDefaultCommunityFunnelDocumentV1/);
 assert.match(
   editor,
@@ -330,7 +337,14 @@ assert.doesNotMatch(
 );
 assert.match(preview, /Nothing to preview yet\./);
 assert.match(preview, /Prompt the agent to build your funnel\./);
-assert.match(publicFunnel, /return \([\s\S]*<WebCommunityVisitorSurface/);
+assert.doesNotMatch(publicFunnel, /WebCommunityVisitorSurface/);
+assert.match(
+  publicFunnel,
+  /document=\{null\}[\s\S]*deterministicContent=\{\{[\s\S]*headline: publicCommunity\.one_liner\?\.trim\(\) \|\| communityName,[\s\S]*body: publicCommunity\.about\?\.trim\(\) \|\| null/,
+  "unpublished communities must render only canonical deterministic content",
+);
+assert.match(publicFunnel, /buildCommunityFunnelPrimaryActionView/);
+assert.doesNotMatch(publicFunnel, /formatCtaPriceLabel|Join now/);
 assert.match(
   publicFunnel,
   /funnel\?\.published_document_v1[\s\S]*document=\{funnel\.published_document_v1\}[\s\S]*isPreview=\{false\}/,
@@ -360,5 +374,5 @@ assert.doesNotMatch(preview, /`is-\$\{document\.theme\.appearance\}`/);
 assert.doesNotMatch(previewStyles, /\.funnel-v1-preview\.is-light/);
 
 console.log(
-  "PASS: Funnel V1 is an AI-assisted bounded draft composer with explicit manager-only revision-safe publication; preview stays disabled, published snapshots power live V1, and unpublished communities retain V0.",
+  "PASS: Funnel V1 keeps private AI drafts and explicit publication separate; published snapshots power custom funnels while unpublished communities render the canonical deterministic fallback.",
 );

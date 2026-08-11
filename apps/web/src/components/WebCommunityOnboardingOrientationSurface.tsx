@@ -1,6 +1,6 @@
 import type { CommunityOnboardingSession } from "../../../../shared/communityOnboarding";
 import { buildCommunityOnboardingCopy } from "../../../../shared/communityOnboardingCopy";
-import { renderHeroMediaDefault } from "./CommunityFunnelSurface";
+import { renderDeferredCommunityHeroMedia } from "./CommunityDeferredHeroMedia";
 import { WebCommunityOnboardingConciergeSurface } from "./WebCommunityOnboardingConciergeSurface";
 
 export function WebCommunityOnboardingOrientationSurface(props: {
@@ -19,7 +19,7 @@ export function WebCommunityOnboardingOrientationSurface(props: {
   onDismiss: () => void;
 }) {
   const video = props.session.intro_video_url
-    ? renderHeroMediaDefault("video", props.session.intro_video_url, {
+    ? renderDeferredCommunityHeroMedia("video", props.session.intro_video_url, {
         eager: true,
         playHint: "Watch the founder welcome",
       })

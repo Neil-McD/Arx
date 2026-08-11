@@ -42,10 +42,13 @@ const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const chatPresentationMode = read(
   "apps/web/src/controllers/resolveWebCommunityChatPresentationMode.ts",
 );
-const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
-const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
+const projection = read(
+  "apps/web/src/components/WebCommunityInteractionProjection.tsx",
+);
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
-const memberSettingsDialog = read("apps/web/src/components/CommunityMemberSettingsDialog.tsx");
+const memberSettingsDialog = read(
+  "apps/web/src/components/CommunityMemberSettingsDialog.tsx",
+);
 const communityNav = read("shared/CommunityNav.tsx");
 const communityAccessViewModel = read("shared/communityAccessViewModel.ts");
 const chromeShared = read("apps/web/src/components/webShellChromeShared.ts");
@@ -62,7 +65,9 @@ const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const directoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const directoryController = read("shared/useCommunityDirectoryController.ts");
-const activeCommunityShellController = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
+const activeCommunityShellController = read(
+  "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
+);
 const communityDirectory = read("convex/communityDirectory.ts");
 const communityDirectoryPageQuery = communityDirectory.slice(
   communityDirectory.indexOf("export const listCommunityDirectoryPage"),
@@ -70,7 +75,12 @@ const communityDirectoryPageQuery = communityDirectory.slice(
 const communityPublic = read("convex/communityPublic.ts");
 const communityAdmin = read("convex/communityAdmin.ts");
 const interactions = read("convex/communityInteractions.ts");
-const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
+const baseCss = [
+  read("apps/web/src/base.css"),
+  read("apps/web/src/styles/shell-and-onboarding.css"),
+  read("apps/web/src/styles/community-and-content.css"),
+  read("apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
+].join("\n");
 const contextFaceCss = sectionBetween(
   baseCss,
   ".community-context-face {",
@@ -86,7 +96,7 @@ const chatBlockMarkdownUi = read("shared/chatBlockMarkdownUi.tsx");
 const publicCommunityStatsMapper = sectionBetween(
   communityPublic,
   "function mapPublicCommunityStats",
-  "const PUBLIC_FEATURED_MESSAGE_LIMIT",
+  "export const resolvePublicFunnelBySlug",
 );
 const memberPresenceSummaryQuery = sectionBetween(
   communityPublic,
@@ -210,11 +220,6 @@ assert.doesNotMatch(
   surfaceProjection,
   /renderMarkdown/,
   "community surface projection should not carry an unused workspace markdown renderer",
-);
-assert.doesNotMatch(
-  visitorSurface,
-  /renderMarkdown/,
-  "visitor chat should use the same bounded community renderer without importing workspace markdown",
 );
 assert.doesNotMatch(
   projection,
@@ -652,7 +657,9 @@ assert.match(
   "deny join request should validate request ids as communityJoinRequests ids",
 );
 assert.equal(
-  existsSync(join(root, "apps/web/src/components/WebWorkspaceUserDataPanel.tsx")),
+  existsSync(
+    join(root, "apps/web/src/components/WebWorkspaceUserDataPanel.tsx"),
+  ),
   false,
   "the retired Workspace data panel must remain absent once member-header approvals own the queue",
 );

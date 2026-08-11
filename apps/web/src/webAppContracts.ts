@@ -48,8 +48,7 @@ export type WebPublicCommunityRecord = {
   banner_zoom?: number | null;
   visibility: string;
   entry_policy?: "open" | "approval" | "paid_subscription" | null;
-  created_at: string;
-  updated_at: string;
+  host?: Omit<CommunityPublicFace, "user_id"> | null;
   funnel?: CommunityFunnelConfig | null;
   member_count?: number | null;
   member_faces_preview?: CommunityPublicFace[] | null;

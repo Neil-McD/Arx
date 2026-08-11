@@ -98,6 +98,7 @@ export type WebCommunityFunnelEditorProps = {
   hydrateCommunityFunnelEditor: (
     config: CommunityFunnelManagerConfig | null,
   ) => void;
+  previewPrimaryActionLabel: string;
   previewCommunity: PreviewCommunityLike;
 };
 
@@ -684,7 +685,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               community={hydratedPreviewCommunity}
               document={document}
               vslUrl={savedVslUrl}
-              primaryActionLabel={`Join ${props.previewCommunity.name}`}
+              primaryActionLabel={props.previewPrimaryActionLabel}
             />
           ) : (
             <div className="funnel-builder-preview-empty">

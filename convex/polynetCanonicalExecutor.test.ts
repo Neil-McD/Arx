@@ -7,7 +7,7 @@ import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import schema from "./schema";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
-import { buildDefaultCommunityFunnelDocumentV1 } from "../shared/communityFunnel";
+import { buildCommunityFunnelDocumentTestFixture } from "../scripts/community_funnel_test_fixture";
 
 const modules = import.meta.glob([
   "./authActor.ts",
@@ -625,9 +625,8 @@ test("funnel draft capability is visible and executable only on the manager funn
     });
   }
 
-  const document = buildDefaultCommunityFunnelDocumentV1({
-    communityName: "Canonical community",
-    oneLiner: "Build together with a shared operating memory.",
+  const document = buildCommunityFunnelDocumentTestFixture({
+    headline: "Build together with a shared operating memory.",
   });
   const creatorVslUrl = "https://www.youtube.com/watch?v=abcdefghijk";
   await t.run(async (ctx) => {

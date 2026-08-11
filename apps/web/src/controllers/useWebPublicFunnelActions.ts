@@ -30,12 +30,6 @@ type UseWebPublicFunnelActionsArgs<
     entry_policy?: unknown;
     avatar_url?: string | null;
     banner_url?: string | null;
-    online_faces?: Array<{
-      avatar_url?: string | null;
-      avatar_focus_x?: number | null;
-      avatar_focus_y?: number | null;
-      avatar_zoom?: number | null;
-    } | null> | null;
     funnel?: {
       hero_media_kind?: unknown;
       hero_media_url?: string | null;
@@ -92,12 +86,6 @@ export function useWebPublicFunnelActions<
     entry_policy?: unknown;
     avatar_url?: string | null;
     banner_url?: string | null;
-    online_faces?: Array<{
-      avatar_url?: string | null;
-      avatar_focus_x?: number | null;
-      avatar_focus_y?: number | null;
-      avatar_zoom?: number | null;
-    } | null> | null;
     funnel?: {
       hero_media_kind?: unknown;
       hero_media_url?: string | null;
@@ -417,7 +405,6 @@ export function useWebPublicFunnelActions<
         const revealImageUrls = [
           payload.community.avatar_url ?? null,
           payload.community.banner_url ?? null,
-          ...((payload.community.online_faces ?? []).map((face) => face?.avatar_url ?? null)),
           (payload.community.funnel?.hero_media_kind ?? null) === "image"
             ? (payload.community.funnel?.hero_media_url ?? null)
             : null,

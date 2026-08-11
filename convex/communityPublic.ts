@@ -1,5 +1,4 @@
 import { mutation, query } from "./_generated/server";
-import { extractMessageText } from "./communityChat";
 import { v } from "convex/values";
 import {
   type CommunityLike,
@@ -299,52 +298,6 @@ function mapPublicCommunityStats(stats: {
   };
 }
 
-const PUBLIC_FEATURED_MESSAGE_LIMIT = 6;
-
-/* Public-safe projection of host-featured messages for the visitor funnel:
-   text body + sender face + timestamps + reaction counts. No attachments,
-   no thread context, nothing the host didn't explicitly feature. */
-async function resolvePublicFeaturedMessages(ctx: any, communityId: any) {
-  const rows = await ctx.db
-    .query("communityFeaturedMessages")
-    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
-    .order("desc")
-    .take(PUBLIC_FEATURED_MESSAGE_LIMIT * 2);
-  const out: Array<Record<string, unknown>> = [];
-  for (const row of rows) {
-    if (out.length >= PUBLIC_FEATURED_MESSAGE_LIMIT) break;
-    const message = await ctx.db.get(row.messageId);
-    if (!message) continue;
-    const body = extractMessageText(message.contentJson);
-    if (!body) continue;
-    const senderFace = message.senderUserId
-      ? await resolvePublicProfileFaceFields(ctx, message.senderUserId)
-      : null;
-    const reactionRows = await ctx.db
-      .query("communityMessageReactions")
-      .withIndex("by_message", (q: any) => q.eq("messageId", row.messageId))
-      .take(200);
-    const counts: Record<string, number> = {};
-    for (const reaction of reactionRows) {
-      const emoji = String(reaction.emoji ?? "").trim();
-      if (!emoji) continue;
-      counts[emoji] = (counts[emoji] ?? 0) + 1;
-    }
-    out.push({
-      id: String(row.messageId),
-      body,
-      created_at: toIsoString(message.createdAt),
-      featured_at: toIsoString(row.createdAt),
-      sender: senderFace,
-      reactions: Object.entries(counts)
-        .map(([emoji, count]) => ({ emoji, count }))
-        .sort((a, b) => b.count - a.count)
-        .slice(0, 4),
-    });
-  }
-  return out;
-}
-
 export const resolvePublicFunnelBySlug = query({
   args: {
     communitySlug: v.string(),
@@ -364,10 +317,6 @@ export const resolvePublicFunnelBySlug = query({
     const funnel = await resolveCommunityFunnelConfigByCommunityId(ctx, community._id);
     const owner = community.ownerId ? await ctx.db.get(community.ownerId) : null;
     const host = owner ? await resolvePublicProfileFaceFields(ctx, owner._id) : null;
-    const builderAccess = await resolveCommunityBuilderAccess({
-      ctx,
-      community,
-    });
 
     return {
       ok: true,
@@ -375,7 +324,6 @@ export const resolvePublicFunnelBySlug = query({
         slug: community.slug,
         name: community.name,
         host,
-        featured_messages: await resolvePublicFeaturedMessages(ctx, community._id),
         one_liner: community.oneLiner ?? null,
         about: community.about ?? null,
         avatar_url: branding.avatar_url,
@@ -388,11 +336,6 @@ export const resolvePublicFunnelBySlug = query({
         banner_zoom: branding.banner_zoom,
         visibility: community.visibility,
         entry_policy: entryPolicy,
-        availability: builderAccess.operational
-          ? "available"
-          : "temporarily_unavailable",
-        created_at: toIsoString(community.createdAt),
-        updated_at: toIsoString(community.updatedAt),
         funnel,
       },
       active_plan: activePlan,
