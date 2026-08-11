@@ -8,7 +8,6 @@ import {
 import { Fragment } from "react";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
-import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   buildCommunityFunnelMemberProofView,
   resolveCommunityFunnelMemberProofInsertIndex,
@@ -19,6 +18,7 @@ import type {
   CommunityPublicFace,
 } from "../../../../shared/communityTypes";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
+import { MemberAvatarStack } from "./MemberAvatarStack";
 import "./CommunityFunnelV1Preview.css";
 
 type PreviewCommunity = {
@@ -89,50 +89,18 @@ export function CommunityFunnelV1Preview(props: {
         className="funnel-v1-member-proof"
         aria-label={memberProof.ariaLabel}
       >
-        {memberProof.faces.length ? (
-          <div className="funnel-v1-member-avatars" aria-hidden="true">
-            {memberProof.faces.map((face) => (
-              <span
-                key={face.user_id}
-                className="community-context-member-avatar"
-                style={
-                  !face.avatar_url && face.avatar_color
-                    ? { color: face.avatar_color }
-                    : undefined
-                }
-              >
-                <UserAvatar
-                  className="community-context-member-avatar-media"
-                  readyClassName="has-image"
-                  name={face.display_name?.trim() || "Community member"}
-                  imageUrl={face.avatar_url}
-                  focusX={face.avatar_focus_x}
-                  focusY={face.avatar_focus_y}
-                  zoom={face.avatar_zoom}
-                  fallback={<span>{face.initials?.trim() || "?"}</span>}
-                  loading="lazy"
-                  alt=""
-                  aria-hidden={true}
-                />
-              </span>
-            ))}
-            {memberProof.hiddenFaceCount > 0 ? (
-              <span
-                className="community-context-member-avatar funnel-v1-member-avatar-more"
-                aria-hidden="true"
-              >
-                +{memberProof.hiddenFaceCount}
-              </span>
-            ) : null}
-          </div>
-        ) : null}
+        <MemberAvatarStack
+          className="funnel-v1-member-avatars"
+          faces={memberProof.faces}
+          totalCount={memberProof.memberCount}
+          limit={5}
+          decorative={true}
+          imageLoading="lazy"
+        />
         <div className="funnel-v1-member-proof-copy">
           <h2>{memberProof.headline}</h2>
           <p>{memberProof.label}</p>
-          <span>
-            {params.body?.trim() ||
-              `Build alongside the people already inside ${community.name}.`}
-          </span>
+          {params.body?.trim() ? <span>{params.body.trim()}</span> : null}
         </div>
       </section>
     );
@@ -236,10 +204,7 @@ export function CommunityFunnelV1Preview(props: {
       );
     }
     if (section.type === "social_proof") {
-      return renderMemberProof({
-        key: section.id,
-        body: section.body,
-      });
+      return renderMemberProof({ key: section.id, body: section.body });
     }
     if (section.type === "testimonial") {
       return (

@@ -83,8 +83,8 @@ const baseCss = [
 ].join("\n");
 const contextFaceCss = sectionBetween(
   baseCss,
-  ".community-context-face {",
-  ".community-context-face-more",
+  ".member-avatar-stack-face {",
+  ".member-avatar-stack-more",
 );
 const contextMemberAvatarMediaCss = sectionBetween(
   baseCss,
