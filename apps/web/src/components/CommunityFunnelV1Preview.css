@@ -236,14 +236,14 @@
   line-height: 1.55;
 }
 
-.funnel-v1-default-conversion {
+.funnel-v1-conversion-spine.is-default {
   width: min(560px, 100%);
   margin: clamp(48px, 7vh, 72px) auto 0;
   padding-top: 30px;
   border-top: 1px solid var(--funnel-v1-divider);
 }
 
-.funnel-v1-default-member-proof {
+.funnel-v1-member-proof-row {
   display: flex;
   min-height: 30px;
   align-items: center;
@@ -255,7 +255,7 @@
   line-height: 1.3;
 }
 
-.funnel-v1-default-member-avatars {
+.funnel-v1-member-proof-avatars {
   --member-avatar-stack-face-size: 30px;
 }
 
@@ -281,18 +281,16 @@
   border: 0;
 }
 
-.funnel-v1-conversion,
 .funnel-v1-final-cta {
   text-align: center;
 }
-.funnel-v1-conversion {
-  padding: 34px 0 30px;
+.funnel-v1-conversion-action {
+  text-align: center;
 }
-.funnel-v1-default .funnel-v1-conversion {
+.funnel-v1-conversion-spine.is-default .funnel-v1-conversion-action {
   padding: 28px 0 0;
 }
-.funnel-v1-conversion button,
-.funnel-v1-final-cta button {
+.funnel-v1-conversion-action button {
   width: min(340px, 100%);
   min-height: 60px;
   border: 0;
@@ -304,7 +302,7 @@
   font-weight: 650;
   opacity: 1;
 }
-.funnel-v1-default .funnel-v1-conversion button {
+.funnel-v1-conversion-spine.is-default .funnel-v1-conversion-action button {
   width: min(430px, 100%);
   min-height: 68px;
   border-radius: 9px;
@@ -316,17 +314,20 @@
     background-color 140ms ease,
     transform 140ms ease;
 }
-.funnel-v1-default .funnel-v1-conversion button:not(:disabled):hover {
+.funnel-v1-conversion-spine.is-default
+  .funnel-v1-conversion-action
+  button:not(:disabled):hover {
   background: color-mix(in srgb, var(--accent-selection) 88%, white 12%);
 }
-.funnel-v1-default .funnel-v1-conversion button:not(:disabled):active {
+.funnel-v1-conversion-spine.is-default
+  .funnel-v1-conversion-action
+  button:not(:disabled):active {
   transform: translateY(1px);
 }
-.funnel-v1-default .funnel-v1-conversion button:focus-visible {
+.funnel-v1-conversion-action button:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 3px;
 }
-.funnel-v1-conversion p,
 .funnel-v1-final-cta p {
   margin: 15px 0 0;
   color: var(--funnel-v1-muted);
@@ -342,10 +343,6 @@
   margin-top: 12px;
   color: var(--funnel-v1-muted);
 }
-.funnel-v1-conversion p span {
-  margin: 0 9px;
-}
-
 .funnel-v1-pillars {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -420,54 +417,6 @@
   color: var(--funnel-v1-text);
 }
 
-.funnel-v1-member-proof {
-  width: min(560px, 100%);
-  margin: var(--funnel-v1-section-gap) auto 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  padding: 14px 18px;
-  border: 1px solid color-mix(in srgb, var(--funnel-v1-divider) 78%, transparent);
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--surface-card) 62%, transparent);
-}
-.funnel-v1-member-proof-copy {
-  display: grid;
-  gap: 2px;
-}
-.funnel-v1-member-proof-copy h2 {
-  margin: 0;
-  font-size: 16px;
-  line-height: 1.25;
-  letter-spacing: -0.015em;
-}
-.funnel-v1-member-proof-copy p {
-  margin: 0;
-  color: var(--funnel-v1-muted);
-  font-size: 12px;
-  line-height: 1.35;
-}
-.funnel-v1-member-proof-copy span {
-  color: var(--funnel-v1-muted);
-  font-size: 12px;
-  line-height: 1.4;
-}
-.funnel-v1-member-avatars {
-  flex: 0 0 auto;
-}
-
-@media (max-width: 560px) {
-  .funnel-v1-member-proof {
-    flex-direction: column;
-    text-align: center;
-  }
-
-  .funnel-v1-member-proof-copy {
-    justify-items: center;
-  }
-}
-
 .funnel-v1-faq {
   width: min(650px, 100%);
   margin: var(--funnel-v1-section-gap) auto 0;
@@ -505,6 +454,20 @@
 }
 .funnel-v1-final-cta {
   padding-top: calc(var(--funnel-v1-section-gap) + 8px);
+}
+.funnel-v1-conversion-spine.is-document .funnel-v1-conversion-action {
+  width: min(560px, 100%);
+  margin: 34px auto 0;
+  padding-top: 28px;
+  border-top: 1px solid var(--funnel-v1-divider);
+}
+.funnel-v1-conversion-spine.is-document .funnel-v1-conversion-action > button {
+  margin-top: 26px;
+}
+.funnel-v1-conversion-spine.is-document
+  .funnel-v1-conversion-action
+  > button:first-child {
+  margin-top: 0;
 }
 .funnel-v1-preview-error {
   margin: 0 0 18px;
@@ -563,10 +526,6 @@
     padding: 34px 12px;
     text-align: center;
   }
-  .funnel-v1-member-proof {
-    flex-direction: column;
-    gap: 8px;
-  }
   .funnel-v1-default {
     padding-block: 48px;
   }
@@ -579,11 +538,11 @@
   .funnel-v1-default-hero h1 {
     font-size: clamp(36px, 11vw, 48px);
   }
-  .funnel-v1-default-conversion {
+  .funnel-v1-conversion-spine.is-default {
     margin-top: 42px;
     padding-top: 24px;
   }
-  .funnel-v1-default .funnel-v1-conversion {
+  .funnel-v1-conversion-spine.is-default .funnel-v1-conversion-action {
     padding-top: 24px;
   }
 }

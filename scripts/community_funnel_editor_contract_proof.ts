@@ -92,28 +92,41 @@ assert.doesNotMatch(
   editor,
   /Save draft|Headline[\s\S]*Subheadline|custom html|custom css|script/i,
 );
-assert.match(preview, /resolveCommunityFunnelMemberProofInsertIndex/);
 assert.match(preview, /buildCommunityFunnelMemberProofView/);
-assert.match(preview, /automaticMemberProofInsertIndex/);
+assert.doesNotMatch(preview, /resolveCommunityFunnelMemberProofInsertIndex/);
+assert.doesNotMatch(preview, /automaticMemberProofInsertIndex/);
 assert.match(preview, /<MemberAvatarStack/);
 assert.doesNotMatch(preview, /<img key=\{face\.user_id\}/);
 assert.match(preview, /renderBrand\("default"\)/);
-assert.match(preview, /renderDefaultMemberProof/);
-assert.match(preview, /className="funnel-v1-default-conversion"/);
+assert.match(preview, /renderConversionSpine/);
+assert.match(preview, /className="funnel-v1-member-proof-row"/);
+assert.match(preview, /section\.type === "social_proof"[\s\S]*return null/);
+assert.equal(
+  preview.match(/\{renderMemberProof\(\)\}/g)?.length,
+  1,
+  "the canonical member proof must have exactly one render call inside the shared conversion spine",
+);
+assert.match(preview, /variant: "default"/);
+assert.match(preview, /variant: "document"/);
 assert.match(
   previewStyles,
-  /\.funnel-v1-brand\.is-default[\s\S]*\.funnel-v1-default-hero h1[\s\S]*\.funnel-v1-default-conversion/,
+  /\.funnel-v1-brand\.is-default[\s\S]*\.funnel-v1-default-hero h1[\s\S]*\.funnel-v1-conversion-spine\.is-default/,
   "the deterministic fallback must retain the selected centered-cover hierarchy",
 );
 assert.match(
   previewStyles,
-  /\.funnel-v1-default \.funnel-v1-conversion button \{[\s\S]*background: var\(--accent-selection\);[\s\S]*color: var\(--bg-button-text\);/,
+  /\.funnel-v1-conversion-spine\.is-default[\s\S]*button \{[\s\S]*background: var\(--accent-selection\);[\s\S]*color: var\(--bg-button-text\);/,
   "the deterministic fallback action must inherit the canonical Dark and Light selection palette",
 );
 assert.doesNotMatch(
   previewStyles,
-  /\.funnel-v1-default \.funnel-v1-member-proof/,
+  /\.funnel-v1-member-proof-copy|\.funnel-v1-member-proof\s*\{/,
   "the deterministic fallback must not restore the legacy bordered member-proof card",
+);
+assert.match(
+  previewStyles,
+  /\.funnel-v1-conversion-spine\.is-document \.funnel-v1-conversion-action[\s\S]*border-top: 1px solid var\(--funnel-v1-divider\);/,
+  "generated funnels must use one quiet canonical conversion spine",
 );
 
 // The builder owns one viewport-height workspace. The outer community page is
@@ -358,7 +371,12 @@ assert.match(
 );
 assert.match(
   assembledFunnelPrompt.text,
-  /saved intro video immediately after the hero/,
+  /saved Video Sales Letter \(VSL\) immediately after the hero/,
+);
+assert.match(assembledFunnelPrompt.text, /Do not create social_proof sections/);
+assert.match(
+  assembledFunnelPrompt.text,
+  /Polynet supplies the canonical action label/,
 );
 assert.match(
   assembledFunnelPrompt.text,

@@ -1,8 +1,4 @@
-import type {
-  CommunityFunnelSectionV1,
-  CommunityPublicFace,
-  PublicPlanSummary,
-} from "./communityTypes";
+import type { CommunityPublicFace, PublicPlanSummary } from "./communityTypes";
 
 export type CommunityFunnelUiFaceLike = CommunityPublicFace;
 
@@ -98,13 +94,6 @@ export function buildCommunityFunnelPrimaryActionView(params: {
   return { label: "Private community", hasValidPaidPlan };
 }
 
-export function formatCompactStat(value: number): string {
-  return new Intl.NumberFormat(undefined, {
-    notation: "compact",
-    maximumFractionDigits: value >= 1000 ? 1 : 0,
-  }).format(value);
-}
-
 export function filterOnlineAvatarFaces<
   TFace extends CommunityFunnelUiFaceLike,
 >(faces: TFace[] | null | undefined, max = 4): TFace[] {
@@ -119,7 +108,6 @@ export type CommunityFunnelMemberProofView<
   memberCount: number;
   faces: TFace[];
   hiddenFaceCount: number;
-  headline: string;
   label: string;
   ariaLabel: string;
 };
@@ -156,26 +144,10 @@ export function buildCommunityFunnelMemberProofView<
     memberCount,
     faces,
     hiddenFaceCount: Math.max(0, memberCount - faces.length),
-    headline:
-      memberCount === 1
-        ? "Join the community"
-        : `Join ${formatCompactStat(memberCount)}+ members`,
     label:
       memberCount === 1
         ? "1 member"
         : `${memberCount.toLocaleString()} members and growing`,
     ariaLabel: `${memberCount.toLocaleString()} community ${noun}`,
   };
-}
-
-export function resolveCommunityFunnelMemberProofInsertIndex(
-  sections: CommunityFunnelSectionV1[],
-): number | null {
-  if (sections.some((section) => section.type === "social_proof")) return null;
-  const benefitsIndex = sections.findIndex(
-    (section) => section.type === "benefits",
-  );
-  if (benefitsIndex >= 0) return benefitsIndex + 1;
-  const ctaIndex = sections.findIndex((section) => section.type === "cta");
-  return ctaIndex >= 0 ? ctaIndex : sections.length;
 }
