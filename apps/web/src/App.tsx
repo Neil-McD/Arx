@@ -1968,13 +1968,11 @@ export default function App() {
       mobileRootPage,
       canViewMembers:
         (hasSelectedCommunity && canViewMembersActiveCommunity) ||
-        ((shellPublicRoute.kind === "community_funnel" ||
-          shellPublicRoute.kind === "community_funnel_preview") &&
+        (shellPublicRoute.kind === "community_funnel" &&
           Boolean(resolvedPublicCommunity)),
       forceCommunityRoot:
         showMobileShell &&
-        (shellPublicRoute.kind === "community_funnel" ||
-          shellPublicRoute.kind === "community_funnel_preview"),
+        shellPublicRoute.kind === "community_funnel",
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
@@ -2683,6 +2681,13 @@ export default function App() {
       isMobile: showMobilePublicFunnel,
       shellVariant,
       isPreviewMode: isPublicFunnelPreviewRoute,
+      previewExitPath:
+        publicRoute.kind === "community_funnel_preview"
+          ? applyShellVariantToAppPath(
+              buildCommunityTabPath(publicRoute.slug, "funnel") ?? "",
+              shellVariant,
+            ) || null
+          : null,
       previewDocument: funnelDraftPreview.document,
       previewVslUrl: funnelDraftPreview.vslUrl,
       previewDocumentIsLoading: funnelDraftPreview.isLoading,
@@ -2690,8 +2695,7 @@ export default function App() {
       gateOpenNonce: publicCommunityUi.visitorGateNonce,
       mobileMembersOverlayOpen:
         showMobileShell &&
-        (publicRoute.kind === "community_funnel" ||
-          publicRoute.kind === "community_funnel_preview") &&
+        publicRoute.kind === "community_funnel" &&
         mobileOverlay === "members",
       onCloseMobileMembersOverlay: () => setMobileOverlay(null),
       publicVisibilityLabel,
@@ -2829,11 +2833,11 @@ export default function App() {
       communityRailAttentionById[communityId] = true;
     }
   }
-  /* The visitor lens reuses the community-local navigation without exposing
-     the authenticated global rail: public identity, locked capabilities, one
-     funnel render path. */
+  /* The published visitor funnel reuses community-local navigation. The
+     private draft preview is intentionally excluded so it can own the full
+     presentation canvas. */
   const isVisitorCommunitySurface =
-    publicRoute.kind === "community_funnel" || publicRoute.kind === "community_funnel_preview";
+    publicRoute.kind === "community_funnel";
   const visitorShellActiveCommunity =
     isVisitorCommunitySurface && resolvedPublicCommunity
       ? {
@@ -2891,21 +2895,11 @@ export default function App() {
     prepareMobileGlobalNavigation,
     setMobileOverlay,
     isPublicCommunityFunnel,
-    isPublicFunnelPreviewRoute: publicRoute.kind === "community_funnel_preview",
-    hasBackTargetSnapshot: Boolean(backTargetSnapshot),
+    hasBackTargetSnapshot:
+      !isPublicFunnelPreviewRoute && Boolean(backTargetSnapshot),
     backTargetLabel: effectiveBackTargetLabel ?? null,
     activeView,
     directMessagesButton,
-    publicFunnelPreviewExitPath:
-      publicRoute.kind === "community_funnel_preview"
-          ? applyShellVariantToAppPath(
-            buildCommunityTabPath(
-              publicRoute.slug,
-              "funnel",
-            ) ?? "",
-            shellVariant,
-          ) || null
-        : null,
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromSettings,
     handleTopbarBackToCommunity,

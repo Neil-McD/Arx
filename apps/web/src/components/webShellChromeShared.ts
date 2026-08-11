@@ -35,12 +35,10 @@ export type CommunityRailBindings = {
 
 export type WebDesktopShellHeaderProps = {
   isPublicCommunityFunnel: boolean;
-  isPublicFunnelPreviewRoute: boolean;
   hasBackTargetSnapshot: boolean;
   backTargetLabel: string | null;
   activePage: AppPage;
   directMessagesButton: ReactNode;
-  publicFunnelPreviewExitPath: string | null;
   onBackFromPublicFunnel: () => void;
   onBackFromSettings: () => void;
   onBackToCommunity: () => void;

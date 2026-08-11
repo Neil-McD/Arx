@@ -3,6 +3,7 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { isDesktopShellContextualBackPage } from "../shared/appShellNavigation.ts";
 import { popDistinctNavSnapshot, type NavSnapshotBase } from "../shared/navSnapshot.ts";
 import { readLegacyWorkspaceRouteContext } from "../shared/webAppRouteState.ts";
+import { buildWebShellProjection } from "../apps/web/src/controllers/buildWebShellProjection.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -41,6 +42,7 @@ const mobileController = read("apps/web/src/controllers/useWebMobileShellControl
 const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const desktopHeader = read("apps/web/src/components/WebDesktopShellHeader.tsx");
 const shellHost = read("apps/web/src/components/WebShellChromeHost.tsx");
+const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 const shellClassNames = read("apps/web/src/controllers/buildWebShellChromeClassNames.ts");
 const webCss = read("apps/web/src/index.css");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
@@ -169,6 +171,20 @@ assert.doesNotMatch(
   /activePage === "workspace"|sessionsDrawerEnabled|isSessionsDrawerOpen|showHeaderIslands/,
   "shell projection must not retain impossible Workspace-only chrome",
 );
+for (const shellVariant of ["standard", "mobile"] as const) {
+  const previewProjection = buildWebShellProjection({
+    publicRouteKind: "community_funnel_preview",
+    shellVariant,
+    activePage: "community",
+    mobileSettingsView: "detail",
+    isPublicCommunityFunnel: true,
+  });
+  assert.equal(previewProjection.showMobileAppShell, false);
+  assert.equal(previewProjection.showMobilePublicFunnel, false);
+  assert.equal(previewProjection.showDesktopCommunityRail, false);
+  assert.equal(previewProjection.showDesktopCommunityNav, false);
+  assert.equal(previewProjection.hasLeftPanel, false);
+}
 assert.doesNotMatch(
   operatorGateway,
   /path: "\/workspace"/,
@@ -254,12 +270,12 @@ assert.match(
 );
 assert.match(
   desktopHeader,
-  /hasPublicFunnelBack[\s\S]*props\.isPublicFunnelPreviewRoute \|\| props\.hasBackTargetSnapshot/,
-  "desktop header must preserve explicit funnel preview and return actions",
+  /hasPublicFunnelBack[\s\S]*props\.isPublicCommunityFunnel && props\.hasBackTargetSnapshot/,
+  "desktop header must reserve public funnel chrome only for a real navigation snapshot",
 );
 assert.match(
   shellHost,
-  /reserveCommunityNavTopbarSpace:[\s\S]*props\.desktopHeader\.isPublicCommunityFunnel[\s\S]*props\.desktopHeader\.isPublicFunnelPreviewRoute[\s\S]*props\.desktopHeader\.hasBackTargetSnapshot/,
+  /reserveCommunityNavTopbarSpace:[\s\S]*props\.desktopHeader\.isPublicCommunityFunnel[\s\S]*props\.desktopHeader\.hasBackTargetSnapshot/,
   "only public funnel return actions may reserve the community navigation header row",
 );
 assert.match(
@@ -278,9 +294,19 @@ assert.doesNotMatch(
   "public funnel actions must not be suppressed by stale app-page state",
 );
 assert.match(
+  publicFunnel,
+  /<a[\s\S]*className="funnel-preview-back"[\s\S]*href=\{props\.previewExitPath \?\? "\/discover"\}[\s\S]*Back to builder/,
+  "the full-canvas preview must own a native Back to builder link",
+);
+assert.doesNotMatch(
   desktopHeader,
-  /<a[\s\S]*href=\{props\.publicFunnelPreviewExitPath \?\? "\/"\}[\s\S]*title="Exit preview"/,
-  "preview exit must be native navigation rather than a hydration-dependent callback",
+  /isPublicFunnelPreviewRoute|publicFunnelPreviewExitPath|Exit preview|exit preview/,
+  "preview navigation must not leak back into shared desktop shell chrome",
+);
+assert.match(
+  app,
+  /hasBackTargetSnapshot:\s*!isPublicFunnelPreviewRoute && Boolean\(backTargetSnapshot\)/,
+  "private preview must suppress the shared shell header even when browser history exists",
 );
 assert.doesNotMatch(
   app,
@@ -289,7 +315,7 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /publicFunnelPreviewExitPath:[\s\S]*buildCommunityTabPath\([\s\S]*publicRoute\.slug,[\s\S]*"funnel",/,
+  /previewExitPath:[\s\S]*buildCommunityTabPath\(publicRoute\.slug, "funnel"\)/,
   "preview exit must target the owning community's funnel editor",
 );
 assert.match(

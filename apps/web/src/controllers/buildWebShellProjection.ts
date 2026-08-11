@@ -43,11 +43,11 @@ export function buildWebShellProjection(params: {
   const isOnboardingPage = isAppRoute && params.activePage === "onboarding";
   const isOperatorPage = isAppRoute && params.activePage === "operator";
   const isPublicAppPage = isLandingPage || isOnboardingPage;
-  /* The visitor lens on mobile: /c/:slug gets the SAME mobile community
-     shell a member gets — one column, the middle panel is the page. */
+  /* The public funnel keeps the community-local visitor shell. The private
+     draft preview is a presentation surface, so it deliberately owns the
+     full canvas instead of inheriting product navigation. */
   const isVisitorCommunityRoute =
-    params.publicRouteKind === "community_funnel" ||
-    params.publicRouteKind === "community_funnel_preview";
+    params.publicRouteKind === "community_funnel";
   const isMobileVisitorCommunity =
     params.shellVariant === "mobile" && isVisitorCommunityRoute;
   const showMobileAppShell =
@@ -75,7 +75,7 @@ export function buildWebShellProjection(params: {
     showMobileSettingsShell && params.mobileSettingsView === "index";
   const showMobilePublicFunnel =
     params.shellVariant === "mobile" &&
-    !isAppRoute &&
+    params.publicRouteKind === "community_funnel" &&
     params.isPublicCommunityFunnel &&
     !isMobileVisitorCommunity;
   /* The visitor lens keeps the community-local navigation, but never exposes

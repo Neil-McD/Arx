@@ -36,12 +36,10 @@ export function buildWebShellChromeHostProps(params: {
   prepareMobileGlobalNavigation: () => void;
   setMobileOverlay: (value: MobileOverlay) => void;
   isPublicCommunityFunnel: boolean;
-  isPublicFunnelPreviewRoute: boolean;
   hasBackTargetSnapshot: boolean;
   backTargetLabel: string | null;
   activeView: AppView;
   directMessagesButton: ReactNode;
-  publicFunnelPreviewExitPath: string | null;
   handleTopbarBackFromPublicFunnel: () => void;
   handleTopbarBackFromSettings: () => void;
   handleTopbarBackToCommunity: () => void;
@@ -205,12 +203,10 @@ export function buildWebShellChromeHostProps(params: {
     },
     desktopHeader: {
       isPublicCommunityFunnel: params.isPublicCommunityFunnel,
-      isPublicFunnelPreviewRoute: params.isPublicFunnelPreviewRoute,
       hasBackTargetSnapshot: params.hasBackTargetSnapshot,
       backTargetLabel: params.backTargetLabel,
       activePage: params.activePage,
       directMessagesButton: params.directMessagesButton,
-      publicFunnelPreviewExitPath: params.publicFunnelPreviewExitPath,
       onBackFromPublicFunnel: params.handleTopbarBackFromPublicFunnel,
       onBackFromSettings: params.handleTopbarBackFromSettings,
       onBackToCommunity: params.handleTopbarBackToCommunity,
