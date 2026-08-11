@@ -90,32 +90,39 @@ export function CommunityFunnelV1Preview(props: {
         aria-label={memberProof.ariaLabel}
       >
         {memberProof.faces.length ? (
-          <div className="funnel-v1-facepile" aria-hidden="true">
+          <div className="funnel-v1-member-avatars" aria-hidden="true">
             {memberProof.faces.map((face) => (
-              <UserAvatar
+              <span
                 key={face.user_id}
-                name={face.display_name?.trim() || "Community member"}
-                imageUrl={face.avatar_url}
-                focusX={face.avatar_focus_x}
-                focusY={face.avatar_focus_y}
-                zoom={face.avatar_zoom}
-                className="funnel-v1-face"
-                readyClassName="has-image"
-                fallbackClassName="has-fallback"
-                imageClassName="funnel-v1-face-image"
-                fallback={face.initials?.trim() || undefined}
-                fallbackStyle={
-                  face.avatar_color
-                    ? { backgroundColor: face.avatar_color }
+                className="community-context-member-avatar"
+                style={
+                  !face.avatar_url && face.avatar_color
+                    ? { color: face.avatar_color }
                     : undefined
                 }
-                loading="lazy"
-                alt=""
-                aria-hidden={true}
-              />
+              >
+                <UserAvatar
+                  className="community-context-member-avatar-media"
+                  readyClassName="has-image"
+                  name={face.display_name?.trim() || "Community member"}
+                  imageUrl={face.avatar_url}
+                  focusX={face.avatar_focus_x}
+                  focusY={face.avatar_focus_y}
+                  zoom={face.avatar_zoom}
+                  fallback={<span>{face.initials?.trim() || "?"}</span>}
+                  loading="lazy"
+                  alt=""
+                  aria-hidden={true}
+                />
+              </span>
             ))}
             {memberProof.hiddenFaceCount > 0 ? (
-              <span aria-hidden="true">+{memberProof.hiddenFaceCount}</span>
+              <span
+                className="community-context-member-avatar funnel-v1-member-avatar-more"
+                aria-hidden="true"
+              >
+                +{memberProof.hiddenFaceCount}
+              </span>
             ) : null}
           </div>
         ) : null}
