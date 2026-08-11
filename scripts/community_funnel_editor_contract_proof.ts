@@ -91,6 +91,24 @@ assert.match(preview, /buildCommunityFunnelMemberProofView/);
 assert.match(preview, /automaticMemberProofInsertIndex/);
 assert.match(preview, /<MemberAvatarStack/);
 assert.doesNotMatch(preview, /<img key=\{face\.user_id\}/);
+assert.match(preview, /renderBrand\("default"\)/);
+assert.match(preview, /renderDefaultMemberProof/);
+assert.match(preview, /className="funnel-v1-default-conversion"/);
+assert.match(
+  previewStyles,
+  /\.funnel-v1-brand\.is-default[\s\S]*\.funnel-v1-default-hero h1[\s\S]*\.funnel-v1-default-conversion/,
+  "the deterministic fallback must retain the selected centered-cover hierarchy",
+);
+assert.match(
+  previewStyles,
+  /\.funnel-v1-default \.funnel-v1-conversion button \{[\s\S]*background: var\(--accent-selection\);[\s\S]*color: var\(--bg-button-text\);/,
+  "the deterministic fallback action must inherit the canonical Dark and Light selection palette",
+);
+assert.doesNotMatch(
+  previewStyles,
+  /\.funnel-v1-default \.funnel-v1-member-proof/,
+  "the deterministic fallback must not restore the legacy bordered member-proof card",
+);
 
 // The builder owns one viewport-height workspace. The outer community page is
 // locked; only the preview and conversation history may scroll independently.

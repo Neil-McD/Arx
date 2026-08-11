@@ -106,8 +106,10 @@ export function CommunityFunnelV1Preview(props: {
     );
   };
 
-  const renderBrand = () => (
-    <header className="funnel-v1-brand">
+  const renderBrand = (variant: "default" | "document" = "document") => (
+    <header
+      className={`funnel-v1-brand${variant === "default" ? " is-default" : ""}`}
+    >
       <CommunityAvatar
         communityId={community.id}
         name={community.name}
@@ -116,11 +118,38 @@ export function CommunityFunnelV1Preview(props: {
         focusY={community.avatar_focus_y}
         zoom={community.avatar_zoom}
         className="funnel-v1-brand-avatar"
-        style={{ width: 28, height: 28 }}
+        style={
+          variant === "default"
+            ? {
+                width: "clamp(68px, 7vw, 80px)",
+                height: "clamp(68px, 7vw, 80px)",
+              }
+            : { width: 28, height: 28 }
+        }
       />
       <span>{community.name}</span>
     </header>
   );
+
+  const renderDefaultMemberProof = () => {
+    if (!memberProof) return null;
+    return (
+      <section
+        className="funnel-v1-default-member-proof"
+        aria-label={memberProof.ariaLabel}
+      >
+        <MemberAvatarStack
+          className="funnel-v1-default-member-avatars"
+          faces={memberProof.faces}
+          totalCount={memberProof.memberCount}
+          limit={5}
+          decorative={true}
+          imageLoading="lazy"
+        />
+        <span>{memberProof.label}</span>
+      </section>
+    );
+  };
 
   if (!document) {
     if (!props.deterministicContent) {
@@ -137,7 +166,7 @@ export function CommunityFunnelV1Preview(props: {
     return (
       <div className="funnel-v1-preview is-editorial accent-blue density-balanced radius-soft">
         <main className="funnel-v1-preview-main funnel-v1-default">
-          {renderBrand()}
+          {renderBrand("default")}
           {props.error ? (
             <div className="funnel-v1-preview-error">{props.error}</div>
           ) : null}
@@ -147,16 +176,18 @@ export function CommunityFunnelV1Preview(props: {
               <p>{props.deterministicContent.body}</p>
             ) : null}
           </section>
-          {renderMemberProof({ key: "deterministic-member-proof" })}
-          <section className="funnel-v1-conversion">
-            <button
-              type="button"
-              disabled={isPreview || props.primaryActionDisabled}
-              onClick={isPreview ? undefined : props.onPrimaryAction}
-            >
-              {props.primaryActionLabel}
-            </button>
-          </section>
+          <div className="funnel-v1-default-conversion">
+            {renderDefaultMemberProof()}
+            <section className="funnel-v1-conversion">
+              <button
+                type="button"
+                disabled={isPreview || props.primaryActionDisabled}
+                onClick={isPreview ? undefined : props.onPrimaryAction}
+              >
+                {props.primaryActionLabel}
+              </button>
+            </section>
+          </div>
         </main>
       </div>
     );
