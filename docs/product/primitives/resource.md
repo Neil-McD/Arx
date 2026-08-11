@@ -3,7 +3,7 @@ id: product.resource
 title: Resource
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-08-10
 ---
 
 # Resource
@@ -18,11 +18,19 @@ Resources let communities store reusable knowledge instead of relying only on ch
 
 ## User Mental Model
 
-Members see resources as useful community materials. Builders see resources as the durable knowledge base of the community.
+Members enter Resources through course cards, then read the ordered lessons inside a selected course. Builders see the same course presentation plus manager-only source intake and authoring controls.
 
 ## System Mental Model
 
 Resources are community-scoped artifacts. Access to resources should follow community membership and role rules.
+
+The course UI is a presentation model over the existing resource primitives:
+
+- a resource module is presented as a course
+- a member-visible page inside that module is presented as a lesson
+- source resources remain manager-only intake material and are not lessons
+
+No separate course, lesson, progress, or completion schema is implied by this presentation.
 
 ## Rules
 
@@ -31,6 +39,7 @@ Resources are community-scoped artifacts. Access to resources should follow comm
 3. Resources should not become a dumping ground for private user data.
 4. Resource context should be explicitly selected, retrieved, or bounded.
 5. Resources should be easier to audit than hidden prompt text.
+6. Course visibility remains module-level `draft` or `live`; individual lesson publication is not a separate member-facing control.
 
 ## Related Concepts
 
@@ -38,4 +47,3 @@ Resources are community-scoped artifacts. Access to resources should follow comm
 - `agent`
 - `skill`
 - `memory`
-

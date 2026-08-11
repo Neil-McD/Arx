@@ -3,7 +3,7 @@ id: product.guide.manage_resources
 title: Manage Resources
 audience: builder, member, llm
 status: alpha-current
-last_verified: 2026-04-26
+last_verified: 2026-08-10
 ---
 
 # Manage Resources
@@ -34,6 +34,12 @@ Use resources for information that should remain useful after the original conve
 ## Current Alpha Behavior
 
 Community resources are scoped to a community. Members with access can read resources. Resource write actions are manager-gated, which currently means owner/admin authority.
+
+The Resources root presents each resource module as a course card. Opening a course shows its ordered member-visible pages as lessons beside the existing resource reader. Course name, description, cover, ordering, and `draft` or `live` state are manager-controlled. Managers can also create, reorder, edit, and delete lessons.
+
+Raw links and uploaded files enter through the manager-only source intake. Sources remain separate from the member course outline until a manager turns them into a lesson draft. Unassigned legacy pages appear in a manager-only maintenance entry rather than as a normal course.
+
+This course presentation does not currently track member progress, completion, certificates, drip schedules, or lesson-specific routes.
 
 Resources can also feed community retrieval paths where the backend supports
 it, but resources remain curated knowledge rather than accepted community

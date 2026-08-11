@@ -108,3 +108,61 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 - Remaining severity: no P0, P1, P2, or P3 findings remain for this responsive composition slice.
 
 final result: passed
+
+## Resources course presentation addendum
+
+### Evidence
+
+- Source visual truth, course catalog: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_j0eN1H/Screenshot 2026-08-10 at 5.55.21 PM.png`
+- Source visual truth, selected course: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_wLId5c/Screenshot 2026-08-10 at 5.55.43 PM.png`
+- Existing Polynet surface baseline: `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_R37OCC/Screenshot 2026-08-10 at 5.55.04 PM.png`
+- Browser-rendered implementation screenshot: unavailable; this code state has not been staged or published, and local browser rendering is not an available verification path for this task.
+- Source image dimensions: all three supplied captures are `3024 x 1964` pixels. They represent desktop Chrome at Retina density; exact CSS viewport and device scale factor were not recorded in the source files.
+- Implementation viewport, pixel dimensions, CSS size, and density normalization: unavailable until the code is reachable in the authorized Chrome staging or production surface.
+- State: dark-theme Resources root and selected course, manager access.
+
+### Full-view comparison
+
+The three source images were opened and reviewed together. They establish the intended shift from Polynet's current wiki-like resource rail to a course catalog followed by a selected-course lesson outline and reader. A valid full-view comparison against the implementation cannot be made until this code is browser-rendered in the same authenticated product shell.
+
+### Focused-region comparison
+
+Blocked for the same reason. The implementation screenshot needed to compare card crop, course metadata density, header hierarchy, lesson-outline width, reader balance, and manager controls does not exist yet.
+
+### Findings
+
+- [P2] Browser-rendered visual acceptance remains unverified.
+  Location: Resources catalog, selected course shell, and course editor.
+  Evidence: source screenshots are available, but no rendered implementation screenshot exists at a matched viewport and state.
+  Impact: production build and contract proofs establish structural correctness, but cannot prove card proportions, responsive wrapping, light/dark polish, or authenticated interaction behavior.
+  Fix: publish or stage this exact code state through the canonical GitHub workflow, then capture the Resources root, selected course, and course editor in the user's Chrome session in dark and light themes.
+
+### Required fidelity surfaces
+
+- Fonts and typography: code reuses the product font and text tokens; browser-rendered weights, wrapping, and optical hierarchy remain unverified.
+- Spacing and layout rhythm: catalog and course-shell tracks have explicit desktop and narrow breakpoints; rendered proportions remain unverified.
+- Colors and visual tokens: all new UI uses existing semantic theme tokens; dark/light browser output remains unverified.
+- Image quality and asset fidelity: course covers use canonical `StableFramedMedia` focus and zoom metadata; real cover crops remain unverified.
+- Copy and content: course, lesson, source inbox, draft/live, empty, and manager-action terminology is implemented and contract-protected.
+
+### Primary interactions and console
+
+- Code and contract coverage confirm catalog selection, back navigation, lesson selection, outline collapse, course editing, cover upload/focus/removal, manager menus, source intake, and responsive structure.
+- Browser interaction and console checks are blocked until this exact code state is reachable in Chrome.
+
+### Comparison history
+
+- No visual fix iteration has been claimed. The source references were opened, the code was built and reviewed, and the remaining gate is the first matched browser capture.
+
+### Implementation checklist
+
+- [x] Build course catalog over canonical resource modules.
+- [x] Keep legacy unassigned pages in a separate manager maintenance entry.
+- [x] Build selected-course lesson outline over canonical page resources.
+- [x] Preserve the existing resource reader and source lineage.
+- [x] Restore course name, description, cover, crop, ordering, and draft/live authoring.
+- [x] Add responsive and keyboard-accessible structures.
+- [x] Pass production build and focused Resources contracts.
+- [ ] Capture and compare the exact implementation in Chrome after an authorized release.
+
+final result: blocked

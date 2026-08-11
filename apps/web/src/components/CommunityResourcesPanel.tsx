@@ -4,11 +4,9 @@ import {
   useRef,
   useState,
   type DragEvent,
-  type KeyboardEvent,
   type MouseEvent,
-  type ReactNode,
 } from "react";
-import { ArrowDown, ArrowUp, ChevronsDown, ChevronsUp, GripVertical } from "lucide-react";
+import { ArrowDown, ArrowLeft, ArrowUp, ChevronDown, ChevronsDown, ChevronsUp, GripVertical, Plus } from "lucide-react";
 import { normalizeExternalUrl, parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import type {
@@ -25,6 +23,7 @@ import {
 } from "./WebCommunityResourceViewerModal";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
 import { WebCommunityKnowledgeSourceIntake } from "./WebCommunityKnowledgeSourceIntake";
+import { ResourceCourseCatalog } from "./ResourceCourseCatalog";
 
 type CommunityResourcesPanelProps = {
   capabilities: CommunityResourcesCapabilities;
@@ -35,7 +34,7 @@ type CommunityResourcesPanelProps = {
 const LEGACY_RESOURCE_MODULE_ID = "__legacy_resources__";
 const MODULE_DRAG_MIME = "application/x-polynet-community-resource-module";
 const RESOURCE_DRAG_MIME = "application/x-polynet-community-resource";
-const RESOURCE_CATEGORY_DRAG_MIME = "application/x-polynet-community-resource-category";
+const RESOURCE_ORIGIN_MODULE_DRAG_MIME = "application/x-polynet-community-resource-origin-module";
 const PAGE_DRAFT_CREATION_GESTURE_LOCK_MS = 650;
 type ReorderDirection = "up" | "down" | "top" | "bottom";
 
@@ -202,245 +201,6 @@ function LinkIcon() {
   );
 }
 
-function ModuleStatusIcon(props: { status: "draft" | "live" }) {
-  return props.status === "live" ? (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M20 6 9 17l-5-5" />
-    </svg>
-  ) : (
-    <svg viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M6 4h9l3 3v13H6z" />
-      <path d="M15 4v4h4" />
-    </svg>
-  );
-}
-
-function ResourceCategorySection(props: {
-  module: ResourceModuleView;
-  isActive: boolean;
-  onEdit: () => void;
-  onSetStatus: (status: "draft" | "live") => void;
-  onDelete: () => void;
-  onAddPage: () => void;
-  onMove: (direction: ReorderDirection) => void;
-  isAddingPage: boolean;
-  onSelectCategory: () => void;
-  onDragStart: (event: DragEvent<HTMLElement>) => void;
-  onDragOver: (event: DragEvent<HTMLElement>) => void;
-  onDragLeave: () => void;
-  onDrop: (event: DragEvent<HTMLElement>) => void;
-  onDragEnd: () => void;
-  canManage: boolean;
-  canReorder: boolean;
-  canMoveUp: boolean;
-  canMoveDown: boolean;
-  isDragging: boolean;
-  isDropTarget: boolean;
-  children: ReactNode;
-}) {
-  const {
-    module,
-    isActive,
-    onEdit,
-    onSetStatus,
-    onDelete,
-    onAddPage,
-    onMove,
-    isAddingPage,
-    onSelectCategory,
-    onDragStart,
-    onDragOver,
-    onDragLeave,
-    onDrop,
-    onDragEnd,
-    canManage,
-    canReorder,
-    canMoveUp,
-    canMoveDown,
-    isDragging,
-    isDropTarget,
-    children,
-  } = props;
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const moduleStatus = module.module_status === "live" ? "live" : "draft";
-  const nextModuleStatus = moduleStatus === "live" ? "draft" : "live";
-  const handleKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.target !== event.currentTarget) return;
-    if (event.key !== "Enter" && event.key !== " ") return;
-    event.preventDefault();
-    onSelectCategory();
-  };
-  const handleMenuClick = (event: MouseEvent<HTMLButtonElement>) => {
-    event.stopPropagation();
-    setIsMenuOpen((current) => !current);
-  };
-  const closeAndRun = (event: MouseEvent<HTMLButtonElement>, action: () => void) => {
-    event.stopPropagation();
-    setIsMenuOpen(false);
-    action();
-  };
-
-  return (
-    <section
-      className={[
-        "knowledge-category-section",
-        isActive ? "is-active" : "",
-        module.is_virtual ? "is-virtual" : "",
-        canReorder ? "can-reorder" : "",
-        isDragging ? "is-dragging" : "",
-        isDropTarget ? "is-drop-target" : "",
-      ].filter(Boolean).join(" ")}
-      onMouseLeave={() => setIsMenuOpen(false)}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-    >
-      <div
-        className="knowledge-category-header"
-        role="button"
-        tabIndex={0}
-        aria-label={`Select ${module.name}`}
-        draggable={canReorder}
-        onClick={onSelectCategory}
-        onDragStart={onDragStart}
-        onDragEnd={onDragEnd}
-        onKeyDown={handleKeyDown}
-      >
-        {canReorder ? (
-          <span className="knowledge-category-drag-handle" title="Drag to reorder category" aria-hidden="true">
-            <GripVertical strokeWidth={1.9} />
-          </span>
-        ) : null}
-        <div className="knowledge-category-copy">
-          <div className="knowledge-category-title-row">
-            <span className="knowledge-category-title">{module.name}</span>
-            {module.is_virtual ? (
-              <span className="knowledge-category-badge is-cleanup">Cleanup</span>
-            ) : canManage && moduleStatus === "draft" ? (
-              <span className="knowledge-category-badge is-draft">Draft</span>
-            ) : null}
-          </div>
-        </div>
-        <div className="knowledge-category-header-actions">
-          {canManage && !module.is_virtual ? (
-            <button
-              className="knowledge-category-menu-trigger"
-              type="button"
-              title="Category actions"
-              aria-label={`Actions for ${module.name}`}
-              aria-haspopup="menu"
-              aria-expanded={isMenuOpen}
-              onClick={handleMenuClick}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              <MoreIcon />
-            </button>
-          ) : null}
-          {canManage && !module.is_virtual && isMenuOpen ? (
-            <div
-              className="knowledge-category-menu-popover web-floating-menu"
-              role="menu"
-              onClick={(event) => event.stopPropagation()}
-              onPointerDown={(event) => event.stopPropagation()}
-            >
-              {canReorder && canMoveUp ? (
-                <>
-                  <button
-                    className="web-floating-menu-item"
-                    type="button"
-                    role="menuitem"
-                    onClick={(event) => closeAndRun(event, () => onMove("up"))}
-                  >
-                    <ArrowUp />
-                    <span>Move up</span>
-                  </button>
-                  <button
-                    className="web-floating-menu-item"
-                    type="button"
-                    role="menuitem"
-                    onClick={(event) => closeAndRun(event, () => onMove("top"))}
-                  >
-                    <ChevronsUp />
-                    <span>Move to top</span>
-                  </button>
-                </>
-              ) : null}
-              {canReorder && canMoveDown ? (
-                <>
-                  <button
-                    className="web-floating-menu-item"
-                    type="button"
-                    role="menuitem"
-                    onClick={(event) => closeAndRun(event, () => onMove("down"))}
-                  >
-                    <ArrowDown />
-                    <span>Move down</span>
-                  </button>
-                  <button
-                    className="web-floating-menu-item"
-                    type="button"
-                    role="menuitem"
-                    onClick={(event) => closeAndRun(event, () => onMove("bottom"))}
-                  >
-                    <ChevronsDown />
-                    <span>Move to bottom</span>
-                  </button>
-                </>
-              ) : null}
-              {canReorder && (canMoveUp || canMoveDown) ? <div className="web-floating-menu-separator" /> : null}
-              <button
-                className="web-floating-menu-item"
-                type="button"
-                role="menuitem"
-                onClick={(event) => closeAndRun(event, onEdit)}
-              >
-                <EditIcon />
-                <span>Edit</span>
-              </button>
-              <button
-                className="web-floating-menu-item"
-                type="button"
-                role="menuitem"
-                onClick={(event) => closeAndRun(event, () => onSetStatus(nextModuleStatus))}
-              >
-                <ModuleStatusIcon status={nextModuleStatus} />
-                <span>{moduleStatus === "live" ? "Move to draft" : "Make live"}</span>
-              </button>
-              <button
-                className="web-floating-menu-item danger"
-                type="button"
-                role="menuitem"
-                onClick={(event) => closeAndRun(event, onDelete)}
-              >
-                <DeleteIcon />
-                <span>Delete</span>
-              </button>
-            </div>
-          ) : null}
-        </div>
-      </div>
-      <div className="knowledge-category-pages">
-        {children}
-        {canManage && !module.is_virtual ? (
-          <button
-            className="knowledge-resource-inline-add"
-            type="button"
-            disabled={isAddingPage}
-            onClick={(event) => {
-              event.stopPropagation();
-              if (isAddingPage) return;
-              onAddPage();
-            }}
-          >
-            <span aria-hidden="true">+</span>
-            <span>Add page</span>
-          </button>
-        ) : null}
-      </div>
-    </section>
-  );
-}
-
 function NoteIcon() {
   return (
     <svg viewBox="0 0 24 24" aria-hidden="true">
@@ -503,13 +263,6 @@ function ResourceRailItem(props: {
   const isEditDisabled = resourceNeedsBodyHydration(resource);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
-  const handleItemKeyDown = (event: KeyboardEvent<HTMLElement>) => {
-    if (event.key === "Enter" || event.key === " ") {
-      event.preventDefault();
-      onSelect();
-    }
-  };
-
   const handleMenuClick = (event: MouseEvent<HTMLButtonElement>) => {
     event.stopPropagation();
     setIsMenuOpen((current) => !current);
@@ -532,17 +285,12 @@ function ResourceRailItem(props: {
         isDragging ? "is-dragging" : "",
         isDropTarget ? "is-drop-target" : "",
       ].filter(Boolean).join(" ")}
-      role="button"
-      tabIndex={0}
-      aria-current={isActive ? "page" : undefined}
       draggable={canReorder}
-      onClick={onSelect}
       onDragStart={onDragStart}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       onDragEnd={onDragEnd}
-      onKeyDown={handleItemKeyDown}
       onMouseLeave={() => setIsMenuOpen(false)}
     >
       {canReorder ? (
@@ -550,21 +298,28 @@ function ResourceRailItem(props: {
           <GripVertical strokeWidth={1.9} />
         </span>
       ) : null}
-      <div className="knowledge-resource-item-icon" aria-hidden="true">
-        <ResourceKindIcon resource={resource} />
-      </div>
-      <div className="knowledge-resource-item-copy">
-        <div className="knowledge-resource-item-topline">
-          <div className="knowledge-resource-item-title">{resource.title}</div>
-          {resource.pinned ? <PinIcon /> : null}
-        </div>
-        {sourceIngestionLabel ? (
-          <div className={`knowledge-resource-source-status is-${resource.source_ingestion_status ?? "saved"}`}>
-            {sourceIngestionLabel}
-          </div>
-        ) : null}
-        {summary ? <div className="knowledge-resource-item-summary">{summary}</div> : null}
-      </div>
+      <button
+        className="knowledge-resource-item-main"
+        type="button"
+        aria-current={isActive ? "page" : undefined}
+        onClick={onSelect}
+      >
+        <span className="knowledge-resource-item-icon" aria-hidden="true">
+          <ResourceKindIcon resource={resource} />
+        </span>
+        <span className="knowledge-resource-item-copy">
+          <span className="knowledge-resource-item-topline">
+            <span className="knowledge-resource-item-title">{resource.title}</span>
+            {resource.pinned ? <PinIcon /> : null}
+          </span>
+          {sourceIngestionLabel ? (
+            <span className={`knowledge-resource-source-status is-${resource.source_ingestion_status ?? "saved"}`}>
+              {sourceIngestionLabel}
+            </span>
+          ) : null}
+          {summary ? <span className="knowledge-resource-item-summary">{summary}</span> : null}
+        </span>
+      </button>
       {canManage ? (
         <div className="knowledge-resource-item-actions">
           <button
@@ -682,6 +437,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     useState<WebCommunityResourceInlineEditorField | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [showSourceIntake, setShowSourceIntake] = useState(false);
+  const [isCourseOutlineOpen, setIsCourseOutlineOpen] = useState(true);
   const [isCreatingPageDraft, setIsCreatingPageDraft] = useState(false);
   const pageDraftCreationInFlightRef = useRef(false);
   const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
@@ -703,7 +459,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => new Set(state.modules.map((module) => module.id)),
     [state.modules],
   );
-  const getResourceCategoryId = (resource: CommunityResource) =>
+  const getResourceModuleSelectionId = (resource: CommunityResource) =>
     resource.module_id && realModuleIdLookup.has(resource.module_id)
       ? resource.module_id
       : LEGACY_RESOURCE_MODULE_ID;
@@ -730,7 +486,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         directory_path: "/unsorted",
         module_status: "draft",
         name: "Needs sorting",
-        description_md: "Resources that need a category. Move these into the right place.",
+        description_md: "Resources that need a course. Move these into the right place.",
         banner_url: null,
         banner_focus_x: null,
         banner_focus_y: null,
@@ -772,7 +528,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     });
     return map;
   }, [isPreviewMode, moduleViews, realModuleIdLookup, state.resources]);
-  const categorySections = useMemo(
+  const moduleSections = useMemo(
     () =>
       moduleViews.map((module) => {
         const resources = resourcesBySelectionId.get(module.id) ?? [];
@@ -785,13 +541,30 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       }),
     [moduleViews, resourcesBySelectionId],
   );
+  const courseCatalogItems = useMemo(
+    () => moduleSections
+      .filter((section) => !section.module.is_virtual)
+      .map((section) => ({
+        module: section.module,
+        lessonCount: section.pageResources.length,
+      })),
+    [moduleSections],
+  );
+  const maintenanceCatalogItem = useMemo(() => {
+    const section = moduleSections.find((candidate) => candidate.module.is_virtual);
+    if (!section) return null;
+    return {
+      module: section.module,
+      lessonCount: section.pageResources.length,
+    };
+  }, [moduleSections]);
   const allPageResources = useMemo(
-    () => categorySections.flatMap((section) => section.pageResources),
-    [categorySections],
+    () => moduleSections.flatMap((section) => section.pageResources),
+    [moduleSections],
   );
   const allSourceResources = useMemo(
-    () => categorySections.flatMap((section) => section.sourceResources),
-    [categorySections],
+    () => moduleSections.flatMap((section) => section.sourceResources),
+    [moduleSections],
   );
   const failedSourceCount = useMemo(
     () => allSourceResources.filter((resource) => resource.source_ingestion_status === "failed").length,
@@ -814,12 +587,30 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => new Set(displayableResources.map((resource) => resource.id)),
     [displayableResources],
   );
+  const selectedModule = useMemo(() => {
+    if (!selectedModuleId) return null;
+    return moduleViews.find((module) => module.id === selectedModuleId) ?? null;
+  }, [moduleViews, selectedModuleId]);
+  const selectedModuleResourceIds = useMemo(() => {
+    if (!selectedModule) return new Set<string>();
+    const section = moduleSections.find((candidate) => candidate.module.id === selectedModule.id);
+    if (!section) return new Set<string>();
+    const visibleResources = canManageResources
+      ? [...section.pageResources, ...section.sourceResources]
+      : section.pageResources;
+    return new Set(visibleResources.map((resource) => resource.id));
+  }, [canManageResources, moduleSections, selectedModule]);
   const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
   const lastRenderableSelectedResourceRef = useRef<CommunityResource | null>(null);
   const selectedResource = useMemo(() => {
-    if (!selectedResourceId || !displayableResourceIds.has(selectedResourceId)) return null;
+    if (
+      !selectedModule ||
+      !selectedResourceId ||
+      !displayableResourceIds.has(selectedResourceId) ||
+      !selectedModuleResourceIds.has(selectedResourceId)
+    ) return null;
     return resourcesById.get(selectedResourceId) ?? null;
-  }, [displayableResourceIds, resourcesById, selectedResourceId]);
+  }, [displayableResourceIds, resourcesById, selectedModule, selectedModuleResourceIds, selectedResourceId]);
   const readerResource =
     selectedResource ??
     (
@@ -831,34 +622,23 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     );
   const isReaderShowingRefreshSnapshot = Boolean(readerResource && !selectedResource);
   const selectedResourceNeedsBodyHydration = resourceNeedsBodyHydration(selectedResource);
-  const selectedResourceCategoryId = selectedResource ? getResourceCategoryId(selectedResource) : null;
-  const selectedModule = useMemo(() => {
-    const selectedModuleExists = selectedModuleId
-      ? moduleViews.some((module) => module.id === selectedModuleId)
-      : false;
-    const activeId = selectedModuleExists ? selectedModuleId : selectedResourceCategoryId;
-    if (!activeId) return null;
-    return moduleViews.find((module) => module.id === activeId) ?? null;
-  }, [moduleViews, selectedModuleId, selectedResourceCategoryId]);
-  const selectedCategorySection = selectedModule
-    ? categorySections.find((section) => section.module.id === selectedModule.id) ?? null
+  const selectedModuleSection = selectedModule
+    ? moduleSections.find((section) => section.module.id === selectedModule.id) ?? null
     : null;
   const reorderableResourceIdsByModule = useMemo(() => {
     const map = new Map<string, string[]>();
-    categorySections.forEach((section) => {
+    moduleSections.forEach((section) => {
       map.set(section.module.id, section.pageResources.map((resource) => resource.id));
     });
     return map;
-  }, [categorySections]);
-  const getFirstResourceForCategory = (module: ResourceModuleView | null) => {
+  }, [moduleSections]);
+  const getFirstResourceForModule = (module: ResourceModuleView | null) => {
     if (!module) return null;
-    const section = categorySections.find((candidate) => candidate.module.id === module.id);
+    const section = moduleSections.find((candidate) => candidate.module.id === module.id);
     if (!section) return null;
     return section.pageResources[0] ?? (canManageResources ? section.sourceResources[0] : null) ?? null;
   };
-  const firstDisplayableResource = displayableResources[0] ?? null;
-  const selectedCategoryFirstResource = selectedModule ? getFirstResourceForCategory(selectedModule) : null;
-  const shouldShowSourceInbox = canManageResources && allSourceResources.length > 0;
+  const selectedModuleFirstResource = selectedModule ? getFirstResourceForModule(selectedModule) : null;
   const selectedSourceResource = useMemo(() => {
     if (isPreviewMode) return null;
     const sourceId = selectedResource?.source_resource_id?.trim();
@@ -866,7 +646,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     return resourcesById.get(sourceId) ?? null;
   }, [isPreviewMode, resourcesById, selectedResource?.source_resource_id]);
   const selectedSourceResourceModuleId = selectedSourceResource
-    ? getResourceCategoryId(selectedSourceResource)
+    ? getResourceModuleSelectionId(selectedSourceResource)
     : null;
   const canOpenSelectedSourceResource = Boolean(
     canManageResources &&
@@ -916,7 +696,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   useEffect(() => {
     setShowSourceIntake(false);
+    setIsCourseOutlineOpen(true);
   }, [capabilities.activeCommunityId]);
+
+  useEffect(() => {
+    setIsCourseOutlineOpen(true);
+  }, [selectedModuleId]);
 
   useEffect(() => {
     if (canManageResources || !actions.resourceEditor.editingResourceId) return;
@@ -936,31 +721,22 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   useEffect(() => {
     if (isRefreshingResources) return;
-    if (displayableResources.length === 0) {
+    if (!selectedModule) {
       if (selectedResourceId) actions.setOpenResourceEmbedId(null);
       return;
     }
-    if (selectedResourceId && displayableResourceIds.has(selectedResourceId)) return;
-    if (selectedModule) {
-      if (selectedCategoryFirstResource) {
-        actions.setOpenResourceEmbedId(selectedCategoryFirstResource.id);
-      } else if (selectedResourceId) {
-        actions.setOpenResourceEmbedId(null);
-      }
+    if (selectedResourceId && selectedModuleResourceIds.has(selectedResourceId)) return;
+    if (selectedModuleFirstResource) {
+      actions.setOpenResourceEmbedId(selectedModuleFirstResource.id);
       return;
     }
-    if (firstDisplayableResource) {
-      actions.handleSelectModule(getResourceCategoryId(firstDisplayableResource));
-      actions.setOpenResourceEmbedId(firstDisplayableResource.id);
-    }
+    if (selectedResourceId) actions.setOpenResourceEmbedId(null);
   }, [
     actions,
-    displayableResourceIds,
-    displayableResources.length,
-    firstDisplayableResource,
     isRefreshingResources,
-    selectedCategoryFirstResource,
+    selectedModuleFirstResource,
     selectedModule,
+    selectedModuleResourceIds,
     selectedResourceId,
   ]);
 
@@ -990,7 +766,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (!pendingOpenResourceId) return;
     const pendingResource = resourcesById.get(pendingOpenResourceId);
     if (!pendingResource || !displayableResourceIds.has(pendingOpenResourceId)) return;
-    actions.handleSelectModule(getResourceCategoryId(pendingResource));
+    actions.handleSelectModule(getResourceModuleSelectionId(pendingResource));
     actions.setOpenResourceEmbedId(pendingOpenResourceId);
     setPendingOpenResourceId(null);
   }, [actions, displayableResourceIds, pendingOpenResourceId, resourcesById]);
@@ -1041,10 +817,10 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       event.dataTransfer.getData(RESOURCE_DRAG_MIME);
     if (draggedResourceId) {
       event.stopPropagation();
-      const draggedCategoryId =
+      const draggedResourceModuleId =
         draggingResourceModuleIdRef.current ||
         draggingResourceModuleId ||
-        event.dataTransfer.getData(RESOURCE_CATEGORY_DRAG_MIME);
+        event.dataTransfer.getData(RESOURCE_ORIGIN_MODULE_DRAG_MIME);
       draggingResourceIdRef.current = null;
       draggingResourceModuleIdRef.current = null;
       setDraggingResourceId(null);
@@ -1052,7 +828,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       setDropTargetResourceId(null);
       setDropTargetModuleId(null);
       const targetModuleId = module.is_virtual || module.id === LEGACY_RESOURCE_MODULE_ID ? null : module.id;
-      if (draggedCategoryId === module.id) {
+      if (draggedResourceModuleId === module.id) {
         const reorderableIds = reorderableResourceIdsByModule.get(module.id) ?? [];
         const fromIndex = reorderableIds.indexOf(draggedResourceId);
         if (fromIndex >= 0 && fromIndex < reorderableIds.length - 1) {
@@ -1097,19 +873,19 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const handleResourceDragStart = (event: DragEvent<HTMLElement>, resource: CommunityResource) => {
-    const categoryId = getResourceCategoryId(resource);
+    const moduleSelectionId = getResourceModuleSelectionId(resource);
     if (!canManageResources || getResourceRole(resource) !== "page") {
       event.preventDefault();
       return;
     }
     draggingResourceIdRef.current = resource.id;
-    draggingResourceModuleIdRef.current = categoryId;
+    draggingResourceModuleIdRef.current = moduleSelectionId;
     setDraggingResourceId(resource.id);
-    setDraggingResourceModuleId(categoryId);
+    setDraggingResourceModuleId(moduleSelectionId);
     setDropTargetResourceId(null);
     event.dataTransfer.effectAllowed = "move";
     event.dataTransfer.setData(RESOURCE_DRAG_MIME, resource.id);
-    event.dataTransfer.setData(RESOURCE_CATEGORY_DRAG_MIME, categoryId);
+    event.dataTransfer.setData(RESOURCE_ORIGIN_MODULE_DRAG_MIME, moduleSelectionId);
     event.dataTransfer.setData("text/plain", resource.id);
   };
 
@@ -1133,11 +909,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       draggingResourceId ||
       event.dataTransfer.getData(RESOURCE_DRAG_MIME) ||
       event.dataTransfer.getData("text/plain");
-    const draggedCategoryId =
+    const draggedResourceModuleId =
       draggingResourceModuleIdRef.current ||
       draggingResourceModuleId ||
-      event.dataTransfer.getData(RESOURCE_CATEGORY_DRAG_MIME);
-    const categoryId = getResourceCategoryId(resource);
+      event.dataTransfer.getData(RESOURCE_ORIGIN_MODULE_DRAG_MIME);
+    const moduleSelectionId = getResourceModuleSelectionId(resource);
     draggingResourceIdRef.current = null;
     draggingResourceModuleIdRef.current = null;
     setDraggingResourceId(null);
@@ -1146,12 +922,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setDropTargetModuleId(null);
     if (!draggedId || draggedId === resource.id) return;
     if (getResourceRole(resource) !== "page") return;
-    const moduleId = categoryId === LEGACY_RESOURCE_MODULE_ID ? null : categoryId;
-    if (draggedCategoryId !== categoryId) {
+    const moduleId = moduleSelectionId === LEGACY_RESOURCE_MODULE_ID ? null : moduleSelectionId;
+    if (draggedResourceModuleId !== moduleSelectionId) {
       void actions.handleMoveResourceToModule(draggedId, moduleId, resource.id);
       return;
     }
-    const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
+    const reorderableIds = reorderableResourceIdsByModule.get(moduleSelectionId) ?? [];
     const fromIndex = reorderableIds.indexOf(draggedId);
     const toIndex = reorderableIds.indexOf(resource.id);
     if (fromIndex < 0 || toIndex < 0 || fromIndex === toIndex) return;
@@ -1170,25 +946,36 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     setDropTargetModuleId(null);
   };
 
-  const handleMoveResource = (categoryId: string, resourceId: string, direction: ReorderDirection) => {
-    const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
+  const handleMoveResource = (moduleSelectionId: string, resourceId: string, direction: ReorderDirection) => {
+    const reorderableIds = reorderableResourceIdsByModule.get(moduleSelectionId) ?? [];
     const nextIds = moveOrderedId(reorderableIds, resourceId, direction);
     if (!nextIds) return;
-    const moduleId = categoryId === LEGACY_RESOURCE_MODULE_ID ? null : categoryId;
+    const moduleId = moduleSelectionId === LEGACY_RESOURCE_MODULE_ID ? null : moduleSelectionId;
     void actions.handleReorderResources(moduleId, nextIds);
   };
 
-  const handleSelectCategory = (module: ResourceModuleView) => {
+  const handleOpenCourse = (module: ResourceModuleView) => {
     setShowSourceIntake(false);
     actions.handleSelectModule(module.id);
-    const firstResource = getFirstResourceForCategory(module);
+    const firstResource = getFirstResourceForModule(module);
     actions.setOpenResourceEmbedId(firstResource?.id ?? null);
+  };
+
+  const handleBackToCatalog = () => {
+    setShowSourceIntake(false);
+    actions.resourceEditor.cancelInlineEditResource();
+    setActiveResourceEditField(null);
+    actions.setOpenResourceEmbedId(null);
+    actions.handleSelectModule(null);
   };
 
   const handleSelectResource = (resource: CommunityResource) => {
     setShowSourceIntake(false);
-    actions.handleSelectModule(getResourceCategoryId(resource));
+    actions.handleSelectModule(getResourceModuleSelectionId(resource));
     actions.setOpenResourceEmbedId(resource.id);
+    if (window.matchMedia("(max-width: 900px)").matches) {
+      setIsCourseOutlineOpen(false);
+    }
   };
 
   const startResourceInlineEdit = (
@@ -1231,7 +1018,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     );
     if (!created) return;
     setPendingOpenResourceId(created.id);
-    actions.handleSelectModule(getResourceCategoryId(created));
+    actions.handleSelectModule(getResourceModuleSelectionId(created));
     actions.setOpenResourceEmbedId(created.id);
     actions.resourceEditor.beginInlineEditResource(created);
     setActiveResourceEditField("title");
@@ -1258,14 +1045,14 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   };
 
   const renderResourceRailItem = (resource: CommunityResource) => {
-    const categoryId = getResourceCategoryId(resource);
-    const reorderableIds = reorderableResourceIdsByModule.get(categoryId) ?? [];
+    const moduleSelectionId = getResourceModuleSelectionId(resource);
+    const reorderableIds = reorderableResourceIdsByModule.get(moduleSelectionId) ?? [];
     const resourceOrderIndex = reorderableIds.indexOf(resource.id);
-    const canMoveAcrossCategories = moduleViews.some((module) => module.id !== categoryId);
+    const canMoveAcrossModules = moduleViews.some((module) => module.id !== moduleSelectionId);
     const canReorderResource =
       canManageResources &&
       getResourceRole(resource) === "page" &&
-      (reorderableIds.length > 1 || canMoveAcrossCategories);
+      (reorderableIds.length > 1 || canMoveAcrossModules);
 
     return (
       <ResourceRailItem
@@ -1275,7 +1062,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
         onSelect={() => handleSelectResource(resource)}
         onEdit={() => startResourceInlineEdit(resource, "body")}
         onDelete={() => setPendingDeleteResourceId(resource.id)}
-        onMove={(direction) => handleMoveResource(categoryId, resource.id, direction)}
+        onMove={(direction) => handleMoveResource(moduleSelectionId, resource.id, direction)}
         onDragStart={(event) => handleResourceDragStart(event, resource)}
         onDragOver={(event) => handleResourceDragOver(event, resource)}
         onDragLeave={() => {
@@ -1347,14 +1134,22 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       <div className="community-panel resources-panel">
         <div className="feed-header-row">
           <div className="feed-header-copy">
-            <div className="resources-header">Resources</div>
+            {selectedModule ? (
+              <button className="resources-back-btn" type="button" onClick={handleBackToCatalog}>
+                <ArrowLeft aria-hidden="true" />
+                <span>Resources</span>
+              </button>
+            ) : null}
+            <div className="resources-header">{selectedModule?.name ?? "Resources"}</div>
             <div className="feed-header-subtitle">
-              {`Organized knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
+              {selectedModule
+                ? selectedModule.description_md?.trim() || "A guided collection of community lessons."
+                : `Courses and durable knowledge for ${capabilities.activeCommunityName ?? "this community"}.`}
             </div>
             {selectedModule?.is_virtual ? (
               <div className="resource-module-status-line is-cleanup">Needs sorting</div>
             ) : canManageResources && selectedModule && selectedModuleStatus === "draft" ? (
-              <div className="resource-module-status-line is-draft">Draft category</div>
+              <div className="resource-module-status-line is-draft">Draft course</div>
             ) : null}
           </div>
           <div
@@ -1363,26 +1158,49 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
             }`}
           >
             <div className="resources-header-admin-actions">
-              <div className="feed-header-badge" aria-label={`${allPageResources.length} pages`}>
-                {allPageResources.length}
+              <div
+                className="feed-header-badge"
+                aria-label={selectedModule
+                  ? `${selectedModuleSection?.pageResources.length ?? 0} lessons`
+                  : `${courseCatalogItems.length} courses`}
+              >
+                {selectedModule ? selectedModuleSection?.pageResources.length ?? 0 : courseCatalogItems.length}
               </div>
               {capabilities.hasActiveCommunity && canManageResources ? (
                 <div className="resources-add-split" role="group" aria-label="Resource actions">
                   <button
                     className="resources-source-intake-action"
                     type="button"
-                    onClick={() => setShowSourceIntake(true)}
+                    onClick={() => setShowSourceIntake((current) => !current)}
                   >
-                    Add sources
+                    {showSourceIntake
+                      ? selectedModule
+                        ? "Back to course"
+                        : "Back to courses"
+                      : "Add sources"}
                   </button>
                   {selectedModule && !selectedModule.is_virtual ? (
-                    <button
-                      className={`resources-module-status-action is-${selectedModuleNextStatus}`}
-                      type="button"
-                      onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
-                      title={selectedModuleStatus === "live" ? "Move category to draft" : "Make category live"}
-                    >
-                      {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
+                    <>
+                      <button
+                        className="resources-course-edit-action"
+                        type="button"
+                        onClick={() => actions.handleEditModule(selectedModule)}
+                      >
+                        Edit course
+                      </button>
+                      <button
+                        className={`resources-module-status-action is-${selectedModuleNextStatus}`}
+                        type="button"
+                        onClick={() => void actions.handleSetModuleStatus(selectedModule, selectedModuleNextStatus)}
+                        title={selectedModuleStatus === "live" ? "Move course to draft" : "Make course live"}
+                      >
+                        {selectedModuleStatus === "live" ? "Move to draft" : "Make live"}
+                      </button>
+                    </>
+                  ) : !selectedModule ? (
+                    <button className="resources-add-course-action" type="button" onClick={() => actions.openNewModuleModal()}>
+                      <Plus aria-hidden="true" />
+                      <span>Add course</span>
                     </button>
                   ) : null}
                 </div>
@@ -1430,6 +1248,17 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               <div className="community-chat-page-loading-progress web-skeleton-pill" aria-hidden="true" />
             </div>
           </div>
+        ) : canManageResources && showSourceIntake ? (
+          <div className="resource-course-intake">
+            <WebCommunityKnowledgeSourceIntake
+              communityId={capabilities.activeCommunityId}
+              communityName={capabilities.activeCommunityName}
+              failedSourceCount={failedSourceCount}
+              readySources={readySources}
+              onAddSources={actions.handleAddCommunitySources}
+              onBuildResources={actions.handleBuildCommunityResources}
+            />
+          </div>
         ) : !hasVisibleResourceContent && !canManageResources ? (
           <div className="community-panel-state-shell">
             <div className="chat-empty-state">
@@ -1443,81 +1272,101 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                 Welcome to {capabilities.activeCommunityName ?? "your"} resources
               </div>
               <div className="chat-empty-text">
-                {canManageResources
-                  ? "Create a category to organize durable pages, sources, and references."
-                  : "Resources shared by the community team will show up here."}
+                Courses and resources shared by the community team will show up here.
               </div>
             </div>
           </div>
-        ) : (
-          <div className="knowledge-workspace" aria-busy={isRefreshingResources}>
-            <aside className="knowledge-resource-rail" aria-label="Resources">
-              <div className="knowledge-resource-list">
-                {categorySections.map((section) => {
-                  const moduleOrderIndex = reorderableModuleIds.indexOf(section.module.id);
-                  const canMoveModule = canReorderModules && !section.module.is_virtual && moduleOrderIndex >= 0;
-                  return (
-                    <ResourceCategorySection
-                      key={section.module.id}
-                      module={section.module}
-                      isActive={selectedModule?.id === section.module.id}
-                      onSelectCategory={() => handleSelectCategory(section.module)}
-                      onEdit={() => actions.handleEditModule(section.module)}
-                      onSetStatus={(status) => void actions.handleSetModuleStatus(section.module, status)}
-                      onDelete={() => void actions.handleDeleteModule(section.module.id)}
-                      onAddPage={() => void handleAddPageDraft(section.module.id)}
-                      onMove={(direction) => handleMoveModule(section.module.id, direction)}
-                      isAddingPage={isCreatingPageDraft}
-                      canManage={canManageResources && !section.module.is_virtual}
-                      canReorder={canReorderModules && !section.module.is_virtual}
-                      canMoveUp={canMoveModule && moduleOrderIndex > 0}
-                      canMoveDown={canMoveModule && moduleOrderIndex < reorderableModuleIds.length - 1}
-                      isDragging={draggingModuleId === section.module.id}
-                      isDropTarget={dropTargetModuleId === section.module.id}
-                      onDragStart={(event) => handleModuleDragStart(event, section.module)}
-                      onDragOver={(event) => handleModuleDragOver(event, section.module)}
-                      onDragLeave={() => {
-                        if (dropTargetModuleId === section.module.id) setDropTargetModuleId(null);
-                      }}
-                      onDrop={(event) => handleModuleDrop(event, section.module)}
-                      onDragEnd={handleModuleDragEnd}
-                    >
-                      {section.pageResources.map(renderResourceRailItem)}
-                    </ResourceCategorySection>
-                  );
-                })}
+        ) : !selectedModule ? (
+          courseCatalogItems.length > 0 || maintenanceCatalogItem ? (
+            <ResourceCourseCatalog
+              items={courseCatalogItems}
+              maintenanceItem={maintenanceCatalogItem}
+              canManage={canManageResources}
+              canReorder={canReorderModules}
+              draggingModuleId={draggingModuleId}
+              dropTargetModuleId={dropTargetModuleId}
+              onOpen={handleOpenCourse}
+              onEdit={actions.handleEditModule}
+              onSetStatus={(module, status) => void actions.handleSetModuleStatus(module, status)}
+              onDelete={(module) => void actions.handleDeleteModule(module.id)}
+              onMove={(module, direction) => handleMoveModule(module.id, direction)}
+              onDragStart={handleModuleDragStart}
+              onDragOver={handleModuleDragOver}
+              onDragLeave={(module) => {
+                if (dropTargetModuleId === module.id) setDropTargetModuleId(null);
+              }}
+              onDrop={handleModuleDrop}
+              onDragEnd={handleModuleDragEnd}
+            />
+          ) : (
+            <div className="community-panel-state-shell">
+              <div className="chat-empty-state">
+                <div className="chat-empty-title">Create your first course</div>
+                <div className="chat-empty-text">
+                  Courses organize durable community knowledge into a clear sequence of lessons.
+                </div>
                 {canManageResources ? (
-                  <button
-                    className="knowledge-category-inline-add"
-                    type="button"
-                    onClick={() => actions.openNewModuleModal()}
-                  >
-                    <span aria-hidden="true">+</span>
-                    <span>Add category</span>
+                  <button className="resources-empty-add-course" type="button" onClick={() => actions.openNewModuleModal()}>
+                    <Plus aria-hidden="true" />
+                    <span>Add course</span>
                   </button>
                 ) : null}
-                {shouldShowSourceInbox ? (
-                  <div className="knowledge-source-inbox-section">
-                    <div className="knowledge-resource-section-header">
-                      <span>Source Inbox</span>
-                      <span>{allSourceResources.length}</span>
-                    </div>
-                    {allSourceResources.map(renderResourceRailItem)}
-                  </div>
-                ) : null}
               </div>
+            </div>
+          )
+        ) : (
+          <div className="knowledge-workspace resource-course-workspace" aria-busy={isRefreshingResources}>
+            <aside
+              className={`knowledge-resource-rail resource-course-outline${isCourseOutlineOpen ? " is-open" : ""}`}
+              aria-label={`${selectedModule.name} lessons`}
+            >
+              <button
+                className="resource-course-outline-header"
+                type="button"
+                aria-expanded={isCourseOutlineOpen}
+                aria-controls="resource-course-lesson-navigation"
+                onClick={() => setIsCourseOutlineOpen((current) => !current)}
+              >
+                <span>Lessons</span>
+                <span className="resource-course-outline-count">
+                  {selectedModuleSection?.pageResources.length ?? 0}
+                  <ChevronDown aria-hidden="true" />
+                </span>
+              </button>
+              <nav
+                id="resource-course-lesson-navigation"
+                className="knowledge-resource-list"
+                aria-label={`${selectedModule.name} lesson navigation`}
+                hidden={!isCourseOutlineOpen}
+              >
+                {selectedModuleSection?.pageResources.map(renderResourceRailItem)}
+                {canManageResources && !selectedModule.is_virtual ? (
+                  <button
+                    className="knowledge-resource-inline-add"
+                    type="button"
+                    disabled={isCreatingPageDraft}
+                    onClick={() => void handleAddPageDraft(selectedModule.id)}
+                  >
+                    <Plus aria-hidden="true" />
+                    <span>{isCreatingPageDraft ? "Adding…" : "Add lesson"}</span>
+                  </button>
+                ) : null}
+              </nav>
+              {canManageResources && (selectedModuleSection?.sourceResources.length ?? 0) > 0 ? (
+                <div
+                  className="knowledge-source-inbox-section resource-course-source-inbox"
+                  hidden={!isCourseOutlineOpen}
+                >
+                  <div className="knowledge-resource-section-header">
+                    <span>Source Inbox</span>
+                    <span>{selectedModuleSection?.sourceResources.length ?? 0}</span>
+                  </div>
+                  {selectedModuleSection?.sourceResources.map(renderResourceRailItem)}
+                </div>
+              ) : null}
             </aside>
             <div className="knowledge-resource-reader">
-              {canManageResources && (!hasVisibleResourceContent || showSourceIntake) ? (
-                <WebCommunityKnowledgeSourceIntake
-                  communityId={capabilities.activeCommunityId}
-                  communityName={capabilities.activeCommunityName}
-                  failedSourceCount={failedSourceCount}
-                  readySources={readySources}
-                  onAddSources={actions.handleAddCommunitySources}
-                  onBuildResources={actions.handleBuildCommunityResources}
-                />
-              ) : readerResource ? (
+              {readerResource ? (
                 <>
                   <WebCommunityResourceViewerContent
                     resource={readerResource}
@@ -1546,11 +1395,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
                         <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
                       </svg>
                     </div>
-                    <div className="chat-empty-title">No page selected</div>
+                    <div className="chat-empty-title">No lessons yet</div>
                     <div className="chat-empty-text">
-                      {selectedCategorySection
-                        ? "This category does not have a page yet."
-                        : "Choose a page from the wiki."}
+                      {canManageResources
+                        ? "Add the first lesson to begin building this course."
+                        : "The community team has not published a lesson here yet."}
                     </div>
                   </div>
                 </div>

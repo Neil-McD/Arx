@@ -9237,62 +9237,6 @@ button.chat-reply-quote:hover {
   padding: 0 4px 2px 0;
 }
 
-.knowledge-category-section {
-  position: relative;
-  display: grid;
-  align-content: start;
-  gap: 5px;
-  min-width: 0;
-}
-
-.knowledge-category-section.is-dragging {
-  opacity: 0.58;
-}
-
-.knowledge-category-section.is-drop-target .knowledge-category-header {
-  border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--border-strong));
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--accent-gold) 34%, transparent);
-}
-
-.knowledge-category-header {
-  position: relative;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-  border: 1px solid transparent;
-  border-radius: 8px;
-  padding: 6px 4px 6px 6px;
-  cursor: pointer;
-  transition: background 0.15s ease, border-color 0.15s ease;
-}
-
-.knowledge-category-section.can-reorder .knowledge-category-header {
-  grid-template-columns: 14px minmax(0, 1fr) auto;
-}
-
-.knowledge-category-header:hover,
-.knowledge-category-section.is-active .knowledge-category-header {
-  background: color-mix(in srgb, var(--bg-card-alt) 72%, transparent);
-  border-color: color-mix(in srgb, var(--border-default) 60%, transparent);
-}
-
-.knowledge-category-header:focus-visible {
-  outline: 2px solid color-mix(in srgb, var(--border-active) 58%, transparent);
-  outline-offset: 2px;
-}
-
-.knowledge-category-section.can-reorder .knowledge-category-header {
-  cursor: grab;
-  user-select: none;
-}
-
-.knowledge-category-section.can-reorder .knowledge-category-header:active {
-  cursor: grabbing;
-}
-
-.knowledge-category-drag-handle,
 .knowledge-resource-drag-handle {
   display: inline-grid;
   place-items: center;
@@ -9301,81 +9245,15 @@ button.chat-reply-quote:hover {
   touch-action: none;
 }
 
-.knowledge-category-drag-handle {
-  width: 14px;
-  height: 18px;
-}
-
-.knowledge-category-drag-handle svg,
 .knowledge-resource-drag-handle svg {
   width: 14px;
   height: 14px;
 }
 
-.knowledge-category-section.can-reorder .knowledge-category-header:hover .knowledge-category-drag-handle,
 .knowledge-resource-item.can-reorder:hover .knowledge-resource-drag-handle {
   color: color-mix(in srgb, var(--text-primary) 72%, var(--text-muted));
 }
 
-.knowledge-category-copy {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-}
-
-.knowledge-category-title-row {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  min-width: 0;
-}
-
-.knowledge-category-title {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  line-height: 1.2;
-  text-transform: uppercase;
-}
-
-.knowledge-category-section.is-active .knowledge-category-title {
-  color: var(--text-primary);
-}
-
-.knowledge-category-badge {
-  display: inline-flex;
-  align-items: center;
-  min-height: 15px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  border-radius: 999px;
-  padding: 0 6px;
-  color: var(--text-muted);
-  font-size: 8px;
-  font-weight: 850;
-  letter-spacing: 0.08em;
-  line-height: 1;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.knowledge-category-badge.is-cleanup {
-  border-style: dashed;
-}
-
-.knowledge-category-header-actions {
-  position: relative;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  z-index: 2;
-}
-
-.knowledge-category-menu-trigger,
 .knowledge-resource-menu-trigger {
   width: 28px;
   height: 24px;
@@ -9391,8 +9269,6 @@ button.chat-reply-quote:hover {
   transition: color 0.15s ease, background 0.15s ease, opacity 0.15s ease;
 }
 
-.knowledge-category-menu-trigger:hover,
-.knowledge-category-menu-trigger[aria-expanded="true"],
 .knowledge-resource-menu-trigger:hover,
 .knowledge-resource-menu-trigger[aria-expanded="true"] {
   color: var(--text-primary);
@@ -9400,7 +9276,6 @@ button.chat-reply-quote:hover {
   opacity: 1;
 }
 
-.knowledge-category-menu-trigger svg,
 .knowledge-resource-menu-trigger svg {
   width: 17px;
   height: 17px;
@@ -9495,19 +9370,9 @@ button.chat-reply-quote:hover {
   stroke-linejoin: round;
 }
 
-.knowledge-category-menu-popover,
 .knowledge-resource-menu-popover {
   top: calc(100% + 7px);
   right: 0;
-}
-
-.knowledge-category-pages {
-  display: grid;
-  gap: 3px;
-  min-width: 0;
-  margin-left: 11px;
-  padding-left: 8px;
-  border-left: 1px solid color-mix(in srgb, var(--border-default) 46%, transparent);
 }
 
 .knowledge-source-inbox-section {
@@ -9569,33 +9434,9 @@ button.chat-reply-quote:hover {
   cursor: not-allowed;
 }
 
-.knowledge-category-inline-add {
-  width: 100%;
-  min-height: 38px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 7px;
-  border: 1px dashed color-mix(in srgb, var(--border-default) 78%, transparent);
-  border-radius: 10px;
-  background: color-mix(in srgb, var(--bg-card-alt) 28%, transparent);
-  color: var(--text-muted);
-  padding: 9px 12px;
-  font-size: 12px;
-  font-weight: 800;
-  line-height: 1;
-  cursor: pointer;
-}
-
-.knowledge-category-inline-add:hover {
-  color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent-gold) 48%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-gold) 7%, transparent);
-}
-
 .knowledge-resource-item {
   display: grid;
-  grid-template-columns: 30px minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: start;
   gap: 10px;
   min-width: 0;
@@ -9607,9 +9448,8 @@ button.chat-reply-quote:hover {
   transition: border-color 0.15s ease, background 0.15s ease, transform 0.15s ease;
 }
 
-.knowledge-category-pages .knowledge-resource-item,
+.resource-course-outline .knowledge-resource-item,
 .knowledge-source-inbox-section .knowledge-resource-item {
-  grid-template-columns: 18px minmax(0, 1fr) auto;
   align-items: center;
   gap: 7px;
   border-radius: 8px;
@@ -9622,13 +9462,13 @@ button.chat-reply-quote:hover {
   background: color-mix(in srgb, var(--bg-card-alt) 82%, transparent);
 }
 
-.knowledge-resource-item:focus-visible {
+.knowledge-resource-item-main:focus-visible {
   outline: 2px solid color-mix(in srgb, var(--border-active) 58%, transparent);
   outline-offset: 2px;
 }
 
 .knowledge-resource-item.can-reorder {
-  grid-template-columns: 14px 30px minmax(0, 1fr) auto;
+  grid-template-columns: 14px minmax(0, 1fr) auto;
   cursor: grab;
   user-select: none;
 }
@@ -9637,15 +9477,34 @@ button.chat-reply-quote:hover {
   cursor: grabbing;
 }
 
-.knowledge-category-pages .knowledge-resource-item.can-reorder,
-.knowledge-source-inbox-section .knowledge-resource-item.can-reorder {
-  grid-template-columns: 14px 18px minmax(0, 1fr) auto;
-}
-
 .knowledge-resource-drag-handle {
   width: 14px;
   min-height: 18px;
   align-self: center;
+}
+
+.knowledge-resource-item-main {
+  appearance: none;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+}
+
+.resource-course-outline .knowledge-resource-item-main,
+.knowledge-source-inbox-section .knowledge-resource-item-main {
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
 }
 
 .knowledge-resource-item.is-dragging {
@@ -9668,7 +9527,7 @@ button.chat-reply-quote:hover {
   place-items: center;
 }
 
-.knowledge-category-pages .knowledge-resource-item-icon,
+.resource-course-outline .knowledge-resource-item-icon,
 .knowledge-source-inbox-section .knowledge-resource-item-icon {
   width: 18px;
   height: 18px;
@@ -9690,7 +9549,7 @@ button.chat-reply-quote:hover {
   stroke-linejoin: round;
 }
 
-.knowledge-category-pages .knowledge-resource-item-icon svg,
+.resource-course-outline .knowledge-resource-item-icon svg,
 .knowledge-source-inbox-section .knowledge-resource-item-icon svg {
   width: 13px;
   height: 13px;
@@ -9768,7 +9627,7 @@ button.chat-reply-quote:hover {
   color: color-mix(in srgb, var(--accent-gold) 72%, var(--text-secondary));
 }
 
-.knowledge-category-pages .knowledge-resource-item-title,
+.resource-course-outline .knowledge-resource-item-title,
 .knowledge-source-inbox-section .knowledge-resource-item-title {
   font-size: 11.5px;
   font-weight: 650;
@@ -9807,7 +9666,7 @@ button.chat-reply-quote:hover {
   -webkit-line-clamp: 2;
 }
 
-.knowledge-category-pages .knowledge-resource-item-summary,
+.resource-course-outline .knowledge-resource-item-summary,
 .knowledge-source-inbox-section .knowledge-resource-item-summary {
   display: none;
 }
@@ -10362,146 +10221,6 @@ button.chat-reply-quote:hover {
   align-items: stretch;
 }
 
-.resource-module-grid {
-  padding: 0;
-}
-
-.resource-module-card {
-  position: relative;
-}
-
-.resource-module-card.can-reorder {
-  cursor: grab;
-}
-
-.resource-module-card.can-reorder:active {
-  cursor: grabbing;
-}
-
-.resource-module-card.is-dragging {
-  opacity: 0.58;
-  transform: scale(0.985);
-}
-
-.resource-module-card.is-drop-target {
-  border-color: color-mix(in srgb, var(--accent-gold) 72%, var(--border-strong));
-  box-shadow:
-    0 0 0 1px color-mix(in srgb, var(--accent-gold) 42%, transparent),
-    var(--shadow-md);
-}
-
-.resource-module-card.is-virtual {
-  border-style: dashed;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.028), transparent 42%),
-    color-mix(in srgb, var(--bg-card) 90%, transparent);
-}
-
-.resource-module-card.is-virtual .discover-card-banner {
-  background:
-    radial-gradient(circle at 15% 20%, rgba(255, 255, 255, 0.08), transparent 60%),
-    linear-gradient(120deg, rgba(138, 143, 156, 0.16), rgba(110, 212, 216, 0.08));
-}
-
-.resource-module-card.is-virtual .discover-card-name {
-  color: var(--text-secondary);
-}
-
-.resource-module-card-menu {
-  position: absolute;
-  top: 10px;
-  right: 10px;
-  z-index: 3;
-}
-
-.resource-module-card-menu-trigger {
-  width: 30px;
-  height: 30px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
-  color: var(--text-secondary);
-  display: grid;
-  place-items: center;
-  padding: 0;
-  cursor: pointer;
-  backdrop-filter: blur(14px);
-  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
-}
-
-.resource-module-card-menu-trigger:hover,
-.resource-module-card-menu-trigger[aria-expanded="true"] {
-  color: var(--text-primary);
-  border-color: var(--border-strong);
-  background: color-mix(in srgb, var(--bg-card) 94%, transparent);
-}
-
-.resource-module-card-menu-trigger svg {
-  width: 17px;
-  height: 17px;
-  fill: currentColor;
-}
-
-.resource-module-card-menu-popover {
-  position: absolute;
-  top: calc(100% + 8px);
-  right: 0;
-  min-width: 128px;
-  border: 1px solid var(--border-default);
-  border-radius: 12px;
-  background: color-mix(in srgb, var(--bg-elevated) 96%, transparent);
-  box-shadow: var(--shadow-lg);
-  padding: 6px;
-  display: grid;
-  gap: 2px;
-  cursor: default;
-}
-
-.resource-module-card-menu-popover button {
-  width: 100%;
-  border: 0;
-  border-radius: 9px;
-  background: transparent;
-  color: var(--text-secondary);
-  display: grid;
-  grid-template-columns: 18px minmax(0, 1fr);
-  align-items: center;
-  gap: 8px;
-  padding: 8px 9px;
-  text-align: left;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.resource-module-card-menu-popover button:hover {
-  background: color-mix(in srgb, var(--bg-card) 86%, transparent);
-  color: var(--text-primary);
-}
-
-.resource-module-card-menu-popover button.danger {
-  color: color-mix(in srgb, #f97316 72%, var(--text-primary));
-}
-
-.resource-module-card-menu-popover button.danger:hover {
-  background: color-mix(in srgb, #f97316 12%, transparent);
-  color: color-mix(in srgb, #fb923c 82%, var(--text-primary));
-}
-
-.resource-module-card-menu-popover svg {
-  width: 16px;
-  height: 16px;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
-.resource-module-card-body {
-  padding-top: 14px;
-}
-
 .resource-module-status-line {
   display: inline-flex;
   align-items: center;
@@ -10525,35 +10244,360 @@ button.chat-reply-quote:hover {
   margin-top: 6px;
 }
 
-.resource-module-corner-badge {
+.resource-course-catalog,
+.resource-course-intake {
+  width: min(100%, 1080px);
+  margin: 0 auto;
+  padding: 18px 48px 34px;
+}
+
+.resource-course-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+  align-items: stretch;
+}
+
+.resource-course-card {
+  position: relative;
+  min-width: 0;
+  overflow: visible;
+  border: 1px solid var(--border-default);
+  border-radius: 16px;
+  background: var(--bg-card);
+  transition: border-color 140ms ease, box-shadow 140ms ease, transform 140ms ease;
+}
+
+.resource-course-card:hover,
+.resource-course-card:focus-within {
+  border-color: var(--border-strong);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.2);
+  transform: translateY(-1px);
+}
+
+.resource-course-card.is-dragging {
+  opacity: 0.58;
+  transform: scale(0.985);
+}
+
+.resource-course-card.is-drop-target {
+  border-color: var(--border-active);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--border-active) 28%, transparent);
+}
+
+.resource-course-card-main {
+  appearance: none;
+  width: 100%;
+  min-height: 100%;
+  overflow: hidden;
+  border: 0;
+  border-radius: inherit;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.resource-course-card-main:focus-visible {
+  outline: 2px solid var(--border-active);
+  outline-offset: 3px;
+}
+
+.resource-course-card-cover {
+  height: clamp(118px, 17vw, 158px);
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  border-radius: 15px 15px 0 0;
+  background: var(--bg-card-alt);
+  color: var(--text-faint);
+}
+
+.resource-course-card-cover > svg {
+  width: 34px;
+  height: 34px;
+  stroke-width: 1.35;
+}
+
+.resource-course-card-cover-image {
   position: absolute;
-  top: 10px;
-  left: 10px;
-  z-index: 2;
-  display: inline-flex;
-  align-items: center;
-  min-height: 22px;
-  border: 1px solid color-mix(in srgb, var(--border-default) 80%, transparent);
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.resource-course-card-body {
+  min-height: 132px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 15px 17px 16px;
+}
+
+.resource-course-card-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.resource-course-card-heading > strong {
+  min-width: 0;
+  color: var(--text-primary);
+  font-size: 15px;
+  font-weight: 650;
+  line-height: 1.3;
+}
+
+.resource-course-card-status {
+  flex: 0 0 auto;
+  border: 1px solid var(--border-default);
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card) 82%, transparent);
-  color: var(--text-secondary);
-  padding: 0 9px;
-  font-size: 10px;
+  color: var(--text-muted);
+  padding: 3px 7px;
+  font-size: 9px;
   font-weight: 750;
   letter-spacing: 0.08em;
   line-height: 1;
   text-transform: uppercase;
-  backdrop-filter: blur(14px);
-  pointer-events: none;
 }
 
-.resource-module-corner-badge.is-cleanup {
-  border-color: color-mix(in srgb, var(--border-default) 72%, transparent);
+.resource-course-card-description {
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  color: var(--text-secondary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.resource-course-card-meta {
+  margin-top: auto;
   color: var(--text-muted);
+  font-size: 11px;
+  font-weight: 600;
 }
 
-.resource-module-card .discover-card-desc {
+.resource-course-card-menu,
+.resource-course-card-drag {
+  position: absolute;
+  top: 10px;
+  z-index: 5;
+}
+
+.resource-course-card-menu {
+  right: 10px;
+}
+
+.resource-course-card-drag {
+  left: 10px;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-default) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  color: var(--text-secondary);
+  cursor: grab;
+  backdrop-filter: blur(12px);
+}
+
+.resource-course-card-drag svg {
+  width: 16px;
+  height: 16px;
+}
+
+.resource-course-card-menu-trigger {
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  border: 1px solid color-mix(in srgb, var(--border-default) 76%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 88%, transparent);
+  color: var(--text-secondary);
+  padding: 0;
+  cursor: pointer;
+  backdrop-filter: blur(12px);
+}
+
+.resource-course-card-menu-trigger:hover,
+.resource-course-card-menu-trigger[aria-expanded="true"] {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+}
+
+.resource-course-card-menu-trigger svg {
+  width: 17px;
+  height: 17px;
+}
+
+.resource-course-card-menu-popover {
+  position: absolute;
+  top: calc(100% + 7px);
+  right: 0;
+  min-width: 164px;
+}
+
+.resource-course-card-menu-popover button {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr);
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 8px 9px;
+  text-align: left;
+  font: inherit;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.resource-course-card-menu-popover button:hover {
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+}
+
+.resource-course-card-menu-popover button.danger {
+  color: color-mix(in srgb, #fb7185 78%, var(--text-primary));
+}
+
+.resource-course-card-menu-popover svg {
+  width: 15px;
+  height: 15px;
+}
+
+.resource-course-maintenance {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-top: 18px;
+  border: 1px dashed var(--border-default);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 12px 14px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.resource-course-maintenance:hover {
+  border-color: var(--border-strong);
+  background: color-mix(in srgb, var(--bg-card-alt) 60%, transparent);
+}
+
+.resource-course-maintenance > svg {
+  width: 18px;
+  height: 18px;
+}
+
+.resource-course-maintenance > span {
+  display: grid;
+  gap: 2px;
+}
+
+.resource-course-maintenance strong {
+  color: var(--text-primary);
+  font-size: 12px;
+}
+
+.resource-course-maintenance small {
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.resource-course-workspace {
+  grid-template-columns: minmax(220px, 270px) minmax(0, 1fr);
+}
+
+.resource-course-outline-header {
+  appearance: none;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 2px 4px 8px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 750;
+  letter-spacing: 0.1em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.resource-course-outline-count {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.resource-course-outline-count svg {
+  width: 14px;
+  height: 14px;
+  transition: transform 140ms ease;
+}
+
+.resource-course-outline:not(.is-open) .resource-course-outline-count svg {
+  transform: rotate(-90deg);
+}
+
+.resource-course-outline [hidden] {
+  display: none !important;
+}
+
+.resource-course-outline .knowledge-resource-item-title {
+  white-space: normal;
+  line-height: 1.35;
+}
+
+.resources-add-course-action,
+.resources-course-edit-action,
+.resources-empty-add-course {
   min-height: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  border: 1px solid var(--border-default);
+  border-radius: 9px;
+  background: transparent;
+  color: var(--text-secondary);
+  padding: 0 10px;
+  font: inherit;
+  font-size: 11px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.resources-add-course-action:hover,
+.resources-course-edit-action:hover,
+.resources-empty-add-course:hover {
+  border-color: var(--border-strong);
+  background: var(--bg-card-alt);
+  color: var(--text-primary);
+}
+
+.resources-add-course-action svg,
+.resources-empty-add-course svg {
+  width: 14px;
+  height: 14px;
+}
+
+.resources-empty-add-course {
+  margin-top: 6px;
 }
 
 .resource-card {
@@ -11555,9 +11599,44 @@ button.chat-reply-quote:hover {
   .knowledge-source-intake {
     padding-inline: 0;
   }
+
+  .resource-course-catalog,
+  .resource-course-intake {
+    padding: 16px 20px 28px;
+  }
+
+  .resource-course-workspace {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .resource-course-outline {
+    border-right: 0;
+    border-bottom: 1px solid color-mix(in srgb, var(--border-default) 72%, transparent);
+    padding: 0 0 12px;
+  }
+
+  .resource-course-outline .knowledge-resource-list {
+    max-height: min(42vh, 320px);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+  }
 }
 
 @media (max-width: 640px) {
+  .resource-course-grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 14px;
+  }
+
+  .resource-course-catalog,
+  .resource-course-intake {
+    padding: 12px 12px 24px;
+  }
+
+  .resource-course-card-cover {
+    height: 132px;
+  }
+
   .knowledge-source-intake {
     gap: 22px;
     padding-top: 8px;

@@ -48,18 +48,23 @@ assert.match(
 );
 assert.match(
   css,
-  /grid-template-columns: minmax\(176px, 224px\) minmax\(0, 1fr\)/,
-  "Resources wiki rail should stay compact",
+  /\.resource-course-workspace \{[\s\S]*grid-template-columns: minmax\(220px, 270px\) minmax\(0, 1fr\)/,
+  "selected courses should reserve a compact lesson outline beside the reader",
 );
 assert.match(
   css,
-  /\.knowledge-resource-rail \{[\s\S]*align-self: start;[\s\S]*display: grid;[\s\S]*border-right: 1px solid color-mix\(in srgb, var\(--border-default\) 72%, transparent\);[\s\S]*padding-right: 12px;/,
-  "Resources wiki rail should stay visually separated without owning a nested scroll container",
+  /\.resource-course-grid \{[\s\S]*grid-template-columns: repeat\(2, minmax\(0, 1fr\)\)/,
+  "Resources root should present courses as a two-column catalog when space allows",
 );
 assert.match(
   css,
-  /@media \(max-width: 900px\) \{[\s\S]*\.knowledge-resource-rail \{[\s\S]*border-right: 0;[\s\S]*border-bottom: 1px solid color-mix\(in srgb, var\(--border-default\) 72%, transparent\);[\s\S]*padding: 0 0 12px;/,
-  "Resources wiki rail should collapse to a top section on mobile",
+  /@media \(max-width: 900px\) \{[\s\S]*\.resource-course-workspace \{[\s\S]*grid-template-columns: minmax\(0, 1fr\)[\s\S]*\.resource-course-outline \.knowledge-resource-list \{[\s\S]*max-height: min\(42vh, 320px\)[\s\S]*overflow-y: auto/,
+  "selected courses should collapse to a bounded top lesson outline on narrow screens",
+);
+assert.match(
+  css,
+  /@media \(max-width: 640px\) \{[\s\S]*\.resource-course-grid \{[\s\S]*grid-template-columns: minmax\(0, 1fr\)/,
+  "course cards should collapse to one column on phone-sized screens",
 );
 assert.match(
   css,

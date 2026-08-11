@@ -171,9 +171,14 @@ assert.match(
   "selected page edit controls must wait for hydrated body content before editing",
 );
 assert.match(
+  webContentController,
+  /const reloadActiveResources = useCallback\(async \(\): Promise<void> => \{[\s\S]*ensureSession\(\)[\s\S]*resourceUi\.loadCommunityResources\([\s\S]*activeCommunityId,[\s\S]*activeSession/,
+  "the content controller should reload Resources through the existing authenticated list path",
+);
+assert.match(
   app,
-  /reloadResources: async \(\) => \{[\s\S]*ensureUsableAuthSession\(\)[\s\S]*loadCommunityResources\(activeCommunityId, usableSession\)/,
-  "App should wire Resources reload through the existing authenticated list path",
+  /reloadResources: reloadActiveResources/,
+  "App should pass the canonical Resources reload action into the surface contract",
 );
 
 console.log("community resource content hydration contract proof passed");

@@ -21,6 +21,7 @@ const emailDigests = read("convex/emailDigests.ts");
 const resourceDirectory = read("shared/communityResourceDirectory.ts");
 const resourceModal = read("apps/web/src/components/WebCommunityResourceModal.tsx");
 const resourceModuleModal = read("apps/web/src/components/WebCommunityResourceModuleModal.tsx");
+const resourceCourseCatalog = read("apps/web/src/components/ResourceCourseCatalog.tsx");
 const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const knowledgeSourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
@@ -383,7 +384,7 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /isAddingPage=\{isCreatingPageDraft\}/,
+  /knowledge-resource-inline-add[\s\S]*disabled=\{isCreatingPageDraft\}[\s\S]*handleAddPageDraft\(selectedModule\.id\)/,
   "add-page draft creation must guard duplicate clicks while the draft is being created",
 );
 assert.match(
@@ -536,8 +537,8 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /knowledge-source-inbox-section[\s\S]*Source Inbox[\s\S]*allSourceResources/,
-  "resources panel must keep builder sources in a separate source inbox",
+  /selectedModuleSection\?\.sourceResources[\s\S]*Source Inbox/,
+  "selected courses must keep builder sources in a separate manager-only source inbox",
 );
 assert.match(
   resourcesPanel,
@@ -551,33 +552,33 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /module\.is_virtual \? \([\s\S]*Cleanup/,
-  "virtual unsorted cleanup bucket must use cleanup labeling instead of live/draft category labeling",
+  /courseCatalogItems[\s\S]*!section\.module\.is_virtual/,
+  "virtual unsorted cleanup must stay outside the normal course catalog",
 );
 assert.match(
   resourcesPanel,
-  /canManage && !module\.is_virtual \? \([\s\S]*knowledge-resource-inline-add/,
-  "page creation controls must live inside real category sections and never inside the virtual cleanup bucket",
+  /maintenanceCatalogItem[\s\S]*module\.is_virtual/,
+  "virtual unsorted cleanup must use a separate maintenance entry",
 );
 assert.match(
   resourcesPanel,
-  /knowledge-category-inline-add[\s\S]*openNewModuleModal[\s\S]*Add category/,
-  "category creation must live in the resources rail instead of the header",
+  /resources-add-course-action[\s\S]*openNewModuleModal[\s\S]*Add course/,
+  "course creation must have one explicit Resources header action",
 );
 assert.doesNotMatch(
   resourcesPanel,
-  /resources-add-choice[\s\S]*>\s*Category\s*</,
-  "resources header must not keep a competing add-category button",
+  /selectedModuleId \?\? selectedResource\?\.module_id/,
+  "the Resources root must not infer a selected course from stale lesson state",
 );
 assert.match(
   resourcesPanel,
-  /!hasVisibleResourceContent && !canManageResources/,
-  "resource managers must still see the rail add-category control when the resource set is empty",
+  /if \(!selectedModule\) \{[\s\S]*actions\.setOpenResourceEmbedId\(null\)[\s\S]*return/,
+  "the Resources root must stay on the course catalog instead of auto-opening the first course",
 );
 assert.match(
   resourcesPanel,
-  /onAddPage=\{\(\) => void handleAddPageDraft\(section\.module\.id\)\}/,
-  "inline page creation must target the category that owns the add-page row",
+  /selectedModuleSection\?\.pageResources\.map\(renderResourceRailItem\)[\s\S]*handleAddPageDraft\(selectedModule\.id\)/,
+  "lesson creation and ordering must stay scoped to the selected course",
 );
 assert.match(
   webResourceController,
@@ -586,28 +587,43 @@ assert.match(
 );
 assert.match(
   resourceModuleModal,
-  /Add category[\s\S]*Category name[\s\S]*Save category/,
-  "resource category modal should use category terminology and only ask for a name",
+  /Add course[\s\S]*Course name[\s\S]*Description[\s\S]*Course cover[\s\S]*Save course/,
+  "course authoring must expose the presentation metadata used by catalog cards",
 );
-assert.doesNotMatch(
+assert.match(
   resourceModuleModal,
-  /Description|Banner|moduleDescriptionInput|moduleBanner|Upload banner|Drop a banner image|WebCommunityBannerEditorModal/,
-  "resource category modal must not expose retired module description or banner fields",
+  /StableFramedMedia[\s\S]*WebCommunityBannerEditorModal/,
+  "course cover authoring must reuse canonical framed media and focus controls",
 );
-assert.doesNotMatch(
+assert.match(
   resourceController,
-  /moduleDescriptionInput|moduleBannerUrlInput|prepareCloudCommunityBrandingField|description_md: current\.moduleDescriptionInput|banner_storage_id: bannerField/,
-  "manual resource category saves must not write retired module description or banner fields",
+  /prepareCloudCommunityBrandingField[\s\S]*description_md: current\.moduleDescriptionInput\.trim\(\) \|\| null[\s\S]*banner_storage_id: bannerField\.storageId \?\? null/,
+  "course saves must persist description and canonicalized cover metadata",
+);
+assert.match(
+  resourcesPanel,
+  /selectedModule\.description_md\?\.trim\(\)/,
+  "selected course headers must surface the course description",
+);
+assert.match(
+  resourcesPanel,
+  />\s*No lessons yet\s*</,
+  "empty courses must explain the next authoring action",
+);
+assert.match(
+  resourcesPanel,
+  /ResourceCourseCatalog[\s\S]*items=\{courseCatalogItems\}[\s\S]*maintenanceItem=\{maintenanceCatalogItem\}/,
+  "the Resources root must render canonical course cards and a separate cleanup entry",
+);
+assert.match(
+  resourceCourseCatalog,
+  /<article[\s\S]*resource-course-card-menu-trigger[\s\S]*resource-course-card-main/,
+  "course cards must use a semantic article with separate navigation and manager controls",
 );
 assert.doesNotMatch(
-  resourcesPanel,
-  /selectedModule\?\.description_md/,
-  "resources header must not surface retired module descriptions",
-);
-assert.doesNotMatch(
-  resourcesPanel,
-  />\s*No pages yet\s*</,
-  "empty categories should collapse to the inline add-page action instead of rendering a duplicate empty-state row",
+  resourceCourseCatalog,
+  /<button[^>]*resource-course-card-main[\s\S]*resource-course-card-menu-trigger[\s\S]*<\/button>/,
+  "course cards must not nest manager controls inside the navigation button",
 );
 assert.doesNotMatch(
   `${webResourceController}\n${resourceContracts}\n${resourcesPanel}`,
@@ -662,11 +678,11 @@ assert.doesNotMatch(
 assert.match(
   resourcesPanel,
   /actions\.handleSetModuleStatus\(selectedModule, selectedModuleNextStatus\)/,
-  "resources panel must expose category-level live/draft changes through the canonical module status action",
+  "resources panel must expose course-level live/draft changes through the canonical module status action",
 );
 assert.match(
   resourcesPanel,
-  /MODULE_DRAG_MIME[\s\S]*RESOURCE_DRAG_MIME[\s\S]*RESOURCE_CATEGORY_DRAG_MIME/,
+  /MODULE_DRAG_MIME[\s\S]*RESOURCE_DRAG_MIME[\s\S]*RESOURCE_ORIGIN_MODULE_DRAG_MIME/,
   "resources panel drag/drop must use explicit internal drag metadata, not only a generic text payload",
 );
 assert.match(
@@ -675,9 +691,9 @@ assert.match(
   "resources panel drag/drop must keep ref-backed drag state so owner reorder does not depend only on async React state",
 );
 assert.match(
-  resourcesPanel,
-  /knowledge-category-drag-handle[\s\S]*GripVertical[\s\S]*knowledge-resource-drag-handle/,
-  "resources panel must expose visible grab handles for category and page reordering",
+  `${resourceCourseCatalog}\n${resourcesPanel}`,
+  /resource-course-card-drag[\s\S]*GripVertical[\s\S]*knowledge-resource-drag-handle/,
+  "resources must expose visible grab handles for course and lesson reordering",
 );
 assert.match(
   resourcesPanel,
@@ -687,7 +703,7 @@ assert.match(
 assert.match(
   resourcesPanel,
   /handleMoveModule[\s\S]*moveOrderedId\(reorderableModuleIds, moduleId, direction\)[\s\S]*actions\.handleReorderModules\(nextIds\)/,
-  "category move commands must reuse the canonical shared module reorder action",
+  "course move commands must reuse the canonical shared module reorder action",
 );
 assert.match(
   resourcesPanel,
@@ -701,7 +717,7 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /reorderableResourceIdsByModule[\s\S]*section\.pageResources\.map\(\(resource\) => resource\.id\)/,
+  /reorderableResourceIdsByModule[\s\S]*moduleSections[\s\S]*section\.pageResources\.map\(\(resource\) => resource\.id\)/,
   "resources panel reorder payload must be page-only because sources are intake material, not member-facing page order",
 );
 assert.match(
@@ -741,18 +757,18 @@ assert.match(
 );
 assert.match(
   resourcesPanel,
-  /handleResourceDrop[\s\S]*draggedCategoryId !== categoryId[\s\S]*actions\.handleMoveResourceToModule\(draggedId, moduleId, resource\.id\)/,
-  "dropping a page on a page in another category must move it before that target page",
+  /handleResourceDrop[\s\S]*draggedResourceModuleId !== moduleSelectionId[\s\S]*actions\.handleMoveResourceToModule\(draggedId, moduleId, resource\.id\)/,
+  "dropping a lesson on a lesson in another course must move it before that target lesson",
 );
 assert.match(
   resourcesPanel,
   /handleModuleDrop[\s\S]*draggedResourceId[\s\S]*actions\.handleMoveResourceToModule\(draggedResourceId, targetModuleId, null\)/,
-  "dropping a page on a category section must append it to that category",
+  "dropping a lesson on a course must append it to that course",
 );
 assert.match(
   baseCss,
-  /\.knowledge-category-section\.can-reorder \.knowledge-category-header[\s\S]*grid-template-columns: 14px minmax\(0, 1fr\) auto/,
-  "category reorder handles must have a stable rail column",
+  /\.knowledge-resource-item\.can-reorder \{[\s\S]*grid-template-columns: 14px minmax\(0, 1fr\) auto/,
+  "lesson reorder handles must have a stable outline column",
 );
 assert.match(
   resourceController,
