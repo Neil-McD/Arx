@@ -7,9 +7,7 @@ import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacke
 const read = (path: string) => readFileSync(path, "utf8");
 const editor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
 const app = read("apps/web/src/App.tsx");
-const memberAgentDock = read(
-  "apps/web/src/components/WebMemberAgentDock.tsx",
-);
+const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const memberAgentDockStyles = read(
   "apps/web/src/components/WebMemberAgentDock.css",
 );
@@ -33,12 +31,16 @@ const routeController = read(
 const previewController = read(
   "apps/web/src/controllers/useWebCommunityFunnelDraftPreviewController.ts",
 );
+const routeState = read("shared/webAppRouteState.ts");
 const gateway = read("shared/cloudCommunityFunnelGateway.ts");
+const communityTypes = read("shared/communityTypes.ts");
 const documentContract = read("shared/communityFunnel.ts");
 const funnelValidators = read("convex/communityFunnelValidators.ts");
 const invocationSurface = read("shared/runtimeInvocationSurface.ts");
 const contextIntegrity = read("shared/runtimeContextIntegrity.ts");
 const runtimeResolution = read("convex/runtimeTurnResolution.ts");
+const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
+const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const canonicalExecutor = read("convex/polynetCanonicalExecutor.ts");
 const backend = read("convex/communityFunnel.ts");
 const schema = read("convex/schema.ts");
@@ -51,6 +53,9 @@ assert.doesNotMatch(
 
 // Product surface: one persistent conversation beside one trusted preview.
 assert.match(editor, /buildCommunityFunnelThreadKey/);
+assert.match(editor, /WebPlatformTabList/);
+assert.match(editor, /Default[\s\S]*Funnel 1[\s\S]*Funnel 2/);
+assert.match(editor, /selectedCustomSlot/);
 assert.match(editor, /useWebTurnRunnerController/);
 assert.match(editor, /invocationSurface: "community_funnel_builder"/);
 assert.match(editor, /resolveAuthPresentationIdentity\(props\.session\)/);
@@ -65,10 +70,16 @@ assert.match(editor, /primaryActionLabel={props\.previewPrimaryActionLabel}/);
 assert.doesNotMatch(editor, /buildDefaultCommunityFunnelDocumentV1/);
 assert.match(
   editor,
-  /const document = props\.communityFunnelConfig\.draft_document_v1;/,
+  /const document = selectedVariant\?\.draft_document_v1 \?\? null;/,
 );
-assert.match(editor, /disabled=\{!document\}/);
-assert.match(editor, /\{document \? \([\s\S]*<CommunityFunnelV1Preview/);
+assert.match(
+  editor,
+  /disabled=\{isBusy \|\| \(selectedSlot !== "default" && !document\)\}/,
+);
+assert.match(
+  editor,
+  /selectedSlot === "default" \? \([\s\S]*deterministicContent[\s\S]*\) : document \? \(/,
+);
 assert.match(editor, /Nothing to preview yet\./);
 assert.match(editor, /Prompt the agent to build your funnel\./);
 assert.doesNotMatch(
@@ -78,7 +89,7 @@ assert.doesNotMatch(
 assert.match(preview, /resolveCommunityFunnelMemberProofInsertIndex/);
 assert.match(preview, /buildCommunityFunnelMemberProofView/);
 assert.match(preview, /automaticMemberProofInsertIndex/);
-assert.match(preview, /<UserAvatar/);
+assert.match(preview, /<MemberAvatarStack/);
 assert.doesNotMatch(preview, /<img key=\{face\.user_id\}/);
 
 // The builder owns one viewport-height workspace. The outer community page is
@@ -133,6 +144,14 @@ assert.match(
   schema,
   /publishedDocumentV1:[\s\S]*publishedDraftRevision:[\s\S]*publishedByUserId:/,
 );
+assert.match(
+  schema,
+  /activeFunnelSlot:[\s\S]*v\.literal\("default"\)[\s\S]*v\.literal\("custom_1"\)[\s\S]*v\.literal\("custom_2"\)/,
+);
+assert.match(
+  schema,
+  /communityFunnels:[\s\S]*slot:[\s\S]*v\.literal\("custom_1"\)[\s\S]*v\.literal\("custom_2"\)/,
+);
 
 // Storage remains manager-authorized and revision-safe.
 assert.match(
@@ -156,13 +175,48 @@ assert.match(
   backend,
   /publishedDocumentV1: draftDocumentV1[\s\S]*publishedDraftRevision: currentRevision/,
 );
+assert.match(gateway, /communityFunnel:publishCommunityFunnelDraft/);
+assert.match(backend, /export const setActiveCommunityFunnel = mutation/);
+assert.match(backend, /community_funnel_activation_requires_published/);
+assert.match(backend, /expectedPublishedDraftRevision/);
+assert.match(backend, /community_funnel_activation_conflict/);
+assert.match(gateway, /communityFunnel:setActiveCommunityFunnel/);
+assert.match(
+  communityTypes,
+  /CommunityFunnelActivationTarget[\s\S]*slot: "default"[\s\S]*expectedPublishedDraftRevision: number/,
+);
 assert.match(
   gateway,
-  /communityFunnel:publishCommunityFunnelDraft/,
+  /target: CommunityFunnelActivationTarget[\s\S]*target: params\.target/,
 );
 assert.match(editor, /community_funnel_publish/);
-assert.match(editor, /Publish funnel/);
-assert.match(editor, /Intro video/);
+assert.match(editor, /Publish changes/);
+assert.match(editor, /Make live/);
+assert.match(editor, /Video Sales Letter/);
+assert.match(
+  editor,
+  /publishCloudCommunityFunnelDraft<[\s\S]*slot: selectedCustomSlot/,
+);
+assert.match(
+  editor,
+  /setCloudCommunityFunnelDraftVsl<[\s\S]*slot: selectedCustomSlot/,
+);
+assert.match(editor, /setCloudActiveCommunityFunnel</);
+assert.match(editor, /expectedPublishedDraftRevision:/);
+assert.match(editor, /community_funnel_activation_conflict_refresh/);
+assert.match(
+  editor,
+  /This funnel changed elsewhere\. Review it before making it live\./,
+);
+assert.match(editor, /selectedSlot === "default"[\s\S]*deterministicContent/);
+assert.match(
+  previewController,
+  /params\.slot === "default"[\s\S]*config\.custom_funnels\[params\.slot\]/,
+);
+assert.match(
+  routeState,
+  /community_funnel_preview[\s\S]*slot: CommunityFunnelSlot/,
+);
 assert.match(editor, /setCloudCommunityFunnelDraftVsl/);
 assert.match(editor, /community_funnel_vsl_save/);
 assert.doesNotMatch(editor, /Assets tab|asset library/i);
@@ -178,14 +232,19 @@ assert.match(gateway, /communityFunnel:setCommunityFunnelDraftVsl/);
 assert.match(schema, /draftVslUrl:[\s\S]*publishedVslUrl:/);
 assert.match(preview, /vslUrl\?: string \| null/);
 assert.match(preview, /section\.type === "media"\) return null/);
-assert.match(preview, /<PreviewMedia community=\{community\} vslUrl=\{props\.vslUrl\}/);
+assert.match(
+  preview,
+  /<PreviewMedia community=\{community\} vslUrl=\{props\.vslUrl\}/,
+);
 
 const funnelDocumentSchema = POLYNET_CANONICAL_TOOL_DEFINITIONS.polynet_call
   .inputSchema.properties?.input as {
   properties?: { document?: { properties?: { sections?: unknown } } };
 };
 assert.doesNotMatch(
-  JSON.stringify(funnelDocumentSchema.properties?.document?.properties?.sections),
+  JSON.stringify(
+    funnelDocumentSchema.properties?.document?.properties?.sections,
+  ),
   /media_url|"media"/,
   "the agent tool must not advertise creator-owned VSL authority",
 );
@@ -219,7 +278,10 @@ assert.equal(
   "the bounded funnel contract must render in the final runtime prompt bundle",
 );
 assert.match(assembledFunnelPrompt.text, /bounded community funnel composer/);
-assert.match(assembledFunnelPrompt.text, /Never invent an audience, offer, price/);
+assert.match(
+  assembledFunnelPrompt.text,
+  /Never invent an audience, offer, price/,
+);
 assert.match(
   assembledFunnelPrompt.text,
   /saved intro video immediately after the hero/,
@@ -239,7 +301,19 @@ assert.equal(
   false,
   "the funnel surface must not inherit private member-dock identity context",
 );
-assert.match(runtimeResolution, /isCommunityFunnelThreadKeyForCommunity/);
+assert.match(runtimeResolution, /resolveCommunityFunnelThreadSlotForCommunity/);
+assert.match(
+  runtimeResolution,
+  /community_funnel_builder[\s\S]*!runtimeCommunityFunnelSlot/,
+);
+assert.match(
+  runtimeTurnHandlers,
+  /communityFunnelSlot: runtimeCommunityFunnelSlot/,
+);
+assert.match(
+  runtimeAgentLoop,
+  /funnelDraftSlot: params\.communityFunnelSlot \?\? null/,
+);
 assert.match(
   runtimeResolution,
   /community_funnel_builder[\s\S]*runtimeCommunityLensAuthority\?\.canManage !== true/,
@@ -253,6 +327,11 @@ assert.match(
   /evidenceSurface === "community_funnel_builder"[\s\S]*principalKind === "personal_agent"[\s\S]*canUseBuilderProjection/,
 );
 assert.match(canonicalExecutor, /saveCommunityFunnelDraftInternal/);
+assert.match(canonicalExecutor, /slot: funnelDraftSlot/);
+assert.match(
+  canonicalExecutor,
+  /community-funnel:\$\{funnelDraftSlot\}:\$\{idempotencyKey\}/,
+);
 assert.match(canonicalExecutor, /current_state: currentState/);
 assert.match(
   canonicalExecutor,
@@ -350,7 +429,10 @@ assert.match(
   /funnel\?\.published_document_v1[\s\S]*document=\{funnel\.published_document_v1\}[\s\S]*isPreview=\{false\}/,
 );
 assert.match(routeController, /recordVisit: !isPublicFunnelPreviewRoute/);
-assert.match(preview, /disabled=\{isPreview \|\| props\.primaryActionDisabled\}/);
+assert.match(
+  preview,
+  /disabled=\{isPreview \|\| props\.primaryActionDisabled\}/,
+);
 assert.match(preview, /onPrimaryAction/);
 assert.match(
   documentContract,

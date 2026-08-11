@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import { expect, test, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 import {
   buildCommunityFounderWelcomeText,
@@ -176,11 +177,17 @@ test("canonical community creation schedules the welcome without blocking durabi
       slug: "scheduled-welcome",
     });
     await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    const communityId = created.id as Id<"communities">;
+
+    const createdCommunity = await t.run(async (ctx) =>
+      ctx.db.get(communityId),
+    );
+    expect(createdCommunity?.activeFunnelSlot).toBe("default");
 
     const roots = await t.run(async (ctx) => await ctx.db
       .query("communityInteractionRoots")
       .withIndex("by_community_idempotencyKey", (q) => q
-        .eq("communityId", created.id as any)
+        .eq("communityId", communityId)
         .eq(
           "idempotencyKey",
           `community_canonical_agent:root:founder_welcome:v1:${created.id}`,

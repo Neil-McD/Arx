@@ -9,11 +9,16 @@ import {
   type OperatorTab,
   type SettingsPage,
 } from "./appShellNavigation";
+import type { CommunityFunnelSlot } from "./communityTypes";
 
 export type PublicRoute =
   | { kind: "app" }
   | { kind: "community_funnel"; slug: string }
-  | { kind: "community_funnel_preview"; slug: string }
+  | {
+      kind: "community_funnel_preview";
+      slug: string;
+      slot: CommunityFunnelSlot;
+    }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
 
@@ -224,10 +229,14 @@ export function buildCommunityMembersPath(
   return `/c/${encodeURIComponent(slug)}/members`;
 }
 
-export function buildCommunityFunnelPreviewPath(communitySlug: string | null | undefined): string | null {
+export function buildCommunityFunnelPreviewPath(
+  communitySlug: string | null | undefined,
+  slot?: CommunityFunnelSlot,
+): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
-  return `/c/${encodeURIComponent(slug)}/preview`;
+  const path = `/c/${encodeURIComponent(slug)}/preview`;
+  return slot ? `${path}?slot=${encodeURIComponent(slot)}` : path;
 }
 
 export function buildCommunityOnboardingPreviewPath(
@@ -540,7 +549,21 @@ export function readPublicRouteFromLocation(): PublicRoute {
   const segments = splitPathSegments(path);
   if (segments[0] === "c" && segments.length === 3 && segments[2] === "preview") {
     const slug = String(segments[1] ?? "").trim();
-    if (slug) return { kind: "community_funnel_preview", slug };
+    if (slug) {
+      const params = new URLSearchParams(window.location.search);
+      const requestedSlot = params.get("slot");
+      return {
+        kind: "community_funnel_preview",
+        slug,
+        // Existing preview links predate slots and always represented Funnel 1.
+        slot:
+          requestedSlot === "default" ||
+          requestedSlot === "custom_1" ||
+          requestedSlot === "custom_2"
+            ? requestedSlot
+            : "custom_1",
+      };
+    }
   }
   if (segments[0] === "c" && segments.length === 2) {
     const slug = String(segments[1] ?? "").trim();

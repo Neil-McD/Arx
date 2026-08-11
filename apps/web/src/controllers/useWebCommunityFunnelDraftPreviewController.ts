@@ -7,6 +7,7 @@ import { fetchCloudCommunityFunnelDraftPreview } from "../../../../shared/cloudC
 import type {
   CommunityFunnelDocumentV1,
   CommunityFunnelManagerConfig,
+  CommunityFunnelSlot,
 } from "../../../../shared/communityTypes";
 import type { WebRouteScopedAccessState } from "../../../../shared/webRouteAccess";
 import type { AuthSession } from "../auth";
@@ -50,6 +51,7 @@ export function formatCommunityFunnelDraftPreviewFailure(
 export function useWebCommunityFunnelDraftPreviewController(params: {
   enabled: boolean;
   communitySlug: string | null;
+  slot: CommunityFunnelSlot;
   session: AuthSession | null;
   ensureSession: EnsureSession;
 }) {
@@ -104,8 +106,10 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
         if (!result) throw new Error("community_funnel_preview_unavailable");
         if (cancelled) return;
         const config = normalizeCommunityFunnelManagerConfig(result);
-        setDocument(config.draft_document_v1);
-        setVslUrl(config.draft_vsl_url);
+        const selectedVariant =
+          params.slot === "default" ? null : config.custom_funnels[params.slot];
+        setDocument(selectedVariant?.draft_document_v1 ?? null);
+        setVslUrl(selectedVariant?.draft_vsl_url ?? null);
         setAccessState("allowed");
       } catch (cause) {
         if (cancelled) return;
@@ -131,6 +135,7 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
     params.enabled,
     params.ensureSession,
     params.session,
+    params.slot,
     requestVersion,
   ]);
 

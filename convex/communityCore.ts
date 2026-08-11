@@ -48,6 +48,7 @@ export type CommunityLike = {
   settingsRevision?: number;
   visibility: "published" | "unlisted";
   entryPolicy?: CommunityEntryPolicy;
+  activeFunnelSlot?: "default" | "custom_1" | "custom_2";
   activeMemberCount?: number;
   createdAt: number;
   updatedAt: number;

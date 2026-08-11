@@ -1633,6 +1633,10 @@ export default function App() {
   const funnelDraftPreview = useWebCommunityFunnelDraftPreviewController({
     enabled: isPublicFunnelPreviewRoute,
     communitySlug: publicFunnelSlug,
+    slot:
+      shellPublicRoute.kind === "community_funnel_preview"
+        ? shellPublicRoute.slot
+        : "custom_1",
     session,
     ensureSession: ensureUsableAuthSession,
   });
@@ -2233,6 +2237,8 @@ export default function App() {
           id: activeCommunity?.id ?? "",
           slug: activeCommunity?.slug ?? null,
           name: activeCommunity?.name ?? "Community",
+          one_liner: activeCommunity?.one_liner ?? null,
+          about: activeCommunity?.about ?? null,
           avatar_url: activeCommunity?.avatar_url ?? null,
           avatar_focus_x: activeCommunity?.avatar_focus_x ?? null,
           avatar_focus_y: activeCommunity?.avatar_focus_y ?? null,
@@ -2711,10 +2717,14 @@ export default function App() {
           }
         : null,
       isPreviewMode: isPublicFunnelPreviewRoute,
+      previewSlot:
+        publicRoute.kind === "community_funnel_preview"
+          ? publicRoute.slot
+          : undefined,
       previewExitPath:
         publicRoute.kind === "community_funnel_preview"
           ? applyShellVariantToAppPath(
-              buildCommunityTabPath(publicRoute.slug, "funnel") ?? "",
+              `${buildCommunityTabPath(publicRoute.slug, "funnel") ?? ""}?slot=${encodeURIComponent(publicRoute.slot)}`,
               shellVariant,
             ) || null
           : null,

@@ -30,6 +30,7 @@ const controller = read(
 );
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
 const webAppContracts = read("apps/web/src/webAppContracts.ts");
 const app = read("apps/web/src/App.tsx");
 
@@ -251,8 +252,13 @@ assert.match(
 );
 assert.match(
   facepile,
-  /onlineCountCapped\?: boolean[\s\S]*`\$\{onlineTotal\}\+`/,
-  "the facepile must not present a capped count as exact",
+  /onlineCountCapped\?: boolean[\s\S]*countCapped=\{props\.onlineCountCapped\}/,
+  "the facepile must forward conservative count state to the canonical avatar stack",
+);
+assert.match(
+  memberAvatarStack,
+  /countCapped\?: boolean[\s\S]*props\.countCapped \? `\$\{totalCount\}\+` : `\+\$\{extraFaces\}`/,
+  "the canonical avatar stack must not present a capped count as exact",
 );
 assert.match(
   webAppContracts,

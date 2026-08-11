@@ -1,11 +1,34 @@
 import type {
+  CommunityCustomFunnelSlot,
   CommunityFunnelConfig,
   CommunityFunnelDocumentV1,
   CommunityFunnelHeroMediaKind,
   CommunityFunnelManagerConfig,
   CommunityFunnelSectionV1,
+  CommunityFunnelSlot,
   CommunityFunnelThemeV1,
+  CommunityFunnelVariantConfig,
 } from "./communityTypes";
+
+export const COMMUNITY_CUSTOM_FUNNEL_SLOTS = [
+  "custom_1",
+  "custom_2",
+] as const satisfies readonly CommunityCustomFunnelSlot[];
+
+export const DEFAULT_COMMUNITY_FUNNEL_SLOT: CommunityFunnelSlot = "default";
+
+export function normalizeCommunityCustomFunnelSlot(
+  raw: unknown,
+): CommunityCustomFunnelSlot {
+  return raw === "custom_2" ? "custom_2" : "custom_1";
+}
+
+export function normalizeCommunityFunnelSlot(
+  raw: unknown,
+): CommunityFunnelSlot {
+  if (raw === "custom_1" || raw === "custom_2") return raw;
+  return DEFAULT_COMMUNITY_FUNNEL_SLOT;
+}
 
 export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
   hero_media_url: null,
@@ -17,6 +40,11 @@ export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
 export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConfig =
   {
     ...DEFAULT_COMMUNITY_FUNNEL_CONFIG,
+    active_slot: DEFAULT_COMMUNITY_FUNNEL_SLOT,
+    custom_funnels: {
+      custom_1: null,
+      custom_2: null,
+    },
     draft_vsl_url: null,
     draft_document_v1: null,
     draft_revision: 0,
@@ -466,8 +494,112 @@ export function normalizeCommunityFunnelManagerConfig(
           })()
         : null);
   }
+  const legacyVariant: CommunityFunnelVariantConfig | null =
+    draftDocumentV1 || base.published_document_v1 || draftVslUrl || base.published_vsl_url
+      ? {
+          slot: "custom_1",
+          draft_vsl_url: draftVslUrl,
+          draft_document_v1: draftDocumentV1,
+          draft_revision:
+            Number.isFinite(revision) && revision >= 0 ? revision : 0,
+          draft_updated_at:
+            Number.isFinite(draftUpdatedAt) && draftUpdatedAt > 0
+              ? draftUpdatedAt
+              : null,
+          published_vsl_url: base.published_vsl_url,
+          published_document_v1: base.published_document_v1,
+          published_draft_revision:
+            Number.isFinite(publishedRevision) && publishedRevision >= 0
+              ? publishedRevision
+              : 0,
+          published_at:
+            Number.isFinite(publishedAt) && publishedAt > 0
+              ? publishedAt
+              : null,
+        }
+      : null;
+  const rawCustomFunnels =
+    value.custom_funnels &&
+    typeof value.custom_funnels === "object" &&
+    !Array.isArray(value.custom_funnels)
+      ? (value.custom_funnels as Record<string, unknown>)
+      : {};
+  const normalizeVariantCandidate = (
+    candidate: Record<string, unknown>,
+    slot: CommunityCustomFunnelSlot,
+  ): CommunityFunnelVariantConfig => {
+    const candidateBase = normalizeCommunityFunnelConfig(candidate);
+    const candidateDraftDocument = normalizeCommunityFunnelDocumentV1(
+      candidate.draft_document_v1,
+    );
+    let candidateDraftVsl: string | null = null;
+    let candidatePublishedVsl: string | null = null;
+    try {
+      candidateDraftVsl = normalizeCommunityFunnelVslUrl(
+        candidate.draft_vsl_url,
+      );
+    } catch {
+      candidateDraftVsl = null;
+    }
+    try {
+      candidatePublishedVsl = normalizeCommunityFunnelVslUrl(
+        candidate.published_vsl_url,
+      );
+    } catch {
+      candidatePublishedVsl = null;
+    }
+    const candidateRevision = Math.floor(Number(candidate.draft_revision));
+    const candidatePublishedRevision = Math.floor(
+      Number(candidate.published_draft_revision),
+    );
+    const candidateDraftUpdatedAt = Number(candidate.draft_updated_at);
+    const candidatePublishedAt = Number(candidate.published_at);
+    return {
+      slot,
+      draft_vsl_url: candidateDraftVsl,
+      draft_document_v1: candidateDraftDocument,
+      draft_revision:
+        Number.isFinite(candidateRevision) && candidateRevision >= 0
+          ? candidateRevision
+          : 0,
+      draft_updated_at:
+        Number.isFinite(candidateDraftUpdatedAt) && candidateDraftUpdatedAt > 0
+          ? candidateDraftUpdatedAt
+          : null,
+      published_vsl_url:
+        candidatePublishedVsl ?? candidateBase.published_vsl_url,
+      published_document_v1: candidateBase.published_document_v1,
+      published_draft_revision:
+        Number.isFinite(candidatePublishedRevision) &&
+        candidatePublishedRevision >= 0
+          ? candidatePublishedRevision
+          : 0,
+      published_at:
+        Number.isFinite(candidatePublishedAt) && candidatePublishedAt > 0
+          ? candidatePublishedAt
+          : null,
+    };
+  };
+  const normalizeVariant = (
+    slot: CommunityCustomFunnelSlot,
+  ): CommunityFunnelVariantConfig | null => {
+    const candidate = rawCustomFunnels[slot];
+    if (!candidate || typeof candidate !== "object" || Array.isArray(candidate)) {
+      return slot === "custom_1" ? legacyVariant : null;
+    }
+    return normalizeVariantCandidate(
+      candidate as Record<string, unknown>,
+      slot,
+    );
+  };
+  const customFunnels = {
+    custom_1: normalizeVariant("custom_1"),
+    custom_2: normalizeVariant("custom_2"),
+  };
   return {
     ...base,
+    active_slot: normalizeCommunityFunnelSlot(value.active_slot),
+    custom_funnels: customFunnels,
     draft_vsl_url: draftVslUrl,
     draft_document_v1: draftDocumentV1,
     draft_revision: Number.isFinite(revision) && revision >= 0 ? revision : 0,

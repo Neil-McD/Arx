@@ -1,6 +1,7 @@
 import type { CapabilityFamily } from "./canonicalGateEngine.ts";
 import type { RetrievalToolName } from "./retrievalTools.ts";
 import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext.ts";
+import type { CommunityCustomFunnelSlot } from "./communityTypes.ts";
 
 export type RuntimeInvocationSurface =
   | "workspace"
@@ -80,14 +81,34 @@ export function resolveRuntimeInvocationSurfaceForThread(params: {
   return normalizeRuntimeInvocationSurface(params.requestedSurface);
 }
 
-export function buildCommunityFunnelThreadKey(communityId: string): string {
+export function buildCommunityFunnelThreadKey(
+  communityId: string,
+  slot: CommunityCustomFunnelSlot = "custom_1",
+): string {
   const normalizedCommunityId = String(communityId ?? "").trim();
   if (!normalizedCommunityId)
     throw new Error("community_funnel_thread_community_required");
-  return `${COMMUNITY_FUNNEL_THREAD_KEY_PREFIX}:${normalizedCommunityId}`.slice(
-    0,
-    200,
-  );
+  if (slot !== "custom_1" && slot !== "custom_2") {
+    throw new Error("community_funnel_thread_slot_invalid");
+  }
+  const baseKey = `${COMMUNITY_FUNNEL_THREAD_KEY_PREFIX}:${normalizedCommunityId}`;
+  return slot === "custom_1" ? baseKey : `${baseKey}:${slot}`;
+}
+
+export function resolveCommunityFunnelThreadSlotForCommunity(
+  threadKey: string,
+  communityId: string,
+): CommunityCustomFunnelSlot | null {
+  const normalizedThreadKey = String(threadKey ?? "").trim();
+  const customOneKey = buildCommunityFunnelThreadKey(communityId, "custom_1");
+  if (normalizedThreadKey === customOneKey) return "custom_1";
+  if (
+    normalizedThreadKey ===
+    buildCommunityFunnelThreadKey(communityId, "custom_2")
+  ) {
+    return "custom_2";
+  }
+  return null;
 }
 
 export function isCommunityFunnelThreadKeyForCommunity(
@@ -95,8 +116,8 @@ export function isCommunityFunnelThreadKeyForCommunity(
   communityId: string,
 ): boolean {
   return (
-    String(threadKey ?? "").trim() ===
-    buildCommunityFunnelThreadKey(communityId)
+    resolveCommunityFunnelThreadSlotForCommunity(threadKey, communityId) !==
+    null
   );
 }
 
