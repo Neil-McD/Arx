@@ -28,6 +28,9 @@ const communityHome = read(
 const communityNavSurface = read(
   "apps/web/src/components/WebCommunityNavSurface.tsx",
 );
+const communityRail = read(
+  "apps/web/src/components/WebCommunityRail.tsx",
+);
 const routeState = read("shared/webAppRouteState.ts");
 const topBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const bottomRail = read("apps/web/src/components/WebMobileBottomRail.tsx");
@@ -164,8 +167,8 @@ assert.doesNotMatch(
 
 assert.match(
   topBar,
-  /isCommunityHome \? \([\s\S]*mobile-topbar-community-home-selector[\s\S]*onClick=\{onOpenCommunitySelector\}/,
-  "the community home should put its switcher in the top-left identity control",
+  /isCommunityHome && !hasCommunityRail \? \([\s\S]*mobile-topbar-community-home-selector[\s\S]*onClick=\{onOpenCommunitySelector\}/,
+  "forced visitor roots should retain the top-left selector while the authenticated rail removes it",
 );
 assert.match(
   topBar,
@@ -305,9 +308,24 @@ assert.doesNotMatch(
   "the community directory should no longer be duplicated inside a drawer",
 );
 assert.match(
-  communityHome + communityNavSurface,
-  /mobile-community-home[\s\S]*WebCommunityNavSurface[\s\S]*presentation="mobile-home"[\s\S]*<CommunityNav/,
-  "the mobile home and desktop shell should share one canonical CommunityNav adapter",
+  communityHome + communityNavSurface + communityRail,
+  /mobile-community-home[\s\S]*WebCommunityRail[\s\S]*presentation="mobile-home"[\s\S]*WebCommunityNavSurface[\s\S]*presentation="mobile-home"[\s\S]*<CommunityNav/,
+  "the mobile home should compose the canonical community rail and CommunityNav adapter",
+);
+assert.match(
+  communityRail,
+  /presentation: "desktop" \| "mobile-home";[\s\S]*isMobileHome[\s\S]*communityShell\.forceMobileCommunityRoot[\s\S]*onOpenCommunityHome\(communitySlug\)/,
+  "one canonical rail should serve desktop and authenticated mobile home while failing closed for visitor roots",
+);
+assert.match(
+  communityRail,
+  /const bindings = isMobileHome[\s\S]*\? null[\s\S]*getCommunityRailItemBindings[\s\S]*!isMobileHome && communityShell\.canReorderCommunities/,
+  "mobile community switching should not inherit desktop drag reordering",
+);
+assert.match(
+  communityNavSurface,
+  /hideIdentitySettings=\{isMobileHome\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
+  "mobile home should keep community identity while deleting duplicate settings and reorder affordances",
 );
 assert.match(
   routeState,
@@ -316,7 +334,7 @@ assert.match(
 );
 assert.match(
   shellHost,
-  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*activeView === "community_home"[\s\S]*<WebMobileCommunityHome/,
+  /const isMobileDedicatedRoot =[\s\S]*mobileRootPage === "agent"[\s\S]*mobileRootPage === "messages"[\s\S]*const isMobileCommunityHome =[\s\S]*activeView === "community_home"[\s\S]*const showMobileCommunityRail =[\s\S]*!props\.communityShell\.forceMobileCommunityRoot[\s\S]*<WebMobileCommunityHome/,
   "AI, Messages, and the community directory should each own one mobile root surface",
 );
 
@@ -380,6 +398,16 @@ assert.match(
   indexCss,
   /--mobile-bottom-rail-height: 62px;[\s\S]*\.mobile-bottom-rail-inner \{[\s\S]*grid-template-columns: repeat\(3, minmax\(0, 1fr\)\);[\s\S]*align-items: center;/,
   "mobile CSS should reserve one restrained three-column rail",
+);
+assert.match(
+  indexCss,
+  /--mobile-community-rail-width: 60px;[\s\S]*\.mobile-community-home\.has-community-rail \{[\s\S]*grid-template-columns: var\(--mobile-community-rail-width\) minmax\(0, 1fr\);[\s\S]*\.mobile-community-home\.has-community-rail \.mobile-community-home-surface \{[\s\S]*border: 1px solid var\(--community-shell-stroke\);[\s\S]*border-radius: var\(--community-shell-radius\);/,
+  "authenticated community home should preserve a narrow rail around one inset framed directory surface",
+);
+assert.match(
+  indexCss,
+  /\.mobile-community-home\.has-community-rail \.community-nav \.nav-item \{[\s\S]*min-height: 44px;[\s\S]*\.mobile-bottom-rail\.has-community-rail \{[\s\S]*left: var\(--mobile-community-rail-width\);[\s\S]*@media \(max-width: 360px\) \{[\s\S]*--mobile-community-rail-width: 56px;/,
+  "mobile directory rows and persistent chrome should remain compact and bounded at narrow widths",
 );
 assert.match(
   baseCss,

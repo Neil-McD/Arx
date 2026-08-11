@@ -15,7 +15,7 @@ export function WebCommunityNavSurface({
   return (
     <CommunityNav
       activeCommunity={communityShell.activeCommunity}
-      hideIdentity={isMobileHome}
+      hideIdentitySettings={isMobileHome}
       communityTab={communityShell.communityTab}
       tabIndicators={communityShell.communityTabIndicators}
       channels={communityShell.communityChannels}
@@ -29,7 +29,7 @@ export function WebCommunityNavSurface({
       clearCreateChannelError={communityShell.clearCommunityChannelCreateError}
       isAtChannelLimit={communityShell.isAtCommunityChannelLimit}
       maxActiveChannels={communityShell.maxActiveCommunityChannels}
-      onReorderChannels={communityShell.onReorderCommunityChannels}
+      onReorderChannels={isMobileHome ? undefined : communityShell.onReorderCommunityChannels}
       isReorderingChannels={communityShell.isReorderingCommunityChannels}
       reorderChannelsError={communityShell.communityChannelReorderError}
       clearReorderChannelsError={communityShell.clearCommunityChannelReorderError}

@@ -1,17 +1,30 @@
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import type { WebCommunityShellProps } from "./webShellChromeShared";
 
-type WebDesktopCommunityRailProps = {
+type WebCommunityRailProps = {
   communityShell: WebCommunityShellProps;
+  presentation: "desktop" | "mobile-home";
 };
 
-export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
-  const { communityShell } = props;
+export function WebCommunityRail({
+  communityShell,
+  presentation,
+}: WebCommunityRailProps) {
+  const isMobileHome = presentation === "mobile-home";
 
-  if (!communityShell.showDesktopCommunityRail) return null;
+  if (
+    isMobileHome
+      ? !communityShell.showMobileShell ||
+        communityShell.forceMobileCommunityRoot
+      : !communityShell.showDesktopCommunityRail
+  )
+    return null;
 
   return (
-    <aside className="rail community-rail" aria-label="Communities">
+    <aside
+      className={`rail community-rail${isMobileHome ? " mobile-community-rail" : ""}`}
+      aria-label="Communities"
+    >
       <div className="rail-main">
         <button
           type="button"
@@ -22,7 +35,11 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
           title="Discover communities"
           aria-label="Discover communities"
         >
-          <svg viewBox="0 0 24 24" aria-hidden="true" className="community-rail-icon">
+          <svg
+            viewBox="0 0 24 24"
+            aria-hidden="true"
+            className="community-rail-icon"
+          >
             <circle
               cx="12"
               cy="12"
@@ -45,44 +62,57 @@ export function WebDesktopCommunityRail(props: WebDesktopCommunityRailProps) {
         ) : null}
         <div
           className="community-rail-list"
-          ref={communityShell.setCommunityRailListElement}
+          ref={
+            isMobileHome
+              ? undefined
+              : communityShell.setCommunityRailListElement
+          }
         >
           {communityShell.railCommunities.map((community) => {
-            const bindings = communityShell.getCommunityRailItemBindings(
-              community.id,
-            );
+            const bindings = isMobileHome
+              ? null
+              : communityShell.getCommunityRailItemBindings(community.id);
+            const communitySlug = String(community.slug ?? "").trim();
             return (
               <button
                 key={community.id}
                 type="button"
-                ref={bindings.ref}
+                ref={bindings?.ref}
                 className={`community-rail-button community-rail-community${
-                  String(community.slug ?? "").trim() ===
-                  communityShell.selectedActiveCommunitySlug
+                  communitySlug === communityShell.selectedActiveCommunitySlug
                     ? " active"
                     : ""
                 }${
+                  !isMobileHome &&
                   community.id === communityShell.draggingCommunityId
                     ? " is-dragging"
                     : ""
-                }${communityShell.canReorderCommunities ? " reorder-enabled" : ""}`}
+                }${!isMobileHome && communityShell.canReorderCommunities ? " reorder-enabled" : ""}`}
                 onClick={() => {
                   const changed =
                     communityShell.onSelectActiveCommunity(community);
+                  if (isMobileHome) {
+                    if (communitySlug) {
+                      communityShell.onOpenCommunityHome(communitySlug);
+                    }
+                    return;
+                  }
                   if (!changed) return;
                   if (communityShell.activePage === "discover") {
-                    const nextCommunitySlug = String(
-                      community.slug ?? "",
-                    ).trim();
-                    if (nextCommunitySlug) {
-                      communityShell.onOpenCommunityChat(nextCommunitySlug);
+                    if (communitySlug) {
+                      communityShell.onOpenCommunityChat(communitySlug);
                     }
                   }
                 }}
-                onClickCapture={bindings.onClickCapture}
-                onPointerDown={bindings.onPointerDown}
-                style={bindings.style}
+                onClickCapture={bindings?.onClickCapture}
+                onPointerDown={bindings?.onPointerDown}
+                style={bindings?.style}
                 title={community.name}
+                aria-current={
+                  communitySlug === communityShell.selectedActiveCommunitySlug
+                    ? "page"
+                    : undefined
+                }
               >
                 <CommunityAvatar
                   communityId={community.id}

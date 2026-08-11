@@ -5,7 +5,7 @@ import type {
 import { WebMobileTopBar } from "./WebMobileTopBar";
 import { buildWebShellChromeClassNames } from "../controllers/buildWebShellChromeClassNames";
 import { WebDesktopShellHeader } from "./WebDesktopShellHeader";
-import { WebDesktopCommunityRail } from "./WebDesktopCommunityRail";
+import { WebCommunityRail } from "./WebCommunityRail";
 import { WebMobileCommunityShell } from "./WebMobileCommunityShell";
 import { WebMobileCommunityHome } from "./WebMobileCommunityHome";
 import { WebCommunityNavSurface } from "./WebCommunityNavSurface";
@@ -46,9 +46,14 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     props.communityShell.mobileRootPage === "community" &&
     props.communityShell.activePage === "community" &&
     props.communityShell.activeView === "community_home";
+  const showMobileCommunityRail =
+    isMobileCommunityHome && !props.communityShell.forceMobileCommunityRoot;
   const shellHeader = props.showMobileAppShell ? (
     isMobileDedicatedRoot ? null : (
-      <WebMobileTopBar {...props.mobileTopBarProps} />
+      <WebMobileTopBar
+        {...props.mobileTopBarProps}
+        hasCommunityRail={showMobileCommunityRail}
+      />
     )
   ) : (
     <WebDesktopShellHeader {...props.desktopHeader} />
@@ -61,7 +66,10 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
     />
   ) : null;
   const mainSurface = isMobileCommunityHome ? (
-    <WebMobileCommunityHome communityShell={props.communityShell} />
+    <WebMobileCommunityHome
+      communityShell={props.communityShell}
+      hasCommunityRail={showMobileCommunityRail}
+    />
   ) : props.mainSurface;
   const desktopSettingsSidebar = (
     <WebSettingsSidebar settingsSidebar={props.settingsSidebar} />
@@ -96,7 +104,10 @@ export function WebShellChromeHost(props: WebShellChromeHostProps) {
       <WebMobileCommunityShell communityShell={props.communityShell} />
 
       <div className={shellClassName}>
-        <WebDesktopCommunityRail communityShell={props.communityShell} />
+        <WebCommunityRail
+          communityShell={props.communityShell}
+          presentation="desktop"
+        />
         {props.communityShell.showDesktopCommunityRail ? (
           <div
             className={`product-shell-surface product-shell-surface--${desktopFrameMode}`}

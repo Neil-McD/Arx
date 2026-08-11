@@ -29,11 +29,12 @@ import type {
 import {
   readAppRouteFromLocation,
   readPublicRouteFromLocation,
-  readShellVariantFromPathname,
+  resolveInitialAppShellVariant,
 } from "../../../../shared/webAppRouteState";
 import {
   readOAuthCallbackShellVariantFromLocation,
 } from "../../../../shared/cloudPkce";
+import { isStandaloneWebApp } from "../../../../shared/browserRuntimeMode";
 import type {
   MobileOverlay,
   MobileRootPage,
@@ -44,8 +45,12 @@ export function useWebShellState() {
   const initialShellVariant: AppShellVariant =
     typeof window === "undefined"
       ? "standard"
-      : readOAuthCallbackShellVariantFromLocation() ??
-        readShellVariantFromPathname(window.location.pathname || "/");
+      : resolveInitialAppShellVariant({
+          pathname: window.location.pathname || "/",
+          search: window.location.search,
+          oauthShellVariant: readOAuthCallbackShellVariantFromLocation(),
+          standalone: isStandaloneWebApp(),
+        });
   const initialPublicRoute: PublicRoute = readPublicRouteFromLocation();
   const initialAppRoute: AppRouteState | null =
     initialPublicRoute.kind === "app"

@@ -5,7 +5,43 @@ import {
   buildCommunityHomePath,
   buildCommunityTabPath,
   parseAppRouteFromPathname,
+  resolveInitialAppShellVariant,
 } from "../shared/webAppRouteState";
+
+describe("installed app shell selection", () => {
+  it("opens new standalone installs in the mobile shell", () => {
+    expect(resolveInitialAppShellVariant({
+      pathname: "/m",
+      search: "?launch=app",
+      standalone: true,
+    })).toBe("mobile");
+  });
+
+  it("keeps already-installed legacy launch URLs in the mobile shell", () => {
+    expect(resolveInitialAppShellVariant({
+      pathname: "/workspace",
+      search: "?launch=app",
+      standalone: true,
+    })).toBe("mobile");
+  });
+
+  it("does not turn an ordinary browser workspace route into mobile", () => {
+    expect(resolveInitialAppShellVariant({
+      pathname: "/workspace",
+      search: "?launch=app",
+      standalone: false,
+    })).toBe("standard");
+  });
+
+  it("preserves the OAuth callback shell authority", () => {
+    expect(resolveInitialAppShellVariant({
+      pathname: "/m",
+      search: "?launch=app",
+      oauthShellVariant: "standard",
+      standalone: true,
+    })).toBe("standard");
+  });
+});
 
 describe("community channel routes", () => {
   it("round-trips the mobile community directory route", () => {

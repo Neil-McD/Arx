@@ -92,6 +92,23 @@ export function readShellVariantFromPathname(pathname: string): AppShellVariant 
   return segments[0] === "m" ? "mobile" : "standard";
 }
 
+export function resolveInitialAppShellVariant(params: {
+  pathname: string | null | undefined;
+  search?: string | null;
+  oauthShellVariant?: AppShellVariant | null;
+  standalone?: boolean;
+}): AppShellVariant {
+  if (params.oauthShellVariant) return params.oauthShellVariant;
+  const isStandaloneLaunch =
+    params.standalone === true
+    && new URLSearchParams(String(params.search ?? "")).get(
+      STANDALONE_APP_LAUNCH_SEARCH_PARAM,
+    ) === STANDALONE_APP_LAUNCH_SEARCH_VALUE;
+  return isStandaloneLaunch
+    ? "mobile"
+    : readShellVariantFromPathname(String(params.pathname || "/"));
+}
+
 export function stripShellVariantFromPathname(pathname: string): string {
   const parsed = new URL(String(pathname || "/"), "http://local.arx");
   const segments = splitPathSegments(parsed.pathname);

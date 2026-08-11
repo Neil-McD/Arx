@@ -24,6 +24,7 @@ type CommunityNavChannel = {
 type CommunityNavProps = {
   activeCommunity: CommunityNavCommunityLike;
   hideIdentity?: boolean;
+  hideIdentitySettings?: boolean;
   communityTab: CommunityTab;
   tabIndicators?: Partial<Record<CommunityTab, boolean>> & { mentions?: boolean };
   canViewMembersActiveCommunity: boolean;
@@ -137,6 +138,7 @@ function resolveCommunityJoinUrl(slugRaw: string | null | undefined): string | n
 export const CommunityNav = memo(function CommunityNav({
   activeCommunity,
   hideIdentity = false,
+  hideIdentitySettings = false,
   communityTab,
   tabIndicators = {},
   canViewMembersActiveCommunity,
@@ -176,7 +178,7 @@ export const CommunityNav = memo(function CommunityNav({
   const addChannelTriggerRef = useRef<HTMLButtonElement | null>(null);
   const addChannelDialogRef = useRef<HTMLFormElement | null>(null);
   const [isCommunityIdentityCondensed, setIsCommunityIdentityCondensed] = useState(false);
-  const showSettingsButton = canViewActiveCommunitySettings;
+  const showSettingsButton = canViewActiveCommunitySettings && !hideIdentitySettings;
   const showManagementSection =
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;

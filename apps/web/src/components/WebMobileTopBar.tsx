@@ -9,6 +9,7 @@ type WebMobileTopBarProps = {
   rootPage: MobileRootPage;
   isThreadPage?: boolean;
   isCommunityHome?: boolean;
+  hasCommunityRail?: boolean;
   communityDetailLabel?: string | null;
   showDrawerButton?: boolean;
   showBackButton?: boolean;
@@ -45,6 +46,7 @@ export function WebMobileTopBar({
   rootPage,
   isThreadPage = false,
   isCommunityHome = false,
+  hasCommunityRail = false,
   communityDetailLabel = null,
   showDrawerButton = true,
   showBackButton = false,
@@ -115,9 +117,9 @@ export function WebMobileTopBar({
   );
 
   return (
-    <header className={`mobile-topbar${showMembers ? " has-members" : ""}${isThreadPage ? " is-thread-page" : ""}${isCommunityHome ? " is-community-home" : ""}`}>
+    <header className={`mobile-topbar${showMembers ? " has-members" : ""}${isThreadPage ? " is-thread-page" : ""}${isCommunityHome ? " is-community-home" : ""}${hasCommunityRail ? " has-community-rail" : ""}`}>
       <div className="mobile-topbar-left">
-        {isCommunityHome ? (
+        {isCommunityHome && !hasCommunityRail ? (
           <button
             type="button"
             className="mobile-topbar-community-selector mobile-topbar-community-home-selector"

@@ -483,7 +483,8 @@ assert.doesNotMatch(
   "theme family must not survive as a second styling authority",
 );
 assert.match(indexHtml, /<meta name="theme-color" content="#1A1A1A"/);
-assert.match(indexHtml, /manifest\.webmanifest\?v=20260808a/);
+assert.match(indexHtml, /manifest\.webmanifest\?v=20260811a/);
+assert.match(manifest, /"start_url": "\/m\?launch=app"/);
 assert.match(manifest, /"background_color": "#1A1A1A"/);
 assert.match(manifest, /"theme_color": "#1A1A1A"/);
 const genericSettingsButtonSelector =
