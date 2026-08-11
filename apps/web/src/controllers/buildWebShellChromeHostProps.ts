@@ -84,6 +84,7 @@ export function buildWebShellChromeHostProps(params: {
   handleSelectActiveCommunity: (community: CommunityLike) => boolean;
   openCommunityChat: (slug: string) => void;
   openCommunityHome: (slug: string) => void;
+  openCommunityMembers: (slug: string) => void;
   communityInitials: (value: string) => string;
   showDesktopCommunityRail: boolean;
   showDesktopCommunityNav: boolean;
@@ -112,6 +113,13 @@ export function buildWebShellChromeHostProps(params: {
     params.activeView === "home" &&
     params.mobileRootPage === "community" &&
     !params.isPublicCommunityFunnel;
+  const isMobileCommunityMembers =
+    params.showMobileAppShell &&
+    !params.showMobileSettingsShell &&
+    params.activePage === "community" &&
+    params.activeView === "community_members" &&
+    params.mobileRootPage === "community" &&
+    !params.isPublicCommunityFunnel;
   const selectedMobileChannel = isMobileCommunityDetail && params.communityTab === "chat"
     ? params.communityChannels.find(
         (channel) => channel.slug === params.selectedCommunityChannelSlug,
@@ -138,16 +146,19 @@ export function buildWebShellChromeHostProps(params: {
           : params.mobileRootPage,
       isThreadPage: params.mobileThreadPageOpen,
       isCommunityHome: isMobileCommunityHome,
-      communityDetailLabel: mobileChannelLabel,
+      communityDetailLabel: isMobileCommunityMembers ? "Members" : mobileChannelLabel,
+      communityDetailIcon: isMobileCommunityMembers ? "members" : "channel",
       showBackButton:
         params.showMobileSettingsIndex ||
         params.mobileThreadPageOpen ||
+        isMobileCommunityMembers ||
         isMobileCommunityDetail,
       showDrawerButton:
         !params.isPublicCommunityFunnel &&
         !params.showMobileSettingsShell &&
         !params.mobileThreadPageOpen &&
         !isMobileCommunityHome &&
+        !isMobileCommunityMembers &&
         !isMobileCommunityDetail,
       hasActiveCommunity: Boolean(params.activeCommunity),
       activeCommunityId: params.activeCommunity?.id ?? null,
@@ -172,7 +183,7 @@ export function buildWebShellChromeHostProps(params: {
         ? params.handleCloseMobileThreadPage
         : params.showMobileSettingsIndex
           ? params.handleExitMobileSettings
-          : isMobileCommunityDetail
+          : isMobileCommunityDetail || isMobileCommunityMembers
             ? () => {
                 const slug = String(params.activeCommunity?.slug ?? "").trim();
                 if (slug) params.openCommunityHome(slug);
@@ -180,7 +191,12 @@ export function buildWebShellChromeHostProps(params: {
           : null,
       canOpenCommunitySelector: !params.isPublicCommunityFunnel,
       onOpenCommunitySelector: () => params.setMobileOverlay("community_selector"),
-      onOpenMembers: () => params.setMobileOverlay("members"),
+      onOpenMembers: params.isPublicCommunityFunnel
+        ? () => params.setMobileOverlay("members")
+        : () => {
+            const slug = String(params.activeCommunity?.slug ?? "").trim();
+            if (slug) params.openCommunityMembers(slug);
+          },
       canOpenCommunitySettings:
         isMobileCommunityHome && params.canViewActiveCommunitySettings,
       onOpenCommunitySettings: isMobileCommunityHome
@@ -227,7 +243,12 @@ export function buildWebShellChromeHostProps(params: {
       clearCommunityChannelReorderError: params.clearCommunityChannelReorderError,
       canViewMembersActiveCommunity: params.canViewMembersActiveCommunity,
       activeCommunityMemberCount: params.activeCommunityMemberCount,
-      onOpenMembers: () => params.setMobileOverlay("members"),
+      onOpenMembers: params.isPublicCommunityFunnel
+        ? () => params.setMobileOverlay("members")
+        : () => {
+            const slug = String(params.activeCommunity?.slug ?? "").trim();
+            if (slug) params.openCommunityMembers(slug);
+          },
       canViewActiveCommunitySettings: params.canViewActiveCommunitySettings,
       canManageMembersActiveCommunity: params.canManageMembersActiveCommunity,
       canViewActiveCommunityAnalytics: params.canViewActiveCommunityAnalytics,

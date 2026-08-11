@@ -37,6 +37,7 @@ type CommunityNavProps = {
   hideIdentity?: boolean;
   hideIdentitySettings?: boolean;
   communityTab: CommunityTab;
+  activeSelectionMode?: "route" | "none";
   tabIndicators?: Partial<Record<CommunityTab, boolean>> & { mentions?: boolean };
   canViewMembersActiveCommunity: boolean;
   canViewActiveCommunitySettings: boolean;
@@ -158,6 +159,7 @@ export const CommunityNav = memo(function CommunityNav({
   hideIdentity = false,
   hideIdentitySettings = false,
   communityTab,
+  activeSelectionMode = "route",
   tabIndicators = {},
   canViewMembersActiveCommunity,
   canViewActiveCommunitySettings,
@@ -199,6 +201,7 @@ export const CommunityNav = memo(function CommunityNav({
   const addChannelDialogRef = useRef<HTMLFormElement | null>(null);
   const [isCommunityIdentityCondensed, setIsCommunityIdentityCondensed] = useState(false);
   const showSettingsButton = canViewActiveCommunitySettings && !hideIdentitySettings;
+  const showActiveSelection = activeSelectionMode === "route";
   const showManagementSection =
     canManageMembersActiveCommunity ||
     canViewActiveCommunityAnalytics;
@@ -389,7 +392,7 @@ export const CommunityNav = memo(function CommunityNav({
           </span>
           {showSettingsButton ? (
             <button
-              className={`community-nav-settings${communityTab === "settings" ? " active" : ""}`}
+              className={`community-nav-settings${showActiveSelection && communityTab === "settings" ? " active" : ""}`}
               type="button"
               onClick={() => onSelectTab("settings")}
               title="Community settings"
@@ -430,6 +433,7 @@ export const CommunityNav = memo(function CommunityNav({
           </div>
         ) : channels.map((channel) => {
           const isSelected =
+            showActiveSelection &&
             communityTab === "chat" &&
             (selectedChannelSlug ?? "general") === channel.slug;
           const indicator = channelIndicators[channel.slug];
@@ -565,7 +569,7 @@ export const CommunityNav = memo(function CommunityNav({
         </button>
       ) : null}
       <button
-        className={communityTab === "resources" ? "nav-item active" : "nav-item"}
+        className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
         type="button"
         onClick={() => onSelectTab("resources")}
         title="Resources"
@@ -580,7 +584,7 @@ export const CommunityNav = memo(function CommunityNav({
         {lockedTabs.resources ? <NavLockGlyph /> : communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
       </button>
       <button
-        className={communityTab === "events" ? "nav-item active" : "nav-item"}
+        className={showActiveSelection && communityTab === "events" ? "nav-item active" : "nav-item"}
         type="button"
         onClick={() => onSelectTab("events")}
         title="Events"
@@ -613,7 +617,7 @@ export const CommunityNav = memo(function CommunityNav({
           <div className="community-nav-divider" />
           {canManageMembersActiveCommunity && (
             <button
-              className={communityTab === "funnel" ? "nav-item active" : "nav-item"}
+              className={showActiveSelection && communityTab === "funnel" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => onSelectTab("funnel")}
               title="Funnel"
@@ -630,7 +634,7 @@ export const CommunityNav = memo(function CommunityNav({
           )}
           {canViewActiveCommunityAnalytics && (
             <button
-              className={communityTab === "analytics" ? "nav-item active" : "nav-item"}
+              className={showActiveSelection && communityTab === "analytics" ? "nav-item active" : "nav-item"}
               type="button"
               onClick={() => onSelectTab("analytics")}
               title="Analytics"

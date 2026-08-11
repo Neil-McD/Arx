@@ -48,6 +48,11 @@ const directMessagesHost = read(
   "apps/web/src/components/WebDirectMessagesHost.tsx",
 );
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
+const communityHost = read("apps/web/src/components/WebCommunityHost.tsx");
+const membersPanel = read("apps/web/src/components/WebCommunityMembersPanel.tsx");
+const communityRouteController = read(
+  "apps/web/src/controllers/useWebCommunityRouteController.ts",
+);
 const interactionProjection = read(
   "apps/web/src/components/WebCommunityInteractionProjection.tsx",
 );
@@ -70,7 +75,7 @@ assert.match(
 assert.match(
   shared,
   /export type MobileOverlay =[\s\S]*\| "community_selector"[\s\S]*\| "members"[\s\S]*\| null;/,
-  "only the community selector and Members should remain dismissible overlays",
+  "the community selector and public-funnel Members surface should remain dismissible overlays",
 );
 assert.match(
   shellState,
@@ -87,10 +92,15 @@ assert.doesNotMatch(
   /readStoredSelectedRoot/,
   "mobile Community should not reopen a stale thread selection from storage",
 );
-assert.match(
+assert.doesNotMatch(
   app,
   /mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members"[\s\S]*onCloseMobileMembersOverlay: \(\) => setMobileOverlay\(null\)/,
-  "the existing Members drawer should remain the canonical mobile member surface",
+  "authenticated Members must not depend on the chat-owned overlay",
+);
+assert.match(
+  app,
+  /mobileMembersOverlayOpen:[\s\S]*community_funnel[\s\S]*mobileOverlay === "members"/,
+  "the public community funnel should retain its visitor Members overlay",
 );
 assert.match(
   app,
@@ -201,7 +211,7 @@ assert.match(
 );
 assert.match(
   shellChromeProps,
-  /selectedMobileChannel[\s\S]*params\.communityTab === "chat"[\s\S]*channel\.slug === params\.selectedCommunityChannelSlug[\s\S]*mobileChannelLabel[\s\S]*communityDetailLabel: mobileChannelLabel/,
+  /selectedMobileChannel[\s\S]*params\.communityTab === "chat"[\s\S]*channel\.slug === params\.selectedCommunityChannelSlug[\s\S]*mobileChannelLabel[\s\S]*communityDetailLabel: isMobileCommunityMembers \? "Members" : mobileChannelLabel/,
   "mobile chat detail should derive its label from the selected canonical channel",
 );
 assert.match(
@@ -231,8 +241,8 @@ assert.doesNotMatch(
 );
 assert.match(
   shellChromeProps,
-  /activeCommunityMemberCount: number \| null;[\s\S]*memberFaces: params\.activeCommunityMemberFaces,[\s\S]*memberCount: params\.activeCommunityMemberCount,[\s\S]*communityShell:[\s\S]*activeCommunityMemberCount: params\.activeCommunityMemberCount,[\s\S]*onOpenMembers: \(\) => params\.setMobileOverlay\("members"\)/,
-  "the visitor header and authenticated mobile directory should share the canonical member total and overlay",
+  /activeCommunityMemberCount: number \| null;[\s\S]*memberFaces: params\.activeCommunityMemberFaces,[\s\S]*memberCount: params\.activeCommunityMemberCount,[\s\S]*onOpenMembers: params\.isPublicCommunityFunnel[\s\S]*setMobileOverlay\("members"\)[\s\S]*openCommunityMembers/,
+  "the visitor header should keep its overlay while authenticated Members navigate durably",
 );
 assert.match(
   app,
@@ -348,8 +358,13 @@ assert.match(
 );
 assert.match(
   communityNavSurface,
-  /hideIdentitySettings=\{isMobileHome\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
-  "mobile home should keep community identity while deleting duplicate settings and reorder affordances",
+  /const hasDestinationSelection =[\s\S]*communityShell\.activeView !== "community_members"[\s\S]*hideIdentitySettings=\{isMobileHome\}[\s\S]*activeSelectionMode=\{hasDestinationSelection \? "route" : "none"\}[\s\S]*onReorderChannels=\{[\s\S]*isMobileHome \? undefined : communityShell\.onReorderCommunityChannels[\s\S]*\}/,
+  "mobile home should keep community identity without claiming an active destination or exposing reorder controls",
+);
+assert.match(
+  communityNav,
+  /activeSelectionMode = "route"[\s\S]*const showActiveSelection = activeSelectionMode === "route"[\s\S]*const isSelected =[\s\S]*showActiveSelection &&[\s\S]*communityTab === "chat"/,
+  "the shared navigation should distinguish an actual route selection from the mobile directory's no-selection state",
 );
 assert.match(
   communityNavSurface,
@@ -363,8 +378,23 @@ assert.match(
 );
 assert.match(
   routeState,
-  /buildCommunityHomePath[\s\S]*\/home[\s\S]*segments\[2\] === "home"[\s\S]*view: "community_home"/,
-  "the mobile community directory should have a durable route state",
+  /buildCommunityHomePath[\s\S]*\/home[\s\S]*buildCommunityMembersPath[\s\S]*\/members[\s\S]*segments\[2\] === "home"[\s\S]*view: "community_home"[\s\S]*segments\[2\] === "members"[\s\S]*view: "community_members"/,
+  "the mobile community directory and Members destination should have durable route states",
+);
+assert.match(
+  communityRouteController,
+  /const openCommunityMembers[\s\S]*buildCommunityMembersPath[\s\S]*navigateTo\(path\)/,
+  "authenticated Members should navigate through the canonical community route controller",
+);
+assert.match(
+  communityHost + membersPanel,
+  /activeView === "community_members"[\s\S]*WebCommunityMembersPanel[\s\S]*CommunityInteractionContextPanelSurface/,
+  "the durable Members route should reuse the canonical member context projection",
+);
+assert.doesNotMatch(
+  chatPanel,
+  /mobileMembersOverlayOpen|mobile-members-drawer/,
+  "chat must not retain authenticated Members overlay ownership",
 );
 assert.match(
   shellHost,
@@ -408,9 +438,9 @@ assert.match(
   "DM root presentation should preserve the desktop host while disabling popover dismissal",
 );
 assert.match(
-  chatPanel,
-  /<WebMobileDrawer[\s\S]*ariaLabel="Community members"[\s\S]*side="right"[\s\S]*className="mobile-members-drawer"[\s\S]*containerClassName="community-interaction-drawer community-context-panel mobile-members-overlay-panel"/,
-  "Members should reuse the existing right-side community context drawer",
+  membersPanel,
+  /<CommunityInteractionContextPanelSurface[\s\S]*containerClassName="community-interaction-drawer community-context-panel community-members-page-panel"[\s\S]*sectionMode="members"/,
+  "the durable Members page should reuse only the canonical member section of the community context surface",
 );
 assert.match(
   interactionProjection,
@@ -540,7 +570,7 @@ assert.match(
 );
 assert.match(
   topBar,
-  /import \{ ArrowLeft, Hash, Settings \} from "lucide-react";[\s\S]*<ArrowLeft aria-hidden="true" \/>/,
+  /import \{ ArrowLeft,[^}]*\} from "lucide-react";[\s\S]*<ArrowLeft aria-hidden="true" \/>/,
   "thread navigation should use the canonical shafted Back icon",
 );
 assert.match(

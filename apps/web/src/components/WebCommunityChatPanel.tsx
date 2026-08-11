@@ -36,9 +36,7 @@ import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
 import { WebCommunityInteractionBootstrap } from "./WebCommunityInteractionBootstrap";
 import { WebCommunityOnboardingConciergeGuide } from "./WebCommunityOnboardingConciergeGuide";
 import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
-import { WebMobileDrawer } from "./WebMobileDrawer";
 import {
-  CommunityInteractionContextPanelSurface,
   WebCommunityInteractionProjection,
   type WebCommunityInteractionProjectionProps,
 } from "./WebCommunityInteractionProjection";
@@ -309,8 +307,6 @@ export type WebCommunityChatPanelProps = {
     owner: CommunityVoiceButtonOwner,
   ) => void;
   lightboxModalProps: ComponentProps<typeof WebCommunityChatLightboxModal>;
-  mobileMembersOverlayOpen?: boolean;
-  onCloseMobileMembersOverlay?: () => void;
   interactionProjection?: Omit<
     WebCommunityInteractionProjectionProps,
     | "activeCommunityName"
@@ -382,8 +378,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     drawerVoiceButtonProps,
     onCommunityVoiceInputClick,
     lightboxModalProps,
-    mobileMembersOverlayOpen = false,
-    onCloseMobileMembersOverlay,
     interactionProjection,
   } = props;
   const communityOnboarding = useWebCommunityOnboarding();
@@ -1001,7 +995,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           : undefined
       }
       getInitials={getInitials}
-      docked={showInteractionProjection || mobileMembersOverlayOpen}
+      docked={showInteractionProjection}
     />
   ) : null;
 
@@ -1585,39 +1579,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     </div>
   ) : null;
 
-  const mobileMembersOverlay = mobileMembersOverlayOpen ? (
-    <WebMobileDrawer
-      isOpen={mobileMembersOverlayOpen}
-      ariaLabel="Community members"
-      side="right"
-      className="mobile-members-drawer"
-      hideHeader
-      onClose={onCloseMobileMembersOverlay ?? (() => undefined)}
-    >
-      {showInteractionProjection && interactionProjection ? (
-        <CommunityInteractionContextPanelSurface
-          {...interactionProjection}
-          activeCommunityName={activeCommunity?.name ?? "Community"}
-          profilesByUserId={profilesByUserId}
-          displayName={displayName}
-          getAvatarColor={getAvatarColor}
-          getInitials={getInitials}
-          formatChatTime={formatChatTime}
-          renderTextWithLinks={renderTextWithLinks}
-          onOpenProfile={handleOpenCommunityProfile}
-          onMessageUser={canOpenDirectMessageFromCommunity ? openDirectMessage : undefined}
-          containerClassName="community-interaction-drawer community-context-panel mobile-members-overlay-panel"
-        />
-      ) : (
-        <div className="chat-messages-state-shell mobile-members-overlay-state">
-          <div className="chat-empty">
-            {activeCommunity ? "Loading community members..." : "Select a community to view members."}
-          </div>
-        </div>
-      )}
-    </WebMobileDrawer>
-  ) : null;
-
   return (
     <>
       <div
@@ -1741,7 +1702,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
       </div>
 
       <WebCommunityChatLightboxModal {...lightboxModalProps} />
-      {mobileMembersOverlay}
     </>
   );
 }

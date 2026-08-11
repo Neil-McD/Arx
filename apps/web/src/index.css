@@ -2832,24 +2832,6 @@
   overflow: hidden;
 }
 
-.mobile-drawer.mobile-members-drawer .mobile-members-overlay-panel {
-  display: flex;
-  min-height: 0;
-  height: 100%;
-  border-left: 0;
-  background: transparent;
-  box-shadow: none;
-}
-
-.mobile-drawer.mobile-members-drawer .mobile-members-overlay-state {
-  min-height: 0;
-  height: 100%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 16px;
-}
-
 .mobile-drawer .session-title {
   font-size: 13px;
   font-weight: 500;

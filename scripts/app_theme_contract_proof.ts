@@ -364,7 +364,7 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*\{showMembersItem \? \([\s\S]*?\) : null\}\s*<button\s*className=\{communityTab === "resources"/,
+  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*\{showMembersItem \? \([\s\S]*?\) : null\}\s*<button\s*className=\{showActiveSelection && communityTab === "resources"/,
   "community navigation should separate channels from the Members and Resources utility rows",
 );
 assert.doesNotMatch(

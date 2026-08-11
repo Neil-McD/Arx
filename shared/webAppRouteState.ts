@@ -216,6 +216,14 @@ export function buildCommunityHomePath(
   return `/c/${encodeURIComponent(slug)}/home`;
 }
 
+export function buildCommunityMembersPath(
+  communitySlug: string | null | undefined,
+): string | null {
+  const slug = String(communitySlug ?? "").trim();
+  if (!slug) return null;
+  return `/c/${encodeURIComponent(slug)}/members`;
+}
+
 export function buildCommunityFunnelPreviewPath(communitySlug: string | null | undefined): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
@@ -460,6 +468,22 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
     };
   }
 
+  if (segments[0] === "c" && segments.length === 3 && segments[2] === "members") {
+    const slug = String(segments[1] ?? "").trim() || null;
+    if (!slug) return null;
+    return {
+      page: "community",
+      view: "community_members",
+      settingsPage: "profile",
+      communitySlug: slug,
+      communityTab: "chat",
+      communityExperienceMode: "standard",
+      communityChannelSlug: null,
+      communityResourceModuleId: null,
+      communitySettingsPane: null,
+    };
+  }
+
   if (segments[0] === "c" && segments.length >= 3) {
     const slug = String(segments[1] ?? "").trim() || null;
     if (!slug) return null;
@@ -574,6 +598,9 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
     }
     if (state.view === "community_home") {
       return buildCommunityHomePath(state.communitySlug);
+    }
+    if (state.view === "community_members") {
+      return buildCommunityMembersPath(state.communitySlug);
     }
     return buildCommunityTabPath(
       state.communitySlug,

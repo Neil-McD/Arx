@@ -11,12 +11,15 @@ export function WebCommunityNavSurface({
   presentation,
 }: WebCommunityNavSurfaceProps) {
   const isMobileHome = presentation === "mobile-home";
+  const hasDestinationSelection =
+    !isMobileHome && communityShell.activeView !== "community_members";
 
   return (
     <CommunityNav
       activeCommunity={communityShell.activeCommunity}
       hideIdentitySettings={isMobileHome}
       communityTab={communityShell.communityTab}
+      activeSelectionMode={hasDestinationSelection ? "route" : "none"}
       tabIndicators={communityShell.communityTabIndicators}
       channels={communityShell.communityChannels}
       isLoadingChannels={communityShell.isLoadingCommunityChannels}

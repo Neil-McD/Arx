@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildAppRoutePath,
   buildCommunityHomePath,
+  buildCommunityMembersPath,
   buildCommunityTabPath,
   parseAppRouteFromPathname,
   resolveInitialAppShellVariant,
@@ -54,6 +55,20 @@ describe("community channel routes", () => {
       communityTab: "chat",
       communityChannelSlug: null,
     });
+  });
+
+  it("round-trips the durable mobile Members route", () => {
+    const path = buildCommunityMembersPath("polynet");
+    expect(path).toBe("/c/polynet/members");
+    const parsed = parseAppRouteFromPathname(path ?? "");
+    expect(parsed).toMatchObject({
+      page: "community",
+      view: "community_members",
+      communitySlug: "polynet",
+      communityTab: "chat",
+      communityChannelSlug: null,
+    });
+    expect(buildAppRoutePath(parsed!)).toBe(path);
   });
 
   it("keeps General on the backward-compatible chat route", () => {

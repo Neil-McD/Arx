@@ -573,7 +573,10 @@ export default function App() {
     activeChannelId,
     canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
-    isCommunityChatActive: activePage === "community" && communityTab === "chat",
+    isCommunityChatActive:
+      activePage === "community" &&
+      activeView === "home" &&
+      communityTab === "chat",
     session,
   });
   const {
@@ -790,15 +793,18 @@ export default function App() {
 
   useWebCommunityTabAccessGuard({
     activePage,
+    activeView,
     activeCommunityId,
     activeCommunityAccessId:
       activeCommunityAccess?.community_id ?? null,
     isLoadingCommunityAccess,
     communityTab,
     canViewSettings: canViewActiveCommunitySettings,
+    canViewMembers: canViewMembersActiveCommunity,
     canManageMembers: canManageMembersActiveCommunity,
     canViewAnalytics: canViewActiveCommunityAnalytics,
     setCommunityResourceModuleId,
+    setActiveView,
     applyCommunityShellState,
   });
 
@@ -930,6 +936,7 @@ export default function App() {
     openPublicCommunityFunnel,
     openCommunityTab,
     openCommunityHome,
+    openCommunityMembers,
     openCommunityChat,
     openCommunityBySlug,
   } = useWebCommunityRouteController<CommunityRecord>({
@@ -1319,6 +1326,7 @@ export default function App() {
   }, [activeCommunityId, attentionByCommunityId]);
   useCommunityDirectoryLifecycle<AuthSession>({
     activePage,
+    activeView,
     communityTab,
     ...sessionArg,
     resumeEpoch: appActivity.resumeEpoch,
@@ -2766,13 +2774,12 @@ export default function App() {
           : null,
     },
     communityHostProps: {
+      activeView,
       communityTab,
       onSelectCommunityTab: handleSelectCommunityTab,
       firstPostFocusRequest: communityOnboardingFirstPostFocusRequest,
       chatPanelProps: {
         ...communityChatPanelProps,
-        mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members",
-        onCloseMobileMembersOverlay: () => setMobileOverlay(null),
       },
       secondaryPanelsProps: communitySecondarySurfaceProps,
     },
@@ -3024,6 +3031,7 @@ export default function App() {
         },
     openCommunityChat,
     openCommunityHome,
+    openCommunityMembers,
     communityInitials,
     showDesktopCommunityRail,
     showDesktopCommunityNav,
