@@ -21,13 +21,15 @@ const emailDigests = read("convex/emailDigests.ts");
 const resourceDirectory = read("shared/communityResourceDirectory.ts");
 const resourceModuleModal = read("apps/web/src/components/WebCommunityResourceModuleModal.tsx");
 const resourceCourseCatalog = read("apps/web/src/components/ResourceCourseCatalog.tsx");
-const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
+const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerContent.tsx");
 const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const webCss = read("apps/web/src/index.css");
 const knowledgeSourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
 const builderKnowledgeSetup = read("apps/web/src/components/WebBuilderKnowledgeSetup.tsx");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const resourceContracts = read("apps/web/src/components/communityResourcesContracts.ts");
+const app = read("apps/web/src/App.tsx");
+const webContentController = read("apps/web/src/controllers/useWebCommunityContentController.ts");
 const resourceController = read("shared/useCommunityResourceController.ts");
 const resourceEditorController = read("shared/useCommunityResourceEditorController.ts");
 const webResourceController = read("apps/web/src/controllers/useWebCommunityResourceUiController.ts");
@@ -508,8 +510,28 @@ assert.doesNotMatch(
 );
 assert.match(
   resourcesPanel,
-  /if \(!selectedModule\) \{[\s\S]*actions\.setOpenResourceEmbedId\(null\)[\s\S]*return/,
-  "the Resources root must stay on the course catalog instead of auto-opening the first course",
+  /const \[selectedLessonId, setSelectedLessonId\] = useState<string \| null>\(null\)[\s\S]*if \(!selectedModuleSection\) return null;[\s\S]*return selectedModuleSection\.lessonResources\[0\] \?\? null/,
+  "lesson selection must stay local and derive a deterministic first-lesson fallback without synchronization effects",
+);
+assert.doesNotMatch(
+  [app, resourceContracts, webContentController].join("\n"),
+  /openResourceEmbedId|setOpenResourceEmbedId/,
+  "transient lesson selection must stay inside Resources instead of rerendering the application root",
+);
+assert.match(
+  resourcesPanel,
+  /handleSelectResource[\s\S]*selectedModuleId !== resource\.module_id[\s\S]*actions\.handleSelectModule\(resource\.module_id\)[\s\S]*setSelectedLessonId\(resource\.id\)/,
+  "ordinary lesson switches must avoid dispatching unchanged course state to the application root",
+);
+assert.doesNotMatch(
+  resourcesPanel,
+  /pendingOpenResourceId|knowledge-resource-item-summary/,
+  "Resources must not retain modal-era selection reconciliation or hidden lesson summaries",
+);
+assert.doesNotMatch(
+  baseCss,
+  /knowledge-resource-item-meta|knowledge-resource-item-summary/,
+  "unused lesson metadata and hidden summary styles must be deleted",
 );
 assert.match(
   resourcesPanel,
@@ -826,10 +848,10 @@ assert.match(
   /runPageDraftCreation[\s\S]*pageDraftCreationInFlightRef\.current[\s\S]*setIsCreatingPageDraft\(true\)[\s\S]*finally[\s\S]*pageDraftCreationInFlightRef\.current = false[\s\S]*setIsCreatingPageDraft\(false\)/,
   "page draft creation must acquire immediately and release its UI boundary on every outcome",
 );
-assert.match(
+assert.doesNotMatch(
   resourcesPanel,
-  /PAGE_DRAFT_CREATION_GESTURE_LOCK_MS = 650[\s\S]*remainingGestureLockMs = Math\.max\([\s\S]*PAGE_DRAFT_CREATION_GESTURE_LOCK_MS - \(Date\.now\(\) - lockStartedAt\)[\s\S]*setTimeout\(resolve, remainingGestureLockMs\)[\s\S]*pageDraftCreationInFlightRef\.current = false/,
-  "page draft creation must keep its lock through one full browser gesture even when the backend returns between clicks",
+  /PAGE_DRAFT_CREATION_GESTURE_LOCK_MS|remainingGestureLockMs|setTimeout\(resolve/,
+  "page draft creation must not retain an artificial delay after acquiring its immediate single-flight boundary",
 );
 assert.doesNotMatch(
   `${resourcesPanel}\n${resourceContracts}\n${webResourceController}`,

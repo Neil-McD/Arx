@@ -16,7 +16,8 @@ const webContentController = read(
 );
 const controller = read("shared/useCommunityResourceController.ts");
 const panel = read("apps/web/src/components/CommunityResourcesPanel.tsx");
-const viewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
+const viewer = read("apps/web/src/components/WebCommunityResourceViewerContent.tsx");
+const deferredYouTube = read("apps/web/src/components/DeferredYouTubeEmbed.tsx");
 const resources = read("convex/communityResources.ts");
 const resourceEvidence = read("convex/communityResourceEvidence.ts");
 const core = read("convex/communityCore.ts");
@@ -89,51 +90,15 @@ assert.match(
   "visibility checks must trust body_chars so split-body pages are not treated as empty",
 );
 
-assert.match(
-  viewer,
-  /function hasStoredBodyContent\(resource: CommunityResource\)[\s\S]*resource\.body_chars/,
-  "viewer should detect persisted body content from body_chars",
+assert.doesNotMatch(
+  [contracts, app, webContentController, panel, viewer].join("\n"),
+  /reloadResources|reloadActiveResources|resourceNeedsBodyHydration|pendingBodyHydrationRefreshIdsRef|lastRenderableSelectedResourceRef|hasDeferredBody|Loading lesson content/,
+  "the client must trust the canonical hydrated list instead of retaining a duplicate whole-list retry and stale snapshot state machine",
 );
 assert.match(
   viewer,
-  /const hasDeferredBody = !editor\?\.isEditing && !hasBody && hasStoredBodyContent\(resource\)/,
-  "viewer should classify body_chars-without-body_md as deferred hydration",
-);
-assert.match(
-  viewer,
-  /const isEmpty = !embed && !hasBody && !hasDeferredBody && !verificationLink/,
-  "viewer must not render empty-page copy when persisted body content exists",
-);
-assert.match(
-  viewer,
-  /if \(hasDeferredBody\) \{[\s\S]*Loading lesson content/,
-  "viewer should show loading copy while persisted lesson content is being rehydrated",
-);
-
-assert.match(
-  contracts,
-  /reloadResources\?: \(\) => Promise<void> \| void/,
-  "Resources actions should expose a narrow reload hook for impossible hydration states",
-);
-assert.match(
-  panel,
-  /function resourceNeedsBodyHydration\(resource: CommunityResource \| null\)[\s\S]*resource\.body_chars[\s\S]*!\(resource\.body_md \?\? ""\)\.trim\(\)/,
-  "Resources panel should identify metadata rows whose body exists but was not hydrated",
-);
-assert.match(
-  panel,
-  /pendingBodyHydrationRefreshIdsRef[\s\S]*actions\.reloadResources/,
-  "Resources panel should trigger a bounded reload for missing hydrated content",
-);
-assert.match(
-  panel,
-  /lastRenderableSelectedResourceRef[\s\S]*const readerResource =[\s\S]*isRefreshingResources[\s\S]*lastRenderableSelectedResourceRef\.current\?\.id === selectedResourceId/,
-  "Resources reader should preserve the last valid selected resource while background refresh is in flight",
-);
-assert.match(
-  panel,
-  /readerResource \? \([\s\S]*resource=\{readerResource\}[\s\S]*editor=\{isReaderShowingRefreshSnapshot \? null : selectedResourceInlineEditor\}/,
-  "Resources reader should keep rendering the previous resource snapshot during refresh without exposing stale edit controls",
+  /const isEmpty = !embed && !hasBody && !verificationLink/,
+  "the viewer should derive its empty state directly from the canonical hydrated resource",
 );
 assert.match(
   linkEmbedUi,
@@ -142,8 +107,13 @@ assert.match(
 );
 assert.match(
   viewer,
-  /import \{ normalizeExternalUrl, parseEmbedUrl, StableMediaEmbedFrame \}[\s\S]*<StableMediaEmbedFrame[\s\S]*src=\{embed\.src\}/,
-  "resource viewer should render URL embeds through the shared stable media frame component",
+  /embed\.provider === "youtube"[\s\S]*<DeferredYouTubeEmbed[\s\S]*<StableMediaEmbedFrame[\s\S]*src=\{embed\.src\}/,
+  "resource viewer should defer YouTube activation while keeping one stable frame for other media providers",
+);
+assert.match(
+  deferredYouTube,
+  /export function DeferredYouTubeEmbed[\s\S]*<iframe[\s\S]*sandbox=[\s\S]*setIsActive\(true\)/,
+  "chat and Resources should share one safe click-to-play YouTube implementation",
 );
 assert.match(
   markdown,
@@ -160,25 +130,4 @@ assert.match(
   /const renderedBodyMarkdown = useMemo\([\s\S]*renderMarkdown\(trimmedBody, \{ embedStandaloneMedia: true, headingLevelOffset: 1 \}\)[\s\S]*\[hasBody, trimmedBody\]/,
   "resource body markdown should be memoized and hierarchy-scoped so unrelated reader state changes do not rebuild the media subtree",
 );
-assert.match(
-  panel,
-  /const isEditDisabled = resourceNeedsBodyHydration\(resource\)[\s\S]*disabled=\{isEditDisabled\}[\s\S]*if \(isEditDisabled\) return/,
-  "rail edit controls must not open an empty editor while persisted body content is still hydrating",
-);
-assert.match(
-  panel,
-  /const selectedResourceInlineEditor =[\s\S]*canManageResources && selectedResource && !selectedResourceNeedsBodyHydration[\s\S]*startResourceInlineEdit\(selectedResource, field\)/,
-  "selected page edit controls must wait for hydrated body content before editing",
-);
-assert.match(
-  webContentController,
-  /const reloadActiveResources = useCallback\(async \(\): Promise<void> => \{[\s\S]*ensureSession\(\)[\s\S]*resourceUi\.loadCommunityResources\([\s\S]*activeCommunityId,[\s\S]*activeSession/,
-  "the content controller should reload Resources through the existing authenticated list path",
-);
-assert.match(
-  app,
-  /reloadResources: reloadActiveResources/,
-  "App should pass the canonical Resources reload action into the surface contract",
-);
-
 console.log("community resource content hydration contract proof passed");

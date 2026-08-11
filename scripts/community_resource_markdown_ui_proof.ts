@@ -6,7 +6,7 @@ const root = path.resolve(new URL("..", import.meta.url).pathname);
 const read = (relativePath: string) => fs.readFileSync(path.join(root, relativePath), "utf8");
 
 const markdown = read("shared/markdownUi.tsx");
-const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerModal.tsx");
+const resourceViewer = read("apps/web/src/components/WebCommunityResourceViewerContent.tsx");
 const linkEmbedUi = read("shared/linkEmbedUi.tsx");
 const css = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const packageJson = read("package.json");

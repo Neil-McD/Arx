@@ -10,7 +10,7 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmojiPickerButton, QUICK_REACTIONS, ReactionSummary } from "./communityInteractionRowParts";
-import { CommunityInteractionYouTubeEmbed } from "./CommunityInteractionYouTubeEmbed";
+import { DeferredYouTubeEmbed } from "./DeferredYouTubeEmbed";
 import { groupInteractionFeed } from "./groupInteractionFeed";
 import type { WebCommunityInteractionProjectionProps } from "./WebCommunityInteractionProjection";
 import type {
@@ -759,7 +759,7 @@ export function InteractionContent(
       />
       {youtube ? (
         <div className="community-interaction-youtube-wrap">
-          <CommunityInteractionYouTubeEmbed embed={youtube.embed} />
+          <DeferredYouTubeEmbed key={youtube.embed.id} embed={youtube.embed} />
         </div>
       ) : null}
       {props.afterBody}

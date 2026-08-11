@@ -18,7 +18,7 @@ import type {
 import {
   WebCommunityResourceViewerContent,
   type WebCommunityResourceInlineEditorField,
-} from "./WebCommunityResourceViewerModal";
+} from "./WebCommunityResourceViewerContent";
 import { WebDeleteResourceModal } from "./WebDeleteResourceModal";
 import { ResourceCourseCatalog } from "./ResourceCourseCatalog";
 
@@ -31,19 +31,12 @@ type CommunityResourcesPanelProps = {
 const MODULE_DRAG_MIME = "application/x-polynet-community-resource-module";
 const RESOURCE_DRAG_MIME = "application/x-polynet-community-resource";
 const RESOURCE_ORIGIN_MODULE_DRAG_MIME = "application/x-polynet-community-resource-origin-module";
-const PAGE_DRAFT_CREATION_GESTURE_LOCK_MS = 650;
 type ReorderDirection = "up" | "down" | "top" | "bottom";
 
 type ResourceModuleView = CommunityResourceModule;
 
 function getResourceRole(resource: CommunityResource): "page" | "source" {
   return resource.resource_role === "source" ? "source" : "page";
-}
-
-function resourceNeedsBodyHydration(resource: CommunityResource | null): boolean {
-  if (!resource) return false;
-  const bodyChars = Number(resource.body_chars ?? 0);
-  return Number.isFinite(bodyChars) && bodyChars > 0 && !(resource.body_md ?? "").trim();
 }
 
 function resourceHasUsableKnowledgeContent(resource: CommunityResource): boolean {
@@ -173,8 +166,6 @@ function ResourceRailItem(props: {
     isDragging,
     isDropTarget,
   } = props;
-  const summary = (resource.body_md ?? "").trim();
-  const isEditDisabled = resourceNeedsBodyHydration(resource);
   const [isMenuOpen, setIsMenuOpen] = useState(false);
 
   const handleMenuClick = (event: MouseEvent<HTMLButtonElement>) => {
@@ -225,7 +216,6 @@ function ResourceRailItem(props: {
             </span>
             {resource.pinned ? <PinIcon /> : null}
           </span>
-          {summary ? <span className="knowledge-resource-item-summary">{summary}</span> : null}
         </span>
       </button>
       {canManage ? (
@@ -298,12 +288,8 @@ function ResourceRailItem(props: {
                 className="web-floating-menu-item"
                 type="button"
                 role="menuitem"
-                title={isEditDisabled ? "Loading lesson content" : "Edit lesson"}
-                disabled={isEditDisabled}
-                onClick={(event) => {
-                  if (isEditDisabled) return;
-                  closeAndRun(event, onEdit);
-                }}
+                title="Edit lesson"
+                onClick={(event) => closeAndRun(event, onEdit)}
               >
                 <EditIcon />
                 <span>Edit</span>
@@ -329,7 +315,7 @@ function ResourceRailItem(props: {
 export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const { capabilities, state, actions } = props;
   const selectedModuleId = state.selectedModuleId;
-  const selectedResourceId = state.openResourceEmbedId;
+  const [selectedLessonId, setSelectedLessonId] = useState<string | null>(null);
   const [pendingDeleteResourceId, setPendingDeleteResourceId] = useState<string | null>(null);
   const [isDeletingResource, setIsDeletingResource] = useState(false);
   const [draggingModuleId, setDraggingModuleId] = useState<string | null>(null);
@@ -340,14 +326,12 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const draggingModuleIdRef = useRef<string | null>(null);
   const draggingResourceIdRef = useRef<string | null>(null);
   const draggingResourceModuleIdRef = useRef<string | null>(null);
-  const [pendingOpenResourceId, setPendingOpenResourceId] = useState<string | null>(null);
   const [activeResourceEditField, setActiveResourceEditField] =
     useState<WebCommunityResourceInlineEditorField | null>(null);
   const [isPreviewMode, setIsPreviewMode] = useState(false);
   const [isCourseOutlineOpen, setIsCourseOutlineOpen] = useState(true);
   const [isCreatingPageDraft, setIsCreatingPageDraft] = useState(false);
   const pageDraftCreationInFlightRef = useRef(false);
-  const pendingBodyHydrationRefreshIdsRef = useRef(new Set<string>());
   const canManageResources = capabilities.canOperateResources && !isPreviewMode;
   const previewSwitcherStyle = buildPlatformSwitcherStyle(2, isPreviewMode ? 1 : 0);
 
@@ -420,45 +404,28 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     () => moduleSections.flatMap((section) => section.lessonResources),
     [moduleSections],
   );
-  const displayableResourceIds = useMemo(
-    () => new Set(allLessonResources.map((resource) => resource.id)),
-    [allLessonResources],
-  );
   const selectedModule = useMemo(() => {
     if (!selectedModuleId) return null;
     return moduleViews.find((module) => module.id === selectedModuleId) ?? null;
   }, [moduleViews, selectedModuleId]);
+  const selectedModuleSection = useMemo(
+    () => selectedModule
+      ? moduleSections.find((section) => section.module.id === selectedModule.id) ?? null
+      : null,
+    [moduleSections, selectedModule],
+  );
   const selectedModuleResourceIds = useMemo(() => {
-    if (!selectedModule) return new Set<string>();
-    const section = moduleSections.find((candidate) => candidate.module.id === selectedModule.id);
-    if (!section) return new Set<string>();
-    return new Set(section.lessonResources.map((resource) => resource.id));
-  }, [moduleSections, selectedModule]);
+    if (!selectedModuleSection) return new Set<string>();
+    return new Set(selectedModuleSection.lessonResources.map((resource) => resource.id));
+  }, [selectedModuleSection]);
   const isRefreshingResources = state.isLoadingResources || state.isLoadingResourceModules;
-  const lastRenderableSelectedResourceRef = useRef<CommunityResource | null>(null);
   const selectedResource = useMemo(() => {
-    if (
-      !selectedModule ||
-      !selectedResourceId ||
-      !displayableResourceIds.has(selectedResourceId) ||
-      !selectedModuleResourceIds.has(selectedResourceId)
-    ) return null;
-    return resourcesById.get(selectedResourceId) ?? null;
-  }, [displayableResourceIds, resourcesById, selectedModule, selectedModuleResourceIds, selectedResourceId]);
-  const readerResource =
-    selectedResource ??
-    (
-      isRefreshingResources &&
-      selectedResourceId &&
-      lastRenderableSelectedResourceRef.current?.id === selectedResourceId
-        ? lastRenderableSelectedResourceRef.current
-        : null
-    );
-  const isReaderShowingRefreshSnapshot = Boolean(readerResource && !selectedResource);
-  const selectedResourceNeedsBodyHydration = resourceNeedsBodyHydration(selectedResource);
-  const selectedModuleSection = selectedModule
-    ? moduleSections.find((section) => section.module.id === selectedModule.id) ?? null
-    : null;
+    if (!selectedModuleSection) return null;
+    if (selectedLessonId && selectedModuleResourceIds.has(selectedLessonId)) {
+      return resourcesById.get(selectedLessonId) ?? selectedModuleSection.lessonResources[0] ?? null;
+    }
+    return selectedModuleSection.lessonResources[0] ?? null;
+  }, [resourcesById, selectedLessonId, selectedModuleResourceIds, selectedModuleSection]);
   const reorderableResourceIdsByModule = useMemo(() => {
     const map = new Map<string, string[]>();
     moduleSections.forEach((section) => {
@@ -472,20 +439,10 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (!section) return null;
     return section.lessonResources[0] ?? null;
   };
-  const selectedModuleFirstResource = selectedModule ? getFirstResourceForModule(selectedModule) : null;
   const hasResourceContent = state.modules.length > 0 || state.resources.length > 0;
   const hasVisibleResourceContent = moduleViews.length > 0 || allLessonResources.length > 0;
   const wasRefreshingResourcesRef = useRef(false);
   const hasCompletedResourceLoadRef = useRef(false);
-  useEffect(() => {
-    if (selectedResource) {
-      lastRenderableSelectedResourceRef.current = selectedResource;
-      return;
-    }
-    if (!isRefreshingResources || !selectedResourceId) {
-      lastRenderableSelectedResourceRef.current = null;
-    }
-  }, [isRefreshingResources, selectedResource, selectedResourceId]);
   useEffect(() => {
     if (!isRefreshingResources && wasRefreshingResourcesRef.current) {
       hasCompletedResourceLoadRef.current = true;
@@ -502,6 +459,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   useEffect(() => {
     setIsCourseOutlineOpen(true);
+    setSelectedLessonId(null);
   }, [capabilities.activeCommunityId]);
 
   useEffect(() => {
@@ -525,56 +483,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   }, [actions, hasResourceContent, isRefreshingResources, moduleViews, selectedModuleId]);
 
   useEffect(() => {
-    if (isRefreshingResources) return;
-    if (!selectedModule) {
-      if (selectedResourceId) actions.setOpenResourceEmbedId(null);
-      return;
-    }
-    if (selectedResourceId && selectedModuleResourceIds.has(selectedResourceId)) return;
-    if (selectedModuleFirstResource) {
-      actions.setOpenResourceEmbedId(selectedModuleFirstResource.id);
-      return;
-    }
-    if (selectedResourceId) actions.setOpenResourceEmbedId(null);
-  }, [
-    actions,
-    isRefreshingResources,
-    selectedModuleFirstResource,
-    selectedModule,
-    selectedModuleResourceIds,
-    selectedResourceId,
-  ]);
-
-  useEffect(() => {
     if (pendingDeleteResourceId && !pendingDeleteResource) {
       setPendingDeleteResourceId(null);
       setIsDeletingResource(false);
     }
   }, [pendingDeleteResource, pendingDeleteResourceId]);
-
-  useEffect(() => {
-    if (!selectedResource || selectedResourceNeedsBodyHydration) return;
-    pendingBodyHydrationRefreshIdsRef.current.delete(selectedResource.id);
-  }, [selectedResource, selectedResourceNeedsBodyHydration]);
-
-  useEffect(() => {
-    if (!selectedResource || !selectedResourceNeedsBodyHydration) return;
-    if (isRefreshingResources || !actions.reloadResources) return;
-    if (pendingBodyHydrationRefreshIdsRef.current.has(selectedResource.id)) return;
-    pendingBodyHydrationRefreshIdsRef.current.add(selectedResource.id);
-    void Promise.resolve(actions.reloadResources()).catch(() => {
-      pendingBodyHydrationRefreshIdsRef.current.delete(selectedResource.id);
-    });
-  }, [actions, isRefreshingResources, selectedResource, selectedResourceNeedsBodyHydration]);
-
-  useEffect(() => {
-    if (!pendingOpenResourceId) return;
-    const pendingResource = resourcesById.get(pendingOpenResourceId);
-    if (!pendingResource?.module_id || !displayableResourceIds.has(pendingOpenResourceId)) return;
-    actions.handleSelectModule(pendingResource.module_id);
-    actions.setOpenResourceEmbedId(pendingOpenResourceId);
-    setPendingOpenResourceId(null);
-  }, [actions, displayableResourceIds, pendingOpenResourceId, resourcesById]);
 
   useEffect(() => {
     const editingId = actions.resourceEditor.editingResourceId;
@@ -761,20 +674,22 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
   const handleOpenCourse = (module: ResourceModuleView) => {
     actions.handleSelectModule(module.id);
     const firstResource = getFirstResourceForModule(module);
-    actions.setOpenResourceEmbedId(firstResource?.id ?? null);
+    setSelectedLessonId(firstResource?.id ?? null);
   };
 
   const handleBackToCatalog = () => {
     actions.resourceEditor.cancelInlineEditResource();
     setActiveResourceEditField(null);
-    actions.setOpenResourceEmbedId(null);
+    setSelectedLessonId(null);
     actions.handleSelectModule(null);
   };
 
   const handleSelectResource = (resource: CommunityResource) => {
     if (!resource.module_id) return;
-    actions.handleSelectModule(resource.module_id);
-    actions.setOpenResourceEmbedId(resource.id);
+    if (selectedModuleId !== resource.module_id) {
+      actions.handleSelectModule(resource.module_id);
+    }
+    setSelectedLessonId(resource.id);
     if (window.matchMedia("(max-width: 900px)").matches) {
       setIsCourseOutlineOpen(false);
     }
@@ -784,7 +699,6 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     resource: CommunityResource,
     field: WebCommunityResourceInlineEditorField,
   ) => {
-    if (resourceNeedsBodyHydration(resource)) return;
     handleSelectResource(resource);
     actions.resourceEditor.beginInlineEditResource(resource);
     setActiveResourceEditField(field);
@@ -796,19 +710,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
     if (pageDraftCreationInFlightRef.current) return null;
     pageDraftCreationInFlightRef.current = true;
     setIsCreatingPageDraft(true);
-    const lockStartedAt = Date.now();
     try {
       return await createDraft();
     } finally {
-      const remainingGestureLockMs = Math.max(
-        0,
-        PAGE_DRAFT_CREATION_GESTURE_LOCK_MS - (Date.now() - lockStartedAt),
-      );
-      if (remainingGestureLockMs > 0) {
-        await new Promise<void>((resolve) => {
-          setTimeout(resolve, remainingGestureLockMs);
-        });
-      }
       pageDraftCreationInFlightRef.current = false;
       setIsCreatingPageDraft(false);
     }
@@ -819,9 +723,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       () => actions.handleCreateBlankPageDraft(moduleId),
     );
     if (!created) return;
-    setPendingOpenResourceId(created.id);
     actions.handleSelectModule(created.module_id);
-    actions.setOpenResourceEmbedId(created.id);
+    setSelectedLessonId(created.id);
     actions.resourceEditor.beginInlineEditResource(created);
     setActiveResourceEditField("title");
   };
@@ -852,7 +755,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       <ResourceRailItem
         key={resource.id}
         resource={resource}
-        isActive={readerResource?.id === resource.id}
+        isActive={selectedResource?.id === resource.id}
         onSelect={() => handleSelectResource(resource)}
         onEdit={() => startResourceInlineEdit(resource, "body")}
         onDelete={() => setPendingDeleteResourceId(resource.id)}
@@ -897,7 +800,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
       !actions.resourceEditor.isSaving,
   );
   const selectedResourceInlineEditor =
-    canManageResources && selectedResource && !selectedResourceNeedsBodyHydration
+    canManageResources && selectedResource
       ? {
           canEdit: true,
           isEditing: isSelectedResourceEditing,
@@ -1066,13 +969,11 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
               </div>
             </aside>
             <div className="knowledge-resource-reader">
-              {readerResource ? (
-                <>
-                  <WebCommunityResourceViewerContent
-                    resource={readerResource}
-                    editor={isReaderShowingRefreshSnapshot ? null : selectedResourceInlineEditor}
-                  />
-                </>
+              {selectedResource ? (
+                <WebCommunityResourceViewerContent
+                  resource={selectedResource}
+                  editor={selectedResourceInlineEditor}
+                />
               ) : (
                 <div className="community-panel-state-shell">
                   <div className="chat-empty-state">
@@ -1111,8 +1012,8 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           setIsDeletingResource(false);
           if (didDelete !== false) {
             setPendingDeleteResourceId(null);
-            if (selectedResourceId === pendingDeleteResource.id) {
-              actions.setOpenResourceEmbedId(null);
+            if (selectedLessonId === pendingDeleteResource.id) {
+              setSelectedLessonId(null);
             }
           }
         }}

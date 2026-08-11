@@ -108,7 +108,7 @@ function assertSourceAnchors() {
   const communityCore = readText(new URL("../convex/communityCore.ts", import.meta.url));
   const communityAdmin = readText(new URL("../convex/communityAdmin.ts", import.meta.url));
   const communityResources = readText(new URL("../convex/communityResources.ts", import.meta.url));
-  const resourceViewer = readText(new URL("../apps/web/src/components/WebCommunityResourceViewerModal.tsx", import.meta.url));
+  const resourceViewer = readText(new URL("../apps/web/src/components/WebCommunityResourceViewerContent.tsx", import.meta.url));
   const linkEmbedUi = readText(new URL("../shared/linkEmbedUi.tsx", import.meta.url));
 
   assertIncludes(

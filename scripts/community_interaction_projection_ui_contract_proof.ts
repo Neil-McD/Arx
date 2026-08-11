@@ -53,7 +53,7 @@ const chromeHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
 const chromeHostPropsBuilder = read("apps/web/src/controllers/buildWebShellChromeHostProps.ts");
 const feed = read("apps/web/src/components/communityInteractionFeed.tsx");
-const youtubeEmbed = read("apps/web/src/components/CommunityInteractionYouTubeEmbed.tsx");
+const youtubeEmbed = read("apps/web/src/components/DeferredYouTubeEmbed.tsx");
 const directMessages = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const gateway = read("shared/cloudCommunityInteractionsGateway.ts");
@@ -272,7 +272,7 @@ assert.match(
 );
 assert.match(
   feed,
-  /export function InteractionContent[\s\S]*firstYouTubeEmbedInText\(props\.text\)[\s\S]*<InteractionBody[\s\S]*<CommunityInteractionYouTubeEmbed[\s\S]*props\.afterBody/,
+  /export function InteractionContent[\s\S]*firstYouTubeEmbedInText\(props\.text\)[\s\S]*<InteractionBody[\s\S]*<DeferredYouTubeEmbed[\s\S]*props\.afterBody/,
   "interaction content should preserve authored text, add one deterministic YouTube enhancement, and preserve attachments",
 );
 assert.doesNotMatch(
@@ -282,7 +282,7 @@ assert.doesNotMatch(
 );
 assert.match(
   youtubeEmbed,
-  /data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*setActive\(true\)/,
+  /data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*setIsActive\(true\)/,
   "YouTube should use one click-activated, sandboxed deterministic media component",
 );
 assert.match(
@@ -1047,7 +1047,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-interaction-youtube-wrap\s*\{[\s\S]*width:\s*min\(100%,\s*480px\);[\s\S]*\.community-interaction-youtube[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.community-interaction-youtube-play:focus-visible[\s\S]*outline:\s*2px solid var\(--chat-link\);/,
+  /\.community-interaction-youtube-wrap\s*\{[\s\S]*width:\s*min\(100%,\s*480px\);[\s\S]*\.deferred-youtube[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.deferred-youtube-play:focus-visible[\s\S]*outline:\s*2px solid var\(--chat-link\);/,
   "YouTube media should use one bounded 16:9 surface with the semantic chat-link focus treatment",
 );
 assert.doesNotMatch(

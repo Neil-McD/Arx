@@ -130,7 +130,6 @@ export function useWebCommunityContentController(
   const [modules, setModules] = useState<WebCommunityResourceModule[]>([]);
   const [isLoadingResources, setIsLoadingResources] = useState(false);
   const [isLoadingModules, setIsLoadingModules] = useState(false);
-  const [openResourceEmbedId, setOpenResourceEmbedId] = useState<string | null>(null);
   const [eventsByCacheKey, setEventsByCacheKey] =
     useState<Record<string, CloudCommunityEvent[]>>({});
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
@@ -270,7 +269,6 @@ export function useWebCommunityContentController(
     setModules([]);
     setIsLoadingResources(false);
     setIsLoadingModules(false);
-    setOpenResourceEmbedId(null);
     resetEventsCache();
     setIsLoadingEvents(false);
     setEventsError(null);
@@ -288,22 +286,7 @@ export function useWebCommunityContentController(
     setModules([]);
     setIsLoadingEvents(false);
     setEventsError(null);
-    setOpenResourceEmbedId(null);
   }, [activeCommunityId]);
-
-  const reloadActiveResources = useCallback(async (): Promise<void> => {
-    if (!activeCommunityId) return;
-    const activeSession = await ensureSession();
-    if (!activeSession) return;
-    await resourceUi.loadCommunityResources(
-      activeCommunityId,
-      activeSession,
-    );
-  }, [
-    activeCommunityId,
-    ensureSession,
-    resourceUi.loadCommunityResources,
-  ]);
 
   const reloadActiveEvents = useCallback(
     async (range: CommunityEventsRange): Promise<void> => {
@@ -324,8 +307,6 @@ export function useWebCommunityContentController(
     modules,
     isLoadingResources,
     isLoadingModules,
-    openResourceEmbedId,
-    setOpenResourceEmbedId,
     events,
     hasLoadedVisibleEventsRange,
     isLoadingEvents,
@@ -337,7 +318,6 @@ export function useWebCommunityContentController(
     resetEventsCache,
     resetContentState,
     loadCommunityEvents,
-    reloadActiveResources,
     reloadActiveEvents,
     handleSaveCommunityEvent,
     handleCancelCommunityEvent,

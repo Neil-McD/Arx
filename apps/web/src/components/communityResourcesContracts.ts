@@ -65,11 +65,9 @@ export type CommunityResourcesState = {
   modules: CommunityResourceModule[];
   resources: CommunityResource[];
   selectedModuleId: string | null;
-  openResourceEmbedId: string | null;
 };
 
 export type CommunityResourcesActions = {
-  setOpenResourceEmbedId: (id: string | null) => void;
   handleSelectModule: (moduleId: string | null) => void;
   openNewModuleModal: () => void;
   handleEditModule: (module: CommunityResourceModule) => void;
@@ -114,5 +112,4 @@ export type CommunityResourcesActions = {
   };
   handleDeleteResource: (resourceId: string) => Promise<boolean> | boolean;
   handleCreateBlankPageDraft: (moduleId: string) => Promise<CommunityResource | null>;
-  reloadResources?: () => Promise<void> | void;
 };

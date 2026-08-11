@@ -5360,28 +5360,28 @@
   margin-top: 8px;
 }
 
-.community-interaction-youtube,
-.community-interaction-youtube iframe,
-.community-interaction-youtube-play {
+.deferred-youtube,
+.deferred-youtube iframe,
+.deferred-youtube-play {
   display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
 }
 
-.community-interaction-youtube {
+.deferred-youtube {
   position: relative;
   overflow: hidden;
   border-radius: 10px;
   background: #000;
 }
 
-.community-interaction-youtube iframe {
+.deferred-youtube iframe {
   height: 100%;
   border: 0;
   background: #000;
 }
 
-.community-interaction-youtube-play {
+.deferred-youtube-play {
   position: relative;
   padding: 0;
   border: 0;
@@ -5390,19 +5390,19 @@
   cursor: pointer;
 }
 
-.community-interaction-youtube-play img,
-.community-interaction-youtube-empty {
+.deferred-youtube-play img,
+.deferred-youtube-empty {
   display: block;
   width: 100%;
   height: 100%;
   object-fit: cover;
 }
 
-.community-interaction-youtube-empty {
+.deferred-youtube-empty {
   background: #000;
 }
 
-.community-interaction-youtube-play-icon {
+.deferred-youtube-play-icon {
   position: absolute;
   top: 50%;
   left: 50%;
@@ -5418,12 +5418,12 @@
   transition: transform 140ms ease, background-color 140ms ease;
 }
 
-.community-interaction-youtube-play:hover .community-interaction-youtube-play-icon {
+.deferred-youtube-play:hover .deferred-youtube-play-icon {
   background: color-mix(in srgb, #050505 90%, transparent);
   transform: translate(-50%, -50%) scale(1.05);
 }
 
-.community-interaction-youtube-play:focus-visible {
+.deferred-youtube-play:focus-visible {
   outline: 2px solid var(--chat-link);
   outline-offset: -3px;
 }
@@ -9317,43 +9317,6 @@ button.chat-reply-quote:hover {
   font-weight: 650;
 }
 
-.knowledge-resource-item-meta {
-  display: flex;
-  align-items: center;
-  gap: 4px 14px;
-  min-width: 0;
-  color: var(--text-muted);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.knowledge-resource-item-meta span {
-  position: relative;
-}
-
-.knowledge-resource-item-meta span+span::before {
-  content: "•";
-  position: absolute;
-  left: -9px;
-  color: color-mix(in srgb, var(--text-muted) 58%, transparent);
-}
-
-.knowledge-resource-item-summary {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
-.resource-course-outline .knowledge-resource-item-summary {
-  display: none;
-}
-
 .knowledge-resource-item-actions {
   position: relative;
   display: inline-flex;
@@ -10952,6 +10915,11 @@ button.chat-reply-quote:hover {
   height: 100%;
   display: block;
   border: 0;
+}
+
+.resource-viewer-embed .deferred-youtube {
+  height: 100%;
+  border-radius: 0;
 }
 
 .resource-viewer-empty {

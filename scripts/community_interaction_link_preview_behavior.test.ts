@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { describe, expect, it } from "vitest";
 
 import { InteractionContent } from "../apps/web/src/components/communityInteractionFeed";
-import { CommunityInteractionYouTubeEmbed } from "../apps/web/src/components/CommunityInteractionYouTubeEmbed";
+import { DeferredYouTubeEmbed } from "../apps/web/src/components/DeferredYouTubeEmbed";
 import {
   firstYouTubeEmbedInText,
   parseEmbedUrl,
@@ -36,7 +36,7 @@ describe("community interaction link presentation", () => {
     const markup = renderInteraction(`Open ${url}`);
     expect(markup).toContain('class="chat-link"');
     expect(markup).toContain(url);
-    expect(markup).not.toContain("community-interaction-youtube");
+    expect(markup).not.toContain("deferred-youtube");
     expect(markup).not.toContain("community-interaction-embed");
   });
 
@@ -77,7 +77,7 @@ describe("community interaction link presentation", () => {
     const resolved = parseYouTubeEmbedUrl("https://youtu.be/M7lc1UVf-VE?t=1m2s");
     expect(resolved?.src).toBe("https://www.youtube.com/embed/M7lc1UVf-VE?start=62");
     const markup = renderToStaticMarkup(
-      createElement(CommunityInteractionYouTubeEmbed, { embed: resolved! }),
+      createElement(DeferredYouTubeEmbed, { embed: resolved! }),
     );
     expect(markup).toContain('aria-label="Play YouTube video"');
   });

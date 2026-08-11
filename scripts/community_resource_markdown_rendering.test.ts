@@ -6,6 +6,8 @@ import { describe, expect, it, vi } from "vitest";
 vi.mock("katex/dist/katex.min.css", () => ({}));
 
 import { renderMarkdown } from "../shared/markdownUi";
+import { WebCommunityResourceViewerContent } from "../apps/web/src/components/WebCommunityResourceViewerContent";
+import type { CommunityResource } from "../apps/web/src/components/communityResourcesContracts";
 
 const requireFromWeb = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { createElement } = requireFromWeb("react") as typeof import("react");
@@ -54,5 +56,31 @@ describe("community resource markdown rendering", () => {
 
     expect(markup).not.toContain("<script");
     expect(markup).not.toContain("alert('nope')");
+  });
+
+  it("keeps lesson YouTube media thumbnail-first until the learner plays it", () => {
+    const resource: CommunityResource = {
+      id: "lesson-1",
+      module_id: "course-1",
+      directory_uri: "community://resources/lesson-1",
+      directory_path: "/lesson-1",
+      type: "link",
+      resource_role: "page",
+      resource_status: "published",
+      title: "Fast lesson switching",
+      body_md: "Lesson body",
+      url: "https://youtu.be/M7lc1UVf-VE?t=42",
+      pinned: false,
+      sort_order: 0,
+      created_at: "2026-08-11T00:00:00.000Z",
+    };
+    const markup = renderToStaticMarkup(
+      createElement(WebCommunityResourceViewerContent, { resource }),
+    );
+
+    expect(markup).toContain('data-community-youtube-embed="M7lc1UVf-VE"');
+    expect(markup).toContain("i.ytimg.com/vi/M7lc1UVf-VE/maxresdefault.jpg");
+    expect(markup).toContain('aria-label="Play Fast lesson switching video"');
+    expect(markup).not.toContain("<iframe");
   });
 });

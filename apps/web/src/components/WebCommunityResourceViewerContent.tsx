@@ -9,12 +9,8 @@ import {
 
 import { normalizeExternalUrl, parseEmbedUrl, StableMediaEmbedFrame } from "../../../../shared/linkEmbedUi";
 import { renderMarkdown } from "../../../../shared/markdownUi";
+import { DeferredYouTubeEmbed } from "./DeferredYouTubeEmbed";
 import type { CommunityResource } from "./communityResourcesContracts";
-
-type WebCommunityResourceViewerModalProps = {
-  resource: CommunityResource | null;
-  onClose: () => void;
-};
 
 type WebCommunityResourceViewerContentProps = {
   resource: CommunityResource;
@@ -76,11 +72,6 @@ const RESOURCE_BODY_INTERACTIVE_SELECTOR = [
   ".resource-viewer-embed",
 ].join(", ");
 
-function hasStoredBodyContent(resource: CommunityResource): boolean {
-  const bodyChars = Number(resource.body_chars ?? 0);
-  return Number.isFinite(bodyChars) && bodyChars > 0;
-}
-
 function PinIcon() {
   return (
     <svg className="resource-viewer-pin-icon" viewBox="0 0 24 24" aria-hidden="true">
@@ -111,7 +102,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
   const titleText = editor?.isEditing ? editor.titleInput : resource.title;
   const bodyText = editor?.isEditing ? editor.bodyInput : persistedBody;
   const hasBody = trimmedBody.length > 0;
-  const hasDeferredBody = !editor?.isEditing && !hasBody && hasStoredBodyContent(resource);
   const verificationLink: { label: string; href: string } | null = sourceUrl
     ? {
         label: embed
@@ -120,7 +110,7 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
         href: sourceUrl.toString(),
       }
     : null;
-  const isEmpty = !embed && !hasBody && !hasDeferredBody && !verificationLink;
+  const isEmpty = !embed && !hasBody && !verificationLink;
   const titleInputRef = useRef<HTMLInputElement | null>(null);
   const bodyTextareaRef = useRef<HTMLTextAreaElement | null>(null);
   const canEdit = Boolean(editor?.canEdit);
@@ -309,10 +299,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
       return <div className="resource-viewer-prose">{prose}</div>;
     }
 
-    if (hasDeferredBody) {
-      return <div className="resource-viewer-empty">Loading lesson content...</div>;
-    }
-
     if (canEdit) {
       return (
         <button
@@ -369,10 +355,18 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
         <div className="resource-viewer-column">
           {embed ? (
             <div className="resource-viewer-embed" data-resource-media="true">
-              <StableMediaEmbedFrame
-                src={embed.src}
-                title={`${resource.title} embed`}
-              />
+              {embed.provider === "youtube" ? (
+                <DeferredYouTubeEmbed
+                  key={embed.id}
+                  embed={embed}
+                  title={`${resource.title} video`}
+                />
+              ) : (
+                <StableMediaEmbedFrame
+                  src={embed.src}
+                  title={`${resource.title} embed`}
+                />
+              )}
             </div>
           ) : null}
 
@@ -390,22 +384,6 @@ export function WebCommunityResourceViewerContent(props: WebCommunityResourceVie
             </a>
           ) : null}
         </div>
-      </div>
-    </div>
-  );
-}
-
-export function WebCommunityResourceViewerModal(props: WebCommunityResourceViewerModalProps) {
-  const { resource, onClose } = props;
-
-  if (!resource) return null;
-
-  return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div className="modal resource-viewer-modal" onClick={(event) => event.stopPropagation()}>
-        <WebCommunityResourceViewerContent
-          resource={resource}
-        />
       </div>
     </div>
   );
