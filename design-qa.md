@@ -112,6 +112,41 @@ final result: passed
 
 ---
 
+# Client-First Funnel Copy QA
+
+## Approved scope
+
+- Reposition the public funnel toward coaches, consultants, and agency owners.
+- Preserve the autonomous client-success headline, premium-neutral visual system, layout, VSL destination, CTA behavior, canonical `$79` one-managed-community offer, and responsive rules.
+- Reorder the mechanism to Train, Onboard, and Execute; replace the community-growth section with a buyer-economics leverage section; simplify the closing CTA; remove the redundant landing-page platform-fee sentence.
+
+## Browser-rendered evidence
+
+- Desktop hero and product-led VSL cover: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/client-positioning-copy/01-desktop-full.jpg`
+- Desktop mechanism: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/client-positioning-copy/02-desktop-mechanism.jpg`
+- Desktop leverage section: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/client-positioning-copy/03-desktop-leverage.jpg`
+- Desktop closing conversion section: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/client-positioning-copy/04-desktop-closing.jpg`
+- Mobile hero at 390 x 844: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/client-positioning-copy/05-mobile-hero.jpg`
+- Mobile mechanism: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/client-positioning-copy/06-mobile-content.jpg`
+- Mobile leverage section: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/client-positioning-copy/07-mobile-leverage.jpg`
+
+## Findings
+
+- Desktop and mobile preserve the existing layout, lighting, materials, type system, media frame, CTA hierarchy, and responsive structure.
+- The page now scans as category, mechanism, business leverage, and conversion: autonomous client success; Train, Onboard, Execute; remove the founder bottleneck; put the trained system to work for every client.
+- The animated cover visibly advances through `01 · Train`, `02 · Onboard`, and `03 · Execute` at the intended four-second intervals. Reduced-motion mode now freezes on Train.
+- The Vimeo destination and explicit play activation remain unchanged and loaded successfully in browser QA.
+- The 390 px viewport reported equal client and scroll widths with no horizontal overflow. Long mechanism and leverage headlines wrap cleanly without collisions or truncation.
+- The public offer remains `$79/month for one managed community · Hosted AI allowance included · No technical setup`, preserving the canonical commercial unit. The 2.9% commerce rule remains in billing, legal, and backend authority; only its redundant closing-page sentence was removed.
+- Two React development warnings were recorded only while hot-replacing the temporary isolated QA entry. The QA entry was fully removed before validation and is absent from the final diff.
+
+## Final result
+
+passed
+
+
+---
+
 # Funnel Autonomous-Execution Conversion QA
 
 ## Visual thesis

@@ -154,36 +154,36 @@ function ServeAtScaleVisual(props: { instance?: string } = {}) {
 const STEPS = [
   {
     number: "01",
-    title: "Build your community",
-    description: "Bring your people, conversations, and resources into one shared place.",
-    visual: <BuildCommunityVisual />,
-  },
-  {
-    number: "02",
     title: "Train your AI",
-    description: "Seed it with your content, calls, and best answers so it learns how you think.",
+    description: "Teach it your frameworks, SOPs, content, calls, and best answers so it works the way you do.",
     visual: <TrainAiVisual />,
   },
   {
+    number: "02",
+    title: "Onboard your clients",
+    description: "Give every client one place to access your program, resources, and autonomous support.",
+    visual: <BuildCommunityVisual />,
+  },
+  {
     number: "03",
-    title: "Execute for every member",
-    description: "Give every member an autonomous agent that coaches, supports, and helps complete the work whenever they need it.",
+    title: "Execute for everyone",
+    description: "Coach, support, and help complete the work for every client—whenever they need it.",
     visual: <ServeAtScaleVisual />,
   },
 ] as const;
 
-const PROBLEMS = [
+const OUTCOMES = [
   {
-    title: "Coach every member individually",
-    description: "Ground every answer in your content and methodology, then help each member diagnose the next step and move forward without waiting for office hours.",
+    title: "Every client gets your best thinking",
+    description: "Give each client personalized guidance grounded in your frameworks, content, and standards—without answering the same questions repeatedly.",
   },
   {
-    title: "Turn repeatable support into execution",
-    description: "Help members apply your frameworks, draft deliverables, review their work, and complete repeatable tasks through an agent operating from the same playbook.",
+    title: "Turn your methodology into execution",
+    description: "Move beyond advice. Help clients apply your process, create deliverables, review their work, and complete repeatable tasks.",
   },
   {
-    title: "Make every useful outcome compound",
-    description: "Successful answers, conversations, resources, and results become shared intelligence the system can find and reuse for the next member.",
+    title: "Grow capacity without growing headcount",
+    description: "Every useful answer, deliverable, and result becomes shared intelligence Polynet can reuse—helping you serve more clients without building a larger support team.",
   },
 ] as const;
 
@@ -210,27 +210,27 @@ function ProductLedVsl() {
         >
           <span className="vsl-preview-meta">2:39 product overview</span>
           <span className="vsl-preview-scenes" aria-hidden="true">
-            <span className="vsl-preview-scene vsl-preview-scene-build">
-              <span className="vsl-preview-copy">
-                <span className="vsl-preview-step">01 · Build</span>
-                <strong>Give your expertise a home.</strong>
-                <span>Bring your people, conversations, and resources together.</span>
-              </span>
-              <span className="vsl-preview-visual"><BuildCommunityVisual instance="vsl" /></span>
-            </span>
             <span className="vsl-preview-scene vsl-preview-scene-train">
               <span className="vsl-preview-copy">
-                <span className="vsl-preview-step">02 · Train</span>
-                <strong>Teach an AI how you think.</strong>
-                <span>Turn your content, calls, and best answers into working intelligence.</span>
+                <span className="vsl-preview-step">01 · Train</span>
+                <strong>Teach an AI how you work.</strong>
+                <span>Turn your frameworks, calls, and best answers into working intelligence.</span>
               </span>
               <span className="vsl-preview-visual"><TrainAiVisual instance="vsl" /></span>
+            </span>
+            <span className="vsl-preview-scene vsl-preview-scene-onboard">
+              <span className="vsl-preview-copy">
+                <span className="vsl-preview-step">02 · Onboard</span>
+                <strong>Give every client a place to succeed.</strong>
+                <span>Bring your program, resources, conversations, and autonomous support together.</span>
+              </span>
+              <span className="vsl-preview-visual"><BuildCommunityVisual instance="vsl" /></span>
             </span>
             <span className="vsl-preview-scene vsl-preview-scene-execute">
               <span className="vsl-preview-copy">
                 <span className="vsl-preview-step">03 · Execute</span>
-                <strong>Serve every member at once.</strong>
-                <span>Coach, support, and help complete the work whenever they need it.</span>
+                <strong>Put your process to work for everyone.</strong>
+                <span>Coach, support, and help complete the work for every client, whenever they need it.</span>
               </span>
               <span className="vsl-preview-visual"><ServeAtScaleVisual instance="vsl" /></span>
             </span>
@@ -264,9 +264,9 @@ export function ConversionLanding({ onJoin }: JoinProps) {
         <Brand />
         <main>
           <div className="intro">
-            <p className="intro-kicker">For community builders, coaches, course creators, and agencies</p>
+            <p className="intro-kicker">For coaches, consultants, and agency owners</p>
             <h1>The autonomous client success platform.</h1>
-            <p className="subhead">Keep running your community, coaching program, course, or agency the way you do now. Train Polynet on how you think, then let it coach, support, and execute for every member or client—all at once.</p>
+            <p className="subhead">Train Polynet on how you think and work. Then onboard your clients and let it coach, support, and execute for all of them—at once.</p>
           </div>
 
           <ProductLedVsl />
@@ -276,7 +276,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             <p className="microcopy">{OFFER_META}</p>
           </div>
 
-          <section className="mechanism" aria-label="What Polynet Builder helps you do">
+          <section className="mechanism" aria-label="How Polynet helps you serve clients">
             <p className="mechanism-title">How Polynet works</p>
             <div className="mechanism-grid">
               {STEPS.map((step) => (
@@ -294,27 +294,26 @@ export function ConversionLanding({ onJoin }: JoinProps) {
 
           <section className="problems" aria-labelledby="problems-title">
             <div className="problems-intro">
-              <p className="problems-kicker">Built to compound</p>
-              <h2 id="problems-title">Your community should get easier to run as it grows.</h2>
-              <p className="problems-lead">Most platforms create more administration as they grow. Polynet turns your expertise into a service layer that can coach, support, and help complete the work for everyone.</p>
+              <p className="problems-kicker">Built for leverage</p>
+              <h2 id="problems-title">Serve more clients without becoming the bottleneck.</h2>
+              <p className="problems-lead">Your expertise is what clients pay for. Polynet turns it into an autonomous service layer that keeps every client moving—even when you’re not in the room.</p>
             </div>
             <div className="problem-list">
-              {PROBLEMS.map((problem, index) => (
-                <article className="problem" key={problem.title}>
+              {OUTCOMES.map((outcome, index) => (
+                <article className="problem" key={outcome.title}>
                   <span className="problem-index">{String(index + 1).padStart(2, "0")}</span>
-                  <h3>{problem.title}</h3>
-                  <p>{problem.description}</p>
+                  <h3>{outcome.title}</h3>
+                  <p>{outcome.description}</p>
                 </article>
               ))}
             </div>
           </section>
 
           <section className="closing" aria-labelledby="closing-title">
-            <h2 id="closing-title">Build your community. Train your AI. Execute for every member.</h2>
-            <p className="closing-copy">Give your members a better home—and an agent grounded in how you think.</p>
+            <h2 id="closing-title">Train it once. Put it to work for every client.</h2>
+            <p className="closing-copy">Launch an autonomous client success system grounded in how you think, coach, and deliver results.</p>
             <button className="cta" type="button" onClick={onJoin}>Start with Polynet — $79/month</button>
             <p className="closing-meta">{OFFER_META}</p>
-            <p className="closing-terms">Paid memberships carry a 2.9% Polynet platform fee. Stripe processing fees are separate.</p>
           </section>
         </main>
 
