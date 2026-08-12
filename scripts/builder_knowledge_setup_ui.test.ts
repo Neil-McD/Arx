@@ -22,6 +22,13 @@ const overlayHostSource = readFileSync(
   resolve(process.cwd(), "apps/web/src/components/WebGlobalOverlayHost.tsx"),
   "utf8",
 );
+const stylesSource = readFileSync(
+  resolve(process.cwd(), "apps/web/src/styles/community-and-content.css"),
+  "utf8",
+);
+const knowledgeCardRule = stylesSource.match(
+  /\.builder-knowledge-setup-card\s*\{(?<body>[^}]*)\}/,
+)?.groups?.body ?? "";
 
 test("Builder knowledge setup is a required, non-dismissible step", () => {
   expect(source).toContain("Community setup · 2 of 2");
@@ -32,6 +39,14 @@ test("Builder knowledge setup is a required, non-dismissible step", () => {
   expect(source).not.toContain('aria-label="Close');
   expect(source).not.toContain("<main");
   expect(source).not.toContain("Build my resources");
+});
+
+test("Builder knowledge setup renders one modal surface without a legacy page shell", () => {
+  expect(source).toContain('className="builder-knowledge-setup-modal"');
+  expect(stylesSource).not.toMatch(/\.builder-knowledge-setup\s*\{[\s\S]*?min-height:\s*100(?:s)?vh/);
+  expect(knowledgeCardRule).toContain("width: 100%");
+  expect(knowledgeCardRule).toContain("display: grid");
+  expect(knowledgeCardRule).not.toMatch(/(?:background|border|border-radius):/);
 });
 
 test("Skip and ready-source continuation share the canonical completion command", () => {

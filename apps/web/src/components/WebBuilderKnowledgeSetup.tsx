@@ -74,7 +74,7 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
       descriptionId="builder-knowledge-setup-description"
       busy={controlsDisabled}
       size="wide"
-      className="builder-knowledge-setup"
+      className="builder-knowledge-setup-modal"
     >
       <section className="builder-knowledge-setup-card">
         <div className="builder-knowledge-setup-step">Community setup · 2 of 2</div>
