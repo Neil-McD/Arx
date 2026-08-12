@@ -1,14 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
 import {
+  buildCloudBuilderKnowledgeResources,
   completeCloudBuilderKnowledgeSetup,
-  listCloudPendingCommunityResourceBuilderChangesets,
 } from "../../../../shared/cloudCommunityAdminGateway";
-import type { AuthSession } from "../auth";
-import {
-  buildResourceChangesetCardFromPayload,
-  type ResourceChangesetCardModel,
-} from "../components/RuntimeResourceChangesetApprovalCards";
 
 type BuilderKnowledgeCommunity = {
   id: string;
@@ -22,61 +17,6 @@ type CommunityShellState = {
   communitySlug: string;
   communityTab: "resources";
 };
-
-export function useWebBuilderKnowledgeChangesetController(params: {
-  communityId: string | null;
-  session: AuthSession | null;
-  resumeEpoch: number;
-}) {
-  const [cards, setCards] = useState<ResourceChangesetCardModel[]>([]);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (!params.communityId || !params.session) {
-      setCards([]);
-      setError(null);
-      return;
-    }
-    let cancelled = false;
-    let pollId: number | null = null;
-    const readPendingChangeset = async () => {
-      try {
-        const rows = await listCloudPendingCommunityResourceBuilderChangesets<
-          AuthSession,
-          Record<string, unknown>
-        >({
-          session: params.session as AuthSession,
-          communityId: params.communityId as string,
-          limit: 1,
-        });
-        if (cancelled) return;
-        setCards(rows.flatMap((row, index) => {
-          const updatedAt = Date.parse(String(row.updated_at ?? ""));
-          const card = buildResourceChangesetCardFromPayload(
-            row,
-            Number.isFinite(updatedAt) ? updatedAt : index,
-          );
-          return card ? [card] : [];
-        }));
-        setError(null);
-      } catch (readError) {
-        if (cancelled) return;
-        console.warn("builder_knowledge_changeset_recovery_failed", readError);
-        setError("Polynet could not verify the resource draft yet.");
-      }
-    };
-    void readPendingChangeset();
-    pollId = window.setInterval(() => {
-      void readPendingChangeset();
-    }, 1_500);
-    return () => {
-      cancelled = true;
-      if (pollId !== null) window.clearInterval(pollId);
-    };
-  }, [params.communityId, params.resumeEpoch, params.session]);
-
-  return { cards, error };
-}
 
 export function useWebBuilderKnowledgeHydrationController<
   SessionT,
@@ -166,15 +106,20 @@ export function useWebBuilderKnowledgeCompletionController<
     communityTab: "chat";
   }) => void;
 }) {
-  return useCallback(async (): Promise<boolean> => {
+  return useCallback(async (mode: "skip" | "build"): Promise<boolean> => {
     const community = params.pendingCommunity;
     if (!community) return false;
     const session = await params.ensureSession();
     if (!session) return false;
-    const result = await completeCloudBuilderKnowledgeSetup({
-      session,
-      communityId: community.id,
-    });
+    const result = mode === "build"
+      ? await buildCloudBuilderKnowledgeResources({
+          session,
+          communityId: community.id,
+        })
+      : await completeCloudBuilderKnowledgeSetup({
+          session,
+          communityId: community.id,
+        });
     if (!result.ok) return false;
     params.setCommunities((current) => current.map((candidate) => (
       candidate.id === community.id

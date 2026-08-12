@@ -20,7 +20,6 @@ export function WebAgentLiveTurn(props: {
   renderMarkdown: (text: string) => ReactNode;
   fallbackLabel: string;
   variant: "dock" | "funnel";
-  onInitialResourcesApplied?: (communityId: string) => void;
 }): JSX.Element | null {
   const normalizedText = props.streamedText.trim();
   const timelineEvents = withoutSequencedAssistantText(props.events);
@@ -41,7 +40,6 @@ export function WebAgentLiveTurn(props: {
           renderReasoningMarkdown={props.renderMarkdown}
           showActiveIndicators={props.isActive}
           showThinkingFooter={!shouldRenderStreamedText}
-          onInitialResourcesApplied={props.onInitialResourcesApplied}
         />
       ) : props.isActive ? (
         <div className="web-agent-live-turn-status">

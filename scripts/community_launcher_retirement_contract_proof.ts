@@ -167,13 +167,23 @@ assert.match(funnel, /WebCommunityFunnelEditor/, "community funnel configuration
 
 assert.match(
   protectedResources,
-  /communityResourceSources|ingestCommunityResourceSources|createCommunityResourcePageDraftFromSource/,
+  /listCommunityLaunchKnowledgeSources[\s\S]*ingestCommunitySources/,
   "protected resource and ingestion authority must remain intact",
 );
 assert.match(
   protectedGateway,
-  /listCloudCommunityLaunchKnowledgeSources|ingestCloudCommunityLaunchKnowledgeSources|createCloudCommunityResourcePageDraftFromSource/,
+  /listCloudCommunityLaunchKnowledgeSources[\s\S]*ingestCloudCommunitySources/,
   "protected cloud resource gateway functions must remain intact for canonical resource surfaces",
+);
+assert.doesNotMatch(
+  protectedGateway,
+  /createCloudCommunityResourcePageDraftFromSource/,
+  "the retired one-source page copier must not remain callable from first-party cloud surfaces",
+);
+assert.match(
+  protectedResources,
+  /createCommunityResourcePageDraftFromSource = mutation\([\s\S]*community_resource_page_draft_from_source_retired/,
+  "the cached one-source copier address must fail closed in its canonical module",
 );
 
 console.log("PASS: community launcher frontend is retired and creation converges on the canonical modal");

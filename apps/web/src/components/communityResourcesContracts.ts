@@ -86,13 +86,6 @@ export type CommunityResourcesActions = {
     retryExisting?: boolean;
     onPhase?: (phase: CommunitySourceIntakePhase) => void;
   }) => Promise<CommunitySourceIntakeResult | null>;
-  handleBuildCommunityResources: (input: {
-    communityId: string;
-    readySources: Array<{
-      id: string;
-      ingestedAt: string | null;
-    }>;
-  }) => Promise<boolean>;
   resourceEditor: {
     editingResourceId: string | null;
     titleInput: string;

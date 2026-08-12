@@ -93,32 +93,6 @@ test("cached-client tombstones fail closed and never mutate legacy rows", async 
   const fixture = await createLegacyRows(t);
 
   await expect(
-    t.action(api.community.runCommunityWikiArchitectProposal, {
-      communityId: fixture.communityId,
-    }),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "community_wiki_architect_retired",
-  });
-  await expect(
-    t.mutation(api.community.applyCommunityWikiArchitectProposal, {
-      communityId: fixture.communityId,
-      proposal: {},
-    }),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "community_wiki_architect_retired",
-  });
-  await expect(
-    t.action(api.community.draftCommunityResourceContentFromSources, {
-      communityId: fixture.communityId,
-    }),
-  ).resolves.toMatchObject({
-    ok: false,
-    code: "community_wiki_architect_retired",
-  });
-
-  await expect(
     t.query(api.community.listCommunityAppMounts, {
       communityId: fixture.communityId,
     }),

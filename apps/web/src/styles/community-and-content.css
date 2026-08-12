@@ -9253,52 +9253,6 @@ button.chat-reply-quote:hover {
   font-size: 11px;
 }
 
-.knowledge-source-build-action {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  padding: 18px;
-  border: 1px solid color-mix(in srgb, var(--accent-gold) 24%, var(--border-default));
-  border-radius: 14px;
-  background: color-mix(in srgb, var(--accent-gold) 6%, var(--bg-card-alt));
-}
-
-.knowledge-source-build-action > div {
-  display: grid;
-  gap: 4px;
-}
-
-.knowledge-source-build-action strong {
-  color: var(--text-primary);
-  font-size: 13px;
-}
-
-.knowledge-source-build-action span {
-  color: var(--text-secondary);
-  font-size: 12px;
-  line-height: 1.45;
-}
-
-.knowledge-source-build-action button {
-  min-height: 42px;
-  flex: 0 0 auto;
-  border: 1px solid #fff;
-  border-radius: 11px;
-  background: #fff;
-  color: #0b0b0d;
-  padding: 0 16px;
-  font: inherit;
-  font-size: 12px;
-  font-weight: 800;
-  cursor: pointer;
-}
-
-.knowledge-source-build-action button:disabled {
-  opacity: 0.42;
-  cursor: not-allowed;
-}
-
 .builder-knowledge-setup {
   min-height: 100vh;
   min-height: 100svh;
@@ -10983,14 +10937,6 @@ button.chat-reply-quote:hover {
     width: 100%;
   }
 
-  .knowledge-source-build-action {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  .knowledge-source-build-action button {
-    width: 100%;
-  }
 }
 
 @media (hover: none) {

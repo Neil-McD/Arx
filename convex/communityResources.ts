@@ -42,7 +42,6 @@ import {
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
 } from "./communityCore";
-import { completeBuilderKnowledgeSetupForOwner } from "./communityBuilderKnowledgeSetupCore";
 import {
   revokeCommunityResourceMemoryProjection,
   syncCommunityResourceMemoryProjection,
@@ -2098,114 +2097,6 @@ export const backfillCommunityResourceModuleStatusesInternal = internalMutation(
     };
   },
 });
-
-function normalizeDraftLine(raw: string): string {
-  return raw.replace(/\s+/g, " ").trim();
-}
-
-function truncateDraftLine(raw: string, maxLength: number): string {
-  const value = normalizeDraftLine(raw);
-  if (value.length <= maxLength) return value;
-  return `${value.slice(0, maxLength - 3).trim()}...`;
-}
-
-function stripDraftBulletPrefix(raw: string): string {
-  return normalizeDraftLine(raw.replace(/^\s*(?:[-*+]\s+|\d+[.)]\s+|#{1,6}\s+)/, ""));
-}
-
-function uniqueDraftLines(lines: string[]): string[] {
-  const seen = new Set<string>();
-  const out: string[] = [];
-  for (const line of lines) {
-    const normalized = truncateDraftLine(line, 240);
-    if (normalized.length < 12) continue;
-    const key = normalized.toLowerCase();
-    if (seen.has(key)) continue;
-    seen.add(key);
-    out.push(normalized);
-  }
-  return out;
-}
-
-function extractDraftSummary(sourceBody: string): string {
-  const paragraphs = sourceBody
-    .split(/\n{2,}/)
-    .map((paragraph) => normalizeDraftLine(paragraph.replace(/\r?\n/g, " ")))
-    .filter((paragraph) => paragraph.length >= 24);
-  const firstParagraph = paragraphs[0] ?? "";
-  if (firstParagraph) return truncateDraftLine(stripDraftBulletPrefix(firstParagraph), 520);
-  return "Review the source and replace this with the durable takeaway members should remember.";
-}
-
-function extractDraftKeyIdeas(sourceBody: string): string[] {
-  const lines = sourceBody
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .filter(Boolean);
-  const bulletLines = uniqueDraftLines(
-    lines
-      .filter((line) => /^\s*(?:[-*+]\s+|\d+[.)]\s+)/.test(line))
-      .map(stripDraftBulletPrefix),
-  );
-  if (bulletLines.length > 0) return bulletLines.slice(0, 5);
-
-  const sentenceLines = uniqueDraftLines(
-    normalizeDraftLine(sourceBody)
-      .match(/[^.!?]+[.!?]+|[^.!?]+$/g)
-      ?.map(stripDraftBulletPrefix) ?? [],
-  );
-  return sentenceLines.slice(0, 5);
-}
-
-function buildPageDraftBodyFromSource(source: CommunityResourceLike): string {
-  const sourceBody = normalizeOptionalText(source.bodyMd, 10_000);
-  const sourceUrl = normalizeOptionalUrl(source.url);
-  const sourceFile = normalizeOptionalFileKey(source.fileKey);
-  const sourceLine = sourceUrl
-    ? `[Original source](${sourceUrl})`
-    : sourceFile
-      ? `Uploaded file: ${sourceFile}`
-      : source.title;
-  const summary = sourceBody
-    ? extractDraftSummary(sourceBody)
-    : "Review the source and replace this with the durable takeaway members should remember.";
-  const keyIdeas = sourceBody ? extractDraftKeyIdeas(sourceBody) : [];
-  const keyIdeaLines = keyIdeas.length > 0
-    ? keyIdeas.map((line) => `- ${line}`)
-    : [
-      "- Add the main idea.",
-      "- Add the most useful detail.",
-      "- Remove anything that should stay as raw source material.",
-    ];
-  const memberUse = sourceBody
-    ? "Use this page as the member-facing version of the source. Tighten the summary, remove private notes, then move it into a live module when the content is accurate."
-    : "Review the source, add the member-facing takeaway, then move it into a live module when the page is accurate.";
-  const sourceNotes = sourceBody
-    ? sourceBody
-    : "Review the original source and replace this note with the durable context members should reuse.";
-
-  return [
-    "## Summary",
-    "",
-    summary,
-    "",
-    "## Key Ideas",
-    "",
-    ...keyIdeaLines,
-    "",
-    "## How Members Should Use This",
-    "",
-    memberUse,
-    "",
-    "## Source Notes",
-    "",
-    sourceNotes,
-    "",
-    "## Source",
-    "",
-    sourceLine,
-  ].join("\n");
-}
 
 function boundedToolLimit(raw: unknown): number {
   const parsed = Math.floor(Number(raw ?? COMMUNITY_RESOURCE_DIRECTORY_TOOL_DEFAULT_LIMIT));
@@ -5295,44 +5186,6 @@ const COMMUNITY_RESOURCE_BUILDER_ACTIONABLE_STATUSES = [
   "approved",
 ] as const;
 
-function communityResourceBuilderChangesetIntent(args: {
-  communityId: unknown;
-  idempotencyKey?: string | null;
-}): "initial_community_resources" | null {
-  const idempotencyKey = String(args.idempotencyKey ?? "").trim();
-  const expectedPrefix =
-    `polynet:personal_agent:initial-community-resources:${String(args.communityId)}:`;
-  return idempotencyKey.startsWith(expectedPrefix)
-    ? "initial_community_resources"
-    : null;
-}
-
-async function completeInitialBuilderKnowledgeSetup(args: {
-  ctx: any;
-  changeset: CommunityResourceBuilderChangesetRow;
-  communityId: any;
-  userId: any;
-  nowMs: number;
-}): Promise<boolean> {
-  if (
-    communityResourceBuilderChangesetIntent({
-      communityId: args.communityId,
-      idempotencyKey: args.changeset.idempotencyKey,
-    }) !== "initial_community_resources"
-  ) {
-    return false;
-  }
-  const community = await args.ctx.db.get(args.communityId);
-  if (!community) throw new Error("community_not_found");
-  const { changed } = await completeBuilderKnowledgeSetupForOwner({
-    ctx: args.ctx,
-    community,
-    userId: args.userId,
-    nowMs: args.nowMs,
-  });
-  return changed;
-}
-
 function communityResourceBuilderChangesetExpiresAt(
   changeset: CommunityResourceBuilderChangesetRow,
 ): number {
@@ -5482,10 +5335,6 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
       }
       const existingPreview =
         buildCommunityResourceBuilderChangesetPreview(existingOperations);
-      const intent = communityResourceBuilderChangesetIntent({
-        communityId: args.communityId,
-        idempotencyKey: existing.idempotencyKey,
-      });
       return {
         ok: true,
         kind: "community_resource_builder_changeset_staged",
@@ -5500,7 +5349,6 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
         warning_count:
           getCommunityResourceBuilderPreflightIssueCount(existing.preflight),
         preflight: existing.preflight,
-        ...(intent ? { intent } : {}),
         deduped: true,
       };
     }
@@ -5549,10 +5397,6 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
       .expireCommunityResourceBuilderChangesetInternal,
     { changesetId: id },
   );
-  const intent = communityResourceBuilderChangesetIntent({
-    communityId: args.communityId,
-    idempotencyKey,
-  });
   return {
     ok: true,
     kind: "community_resource_builder_changeset_staged",
@@ -5566,7 +5410,6 @@ async function stageCommunityResourceBuilderChangesetCore(args: {
     preview_limit: preview.preview_limit,
     warning_count: getCommunityResourceBuilderPreflightIssueCount(preflight),
     preflight,
-    ...(intent ? { intent } : {}),
     deduped: false,
   };
 }
@@ -5673,10 +5516,6 @@ export const getCommunityResourceBuilderChangesetStatus = query({
     );
     const operations = normalizeCommunityResourceBuilderChangesetOperations(changeset.operations);
     const preview = buildCommunityResourceBuilderChangesetPreview(operations);
-    const intent = communityResourceBuilderChangesetIntent({
-      communityId: args.communityId,
-      idempotencyKey: changeset.idempotencyKey,
-    });
     return {
       ok: true,
       kind: "community_resource_builder_changeset_status",
@@ -5691,7 +5530,6 @@ export const getCommunityResourceBuilderChangesetStatus = query({
       approved_by_current_user: changeset.approvedByUserId
         ? String(changeset.approvedByUserId) === String(userId)
         : false,
-      ...(intent ? { intent } : {}),
       updated_at: toIsoString(changeset.updatedAt),
     };
   },
@@ -5732,10 +5570,6 @@ export const listPendingCommunityResourceBuilderChangesets = query({
           changeset.operations,
         );
         const preview = buildCommunityResourceBuilderChangesetPreview(operations);
-        const intent = communityResourceBuilderChangesetIntent({
-          communityId: args.communityId,
-          idempotencyKey: changeset.idempotencyKey,
-        });
         return {
           ok: true,
           kind: "community_resource_builder_changeset_pending",
@@ -5752,7 +5586,6 @@ export const listPendingCommunityResourceBuilderChangesets = query({
           approved_by_current_user: changeset.approvedByUserId
             ? String(changeset.approvedByUserId) === String(userId)
             : false,
-          ...(intent ? { intent } : {}),
           created_at: toIsoString(changeset.createdAt),
           updated_at: toIsoString(changeset.updatedAt),
         };
@@ -5978,14 +5811,6 @@ export const applyCommunityResourceBuilderChangeset = mutation({
       throw new Error("community_resource_changeset_not_found");
     }
     if (changeset.status === "applied") {
-      const builderKnowledgeSetupCompleted =
-        await completeInitialBuilderKnowledgeSetup({
-          ctx,
-          changeset,
-          communityId: args.communityId,
-          userId,
-          nowMs: Date.now(),
-        });
       const operations = normalizeCommunityResourceBuilderChangesetOperations(
         changeset.operations,
       );
@@ -6002,7 +5827,6 @@ export const applyCommunityResourceBuilderChangeset = mutation({
         preview_total_count: preview.total_count,
         preview_limit: preview.preview_limit,
         result: changeset.result ?? null,
-        builder_knowledge_setup_completed: builderKnowledgeSetupCompleted,
         deduped: true,
       };
     }
@@ -6055,14 +5879,6 @@ export const applyCommunityResourceBuilderChangeset = mutation({
       appliedAt: nowMs,
       appliedByUserId: userId,
     });
-    const builderKnowledgeSetupCompleted =
-      await completeInitialBuilderKnowledgeSetup({
-        ctx,
-        changeset,
-        communityId: args.communityId,
-        userId,
-        nowMs,
-      });
     return {
       ok: true,
       kind: "community_resource_builder_changeset_applied",
@@ -6075,7 +5891,6 @@ export const applyCommunityResourceBuilderChangeset = mutation({
       preview_total_count: preview.total_count,
       preview_limit: preview.preview_limit,
       result,
-      builder_knowledge_setup_completed: builderKnowledgeSetupCompleted,
       deduped: false,
     };
   },
@@ -10217,77 +10032,6 @@ export const saveCommunityResource = mutation({
   },
 });
 
-export const createCommunityResourcePageDraftFromSource = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    sourceResourceId: v.string(),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    const sourceResourceId = String(args.sourceResourceId ?? "").trim();
-    if (!sourceResourceId) throw new Error("community_source_resource_id_required");
-    const sourceRow = (await ctx.db.get(sourceResourceId as any)) as CommunityResourceLike | null;
-    const source = await hydrateCommunityResourceBody(ctx, sourceRow) ?? sourceRow;
-    if (!source) throw new Error("community_source_resource_not_found");
-    await requireCommunityManager({
-      ctx,
-      communityId: source.communityId,
-      userId: args.userId,
-    });
-    if (normalizeResourceRole(source.role) !== "source") {
-      throw new Error("community_source_resource_required");
-    }
-    if (!communityResourceSourceHasReadyText(source)) {
-      throw new Error("community_source_resource_not_ready");
-    }
-
-    const moduleId = await requireResourceModuleForRole({
-      ctx,
-      communityId: source.communityId,
-      moduleId: normalizeOptionalModuleId(source.moduleId),
-      role: "page",
-    });
-    const nowMs = Date.now();
-    const sortOrder = await getNextResourceSortOrder({
-      ctx,
-      communityId: source.communityId,
-      moduleId,
-    });
-    const id = await ctx.db.insert("communityResources" as any, {
-      communityId: source.communityId,
-      moduleId,
-      createdByUserId: args.userId,
-      type: "post",
-      role: "page",
-      status: "draft",
-      sourceResourceId: source._id,
-      title: source.title,
-      pinned: false,
-      sortOrder,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    const created = (await ctx.db.get(id as any)) as CommunityResourceLike | null;
-    if (!created) throw new Error("community_resource_create_failed");
-    await writeCommunityResourceBodyContent(ctx, {
-      communityId: source.communityId,
-      resourceId: created._id,
-      bodyMd: buildPageDraftBodyFromSource(source),
-      nowMs,
-      maxChars: 20_000,
-    });
-    const hydrated = await hydrateCommunityResourceBody(ctx, created) ?? created;
-    await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-    return await mapCommunityResourceRow(ctx, hydrated);
-  },
-});
-
 export const reorderCommunityResources = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -10466,5 +10210,19 @@ export const deleteCommunityResource = mutation({
     await deleteCommunityResourceBodyContent(ctx, resource._id);
     await ctx.db.delete(resource._id as any);
     return { ok: true };
+  },
+});
+
+// Cached clients may still call this retired one-source copier. Keep the
+// address fail-closed while all resource generation goes through the canonical
+// builder knowledge loop.
+export const createCommunityResourcePageDraftFromSource = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    sourceResourceId: v.string(),
+  },
+  handler: async () => {
+    throw new Error("community_resource_page_draft_from_source_retired");
   },
 });

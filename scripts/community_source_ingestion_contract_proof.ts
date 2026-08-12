@@ -411,10 +411,10 @@ assert.match(
   /const nextSourceIngestionKind = Object\.prototype\.hasOwnProperty\.call\(payload, "source_ingestion_kind"\)[\s\S]*fileChanged[\s\S]*urlChanged[\s\S]*normalizeResourceSourceIngestionKind\(\{[\s\S]*\.\.\.existing/,
   "generic resource edits should preserve existing integration ingestion kind unless the source payload changes",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /createCommunityResourcePageDraftFromSource[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*community_source_resource_not_ready/,
-  "page drafts from source should require ingested source text",
+  /buildPageDraftBodyFromSource/,
+  "source ingestion must not retain the obsolete one-source page copier",
 );
 assert.match(
   resources,

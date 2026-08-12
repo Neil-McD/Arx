@@ -11,6 +11,7 @@ export const COMMUNITY_INFERENCE_SURFACES = [
   "member_agent_dock",
   "community_agent_mention",
   "community_autonomous_cognition",
+  "community_setup_generation",
 ] as const;
 
 export type CommunityInferenceSurface = (typeof COMMUNITY_INFERENCE_SURFACES)[number];

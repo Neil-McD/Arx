@@ -26,7 +26,7 @@ const worker = read("convex/communityAgentServeWorker.ts");
 const autonomousRuntime = read("convex/communityAgentRuntime.ts");
 const memberRuntime = read("convex/runtimeAgentLoop.ts");
 const memberTurnHandlers = read("convex/runtimeTurnHandlers.ts");
-const communityFacade = read("convex/community.ts");
+const wikiArchitect = read("convex/communityWikiArchitect.ts");
 const communityAdminGateway = read("shared/cloudCommunityAdminGateway.ts");
 const modelCatalog = read("shared/modelCatalog.ts");
 const settings = read("apps/web/src/components/WebAccountSettingsSection.tsx");
@@ -71,9 +71,8 @@ assert.match(shared, /COMMUNITY_OWNER_FUNDED_MODEL_ID = "gpt-5\.6-luna"/);
 assert.doesNotMatch(shared, /LEGACY_BYOK|OWNER_INFERENCE_TERMS|FounderInferenceGrantStatus/);
 assert.match(
   shared,
-  /COMMUNITY_INFERENCE_SURFACES = \[[\s\S]*"member_agent_dock"[\s\S]*"community_agent_mention"[\s\S]*"community_autonomous_cognition"/,
+  /COMMUNITY_INFERENCE_SURFACES = \[[\s\S]*"member_agent_dock"[\s\S]*"community_agent_mention"[\s\S]*"community_autonomous_cognition"[\s\S]*"community_setup_generation"/,
 );
-assert.doesNotMatch(shared, /community_setup_generation/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_MONTHLY_PRICE_BASE_UNITS = 7_900/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COMMUNITIES = 1/);
@@ -107,9 +106,8 @@ assert.match(receiptSchema, /\.index\("by_receipt_key", \["receiptKey"\]\)/);
 assert.doesNotMatch(receiptSchema, /owner_api_key|founderGrantId|founderInferenceGrants/);
 assert.match(
   receiptSchema,
-  /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition/,
+  /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
 );
-assert.doesNotMatch(receiptSchema, /community_setup_generation/);
 assert.doesNotMatch(receiptSchema, /apiKey|encryptedSecret|prompt:|response:|toolOutput|costDollars/);
 
 assert.equal(existsSync(join(root, "convex/founderInferenceMigration.ts")), false);
@@ -343,18 +341,15 @@ assert.match(
 assert.match(autonomousRuntime, /modelId: fundingSession\.modelId/);
 assert.doesNotMatch(autonomousRuntime, /runChatgptNativeToolCompletion|fundingSession\.apiKeyOverride/);
 assert.match(autonomousRuntime, /settleCommunityInferenceFundingSession/);
+assert.match(wikiArchitect, /surface: "community_setup_generation"/g);
+assert.match(wikiArchitect, /receiptKey: `community_setup_generation:wiki_architect:\$\{requestId\}`/);
+assert.match(wikiArchitect, /receiptKey: `community_setup_generation:resource_writer:\$\{requestId\}`/);
+assert.match(wikiArchitect, /claimCommunityInferenceFundingSession/g);
+assert.match(wikiArchitect, /markCommunityInferenceFundingSessionProviderStarted/g);
+assert.match(wikiArchitect, /modelIdOverride: fundingSession\.modelId/g);
+assert.doesNotMatch(wikiArchitect, /fundingSession\.apiKeyOverride/);
 assert.doesNotMatch(communityAdminGateway, /runCommunityWikiArchitectProposal/);
 assert.doesNotMatch(communityAdminGateway, /draftCommunityResourceContentFromSources/);
-assert.equal(existsSync(join(root, "convex/communityWikiArchitect.ts")), false);
-assert.match(communityFacade, /community_wiki_architect_retired/);
-const retiredWikiFacade = communityFacade.slice(
-  communityFacade.indexOf("const COMMUNITY_WIKI_ARCHITECT_RETIRED_CODE"),
-  communityFacade.indexOf("// Cached clients may still invoke the retired third-party MCP names"),
-);
-assert.doesNotMatch(
-  retiredWikiFacade,
-  /runAction|runMutation|runQuery|fetch\(|ctx\.db|generateText|runOpenAi|stageCommunityResourceBuilderChangeset/,
-);
 
 assert.doesNotMatch(settings, /Legacy API funding|legacy-eligible|Activate for eligible|Personal AI connection|API key/i);
 assert.doesNotMatch(settings, /GPT 5\.6|\bLuna\b/i);

@@ -3,12 +3,13 @@
 import { convexTest } from "convex-test";
 import { expect, test, vi } from "vitest";
 
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import schema from "./schema";
 
 const modules = import.meta.glob([
   "./communityAdmin.ts",
   "./communityBuilderKnowledgeSetup.ts",
+  "./communityWikiArchitect.ts",
   "./communityInteractions.ts",
   "./communityInteractionEvidence.ts",
   "./communityAgentConcierge.ts",
@@ -148,4 +149,92 @@ test("Builder knowledge completion is owner-only, active-only, and idempotent", 
   } finally {
     vi.useRealTimers();
   }
+});
+
+test("Builder knowledge build lease is exclusive and resumes from its durable stage", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: "builder-knowledge-owner" });
+  const nowMs = Date.now();
+
+  await expect(asOwner.mutation(
+    internal.communityBuilderKnowledgeSetup.claimBuilderKnowledgeBuildInternal,
+    {
+      communityId: fixture.pendingCommunityId,
+      leaseToken: "lease-one",
+      nowMs,
+    },
+  )).resolves.toMatchObject({ ok: true, complete: false, stage: "architecture" });
+
+  await expect(asOwner.mutation(
+    internal.communityBuilderKnowledgeSetup.claimBuilderKnowledgeBuildInternal,
+    {
+      communityId: fixture.pendingCommunityId,
+      leaseToken: "lease-two",
+      nowMs: nowMs + 1,
+    },
+  )).resolves.toMatchObject({ ok: false, code: "builder_knowledge_build_in_progress" });
+
+  await expect(asOwner.mutation(api.communityBuilderKnowledgeSetup.completeBuilderKnowledgeSetup, {
+    communityId: fixture.pendingCommunityId,
+  })).rejects.toThrow("builder_knowledge_build_in_progress");
+
+  await expect(t.mutation(
+    internal.communityBuilderKnowledgeSetup.applyBuilderKnowledgeArchitectureInternal,
+    {
+      communityId: fixture.pendingCommunityId,
+      userId: fixture.ownerId,
+      leaseToken: "lease-one",
+      proposal: {
+        run_type: "first",
+        modules_created: [],
+        modules_existing: [],
+        drafts_created: [],
+        drafts_updated: [],
+        pages_left_unchanged: [],
+        proposed_changes_to_existing: [],
+        sources_assigned: [],
+        sources_unassigned: [],
+        gaps: [],
+        deferred: [],
+        recommended_next_uploads: [],
+        needs_from_builder: [],
+      },
+      expectedSourceRevisions: [],
+      nowMs: nowMs + 2,
+    },
+  )).resolves.toMatchObject({ ok: true, stage: "content" });
+  await t.mutation(
+    internal.communityBuilderKnowledgeSetup.releaseBuilderKnowledgeBuildInternal,
+    {
+      communityId: fixture.pendingCommunityId,
+      leaseToken: "lease-one",
+      nowMs: nowMs + 3,
+    },
+  );
+
+  await expect(asOwner.mutation(
+    internal.communityBuilderKnowledgeSetup.claimBuilderKnowledgeBuildInternal,
+    {
+      communityId: fixture.pendingCommunityId,
+      leaseToken: "lease-three",
+      nowMs: nowMs + 4,
+    },
+  )).resolves.toMatchObject({ ok: true, complete: false, stage: "content" });
+
+  await expect(t.mutation(
+    internal.communityBuilderKnowledgeSetup.completeBuilderKnowledgeBuildInternal,
+    {
+      communityId: fixture.pendingCommunityId,
+      userId: fixture.ownerId,
+      leaseToken: "lease-three",
+      nowMs: nowMs + 5,
+    },
+  )).resolves.toMatchObject({ ok: true, changed: true });
+
+  const completedCommunity = await t.run((ctx) => ctx.db.get(fixture.pendingCommunityId));
+  expect(completedCommunity?.builderKnowledgeSetupPending).toBe(false);
+  expect(completedCommunity?.builderKnowledgeBuildStage).toBeUndefined();
+  expect(completedCommunity?.builderKnowledgeBuildLeaseToken).toBeUndefined();
+  expect(completedCommunity?.builderKnowledgeBuildLeaseExpiresAt).toBeUndefined();
 });

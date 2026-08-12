@@ -17,6 +17,7 @@ import * as communityLifecycle from "./communityLifecycle";
 import * as communityPublic from "./communityPublic";
 import * as communityResources from "./communityResources";
 import * as communitySkillAttachments from "./communitySkillAttachments";
+import * as communityWikiArchitect from "./communityWikiArchitect";
 import * as skillPackages from "./skillPackages";
 import {
   retiredAuthTypeValidator,
@@ -229,56 +230,15 @@ export const listOwnedSkillPackages = skillPackages.listOwnedSkillPackages;
 export const getCommunityLaunchSetupStatus =
   communityLaunchSetup.getCommunityLaunchSetupStatus;
 
+export const applyCommunityWikiArchitectProposal =
+  communityWikiArchitect.applyCommunityWikiArchitectProposal;
+export const draftCommunityResourceContentFromSources =
+  communityWikiArchitect.draftCommunityResourceContentFromSources;
+export const runCommunityWikiArchitectProposal =
+  communityWikiArchitect.runCommunityWikiArchitectProposal;
+
 // Cached clients may still invoke the retired third-party MCP names. Preserve
 // their validators and stable result shapes, but never perform I/O or writes.
-const COMMUNITY_WIKI_ARCHITECT_RETIRED_CODE = "community_wiki_architect_retired";
-const COMMUNITY_WIKI_ARCHITECT_RETIRED_MESSAGE =
-  "The legacy Wiki Architect is retired. Use the canonical Polynet resource builder.";
-
-function retiredCommunityWikiArchitectResult(kind: string) {
-  return {
-    ok: false as const,
-    kind,
-    code: COMMUNITY_WIKI_ARCHITECT_RETIRED_CODE,
-    message: COMMUNITY_WIKI_ARCHITECT_RETIRED_MESSAGE,
-  };
-}
-
-// Cached production clients may also invoke these retired Wiki Architect
-// names during the rollout window. They preserve validators and stable errors,
-// but never run inference or mutate resources.
-export const runCommunityWikiArchitectProposal = action({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    builderIntent: v.optional(v.union(v.string(), v.null())),
-    requestId: v.optional(v.string()),
-  },
-  handler: async () => retiredCommunityWikiArchitectResult("community_wiki_architect_proposal"),
-});
-
-export const applyCommunityWikiArchitectProposal = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    proposal: v.any(),
-  },
-  handler: async () => retiredCommunityWikiArchitectResult("community_wiki_architect_apply"),
-});
-
-export const draftCommunityResourceContentFromSources = action({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    limit: v.optional(v.number()),
-    requestId: v.optional(v.string()),
-  },
-  handler: async () => retiredCommunityWikiArchitectResult("community_resource_content_writer"),
-});
-
 export const listCommunityAppMounts = query({
   args: {
     authSubject: v.optional(v.string()),

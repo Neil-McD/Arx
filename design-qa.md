@@ -109,6 +109,46 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 
 final result: passed
 
+
+---
+
+# Funnel Autonomous-Execution Conversion QA
+
+## Visual thesis
+
+Carbon black, warm ivory, neutral silver, and one icy-blue intelligence signal. The existing composition stays intact while the VSL first impression becomes a quiet product-led motion sequence rather than a talking-head thumbnail.
+
+## Scope
+
+- Preserve the live section order, widths, responsive grid, checkout action, legal/footer content, and underlying Vimeo asset.
+- Bridge the existing community/coaching paradigm to autonomous client success in the subhead.
+- Make the current value rows describe concrete coaching and execution outcomes.
+- Align the public offer with the canonical one-community Builder contract without exposing internal model or cost-control details.
+- Increase mid-page diagram legibility and localized light without introducing purple, cards, or a second accent.
+
+## Browser-rendered evidence
+
+- Desktop hero and product-led VSL cover: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/01-hero-vsl-build.jpg`
+- Desktop CTA and three-pillar mechanism: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/02-cta-mechanism.jpg`
+- Desktop autonomous-execution outcomes: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/03-autonomous-outcomes.jpg`
+- Mobile 390 x 844 iframe viewport: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/04-mobile-hero.jpg`
+- Activated Vimeo playback: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/05-vsl-playing.jpg`
+
+## Findings
+
+- The animated Build, Train, and Execute cover reads as a product overview before activation; the existing Vimeo VSL loads only after the explicit play action and begins playback successfully.
+- The visual hierarchy and page layout remain unchanged. The media frame retains the established width, aspect ratio, border, radius, and placement.
+- Desktop and 390 px mobile renders show no horizontal overflow. Mobile suppresses supporting scene copy while retaining the step, headline, diagram, duration, and play action.
+- The value rows now describe individual coaching, repeatable execution, and compounding shared intelligence instead of generic platform benefits.
+- The public offer now states one managed community and an included hosted-AI allowance without publishing the internal model label or raw-cost threshold.
+- Diagram structure and localized lighting are more legible while icy blue remains the only non-brand signal accent. Purple remains absent and dusty rose remains restricted to the wordmark/logo.
+- Focus semantics remain explicit for the VSL cover, iframe, CTA, and footer controls. Reduced-motion mode freezes the cover on its Build scene and suppresses decorative animation.
+- Browser console inspection after cover activation showed no warning or error entries. Vimeo exposed the expected pause, progress, volume, settings, picture-in-picture, and fullscreen controls.
+
+## Final result
+
+passed
+
 ## Resources course presentation addendum
 
 ### Evidence
@@ -423,3 +463,66 @@ The current production capture and implementation capture were combined in one s
 ## Final result
 
 passed
+
+
+---
+
+# Funnel Premium-Neutral Design QA
+
+## Source truth
+
+- Selected visual target: `/Users/neilmcdevitt/.codex/generated_images/019ff6af-246b-7f92-824e-b10b1b698dd6/exec-509e1220-816a-45f3-b2fb-eba00230b1bf.png`
+- Target pixels: 986 x 1596.
+- Required product constraint: preserve the existing funnel layout, hierarchy, copy, VSL, conversion path, and responsive behavior; change only color, lighting, surface, and material finish.
+- Implemented CSS: `apps/web/src/components/polynetLanding/ConversionLanding.css`.
+
+## Browser-rendered evidence
+
+- Full source/implementation comparison: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/09-source-implementation-full-comparison.png`
+- Focused hero comparison: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/10-source-implementation-hero-comparison.png`
+- Exact before/after viewport comparison: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/12-before-after-1280x720.png`
+- Desktop hero: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/02-premium-neutral-hero-1440x1024.png`
+- Desktop mechanism: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/03-premium-neutral-mechanism-1440x1024.png`
+- Desktop lower section: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/04-premium-neutral-lower-1440x1024.png`
+- Desktop closing conversion section: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/05-premium-neutral-closing-1440x1024.png`
+- Mobile hero: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/06-premium-neutral-mobile-390x844.png`
+- Mobile mechanism: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-neutral-implementation/07-premium-neutral-mobile-mechanism-390x844.png`
+
+## Capture normalization
+
+- Desktop viewport override: 1440 x 1024 CSS pixels; browser content capture: 1429 x 1016 pixels; device density: 1.
+- Exact before/after viewport override: 1280 x 720 CSS pixels; implementation capture: 1269 x 714 pixels; device density: 1. The prior implementation capture is 1280 x 720; both are shown uncropped in the comparison board.
+- Mobile viewport override: 390 x 844 CSS pixels; browser content capture: 379 x 820 pixels; device density: 1.
+- The browser surface excludes its scrollbar/chrome from raster output. Layout and overflow assertions use the live CSS viewport values rather than inferring them from raster dimensions.
+- State: anonymous public landing page rendered through an isolated local QA entry with the production component and stylesheet. The CTA handler was a no-op so checkout could not be invoked during visual testing.
+
+## Findings
+
+- No actionable P0, P1, or P2 mismatch remains.
+- Fonts and typography: the existing Sora/Inter system, weights, wrapping, hierarchy, antialiasing, and type measures are unchanged. The implementation retains the live layout as explicitly required instead of adopting the generated target's compressed vertical scale.
+- Spacing and layout rhythm: widths, grids, section order, margins, padding, radii, breakpoints, and sticky behavior are unchanged. The 1280 x 720 before/after board confirms that the visual upgrade does not recompose the hero.
+- Colors and visual tokens: the canvas is carbon black; text is warm ivory/stone; borders and diagram intelligence are neutral silver; icy blue is the only non-brand signal accent. Purple is absent. Dusty rose is restricted to the Polynet wordmark period and supplied logo asset.
+- Elevation and polish: the VSL has a controlled silver edge, neutral depth shadow, and restrained icy-blue atmospheric spill. The CTA remains the highest-contrast conversion element. The closing section has localized light without becoming a card.
+- Image quality and assets: the supplied Polynet logo and existing Vimeo VSL are unchanged, sharp, correctly cropped, and retain their native controls. No placeholder, generated replacement, or code-drawn asset was introduced.
+- Copy and content: all approved autonomous client-success copy, the three pillars, pricing, fee disclosure, and legal/footer content are unchanged.
+- Responsiveness: desktop and 390 px mobile captures show no horizontal overflow. Mobile preserves the existing single-column mechanism and full-width CTA.
+- Accessibility and interaction: the primary CTA remained enabled, the local no-op activation did not navigate, keyboard focus produced a 2 px cream outline, and reduced-motion behavior remains present in the unchanged media query.
+- Console: no warning or error entries were present after render, responsive checks, and CTA interaction.
+
+## Comparison history
+
+1. First source/implementation comparison: no P0, P1, or P2 defects were found. The generated visual target and implementation share the approved black/ivory/silver/blue material direction; the implementation intentionally preserves the live layout rather than copying the mock's compressed page geometry.
+2. Focused hero and exact before/after comparisons: the VSL elevation, premium canvas, CTA hierarchy, and unchanged funnel composition passed. No post-capture corrective iteration was required.
+
+## Implementation checklist
+
+- [x] Preserve all layout, copy, VSL, pricing, and conversion behavior.
+- [x] Remove purple from the landing palette and contract.
+- [x] Restrict pink to the Polynet identity.
+- [x] Reintroduce premium depth through localized neutral and icy-blue light.
+- [x] Preserve desktop and mobile overflow behavior.
+- [x] Exercise CTA activation and keyboard focus without invoking checkout.
+- [x] Check the browser console.
+- [x] Compare source and browser implementation in the same visual inputs.
+
+final result: passed

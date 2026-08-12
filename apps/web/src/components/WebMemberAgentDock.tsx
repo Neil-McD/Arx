@@ -68,7 +68,7 @@ import type {
   ThreadStreamingRuntimeEvent,
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
-import { WebAgentLiveTurn } from "./WebAgentLiveTurn";
+import { RuntimeLiveTimeline } from "./RuntimeLiveTimeline";
 import {
   buildResourceChangesetCardFromPayload,
   extractRuntimeResourceChangesetCards,
@@ -122,7 +122,6 @@ export type WebMemberAgentDockProps = {
   canManageResources?: boolean;
   mobileShellActive?: boolean;
   onRequestOpen?: () => void;
-  onInitialResourcesApplied?: (communityId: string) => void;
   mobileRoot?: boolean;
   community: WebCommunityRecord | null;
   surfaceContext: MemberAgentSurfaceContextV1 | null;
@@ -177,6 +176,10 @@ function normalizeMessages(rows: CloudMessageTransportRow[]): MemberAgentMessage
         row.role === "user" || row.role === "assistant" || row.role === "system",
     )
     .sort((a, b) => a.seq - b.seq);
+}
+
+function hasSequencedAssistantText(events: ThreadStreamingRuntimeEvent[]): boolean {
+  return events.some((event) => event.event_type === "assistant_text_delta");
 }
 
 function formatInferenceIssue(issue: InferenceIssueModalState | null): string | null {
@@ -1222,6 +1225,8 @@ function WebMemberAgentDock(props, ref) {
   const hasCommunityIntelligence = Boolean(
     presentation.communityIntelligenceName,
   );
+  const shouldRenderStreamedText =
+    Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
   const liveResourceChangesetIds = new Set(
     extractRuntimeResourceChangesetCards(runtimeEvents).map(
@@ -1351,7 +1356,6 @@ function WebMemberAgentDock(props, ref) {
             <RuntimeResourceChangesetApprovalCards
               cards={persistentResourceChangesetCards}
               session={props.session}
-              onInitialResourcesApplied={props.onInitialResourcesApplied}
             />
           ) : null}
 
@@ -1369,16 +1373,30 @@ function WebMemberAgentDock(props, ref) {
             </div>
           ) : null}
 
-          <WebAgentLiveTurn
-            events={runtimeEvents}
-            streamedText={streamedText}
-            isActive={turnIsActive}
-            session={props.session}
-            renderMarkdown={renderMarkdown}
-            fallbackLabel={`Getting oriented in ${presentation.surfaceLabel}`}
-            variant="dock"
-            onInitialResourcesApplied={props.onInitialResourcesApplied}
-          />
+          {turnIsActive || shouldRenderStreamedText ? (
+            <div className="member-agent-dock-live-turn">
+              {runtimeEvents.length > 0 ? (
+                <RuntimeLiveTimeline
+                  events={runtimeEvents}
+                  session={props.session}
+                  renderReasoningMarkdown={renderMarkdown}
+                  showActiveIndicators={turnIsActive}
+                  showThinkingFooter={!shouldRenderStreamedText}
+                />
+              ) : turnIsActive ? (
+                <div className="member-agent-dock-reasoning">
+                  <LoaderCircle aria-hidden="true" />
+                  <span>Getting oriented in {presentation.surfaceLabel}</span>
+                </div>
+              ) : null}
+              {shouldRenderStreamedText ? (
+                <article className="member-agent-dock-message is-assistant is-streaming">
+                  {renderMarkdown(streamedText)}
+                  {turnIsActive ? <span className="member-agent-dock-caret" aria-hidden="true" /> : null}
+                </article>
+              ) : null}
+            </div>
+          ) : null}
 
           {dockError ? <p className="member-agent-dock-error">{dockError}</p> : null}
         </div>

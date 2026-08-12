@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Play } from "lucide-react";
 
 import {
   PRIVACY_AI_DATA_POLICY_ENTRY,
@@ -39,10 +40,11 @@ function Brain(props: { compact?: boolean } = {}) {
   return props.compact ? <g transform="scale(0.565)">{brain}</g> : brain;
 }
 
-function BuildCommunityVisual() {
+function BuildCommunityVisual(props: { instance?: string } = {}) {
+  const titleId = `community-visual-title-${props.instance ?? "mechanism"}`;
   return (
-    <svg viewBox="0 0 360 240" role="img" aria-labelledby="community-visual-title">
-      <title id="community-visual-title">Information moving through a founder-led community</title>
+    <svg viewBox="0 0 360 240" role="img" aria-labelledby={titleId}>
+      <title id={titleId}>Information moving through a founder-led community</title>
       <circle className="diagram-orbit" cx="180" cy="120" r="92" />
       <path className="diagram-line" d="M180 28 L180 120 L258 74 M180 120 L258 166 M180 120 L180 212 M180 120 L102 166 M180 120 L102 74" />
       <path className="diagram-line" d="M180 28 L258 74 L258 166 L180 212 L102 166 L102 74 Z" />
@@ -70,10 +72,11 @@ function BuildCommunityVisual() {
   );
 }
 
-function TrainAiVisual() {
+function TrainAiVisual(props: { instance?: string } = {}) {
+  const titleId = `knowledge-visual-title-${props.instance ?? "mechanism"}`;
   return (
-    <svg viewBox="0 0 360 240" role="img" aria-labelledby="knowledge-visual-title">
-      <title id="knowledge-visual-title">Founder-owned material flowing into an AI that becomes more knowledgeable</title>
+    <svg viewBox="0 0 360 240" role="img" aria-labelledby={titleId}>
+      <title id={titleId}>Founder-owned material flowing into an AI that becomes more knowledgeable</title>
       <g transform="translate(42 120)">
         <circle className="diagram-node" r="20" />
         <circle className="diagram-node-accent" cy="-5" r="5" />
@@ -112,10 +115,11 @@ function TrainAiVisual() {
   );
 }
 
-function ServeAtScaleVisual() {
+function ServeAtScaleVisual(props: { instance?: string } = {}) {
+  const titleId = `scale-visual-title-${props.instance ?? "mechanism"}`;
   return (
-    <svg viewBox="0 0 360 240" role="img" aria-labelledby="scale-visual-title">
-      <title id="scale-visual-title">A trained AI sending useful information to every community member</title>
+    <svg viewBox="0 0 360 240" role="img" aria-labelledby={titleId}>
+      <title id={titleId}>A trained AI sending useful information to every community member</title>
       <circle className="diagram-orbit" cx="180" cy="120" r="92" />
       <path className="diagram-line" d="M180 120 L180 28 M180 120 L258 74 M180 120 L258 166 M180 120 L180 212 M180 120 L102 166 M180 120 L102 74" />
       <g transform="translate(154 94)">
@@ -170,18 +174,76 @@ const STEPS = [
 
 const PROBLEMS = [
   {
-    title: "A platform people actually want to use",
-    description: "Simple enough to feel effortless. Flexible enough to feel alive. AI is built into the community from the beginning—not added as another disconnected tool.",
+    title: "Coach every member individually",
+    description: "Ground every answer in your content and methodology, then help each member diagnose the next step and move forward without waiting for office hours.",
   },
   {
-    title: "Grow without becoming the support team",
-    description: "Train your AI on your content, frameworks, and best answers. Members get help immediately, while you stop answering the same questions repeatedly.",
+    title: "Turn repeatable support into execution",
+    description: "Help members apply your frameworks, draft deliverables, review their work, and complete repeatable tasks through an agent operating from the same playbook.",
   },
   {
-    title: "Your AI gets smarter as your community grows",
-    description: "You provide the foundation. Useful answers, conversations, and outcomes become shared intelligence that is easier to find and reuse—without constantly creating, organizing, and updating more content.",
+    title: "Make every useful outcome compound",
+    description: "Successful answers, conversations, resources, and results become shared intelligence the system can find and reuse for the next member.",
   },
 ] as const;
+
+const OFFER_META = "$79/month for one managed community · Hosted AI allowance included · No technical setup";
+
+function ProductLedVsl() {
+  const [isPlaying, setIsPlaying] = useState(false);
+
+  return (
+    <div className={`vsl${isPlaying ? " is-playing" : ""}`}>
+      {isPlaying ? (
+        <iframe
+          src="https://player.vimeo.com/video/1216548030?autoplay=1&dnt=1&title=0&byline=0&portrait=0"
+          title="Polynet video sales letter"
+          allow="autoplay; fullscreen; picture-in-picture"
+          allowFullScreen
+        />
+      ) : (
+        <button
+          className="vsl-preview"
+          type="button"
+          onClick={() => setIsPlaying(true)}
+          aria-label="Play the 2 minute 39 second Polynet product overview"
+        >
+          <span className="vsl-preview-meta">2:39 product overview</span>
+          <span className="vsl-preview-scenes" aria-hidden="true">
+            <span className="vsl-preview-scene vsl-preview-scene-build">
+              <span className="vsl-preview-copy">
+                <span className="vsl-preview-step">01 · Build</span>
+                <strong>Give your expertise a home.</strong>
+                <span>Bring your people, conversations, and resources together.</span>
+              </span>
+              <span className="vsl-preview-visual"><BuildCommunityVisual instance="vsl" /></span>
+            </span>
+            <span className="vsl-preview-scene vsl-preview-scene-train">
+              <span className="vsl-preview-copy">
+                <span className="vsl-preview-step">02 · Train</span>
+                <strong>Teach an AI how you think.</strong>
+                <span>Turn your content, calls, and best answers into working intelligence.</span>
+              </span>
+              <span className="vsl-preview-visual"><TrainAiVisual instance="vsl" /></span>
+            </span>
+            <span className="vsl-preview-scene vsl-preview-scene-execute">
+              <span className="vsl-preview-copy">
+                <span className="vsl-preview-step">03 · Execute</span>
+                <strong>Serve every member at once.</strong>
+                <span>Coach, support, and help complete the work whenever they need it.</span>
+              </span>
+              <span className="vsl-preview-visual"><ServeAtScaleVisual instance="vsl" /></span>
+            </span>
+          </span>
+          <span className="vsl-preview-action">
+            <span className="vsl-preview-play"><Play aria-hidden="true" size={17} strokeWidth={2.2} /></span>
+            Watch how Polynet works
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
 
 function Brand() {
   return (
@@ -204,21 +266,14 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           <div className="intro">
             <p className="intro-kicker">For community builders, coaches, course creators, and agencies</p>
             <h1>The autonomous client success platform.</h1>
-            <p className="subhead">Train an AI on your expertise, methodology, content, and processes—then deploy it to coach, support, and execute for every member or client, all at once.</p>
+            <p className="subhead">Keep running your community, coaching program, course, or agency the way you do now. Train Polynet on how you think, then let it coach, support, and execute for every member or client—all at once.</p>
           </div>
 
-          <div className="vsl">
-            <iframe
-              src="https://player.vimeo.com/video/1216548030?dnt=1&title=0&byline=0&portrait=0"
-              title="Polynet video sales letter"
-              allow="autoplay; fullscreen; picture-in-picture"
-              allowFullScreen
-            />
-          </div>
+          <ProductLedVsl />
 
           <div className="conversion">
-            <button className="cta" type="button" onClick={onJoin}>Create your community — $79/month</button>
-            <p className="microcopy">$79/month per community · Polynet-hosted AI included · No technical setup</p>
+            <button className="cta" type="button" onClick={onJoin}>Start with Polynet — $79/month</button>
+            <p className="microcopy">{OFFER_META}</p>
           </div>
 
           <section className="mechanism" aria-label="What Polynet Builder helps you do">
@@ -241,7 +296,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
             <div className="problems-intro">
               <p className="problems-kicker">Built to compound</p>
               <h2 id="problems-title">Your community should get easier to run as it grows.</h2>
-              <p className="problems-lead">Most platforms create more administration, more repeated questions, and more content to maintain. Polynet turns growth into leverage.</p>
+              <p className="problems-lead">Most platforms create more administration as they grow. Polynet turns your expertise into a service layer that can coach, support, and help complete the work for everyone.</p>
             </div>
             <div className="problem-list">
               {PROBLEMS.map((problem, index) => (
@@ -257,8 +312,8 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           <section className="closing" aria-labelledby="closing-title">
             <h2 id="closing-title">Build your community. Train your AI. Execute for every member.</h2>
             <p className="closing-copy">Give your members a better home—and an agent grounded in how you think.</p>
-            <button className="cta" type="button" onClick={onJoin}>Create your community — $79/month</button>
-            <p className="closing-meta">$79/month per community · Polynet-hosted AI included · No technical setup</p>
+            <button className="cta" type="button" onClick={onJoin}>Start with Polynet — $79/month</button>
+            <p className="closing-meta">{OFFER_META}</p>
             <p className="closing-terms">Paid memberships carry a 2.9% Polynet platform fee. Stripe processing fees are separate.</p>
           </section>
         </main>

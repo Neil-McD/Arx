@@ -59,7 +59,6 @@ import type * as communityArchiveDocuments from "../communityArchiveDocuments.js
 import type * as communityAttention from "../communityAttention.js";
 import type * as communityBuilderAccessCore from "../communityBuilderAccessCore.js";
 import type * as communityBuilderKnowledgeSetup from "../communityBuilderKnowledgeSetup.js";
-import type * as communityBuilderKnowledgeSetupCore from "../communityBuilderKnowledgeSetupCore.js";
 import type * as communityCapabilityContext from "../communityCapabilityContext.js";
 import type * as communityChannelAudit from "../communityChannelAudit.js";
 import type * as communityChannelBackfill from "../communityChannelBackfill.js";
@@ -123,6 +122,7 @@ import type * as communitySkillAttachments from "../communitySkillAttachments.js
 import type * as communitySourceUrlPolicy from "../communitySourceUrlPolicy.js";
 import type * as communityText from "../communityText.js";
 import type * as communityTypingPresenceCore from "../communityTypingPresenceCore.js";
+import type * as communityWikiArchitect from "../communityWikiArchitect.js";
 import type * as creatorCommerce from "../creatorCommerce.js";
 import type * as criticalAudit from "../criticalAudit.js";
 import type * as crons from "../crons.js";
@@ -307,7 +307,6 @@ declare const fullApi: ApiFromModules<{
   communityAttention: typeof communityAttention;
   communityBuilderAccessCore: typeof communityBuilderAccessCore;
   communityBuilderKnowledgeSetup: typeof communityBuilderKnowledgeSetup;
-  communityBuilderKnowledgeSetupCore: typeof communityBuilderKnowledgeSetupCore;
   communityCapabilityContext: typeof communityCapabilityContext;
   communityChannelAudit: typeof communityChannelAudit;
   communityChannelBackfill: typeof communityChannelBackfill;
@@ -371,6 +370,7 @@ declare const fullApi: ApiFromModules<{
   communitySourceUrlPolicy: typeof communitySourceUrlPolicy;
   communityText: typeof communityText;
   communityTypingPresenceCore: typeof communityTypingPresenceCore;
+  communityWikiArchitect: typeof communityWikiArchitect;
   creatorCommerce: typeof creatorCommerce;
   criticalAudit: typeof criticalAudit;
   crons: typeof crons;

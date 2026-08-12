@@ -26,6 +26,8 @@ const resourcesPanel = read("apps/web/src/components/CommunityResourcesPanel.tsx
 const webCss = read("apps/web/src/index.css");
 const knowledgeSourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
 const builderKnowledgeSetup = read("apps/web/src/components/WebBuilderKnowledgeSetup.tsx");
+const builderKnowledgeSetupController = read("apps/web/src/controllers/useWebBuilderKnowledgeSetupController.ts");
+const builderKnowledgeSetupBackend = read("convex/communityBuilderKnowledgeSetup.ts");
 const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
 const resourceContracts = read("apps/web/src/components/communityResourcesContracts.ts");
 const app = read("apps/web/src/App.tsx");
@@ -275,50 +277,15 @@ assert.match(
   /backfillCommunityResourceModuleStatusesInternal[\s\S]*syncResourceMemoryProjectionsForModule/,
   "module status backfill must resync resource memory projections after canonicalizing visibility",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /createCommunityResourcePageDraftFromSource/,
-  "source inbox must be able to create a reviewed page draft",
+  /buildPageDraftBodyFromSource|extractDraftSummary|extractDraftKeyIdeas/,
+  "the obsolete one-source page copier must remain deleted",
 );
 assert.match(
   resources,
-  /createCommunityResourcePageDraftFromSource[\s\S]*requireCommunityManager/,
-  "source-to-page draft creation must be manager-gated",
-);
-assert.match(
-  resources,
-  /normalizeResourceRole\(source\.role\) !== "source"/,
-  "source-to-page draft creation must only accept source resources",
-);
-assert.match(
-  resources,
-  /role: "page"[\s\S]*status: "draft"/,
-  "source-to-page draft creation must create page drafts",
-);
-assert.match(
-  resources,
-  /sourceResourceId: source\._id/,
-  "source-to-page draft creation must persist lineage back to the source item",
-);
-assert.match(
-  resources,
-  /buildPageDraftBodyFromSource/,
-  "source-to-page draft creation must preserve source citation context",
-);
-assert.match(
-  resources,
-  /extractDraftSummary/,
-  "source-to-page draft creation must seed the draft summary from source material",
-);
-assert.match(
-  resources,
-  /extractDraftKeyIdeas/,
-  "source-to-page draft creation must seed useful draft bullets from source material",
-);
-assert.match(
-  resources,
-  /## How Members Should Use This/,
-  "source-to-page draft creation must include operator editing guidance",
+  /export const createCommunityResourcePageDraftFromSource = mutation\([\s\S]*community_resource_page_draft_from_source_retired/,
+  "the cached one-source copier address must remain a fail-closed tombstone",
 );
 assert.match(
   resourceController,
@@ -648,20 +615,40 @@ assert.match(
   /Seed your knowledge[\s\S]*Add and read sources/,
   "builder onboarding source intake must support canonical links and files",
 );
-assert.match(
+assert.doesNotMatch(
   knowledgeSourceIntake,
-  /readySources\.length > 0[\s\S]*Build my resources/,
-  "the shared source intake must preserve its explicit architect launch capability",
+  /Build my resources|onBuildResources|isBuildingResources/,
+  "source intake must not retain the retired agent-prompt resource launcher",
 );
 assert.doesNotMatch(
   builderKnowledgeSetup,
   /later from Resources/,
   "builder onboarding must not promise a source intake action removed from Resources",
 );
-assert.match(
+assert.doesNotMatch(
   resourceContracts,
-  /handleBuildCommunityResources:[\s\S]*communityId: string[\s\S]*readySources:/,
-  "resource launch must stay bound to one community and an explicit ready-source set",
+  /handleBuildCommunityResources/,
+  "resource contracts must expose no parallel onboarding build path",
+);
+assert.match(
+  builderKnowledgeSetupController,
+  /mode === "build"[\s\S]*buildCloudBuilderKnowledgeResources[\s\S]*completeCloudBuilderKnowledgeSetup/,
+  "Builder Next must use the canonical server build while Skip remains inference-free",
+);
+assert.match(
+  builderKnowledgeSetupBackend,
+  /claimBuilderKnowledgeBuildInternal[\s\S]*builderKnowledgeBuildLeaseToken[\s\S]*builder_knowledge_build_in_progress/,
+  "Builder resource generation must have one durable community-scoped lease",
+);
+assert.match(
+  builderKnowledgeSetupBackend,
+  /buildBuilderKnowledgeResources[\s\S]*runCommunityWikiArchitectProposal[\s\S]*applyBuilderKnowledgeArchitectureInternal[\s\S]*draftCommunityResourceContentFromSources[\s\S]*completeBuilderKnowledgeBuildInternal/,
+  "Builder Next must sequence the canonical Architect and Writer before completing onboarding",
+);
+assert.doesNotMatch(
+  builderKnowledgeSetupBackend,
+  /communityResourceBuilderChangesets|polynet_write|memberAgent/,
+  "canonical onboarding generation must not retain the agent changeset detour",
 );
 assert.match(
   resourceController,

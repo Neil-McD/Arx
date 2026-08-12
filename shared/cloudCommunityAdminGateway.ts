@@ -1,4 +1,3 @@
-import { api } from "../convex/_generated/api";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import {
   coerceGatewayRows,
@@ -1600,22 +1599,6 @@ export async function saveCloudCommunityResource<SessionT, TResult = unknown>(
   return payload as TResult;
 }
 
-export async function createCloudCommunityResourcePageDraftFromSource<SessionT, TResource = unknown>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    sourceResourceId: string;
-  },
-): Promise<TResource> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.mutation(
-    api.communityResources.createCommunityResourcePageDraftFromSource,
-    {
-      authSubject,
-      sourceResourceId: params.sourceResourceId,
-    } as any,
-  );
-  return payload as TResource;
-}
-
 export async function getCloudCommunityResourceBuilderChangesetStatus<SessionT, TResult = unknown>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -1852,6 +1835,30 @@ export async function completeCloudBuilderKnowledgeSetup<SessionT>(
       communityId: params.communityId,
     },
   ) as CloudBuilderKnowledgeSetupCompletion;
+}
+
+export type CloudBuilderKnowledgeBuildResult = {
+  ok: boolean;
+  kind: "builder_knowledge_build";
+  code?: string | null;
+  message?: string | null;
+  community_id?: string;
+  builder_knowledge_setup_pending?: false;
+};
+
+export async function buildCloudBuilderKnowledgeResources<SessionT>(
+  params: CloudCommunityAdminGatewayParams<SessionT> & {
+    communityId: string;
+  },
+): Promise<CloudBuilderKnowledgeBuildResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.action(
+    "communityBuilderKnowledgeSetup:buildBuilderKnowledgeResources" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+    },
+  ) as CloudBuilderKnowledgeBuildResult;
 }
 
 export type CloudCommunityArchiveResult = {
