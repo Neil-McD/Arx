@@ -287,8 +287,8 @@ assert.ok(
   "--surface-deep: #0d0f11;",
   "--surface-raised: #171a1d;",
   "--line: rgba(252, 248, 240, 0.08);",
-  "--line-default: rgba(214, 208, 198, 0.16);",
-  "--line-strong: rgba(214, 208, 198, 0.28);",
+  "--line-default: rgba(214, 208, 198, 0.21);",
+  "--line-strong: rgba(214, 208, 198, 0.32);",
   "--text: #fcf8f0;",
   "--muted: #bbb5ab;",
   "--quiet: #8d8982;",
@@ -323,6 +323,11 @@ assert.match(
   publicBuilderLandingCss,
   /\.pn-landing \.cta\s*\{[\s\S]*?background:\s*var\(--action\);[\s\S]*?color:\s*var\(--action-text\);/,
   "the public Builder CTA should use the canonical cream action treatment",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-landing \.vsl-preview\s*\{[\s\S]*?rgba\(123, 170, 214, 0\.13\)[\s\S]*?linear-gradient\(135deg, #0b0d0f/,
+  "the public Builder VSL cover should use the neutral material and attention-blue system",
 );
 assert.match(
   publicBuilderLandingCss,

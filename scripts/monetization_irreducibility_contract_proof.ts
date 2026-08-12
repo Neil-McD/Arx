@@ -228,8 +228,8 @@ assert.match(
 );
 
 // Public offer truth stays conceptual. Allowances, model versions, and cost controls are internal.
-assert.match(publicLanding, /\$79\/month per community/);
-assert.match(publicLanding, /Polynet-hosted AI included/);
+assert.match(publicLanding, /\$79\/month for one managed community/);
+assert.match(publicLanding, /Hosted AI allowance included/);
 assert.match(publicLanding, /2\.9% Polynet platform fee/);
 assert.match(publicLanding, /Stripe processing fees are separate/);
 assert.match(publicLanding, /(?:shared|collective) intelligence/i);

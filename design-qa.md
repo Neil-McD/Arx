@@ -109,6 +109,46 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 
 final result: passed
 
+
+---
+
+# Funnel Autonomous-Execution Conversion QA
+
+## Visual thesis
+
+Carbon black, warm ivory, neutral silver, and one icy-blue intelligence signal. The existing composition stays intact while the VSL first impression becomes a quiet product-led motion sequence rather than a talking-head thumbnail.
+
+## Scope
+
+- Preserve the live section order, widths, responsive grid, checkout action, legal/footer content, and underlying Vimeo asset.
+- Bridge the existing community/coaching paradigm to autonomous client success in the subhead.
+- Make the current value rows describe concrete coaching and execution outcomes.
+- Align the public offer with the canonical one-community Builder contract without exposing internal model or cost-control details.
+- Increase mid-page diagram legibility and localized light without introducing purple, cards, or a second accent.
+
+## Browser-rendered evidence
+
+- Desktop hero and product-led VSL cover: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/01-hero-vsl-build.jpg`
+- Desktop CTA and three-pillar mechanism: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/02-cta-mechanism.jpg`
+- Desktop autonomous-execution outcomes: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/03-autonomous-outcomes.jpg`
+- Mobile 390 x 844 iframe viewport: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/04-mobile-hero.jpg`
+- Activated Vimeo playback: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/conversion-pass-implementation/05-vsl-playing.jpg`
+
+## Findings
+
+- The animated Build, Train, and Execute cover reads as a product overview before activation; the existing Vimeo VSL loads only after the explicit play action and begins playback successfully.
+- The visual hierarchy and page layout remain unchanged. The media frame retains the established width, aspect ratio, border, radius, and placement.
+- Desktop and 390 px mobile renders show no horizontal overflow. Mobile suppresses supporting scene copy while retaining the step, headline, diagram, duration, and play action.
+- The value rows now describe individual coaching, repeatable execution, and compounding shared intelligence instead of generic platform benefits.
+- The public offer now states one managed community and an included hosted-AI allowance without publishing the internal model label or raw-cost threshold.
+- Diagram structure and localized lighting are more legible while icy blue remains the only non-brand signal accent. Purple remains absent and dusty rose remains restricted to the wordmark/logo.
+- Focus semantics remain explicit for the VSL cover, iframe, CTA, and footer controls. Reduced-motion mode freezes the cover on its Build scene and suppresses decorative animation.
+- Browser console inspection after cover activation showed no warning or error entries. Vimeo exposed the expected pause, progress, volume, settings, picture-in-picture, and fullscreen controls.
+
+## Final result
+
+passed
+
 ## Resources course presentation addendum
 
 ### Evidence
