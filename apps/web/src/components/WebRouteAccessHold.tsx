@@ -19,6 +19,7 @@ export function WebRouteAccessHold(props: {
   >;
   mainSurfaceHostProps: ComponentProps<typeof WebAppMainSurfaceFallback>;
   error: string | null;
+  errorMessage?: string;
   onRetry: () => void;
 }) {
   const shellChromeHostProps = props.shellChromeHostProps;
@@ -101,7 +102,7 @@ export function WebRouteAccessHold(props: {
 
       {props.error ? (
         <div className="web-route-access-hold-failure" role="alert">
-          <p>Polynet could not finish verifying your session.</p>
+          <p>{props.errorMessage ?? "Polynet could not finish verifying your session."}</p>
           <button type="button" onClick={props.onRetry}>
             Try again
           </button>

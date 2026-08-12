@@ -364,7 +364,7 @@ for (const protectedProjection of [
 }
 assert.match(
   routeAccessHold,
-  /Polynet could not finish verifying your session\.[\s\S]*Try again/,
+  /props\.errorMessage \?\? "Polynet could not finish verifying your session\."[\s\S]*Try again/,
   "a held route must expose visible, recoverable failure UI only after a real error",
 );
 assert.match(

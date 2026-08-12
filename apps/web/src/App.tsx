@@ -3019,6 +3019,7 @@ export default function App() {
         shellChromeHostProps={shellChromeHostProps}
         mainSurfaceHostProps={mainSurfaceHostProps}
         error={routeAdmissionError}
+        errorMessage={isPreviewAdmissionFailure ? previewAdmissionError ?? undefined : undefined}
         onRetry={retryRouteAdmission}
       />
     );

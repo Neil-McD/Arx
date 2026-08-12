@@ -8,8 +8,11 @@ import {
 } from "../shared/communityFunnel";
 import type { CommunityFunnelContentV2 } from "../shared/communityTypes";
 import {
+  normalizeSlug,
+  requireActiveCommunity,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
+  type CommunityLike,
 } from "./communityCore";
 import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 
@@ -251,6 +254,38 @@ export const getCommunityFunnelConfig = query({
     });
     return buildCommunityFunnelManagerConfig(
       await getCommunityFunnelRow(ctx, args.communityId),
+    );
+  },
+});
+
+/**
+ * Manager-only projection used by the isolated public-shape draft preview.
+ *
+ * The preview route is slug-addressed, but private draft state remains bound
+ * to the canonical community id and the existing manager authorization gate.
+ */
+export const getCommunityFunnelDraftPreview = query({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    slug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const slug = normalizeSlug(args.slug);
+    const community = (await ctx.db
+      .query("communities")
+      .withIndex("by_slug", (q) => q.eq("slug", slug))
+      .first()) as CommunityLike | null;
+    if (!community) throw new ConvexError({ code: "community_not_found" });
+    requireActiveCommunity(community);
+    await requireManager({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+      communityId: community._id,
+    });
+    return buildCommunityFunnelManagerConfig(
+      await getCommunityFunnelRow(ctx, community._id),
     );
   },
 });

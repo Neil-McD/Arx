@@ -131,6 +131,34 @@ test("default remains public until a manager explicitly publishes and activates 
   expect(custom.community?.funnel).not.toHaveProperty("draft_revision");
 });
 
+test("draft preview resolves by slug for managers and fails closed for members", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+
+  await asOwner.mutation(api.communityFunnel.saveCommunityFunnelDraft, {
+    communityId: fixture.communityId,
+    expectedDraftRevision: 0,
+    content: content("Private manager preview"),
+  });
+
+  await expect(
+    asOwner.query(api.communityFunnel.getCommunityFunnelDraftPreview, {
+      slug: "FUNNEL-AUTHORITY",
+    }),
+  ).resolves.toMatchObject({
+    draft_revision: 1,
+    draft_content_v2: { headline: "Private manager preview" },
+  });
+
+  await expect(
+    asMember.query(api.communityFunnel.getCommunityFunnelDraftPreview, {
+      slug: "funnel-authority",
+    }),
+  ).rejects.toThrow("community_forbidden");
+});
+
 test("manager authority, optimistic revisions, and publish idempotency fail closed", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
