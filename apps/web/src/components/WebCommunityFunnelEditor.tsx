@@ -803,7 +803,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               memberFaces={hydratedPreviewCommunity.member_faces_preview ?? []}
               renderModel={previewRenderModel}
               action={previewAction}
-              embedded
             />
           ) : (
             <div className="funnel-builder-preview-empty">

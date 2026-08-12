@@ -40,9 +40,9 @@ assert.match(
   "the custom draft must remain editable through the existing agent harness",
 );
 assert.match(
-  editor,
-  /<WebCommunityFunnelRenderer[\s\S]*embedded/,
-  "the builder preview must reuse the canonical renderer without nesting a second main landmark",
+  read("apps/web/src/components/WebCommunityFunnelRenderer.tsx"),
+  /<div className="community-funnel-layout" aria-labelledby=\{titleId\}>/,
+  "the canonical renderer must remain structurally neutral inside the route-owned main landmark",
 );
 assert.match(
   editor,
