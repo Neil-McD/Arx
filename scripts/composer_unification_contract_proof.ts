@@ -148,6 +148,11 @@ assert.match(
   /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\),[\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\) \{[^}]*border-color: color-mix\(in srgb, var\(--border-default\) 68%, transparent\);/,
   "desktop community composers should keep a quiet resting edge without masking drag-over feedback",
 );
+assert.match(
+  baseCss,
+  /:root\[data-theme="light"\][\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\),[\s\S]*:root\[data-theme="light"\][\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\) \{[^}]*border-color: var\(--stroke-panel-edge\);/,
+  "light desktop community composers should use the canonical structural edge without changing drag-over feedback",
+);
 assert.doesNotMatch(
   baseCss,
   /(?:\.community-member-chat \.chat-input-bar|\.community-dm-panel-composer):focus-within/,
