@@ -3986,8 +3986,8 @@
   margin-bottom: var(--community-thread-composer-bottom-offset, 0px);
 }
 
-/* Keep the scrolling layer cheap: a static layer behind each floating pill
-   softens content at the viewport edge without masking or repainting the feed. */
+/* Keep the scrolling layer cheap: reveal only a narrow under-scroll cue, then
+   make content effectively opaque before it reaches the floating composer. */
 .community-member-chat .community-interaction-main-composer::before,
 .community-member-chat .community-interaction-drawer-composer::before {
   content: "";
@@ -3996,12 +3996,13 @@
   bottom: 0;
   left: 0;
   z-index: -1;
-  height: calc(100% + 22px);
+  height: calc(100% + 18px);
   pointer-events: none;
   background: linear-gradient(
     to bottom,
     transparent 0,
-    color-mix(in srgb, var(--bg-workspace) 76%, transparent) 100%
+    color-mix(in srgb, var(--bg-workspace) 92%, transparent) 18px,
+    color-mix(in srgb, var(--bg-workspace) 94%, transparent) 100%
   );
 }
 

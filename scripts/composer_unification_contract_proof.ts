@@ -117,8 +117,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-main-composer::before,[\s\S]*\.community-member-chat \.community-interaction-drawer-composer::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 22px\);[\s\S]*linear-gradient\([\s\S]*var\(--bg-workspace\) 76%/,
-  "community and thread content should fade behind a static composer layer",
+  /\.community-member-chat \.community-interaction-main-composer::before,[\s\S]*\.community-member-chat \.community-interaction-drawer-composer::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 18px\);[\s\S]*linear-gradient\([\s\S]*var\(--bg-workspace\) 92%[\s\S]*18px,[\s\S]*var\(--bg-workspace\) 94%/,
+  "community and thread content should leave only a narrow cue before becoming opaque behind the composer",
 );
 assert.match(
   baseCss,
