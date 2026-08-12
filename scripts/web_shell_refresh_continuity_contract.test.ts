@@ -7,6 +7,36 @@ function read(path: string): string {
 }
 
 describe("web shell refresh continuity contract", () => {
+  it("keeps route admission inside one inert canonical shell", () => {
+    const app = read("apps/web/src/App.tsx");
+    const hold = read("apps/web/src/components/WebRouteAccessHold.tsx");
+    const fallback = read("apps/web/src/components/WebAppMainSurfaceFallback.tsx");
+    const communityBootstrap = read(
+      "apps/web/src/components/WebCommunityInteractionBootstrap.tsx",
+    );
+    const css = read("apps/web/src/index.css");
+
+    expect(app).not.toContain("Opening Polynet…");
+    expect(app).toMatch(
+      /if \(shouldHoldRouteForAccess\) \{[\s\S]*WebRouteAccessHold/,
+    );
+    expect(hold).toContain("WebShellChromeHost");
+    expect(hold).toContain("WebAppMainSurfaceFallback");
+    expect(hold).toContain("node.inert = true");
+    expect(hold).toContain('aria-busy={!props.error}');
+    expect(hold).toContain("quiet");
+    expect(hold).toContain("globalOverlays={null}");
+    expect(hold).toContain("railCommunities: []");
+    expect(hold).toContain("communityChannels: []");
+    expect(hold).toContain("memberFaces: []");
+    expect(fallback).toContain("quiet={props.quiet}");
+    expect(communityBootstrap).toMatch(
+      /!props\.quiet \? \([\s\S]*Opening community…[\s\S]*\) : null/,
+    );
+    expect(css).not.toContain(".landing-auth-hold-content");
+    expect(css).toContain(".web-route-access-hold-failure");
+  });
+
   it("never redirects an unresolved valid community route to Discover", () => {
     const app = read("apps/web/src/App.tsx");
 

@@ -1,7 +1,9 @@
 import type { WebAppMainSurfaceHostProps } from "./WebAppMainSurfaceHost";
 import { WebCommunityInteractionBootstrap } from "./WebCommunityInteractionBootstrap";
 
-export function WebAppMainSurfaceFallback(props: WebAppMainSurfaceHostProps) {
+export function WebAppMainSurfaceFallback(
+  props: WebAppMainSurfaceHostProps & { quiet?: boolean },
+) {
   const isCommunitySurface =
     !props.showPublicCommunityFunnel && props.activePage === "community";
 
@@ -18,7 +20,7 @@ export function WebAppMainSurfaceFallback(props: WebAppMainSurfaceHostProps) {
           <div className="community-chat community-member-chat">
             <div className="workspace-body chat-feed">
               <div className="community-interaction-scroll">
-                <WebCommunityInteractionBootstrap />
+                <WebCommunityInteractionBootstrap quiet={props.quiet} />
               </div>
             </div>
           </div>

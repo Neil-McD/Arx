@@ -176,6 +176,7 @@ import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommun
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebAppCompositionRoot } from "./components/WebAppCompositionRoot";
+import { WebRouteAccessHold } from "./components/WebRouteAccessHold";
 import { WebBuilderKnowledgeSetup } from "./components/WebBuilderKnowledgeSetup";
 import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
@@ -3087,34 +3088,19 @@ export default function App() {
   if (shouldHoldRouteForAccess) {
     const routeAdmissionError = authError ?? onboardingError;
     return (
-      <main
-        className="landing-auth-hold"
-        aria-busy={!routeAdmissionError}
-      >
-        <div className="landing-auth-hold-content">
-          <p role="status" aria-live="polite">
-            {routeAdmissionError
-              ? "Polynet could not finish verifying your session."
-              : "Opening Polynet…"}
-          </p>
-          {routeAdmissionError ? (
-            <button
-              type="button"
-              className="landing-auth-hold-retry"
-              onClick={() => {
-                if (authError) {
-                  window.location.reload();
-                  return;
-                }
-                setOnboardingError(null);
-                void refreshAccountSetupStatus();
-              }}
-            >
-              Try again
-            </button>
-          ) : null}
-        </div>
-      </main>
+      <WebRouteAccessHold
+        shellChromeHostProps={shellChromeHostProps}
+        mainSurfaceHostProps={mainSurfaceHostProps}
+        error={routeAdmissionError}
+        onRetry={() => {
+          if (authError) {
+            window.location.reload();
+            return;
+          }
+          setOnboardingError(null);
+          void refreshAccountSetupStatus();
+        }}
+      />
     );
   }
 
