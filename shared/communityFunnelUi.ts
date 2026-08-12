@@ -135,9 +135,9 @@ export function buildCommunityFunnelRenderModel(
   return {
     mode: "default",
     headline: cleanOptionalCopy(input.oneLiner) ?? input.communityName.trim(),
-    subheadline: cleanOptionalCopy(input.about),
+    subheadline: null,
     pillars: [],
-    longFormMarkdown: null,
+    longFormMarkdown: cleanOptionalCopy(input.about),
     vslUrl:
       input.funnel?.hero_media_kind === "video"
         ? cleanOptionalCopy(input.funnel?.hero_media_url)

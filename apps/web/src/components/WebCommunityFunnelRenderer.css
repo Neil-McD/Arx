@@ -63,9 +63,6 @@
   width: 44px;
   height: 44px;
   flex: 0 0 44px;
-  border: 1px solid var(--community-funnel-line);
-  border-radius: 12px;
-  background: var(--surface-card);
 }
 
 .community-funnel-hero {
@@ -286,9 +283,7 @@
 .community-funnel-renderer.is-default
   .community-funnel-layout
   > .community-funnel-member-proof {
-  margin-top: clamp(38px, 6vh, 58px);
-  border-top: 1px solid var(--community-funnel-line);
-  padding-top: 30px;
+  margin-top: 18px;
 }
 
 .community-funnel-conversion .community-funnel-action {

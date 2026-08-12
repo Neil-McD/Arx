@@ -26,9 +26,9 @@ describe("buildCommunityFunnelRenderModel", () => {
     ).toEqual({
       mode: "default",
       headline: "The operating room for builders.",
-      subheadline: "Work through real problems together.",
+      subheadline: null,
       pillars: [],
-      longFormMarkdown: null,
+      longFormMarkdown: "Work through real problems together.",
       vslUrl: null,
     });
   });

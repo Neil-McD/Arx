@@ -93,6 +93,21 @@ assert.doesNotMatch(
   /\.community-funnel-member-(?:faces|face|more|proof-row)\b/,
   "funnel surfaces must not recreate avatar holder or facepile CSS",
 );
+assert.match(
+  renderer,
+  /<CommunityAvatar[\s\S]*className="community-funnel-community-avatar"/,
+  "the funnel identity must use the canonical community avatar component",
+);
+assert.doesNotMatch(
+  rendererCss.match(/\.community-funnel-community-avatar\s*\{[\s\S]*?\}/)?.[0] ?? "",
+  /border|border-radius|background/,
+  "the funnel may size the canonical community avatar but must not recreate its holder styling",
+);
+assert.match(
+  renderProjection,
+  /mode:\s*"default"[\s\S]*subheadline:\s*null[\s\S]*longFormMarkdown:\s*cleanOptionalCopy\(input\.about\)/,
+  "the deterministic funnel must keep the one-liner in the hero and move About below conversion proof",
+);
 assert.match(memberProofCss, /\.community-funnel-member-proof-avatars[\s\S]*--member-avatar-stack-face-size/);
 assert.match(rendererCss, /var\(--surface-app\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
 assert.match(rendererCss, /@media \(prefers-reduced-motion: reduce\)/);

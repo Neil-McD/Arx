@@ -124,8 +124,10 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
 
         {media ? <section className="community-funnel-vsl community-funnel-reveal">{media}</section> : null}
 
-        {props.renderModel.mode === "custom" ? (
-          <FunnelAction action={props.action} position="primary" />
+        <FunnelAction action={props.action} position="primary" />
+
+        {props.renderModel.mode === "default" ? (
+          <ActionStatusCards action={props.action} />
         ) : null}
 
         {memberProof}
@@ -148,10 +150,12 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           </section>
         ) : null}
 
-        <section className="community-funnel-conversion">
-          <FunnelAction action={props.action} position="final" />
-          <ActionStatusCards action={props.action} />
-        </section>
+        {props.renderModel.mode === "custom" ? (
+          <section className="community-funnel-conversion">
+            <FunnelAction action={props.action} position="final" />
+            <ActionStatusCards action={props.action} />
+          </section>
+        ) : null}
       </div>
 
       {props.bridge ? (
