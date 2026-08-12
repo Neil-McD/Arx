@@ -1586,7 +1586,7 @@
   background: transparent;
 }
 
-/* The funnel composer is a bounded conversation beside the trusted Funnel V1
+/* The funnel composer is a bounded conversation beside the canonical funnel
    renderer. It never exposes arbitrary markup; publication and activation stay
    explicit, separate manager actions. */
 .community-funnel-panel.settings-panel {
@@ -1603,14 +1603,6 @@
   width: 100%;
   min-height: 0;
   height: 100%;
-}
-
-.funnel-builder-slot-switcher {
-  flex: 0 0 auto;
-  margin: 0 0 12px;
-}
-.funnel-builder-slot-switcher .platform-switcher-btn {
-  transition: color 140ms ease, opacity 140ms ease;
 }
 
 .funnel-builder-header {

@@ -143,36 +143,19 @@ describe("community channel routes", () => {
     });
   });
 
-  it("keeps the selected funnel slot in the full-preview route", () => {
-    expect(buildCommunityFunnelPreviewPath("polynet", "default")).toBe(
-      "/c/polynet/preview?slot=default",
-    );
-    expect(buildCommunityFunnelPreviewPath("polynet", "custom_2")).toBe(
-      "/c/polynet/preview?slot=custom_2",
+  it("uses one canonical full-preview route and ignores retired slot queries", () => {
+    expect(buildCommunityFunnelPreviewPath("polynet")).toBe(
+      "/c/polynet/preview",
     );
     vi.stubGlobal("window", {
       location: {
         pathname: "/c/polynet/preview",
-        search: "?slot=custom_2",
+        search: "?legacy=ignored",
       },
     });
     expect(readPublicRouteFromLocation()).toEqual({
       kind: "community_funnel_preview",
       slug: "polynet",
-      slot: "custom_2",
-    });
-  });
-
-  it("keeps legacy or malformed preview links on Funnel 1", () => {
-    vi.stubGlobal("window", {
-      location: {
-        pathname: "/c/polynet/preview",
-        search: "?slot=not-a-funnel",
-      },
-    });
-    expect(readPublicRouteFromLocation()).toMatchObject({
-      kind: "community_funnel_preview",
-      slot: "custom_1",
     });
   });
 

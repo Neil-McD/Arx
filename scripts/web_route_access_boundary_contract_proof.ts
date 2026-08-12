@@ -101,7 +101,7 @@ for (const [publicRoute, activePage, pathname] of [
   [{ kind: "app" }, "onboarding", "/onboarding"],
   [{ kind: "app" }, "community", "/c/polynet/chat"],
   [
-    { kind: "community_funnel_preview", slug: "polynet", slot: "custom_1" },
+    { kind: "community_funnel_preview", slug: "polynet" },
     "landing",
     "/c/polynet/preview",
   ],
@@ -219,7 +219,6 @@ for (const publicRoute of [
 const previewRoute: PublicRoute = {
   kind: "community_funnel_preview",
   slug: "polynet",
-  slot: "custom_1",
 };
 assert.deepEqual(project({ publicRoute: previewRoute }), {
   kind: "redirect_community_funnel",
