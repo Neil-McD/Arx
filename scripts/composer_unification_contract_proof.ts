@@ -138,6 +138,11 @@ assert.match(
   /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*border-radius: 18px;[\s\S]*\.community-member-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*border-radius: 18px;/,
   "main and thread community composers should share the same raised-shell shape",
 );
+assert.match(
+  baseCss,
+  /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar,[\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar \{[^}]*border-radius: 12px;[^}]*border-color: color-mix\(in srgb, var\(--border-default\) 55%, transparent\);[^}]*box-shadow: none;/,
+  "desktop community composers should use the memory preview's quiet bounded material",
+);
 assert.doesNotMatch(
   baseCss,
   /(?:\.community-member-chat \.chat-input-bar|\.community-dm-panel-composer):focus-within/,

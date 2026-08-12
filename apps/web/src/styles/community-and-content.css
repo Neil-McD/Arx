@@ -4035,6 +4035,22 @@
   border-radius: 18px;
 }
 
+/* Desktop community composers use the same quiet, bounded material language as
+   the memory preview: a tighter silhouette, a hairline edge, and no card-like
+   lift. Mobile keeps its larger one-row touch shape in the mobile overrides. */
+.app-root:not(.mobile-shell)
+  .community-member-chat
+  .community-interaction-main-composer
+  .chat-input-bar,
+.app-root:not(.mobile-shell)
+  .community-member-chat
+  .community-interaction-drawer-composer
+  .chat-input-bar {
+  border-radius: 12px;
+  border-color: color-mix(in srgb, var(--border-default) 55%, transparent);
+  box-shadow: none;
+}
+
 .community-composer-authoring-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
