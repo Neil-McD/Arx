@@ -72,10 +72,12 @@ export type WebCommunityFunnelRendererProps = {
   action: CommunityFunnelSurfaceAction;
   bridge?: WebCommunityBridgeCardProps | null;
   alertMessages?: string[];
+  embedded?: boolean;
 };
 
 export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProps) {
   const titleId = useId();
+  const LayoutRoot = props.embedded ? "div" : "main";
   const memberProof = (
     <CommunityFunnelMemberProof
       communityName={props.communityName}
@@ -92,7 +94,7 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
 
   return (
     <div className={`community-funnel-renderer is-${props.renderModel.mode}`}>
-      <main className="community-funnel-layout" aria-labelledby={titleId}>
+      <LayoutRoot className="community-funnel-layout" aria-labelledby={titleId}>
         <div className="community-funnel-ambient" aria-hidden="true" />
         <header className="community-funnel-identity community-funnel-reveal">
           <CommunityAvatar
@@ -152,7 +154,7 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           <FunnelAction action={props.action} position="final" />
           <ActionStatusCards action={props.action} />
         </section>
-      </main>
+      </LayoutRoot>
 
       {props.bridge ? (
         <WebBlockingSetupModal

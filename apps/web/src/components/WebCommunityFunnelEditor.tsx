@@ -803,6 +803,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               memberFaces={hydratedPreviewCommunity.member_faces_preview ?? []}
               renderModel={previewRenderModel}
               action={previewAction}
+              embedded
             />
           ) : (
             <div className="funnel-builder-preview-empty">
@@ -932,6 +933,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                 rows={3}
                 value={input}
                 maxLength={4_000}
+                aria-label="Describe the funnel or ask for a revision"
                 placeholder="Describe the funnel or ask for a revision…"
                 onChange={(event) => setInput(event.target.value)}
                 disabled={isBusy}

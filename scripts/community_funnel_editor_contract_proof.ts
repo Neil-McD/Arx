@@ -39,6 +39,16 @@ assert.match(
   /Describe the funnel or ask for a revision/,
   "the custom draft must remain editable through the existing agent harness",
 );
+assert.match(
+  editor,
+  /<WebCommunityFunnelRenderer[\s\S]*embedded/,
+  "the builder preview must reuse the canonical renderer without nesting a second main landmark",
+);
+assert.match(
+  editor,
+  /aria-label="Describe the funnel or ask for a revision"/,
+  "the funnel composer must expose an accessible name",
+);
 for (const operation of [
   "setCloudCommunityFunnelDraftVsl",
   "publishCloudCommunityFunnelDraft",
