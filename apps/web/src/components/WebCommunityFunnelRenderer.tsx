@@ -122,15 +122,22 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           </div>
         ) : null}
 
-        {media ? <section className="community-funnel-vsl community-funnel-reveal">{media}</section> : null}
-
-        <FunnelAction action={props.action} position="primary" />
-
         {props.renderModel.mode === "default" ? (
-          <ActionStatusCards action={props.action} />
+          <>
+            <FunnelAction action={props.action} position="primary" />
+            <ActionStatusCards action={props.action} />
+            {memberProof}
+          </>
         ) : null}
 
-        {memberProof}
+        {media ? <section className="community-funnel-vsl community-funnel-reveal">{media}</section> : null}
+
+        {props.renderModel.mode === "custom" ? (
+          <>
+            <FunnelAction action={props.action} position="primary" />
+            {memberProof}
+          </>
+        ) : null}
 
         {props.renderModel.pillars.length === 3 ? (
           <section className="community-funnel-pillars" aria-label="Community benefits">

@@ -44,22 +44,26 @@ assert.equal(
 
 const identity = renderer.indexOf('className="community-funnel-identity');
 const hero = renderer.indexOf('className="community-funnel-hero');
+const defaultPrimaryAction = renderer.indexOf('props.renderModel.mode === "default"');
+const defaultMemberProof = renderer.indexOf("{memberProof}", defaultPrimaryAction);
 const vsl = renderer.indexOf('className="community-funnel-vsl');
-const primaryAction = renderer.indexOf('position="primary"');
-const memberProofPlacement = renderer.indexOf("{memberProof}", primaryAction);
+const customPrimaryAction = renderer.indexOf('props.renderModel.mode === "custom"', vsl);
+const customMemberProof = renderer.indexOf("{memberProof}", customPrimaryAction);
 const pillars = renderer.indexOf('className="community-funnel-pillars');
 const longForm = renderer.indexOf('className="community-funnel-long-form');
 const conversion = renderer.indexOf('className="community-funnel-conversion');
 assert.ok(
   identity >= 0 &&
     identity < hero &&
-    hero < vsl &&
-    vsl < primaryAction &&
-    primaryAction < memberProofPlacement &&
-    memberProofPlacement < pillars &&
+    hero < defaultPrimaryAction &&
+    defaultPrimaryAction < defaultMemberProof &&
+    defaultMemberProof < vsl &&
+    vsl < customPrimaryAction &&
+    customPrimaryAction < customMemberProof &&
+    customMemberProof < pillars &&
     pillars < longForm &&
     longForm < conversion,
-  "the canonical renderer must keep identity, hero, VSL, primary action, member proof, pillars, narrative, and final conversion in order",
+  "the canonical renderer must keep default conversion above optional media while preserving the custom VSL conversion order",
 );
 assert.doesNotMatch(
   renderer.slice(conversion),
