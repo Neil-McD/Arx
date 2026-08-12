@@ -109,6 +109,49 @@ A separate crop was not needed because the matched 1201px full-view comparison k
 
 final result: passed
 
+---
+
+# Platform-Native Premium Funnel QA
+
+## Visual thesis
+
+Warm graphite precision: keep the existing linear conversion funnel, then rebuild its typography, lighting, surfaces, and motion from Polynet's canonical dark product theme without copying application chrome.
+
+## Browser-rendered evidence
+
+- Desktop hero and VSL: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-funnel-implementation/01-desktop-hero.png`
+- Desktop mechanism: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-funnel-implementation/02-desktop-mechanism.png`
+- Desktop leverage section: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-funnel-implementation/03-desktop-leverage.png`
+- Desktop closing conversion section: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-funnel-implementation/04-desktop-closing.png`
+- Mobile hero at 390 x 844: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-funnel-implementation/05-mobile-hero.png`
+- Mobile mechanism: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-funnel-implementation/06-mobile-mechanism.png`
+- Mobile leverage section: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/premium-funnel-implementation/07-mobile-leverage.png`
+
+## Findings
+
+- The page remains a direct funnel: positioning, dominant VSL, primary CTA, connected three-step mechanism, leverage section, and final CTA. No navigation rail, dashboard shell, fake product controls, new copy, or competing conversion path was introduced.
+- The public canvas now uses the platform's canonical `#111113`, `#1a1a1a`, `#222222`, `#2a2a2a`, `#3a3a3a`, and `#4a4a4a` graphite hierarchy with warm product text roles.
+- IBM Plex Sans now carries the complete funnel, removing the prior marketing-only Sora/Inter split and the external Google Fonts request.
+- Blue atmospheric washes, blue CTA shadows, and blue persistent diagram structure were removed. `#7baad6` remains only on moving particles and active signal pulses.
+- The VSL retains its dominant 16:9 placement and conversion behavior while using neutral product-panel depth, a warm top light, a stronger physical edge, and a restrained hover lift.
+- The mechanism is one continuous surface with three connected columns and shared dividers instead of three visually detached islands. Mobile converts those dividers into a clean vertical sequence.
+- The leverage section is one calm graphite plane with a clear left-to-right reading order. The existing sticky desktop introduction, copy, and content remain unchanged.
+- Desktop layout measured `1429px` client width and `1429px` scroll width. Mobile measured `379px` client width and `379px` scroll width. Neither state has horizontal overflow.
+- Desktop and mobile browser console checks returned no warnings or errors.
+- The existing focus-visible and reduced-motion contracts remain intact. View-linked section reveals are progressive enhancement and are explicitly disabled for reduced-motion users.
+
+## Verification
+
+- `npx tsx scripts/app_theme_contract_proof.ts`
+- `npm --prefix apps/web run typecheck`
+- `npm run build`
+- Desktop browser QA at 1440 x 1000.
+- Mobile browser QA at 390 x 844.
+
+## Final result
+
+passed
+
 
 ---
 

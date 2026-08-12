@@ -1,36 +1,54 @@
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@500;600;700&display=swap");
-
 .pn-landing {
-  /* Premium dark-locked marketing palette: neutral material, one signal accent. */
-  --bg: #08090a;
-  --surface-deep: #0d0f11;
-  --surface-raised: #171a1d;
-  --line: rgba(252, 248, 240, 0.08);
-  --line-default: rgba(214, 208, 198, 0.21);
-  --line-strong: rgba(214, 208, 198, 0.32);
+  /* The public funnel uses the same warm graphite material system as the product. */
+  --bg: #111113;
+  --surface-deep: #1a1a1a;
+  --surface-raised: #222222;
+  --surface-quiet: #171719;
+  --line: #2a2a2a;
+  --line-default: #3a3a3a;
+  --line-strong: #4a4a4a;
   --text: #fcf8f0;
-  --muted: #bbb5ab;
-  --quiet: #8d8982;
+  --muted: #b3ad9f;
+  --quiet: #9c968a;
   --action: #f1ede5;
   --action-text: #0a0a0a;
   --brand: #d66a8a;
   --attention: #7baad6;
-  --attention-soft: rgba(123, 170, 214, 0.14);
+  --attention-soft: rgba(123, 170, 214, 0.09);
   --metal: #d6d0c6;
   --content-narrow: 680px;
   --content-media: 900px;
   --content-wide: 1120px;
   min-width: 320px;
   min-height: 100svh;
-  background:
-    radial-gradient(52% 20% at 50% 7%, rgba(252, 248, 240, 0.055), transparent 74%),
-    radial-gradient(44% 18% at 50% 34%, rgba(123, 170, 214, 0.05), transparent 76%),
-    radial-gradient(42% 14% at 50% 92%, rgba(252, 248, 240, 0.028), transparent 78%),
-    var(--bg);
+  position: relative;
+  isolation: isolate;
+  background: var(--bg);
   color: var(--text);
-  font-family: "Inter", system-ui, sans-serif;
+  font-family: var(--font-sans, "IBM Plex Sans Variable", "IBM Plex Sans", system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   overflow-x: hidden;
+}
+
+.pn-landing::before {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0 0 auto;
+  height: min(760px, 76svh);
+  background:
+    radial-gradient(ellipse 42% 54% at 50% 8%, rgba(252, 248, 240, 0.085), transparent 72%),
+    linear-gradient(180deg, rgba(255, 255, 255, 0.012), transparent 64%);
+  pointer-events: none;
+}
+
+.pn-landing::after {
+  content: "";
+  position: absolute;
+  z-index: -1;
+  inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(252, 248, 240, 0.012) 50%, transparent);
+  pointer-events: none;
 }
 
 .pn-landing,
@@ -45,7 +63,7 @@
   width: min(1240px, calc(100% - 64px));
   min-height: 100svh;
   margin: 0 auto;
-  padding: 30px 0 40px;
+  padding: 28px 0 36px;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -56,9 +74,9 @@
   align-items: center;
   gap: 9px;
   color: var(--text);
-  font-family: "Sora", sans-serif;
-  font-size: 17px;
-  font-weight: 600;
+  font-size: 18px;
+  font-weight: 650;
+  letter-spacing: -0.025em;
   text-decoration: none;
 }
 
@@ -73,16 +91,16 @@
 .pn-landing main {
   width: 100%;
   margin: auto 0;
-  padding: 34px 0 20px;
+  padding: 48px 0 24px;
   text-align: center;
 }
 
 .pn-landing .intro-kicker {
-  margin: 0 auto 16px;
-  color: var(--attention);
+  margin: 0 auto 18px;
+  color: var(--muted);
   font-size: 11px;
   font-weight: 600;
-  letter-spacing: 0.12em;
+  letter-spacing: 0.14em;
   line-height: 1.5;
   text-transform: uppercase;
 }
@@ -90,21 +108,20 @@
 .pn-landing h1 {
   max-width: 940px;
   margin: 0 auto;
-  font-family: "Sora", sans-serif;
-  font-size: clamp(46px, 5.2vw, 70px);
-  font-weight: 700;
-  letter-spacing: -0.05em;
-  line-height: 1.02;
-  text-shadow: 0 18px 68px rgba(252, 248, 240, 0.045);
+  font-size: clamp(48px, 5.5vw, 76px);
+  font-weight: 680;
+  letter-spacing: -0.058em;
+  line-height: 0.99;
+  text-shadow: 0 22px 76px rgba(252, 248, 240, 0.055);
   text-wrap: balance;
 }
 
 .pn-landing .subhead {
   max-width: var(--content-narrow);
-  margin: 18px auto 0;
+  margin: 22px auto 0;
   color: var(--muted);
-  font-size: clamp(17px, 1.45vw, 19px);
-  line-height: 1.55;
+  font-size: clamp(17px, 1.5vw, 20px);
+  line-height: 1.52;
   text-wrap: balance;
 }
 
@@ -112,18 +129,29 @@
   display: block;
   position: relative;
   overflow: hidden;
-  width: min(var(--content-media), 100%);
+  width: min(960px, 100%);
   aspect-ratio: 16 / 9;
-  margin: 36px auto 0;
-  border: 1px solid var(--line-strong);
-  border-radius: 16px;
+  margin: 44px auto 0;
+  border: 1px solid var(--line-default);
+  border-radius: 18px;
   background:
-    radial-gradient(ellipse 54% 76% at 68% 50%, rgba(123, 170, 214, 0.1), transparent 72%),
-    linear-gradient(135deg, #0b0d0f 0%, #101419 52%, #090b0d 100%);
+    radial-gradient(ellipse 50% 80% at 70% 44%, rgba(252, 248, 240, 0.05), transparent 72%),
+    linear-gradient(135deg, #18181a 0%, #202022 52%, #171719 100%);
   box-shadow:
-    0 0 0 1px rgba(252, 248, 240, 0.045),
-    0 34px 96px -46px rgba(0, 0, 0, 0.98),
-    0 0 118px -54px rgba(123, 170, 214, 0.4);
+    0 0 0 1px rgba(252, 248, 240, 0.025),
+    0 36px 84px -42px rgba(0, 0, 0, 0.9),
+    0 72px 140px -94px rgba(252, 248, 240, 0.22);
+  transform: translateZ(0);
+  transition: border-color 300ms ease, box-shadow 300ms ease, transform 300ms ease;
+}
+
+.pn-landing .vsl:hover {
+  border-color: var(--line-strong);
+  box-shadow:
+    0 0 0 1px rgba(252, 248, 240, 0.04),
+    0 40px 92px -42px rgba(0, 0, 0, 0.94),
+    0 76px 150px -94px rgba(252, 248, 240, 0.28);
+  transform: translateY(-2px);
 }
 
 .pn-landing .vsl::after {
@@ -133,8 +161,8 @@
   inset: 0;
   border-radius: inherit;
   box-shadow:
-    inset 0 1px 0 rgba(252, 248, 240, 0.24),
-    inset 0 0 0 1px rgba(123, 170, 214, 0.045);
+    inset 0 1px 0 rgba(252, 248, 240, 0.18),
+    inset 0 0 0 1px rgba(252, 248, 240, 0.018);
   pointer-events: none;
 }
 
@@ -155,10 +183,10 @@
   padding: 0;
   border: 0;
   background:
-    linear-gradient(90deg, rgba(252, 248, 240, 0.018) 1px, transparent 1px),
-    linear-gradient(rgba(252, 248, 240, 0.014) 1px, transparent 1px),
-    radial-gradient(ellipse 42% 60% at 72% 50%, rgba(123, 170, 214, 0.13), transparent 72%),
-    linear-gradient(135deg, #0b0d0f 0%, #101419 55%, #090b0d 100%);
+    linear-gradient(90deg, rgba(252, 248, 240, 0.022) 1px, transparent 1px),
+    linear-gradient(rgba(252, 248, 240, 0.018) 1px, transparent 1px),
+    radial-gradient(ellipse 42% 66% at 72% 48%, rgba(252, 248, 240, 0.065), transparent 72%),
+    linear-gradient(135deg, #18181a 0%, #202022 54%, #171719 100%);
   background-size: 64px 64px, 64px 64px, auto, auto;
   color: var(--text);
   cursor: pointer;
@@ -171,8 +199,8 @@
   position: absolute;
   inset: 0;
   background:
-    radial-gradient(circle at 72% 48%, rgba(252, 248, 240, 0.07), transparent 18%),
-    linear-gradient(115deg, rgba(252, 248, 240, 0.025), transparent 38%);
+    radial-gradient(circle at 72% 48%, rgba(252, 248, 240, 0.09), transparent 19%),
+    linear-gradient(115deg, rgba(252, 248, 240, 0.038), transparent 38%);
   pointer-events: none;
 }
 
@@ -181,7 +209,7 @@
   z-index: 2;
   top: 27px;
   left: 30px;
-  color: color-mix(in srgb, var(--muted) 84%, var(--attention) 16%);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -218,7 +246,7 @@
 }
 
 .pn-landing .vsl-preview-step {
-  color: var(--attention);
+  color: var(--muted);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -228,8 +256,8 @@
 .pn-landing .vsl-preview-copy strong {
   max-width: 330px;
   margin-top: 13px;
-  font-family: "Sora", sans-serif;
   font-size: clamp(25px, 3.2vw, 38px);
+  font-weight: 650;
   letter-spacing: -0.045em;
   line-height: 1.08;
   text-wrap: balance;
@@ -248,7 +276,7 @@
   align-items: center;
   justify-content: center;
   min-width: 0;
-  filter: drop-shadow(0 22px 36px rgba(123, 170, 214, 0.14));
+  filter: drop-shadow(0 22px 36px rgba(0, 0, 0, 0.24));
 }
 
 .pn-landing .vsl-preview-visual svg {
@@ -283,7 +311,7 @@
   color: var(--action-text);
   box-shadow:
     0 12px 30px rgba(0, 0, 0, 0.48),
-    0 0 32px -16px rgba(123, 170, 214, 0.7);
+    0 0 0 1px rgba(252, 248, 240, 0.06);
 }
 
 .pn-landing .vsl-preview:hover .vsl-preview-action { transform: translateX(3px); }
@@ -302,14 +330,14 @@
   margin-top: 24px;
   padding: 0 32px;
   border: 1px solid var(--action);
-  border-radius: 14px;
+  border-radius: 12px;
   background: var(--action);
   color: var(--action-text);
   font-weight: 600;
   cursor: pointer;
   box-shadow:
-    0 14px 42px rgba(0, 0, 0, 0.48),
-    0 0 42px -24px rgba(123, 170, 214, 0.54);
+    0 14px 42px rgba(0, 0, 0, 0.42),
+    0 0 0 1px rgba(252, 248, 240, 0.08);
   transition: transform 180ms ease, background 180ms ease, box-shadow 180ms ease;
 }
 
@@ -317,8 +345,8 @@
   transform: translateY(-2px);
   background: #fff;
   box-shadow:
-    0 17px 46px rgba(0, 0, 0, 0.5),
-    0 0 48px -22px rgba(123, 170, 214, 0.58);
+    0 18px 48px rgba(0, 0, 0, 0.48),
+    0 0 0 1px rgba(252, 248, 240, 0.12);
 }
 
 .pn-landing .cta:disabled {
@@ -336,15 +364,18 @@
 
 .pn-landing .mechanism {
   width: min(var(--content-wide), 100%);
-  margin: 104px auto 0;
-  padding-top: 32px;
-  border-top: 1px solid var(--line);
-  background: radial-gradient(ellipse 34% 58% at 50% 46%, rgba(123, 170, 214, 0.055), transparent 76%);
+  margin: 116px auto 0;
+  padding: 30px 0 0;
+  border-top: 1px solid var(--line-default);
+  border-bottom: 1px solid var(--line);
+  background:
+    linear-gradient(180deg, rgba(252, 248, 240, 0.018), transparent 24%),
+    var(--surface-deep);
   text-align: left;
 }
 
 .pn-landing .mechanism-title {
-  margin: 0 0 38px;
+  margin: 0 34px 24px;
   color: var(--muted);
   font-size: 11px;
   font-weight: 600;
@@ -355,10 +386,18 @@
 .pn-landing .mechanism-grid {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: clamp(34px, 5vw, 72px);
+  gap: 0;
 }
 
-.pn-landing .mechanism-step { min-width: 0; }
+.pn-landing .mechanism-step {
+  min-width: 0;
+  padding: 18px 34px 44px;
+  border-left: 1px solid var(--line);
+  transition: background 260ms ease;
+}
+
+.pn-landing .mechanism-step:first-child { border-left: 0; }
+.pn-landing .mechanism-step:hover { background: rgba(252, 248, 240, 0.018); }
 
 .pn-landing .mechanism-copy {
   max-width: 330px;
@@ -369,7 +408,7 @@
 .pn-landing .problems-kicker,
 .pn-landing .problem-index {
   display: block;
-  color: var(--attention);
+  color: var(--quiet);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -378,8 +417,8 @@
 
 .pn-landing .mechanism-copy h2 {
   margin: 11px 0 0;
-  font-family: "Sora", sans-serif;
   font-size: clamp(22px, 2.1vw, 28px);
+  font-weight: 650;
   letter-spacing: -0.035em;
   line-height: 1.12;
   text-wrap: balance;
@@ -407,8 +446,11 @@
   width: 100%;
   max-width: 340px;
   height: auto;
-  filter: drop-shadow(0 18px 30px rgba(123, 170, 214, 0.1));
+  filter: drop-shadow(0 18px 30px rgba(0, 0, 0, 0.16));
+  transition: transform 320ms cubic-bezier(0.2, 0.72, 0.2, 1);
 }
+
+.pn-landing .mechanism-step:hover .mechanism-visual svg { transform: translateY(-4px); }
 
 .pn-landing .diagram-line,
 .pn-landing .diagram-line-accent {
@@ -422,7 +464,7 @@
 }
 
 .pn-landing .diagram-line-accent {
-  stroke: var(--attention);
+  stroke: var(--metal);
   stroke-width: 1.5;
 }
 
@@ -434,8 +476,8 @@
 }
 
 .pn-landing .diagram-node-accent {
-  fill: var(--attention);
-  stroke: color-mix(in srgb, var(--attention) 62%, var(--text) 38%);
+  fill: var(--metal);
+  stroke: color-mix(in srgb, var(--metal) 62%, var(--text) 38%);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
@@ -448,8 +490,8 @@
 }
 
 .pn-landing .diagram-ai {
-  fill: var(--attention-soft);
-  stroke: color-mix(in srgb, var(--metal) 42%, transparent);
+  fill: rgba(252, 248, 240, 0.055);
+  stroke: color-mix(in srgb, var(--metal) 46%, transparent);
   stroke-width: 1.4;
   vector-effect: non-scaling-stroke;
 }
@@ -506,7 +548,7 @@
 
 @keyframes pn-brain-learn {
   0%, 18%, 100% { stroke: rgba(255, 255, 255, 0.22); opacity: 0.42; }
-  32%, 72% { stroke: var(--attention); opacity: 1; }
+  32%, 72% { stroke: var(--metal); opacity: 1; }
 }
 
 @keyframes pn-signal-pulse {
@@ -517,14 +559,17 @@
 
 .pn-landing .problems {
   width: min(var(--content-wide), 100%);
-  margin: 148px auto 0;
+  margin: 120px auto 0;
+  padding: 72px 64px 62px;
   display: grid;
   grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
-  gap: clamp(72px, 8vw, 132px);
+  gap: clamp(64px, 7vw, 112px);
   align-items: start;
   background:
-    radial-gradient(ellipse 34% 46% at 18% 32%, rgba(252, 248, 240, 0.035), transparent 74%),
-    radial-gradient(ellipse 30% 34% at 82% 58%, rgba(123, 170, 214, 0.035), transparent 76%);
+    radial-gradient(ellipse 42% 50% at 16% 20%, rgba(252, 248, 240, 0.045), transparent 74%),
+    var(--surface-deep);
+  border-top: 1px solid var(--line-default);
+  border-bottom: 1px solid var(--line);
   text-align: left;
 }
 
@@ -538,8 +583,8 @@
 .pn-landing .problems-intro > h2 {
   max-width: 470px;
   margin: 0;
-  font-family: "Sora", sans-serif;
   font-size: clamp(32px, 4vw, 48px);
+  font-weight: 650;
   letter-spacing: -0.045em;
   line-height: 1.08;
   text-wrap: balance;
@@ -555,20 +600,26 @@
 
 .pn-landing .problem-list {
   margin: 0;
-  border-top: 1px solid var(--line);
+  border-top: 1px solid var(--line-default);
 }
 
 .pn-landing .problem {
   padding: 42px 0 46px;
   border-bottom: 1px solid var(--line);
+  transition: padding-left 220ms ease, border-color 220ms ease;
+}
+
+.pn-landing .problem:hover {
+  padding-left: 8px;
+  border-bottom-color: var(--line-default);
 }
 
 .pn-landing .problem-index { margin-bottom: 14px; }
 
 .pn-landing .problem h3 {
   margin: 0;
-  font-family: "Sora", sans-serif;
   font-size: clamp(22px, 2.25vw, 29px);
+  font-weight: 650;
   letter-spacing: -0.035em;
   line-height: 1.16;
   text-wrap: balance;
@@ -584,20 +635,21 @@
 
 .pn-landing .closing {
   width: min(var(--content-wide), 100%);
-  margin: 136px auto 16px;
-  padding: 88px 20px 72px;
-  border-top: 1px solid var(--line);
+  margin: 120px auto 16px;
+  padding: 96px 20px 82px;
+  border-top: 1px solid var(--line-default);
+  border-bottom: 1px solid var(--line);
   background:
-    radial-gradient(ellipse 42% 50% at 50% 76%, rgba(252, 248, 240, 0.052), transparent 74%),
-    radial-gradient(ellipse 36% 38% at 50% 80%, rgba(123, 170, 214, 0.045), transparent 78%);
+    radial-gradient(ellipse 46% 56% at 50% 72%, rgba(252, 248, 240, 0.065), transparent 74%),
+    linear-gradient(180deg, var(--surface-quiet), rgba(23, 23, 25, 0.42));
   text-align: center;
 }
 
 .pn-landing .closing h2 {
   max-width: 760px;
   margin: 0 auto;
-  font-family: "Sora", sans-serif;
   font-size: clamp(30px, 4vw, 46px);
+  font-weight: 650;
   letter-spacing: -0.045em;
   line-height: 1.08;
   text-wrap: balance;
@@ -619,7 +671,7 @@
   width: min(var(--content-wide), 100%);
   margin: 0 auto;
   padding: 30px 0 10px;
-  border-top: 1px solid var(--line);
+  border-top: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -666,12 +718,10 @@
 .pn-landing .footer-links a:hover,
 .pn-landing .footer-links button:hover { color: var(--text); }
 
-.pn-landing .intro { animation: pn-enter 650ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
-.pn-landing .vsl { animation: pn-enter 650ms 90ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
-.pn-landing .conversion { animation: pn-enter 650ms 160ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
-.pn-landing .mechanism { animation: pn-enter 650ms 220ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
-.pn-landing .problems { animation: pn-enter 650ms 290ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
-.pn-landing .closing { animation: pn-enter 650ms 350ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
+.pn-landing .brand { animation: pn-enter 620ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
+.pn-landing .intro { animation: pn-enter 680ms 70ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
+.pn-landing .vsl { animation: pn-enter 720ms 150ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
+.pn-landing .conversion { animation: pn-enter 680ms 220ms cubic-bezier(0.2, 0.72, 0.2, 1) both; }
 
 @keyframes pn-enter {
   from { opacity: 0; transform: translateY(14px); }
@@ -681,6 +731,21 @@
 @keyframes pn-vsl-scene {
   0%, 27% { opacity: 1; transform: translateY(0); }
   33%, 100% { opacity: 0; transform: translateY(-8px); }
+}
+
+@supports (animation-timeline: view()) {
+  .pn-landing .mechanism,
+  .pn-landing .problems,
+  .pn-landing .closing {
+    animation: pn-section-reveal linear both;
+    animation-timeline: view();
+    animation-range: entry 4% entry 26%;
+  }
+}
+
+@keyframes pn-section-reveal {
+  from { opacity: 0.36; transform: translateY(24px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .pn-builder-activation {
@@ -693,12 +758,12 @@
   transform: translateX(-50%);
   border: 1px solid rgba(214, 208, 198, 0.18);
   border-radius: 14px;
-  background: rgba(13, 15, 17, 0.98);
+  background: rgba(26, 26, 26, 0.98);
   color: #fcf8f0;
   box-shadow:
     0 18px 64px rgba(0, 0, 0, 0.62),
-    0 0 44px -28px rgba(123, 170, 214, 0.42);
-  font: 500 14px/1.45 "Inter", system-ui, sans-serif;
+    0 0 0 1px rgba(252, 248, 240, 0.025);
+  font: 500 14px/1.45 var(--font-sans, "IBM Plex Sans Variable", "IBM Plex Sans", system-ui, sans-serif);
   text-align: center;
   backdrop-filter: blur(14px);
 }
@@ -711,7 +776,6 @@
 
 @media (max-width: 900px) {
   .pn-landing .page { width: min(100% - 40px, 1240px); }
-  .pn-landing .mechanism-grid { gap: 28px; }
   .pn-landing .mechanism-copy { min-height: 84px; }
   .pn-landing .mechanism-visual { min-height: 185px; }
   .pn-landing .problems { grid-template-columns: 1fr; gap: 52px; }
@@ -742,15 +806,15 @@
   .pn-landing .vsl-preview-play svg { width: 13px; height: 13px; }
   .pn-landing .cta { width: 100%; padding: 0 14px; font-size: 15px; white-space: nowrap; }
   .pn-landing .mechanism { margin-top: 76px; padding-top: 26px; }
-  .pn-landing .mechanism-title { margin-bottom: 12px; }
+  .pn-landing .mechanism-title { margin: 0 0 12px; }
   .pn-landing .mechanism-grid { grid-template-columns: 1fr; gap: 0; }
-  .pn-landing .mechanism-step { padding: 40px 0 46px; border-bottom: 1px solid var(--line); }
+  .pn-landing .mechanism-step { padding: 40px 0 46px; border-left: 0; border-bottom: 1px solid var(--line); }
   .pn-landing .mechanism-copy { max-width: 520px; min-height: 0; }
   .pn-landing .mechanism-copy h2 { font-size: 27px; }
   .pn-landing .mechanism-description { max-width: 520px; font-size: 15px; line-height: 1.65; }
   .pn-landing .mechanism-visual { min-height: 0; margin: 25px 0 21px; }
   .pn-landing .mechanism-visual svg { width: min(100%, 330px); }
-  .pn-landing .problems { margin-top: 104px; gap: 38px; }
+  .pn-landing .problems { margin-top: 104px; padding: 54px 24px 38px; gap: 38px; }
   .pn-landing .problems-kicker { margin-bottom: 14px; }
   .pn-landing .problems-intro > h2 { font-size: 31px; }
   .pn-landing .problems-lead { margin-top: 18px; font-size: 15px; line-height: 1.65; }
@@ -775,6 +839,14 @@
 
   .pn-landing .diagram-particle,
   .pn-landing .diagram-signal { display: none; }
+
+  .pn-landing .mechanism,
+  .pn-landing .problems,
+  .pn-landing .closing {
+    animation: none !important;
+    opacity: 1;
+    transform: none;
+  }
 
   .pn-landing .brain-fold {
     animation: none;
