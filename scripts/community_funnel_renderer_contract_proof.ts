@@ -46,23 +46,25 @@ const identity = renderer.indexOf('className="community-funnel-identity');
 const hero = renderer.indexOf('className="community-funnel-hero');
 const defaultPrimaryAction = renderer.indexOf('props.renderModel.mode === "default"');
 const defaultMemberProof = renderer.indexOf("{memberProof}", defaultPrimaryAction);
-const vsl = renderer.indexOf('className="community-funnel-vsl');
-const customPrimaryAction = renderer.indexOf('props.renderModel.mode === "custom"', vsl);
+const customVsl = renderer.indexOf('props.renderModel.mode === "custom" && media');
+const customPrimaryAction = renderer.indexOf('props.renderModel.mode === "custom"', customVsl + 1);
 const customMemberProof = renderer.indexOf("{memberProof}", customPrimaryAction);
 const pillars = renderer.indexOf('className="community-funnel-pillars');
 const longForm = renderer.indexOf('className="community-funnel-long-form');
+const defaultVsl = renderer.indexOf('props.renderModel.mode === "default" && media');
 const conversion = renderer.indexOf('className="community-funnel-conversion');
 assert.ok(
   identity >= 0 &&
     identity < hero &&
     hero < defaultPrimaryAction &&
     defaultPrimaryAction < defaultMemberProof &&
-    defaultMemberProof < vsl &&
-    vsl < customPrimaryAction &&
+    defaultMemberProof < customVsl &&
+    customVsl < customPrimaryAction &&
     customPrimaryAction < customMemberProof &&
     customMemberProof < pillars &&
     pillars < longForm &&
-    longForm < conversion,
+    longForm < defaultVsl &&
+    defaultVsl < conversion,
   "the canonical renderer must keep default conversion above optional media while preserving the custom VSL conversion order",
 );
 assert.doesNotMatch(

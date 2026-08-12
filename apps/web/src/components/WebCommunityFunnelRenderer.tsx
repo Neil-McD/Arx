@@ -130,7 +130,9 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           </>
         ) : null}
 
-        {media ? <section className="community-funnel-vsl community-funnel-reveal">{media}</section> : null}
+        {props.renderModel.mode === "custom" && media ? (
+          <section className="community-funnel-vsl community-funnel-reveal">{media}</section>
+        ) : null}
 
         {props.renderModel.mode === "custom" ? (
           <>
@@ -155,6 +157,10 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           <section className="community-funnel-long-form">
             {renderMarkdown(props.renderModel.longFormMarkdown, { headingLevelOffset: 1 })}
           </section>
+        ) : null}
+
+        {props.renderModel.mode === "default" && media ? (
+          <section className="community-funnel-vsl community-funnel-reveal">{media}</section>
         ) : null}
 
         {props.renderModel.mode === "custom" ? (
