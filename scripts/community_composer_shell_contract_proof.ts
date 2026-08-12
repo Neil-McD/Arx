@@ -95,6 +95,11 @@ assert.match(
   "mobile composers should collapse to one row while omitting redundant mention and emoji buttons",
 );
 assert.match(
+  mobileCss,
+  /\.community-composer-editor-row \.chat-input,[\s\S]*\.mention-composer-highlight \{[^}]*box-sizing: border-box;[^}]*min-height: var\(--community-composer-input-size\);[^}]*line-height: 1\.45;[^}]*padding-block: calc\(\(var\(--community-composer-input-size\) - 1\.45em\) \/ 2\);/,
+  "mobile composer text should share the controls' vertical centerline while retaining multiline growth",
+);
+assert.match(
   packageJson,
   /"check:community-composer-shell-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_composer_shell_contract_proof\.ts"/,
   "package scripts should expose the composer-shell contract proof",

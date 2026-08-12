@@ -2542,6 +2542,12 @@
   pointer-events: none;
 }
 
+.app-root.mobile-shell.mobile-reading-mode .community-chat .community-channel-header {
+  flex-basis: 0;
+  height: 0;
+  min-height: 0;
+}
+
 .app-root.mobile-shell.mobile-reading-mode .mobile-bottom-rail {
   transform: translateY(100%);
   opacity: 0;
@@ -2572,6 +2578,7 @@
 @media (prefers-reduced-motion: reduce) {
   .mobile-topbar,
   .mobile-bottom-rail,
+  .app-root.mobile-shell .community-chat .community-channel-header,
   .app-root.mobile-shell .community-chat .community-channel-header-actions,
   .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-interaction-main-composer,
   .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root,

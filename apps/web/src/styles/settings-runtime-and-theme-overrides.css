@@ -8192,10 +8192,15 @@ button.settings-primary-action svg {
   flex: 0 0 var(--mobile-topbar-clearance);
   height: var(--mobile-topbar-clearance);
   min-height: var(--mobile-topbar-clearance);
+  overflow: hidden;
   padding: 0;
   border-bottom: 0;
   background: transparent;
   pointer-events: none;
+  transition:
+    flex-basis 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    min-height 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .app-root.mobile-shell .community-chat .community-channel-header-identity {
@@ -8421,7 +8426,10 @@ button.settings-primary-action svg {
 
 .app-root.mobile-shell .community-member-chat .community-composer-editor-row .chat-input,
 .app-root.mobile-shell .community-member-chat .community-composer-editor-row .mention-composer-highlight {
+  box-sizing: border-box;
   min-height: var(--community-composer-input-size);
+  line-height: 1.45;
+  padding-block: calc((var(--community-composer-input-size) - 1.45em) / 2);
 }
 
 .app-root.mobile-shell .community-member-chat .chat-input-bar > .chat-replying-bar {

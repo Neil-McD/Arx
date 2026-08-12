@@ -581,7 +581,12 @@ assert.match(
 assert.match(
   indexCss,
   /\.app-root\.mobile-shell\.mobile-chrome-auto-hide \.community-chat \.community-interaction-main-composer \{[\s\S]*position: absolute;[\s\S]*\.app-root\.mobile-shell\.mobile-reading-mode \.mobile-topbar \{[\s\S]*translateY[\s\S]*\.app-root\.mobile-shell\.mobile-reading-mode \.mobile-bottom-rail \{[\s\S]*translateY\(100%\)[\s\S]*\.app-root\.mobile-shell\.mobile-reading-mode \.community-chat \.community-interaction-main-composer \{[\s\S]*pointer-events: none;[\s\S]*@media \(prefers-reduced-motion: reduce\)/,
-  "reading mode should clear both rails and the composer without shifting the scroll container",
+  "reading mode should clear both rails and the composer while preserving the feed scroll state",
+);
+assert.match(
+  indexCss,
+  /mobile-reading-mode \.community-chat \.community-channel-header \{[^}]*flex-basis: 0;[^}]*height: 0;[^}]*min-height: 0;/,
+  "mobile reading mode should release the hidden top bar's feed clearance",
 );
 assert.match(
   topBar,
