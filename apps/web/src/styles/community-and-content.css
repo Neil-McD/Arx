@@ -4035,9 +4035,9 @@
   border-radius: 18px;
 }
 
-/* Desktop community composers use the same quiet, bounded material language as
-   the memory preview: a tighter silhouette, a hairline edge, and no card-like
-   lift. Mobile keeps its larger one-row touch shape in the mobile overrides. */
+/* Desktop community composers use a near-workspace fill with a crisp panel
+   edge. The edge, rather than a shadow or a bright card surface, carries the
+   structure. Mobile keeps its larger one-row touch shape in its overrides. */
 .app-root:not(.mobile-shell)
   .community-member-chat
   .community-interaction-main-composer
@@ -4047,8 +4047,25 @@
   .community-interaction-drawer-composer
   .chat-input-bar {
   border-radius: 12px;
-  border-color: color-mix(in srgb, var(--border-default) 55%, transparent);
+  background: color-mix(
+    in srgb,
+    var(--bg-app) 58%,
+    var(--bg-card-solid, var(--bg-card)) 42%
+  );
   box-shadow: none;
+}
+
+/* Preserve the accent/dashed drop target instead of letting the stronger
+   resting edge win the cascade while a file is dragged over the composer. */
+.app-root:not(.mobile-shell)
+  .community-member-chat
+  .community-interaction-main-composer
+  .chat-input-bar:not(.drag-over),
+.app-root:not(.mobile-shell)
+  .community-member-chat
+  .community-interaction-drawer-composer
+  .chat-input-bar:not(.drag-over) {
+  border-color: var(--border-strong);
 }
 
 .community-composer-authoring-row {
