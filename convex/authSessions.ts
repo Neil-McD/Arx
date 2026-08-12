@@ -831,6 +831,8 @@ export const claimAuthSessionRefreshInternal = internalMutation({
     sessionId: v.string(),
     leaseId: v.string(),
     nowMs: v.number(),
+    forceRefresh: v.optional(v.boolean()),
+    refreshRequestedAt: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const resolved = await resolveAuthSessionRowInDatabase(ctx, args.sessionId);
@@ -843,10 +845,25 @@ export const claimAuthSessionRefreshInternal = internalMutation({
       args.nowMs,
     );
     const row = resolved.row;
+    const generation = normalizeAuthSessionRefreshGeneration(
+      row.refreshGeneration,
+    );
+    const refreshRequestedAt =
+      typeof args.refreshRequestedAt === "number" &&
+      Number.isFinite(args.refreshRequestedAt)
+        ? Math.max(0, Math.floor(args.refreshRequestedAt))
+        : args.nowMs;
+    const forcedRefreshAlreadyCompleted =
+      args.forceRefresh === true &&
+      typeof row.lastRefreshAt === "number" &&
+      row.lastRefreshAt >= refreshRequestedAt;
+    const recentRefreshCanBeReused =
+      args.forceRefresh !== true &&
+      typeof row.lastRefreshAt === "number" &&
+      row.lastRefreshAt >= args.nowMs - AUTH_SESSION_REFRESH_COALESCE_MS;
     if (
       typeof row.revokedAt !== "number" &&
-      typeof row.lastRefreshAt === "number" &&
-      row.lastRefreshAt >= args.nowMs - AUTH_SESSION_REFRESH_COALESCE_MS &&
+      (forcedRefreshAlreadyCompleted || recentRefreshCanBeReused) &&
       typeof row.accessTokenExpiresAt === "number" &&
       row.accessTokenExpiresAt > Math.floor(args.nowMs / 1_000) + 5
     ) {
@@ -1158,7 +1175,10 @@ async function readDecodedAuthSessionById(
 async function refreshAuthSessionWithServerLease(
   ctx: AuthSessionActionContext,
   requestedSessionId: string,
+  options?: { forceRefresh?: boolean },
 ): Promise<StableRefreshResult> {
+  const forceRefresh = options?.forceRefresh === true;
+  const refreshRequestedAt = Date.now();
   for (let claimAttempt = 0; claimAttempt < 2; claimAttempt += 1) {
     const leaseId = buildSessionId();
     const claim = await ctx.runMutation(
@@ -1167,6 +1187,7 @@ async function refreshAuthSessionWithServerLease(
         sessionId: requestedSessionId,
         leaseId,
         nowMs: Date.now(),
+        ...(forceRefresh ? { forceRefresh: true, refreshRequestedAt } : null),
       },
     );
     if (claim?.status === "terminal_failure") {
@@ -1415,7 +1436,7 @@ async function refreshAuthSessionWithServerLease(
         };
       }
       const nowSec = Math.floor(Date.now() / 1000);
-      if (hasUsableAccessToken(current.stored, nowSec, 0)) {
+      if (!forceRefresh && hasUsableAccessToken(current.stored, nowSec, 0)) {
         return {
           status: "ready",
           session: toPublicSession(current.stored),
@@ -1576,6 +1597,7 @@ export const refreshAuthSessionInternal = internalAction({
     const refreshed = await refreshAuthSessionWithServerLease(
       ctx,
       args.sessionId,
+      { forceRefresh: true },
     );
     if (refreshed.status === "refreshed" || refreshed.status === "ready") {
       const current = await ctx.runQuery(

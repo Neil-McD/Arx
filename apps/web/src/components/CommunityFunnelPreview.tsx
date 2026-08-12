@@ -39,7 +39,7 @@ function PreviewMedia(props: { community: PreviewCommunity; vslUrl: string }) {
   const embed = parseEmbedUrl(props.vslUrl);
   if (!embed) return null;
   return (
-    <section className="community-funnel-media" aria-label="Video Sales Letter">
+    <section className="community-funnel-editor-media" aria-label="Video Sales Letter">
       <iframe
         src={embed.src}
         title={`${props.community.name} Video Sales Letter`}
@@ -135,7 +135,7 @@ export function CommunityFunnelPreview(props: {
           {props.error ? (
             <div className="community-funnel-preview-error">{props.error}</div>
           ) : null}
-          <section className="community-funnel-hero community-funnel-default-hero">
+          <section className="community-funnel-editor-hero community-funnel-editor-default-hero">
             <h1>{props.deterministicContent.headline}</h1>
             {props.deterministicContent.body ? (
               <p>{props.deterministicContent.body}</p>
@@ -160,7 +160,7 @@ export function CommunityFunnelPreview(props: {
         {props.error ? (
           <div className="community-funnel-preview-error">{props.error}</div>
         ) : null}
-        <section className="community-funnel-hero">
+        <section className="community-funnel-editor-hero">
           <h1>{content.headline}</h1>
           <p>{content.subheadline}</p>
         </section>
@@ -170,7 +170,7 @@ export function CommunityFunnelPreview(props: {
         {renderPrimaryAction("first")}
         {renderMemberProof()}
         <section className="community-funnel-benefits" aria-label="Community benefits">
-          <div className="community-funnel-pillars">
+          <div className="community-funnel-editor-pillars">
             {content.pillars.map((pillar, index) => {
               const Icon = PILLAR_ICONS[index] ?? Sparkles;
               return (
@@ -183,7 +183,7 @@ export function CommunityFunnelPreview(props: {
             })}
           </div>
         </section>
-        <section className="community-funnel-long-form" aria-label="About this community">
+        <section className="community-funnel-editor-long-form" aria-label="About this community">
           <ReactMarkdown
             skipHtml={true}
             unwrapDisallowed={true}

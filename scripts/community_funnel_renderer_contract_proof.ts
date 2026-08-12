@@ -91,6 +91,16 @@ assert.doesNotMatch(
   /\.community-funnel-member-(?:faces|face|more|proof-row)\b/,
   "funnel surfaces must not recreate avatar holder or facepile CSS",
 );
+assert.doesNotMatch(
+  previewCss,
+  /\.community-funnel-(?:hero|pillars|long-form|media)\b/,
+  "the embedded editor preview must not override canonical public-renderer selectors",
+);
+assert.match(
+  preview,
+  /community-funnel-editor-hero[\s\S]*community-funnel-editor-pillars[\s\S]*community-funnel-editor-long-form/,
+  "the embedded editor preview must own a namespaced style surface",
+);
 assert.match(memberProofCss, /\.community-funnel-member-proof-avatars[\s\S]*--member-avatar-stack-face-size/);
 assert.match(rendererCss, /var\(--surface-app\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
 assert.match(rendererCss, /@media \(prefers-reduced-motion: reduce\)/);

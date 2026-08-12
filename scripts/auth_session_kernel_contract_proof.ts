@@ -26,6 +26,11 @@ const refreshAction = sessions.slice(
   sessions.indexOf("export const logoutAuthSessionInternal"),
 );
 assert.match(refreshAction, /refreshAuthSessionWithServerLease/);
+assert.match(
+  refreshAction,
+  /refreshAuthSessionWithServerLease\([\s\S]*forceRefresh: true/,
+  "the explicit refresh bridge must require a newer bearer generation",
+);
 assert.doesNotMatch(refreshAction, /ctx\.runMutation[\s\S]*createAuthSessionInternal/);
 assert.doesNotMatch(refreshAction, /ctx\.db\.insert/);
 

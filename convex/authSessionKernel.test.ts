@@ -181,6 +181,58 @@ test("late refresh callers reuse the newly fresh generation", async () => {
   });
 });
 
+test("an explicit refresh cannot reuse the generation it was asked to replace", async () => {
+  const t = convexTest(schema, modules);
+  await insertSessionFixture(t, {
+    sessionId: "force-refresh",
+    refreshGeneration: 8,
+    accessTokenExpiresAt: Math.floor(NOW / 1_000) + 3_600,
+    lastRefreshAt: NOW - 1,
+  });
+
+  await expect(
+    t.mutation(
+      (internal as any).authSessions.claimAuthSessionRefreshInternal,
+      {
+        sessionId: "force-refresh",
+        leaseId: "force-leader",
+        nowMs: NOW,
+        forceRefresh: true,
+        refreshRequestedAt: NOW,
+      },
+    ),
+  ).resolves.toMatchObject({
+    status: "leader",
+    generation: 8,
+  });
+});
+
+test("a completed forced refresh is reused by its waiting callers", async () => {
+  const t = convexTest(schema, modules);
+  await insertSessionFixture(t, {
+    sessionId: "force-complete",
+    refreshGeneration: 9,
+    accessTokenExpiresAt: Math.floor(NOW / 1_000) + 3_600,
+    lastRefreshAt: NOW + 1,
+  });
+
+  await expect(
+    t.mutation(
+      (internal as any).authSessions.claimAuthSessionRefreshInternal,
+      {
+        sessionId: "force-complete",
+        leaseId: "late-force-caller",
+        nowMs: NOW + 2,
+        forceRefresh: true,
+        refreshRequestedAt: NOW,
+      },
+    ),
+  ).resolves.toMatchObject({
+    status: "ready",
+    generation: 9,
+  });
+});
+
 test("fresh-token coalescing is bounded and cannot suppress a later refresh", async () => {
   const t = convexTest(schema, modules);
   await insertSessionFixture(t, {
