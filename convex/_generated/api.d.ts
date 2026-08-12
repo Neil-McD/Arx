@@ -169,7 +169,6 @@ import type * as httpRuntimeRoutes from "../httpRuntimeRoutes.js";
 import type * as httpRuntimeSupport from "../httpRuntimeSupport.js";
 import type * as httpRuntimeTurnState from "../httpRuntimeTurnState.js";
 import type * as httpVoice from "../httpVoice.js";
-import type * as legacyOnboardingMigration from "../legacyOnboardingMigration.js";
 import type * as legalAcceptances from "../legalAcceptances.js";
 import type * as memberEntryDestination from "../memberEntryDestination.js";
 import type * as memberOntology from "../memberOntology.js";
@@ -417,7 +416,6 @@ declare const fullApi: ApiFromModules<{
   httpRuntimeSupport: typeof httpRuntimeSupport;
   httpRuntimeTurnState: typeof httpRuntimeTurnState;
   httpVoice: typeof httpVoice;
-  legacyOnboardingMigration: typeof legacyOnboardingMigration;
   legalAcceptances: typeof legalAcceptances;
   memberEntryDestination: typeof memberEntryDestination;
   memberOntology: typeof memberOntology;

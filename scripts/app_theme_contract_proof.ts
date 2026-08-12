@@ -282,20 +282,21 @@ assert.ok(
   "the public Builder landing page should own one dark-locked theme adapter",
 );
 [
-  "--bg: #08090a;",
-  "--surface-deep: #0d0f11;",
-  "--surface-raised: #171a1d;",
-  "--line: rgba(252, 248, 240, 0.08);",
-  "--line-default: rgba(214, 208, 198, 0.21);",
-  "--line-strong: rgba(214, 208, 198, 0.32);",
+  "--bg: #111113;",
+  "--surface-deep: #1a1a1a;",
+  "--surface-raised: #222222;",
+  "--surface-quiet: #171719;",
+  "--line: #2a2a2a;",
+  "--line-default: #3a3a3a;",
+  "--line-strong: #4a4a4a;",
   "--text: #fcf8f0;",
-  "--muted: #bbb5ab;",
-  "--quiet: #8d8982;",
+  "--muted: #b3ad9f;",
+  "--quiet: #9c968a;",
   "--action: #f1ede5;",
   "--action-text: #0a0a0a;",
   "--brand: #d66a8a;",
   "--attention: #7baad6;",
-  "--attention-soft: rgba(123, 170, 214, 0.14);",
+  "--attention-soft: rgba(123, 170, 214, 0.09);",
   "--metal: #d6d0c6;",
 ].forEach((token) => {
   assert.ok(
@@ -325,13 +326,13 @@ assert.match(
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-landing \.vsl-preview\s*\{[\s\S]*?rgba\(123, 170, 214, 0\.13\)[\s\S]*?linear-gradient\(135deg, #0b0d0f/,
-  "the public Builder VSL cover should use the neutral material and attention-blue system",
+  /\.pn-landing \.vsl-preview\s*\{[\s\S]*?rgba\(252, 248, 240, 0\.065\)[\s\S]*?linear-gradient\(135deg, #18181a/,
+  "the public Builder VSL cover should use the canonical warm-graphite material system",
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-landing \.diagram-line-accent\s*\{[^}]*stroke:\s*var\(--attention\);[^}]*\}/,
-  "the public Builder diagrams should reserve attention blue for information movement",
+  /\.pn-landing \.diagram-line-accent\s*\{[^}]*stroke:\s*var\(--metal\);[^}]*\}/,
+  "the public Builder diagrams should keep structural emphasis neutral",
 );
 assert.match(
   publicBuilderLandingCss,
@@ -340,12 +341,22 @@ assert.match(
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-landing \.diagram-node-accent\s*\{[^}]*fill:\s*var\(--attention\);[^}]*\}/,
-  "the public Builder diagrams should keep community signals in the single attention-blue system",
+  /\.pn-landing \.diagram-node-accent\s*\{[^}]*fill:\s*var\(--metal\);[^}]*\}/,
+  "the public Builder diagrams should keep persistent nodes neutral",
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-builder-activation\s*\{[\s\S]*?border:\s*1px solid rgba\(214, 208, 198, 0\.18\);[\s\S]*?background:\s*rgba\(13, 15, 17, 0\.98\);[\s\S]*?color:\s*#fcf8f0;/,
+  /\.pn-landing \.diagram-particle\s*\{[^}]*fill:\s*var\(--attention\);[^}]*\}/,
+  "the public Builder diagrams should reserve attention blue for moving information",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-landing \.diagram-signal\s*\{[^}]*stroke:\s*var\(--attention\);[^}]*\}/,
+  "the public Builder diagrams should reserve attention blue for active signals",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-builder-activation\s*\{[\s\S]*?border:\s*1px solid rgba\(214, 208, 198, 0\.18\);[\s\S]*?background:\s*rgba\(26, 26, 26, 0\.98\);[\s\S]*?color:\s*#fcf8f0;/,
   "the public Builder activation banner should retain the premium dark-locked treatment",
 );
 assert.match(

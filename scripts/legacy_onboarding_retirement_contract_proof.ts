@@ -11,6 +11,7 @@ function read(path: string): string {
 
 for (const path of [
   "convex/agentLifecycleActivations.ts",
+  "convex/legacyOnboardingMigration.ts",
   "shared/cloudOnboardingGuideGateway.ts",
   "shared/runtimeSkillLifecycle.ts",
   "shared/communityMemberOnboarding.ts",
@@ -61,10 +62,7 @@ const toolRegistry = read("shared/toolRegistry.ts");
 assert.match(toolRegistry, /member_profile_confirm_facts/);
 
 const schema = read("convex/schema.ts");
-assert.match(schema, /Deprecated release-compatibility table/);
-assert.match(schema, /agentLifecycleActivations:\s*defineTable/);
-assert.match(schema, /Deprecated release-compatibility field/);
-assert.match(schema, /memberOnboarding:\s*v\.optional/);
+assert.doesNotMatch(schema, /agentLifecycleActivations|memberOnboarding/);
 
 const retiredCommunityConfigSurface = [
   read("apps/web/src/App.tsx"),
