@@ -283,20 +283,21 @@ assert.ok(
   "the public Builder landing page should own one dark-locked theme adapter",
 );
 [
-  "--bg: #1a1a1a;",
-  "--surface-deep: #141414;",
-  "--surface-raised: #2a2a2a;",
-  "--line: rgba(255, 255, 255, 0.06);",
-  "--line-default: #3a3a3a;",
-  "--line-strong: #4a4a4a;",
+  "--bg: #08090a;",
+  "--surface-deep: #0d0f11;",
+  "--surface-raised: #171a1d;",
+  "--line: rgba(252, 248, 240, 0.08);",
+  "--line-default: rgba(214, 208, 198, 0.16);",
+  "--line-strong: rgba(214, 208, 198, 0.28);",
   "--text: #fcf8f0;",
-  "--muted: #b3ad9f;",
-  "--quiet: #9c968a;",
+  "--muted: #bbb5ab;",
+  "--quiet: #8d8982;",
   "--action: #f1ede5;",
   "--action-text: #0a0a0a;",
   "--brand: #d66a8a;",
-  "--agent: #a78bfa;",
   "--attention: #7baad6;",
+  "--attention-soft: rgba(123, 170, 214, 0.14);",
+  "--metal: #d6d0c6;",
 ].forEach((token) => {
   assert.ok(
     publicBuilderLandingThemeBlock.includes(token),
@@ -305,8 +306,13 @@ assert.ok(
 });
 assert.doesNotMatch(
   publicBuilderLandingCss,
-  /--pink|#ff3d7f|#ff9dc0|rgba\(255,\s*61,\s*127/,
-  "the public Builder landing page should not restore the retired neon-pink palette",
+  /--pink|#ff3d7f|#ff9dc0|rgba\(255,\s*61,\s*127|--agent\b|#a78bfa|#8b5cf6|#c4b5fd/i,
+  "the public Builder landing page should not restore neon pink or agent purple",
+);
+assert.equal(
+  publicBuilderLandingCss.match(/var\(--brand\)/g)?.length ?? 0,
+  1,
+  "the public Builder landing page should reserve dusty rose for the Polynet wordmark only",
 );
 assert.doesNotMatch(
   publicBuilderLandingCss,
@@ -325,18 +331,18 @@ assert.match(
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-landing \.brain-outline\s*\{[^}]*stroke:\s*var\(--agent\);[^}]*\}/,
-  "the public Builder diagrams should reserve agent purple for autonomous intelligence",
+  /\.pn-landing \.brain-outline\s*\{[^}]*stroke:\s*var\(--metal\);[^}]*\}/,
+  "the public Builder diagrams should render autonomous intelligence in neutral silver",
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-landing \.diagram-node-accent\s*\{[^}]*fill:\s*var\(--brand\);[^}]*\}/,
-  "the public Builder diagrams should reserve dusty rose for community identity",
+  /\.pn-landing \.diagram-node-accent\s*\{[^}]*fill:\s*var\(--attention\);[^}]*\}/,
+  "the public Builder diagrams should keep community signals in the single attention-blue system",
 );
 assert.match(
   publicBuilderLandingCss,
-  /\.pn-builder-activation\s*\{[\s\S]*?border:\s*1px solid #3a3a3a;[\s\S]*?background:\s*rgba\(20, 20, 20, 0\.98\);[\s\S]*?color:\s*#fcf8f0;/,
-  "the public Builder activation banner should retain the dark-locked modal treatment",
+  /\.pn-builder-activation\s*\{[\s\S]*?border:\s*1px solid rgba\(214, 208, 198, 0\.18\);[\s\S]*?background:\s*rgba\(13, 15, 17, 0\.98\);[\s\S]*?color:\s*#fcf8f0;/,
+  "the public Builder activation banner should retain the premium dark-locked treatment",
 );
 assert.match(
   publicBuilderLandingCss,
