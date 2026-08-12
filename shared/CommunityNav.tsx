@@ -106,6 +106,7 @@ const MODAL_FOCUSABLE_SELECTOR = [
 ].join(",");
 
 const COMMUNITY_IDENTITY_HEIGHT_PX = 44;
+const COMMUNITY_CHANNEL_LOADING_ROW_COUNT = 4;
 
 function trapModalFocus(event: KeyboardEvent, container: HTMLElement | null) {
   if (event.key !== "Tab" || !container) return;
@@ -382,7 +383,11 @@ export const CommunityNav = memo(function CommunityNav({
   };
 
   return (
-    <aside className="community-nav" ref={communityNavRef}>
+    <aside
+      className="community-nav"
+      ref={communityNavRef}
+      aria-busy={isLoadingAccess || showChannelLoadingSkeleton}
+    >
       {activeCommunityName && !hideIdentity ? (
         <div
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
@@ -402,6 +407,14 @@ export const CommunityNav = memo(function CommunityNav({
             </button>
           ) : null}
         </div>
+      ) : isLoadingAccess && !hideIdentity ? (
+        <div
+          className="community-nav-identity community-nav-identity-loading has-banner"
+          aria-hidden="true"
+        >
+          <span className="community-nav-identity-loading-name community-nav-loading-surface" />
+          <span className="community-nav-identity-loading-action community-nav-loading-surface" />
+        </div>
       ) : null}
       {activeCommunityBannerUrl ? (
         <div className="community-nav-header" ref={communityBannerHeaderRef}>
@@ -420,6 +433,10 @@ export const CommunityNav = memo(function CommunityNav({
             aria-hidden
           />
         </div>
+      ) : isLoadingAccess && !hideIdentity ? (
+        <div className="community-nav-header community-nav-header-loading" aria-hidden="true">
+          <div className="community-nav-banner community-nav-banner-loading community-nav-loading-surface" />
+        </div>
       ) : null}
       <div
         className="community-channel-list"
@@ -428,8 +445,12 @@ export const CommunityNav = memo(function CommunityNav({
       >
         {showChannelLoadingSkeleton ? (
           <div className="community-channel-loading" aria-label="Loading channels">
-            <div className="community-channel-loading-row web-skeleton-row" />
-            <div className="community-channel-loading-row is-short web-skeleton-row" />
+            {Array.from({ length: COMMUNITY_CHANNEL_LOADING_ROW_COUNT }).map((_, index) => (
+              <div className="community-channel-loading-row" key={index} aria-hidden="true">
+                <span className="community-channel-loading-icon community-nav-loading-surface" />
+                <span className="community-channel-loading-label community-nav-loading-surface" />
+              </div>
+            ))}
           </div>
         ) : channels.map((channel) => {
           const isSelected =
@@ -551,7 +572,13 @@ export const CommunityNav = memo(function CommunityNav({
         ) : null}
       </div>
       <div className="community-nav-divider" aria-hidden="true" />
-      {showMembersItem ? (
+      {isLoadingAccess ? (
+        <div className="community-nav-members-loading" aria-hidden="true">
+          <span className="community-nav-loading-icon community-nav-loading-surface" />
+          <span className="community-nav-loading-label community-nav-loading-surface" />
+          <span className="community-nav-loading-count community-nav-loading-surface" />
+        </div>
+      ) : showMembersItem ? (
         <button
           className="nav-item community-nav-members"
           type="button"
@@ -607,8 +634,11 @@ export const CommunityNav = memo(function CommunityNav({
         <>
           <div className="community-nav-divider" />
           <div className="community-nav-access-loading" aria-label="Loading navigation">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
+            {Array.from({ length: 2 }).map((_, index) => (
+              <div className="community-nav-access-loading-row" key={index} aria-hidden="true">
+                <span className="community-nav-loading-icon community-nav-loading-surface" />
+                <span className="community-nav-loading-label community-nav-loading-surface" />
+              </div>
             ))}
           </div>
         </>
@@ -655,7 +685,7 @@ export const CommunityNav = memo(function CommunityNav({
       ) : null}
       {isLoadingAccess ? (
         <div className="community-nav-footer" aria-hidden="true">
-          <div className="community-nav-invite-loading web-skeleton-block" />
+          <div className="community-nav-invite-loading community-nav-loading-surface" />
         </div>
       ) : canCopyJoinLink ? (
         <div className="community-nav-footer">

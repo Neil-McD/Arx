@@ -502,6 +502,22 @@ body {
   font-weight: 650;
 }
 
+.community-nav-loading-surface {
+  background: color-mix(in srgb, var(--text-primary) 9%, transparent);
+}
+
+.community-nav-identity-loading-name {
+  width: min(46%, 112px);
+  height: 12px;
+  border-radius: 999px;
+}
+
+.community-nav-identity-loading-action {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+}
+
 .community-nav-settings {
   flex: 0 0 auto;
   width: 36px;
@@ -565,6 +581,13 @@ body {
 
 .community-nav-banner-img {
   display: block;
+}
+
+.community-nav-banner-loading {
+  border-radius: inherit;
+  background:
+    radial-gradient(circle at 22% 20%, color-mix(in srgb, var(--text-primary) 8%, transparent), transparent 58%),
+    color-mix(in srgb, var(--surface-panel) 82%, var(--text-primary) 6%);
 }
 
 /* Preserve the authored banner ratio while the navigation has room. Once the
@@ -791,11 +814,38 @@ body {
 .community-channel-loading-row {
   width: 100%;
   height: 35px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
 }
 
-.community-channel-loading-row.is-short {
-  width: 100%;
+.community-channel-loading-icon,
+.community-nav-loading-icon {
+  width: 16px;
+  height: 16px;
+  flex: 0 0 16px;
+  border-radius: 5px;
+}
+
+.community-channel-loading-label,
+.community-nav-loading-label {
+  width: min(48%, 112px);
+  height: 10px;
+  border-radius: 999px;
+}
+
+.community-channel-loading-row:nth-child(2) .community-channel-loading-label {
+  width: min(36%, 82px);
+}
+
+.community-channel-loading-row:nth-child(3) .community-channel-loading-label {
+  width: min(42%, 96px);
+}
+
+.community-channel-loading-row:nth-child(4) .community-channel-loading-label {
+  width: min(31%, 72px);
 }
 
 .community-channel-item .community-channel-icon {
@@ -1024,7 +1074,32 @@ body {
 .community-nav-access-loading-row {
   width: 100%;
   height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
   border-radius: var(--radius-sm);
+}
+
+.community-nav-access-loading-row:nth-child(2) .community-nav-loading-label {
+  width: min(38%, 88px);
+}
+
+.community-nav-members-loading {
+  width: 100%;
+  height: 34px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+}
+
+.community-nav-loading-count {
+  width: 22px;
+  height: 10px;
+  margin-left: auto;
+  border-radius: 999px;
 }
 
 .community-nav-footer {

@@ -73,7 +73,8 @@ describe("web shell refresh continuity contract", () => {
     const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
     const app = read("apps/web/src/App.tsx");
 
-    expect(nav).toContain("community-channel-loading-row web-skeleton-row");
+    expect(nav).toContain("COMMUNITY_CHANNEL_LOADING_ROW_COUNT = 4");
+    expect(nav).toContain('className="community-channel-loading-row"');
     expect(context).toContain("community-context-memory-preview web-skeleton-block");
     expect(context).toContain("community-context-member-skeleton");
     expect(context).not.toContain("Loading members...");
@@ -162,8 +163,14 @@ describe("web shell refresh continuity contract", () => {
       /const showChannelLoadingSkeleton =[\s\S]*isLoadingAccess \|\| \(isLoadingChannels/,
     );
     expect(nav).toContain("!showChannelLoadingSkeleton && canManageMembersActiveCommunity");
+    expect(nav).toContain("community-nav-identity-loading has-banner");
+    expect(nav).toContain("community-nav-banner-loading community-nav-loading-surface");
+    expect(nav).toContain('className="community-nav-members-loading"');
+    expect(nav).toMatch(
+      /title="Resources"[\s\S]*title="Events"[\s\S]*Array\.from\(\{ length: 2 \}\)/,
+    );
     expect(nav).toContain('className="community-nav-access-loading"');
-    expect(nav).toContain('className="community-nav-invite-loading web-skeleton-block"');
+    expect(nav).toContain('className="community-nav-invite-loading community-nav-loading-surface"');
     expect(navSurface).toContain("isLoadingAccess={communityShell.isLoadingCommunityAccess}");
   });
 

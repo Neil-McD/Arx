@@ -364,8 +364,8 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*\{showMembersItem \? \([\s\S]*?\) : null\}\s*<button\s*className=\{showActiveSelection && communityTab === "resources"/,
-  "community navigation should separate channels from the Members and Resources utility rows",
+  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*\{isLoadingAccess \? \([\s\S]*?<div className="community-nav-members-loading"[\s\S]*?\) : showMembersItem \? \([\s\S]*?\) : null\}\s*<button\s*className=\{showActiveSelection && communityTab === "resources"/,
+  "community navigation should separate channels from the shape-stable Members loading state and utility rows",
 );
 assert.doesNotMatch(
   baseCss,
