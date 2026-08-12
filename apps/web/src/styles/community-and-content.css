@@ -3633,6 +3633,21 @@
   border-color: color-mix(in srgb, var(--border-default) 68%, transparent);
 }
 
+/* Paper surfaces need a structural edge to separate authoring from reading.
+   Reuse the canonical panel edge without changing Dark or drag-over feedback. */
+:root[data-theme="light"]
+  .app-root:not(.mobile-shell)
+  .community-member-chat
+  .community-interaction-main-composer
+  .chat-input-bar:not(.drag-over),
+:root[data-theme="light"]
+  .app-root:not(.mobile-shell)
+  .community-member-chat
+  .community-interaction-drawer-composer
+  .chat-input-bar:not(.drag-over) {
+  border-color: var(--stroke-panel-edge);
+}
+
 .community-composer-authoring-row {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
