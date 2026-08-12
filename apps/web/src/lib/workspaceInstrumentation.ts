@@ -57,7 +57,7 @@ export function emitWorkspaceEvent(
     ...event,
   };
   try {
-    console.debug("[workspace]", next);
+    console.debug("[workspace]", JSON.stringify(next));
   } catch {
     // ignore console failures
   }

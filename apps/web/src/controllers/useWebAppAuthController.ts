@@ -377,6 +377,9 @@ export function useWebAppAuthController(
             cacheHit: false,
             durationMs: Date.now() - startedAt,
             reason: ensured.reason,
+            runtimeProbeAccepted: ensured.runtimeAcceptance?.accepted ?? null,
+            runtimeProbeFailureStage: ensured.runtimeAcceptance?.failureStage ?? null,
+            runtimeProbeError: ensured.runtimeAcceptance?.error ?? null,
           },
         });
         return { status: "transient_failure", reason: ensured.reason };

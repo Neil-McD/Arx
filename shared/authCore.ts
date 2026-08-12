@@ -50,7 +50,11 @@ export type AuthSessionRefreshResultInFlightRef = {
 
 export type AuthSessionEnsureResult =
   | { status: "ready"; session: AuthSession; runtimeAcceptance?: ConvexAuthenticatedSessionProbeResult }
-  | { status: "transient_failure"; reason: string }
+  | {
+      status: "transient_failure";
+      reason: string;
+      runtimeAcceptance?: ConvexAuthenticatedSessionProbeResult;
+    }
   | { status: "terminal_failure"; reason: string };
 
 export class VoiceTranscriptionRequestError extends Error {
@@ -732,6 +736,7 @@ export async function ensureAuthSessionForAuthenticatedSendResult(params: {
     return {
       status: "transient_failure",
       reason: "runtime_auth_verification_failed",
+      runtimeAcceptance: refreshedAccepted,
     };
   }
   return { status: "ready", session: refreshed.session, runtimeAcceptance: refreshedAccepted };
