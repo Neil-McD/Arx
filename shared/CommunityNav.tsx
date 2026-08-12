@@ -382,7 +382,11 @@ export const CommunityNav = memo(function CommunityNav({
   };
 
   return (
-    <aside className="community-nav" ref={communityNavRef}>
+    <aside
+      className="community-nav"
+      ref={communityNavRef}
+      aria-busy={isLoadingAccess || showChannelLoadingSkeleton}
+    >
       {activeCommunityName && !hideIdentity ? (
         <div
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
@@ -551,7 +555,13 @@ export const CommunityNav = memo(function CommunityNav({
         ) : null}
       </div>
       <div className="community-nav-divider" aria-hidden="true" />
-      {showMembersItem ? (
+      {isLoadingAccess ? (
+        <div className="community-nav-access-loading community-nav-utility-loading" aria-label="Loading community navigation">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
+          ))}
+        </div>
+      ) : showMembersItem ? (
         <button
           className="nav-item community-nav-members"
           type="button"
@@ -568,46 +578,50 @@ export const CommunityNav = memo(function CommunityNav({
           ) : null}
         </button>
       ) : null}
-      <button
-        className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
-        type="button"
-        onClick={() => onSelectTab("resources")}
-        title="Resources"
-      >
-        <span className="nav-icon">
-          <svg viewBox="0 0 24 24">
-            <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
-            <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
-          </svg>
-        </span>
-        <span className="nav-item-label">Resources</span>
-        {lockedTabs.resources ? <NavLockGlyph /> : communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
-      </button>
-      <button
-        className={showActiveSelection && communityTab === "events" ? "nav-item active" : "nav-item"}
-        type="button"
-        onClick={() => onSelectTab("events")}
-        title="Events"
-      >
-        <span className="nav-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M7 3v4" />
-            <path d="M17 3v4" />
-            <path d="M4 9h16" />
-            <path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
-            <path d="M8 13h3" />
-            <path d="M13 13h3" />
-            <path d="M8 16h3" />
-          </svg>
-        </span>
-        <span className="nav-item-label">Events</span>
-        {lockedTabs.events ? <NavLockGlyph /> : communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
-      </button>
+      {!isLoadingAccess ? (
+        <>
+          <button
+            className={showActiveSelection && communityTab === "resources" ? "nav-item active" : "nav-item"}
+            type="button"
+            onClick={() => onSelectTab("resources")}
+            title="Resources"
+          >
+            <span className="nav-icon">
+              <svg viewBox="0 0 24 24">
+                <path d="M10 13a5 5 0 0 0 7.07 0l3.54-3.54a5 5 0 0 0-7.07-7.07L10 5" />
+                <path d="M14 11a5 5 0 0 0-7.07 0L3.4 14.54a5 5 0 0 0 7.07 7.07L14 19" />
+              </svg>
+            </span>
+            <span className="nav-item-label">Resources</span>
+            {lockedTabs.resources ? <NavLockGlyph /> : communityTab !== "resources" && tabIndicators.resources ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+          </button>
+          <button
+            className={showActiveSelection && communityTab === "events" ? "nav-item active" : "nav-item"}
+            type="button"
+            onClick={() => onSelectTab("events")}
+            title="Events"
+          >
+            <span className="nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M7 3v4" />
+                <path d="M17 3v4" />
+                <path d="M4 9h16" />
+                <path d="M5 5h14a1 1 0 0 1 1 1v13a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1z" />
+                <path d="M8 13h3" />
+                <path d="M13 13h3" />
+                <path d="M8 16h3" />
+              </svg>
+            </span>
+            <span className="nav-item-label">Events</span>
+            {lockedTabs.events ? <NavLockGlyph /> : communityTab !== "events" && tabIndicators.events ? <span className="nav-item-dot" aria-hidden="true" /> : null}
+          </button>
+        </>
+      ) : null}
       {isLoadingAccess ? (
         <>
           <div className="community-nav-divider" />
           <div className="community-nav-access-loading" aria-label="Loading navigation">
-            {Array.from({ length: 4 }).map((_, index) => (
+            {Array.from({ length: 2 }).map((_, index) => (
               <div className="community-nav-access-loading-row web-skeleton-block" key={index} />
             ))}
           </div>

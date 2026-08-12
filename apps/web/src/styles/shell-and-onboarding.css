@@ -1027,6 +1027,10 @@ body {
   border-radius: var(--radius-sm);
 }
 
+.community-nav-utility-loading {
+  margin-bottom: 0;
+}
+
 .community-nav-footer {
   margin-top: auto;
   padding-top: 12px;

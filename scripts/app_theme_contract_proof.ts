@@ -364,8 +364,8 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*\{showMembersItem \? \([\s\S]*?\) : null\}\s*<button\s*className=\{showActiveSelection && communityTab === "resources"/,
-  "community navigation should separate channels from the Members and Resources utility rows",
+  /<\/div>\s*<div className="community-nav-divider" aria-hidden="true" \/>\s*\{isLoadingAccess \? \([\s\S]*?community-nav-utility-loading[\s\S]*?Array\.from\(\{ length: 3 \}\)[\s\S]*?\) : showMembersItem \? \([\s\S]*?\) : null\}\s*\{!isLoadingAccess \? \([\s\S]*?title="Resources"[\s\S]*?title="Events"/,
+  "community navigation should use one shared shimmer state for Members, Resources, and Events",
 );
 assert.doesNotMatch(
   baseCss,

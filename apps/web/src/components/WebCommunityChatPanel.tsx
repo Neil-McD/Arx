@@ -1316,6 +1316,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           style={{ display: "none" }}
           onChange={onCommunityFileInputChange}
         />
+        <div className="community-composer-authoring-row">
         <div className="community-composer-editor-row">
           <div className="mention-composer-field">
             <MentionComposerHighlight
@@ -1441,6 +1442,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             </button>
           )}
         />
+        </div>
       </div>
     </>
   );
@@ -1473,6 +1475,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
           style={{ display: "none" }}
           onChange={handleDrawerReplyFileInputChange}
         />
+        <div className="community-composer-authoring-row">
         <div className="community-composer-editor-row">
           <div className="mention-composer-field">
             <MentionComposerHighlight
@@ -1575,6 +1578,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             </button>
           )}
         />
+        </div>
       </div>
     </div>
   ) : null;

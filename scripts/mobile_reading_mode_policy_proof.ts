@@ -33,23 +33,22 @@ function advance(
   let result = advance(state, 580, 20);
   assert.equal(result.changed, false, "partial upward travel should not hide chrome");
   result = advance(result.state, 550, 30);
-  assert.equal(result.changed, true, "deliberate upward travel should hide chrome once");
+  assert.equal(result.changed, true, "deliberate upward travel should hide chrome");
   assert.equal(result.state.active, true);
-  assert.equal(result.state.gestureTransitioned, true);
 
   state = result.state;
-  for (const [scrollTop, nowMs] of [[590, 300], [640, 400], [560, 500]] as const) {
-    result = advance(state, scrollTop, nowMs);
-    state = result.state;
-    assert.equal(result.changed, false, "momentum reversal must not reverse the same gesture");
-    assert.equal(state.active, true);
-  }
+  result = advance(state, 554, 40);
+  assert.equal(result.changed, false, "tiny reversal should not reveal chrome");
+  result = advance(result.state, 558, 50);
+  assert.equal(result.changed, true, "intentional reversal should reveal chrome in the same gesture");
+  assert.equal(result.state.active, false);
 
-  result = advance(state, 950, 520);
+  state = forceMobileReadingMode(result.state, true, 60).state;
+  result = advance(state, 950, 70);
   state = result.state;
-  assert.equal(result.changed, false, "bottom-zone bounce must not reverse the same gesture");
+  assert.equal(result.changed, true, "entering the bottom zone should restore chrome immediately");
   assert.equal(state.bottomLocked, true);
-  assert.equal(state.active, true);
+  assert.equal(state.active, false);
 
   result = settleMobileReadingMode(state, {
     scrollTop: 1_000,
@@ -57,7 +56,7 @@ function advance(
     nowMs: 620,
     composerFocused: false,
   });
-  assert.equal(result.changed, true, "settling at the bottom should restore chrome");
+  assert.equal(result.changed, false, "settling should preserve already-visible chrome");
   assert.equal(result.state.active, false);
 }
 
@@ -70,9 +69,9 @@ function advance(
   }
   assert.equal(state.active, false, "sub-threshold jitter should not change chrome state");
   assert.equal(
-    state.gestureAnchorScrollTop,
+    state.directionAnchorScrollTop,
     600,
-    "sub-threshold jitter should keep one stable gesture anchor",
+    "sub-threshold travel should keep one stable direction anchor",
   );
 }
 
@@ -83,27 +82,28 @@ function advance(
   let changes = 0;
   for (const [scrollTop, nowMs] of [
     [560, 20],
-    [574, 40],
+    [565, 40],
     [534, 60],
-    [548, 80],
+    [539, 80],
   ] as const) {
     const result = advance(state, scrollTop, nowMs);
     state = result.state;
     if (result.changed) changes += 1;
   }
-  assert.equal(changes, 1, "-40/+14 jitter should produce at most one transition");
+  assert.equal(changes, 1, "sub-threshold reversals should not make chrome flicker");
   assert.equal(state.active, true, "the deliberate upward gesture should finish hidden");
 
   state = settleMobileReadingMode(state, {
-    scrollTop: 548,
+    scrollTop: 539,
     maxScrollTop: 1_000,
     nowMs: 400,
     composerFocused: false,
   }).state;
-  state = beginMobileReadingModeGesture(state, 548, 1_000, 500);
-  const nextGesture = advance(state, 578, 520);
-  assert.equal(nextGesture.changed, true, "a new deliberate downward gesture should show chrome");
-  assert.equal(nextGesture.state.active, false);
+  state = forceMobileReadingMode(state, false, 480).state;
+  state = beginMobileReadingModeGesture(state, 539, 1_000, 500);
+  const nextGesture = advance(state, 503, 520);
+  assert.equal(nextGesture.changed, true, "a new deliberate upward gesture should hide chrome");
+  assert.equal(nextGesture.state.active, true);
 }
 
 {
@@ -113,9 +113,9 @@ function advance(
   state = advance(state, -80, 20).state;
   assert.equal(state.lastScrollTop, 0, "negative rubber-band scroll should clamp to zero");
   assert.equal(
-    state.gestureAnchorScrollTop,
-    0,
-    "rubber-band overscroll should not move the gesture anchor",
+    state.directionAnchorScrollTop,
+    null,
+    "rubber-band overscroll should not create directional travel",
   );
 }
 

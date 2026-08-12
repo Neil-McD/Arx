@@ -11,6 +11,8 @@ import {
 } from "../shared/webRouteAccess.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
+const app = read("apps/web/src/App.tsx");
+const routeAccessHold = read("apps/web/src/components/WebRouteAccessHold.tsx");
 
 function project(params: {
   publicRoute?: PublicRoute;
@@ -286,7 +288,6 @@ assert.deepEqual(project({ pathname: "/workspace", authState: "signed_in" }), {
   requirement: "legacy_entry",
 });
 
-const app = read("apps/web/src/App.tsx");
 const boundary = read(
   "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts",
 );
@@ -328,15 +329,49 @@ assert.doesNotMatch(
   /params\.activePage === "settings"|params\.activePage === "community"|params\.activePage === "onboarding"/,
   "account hydration must not drift behind a page-name allowlist",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /landing-auth-hold-content[\s\S]*Polynet could not finish verifying your session[\s\S]*Try again/,
-  "a held route must expose visible, recoverable failure UI",
+  /Opening Polynet…|landing-auth-hold-content/,
+  "normal route admission must not replace the shell with a branded interstitial",
 );
 assert.match(
   app,
-  /useWebMemberAgentSurfaceController[\s\S]*if \(shouldHoldRouteForAccess\) \{[\s\S]*landing-auth-hold/,
-  "the composition root must hold before rendering unauthorized chrome",
+  /if \(shouldHoldRouteForAccess\) \{[\s\S]*<WebRouteAccessHold[\s\S]*shellChromeHostProps=\{shellChromeHostProps\}[\s\S]*mainSurfaceHostProps=\{mainSurfaceHostProps\}/,
+  "a held route must preserve canonical shell composition",
+);
+assert.match(
+  routeAccessHold,
+  /<WebShellChromeHost[\s\S]*<WebAppMainSurfaceFallback[\s\S]*quiet[\s\S]*globalOverlays=\{null\}/,
+  "the access hold must reuse canonical shell and surface fallback owners without overlays",
+);
+assert.match(
+  routeAccessHold,
+  /node\.inert = true[\s\S]*aria-hidden="true"/,
+  "unverified shell geometry must remain non-interactive and hidden from assistive technology",
+);
+for (const protectedProjection of [
+  /activeCommunity: null/,
+  /communityChannels: \[\]/,
+  /memberFaces: \[\]/,
+  /communities: \[\]/,
+  /railCommunities: \[\]/,
+  /canOpenDirectMessages: false/,
+] as const) {
+  assert.match(
+    routeAccessHold,
+    protectedProjection,
+    "the held shell must not project protected community or messaging data",
+  );
+}
+assert.match(
+  routeAccessHold,
+  /Polynet could not finish verifying your session\.[\s\S]*Try again/,
+  "a held route must expose visible, recoverable failure UI only after a real error",
+);
+assert.match(
+  app,
+  /useWebMemberAgentSurfaceController[\s\S]*if \(shouldHoldRouteForAccess\) \{[\s\S]*WebRouteAccessHold/,
+  "the composition root must hold before rendering authorized overlays",
 );
 assert.match(
   boundary,

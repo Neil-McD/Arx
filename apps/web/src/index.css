@@ -198,26 +198,40 @@
   color: var(--text-muted);
 }
 
-.landing-auth-hold-content {
+.web-route-access-hold {
+  position: relative;
+  min-height: 100vh;
+  background: var(--bg-workspace);
+}
+
+.web-route-access-hold-frame {
+  min-height: inherit;
+}
+
+.web-route-access-hold-failure {
+  position: fixed;
+  z-index: 100;
+  top: 50%;
+  left: 50%;
   display: grid;
   justify-items: center;
   gap: 10px;
-  padding: 24px;
+  width: min(360px, calc(100vw - 40px));
+  padding: 20px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 14px;
+  background: var(--bg-card-solid, var(--bg-card));
+  color: var(--text-muted);
   text-align: center;
+  box-shadow: var(--web-popover-shadow);
+  transform: translate(-50%, -50%);
 }
 
-.landing-auth-hold-content p {
+.web-route-access-hold-failure p {
   margin: 0;
 }
 
-.landing-auth-hold-actions {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 16px;
-}
-
-.landing-auth-hold-retry {
+.web-route-access-hold-failure button {
   padding: 0;
   border: 0;
   background: transparent;
@@ -228,7 +242,7 @@
   cursor: pointer;
 }
 
-.landing-auth-hold-retry:focus-visible {
+.web-route-access-hold-failure button:focus-visible {
   outline: 2px solid var(--focus-ring, var(--accent));
   outline-offset: 4px;
   border-radius: 2px;
@@ -2527,10 +2541,32 @@
   padding-bottom: calc(var(--mobile-community-composer-height, 0px) + 18px);
 }
 
+.app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root,
+.app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root-error {
+  transform-origin: top;
+  transition:
+    max-block-size 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 140ms ease,
+    border-width 140ms ease;
+  will-change: max-block-size, transform, opacity;
+}
+
+.app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root-error {
+  max-block-size: 48px;
+  overflow: hidden;
+}
+
 .app-root.mobile-shell.mobile-reading-mode .mobile-topbar {
   transform: translateY(calc(-100% - env(safe-area-inset-top, 0px) - 8px));
   opacity: 0;
   pointer-events: none;
+}
+
+.app-root.mobile-shell.mobile-reading-mode .community-chat .community-channel-header {
+  flex-basis: 0;
+  height: 0;
+  min-height: 0;
 }
 
 .app-root.mobile-shell.mobile-reading-mode .mobile-bottom-rail {
@@ -2545,6 +2581,15 @@
   pointer-events: none;
 }
 
+.app-root.mobile-shell.mobile-reading-mode .community-chat .community-channel-pinned-root,
+.app-root.mobile-shell.mobile-reading-mode .community-chat .community-channel-pinned-root-error {
+  max-block-size: 0;
+  transform: translateY(-12px);
+  opacity: 0;
+  border-block-width: 0;
+  pointer-events: none;
+}
+
 .app-root.mobile-shell:has(.community-chat .chat-input-bar:focus-within) .mobile-bottom-rail {
   transform: translateY(100%);
   opacity: 0;
@@ -2554,8 +2599,11 @@
 @media (prefers-reduced-motion: reduce) {
   .mobile-topbar,
   .mobile-bottom-rail,
+  .app-root.mobile-shell .community-chat .community-channel-header,
   .app-root.mobile-shell .community-chat .community-channel-header-actions,
-  .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-interaction-main-composer {
+  .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-interaction-main-composer,
+  .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root,
+  .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root-error {
     transition: none;
   }
 }

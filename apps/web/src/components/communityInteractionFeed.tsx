@@ -519,7 +519,7 @@ export function ProfileHoverCard(props: {
           />
           <button
             type="button"
-            className="chat-profile-message-button"
+            className="community-profile-message-action"
             disabled={!canMessage}
             onClick={() => {
               if (canMessage) props.onMessageUser?.(userId);

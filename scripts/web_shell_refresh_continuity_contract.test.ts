@@ -7,6 +7,36 @@ function read(path: string): string {
 }
 
 describe("web shell refresh continuity contract", () => {
+  it("keeps route admission inside one inert canonical shell", () => {
+    const app = read("apps/web/src/App.tsx");
+    const hold = read("apps/web/src/components/WebRouteAccessHold.tsx");
+    const fallback = read("apps/web/src/components/WebAppMainSurfaceFallback.tsx");
+    const communityBootstrap = read(
+      "apps/web/src/components/WebCommunityInteractionBootstrap.tsx",
+    );
+    const css = read("apps/web/src/index.css");
+
+    expect(app).not.toContain("Opening Polynet…");
+    expect(app).toMatch(
+      /if \(shouldHoldRouteForAccess\) \{[\s\S]*WebRouteAccessHold/,
+    );
+    expect(hold).toContain("WebShellChromeHost");
+    expect(hold).toContain("WebAppMainSurfaceFallback");
+    expect(hold).toContain("node.inert = true");
+    expect(hold).toContain('aria-busy={!props.error}');
+    expect(hold).toContain("quiet");
+    expect(hold).toContain("globalOverlays={null}");
+    expect(hold).toContain("railCommunities: []");
+    expect(hold).toContain("communityChannels: []");
+    expect(hold).toContain("memberFaces: []");
+    expect(fallback).toContain("quiet={props.quiet}");
+    expect(communityBootstrap).toMatch(
+      /!props\.quiet \? \([\s\S]*Opening community…[\s\S]*\) : null/,
+    );
+    expect(css).not.toContain(".landing-auth-hold-content");
+    expect(css).toContain(".web-route-access-hold-failure");
+  });
+
   it("never redirects an unresolved valid community route to Discover", () => {
     const app = read("apps/web/src/App.tsx");
 
@@ -44,7 +74,8 @@ describe("web shell refresh continuity contract", () => {
     const interaction = read("apps/web/src/controllers/useWebCommunityInteractionProjection.ts");
     const app = read("apps/web/src/App.tsx");
 
-    expect(nav).toContain("community-channel-loading-row web-skeleton-row");
+    expect(nav).toContain('className="community-channel-loading-row web-skeleton-row"');
+    expect(nav).toContain('className="community-channel-loading-row is-short web-skeleton-row"');
     expect(context).toContain("community-context-memory-preview web-skeleton-block");
     expect(context).toContain("community-context-member-skeleton");
     expect(context).not.toContain("Loading members...");
@@ -134,8 +165,14 @@ describe("web shell refresh continuity contract", () => {
       /const showChannelLoadingSkeleton =[\s\S]*isLoadingAccess \|\| \(isLoadingChannels/,
     );
     expect(nav).toContain("!showChannelLoadingSkeleton && canManageMembersActiveCommunity");
+    expect(nav).toContain("community-nav-access-loading community-nav-utility-loading");
+    expect(nav).toMatch(
+      /isLoadingAccess \? \([\s\S]*Array\.from\(\{ length: 3 \}\)[\s\S]*title="Resources"[\s\S]*title="Events"/,
+    );
+    expect(nav).toContain('className="community-nav-access-loading-row web-skeleton-block"');
     expect(nav).toContain('className="community-nav-access-loading"');
     expect(nav).toContain('className="community-nav-invite-loading web-skeleton-block"');
+    expect(nav).not.toContain("community-nav-loading-surface");
     expect(navSurface).toContain("isLoadingAccess={communityShell.isLoadingCommunityAccess}");
   });
 

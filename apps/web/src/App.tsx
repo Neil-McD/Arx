@@ -178,6 +178,7 @@ import { buildWebCommunitySurfaceProjection } from "./controllers/buildWebCommun
 import { useCommunitySettingsAccessLifecycle } from "../../../shared/useCommunitySettingsAccessLifecycle";
 import type { WebSettingsPanelsProps } from "./components/WebSettingsPanels";
 import { WebAppCompositionRoot } from "./components/WebAppCompositionRoot";
+import { WebRouteAccessHold } from "./components/WebRouteAccessHold";
 import { useWebDirectMessagesController } from "./controllers/useWebDirectMessagesController";
 import { buildWebStandalonePublicRouteViewProps } from "./controllers/buildWebStandalonePublicRouteViewProps";
 import { buildWebGlobalOverlayHostProps } from "./controllers/buildWebGlobalOverlayHostProps";
@@ -3100,46 +3101,12 @@ export default function App() {
       void refreshAccountSetupStatus();
     };
     return (
-      <main
-        className="landing-auth-hold"
-        aria-busy={!routeAdmissionError}
-      >
-        <div className="landing-auth-hold-content">
-          <p role="status" aria-live="polite">
-            {routeAdmissionError
-              ? isPreviewAdmissionFailure
-                ? previewAdmissionError
-                : "Polynet could not finish verifying your session."
-              : "Opening Polynet…"}
-          </p>
-          {routeAdmissionError ? (
-            <div className="landing-auth-hold-actions">
-              <button
-                type="button"
-                className="landing-auth-hold-retry"
-                onClick={retryRouteAdmission}
-              >
-                Try again
-              </button>
-              {isPreviewAdmissionFailure ? (
-                <button
-                  type="button"
-                  className="landing-auth-hold-retry"
-                  onClick={() =>
-                    navigateTo(
-                      buildCommunityTabPath(publicFunnelSlug, "funnel") ??
-                        "/discover",
-                      { replace: true },
-                    )
-                  }
-                >
-                  Back to builder
-                </button>
-              ) : null}
-            </div>
-          ) : null}
-        </div>
-      </main>
+      <WebRouteAccessHold
+        shellChromeHostProps={shellChromeHostProps}
+        mainSurfaceHostProps={mainSurfaceHostProps}
+        error={routeAdmissionError}
+        onRetry={retryRouteAdmission}
+      />
     );
   }
 

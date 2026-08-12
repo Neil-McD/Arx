@@ -52,7 +52,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 46px;/,
+  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 42px;/,
   "mobile member composers should retain touch controls and a bounded writing region",
 );
 assert.match(
@@ -105,8 +105,8 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.community-member-chat \.community-interaction-main-composer::before,[\s\S]*\.community-member-chat \.community-interaction-drawer-composer::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 22px\);[\s\S]*linear-gradient\([\s\S]*var\(--bg-workspace\) 76%/,
-  "community and thread content should fade behind a static composer layer",
+  /\.community-member-chat \.community-interaction-main-composer::before,[\s\S]*\.community-member-chat \.community-interaction-drawer-composer::before \{[\s\S]*z-index: -1;[\s\S]*height: calc\(100% \+ 18px\);[\s\S]*linear-gradient\([\s\S]*var\(--bg-workspace\) 92%[\s\S]*18px,[\s\S]*var\(--bg-workspace\) 94%/,
+  "community and thread content should leave only a narrow cue before becoming opaque behind the composer",
 );
 assert.match(
   baseCss,
@@ -125,6 +125,16 @@ assert.match(
   baseCss,
   /\.community-member-chat \.community-interaction-main-composer \.chat-input-bar \{[^}]*border-radius: 18px;[\s\S]*\.community-member-chat \.community-interaction-drawer-composer \.chat-input-bar \{[^}]*border-radius: 18px;/,
   "main and thread community composers should share the same raised-shell shape",
+);
+assert.match(
+  baseCss,
+  /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar,[\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar \{[^}]*border-radius: 14px;[^}]*background: color-mix\([\s\S]*var\(--bg-workspace\) 60%,[\s\S]*var\(--bg-card-solid, var\(--bg-card\)\) 40%[\s\S]*box-shadow: none;/,
+  "desktop community composers should use a bounded, shadowless material between the workspace and card surfaces",
+);
+assert.match(
+  baseCss,
+  /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\),[\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\) \{[^}]*border-color: color-mix\(in srgb, var\(--border-default\) 68%, transparent\);/,
+  "desktop community composers should keep a quiet resting edge without masking drag-over feedback",
 );
 assert.doesNotMatch(
   baseCss,
