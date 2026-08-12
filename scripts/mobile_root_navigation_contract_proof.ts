@@ -97,15 +97,15 @@ assert.doesNotMatch(
   /mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members"[\s\S]*onCloseMobileMembersOverlay: \(\) => setMobileOverlay\(null\)/,
   "authenticated Members must not depend on the chat-owned overlay",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /mobileMembersOverlayOpen:[\s\S]*community_funnel[\s\S]*mobileOverlay === "members"/,
-  "the public community funnel should retain its visitor Members overlay",
+  /mobileMembersOverlayOpen|visitorShellActiveCommunity|visitorGateNonce/,
+  "the public marketing funnel must not retain the deleted visitor community shell",
 );
 assert.match(
   app,
-  /canViewMembers:[\s\S]*hasSelectedCommunity && canViewMembersActiveCommunity[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*Boolean\(resolvedPublicCommunity\)/,
-  "the Members affordance should follow member capability or the public community funnel",
+  /canOpenMobileMembers: canViewMembersActiveCommunity/,
+  "the Members affordance must remain an authenticated member capability",
 );
 assert.match(
   app,
@@ -127,10 +127,15 @@ assert.match(
   /<WebMemberAgentDock[\s\S]*\{\.\.\.props\.memberAgentDockProps\}[\s\S]*<WebDirectMessagesHost \{\.\.\.props\.directMessagesHostProps\} \/>/,
   "the composition root should mount both controlled persistent mobile-root surfaces",
 );
+assert.doesNotMatch(
+  app + controller,
+  /forceCommunityRoot/,
+  "the authenticated mobile shell must not retain a public-funnel root override",
+);
 assert.match(
-  app,
-  /forceCommunityRoot:[\s\S]*showMobileShell[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*shellPublicRoute\.kind === "community_funnel_preview"/,
-  "public community funnels should remain forced to the Community root",
+  shellProjection,
+  /const showMobilePublicFunnel =[\s\S]*params\.shellVariant === "mobile" && isPublicFunnelRoute;/,
+  "mobile public funnels should render as a dedicated acquisition surface",
 );
 
 assert.match(
@@ -413,7 +418,7 @@ assert.match(
 );
 assert.match(
   shellProjection,
-  /const showMobileShell = showMobileAppShell;[\s\S]*const showMobileGlobalShell =[\s\S]*!isMobileVisitorCommunity[\s\S]*params\.mobileRootPage !== "community"[\s\S]*!isCommunityAppDestination[\s\S]*params\.destination\.kind === "community_home"/,
+  /const showMobileShell = showMobileAppShell;[\s\S]*const showMobileGlobalShell =[\s\S]*params\.mobileRootPage !== "community"[\s\S]*!isCommunityAppDestination[\s\S]*params\.destination\.kind === "community_home"/,
   "the route projection should frame global roots while leaving community detail routes focused",
 );
 assert.match(

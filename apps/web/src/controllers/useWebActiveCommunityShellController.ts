@@ -302,10 +302,6 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     activeCommunityPresenceSummary?.online_faces,
   ]);
 
-  const funnelPreviewAdminCount = communitySocialSummary.adminCount;
-  const funnelPreviewOnlineCount = communitySocialSummary.onlineCount;
-  const funnelPreviewOnlineFaces = communitySocialSummary.onlineFaces;
-
   const activeCommunityOnlineUserIds = useMemo(() => {
     if (!activeCommunityPresenceSummary) return null;
     const ids = activeCommunityPresenceSummary.online_user_ids;
@@ -338,9 +334,6 @@ export function useWebActiveCommunityShellController<SessionT>(params: {
     canManageMembersActiveCommunity,
     canReviewJoinRequestsActiveCommunity,
     canViewActiveCommunityAnalytics,
-    funnelPreviewAdminCount,
-    funnelPreviewOnlineCount,
-    funnelPreviewOnlineFaces,
     activeCommunityOnlineUserIds,
   };
 }

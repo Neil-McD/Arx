@@ -140,10 +140,7 @@ import { useCommunityMembersReviewController } from "../../../shared/useCommunit
 import { useCommunityAdminAnalyticsLifecycle } from "../../../shared/useCommunityAdminAnalyticsLifecycle";
 import { useCommunityMembersReviewLifecycle } from "../../../shared/useCommunityMembersReviewLifecycle";
 import { truncateReplyPreview } from "../../../shared/communityMessageParsing";
-import {
-  formatCommunityVisibilityLabel,
-  toCanonicalCommunityVisibility,
-} from "../../../shared/communityVisibility";
+import { toCanonicalCommunityVisibility } from "../../../shared/communityVisibility";
 import {
   loadAccountCommerceStatusCanonical,
   type AccountCommerceStatus,
@@ -781,9 +778,6 @@ export default function App() {
     canReviewJoinRequestsActiveCommunity,
     canViewActiveCommunityAnalytics,
     communitySocialSummary,
-    funnelPreviewAdminCount,
-    funnelPreviewOnlineCount,
-    funnelPreviewOnlineFaces,
     activeCommunityOnlineUserIds,
     activeCommunityPresenceSummary,
     isLoadingActiveCommunityPresence,
@@ -1906,11 +1900,6 @@ export default function App() {
       enabled: canReorderCommunities,
       onMoveToIndex: handleReorderCommunityRail,
     });
-  const funnelPreviewVisibility = toCanonicalCommunityVisibility(activeCommunity?.visibility, "unlisted");
-  const funnelPreviewVisibilityLabel = formatCommunityVisibilityLabel(funnelPreviewVisibility);
-  const funnelPreviewAction = deriveCommunityFunnelAction({
-    entry_policy: activeCommunity?.entry_policy,
-  });
   const activeCommunitySocialMemberCount = activeCommunity && typeof communitySocialSummary.memberCount === "number"
     ? communitySocialSummary.memberCount
     : null;
@@ -1996,14 +1985,7 @@ export default function App() {
       selectedActiveCommunitySlug,
       mobileRootPage,
       canViewMembers:
-        (hasSelectedCommunity && canViewMembersActiveCommunity) ||
-        ((shellPublicRoute.kind === "community_funnel" ||
-          shellPublicRoute.kind === "community_funnel_preview") &&
-          Boolean(resolvedPublicCommunity)),
-      forceCommunityRoot:
-        showMobileShell &&
-        (shellPublicRoute.kind === "community_funnel" ||
-          shellPublicRoute.kind === "community_funnel_preview"),
+        hasSelectedCommunity && canViewMembersActiveCommunity,
       mobileOverlay,
       showMobileShell,
       showMobileSettingsShell,
@@ -2234,7 +2216,6 @@ export default function App() {
         communityFunnelConfig,
         setCommunityFunnelConfig,
         markCommunityFunnelDirty,
-        funnelOneLiner: communitySettingsOneLiner,
         funnelAbout: communitySettingsAbout,
         setFunnelAbout: setCommunitySettingsAbout,
         isFunnelAboutDirty: isCommunityFunnelAboutDirty,
@@ -2243,27 +2224,6 @@ export default function App() {
         handleResetCommunityFunnelAbout,
         isSavingCommunitySettings,
         communitySettingsError,
-        previewCommunity: {
-          slug: activeCommunity?.slug ?? null,
-          name: activeCommunity?.name ?? "Community",
-          one_liner: communitySettingsOneLiner || null,
-          about: communitySettingsAbout || null,
-          avatar_url: activeCommunity?.avatar_url ?? null,
-          avatar_focus_x: activeCommunity?.avatar_focus_x ?? null,
-          avatar_focus_y: activeCommunity?.avatar_focus_y ?? null,
-          avatar_zoom: activeCommunity?.avatar_zoom ?? null,
-          banner_url: activeCommunity?.banner_url ?? null,
-          banner_focus_x: activeCommunity?.banner_focus_x ?? null,
-          banner_focus_y: activeCommunity?.banner_focus_y ?? null,
-          banner_zoom: activeCommunity?.banner_zoom ?? null,
-          visibility: activeCommunity?.visibility ?? "unlisted",
-          admin_count: funnelPreviewAdminCount,
-          online_count: funnelPreviewOnlineCount,
-          online_faces: funnelPreviewOnlineFaces,
-        },
-        previewVisibilityLabel: funnelPreviewVisibilityLabel,
-        previewMemberCount: activeCommunitySocialMemberCount,
-        previewFunnelAction: funnelPreviewAction,
       },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,
@@ -2730,17 +2690,7 @@ export default function App() {
             slug: resolvedPublicCommunity.slug ?? undefined,
           }
         : null,
-      isMobile: showMobilePublicFunnel,
-      shellVariant,
       isPreviewMode: isPublicFunnelPreviewRoute,
-      gateOpenNonce: publicCommunityUi.visitorGateNonce,
-      mobileMembersOverlayOpen:
-        showMobileShell &&
-        (publicRoute.kind === "community_funnel" ||
-          publicRoute.kind === "community_funnel_preview") &&
-        mobileOverlay === "members",
-      onCloseMobileMembersOverlay: () => setMobileOverlay(null),
-      publicVisibilityLabel,
       selectedPublicCommunityPlanLabel: selectedPublicCommunityPlan
         ? formatPlanPrice(selectedPublicCommunityPlan)
         : null,
@@ -2875,27 +2825,6 @@ export default function App() {
       communityRailAttentionById[communityId] = true;
     }
   }
-  /* The visitor lens reuses the community-local navigation without exposing
-     the authenticated global rail: public identity, locked capabilities, one
-     funnel render path. */
-  const isVisitorCommunitySurface =
-    publicRoute.kind === "community_funnel" || publicRoute.kind === "community_funnel_preview";
-  const visitorShellActiveCommunity =
-    isVisitorCommunitySurface && resolvedPublicCommunity
-      ? {
-          id: `visitor:${resolvedPublicCommunity.slug ?? publicFunnelSlug ?? ""}`,
-          slug: resolvedPublicCommunity.slug ?? null,
-          name: resolvedPublicCommunity.name,
-          avatar_url: resolvedPublicCommunity.avatar_url ?? null,
-          avatar_focus_x: resolvedPublicCommunity.avatar_focus_x ?? null,
-          avatar_focus_y: resolvedPublicCommunity.avatar_focus_y ?? null,
-          avatar_zoom: resolvedPublicCommunity.avatar_zoom ?? null,
-          banner_url: resolvedPublicCommunity.banner_url ?? null,
-          banner_focus_x: resolvedPublicCommunity.banner_focus_x ?? null,
-          banner_focus_y: resolvedPublicCommunity.banner_focus_y ?? null,
-          banner_zoom: resolvedPublicCommunity.banner_zoom ?? null,
-        }
-      : null;
   const shellChromeHostProps = buildWebShellChromeHostProps({
     showMobileAppShell,
     showMobileSettingsShell,
@@ -2908,30 +2837,19 @@ export default function App() {
     mobileShellMode,
     mobileRootPage,
     mobileThreadPageOpen,
-    forceMobileCommunityRoot: showMobileShell && isVisitorCommunitySurface,
+    forceMobileCommunityRoot: false,
     showMobileSettingsIndex,
     activePage,
     destination: webDestination,
-    activeCommunity: isVisitorCommunitySurface ? visitorShellActiveCommunity : activeCommunity,
+    activeCommunity,
     activeCommunityAttentionCount,
-    activeCommunityMemberFaces:
-      isVisitorCommunitySurface
-        ? resolvedPublicCommunity?.online_faces ?? []
-        : canViewMembersActiveCommunity
-        ? activeCommunityPresenceSummary?.online_faces ?? []
-        : [],
-    activeCommunityMemberCount:
-      isVisitorCommunitySurface
-        ? resolvedPublicCommunity?.member_count ?? null
-        : canViewMembersActiveCommunity
-        ? communityDirectoryMemberCount ??
-          activeCommunityPresenceSummary?.member_count ??
-          null
-        : null,
-    canOpenMobileMembers:
-      isVisitorCommunitySurface
-        ? Boolean(resolvedPublicCommunity)
-        : canViewMembersActiveCommunity,
+    activeCommunityMemberFaces: canViewMembersActiveCommunity
+      ? activeCommunityPresenceSummary?.online_faces ?? []
+      : [],
+    activeCommunityMemberCount: canViewMembersActiveCommunity
+      ? communityDirectoryMemberCount ?? activeCommunityPresenceSummary?.member_count ?? null
+      : null,
+    canOpenMobileMembers: canViewMembersActiveCommunity,
     handleExitMobileSettings,
     handleCloseMobileThreadPage: handleCloseCommunityInteractionDrawer,
     handleSelectMobileRootPage,
@@ -2955,80 +2873,44 @@ export default function App() {
     handleTopbarBackFromPublicFunnel,
     handleTopbarBackFromSettings,
     handleTopbarBackToCommunity,
-    communityTab: isVisitorCommunitySurface ? "chat" : communityTab,
-    communityTabIndicators: isVisitorCommunitySurface
-      ? { chat: false, resources: false, events: false, mentions: false }
-      : communityTabIndicators,
-    communityChannels: isVisitorCommunitySurface
-      ? [{ id: "", slug: "general", name: "General", is_general: true, position: 0 }]
-      : activeCommunityChannels,
-    isLoadingCommunityChannels:
-      !isVisitorCommunitySurface && isLoadingActiveCommunityChannels,
-    selectedCommunityChannelSlug: isVisitorCommunitySurface
-      ? "general"
-      : activeCommunityChannelSlug,
-    communityChannelIndicators: isVisitorCommunitySurface
-      ? {}
-      : communityChannelIndicators,
-    handleSelectCommunityChannel: isVisitorCommunitySurface
-      ? () => undefined
-      : (channel) => {
-          const path = buildCommunityTabPath(
-            selectedActiveCommunitySlug,
-            "chat",
-            null,
-            null,
-            channel.is_general ? null : channel.slug,
-          );
-          if (path) navigateTo(path);
-        },
-    handleCreateCommunityChannel: isVisitorCommunitySurface
-      ? () => Promise.resolve(null)
-      : handleCreateCommunityChannel,
+    communityTab,
+    communityTabIndicators,
+    communityChannels: activeCommunityChannels,
+    isLoadingCommunityChannels: isLoadingActiveCommunityChannels,
+    selectedCommunityChannelSlug: activeCommunityChannelSlug,
+    communityChannelIndicators,
+    handleSelectCommunityChannel: (channel) => {
+      const path = buildCommunityTabPath(
+        selectedActiveCommunitySlug,
+        "chat",
+        null,
+        null,
+        channel.is_general ? null : channel.slug,
+      );
+      if (path) navigateTo(path);
+    },
+    handleCreateCommunityChannel,
     isCreatingCommunityChannel,
     communityChannelCreateError,
     clearCommunityChannelCreateError,
     isAtCommunityChannelLimit,
     maxActiveCommunityChannels,
-    handleReorderCommunityChannels: isVisitorCommunitySurface
-      ? () => Promise.resolve(false)
-      : handleReorderCommunityChannels,
+    handleReorderCommunityChannels,
     isReorderingCommunityChannels,
     communityChannelReorderError,
     clearCommunityChannelReorderError,
-    canViewMembersActiveCommunity: !isVisitorCommunitySurface && canViewMembersActiveCommunity,
-    canViewActiveCommunitySettings: !isVisitorCommunitySurface && canViewActiveCommunitySettings,
-    canManageMembersActiveCommunity: !isVisitorCommunitySurface && canManageMembersActiveCommunity,
-    canViewActiveCommunityAnalytics: !isVisitorCommunitySurface && canViewActiveCommunityAnalytics,
-    isLoadingCommunityAccess:
-      !isVisitorCommunitySurface &&
-      (isAuthRecoveringSignedInAppShell || isLoadingCommunityAccess),
-    lockedCommunityNavTabs: isVisitorCommunitySurface
-      ? { resources: true, events: true }
-      : null,
-    handleSelectCommunityTab: isVisitorCommunitySurface
-      ? (tab) => {
-          if (tab !== "chat") {
-            publicCommunityUi.setVisitorGateNonce((nonce) => nonce + 1);
-          }
-        }
-      : handleSelectCommunityTab,
-    handleSelectCommunityTabFromMobile: isVisitorCommunitySurface
-      ? (tab) => {
-          if (tab !== "chat") {
-            publicCommunityUi.setVisitorGateNonce((nonce) => nonce + 1);
-          }
-        }
-      : handleSelectCommunityTabFromMobile,
+    canViewMembersActiveCommunity,
+    canViewActiveCommunitySettings,
+    canManageMembersActiveCommunity,
+    canViewActiveCommunityAnalytics,
+    isLoadingCommunityAccess: isAuthRecoveringSignedInAppShell || isLoadingCommunityAccess,
+    lockedCommunityNavTabs: null,
+    handleSelectCommunityTab,
+    handleSelectCommunityTabFromMobile,
     onCopyCommunityJoinLink: copyTextToClipboard,
     canOpenDirectMessages: Boolean(session),
     directMessagesUnreadCount,
-    /* Rail bridge: on the visitor route, app state changes don't render
-       (publicRoute stays "community_funnel"), so shell verbs must really
-       NAVIGATE — the rail is real, its clicks must be too. */
-    handleOpenDiscover: isVisitorCommunitySurface
-      ? () => navigateTo("/discover")
-      : handleOpenDiscover,
+    handleOpenDiscover,
     openMobileCreateCommunity,
     openCommunityCreateFlow: openNewCommunityPurchaseFlow,
     communities,
@@ -3036,18 +2918,12 @@ export default function App() {
     communityRailAttentionById,
     isLoadingCommunities,
     selectedActiveCommunitySlug,
-    handleSelectActiveCommunity: isVisitorCommunitySurface
-      ? (community) => {
-          const path = buildCommunityTabPath(community.slug ?? null, "chat");
-          if (path) navigateTo(path);
-          return false;
-        }
-      : (community) => {
-          const nextCommunity =
-            railCommunities.find((candidate) => candidate.id === community.id) ??
-            communities.find((candidate) => candidate.id === community.id);
-          return nextCommunity ? handleSelectActiveCommunity(nextCommunity) : false;
-        },
+    handleSelectActiveCommunity: (community) => {
+      const nextCommunity =
+        railCommunities.find((candidate) => candidate.id === community.id) ??
+        communities.find((candidate) => candidate.id === community.id);
+      return nextCommunity ? handleSelectActiveCommunity(nextCommunity) : false;
+    },
     openCommunityChat,
     openCommunityHome,
     openCommunityMembers,
@@ -3059,11 +2935,9 @@ export default function App() {
     draggingCommunityId,
     setCommunityRailListElement,
     getCommunityRailItemBindings,
-    handleOpenGlobalSettings: isVisitorCommunitySurface
-      ? () => navigateTo(buildSettingsPath("profile"))
-      : shellVariant === "mobile"
-        ? () => navigateTo(buildSettingsIndexPath())
-        : () => openGlobalSettings("profile"),
+    handleOpenGlobalSettings: shellVariant === "mobile"
+      ? () => navigateTo(buildSettingsIndexPath())
+      : () => openGlobalSettings("profile"),
     settingsGroup: settingsGroup as SettingsGroup,
     setSettingsPage,
     hasLeftPanel,

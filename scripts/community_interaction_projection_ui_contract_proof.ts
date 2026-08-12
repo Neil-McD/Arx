@@ -43,7 +43,6 @@ const chatPresentationMode = read(
   "apps/web/src/controllers/resolveWebCommunityChatPresentationMode.ts",
 );
 const projection = read("apps/web/src/components/WebCommunityInteractionProjection.tsx");
-const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberSettingsDialog = read("apps/web/src/components/CommunityMemberSettingsDialog.tsx");
 const communityNav = read("shared/CommunityNav.tsx");
@@ -210,11 +209,6 @@ assert.doesNotMatch(
   surfaceProjection,
   /renderMarkdown/,
   "community surface projection should not carry an unused workspace markdown renderer",
-);
-assert.doesNotMatch(
-  visitorSurface,
-  /renderMarkdown/,
-  "visitor chat should use the same bounded community renderer without importing workspace markdown",
 );
 assert.doesNotMatch(
   projection,

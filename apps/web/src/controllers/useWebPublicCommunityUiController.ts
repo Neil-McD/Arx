@@ -15,7 +15,6 @@ export function useWebPublicCommunityUiController<
   const [isJoiningPublicCommunity, setIsJoiningPublicCommunity] = useState(false);
   const [isCancellingPublicCommunityJoinRequest, setIsCancellingPublicCommunityJoinRequest] = useState(false);
   const [publicJoinError, setPublicJoinError] = useState<string | null>(null);
-  const [visitorGateNonce, setVisitorGateNonce] = useState(0);
 
   return {
     publicCommunity,
@@ -36,7 +35,5 @@ export function useWebPublicCommunityUiController<
     setIsCancellingPublicCommunityJoinRequest,
     publicJoinError,
     setPublicJoinError,
-    visitorGateNonce,
-    setVisitorGateNonce,
   };
 }

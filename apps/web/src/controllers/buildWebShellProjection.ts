@@ -44,30 +44,24 @@ export function buildWebShellProjection(params: {
   const isCommunityAppDestination = isWebCommunityAppDestination(
     params.destination,
   );
-  /* The visitor lens on mobile: /c/:slug gets the SAME mobile community
-     shell a member gets — one column, the middle panel is the page. */
-  const isVisitorCommunityRoute =
+  const isPublicFunnelRoute =
     params.publicRouteKind === "community_funnel" ||
     params.publicRouteKind === "community_funnel_preview";
-  const isMobileVisitorCommunity =
-    params.shellVariant === "mobile" && isVisitorCommunityRoute;
   const showMobileAppShell =
-    (params.shellVariant === "mobile" &&
-      isAppRoute &&
-      !isPublicAppPage &&
-      !params.isPublicCommunityFunnel &&
-      (isGlobalSettings ||
-        isCommunityAppDestination ||
-        params.destination.kind === "discover" ||
-        params.destination.kind === "operator" ||
-        params.destination.kind === "docs")) ||
-    isMobileVisitorCommunity;
+    params.shellVariant === "mobile" &&
+    isAppRoute &&
+    !isPublicAppPage &&
+    !params.isPublicCommunityFunnel &&
+    (isGlobalSettings ||
+      isCommunityAppDestination ||
+      params.destination.kind === "discover" ||
+      params.destination.kind === "operator" ||
+      params.destination.kind === "docs");
   const showMobileSettingsShell =
-    showMobileAppShell && isGlobalSettings && !isMobileVisitorCommunity;
+    showMobileAppShell && isGlobalSettings;
   const showMobileShell = showMobileAppShell;
   const showMobileGlobalShell =
     showMobileAppShell &&
-    !isMobileVisitorCommunity &&
     (params.mobileRootPage !== "community" ||
       !isCommunityAppDestination ||
       params.destination.kind === "community_home" ||
@@ -75,21 +69,12 @@ export function buildWebShellProjection(params: {
   const showMobileSettingsIndex =
     showMobileSettingsShell && params.mobileSettingsView === "index";
   const showMobilePublicFunnel =
-    params.shellVariant === "mobile" &&
-    !isAppRoute &&
-    params.isPublicCommunityFunnel &&
-    !isMobileVisitorCommunity;
-  /* The visitor lens keeps the community-local navigation, but never exposes
-     the authenticated global community rail. One funnel render path, one
-     public acquisition context. */
-  const showDesktopPublicFunnelNav =
-    isVisitorCommunityRoute && params.shellVariant !== "mobile";
+    params.shellVariant === "mobile" && isPublicFunnelRoute;
   const showDesktopCommunityNav =
-    (isAppRoute &&
+    isAppRoute &&
       isCommunityAppDestination &&
       !showMobileAppShell &&
-      !showMobilePublicFunnel) ||
-    showDesktopPublicFunnelNav;
+      !showMobilePublicFunnel;
   const showDesktopCommunityRail =
     isAppRoute &&
     !isOperatorPage &&
@@ -99,9 +84,7 @@ export function buildWebShellProjection(params: {
     showDesktopCommunityRail && !isPublicAppPage;
   const hasLeftPanel =
     (isGlobalSettings && !showMobileSettingsShell) || showDesktopCommunityNav;
-  const mobileShellMode: MobileShellMode = isMobileVisitorCommunity
-    ? "community"
-    : isGlobalSettings || isCommunitySettings
+  const mobileShellMode: MobileShellMode = isGlobalSettings || isCommunitySettings
       ? "settings"
       : params.destination.kind === "discover" ||
         params.destination.kind === "operator" ||

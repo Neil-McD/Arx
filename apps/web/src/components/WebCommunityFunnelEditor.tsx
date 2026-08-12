@@ -7,39 +7,7 @@ import {
 } from "react";
 
 import type { CommunityFunnelConfig } from "../../../../shared/communityTypes";
-import {
-  buildCommunityFunnelCopy,
-  filterOnlineAvatarFaces,
-  formatCommunityLink,
-} from "../../../../shared/communityFunnelUi";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
-
-type PreviewCommunityLike = {
-  slug?: string | null;
-  name: string;
-  one_liner: string | null;
-  about?: string | null;
-  avatar_url?: string | null;
-  avatar_focus_x?: number | null;
-  avatar_focus_y?: number | null;
-  avatar_zoom?: number | null;
-  banner_url?: string | null;
-  banner_focus_x?: number | null;
-  banner_focus_y?: number | null;
-  banner_zoom?: number | null;
-  visibility: string;
-  admin_count?: number | null;
-  online_count?: number | null;
-  online_count_capped?: boolean | null;
-  online_faces?: Array<{
-    user_id: string;
-    display_name: string | null;
-    avatar_url: string | null;
-    avatar_focus_x?: number | null;
-    avatar_focus_y?: number | null;
-    avatar_zoom?: number | null;
-  }> | null;
-};
 
 export type WebCommunityFunnelEditorProps = {
   communityFunnelDirtyRef: MutableRefObject<boolean>;
@@ -51,7 +19,6 @@ export type WebCommunityFunnelEditorProps = {
   communityFunnelConfig: CommunityFunnelConfig;
   setCommunityFunnelConfig: React.Dispatch<React.SetStateAction<CommunityFunnelConfig>>;
   markCommunityFunnelDirty: () => void;
-  funnelOneLiner: string;
   funnelAbout: string;
   setFunnelAbout: (value: string) => void;
   isFunnelAboutDirty: boolean;
@@ -60,10 +27,6 @@ export type WebCommunityFunnelEditorProps = {
   handleResetCommunityFunnelAbout: () => void;
   isSavingCommunitySettings: boolean;
   communitySettingsError: string | null;
-  previewCommunity: PreviewCommunityLike;
-  previewVisibilityLabel: string;
-  previewMemberCount: number | null;
-  previewFunnelAction: "join" | "request_access" | "checkout";
 };
 
 export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
@@ -77,7 +40,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     communityFunnelConfig,
     setCommunityFunnelConfig,
     markCommunityFunnelDirty,
-    funnelOneLiner,
     funnelAbout,
     setFunnelAbout,
     isFunnelAboutDirty,
@@ -86,29 +48,14 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     handleResetCommunityFunnelAbout,
     isSavingCommunitySettings,
     communitySettingsError,
-    previewCommunity,
-    previewVisibilityLabel,
-    previewMemberCount,
-    previewFunnelAction,
   } = props;
 
   const isMediaDirty = communityFunnelDirtyRef.current;
   const isDirty = isMediaDirty || isFunnelAboutDirty;
   const isSaving = isSavingCommunityFunnel || isSavingCommunitySettings;
-  const funnelCopy = buildCommunityFunnelCopy(previewFunnelAction);
   const mediaPreviewUrl = communityFunnelConfig.hero_media_url ?? null;
   const mediaPreviewEmbed = mediaPreviewUrl ? parseEmbedUrl(mediaPreviewUrl) : null;
-  const cardOneLiner = funnelOneLiner.trim() || funnelCopy.body;
   const aboutText = funnelAbout.trim();
-  const communityLink = previewCommunity.slug ? formatCommunityLink(previewCommunity.slug) : null;
-  const isPublishedVisibility = previewVisibilityLabel === "Published";
-  const isFreePricing = previewFunnelAction !== "checkout";
-  const pricingLabel = isFreePricing ? "FREE" : "Paid";
-  const previewAdminCount =
-    typeof previewCommunity.admin_count === "number" ? previewCommunity.admin_count : null;
-  const previewOnlineCount =
-    typeof previewCommunity.online_count === "number" ? previewCommunity.online_count : null;
-  const previewFaces = filterOnlineAvatarFaces(previewCommunity.online_faces, 4);
   const [isVideoUrlModalOpen, setIsVideoUrlModalOpen] = useState(false);
   const [videoUrlDraft, setVideoUrlDraft] = useState("");
   const [videoUrlError, setVideoUrlError] = useState<string | null>(null);
@@ -191,30 +138,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       const savedMedia = await handleSaveCommunityFunnel();
       if (savedMedia === false) return;
     }
-  };
-  const previewAction = {
-    communityName: previewCommunity.name,
-    communityLinkLabel: previewCommunity.slug ? `c/${previewCommunity.slug}` : null,
-    communityLinkHref: null,
-    avatarUrl: previewCommunity.avatar_url ?? null,
-    avatarFocusX: previewCommunity.avatar_focus_x ?? null,
-    avatarFocusY: previewCommunity.avatar_focus_y ?? null,
-    avatarZoom: previewCommunity.avatar_zoom ?? null,
-    cardBlurb: cardOneLiner,
-    memberCount: typeof previewMemberCount === "number" ? previewMemberCount : null,
-    onlineCount: previewOnlineCount,
-    onlineCountCapped: Boolean(previewCommunity.online_count_capped),
-    adminCount: previewAdminCount,
-    onlineFaces: previewFaces,
-    primaryActionLabel: "Join now",
-    isPrimaryActionDisabled: true,
-    onPrimaryAction: () => {},
-    canJoinWithApproval: false,
-    showSignIn: false,
-    approvalPending: false,
-    approvalDenied: false,
-    canRequestAgain: false,
-    isPreviewMode: true,
   };
   const renderAboutEditor = () => {
     if (isAboutEditing) {

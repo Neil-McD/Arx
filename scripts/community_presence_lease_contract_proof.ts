@@ -33,7 +33,7 @@ const facepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const webAppContracts = read("apps/web/src/webAppContracts.ts");
 const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 const funnelSurface = read("apps/web/src/components/CommunityFunnelSurface.tsx");
-const visitorChrome = read("apps/web/src/components/CommunityVisitorChrome.tsx");
+const funnelMemberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
 
 const presenceSchema = sectionBetween(
   schema,
@@ -257,19 +257,19 @@ assert.match(
   "the facepile must not present a capped count as exact",
 );
 assert.match(
-  webAppContracts + funnelSurface,
-  /online_count_capped\?: boolean \| null[\s\S]*onlineCountCapped: boolean/,
-  "the public frontend types must retain the conservative count state",
+  webAppContracts,
+  /online_count_capped\?: boolean \| null/,
+  "the authenticated presence summary must retain the conservative count state",
+);
+assert.doesNotMatch(
+  funnelSurface,
+  /onlineCount|onlineFaces/,
+  "the public acquisition renderer must not inherit live-presence state from the deleted visitor shell",
 );
 assert.match(
-  publicFunnel,
-  /onlineCountCapped = Boolean\(publicCommunity\?\.online_count_capped\)[\s\S]*onlineCountCapped,[\s\S]*stats=\{\{[\s\S]*onlineCountCapped,/,
-  "the public funnel must carry the conservative count state into its visitor projections",
-);
-assert.match(
-  visitorChrome,
-  /formatCompactStat\(action\.onlineCount\)[\s\S]*action\.onlineCountCapped \? "\+" : ""/,
-  "the public gate must visibly label a capped online count as a lower bound",
+  publicFunnel + funnelMemberProof,
+  /member_count[\s\S]*memberFaces=\{publicCommunity\?\.member_faces_preview \?\? \[\]\}[\s\S]*formatMemberCount/,
+  "the public funnel must render canonical total-member proof from the bounded public preview",
 );
 
 console.log("community_presence_lease_contract_proof: ok");

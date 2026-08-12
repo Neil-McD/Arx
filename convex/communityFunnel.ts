@@ -1,15 +1,32 @@
-import { query } from "./_generated/server";
-import { v } from "convex/values";
+import { mutation, query } from "./_generated/server";
+import { ConvexError, v } from "convex/values";
+import {
+  normalizeCommunityFunnelContentV2,
+  validateCommunityFunnelContentV2,
+} from "../shared/communityFunnel";
+import type { CommunityFunnelContentV2 } from "../shared/communityTypes";
 import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
+import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 
 type CommunityFunnelRowLike = {
   _id: unknown;
   communityId: unknown;
   heroMediaUrl?: string | null;
   heroMediaKind?: "image" | "video" | null;
+  liveMode?: "default" | "custom" | null;
+  draftVslUrl?: string | null;
+  publishedVslUrl?: string | null;
+  draftContentV2?: unknown;
+  publishedContentV2?: unknown;
+  draftRevision?: number | null;
+  draftUpdatedAt?: number | null;
+  draftUpdatedByUserId?: unknown;
+  publishedDraftRevision?: number | null;
+  publishedAt?: number | null;
+  publishedByUserId?: unknown;
   createdAt: number;
   updatedAt: number;
 };
@@ -23,6 +40,11 @@ function normalizeTrimmedString(raw: unknown, maxLength: number): string | null 
 
 function normalizeHeroMediaKind(raw: unknown): "image" | "video" {
   return raw === "video" ? "video" : "image";
+}
+
+function normalizeRevision(raw: unknown): number {
+  const revision = Math.floor(Number(raw));
+  return Number.isSafeInteger(revision) && revision >= 0 ? revision : 0;
 }
 
 function normalizeExternalUrl(raw: string): URL | null {
@@ -39,57 +61,140 @@ function normalizeExternalUrl(raw: string): URL | null {
   }
 }
 
+function isHostOrSubdomain(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
 function isSupportedCommunityFunnelVideoUrl(raw: string | null): boolean {
   if (!raw) return false;
   const url = normalizeExternalUrl(raw);
-  if (!url) return false;
+  if (!url || url.protocol !== "https:") return false;
   const host = url.hostname.toLowerCase();
   const parts = url.pathname.split("/").filter(Boolean);
 
   if (host === "youtu.be" && parts[0]) return true;
-  if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+  if (
+    isHostOrSubdomain(host, "youtube.com") ||
+    isHostOrSubdomain(host, "youtube-nocookie.com")
+  ) {
     if (url.pathname === "/watch" && url.searchParams.get("v")) return true;
-    if (
-      (parts[0] === "embed" || parts[0] === "shorts" || parts[0] === "live" || parts[0] === "v") &&
-      parts[1]
-    ) {
+    if (["embed", "shorts", "live", "v"].includes(parts[0] ?? "") && parts[1]) {
       return true;
     }
   }
-
-  if (host.includes("vimeo.com")) {
-    return parts.some((part) => /^\d{6,}$/.test(part));
-  }
-
-  if ((host === "loom.com" || host === "www.loom.com") && (parts[0] === "share" || parts[0] === "embed") && parts[1]) {
+  if (
+    isHostOrSubdomain(host, "vimeo.com") &&
+    parts.some((part) => /^\d{6,}$/.test(part))
+  ) {
     return true;
   }
-
-  if (host.includes("wistia.com") || host.includes("wistia.net")) {
-    if (url.searchParams.get("wvideo")) return true;
-    return parts.some((part, index) => (part === "medias" || part === "iframe") && Boolean(parts[index + 1]));
+  if (
+    isHostOrSubdomain(host, "loom.com") &&
+    ["share", "embed"].includes(parts[0] ?? "") &&
+    parts[1]
+  ) {
+    return true;
   }
-
+  if (
+    isHostOrSubdomain(host, "wistia.com") ||
+    isHostOrSubdomain(host, "wistia.net")
+  ) {
+    if (url.searchParams.get("wvideo")) return true;
+    return parts.some(
+      (part, index) =>
+        ["medias", "iframe"].includes(part) && Boolean(parts[index + 1]),
+    );
+  }
   return false;
 }
 
-async function buildCommunityFunnelConfig(
-  ctx: any,
-  communityId: any,
+function normalizeCommunityFunnelVslUrl(raw: unknown): string | null {
+  const value = normalizeTrimmedString(raw, 2_000);
+  if (!value) return null;
+  const url = normalizeExternalUrl(value);
+  if (!url || !isSupportedCommunityFunnelVideoUrl(url.href)) {
+    throw new ConvexError({ code: "community_funnel_vsl_url_unsupported" });
+  }
+  return url.href;
+}
+
+function normalizeStoredVslUrl(raw: unknown): string | null {
+  try {
+    return normalizeCommunityFunnelVslUrl(raw);
+  } catch {
+    return null;
+  }
+}
+
+function sameContent(
+  left: CommunityFunnelContentV2 | null,
+  right: CommunityFunnelContentV2,
+): boolean {
+  return left !== null && JSON.stringify(left) === JSON.stringify(right);
+}
+
+function storedPublishedContent(row: CommunityFunnelRowLike | null) {
+  return normalizeCommunityFunnelContentV2(row?.publishedContentV2);
+}
+
+function resolvedLiveMode(row: CommunityFunnelRowLike | null) {
+  // Compatibility: before the explicit selector existed, a published custom
+  // snapshot was live. New writes persist the selector explicitly.
+  return row?.liveMode !== "default" && storedPublishedContent(row)
+    ? "custom"
+    : "default";
+}
+
+/** Public projection: private draft state and inactive snapshots never escape. */
+export function buildCommunityFunnelPublicConfig(
+  row: CommunityFunnelRowLike | null,
+) {
+  const liveMode = resolvedLiveMode(row);
+  return {
+    hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
+    hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
+    live_mode: liveMode,
+    published_vsl_url:
+      liveMode === "custom" ? normalizeStoredVslUrl(row?.publishedVslUrl) : null,
+    published_content_v2:
+      liveMode === "custom" ? storedPublishedContent(row) : null,
+  };
+}
+
+/** Manager projection: the private draft and inactive published snapshot remain visible. */
+export function buildCommunityFunnelManagerConfig(
   row: CommunityFunnelRowLike | null,
 ) {
   return {
     hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
     hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
+    live_mode: resolvedLiveMode(row),
+    published_vsl_url: normalizeStoredVslUrl(row?.publishedVslUrl),
+    published_content_v2: storedPublishedContent(row),
+    draft_vsl_url: normalizeStoredVslUrl(row?.draftVslUrl),
+    draft_content_v2: normalizeCommunityFunnelContentV2(row?.draftContentV2),
+    draft_revision: normalizeRevision(row?.draftRevision),
+    draft_updated_at: row?.draftUpdatedAt ?? null,
+    published_draft_revision: normalizeRevision(row?.publishedDraftRevision),
+    published_at: row?.publishedAt ?? null,
   };
 }
 
 export function normalizeCommunityFunnelConfigInput(raw: unknown) {
-  const value = raw && typeof raw === "object" && !Array.isArray(raw) ? (raw as Record<string, unknown>) : {};
+  const value =
+    raw && typeof raw === "object" && !Array.isArray(raw)
+      ? (raw as Record<string, unknown>)
+      : {};
   const heroMediaKind = normalizeHeroMediaKind(value.hero_media_kind);
   const heroMediaUrl = normalizeTrimmedString(value.hero_media_url, 2_000);
-  if (heroMediaUrl && heroMediaKind === "video" && !isSupportedCommunityFunnelVideoUrl(heroMediaUrl)) {
-    throw new Error("Only YouTube, Vimeo, Loom, and Wistia links are supported for funnel media.");
+  if (
+    heroMediaUrl &&
+    heroMediaKind === "video" &&
+    !isSupportedCommunityFunnelVideoUrl(heroMediaUrl)
+  ) {
+    throw new Error(
+      "Only YouTube, Vimeo, Loom, and Wistia links are supported for funnel media.",
+    );
   }
   return {
     hero_media_url: heroMediaUrl,
@@ -97,13 +202,33 @@ export function normalizeCommunityFunnelConfigInput(raw: unknown) {
   };
 }
 
-async function getCommunityFunnelRow(ctx: any, communityId: any): Promise<CommunityFunnelRowLike | null> {
-  return (await ctx.db
+async function getCommunityFunnelRow(
+  ctx: any,
+  communityId: any,
+): Promise<CommunityFunnelRowLike | null> {
+  const rows = (await ctx.db
     .query("communityFunnels" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .first()) as CommunityFunnelRowLike | null;
+    .take(2)) as CommunityFunnelRowLike[];
+  if (rows.length > 1) {
+    throw new ConvexError({ code: "community_funnel_duplicate_rows" });
+  }
+  return rows[0] ?? null;
 }
 
+function rowHasCanonicalState(row: CommunityFunnelRowLike): boolean {
+  return Boolean(
+    row.draftContentV2 ||
+      row.publishedContentV2 ||
+      row.draftVslUrl ||
+      row.publishedVslUrl ||
+      normalizeRevision(row.draftRevision) ||
+      normalizeRevision(row.publishedDraftRevision) ||
+      row.liveMode === "custom",
+  );
+}
+
+/** Compatibility adapter for the existing profile-media editor. */
 export async function saveCommunityFunnelConfigInternal(
   ctx: any,
   communityId: any,
@@ -111,32 +236,65 @@ export async function saveCommunityFunnelConfigInternal(
   nowMs: number,
 ) {
   const existing = await getCommunityFunnelRow(ctx, communityId);
-  const hasHeroMedia = Boolean(normalized?.hero_media_url);
-  if (!hasHeroMedia) {
-    if (existing) {
-      await ctx.db.delete(existing._id as any);
+  if (!normalized.hero_media_url) {
+    if (existing && rowHasCanonicalState(existing)) {
+      await ctx.db.patch(existing._id as any, {
+        heroMediaUrl: undefined,
+        heroMediaKind: undefined,
+        updatedAt: nowMs,
+      });
+      return buildCommunityFunnelPublicConfig(
+        await getCommunityFunnelRow(ctx, communityId),
+      );
     }
-    return await buildCommunityFunnelConfig(ctx, communityId, null);
+    if (existing) await ctx.db.delete(existing._id as any);
+    return buildCommunityFunnelPublicConfig(null);
   }
-  const nextFields = {
-    heroMediaUrl: normalized.hero_media_url ?? undefined,
-    heroMediaKind: normalized.hero_media_kind ?? "image",
-    communityId,
-    createdAt: existing?.createdAt ?? nowMs,
+  const fields = {
+    heroMediaUrl: normalized.hero_media_url,
+    heroMediaKind: normalized.hero_media_kind,
     updatedAt: nowMs,
   };
   if (existing) {
-    await ctx.db.replace(existing._id as any, nextFields);
+    await ctx.db.patch(existing._id as any, fields);
   } else {
-    await ctx.db.insert("communityFunnels" as any, nextFields);
+    await ctx.db.insert("communityFunnels" as any, {
+      communityId,
+      ...fields,
+      createdAt: nowMs,
+    });
   }
-  const saved = await getCommunityFunnelRow(ctx, communityId);
-  return await buildCommunityFunnelConfig(ctx, communityId, saved);
+  return buildCommunityFunnelPublicConfig(
+    await getCommunityFunnelRow(ctx, communityId),
+  );
 }
 
-export async function resolveCommunityFunnelConfigByCommunityId(ctx: any, communityId: any) {
-  const row = await getCommunityFunnelRow(ctx, communityId);
-  return await buildCommunityFunnelConfig(ctx, communityId, row);
+export async function resolveCommunityFunnelConfigByCommunityId(
+  ctx: any,
+  communityId: any,
+) {
+  return buildCommunityFunnelPublicConfig(
+    await getCommunityFunnelRow(ctx, communityId),
+  );
+}
+
+async function requireManager(args: {
+  ctx: any;
+  userId?: any;
+  authSubject?: string | null;
+  communityId: any;
+}) {
+  const userId = await resolveUserIdForAuthenticatedRequest({
+    ctx: args.ctx,
+    userId: args.userId,
+    authSubject: args.authSubject ?? null,
+  });
+  await requireCommunityManager({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId,
+  });
+  return userId;
 }
 
 export const getCommunityFunnelConfig = query({
@@ -146,18 +304,242 @@ export const getCommunityFunnelConfig = query({
     communityId: v.id("communities"),
   },
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
+    await requireManager({
       ctx,
       userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    (args as { userId?: any }).userId = userId;
-    await requireCommunityManager({
-      ctx,
+      authSubject: args.authSubject,
       communityId: args.communityId,
-      userId: args.userId,
     });
-    const row = await getCommunityFunnelRow(ctx, args.communityId);
-    return await buildCommunityFunnelConfig(ctx, args.communityId, row);
+    return buildCommunityFunnelManagerConfig(
+      await getCommunityFunnelRow(ctx, args.communityId),
+    );
+  },
+});
+
+export const saveCommunityFunnelDraft = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    expectedDraftRevision: v.number(),
+    content: communityFunnelContentV2Validator,
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireManager({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+      communityId: args.communityId,
+    });
+    const content = validateCommunityFunnelContentV2(args.content);
+    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    const currentRevision = normalizeRevision(existing?.draftRevision);
+    const expectedRevision = normalizeRevision(args.expectedDraftRevision);
+    if (args.expectedDraftRevision !== expectedRevision) {
+      throw new ConvexError({ code: "community_funnel_draft_revision_invalid" });
+    }
+    if (expectedRevision !== currentRevision) {
+      const currentContent = normalizeCommunityFunnelContentV2(
+        existing?.draftContentV2,
+      );
+      if (
+        currentRevision === expectedRevision + 1 &&
+        sameContent(currentContent, content)
+      ) {
+        return buildCommunityFunnelManagerConfig(existing);
+      }
+      throw new ConvexError({
+        code: "community_funnel_draft_conflict",
+        expected_revision: expectedRevision,
+        current_revision: currentRevision,
+      });
+    }
+    const nowMs = Date.now();
+    const fields = {
+      draftContentV2: content,
+      draftRevision: currentRevision + 1,
+      draftUpdatedAt: nowMs,
+      draftUpdatedByUserId: userId,
+      updatedAt: nowMs,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id as any, fields);
+    } else {
+      await ctx.db.insert("communityFunnels", {
+        communityId: args.communityId,
+        ...fields,
+        createdAt: nowMs,
+      });
+    }
+    return buildCommunityFunnelManagerConfig(
+      await getCommunityFunnelRow(ctx, args.communityId),
+    );
+  },
+});
+
+export const setCommunityFunnelDraftVsl = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    expectedDraftRevision: v.number(),
+    url: v.union(v.string(), v.null()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireManager({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+      communityId: args.communityId,
+    });
+    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    const currentRevision = normalizeRevision(existing?.draftRevision);
+    const expectedRevision = normalizeRevision(args.expectedDraftRevision);
+    if (
+      args.expectedDraftRevision !== expectedRevision ||
+      expectedRevision !== currentRevision
+    ) {
+      throw new ConvexError({
+        code: "community_funnel_draft_conflict",
+        expected_revision: args.expectedDraftRevision,
+        current_revision: currentRevision,
+      });
+    }
+    const draftVslUrl = normalizeCommunityFunnelVslUrl(args.url);
+    if (normalizeStoredVslUrl(existing?.draftVslUrl) === draftVslUrl) {
+      return buildCommunityFunnelManagerConfig(existing);
+    }
+    const nowMs = Date.now();
+    const fields = {
+      draftVslUrl,
+      draftRevision: currentRevision + 1,
+      draftUpdatedAt: nowMs,
+      draftUpdatedByUserId: userId,
+      updatedAt: nowMs,
+    };
+    if (existing) {
+      await ctx.db.patch(existing._id as any, fields);
+    } else {
+      await ctx.db.insert("communityFunnels", {
+        communityId: args.communityId,
+        ...fields,
+        createdAt: nowMs,
+      });
+    }
+    return buildCommunityFunnelManagerConfig(
+      await getCommunityFunnelRow(ctx, args.communityId),
+    );
+  },
+});
+
+export const publishCommunityFunnelDraft = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    expectedDraftRevision: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const userId = await requireManager({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+      communityId: args.communityId,
+    });
+    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    const draftContent = normalizeCommunityFunnelContentV2(
+      existing?.draftContentV2,
+    );
+    if (!existing || !draftContent) {
+      throw new ConvexError({ code: "community_funnel_draft_missing" });
+    }
+    const currentRevision = normalizeRevision(existing.draftRevision);
+    if (
+      args.expectedDraftRevision !== normalizeRevision(args.expectedDraftRevision) ||
+      args.expectedDraftRevision !== currentRevision
+    ) {
+      throw new ConvexError({
+        code: "community_funnel_publish_conflict",
+        expected_revision: args.expectedDraftRevision,
+        current_revision: currentRevision,
+      });
+    }
+    if (
+      normalizeRevision(existing.publishedDraftRevision) === currentRevision &&
+      sameContent(storedPublishedContent(existing), draftContent)
+    ) {
+      return buildCommunityFunnelManagerConfig(existing);
+    }
+    const nowMs = Date.now();
+    await ctx.db.patch(existing._id as any, {
+      // New publication remains private until the manager explicitly selects it.
+      liveMode: existing.liveMode ?? "default",
+      publishedContentV2: draftContent,
+      publishedVslUrl: normalizeStoredVslUrl(existing.draftVslUrl),
+      publishedDraftRevision: currentRevision,
+      publishedAt: nowMs,
+      publishedByUserId: userId,
+      updatedAt: nowMs,
+    });
+    return buildCommunityFunnelManagerConfig(
+      await getCommunityFunnelRow(ctx, args.communityId),
+    );
+  },
+});
+
+export const setCommunityFunnelLiveMode = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    mode: v.union(v.literal("default"), v.literal("custom")),
+    expectedPublishedDraftRevision: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    await requireManager({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject,
+      communityId: args.communityId,
+    });
+    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    if (args.mode === "custom") {
+      if (!existing || !storedPublishedContent(existing)) {
+        throw new ConvexError({
+          code: "community_funnel_activation_requires_published",
+        });
+      }
+      const currentRevision = normalizeRevision(
+        existing.publishedDraftRevision,
+      );
+      if (
+        args.expectedPublishedDraftRevision !== currentRevision ||
+        args.expectedPublishedDraftRevision !==
+          normalizeRevision(args.expectedPublishedDraftRevision)
+      ) {
+        throw new ConvexError({
+          code: "community_funnel_activation_conflict",
+          expected_revision: args.expectedPublishedDraftRevision,
+          current_revision: currentRevision,
+        });
+      }
+    }
+    if (!existing) {
+      if (args.mode === "default") {
+        return buildCommunityFunnelManagerConfig(null);
+      }
+      throw new ConvexError({
+        code: "community_funnel_activation_requires_published",
+      });
+    }
+    if (existing.liveMode !== args.mode) {
+      await ctx.db.patch(existing._id as any, {
+        liveMode: args.mode,
+        updatedAt: Date.now(),
+      });
+    }
+    return buildCommunityFunnelManagerConfig(
+      await getCommunityFunnelRow(ctx, args.communityId),
+    );
   },
 });

@@ -54,12 +54,12 @@ assert.doesNotMatch(
 const socialSummarySlice = sliceBetween(
   shellController,
   "const communitySocialSummary",
-  "const funnelPreviewAdminCount",
+  "const activeCommunityOnlineUserIds",
 );
 assert.match(
   socialSummarySlice,
   /member_count[\s\S]*admin_count[\s\S]*online_count[\s\S]*online_faces/,
-  "Funnel social proof must be backed by the cheap presence summary",
+  "community social proof must be backed by the cheap presence summary",
 );
 assert.doesNotMatch(
   socialSummarySlice,
@@ -67,20 +67,14 @@ assert.doesNotMatch(
   "social proof must not derive admin/member counts from the hydrated roster",
 );
 assert.match(
-  shellController,
-  /const funnelPreviewAdminCount = communitySocialSummary\.adminCount;[\s\S]*const funnelPreviewOnlineCount = communitySocialSummary\.onlineCount;[\s\S]*const funnelPreviewOnlineFaces = communitySocialSummary\.onlineFaces;/,
-  "legacy Funnel preview props must project from the shared social summary",
-);
-
-assert.match(
   app,
   /const activeCommunitySocialMemberCount = activeCommunity && typeof communitySocialSummary\.memberCount === "number"[\s\S]*\? communitySocialSummary\.memberCount[\s\S]*: null;/,
   "App must derive public social member count from the presence summary",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /previewMemberCount: activeCommunitySocialMemberCount/,
-  "Funnel preview must use the summary-backed member count",
+  /previewMemberCount|funnelPreviewAdminCount|funnelPreviewOnlineFaces/,
+  "deleted inline Funnel preview props must not remain in App",
 );
 assert.doesNotMatch(
   app,

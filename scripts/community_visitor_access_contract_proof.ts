@@ -9,9 +9,9 @@ const communityPublic = read("convex/communityPublic.ts");
 const communityCore = read("convex/communityCore.ts");
 const communityChannelCore = read("convex/communityChannelCore.ts");
 const appSource = read("apps/web/src/App.tsx");
-const visitorSurface = read("apps/web/src/components/WebCommunityVisitorSurface.tsx");
-const visitorChrome = read("apps/web/src/components/CommunityVisitorChrome.tsx");
 const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
+const funnelRenderer = read("apps/web/src/components/WebCommunityFunnelRenderer.tsx");
+const memberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
 
 function sliceExport(source: string, name: string): string {
   const start = source.indexOf(`export const ${name}`);
@@ -122,45 +122,35 @@ assert.match(
   "public memory statuses must stay in parity with MEMBER_READABLE_STATUSES in communityIntelligenceDirectory",
 );
 
-assert.match(
+assert.doesNotMatch(
   appSource,
-  /isVisitorCommunitySurface[\s\S]*resolvedPublicCommunity\?\.online_faces \?\? \[\][\s\S]*resolvedPublicCommunity\?\.member_count \?\? null/,
-  "the visitor mobile top bar must use public online faces but the total community member count",
-);
-assert.match(
-  appSource,
-  /canViewMembers:[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*Boolean\(resolvedPublicCommunity\)/,
-  "the mobile shell must allow the visitor-safe Members drawer without granting private directory access",
+  /isVisitorCommunitySurface|visitorShellActiveCommunity|visitorGateNonce/,
+  "the public marketing funnel must not manufacture a parallel community-chat shell",
 );
 assert.match(
   publicFunnel,
-  /mobileMembersOverlayOpen=\{props\.mobileMembersOverlayOpen\}[\s\S]*onCloseMobileMembersOverlay=\{props\.onCloseMobileMembersOverlay\}/,
-  "the public funnel must carry the shared mobile overlay state into the visitor surface",
+  /buildCommunityFunnelRenderModel[\s\S]*<WebCommunityFunnelRenderer/,
+  "the public route must reduce public data into one canonical marketing renderer",
 );
 assert.match(
-  visitorSurface,
-  /<WebMobileDrawer[\s\S]*className="mobile-members-drawer cvs-members-drawer"[\s\S]*lockedSections=\{\{ members: true \}\}[\s\S]*membersPreview=\{memberPreviewFaces\}/,
-  "the visitor Members drawer must reuse the canonical drawer and render only locked public member preview data",
+  funnelRenderer,
+  /<CommunityFunnelMemberProof[\s\S]*<FunnelAction action=\{props\.action\} position="final"/,
+  "the marketing renderer must pair bounded member proof with the canonical admission action",
 );
 assert.match(
-  visitorSurface,
-  /firstRootBodyExpansion=\{props\.isMobileLayout/,
-  "the mobile visitor funnel must bound the host-intro preview",
+  memberProof,
+  /slice\(0, MAX_VISIBLE_MEMBER_FACES\)[\s\S]*<UserAvatar/,
+  "public social proof must remain bounded and reuse the canonical user avatar",
 );
-assert.match(
-  visitorSurface,
-  /<CommunityVisitorMobileJoinDock/,
-  "the mobile visitor funnel must expose one persistent join dock",
-);
-assert.match(
-  visitorChrome,
-  /className="cvs-mobile-join-dock"[\s\S]*action\.primaryActionLabel/,
-  "the persistent mobile conversion action must use the canonical funnel action label and handler",
+assert.doesNotMatch(
+  funnelRenderer,
+  /communityMessages|WebMobileDrawer|CommunityContextPanel/,
+  "the public marketing surface must not project member chat or directory UI",
 );
 assert.match(
   communityPublic,
   /messages_today_count[\s\S]*resource_count[\s\S]*memory_note_count/,
-  "the public stats payload must carry the lock metadata for the visitor surface",
+  "the public payload may retain bounded activity metadata without exposing private content",
 );
 assert.match(
   communityPublic,
@@ -176,7 +166,7 @@ assert.match(
 assert.match(
   communityPublic,
   /member_faces_preview: stats\.memberFacesPreview/,
-  "the public stats payload must carry the members preview for the visitor rail",
+  "the public payload must carry the bounded members preview for social proof",
 );
 
 const intelligenceDirectory = read("convex/communityIntelligenceDirectory.ts");

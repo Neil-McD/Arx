@@ -66,9 +66,36 @@ export type PublicPlanSummary = {
 
 export type CommunityFunnelHeroMediaKind = "image" | "video";
 
+export type CommunityFunnelLiveMode = "default" | "custom";
+
+export type CommunityFunnelPillarV2 = {
+  title: string;
+  body: string;
+};
+
+/**
+ * Funnel V2 is bounded sales content, not page structure. Polynet owns the
+ * layout, theme, VSL placement, member proof, pricing, access language, and
+ * CTAs so every public funnel remains safe and on-brand.
+ */
+export type CommunityFunnelContentV2 = {
+  version: 2;
+  headline: string;
+  subheadline: string;
+  pillars: [
+    CommunityFunnelPillarV2,
+    CommunityFunnelPillarV2,
+    CommunityFunnelPillarV2,
+  ];
+  long_form_markdown: string;
+};
+
 export type CommunityFunnelConfig = {
   hero_media_url: string | null;
   hero_media_kind: CommunityFunnelHeroMediaKind;
+  live_mode: CommunityFunnelLiveMode;
+  published_vsl_url: string | null;
+  published_content_v2: CommunityFunnelContentV2 | null;
 };
 
 export type DiscoverCommunitySnapshot = {

@@ -1,5 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 
 export default defineSchema({
   users: defineTable({
@@ -1370,6 +1371,17 @@ export default defineSchema({
     communityId: v.id("communities"),
     heroMediaUrl: v.optional(v.string()),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
+    liveMode: v.optional(v.union(v.literal("default"), v.literal("custom"))),
+    draftVslUrl: v.optional(v.union(v.string(), v.null())),
+    publishedVslUrl: v.optional(v.union(v.string(), v.null())),
+    draftContentV2: v.optional(communityFunnelContentV2Validator),
+    publishedContentV2: v.optional(communityFunnelContentV2Validator),
+    draftRevision: v.optional(v.number()),
+    draftUpdatedAt: v.optional(v.number()),
+    draftUpdatedByUserId: v.optional(v.id("users")),
+    publishedDraftRevision: v.optional(v.number()),
+    publishedAt: v.optional(v.number()),
+    publishedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),

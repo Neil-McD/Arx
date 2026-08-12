@@ -80,16 +80,16 @@ assert.match(
   "combined save must save About before media and stop if About save fails",
 );
 
-// --- ONE render path: /preview renders the live visitor surface, no scaffold ---
+// --- ONE render path: /preview renders the canonical public funnel, no scaffold ---
 assert.match(
   publicFunnel,
-  /<WebCommunityVisitorSurface/,
-  "the public funnel must render the live visitor surface",
+  /<WebCommunityFunnelRenderer/,
+  "the public funnel must render the canonical marketing renderer",
 );
 assert.doesNotMatch(
   publicFunnel,
-  /CommunityFunnelSurface/,
-  "the public funnel must not fall back to the deleted scaffold for preview",
+  /WebCommunityVisitorSurface/,
+  "the public funnel must not retain the deleted frosted-chat visitor surface",
 );
 assert.doesNotMatch(
   surfaceHost,
@@ -103,13 +103,18 @@ assert.ok(
 );
 assert.match(
   shellProjection,
-  /const isVisitorCommunityRoute =[\s\S]*"community_funnel"[\s\S]*"community_funnel_preview";/,
-  "the shell must treat /c/:slug and its /preview as the same visitor route",
+  /const isPublicFunnelRoute =[\s\S]*"community_funnel"[\s\S]*"community_funnel_preview";/,
+  "the shell must treat /c/:slug and its /preview as the same public funnel route",
 );
 assert.match(
   shellProjection,
   /const showDesktopCommunityRail =\s*isAppRoute/,
-  "the public visitor funnel must not expose the authenticated global community rail",
+  "the public funnel must not expose the authenticated global community rail",
+);
+assert.match(
+  shellProjection,
+  /const showDesktopCommunityNav =[\s\S]*isAppRoute &&[\s\S]*isCommunityAppDestination/,
+  "the public funnel must not render community navigation around the acquisition page",
 );
 
 // --- Honest analytics: the owner's own preview must not log a funnel visit ---
@@ -125,8 +130,8 @@ assert.match(
 );
 assert.doesNotMatch(
   routeController,
-  /isPreviewMode:/,
-  "the route loader must not invent a second preview-data contract; preview is a presentation lens",
+  /loadPublicCommunityPreview|loadDraftCommunityFunnel/,
+  "preview must remain a presentation lens over the public projection, not a second data contract",
 );
 
 // --- Destination-owned About save workflow and App composition wiring ---
@@ -152,7 +157,7 @@ assert.doesNotMatch(
 );
 assert.match(
   app,
-  /useWebCommunityFunnelAboutController\(\{[\s\S]*about: communitySettingsAbout,[\s\S]*hasOtherSettingsDirty: hasCommunitySettingsChangesExceptAbout,[\s\S]*setAbout: setCommunitySettingsAbout,[\s\S]*funnelOneLiner: communitySettingsOneLiner,[\s\S]*funnelAbout: communitySettingsAbout,[\s\S]*isFunnelAboutDirty: isCommunityFunnelAboutDirty,[\s\S]*handleSaveCommunityFunnelAbout,[\s\S]*handleResetCommunityFunnelAbout,/,
+  /useWebCommunityFunnelAboutController\(\{[\s\S]*about: communitySettingsAbout,[\s\S]*hasOtherSettingsDirty: hasCommunitySettingsChangesExceptAbout,[\s\S]*setAbout: setCommunitySettingsAbout,[\s\S]*funnelAbout: communitySettingsAbout,[\s\S]*isFunnelAboutDirty: isCommunityFunnelAboutDirty,[\s\S]*handleSaveCommunityFunnelAbout,[\s\S]*handleResetCommunityFunnelAbout,/,
   "App must compose the Funnel About controller into the builder's canonical settings state",
 );
 assert.doesNotMatch(
@@ -190,4 +195,4 @@ assert.match(
   "Funnel About resting and editing states should share native transparent styling",
 );
 
-console.log("PASS: the funnel builder is fields + a Preview button, and /preview renders the one live visitor surface.");
+console.log("PASS: the funnel builder is fields + a Preview button, and /preview renders the one public funnel surface.");

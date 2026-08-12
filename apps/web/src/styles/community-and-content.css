@@ -3932,9 +3932,8 @@
   min-height: 24px;
 }
 
-/* Member communication composers share one solid floating material. The
-   visitor funnel intentionally reuses the interaction projection without the
-   member root class, so these rules cannot leak into .cvs-chat. */
+/* Member communication composers share one solid floating material. Keep the
+   rules scoped to the authenticated member surface. */
 .community-member-chat .community-interaction-feed-scroll {
   padding-bottom: calc(var(--mobile-community-composer-height, 0px) + 18px);
 }
