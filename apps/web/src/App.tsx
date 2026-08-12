@@ -1626,6 +1626,7 @@ export default function App() {
     approvalPending,
     approvalDenied,
     canRequestAgain,
+    approvalReapplyLabel,
   } = useWebPublicCommunityRouteController<PublicCommunityRecord>({
     publicRoute: shellPublicRoute,
     publicCommunity: publicCommunityUi.publicCommunity,
@@ -1641,10 +1642,6 @@ export default function App() {
   const funnelDraftPreview = useWebCommunityFunnelDraftPreviewController({
     enabled: isPublicFunnelPreviewRoute,
     communitySlug: publicFunnelSlug,
-    slot:
-      shellPublicRoute.kind === "community_funnel_preview"
-        ? shellPublicRoute.slot
-        : "custom_1",
     session,
     ensureSession: ensureUsableAuthSession,
   });
@@ -1946,6 +1943,7 @@ export default function App() {
     handlePrimaryAction: handlePublicLandingPrimaryAction,
     handleCheckoutContinue: handlePublicCheckoutContinue,
     handleClaimContinue: handlePublicClaimContinue,
+    handleCancelPendingJoinRequest,
   } = useWebPublicFunnelEntryController({
     checkoutClaimToken,
     publicRouteClaimToken:
@@ -2258,8 +2256,8 @@ export default function App() {
           banner_focus_x: activeCommunity?.banner_focus_x ?? null,
           banner_focus_y: activeCommunity?.banner_focus_y ?? null,
           banner_zoom: activeCommunity?.banner_zoom ?? null,
-          member_count:
-            activeCommunityPresenceSummary?.member_count ?? null,
+          member_count: activeCommunitySocialMemberCount,
+          member_faces_preview: funnelPreviewOnlineFaces,
         },
       },
       canViewActiveCommunityAnalytics,
@@ -2748,17 +2746,6 @@ export default function App() {
           }
         : null,
       isPreviewMode: isPublicFunnelPreviewRoute,
-      previewSlot:
-        publicRoute.kind === "community_funnel_preview"
-          ? publicRoute.slot
-          : undefined,
-      previewExitPath:
-        publicRoute.kind === "community_funnel_preview"
-          ? applyShellVariantToAppPath(
-              `${buildCommunityTabPath(publicRoute.slug, "funnel") ?? ""}?slot=${encodeURIComponent(publicRoute.slot)}`,
-              shellVariant,
-            ) || null
-          : null,
       previewDocument: funnelDraftPreview.document,
       previewVslUrl: funnelDraftPreview.vslUrl,
       previewDocumentIsLoading: funnelDraftPreview.isLoading,
@@ -2774,6 +2761,11 @@ export default function App() {
       approvalPending,
       approvalDenied,
       canRequestAgain,
+      approvalReapplyLabel,
+      showSignIn: showPublicSignIn,
+      isCancellingPendingRequest:
+        publicCommunityUi.isCancellingPublicCommunityJoinRequest,
+      onCancelPendingRequest: handleCancelPendingJoinRequest,
       onPrimaryJoinAction: handlePublicLandingPrimaryAction,
       publicCommunityError: publicCommunityUi.publicCommunityError,
       publicJoinError: publicCommunityUi.publicJoinError,

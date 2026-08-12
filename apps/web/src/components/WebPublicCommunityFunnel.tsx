@@ -1,28 +1,19 @@
 import type {
   CommunityFunnelConfig,
   CommunityFunnelContentV2,
-  CommunityFunnelSlot,
-  CommunityPublicFace,
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
-import { getAvatarColor } from "../../../../shared/chatUi";
 import {
-  buildCommunityFunnelPrimaryActionView,
-  type CommunityFunnelUiMode,
+  buildCommunityFunnelRenderModel,
 } from "../../../../shared/communityFunnelUi";
-import type { ReactNode } from "react";
-import {
-  WebCommunityBridgeCard,
-  type WebCommunityBridgeCardProps,
-} from "./WebCommunityBridgeCard";
-import { CommunityContextPanel } from "./CommunityContextPanel";
-import { CommunityFunnelPreview } from "./CommunityFunnelPreview";
-import { WebMobileDrawer } from "./WebMobileDrawer";
+import type { WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
+import { WebCommunityFunnelRenderer } from "./WebCommunityFunnelRenderer";
 
+type FunnelMode = "enter" | "join" | "request_access" | "checkout" | "private";
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
+type MagicLinkStatus = "idle" | "sending" | "sent";
 
-type PublicCommunityFunnelCommunityLike = {
-  id?: string;
+export type PublicCommunityFunnelCommunityLike = {
   slug?: string;
   name: string;
   one_liner: string | null;
@@ -31,12 +22,15 @@ type PublicCommunityFunnelCommunityLike = {
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
   avatar_zoom?: number | null;
-  host?: Omit<CommunityPublicFace, "user_id"> | null;
   member_count?: number | null;
-  member_faces_preview?: CommunityPublicFace[] | null;
-  online_count?: number | null;
-  online_count_capped?: boolean | null;
-  online_faces?: CommunityPublicFace[] | null;
+  member_faces_preview?: Array<{
+    user_id: string;
+    display_name: string | null;
+    avatar_url: string | null;
+    avatar_focus_x?: number | null;
+    avatar_focus_y?: number | null;
+    avatar_zoom?: number | null;
+  }> | null;
   funnel?: CommunityFunnelConfig | null;
 };
 
@@ -44,8 +38,6 @@ type WebPublicCommunityFunnelProps = {
   publicCommunity: PublicCommunityFunnelCommunityLike | null;
   publicRouteSlug?: string;
   isPreviewMode?: boolean;
-  previewSlot?: CommunityFunnelSlot;
-  previewExitPath?: string | null;
   previewDocument?: CommunityFunnelContentV2 | null;
   previewVslUrl?: string | null;
   previewDocumentIsLoading?: boolean;
@@ -61,28 +53,27 @@ type WebPublicCommunityFunnelProps = {
   approvalPending: boolean;
   approvalDenied: boolean;
   canRequestAgain: boolean;
+  approvalReapplyLabel?: string | null;
+  showSignIn: boolean;
+  isCancellingPendingRequest: boolean;
+  onCancelPendingRequest: () => void;
   onPrimaryJoinAction: () => void;
   publicCommunityError: string | null;
   publicJoinError: string | null;
   checkoutError: string | null;
   mobileMembersOverlayOpen?: boolean;
   onCloseMobileMembersOverlay?: () => void;
+  /** Present when the signed-in viewer still owes platform credentials —
+      renders the gate card's second state instead of the pitch gate. */
   bridge?: WebCommunityBridgeCardProps | null;
 };
-
-function getInitialsFromLabel(label: string): string {
-  const parts = label.trim().split(/\s+/).filter(Boolean);
-  if (parts.length === 0) return "?";
-  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
-  return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-}
 
 function deriveFunnelMode(args: {
   canEnterCommunity: boolean;
   canJoinWithCheckout: boolean;
   canJoinWithApproval: boolean;
   canJoinForFree: boolean;
-}): CommunityFunnelUiMode {
+}): FunnelMode {
   if (args.canEnterCommunity) return "enter";
   if (args.canJoinWithCheckout) return "checkout";
   if (args.canJoinWithApproval) return "request_access";
@@ -90,11 +81,44 @@ function deriveFunnelMode(args: {
   return "private";
 }
 
+function buildPrimaryActionLabel(args: {
+  mode: FunnelMode;
+  isJoiningPublicCommunity: boolean;
+  approvalPending: boolean;
+  approvalDenied: boolean;
+  canRequestAgain: boolean;
+  priceLabel: string | null;
+}): string {
+  if (args.mode === "enter") return "Enter community";
+  if (args.mode === "checkout") return args.priceLabel ? `Join now · ${formatCtaPriceLabel(args.priceLabel)}` : "Join now";
+  if (args.mode === "request_access") {
+    if (args.isJoiningPublicCommunity) return "Joining…";
+    if (args.approvalPending) return "Request pending";
+    if (args.approvalDenied) return args.canRequestAgain ? "Request again" : "Request denied";
+    return "Join now";
+  }
+  if (args.mode === "join") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";
+  return "Private community";
+}
+
+function formatCtaPriceLabel(priceLabel: string): string {
+  return priceLabel
+    .trim()
+    .replace(/\/\s*month\b/i, "/mo")
+    .replace(/\/\s*monthly\b/i, "/mo")
+    .replace(/\/\s*year\b/i, "/yr")
+    .replace(/\/\s*annual\b/i, "/yr");
+}
+
 export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const {
     publicCommunity,
     publicRouteSlug,
     isPreviewMode = false,
+    previewDocument = null,
+    previewVslUrl = null,
+    previewDocumentIsLoading = false,
+    previewDocumentError = null,
     selectedPublicCommunityPlan,
     isLoadingPublicCommunity,
     canEnterCommunity,
@@ -106,6 +130,10 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     approvalPending,
     approvalDenied,
     canRequestAgain,
+    approvalReapplyLabel = null,
+    showSignIn,
+    isCancellingPendingRequest,
+    onCancelPendingRequest,
     onPrimaryJoinAction,
     publicCommunityError,
     publicJoinError,
@@ -114,173 +142,101 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
 
   const communityName = publicCommunity?.name ?? publicRouteSlug ?? "Community";
   const funnel = publicCommunity?.funnel ?? null;
+  const memberCount =
+    typeof publicCommunity?.member_count === "number" ? publicCommunity.member_count : null;
+  const paidPlan = selectedPublicCommunityPlan;
+  const hasSelectedPublicCommunityPlan = Boolean(paidPlan);
+  const pricingLabel = paidPlan
+    ? new Intl.NumberFormat(undefined, {
+        style: "currency",
+        currency: paidPlan.currency,
+        maximumFractionDigits: 2,
+      }).format(Number(paidPlan.amount_base_units) / Math.pow(10, paidPlan.currency_decimals))
+    : null;
+
   const funnelMode = deriveFunnelMode({
     canEnterCommunity,
     canJoinWithCheckout,
     canJoinWithApproval,
     canJoinForFree,
   });
-  const primaryAction = buildCommunityFunnelPrimaryActionView({
+  const primaryActionLabel = buildPrimaryActionLabel({
     mode: funnelMode,
-    plan: selectedPublicCommunityPlan,
-    isBusy: isJoiningPublicCommunity || checkoutStatus === "loading",
+    isJoiningPublicCommunity,
     approvalPending,
     approvalDenied,
     canRequestAgain,
+    priceLabel: pricingLabel,
   });
   const isPrimaryActionDisabled =
     isPreviewMode ||
     !publicCommunity ||
     checkoutStatus === "loading" ||
     isJoiningPublicCommunity ||
-    (!canEnterCommunity && canJoinWithCheckout && !primaryAction.hasValidPaidPlan) ||
+    (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
     (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
     (canJoinWithApproval && (approvalPending || (approvalDenied && !canRequestAgain)));
   const funnelErrors = [publicCommunityError, publicJoinError, checkoutError].filter(
     Boolean,
   ) as string[];
-  const publicMemberFaces = publicCommunity?.member_faces_preview ?? [];
-  const publicOnlineFaces = publicCommunity?.online_faces ?? [];
-  const closeMobileMembersOverlay = props.onCloseMobileMembersOverlay ?? (() => {});
-  const mobileMembersDrawer = publicCommunity ? (
-    <WebMobileDrawer
-      isOpen={Boolean(props.mobileMembersOverlayOpen)}
-      ariaLabel={`${communityName} members`}
-      title="Members"
-      side="right"
-      className="mobile-members-drawer public-funnel-members-drawer"
-      footer={(
-        <button
-          className="cfg-join public-funnel-members-join"
-          type="button"
-          disabled={isPrimaryActionDisabled}
-          onClick={() => {
-            closeMobileMembersOverlay();
-            onPrimaryJoinAction();
-          }}
-        >
-          {primaryAction.label}
-        </button>
-      )}
-      onClose={closeMobileMembersOverlay}
-    >
-      <CommunityContextPanel
-        communityName={communityName}
-        onlineFaces={publicOnlineFaces}
-        onlineCount={publicCommunity.online_count ?? null}
-        onlineCountCapped={Boolean(publicCommunity.online_count_capped)}
-        memberCount={publicCommunity.member_count ?? null}
-        lockedSections={{ members: true }}
-        membersPreview={publicMemberFaces}
-        onLockedSectionActivate={closeMobileMembersOverlay}
-        displayName={(userId) =>
-          [...publicOnlineFaces, ...publicMemberFaces].find(
-            (face) => face.user_id === userId,
-          )?.display_name ?? "Member"
-        }
-        getInitials={getInitialsFromLabel}
-        getAvatarColor={getAvatarColor}
-        sectionMode="members"
-      />
-    </WebMobileDrawer>
-  ) : null;
-  const renderWithBridge = (content: ReactNode) => (
-    <>
-      {content}
-      {mobileMembersDrawer}
-      {props.bridge ? (
-        <div className="cfg-gate cvs-gate cvs-gate-bridge">
-          <WebCommunityBridgeCard {...props.bridge} />
-        </div>
-      ) : null}
-    </>
-  );
+  const action = {
+    communityName,
+    primaryActionLabel,
+    isPrimaryActionDisabled,
+    onPrimaryAction: onPrimaryJoinAction,
+    canJoinWithApproval,
+    showSignIn,
+    approvalPending,
+    approvalDenied,
+    canRequestAgain,
+    approvalReapplyLabel,
+    canCancelPendingRequest: approvalPending,
+    cancelPendingRequestLabel: isCancellingPendingRequest ? "Cancelling…" : "Cancel request",
+    isCancelPendingRequestDisabled: isCancellingPendingRequest,
+    onCancelPendingRequest,
+    isPreviewMode,
+  };
   if (isLoadingPublicCommunity && !publicCommunity) {
     return (
-      <div
-        className="community-funnel-preview"
-        aria-busy="true"
-      >
-        <main className="community-funnel-preview-main community-funnel-preview-empty">
-          <strong>Loading community…</strong>
-        </main>
+      <div className="community-funnel-loading" aria-busy="true" aria-label="Loading community funnel">
+        <div className="community-funnel-loading-inner" aria-hidden="true">
+          <div className="community-funnel-loading-mark web-skeleton-pill" />
+          <div className="community-funnel-loading-title web-skeleton-block" />
+          <div className="community-funnel-loading-action web-skeleton-block" />
+        </div>
       </div>
     );
   }
 
-  if (isPreviewMode && publicCommunity) {
-    return (
-      <div className="funnel-preview-presentation">
-        <a
-          className="funnel-preview-back"
-          href={props.previewExitPath ?? "/discover"}
-          aria-label="Back to funnel builder"
-        >
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M19 12H5M12 19l-7-7 7-7" />
-          </svg>
-          <span>Back to builder</span>
-        </a>
-        <CommunityFunnelPreview
-          community={publicCommunity}
-          content={props.previewDocument ?? null}
-          deterministicContent={
-            props.previewSlot === "default"
-              ? {
-                  headline: publicCommunity.one_liner?.trim() || communityName,
-                  body: publicCommunity.about?.trim() || null,
-                }
-              : null
-          }
-          vslUrl={props.previewVslUrl}
-          primaryActionLabel={primaryAction.label}
-          isLoading={props.previewDocumentIsLoading}
-          error={props.previewDocumentError}
-        />
-      </div>
-    );
-  }
-
-  if (publicCommunity && funnel?.published_content_v2) {
-    return renderWithBridge(
-      <CommunityFunnelPreview
-        community={publicCommunity}
-        content={funnel.published_content_v2}
-        vslUrl={funnel.published_vsl_url}
-        primaryActionLabel={primaryAction.label}
-        isPreview={false}
-        primaryActionDisabled={isPrimaryActionDisabled}
-        onPrimaryAction={onPrimaryJoinAction}
-        error={funnelErrors[0] ?? null}
-      />
-    );
-  }
-
-  if (publicCommunity) {
-    return renderWithBridge(
-      <CommunityFunnelPreview
-        community={publicCommunity}
-        content={null}
-        deterministicContent={{
-          headline: publicCommunity.one_liner?.trim() || communityName,
-          body: publicCommunity.about?.trim() || null,
-        }}
-        primaryActionLabel={primaryAction.label}
-        isPreview={false}
-        primaryActionDisabled={isPrimaryActionDisabled}
-        onPrimaryAction={onPrimaryJoinAction}
-        error={funnelErrors[0] ?? null}
-      />
-    );
-  }
+  const renderModel = buildCommunityFunnelRenderModel({
+    communityName,
+    oneLiner: publicCommunity?.one_liner,
+    about: publicCommunity?.about,
+    funnel: isPreviewMode && previewDocument
+      ? {
+          ...funnel,
+          live_mode: "custom",
+          published_content_v2: previewDocument,
+          published_vsl_url: previewVslUrl,
+        }
+      : funnel,
+  });
 
   return (
-    <div className="community-funnel-preview">
-      <main className="community-funnel-preview-main community-funnel-preview-empty">
-        <strong role="alert">
-          {funnelErrors[0] ?? "Community unavailable."}
-        </strong>
-      </main>
-    </div>
+    <WebCommunityFunnelRenderer
+      communityName={communityName}
+      avatarUrl={publicCommunity?.avatar_url ?? null}
+      avatarFocusX={publicCommunity?.avatar_focus_x ?? null}
+      avatarFocusY={publicCommunity?.avatar_focus_y ?? null}
+      avatarZoom={publicCommunity?.avatar_zoom ?? null}
+      memberCount={memberCount}
+      memberFaces={publicCommunity?.member_faces_preview ?? []}
+      renderModel={renderModel}
+      action={action}
+      alertMessages={!isLoadingPublicCommunity
+        ? [...funnelErrors, ...(previewDocumentError ? [previewDocumentError] : [])]
+        : []}
+      bridge={props.bridge ?? null}
+    />
   );
 }

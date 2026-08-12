@@ -9,7 +9,6 @@ import {
   type OperatorTab,
   type SettingsPage,
 } from "./appShellNavigation";
-import type { CommunityFunnelSlot } from "./communityTypes";
 
 export type PublicRoute =
   | { kind: "app" }
@@ -17,7 +16,6 @@ export type PublicRoute =
   | {
       kind: "community_funnel_preview";
       slug: string;
-      slot: CommunityFunnelSlot;
     }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
@@ -260,12 +258,11 @@ export function buildCommunityMembersPath(
 
 export function buildCommunityFunnelPreviewPath(
   communitySlug: string | null | undefined,
-  slot?: CommunityFunnelSlot,
 ): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
   const path = `/c/${encodeURIComponent(slug)}/preview`;
-  return slot ? `${path}?slot=${encodeURIComponent(slot)}` : path;
+  return path;
 }
 
 export function buildCommunityOnboardingPreviewPath(
@@ -729,17 +726,9 @@ export function parsePublicRouteFromPath(pathWithSearch: string): PublicRoute {
   if (segments[0] === "c" && segments.length === 3 && segments[2] === "preview") {
     const slug = String(segments[1] ?? "").trim();
     if (slug) {
-      const requestedSlot = normalized.searchParams.get("slot");
       return {
         kind: "community_funnel_preview",
         slug,
-        // Existing preview links predate slots and always represented Funnel 1.
-        slot:
-          requestedSlot === "default" ||
-          requestedSlot === "custom_1" ||
-          requestedSlot === "custom_2"
-            ? requestedSlot
-            : "custom_1",
       };
     }
   }

@@ -12,7 +12,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type FormEvent,
 } from "react";
 
@@ -26,7 +25,7 @@ import {
 import {
   fetchCloudCommunityFunnelConfig,
   publishCloudCommunityFunnelDraft,
-  setCloudActiveCommunityFunnel,
+  setCloudCommunityFunnelLiveMode,
   setCloudCommunityFunnelDraftVsl,
 } from "../../../../shared/cloudCommunityFunnelGateway";
 import { fetchCloudPublicFunnelStats } from "../../../../shared/cloudPublicFunnelGateway";
@@ -38,10 +37,7 @@ import {
 import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
 import { buildCommunityFunnelThreadKey } from "../../../../shared/runtimeInvocationSurface";
 import type {
-  CommunityFunnelActivationTarget,
   CommunityFunnelManagerConfig,
-  CommunityFunnelSlot,
-  CommunityFunnelVariantConfig,
   CommunityMemberProof,
   CommunityPublicFace,
 } from "../../../../shared/communityTypes";
@@ -54,11 +50,6 @@ import type {
 } from "../../../../shared/webTurnRunnerCore";
 import { CommunityFunnelPreview } from "./CommunityFunnelPreview";
 import { WebAgentLiveTurn } from "./WebAgentLiveTurn";
-import {
-  platformTabId,
-  platformTabPanelId,
-  WebPlatformTabList,
-} from "./WebPlatformChoiceControls";
 
 type PreviewCommunityLike = {
   id: string;
@@ -95,7 +86,7 @@ export type WebCommunityFunnelEditorProps = {
     init: RequestInit,
     session: AuthSession,
   ) => Promise<Response>;
-  handlePreviewCommunityFunnel: (slot: CommunityFunnelSlot) => void;
+  handlePreviewCommunityFunnel: () => void;
   communityFunnelConfig: CommunityFunnelManagerConfig;
   hydrateCommunityFunnelEditor: (
     config: CommunityFunnelManagerConfig | null,
@@ -103,47 +94,6 @@ export type WebCommunityFunnelEditorProps = {
   previewPrimaryActionLabel: string;
   previewCommunity: PreviewCommunityLike;
 };
-
-const FUNNEL_SLOT_TABS = [
-  { id: "default", name: "Default" },
-  { id: "custom_1", name: "Funnel 1" },
-  { id: "custom_2", name: "Funnel 2" },
-] as const satisfies readonly {
-  id: CommunityFunnelSlot;
-  name: string;
-}[];
-
-function resolveFunnelSlotName(slot: CommunityFunnelSlot): string {
-  return FUNNEL_SLOT_TABS.find((tab) => tab.id === slot)?.name ?? "Funnel";
-}
-
-function resolveInitialEditorSlot(
-  activeSlot: CommunityFunnelSlot,
-): CommunityFunnelSlot {
-  if (typeof window === "undefined") return activeSlot;
-  const requestedSlot = new URLSearchParams(window.location.search).get("slot");
-  return requestedSlot === "default" ||
-    requestedSlot === "custom_1" ||
-    requestedSlot === "custom_2"
-    ? requestedSlot
-    : activeSlot;
-}
-
-function resolveFunnelSlotStatus(params: {
-  slot: CommunityFunnelSlot;
-  activeSlot: CommunityFunnelSlot;
-  variant: CommunityFunnelVariantConfig | null;
-}): string | null {
-  if (params.slot === "default") {
-    return params.slot === params.activeSlot ? "Live" : null;
-  }
-  if (!params.variant?.draft_content_v2) return "Empty";
-  const isPublishedCurrentDraft =
-    params.variant.published_content_v2 &&
-    params.variant.published_draft_revision === params.variant.draft_revision;
-  if (!isPublishedCurrentDraft) return "Draft";
-  return params.slot === params.activeSlot ? "Live" : "Published";
-}
 
 function normalizeMessages(
   rows: CloudMessageTransportRow[],
@@ -200,21 +150,10 @@ function formatActivationError(error: unknown): string {
 }
 
 export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
-  const [selectedSlot, setSelectedSlot] = useState<CommunityFunnelSlot>(
-    resolveInitialEditorSlot(props.communityFunnelConfig.active_slot),
-  );
   const selectedCommunityIdRef = useRef(props.previewCommunity.id);
-  const selectedCustomSlot = selectedSlot === "default" ? null : selectedSlot;
-  const selectedVariant = selectedCustomSlot
-    ? props.communityFunnelConfig.custom_funnels[selectedCustomSlot]
-    : null;
   const threadKey = useMemo(
-    () =>
-      buildCommunityFunnelThreadKey(
-        props.previewCommunity.id,
-        selectedCustomSlot ?? "custom_1",
-      ),
-    [props.previewCommunity.id, selectedCustomSlot],
+    () => buildCommunityFunnelThreadKey(props.previewCommunity.id),
+    [props.previewCommunity.id],
   );
   const [memberProof, setMemberProof] = useState<CommunityMemberProof>({
     member_count: props.previewCommunity.member_count ?? null,
@@ -269,7 +208,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const [isActivating, setIsActivating] = useState(false);
   const [isSavingVsl, setIsSavingVsl] = useState(false);
   const [vslInput, setVslInput] = useState(
-    selectedVariant?.draft_vsl_url ?? "",
+    props.communityFunnelConfig.draft_vsl_url ?? "",
   );
   const [vslError, setVslError] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -295,32 +234,31 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   activeCommunityIdRef.current = props.previewCommunity.id;
   const sessionIdentity = resolveAuthPresentationIdentity(props.session);
 
-  const content = selectedVariant?.draft_content_v2 ?? null;
-  const savedVslUrl = selectedVariant?.draft_vsl_url ?? null;
+  const content = props.communityFunnelConfig.draft_content_v2 ?? null;
+  const savedVslUrl = props.communityFunnelConfig.draft_vsl_url ?? null;
   const isVslInputDirty = vslInput.trim() !== (savedVslUrl ?? "");
   const isPublishedCurrentDraft =
     Boolean(content) &&
-    Boolean(selectedVariant?.published_content_v2) &&
-    (selectedVariant?.draft_revision ?? 0) > 0 &&
-    selectedVariant?.published_draft_revision ===
-      selectedVariant?.draft_revision;
+    Boolean(props.communityFunnelConfig.published_content_v2) &&
+    props.communityFunnelConfig.draft_revision > 0 &&
+    props.communityFunnelConfig.published_draft_revision ===
+      props.communityFunnelConfig.draft_revision;
   const selectedSlotIsLive =
-    props.communityFunnelConfig.active_slot === selectedSlot;
+    props.communityFunnelConfig.live_mode === "custom";
 
   useEffect(() => {
     if (selectedCommunityIdRef.current === props.previewCommunity.id) return;
     selectedCommunityIdRef.current = props.previewCommunity.id;
-    setSelectedSlot(props.communityFunnelConfig.active_slot);
-  }, [props.communityFunnelConfig.active_slot, props.previewCommunity.id]);
+  }, [props.previewCommunity.id]);
 
   useEffect(() => {
-    setVslInput(selectedVariant?.draft_vsl_url ?? "");
-  }, [props.previewCommunity.id, selectedSlot, selectedVariant?.draft_vsl_url]);
+    setVslInput(props.communityFunnelConfig.draft_vsl_url ?? "");
+  }, [props.communityFunnelConfig.draft_vsl_url, props.previewCommunity.id]);
 
   useEffect(() => {
     setVslError(null);
     setLocalError(null);
-  }, [props.previewCommunity.id, selectedSlot]);
+  }, [props.previewCommunity.id]);
 
   const loadMessages = useCallback(
     async (targetThreadKey: string, session: AuthSession) => {
@@ -370,7 +308,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         targetThreadKey === threadKey
           ? {
               id: threadKey,
-              title: `${props.previewCommunity.name} ${resolveFunnelSlotName(selectedCustomSlot ?? "custom_1")}`,
+              title: `${props.previewCommunity.name} funnel`,
               model_id: DEFAULT_ACTIVE_MODEL_ID,
               runtime_engine: "polynet",
               project_id: null,
@@ -402,12 +340,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     let cancelled = false;
     setMessages([]);
     setLocalError(null);
-    if (!selectedCustomSlot) {
-      setIsPreparing(false);
-      return () => {
-        cancelled = true;
-      };
-    }
     setIsPreparing(true);
     void (async () => {
       try {
@@ -420,7 +352,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           session,
           thread: {
             threadId: threadKey,
-            title: `${props.previewCommunity.name} ${resolveFunnelSlotName(selectedCustomSlot)}`,
+            title: `${props.previewCommunity.name} funnel`,
             modelId: DEFAULT_ACTIVE_MODEL_ID,
             runtimeEngine: "polynet",
             communityId: props.previewCommunity.id,
@@ -446,7 +378,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     props.ensureSession,
     props.previewCommunity.id,
     props.previewCommunity.name,
-    selectedCustomSlot,
     sessionIdentity,
     stopStreamingTurn,
     threadKey,
@@ -480,7 +411,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     event.preventDefault();
     const text = input.trim();
     if (
-      !selectedCustomSlot ||
       !text ||
       submitInFlightRef.current
     )
@@ -502,7 +432,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         session,
         thread: {
           threadId: threadKey,
-          title: `${props.previewCommunity.name} ${resolveFunnelSlotName(selectedCustomSlot)}`,
+          title: `${props.previewCommunity.name} funnel`,
           modelId: DEFAULT_ACTIVE_MODEL_ID,
           runtimeEngine: "polynet",
           communityId: props.previewCommunity.id,
@@ -566,7 +496,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
 
   const handlePublish = async () => {
     if (
-      !selectedCustomSlot ||
       !content ||
       isPublishing ||
       isPreparing ||
@@ -592,8 +521,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       >({
         session,
         communityId: props.previewCommunity.id,
-        slot: selectedCustomSlot,
-        expectedDraftRevision: selectedVariant?.draft_revision ?? 0,
+        expectedDraftRevision: props.communityFunnelConfig.draft_revision,
       });
       props.hydrateCommunityFunnelEditor(
         normalizeCommunityFunnelManagerConfig(config),
@@ -622,7 +550,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
 
   const handleSaveVsl = async (url: string | null) => {
     if (
-      !selectedCustomSlot ||
       isSavingVsl ||
       turnIsActive ||
       isPublishing ||
@@ -650,16 +577,12 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       >({
         session,
         communityId: props.previewCommunity.id,
-        slot: selectedCustomSlot,
-        expectedDraftRevision: selectedVariant?.draft_revision ?? 0,
+        expectedDraftRevision: props.communityFunnelConfig.draft_revision,
         url: normalizedUrl,
       });
       const normalizedConfig = normalizeCommunityFunnelManagerConfig(config);
       props.hydrateCommunityFunnelEditor(normalizedConfig);
-      setVslInput(
-        normalizedConfig.custom_funnels[selectedCustomSlot]?.draft_vsl_url ??
-          "",
-      );
+      setVslInput(normalizedConfig.draft_vsl_url ?? "");
     } catch (error) {
       console.warn("community_funnel_vsl_save_failed", error);
       setVslError(formatVslSaveError(error));
@@ -685,7 +608,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       isSavingVsl ||
       turnIsActive ||
       isVslInputDirty ||
-      (selectedCustomSlot !== null && !isPublishedCurrentDraft)
+      !isPublishedCurrentDraft
     )
       return;
     setIsActivating(true);
@@ -696,20 +619,15 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         "community_funnel_activate",
       );
       if (!session) throw new Error("auth_session_required");
-      const target: CommunityFunnelActivationTarget = selectedCustomSlot
-        ? {
-            slot: selectedCustomSlot,
-            expectedPublishedDraftRevision:
-              selectedVariant?.published_draft_revision ?? 0,
-          }
-        : { slot: "default" };
-      const config = await setCloudActiveCommunityFunnel<
+      const config = await setCloudCommunityFunnelLiveMode<
         AuthSession,
         CommunityFunnelManagerConfig
       >({
         session,
         communityId: props.previewCommunity.id,
-        target,
+        mode: "custom",
+        expectedPublishedDraftRevision:
+          props.communityFunnelConfig.published_draft_revision,
       });
       props.hydrateCommunityFunnelEditor(
         normalizeCommunityFunnelManagerConfig(config),
@@ -743,84 +661,31 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     isActivating ||
     isSavingVsl ||
     turnIsActive;
-  const slotTabs = FUNNEL_SLOT_TABS.map((tab) => {
-    const variant =
-      tab.id === "default"
-        ? null
-        : props.communityFunnelConfig.custom_funnels[tab.id];
-    const status = resolveFunnelSlotStatus({
-      slot: tab.id,
-      activeSlot: props.communityFunnelConfig.active_slot,
-      variant,
-    });
-    return {
-      id: tab.id,
-      label: status ? `${tab.name} · ${status}` : tab.name,
-      disabled: isBusy,
-    };
-  });
-  const handleSelectSlot = (nextSlot: CommunityFunnelSlot) => {
-    if (nextSlot === selectedSlot || isBusy) return;
-    const hasUnsentChanges =
-      Boolean(input.trim()) || isVslInputDirty;
-    if (
-      hasUnsentChanges &&
-      !window.confirm("Discard unsent changes and switch funnels?")
-    )
-      return;
-    setInput("");
-    setVslError(null);
-    setLocalError(null);
-    setSelectedSlot(nextSlot);
-  };
-  const selectedSlotIndex = Math.max(
-    0,
-    FUNNEL_SLOT_TABS.findIndex((tab) => tab.id === selectedSlot),
-  );
-  const slotSwitcherStyle = {
-    "--switcher-pill-width": "calc((100% - 8px) / 3)",
-    "--switcher-pill-left": `calc(4px + ${selectedSlotIndex} * ((100% - 8px) / 3))`,
-  } as CSSProperties;
   const visibleMessages = messages.filter(
     (message) => message.role !== "system",
   );
   const shouldShowPublish =
-    selectedCustomSlot !== null &&
     Boolean(content) &&
     !isPublishedCurrentDraft;
   const shouldShowActivate =
-    !selectedSlotIsLive &&
-    (selectedSlot === "default" || isPublishedCurrentDraft);
+    !selectedSlotIsLive && isPublishedCurrentDraft;
 
   return (
     <section className="funnel-builder" aria-labelledby="funnel-builder-title">
-      <WebPlatformTabList
-        tabs={slotTabs}
-        activeTab={selectedSlot}
-        onSelectTab={handleSelectSlot}
-        ariaLabel="Community funnels"
-        idPrefix="community-funnel"
-        className="platform-switcher platform-switcher-compact funnel-builder-slot-switcher"
-        style={slotSwitcherStyle}
-      />
       <header className="funnel-builder-header">
         <div>
           <div className="settings-section-title" id="funnel-builder-title">
-            {selectedSlot === "default"
-              ? "Default funnel"
-              : `${resolveFunnelSlotName(selectedSlot)} composer`}
+            Funnel composer
           </div>
           <p>
-            {selectedSlot === "default"
-              ? "Built automatically from your community profile. Always available."
-              : "Describe what you want. Changes stay private until you publish."}
+            Describe what you want. Changes stay private until you publish.
           </p>
         </div>
         <div className="funnel-builder-header-actions">
           <button
             type="button"
-            onClick={() => props.handlePreviewCommunityFunnel(selectedSlot)}
-            disabled={isBusy || (selectedSlot !== "default" && !content)}
+            onClick={props.handlePreviewCommunityFunnel}
+            disabled={isBusy || !content}
           >
             Open full preview
           </button>
@@ -852,12 +717,12 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               disabled={
                 isBusy ||
                 isVslInputDirty ||
-                (selectedCustomSlot !== null && !isPublishedCurrentDraft)
+                !isPublishedCurrentDraft
               }
               title={
                 isVslInputDirty
                   ? "Save the Video Sales Letter before making this funnel live."
-                  : selectedCustomSlot !== null && !isPublishedCurrentDraft
+                  : !isPublishedCurrentDraft
                     ? "Publish the current draft before making it live."
                     : "Make this funnel live"
               }
@@ -869,28 +734,13 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       </header>
 
       <div
-        id={platformTabPanelId("community-funnel", selectedSlot)}
-        role="tabpanel"
-        aria-labelledby={platformTabId("community-funnel", selectedSlot)}
-        className={`funnel-builder-layout is-${selectedSlot === "default" ? "default" : "custom"}`}
+        className="funnel-builder-layout is-custom"
       >
         <div
-          className={`funnel-builder-preview${selectedSlot === "default" || content ? "" : " is-empty"}`}
-          aria-label={`${resolveFunnelSlotName(selectedSlot)} preview`}
+          className={`funnel-builder-preview${content ? "" : " is-empty"}`}
+          aria-label="Custom funnel preview"
         >
-          {selectedSlot === "default" ? (
-            <CommunityFunnelPreview
-              community={hydratedPreviewCommunity}
-              content={null}
-              deterministicContent={{
-                headline:
-                  props.previewCommunity.one_liner?.trim() ||
-                  props.previewCommunity.name,
-                body: props.previewCommunity.about?.trim() || null,
-              }}
-              primaryActionLabel={props.previewPrimaryActionLabel}
-            />
-          ) : content ? (
+          {content ? (
             <CommunityFunnelPreview
               community={hydratedPreviewCommunity}
               content={content}
@@ -905,7 +755,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           )}
         </div>
 
-        {selectedCustomSlot ? (
           <aside
             className="funnel-builder-conversation"
             aria-label="Funnel composer conversation"
@@ -1058,7 +907,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               )}
             </form>
           </aside>
-        ) : null}
       </div>
     </section>
   );

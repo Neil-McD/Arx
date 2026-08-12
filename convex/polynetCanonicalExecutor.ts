@@ -26,7 +26,6 @@ import {
 } from "../shared/polynetSemanticRepositoryContract.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import { executePlatformOperation } from "./platformOperationExecutor.ts";
-import type { CommunityCustomFunnelSlot } from "../shared/communityTypes.ts";
 
 export type PolynetCanonicalExecutionResult =
   | { ok: true; value: Record<string, unknown> }
@@ -55,35 +54,21 @@ const MEMBER_CAPABILITIES = ["community.memory.record_outcome"] as const;
 const COMMUNITY_FUNNEL_UPDATE_OPERATION =
   "community.funnel.update_draft" as const;
 
-function resolveTrustedFunnelDraftSlot(
-  value: CommunityCustomFunnelSlot | null | undefined,
-): CommunityCustomFunnelSlot {
-  return value === "custom_2" ? "custom_2" : "custom_1";
-}
-
 function projectSelectedFunnelCurrentState(
   value: Record<string, unknown>,
-  slot: CommunityCustomFunnelSlot,
 ): Record<string, unknown> {
-  const selected =
-    value.selected_funnel &&
-    typeof value.selected_funnel === "object" &&
-    !Array.isArray(value.selected_funnel)
-      ? (value.selected_funnel as Record<string, unknown>)
-      : {};
   return {
-    selected_slot: slot,
-    active_slot: value.active_slot ?? "default",
-    draft_vsl_url: selected.draft_vsl_url ?? null,
-    draft_content_v2: selected.draft_content_v2 ?? null,
-    draft_revision: Number(selected.draft_revision ?? 0),
-    draft_updated_at: selected.draft_updated_at ?? null,
-    published_vsl_url: selected.published_vsl_url ?? null,
-    published_content_v2: selected.published_content_v2 ?? null,
+    live_mode: value.live_mode ?? "default",
+    draft_vsl_url: value.draft_vsl_url ?? null,
+    draft_content_v2: value.draft_content_v2 ?? null,
+    draft_revision: Number(value.draft_revision ?? 0),
+    draft_updated_at: value.draft_updated_at ?? null,
+    published_vsl_url: value.published_vsl_url ?? null,
+    published_content_v2: value.published_content_v2 ?? null,
     published_draft_revision: Number(
-      selected.published_draft_revision ?? 0,
+      value.published_draft_revision ?? 0,
     ),
-    published_at: selected.published_at ?? null,
+    published_at: value.published_at ?? null,
   };
 }
 
@@ -812,7 +797,6 @@ async function executeCanonicalRead(args: {
   principalKind: PolynetPrincipalKind;
   mountedCommunityId?: string | null;
   evidenceSurface: CommunityEvidenceSurface;
-  funnelDraftSlot?: CommunityCustomFunnelSlot | null;
   input: Record<string, unknown>;
 }): Promise<PolynetCanonicalExecutionResult> {
   const parsed = parsePolynetSemanticRepositoryPath(args.input.path);
@@ -952,12 +936,8 @@ async function executeCanonicalRead(args: {
             (await args.ctx.runQuery(
               (internal as any).communityFunnel
                 .getCommunityFunnelDraftInternal,
-              {
-                communityId: target.communityId,
-                slot: resolveTrustedFunnelDraftSlot(args.funnelDraftSlot),
-              },
+              { communityId: target.communityId },
             )) as Record<string, unknown>,
-            resolveTrustedFunnelDraftSlot(args.funnelDraftSlot),
           )
         : null;
     return {
@@ -1425,7 +1405,6 @@ async function executeCanonicalCall(args: {
   principalKind: PolynetPrincipalKind;
   mountedCommunityId?: string | null;
   evidenceSurface: CommunityEvidenceSurface;
-  funnelDraftSlot?: CommunityCustomFunnelSlot | null;
   input: Record<string, unknown>;
 }): Promise<PolynetCanonicalExecutionResult> {
   const targetPath = requiredString(args.input.target, 1_024);
@@ -1476,10 +1455,7 @@ async function executeCanonicalCall(args: {
     );
   }
   if (operation === COMMUNITY_FUNNEL_UPDATE_OPERATION) {
-    const funnelDraftSlot = resolveTrustedFunnelDraftSlot(
-      args.funnelDraftSlot,
-    );
-    const receiptIdempotencyKey = `community-funnel:${funnelDraftSlot}:${idempotencyKey}`;
+    const receiptIdempotencyKey = `community-funnel:${idempotencyKey}`;
     const expectedRevision = Number(input.expected_revision);
     if (
       !Number.isSafeInteger(expectedRevision) ||
@@ -1509,7 +1485,6 @@ async function executeCanonicalCall(args: {
         {
           userId: args.userId,
           communityId: target.communityId,
-          slot: funnelDraftSlot,
           expectedDraftRevision: expectedRevision,
           content: input.content,
         },
@@ -1517,10 +1492,7 @@ async function executeCanonicalCall(args: {
       const responseValue = {
         ok: true,
         operation,
-        result: projectSelectedFunnelCurrentState(
-          result,
-          funnelDraftSlot,
-        ),
+        result: projectSelectedFunnelCurrentState(result),
         deduped: false,
         receipt: canonicalReceipt({
           toolName: "polynet_call",
@@ -1654,7 +1626,6 @@ export async function executePolynetCanonicalTool(args: {
   principalKind: PolynetPrincipalKind;
   mountedCommunityId?: string | null;
   evidenceSurface: CommunityEvidenceSurface;
-  funnelDraftSlot?: CommunityCustomFunnelSlot | null;
   toolName: PolynetCanonicalToolName;
   input: Record<string, unknown>;
 }): Promise<PolynetCanonicalExecutionResult> {

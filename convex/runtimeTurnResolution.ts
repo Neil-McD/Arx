@@ -39,14 +39,13 @@ import {
 } from "./httpRuntimeSupport";
 import {
   isReadOnlyLegacyMemberAgentThreadKey,
-  resolveCommunityFunnelThreadSlotForCommunity,
+  isCommunityFunnelThreadKeyForCommunity,
   resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
   restrictCapabilityFamiliesForInvocationSurface,
   restrictToolNamesForInvocationSurface,
   type RuntimeInvocationSurface,
 } from "../shared/runtimeInvocationSurface";
-import type { CommunityCustomFunnelSlot } from "../shared/communityTypes";
 import {
   buildMemberAgentConversationContext,
   type MemberAgentStoredMessage,
@@ -143,7 +142,6 @@ export type RuntimeTurnResolution = {
   runtimeCommunityAbout: string | null;
   runtimeCommunitySystemPrompt: string | null;
   runtimeCommunityLensAuthority: CommunityLensAuthority | null;
-  runtimeCommunityFunnelSlot: CommunityCustomFunnelSlot | null;
   runtimeProjectId: string | null;
   runtimeSandboxMode: "sandbox_write" | "workspace_write" | undefined;
   allowedToolNames: RetrievalToolName[];
@@ -661,16 +659,10 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
   let runtimeCommunitySystemPrompt: string | null = null;
   let runtimeCommunityLensAuthority: CommunityLensAuthority | null = null;
   const threadCommunityId = String(ownedThread.communityId ?? "").trim();
-  const runtimeCommunityFunnelSlot =
-    invocationSurface === "community_funnel_builder" && threadCommunityId
-      ? resolveCommunityFunnelThreadSlotForCommunity(
-          threadKey,
-          threadCommunityId,
-        )
-      : null;
   if (
     invocationSurface === "community_funnel_builder" &&
-    (!threadCommunityId || !runtimeCommunityFunnelSlot)
+    (!threadCommunityId ||
+      !isCommunityFunnelThreadKeyForCommunity(threadKey, threadCommunityId))
   ) {
     return {
       ok: false,
@@ -883,7 +875,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
-      runtimeCommunityFunnelSlot,
       runtimeProjectId,
       runtimeSandboxMode: resolvedRuntimeCapabilityFamilies.includes("workspace_tools")
         ? "workspace_write"

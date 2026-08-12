@@ -132,7 +132,7 @@ assert.match(
 );
 assert.match(
   publicFunnel,
-  /document=\{null\}[\s\S]*deterministicContent=\{\{[\s\S]*primaryActionLabel=\{primaryAction\.label\}/,
+  /buildCommunityFunnelRenderModel\(\{[\s\S]*oneLiner: publicCommunity\?\.one_liner,[\s\S]*about: publicCommunity\?\.about,[\s\S]*<WebCommunityFunnelRenderer/,
   "an unpublished public funnel must use the deterministic conversion surface instead of the legacy visitor lens",
 );
 assert.doesNotMatch(

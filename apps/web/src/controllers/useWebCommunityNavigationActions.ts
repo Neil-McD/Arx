@@ -9,7 +9,6 @@ import type {
   CommunityTab,
 } from "../../../../shared/appShellNavigation";
 import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../../shared/communityUnsavedGuard";
-import type { CommunityFunnelSlot } from "../../../../shared/communityTypes";
 import {
   applyShellVariantToPublicPath,
   buildCommunityFunnelPreviewPath,
@@ -93,11 +92,11 @@ export function useWebCommunityNavigationActions(params: {
   ]);
 
   const handlePreviewCommunityFunnel = useCallback(
-    (slot: CommunityFunnelSlot) => {
+    () => {
       const slug = String(params.activeCommunity?.slug ?? "").trim();
       if (!slug) return;
       const path = applyShellVariantToPublicPath(
-        buildCommunityFunnelPreviewPath(slug, slot) ?? "",
+        buildCommunityFunnelPreviewPath(slug) ?? "",
         params.shellVariant,
       );
       if (!path) return;

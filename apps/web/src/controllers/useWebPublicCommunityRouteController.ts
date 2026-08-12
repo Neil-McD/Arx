@@ -77,6 +77,11 @@ export function useWebPublicCommunityRouteController<
   const approvalPending = admission.approvalPending;
   const approvalDenied = admission.approvalDenied;
   const canRequestAgain = admission.canRequestAgain;
+  const approvalReapplyLabel = admission.approvalReapplyAtMs === null
+    ? null
+    : new Intl.DateTimeFormat(undefined, {
+        dateStyle: "medium",
+      }).format(admission.approvalReapplyAtMs);
   return {
     publicFunnelSlug,
     isPublicFunnelPreviewRoute,
@@ -93,5 +98,6 @@ export function useWebPublicCommunityRouteController<
     approvalPending,
     approvalDenied,
     canRequestAgain,
+    approvalReapplyLabel,
   };
 }

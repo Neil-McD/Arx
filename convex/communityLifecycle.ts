@@ -701,7 +701,6 @@ export const createCommunity = mutation({
       visibility: requestedVisibility,
       inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
       entryPolicy,
-      activeFunnelSlot: "default",
       activeMemberCount: 1,
       createdAt: nowMs,
       updatedAt: nowMs,

@@ -79,7 +79,7 @@ assert.match(
 );
 assert.match(
   app,
-  /previewMemberCount: activeCommunitySocialMemberCount/,
+  /previewCommunity:[\s\S]*member_count: activeCommunitySocialMemberCount/,
   "Funnel preview must use the summary-backed member count",
 );
 assert.doesNotMatch(

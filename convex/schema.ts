@@ -1,9 +1,6 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import {
-  communityFunnelContentV2Validator,
-  communityFunnelDocumentV1Validator,
-} from "./communityFunnelValidators";
+import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 
 export default defineSchema({
   users: defineTable({
@@ -264,6 +261,7 @@ export default defineSchema({
       v.literal("member_agent_dock"),
       v.literal("community_agent_mention"),
       v.literal("community_autonomous_cognition"),
+      v.literal("community_setup_generation"),
     ),
     provider: v.literal("openai"),
     modelId: v.string(),
@@ -1232,6 +1230,8 @@ export default defineSchema({
       v.literal("approval"),
       v.literal("paid_subscription"),
     ),
+    // Transitional staging compatibility. Removed after the bounded funnel
+    // collapse proves every community uses the canonical liveMode selector.
     activeFunnelSlot: v.optional(
       v.union(
         v.literal("default"),
@@ -1378,41 +1378,21 @@ export default defineSchema({
 
   communityFunnels: defineTable({
     communityId: v.id("communities"),
-    // Slotless rows are legacy Custom 1 rows until the bounded backfill runs.
-    slot: v.optional(
-      v.union(v.literal("custom_1"), v.literal("custom_2")),
-    ),
+    // Transitional staging compatibility. The migration clears these fields
+    // before the strict slotless schema lands.
+    slot: v.optional(v.union(v.literal("custom_1"), v.literal("custom_2"))),
     heroMediaUrl: v.optional(v.string()),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
+    liveMode: v.optional(v.union(v.literal("default"), v.literal("custom"))),
     draftVslUrl: v.optional(v.union(v.string(), v.null())),
     publishedVslUrl: v.optional(v.union(v.string(), v.null())),
     draftContentV2: v.optional(communityFunnelContentV2Validator),
     publishedContentV2: v.optional(communityFunnelContentV2Validator),
-    // Read compatibility for the short-lived manual V1 draft plus the
-    // canonical bounded design grammar. New writes accept only the latter.
-    draftDocumentV1: v.optional(v.union(
-      v.object({
-        version: v.literal(1),
-        template: v.literal("editorial_vsl"),
-        headline: v.string(),
-        subheadline: v.string(),
-        intro_video_url: v.union(v.string(), v.null()),
-        pillars: v.array(v.object({
-          title: v.string(),
-          body: v.string(),
-        })),
-        founder_quote: v.union(v.string(), v.null()),
-        faq: v.array(v.object({
-          question: v.string(),
-          answer: v.string(),
-        })),
-      }),
-      communityFunnelDocumentV1Validator,
-    )),
+    draftDocumentV1: v.optional(v.any()),
+    publishedDocumentV1: v.optional(v.any()),
     draftRevision: v.optional(v.number()),
     draftUpdatedAt: v.optional(v.number()),
     draftUpdatedByUserId: v.optional(v.id("users")),
-    publishedDocumentV1: v.optional(communityFunnelDocumentV1Validator),
     publishedDraftRevision: v.optional(v.number()),
     publishedAt: v.optional(v.number()),
     publishedByUserId: v.optional(v.id("users")),
@@ -3097,7 +3077,6 @@ export default defineSchema({
       v.literal("coding_harness"),
       v.literal("external_mcp"),
       v.literal("community_concierge"),
-      v.literal("community_funnel_builder"),
     ),
     capability: v.union(
       v.literal("community_repository_search"),
@@ -3402,7 +3381,6 @@ export default defineSchema({
         v.literal("coding_harness"),
         v.literal("external_mcp"),
         v.literal("community_concierge"),
-      v.literal("community_funnel_builder"),
       ),
     ),
     workflowId: v.optional(v.string()),

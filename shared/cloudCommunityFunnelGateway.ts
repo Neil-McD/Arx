@@ -1,8 +1,5 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
-import type {
-  CommunityFunnelActivationTarget,
-  CommunityCustomFunnelSlot,
-} from "./communityTypes";
+import type { CommunityFunnelLiveMode } from "./communityTypes";
 
 type CloudCommunityFunnelGatewayParams<SessionT> = {
   session: SessionT;
@@ -60,7 +57,6 @@ export async function publishCloudCommunityFunnelDraft<
 >(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;
-    slot?: CommunityCustomFunnelSlot;
     expectedDraftRevision: number;
   },
 ): Promise<TConfig | null> {
@@ -72,7 +68,6 @@ export async function publishCloudCommunityFunnelDraft<
     {
       authSubject,
       communityId: params.communityId,
-      ...(params.slot ? { slot: params.slot } : {}),
       expectedDraftRevision: params.expectedDraftRevision,
     },
   );
@@ -85,7 +80,6 @@ export async function setCloudCommunityFunnelDraftVsl<
 >(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;
-    slot?: CommunityCustomFunnelSlot;
     expectedDraftRevision: number;
     url: string | null;
   },
@@ -98,7 +92,6 @@ export async function setCloudCommunityFunnelDraftVsl<
     {
       authSubject,
       communityId: params.communityId,
-      ...(params.slot ? { slot: params.slot } : {}),
       expectedDraftRevision: params.expectedDraftRevision,
       url: params.url,
     },
@@ -106,24 +99,28 @@ export async function setCloudCommunityFunnelDraftVsl<
   return firstObjectRow(payload) as TConfig | null;
 }
 
-export async function setCloudActiveCommunityFunnel<
+export async function setCloudCommunityFunnelLiveMode<
   SessionT,
   TConfig = unknown,
 >(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;
-    target: CommunityFunnelActivationTarget;
+    mode: CommunityFunnelLiveMode;
+    expectedPublishedDraftRevision?: number;
   },
 ): Promise<TConfig | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
   const payload = await client.mutation(
-    "communityFunnel:setActiveCommunityFunnel" as any,
+    "communityFunnel:setCommunityFunnelLiveMode" as any,
     {
       authSubject,
       communityId: params.communityId,
-      target: params.target,
+      mode: params.mode,
+      ...(params.expectedPublishedDraftRevision === undefined
+        ? {}
+        : { expectedPublishedDraftRevision: params.expectedPublishedDraftRevision }),
     },
   );
   return firstObjectRow(payload) as TConfig | null;

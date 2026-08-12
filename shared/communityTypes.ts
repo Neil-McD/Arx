@@ -9,7 +9,6 @@ export type CommunityPublicFace = {
   user_id: string;
   display_name: string | null;
   avatar_url: string | null;
-  avatar_storage_id?: string | null;
   avatar_color?: string | null;
   initials?: string | null;
   avatar_focus_x?: number | null;
@@ -74,100 +73,7 @@ export type PublicPlanSummary = {
 
 export type CommunityFunnelHeroMediaKind = "image" | "video";
 
-export type CommunityCustomFunnelSlot = "custom_1" | "custom_2";
-
-export type CommunityFunnelSlot = "default" | CommunityCustomFunnelSlot;
-
-export type CommunityFunnelActivationTarget =
-  | { slot: "default" }
-  | {
-      slot: CommunityCustomFunnelSlot;
-      expectedPublishedDraftRevision: number;
-    };
-
-export type CommunityFunnelConfig = {
-  hero_media_url: string | null;
-  hero_media_kind: CommunityFunnelHeroMediaKind;
-  published_vsl_url: string | null;
-  published_content_v2: CommunityFunnelContentV2 | null;
-  /** Temporary read compatibility for pre-V2 drafts. */
-  published_document_v1: CommunityFunnelDocumentV1 | null;
-};
-
-export type CommunityFunnelThemeV1 = {
-  /**
-   * Funnels inherit the canonical Polynet application theme. The legacy
-   * light/dark values remain readable at the persistence boundary only and
-   * normalize to `inherit` before entering product state.
-   */
-  appearance: "inherit";
-  character: "minimal" | "editorial" | "cinematic";
-  accent: "blue" | "violet" | "rose" | "amber" | "emerald";
-  density: "compact" | "balanced" | "airy";
-  radius: "subtle" | "soft";
-};
-
-export type CommunityFunnelBenefitV1 = {
-  title: string;
-  body: string;
-};
-
-export type CommunityFunnelFaqV1 = {
-  question: string;
-  answer: string;
-};
-
-export type CommunityFunnelSectionV1 =
-  | {
-      id: string;
-      type: "hero";
-      eyebrow: string | null;
-      headline: string;
-      body: string;
-      alignment: "left" | "center";
-    }
-  | {
-      id: string;
-      type: "media";
-      media_url: string | null;
-      caption: string | null;
-    }
-  | {
-      id: string;
-      type: "benefits";
-      heading: string | null;
-      items: CommunityFunnelBenefitV1[];
-    }
-  | {
-      id: string;
-      type: "social_proof";
-      headline: string | null;
-      body: string | null;
-    }
-  | {
-      id: string;
-      type: "testimonial";
-      quote: string;
-      attribution: string;
-    }
-  | {
-      id: string;
-      type: "faq";
-      heading: string | null;
-      items: CommunityFunnelFaqV1[];
-    }
-  | {
-      id: string;
-      type: "cta";
-      headline: string;
-      body: string | null;
-    };
-
-export type CommunityFunnelDocumentV1 = {
-  version: 1;
-  theme: CommunityFunnelThemeV1;
-  sections: CommunityFunnelSectionV1[];
-};
+export type CommunityFunnelLiveMode = "default" | "custom";
 
 export type CommunityFunnelPillarV2 = {
   title: string;
@@ -175,8 +81,9 @@ export type CommunityFunnelPillarV2 = {
 };
 
 /**
- * Funnel V2 is content, not page structure. Polynet owns the layout, theme,
- * media placement, member proof, pricing, access language, and both CTAs.
+ * Funnel V2 is bounded sales content, not page structure. Polynet owns the
+ * layout, theme, VSL placement, member proof, pricing, access language, and
+ * CTAs so every public funnel remains safe and on-brand.
  */
 export type CommunityFunnelContentV2 = {
   version: 2;
@@ -190,32 +97,17 @@ export type CommunityFunnelContentV2 = {
   long_form_markdown: string;
 };
 
-export type CommunityFunnelVariantConfig = {
-  slot: CommunityCustomFunnelSlot;
-  draft_vsl_url: string | null;
-  draft_content_v2: CommunityFunnelContentV2 | null;
-  /** Temporary read compatibility for pre-V2 drafts. */
-  draft_document_v1: CommunityFunnelDocumentV1 | null;
-  draft_revision: number;
-  draft_updated_at: number | null;
+export type CommunityFunnelConfig = {
+  hero_media_url: string | null;
+  hero_media_kind: CommunityFunnelHeroMediaKind;
+  live_mode: CommunityFunnelLiveMode;
   published_vsl_url: string | null;
   published_content_v2: CommunityFunnelContentV2 | null;
-  /** Temporary read compatibility for pre-V2 drafts. */
-  published_document_v1: CommunityFunnelDocumentV1 | null;
-  published_draft_revision: number;
-  published_at: number | null;
 };
 
 export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
-  active_slot: CommunityFunnelSlot;
-  custom_funnels: Record<
-    CommunityCustomFunnelSlot,
-    CommunityFunnelVariantConfig | null
-  >;
   draft_vsl_url: string | null;
   draft_content_v2: CommunityFunnelContentV2 | null;
-  /** Temporary read compatibility for pre-V2 drafts. */
-  draft_document_v1: CommunityFunnelDocumentV1 | null;
   draft_revision: number;
   draft_updated_at: number | null;
   published_draft_revision: number;
@@ -435,14 +327,7 @@ export type CommunityTypingPresenceBundle = {
 export type CommunityAccess = {
   community_id: string;
   user_id: string;
-  relation?:
-    | "visitor"
-    | "pending"
-    | "member"
-    | "moderator"
-    | "admin"
-    | "owner"
-    | null;
+  relation?: "visitor" | "pending" | "member" | "moderator" | "admin" | "owner" | null;
   entry_policy?: CommunityEntryPolicy | null;
   visibility?: "published" | "unlisted";
   join_request_status?: "pending" | "denied" | null;
@@ -451,13 +336,7 @@ export type CommunityAccess = {
   is_owner: boolean;
   is_entitled: boolean;
   access_source?: "free_grant" | "manual_grant" | "paid_subscription" | null;
-  subscription_status?:
-    | "active"
-    | "past_due"
-    | "cancel_at_period_end"
-    | "canceled"
-    | "ended"
-    | null;
+  subscription_status?: "active" | "past_due" | "cancel_at_period_end" | "canceled" | "ended" | null;
   entitlement_role: string | null;
   entitlement_ends_at: string | null;
   effective_role: string | null;
@@ -486,10 +365,7 @@ export type CommunityAgentConfig<TLanding = unknown> = {
   updated_at: string;
 };
 
-export type CommunityAiFeedPostType =
-  | "observation"
-  | "recommendation"
-  | "action";
+export type CommunityAiFeedPostType = "observation" | "recommendation" | "action";
 
 export type CommunityAiFeedReactionType = "good" | "low_signal";
 

@@ -708,7 +708,7 @@ test("funnel draft capability is visible and executable only on the manager funn
   });
 });
 
-test("funnel composer isolates custom slots and namespaces retry receipts", async () => {
+test("funnel composer keeps one canonical draft and dedupes model retries", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const ownerCtx = executionContext(
@@ -716,24 +716,17 @@ test("funnel composer isolates custom slots and namespaces retry receipts", asyn
   );
   const capabilityPath =
     "/communities/canonical-community/capabilities/community.funnel.update_draft.json";
-  const customOneContent = buildCommunityFunnelContentTestFixture({
-    headline: "Custom one remains independent.",
-  });
-  const customTwoContent = buildCommunityFunnelContentTestFixture({
-    headline: "Custom two receives its own revision.",
+  const content = buildCommunityFunnelContentTestFixture({
+    headline: "One canonical community funnel draft.",
   });
   const sharedModelIdempotencyKey = "same-model-retry-key";
-  const update = async (
-    slot: "custom_1" | "custom_2",
-    content: ReturnType<typeof buildCommunityFunnelContentTestFixture>,
-  ) =>
+  const update = async () =>
     await executePolynetCanonicalTool({
       ctx: ownerCtx,
       authSubject: fixture.ownerSubject,
       userId: fixture.ownerId,
       principalKind: "personal_agent",
       evidenceSurface: "community_funnel_builder",
-      funnelDraftSlot: slot,
       toolName: "polynet_call",
       input: {
         operation: "community.funnel.update_draft",
@@ -744,66 +737,42 @@ test("funnel composer isolates custom slots and namespaces retry receipts", asyn
       },
     });
 
-  await expect(update("custom_1", customOneContent)).resolves.toMatchObject({
+  await expect(update()).resolves.toMatchObject({
     ok: true,
     value: { result: { draft_revision: 1 }, deduped: false },
   });
-  await expect(update("custom_2", customTwoContent)).resolves.toMatchObject({
+  await expect(update()).resolves.toMatchObject({
     ok: true,
-    value: {
-      result: {
-        selected_slot: "custom_2",
-        draft_revision: 1,
-        draft_content_v2: customTwoContent,
-      },
-      deduped: false,
-    },
+    value: { result: { draft_revision: 1 }, deduped: true },
   });
 
-  const readSlot = async (slot: "custom_1" | "custom_2") => {
-    const result = await executePolynetCanonicalTool({
+  const readResult = await executePolynetCanonicalTool({
       ctx: ownerCtx,
       authSubject: fixture.ownerSubject,
       userId: fixture.ownerId,
       principalKind: "personal_agent",
       evidenceSurface: "community_funnel_builder",
-      funnelDraftSlot: slot,
       toolName: "polynet_read",
       input: { path: capabilityPath },
     });
-    if (!result.ok) throw new Error(`could not read ${slot}`);
-    return JSON.parse(String(result.value.body));
-  };
-  const customOneState = await readSlot("custom_1");
-  const customTwoState = await readSlot("custom_2");
-  expect(customOneState.current_state).toMatchObject({
-    selected_slot: "custom_1",
+  if (!readResult.ok) throw new Error("could not read canonical draft");
+  const state = JSON.parse(String(readResult.value.body));
+  expect(state.current_state).toMatchObject({
     draft_revision: 1,
-    draft_content_v2: customOneContent,
+    draft_content_v2: content,
   });
-  expect(customTwoState.current_state).toMatchObject({
-    selected_slot: "custom_2",
-    draft_revision: 1,
-    draft_content_v2: customTwoContent,
-  });
-  expect(customOneState.current_state).not.toHaveProperty("custom_funnels");
-  expect(customTwoState.current_state).not.toHaveProperty("custom_funnels");
+  expect(state.current_state).not.toHaveProperty("selected_slot");
+  expect(state.current_state).not.toHaveProperty("custom_funnels");
 
   const rows = await t.run(async (ctx) =>
     ctx.db.query("communityFunnels").collect(),
   );
-  expect(rows).toHaveLength(2);
-  expect(
-    rows.find((row) => (row.slot ?? "custom_1") === "custom_1"),
-  ).toMatchObject({
+  expect(rows).toHaveLength(1);
+  expect(rows[0]).toMatchObject({
     draftRevision: 1,
-    draftContentV2: customOneContent,
+    draftContentV2: content,
   });
-  expect(rows.find((row) => row.slot === "custom_2")).toMatchObject({
-    slot: "custom_2",
-    draftRevision: 1,
-    draftContentV2: customTwoContent,
-  });
+  expect(rows[0]).not.toHaveProperty("slot");
 });
 
 test("retired AI Feed paths are uniformly absent across canonical operations", async () => {

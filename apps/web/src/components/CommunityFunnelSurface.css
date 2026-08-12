@@ -1,0 +1,109 @@
+.public-funnel-media-shell {
+  position: relative;
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  overflow: hidden;
+  border: 0;
+  background: var(--surface-card);
+  padding: 0;
+}
+
+.public-funnel-media-image,
+.public-funnel-media-video,
+.public-funnel-media-embed {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  object-fit: cover;
+}
+
+.public-funnel-media-deferred {
+  color: var(--text-ink-primary);
+  cursor: pointer;
+}
+
+.public-funnel-media-placeholder {
+  display: grid;
+  width: 100%;
+  height: 100%;
+  place-items: center;
+  background: linear-gradient(145deg, var(--surface-card), var(--surface-selected));
+}
+
+.public-funnel-media-placeholder-text {
+  color: var(--text-ink-muted);
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.public-funnel-media-play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  display: grid;
+  width: 68px;
+  height: 68px;
+  transform: translate(-50%, -50%);
+  place-items: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--surface-app) 86%, transparent);
+  color: var(--text-ink-primary);
+  box-shadow: 0 14px 36px -18px rgb(0 0 0 / 76%);
+  transition: transform 150ms ease, background-color 150ms ease;
+}
+
+.public-funnel-media-play svg {
+  width: 30px;
+  height: 30px;
+  fill: currentColor;
+}
+
+.public-funnel-media-deferred:hover .public-funnel-media-play,
+.public-funnel-media-deferred:focus-visible .public-funnel-media-play {
+  transform: translate(-50%, -50%) scale(1.04);
+  background: var(--surface-app);
+}
+
+.public-funnel-media-deferred:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 4px;
+}
+
+.public-funnel-media-hint {
+  position: absolute;
+  right: 16px;
+  bottom: 14px;
+  left: 16px;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 650;
+  text-shadow: 0 1px 8px rgb(0 0 0 / 80%);
+}
+
+.cfg-status-card {
+  position: relative;
+  margin-top: 12px;
+  border: 1px solid var(--stroke-divider-accent);
+  border-radius: 9px;
+  background: var(--surface-card);
+  padding: 11px 13px;
+  text-align: left;
+}
+
+.cfg-status-card.is-error {
+  border-color: color-mix(in srgb, var(--accent-error) 40%, transparent);
+  background: color-mix(in srgb, var(--accent-error) 7%, transparent);
+}
+
+.cfg-sc-title { font-size: 12.5px; font-weight: 650; }
+.cfg-sc-body { margin-top: 3px; color: var(--text-ink-muted); font-size: 12px; }
+.cfg-sc-dismiss { position: absolute; top: 9px; right: 10px; border: 0; background: none; color: var(--text-ink-muted); font: inherit; font-size: 11.5px; cursor: pointer; }
+.cfg-sc-dismiss:hover { color: var(--text-ink-primary); }
+.cfg-sc-dismiss:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; }
+.cfg-preview-note { margin-top: 10px; color: var(--text-ink-muted); font-size: 11.5px; text-align: center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .public-funnel-media-play { transition: none; }
+}
