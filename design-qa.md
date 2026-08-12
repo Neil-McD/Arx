@@ -381,3 +381,45 @@ Blocked for the same reason. The required focused regions are the banner action 
 - [ ] Capture and compare the exact deployed state in iPhone Safari and the home-screen PWA.
 
 final result: blocked
+
+
+---
+
+# Funnel Dark-Theme Design QA
+
+## Source truth
+
+- Current production reference: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/theme-audit/01-live-funnel-current.jpg`
+- Target visual system: canonical Polynet Dark tokens in `apps/web/src/base.css` (background, action, text, border, brand, agent, and attention roles at lines 16-104).
+- Implemented CSS: `apps/web/src/components/polynetLanding/ConversionLanding.css`
+
+## Final capture
+
+- Implementation screenshot: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/theme-implementation/01-dark-theme-hero-desktop.jpg`
+- Before/after comparison: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/theme-implementation/04-before-after-comparison.jpg`
+- Focused interaction/mechanism capture: `/Users/neilmcdevitt/.codex/visualizations/2026/08/12/019ff6af-246b-7f92-824e-b10b1b698dd6/theme-implementation/02-dark-theme-mechanism-desktop.jpg`
+- Viewport: 1280 x 720 CSS pixels
+- Screenshot dimensions: 1280 x 720 pixels
+- Device density: 1
+- State: public conversion landing page, initial hero at scroll position 0; secondary capture includes the primary CTA focus state and the three-pillar section.
+
+## Comparison and findings
+
+The current production capture and implementation capture were combined in one side-by-side comparison input before judgment. The implementation intentionally preserves the approved copy, typography, spacing, hierarchy, VSL asset, and funnel structure while replacing the disconnected neon treatment with the product's canonical Dark language.
+
+- Colors: warm graphite `#1a1a1a`, cream `#fcf8f0`, muted warm text, neutral borders, and cream action surface match the product theme. Dusty rose is limited to brand/community identity; blue is attention/flow; purple is agent intelligence.
+- Typography and layout: hero measure, headline wrapping, section order, and CTA hierarchy remain consistent with the source. No reflow regression was observed at the validated desktop viewport.
+- Media and assets: the existing logo and Vimeo VSL remain unchanged and render correctly.
+- Copy: the approved autonomous client-success positioning and three-pillar copy remain unchanged.
+- Interaction: primary CTA focus treatment was exercised in the isolated QA route; the temporary route used a no-op handler so checkout was not invoked. The focus ring is visible and uses the canonical cream action role.
+- Console: checked after initial render and interaction. No warning or error entries were present; only Vite connection, React development-tools, and successful Convex health messages appeared.
+- Responsive note: the browser's viewport override did not apply in this environment and continued reporting 1280 x 720. No responsive layout rules were changed by this slice; existing media queries remain intact, and type/build validation covers the same production bundle.
+
+## Review history
+
+1. Initial implementation capture: no P0, P1, or P2 visual defects found. The intended delta is present and the existing funnel hierarchy is preserved.
+2. Focused CTA/mechanism review: focus visibility and semantic accent separation passed. No corrective code iteration was required.
+
+## Final result
+
+passed
