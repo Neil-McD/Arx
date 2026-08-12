@@ -40,12 +40,26 @@ assert.equal(
 const identity = renderer.indexOf('className="community-funnel-identity');
 const hero = renderer.indexOf('className="community-funnel-hero');
 const vsl = renderer.indexOf('className="community-funnel-vsl');
+const primaryAction = renderer.indexOf('position="primary"');
+const memberProofPlacement = renderer.indexOf("{memberProof}", primaryAction);
 const pillars = renderer.indexOf('className="community-funnel-pillars');
 const longForm = renderer.indexOf('className="community-funnel-long-form');
 const conversion = renderer.indexOf('className="community-funnel-conversion');
 assert.ok(
-  identity >= 0 && identity < hero && hero < vsl && vsl < pillars && pillars < longForm && longForm < conversion,
-  "the canonical renderer must keep identity, hero, VSL, pillars, narrative, and conversion in order",
+  identity >= 0 &&
+    identity < hero &&
+    hero < vsl &&
+    vsl < primaryAction &&
+    primaryAction < memberProofPlacement &&
+    memberProofPlacement < pillars &&
+    pillars < longForm &&
+    longForm < conversion,
+  "the canonical renderer must keep identity, hero, VSL, primary action, member proof, pillars, narrative, and final conversion in order",
+);
+assert.doesNotMatch(
+  renderer.slice(conversion),
+  /\{memberProof\}/,
+  "member proof must stay next to the primary conversion instead of drifting to the bottom",
 );
 assert.match(renderer, /renderMarkdown\(props\.renderModel\.longFormMarkdown, \{ headingLevelOffset: 1 \}\)/);
 assert.doesNotMatch(renderer, /dangerouslySetInnerHTML|communityMessages|CommunityContextPanel/);
@@ -53,6 +67,7 @@ assert.match(memberProof, /<UserAvatar[\s\S]*focusX=\{face\.avatar_focus_x\}[\s\
 assert.match(memberProof, /const MAX_VISIBLE_MEMBER_FACES = 5[\s\S]*slice\(0, MAX_VISIBLE_MEMBER_FACES\)/, "public member faces must remain bounded");
 assert.match(rendererCss, /var\(--surface-app\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
 assert.match(rendererCss, /@media \(prefers-reduced-motion: reduce\)/);
+assert.match(rendererCss, /container-type: inline-size[\s\S]*font-size: clamp\([^;]*cqi/);
 assert.doesNotMatch(rendererCss, /#d66a8a|accent-gold|pink/i, "retired Polynet-pink tokens must not leak into the funnel");
 assert.match(
   renderProjection,

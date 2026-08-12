@@ -10,6 +10,7 @@ import {
 } from "../../../../shared/communityFunnelUi";
 import type { WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityFunnelRenderer } from "./WebCommunityFunnelRenderer";
+import "./WebPublicCommunityFunnel.css";
 
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
@@ -39,6 +40,7 @@ type WebPublicCommunityFunnelProps = {
   publicCommunity: PublicCommunityFunnelCommunityLike | null;
   publicRouteSlug?: string;
   isPreviewMode?: boolean;
+  previewExitPath?: string | null;
   previewDocument?: CommunityFunnelContentV2 | null;
   previewVslUrl?: string | null;
   previewDocumentError?: string | null;
@@ -61,8 +63,6 @@ type WebPublicCommunityFunnelProps = {
   publicCommunityError: string | null;
   publicJoinError: string | null;
   checkoutError: string | null;
-  mobileMembersOverlayOpen?: boolean;
-  onCloseMobileMembersOverlay?: () => void;
   /** Present when the signed-in viewer still owes platform credentials —
       renders the gate card's second state instead of the pitch gate. */
   bridge?: WebCommunityBridgeCardProps | null;
@@ -172,7 +172,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
       : funnel,
   });
 
-  return (
+  const funnelSurface = (
     <WebCommunityFunnelRenderer
       communityName={communityName}
       avatarUrl={publicCommunity?.avatar_url ?? null}
@@ -188,5 +188,23 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
         : []}
       bridge={props.bridge ?? null}
     />
+  );
+
+  if (!isPreviewMode) return funnelSurface;
+
+  return (
+    <div className="funnel-preview-presentation">
+      <a
+        className="funnel-preview-back"
+        href={props.previewExitPath ?? "/discover"}
+        aria-label="Back to builder"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M19 12H5M12 19l-7-7 7-7" />
+        </svg>
+        <span>Back to builder</span>
+      </a>
+      {funnelSurface}
+    </div>
   );
 }

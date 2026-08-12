@@ -265,10 +265,10 @@ assert.match(
   /online_count_capped\?: boolean \| null/,
   "the public frontend contract must retain the conservative count state",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /isVisitorCommunitySurface[\s\S]*resolvedPublicCommunity\?\.online_faces \?\? \[\][\s\S]*resolvedPublicCommunity\?\.member_count \?\? null/,
-  "the visitor shell must use public presence faces without inflating the total member count",
+  /isVisitorCommunitySurface|visitorShellActiveCommunity/,
+  "public funnels must use bounded funnel member proof instead of inheriting presence shell state",
 );
 
 console.log("community_presence_lease_contract_proof: ok");

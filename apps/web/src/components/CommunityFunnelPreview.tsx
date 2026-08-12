@@ -183,6 +183,7 @@ export function CommunityFunnelPreview(props: {
           <PreviewMedia community={community} vslUrl={props.vslUrl} />
         ) : null}
         {renderPrimaryAction("first")}
+        {renderMemberProof()}
         <section className="community-funnel-benefits" aria-label="Community benefits">
           <div className="community-funnel-pillars">
             {content.pillars.map((pillar, index) => {
@@ -207,7 +208,6 @@ export function CommunityFunnelPreview(props: {
           </ReactMarkdown>
         </section>
         <section className="community-funnel-final-conversion">
-          {renderMemberProof()}
           {renderPrimaryAction("final")}
         </section>
       </main>

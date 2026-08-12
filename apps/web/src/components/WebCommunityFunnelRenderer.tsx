@@ -125,6 +125,8 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           <FunnelAction action={props.action} position="primary" />
         ) : null}
 
+        {memberProof}
+
         {props.renderModel.pillars.length === 3 ? (
           <section className="community-funnel-pillars" aria-label="Community benefits">
             {props.renderModel.pillars.map((pillar, index) => (
@@ -144,7 +146,6 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
         ) : null}
 
         <section className="community-funnel-conversion">
-          {memberProof}
           <FunnelAction action={props.action} position="final" />
           <ActionStatusCards action={props.action} />
         </section>

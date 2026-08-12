@@ -75,7 +75,7 @@ assert.match(
 assert.match(
   shared,
   /export type MobileOverlay =[\s\S]*\| "community_selector"[\s\S]*\| "members"[\s\S]*\| null;/,
-  "the community selector and public-funnel Members surface should remain dismissible overlays",
+  "authenticated community overlays should remain dismissible",
 );
 assert.match(
   shellState,
@@ -97,15 +97,10 @@ assert.doesNotMatch(
   /mobileMembersOverlayOpen: showMobileShell && mobileOverlay === "members"[\s\S]*onCloseMobileMembersOverlay: \(\) => setMobileOverlay\(null\)/,
   "authenticated Members must not depend on the chat-owned overlay",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /mobileMembersOverlayOpen:[\s\S]*community_funnel[\s\S]*mobileOverlay === "members"/,
-  "the public community funnel should retain its visitor Members overlay",
-);
-assert.match(
-  app,
-  /canViewMembers:[\s\S]*hasSelectedCommunity && canViewMembersActiveCommunity[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*Boolean\(resolvedPublicCommunity\)/,
-  "the Members affordance should follow member capability or the public community funnel",
+  /mobileMembersOverlayOpen:[\s\S]*community_funnel|canViewMembers:[\s\S]*shellPublicRoute\.kind === "community_funnel"/,
+  "the public funnel must not retain authenticated-shell member controls",
 );
 assert.match(
   app,
@@ -127,10 +122,10 @@ assert.match(
   /<WebMemberAgentDock[\s\S]*\{\.\.\.props\.memberAgentDockProps\}[\s\S]*<WebDirectMessagesHost \{\.\.\.props\.directMessagesHostProps\} \/>/,
   "the composition root should mount both controlled persistent mobile-root surfaces",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /forceCommunityRoot:\s*showMobileShell &&\s*shellPublicRoute\.kind === "community_funnel"/,
-  "the published public community funnel should remain forced to the Community root",
+  /forceCommunityRoot:[\s\S]{0,180}community_funnel/,
+  "public funnel routes must not inherit the mobile community root",
 );
 assert.doesNotMatch(
   app,
@@ -229,10 +224,10 @@ assert.match(
   /const showMembers =[\s\S]*isCommunityHome &&[\s\S]*!hasCommunityRail &&[\s\S]*rootPage === "community"/,
   "the authenticated rail home should move Members out of the header while preserving the visitor affordance",
 );
-assert.match(
-  shellChromeProps,
-  /const isMobileCommunityHome =[\s\S]*destination\.kind === "community_home" \|\| params\.isPublicCommunityFunnel/,
-  "the public community funnel should project as the visitor home so its Members affordance remains reachable",
+assert.doesNotMatch(
+  shellProjection,
+  /isMobileVisitorCommunity|showDesktopPublicFunnelNav/,
+  "public funnels must remain standalone presentation canvases",
 );
 assert.match(
   topBar,
@@ -423,7 +418,7 @@ assert.match(
 );
 assert.match(
   shellProjection,
-  /const showMobileShell = showMobileAppShell;[\s\S]*const showMobileGlobalShell =[\s\S]*!isMobileVisitorCommunity[\s\S]*params\.mobileRootPage !== "community"[\s\S]*!isCommunityAppDestination[\s\S]*params\.destination\.kind === "community_home"/,
+  /const showMobileShell = showMobileAppShell;[\s\S]*const showMobileGlobalShell =[\s\S]*showMobileAppShell &&[\s\S]*params\.mobileRootPage !== "community"[\s\S]*!isCommunityAppDestination[\s\S]*params\.destination\.kind === "community_home"/,
   "the route projection should frame global roots while leaving community detail routes focused",
 );
 assert.match(

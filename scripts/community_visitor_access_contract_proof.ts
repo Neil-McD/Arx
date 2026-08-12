@@ -120,15 +120,10 @@ assert.match(
   "public memory statuses must stay in parity with MEMBER_READABLE_STATUSES in communityIntelligenceDirectory",
 );
 
-assert.match(
+assert.doesNotMatch(
   appSource,
-  /isVisitorCommunitySurface[\s\S]*resolvedPublicCommunity\?\.online_faces \?\? \[\][\s\S]*resolvedPublicCommunity\?\.member_count \?\? null/,
-  "the visitor mobile top bar must use public online faces but the total community member count",
-);
-assert.match(
-  appSource,
-  /canViewMembers:[\s\S]*shellPublicRoute\.kind === "community_funnel"[\s\S]*Boolean\(resolvedPublicCommunity\)/,
-  "the mobile shell must allow the visitor-safe Members drawer without granting private directory access",
+  /isVisitorCommunitySurface|canViewMembers:[\s\S]{0,260}shellPublicRoute\.kind === "community_funnel"/,
+  "the public funnel must not inherit visitor shell presence or member-directory controls",
 );
 assert.match(
   publicFunnel,

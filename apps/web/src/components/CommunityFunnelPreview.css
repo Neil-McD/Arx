@@ -1,65 +1,3 @@
-.funnel-preview-presentation {
-  position: relative;
-  width: 100%;
-  height: 100%;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-}
-
-.funnel-preview-presentation > .community-funnel-preview {
-  height: 100%;
-}
-
-.funnel-preview-back {
-  position: absolute;
-  z-index: 4;
-  top: max(14px, env(safe-area-inset-top));
-  left: max(14px, env(safe-area-inset-left));
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 44px;
-  min-height: 44px;
-  padding: 0 14px 0 12px;
-  border: 1px solid var(--stroke-default);
-  border-radius: 11px;
-  background: color-mix(in srgb, var(--surface-card) 88%, transparent);
-  color: var(--text-primary);
-  font: inherit;
-  font-size: 13px;
-  font-weight: 650;
-  line-height: 1;
-  text-decoration: none;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  transition:
-    background-color 140ms ease,
-    border-color 140ms ease;
-}
-
-.funnel-preview-back:hover {
-  border-color: var(--stroke-strong);
-  background: color-mix(in srgb, var(--surface-card-hover) 94%, transparent);
-}
-
-.funnel-preview-back:focus-visible {
-  outline: 2px solid var(--focus-ring);
-  outline-offset: 3px;
-}
-
-.funnel-preview-back svg {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-  fill: none;
-  stroke: currentColor;
-  stroke-width: 1.8;
-  stroke-linecap: round;
-  stroke-linejoin: round;
-}
-
 .community-funnel-preview {
   --community-funnel-accent: var(--accent-attention);
   --community-funnel-text: var(--text-primary);
@@ -78,21 +16,6 @@
     ),
     var(--community-funnel-page);
   color: var(--community-funnel-text);
-}
-
-@media (max-width: 520px) {
-  .funnel-preview-back {
-    width: 44px;
-    padding: 0;
-  }
-
-  .funnel-preview-back span {
-    display: none;
-  }
-
-  .funnel-preview-presentation .community-funnel-preview-main {
-    padding-top: 72px;
-  }
 }
 
 .community-funnel-preview-main {
@@ -186,6 +109,10 @@
   font-size: 15px;
   font-weight: 500;
   line-height: 1.3;
+}
+
+.community-funnel-content > .community-funnel-member-proof-row {
+  margin-top: 20px;
 }
 
 .community-funnel-member-proof-avatars {

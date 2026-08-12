@@ -171,19 +171,25 @@ assert.doesNotMatch(
   /activePage === "workspace"|sessionsDrawerEnabled|isSessionsDrawerOpen|showHeaderIslands/,
   "shell projection must not retain impossible Workspace-only chrome",
 );
-for (const shellVariant of ["standard", "mobile"] as const) {
-  const previewProjection = buildWebShellProjection({
-    publicRouteKind: "community_funnel_preview",
-    shellVariant,
-    activePage: "community",
-    mobileSettingsView: "detail",
-    isPublicCommunityFunnel: true,
-  });
-  assert.equal(previewProjection.showMobileAppShell, false);
-  assert.equal(previewProjection.showMobilePublicFunnel, false);
-  assert.equal(previewProjection.showDesktopCommunityRail, false);
-  assert.equal(previewProjection.showDesktopCommunityNav, false);
-  assert.equal(previewProjection.hasLeftPanel, false);
+for (const publicRouteKind of ["community_funnel", "community_funnel_preview"] as const) {
+  for (const shellVariant of ["standard", "mobile"] as const) {
+    const projection = buildWebShellProjection({
+      publicRouteKind,
+      shellVariant,
+      destination: { kind: publicRouteKind, slug: "polynet" },
+      mobileRootPage: "community",
+      mobileSettingsView: "detail",
+      isPublicCommunityFunnel: true,
+    });
+    assert.equal(projection.showMobileAppShell, false);
+    assert.equal(
+      projection.showMobilePublicFunnel,
+      publicRouteKind === "community_funnel" && shellVariant === "mobile",
+    );
+    assert.equal(projection.showDesktopCommunityRail, false);
+    assert.equal(projection.showDesktopCommunityNav, false);
+    assert.equal(projection.hasLeftPanel, false);
+  }
 }
 assert.doesNotMatch(
   operatorGateway,

@@ -12,6 +12,8 @@
   color: var(--community-funnel-ink);
   background: var(--community-funnel-page);
   scroll-behavior: smooth;
+  container-name: community-funnel;
+  container-type: inline-size;
 }
 
 .community-funnel-layout {
@@ -73,7 +75,7 @@
 
 .community-funnel-hero h1 {
   margin: 0;
-  font-size: clamp(50px, 8.5vw, 94px);
+  font-size: clamp(48px, 7.5cqi, 88px);
   font-weight: 720;
   line-height: 0.96;
   letter-spacing: -0.064em;
@@ -103,7 +105,7 @@
 }
 
 .community-funnel-renderer.is-default .community-funnel-hero h1 {
-  width: min(850px, 100%);
+  width: min(820px, 100%);
   margin-inline: auto;
 }
 
@@ -270,7 +272,9 @@
 }
 
 .community-funnel-renderer.is-default .community-funnel-conversion {
-  margin-top: clamp(48px, 8vh, 78px);
+  margin-top: 28px;
+  border-top: 0;
+  padding-top: 0;
 }
 
 .community-funnel-member-proof {
@@ -282,6 +286,19 @@
   color: var(--community-funnel-muted);
   font-size: 15px;
   font-weight: 520;
+}
+
+.community-funnel-layout > .community-funnel-member-proof {
+  width: min(580px, 100%);
+  margin: 22px auto 0;
+}
+
+.community-funnel-renderer.is-default
+  .community-funnel-layout
+  > .community-funnel-member-proof {
+  margin-top: clamp(38px, 6vh, 58px);
+  border-top: 1px solid var(--community-funnel-line);
+  padding-top: 30px;
 }
 
 .community-funnel-member-faces {
@@ -314,7 +331,7 @@
 }
 
 .community-funnel-conversion .community-funnel-action {
-  margin-top: 28px;
+  margin-top: 0;
 }
 
 .community-funnel-conversion .cfg-status-card,
@@ -443,6 +460,21 @@
 
   .community-funnel-long-form {
     font-size: 16px;
+  }
+}
+
+@container community-funnel (max-width: 900px) {
+  .community-funnel-hero {
+    width: min(760px, 100%);
+  }
+
+  .community-funnel-hero h1 {
+    font-size: clamp(44px, 8.6cqi, 70px);
+    letter-spacing: -0.055em;
+  }
+
+  .community-funnel-pillars article {
+    padding-inline: clamp(16px, 3cqi, 28px);
   }
 }
 
