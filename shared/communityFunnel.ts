@@ -1,26 +1,46 @@
 import type {
+  CommunityCustomFunnelSlot,
   CommunityFunnelConfig,
   CommunityFunnelContentV2,
   CommunityFunnelHeroMediaKind,
   CommunityFunnelManagerConfig,
+  CommunityFunnelSlot,
+  CommunityFunnelVariantConfig,
 } from "./communityTypes";
+
+export const COMMUNITY_CUSTOM_FUNNEL_SLOTS = [
+  "custom_1",
+  "custom_2",
+] as const satisfies readonly CommunityCustomFunnelSlot[];
+
+export const DEFAULT_COMMUNITY_FUNNEL_SLOT: CommunityFunnelSlot = "default";
+
+export function normalizeCommunityCustomFunnelSlot(
+  raw: unknown,
+): CommunityCustomFunnelSlot {
+  return raw === "custom_2" ? "custom_2" : "custom_1";
+}
+
+export function normalizeCommunityFunnelSlot(
+  raw: unknown,
+): CommunityFunnelSlot {
+  return raw === "custom_1" || raw === "custom_2" ? raw : "default";
+}
 
 export const DEFAULT_COMMUNITY_FUNNEL_CONFIG: CommunityFunnelConfig = {
   hero_media_url: null,
   hero_media_kind: "image",
-  live_mode: "default",
+  active_slot: "default",
   published_vsl_url: null,
   published_content_v2: null,
 };
 
 export const DEFAULT_COMMUNITY_FUNNEL_MANAGER_CONFIG: CommunityFunnelManagerConfig = {
   ...DEFAULT_COMMUNITY_FUNNEL_CONFIG,
-  draft_vsl_url: null,
-  draft_content_v2: null,
-  draft_revision: 0,
-  draft_updated_at: null,
-  published_draft_revision: 0,
-  published_at: null,
+  custom_funnels: {
+    custom_1: null,
+    custom_2: null,
+  },
 };
 
 function normalizeTrimmedString(raw: unknown, maxLength: number): string | null {
@@ -159,20 +179,19 @@ export function normalizeCommunityFunnelConfig(raw: unknown): CommunityFunnelCon
     return DEFAULT_COMMUNITY_FUNNEL_CONFIG;
   }
   const value = raw as Record<string, unknown>;
-  const publishedContentV2 = normalizeCommunityFunnelContentV2(
-    value.published_content_v2,
-  );
-  // Old rows predate the explicit selector; a published custom snapshot was
-  // their live surface. Only an explicit `default` opts such a row out.
-  const liveMode = publishedContentV2 && value.live_mode !== "default"
-    ? "custom"
+  const publishedContentV2 = normalizeCommunityFunnelContentV2(value.published_content_v2);
+  const legacyActiveSlot = publishedContentV2 && value.live_mode !== "default"
+    ? "custom_1"
     : "default";
+  const activeSlot = Object.prototype.hasOwnProperty.call(value, "active_slot")
+    ? normalizeCommunityFunnelSlot(value.active_slot)
+    : legacyActiveSlot;
   return {
     hero_media_url: normalizeTrimmedString(value.hero_media_url, 2_000),
     hero_media_kind: normalizeHeroMediaKind(value.hero_media_kind),
-    live_mode: liveMode,
+    active_slot: activeSlot,
     published_vsl_url: normalizeTrimmedString(value.published_vsl_url, 2_000),
-    published_content_v2: liveMode === "custom" ? publishedContentV2 : null,
+    published_content_v2: activeSlot === "default" ? null : publishedContentV2,
   };
 }
 
@@ -191,16 +210,43 @@ export function normalizeCommunityFunnelManagerConfig(
     const timestamp = Number(candidate);
     return Number.isFinite(timestamp) && timestamp > 0 ? timestamp : null;
   };
+  const normalizeVariantCandidate = (
+    rawVariant: unknown,
+    slot: CommunityCustomFunnelSlot,
+  ): CommunityFunnelVariantConfig | null => {
+    if (!rawVariant || typeof rawVariant !== "object" || Array.isArray(rawVariant)) {
+      return null;
+    }
+    const candidate = rawVariant as Record<string, unknown>;
+    const draftContent = normalizeCommunityFunnelContentV2(candidate.draft_content_v2);
+    const publishedContent = normalizeCommunityFunnelContentV2(candidate.published_content_v2);
+    const draftVsl = normalizeTrimmedString(candidate.draft_vsl_url, 2_000);
+    const publishedVsl = normalizeTrimmedString(candidate.published_vsl_url, 2_000);
+    if (!draftContent && !publishedContent && !draftVsl && !publishedVsl) return null;
+    return {
+      slot,
+      draft_vsl_url: draftVsl,
+      draft_content_v2: draftContent,
+      draft_revision: normalizeRevision(candidate.draft_revision),
+      draft_updated_at: normalizeTimestamp(candidate.draft_updated_at),
+      published_vsl_url: publishedVsl,
+      published_content_v2: publishedContent,
+      published_draft_revision: normalizeRevision(candidate.published_draft_revision),
+      published_at: normalizeTimestamp(candidate.published_at),
+    };
+  };
+  const legacyVariant = normalizeVariantCandidate(value, "custom_1");
+  const rawCustomFunnels =
+    value.custom_funnels && typeof value.custom_funnels === "object" && !Array.isArray(value.custom_funnels)
+      ? value.custom_funnels as Record<string, unknown>
+      : {};
   return {
     ...publicConfig,
-    published_vsl_url: normalizeTrimmedString(value.published_vsl_url, 2_000),
-    published_content_v2: normalizeCommunityFunnelContentV2(value.published_content_v2),
-    draft_vsl_url: normalizeTrimmedString(value.draft_vsl_url, 2_000),
-    draft_content_v2: normalizeCommunityFunnelContentV2(value.draft_content_v2),
-    draft_revision: normalizeRevision(value.draft_revision),
-    draft_updated_at: normalizeTimestamp(value.draft_updated_at),
-    published_draft_revision: normalizeRevision(value.published_draft_revision),
-    published_at: normalizeTimestamp(value.published_at),
+    custom_funnels: {
+      custom_1:
+        normalizeVariantCandidate(rawCustomFunnels.custom_1, "custom_1") ?? legacyVariant,
+      custom_2: normalizeVariantCandidate(rawCustomFunnels.custom_2, "custom_2"),
+    },
   };
 }
 

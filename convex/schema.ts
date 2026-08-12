@@ -1235,6 +1235,13 @@ export default defineSchema({
       v.literal("approval"),
       v.literal("paid_subscription"),
     ),
+    activeFunnelSlot: v.optional(
+      v.union(
+        v.literal("default"),
+        v.literal("custom_1"),
+        v.literal("custom_2"),
+      ),
+    ),
     activeMemberCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1374,8 +1381,12 @@ export default defineSchema({
 
   communityFunnels: defineTable({
     communityId: v.id("communities"),
+    // Slotless legacy rows are read as custom_1 during the bounded migration.
+    slot: v.optional(v.union(v.literal("custom_1"), v.literal("custom_2"))),
     heroMediaUrl: v.optional(v.string()),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
+    // Read compatibility only. Active authority now lives on
+    // communities.activeFunnelSlot.
     liveMode: v.optional(v.union(v.literal("default"), v.literal("custom"))),
     draftVslUrl: v.optional(v.union(v.string(), v.null())),
     publishedVslUrl: v.optional(v.union(v.string(), v.null())),
@@ -1389,7 +1400,8 @@ export default defineSchema({
     publishedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  }).index("by_community", ["communityId"]),
+  })
+    .index("by_community", ["communityId"]),
 
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),

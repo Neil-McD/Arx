@@ -9,6 +9,7 @@ import {
   type OperatorTab,
   type SettingsPage,
 } from "./appShellNavigation";
+import type { CommunityFunnelSlot } from "./communityTypes";
 
 export type PublicRoute =
   | { kind: "app" }
@@ -16,6 +17,7 @@ export type PublicRoute =
   | {
       kind: "community_funnel_preview";
       slug: string;
+      slot: CommunityFunnelSlot;
     }
   | { kind: "checkout_success"; sessionId: string }
   | { kind: "claim"; token: string };
@@ -258,10 +260,11 @@ export function buildCommunityMembersPath(
 
 export function buildCommunityFunnelPreviewPath(
   communitySlug: string | null | undefined,
+  slot: "default" | "custom_1" | "custom_2" = "default",
 ): string | null {
   const slug = String(communitySlug ?? "").trim();
   if (!slug) return null;
-  const path = `/c/${encodeURIComponent(slug)}/preview`;
+  const path = `/c/${encodeURIComponent(slug)}/preview?slot=${encodeURIComponent(slot)}`;
   return path;
 }
 
@@ -729,6 +732,11 @@ export function parsePublicRouteFromPath(pathWithSearch: string): PublicRoute {
       return {
         kind: "community_funnel_preview",
         slug,
+        slot:
+          normalized.searchParams.get("slot") === "custom_1" ||
+          normalized.searchParams.get("slot") === "custom_2"
+            ? (normalized.searchParams.get("slot") as CommunityFunnelSlot)
+            : "default",
       };
     }
   }

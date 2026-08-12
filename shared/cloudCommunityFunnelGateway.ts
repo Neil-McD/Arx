@@ -1,5 +1,8 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
-import type { CommunityFunnelLiveMode } from "./communityTypes";
+import type {
+  CommunityCustomFunnelSlot,
+  CommunityFunnelActivationTarget,
+} from "./communityTypes";
 
 type CloudCommunityFunnelGatewayParams<SessionT> = {
   session: SessionT;
@@ -57,6 +60,7 @@ export async function publishCloudCommunityFunnelDraft<
 >(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;
+    slot: CommunityCustomFunnelSlot;
     expectedDraftRevision: number;
   },
 ): Promise<TConfig | null> {
@@ -68,6 +72,7 @@ export async function publishCloudCommunityFunnelDraft<
     {
       authSubject,
       communityId: params.communityId,
+      slot: params.slot,
       expectedDraftRevision: params.expectedDraftRevision,
     },
   );
@@ -80,6 +85,7 @@ export async function setCloudCommunityFunnelDraftVsl<
 >(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;
+    slot: CommunityCustomFunnelSlot;
     expectedDraftRevision: number;
     url: string | null;
   },
@@ -92,6 +98,7 @@ export async function setCloudCommunityFunnelDraftVsl<
     {
       authSubject,
       communityId: params.communityId,
+      slot: params.slot,
       expectedDraftRevision: params.expectedDraftRevision,
       url: params.url,
     },
@@ -99,28 +106,24 @@ export async function setCloudCommunityFunnelDraftVsl<
   return firstObjectRow(payload) as TConfig | null;
 }
 
-export async function setCloudCommunityFunnelLiveMode<
+export async function setCloudActiveCommunityFunnel<
   SessionT,
   TConfig = unknown,
 >(
   params: CloudCommunityFunnelGatewayParams<SessionT> & {
     communityId: string;
-    mode: CommunityFunnelLiveMode;
-    expectedPublishedDraftRevision?: number;
+    target: CommunityFunnelActivationTarget;
   },
 ): Promise<TConfig | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
   const payload = await client.mutation(
-    "communityFunnel:setCommunityFunnelLiveMode" as any,
+    "communityFunnel:setActiveCommunityFunnel" as any,
     {
       authSubject,
       communityId: params.communityId,
-      mode: params.mode,
-      ...(params.expectedPublishedDraftRevision === undefined
-        ? {}
-        : { expectedPublishedDraftRevision: params.expectedPublishedDraftRevision }),
+      target: params.target,
     },
   );
   return firstObjectRow(payload) as TConfig | null;

@@ -39,6 +39,9 @@ export function useWebPublicCommunityRouteController<
       ? params.publicRoute.slug
       : null;
   const isPublicFunnelPreviewRoute = params.publicRoute.kind === "community_funnel_preview";
+  const publicFunnelPreviewSlot = params.publicRoute.kind === "community_funnel_preview"
+    ? params.publicRoute.slot
+    : "default";
   const checkoutSuccessSessionId = params.publicRoute.kind === "checkout_success" ? params.publicRoute.sessionId : null;
   const claimTokenParam = params.publicRoute.kind === "claim" ? params.publicRoute.token : null;
   const isPublicCommunityFunnel =
@@ -85,6 +88,7 @@ export function useWebPublicCommunityRouteController<
   return {
     publicFunnelSlug,
     isPublicFunnelPreviewRoute,
+    publicFunnelPreviewSlot,
     checkoutSuccessSessionId,
     claimTokenParam,
     isPublicCommunityFunnel,

@@ -21,7 +21,7 @@ describe("buildCommunityFunnelRenderModel", () => {
         communityName: "Operators",
         oneLiner: "The operating room for builders.",
         about: "Work through real problems together.",
-        funnel: { live_mode: "default", published_content_v2: published },
+        funnel: { active_slot: "default", published_content_v2: published },
       }),
     ).toEqual({
       mode: "default",
@@ -44,7 +44,7 @@ describe("buildCommunityFunnelRenderModel", () => {
       buildCommunityFunnelRenderModel({
         communityName: "Operators",
         funnel: {
-          live_mode: "custom",
+          active_slot: "custom_1",
           published_vsl_url: " https://youtube.com/watch?v=published ",
           hero_media_url: "https://youtube.com/watch?v=legacy",
           hero_media_kind: "video",
@@ -66,7 +66,7 @@ describe("buildCommunityFunnelRenderModel", () => {
       buildCommunityFunnelRenderModel({
         communityName: "Operators",
         funnel: {
-          live_mode: "custom",
+          active_slot: "custom_2",
           hero_media_url: "https://vimeo.com/123",
           hero_media_kind: "video",
           published_content_v2: published,

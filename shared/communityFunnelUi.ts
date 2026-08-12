@@ -88,7 +88,7 @@ type CommunityFunnelRenderInput = {
   funnel?: {
     hero_media_url?: string | null;
     hero_media_kind?: "image" | "video" | null;
-    live_mode?: "default" | "custom" | null;
+    active_slot?: "default" | "custom_1" | "custom_2" | null;
     published_vsl_url?: string | null;
     published_content_v2?: {
       version: 2;
@@ -113,7 +113,7 @@ export function buildCommunityFunnelRenderModel(
   input: CommunityFunnelRenderInput,
 ): CommunityFunnelRenderModel {
   const published = input.funnel?.published_content_v2 ?? null;
-  const isCustom = input.funnel?.live_mode === "custom" && published?.version === 2;
+  const isCustom = input.funnel?.active_slot !== "default" && published?.version === 2;
   if (isCustom && published) {
     return {
       mode: "custom",

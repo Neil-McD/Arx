@@ -1,6 +1,7 @@
 import type {
   CommunityFunnelConfig,
   CommunityFunnelContentV2,
+  CommunityFunnelSlot,
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
 import {
@@ -42,6 +43,7 @@ type WebPublicCommunityFunnelProps = {
   publicRouteSlug?: string;
   isPreviewMode?: boolean;
   previewExitPath?: string | null;
+  previewSlot?: CommunityFunnelSlot;
   previewDocument?: CommunityFunnelContentV2 | null;
   previewVslUrl?: string | null;
   previewDocumentError?: string | null;
@@ -75,6 +77,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     publicRouteSlug,
     isPreviewMode = false,
     previewDocument = null,
+    previewSlot = "default",
     previewVslUrl = null,
     previewDocumentError = null,
     selectedPublicCommunityPlan,
@@ -163,13 +166,22 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     communityName,
     oneLiner: publicCommunity?.one_liner,
     about: publicCommunity?.about,
-    funnel: isPreviewMode && previewDocument
-      ? {
-          ...funnel,
-          live_mode: "custom",
-          published_content_v2: previewDocument,
-          published_vsl_url: previewVslUrl,
-        }
+    funnel: isPreviewMode
+      ? previewSlot === "default"
+        ? {
+            ...funnel,
+            active_slot: "default",
+            published_content_v2: null,
+            published_vsl_url: null,
+          }
+        : previewDocument
+          ? {
+              ...funnel,
+              active_slot: previewSlot,
+              published_content_v2: previewDocument,
+              published_vsl_url: previewVslUrl,
+            }
+          : funnel
       : funnel,
   });
 

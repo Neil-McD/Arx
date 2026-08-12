@@ -2,11 +2,17 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import { ConvexError, v } from "convex/values";
 import {
   isSupportedCommunityFunnelVideoUrl,
+  normalizeCommunityCustomFunnelSlot,
+  normalizeCommunityFunnelSlot,
   normalizeCommunityFunnelVslUrl as normalizeSharedCommunityFunnelVslUrl,
   normalizeCommunityFunnelContentV2,
   validateCommunityFunnelContentV2,
 } from "../shared/communityFunnel";
-import type { CommunityFunnelContentV2 } from "../shared/communityTypes";
+import type {
+  CommunityCustomFunnelSlot,
+  CommunityFunnelContentV2,
+  CommunityFunnelSlot,
+} from "../shared/communityTypes";
 import {
   normalizeSlug,
   requireActiveCommunity,
@@ -19,6 +25,7 @@ import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 type CommunityFunnelRowLike = {
   _id: unknown;
   communityId: unknown;
+  slot?: CommunityCustomFunnelSlot | null;
   heroMediaUrl?: string | null;
   heroMediaKind?: "image" | "video" | null;
   liveMode?: "default" | "custom" | null;
@@ -35,6 +42,19 @@ type CommunityFunnelRowLike = {
   createdAt: number;
   updatedAt: number;
 };
+
+const communityCustomFunnelSlotValidator = v.union(
+  v.literal("custom_1"),
+  v.literal("custom_2"),
+);
+
+const communityFunnelActivationTargetValidator = v.union(
+  v.object({ slot: v.literal("default") }),
+  v.object({
+    slot: communityCustomFunnelSlotValidator,
+    expectedPublishedDraftRevision: v.number(),
+  }),
+);
 
 function normalizeTrimmedString(raw: unknown, maxLength: number): string | null {
   if (typeof raw !== "string") return null;
@@ -79,38 +99,33 @@ function storedPublishedContent(row: CommunityFunnelRowLike | null) {
   return normalizeCommunityFunnelContentV2(row?.publishedContentV2);
 }
 
-function resolvedLiveMode(row: CommunityFunnelRowLike | null) {
-  // Compatibility: before the explicit selector existed, a published custom
-  // snapshot was live. New writes persist the selector explicitly.
-  return row?.liveMode !== "default" && storedPublishedContent(row)
-    ? "custom"
-    : "default";
+function rowHasPublishedFunnel(row: CommunityFunnelRowLike | null) {
+  return Boolean(storedPublishedContent(row));
 }
 
 /** Public projection: private draft state and inactive snapshots never escape. */
 export function buildCommunityFunnelPublicConfig(
   row: CommunityFunnelRowLike | null,
+  activeSlot: CommunityFunnelSlot = "default",
 ) {
-  const liveMode = resolvedLiveMode(row);
   return {
     hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
     hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
-    live_mode: liveMode,
+    active_slot: activeSlot,
     published_vsl_url:
-      liveMode === "custom" ? normalizeStoredVslUrl(row?.publishedVslUrl) : null,
+      activeSlot !== "default" ? normalizeStoredVslUrl(row?.publishedVslUrl) : null,
     published_content_v2:
-      liveMode === "custom" ? storedPublishedContent(row) : null,
+      activeSlot !== "default" ? storedPublishedContent(row) : null,
   };
 }
 
-/** Manager projection: the private draft and inactive published snapshot remain visible. */
-export function buildCommunityFunnelManagerConfig(
+function buildCommunityFunnelVariantConfig(
   row: CommunityFunnelRowLike | null,
+  slot: CommunityCustomFunnelSlot,
 ) {
+  if (!row) return null;
   return {
-    hero_media_url: normalizeTrimmedString(row?.heroMediaUrl, 2_000),
-    hero_media_kind: normalizeHeroMediaKind(row?.heroMediaKind),
-    live_mode: resolvedLiveMode(row),
+    slot,
     published_vsl_url: normalizeStoredVslUrl(row?.publishedVslUrl),
     published_content_v2: storedPublishedContent(row),
     draft_vsl_url: normalizeStoredVslUrl(row?.draftVslUrl),
@@ -119,6 +134,21 @@ export function buildCommunityFunnelManagerConfig(
     draft_updated_at: row?.draftUpdatedAt ?? null,
     published_draft_revision: normalizeRevision(row?.publishedDraftRevision),
     published_at: row?.publishedAt ?? null,
+  };
+}
+
+/** Manager projection: both private custom slots remain visible to managers. */
+export function buildCommunityFunnelManagerConfig(params: {
+  rows: Record<CommunityCustomFunnelSlot, CommunityFunnelRowLike | null>;
+  activeSlot: CommunityFunnelSlot;
+}) {
+  const activeRow = params.activeSlot === "default" ? null : params.rows[params.activeSlot];
+  return {
+    ...buildCommunityFunnelPublicConfig(activeRow, params.activeSlot),
+    custom_funnels: {
+      custom_1: buildCommunityFunnelVariantConfig(params.rows.custom_1, "custom_1"),
+      custom_2: buildCommunityFunnelVariantConfig(params.rows.custom_2, "custom_2"),
+    },
   };
 }
 
@@ -144,18 +174,75 @@ export function normalizeCommunityFunnelConfigInput(raw: unknown) {
   };
 }
 
-async function getCommunityFunnelRow(
+function resolveCommunityFunnelRowSlot(
+  row: CommunityFunnelRowLike,
+): CommunityCustomFunnelSlot {
+  return normalizeCommunityCustomFunnelSlot(row.slot);
+}
+
+async function getCommunityFunnelRows(
   ctx: any,
   communityId: any,
-): Promise<CommunityFunnelRowLike | null> {
+): Promise<Record<CommunityCustomFunnelSlot, CommunityFunnelRowLike | null>> {
   const rows = (await ctx.db
     .query("communityFunnels" as any)
     .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(2)) as CommunityFunnelRowLike[];
-  if (rows.length > 1) {
-    throw new ConvexError({ code: "community_funnel_duplicate_rows" });
+    .collect()) as CommunityFunnelRowLike[];
+  const indexed: Record<CommunityCustomFunnelSlot, CommunityFunnelRowLike | null> = {
+    custom_1: null,
+    custom_2: null,
+  };
+  for (const row of rows) {
+    const slot = resolveCommunityFunnelRowSlot(row);
+    if (indexed[slot]) {
+      throw new ConvexError({ code: "community_funnel_slot_duplicate", slot });
+    }
+    indexed[slot] = row;
   }
-  return rows[0] ?? null;
+  return indexed;
+}
+
+async function getCommunityFunnelRow(
+  ctx: any,
+  communityId: any,
+  slot: CommunityCustomFunnelSlot = "custom_1",
+): Promise<CommunityFunnelRowLike | null> {
+  return (await getCommunityFunnelRows(ctx, communityId))[slot];
+}
+
+function resolveActiveCommunityFunnelSlot(params: {
+  storedSlot: unknown;
+  rows: Record<CommunityCustomFunnelSlot, CommunityFunnelRowLike | null>;
+}): CommunityFunnelSlot {
+  const hasStoredSlot =
+    params.storedSlot === "default" ||
+    params.storedSlot === "custom_1" ||
+    params.storedSlot === "custom_2";
+  if (hasStoredSlot) {
+    const slot = normalizeCommunityFunnelSlot(params.storedSlot);
+    if (slot === "default") return slot;
+    return rowHasPublishedFunnel(params.rows[slot]) ? slot : "default";
+  }
+  // A legacy singleton custom row was live unless it explicitly selected default.
+  const legacy = params.rows.custom_1;
+  return legacy?.liveMode !== "default" && rowHasPublishedFunnel(legacy)
+    ? "custom_1"
+    : "default";
+}
+
+async function resolveCommunityFunnelAuthorityState(ctx: any, communityId: any) {
+  const [community, rows] = await Promise.all([
+    ctx.db.get(communityId),
+    getCommunityFunnelRows(ctx, communityId),
+  ]);
+  return {
+    community,
+    rows,
+    activeSlot: resolveActiveCommunityFunnelSlot({
+      storedSlot: community?.activeFunnelSlot,
+      rows,
+    }),
+  };
 }
 
 function rowHasCanonicalState(row: CommunityFunnelRowLike): boolean {
@@ -215,9 +302,13 @@ export async function resolveCommunityFunnelConfigByCommunityId(
   ctx: any,
   communityId: any,
 ) {
-  return buildCommunityFunnelPublicConfig(
-    await getCommunityFunnelRow(ctx, communityId),
-  );
+  const state = await resolveCommunityFunnelAuthorityState(ctx, communityId);
+  return state.activeSlot === "default"
+    ? buildCommunityFunnelPublicConfig(null, "default")
+    : buildCommunityFunnelPublicConfig(
+        state.rows[state.activeSlot],
+        state.activeSlot,
+      );
 }
 
 async function requireManager(args: {
@@ -252,9 +343,8 @@ export const getCommunityFunnelConfig = query({
       authSubject: args.authSubject,
       communityId: args.communityId,
     });
-    return buildCommunityFunnelManagerConfig(
-      await getCommunityFunnelRow(ctx, args.communityId),
-    );
+    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+    return buildCommunityFunnelManagerConfig(state);
   },
 });
 
@@ -284,24 +374,32 @@ export const getCommunityFunnelDraftPreview = query({
       authSubject: args.authSubject,
       communityId: community._id,
     });
-    return buildCommunityFunnelManagerConfig(
-      await getCommunityFunnelRow(ctx, community._id),
-    );
+    const state = await resolveCommunityFunnelAuthorityState(ctx, community._id);
+    return buildCommunityFunnelManagerConfig(state);
   },
 });
 
 export const getCommunityFunnelDraftInternal = internalQuery({
-  args: { communityId: v.id("communities") },
-  handler: async (ctx, args) =>
-    buildCommunityFunnelManagerConfig(
-      await getCommunityFunnelRow(ctx, args.communityId),
-    ),
+  args: {
+    communityId: v.id("communities"),
+    slot: v.optional(communityCustomFunnelSlotValidator),
+  },
+  handler: async (ctx, args) => {
+    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
+    return {
+      ...buildCommunityFunnelManagerConfig(state),
+      selected_slot: slot,
+      selected_funnel: buildCommunityFunnelVariantConfig(state.rows[slot], slot),
+    };
+  },
 });
 
 async function saveCommunityFunnelDraftForManager(args: {
   ctx: any;
   userId: any;
   communityId: any;
+  slot: CommunityCustomFunnelSlot;
   expectedDraftRevision: number;
   content: unknown;
 }) {
@@ -311,7 +409,7 @@ async function saveCommunityFunnelDraftForManager(args: {
     userId: args.userId,
   });
   const content = validateCommunityFunnelContentV2(args.content);
-  const existing = await getCommunityFunnelRow(args.ctx, args.communityId);
+  const existing = await getCommunityFunnelRow(args.ctx, args.communityId, args.slot);
   const currentRevision = normalizeRevision(existing?.draftRevision);
   if (normalizeRevision(args.expectedDraftRevision) !== currentRevision) {
     throw new ConvexError({
@@ -322,6 +420,7 @@ async function saveCommunityFunnelDraftForManager(args: {
   }
   const nowMs = Date.now();
   const fields = {
+    slot: args.slot,
     draftContentV2: content,
     draftRevision: currentRevision + 1,
     draftUpdatedAt: nowMs,
@@ -334,25 +433,30 @@ async function saveCommunityFunnelDraftForManager(args: {
     ...fields,
     createdAt: nowMs,
   });
-  return buildCommunityFunnelManagerConfig(
-    await getCommunityFunnelRow(args.ctx, args.communityId),
-  );
+  const state = await resolveCommunityFunnelAuthorityState(args.ctx, args.communityId);
+  return buildCommunityFunnelManagerConfig(state);
 }
 
 export const saveCommunityFunnelDraftInternal = internalMutation({
   args: {
     userId: v.id("users"),
     communityId: v.id("communities"),
+    slot: v.optional(communityCustomFunnelSlotValidator),
     expectedDraftRevision: v.number(),
     content: communityFunnelContentV2Validator,
   },
-  handler: async (ctx, args) => saveCommunityFunnelDraftForManager({
-    ctx,
-    userId: args.userId,
-    communityId: args.communityId,
-    expectedDraftRevision: args.expectedDraftRevision,
-    content: args.content,
-  }),
+  handler: async (ctx, args) => {
+    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
+    const manager = await saveCommunityFunnelDraftForManager({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      slot,
+      expectedDraftRevision: args.expectedDraftRevision,
+      content: args.content,
+    });
+    return { ...manager, selected_slot: slot, selected_funnel: manager.custom_funnels[slot] };
+  },
 });
 
 export const saveCommunityFunnelDraft = mutation({
@@ -360,6 +464,7 @@ export const saveCommunityFunnelDraft = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    slot: v.optional(communityCustomFunnelSlotValidator),
     expectedDraftRevision: v.number(),
     content: communityFunnelContentV2Validator,
   },
@@ -371,7 +476,8 @@ export const saveCommunityFunnelDraft = mutation({
       communityId: args.communityId,
     });
     const content = validateCommunityFunnelContentV2(args.content);
-    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
+    const existing = await getCommunityFunnelRow(ctx, args.communityId, slot);
     const currentRevision = normalizeRevision(existing?.draftRevision);
     const expectedRevision = normalizeRevision(args.expectedDraftRevision);
     if (args.expectedDraftRevision !== expectedRevision) {
@@ -385,7 +491,8 @@ export const saveCommunityFunnelDraft = mutation({
         currentRevision === expectedRevision + 1 &&
         sameContent(currentContent, content)
       ) {
-        return buildCommunityFunnelManagerConfig(existing);
+        const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+        return buildCommunityFunnelManagerConfig(state);
       }
       throw new ConvexError({
         code: "community_funnel_draft_conflict",
@@ -395,6 +502,7 @@ export const saveCommunityFunnelDraft = mutation({
     }
     const nowMs = Date.now();
     const fields = {
+      slot,
       draftContentV2: content,
       draftRevision: currentRevision + 1,
       draftUpdatedAt: nowMs,
@@ -410,9 +518,8 @@ export const saveCommunityFunnelDraft = mutation({
         createdAt: nowMs,
       });
     }
-    return buildCommunityFunnelManagerConfig(
-      await getCommunityFunnelRow(ctx, args.communityId),
-    );
+    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+    return buildCommunityFunnelManagerConfig(state);
   },
 });
 
@@ -421,6 +528,7 @@ export const setCommunityFunnelDraftVsl = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    slot: v.optional(communityCustomFunnelSlotValidator),
     expectedDraftRevision: v.number(),
     url: v.union(v.string(), v.null()),
   },
@@ -431,7 +539,8 @@ export const setCommunityFunnelDraftVsl = mutation({
       authSubject: args.authSubject,
       communityId: args.communityId,
     });
-    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
+    const existing = await getCommunityFunnelRow(ctx, args.communityId, slot);
     const currentRevision = normalizeRevision(existing?.draftRevision);
     const expectedRevision = normalizeRevision(args.expectedDraftRevision);
     if (
@@ -446,10 +555,12 @@ export const setCommunityFunnelDraftVsl = mutation({
     }
     const draftVslUrl = normalizeCommunityFunnelVslUrl(args.url);
     if (normalizeStoredVslUrl(existing?.draftVslUrl) === draftVslUrl) {
-      return buildCommunityFunnelManagerConfig(existing);
+      const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+      return buildCommunityFunnelManagerConfig(state);
     }
     const nowMs = Date.now();
     const fields = {
+      slot,
       draftVslUrl,
       draftRevision: currentRevision + 1,
       draftUpdatedAt: nowMs,
@@ -465,9 +576,8 @@ export const setCommunityFunnelDraftVsl = mutation({
         createdAt: nowMs,
       });
     }
-    return buildCommunityFunnelManagerConfig(
-      await getCommunityFunnelRow(ctx, args.communityId),
-    );
+    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+    return buildCommunityFunnelManagerConfig(state);
   },
 });
 
@@ -476,6 +586,7 @@ export const publishCommunityFunnelDraft = mutation({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    slot: v.optional(communityCustomFunnelSlotValidator),
     expectedDraftRevision: v.number(),
   },
   handler: async (ctx, args) => {
@@ -485,7 +596,8 @@ export const publishCommunityFunnelDraft = mutation({
       authSubject: args.authSubject,
       communityId: args.communityId,
     });
-    const existing = await getCommunityFunnelRow(ctx, args.communityId);
+    const slot = normalizeCommunityCustomFunnelSlot(args.slot);
+    const existing = await getCommunityFunnelRow(ctx, args.communityId, slot);
     const draftContent = normalizeCommunityFunnelContentV2(
       existing?.draftContentV2,
     );
@@ -507,12 +619,11 @@ export const publishCommunityFunnelDraft = mutation({
       normalizeRevision(existing.publishedDraftRevision) === currentRevision &&
       sameContent(storedPublishedContent(existing), draftContent)
     ) {
-      return buildCommunityFunnelManagerConfig(existing);
+      const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+      return buildCommunityFunnelManagerConfig(state);
     }
     const nowMs = Date.now();
     await ctx.db.patch(existing._id as any, {
-      // New publication remains private until the manager explicitly selects it.
-      liveMode: existing.liveMode ?? "default",
       publishedContentV2: draftContent,
       publishedVslUrl: normalizeStoredVslUrl(existing.draftVslUrl),
       publishedDraftRevision: currentRevision,
@@ -520,19 +631,17 @@ export const publishCommunityFunnelDraft = mutation({
       publishedByUserId: userId,
       updatedAt: nowMs,
     });
-    return buildCommunityFunnelManagerConfig(
-      await getCommunityFunnelRow(ctx, args.communityId),
-    );
+    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+    return buildCommunityFunnelManagerConfig(state);
   },
 });
 
-export const setCommunityFunnelLiveMode = mutation({
+export const setActiveCommunityFunnel = mutation({
   args: {
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    mode: v.union(v.literal("default"), v.literal("custom")),
-    expectedPublishedDraftRevision: v.optional(v.number()),
+    target: communityFunnelActivationTargetValidator,
   },
   handler: async (ctx, args) => {
     await requireManager({
@@ -541,44 +650,37 @@ export const setCommunityFunnelLiveMode = mutation({
       authSubject: args.authSubject,
       communityId: args.communityId,
     });
-    const existing = await getCommunityFunnelRow(ctx, args.communityId);
-    if (args.mode === "custom") {
+    const state = await resolveCommunityFunnelAuthorityState(ctx, args.communityId);
+    const target = args.target;
+    const slot = normalizeCommunityFunnelSlot(target.slot);
+    if (target.slot !== "default") {
+      const existing = state.rows[target.slot];
       if (!existing || !storedPublishedContent(existing)) {
         throw new ConvexError({
           code: "community_funnel_activation_requires_published",
+          slot,
         });
       }
-      const currentRevision = normalizeRevision(
-        existing.publishedDraftRevision,
-      );
+      const currentRevision = normalizeRevision(existing.publishedDraftRevision);
       if (
-        args.expectedPublishedDraftRevision !== currentRevision ||
-        args.expectedPublishedDraftRevision !==
-          normalizeRevision(args.expectedPublishedDraftRevision)
+        target.expectedPublishedDraftRevision !== currentRevision ||
+        target.expectedPublishedDraftRevision !==
+          normalizeRevision(target.expectedPublishedDraftRevision)
       ) {
         throw new ConvexError({
           code: "community_funnel_activation_conflict",
-          expected_revision: args.expectedPublishedDraftRevision,
+          slot,
+          expected_revision: target.expectedPublishedDraftRevision,
           current_revision: currentRevision,
         });
       }
     }
-    if (!existing) {
-      if (args.mode === "default") {
-        return buildCommunityFunnelManagerConfig(null);
-      }
-      throw new ConvexError({
-        code: "community_funnel_activation_requires_published",
-      });
-    }
-    if (existing.liveMode !== args.mode) {
-      await ctx.db.patch(existing._id as any, {
-        liveMode: args.mode,
+    if (state.community?.activeFunnelSlot !== slot) {
+      await ctx.db.patch(args.communityId, {
+        activeFunnelSlot: slot,
         updatedAt: Date.now(),
       });
     }
-    return buildCommunityFunnelManagerConfig(
-      await getCommunityFunnelRow(ctx, args.communityId),
-    );
+    return buildCommunityFunnelManagerConfig({ rows: state.rows, activeSlot: slot });
   },
 });

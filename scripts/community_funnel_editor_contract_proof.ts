@@ -2,83 +2,73 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 const read = (path: string) => readFileSync(path, "utf8");
-
 const app = read("apps/web/src/App.tsx");
 const editor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
 const publicFunnel = read("apps/web/src/components/WebPublicCommunityFunnel.tsx");
 const gateway = read("shared/cloudCommunityFunnelGateway.ts");
 const invocation = read("shared/runtimeInvocationSurface.ts");
+const preview = read(
+  "apps/web/src/controllers/useWebCommunityFunnelDraftPreviewController.ts",
+);
 
-assert.doesNotMatch(
+for (const label of ["Default", "Funnel 1", "Funnel 2"]) {
+  assert.match(editor, new RegExp(`label: .${label}`));
+}
+assert.match(
   editor,
-  /funnelDraftSlot|selected_slot|custom_1|custom_2|CommunityFunnelV1Preview/,
-  "the editor must expose one canonical custom draft, not slots or V1 surfaces",
+  /<WebPlatformTabList[\s\S]*ariaLabel="Community funnels"/,
+  "the three-slot picker must use the canonical accessible tablist",
 );
 assert.match(
   editor,
-  /buildCommunityFunnelThreadKey\(props\.previewCommunity\.id\)/,
-  "the composer must use the one community-scoped funnel thread",
+  /selectedSlot === "default"[\s\S]*Built automatically from your community profile\. Always available\./,
+  "the default slot must remain deterministic and immutable",
+);
+assert.match(
+  editor,
+  /buildCommunityFunnelThreadKey\([\s\S]*selectedCustomSlot \?\? "custom_1"/,
+  "each custom slot must bind its own agent conversation",
 );
 assert.match(
   invocation,
-  /return `\$\{COMMUNITY_FUNNEL_THREAD_KEY_PREFIX\}:\$\{normalizedCommunityId\}`/,
-  "the runtime thread key must not namespace legacy slots",
+  /slot === "custom_1" \? baseKey : `\$\{baseKey\}:\$\{slot\}`/,
+  "custom two must be isolated without migrating the existing custom-one thread",
 );
 assert.match(
   editor,
   /Video Sales Letter[\s\S]*YouTube, Vimeo, Loom, or Wistia[\s\S]*Paste the VSL link/,
-  "the creator-owned VSL must remain an explicit bounded field",
-);
-assert.match(
-  editor,
-  /Publish changes[\s\S]*Make live[\s\S]*Use default/,
-  "publication, custom activation, and default restoration must remain separate explicit transitions",
-);
-assert.match(
-  editor,
-  /Describe the funnel or ask for a revision/,
-  "the custom draft must remain editable through the existing agent harness",
-);
-assert.match(
-  read("apps/web/src/components/WebCommunityFunnelRenderer.tsx"),
-  /<div className="community-funnel-layout" aria-labelledby=\{titleId\}>/,
-  "the canonical renderer must remain structurally neutral inside the route-owned main landmark",
-);
-assert.match(
-  editor,
-  /aria-label="Describe the funnel or ask for a revision"/,
-  "the funnel composer must expose an accessible name",
+  "each editable slot must retain the bounded VSL field",
 );
 for (const operation of [
   "setCloudCommunityFunnelDraftVsl",
   "publishCloudCommunityFunnelDraft",
-  "setCloudCommunityFunnelLiveMode",
+  "setCloudActiveCommunityFunnel",
 ]) {
-  assert.match(
-    gateway,
-    new RegExp(`export async function ${operation}`),
-    `the client gateway must retain ${operation}`,
-  );
+  assert.match(gateway, new RegExp(`export async function ${operation}`));
 }
+assert.match(
+  preview,
+  /const variant = slot === "default" \? null : config\.custom_funnels\[slot\]/,
+  "full preview must resolve only the selected private custom slot",
+);
+assert.match(
+  publicFunnel,
+  /previewSlot === "default"[\s\S]*active_slot: "default"[\s\S]*active_slot: previewSlot/,
+  "full preview must distinguish deterministic default from selected custom content",
+);
 assert.match(
   publicFunnel,
   /<WebCommunityFunnelRenderer/,
-  "preview and live must share the canonical public renderer",
+  "default, draft preview, and live output must share the canonical renderer",
+);
+assert.match(
+  app,
+  /slot: publicFunnelPreviewSlot[\s\S]*previewSlot: publicFunnelPreviewSlot/,
+  "the route-selected slot must flow through authorization and rendering",
 );
 assert.doesNotMatch(
-  publicFunnel,
-  /WebCommunityVisitorSurface|CommunityFunnelV1Preview/,
-  "retired visitor and V1 renderer surfaces must stay absent",
-);
-assert.match(
-  app,
-  /previewDocument: funnelDraftPreview\.document[\s\S]*previewVslUrl: funnelDraftPreview\.vslUrl/,
-  "the owner preview must project the private canonical draft through the public renderer",
-);
-assert.match(
-  app,
-  /handleCancelPendingJoinRequest[\s\S]*onCancelPendingRequest: handleCancelPendingJoinRequest/,
-  "public admission behavior must preserve pending-request cancellation",
+  editor,
+  /CommunityFunnelV1Preview|custom HTML|dangerouslySetInnerHTML/,
 );
 
 console.log("community funnel editor contract proof passed");

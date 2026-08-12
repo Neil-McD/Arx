@@ -143,19 +143,20 @@ describe("community channel routes", () => {
     });
   });
 
-  it("uses one canonical full-preview route and ignores retired slot queries", () => {
+  it("uses one canonical full-preview route with an explicit slot", () => {
     expect(buildCommunityFunnelPreviewPath("polynet")).toBe(
-      "/c/polynet/preview",
+      "/c/polynet/preview?slot=default",
     );
     vi.stubGlobal("window", {
       location: {
         pathname: "/c/polynet/preview",
-        search: "?legacy=ignored",
+        search: "?slot=custom_2",
       },
     });
     expect(readPublicRouteFromLocation()).toEqual({
       kind: "community_funnel_preview",
       slug: "polynet",
+      slot: "custom_2",
     });
   });
 

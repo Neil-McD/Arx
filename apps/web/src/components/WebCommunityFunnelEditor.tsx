@@ -25,7 +25,7 @@ import {
 import {
   fetchCloudCommunityFunnelConfig,
   publishCloudCommunityFunnelDraft,
-  setCloudCommunityFunnelLiveMode,
+  setCloudActiveCommunityFunnel,
   setCloudCommunityFunnelDraftVsl,
 } from "../../../../shared/cloudCommunityFunnelGateway";
 import { fetchCloudPublicFunnelStats } from "../../../../shared/cloudPublicFunnelGateway";
@@ -37,7 +37,9 @@ import {
 import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
 import { buildCommunityFunnelThreadKey } from "../../../../shared/runtimeInvocationSurface";
 import type {
+  CommunityCustomFunnelSlot,
   CommunityFunnelManagerConfig,
+  CommunityFunnelSlot,
   CommunityMemberProof,
   CommunityPublicFace,
 } from "../../../../shared/communityTypes";
@@ -52,6 +54,7 @@ import type {
 import type { CommunityFunnelSurfaceAction } from "./CommunityFunnelSurface";
 import { WebCommunityFunnelRenderer } from "./WebCommunityFunnelRenderer";
 import { WebAgentLiveTurn } from "./WebAgentLiveTurn";
+import { WebPlatformTabList } from "./WebPlatformChoiceControls";
 
 type PreviewCommunityLike = {
   id: string;
@@ -88,7 +91,7 @@ export type WebCommunityFunnelEditorProps = {
     init: RequestInit,
     session: AuthSession,
   ) => Promise<Response>;
-  handlePreviewCommunityFunnel: () => void;
+  handlePreviewCommunityFunnel: (slot: CommunityFunnelSlot) => void;
   communityFunnelConfig: CommunityFunnelManagerConfig;
   hydrateCommunityFunnelEditor: (
     config: CommunityFunnelManagerConfig | null,
@@ -152,10 +155,19 @@ function formatActivationError(error: unknown): string {
 }
 
 export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
+  const [selectedSlot, setSelectedSlot] = useState<CommunityFunnelSlot>("default");
+  const selectedCustomSlot: CommunityCustomFunnelSlot | null =
+    selectedSlot === "default" ? null : selectedSlot;
+  const selectedVariant = selectedCustomSlot
+    ? props.communityFunnelConfig.custom_funnels[selectedCustomSlot]
+    : null;
   const selectedCommunityIdRef = useRef(props.previewCommunity.id);
   const threadKey = useMemo(
-    () => buildCommunityFunnelThreadKey(props.previewCommunity.id),
-    [props.previewCommunity.id],
+    () => buildCommunityFunnelThreadKey(
+      props.previewCommunity.id,
+      selectedCustomSlot ?? "custom_1",
+    ),
+    [props.previewCommunity.id, selectedCustomSlot],
   );
   const [memberProof, setMemberProof] = useState<CommunityMemberProof>({
     member_count: props.previewCommunity.member_count ?? null,
@@ -210,7 +222,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const [isActivating, setIsActivating] = useState(false);
   const [isSavingVsl, setIsSavingVsl] = useState(false);
   const [vslInput, setVslInput] = useState(
-    props.communityFunnelConfig.draft_vsl_url ?? "",
+    selectedVariant?.draft_vsl_url ?? "",
   );
   const [vslError, setVslError] = useState<string | null>(null);
   const [localError, setLocalError] = useState<string | null>(null);
@@ -236,30 +248,41 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   activeCommunityIdRef.current = props.previewCommunity.id;
   const sessionIdentity = resolveAuthPresentationIdentity(props.session);
 
-  const content = props.communityFunnelConfig.draft_content_v2 ?? null;
-  const savedVslUrl = props.communityFunnelConfig.draft_vsl_url ?? null;
+  const content = selectedVariant?.draft_content_v2 ?? null;
+  const savedVslUrl = selectedVariant?.draft_vsl_url ?? null;
   const isVslInputDirty = vslInput.trim() !== (savedVslUrl ?? "");
   const isPublishedCurrentDraft =
     Boolean(content) &&
-    Boolean(props.communityFunnelConfig.published_content_v2) &&
-    props.communityFunnelConfig.draft_revision > 0 &&
-    props.communityFunnelConfig.published_draft_revision ===
-      props.communityFunnelConfig.draft_revision;
+    Boolean(selectedVariant?.published_content_v2) &&
+    (selectedVariant?.draft_revision ?? 0) > 0 &&
+    selectedVariant?.published_draft_revision === selectedVariant?.draft_revision;
   const selectedSlotIsLive =
-    props.communityFunnelConfig.live_mode === "custom";
+    props.communityFunnelConfig.active_slot === selectedSlot;
   const previewRenderModel = useMemo(
     () => buildCommunityFunnelRenderModel({
       communityName: hydratedPreviewCommunity.name,
       oneLiner: hydratedPreviewCommunity.one_liner,
       about: hydratedPreviewCommunity.about,
-      funnel: content
+      funnel: selectedSlot === "default"
         ? {
             ...props.communityFunnelConfig,
-            live_mode: "custom",
+            active_slot: "default",
+            published_content_v2: null,
+            published_vsl_url: null,
+          }
+        : content
+        ? {
+            ...props.communityFunnelConfig,
+            active_slot: selectedSlot,
             published_content_v2: content,
             published_vsl_url: savedVslUrl,
           }
-        : props.communityFunnelConfig,
+        : {
+            ...props.communityFunnelConfig,
+            active_slot: selectedSlot,
+            published_content_v2: null,
+            published_vsl_url: null,
+          },
     }),
     [
       content,
@@ -268,6 +291,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       hydratedPreviewCommunity.one_liner,
       props.communityFunnelConfig,
       savedVslUrl,
+      selectedSlot,
     ],
   );
   const previewAction = useMemo<CommunityFunnelSurfaceAction>(() => ({
@@ -286,16 +310,17 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   useEffect(() => {
     if (selectedCommunityIdRef.current === props.previewCommunity.id) return;
     selectedCommunityIdRef.current = props.previewCommunity.id;
+    setSelectedSlot("default");
   }, [props.previewCommunity.id]);
 
   useEffect(() => {
-    setVslInput(props.communityFunnelConfig.draft_vsl_url ?? "");
-  }, [props.communityFunnelConfig.draft_vsl_url, props.previewCommunity.id]);
+    setVslInput(selectedVariant?.draft_vsl_url ?? "");
+  }, [props.previewCommunity.id, selectedSlot, selectedVariant?.draft_vsl_url]);
 
   useEffect(() => {
     setVslError(null);
     setLocalError(null);
-  }, [props.previewCommunity.id]);
+  }, [props.previewCommunity.id, selectedSlot]);
 
   const loadMessages = useCallback(
     async (targetThreadKey: string, session: AuthSession) => {
@@ -378,6 +403,10 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     setMessages([]);
     setLocalError(null);
     setIsPreparing(true);
+    if (!selectedCustomSlot) {
+      setIsPreparing(false);
+      return () => undefined;
+    }
     void (async () => {
       try {
         const session = await props.ensureSession(
@@ -418,6 +447,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     sessionIdentity,
     stopStreamingTurn,
     threadKey,
+    selectedCustomSlot,
   ]);
 
   const streamingState = streamingByThread[threadKey] ?? null;
@@ -533,6 +563,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
 
   const handlePublish = async () => {
     if (
+      !selectedCustomSlot ||
       !content ||
       isPublishing ||
       isPreparing ||
@@ -558,7 +589,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       >({
         session,
         communityId: props.previewCommunity.id,
-        expectedDraftRevision: props.communityFunnelConfig.draft_revision,
+        slot: selectedCustomSlot,
+        expectedDraftRevision: selectedVariant?.draft_revision ?? 0,
       });
       props.hydrateCommunityFunnelEditor(
         normalizeCommunityFunnelManagerConfig(config),
@@ -587,6 +619,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
 
   const handleSaveVsl = async (url: string | null) => {
     if (
+      !selectedCustomSlot ||
       isSavingVsl ||
       turnIsActive ||
       isPublishing ||
@@ -614,12 +647,15 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       >({
         session,
         communityId: props.previewCommunity.id,
-        expectedDraftRevision: props.communityFunnelConfig.draft_revision,
+        slot: selectedCustomSlot,
+        expectedDraftRevision: selectedVariant?.draft_revision ?? 0,
         url: normalizedUrl,
       });
       const normalizedConfig = normalizeCommunityFunnelManagerConfig(config);
       props.hydrateCommunityFunnelEditor(normalizedConfig);
-      setVslInput(normalizedConfig.draft_vsl_url ?? "");
+      setVslInput(
+        normalizedConfig.custom_funnels[selectedCustomSlot]?.draft_vsl_url ?? "",
+      );
     } catch (error) {
       console.warn("community_funnel_vsl_save_failed", error);
       setVslError(formatVslSaveError(error));
@@ -637,15 +673,14 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     }
   };
 
-  const handleSetLiveMode = async (mode: "default" | "custom") => {
+  const handleSetLiveSlot = async (slot: CommunityFunnelSlot) => {
     if (
       isActivating ||
       isPublishing ||
       isSavingVsl ||
       turnIsActive ||
-      (mode === "custom" &&
-        (selectedSlotIsLive || isVslInputDirty || !isPublishedCurrentDraft)) ||
-      (mode === "default" && !selectedSlotIsLive)
+      selectedSlotIsLive ||
+      (slot !== "default" && (isVslInputDirty || !isPublishedCurrentDraft))
     )
       return;
     setIsActivating(true);
@@ -653,22 +688,22 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     try {
       const session = await props.ensureSession(
         props.session,
-        `community_funnel_activate_${mode}`,
+        `community_funnel_activate_${slot}`,
       );
       if (!session) throw new Error("auth_session_required");
-      const config = await setCloudCommunityFunnelLiveMode<
+      const config = await setCloudActiveCommunityFunnel<
         AuthSession,
         CommunityFunnelManagerConfig
       >({
         session,
         communityId: props.previewCommunity.id,
-        mode,
-        ...(mode === "custom"
-          ? {
+        target: slot === "default"
+          ? { slot: "default" }
+          : {
+              slot,
               expectedPublishedDraftRevision:
-                props.communityFunnelConfig.published_draft_revision,
-            }
-          : {}),
+                selectedVariant?.published_draft_revision ?? 0,
+            },
       });
       props.hydrateCommunityFunnelEditor(
         normalizeCommunityFunnelManagerConfig(config),
@@ -682,7 +717,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         try {
           const session = await props.ensureSession(
             props.session,
-            `community_funnel_activation_${mode}_conflict_refresh`,
+            `community_funnel_activation_${slot}_conflict_refresh`,
           );
           if (session) await refreshDraft(session);
         } catch {
@@ -706,27 +741,54 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     (message) => message.role !== "system",
   );
   const shouldShowPublish =
+    Boolean(selectedCustomSlot) &&
     Boolean(content) &&
     !isPublishedCurrentDraft;
   const shouldShowActivate =
-    !selectedSlotIsLive && isPublishedCurrentDraft;
+    !selectedSlotIsLive &&
+    (selectedSlot === "default" || isPublishedCurrentDraft);
+
+  const funnelTabs = useMemo(() => [
+    {
+      id: "default" as const,
+      label: `Default${props.communityFunnelConfig.active_slot === "default" ? " · Live" : ""}`,
+    },
+    {
+      id: "custom_1" as const,
+      label: `Funnel 1${props.communityFunnelConfig.active_slot === "custom_1" ? " · Live" : ""}`,
+    },
+    {
+      id: "custom_2" as const,
+      label: `Funnel 2${props.communityFunnelConfig.active_slot === "custom_2" ? " · Live" : ""}`,
+    },
+  ], [props.communityFunnelConfig.active_slot]);
 
   return (
     <section className="funnel-builder" aria-labelledby="funnel-builder-title">
+      <WebPlatformTabList
+        tabs={funnelTabs}
+        activeTab={selectedSlot}
+        onSelectTab={(slot) => setSelectedSlot(slot)}
+        ariaLabel="Community funnels"
+        idPrefix="community-funnel"
+        className="platform-switcher funnel-builder-slot-switcher"
+      />
       <header className="funnel-builder-header">
         <div>
           <div className="settings-section-title" id="funnel-builder-title">
-            Funnel composer
+            {selectedSlot === "default" ? "Default funnel" : `Funnel ${selectedSlot === "custom_1" ? "1" : "2"}`}
           </div>
           <p>
-            Describe what you want. Changes stay private until you publish.
+            {selectedSlot === "default"
+              ? "Built automatically from your community profile. Always available."
+              : "Describe what you want. Changes stay private until you save them."}
           </p>
         </div>
         <div className="funnel-builder-header-actions">
           <button
             type="button"
-            onClick={props.handlePreviewCommunityFunnel}
-            disabled={isBusy || !content}
+            onClick={() => props.handlePreviewCommunityFunnel(selectedSlot)}
+            disabled={isBusy || (selectedSlot !== "default" && !content)}
           >
             Open full preview
           </button>
@@ -747,14 +809,14 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                   : "Publish the current draft"
               }
             >
-              {isPublishing ? "Publishing…" : "Publish changes"}
+              {isPublishing ? "Saving…" : "Save funnel"}
             </button>
           ) : null}
           {shouldShowActivate ? (
             <button
               type="button"
               className="is-primary"
-              onClick={() => void handleSetLiveMode("custom")}
+              onClick={() => void handleSetLiveSlot(selectedSlot)}
               disabled={
                 isBusy ||
                 isVslInputDirty ||
@@ -771,27 +833,18 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               {isActivating ? "Making live…" : "Make live"}
             </button>
           ) : null}
-          {selectedSlotIsLive ? (
-            <button
-              type="button"
-              onClick={() => void handleSetLiveMode("default")}
-              disabled={isBusy}
-              title="Use the immutable default funnel"
-            >
-              {isActivating ? "Switching…" : "Use default"}
-            </button>
-          ) : null}
+          {selectedSlotIsLive ? <span className="funnel-builder-live-status">Live</span> : null}
         </div>
       </header>
 
       <div
-        className="funnel-builder-layout is-custom"
+        className={`funnel-builder-layout ${selectedSlot === "default" ? "is-default" : "is-custom"}`}
       >
         <div
-          className={`funnel-builder-preview${content ? "" : " is-empty"}`}
-          aria-label="Custom funnel preview"
+          className={`funnel-builder-preview${selectedSlot === "default" || content ? "" : " is-empty"}`}
+          aria-label={selectedSlot === "default" ? "Default funnel preview" : "Custom funnel preview"}
         >
-          {content ? (
+          {selectedSlot === "default" || content ? (
             <WebCommunityFunnelRenderer
               communityId={hydratedPreviewCommunity.id}
               communityName={hydratedPreviewCommunity.name}
@@ -812,7 +865,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           )}
         </div>
 
-          <aside
+          {selectedCustomSlot ? <aside
             className="funnel-builder-conversation"
             aria-label="Funnel composer conversation"
           >
@@ -964,7 +1017,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                 </button>
               )}
             </form>
-          </aside>
+          </aside> : null}
       </div>
     </section>
   );

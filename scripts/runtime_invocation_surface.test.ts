@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCommunityFunnelThreadKey,
   isCommunityFunnelThreadKeyForCommunity,
+  resolveCommunityFunnelThreadSlotForCommunity,
   resolveRuntimeInvocationFundingPolicy,
   resolveRuntimeInvocationSurfaceForThread,
   restrictToolNamesForInvocationSurface,
@@ -18,9 +19,18 @@ const promptBudget = {
 };
 
 describe("community funnel runtime surface", () => {
-  it("binds the funnel builder to one canonical community thread", () => {
+  it("binds each custom funnel to one canonical community thread", () => {
     const threadKey = buildCommunityFunnelThreadKey("community-1");
     expect(threadKey).toBe("community-funnel:community-1");
+    expect(
+      buildCommunityFunnelThreadKey("community-1", "custom_2"),
+    ).toBe("community-funnel:community-1:custom_2");
+    expect(
+      resolveCommunityFunnelThreadSlotForCommunity(
+        "community-funnel:community-1:custom_2",
+        "community-1",
+      ),
+    ).toBe("custom_2");
     expect(
       isCommunityFunnelThreadKeyForCommunity(threadKey, "community-1"),
     ).toBe(true);

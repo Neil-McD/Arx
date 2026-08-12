@@ -758,21 +758,59 @@ test("funnel composer keeps one canonical draft and dedupes model retries", asyn
   if (!readResult.ok) throw new Error("could not read canonical draft");
   const state = JSON.parse(String(readResult.value.body));
   expect(state.current_state).toMatchObject({
+    selected_slot: "custom_1",
+    active_slot: "default",
     draft_revision: 1,
     draft_content_v2: content,
   });
-  expect(state.current_state).not.toHaveProperty("selected_slot");
-  expect(state.current_state).not.toHaveProperty("custom_funnels");
 
   const rows = await t.run(async (ctx) =>
     ctx.db.query("communityFunnels").collect(),
   );
   expect(rows).toHaveLength(1);
   expect(rows[0]).toMatchObject({
+    slot: "custom_1",
     draftRevision: 1,
     draftContentV2: content,
   });
-  expect(rows[0]).not.toHaveProperty("slot");
+
+  const customTwoContent = buildCommunityFunnelContentTestFixture({
+    headline: "A separately isolated second funnel.",
+  });
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: ownerCtx,
+      authSubject: fixture.ownerSubject,
+      userId: fixture.ownerId,
+      principalKind: "personal_agent",
+      evidenceSurface: "community_funnel_builder",
+      funnelDraftSlot: "custom_2",
+      toolName: "polynet_call",
+      input: {
+        operation: "community.funnel.update_draft",
+        version: 1,
+        target: capabilityPath,
+        input: { expected_revision: 0, content: customTwoContent },
+        idempotency_key: "custom-two-model-key",
+      },
+    }),
+  ).resolves.toMatchObject({
+    ok: true,
+    value: { result: { selected_slot: "custom_2" } },
+  });
+  const isolatedRows = await t.run(async (ctx) =>
+    ctx.db.query("communityFunnels").collect(),
+  );
+  expect(isolatedRows).toHaveLength(2);
+  expect(isolatedRows).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ slot: "custom_1", draftContentV2: content }),
+      expect.objectContaining({
+        slot: "custom_2",
+        draftContentV2: customTwoContent,
+      }),
+    ]),
+  );
 });
 
 test("retired AI Feed paths are uniformly absent across canonical operations", async () => {

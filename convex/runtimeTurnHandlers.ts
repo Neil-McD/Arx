@@ -567,6 +567,7 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunityAbout,
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
+      runtimeCommunityFunnelSlot,
       runtimeProjectId,
       runtimeSandboxMode,
       allowedToolNames,
@@ -2557,6 +2558,7 @@ export async function handleRuntimeTurnRequest(args: {
               communityAbout: runtimeCommunityAbout,
               communitySystemPrompt: runtimeCommunitySystemPrompt,
               communityLensAuthority: runtimeCommunityLensAuthority,
+              communityFunnelSlot: runtimeCommunityFunnelSlot,
               communityContextVersion: runtimeCommunityId
                 ? runtimeCommunityContextVersion
                 : null,
@@ -2894,6 +2896,7 @@ export async function handleRuntimeTurnRequest(args: {
           communityAbout: runtimeCommunityAbout,
           communitySystemPrompt: runtimeCommunitySystemPrompt,
           communityLensAuthority: runtimeCommunityLensAuthority,
+          communityFunnelSlot: runtimeCommunityFunnelSlot,
           communityContextVersion: runtimeCommunityId
             ? runtimeCommunityContextVersion
             : null,

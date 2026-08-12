@@ -1604,6 +1604,7 @@ export default function App() {
   const {
     publicFunnelSlug,
     isPublicFunnelPreviewRoute,
+    publicFunnelPreviewSlot,
     checkoutSuccessSessionId,
     claimTokenParam,
     isPublicCommunityFunnel,
@@ -1633,6 +1634,7 @@ export default function App() {
   const funnelDraftPreview = useWebCommunityFunnelDraftPreviewController({
     enabled: isPublicFunnelPreviewRoute,
     communitySlug: publicFunnelSlug,
+    slot: publicFunnelPreviewSlot,
     session,
     ensureSession: ensureUsableAuthSession,
   });
@@ -2710,6 +2712,7 @@ export default function App() {
         publicRoute.kind === "community_funnel_preview"
           ? buildCommunityTabPath(publicRoute.slug, "funnel")
           : null,
+      previewSlot: publicFunnelPreviewSlot,
       previewDocument: funnelDraftPreview.document,
       previewVslUrl: funnelDraftPreview.vslUrl,
       previewDocumentError: funnelDraftPreview.error,

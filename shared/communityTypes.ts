@@ -73,7 +73,16 @@ export type PublicPlanSummary = {
 
 export type CommunityFunnelHeroMediaKind = "image" | "video";
 
-export type CommunityFunnelLiveMode = "default" | "custom";
+export type CommunityCustomFunnelSlot = "custom_1" | "custom_2";
+
+export type CommunityFunnelSlot = "default" | CommunityCustomFunnelSlot;
+
+export type CommunityFunnelActivationTarget =
+  | { slot: "default" }
+  | {
+      slot: CommunityCustomFunnelSlot;
+      expectedPublishedDraftRevision: number;
+    };
 
 export type CommunityFunnelPillarV2 = {
   title: string;
@@ -100,18 +109,28 @@ export type CommunityFunnelContentV2 = {
 export type CommunityFunnelConfig = {
   hero_media_url: string | null;
   hero_media_kind: CommunityFunnelHeroMediaKind;
-  live_mode: CommunityFunnelLiveMode;
+  active_slot: CommunityFunnelSlot;
   published_vsl_url: string | null;
   published_content_v2: CommunityFunnelContentV2 | null;
 };
 
-export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
+export type CommunityFunnelVariantConfig = {
+  slot: CommunityCustomFunnelSlot;
   draft_vsl_url: string | null;
   draft_content_v2: CommunityFunnelContentV2 | null;
   draft_revision: number;
   draft_updated_at: number | null;
+  published_vsl_url: string | null;
+  published_content_v2: CommunityFunnelContentV2 | null;
   published_draft_revision: number;
   published_at: number | null;
+};
+
+export type CommunityFunnelManagerConfig = CommunityFunnelConfig & {
+  custom_funnels: Record<
+    CommunityCustomFunnelSlot,
+    CommunityFunnelVariantConfig | null
+  >;
 };
 
 export type DiscoverCommunitySnapshot = {

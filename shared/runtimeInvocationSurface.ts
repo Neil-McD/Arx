@@ -82,18 +82,32 @@ export function resolveRuntimeInvocationSurfaceForThread(params: {
 
 export function buildCommunityFunnelThreadKey(
   communityId: string,
+  slot: import("./communityTypes").CommunityCustomFunnelSlot = "custom_1",
 ): string {
   const normalizedCommunityId = String(communityId ?? "").trim();
   if (!normalizedCommunityId)
     throw new Error("community_funnel_thread_community_required");
-  return `${COMMUNITY_FUNNEL_THREAD_KEY_PREFIX}:${normalizedCommunityId}`;
+  if (slot !== "custom_1" && slot !== "custom_2")
+    throw new Error("community_funnel_thread_slot_invalid");
+  const baseKey = `${COMMUNITY_FUNNEL_THREAD_KEY_PREFIX}:${normalizedCommunityId}`;
+  return slot === "custom_1" ? baseKey : `${baseKey}:${slot}`;
+}
+
+export function resolveCommunityFunnelThreadSlotForCommunity(
+  threadKey: string,
+  communityId: string,
+): import("./communityTypes").CommunityCustomFunnelSlot | null {
+  const normalized = String(threadKey ?? "").trim();
+  if (normalized === buildCommunityFunnelThreadKey(communityId, "custom_1")) return "custom_1";
+  if (normalized === buildCommunityFunnelThreadKey(communityId, "custom_2")) return "custom_2";
+  return null;
 }
 
 export function isCommunityFunnelThreadKeyForCommunity(
   threadKey: string,
   communityId: string,
 ): boolean {
-  return String(threadKey ?? "").trim() === buildCommunityFunnelThreadKey(communityId);
+  return resolveCommunityFunnelThreadSlotForCommunity(threadKey, communityId) !== null;
 }
 
 export function buildMemberAgentThreadKey(communityId: string): string {

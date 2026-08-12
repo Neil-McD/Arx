@@ -131,8 +131,8 @@ assert.match(
 assert.doesNotMatch(rendererCss, /#d66a8a|accent-gold|pink/i, "retired Polynet-pink tokens must not leak into the funnel");
 assert.match(
   renderProjection,
-  /input\.funnel\?\.live_mode === "custom" && published\?\.version === 2/,
-  "custom content must require an explicit live-mode selection and published V2 snapshot",
+  /input\.funnel\?\.active_slot !== "default" && published\?\.version === 2/,
+  "custom content must require an explicit active custom slot and published V2 snapshot",
 );
 assert.match(
   publicRoute,

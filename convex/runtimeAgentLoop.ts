@@ -64,6 +64,7 @@ import {
   normalizeToolArguments as normalizeRegistryToolArguments,
 } from "../shared/toolRegistry";
 import type { CommunityEvidenceSurface } from "../shared/communityEvidenceContract";
+import type { CommunityCustomFunnelSlot } from "../shared/communityTypes";
 import {
   buildPlatformHarnessRuntimePromptBundle,
   type RuntimeCommunityPromptFields,
@@ -228,6 +229,7 @@ export async function executeRetrievalHarnessTool(params: {
   toolName: RetrievalToolName;
   args: Record<string, unknown>;
   evidenceSurface?: CommunityEvidenceSurface;
+  communityFunnelSlot?: CommunityCustomFunnelSlot | null;
   workspaceSession?: RuntimeWorkspaceSession | null;
   activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
   executeDaytonaWorkspaceTool?: (params: {
@@ -330,6 +332,7 @@ export async function executeRetrievalHarnessTool(params: {
         ? { mountedCommunityId: params.communityId }
         : {}),
       evidenceSurface: params.evidenceSurface ?? "member_agent_dock",
+      funnelDraftSlot: params.communityFunnelSlot ?? null,
       toolName: params.toolName as PolynetCanonicalToolName,
       input: normalizedArgs,
     });
@@ -1220,6 +1223,7 @@ async function executeRetrievalAgentLoop(
     allowedToolNames: readonly RetrievalToolName[];
     invocationSurface?: RuntimeInvocationSurface;
     memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
+    communityFunnelSlot?: CommunityCustomFunnelSlot | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     projectId?: string | null;
@@ -2150,6 +2154,7 @@ async function executeRetrievalAgentLoop(
                     : params.invocationSurface === "community_funnel_builder"
                       ? "community_funnel_builder"
                       : "coding_harness",
+                communityFunnelSlot: params.communityFunnelSlot ?? null,
                 workspaceSession: executionSession.getWorkspaceSession(),
                 activeDaytonaRuntimeSubstrate,
                 executeDaytonaWorkspaceTool: async (toolParams) =>
@@ -2404,6 +2409,7 @@ async function executeChatToolsAgentLoop(
     allowedToolNames: readonly RetrievalToolName[];
     invocationSurface?: RuntimeInvocationSurface;
     memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
+    communityFunnelSlot?: CommunityCustomFunnelSlot | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;

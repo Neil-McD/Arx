@@ -2,11 +2,13 @@ import { useCallback, useEffect, useState } from "react";
 
 import {
   normalizeCommunityFunnelManagerConfig,
+  normalizeCommunityFunnelSlot,
 } from "../../../../shared/communityFunnel";
 import { fetchCloudCommunityFunnelDraftPreview } from "../../../../shared/cloudCommunityFunnelGateway";
 import type {
   CommunityFunnelContentV2,
   CommunityFunnelManagerConfig,
+  CommunityFunnelSlot,
 } from "../../../../shared/communityTypes";
 import type { WebRouteScopedAccessState } from "../../../../shared/webRouteAccess";
 import type { AuthSession } from "../auth";
@@ -64,6 +66,7 @@ export function formatCommunityFunnelDraftPreviewFailure(
 export function useWebCommunityFunnelDraftPreviewController(params: {
   enabled: boolean;
   communitySlug: string | null;
+  slot: CommunityFunnelSlot;
   session: AuthSession | null;
   ensureSession: EnsureSession;
 }) {
@@ -145,8 +148,10 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
         if (!result) throw new Error("community_funnel_preview_unavailable");
         if (cancelled) return;
         const config = normalizeCommunityFunnelManagerConfig(result);
-        setDocument(config.draft_content_v2);
-        setVslUrl(config.draft_vsl_url);
+        const slot = normalizeCommunityFunnelSlot(params.slot);
+        const variant = slot === "default" ? null : config.custom_funnels[slot];
+        setDocument(variant?.draft_content_v2 ?? null);
+        setVslUrl(variant?.draft_vsl_url ?? null);
         setAccessState("allowed");
       } catch (cause) {
         if (cancelled) return;
@@ -173,6 +178,7 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
     params.enabled,
     params.ensureSession,
     params.session,
+    params.slot,
     requestVersion,
   ]);
 
