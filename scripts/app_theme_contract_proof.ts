@@ -238,7 +238,7 @@ const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const persistenceLifecycle = read(
   "apps/web/src/controllers/useWebUiPersistenceLifecycle.ts",
 );
-const funnelCss = read("apps/web/src/components/CommunityFunnelSurface.css");
+const bridgeCss = read("apps/web/src/components/WebCommunityBridgeCard.css");
 const publicBuilderLandingCss = read(
   "apps/web/src/components/polynetLanding/ConversionLanding.css",
 );
@@ -550,7 +550,7 @@ assert.match(baseCss, /data-preview-theme="light"/);
 assert.match(baseCss, /data-preview-theme="dark"/);
 assert.doesNotMatch(baseCss, /data-preview-theme="polynet"|data-theme="polynet"/);
 assert.doesNotMatch(
-  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${funnelCss}\n${memberAgentCss}`,
+  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${bridgeCss}\n${memberAgentCss}`,
   /data-theme-family/,
   "theme family must not survive as a second styling authority",
 );
@@ -644,39 +644,28 @@ assert.doesNotMatch(
   "the opaque launcher should not carry a visually inert backdrop filter",
 );
 
-[
-  "--cfg-selection-text: #17070c;",
-  "--cfg-alert-border: rgba(226, 75, 74, 0.4);",
-  "--cfg-alert-surface: rgba(226, 75, 74, 0.08);",
-  "--cfg-alert-text: #f0a2a2;",
-  "--cfg-primary-surface: #f1ede5;",
-  "--cfg-primary-surface-hover: #fff;",
-  "--cfg-primary-text: #0a0a0a;",
-  "--cfg-error-border: rgba(226, 75, 74, 0.4);",
-  "--cfg-error-surface: rgba(226, 75, 74, 0.07);",
-  "--cfg-gate-surface: #161619;",
-  "--cfg-gate-avatar-stroke: #161619;",
-].forEach((declaration) => {
-  assert.ok(
-    funnelCss.includes(declaration),
-    `Dark should retain funnel declaration ${declaration}`,
-  );
-});
-assert.match(
-  funnelCss,
-  /:root\[data-theme="light"\]\s*\.cfg-page\s*\{[\s\S]*?--cfg-primary-surface:\s*var\(--bg-button\);[\s\S]*?--cfg-gate-surface:\s*var\(--bg-modal\);[\s\S]*?--cfg-gate-avatar-stroke:\s*var\(--bg-modal\);[\s\S]*?\}/,
-  "Light should adapt funnel chrome through one theme-scoped role block",
+assert.doesNotMatch(
+  bridgeCss,
+  /\.cfg-(?:page|shell|guestbar|nav|center|topic|feed|rope|mobile-ident)\b/,
+  "retired guest-shell selectors must not survive in the account bridge",
 );
 assert.match(
-  funnelCss,
-  /\.cfg-gatecard[^}]*background:\s*var\(--cfg-gate-surface\)/,
+  bridgeCss,
+  /\.cvs-bridge-card\s*\{[\s\S]*?--bridge-line:\s*var\(--stroke-divider-accent\);[\s\S]*?--bridge-muted:\s*var\(--text-ink-muted\);[\s\S]*?--bridge-ink:\s*var\(--text-ink-primary\);[\s\S]*?background:\s*var\(--surface-card\);/,
+  "the live account bridge should consume the canonical theme roles",
 );
 assert.match(
-  funnelCss,
-  /\.cfg-join[^}]*background:\s*var\(--cfg-primary-surface\)/,
+  bridgeCss,
+  /\.cvs-bridge-card \.cfg-join\.cvs-bridge-enter-ready\s*\{[\s\S]*?background:\s*var\(--bg-button\);[\s\S]*?color:\s*var\(--bg-button-text\);/,
+  "bridge conversion actions should use the canonical button roles",
+);
+assert.match(
+  bridgeCss,
+  /\.cvs-bridge-card \.cfg-gav\s*\{[\s\S]*?border:\s*3px solid var\(--surface-card\);[\s\S]*?background:\s*var\(--surface-app\);/,
+  "bridge identity media should use canonical card and app surfaces",
 );
 assert.doesNotMatch(
-  `${funnelCss}\n${memberAgentCss}`,
+  `${bridgeCss}\n${memberAgentCss}`,
   /:root\[data-theme="dark"\]/,
   "Dark component preservation should come from canonical root defaults, not new component overrides",
 );
