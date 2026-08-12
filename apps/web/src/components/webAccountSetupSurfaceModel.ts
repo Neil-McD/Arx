@@ -1,15 +1,9 @@
-import type {
-  SocialProfileKind,
-  SocialProfileLinks,
-} from "../../../../shared/socialProfileLinks";
 import type { ProfileHandleAvailabilityLike } from "./profileHandleAvailabilityHint";
 
 export type WebAccountSetupSurfaceModel = {
   identity: {
     displayName: string;
     handle: string;
-    bio: string;
-    socialLinks: SocialProfileLinks;
     avatarUrl: string | null;
     avatarFocusX: number;
     avatarFocusY: number;
@@ -18,12 +12,19 @@ export type WebAccountSetupSurfaceModel = {
     isCheckingHandleAvailability: boolean;
     onDisplayNameChange: (value: string) => void;
     onHandleChange: (value: string) => void;
-    onBioChange: (value: string) => void;
-    onSocialLinkChange: (kind: SocialProfileKind, value: string) => void;
     onAvatarUpload: (file: File | null) => Promise<void> | void;
+    onAvatarFocusXChange: (value: number) => void;
+    onAvatarFocusYChange: (value: number) => void;
+    onAvatarZoomChange: (value: number) => void;
+    onAvatarRemove: () => void;
   };
   submission: {
     isSaving: boolean;
     error: string | null;
   };
+};
+
+export type PlatformLegalAcceptanceDraft = {
+  termsOfServiceVersion: string;
+  privacyPolicyVersion: string;
 };

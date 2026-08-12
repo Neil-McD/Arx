@@ -11,6 +11,9 @@ const shellStyles = read("apps/web/src/styles/shell-and-onboarding.css");
 const create = read("apps/web/src/components/WebCreateCommunityModal.tsx");
 const account = read("apps/web/src/components/WebPlatformBridgePage.tsx");
 const profile = read("apps/web/src/components/WebOnboardingPage.tsx");
+const accountForm = read("apps/web/src/components/WebAccountSetupForm.tsx");
+const communityBridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
+const communityFunnel = read("apps/web/src/components/WebCommunityFunnelRenderer.tsx");
 const knowledge = read("apps/web/src/components/WebBuilderKnowledgeSetup.tsx");
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
 const shellProjection = read(
@@ -27,6 +30,18 @@ test("required setup surfaces share one accessible blocking shell", () => {
   expect(shell).toContain("appRoot.inert = true");
   expect(shell).toContain('event.key !== "Tab"');
   expect(shell).toContain('event.key === "Escape"');
+});
+
+test("all account entry contexts share one field renderer", () => {
+  expect(profile).toContain("<WebAccountSetupForm");
+  expect(communityBridge).toContain("<WebAccountSetupForm");
+  expect(accountForm).toContain("Display name");
+  expect(accountForm).toContain("Terms of Service");
+  expect(accountForm).not.toContain("<span>Bio</span>");
+  expect(profile).not.toContain("Terms of Service");
+  expect(communityBridge).not.toContain("Terms of Service");
+  expect(communityFunnel).toContain("<WebBlockingSetupModal");
+  expect(communityFunnel).not.toContain("community-funnel-bridge");
 });
 
 test("account setup and knowledge setup keep the live product behind the blocker", () => {

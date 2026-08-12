@@ -22,6 +22,7 @@ const communityEntryBridgeController = read(
 );
 const onboarding = read("apps/web/src/components/WebOnboardingPage.tsx");
 const bridge = read("apps/web/src/components/WebCommunityBridgeCard.tsx");
+const form = read("apps/web/src/components/WebAccountSetupForm.tsx");
 
 for (const group of ["identity", "submission"]) {
   assert.match(
@@ -33,7 +34,6 @@ for (const group of ["identity", "submission"]) {
 for (const field of [
   "handleAvailability",
   "isCheckingHandleAvailability",
-  "onSocialLinkChange",
   "onAvatarUpload",
   "isSaving",
   "error",
@@ -101,8 +101,8 @@ for (const surface of [onboarding, bridge]) {
   );
   assert.match(
     surface,
-    /const \{ identity, submission \} = props\.setup;/,
-    "each account-setup presentation must read the irreducible identity and submission groups",
+    /<WebAccountSetupForm/,
+    "each account-setup entry surface must delegate fields to the canonical form",
   );
   assert.doesNotMatch(
     surface,
@@ -110,6 +110,30 @@ for (const surface of [onboarding, bridge]) {
     "account-setup presentations must not regress to wide duplicated props",
   );
 }
+assert.match(
+  form,
+  /const \{ identity, submission \} = props\.setup;/,
+  "the canonical form must read the irreducible identity and submission groups",
+);
+for (const field of [
+  "Display name",
+  "Handle",
+  "Terms of Service",
+  "Privacy &amp; AI Data Policy",
+  "WebUserAvatarEditorModal",
+]) {
+  assert.ok(form.includes(field), `canonical account-setup form missing ${field}`);
+}
+assert.doesNotMatch(
+  `${onboarding}\n${bridge}`,
+  /identity\.(?:onDisplayNameChange|onHandleChange|onAvatarUpload)|Terms of Service|Privacy &amp; AI Data Policy/,
+  "entry wrappers must not duplicate account fields or legal controls",
+);
+assert.doesNotMatch(
+  form,
+  /<span>Bio<\/span>|web-social-profile-links|onSocialLinkChange/,
+  "optional profile enrichment must remain outside blocking account setup",
+);
 
 for (const authority of [
   "const completeAccountSetup = useCallback",

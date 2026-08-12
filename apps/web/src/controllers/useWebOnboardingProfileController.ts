@@ -132,10 +132,6 @@ export function useWebOnboardingProfileController(params: {
     setIsOnboardingModalOpen(true);
   }, []);
 
-  const closeProfileSetup = useCallback(() => {
-    setIsOnboardingModalOpen(false);
-  }, []);
-
   const refreshAccountSetupStatus = useCallback(
     async (
       nextSession: AuthSession | null =
@@ -538,7 +534,6 @@ export function useWebOnboardingProfileController(params: {
       onboardingError,
       setOnboardingError,
       openProfileSetup,
-      closeProfileSetup,
       refreshAccountSetupStatus,
       loadProfileForOnboarding,
       completeAccountSetup,
@@ -548,7 +543,6 @@ export function useWebOnboardingProfileController(params: {
     }),
     [
       accountSetupStatus,
-      closeProfileSetup,
       cloudProfile,
       effectiveAccountSetupStatus,
       completeAccountSetup,

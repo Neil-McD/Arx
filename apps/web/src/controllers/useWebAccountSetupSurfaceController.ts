@@ -89,8 +89,6 @@ export function useWebAccountSetupSurfaceController<TSession>(
       identity: {
         displayName: profile.profileName,
         handle: profile.profileHandle,
-        bio: profile.profileBio,
-        socialLinks: profile.profileSocialLinks,
         avatarUrl: profile.profileAvatarUrl,
         avatarFocusX: profile.profileAvatarFocusX,
         avatarFocusY: profile.profileAvatarFocusY,
@@ -99,9 +97,17 @@ export function useWebAccountSetupSurfaceController<TSession>(
         isCheckingHandleAvailability,
         onDisplayNameChange: profile.setProfileName,
         onHandleChange: profile.setProfileHandle,
-        onBioChange: profile.setProfileBio,
-        onSocialLinkChange: profile.setProfileSocialLink,
         onAvatarUpload,
+        onAvatarFocusXChange: profile.setProfileAvatarFocusX,
+        onAvatarFocusYChange: profile.setProfileAvatarFocusY,
+        onAvatarZoomChange: profile.setProfileAvatarZoom,
+        onAvatarRemove: () => {
+          profile.setProfileAvatarUrl(null);
+          profile.setProfileAvatarStorageId(null);
+          profile.setProfileAvatarFocusX(0.5);
+          profile.setProfileAvatarFocusY(0.5);
+          profile.setProfileAvatarZoom(1);
+        },
       },
       submission: {
         isSaving,

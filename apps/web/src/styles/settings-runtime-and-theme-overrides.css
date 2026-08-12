@@ -4546,8 +4546,7 @@ button.message-citation-chip:hover {
   padding: 12px 0 4px;
 }
 
-.web-social-profile-link-button,
-.polynet-onboarding-profile .web-social-profile-link-button {
+.web-social-profile-link-button {
   width: 44px;
   height: 44px;
   min-width: 44px;
@@ -4566,27 +4565,23 @@ button.message-citation-chip:hover {
     opacity 140ms ease;
 }
 
-.web-social-profile-link-button:hover:not(:disabled),
-.polynet-onboarding-profile .web-social-profile-link-button:hover:not(:disabled) {
+.web-social-profile-link-button:hover:not(:disabled) {
   color: var(--text-primary);
   filter: brightness(1.18);
 }
 
-.web-social-profile-link-button:focus-visible,
-.polynet-onboarding-profile .web-social-profile-link-button:focus-visible {
+.web-social-profile-link-button:focus-visible {
   color: var(--text-primary);
   outline: 2px solid color-mix(in srgb, var(--text-primary) 42%, transparent);
   outline-offset: 4px;
 }
 
-.web-social-profile-link-button:disabled,
-.polynet-onboarding-profile .web-social-profile-link-button:disabled {
+.web-social-profile-link-button:disabled {
   cursor: not-allowed;
   opacity: 0.38;
 }
 
-.web-social-profile-link-button.connected,
-.polynet-onboarding-profile .web-social-profile-link-button.connected {
+.web-social-profile-link-button.connected {
   color: var(--text-primary);
 }
 

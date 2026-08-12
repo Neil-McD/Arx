@@ -21,6 +21,7 @@ const onboardingProfileController = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
 const onboardingPage = read("apps/web/src/components/WebOnboardingPage.tsx");
+const accountSetupForm = read("apps/web/src/components/WebAccountSetupForm.tsx");
 const legalReaderModal = read("apps/web/src/components/WebPlatformLegalReaderModal.tsx");
 const legalRegistry = read("shared/legalDocuments.ts");
 const legalAcceptances = read("convex/legalAcceptances.ts");
@@ -114,12 +115,13 @@ assert.match(communityTypes, /AccountSetupStatus/, "shared profile types must ex
 assert.match(communityTypes, /account_setup\?: AccountSetupStatus \| null/, "profile details must carry setup status");
 
 assert.match(onboardingPage, /accountSetupStatus: AccountSetupStatus \| null/, "onboarding UI must consume canonical setup status");
-assert.match(onboardingPage, /identity\.handleAvailability/, "onboarding profile step should show handle availability");
-assert.match(onboardingPage, /<span>Bio<\/span>/, "onboarding profile step should expose bio");
-assert.match(onboardingPage, /handleReady[\s\S]*?profileReady[\s\S]*?handleReady/, "onboarding profile step must require an available handle");
-assert.match(onboardingPage, /Terms of Service[\s\S]*Privacy &amp; AI Data Policy/, "onboarding profile step must link the platform legal documents inline");
-assert.match(onboardingPage, /platformLegalReady[\s\S]*?profileReady[\s\S]*?platformLegalReady/, "onboarding profile step must require platform legal acceptance before Next");
-assert.match(onboardingPage, /WebPlatformLegalReaderModal/, "onboarding legal documents must render through the shared reader modal");
+assert.match(onboardingPage, /<WebAccountSetupForm/, "onboarding must delegate all fields to the canonical account form");
+assert.match(accountSetupForm, /identity\.handleAvailability/, "account setup should show handle availability");
+assert.doesNotMatch(accountSetupForm, /<span>Bio<\/span>/, "blocking account setup must not expose optional bio enrichment");
+assert.match(accountSetupForm, /handleReady[\s\S]*?missing[\s\S]*?push\("handle"\)/, "account setup must require an available handle");
+assert.match(accountSetupForm, /Terms of Service[\s\S]*Privacy &amp; AI Data Policy/, "account setup must link the platform legal documents inline");
+assert.match(accountSetupForm, /platformLegalReady[\s\S]*?missing[\s\S]*?push\("terms"\)/, "account setup must require platform legal acceptance before submission");
+assert.match(accountSetupForm, /WebPlatformLegalReaderModal/, "account setup legal documents must render through the shared reader modal");
 assert.match(legalReaderModal, /polynet-onboarding-legal-reader message-text/, "the shared legal reader must render documents in the scrollable modal reader");
 assert.match(legalRegistry, /TERMS_OF_SERVICE_VERSION = "terms_of_service_v3"/, "current account setup must present Terms v3");
 assert.match(legalRegistry, /HISTORICAL_TERMS_OF_SERVICE_VERSION = "terms_of_service_v2"/, "Terms v2 must remain explicitly historical");
@@ -129,15 +131,14 @@ assert.match(legalAcceptances, /args\.termsVersion !== TERMS_OF_SERVICE_DOCUMENT
 assert.match(legalContent, /terms-of-service-v3\.md\?raw/, "the legal reader must project current Terms v3");
 assert.doesNotMatch(legalContent, /terms-of-service-v2\.md\?raw/, "the legal reader must not project historical Terms v2 as current");
 assert.doesNotMatch(legalContent, /terms-of-service-v1\.md\?raw/, "the legal reader must not project historical Terms v1 as current");
-assert.doesNotMatch(onboardingPage, /chatgpt\.onConnect|openai\.onConnect|OpenAI API key|Connect ChatGPT/, "onboarding must not ask members to bring inference");
-assert.match(onboardingPage, /await props\.onCompleteAccountSetup\(/, "identity completion must use the canonical account completion operation");
+assert.doesNotMatch(`${onboardingPage}\n${accountSetupForm}`, /chatgpt\.onConnect|openai\.onConnect|OpenAI API key|Connect ChatGPT/, "onboarding must not ask members to bring inference");
+assert.match(onboardingPage, /onSubmit=\{props\.onCompleteAccountSetup\}/, "identity completion must use the canonical account completion operation");
 assert.doesNotMatch(onboardingPage, /onNextProfile|onFinishOnboarding/, "account setup must not split saving and continuation across two callbacks");
 assert.doesNotMatch(onboardingPage, /Direction|onBuildCommunity|onDiscoverCommunity|polynet-onboarding-direction/, "onboarding must not expose a direction step");
 assert.doesNotMatch(onboardingPage, /onSaveAgent|agentNameDraft|agentSoulDraft|polynet-onboarding-agent/, "onboarding must not expose an agent step");
 assert.doesNotMatch(onboardingPage, /WebAgentPersonalityPicker/, "onboarding must not render the personality picker");
 assert.doesNotMatch(onboardingPage, /step === "inference"|hasInferenceProvider/, "inference must not remain an onboarding step");
-assert.match(onboardingPage, /formatAccountSetupMissingGuidance\(props\.accountSetupStatus\)/, "onboarding must format guidance from the canonical setup status");
-assert.match(onboardingPage, /polynet-onboarding-guidance/, "onboarding setup blockers should render as guidance, not red server errors");
+assert.match(accountSetupForm, /account-setup-guidance/, "account setup blockers should render as accessible guidance");
 assert.match(
   onboardingProfileController,
   /const completeAccountSetup = useCallback/,

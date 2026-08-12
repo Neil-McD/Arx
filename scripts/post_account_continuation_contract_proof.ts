@@ -99,7 +99,7 @@ assert.doesNotMatch(
 
 assert.match(
   onboardingPage,
-  /onCompleteAccountSetup:[\s\S]*await props\.onCompleteAccountSetup\(/,
+  /onCompleteAccountSetup:[\s\S]*onSubmit=\{props\.onCompleteAccountSetup\}/,
   "modal onboarding must expose one completion callback",
 );
 assert.doesNotMatch(

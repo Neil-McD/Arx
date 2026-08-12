@@ -238,7 +238,6 @@ const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const persistenceLifecycle = read(
   "apps/web/src/controllers/useWebUiPersistenceLifecycle.ts",
 );
-const bridgeCss = read("apps/web/src/components/WebCommunityBridgeCard.css");
 const publicBuilderLandingCss = read(
   "apps/web/src/components/polynetLanding/ConversionLanding.css",
 );
@@ -561,7 +560,7 @@ assert.match(baseCss, /data-preview-theme="light"/);
 assert.match(baseCss, /data-preview-theme="dark"/);
 assert.doesNotMatch(baseCss, /data-preview-theme="polynet"|data-theme="polynet"/);
 assert.doesNotMatch(
-  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${bridgeCss}\n${memberAgentCss}`,
+  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${memberAgentCss}`,
   /data-theme-family/,
   "theme family must not survive as a second styling authority",
 );
@@ -656,27 +655,27 @@ assert.doesNotMatch(
 );
 
 assert.doesNotMatch(
-  bridgeCss,
+  baseCss,
   /\.cfg-(?:page|shell|guestbar|nav|center|topic|feed|rope|mobile-ident)\b/,
   "retired guest-shell selectors must not survive in the account bridge",
 );
 assert.match(
-  bridgeCss,
-  /\.cvs-bridge-card\s*\{[\s\S]*?--bridge-line:\s*var\(--stroke-divider-accent\);[\s\S]*?--bridge-muted:\s*var\(--text-ink-muted\);[\s\S]*?--bridge-ink:\s*var\(--text-ink-primary\);[\s\S]*?background:\s*var\(--surface-card\);/,
-  "the live account bridge should consume the canonical theme roles",
+  baseCss,
+  /\.polynet-account-setup-modal\s*\{[\s\S]*?width:\s*min\(100%,\s*560px\);/,
+  "the live account bridge should use the canonical account setup modal",
 );
 assert.match(
-  bridgeCss,
-  /\.cvs-bridge-card \.cfg-join\.cvs-bridge-enter-ready\s*\{[\s\S]*?background:\s*var\(--bg-button\);[\s\S]*?color:\s*var\(--bg-button-text\);/,
-  "bridge conversion actions should use the canonical button roles",
+  baseCss,
+  /\.account-setup-primary\.is-ready\s*\{[\s\S]*?background:\s*var\(--bg-button\);[\s\S]*?color:\s*var\(--bg-button-text\);/,
+  "account setup conversion actions should use the canonical button roles",
 );
 assert.match(
-  bridgeCss,
-  /\.cvs-bridge-card \.cfg-gav\s*\{[\s\S]*?border:\s*3px solid var\(--surface-card\);[\s\S]*?background:\s*var\(--surface-app\);/,
-  "bridge identity media should use canonical card and app surfaces",
+  baseCss,
+  /\.account-setup-avatar-trigger\s*\{[\s\S]*?border:\s*1px dashed var\(--border-default\);[\s\S]*?background:\s*var\(--bg-card-alt\);/,
+  "account setup identity media should use canonical border and card roles",
 );
 assert.doesNotMatch(
-  `${bridgeCss}\n${memberAgentCss}`,
+  memberAgentCss,
   /:root\[data-theme="dark"\]/,
   "Dark component preservation should come from canonical root defaults, not new component overrides",
 );

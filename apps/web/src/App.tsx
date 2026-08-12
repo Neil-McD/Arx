@@ -372,7 +372,6 @@ export default function App() {
     onboardingError,
     setOnboardingError,
     openProfileSetup,
-    closeProfileSetup,
     refreshAccountSetupStatus,
     completeAccountSetup,
     completeAccountSetupAndContinue,
@@ -2663,23 +2662,7 @@ export default function App() {
     onboardingPageProps: {
       accountSetupStatus: effectiveAccountSetupStatus,
       setup: accountSetupSurface.model,
-      isAvatarFocusModalOpen: profileUi.isProfileAvatarFocusModalOpen,
-      isAvatarDragOver: profileUi.isProfileAvatarDragOver,
-      setIsAvatarDragOver: profileUi.setIsProfileAvatarDragOver,
-      setAvatarFocusX: profileUi.setProfileAvatarFocusX,
-      setAvatarFocusY: profileUi.setProfileAvatarFocusY,
-      setAvatarZoom: profileUi.setProfileAvatarZoom,
-      setIsAvatarFocusModalOpen: profileUi.setIsProfileAvatarFocusModalOpen,
-      onAvatarDrop: handleProfileAvatarDrop,
-      onRemoveAvatar: () => {
-        profileUi.setProfileAvatarUrl(null);
-        profileUi.setProfileAvatarStorageId(null);
-        profileUi.setProfileAvatarFocusX(0.5);
-        profileUi.setProfileAvatarFocusY(0.5);
-        profileUi.setProfileAvatarZoom(1);
-      },
       onCompleteAccountSetup: completeAccountSetupAndContinue,
-      onClose: closeProfileSetup,
     },
     platformBridgePageProps: {
       bridge:
@@ -2693,6 +2676,7 @@ export default function App() {
               communityAvatarZoom: null,
               paidReceiptLabel: null,
               enterLabel: "Enter Polynet",
+              accountSetupStatus: effectiveAccountSetupStatus,
               setup: accountSetupSurface.model,
               onEnter: completePlatformBridge,
             }
@@ -2772,6 +2756,7 @@ export default function App() {
               enterLabel: approvalPending
                 ? "Finish setup"
                 : `Enter ${resolvedPublicCommunity.name}`,
+              accountSetupStatus: effectiveAccountSetupStatus,
               setup: accountSetupSurface.model,
               onEnter: completeBridgeAndEnter,
             }

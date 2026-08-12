@@ -13,6 +13,7 @@ import {
 } from "./CommunityFunnelSurface";
 import { CommunityFunnelMemberProof } from "./CommunityFunnelMemberProof";
 import { WebCommunityBridgeCard, type WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
+import { WebBlockingSetupModal } from "./WebBlockingSetupModal";
 import "./WebCommunityFunnelRenderer.css";
 
 function FunnelPillarIcon(props: { index: number }) {
@@ -154,9 +155,14 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
       </main>
 
       {props.bridge ? (
-        <div className="community-funnel-bridge" role="dialog" aria-modal="true" aria-label="Complete account setup">
+        <WebBlockingSetupModal
+          titleId="community-account-setup-title"
+          descriptionId="community-account-setup-description"
+          busy={props.bridge.setup.submission.isSaving}
+          className="polynet-account-setup-modal"
+        >
           <WebCommunityBridgeCard {...props.bridge} />
-        </div>
+        </WebBlockingSetupModal>
       ) : null}
     </div>
   );

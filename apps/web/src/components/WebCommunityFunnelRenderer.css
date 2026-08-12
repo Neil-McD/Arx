@@ -314,19 +314,6 @@
   margin: 6px 0 0;
 }
 
-.community-funnel-bridge {
-  position: fixed;
-  z-index: 80;
-  inset: 0;
-  display: grid;
-  overflow-y: auto;
-  place-items: center;
-  padding: 24px 20px;
-  background: color-mix(in srgb, #080808 72%, transparent);
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-}
-
 .community-funnel-loading {
   height: 100%;
   min-height: 0;
