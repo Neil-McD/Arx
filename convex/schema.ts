@@ -1230,15 +1230,6 @@ export default defineSchema({
       v.literal("approval"),
       v.literal("paid_subscription"),
     ),
-    // Transitional staging compatibility. Removed after the bounded funnel
-    // collapse proves every community uses the canonical liveMode selector.
-    activeFunnelSlot: v.optional(
-      v.union(
-        v.literal("default"),
-        v.literal("custom_1"),
-        v.literal("custom_2"),
-      ),
-    ),
     activeMemberCount: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
@@ -1378,9 +1369,6 @@ export default defineSchema({
 
   communityFunnels: defineTable({
     communityId: v.id("communities"),
-    // Transitional staging compatibility. The migration clears these fields
-    // before the strict slotless schema lands.
-    slot: v.optional(v.union(v.literal("custom_1"), v.literal("custom_2"))),
     heroMediaUrl: v.optional(v.string()),
     heroMediaKind: v.optional(v.union(v.literal("image"), v.literal("video"))),
     liveMode: v.optional(v.union(v.literal("default"), v.literal("custom"))),
@@ -1388,8 +1376,6 @@ export default defineSchema({
     publishedVslUrl: v.optional(v.union(v.string(), v.null())),
     draftContentV2: v.optional(communityFunnelContentV2Validator),
     publishedContentV2: v.optional(communityFunnelContentV2Validator),
-    draftDocumentV1: v.optional(v.any()),
-    publishedDocumentV1: v.optional(v.any()),
     draftRevision: v.optional(v.number()),
     draftUpdatedAt: v.optional(v.number()),
     draftUpdatedByUserId: v.optional(v.id("users")),
@@ -1398,9 +1384,7 @@ export default defineSchema({
     publishedByUserId: v.optional(v.id("users")),
     createdAt: v.number(),
     updatedAt: v.number(),
-  })
-    .index("by_community", ["communityId"])
-    .index("by_community_slot", ["communityId", "slot"]),
+  }).index("by_community", ["communityId"]),
 
   communityAnalyticsEvents: defineTable({
     communityId: v.id("communities"),

@@ -1,6 +1,6 @@
 # Community Funnel V2 Authority Kernel
 
-Status: implemented locally; UI and agent integration are separate slices.
+Status: implemented with the canonical renderer and existing agent harness.
 
 ## Irreducible model
 
@@ -52,11 +52,14 @@ legacy hero media cannot delete canonical draft or published state. Historical
 rows with a published custom snapshot and no selector remain custom-live until
 a manager explicitly selects default.
 
-## Deliberately deferred
+The staging slot/V1 transition completed through a bounded census-first
+migration before this strict schema landed. The temporary operator module and
+compatibility validators were removed after a second census proved zero
+duplicate rows, slot markers, community selectors, and V1 documents.
 
-- funnel manager UI;
-- agent tool wiring;
-- AI prompt/streaming behavior;
-- visual renderer changes;
+## Deliberately absent
+
 - any second custom funnel;
-- staging or production release.
+- free-form generated markup or layout authority;
+- AI control over the VSL, pricing, access, publication, or activation;
+- duplicate public or preview renderers.

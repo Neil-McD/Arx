@@ -179,11 +179,6 @@ test("canonical community creation schedules the welcome without blocking durabi
     await t.finishAllScheduledFunctions(() => vi.runAllTimers());
     const communityId = created.id as Id<"communities">;
 
-    const createdCommunity = await t.run(async (ctx) =>
-      ctx.db.get(communityId),
-    );
-    expect(createdCommunity?.activeFunnelSlot).toBe("default");
-
     const roots = await t.run(async (ctx) => await ctx.db
       .query("communityInteractionRoots")
       .withIndex("by_community_idempotencyKey", (q) => q
