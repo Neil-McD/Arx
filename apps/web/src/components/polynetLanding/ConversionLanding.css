@@ -205,8 +205,8 @@
   animation: pn-vsl-scene 12s cubic-bezier(0.2, 0.72, 0.2, 1) infinite;
 }
 
-.pn-landing .vsl-preview-scene-build { animation-delay: 0s; }
-.pn-landing .vsl-preview-scene-train { animation-delay: 4s; }
+.pn-landing .vsl-preview-scene-train { animation-delay: 0s; }
+.pn-landing .vsl-preview-scene-onboard { animation-delay: 4s; }
 .pn-landing .vsl-preview-scene-execute { animation-delay: 8s; }
 
 .pn-landing .vsl-preview-copy {
@@ -615,15 +615,6 @@
 .pn-landing .closing .cta { margin-top: 25px; }
 .pn-landing .closing-meta { margin-top: 12px; }
 
-.pn-landing .closing-terms {
-  max-width: 620px;
-  margin: 18px auto 0;
-  color: var(--quiet);
-  font-size: 12px;
-  line-height: 1.55;
-  text-wrap: balance;
-}
-
 .pn-landing .footer {
   width: min(var(--content-wide), 100%);
   margin: 0 auto;
@@ -797,5 +788,5 @@
     transform: none;
   }
 
-  .pn-landing .vsl-preview-scene-build { opacity: 1; }
+  .pn-landing .vsl-preview-scene-train { opacity: 1; }
 }
