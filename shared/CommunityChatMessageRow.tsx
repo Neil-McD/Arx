@@ -288,7 +288,7 @@ function CommunityChatMessageRowComponent({
               />
               <button
                 type="button"
-                className="chat-profile-message-button"
+                className="community-profile-message-action"
                 disabled={!canMessageSender}
                 onClick={openSenderDirectMessage}
               >

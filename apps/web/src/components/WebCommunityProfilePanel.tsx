@@ -109,7 +109,7 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
         <div className="community-profile-panel-actions">
           <button
             type="button"
-            className="chat-profile-message-button community-profile-panel-message"
+            className="community-profile-message-action community-profile-panel-message"
             disabled={!canMessageProfile}
             onClick={() => {
               if (!canMessageProfile) return;

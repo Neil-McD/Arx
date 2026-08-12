@@ -5679,16 +5679,16 @@
   top: auto;
   bottom: calc(100% + 8px);
   left: 14px;
-  width: min(300px, calc(100vw - 48px));
+  width: min(292px, calc(100vw - 48px));
   max-height: 188px;
-  padding: 10px;
+  padding: 12px;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
   overflow: hidden;
-  border: 1px solid var(--web-popover-border);
-  border-radius: 16px;
-  background: var(--web-popover-surface);
+  border: 1px solid var(--web-context-panel-border);
+  border-radius: 14px;
+  background: var(--bg-card-solid, var(--web-popover-surface));
   box-shadow: var(--web-popover-shadow);
   color: var(--text-primary);
   opacity: 0;
@@ -5696,8 +5696,6 @@
   transform: translateY(4px) scale(0.985);
   transform-origin: 22px bottom;
   visibility: hidden;
-  backdrop-filter: blur(16px) saturate(130%);
-  -webkit-backdrop-filter: blur(16px) saturate(130%);
   transition:
     opacity 130ms ease,
     transform 130ms ease,
@@ -5737,9 +5735,10 @@
 
 .chat-profile-hover-avatar {
   position: relative;
-  width: 56px;
-  height: 56px;
-  flex: 0 0 56px;
+  width: 52px;
+  height: 52px;
+  flex: 0 0 52px;
+  border: 1px solid var(--web-popover-border);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -5749,9 +5748,7 @@
   font-size: 16px;
   font-weight: 700;
   background: color-mix(in srgb, var(--bg-card-alt) 82%, var(--border-default));
-  box-shadow:
-    0 10px 28px rgba(0, 0, 0, 0.28),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 .chat-profile-hover-avatar.has-image {
@@ -5833,30 +5830,46 @@
   color: var(--text-faint);
 }
 
-.chat-profile-message-button {
+.community-profile-message-action {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
   width: auto;
-  min-height: 32px;
-  padding: 0 13px;
-  border: 1px solid color-mix(in srgb, var(--accent-pink) 34%, var(--web-popover-border) 66%);
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--accent-pink) 14%, transparent);
-  color: color-mix(in srgb, var(--accent-pink) 50%, var(--text-primary) 50%);
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid var(--web-context-panel-border);
+  border-radius: 10px;
+  background: var(--surface-card-alt, var(--bg-card-alt));
+  color: var(--text-secondary);
   font-size: 13px;
-  font-weight: 700;
+  font-weight: 650;
   flex: 0 0 auto;
+  cursor: pointer;
+  transition:
+    border-color 120ms ease,
+    background-color 120ms ease,
+    color 120ms ease;
 }
 
-.chat-profile-message-button svg {
+.community-profile-message-action:hover:not(:disabled) {
+  border-color: var(--stroke-strong, var(--border-default));
+  background: var(--hover-overlay, var(--bg-card));
+  color: var(--text-primary);
+}
+
+.community-profile-message-action:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.community-profile-message-action svg {
   width: 15px;
   height: 15px;
   stroke-width: 2;
 }
 
-.chat-profile-message-button:disabled {
+.community-profile-message-action:disabled {
   cursor: not-allowed;
   opacity: 0.68;
 }
@@ -5892,13 +5905,13 @@
   z-index: 48;
   width: min(340px, calc(100vw - 36px));
   max-height: min(560px, calc(100vh - 96px));
-  padding: 14px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 12px;
+  gap: 16px;
   overflow: auto;
   border: 1px solid var(--web-context-panel-border);
-  border-radius: 18px;
+  border-radius: 16px;
   background: var(--web-context-panel-surface);
   box-shadow: var(--web-context-panel-shadow);
   color: var(--text-primary);
@@ -5916,6 +5929,7 @@
   width: 64px;
   height: 64px;
   flex: 0 0 64px;
+  border: 1px solid var(--web-context-panel-border);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -5925,9 +5939,7 @@
   font-size: 18px;
   font-weight: 700;
   background: color-mix(in srgb, var(--bg-card-alt) 82%, var(--border-default));
-  box-shadow:
-    0 10px 30px rgba(0, 0, 0, 0.3),
-    0 0 0 1px rgba(255, 255, 255, 0.08);
+  box-shadow: none;
 }
 
 .community-profile-panel-avatar.has-image {
@@ -5947,7 +5959,7 @@
 }
 
 .community-profile-panel-message {
-  min-height: 32px;
+  min-height: 34px;
 }
 
 .community-profile-panel-identity {
@@ -5958,7 +5970,7 @@
   overflow: hidden;
   color: var(--text-primary);
   font-size: 18px;
-  font-weight: 750;
+  font-weight: 700;
   line-height: 1.2;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -5997,19 +6009,19 @@
 .community-profile-panel-links {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 8px 16px;
 }
 
 .community-profile-panel-link {
   display: inline-flex;
   align-items: center;
-  gap: 7px;
-  min-height: 30px;
-  padding: 0 10px;
-  border: 1px solid color-mix(in srgb, var(--web-context-panel-border) 82%, transparent);
-  border-radius: 999px;
-  color: var(--text-secondary);
-  background: color-mix(in srgb, var(--bg-card) 38%, transparent);
+  gap: 6px;
+  min-height: 28px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  color: var(--text-muted);
+  background: transparent;
   font-size: 12px;
   font-weight: 650;
   text-decoration: none;
@@ -6017,8 +6029,15 @@
 
 .community-profile-panel-link:hover {
   color: var(--text-primary);
-  border-color: color-mix(in srgb, var(--accent-pink) 32%, var(--border-default));
-  background: color-mix(in srgb, var(--accent-pink) 10%, transparent);
+  background: transparent;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.community-profile-panel-link:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: 3px;
 }
 
 .community-profile-panel-link svg {

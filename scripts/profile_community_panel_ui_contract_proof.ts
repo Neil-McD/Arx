@@ -8,6 +8,7 @@ function read(path: string): string {
 const panel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const messageRow = read("shared/CommunityChatMessageRow.tsx");
+const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const projection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const app = read("apps/web/src/App.tsx");
 const css = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
@@ -33,6 +34,10 @@ assert.match(panel, /handleLabel \? <div className="community-profile-panel-hand
 assert.match(panel, /bio \? <div className="community-profile-panel-bio">\{bio\}<\/div> : null/, "profile panel bio row must render only when a bio exists");
 assert.doesNotMatch(panel, /In this community/, "profile panel must not keep the old active-community text row");
 assert.doesNotMatch(panel, /activeCommunityName|isActiveCommunityOwner/, "profile panel must not synthesize context from current community props");
+assert.match(panel, /community-profile-message-action community-profile-panel-message/, "full profile must use the canonical neutral profile action");
+assert.match(interactionFeed, /className="community-profile-message-action"/, "interaction profile preview must use the canonical neutral profile action");
+assert.match(messageRow, /className="community-profile-message-action"/, "legacy message preview must inherit the canonical neutral profile action while it remains migration substrate");
+assert.doesNotMatch(panel, /chat-profile-message-button/, "full profile must not retain the bespoke profile message button");
 
 assert.doesNotMatch(messageRow, /No handle yet|No bio yet|chat-profile-hover-bio\\$|chat-profile-hover-bio\$\{/, "profile hover card must not show placeholder handle or bio rows");
 assert.match(messageRow, /profileHandleLabel \? \([\s\S]*chat-profile-hover-handle[\s\S]*\) : null/, "profile hover handle row must render only when a handle exists");
@@ -95,5 +100,10 @@ assert.match(app, /buildWebCommunitySurfaceProjection\(\{[\s\S]*session: session
 assert.match(css, /\.community-profile-panel-community-strip/, "profile panel must style the horizontal community avatar strip");
 assert.match(css, /\.community-profile-panel-community-avatar \{[\s\S]*width: 38px;[\s\S]*height: 38px;/, "community avatars must have fixed compact dimensions");
 assert.match(css, /overflow-x: auto/, "community avatar strip must constrain overflow horizontally");
+assert.match(css, /\.community-profile-message-action \{/, "profile surfaces must share one canonical action style");
+assert.doesNotMatch(css, /\.chat-profile-message-button \{/, "retired pink profile action styling must be deleted");
+assert.match(css, /\.chat-profile-hover-card \{[\s\S]*background: var\(--bg-card-solid, var\(--web-popover-surface\)\);/, "profile preview must be an opaque raised surface");
+assert.doesNotMatch(css.match(/\.chat-profile-hover-card \{[\s\S]*?\n\}/)?.[0] ?? "", /backdrop-filter/, "profile preview must not retain glass blur");
+assert.match(css, /\.community-profile-panel-link \{[\s\S]*border: 0;[\s\S]*background: transparent;/, "full profile links must be quiet links instead of CTA capsules");
 
 console.log("PASS: profile community panel renders backend-owned and mutual community avatar strips.");
