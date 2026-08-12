@@ -108,6 +108,10 @@ assert.match(
   receiptSchema,
   /surface: v\.union\([\s\S]*member_agent_dock[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
 );
+assert.match(
+  backend,
+  /const communityInferenceSurfaceValidator = v\.union\([\s\S]*member_agent_dock[\s\S]*community_agent_mention[\s\S]*community_autonomous_cognition[\s\S]*community_setup_generation/,
+);
 assert.doesNotMatch(receiptSchema, /apiKey|encryptedSecret|prompt:|response:|toolOutput|costDollars/);
 
 assert.equal(existsSync(join(root, "convex/founderInferenceMigration.ts")), false);
