@@ -4035,6 +4035,13 @@
   border-radius: 18px;
 }
 
+.community-composer-authoring-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0;
+  min-width: 0;
+}
+
 .community-composer-editor-row {
   min-width: 0;
   padding: 0 4px 6px;

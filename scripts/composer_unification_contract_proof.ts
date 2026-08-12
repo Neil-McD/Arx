@@ -53,7 +53,7 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 46px;/,
+  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 42px;/,
   "mobile member composers should retain touch controls and a bounded writing region",
 );
 assert.match(

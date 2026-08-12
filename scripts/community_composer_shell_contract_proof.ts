@@ -91,8 +91,8 @@ assert.match(
 );
 assert.match(
   mobileCss,
-  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 46px;[^}]*border-radius: 20px;/,
-  "mobile composers should retain large controls and a bounded writing region",
+  /\.app-root\.mobile-shell \.community-member-chat \.chat-input-bar \{[^}]*--community-composer-control-size: 42px;[^}]*--community-composer-input-size: 42px;[^}]*border-radius: 22px;[\s\S]*\.community-composer-authoring-row \{[^}]*grid-template-columns: var\(--community-composer-control-size\) minmax\(0, 1fr\) auto;[\s\S]*\.ask-mention,[\s\S]*\.community-composer-emoji-picker \{[^}]*display: none;/,
+  "mobile composers should collapse to one row while omitting redundant mention and emoji buttons",
 );
 assert.match(
   packageJson,

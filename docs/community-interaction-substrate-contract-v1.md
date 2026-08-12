@@ -477,7 +477,7 @@ Rules:
 - channel switching clears transient composer/reply state and cannot expose roots or pending sends from another channel
 - only community managers see Add Channel; the dialog accepts one display name and the server remains authoritative for normalization, authorization, and the ten-channel limit
 - every resolved member channel renders one canonical conversation header so the active scope remains explicit independently of sidebar or mobile-drawer state
-- main-channel and drawer-reply composers share one raised writing surface: the editor owns the upper region and one shared utility row renders add, mention, and emoji insertion controls on the left with dictation and send on the right
+- main-channel and drawer-reply composers share one canonical writing surface: desktop retains the raised editor and full utility row, while mobile collapses attachment, editor, dictation, and send into one compact row; mobile mention entry remains available through typed `@` autocomplete and emoji entry through the native keyboard rather than duplicate visible controls
 - the visible mention control inserts at the current caret and opens the same authorized autocomplete used by typed `@`; reply candidates continue to exclude role broadcasts such as `@everybody`
 - `+` opens the existing bounded attachment input directly; it is not a generalized add menu
 - emoji insertion returns focus to the native textarea; supported formatting remains authored as canonical plain text through typed syntax and bounded keyboard behavior rather than a visible formatting toolbar

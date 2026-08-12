@@ -1,9 +1,8 @@
 export const MOBILE_READING_MODE_POLICY = {
-  hideTravelPx: 48,
-  showTravelPx: 28,
+  hideTravelPx: 36,
+  showTravelPx: 8,
   bottomLockEnterPx: 96,
   bottomLockExitPx: 160,
-  transitionLockMs: 220,
   scrollSettleMs: 240,
   instantProgrammaticScrollLockMs: 80,
   smoothProgrammaticScrollLockMs: 700,
@@ -12,12 +11,10 @@ export const MOBILE_READING_MODE_POLICY = {
 export type MobileReadingModeState = {
   active: boolean;
   lastScrollTop: number | null;
-  gestureAnchorScrollTop: number | null;
+  directionAnchorScrollTop: number | null;
+  travelDirection: "older" | "latest" | null;
   bottomLocked: boolean;
-  transitionLockedUntilMs: number;
   programmaticLockedUntilMs: number;
-  gestureTracked: boolean;
-  gestureTransitioned: boolean;
 };
 
 export type MobileReadingModeSample = {
@@ -36,17 +33,17 @@ function clampScrollTop(scrollTop: number, maxScrollTop: number): number {
   return Math.min(Math.max(0, scrollTop), Math.max(0, maxScrollTop));
 }
 
-function resetGestureAnchor(state: MobileReadingModeState): MobileReadingModeState {
+function resetDirectionalTravel(state: MobileReadingModeState): MobileReadingModeState {
   return {
     ...state,
-    gestureAnchorScrollTop: null,
+    directionAnchorScrollTop: null,
+    travelDirection: null,
   };
 }
 
 function transition(
   state: MobileReadingModeState,
   active: boolean,
-  nowMs: number,
 ): MobileReadingModeResult {
   if (state.active === active) {
     return { state, changed: false };
@@ -55,8 +52,6 @@ function transition(
     state: {
       ...state,
       active,
-      transitionLockedUntilMs: nowMs + MOBILE_READING_MODE_POLICY.transitionLockMs,
-      gestureTransitioned: state.gestureTracked || state.gestureTransitioned,
     },
     changed: true,
   };
@@ -66,12 +61,10 @@ export function createMobileReadingModeState(): MobileReadingModeState {
   return {
     active: false,
     lastScrollTop: null,
-    gestureAnchorScrollTop: null,
+    directionAnchorScrollTop: null,
+    travelDirection: null,
     bottomLocked: false,
-    transitionLockedUntilMs: 0,
     programmaticLockedUntilMs: 0,
-    gestureTracked: false,
-    gestureTransitioned: false,
   };
 }
 
@@ -85,37 +78,24 @@ export function beginMobileReadingModeGesture(
   return {
     ...state,
     lastScrollTop: clampedScrollTop,
-    gestureAnchorScrollTop: clampedScrollTop,
+    directionAnchorScrollTop: null,
+    travelDirection: null,
     programmaticLockedUntilMs: nowMs,
-    gestureTracked: true,
-    gestureTransitioned: false,
   };
 }
 
 export function endMobileReadingModeGesture(
   state: MobileReadingModeState,
 ): MobileReadingModeState {
-  return {
-    ...resetGestureAnchor(state),
-    gestureTracked: false,
-    gestureTransitioned: false,
-  };
+  return resetDirectionalTravel(state);
 }
 
 export function forceMobileReadingMode(
   state: MobileReadingModeState,
   active: boolean,
-  nowMs: number,
+  _nowMs: number,
 ): MobileReadingModeResult {
-  return transition(
-    {
-      ...state,
-      gestureTracked: false,
-      gestureTransitioned: false,
-    },
-    active,
-    nowMs,
-  );
+  return transition(resetDirectionalTravel(state), active);
 }
 
 export function suppressProgrammaticMobileScroll(
@@ -125,16 +105,14 @@ export function suppressProgrammaticMobileScroll(
   forceVisible = false,
 ): MobileReadingModeResult {
   const baseState: MobileReadingModeState = {
-    ...resetGestureAnchor(state),
+    ...resetDirectionalTravel(state),
     programmaticLockedUntilMs: Math.max(
       state.programmaticLockedUntilMs,
       nowMs + durationMs,
     ),
-    gestureTracked: false,
-    gestureTransitioned: false,
   };
   if (!forceVisible) return { state: baseState, changed: false };
-  return transition(baseState, false, nowMs);
+  return transition(baseState, false);
 }
 
 export function advanceMobileReadingMode(
@@ -153,59 +131,53 @@ export function advanceMobileReadingMode(
     bottomLocked,
   };
 
-  const mayTransitionThisGesture =
-    !nextState.gestureTracked || !nextState.gestureTransitioned;
   if (sample.composerFocused) {
-    nextState = resetGestureAnchor(nextState);
-    if (
-      nextState.active
-      && mayTransitionThisGesture
-      && sample.nowMs >= nextState.transitionLockedUntilMs
-    ) {
-      return transition(nextState, false, sample.nowMs);
+    nextState = resetDirectionalTravel(nextState);
+    if (nextState.active) {
+      return transition(nextState, false);
     }
     return { state: nextState, changed: false };
   }
 
   if (sample.nowMs < nextState.programmaticLockedUntilMs) {
-    return { state: resetGestureAnchor(nextState), changed: false };
+    return { state: resetDirectionalTravel(nextState), changed: false };
   }
 
   if (bottomLocked) {
-    nextState = resetGestureAnchor(nextState);
-    if (
-      nextState.active
-      && mayTransitionThisGesture
-      && sample.nowMs >= nextState.transitionLockedUntilMs
-    ) {
-      return transition(nextState, false, sample.nowMs);
+    nextState = resetDirectionalTravel(nextState);
+    if (nextState.active) {
+      return transition(nextState, false);
     }
     return { state: nextState, changed: false };
   }
 
-  if (
-    state.lastScrollTop === null
-    || sample.nowMs < nextState.transitionLockedUntilMs
-    || !mayTransitionThisGesture
-  ) {
+  if (state.lastScrollTop === null) {
     return { state: nextState, changed: false };
   }
 
-  const gestureAnchorScrollTop = state.gestureAnchorScrollTop ?? state.lastScrollTop;
-  nextState = { ...nextState, gestureAnchorScrollTop };
-  const netTravelPx = scrollTop - gestureAnchorScrollTop;
+  const delta = scrollTop - state.lastScrollTop;
+  if (Math.abs(delta) < 0.5) return { state: nextState, changed: false };
+
+  const travelDirection = delta < 0 ? "older" : "latest";
+  const directionAnchorScrollTop = state.travelDirection === travelDirection
+    ? (state.directionAnchorScrollTop ?? state.lastScrollTop)
+    : state.lastScrollTop;
+  nextState = { ...nextState, directionAnchorScrollTop, travelDirection };
+  const directionalTravelPx = Math.abs(scrollTop - directionAnchorScrollTop);
 
   if (
     !nextState.active
-    && netTravelPx <= -MOBILE_READING_MODE_POLICY.hideTravelPx
+    && travelDirection === "older"
+    && directionalTravelPx >= MOBILE_READING_MODE_POLICY.hideTravelPx
   ) {
-    return transition(nextState, true, sample.nowMs);
+    return transition(nextState, true);
   }
   if (
     nextState.active
-    && netTravelPx >= MOBILE_READING_MODE_POLICY.showTravelPx
+    && travelDirection === "latest"
+    && directionalTravelPx >= MOBILE_READING_MODE_POLICY.showTravelPx
   ) {
-    return transition(nextState, false, sample.nowMs);
+    return transition(nextState, false);
   }
   return { state: nextState, changed: false };
 }
@@ -226,7 +198,7 @@ export function settleMobileReadingMode(
     bottomLocked: mustBeVisible,
   };
   if (mustBeVisible && settledState.active) {
-    return transition(settledState, false, sample.nowMs);
+    return transition(settledState, false);
   }
   return { state: settledState, changed: false };
 }

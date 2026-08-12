@@ -2520,6 +2520,22 @@
   padding-bottom: calc(var(--mobile-community-composer-height, 0px) + 18px);
 }
 
+.app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root,
+.app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root-error {
+  transform-origin: top;
+  transition:
+    max-block-size 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 180ms cubic-bezier(0.22, 1, 0.36, 1),
+    opacity 140ms ease,
+    border-width 140ms ease;
+  will-change: max-block-size, transform, opacity;
+}
+
+.app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root-error {
+  max-block-size: 48px;
+  overflow: hidden;
+}
+
 .app-root.mobile-shell.mobile-reading-mode .mobile-topbar {
   transform: translateY(calc(-100% - env(safe-area-inset-top, 0px) - 8px));
   opacity: 0;
@@ -2538,6 +2554,15 @@
   pointer-events: none;
 }
 
+.app-root.mobile-shell.mobile-reading-mode .community-chat .community-channel-pinned-root,
+.app-root.mobile-shell.mobile-reading-mode .community-chat .community-channel-pinned-root-error {
+  max-block-size: 0;
+  transform: translateY(-12px);
+  opacity: 0;
+  border-block-width: 0;
+  pointer-events: none;
+}
+
 .app-root.mobile-shell:has(.community-chat .chat-input-bar:focus-within) .mobile-bottom-rail {
   transform: translateY(100%);
   opacity: 0;
@@ -2548,7 +2573,9 @@
   .mobile-topbar,
   .mobile-bottom-rail,
   .app-root.mobile-shell .community-chat .community-channel-header-actions,
-  .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-interaction-main-composer {
+  .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-interaction-main-composer,
+  .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root,
+  .app-root.mobile-shell.mobile-chrome-auto-hide .community-chat .community-channel-pinned-root-error {
     transition: none;
   }
 }

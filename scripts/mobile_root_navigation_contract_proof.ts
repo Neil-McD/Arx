@@ -560,8 +560,13 @@ assert.match(
 );
 assert.match(
   mobileReadingModePolicy,
-  /hideTravelPx: 48[\s\S]*showTravelPx: 28[\s\S]*bottomLockEnterPx: 96[\s\S]*bottomLockExitPx: 160[\s\S]*transitionLockMs: 220[\s\S]*scrollSettleMs: 240[\s\S]*gestureAnchorScrollTop[\s\S]*gestureTransitioned[\s\S]*programmaticLockedUntilMs/,
-  "reading mode should use deliberate thresholds, bottom hysteresis, gesture gating, and programmatic suppression",
+  /hideTravelPx: 36[\s\S]*showTravelPx: 8[\s\S]*bottomLockEnterPx: 96[\s\S]*bottomLockExitPx: 160[\s\S]*scrollSettleMs: 240[\s\S]*directionAnchorScrollTop[\s\S]*travelDirection[\s\S]*programmaticLockedUntilMs/,
+  "reading mode should use directional hysteresis, bottom locking, and programmatic suppression",
+);
+assert.match(
+  indexCss,
+  /mobile-chrome-auto-hide \.community-chat \.community-channel-pinned-root,[\s\S]*max-block-size 180ms[\s\S]*mobile-reading-mode \.community-chat \.community-channel-pinned-root,[\s\S]*max-block-size: 0;/,
+  "the pinned surface should collapse with the rest of the mobile reading chrome",
 );
 assert.match(
   interactionProjection,
