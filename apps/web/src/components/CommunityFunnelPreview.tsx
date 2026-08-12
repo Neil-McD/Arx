@@ -2,13 +2,12 @@ import { Brain, Sparkles, UsersRound, type LucideIcon } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
-import { buildCommunityFunnelMemberProofView } from "../../../../shared/communityFunnelUi";
 import type {
   CommunityFunnelContentV2,
   CommunityPublicFace,
 } from "../../../../shared/communityTypes";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
-import { MemberAvatarStack } from "./MemberAvatarStack";
+import { CommunityFunnelMemberProof } from "./CommunityFunnelMemberProof";
 import "./CommunityFunnelPreview.css";
 
 type PreviewCommunity = {
@@ -68,10 +67,6 @@ export function CommunityFunnelPreview(props: {
 }) {
   const { community, content } = props;
   const isPreview = props.isPreview !== false;
-  const memberProof = buildCommunityFunnelMemberProofView({
-    memberCount: community.member_count,
-    faces: community.member_faces_preview,
-  });
 
   const renderBrand = (large = false) => (
     <header className={`community-funnel-brand${large ? " is-default" : ""}`}>
@@ -97,22 +92,12 @@ export function CommunityFunnelPreview(props: {
   );
 
   const renderMemberProof = () => {
-    if (!memberProof) return null;
     return (
-      <section
-        className="community-funnel-member-proof-row"
-        aria-label={memberProof.ariaLabel}
-      >
-        <MemberAvatarStack
-          className="community-funnel-member-proof-avatars"
-          faces={memberProof.faces}
-          totalCount={memberProof.memberCount}
-          limit={5}
-          decorative={true}
-          imageLoading="lazy"
-        />
-        <span>{memberProof.label}</span>
-      </section>
+      <CommunityFunnelMemberProof
+        communityName={community.name}
+        faces={community.member_faces_preview}
+        memberCount={community.member_count}
+      />
     );
   };
 

@@ -1,0 +1,15 @@
+.community-funnel-member-proof {
+  display: flex;
+  min-height: 30px;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  color: var(--community-funnel-muted);
+  font-size: 15px;
+  font-weight: 500;
+  line-height: 1.3;
+}
+
+.community-funnel-member-proof-avatars {
+  --member-avatar-stack-face-size: 30px;
+}

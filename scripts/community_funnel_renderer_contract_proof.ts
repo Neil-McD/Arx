@@ -9,6 +9,9 @@ const publicRoute = read("apps/web/src/components/WebPublicCommunityFunnel.tsx")
 const renderer = read("apps/web/src/components/WebCommunityFunnelRenderer.tsx");
 const rendererCss = read("apps/web/src/components/WebCommunityFunnelRenderer.css");
 const memberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
+const memberProofCss = read("apps/web/src/components/CommunityFunnelMemberProof.css");
+const preview = read("apps/web/src/components/CommunityFunnelPreview.tsx");
+const previewCss = read("apps/web/src/components/CommunityFunnelPreview.css");
 const renderProjection = read("shared/communityFunnelUi.ts");
 
 assert.match(
@@ -63,8 +66,32 @@ assert.doesNotMatch(
 );
 assert.match(renderer, /renderMarkdown\(props\.renderModel\.longFormMarkdown, \{ headingLevelOffset: 1 \}\)/);
 assert.doesNotMatch(renderer, /dangerouslySetInnerHTML|communityMessages|CommunityContextPanel/);
-assert.match(memberProof, /<UserAvatar[\s\S]*focusX=\{face\.avatar_focus_x\}[\s\S]*zoom=\{face\.avatar_zoom\}/);
-assert.match(memberProof, /const MAX_VISIBLE_MEMBER_FACES = 5[\s\S]*slice\(0, MAX_VISIBLE_MEMBER_FACES\)/, "public member faces must remain bounded");
+assert.match(
+  memberProof,
+  /buildCommunityFunnelMemberProofView\([\s\S]*<MemberAvatarStack[\s\S]*limit=\{5\}/,
+  "public member proof must compose the canonical proof projection and member avatar stack",
+);
+assert.doesNotMatch(
+  memberProof,
+  /UserAvatar|\.map\(\(face/,
+  "public member proof must not recreate member avatar holders",
+);
+assert.match(
+  preview,
+  /<CommunityFunnelMemberProof[\s\S]*faces=\{community\.member_faces_preview\}[\s\S]*memberCount=\{community\.member_count\}/,
+  "builder preview and public lander must share the same canonical member proof",
+);
+assert.doesNotMatch(
+  preview,
+  /MemberAvatarStack|buildCommunityFunnelMemberProofView/,
+  "builder preview must not rebuild canonical member proof internals",
+);
+assert.doesNotMatch(
+  `${rendererCss}\n${previewCss}\n${memberProofCss}`,
+  /\.community-funnel-member-(?:faces|face|more|proof-row)\b/,
+  "funnel surfaces must not recreate avatar holder or facepile CSS",
+);
+assert.match(memberProofCss, /\.community-funnel-member-proof-avatars[\s\S]*--member-avatar-stack-face-size/);
 assert.match(rendererCss, /var\(--surface-app\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
 assert.match(rendererCss, /@media \(prefers-reduced-motion: reduce\)/);
 assert.match(rendererCss, /container-type: inline-size[\s\S]*font-size: clamp\([^;]*cqi/);

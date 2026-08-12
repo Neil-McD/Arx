@@ -277,17 +277,6 @@
   padding-top: 0;
 }
 
-.community-funnel-member-proof {
-  display: flex;
-  min-height: 34px;
-  align-items: center;
-  justify-content: center;
-  gap: 13px;
-  color: var(--community-funnel-muted);
-  font-size: 15px;
-  font-weight: 520;
-}
-
 .community-funnel-layout > .community-funnel-member-proof {
   width: min(580px, 100%);
   margin: 22px auto 0;
@@ -299,35 +288,6 @@
   margin-top: clamp(38px, 6vh, 58px);
   border-top: 1px solid var(--community-funnel-line);
   padding-top: 30px;
-}
-
-.community-funnel-member-faces {
-  display: flex;
-  align-items: center;
-}
-
-.community-funnel-member-face {
-  position: relative;
-  display: grid;
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-  place-items: center;
-  overflow: hidden;
-  border: 2px solid var(--community-funnel-page);
-  border-radius: 50%;
-  background: var(--surface-card);
-  color: var(--community-funnel-muted);
-  font-size: 9px;
-  font-weight: 700;
-}
-
-.community-funnel-member-face + .community-funnel-member-face {
-  margin-left: -8px;
-}
-
-.community-funnel-member-more {
-  z-index: 0;
 }
 
 .community-funnel-conversion .community-funnel-action {
