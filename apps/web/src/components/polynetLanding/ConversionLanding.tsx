@@ -162,8 +162,8 @@ const STEPS = [
   },
   {
     number: "03",
-    title: "Serve at scale",
-    description: "Give every member an agent grounded in your knowledge, available whenever they need it.",
+    title: "Execute for every member",
+    description: "Give every member an autonomous agent that coaches, supports, and helps complete the work whenever they need it.",
     visual: <ServeAtScaleVisual />,
   },
 ] as const;
@@ -179,7 +179,7 @@ const PROBLEMS = [
   },
   {
     title: "Your AI gets smarter as your community grows",
-    description: "You provide the foundation. Useful answers, conversations, and outcomes become easier to find and reuse—without constantly creating, organizing, and updating more content.",
+    description: "You provide the foundation. Useful answers, conversations, and outcomes become shared intelligence that is easier to find and reuse—without constantly creating, organizing, and updating more content.",
   },
 ] as const;
 
@@ -202,8 +202,9 @@ export function ConversionLanding({ onJoin }: JoinProps) {
         <Brand />
         <main>
           <div className="intro">
-            <h1>All-in-one agentic community platform.</h1>
-            <p className="subhead">Polynet turns your members’ conversations, resources, and outcomes into shared intelligence that compounds.</p>
+            <p className="intro-kicker">For community builders, coaches, course creators, and agencies</p>
+            <h1>The autonomous client success platform.</h1>
+            <p className="subhead">Train an AI on your expertise, methodology, content, and processes—then deploy it to coach, support, and execute for every member or client, all at once.</p>
           </div>
 
           <div className="vsl">
@@ -254,7 +255,7 @@ export function ConversionLanding({ onJoin }: JoinProps) {
           </section>
 
           <section className="closing" aria-labelledby="closing-title">
-            <h2 id="closing-title">Build your community. Train your AI. Serve at scale.</h2>
+            <h2 id="closing-title">Build your community. Train your AI. Execute for every member.</h2>
             <p className="closing-copy">Give your members a better home—and an agent grounded in how you think.</p>
             <button className="cta" type="button" onClick={onJoin}>Create your community — $79/month</button>
             <p className="closing-meta">$79/month per community · Polynet-hosted AI included · No technical setup</p>

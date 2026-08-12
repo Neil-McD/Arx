@@ -1,21 +1,28 @@
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Sora:wght@500;600;700&display=swap");
 
 .pn-landing {
-  --bg: #0b0b0f;
-  --surface: #121217;
-  --line: rgba(255, 255, 255, 0.12);
-  --text: #f6f6f8;
-  --muted: #a4a4af;
-  --quiet: #898995;
-  --pink: #ff3d7f;
-  --pink-soft: #ff9dc0;
+  /* Dark-locked public palette aligned with the canonical product theme. */
+  --bg: #1a1a1a;
+  --surface-deep: #141414;
+  --surface-raised: #2a2a2a;
+  --line: rgba(255, 255, 255, 0.06);
+  --line-default: #3a3a3a;
+  --line-strong: #4a4a4a;
+  --text: #fcf8f0;
+  --muted: #b3ad9f;
+  --quiet: #9c968a;
+  --action: #f1ede5;
+  --action-text: #0a0a0a;
+  --brand: #d66a8a;
+  --agent: #a78bfa;
+  --attention: #7baad6;
   --content-narrow: 680px;
   --content-media: 900px;
   --content-wide: 1120px;
   min-width: 320px;
   min-height: 100svh;
   background:
-    radial-gradient(58% 44% at 50% 8%, rgba(255, 61, 127, 0.1), transparent 72%),
+    radial-gradient(58% 44% at 50% 8%, rgba(214, 106, 138, 0.055), transparent 72%),
     var(--bg);
   color: var(--text);
   font-family: "Inter", system-ui, sans-serif;
@@ -57,13 +64,23 @@
   border-radius: 8px;
 }
 
-.pn-landing .brand span span { color: var(--pink); }
+.pn-landing .brand span span { color: var(--brand); }
 
 .pn-landing main {
   width: 100%;
   margin: auto 0;
   padding: 34px 0 20px;
   text-align: center;
+}
+
+.pn-landing .intro-kicker {
+  margin: 0 auto 16px;
+  color: var(--brand);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  line-height: 1.5;
+  text-transform: uppercase;
 }
 
 .pn-landing h1 {
@@ -93,12 +110,10 @@
   width: min(var(--content-media), 100%);
   aspect-ratio: 16 / 9;
   margin: 36px auto 0;
-  border: 1px solid var(--line);
-  border-radius: 17px;
-  background: #101015;
-  box-shadow:
-    0 48px 140px -62px rgba(255, 61, 127, 0.78),
-    0 20px 70px -46px rgba(0, 0, 0, 0.94);
+  border: 1px solid var(--line-default);
+  border-radius: 16px;
+  background: var(--surface-deep);
+  box-shadow: 0 24px 70px -36px rgba(0, 0, 0, 0.78);
 }
 
 .pn-landing .vsl iframe {
@@ -112,7 +127,7 @@
 .pn-landing .cta:focus-visible,
 .pn-landing .footer a:focus-visible,
 .pn-landing .footer button:focus-visible {
-  outline: 2px solid var(--pink-soft);
+  outline: 2px solid var(--action);
   outline-offset: 4px;
 }
 
@@ -120,10 +135,10 @@
   min-height: 56px;
   margin-top: 24px;
   padding: 0 32px;
-  border: 1px solid #f5f5f8;
-  border-radius: 11px;
-  background: #f5f5f8;
-  color: #0b0b0f;
+  border: 1px solid var(--action);
+  border-radius: 14px;
+  background: var(--action);
+  color: var(--action-text);
   font-weight: 600;
   cursor: pointer;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.34);
@@ -133,7 +148,7 @@
 .pn-landing .cta:hover {
   transform: translateY(-2px);
   background: #fff;
-  box-shadow: 0 18px 50px rgba(255, 61, 127, 0.16);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
 }
 
 .pn-landing .cta:disabled {
@@ -183,7 +198,7 @@
 .pn-landing .problems-kicker,
 .pn-landing .problem-index {
   display: block;
-  color: var(--pink);
+  color: var(--brand);
   font-size: 11px;
   font-weight: 600;
   letter-spacing: 0.12em;
@@ -202,7 +217,7 @@
 .pn-landing .mechanism-description {
   max-width: 330px;
   margin: 0;
-  color: #b6b6c0;
+  color: var(--muted);
   font-size: 15px;
   line-height: 1.68;
 }
@@ -230,54 +245,54 @@
 }
 
 .pn-landing .diagram-line {
-  stroke: rgba(255, 255, 255, 0.16);
+  stroke: var(--line-default);
   stroke-width: 1.4;
 }
 
 .pn-landing .diagram-line-accent {
-  stroke: rgba(255, 61, 127, 0.68);
+  stroke: var(--attention);
   stroke-width: 1.5;
 }
 
 .pn-landing .diagram-node {
-  fill: #101015;
-  stroke: rgba(255, 255, 255, 0.32);
+  fill: var(--surface-raised);
+  stroke: var(--line-strong);
   stroke-width: 1.4;
   vector-effect: non-scaling-stroke;
 }
 
 .pn-landing .diagram-node-accent {
-  fill: var(--pink);
-  stroke: rgba(255, 157, 192, 0.9);
+  fill: var(--brand);
+  stroke: color-mix(in srgb, var(--brand) 68%, var(--text) 32%);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
 
 .pn-landing .diagram-boundary {
   fill: rgba(255, 255, 255, 0.015);
-  stroke: rgba(255, 255, 255, 0.16);
+  stroke: var(--line-default);
   stroke-width: 1.2;
   vector-effect: non-scaling-stroke;
 }
 
 .pn-landing .diagram-ai {
-  fill: rgba(255, 61, 127, 0.055);
-  stroke: rgba(255, 61, 127, 0.48);
+  fill: color-mix(in srgb, var(--agent) 10%, transparent);
+  stroke: color-mix(in srgb, var(--agent) 62%, transparent);
   stroke-width: 1.4;
   vector-effect: non-scaling-stroke;
 }
 
 .pn-landing .diagram-orbit {
   fill: none;
-  stroke: rgba(255, 255, 255, 0.1);
+  stroke: var(--line);
   stroke-width: 1;
   stroke-dasharray: 4 7;
   vector-effect: non-scaling-stroke;
 }
 
 .pn-landing .diagram-particle {
-  fill: var(--pink);
-  stroke: var(--pink-soft);
+  fill: var(--attention);
+  stroke: color-mix(in srgb, var(--attention) 70%, var(--text) 30%);
   stroke-width: 0.8;
 }
 
@@ -290,7 +305,7 @@
 }
 
 .pn-landing .brain-outline {
-  stroke: var(--pink);
+  stroke: var(--agent);
   stroke-width: 1.7;
 }
 
@@ -305,7 +320,7 @@
 
 .pn-landing .diagram-signal {
   fill: none;
-  stroke: var(--pink);
+  stroke: var(--attention);
   stroke-width: 1;
   opacity: 0;
   transform-box: fill-box;
@@ -319,7 +334,7 @@
 
 @keyframes pn-brain-learn {
   0%, 18%, 100% { stroke: rgba(255, 255, 255, 0.22); opacity: 0.42; }
-  32%, 72% { stroke: var(--pink); opacity: 1; }
+  32%, 72% { stroke: var(--agent); opacity: 1; }
 }
 
 @keyframes pn-signal-pulse {
@@ -387,7 +402,7 @@
 .pn-landing .problem p {
   max-width: 620px;
   margin: 17px 0 0;
-  color: #b6b6c0;
+  color: var(--muted);
   font-size: 17px;
   line-height: 1.72;
 }
@@ -502,10 +517,10 @@
   width: min(560px, calc(100% - 28px));
   padding: 12px 16px;
   transform: translateX(-50%);
-  border: 1px solid rgba(255, 255, 255, 0.13);
-  border-radius: 12px;
-  background: rgba(20, 20, 25, 0.94);
-  color: #f6f6f8;
+  border: 1px solid #3a3a3a;
+  border-radius: 14px;
+  background: rgba(20, 20, 20, 0.98);
+  color: #fcf8f0;
   box-shadow: 0 18px 60px rgba(0, 0, 0, 0.45);
   font: 500 14px/1.45 "Inter", system-ui, sans-serif;
   text-align: center;
@@ -513,8 +528,9 @@
 }
 
 .pn-builder-activation.error {
-  border-color: rgba(255, 61, 127, 0.5);
-  color: #ffbfd5;
+  border-color: color-mix(in srgb, #ef4444 42%, transparent);
+  background: color-mix(in srgb, #ef4444 10%, rgba(20, 20, 20, 0.98));
+  color: color-mix(in srgb, #ef4444 42%, white 58%);
 }
 
 @media (max-width: 900px) {
@@ -531,6 +547,7 @@
 @media (max-width: 640px) {
   .pn-landing .page { width: min(100% - 28px, 1240px); padding: 20px 0 28px; }
   .pn-landing main { padding-top: 34px; }
+  .pn-landing .intro-kicker { max-width: 330px; margin-bottom: 13px; font-size: 10px; }
   .pn-landing h1 { font-size: clamp(39px, 12vw, 54px); }
   .pn-landing .subhead { margin-top: 15px; font-size: 15px; }
   .pn-landing .vsl { margin-top: 24px; border-radius: 12px; }
@@ -572,7 +589,7 @@
 
   .pn-landing .brain-fold {
     animation: none;
-    stroke: var(--pink);
+    stroke: var(--agent);
     opacity: 0.8;
   }
 }

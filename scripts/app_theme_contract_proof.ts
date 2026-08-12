@@ -238,7 +238,10 @@ const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const persistenceLifecycle = read(
   "apps/web/src/controllers/useWebUiPersistenceLifecycle.ts",
 );
-const bridgeCss = read("apps/web/src/components/WebCommunityBridgeCard.css");
+const funnelCss = read("apps/web/src/components/CommunityFunnelSurface.css");
+const publicBuilderLandingCss = read(
+  "apps/web/src/components/polynetLanding/ConversionLanding.css",
+);
 const memberAgentCss = read("apps/web/src/components/WebMemberAgentDock.css");
 const memberAgentComponent = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const communityChat = read("apps/web/src/components/WebCommunityChatPanel.tsx");
@@ -271,6 +274,75 @@ assert.ok(darkRootBlock, "base.css should define canonical Dark tokens at root")
 ].forEach((token) => {
   assert.ok(darkRootBlock.includes(token), `Dark root should define ${token}`);
 });
+
+const publicBuilderLandingThemeBlock = publicBuilderLandingCss.match(
+  /\.pn-landing\s*\{([\s\S]*?)\n\}/,
+)?.[1];
+assert.ok(
+  publicBuilderLandingThemeBlock,
+  "the public Builder landing page should own one dark-locked theme adapter",
+);
+[
+  "--bg: #1a1a1a;",
+  "--surface-deep: #141414;",
+  "--surface-raised: #2a2a2a;",
+  "--line: rgba(255, 255, 255, 0.06);",
+  "--line-default: #3a3a3a;",
+  "--line-strong: #4a4a4a;",
+  "--text: #fcf8f0;",
+  "--muted: #b3ad9f;",
+  "--quiet: #9c968a;",
+  "--action: #f1ede5;",
+  "--action-text: #0a0a0a;",
+  "--brand: #d66a8a;",
+  "--agent: #a78bfa;",
+  "--attention: #7baad6;",
+].forEach((token) => {
+  assert.ok(
+    publicBuilderLandingThemeBlock.includes(token),
+    `the public Builder landing page should map canonical Dark role ${token}`,
+  );
+});
+assert.doesNotMatch(
+  publicBuilderLandingCss,
+  /--pink|#ff3d7f|#ff9dc0|rgba\(255,\s*61,\s*127/,
+  "the public Builder landing page should not restore the retired neon-pink palette",
+);
+assert.doesNotMatch(
+  publicBuilderLandingCss,
+  /:root\[data-theme="light"\][^{]*\.pn-landing/,
+  "the public Builder landing page should remain dark-locked regardless of a saved app theme",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-landing \.cta\s*\{[\s\S]*?background:\s*var\(--action\);[\s\S]*?color:\s*var\(--action-text\);/,
+  "the public Builder CTA should use the canonical cream action treatment",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-landing \.diagram-line-accent\s*\{[^}]*stroke:\s*var\(--attention\);[^}]*\}/,
+  "the public Builder diagrams should reserve attention blue for information movement",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-landing \.brain-outline\s*\{[^}]*stroke:\s*var\(--agent\);[^}]*\}/,
+  "the public Builder diagrams should reserve agent purple for autonomous intelligence",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-landing \.diagram-node-accent\s*\{[^}]*fill:\s*var\(--brand\);[^}]*\}/,
+  "the public Builder diagrams should reserve dusty rose for community identity",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-builder-activation\s*\{[\s\S]*?border:\s*1px solid #3a3a3a;[\s\S]*?background:\s*rgba\(20, 20, 20, 0\.98\);[\s\S]*?color:\s*#fcf8f0;/,
+  "the public Builder activation banner should retain the dark-locked modal treatment",
+);
+assert.match(
+  publicBuilderLandingCss,
+  /\.pn-builder-activation\.error\s*\{[\s\S]*?#ef4444/,
+  "the public Builder activation banner should use the canonical functional error role",
+);
 
 const lightThemeBlock = baseThemeCss.match(
   /:root\[data-theme="light"\]\s*\{([\s\S]*?)\n\}/,
@@ -478,7 +550,7 @@ assert.match(baseCss, /data-preview-theme="light"/);
 assert.match(baseCss, /data-preview-theme="dark"/);
 assert.doesNotMatch(baseCss, /data-preview-theme="polynet"|data-theme="polynet"/);
 assert.doesNotMatch(
-  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${bridgeCss}\n${memberAgentCss}`,
+  `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${funnelCss}\n${memberAgentCss}`,
   /data-theme-family/,
   "theme family must not survive as a second styling authority",
 );
@@ -572,28 +644,39 @@ assert.doesNotMatch(
   "the opaque launcher should not carry a visually inert backdrop filter",
 );
 
+[
+  "--cfg-selection-text: #17070c;",
+  "--cfg-alert-border: rgba(226, 75, 74, 0.4);",
+  "--cfg-alert-surface: rgba(226, 75, 74, 0.08);",
+  "--cfg-alert-text: #f0a2a2;",
+  "--cfg-primary-surface: #f1ede5;",
+  "--cfg-primary-surface-hover: #fff;",
+  "--cfg-primary-text: #0a0a0a;",
+  "--cfg-error-border: rgba(226, 75, 74, 0.4);",
+  "--cfg-error-surface: rgba(226, 75, 74, 0.07);",
+  "--cfg-gate-surface: #161619;",
+  "--cfg-gate-avatar-stroke: #161619;",
+].forEach((declaration) => {
+  assert.ok(
+    funnelCss.includes(declaration),
+    `Dark should retain funnel declaration ${declaration}`,
+  );
+});
+assert.match(
+  funnelCss,
+  /:root\[data-theme="light"\]\s*\.cfg-page\s*\{[\s\S]*?--cfg-primary-surface:\s*var\(--bg-button\);[\s\S]*?--cfg-gate-surface:\s*var\(--bg-modal\);[\s\S]*?--cfg-gate-avatar-stroke:\s*var\(--bg-modal\);[\s\S]*?\}/,
+  "Light should adapt funnel chrome through one theme-scoped role block",
+);
+assert.match(
+  funnelCss,
+  /\.cfg-gatecard[^}]*background:\s*var\(--cfg-gate-surface\)/,
+);
+assert.match(
+  funnelCss,
+  /\.cfg-join[^}]*background:\s*var\(--cfg-primary-surface\)/,
+);
 assert.doesNotMatch(
-  bridgeCss,
-  /\.cfg-(?:page|shell|guestbar|nav|center|topic|feed|rope|mobile-ident)\b/,
-  "retired guest-shell selectors must not survive in the account bridge",
-);
-assert.match(
-  bridgeCss,
-  /\.cfg-gate\.cvs-gate\s*\{[\s\S]*?--cfg-gate-surface:\s*var\(--bg-modal,[^;]+;[\s\S]*?--cfg-primary-surface:\s*var\(--bg-button,[^;]+;/,
-  "the live account bridge should own its theme adapter",
-);
-assert.match(
-  bridgeCss,
-  /\.cfg-join[^}]*background:\s*var\(--cfg-primary-surface,\s*var\(--bg-button,\s*#f1ede5\)\)/,
-  "bridge conversion actions should fail safely to canonical button tokens",
-);
-assert.match(
-  bridgeCss,
-  /\.cfg-gatecard[^}]*background:\s*var\(--cfg-gate-surface,\s*var\(--bg-modal,\s*#161619\)\)/,
-  "bridge cards should retain a deterministic dark fallback",
-);
-assert.doesNotMatch(
-  `${bridgeCss}\n${memberAgentCss}`,
+  `${funnelCss}\n${memberAgentCss}`,
   /:root\[data-theme="dark"\]/,
   "Dark component preservation should come from canonical root defaults, not new component overrides",
 );
@@ -701,6 +784,11 @@ assert.match(
 );
 
 const accessiblePairs = [
+  ["Builder primary text on canvas", "#FCF8F0", "#1A1A1A"],
+  ["Builder muted text on canvas", "#B3AD9F", "#1A1A1A"],
+  ["Builder faint text on canvas", "#9C968A", "#1A1A1A"],
+  ["Builder brand label on canvas", "#D66A8A", "#1A1A1A"],
+  ["Builder action text on cream", "#0A0A0A", "#F1EDE5"],
   ["Dark activity blue on canvas", "#7BAAD6", "#1E1E1E"],
   ["Light activity blue on canvas", "#326FAD", "#F8F8F4"],
   ["Light activity blue on navigation", "#326FAD", "#F0F0EE"],
