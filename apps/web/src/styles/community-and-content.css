@@ -4035,9 +4035,9 @@
   border-radius: 18px;
 }
 
-/* Desktop community composers use a near-workspace fill with a crisp panel
-   edge. The edge, rather than a shadow or a bright card surface, carries the
-   structure. Mobile keeps its larger one-row touch shape in its overrides. */
+/* Desktop community composers sit between the quiet memory preview and a
+   dedicated authoring surface: clearly contained, but never outlined like a
+   form field. Mobile keeps its larger one-row touch shape in its overrides. */
 .app-root:not(.mobile-shell)
   .community-member-chat
   .community-interaction-main-composer
@@ -4046,11 +4046,11 @@
   .community-member-chat
   .community-interaction-drawer-composer
   .chat-input-bar {
-  border-radius: 12px;
+  border-radius: 14px;
   background: color-mix(
     in srgb,
-    var(--bg-app) 58%,
-    var(--bg-card-solid, var(--bg-card)) 42%
+    var(--bg-workspace) 60%,
+    var(--bg-card-solid, var(--bg-card)) 40%
   );
   box-shadow: none;
 }
@@ -4065,7 +4065,7 @@
   .community-member-chat
   .community-interaction-drawer-composer
   .chat-input-bar:not(.drag-over) {
-  border-color: var(--border-strong);
+  border-color: color-mix(in srgb, var(--border-default) 68%, transparent);
 }
 
 .community-composer-authoring-row {

@@ -140,13 +140,13 @@ assert.match(
 );
 assert.match(
   baseCss,
-  /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar,[\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar \{[^}]*border-radius: 12px;[^}]*background: color-mix\([\s\S]*var\(--bg-app\) 58%,[\s\S]*var\(--bg-card-solid, var\(--bg-card\)\) 42%[\s\S]*box-shadow: none;/,
-  "desktop community composers should use a bounded, shadowless material near the app surface",
+  /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar,[\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar \{[^}]*border-radius: 14px;[^}]*background: color-mix\([\s\S]*var\(--bg-workspace\) 60%,[\s\S]*var\(--bg-card-solid, var\(--bg-card\)\) 40%[\s\S]*box-shadow: none;/,
+  "desktop community composers should use a bounded, shadowless material between the workspace and card surfaces",
 );
 assert.match(
   baseCss,
-  /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\),[\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\) \{[^}]*border-color: var\(--border-strong\);/,
-  "desktop community composers should keep a crisp resting edge without masking drag-over feedback",
+  /\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-main-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\),[\s\S]*\.app-root:not\(\.mobile-shell\)[\s\S]*\.community-interaction-drawer-composer[\s\S]*\.chat-input-bar:not\(\.drag-over\) \{[^}]*border-color: color-mix\(in srgb, var\(--border-default\) 68%, transparent\);/,
+  "desktop community composers should keep a quiet resting edge without masking drag-over feedback",
 );
 assert.doesNotMatch(
   baseCss,
