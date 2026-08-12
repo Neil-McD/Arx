@@ -295,6 +295,13 @@ export function validateCommunityWikiArchitectProposal(
   }
 
   const draftsUpdated = validateObjectArray(getArrayField(proposal, "drafts_updated"), "$.drafts_updated", errors);
+  if (draftsCreated.length + draftsUpdated.length > COMMUNITY_WIKI_ARCHITECT_MAX_DRAFTS) {
+    pushError(
+      errors,
+      "$.drafts_updated",
+      `Propose at most ${COMMUNITY_WIKI_ARCHITECT_MAX_DRAFTS} total created or updated drafts per run.`,
+    );
+  }
   for (const [index, row] of draftsUpdated.entries()) {
     for (const field of FORBIDDEN_DRAFT_FIELDS) {
       if (Object.prototype.hasOwnProperty.call(row, field)) {

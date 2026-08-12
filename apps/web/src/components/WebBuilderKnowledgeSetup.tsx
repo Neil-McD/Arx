@@ -14,7 +14,7 @@ type WebBuilderKnowledgeSetupProps = {
   isHydrating: boolean;
   resources: CommunityResource[];
   onAddSources: CommunityResourcesActions["handleAddCommunitySources"];
-  onComplete: () => Promise<boolean>;
+  onComplete: (mode: "skip" | "build") => Promise<boolean>;
 };
 
 export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
@@ -45,13 +45,13 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
   const controlsDisabled = props.isHydrating || isIntakeBusy || isCompleting;
   const canContinue = readySources.length > 0 && !hasPendingSources && !props.isHydrating;
 
-  const complete = async () => {
+  const complete = async (mode: "skip" | "build") => {
     if (controlsDisabled || completionInFlightRef.current) return;
     completionInFlightRef.current = true;
     setCompletionError(null);
     setIsCompleting(true);
     try {
-      const completed = await props.onComplete();
+      const completed = await props.onComplete(mode);
       if (!completed) {
         setCompletionError("Polynet could not finish setup. Try again.");
       }
@@ -84,7 +84,6 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
           communityId={props.community.id}
           communityName={props.community.name}
           failedSourceCount={failedSourceCount}
-          readySources={readySources}
           onAddSources={props.onAddSources}
           externalDisabled={props.isHydrating || isCompleting}
           onBusyChange={setIsIntakeBusy}
@@ -108,7 +107,7 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
             type="button"
             className="builder-knowledge-setup-skip"
             disabled={controlsDisabled}
-            onClick={() => void complete()}
+            onClick={() => void complete("skip")}
           >
             Skip for now
           </button>
@@ -116,9 +115,9 @@ export function WebBuilderKnowledgeSetup(props: WebBuilderKnowledgeSetupProps) {
             type="button"
             className="builder-knowledge-setup-next"
             disabled={controlsDisabled || !canContinue}
-            onClick={() => void complete()}
+            onClick={() => void complete("build")}
           >
-            {isCompleting ? "Finishing…" : "Next"}
+            {isCompleting ? "Building your resources…" : "Next"}
           </button>
         </div>
       </section>

@@ -16,7 +16,6 @@ const app = read("apps/web/src/App.tsx");
 const turnRunner = read("shared/useWebTurnRunnerController.ts");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const communityContentController = read("apps/web/src/controllers/useWebCommunityContentController.ts");
-const resourceBuildHandler = read("apps/web/src/controllers/buildWebCommunityResourceBuildHandler.ts");
 const runtimeTimeline = read("apps/web/src/components/RuntimeLiveTimeline.tsx");
 const changesetApprovalCards = read("apps/web/src/components/RuntimeResourceChangesetApprovalCards.tsx");
 const mutationEvents = read("shared/communityResourceMutationEvents.ts");
@@ -484,34 +483,19 @@ assert.match(
   "mounted member-agent dock must recover staged proposals after a reload",
 );
 assert.match(
-  resourceBuildHandler,
-  /initial-community-resources:[\s\S]*Build the first useful draft of this community's Resources[\s\S]*startResourceBuild/,
-  "Resources CTA must launch one bounded idempotent turn through the existing member-agent dock",
-);
-assert.match(
-  resources,
-  /communityResourceBuilderChangesetIntent[\s\S]*polynet:personal_agent:initial-community-resources:[\s\S]*initial_community_resources[\s\S]*listPendingCommunityResourceBuilderChangesets/,
-  "the canonical initial-resource idempotency key must survive durable proposal recovery as presentation intent",
-);
-assert.match(
-  changesetApprovalCards,
-  /isInitialResources[\s\S]*Your community knowledge is ready[\s\S]*resource-changeset-next-action[\s\S]*Next/,
-  "initial community resources must present one Next action instead of a second approval decision",
-);
-assert.match(
   changesetApprovalCards,
   /actionInFlightRef[\s\S]*readAuthoritativeStatus[\s\S]*status === "applied"[\s\S]*finishVerifiedApply/,
-  "the final Next action must suppress duplicate requests and recover authoritative applied state",
+  "resource changeset application must suppress duplicate requests and recover authoritative applied state",
 );
-assert.match(
-  app,
-  /onInitialResourcesApplied[\s\S]*setMobileRootPage\("community"\)[\s\S]*communityTab: "chat"/,
-  "verified initial resource application must enter the completed community",
+assert.doesNotMatch(
+  `${resources}\n${changesetApprovalCards}\n${app}`,
+  /initial_community_resources|initial-community-resources|onInitialResourcesApplied|resource-changeset-next-action/,
+  "generic resource changesets must not retain initial-launch presentation branching",
 );
-assert.match(
+assert.doesNotMatch(
   app,
-  /buildWebCommunityResourceBuildHandler[\s\S]*handleBuildCommunityResources/,
-  "App should wire resource building through the extracted orchestration boundary",
+  /buildWebCommunityResourceBuildHandler|handleBuildCommunityResources/,
+  "App must not retain the retired agent-prompt onboarding resource launcher",
 );
 assert.match(
   communityContentController,

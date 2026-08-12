@@ -28,13 +28,14 @@ assert.equal(
 assert.equal(contract.staging_deployment, "quick-porcupine-949");
 assert.equal(contract.required_public_operations.length, 246);
 assert.equal(contract.candidate_already_supported_operations.length, 113);
-assert.equal(Object.keys(contract.compatibility_aliases).length, 117);
-assert.equal(contract.retired_tombstone_operations.length, 16);
+assert.equal(Object.keys(contract.compatibility_aliases).length, 116);
+assert.equal(contract.retired_tombstone_operations.length, 17);
 
 const exactRetiredOperations = [
   "appOAuth:beginUserPlatformAppOAuth",
   "appOAuth:finalizeUserPlatformAppOAuth",
   "community:connectCommunityApp",
+  "community:createCommunityResourcePageDraftFromSource",
   "community:listCommunityAppMounts",
   "community:refreshCommunityApp",
   "community:setupImportedCommunityMcpApp",
@@ -59,8 +60,8 @@ const aliases = new Set(Object.keys(contract.compatibility_aliases));
 const retired = new Set(contract.retired_tombstone_operations);
 assert.equal(required.size, contract.required_public_operations.length);
 assert.equal(alreadySupported.size, 113);
-assert.equal(aliases.size, 117);
-assert.equal(retired.size, 16);
+assert.equal(aliases.size, 116);
+assert.equal(retired.size, 17);
 
 for (const operation of alreadySupported) {
   assert.ok(required.has(operation));
@@ -142,5 +143,5 @@ assert.match(
 );
 
 console.log(
-  "PASS: cached production client contract is complete: 113 canonical calls + 117 compatibility aliases + 16 inert retirement tombstones",
+  "PASS: cached production client contract is complete: 113 canonical calls + 116 compatibility aliases + 17 inert retirement tombstones",
 );

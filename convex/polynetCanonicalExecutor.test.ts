@@ -1335,52 +1335,6 @@ test("resource changeset staging permits only one live proposal per community", 
   });
 });
 
-test("initial community resource intent survives staging and durable recovery", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
-  const staged = await t.mutation(
-    internal.communityResources.stageCommunityResourceBuilderChangesetInternal,
-    {
-      userId: fixture.ownerId,
-      communityId: fixture.communityId,
-      summary: "Build the first community resources.",
-      operations: [
-        {
-          op: "create_module",
-          module_key: "start-here",
-          name: "Start here",
-          module_status: "draft",
-        },
-      ],
-      idempotencyKey:
-        `polynet:personal_agent:initial-community-resources:${String(fixture.communityId)}:fixture`,
-    },
-  );
-
-  expect(staged).toMatchObject({
-    intent: "initial_community_resources",
-    status: "staged",
-  });
-  await expect(
-    asOwner.query(
-      api.communityResources.listPendingCommunityResourceBuilderChangesets,
-      { communityId: fixture.communityId, limit: 1 },
-    ),
-  ).resolves.toEqual([
-    expect.objectContaining({ intent: "initial_community_resources" }),
-  ]);
-  await expect(
-    asOwner.query(
-      api.communityResources.getCommunityResourceBuilderChangesetStatus,
-      {
-        communityId: fixture.communityId,
-        changesetId: staged.changeset_id as any,
-      },
-    ),
-  ).resolves.toMatchObject({ intent: "initial_community_resources" });
-});
-
 test("expired resource changesets commit one terminal state across every decision path", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);

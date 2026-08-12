@@ -26,7 +26,6 @@ export type ResourceChangesetCardModel = {
   operationCount: number;
   warningCount: number;
   previewItems: ResourceChangesetPreviewItem[];
-  intent: "initial_community_resources" | null;
   seq: number;
 };
 
@@ -169,9 +168,6 @@ export function buildResourceChangesetCardFromPayload(
     operationCount: asNumber(output?.operation_count ?? output?.preview_total_count),
     warningCount: asNumber(output?.warning_count),
     previewItems: normalizePreviewItems(output?.preview_items),
-    intent: asString(output?.intent) === "initial_community_resources"
-      ? "initial_community_resources"
-      : null,
     seq,
   };
 }
@@ -209,8 +205,6 @@ export function extractRuntimeResourceChangesetCards(
 function ResourceChangesetApprovalCard(props: {
   card: ResourceChangesetCardModel;
   session: AuthSessionLike;
-  onInitialResourcesApplied?: (communityId: string) => void;
-  disableInitialResourcesAction?: boolean;
 }): JSX.Element {
   const [actionState, setActionState] = useState<ResourceChangesetActionState>("idle");
   const [serverStatus, setServerStatus] = useState<ResourceChangesetServerStatus | null>(null);
@@ -218,7 +212,6 @@ function ResourceChangesetApprovalCard(props: {
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const actionInFlightRef = useRef(false);
   const verifiedApplyRef = useRef(false);
-  const isInitialResources = props.card.intent === "initial_community_resources";
   const isBusy = actionState === "applying" || actionState === "rejecting";
   const isDone =
     actionState === "applied" ||
@@ -292,9 +285,6 @@ function ResourceChangesetApprovalCard(props: {
       changesetId: props.card.changesetId,
       source: "resource_changeset_approval_card",
     });
-    if (isInitialResources) {
-      props.onInitialResourcesApplied?.(props.card.communityId);
-    }
   }
 
   async function applyChangeset(): Promise<void> {
@@ -377,55 +367,40 @@ function ResourceChangesetApprovalCard(props: {
   return (
     <section
       className="resource-changeset-card"
-      aria-label={isInitialResources ? "Community knowledge ready" : "Resource changes proposed"}
+      aria-label="Resource changes proposed"
     >
       <div className="resource-changeset-card-header">
         <div className="resource-changeset-card-title-block">
           <div className="resource-changeset-card-title">
-            {isInitialResources ? "Your community knowledge is ready" : "Resource changes proposed"}
+            Resource changes proposed
           </div>
           <div className="resource-changeset-card-summary">{props.card.summary}</div>
         </div>
         <div className="resource-changeset-card-actions">
-          {isInitialResources ? (
-            <button
-              type="button"
-              className="resource-changeset-next-action"
-              disabled={isBusy || isDone || props.disableInitialResourcesAction}
-              onClick={() => {
-                void applyChangeset();
-              }}
-            >
-              {actionState === "applying" ? "Finishing…" : "Next"}
-            </button>
-          ) : (
-            <>
-              <button
-                type="button"
-                className="resource-changeset-icon-action approve"
-                aria-label="Apply resource changes"
-                title="Apply"
-                disabled={isBusy || isDone}
-                onClick={() => {
-                  void applyChangeset();
-                }}
-              >
-                <Check size={15} strokeWidth={2.4} aria-hidden="true" />
-              </button>
-              <button
-                type="button"
-                className="resource-changeset-icon-action reject"
-                aria-label="Reject resource changes"
-                title="Reject"
-                disabled={isBusy || isDone}
-                onClick={() => {
-                  void rejectChangeset();
-                }}
-              >
-                <X size={15} strokeWidth={2.4} aria-hidden="true" />
-              </button>
-            </>
-          )}
+          <button
+            type="button"
+            className="resource-changeset-icon-action approve"
+            aria-label="Apply resource changes"
+            title="Apply"
+            disabled={isBusy || isDone}
+            onClick={() => {
+              void applyChangeset();
+            }}
+          >
+            <Check size={15} strokeWidth={2.4} aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            className="resource-changeset-icon-action reject"
+            aria-label="Reject resource changes"
+            title="Reject"
+            disabled={isBusy || isDone}
+            onClick={() => {
+              void rejectChangeset();
+            }}
+          >
+            <X size={15} strokeWidth={2.4} aria-hidden="true" />
+          </button>
         </div>
       </div>
       {props.card.previewItems.length > 0 ? (
@@ -462,8 +437,6 @@ function ResourceChangesetApprovalCard(props: {
 export function RuntimeResourceChangesetApprovalCards(props: {
   cards: ResourceChangesetCardModel[];
   session: AuthSessionLike | null;
-  onInitialResourcesApplied?: (communityId: string) => void;
-  disableInitialResourcesAction?: boolean;
 }): JSX.Element | null {
   if (!props.session || props.cards.length === 0) return null;
   return (
@@ -473,8 +446,6 @@ export function RuntimeResourceChangesetApprovalCards(props: {
           key={card.id}
           card={card}
           session={props.session}
-          onInitialResourcesApplied={props.onInitialResourcesApplied}
-          disableInitialResourcesAction={props.disableInitialResourcesAction}
         />
       ))}
     </div>

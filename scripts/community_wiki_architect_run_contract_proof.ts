@@ -11,12 +11,14 @@ function read(path: string): string {
 const packageJson = read("package.json");
 const architect = read("convex/communityWikiArchitect.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
+const applyCoreStart = architect.indexOf("export async function applyCommunityWikiArchitectProposalCore");
+assert.notEqual(applyCoreStart, -1, "architect apply core should exist");
 const applyStart = architect.indexOf("export const applyCommunityWikiArchitectProposal");
 assert.notEqual(applyStart, -1, "architect apply mutation should exist");
 const runStart = architect.indexOf("export const runCommunityWikiArchitectProposal");
 assert.notEqual(runStart, -1, "architect proposal action should exist");
-const runBody = architect.slice(runStart, applyStart);
-const applyBody = architect.slice(applyStart);
+const runBody = architect.slice(runStart, applyCoreStart);
+const applyBody = architect.slice(applyCoreStart);
 
 assert.match(
   packageJson,
@@ -242,18 +244,28 @@ assert.match(
 );
 assert.match(
   architect,
-  /export const buildCommunityResourceContentWriterRunContextInternal = internalQuery\([\s\S]*COMMUNITY_RESOURCE_CONTENT_WRITER_PAGE_SCAN_LIMIT[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*neededSourceIds[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*hydrateCommunityResourceBody[\s\S]*pages\.slice\(0, limit\)\.map[\s\S]*buildContentWriterSourceFromUnits\(ctx, \{[\s\S]*pageTitle:[\s\S]*pageModule,[\s\S]*pageBody:[\s\S]*source_units: unitContext\.sourceUnits[\s\S]*source_body_md: unitContext\.sourceBodyMd \?\? truncateContentWriterSource\(source\.bodyMd\)/,
-  "content writer context should target only bounded scaffold draft pages with hydrated ready source text and prefer source-unit bodies when present",
+  /export const buildCommunityResourceContentWriterRunContextInternal = internalQuery\([\s\S]*COMMUNITY_RESOURCE_CONTENT_WRITER_PAGE_SCAN_LIMIT[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*neededSourceIds[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*hydrateCommunityResourceBody[\s\S]*pages\.slice\(0, limit\)\.map[\s\S]*buildContentWriterSourceFromUnits\(ctx, \{[\s\S]*pageTitle:[\s\S]*pageModule,[\s\S]*pageBody:[\s\S]*buildCommunityResourceContentWriterSourceInput[\s\S]*source_units: unitContext\.sourceUnits[\s\S]*source_body_md: sourceInput\.body_md[\s\S]*expected_source_revision_hash:[\s\S]*hashCommunityResourceContentWriterSourceRevision/,
+  "content writer context should target only bounded scaffold draft pages and bind the exact hydrated source input to a revision hash",
 );
 assert.match(
   architect,
-  /export const patchCommunityResourceContentDraftInternal = internalMutation\([\s\S]*hydrateCommunityResourceBody[\s\S]*normalizeResourceStatus\(page\.status\) !== "draft"[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*status: "review"[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
-  "content writer patch should refuse unsafe targets, persist body content, and leave generated pages in review",
+  /export const patchCommunityResourceContentDraftInternal = internalMutation\([\s\S]*expectedSourceRevisionHash: v\.string\(\)[\s\S]*hydrateCommunityResourceBody[\s\S]*normalizeResourceStatus\(page\.status\) !== "draft"[\s\S]*isResourceDraftScaffoldBody\(page\.bodyMd\)[\s\S]*communityResourceSourceHasReadyText\(source\)[\s\S]*hashCommunityResourceContentWriterSourceRevision[\s\S]*community_resource_content_writer_source_changed[\s\S]*status: "review"[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
+  "content writer patch should atomically refuse stale source input or unsafe targets before leaving generated pages in review",
 );
 assert.match(
   architect,
-  /export const draftCommunityResourceContentFromSources(?:: any)? = action\([\s\S]*runResourceContentWriterModel[\s\S]*parseResourceContentWriterBody[\s\S]*patchCommunityResourceContentDraftInternal[\s\S]*const ok = failed === 0/,
-  "content writer action should call the model, patch through the guarded mutation, and surface partial failures",
+  /export const draftCommunityResourceContentFromSources(?:: any)? = action\([\s\S]*sourceInput:[\s\S]*runResourceContentWriterModel[\s\S]*source: sourceInput[\s\S]*parseResourceContentWriterBody[\s\S]*patchCommunityResourceContentDraftInternal[\s\S]*expectedSourceRevisionHash:[\s\S]*const ok = failed === 0/,
+  "content writer action should send and guard the same source input, then surface partial failures",
+);
+assert.match(
+  architect,
+  /buildCommunityWikiArchitectSourceRevision[\s\S]*visible_source_revisions[\s\S]*source_revisions:/,
+  "Architect proposals must carry the exact visible source revisions",
+);
+assert.match(
+  architect,
+  /expectedSourceRevisions\?[\s\S]*buildCommunityWikiArchitectSourceRevision[\s\S]*community_wiki_architect_source_changed/,
+  "automatic Architect application must fail closed when a source revision changes",
 );
 
 assert.doesNotMatch(

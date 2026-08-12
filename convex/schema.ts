@@ -1189,6 +1189,11 @@ export default defineSchema({
       v.union(v.literal("grandfathered"), v.literal("subscription_required")),
     ),
     builderKnowledgeSetupPending: v.optional(v.boolean()),
+    builderKnowledgeBuildStage: v.optional(
+      v.union(v.literal("architecture"), v.literal("content")),
+    ),
+    builderKnowledgeBuildLeaseToken: v.optional(v.string()),
+    builderKnowledgeBuildLeaseExpiresAt: v.optional(v.number()),
     oneLiner: v.optional(v.string()),
     about: v.optional(v.string()),
     avatarUrl: v.optional(v.string()),

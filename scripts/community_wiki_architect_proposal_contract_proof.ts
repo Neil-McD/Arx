@@ -233,6 +233,27 @@ expectInvalid(
 expectInvalid(
   {
     ...validProposal,
+    drafts_created: Array.from({ length: 10 }, (_, index) => ({
+      title: `Mixed draft ${index}`,
+      module: "Playbooks",
+      purpose: "A valid purpose.",
+      source_resource_id: "src_1",
+    })),
+    drafts_updated: Array.from({ length: 3 }, () => ({
+      resource_id: "page_welcome",
+      expected_updated_at: 1000,
+      title: "Welcome",
+      change: "attached primary source",
+      source_resource_id: "src_2",
+    })),
+  },
+  "$.drafts_updated",
+  /at most 12 total/,
+);
+
+expectInvalid(
+  {
+    ...validProposal,
     modules_created: [{ name: "Methodology", purpose: "One" }, { name: " methodology ", purpose: "Two" }],
   },
   "$.modules_created[1].name",

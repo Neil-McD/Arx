@@ -20,9 +20,7 @@ export function WebCommunityKnowledgeSourceIntake(props: {
   communityId: string | null;
   communityName: string | null;
   failedSourceCount: number;
-  readySources: Array<{ id: string; ingestedAt: string | null }>;
   onAddSources: CommunityResourcesActions["handleAddCommunitySources"];
-  onBuildResources?: CommunityResourcesActions["handleBuildCommunityResources"];
   externalDisabled?: boolean;
   onBusyChange?: (isBusy: boolean) => void;
 }) {
@@ -30,9 +28,7 @@ export function WebCommunityKnowledgeSourceIntake(props: {
     communityId,
     communityName,
     failedSourceCount,
-    readySources,
     onAddSources,
-    onBuildResources,
     externalDisabled = false,
     onBusyChange,
   } = props;
@@ -40,7 +36,6 @@ export function WebCommunityKnowledgeSourceIntake(props: {
   const [files, setFiles] = useState<File[]>([]);
   const [isDragOver, setIsDragOver] = useState(false);
   const [phase, setPhase] = useState<"idle" | "saving" | "ingesting">("idle");
-  const [isBuildingResources, setIsBuildingResources] = useState(false);
   const [feedback, setFeedback] = useState<{ tone: "success" | "error"; message: string } | null>(null);
   const submitInFlightRef = useRef(false);
 
@@ -49,7 +44,6 @@ export function WebCommunityKnowledgeSourceIntake(props: {
     setFiles([]);
     setIsDragOver(false);
     setPhase("idle");
-    setIsBuildingResources(false);
     setFeedback(null);
     submitInFlightRef.current = false;
   }, [communityId]);
@@ -115,30 +109,13 @@ export function WebCommunityKnowledgeSourceIntake(props: {
     }
   };
 
-  const isBusy = externalDisabled || phase !== "idle" || isBuildingResources;
+  const isBusy = externalDisabled || phase !== "idle";
   const linkCount = linkDraft.split(/\r?\n/).map((value) => value.trim()).filter(Boolean).length;
   const sourceCount = linkCount + files.length;
 
   useEffect(() => {
     onBusyChange?.(isBusy);
   }, [isBusy, onBusyChange]);
-
-  const buildResources = async () => {
-    if (!communityId || readySources.length === 0 || isBuildingResources || !onBuildResources) return;
-    setFeedback(null);
-    setIsBuildingResources(true);
-    try {
-      const opened = await onBuildResources({ communityId, readySources });
-      if (!opened) {
-        setFeedback({
-          tone: "error",
-          message: "Your agent could not start this resource build. Try again.",
-        });
-      }
-    } finally {
-      setIsBuildingResources(false);
-    }
-  };
 
   return (
     <section className="knowledge-source-intake" aria-labelledby="knowledge-source-intake-title">
@@ -245,21 +222,6 @@ export function WebCommunityKnowledgeSourceIntake(props: {
         ) : null}
         <span>{sourceCount > 0 ? `${sourceCount} of ${SOURCE_INTAKE_MAX_ITEMS} selected` : "You can add more sources later."}</span>
       </div>
-      {readySources.length > 0 && onBuildResources ? (
-        <div className="knowledge-source-build-action">
-          <div>
-            <strong>{readySources.length} ready source{readySources.length === 1 ? "" : "s"}</strong>
-            <span>Your agent will turn them into a draft structure for you to review.</span>
-          </div>
-          <button
-            type="button"
-            disabled={isBusy || isBuildingResources}
-            onClick={() => void buildResources()}
-          >
-            {isBuildingResources ? "Opening your agent…" : "Build my resources"}
-          </button>
-        </div>
-      ) : null}
     </section>
   );
 }

@@ -39,6 +39,7 @@ import {
   hydrateCommunityResourceBody,
   writeCommunityResourceBodyContent,
 } from "./communityResourceContent";
+import { sha256HexText } from "./providerConnections";
 import {
   beginCommunityInferenceFundingSession,
   failCommunityInferenceFundingSession,
@@ -312,6 +313,11 @@ type ArchitectSourceUnitsForSource = {
   cards: ArchitectSourceUnitCard[];
 };
 
+type CommunityWikiArchitectSourceRevision = {
+  source_resource_id: string;
+  revision_hash: string;
+};
+
 function compareSourceUnits(left: CommunitySourceUnitLike, right: CommunitySourceUnitLike): number {
   const leftOrder = Number(left.order) || 0;
   const rightOrder = Number(right.order) || 0;
@@ -479,6 +485,55 @@ async function loadSourceUnitCardsBySourceId(ctx: any, args: {
     }
   }
   return sourceUnitsBySourceId;
+}
+
+async function buildCommunityWikiArchitectSourceRevision(
+  ctx: any,
+  source: CommunityResourceLike,
+  assignedPages: string[] = [],
+): Promise<CommunityWikiArchitectSourceRevision> {
+  const sourceId = normalizeIdValue(source._id);
+  const units = (await loadReadySourceUnitsForSource(ctx, sourceId))
+    .slice(0, COMMUNITY_WIKI_ARCHITECT_MAX_SOURCE_UNITS_PER_SOURCE_CARD);
+  const unitRevisions = await Promise.all(units.map(async (unit) => {
+    const content = await readSourceUnitContent(ctx, unit._id);
+    return {
+      id: normalizeIdValue(unit._id),
+      title: String(unit.title ?? "").trim() || null,
+      path: String(unit.path ?? "").trim() || null,
+      kind: String(unit.unitKind ?? ""),
+      order: Number(unit.order) || 0,
+      status: String(unit.status ?? ""),
+      source_url: String(unit.sourceUrl ?? "").trim() || null,
+      body_hash: String(content?.bodyHash ?? unit.bodyHash ?? ""),
+      body_chars: Math.max(0, Math.floor(Number(unit.bodyChars) || 0)),
+      body_original_chars: Math.max(
+        0,
+        Math.floor(Number(unit.bodyOriginalChars ?? unit.bodyChars) || 0),
+      ),
+      body_truncated: unit.bodyTruncated === true,
+      capture_method: String(unit.captureMethod ?? "").trim() || null,
+      updated_at: Number(unit.updatedAt) || 0,
+    };
+  }));
+  const sourceBodyHash = await sha256HexText(String(source.bodyMd ?? ""));
+  return {
+    source_resource_id: sourceId,
+    revision_hash: await sha256HexText(JSON.stringify({
+      id: sourceId,
+      title: String(source.title ?? ""),
+      type: String(source.type ?? ""),
+      status: normalizeResourceStatus(source.status),
+      source_ingestion_status: normalizeResourceSourceIngestionStatus(source),
+      provider: String(source.sourceExternalProvider ?? source.sourceIngestionKind ?? "").trim() || null,
+      url: String(source.url ?? (source as any).sourceExternalUrl ?? "").trim() || null,
+      source_external_name: String(source.sourceExternalName ?? "").trim() || null,
+      body_hash: sourceBodyHash,
+      units: unitRevisions,
+      assigned_pages: assignedPages.slice().sort(),
+      updated_at: Number(source.updatedAt) || 0,
+    })),
+  };
 }
 
 async function buildContentWriterSourceFromUnits(ctx: any, args: {
@@ -674,6 +729,33 @@ function truncateContentWriterSource(raw: unknown): string {
   return value.length <= COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_CHARS
     ? value
     : `${value.slice(0, COMMUNITY_RESOURCE_CONTENT_WRITER_SOURCE_CHARS - 1).trimEnd()}…`;
+}
+
+type CommunityResourceContentWriterSourceInput = {
+  id: string;
+  title: string;
+  url: string | null;
+  body_md: string;
+};
+
+function buildCommunityResourceContentWriterSourceInput(args: {
+  source: CommunityResourceLike;
+  bodyMd: unknown;
+}): CommunityResourceContentWriterSourceInput {
+  return {
+    id: normalizeIdValue(args.source._id),
+    title: String(args.source.title ?? ""),
+    url: String(args.source.url ?? (args.source as any).sourceExternalUrl ?? "").trim() || null,
+    body_md: String(args.bodyMd ?? ""),
+  };
+}
+
+async function hashCommunityResourceContentWriterSourceRevision(
+  source: CommunityResourceLike,
+  sourceInput: CommunityResourceContentWriterSourceInput,
+): Promise<string> {
+  const sourceBodyHash = await sha256HexText(String(source.bodyMd ?? ""));
+  return await sha256HexText(JSON.stringify({ source_body_hash: sourceBodyHash, input: sourceInput }));
 }
 
 function isResourceDraftScaffoldBody(raw: unknown): boolean {
@@ -1238,6 +1320,21 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
       sourceUnitsBySourceId,
       builderIntent,
     });
+    const readySourceById = new Map(
+      readySources.map((source) => [normalizeIdValue(source._id), source]),
+    );
+    const visibleSourceRevisions = await Promise.all(
+      sourceWindow.visibleSourceIds.map(async (sourceId) => {
+        const source = readySourceById.get(sourceId);
+        return source
+          ? await buildCommunityWikiArchitectSourceRevision(
+              ctx,
+              source,
+              assignedPagesBySourceId.get(sourceId) ?? [],
+            )
+          : null;
+      }),
+    );
 
     const communityRow = community as CommunityLike;
     return {
@@ -1272,6 +1369,7 @@ export const buildCommunityWikiArchitectRunContextInternal = internalQuery({
         source_context_budget_chars: sourceWindow.budgetChars,
         source_context_used_chars: sourceWindow.usedChars,
         visible_source_ids: sourceWindow.visibleSourceIds,
+        visible_source_revisions: visibleSourceRevisions.filter(Boolean),
         modules: modules
           .slice()
           .sort((left, right) => left.sortOrder - right.sortOrder || left.createdAt - right.createdAt)
@@ -1494,6 +1592,9 @@ export const runCommunityWikiArchitectProposal: any = action({
       ok: true,
       kind: "community_wiki_architect_proposal",
       proposal: validation.value,
+      source_revisions: Array.isArray(state.visible_source_revisions)
+        ? state.visible_source_revisions
+        : [],
       model_id: completion.resolvedModelId ?? completion.modelId,
       usage: {
         prompt_tokens: completion.promptTokens,
@@ -1516,24 +1617,14 @@ export const runCommunityWikiArchitectProposal: any = action({
   },
 });
 
-export const applyCommunityWikiArchitectProposal: any = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    proposal: v.any(),
-  },
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityManager({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
+export async function applyCommunityWikiArchitectProposalCore(ctx: any, args: {
+  userId: any;
+  communityId: any;
+  proposal: unknown;
+  expectedSourceRevisions?: CommunityWikiArchitectSourceRevision[];
+}): Promise<Record<string, unknown>> {
+    const userId = args.userId;
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
 
     const nowMs = Date.now();
     const [modules, resources] = await Promise.all([
@@ -1574,6 +1665,14 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
     );
     const sourceById = new Map(sources.map((source) => [normalizeIdValue(source._id), source]));
     const pageById = new Map(pages.map((page) => [normalizeIdValue(page._id), page]));
+    const assignedPagesBySourceId = new Map<string, string[]>();
+    for (const page of pages) {
+      const sourceId = normalizeIdValue(page.sourceResourceId ?? "");
+      if (!sourceId) continue;
+      const assignedPages = assignedPagesBySourceId.get(sourceId) ?? [];
+      assignedPages.push(normalizeIdValue(page._id));
+      assignedPagesBySourceId.set(sourceId, assignedPages);
+    }
     const pageKeys = new Set(
       pages.map((page) =>
         getCommunityResourceBuilderModulePageKey({
@@ -1588,6 +1687,35 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
     const pagesUpdated: string[] = [];
     const sourceModulesUpdated: string[] = [];
     const sourceBackedPages: AppliedSourceBackedPage[] = [];
+    if (args.expectedSourceRevisions) {
+      const expectedRevisionBySourceId = new Map(
+        args.expectedSourceRevisions.map((revision) => [
+          String(revision.source_resource_id),
+          String(revision.revision_hash),
+        ]),
+      );
+      const usedSourceIds = new Set([
+        ...proposal.drafts_created.map((draft) => draft.source_resource_id),
+        ...proposal.drafts_updated.map((draft) => draft.source_resource_id),
+      ].filter((sourceId): sourceId is string => Boolean(sourceId)));
+      for (const sourceId of usedSourceIds) {
+        const sourceRow = sourceById.get(sourceId);
+        const source = await hydrateCommunityResourceBody(ctx, sourceRow) ?? sourceRow;
+        const expectedRevision = expectedRevisionBySourceId.get(sourceId);
+        if (!source || !expectedRevision) {
+          throw new Error("community_wiki_architect_source_changed");
+        }
+        const currentRevision = await buildCommunityWikiArchitectSourceRevision(
+          ctx,
+          source,
+          assignedPagesBySourceId.get(sourceId) ?? [],
+        );
+        if (currentRevision.revision_hash !== expectedRevision) {
+          throw new Error("community_wiki_architect_source_changed");
+        }
+        sourceById.set(sourceId, source);
+      }
+    }
     let nextModuleSortOrder =
       modules.reduce((max, row) => Math.max(max, Number(row.sortOrder) || 0), 0) + 1000;
     const nextPageSortOrderByModule = new Map<string, number>();
@@ -1747,6 +1875,31 @@ export const applyCommunityWikiArchitectProposal: any = mutation({
         nowMs: Date.now(),
       }),
     };
+}
+
+export const applyCommunityWikiArchitectProposal: any = mutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    proposal: v.any(),
+    expectedSourceRevisions: v.optional(v.array(v.object({
+      source_resource_id: v.string(),
+      revision_hash: v.string(),
+    }))),
+  },
+  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    return await applyCommunityWikiArchitectProposalCore(ctx, {
+      userId,
+      communityId: args.communityId,
+      proposal: args.proposal,
+      expectedSourceRevisions: args.expectedSourceRevisions,
+    });
   },
 });
 
@@ -1833,6 +1986,10 @@ export const buildCommunityResourceContentWriterRunContextInternal = internalQue
           pageModule,
           pageBody: String(page.bodyMd ?? ""),
         });
+        const sourceInput = buildCommunityResourceContentWriterSourceInput({
+          source,
+          bodyMd: unitContext.sourceBodyMd ?? truncateContentWriterSource(source.bodyMd),
+        });
         return {
           page_id: normalizeIdValue(page._id),
           page_title: String(page.title ?? ""),
@@ -1843,7 +2000,9 @@ export const buildCommunityResourceContentWriterRunContextInternal = internalQue
           source_url: String(source.url ?? (source as any).sourceExternalUrl ?? "").trim() || null,
           source_ingestion_status: normalizeResourceSourceIngestionStatus(source),
           source_units: unitContext.sourceUnits,
-          source_body_md: unitContext.sourceBodyMd ?? truncateContentWriterSource(source.bodyMd),
+          source_body_md: sourceInput.body_md,
+          expected_source_revision_hash:
+            await hashCommunityResourceContentWriterSourceRevision(source, sourceInput),
         };
       }),
     ))
@@ -1874,6 +2033,7 @@ export const patchCommunityResourceContentDraftInternal = internalMutation({
     pageId: v.id("communityResources"),
     sourceResourceId: v.id("communityResources"),
     expectedUpdatedAt: v.number(),
+    expectedSourceRevisionHash: v.string(),
     bodyMd: v.string(),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
@@ -1911,6 +2071,28 @@ export const patchCommunityResourceContentDraftInternal = internalMutation({
     }
     if (!communityResourceSourceHasReadyText(source)) {
       throw new Error("community_resource_content_writer_source_not_ready");
+    }
+    const pageModuleRow = page.moduleId
+      ? await ctx.db.get(page.moduleId as any) as CommunityResourceModuleLike | null
+      : null;
+    const pageModule = pageModuleRow &&
+      normalizeIdValue(pageModuleRow.communityId) === normalizeIdValue(args.communityId)
+      ? String(pageModuleRow.name ?? "")
+      : null;
+    const currentUnitContext = await buildContentWriterSourceFromUnits(ctx, {
+      sourceId: normalizeIdValue(source._id),
+      pageTitle: String(page.title ?? ""),
+      pageModule,
+      pageBody: String(page.bodyMd ?? ""),
+    });
+    const currentSourceInput = buildCommunityResourceContentWriterSourceInput({
+      source,
+      bodyMd: currentUnitContext.sourceBodyMd ?? truncateContentWriterSource(source.bodyMd),
+    });
+    const currentSourceRevisionHash =
+      await hashCommunityResourceContentWriterSourceRevision(source, currentSourceInput);
+    if (currentSourceRevisionHash !== String(args.expectedSourceRevisionHash ?? "")) {
+      throw new Error("community_resource_content_writer_source_changed");
     }
     const bodyMd = normalizeOptionalText(args.bodyMd, COMMUNITY_RESOURCE_CONTENT_WRITER_BODY_CHARS);
     if (!bodyMd || isResourceDraftScaffoldBody(bodyMd)) {
@@ -2005,6 +2187,12 @@ export const draftCommunityResourceContentFromSources: any = action({
         if (!pageId || !sourceId || !userId) {
           throw new Error("community_resource_content_writer_candidate_invalid");
         }
+        const sourceInput: CommunityResourceContentWriterSourceInput = {
+          id: sourceId,
+          title: String(candidate.source_title ?? ""),
+          url: candidate.source_url ?? null,
+          body_md: String(candidate.source_body_md ?? ""),
+        };
         const completion = await runResourceContentWriterModel({
           input: {
             community: context.community,
@@ -2013,12 +2201,7 @@ export const draftCommunityResourceContentFromSources: any = action({
               title,
               module: candidate.page_module ?? null,
             },
-            source: {
-              id: sourceId,
-              title: candidate.source_title,
-              url: candidate.source_url ?? null,
-              body_md: candidate.source_body_md,
-            },
+            source: sourceInput,
           },
           modelIdOverride: fundingSession.modelId,
         });
@@ -2050,6 +2233,7 @@ export const draftCommunityResourceContentFromSources: any = action({
             pageId,
             sourceResourceId: sourceId,
             expectedUpdatedAt: Number(candidate.expected_updated_at),
+            expectedSourceRevisionHash: String(candidate.expected_source_revision_hash ?? ""),
             bodyMd,
           },
         ) as { id?: string; title?: string; status?: string; source_resource_id?: string | null };

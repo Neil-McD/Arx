@@ -41,7 +41,6 @@ import {
   getWebCommunityEventsMonthRange,
   useWebCommunityContentController,
 } from "./controllers/useWebCommunityContentController";
-import { buildWebCommunityResourceBuildHandler } from "./controllers/buildWebCommunityResourceBuildHandler";
 import { useWebCommunityAttentionModel } from "./controllers/useWebCommunityAttentionController";
 import {
   useWebCommunityAdministrationState,
@@ -1818,12 +1817,6 @@ export default function App() {
       memberAgentComposerApiRef.current?.appendTranscript(transcript),
     focusMemberAgentInput: () => memberAgentComposerApiRef.current?.focusInput(),
   });
-  const handleBuildCommunityResources = buildWebCommunityResourceBuildHandler({
-    activeCommunityId: activeCommunity?.id ?? null,
-    canManageResources: canManageResourcesActiveCommunity,
-    startResourceBuild: (input) => memberAgentComposerApiRef.current?.startResourceBuild(input) ?? Promise.resolve(false),
-    showToastMessage: showAppToastMessage,
-  });
 
   const hasSelectedCommunity = Boolean(String(selectedActiveCommunitySlug ?? activeCommunity?.slug ?? "").trim());
   const webDestination = deriveWebDestination({
@@ -2295,7 +2288,6 @@ export default function App() {
         handleReorderResources,
         handleMoveResourceToModule,
         handleAddCommunitySources,
-        handleBuildCommunityResources,
         resourceEditor,
         handleDeleteResource,
         handleCreateBlankPageDraft,
@@ -3114,16 +3106,6 @@ export default function App() {
         mobileShellActive: showMobileShell,
         mobileRoot: showMobileShell && mobileRootPage === "agent",
         onRequestOpen: () => setMobileRootPage("agent"),
-        onInitialResourcesApplied: (communityId) => {
-          const community = communities.find((candidate) => candidate.id === communityId);
-          setMobileRootPage("community");
-          enterJoinedCommunity({
-            communityId,
-            communitySlug: community?.slug ?? null,
-            communityTab: "chat",
-          });
-          showAppToastMessage("Your community is ready.");
-        },
         community: memberAgentDockCommunity,
         surfaceContext: memberAgentSurfaceContext,
         session,

@@ -32,6 +32,9 @@ export type CommunityLike = {
   lifecycleGeneration?: number;
   builderAccessMode?: CommunityBuilderAccessMode;
   builderKnowledgeSetupPending?: boolean;
+  builderKnowledgeBuildStage?: "architecture" | "content";
+  builderKnowledgeBuildLeaseToken?: string;
+  builderKnowledgeBuildLeaseExpiresAt?: number;
   oneLiner?: string;
   about?: string;
   avatarUrl?: string;

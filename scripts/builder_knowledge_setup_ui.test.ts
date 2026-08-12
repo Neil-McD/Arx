@@ -32,8 +32,11 @@ test("Skip and ready-source continuation share the canonical completion command"
   expect(source).toContain(
     "const canContinue = readySources.length > 0 && !hasPendingSources && !props.isHydrating;",
   );
-  expect(source).toMatch(/className="builder-knowledge-setup-skip"[\s\S]*?onClick=\{\(\) => void complete\(\)\}/);
-  expect(source).toMatch(/className="builder-knowledge-setup-next"[\s\S]*?disabled=\{controlsDisabled \|\| !canContinue\}[\s\S]*?onClick=\{\(\) => void complete\(\)\}/);
+  expect(source).toMatch(/className="builder-knowledge-setup-skip"[\s\S]*?onClick=\{\(\) => void complete\("skip"\)\}/);
+  expect(source).toMatch(/className="builder-knowledge-setup-next"[\s\S]*?disabled=\{controlsDisabled \|\| !canContinue\}[\s\S]*?onClick=\{\(\) => void complete\("build"\)\}/);
+  expect(knowledgeControllerSource).toMatch(
+    /mode === "build"[\s\S]*buildCloudBuilderKnowledgeResources[\s\S]*completeCloudBuilderKnowledgeSetup/,
+  );
 });
 
 test("a source-loading failure cannot trap the buyer in onboarding", () => {

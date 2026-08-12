@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 
-import { completeCloudBuilderKnowledgeSetup } from "../../../../shared/cloudCommunityAdminGateway";
+import {
+  buildCloudBuilderKnowledgeResources,
+  completeCloudBuilderKnowledgeSetup,
+} from "../../../../shared/cloudCommunityAdminGateway";
 
 type BuilderKnowledgeCommunity = {
   id: string;
@@ -103,15 +106,20 @@ export function useWebBuilderKnowledgeCompletionController<
     communityTab: "chat";
   }) => void;
 }) {
-  return useCallback(async (): Promise<boolean> => {
+  return useCallback(async (mode: "skip" | "build"): Promise<boolean> => {
     const community = params.pendingCommunity;
     if (!community) return false;
     const session = await params.ensureSession();
     if (!session) return false;
-    const result = await completeCloudBuilderKnowledgeSetup({
-      session,
-      communityId: community.id,
-    });
+    const result = mode === "build"
+      ? await buildCloudBuilderKnowledgeResources({
+          session,
+          communityId: community.id,
+        })
+      : await completeCloudBuilderKnowledgeSetup({
+          session,
+          communityId: community.id,
+        });
     if (!result.ok) return false;
     params.setCommunities((current) => current.map((candidate) => (
       candidate.id === community.id
