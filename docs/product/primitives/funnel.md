@@ -28,10 +28,10 @@ The funnel is a public-facing surface. It can show community profile information
 
 Every community has one deterministic fallback assembled from canonical
 community identity, public profile, pricing, and member-proof data. A builder
-may also maintain two custom variants through the bounded AI-assisted composer.
+may also maintain one custom funnel through the bounded AI-assisted composer.
 Custom work remains private until explicitly published, and publishing does not
 change which funnel is live. One explicit active-funnel selector determines
-whether the fallback, Custom 1, or Custom 2 is served publicly.
+whether the fallback or published custom funnel is served publicly.
 
 Custom funnels use one platform-owned composition: community identity,
 outcome-focused headline and subheadline, an optional founder-managed Video

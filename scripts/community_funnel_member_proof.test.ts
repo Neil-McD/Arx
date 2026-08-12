@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   buildCommunityFunnelPrimaryActionView,
   buildCommunityFunnelMemberProofView,
+  deriveCommunityFunnelUiMode,
 } from "../shared/communityFunnelUi";
 
 describe("community funnel member proof", () => {
@@ -113,6 +114,49 @@ describe("community funnel member proof", () => {
         },
       }).label,
     ).toBe("Join $290/year");
+  });
+
+  it("derives one canonical access mode for preview and public rendering", () => {
+    expect(
+      deriveCommunityFunnelUiMode({
+        canEnterCommunity: true,
+        canJoinWithCheckout: true,
+        canJoinWithApproval: true,
+        canJoinForFree: true,
+      }),
+    ).toBe("enter");
+    expect(
+      deriveCommunityFunnelUiMode({
+        canEnterCommunity: false,
+        canJoinWithCheckout: true,
+        canJoinWithApproval: true,
+        canJoinForFree: true,
+      }),
+    ).toBe("checkout");
+    expect(
+      deriveCommunityFunnelUiMode({
+        canEnterCommunity: false,
+        canJoinWithCheckout: false,
+        canJoinWithApproval: true,
+        canJoinForFree: true,
+      }),
+    ).toBe("request_access");
+    expect(
+      deriveCommunityFunnelUiMode({
+        canEnterCommunity: false,
+        canJoinWithCheckout: false,
+        canJoinWithApproval: false,
+        canJoinForFree: true,
+      }),
+    ).toBe("join");
+    expect(
+      deriveCommunityFunnelUiMode({
+        canEnterCommunity: false,
+        canJoinWithCheckout: false,
+        canJoinWithApproval: false,
+        canJoinForFree: false,
+      }),
+    ).toBe("private");
   });
 
   it("fails closed when paid access has no valid positive plan", () => {

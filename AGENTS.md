@@ -33,8 +33,8 @@ This file is the execution contract for agents working in this repository.
 - Discover is a communities-only surface using simplified visibility semantics.
 - Gated community access model (including for `Published` communities).
 - Public community funnels for founder-shared links (YouTube/social/direct),
-  including one deterministic fallback and at most two AI-assisted custom
-  variants with explicit draft, publish, and active-selection boundaries.
+  including one deterministic fallback and one AI-assisted custom lifecycle
+  with explicit draft, publish, and active-selection boundaries.
 - Core member UX: join, navigate, post/chat, and voice.
 - One founder plan: $79 monthly for one specific managed community, including
   up to $20 of raw GPT 5.6 Luna model cost per billing cycle.

@@ -14,6 +14,19 @@ export type CommunityFunnelPrimaryActionView = {
   hasValidPaidPlan: boolean;
 };
 
+export function deriveCommunityFunnelUiMode(params: {
+  canEnterCommunity: boolean;
+  canJoinWithCheckout: boolean;
+  canJoinWithApproval: boolean;
+  canJoinForFree: boolean;
+}): CommunityFunnelUiMode {
+  if (params.canEnterCommunity) return "enter";
+  if (params.canJoinWithCheckout) return "checkout";
+  if (params.canJoinWithApproval) return "request_access";
+  if (params.canJoinForFree) return "join";
+  return "private";
+}
+
 function formatPublicPlanJoinPrice(plan: import("./communityTypes").PublicPlanSummary | null | undefined) {
   if (!plan) return null;
   const amount = Number(plan.amount_base_units);
@@ -204,12 +217,16 @@ export function buildCommunityFunnelMemberProofView<
   const memberCount = Math.max(0, Math.floor(params.memberCount));
   if (memberCount === 0) return null;
   const seen = new Set<string>();
+  const faceLimit = Math.min(
+    memberCount,
+    Math.max(0, Math.floor(params.maxFaces ?? 5)),
+  );
   const faces = (params.faces ?? []).filter((face) => {
     const id = String(face.user_id ?? "").trim();
     if (!id || seen.has(id)) return false;
     seen.add(id);
     return true;
-  }).slice(0, Math.max(0, Math.floor(params.maxFaces ?? 5)));
+  }).slice(0, faceLimit);
   return {
     memberCount,
     faces,

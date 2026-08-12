@@ -1,6 +1,8 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { ConvexError, v } from "convex/values";
 import {
+  isSupportedCommunityFunnelVideoUrl,
+  normalizeCommunityFunnelVslUrl as normalizeSharedCommunityFunnelVslUrl,
   normalizeCommunityFunnelContentV2,
   validateCommunityFunnelContentV2,
 } from "../shared/communityFunnel";
@@ -47,75 +49,12 @@ function normalizeRevision(raw: unknown): number {
   return Number.isSafeInteger(revision) && revision >= 0 ? revision : 0;
 }
 
-function normalizeExternalUrl(raw: string): URL | null {
-  const trimmed = raw.trim();
-  if (!trimmed) return null;
-  try {
-    return new URL(trimmed);
-  } catch {
-    try {
-      return new URL(`https://${trimmed}`);
-    } catch {
-      return null;
-    }
-  }
-}
-
-function isHostOrSubdomain(host: string, domain: string): boolean {
-  return host === domain || host.endsWith(`.${domain}`);
-}
-
-function isSupportedCommunityFunnelVideoUrl(raw: string | null): boolean {
-  if (!raw) return false;
-  const url = normalizeExternalUrl(raw);
-  if (!url || url.protocol !== "https:") return false;
-  const host = url.hostname.toLowerCase();
-  const parts = url.pathname.split("/").filter(Boolean);
-
-  if (host === "youtu.be" && parts[0]) return true;
-  if (
-    isHostOrSubdomain(host, "youtube.com") ||
-    isHostOrSubdomain(host, "youtube-nocookie.com")
-  ) {
-    if (url.pathname === "/watch" && url.searchParams.get("v")) return true;
-    if (["embed", "shorts", "live", "v"].includes(parts[0] ?? "") && parts[1]) {
-      return true;
-    }
-  }
-  if (
-    isHostOrSubdomain(host, "vimeo.com") &&
-    parts.some((part) => /^\d{6,}$/.test(part))
-  ) {
-    return true;
-  }
-  if (
-    isHostOrSubdomain(host, "loom.com") &&
-    ["share", "embed"].includes(parts[0] ?? "") &&
-    parts[1]
-  ) {
-    return true;
-  }
-  if (
-    isHostOrSubdomain(host, "wistia.com") ||
-    isHostOrSubdomain(host, "wistia.net")
-  ) {
-    if (url.searchParams.get("wvideo")) return true;
-    return parts.some(
-      (part, index) =>
-        ["medias", "iframe"].includes(part) && Boolean(parts[index + 1]),
-    );
-  }
-  return false;
-}
-
 function normalizeCommunityFunnelVslUrl(raw: unknown): string | null {
-  const value = normalizeTrimmedString(raw, 2_000);
-  if (!value) return null;
-  const url = normalizeExternalUrl(value);
-  if (!url || !isSupportedCommunityFunnelVideoUrl(url.href)) {
+  try {
+    return normalizeSharedCommunityFunnelVslUrl(raw);
+  } catch {
     throw new ConvexError({ code: "community_funnel_vsl_url_unsupported" });
   }
-  return url.href;
 }
 
 function normalizeStoredVslUrl(raw: unknown): string | null {

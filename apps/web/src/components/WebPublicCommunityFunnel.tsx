@@ -4,12 +4,13 @@ import type {
   PublicPlanSummary,
 } from "../../../../shared/communityTypes";
 import {
+  buildCommunityFunnelPrimaryActionView,
   buildCommunityFunnelRenderModel,
+  deriveCommunityFunnelUiMode,
 } from "../../../../shared/communityFunnelUi";
 import type { WebCommunityBridgeCardProps } from "./WebCommunityBridgeCard";
 import { WebCommunityFunnelRenderer } from "./WebCommunityFunnelRenderer";
 
-type FunnelMode = "enter" | "join" | "request_access" | "checkout" | "private";
 type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
 
@@ -40,7 +41,6 @@ type WebPublicCommunityFunnelProps = {
   isPreviewMode?: boolean;
   previewDocument?: CommunityFunnelContentV2 | null;
   previewVslUrl?: string | null;
-  previewDocumentIsLoading?: boolean;
   previewDocumentError?: string | null;
   selectedPublicCommunityPlan: PublicPlanSummary | null;
   isLoadingPublicCommunity: boolean;
@@ -68,48 +68,6 @@ type WebPublicCommunityFunnelProps = {
   bridge?: WebCommunityBridgeCardProps | null;
 };
 
-function deriveFunnelMode(args: {
-  canEnterCommunity: boolean;
-  canJoinWithCheckout: boolean;
-  canJoinWithApproval: boolean;
-  canJoinForFree: boolean;
-}): FunnelMode {
-  if (args.canEnterCommunity) return "enter";
-  if (args.canJoinWithCheckout) return "checkout";
-  if (args.canJoinWithApproval) return "request_access";
-  if (args.canJoinForFree) return "join";
-  return "private";
-}
-
-function buildPrimaryActionLabel(args: {
-  mode: FunnelMode;
-  isJoiningPublicCommunity: boolean;
-  approvalPending: boolean;
-  approvalDenied: boolean;
-  canRequestAgain: boolean;
-  priceLabel: string | null;
-}): string {
-  if (args.mode === "enter") return "Enter community";
-  if (args.mode === "checkout") return args.priceLabel ? `Join now · ${formatCtaPriceLabel(args.priceLabel)}` : "Join now";
-  if (args.mode === "request_access") {
-    if (args.isJoiningPublicCommunity) return "Joining…";
-    if (args.approvalPending) return "Request pending";
-    if (args.approvalDenied) return args.canRequestAgain ? "Request again" : "Request denied";
-    return "Join now";
-  }
-  if (args.mode === "join") return args.isJoiningPublicCommunity ? "Joining…" : "Join now";
-  return "Private community";
-}
-
-function formatCtaPriceLabel(priceLabel: string): string {
-  return priceLabel
-    .trim()
-    .replace(/\/\s*month\b/i, "/mo")
-    .replace(/\/\s*monthly\b/i, "/mo")
-    .replace(/\/\s*year\b/i, "/yr")
-    .replace(/\/\s*annual\b/i, "/yr");
-}
-
 export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
   const {
     publicCommunity,
@@ -117,7 +75,6 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     isPreviewMode = false,
     previewDocument = null,
     previewVslUrl = null,
-    previewDocumentIsLoading = false,
     previewDocumentError = null,
     selectedPublicCommunityPlan,
     isLoadingPublicCommunity,
@@ -146,34 +103,27 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
     typeof publicCommunity?.member_count === "number" ? publicCommunity.member_count : null;
   const paidPlan = selectedPublicCommunityPlan;
   const hasSelectedPublicCommunityPlan = Boolean(paidPlan);
-  const pricingLabel = paidPlan
-    ? new Intl.NumberFormat(undefined, {
-        style: "currency",
-        currency: paidPlan.currency,
-        maximumFractionDigits: 2,
-      }).format(Number(paidPlan.amount_base_units) / Math.pow(10, paidPlan.currency_decimals))
-    : null;
-
-  const funnelMode = deriveFunnelMode({
+  const funnelMode = deriveCommunityFunnelUiMode({
     canEnterCommunity,
     canJoinWithCheckout,
     canJoinWithApproval,
     canJoinForFree,
   });
-  const primaryActionLabel = buildPrimaryActionLabel({
+  const primaryAction = buildCommunityFunnelPrimaryActionView({
     mode: funnelMode,
-    isJoiningPublicCommunity,
+    plan: paidPlan,
+    isBusy: checkoutStatus === "loading" || isJoiningPublicCommunity,
     approvalPending,
     approvalDenied,
     canRequestAgain,
-    priceLabel: pricingLabel,
   });
+  const primaryActionLabel = primaryAction.label;
   const isPrimaryActionDisabled =
     isPreviewMode ||
     !publicCommunity ||
     checkoutStatus === "loading" ||
     isJoiningPublicCommunity ||
-    (!canEnterCommunity && canJoinWithCheckout && !hasSelectedPublicCommunityPlan) ||
+    (!canEnterCommunity && canJoinWithCheckout && (!hasSelectedPublicCommunityPlan || !primaryAction.hasValidPaidPlan)) ||
     (!canEnterCommunity && !canJoinWithCheckout && !canJoinForFree && !canJoinWithApproval) ||
     (canJoinWithApproval && (approvalPending || (approvalDenied && !canRequestAgain)));
   const funnelErrors = [publicCommunityError, publicJoinError, checkoutError].filter(

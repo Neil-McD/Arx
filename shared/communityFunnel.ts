@@ -216,9 +216,57 @@ export function normalizeCommunityFunnelVslUrl(raw: unknown): string | null {
   if (url.protocol !== "https:") {
     throw new Error("community_funnel_vsl_url_unsupported");
   }
-  const host = url.hostname.toLowerCase();
-  const supported = ["youtube.com", "youtu.be", "vimeo.com", "loom.com", "wistia.com", "wistia.net"]
-    .some((domain) => host === domain || host.endsWith(`.${domain}`));
-  if (!supported) throw new Error("community_funnel_vsl_url_unsupported");
+  if (!isSupportedCommunityFunnelVideoUrl(url.href)) {
+    throw new Error("community_funnel_vsl_url_unsupported");
+  }
   return url.href;
+}
+
+function isHostOrSubdomain(host: string, domain: string): boolean {
+  return host === domain || host.endsWith(`.${domain}`);
+}
+
+export function isSupportedCommunityFunnelVideoUrl(raw: string | null): boolean {
+  if (!raw) return false;
+  let url: URL;
+  try {
+    url = new URL(raw.trim());
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:") return false;
+  const host = url.hostname.toLowerCase();
+  const parts = url.pathname.split("/").filter(Boolean);
+
+  if (host === "youtu.be" && Boolean(parts[0])) return true;
+  if (
+    isHostOrSubdomain(host, "youtube.com") ||
+    isHostOrSubdomain(host, "youtube-nocookie.com")
+  ) {
+    if (url.pathname === "/watch" && url.searchParams.get("v")) return true;
+    return ["embed", "shorts", "live", "v"].includes(parts[0] ?? "") && Boolean(parts[1]);
+  }
+  if (
+    isHostOrSubdomain(host, "vimeo.com") &&
+    parts.some((part) => /^\d{6,}$/.test(part))
+  ) {
+    return true;
+  }
+  if (
+    isHostOrSubdomain(host, "loom.com") &&
+    ["share", "embed"].includes(parts[0] ?? "") &&
+    Boolean(parts[1])
+  ) {
+    return true;
+  }
+  if (
+    isHostOrSubdomain(host, "wistia.com") ||
+    isHostOrSubdomain(host, "wistia.net")
+  ) {
+    if (url.searchParams.get("wvideo")) return true;
+    return parts.some(
+      (part, index) => ["medias", "iframe"].includes(part) && Boolean(parts[index + 1]),
+    );
+  }
+  return false;
 }

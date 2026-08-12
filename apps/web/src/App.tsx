@@ -2748,7 +2748,6 @@ export default function App() {
       isPreviewMode: isPublicFunnelPreviewRoute,
       previewDocument: funnelDraftPreview.document,
       previewVslUrl: funnelDraftPreview.vslUrl,
-      previewDocumentIsLoading: funnelDraftPreview.isLoading,
       previewDocumentError: funnelDraftPreview.error,
       selectedPublicCommunityPlan,
       isLoadingPublicCommunity: publicCommunityUi.isLoadingPublicCommunity,
