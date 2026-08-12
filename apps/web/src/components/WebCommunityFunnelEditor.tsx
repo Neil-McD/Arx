@@ -41,6 +41,7 @@ import type {
   CommunityMemberProof,
   CommunityPublicFace,
 } from "../../../../shared/communityTypes";
+import { buildCommunityFunnelRenderModel } from "../../../../shared/communityFunnelUi";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import type {
@@ -48,7 +49,8 @@ import type {
   ThreadStreamingRuntimeEvent,
   ThreadStreamingState,
 } from "../../../../shared/webTurnRunnerCore";
-import { CommunityFunnelPreview } from "./CommunityFunnelPreview";
+import type { CommunityFunnelSurfaceAction } from "./CommunityFunnelSurface";
+import { WebCommunityFunnelRenderer } from "./WebCommunityFunnelRenderer";
 import { WebAgentLiveTurn } from "./WebAgentLiveTurn";
 
 type PreviewCommunityLike = {
@@ -245,6 +247,41 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       props.communityFunnelConfig.draft_revision;
   const selectedSlotIsLive =
     props.communityFunnelConfig.live_mode === "custom";
+  const previewRenderModel = useMemo(
+    () => buildCommunityFunnelRenderModel({
+      communityName: hydratedPreviewCommunity.name,
+      oneLiner: hydratedPreviewCommunity.one_liner,
+      about: hydratedPreviewCommunity.about,
+      funnel: content
+        ? {
+            ...props.communityFunnelConfig,
+            live_mode: "custom",
+            published_content_v2: content,
+            published_vsl_url: savedVslUrl,
+          }
+        : props.communityFunnelConfig,
+    }),
+    [
+      content,
+      hydratedPreviewCommunity.about,
+      hydratedPreviewCommunity.name,
+      hydratedPreviewCommunity.one_liner,
+      props.communityFunnelConfig,
+      savedVslUrl,
+    ],
+  );
+  const previewAction = useMemo<CommunityFunnelSurfaceAction>(() => ({
+    communityName: hydratedPreviewCommunity.name,
+    primaryActionLabel: props.previewPrimaryActionLabel,
+    isPrimaryActionDisabled: true,
+    onPrimaryAction: () => undefined,
+    canJoinWithApproval: false,
+    showSignIn: false,
+    approvalPending: false,
+    approvalDenied: false,
+    canRequestAgain: false,
+    isPreviewMode: true,
+  }), [hydratedPreviewCommunity.name, props.previewPrimaryActionLabel]);
 
   useEffect(() => {
     if (selectedCommunityIdRef.current === props.previewCommunity.id) return;
@@ -600,15 +637,15 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     }
   };
 
-  const handleActivate = async () => {
+  const handleSetLiveMode = async (mode: "default" | "custom") => {
     if (
-      selectedSlotIsLive ||
       isActivating ||
       isPublishing ||
       isSavingVsl ||
       turnIsActive ||
-      isVslInputDirty ||
-      !isPublishedCurrentDraft
+      (mode === "custom" &&
+        (selectedSlotIsLive || isVslInputDirty || !isPublishedCurrentDraft)) ||
+      (mode === "default" && !selectedSlotIsLive)
     )
       return;
     setIsActivating(true);
@@ -616,7 +653,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     try {
       const session = await props.ensureSession(
         props.session,
-        "community_funnel_activate",
+        `community_funnel_activate_${mode}`,
       );
       if (!session) throw new Error("auth_session_required");
       const config = await setCloudCommunityFunnelLiveMode<
@@ -625,9 +662,13 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       >({
         session,
         communityId: props.previewCommunity.id,
-        mode: "custom",
-        expectedPublishedDraftRevision:
-          props.communityFunnelConfig.published_draft_revision,
+        mode,
+        ...(mode === "custom"
+          ? {
+              expectedPublishedDraftRevision:
+                props.communityFunnelConfig.published_draft_revision,
+            }
+          : {}),
       });
       props.hydrateCommunityFunnelEditor(
         normalizeCommunityFunnelManagerConfig(config),
@@ -641,7 +682,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         try {
           const session = await props.ensureSession(
             props.session,
-            "community_funnel_activation_conflict_refresh",
+            `community_funnel_activation_${mode}_conflict_refresh`,
           );
           if (session) await refreshDraft(session);
         } catch {
@@ -713,7 +754,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
             <button
               type="button"
               className="is-primary"
-              onClick={() => void handleActivate()}
+              onClick={() => void handleSetLiveMode("custom")}
               disabled={
                 isBusy ||
                 isVslInputDirty ||
@@ -730,6 +771,16 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               {isActivating ? "Making live…" : "Make live"}
             </button>
           ) : null}
+          {selectedSlotIsLive ? (
+            <button
+              type="button"
+              onClick={() => void handleSetLiveMode("default")}
+              disabled={isBusy}
+              title="Use the immutable default funnel"
+            >
+              {isActivating ? "Switching…" : "Use default"}
+            </button>
+          ) : null}
         </div>
       </header>
 
@@ -741,11 +792,17 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           aria-label="Custom funnel preview"
         >
           {content ? (
-            <CommunityFunnelPreview
-              community={hydratedPreviewCommunity}
-              content={content}
-              vslUrl={savedVslUrl}
-              primaryActionLabel={props.previewPrimaryActionLabel}
+            <WebCommunityFunnelRenderer
+              communityId={hydratedPreviewCommunity.id}
+              communityName={hydratedPreviewCommunity.name}
+              avatarUrl={hydratedPreviewCommunity.avatar_url ?? null}
+              avatarFocusX={hydratedPreviewCommunity.avatar_focus_x ?? null}
+              avatarFocusY={hydratedPreviewCommunity.avatar_focus_y ?? null}
+              avatarZoom={hydratedPreviewCommunity.avatar_zoom ?? null}
+              memberCount={hydratedPreviewCommunity.member_count ?? null}
+              memberFaces={hydratedPreviewCommunity.member_faces_preview ?? []}
+              renderModel={previewRenderModel}
+              action={previewAction}
             />
           ) : (
             <div className="funnel-builder-preview-empty">

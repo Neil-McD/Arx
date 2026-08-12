@@ -1676,14 +1676,14 @@
 .funnel-builder-preview-empty span {
   font-size: 12px;
 }
-.funnel-builder-preview .community-funnel-preview {
+.funnel-builder-preview .community-funnel-renderer {
   width: min(780px, 100%);
   min-height: 100%;
   margin: 0 auto;
   border: 1px solid var(--border-muted);
   overflow: hidden;
 }
-.funnel-builder-layout.is-default .community-funnel-preview {
+.funnel-builder-layout.is-default .community-funnel-renderer {
   width: min(920px, 100%);
 }
 .funnel-builder-conversation {

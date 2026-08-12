@@ -32,8 +32,7 @@ const communityContextPanel = read("apps/web/src/components/CommunityContextPane
 const communityPresenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
 const memberAvatarStack = read("apps/web/src/components/MemberAvatarStack.tsx");
 const communityFunnelMemberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
-const communityFunnelPreview = read("apps/web/src/components/CommunityFunnelPreview.tsx");
-const communityFunnelPreviewCss = read("apps/web/src/components/CommunityFunnelPreview.css");
+const communityFunnelEditor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
 const communityDirectoryGateway = read("shared/cloudCommunityDirectoryGateway.ts");
 const communityTypes = read("shared/communityTypes.ts");
 const baseCss = [
@@ -86,9 +85,9 @@ assert.match(
   "funnel member proof must use the canonical member avatar stack",
 );
 assert.match(
-  communityFunnelPreview,
-  /<CommunityFunnelMemberProof/,
-  "the funnel preview must reuse the canonical member proof composition",
+  communityFunnelEditor,
+  /<WebCommunityFunnelRenderer/,
+  "the funnel preview must reuse the canonical funnel renderer",
 );
 assert.match(
   communityPresenceFacepile,
@@ -101,12 +100,12 @@ assert.match(
   "the canonical member avatar stack must own avatar presentation",
 );
 assert.doesNotMatch(
-  `${communityFunnelPreview}\n${communityFunnelMemberProof}`,
+  `${communityFunnelEditor}\n${communityFunnelMemberProof}`,
   /imageClassName="community-funnel-face-image"/,
   "funnel member proof must not replace canonical avatar image geometry",
 );
 assert.doesNotMatch(
-  communityFunnelPreviewCss,
+  communityFunnelMemberProof,
   /\.community-funnel-face(?:pile|-image)?\b/,
   "funnel member proof must not recreate a custom facepile or avatar crop",
 );

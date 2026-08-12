@@ -59,6 +59,7 @@ function FunnelAction(props: {
 }
 
 export type WebCommunityFunnelRendererProps = {
+  communityId?: string;
   communityName: string;
   avatarUrl?: string | null;
   avatarFocusX?: number | null;
@@ -95,6 +96,7 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
         <header className="community-funnel-identity community-funnel-reveal">
           <CommunityAvatar
             className="community-funnel-community-avatar"
+            communityId={props.communityId}
             name={props.communityName}
             imageUrl={props.avatarUrl}
             focusX={props.avatarFocusX}

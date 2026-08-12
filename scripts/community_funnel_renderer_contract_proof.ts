@@ -10,8 +10,10 @@ const renderer = read("apps/web/src/components/WebCommunityFunnelRenderer.tsx");
 const rendererCss = read("apps/web/src/components/WebCommunityFunnelRenderer.css");
 const memberProof = read("apps/web/src/components/CommunityFunnelMemberProof.tsx");
 const memberProofCss = read("apps/web/src/components/CommunityFunnelMemberProof.css");
-const preview = read("apps/web/src/components/CommunityFunnelPreview.tsx");
-const previewCss = read("apps/web/src/components/CommunityFunnelPreview.css");
+const editor = read("apps/web/src/components/WebCommunityFunnelEditor.tsx");
+const previewController = read(
+  "apps/web/src/controllers/useWebCommunityFunnelDraftPreviewController.ts",
+);
 const renderProjection = read("shared/communityFunnelUi.ts");
 
 assert.match(
@@ -77,34 +79,34 @@ assert.doesNotMatch(
   "public member proof must not recreate member avatar holders",
 );
 assert.match(
-  preview,
-  /<CommunityFunnelMemberProof[\s\S]*faces=\{community\.member_faces_preview\}[\s\S]*memberCount=\{community\.member_count\}/,
-  "builder preview and public lander must share the same canonical member proof",
+  editor,
+  /<WebCommunityFunnelRenderer[\s\S]*memberFaces=\{hydratedPreviewCommunity\.member_faces_preview[\s\S]*renderModel=\{previewRenderModel\}/,
+  "builder preview and public lander must share the same canonical renderer",
 );
 assert.doesNotMatch(
-  preview,
-  /MemberAvatarStack|buildCommunityFunnelMemberProofView/,
-  "builder preview must not rebuild canonical member proof internals",
+  editor,
+  /CommunityFunnelPreview|MemberAvatarStack|buildCommunityFunnelMemberProofView/,
+  "builder preview must not retain or rebuild a parallel renderer",
 );
 assert.doesNotMatch(
-  `${rendererCss}\n${previewCss}\n${memberProofCss}`,
+  `${rendererCss}\n${memberProofCss}`,
   /\.community-funnel-member-(?:faces|face|more|proof-row)\b/,
   "funnel surfaces must not recreate avatar holder or facepile CSS",
-);
-assert.doesNotMatch(
-  previewCss,
-  /\.community-funnel-(?:hero|pillars|long-form|media)\b/,
-  "the embedded editor preview must not override canonical public-renderer selectors",
-);
-assert.match(
-  preview,
-  /community-funnel-editor-hero[\s\S]*community-funnel-editor-pillars[\s\S]*community-funnel-editor-long-form/,
-  "the embedded editor preview must own a namespaced style surface",
 );
 assert.match(memberProofCss, /\.community-funnel-member-proof-avatars[\s\S]*--member-avatar-stack-face-size/);
 assert.match(rendererCss, /var\(--surface-app\)[\s\S]*var\(--accent-selection\)[\s\S]*var\(--bg-button\)/);
 assert.match(rendererCss, /@media \(prefers-reduced-motion: reduce\)/);
 assert.match(rendererCss, /container-type: inline-size[\s\S]*font-size: clamp\([^;]*cqi/);
+assert.match(
+  rendererCss,
+  /--community-funnel-rail:\s*980px[\s\S]*community-funnel-hero[\s\S]*var\(--community-funnel-rail\)[\s\S]*community-funnel-vsl[\s\S]*var\(--community-funnel-rail\)[\s\S]*community-funnel-pillars[\s\S]*var\(--community-funnel-rail\)/,
+  "hero, VSL, and pillars must share one canonical content rail",
+);
+assert.match(
+  previewController,
+  /funnel_draft_preview_retry[\s\S]*forceRefresh:\s*true[\s\S]*funnel_draft_preview_query_retry[\s\S]*forceRefresh:\s*true/,
+  "the owner preview must retry both initial and query-time session verification once through the canonical auth refresh lock",
+);
 assert.doesNotMatch(rendererCss, /#d66a8a|accent-gold|pink/i, "retired Polynet-pink tokens must not leak into the funnel");
 assert.match(
   renderProjection,

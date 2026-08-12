@@ -16,6 +16,7 @@ type CheckoutStatus = "idle" | "loading" | "pending" | "succeeded" | "error";
 type MagicLinkStatus = "idle" | "sending" | "sent";
 
 export type PublicCommunityFunnelCommunityLike = {
+  id?: string;
   slug?: string;
   name: string;
   one_liner: string | null;
@@ -174,6 +175,7 @@ export function WebPublicCommunityFunnel(props: WebPublicCommunityFunnelProps) {
 
   const funnelSurface = (
     <WebCommunityFunnelRenderer
+      communityId={publicCommunity?.id}
       communityName={communityName}
       avatarUrl={publicCommunity?.avatar_url ?? null}
       avatarFocusX={publicCommunity?.avatar_focus_x ?? null}

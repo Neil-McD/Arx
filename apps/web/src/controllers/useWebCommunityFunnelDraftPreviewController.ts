@@ -14,21 +14,27 @@ import type { AuthSession } from "../auth";
 type EnsureSession = (
   session?: AuthSession | null,
   source?: string,
+  options?: { forceRefresh?: boolean },
 ) => Promise<AuthSession | null>;
 
 export function classifyCommunityFunnelDraftPreviewFailure(
   cause: unknown,
-): "denied" | "retryable" {
+): "denied" | "session" | "retryable" {
   const message = String(
     cause instanceof Error ? cause.message : cause,
   ).toLowerCase();
-  return (
+  if (
     message.includes("community_forbidden") ||
     message.includes("community_not_found") ||
     message.includes("community_archived")
-  )
-    ? "denied"
-    : "retryable";
+  ) return "denied";
+  if (
+    message.includes("sign in as a community manager") ||
+    message.includes("session expired") ||
+    message.includes("auth_session") ||
+    message.includes("unauthenticated")
+  ) return "session";
+  return "retryable";
 }
 
 export function formatCommunityFunnelDraftPreviewFailure(
@@ -43,6 +49,14 @@ export function formatCommunityFunnelDraftPreviewFailure(
     message.includes("timeout")
   ) {
     return "The draft preview could not connect. Try again.";
+  }
+  if (
+    message.includes("sign in as a community manager") ||
+    message.includes("session expired") ||
+    message.includes("auth_session") ||
+    message.includes("unauthenticated")
+  ) {
+    return "Your session could not be verified. Try again.";
   }
   return "The draft preview could not be opened. Try again.";
 }
@@ -84,23 +98,50 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
     setAccessState("resolving");
     void (async () => {
       try {
-        const session = await params.ensureSession(
+        let session = await params.ensureSession(
           params.session,
           "funnel_draft_preview",
         );
+        if (!session && params.session) {
+          session = await params.ensureSession(
+            params.session,
+            "funnel_draft_preview_retry",
+            { forceRefresh: true },
+          );
+        }
         if (!session) {
           throw new Error(
             "Sign in as a community manager to preview this funnel.",
           );
         }
-        const result =
-          await fetchCloudCommunityFunnelDraftPreview<
+        let result: CommunityFunnelManagerConfig | null = null;
+        try {
+          result = await fetchCloudCommunityFunnelDraftPreview<
+              AuthSession,
+              CommunityFunnelManagerConfig
+            >({
+              session,
+              communitySlug: slug,
+            });
+        } catch (cause) {
+          if (classifyCommunityFunnelDraftPreviewFailure(cause) !== "session") {
+            throw cause;
+          }
+          const refreshed = await params.ensureSession(
+            session,
+            "funnel_draft_preview_query_retry",
+            { forceRefresh: true },
+          );
+          if (!refreshed) throw cause;
+          session = refreshed;
+          result = await fetchCloudCommunityFunnelDraftPreview<
             AuthSession,
             CommunityFunnelManagerConfig
           >({
             session,
             communitySlug: slug,
           });
+        }
         if (!result) throw new Error("community_funnel_preview_unavailable");
         if (cancelled) return;
         const config = normalizeCommunityFunnelManagerConfig(result);
@@ -111,7 +152,8 @@ export function useWebCommunityFunnelDraftPreviewController(params: {
         if (cancelled) return;
         setDocument(null);
         setVslUrl(null);
-        if (classifyCommunityFunnelDraftPreviewFailure(cause) === "denied") {
+        const failureKind = classifyCommunityFunnelDraftPreviewFailure(cause);
+        if (failureKind === "denied") {
           setAccessState("denied");
           setError(null);
         } else {

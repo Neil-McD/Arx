@@ -17,6 +17,7 @@
 }
 
 .community-funnel-layout {
+  --community-funnel-rail: 980px;
   position: relative;
   isolation: isolate;
   width: 100%;
@@ -68,7 +69,7 @@
 }
 
 .community-funnel-hero {
-  width: min(940px, 100%);
+  width: min(var(--community-funnel-rail), 100%);
   margin: clamp(44px, 7vw, 76px) auto 0;
   text-align: center;
 }
@@ -110,7 +111,7 @@
 }
 
 .community-funnel-vsl {
-  width: min(980px, 100%);
+  width: min(var(--community-funnel-rail), 100%);
   margin: clamp(52px, 8vw, 88px) auto 0;
 }
 
@@ -174,7 +175,7 @@
 
 .community-funnel-pillars {
   display: grid;
-  width: min(980px, 100%);
+  width: min(var(--community-funnel-rail), 100%);
   grid-template-columns: repeat(3, minmax(0, 1fr));
   margin: clamp(58px, 8vw, 92px) auto 0;
   border-block: 1px solid var(--community-funnel-line);

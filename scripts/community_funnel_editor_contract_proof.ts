@@ -31,8 +31,8 @@ assert.match(
 );
 assert.match(
   editor,
-  /Publish changes[\s\S]*Make live/,
-  "publication and activation must remain separate explicit transitions",
+  /Publish changes[\s\S]*Make live[\s\S]*Use default/,
+  "publication, custom activation, and default restoration must remain separate explicit transitions",
 );
 assert.match(
   editor,
