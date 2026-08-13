@@ -44,6 +44,11 @@ import type {
   CommunityPublicFace,
 } from "../../../../shared/communityTypes";
 import { buildCommunityFunnelRenderModel } from "../../../../shared/communityFunnelUi";
+import {
+  communityFunnelDraftAdvanced,
+  readCommunityFunnelDraftAuthoritySnapshot,
+} from "../../../../shared/communityFunnelTurnPostcondition";
+import { buildPlatformSwitcherStyle } from "../../../../shared/platformSwitcherUi";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import { renderMarkdown } from "../../../../shared/markdownUi";
 import type {
@@ -345,11 +350,11 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         session,
         communityId: props.previewCommunity.id,
       });
+      const normalizedConfig = normalizeCommunityFunnelManagerConfig(config);
       if (activeCommunityIdRef.current === props.previewCommunity.id) {
-        props.hydrateCommunityFunnelEditor(
-          normalizeCommunityFunnelManagerConfig(config),
-        );
+        props.hydrateCommunityFunnelEditor(normalizedConfig);
       }
+      return normalizedConfig;
     },
     [props.hydrateCommunityFunnelEditor, props.previewCommunity.id],
   );
@@ -489,6 +494,12 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     setLocalError(null);
     setInferenceIssue(null);
     const messageId = crypto.randomUUID();
+    const draftBefore = selectedCustomSlot
+      ? readCommunityFunnelDraftAuthoritySnapshot(
+          props.communityFunnelConfig,
+          selectedCustomSlot,
+        )
+      : null;
     try {
       const session = await props.ensureSession(
         props.session,
@@ -543,10 +554,23 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         messages: [optimisticMessage],
       });
       if (result.error) throw new Error(result.error);
-      await Promise.all([
-        loadMessages(threadKey, session),
-        refreshDraft(session),
-      ]);
+      const nextConfig = await refreshDraft(session);
+      if (
+        selectedCustomSlot &&
+        draftBefore &&
+        !communityFunnelDraftAdvanced({
+          before: draftBefore,
+          after: readCommunityFunnelDraftAuthoritySnapshot(
+            nextConfig,
+            selectedCustomSlot,
+          ),
+        })
+      ) {
+        throw new Error(
+          "The composer finished without saving this funnel. Try the revision again.",
+        );
+      }
+      await loadMessages(threadKey, session);
     } catch (error) {
       console.warn("community_funnel_builder_send_failed", error);
       setLocalError(
@@ -762,6 +786,13 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       label: `Funnel 2${props.communityFunnelConfig.active_slot === "custom_2" ? " · Live" : ""}`,
     },
   ], [props.communityFunnelConfig.active_slot]);
+  const funnelSwitcherStyle = useMemo(
+    () => buildPlatformSwitcherStyle(
+      funnelTabs.length,
+      Math.max(0, funnelTabs.findIndex((tab) => tab.id === selectedSlot)),
+    ),
+    [funnelTabs, selectedSlot],
+  );
 
   return (
     <section className="funnel-builder" aria-labelledby="funnel-builder-title">
@@ -772,6 +803,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         ariaLabel="Community funnels"
         idPrefix="community-funnel"
         className="platform-switcher funnel-builder-slot-switcher"
+        style={funnelSwitcherStyle}
       />
       <header className="funnel-builder-header">
         <div>

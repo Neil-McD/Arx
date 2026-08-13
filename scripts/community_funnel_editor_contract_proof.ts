@@ -10,6 +10,10 @@ const invocation = read("shared/runtimeInvocationSurface.ts");
 const preview = read(
   "apps/web/src/controllers/useWebCommunityFunnelDraftPreviewController.ts",
 );
+const postcondition = read("shared/communityFunnelTurnPostcondition.ts");
+const styles = read("apps/web/src/styles/community-and-content.css");
+const runtime = read("convex/runtimeTurnHandlers.ts");
+const runtimePrompt = read("shared/runtimeInvocationSurface.ts");
 
 for (const label of ["Default", "Funnel 1", "Funnel 2"]) {
   assert.match(editor, new RegExp(`label: .${label}`));
@@ -18,6 +22,11 @@ assert.match(
   editor,
   /<WebPlatformTabList[\s\S]*ariaLabel="Community funnels"/,
   "the three-slot picker must use the canonical accessible tablist",
+);
+assert.match(
+  editor,
+  /buildPlatformSwitcherStyle\([\s\S]*funnelTabs\.length[\s\S]*style=\{funnelSwitcherStyle\}/,
+  "the three-slot picker must compute its canonical pill geometry instead of using the two-slot fallback",
 );
 assert.match(
   editor,
@@ -69,6 +78,36 @@ assert.match(
 assert.doesNotMatch(
   editor,
   /CommunityFunnelV1Preview|custom HTML|dangerouslySetInnerHTML/,
+);
+assert.match(
+  postcondition,
+  /params\.after\.draftRevision > params\.before\.draftRevision/,
+  "a composer turn must advance the authoritative selected-slot revision",
+);
+assert.match(
+  editor,
+  /communityFunnelDraftAdvanced\([\s\S]*finished without saving this funnel/,
+  "the UI must fail closed when authoritative draft state did not advance",
+);
+assert.match(
+  runtime,
+  /invocationSurface === "community_funnel_builder"[\s\S]*communityFunnelTurnPostconditionPassed\([\s\S]*writeReceiptObserved: funnelDraftWriteObserved[\s\S]*community_funnel_draft_not_saved/,
+  "the runtime must verify selected-slot authority before persisting model success prose",
+);
+assert.match(
+  postcondition,
+  /writeReceiptObserved[\s\S]*communityFunnelDraftAdvanced/,
+  "the runtime postcondition must require both this turn's write receipt and authoritative revision advancement",
+);
+assert.match(
+  runtimePrompt,
+  /turn is incomplete until polynet_call returns a successful saved draft at a higher draft revision/,
+  "the bounded model prompt must agree with the runtime postcondition",
+);
+assert.match(
+  styles,
+  /\.funnel-builder-conversation \{[\s\S]*overflow: hidden;/,
+  "the composer rail must stay bounded inside the funnel surface",
 );
 
 console.log("community funnel editor contract proof passed");

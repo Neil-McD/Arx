@@ -214,6 +214,7 @@ export function buildRuntimeInvocationSurfacePrompt(
       "The long-form narrative may use paragraphs, headings, emphasis, and lists. Do not include HTML, links, images, video URLs, code, tables, testimonials, FAQs, member counts, pricing, or calls to action.",
       "Never propose custom HTML, CSS, JavaScript, external hosting, theme tokens, layout choices, or a second page.",
       "Read the exact authorized capability under the current community's capabilities directory, then use polynet_call to update the complete draft with its current expected revision.",
+      "The turn is incomplete until polynet_call returns a successful saved draft at a higher draft revision. If that update fails or is skipped, report the failure plainly and never claim the draft was created or revised.",
       "Never publish, change pricing, change access policy, or claim the draft is live. A human manager controls publication in a later workflow.",
       "After a successful update, briefly summarize the positioning and copy choices. Do not print the full JSON content object to the user.",
     ].join("\n");

@@ -34,6 +34,10 @@ import {
   shouldRecordCommunityOnboardingAgentTurn,
 } from "../shared/runtimeInvocationSurface";
 import {
+  communityFunnelTurnPostconditionPassed,
+  isCommunityFunnelDraftWriteReceiptEvent,
+} from "../shared/communityFunnelTurnPostcondition";
+import {
   isRecoverableRuntimeKernelStopReason,
 } from "../shared/runtimeKernelTypes";
 import {
@@ -729,6 +733,113 @@ export async function handleRuntimeTurnRequest(args: {
       threadId: String(ownedThread._id),
       runId,
     });
+    let funnelDraftWriteObserved = false;
+    const observeFunnelDraftWriteEvent = (event: {
+      eventType: string;
+      payload: Record<string, unknown>;
+    }): void => {
+      if (isCommunityFunnelDraftWriteReceiptEvent(event)) {
+        funnelDraftWriteObserved = true;
+      }
+    };
+    const funnelDraftPostconditionBefore =
+      invocationSurface === "community_funnel_builder" &&
+      runtimeCommunityId &&
+      runtimeCommunityFunnelSlot
+        ? ((await ctx.runQuery(
+            (internal as any).communityFunnel.getCommunityFunnelDraftInternal as any,
+            {
+              communityId: runtimeCommunityId as any,
+              slot: runtimeCommunityFunnelSlot,
+            },
+          )) as {
+            selected_funnel?: {
+              draft_revision?: unknown;
+              draft_content_v2?: unknown;
+            } | null;
+          })
+        : null;
+    const verifyFunnelDraftPostcondition = async (): Promise<{
+      ok: boolean;
+      beforeRevision: number;
+      afterRevision: number;
+    }> => {
+      if (invocationSurface !== "community_funnel_builder") {
+        return { ok: true, beforeRevision: 0, afterRevision: 0 };
+      }
+      const beforeRevision = Math.max(
+        0,
+        Math.floor(Number(
+          funnelDraftPostconditionBefore?.selected_funnel?.draft_revision ?? 0,
+        )),
+      );
+      if (!runtimeCommunityId || !runtimeCommunityFunnelSlot) {
+        return { ok: false, beforeRevision, afterRevision: beforeRevision };
+      }
+      try {
+        const after = (await ctx.runQuery(
+          (internal as any).communityFunnel.getCommunityFunnelDraftInternal as any,
+          {
+            communityId: runtimeCommunityId as any,
+            slot: runtimeCommunityFunnelSlot,
+          },
+        )) as {
+          selected_funnel?: {
+            draft_revision?: unknown;
+            draft_content_v2?: unknown;
+          } | null;
+        };
+        const afterRevision = Math.max(
+          0,
+          Math.floor(Number(after?.selected_funnel?.draft_revision ?? 0)),
+        );
+        const ok = communityFunnelTurnPostconditionPassed({
+          before: {
+            draftRevision: beforeRevision,
+            hasDraftContent: Boolean(
+              funnelDraftPostconditionBefore?.selected_funnel?.draft_content_v2,
+            ),
+          },
+          after: {
+            draftRevision: afterRevision,
+            hasDraftContent: Boolean(after?.selected_funnel?.draft_content_v2),
+          },
+          writeReceiptObserved: funnelDraftWriteObserved,
+        });
+        await appendRunEvent({
+          eventType: "community_funnel_draft_postcondition_checked",
+          eventKey: `${runId}:community_funnel_draft_postcondition_checked:1`,
+          payload: {
+            run_id: runId,
+            community_id: runtimeCommunityId,
+            slot: runtimeCommunityFunnelSlot,
+            before_revision: beforeRevision,
+            after_revision: afterRevision,
+            write_receipt_observed: funnelDraftWriteObserved,
+            draft_content_present: Boolean(
+              after?.selected_funnel?.draft_content_v2,
+            ),
+            status: ok ? "passed" : "failed",
+          },
+        });
+        return { ok, beforeRevision, afterRevision };
+      } catch {
+        return { ok: false, beforeRevision, afterRevision: beforeRevision };
+      }
+    };
+    const funnelDraftPostconditionFailure = {
+      code: "community_funnel_draft_not_saved",
+      message:
+        "The composer finished without saving this funnel. Try the revision again.",
+    } as const;
+    const finishFunnelDraftPostconditionFailure = async (): Promise<void> => {
+      await finishRunBestEffortForRun({
+        status: "error",
+        reason: funnelDraftPostconditionFailure.code,
+        errorCode: funnelDraftPostconditionFailure.code,
+        errorMessage: funnelDraftPostconditionFailure.message,
+      });
+    };
     const appendContextIntegrityCheckBestEffortForRun = async (): Promise<void> => {
       await appendRuntimeContextIntegrityCheckBestEffort({
         ctx,
@@ -1581,6 +1692,7 @@ export async function handleRuntimeTurnRequest(args: {
             eventKey?: string;
             payload: Record<string, unknown>;
           }): Promise<void> => {
+            observeFunnelDraftWriteEvent(event);
             const created = await appendRunEvent(event);
             await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
             const mapped = mapPersistedRuntimeEventRow(created);
@@ -2391,6 +2503,21 @@ export async function handleRuntimeTurnRequest(args: {
             return;
           }
 
+          const funnelPostcondition = await verifyFunnelDraftPostcondition();
+          if (!funnelPostcondition.ok) {
+            await finishFunnelDraftPostconditionFailure();
+            writer.send({
+              event: "error",
+              data: {
+                code: funnelDraftPostconditionFailure.code,
+                error: funnelDraftPostconditionFailure.message,
+                message: funnelDraftPostconditionFailure.message,
+                status: 409,
+              },
+            });
+            return;
+          }
+
           runtimeTurnStage = "assistant_persist";
           if (persistVisibleAssistantMessage) {
             try {
@@ -2513,6 +2640,7 @@ export async function handleRuntimeTurnRequest(args: {
             eventKey?: string;
             payload: Record<string, unknown>;
           }): Promise<void> => {
+            observeFunnelDraftWriteEvent(event);
             const created = await appendRunEvent(event);
             await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
             const mapped = mapPersistedRuntimeEventRow(created);
@@ -2768,6 +2896,20 @@ export async function handleRuntimeTurnRequest(args: {
             });
             return;
           }
+          const funnelPostcondition = await verifyFunnelDraftPostcondition();
+          if (!funnelPostcondition.ok) {
+            await finishFunnelDraftPostconditionFailure();
+            writer.send({
+              event: "error",
+              data: {
+                code: funnelDraftPostconditionFailure.code,
+                error: funnelDraftPostconditionFailure.message,
+                message: funnelDraftPostconditionFailure.message,
+                status: 409,
+              },
+            });
+            return;
+          }
           runtimeTurnStage = "assistant_emit";
           streamedPromptTokens = loopResult.promptTokens;
           streamedCompletionTokens = loopResult.completionTokens;
@@ -2910,6 +3052,7 @@ export async function handleRuntimeTurnRequest(args: {
             activeDaytonaRuntimeSubstrateForPolynetTools,
           apiKeyOverride: providerApiKeyOverride,
           appendRunEvent: async (event): Promise<void> => {
+            observeFunnelDraftWriteEvent(event);
             await appendRunEvent(event);
             await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
           },
@@ -3084,6 +3227,17 @@ export async function handleRuntimeTurnRequest(args: {
           run_id: runId,
         });
       }
+      const funnelPostcondition = await verifyFunnelDraftPostcondition();
+      if (!funnelPostcondition.ok) {
+        await finishFunnelDraftPostconditionFailure();
+        return runtimeJsonResponse(409, {
+          ok: false,
+          code: funnelDraftPostconditionFailure.code,
+          error: funnelDraftPostconditionFailure.code,
+          message: funnelDraftPostconditionFailure.message,
+          run_id: runId,
+        });
+      }
       content = loopResult.assistantText;
       promptTokens = loopResult.promptTokens;
       completionTokens = loopResult.completionTokens;
@@ -3157,6 +3311,7 @@ export async function handleRuntimeTurnRequest(args: {
             eventKey?: string;
             payload: Record<string, unknown>;
           }): Promise<void> => {
+            observeFunnelDraftWriteEvent(event);
             const created = await appendRunEvent(event);
             const mapped = mapPersistedRuntimeEventRow(created);
             if (!mapped) return;
