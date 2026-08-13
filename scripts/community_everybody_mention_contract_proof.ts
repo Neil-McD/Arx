@@ -5,6 +5,14 @@ function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
 }
 
+function functionBlock(source: string, startMarker: string, endMarker: string): string {
+  const start = source.indexOf(startMarker);
+  const end = source.indexOf(endMarker, start + startMarker.length);
+  assert.notEqual(start, -1, `missing function marker: ${startMarker}`);
+  assert.notEqual(end, -1, `missing function boundary: ${endMarker}`);
+  return source.slice(start, end);
+}
+
 const interactions = read("convex/communityInteractions.ts");
 const mentionEmails = read("convex/communityMentionEmails.ts");
 const mentionBroadcasts = read("convex/communityMentionBroadcasts.ts");
@@ -225,16 +233,30 @@ assert.match(
   /processCanceledCommunityMentionBroadcastCleanupsInternal[\s\S]*withIndex\("by_sourceBroadcast"[\s\S]*paginate\(\{[\s\S]*cleanupCursor[\s\S]*notifyState: "suppressed"/,
   "canceled broadcast cleanup must force-suppress projected recipient rows in bounded batches",
 );
-assert.match(
+assert.doesNotMatch(
   crons,
-  /process canceled community mention broadcast cleanups[\s\S]*communityMentionBroadcasts\.processCanceledCommunityMentionBroadcastCleanupsInternal/,
-  "canceled @everybody broadcast cleanup must have a repair cron",
+  /process canceled community mention broadcast cleanups/,
+  "canceled @everybody cleanup must not retain a fixed repair scan",
 );
 
-assert.match(
+assert.doesNotMatch(
   crons,
-  /process queued community mention broadcasts[\s\S]*communityMentionBroadcasts\.processQueuedCommunityMentionBroadcastsInternal/,
-  "@everybody broadcasts must have a repair cron, not rely only on best-effort immediate scheduling",
+  /process queued community mention broadcasts/,
+  "@everybody fanout must not retain a fixed repair scan",
+);
+assert.match(
+  mentionBroadcasts,
+  /scheduleEverybodyMentionBroadcast[\s\S]*ctx\.scheduler\.runAfter\([\s\S]*processQueuedCommunityMentionBroadcastsInternal[\s\S]*broadcastId[\s\S]*limit: 1/,
+  "@everybody fanout must be scheduled atomically for the exact broadcast",
+);
+assert.doesNotMatch(
+  functionBlock(
+    mentionBroadcasts,
+    "export async function scheduleEverybodyMentionBroadcast",
+    "async function getExistingMentionRowForBroadcastRecipient",
+  ),
+  /catch \{/,
+  "@everybody scheduling must not swallow transactional scheduling failures",
 );
 
 assert.match(

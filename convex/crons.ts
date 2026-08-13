@@ -103,34 +103,6 @@ crons.interval(
   { limit: 25 },
 );
 
-// Concierge serve repair drain: accepted community-agent mentions schedule an
-// immediate community-founder-funded worker at intake time. This cron only
-// drains leftover queued/stale requests.
-crons.interval(
-  "process queued community agent serve requests",
-  { minutes: 1 },
-  (internal as any).communityAgentServeWorker.processQueuedCommunityAgentServeRequestsInternal,
-  { limit: 3 },
-);
-
-// Everybody mention fanout: the chat write records the role source row and this
-// drain materializes per-user mention rows in bounded batches.
-crons.interval(
-  "process queued community mention broadcasts",
-  { minutes: 1 },
-  (internal as any).communityMentionBroadcasts.processQueuedCommunityMentionBroadcastsInternal,
-  { limit: 3 },
-);
-
-// Canceled broadcasts are the kill switch; this repair drain clears projected
-// recipient rows in bounded batches after edit/delete invalidates the source.
-crons.interval(
-  "process canceled community mention broadcast cleanups",
-  { minutes: 1 },
-  (internal as any).communityMentionBroadcasts.processCanceledCommunityMentionBroadcastCleanupsInternal,
-  { limit: 3 },
-);
-
 // Mention email pings: mentions still "pending" after the in-app grace window
 // get one email each, preference-gated and deduped per mention.
 crons.interval(

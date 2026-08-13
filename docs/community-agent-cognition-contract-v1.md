@@ -1784,8 +1784,9 @@ Rules:
   hosted-inference authority.
 - Source and response visibility scopes are captured at intake so the future response path cannot guess or widen the boundary.
 - Skipped requests are recorded with machine-readable `intakeReason`; no tokens are spent for skipped intake.
-- Immediate worker scheduling failure must not fail the chat write; the durable
-  queued request remains available to the repair worker.
+- Request insertion and scheduling are one atomic Convex mutation. Each accepted
+  request schedules the immediate action plus a finite three-invocation delayed
+  recovery budget scoped to that request; there is no fixed global serve-repair scan.
 
 ## Twenty-Fifth Implementation Slice: Concierge Serve Worker v0
 
@@ -1924,11 +1925,11 @@ Rules:
 - Sending an accepted addressed turn invokes it. Editing the source does not
   retract an accepted request. Deleting or hiding the source before
   finalization fails closed through the live-source recheck.
-- The cron is a bounded worker. It processes a small number of queued requests
-  per tick and leaves product truth in `communityAgentServeRequests`.
-- Serve is event-driven primary, cron-repaired secondary. Fresh accepted
-  requests schedule the serve worker immediately with `requestId`; the cron is
-  only a leftover/stale request drain.
+- Serve is request-scoped and event-driven. Fresh accepted requests atomically
+  schedule the serve worker immediately with `requestId` and three delayed
+  request-scoped recovery invocations spaced beyond the maximum lease. Terminal
+  requests make delayed invocations no-ops; the request can be claimed at most
+  three times and there is no deployment-wide polling worker.
 
 ## What Not To Build Yet
 

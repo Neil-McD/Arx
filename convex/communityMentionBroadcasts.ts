@@ -212,19 +212,15 @@ function cancellationCleanupPatch(errorCode: string, nowMs: number): Record<stri
 }
 
 async function scheduleBroadcastCleanup(ctx: any, broadcastId: any): Promise<boolean> {
-  try {
-    await ctx.scheduler.runAfter(
-      0,
-      internalRefs.communityMentionBroadcasts.processCanceledCommunityMentionBroadcastCleanupsInternal,
-      {
-        broadcastId,
-        limit: 1,
-      },
-    );
-    return true;
-  } catch {
-    return false;
-  }
+  await ctx.scheduler.runAfter(
+    0,
+    internalRefs.communityMentionBroadcasts.processCanceledCommunityMentionBroadcastCleanupsInternal,
+    {
+      broadcastId,
+      limit: 1,
+    },
+  );
+  return true;
 }
 
 export async function mentionBroadcastAllowsEmail(args: {
@@ -319,18 +315,14 @@ export async function scheduleEverybodyMentionBroadcast(args: {
     sourceBroadcastId: broadcastId,
     updatedAt: args.nowMs,
   });
-  try {
-    await args.ctx.scheduler.runAfter(
-      0,
-      internalRefs.communityMentionBroadcasts.processQueuedCommunityMentionBroadcastsInternal,
-      {
-        broadcastId,
-        limit: 1,
-      },
-    );
-  } catch {
-    // The cron drain owns reliability; scheduling failure must not fail the chat write.
-  }
+  await args.ctx.scheduler.runAfter(
+    0,
+    internalRefs.communityMentionBroadcasts.processQueuedCommunityMentionBroadcastsInternal,
+    {
+      broadcastId,
+      limit: 1,
+    },
+  );
   return { broadcastId, emailMode: availability.emailMode };
 }
 
@@ -800,20 +792,16 @@ export const processQueuedCommunityMentionBroadcastsInternal = internalMutation(
       if (result.processed) processed += 1;
       if (result.complete) completed += 1;
       if (!result.complete) {
-        try {
-          await ctx.scheduler.runAfter(
-            0,
-            internalRefs.communityMentionBroadcasts.processQueuedCommunityMentionBroadcastsInternal,
-            {
-              broadcastId: broadcast._id,
-              limit: 1,
-              batchSize,
-            },
-          );
-          scheduledContinuation = true;
-        } catch {
-          // The cron repair drain will continue the still-draining broadcast.
-        }
+        await ctx.scheduler.runAfter(
+          0,
+          internalRefs.communityMentionBroadcasts.processQueuedCommunityMentionBroadcastsInternal,
+          {
+            broadcastId: broadcast._id,
+            limit: 1,
+            batchSize,
+          },
+        );
+        scheduledContinuation = true;
       }
     }
 
@@ -845,20 +833,16 @@ export const processCanceledCommunityMentionBroadcastCleanupsInternal = internal
       if (result.complete) completed += 1;
       suppressed += result.suppressed;
       if (!result.complete) {
-        try {
-          await ctx.scheduler.runAfter(
-            0,
-            internalRefs.communityMentionBroadcasts.processCanceledCommunityMentionBroadcastCleanupsInternal,
-            {
-              broadcastId: broadcast._id,
-              limit: 1,
-              batchSize,
-            },
-          );
-          scheduledContinuation = true;
-        } catch {
-          // The cron repair drain will continue the queued cleanup.
-        }
+        await ctx.scheduler.runAfter(
+          0,
+          internalRefs.communityMentionBroadcasts.processCanceledCommunityMentionBroadcastCleanupsInternal,
+          {
+            broadcastId: broadcast._id,
+            limit: 1,
+            batchSize,
+          },
+        );
+        scheduledContinuation = true;
       }
     }
 

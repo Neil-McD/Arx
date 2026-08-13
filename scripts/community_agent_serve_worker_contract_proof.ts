@@ -325,10 +325,15 @@ assert.match(
   /catch \(error\)[\s\S]*const failureCode = providerStarted[\s\S]*errorCode: failureCode[\s\S]*catch \(error\)[\s\S]*errorCode: "serve_finalize_exception"/,
   "serve worker should mark provider and finalize exceptions as deterministic request errors",
 );
-assert.match(
+assert.doesNotMatch(
   crons,
-  /"process queued community agent serve requests",\s*\{ minutes: 1 \},[\s\S]*communityAgentServeWorker\.processQueuedCommunityAgentServeRequestsInternal[\s\S]*\{ limit: 3 \}/,
-  "serve worker should keep a bounded cron repair drain",
+  /process queued community agent serve requests/,
+  "serve worker must not retain a fixed global repair scan",
+);
+assert.match(
+  serveContract,
+  /COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS[\s\S]*COMMUNITY_AGENT_SERVE_LEASE_MS \+ 60_000[\s\S]*\* 2[\s\S]*\* 3/,
+  "serve recovery should retain a finite request-scoped schedule",
 );
 assert.match(
   docs,
@@ -357,8 +362,8 @@ assert.match(
 );
 assert.match(
   docs,
-  /Serve is event-driven primary, cron-repaired secondary[\s\S]*schedule the serve worker immediately with `requestId`[\s\S]*leftover\/stale request drain/,
-  "architecture docs should state that cron is repair, not primary serve",
+  /Serve is request-scoped and event-driven[\s\S]*schedule the serve worker immediately with `requestId` and three delayed[\s\S]*there is no deployment-wide polling worker/,
+  "architecture docs should define finite request-scoped serve recovery",
 );
 assert.match(
   docs,

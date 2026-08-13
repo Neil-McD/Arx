@@ -130,7 +130,7 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 
 #### Convex scheduled jobs
 
-`convex/crons.ts` currently declares 14 jobs:
+`convex/crons.ts` currently declares 11 jobs:
 
 | Job | Cadence | Current batch bound | Classification |
 | --- | --- | --- | --- |
@@ -144,9 +144,6 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 | Sweep expired Daytona Codex runtime targets | 5 minutes | 20 | infrastructure repair; keep |
 | Community memory sweep | 6 hours | 500 communities plus downstream gates | AI-triggering job; retain only with founder funding, per-community caps, and delta gating proven |
 | Process pending community agent mentions | 5 minutes | 25 | token-free repair; verify indexed pending lookup |
-| Process queued community agent serve requests | 1 minute | 3 | `remediation candidate`: immediate scheduling is primary, so empty one-minute repair should be reduced, consolidated, or made adaptive |
-| Process queued community mention broadcasts | 1 minute | 3 | `remediation candidate`: event-driven primary path should not require constant empty scans |
-| Process canceled community mention broadcast cleanups | 1 minute | 3 | `remediation candidate`: consolidate with broadcast repair if authority and indexes allow |
 | Process pending mention emails | 15 minutes | implementation-owned | notification job; declare an explicit batch bound in this registry |
 
 The existence of a batch limit does not prove cost safety. Each job still needs
@@ -160,7 +157,7 @@ writes, and evidence that empty runs are cheap.
 | COST-001 | P0 | Contain repeated profile hydration | `fixed in production` | production build marker plus no recurrence under remount/resume/render-churn proof |
 | COST-002 | P0 | Delete attention polling and bound reactive attention reads | `implemented; staging proof pending` | idle tabs have no attention cadence; scopes are bounded; real activity reconciles reactively; update read cost is measured before adding storage |
 | COST-003 | P0 | Remove N+1 bundle hydration from chat root listing | `confirmed` | feed query returns a thin bounded projection; full bundles load only on demand |
-| COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `open` | every retained job satisfies the recurring-work declaration and empty-run proof |
+| COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `partial` | three one-minute global repair scans are deleted; every retained job still needs its recurring-work declaration and empty-run proof |
 | COST-005 | P1 | Bound staging/realtime reconnect behavior | `implemented; staging proof pending` | disabled/dormant deployment and stale-client tests terminate without sustained calls |
 | COST-006 | P1 | Validate auth/session call clusters | `investigate` | calls are attributable to distinct valid lifecycle events or a dedupe fix lands |
 | COST-007 | P1 | Prove rate limiting for public cost-bearing HTTP surfaces | `open` | actor/IP/community limits and abuse tests for runtime, auth, ingestion, billing, and workers |

@@ -43,11 +43,21 @@ const declaredCronNames = Array.from(
   crons.matchAll(/crons\.(?:interval|daily)\(\s*\n\s*"([^"]+)"/g),
   (match) => match[1]!,
 );
-assert.equal(declaredCronNames.length, 14, "every Convex cron must remain inventoried");
+assert.equal(declaredCronNames.length, 11, "every Convex cron must remain inventoried");
 for (const cronName of declaredCronNames) {
   assert.ok(
     contract.toLowerCase().includes(cronName.toLowerCase()),
     `cost contract must inventory Convex cron: ${cronName}`,
+  );
+}
+for (const retiredCronName of [
+  "process queued community agent serve requests",
+  "process queued community mention broadcasts",
+  "process canceled community mention broadcast cleanups",
+]) {
+  assert.ok(
+    !declaredCronNames.includes(retiredCronName),
+    `fixed repair drain must remain deleted: ${retiredCronName}`,
   );
 }
 

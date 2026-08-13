@@ -11,6 +11,14 @@ const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
 
+function functionBlock(source: string, functionName: string): string {
+  const startToken = `async function ${functionName}`;
+  const start = source.indexOf(startToken);
+  assert.notEqual(start, -1, `${functionName} should exist`);
+  const nextFunction = source.indexOf("\nasync function ", start + startToken.length);
+  return source.slice(start, nextFunction === -1 ? source.length : nextFunction);
+}
+
 function exportedFunctionBlock(source: string, exportName: string): string {
   const startToken = `export const ${exportName} =`;
   const start = source.indexOf(startToken);
@@ -134,13 +142,13 @@ assert.match(
 );
 assert.match(
   conciergeCore,
-  /scheduleImmediateServeWorker[\s\S]*ctx\.scheduler\.runAfter\([\s\S]*communityAgentServeWorker\.processQueuedCommunityAgentServeRequestsInternal[\s\S]*requestId: args\.requestId[\s\S]*limit: 1/,
-  "accepted Concierge intake should immediately schedule the serve worker for the exact request",
+  /COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS[\s\S]*scheduleImmediateServeWorker[\s\S]*for \(const delayMs of COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS\)[\s\S]*ctx\.scheduler\.runAfter\([\s\S]*delayMs[\s\S]*communityAgentServeWorker\.processQueuedCommunityAgentServeRequestsInternal/,
+  "accepted Concierge intake should atomically schedule a finite request-scoped recovery budget",
 );
-assert.match(
-  conciergeCore,
-  /catch \{[\s\S]*serve repair cron will drain it/,
-  "immediate serve scheduling failure should not fail the chat write",
+assert.doesNotMatch(
+  functionBlock(conciergeCore, "scheduleImmediateServeWorker"),
+  /catch \{/,
+  "serve scheduling must remain atomic with request intake instead of swallowing failures",
 );
 assert.match(
   conciergeCore,

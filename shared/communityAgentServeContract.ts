@@ -6,6 +6,12 @@ export const COMMUNITY_AGENT_SERVE_RECOVERY_GRACE_MS = 5 * 60 * 1000;
 export const COMMUNITY_AGENT_SERVE_LEASE_MS =
   COMMUNITY_AGENT_SERVE_RUNTIME_MAX_MS + COMMUNITY_AGENT_SERVE_RECOVERY_GRACE_MS;
 export const COMMUNITY_AGENT_SERVE_MAX_ATTEMPTS = 3;
+export const COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS = [
+  0,
+  COMMUNITY_AGENT_SERVE_LEASE_MS + 60_000,
+  (COMMUNITY_AGENT_SERVE_LEASE_MS + 60_000) * 2,
+  (COMMUNITY_AGENT_SERVE_LEASE_MS + 60_000) * 3,
+] as const;
 
 export function normalizeCommunityAgentServeAttempt(raw: unknown): number {
   const parsed = Math.floor(Number(raw));

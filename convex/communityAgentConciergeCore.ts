@@ -2,6 +2,7 @@ import { internal } from "./_generated/api";
 import { normalizeIdValue, requireCommunityChatAccess } from "./communityCore";
 import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+import { COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS } from "../shared/communityAgentServeContract";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 
 const internalRefs = internal as any;
@@ -143,18 +144,19 @@ async function scheduleImmediateServeWorker(args: {
   ctx: any;
   requestId: any;
 }): Promise<void> {
-  try {
+  // This runs inside the intake mutation. Convex commits the queued request and
+  // scheduled action atomically, so a global polling repair drain is unnecessary.
+  // Scheduled actions are at-most-once. Attach a finite request-scoped recovery
+  // budget atomically to intake instead of scanning the deployment every minute.
+  for (const delayMs of COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS) {
     await args.ctx.scheduler.runAfter(
-      0,
+      delayMs,
       internalRefs.communityAgentServeWorker.processQueuedCommunityAgentServeRequestsInternal,
       {
         requestId: args.requestId,
         limit: 1,
       },
     );
-  } catch {
-    // Chat writes should not fail because the immediate serve schedule failed;
-    // the queued request remains durable and the serve repair cron will drain it.
   }
 }
 
