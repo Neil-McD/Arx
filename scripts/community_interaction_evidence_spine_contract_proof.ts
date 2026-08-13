@@ -133,8 +133,7 @@ assert.match(evidence, /"communityInteractionReplies" as any/);
 assert.doesNotMatch(communityChat, /communityArchiveDocuments|deleteArchiveDocumentBySource/);
 assert.match(interactions, /scheduleCommunityInteractionEvidenceSync/);
 
-assert.match(retrievalTools, /community_chat_search/);
-assert.match(retrievalTools, /community_chat_read/);
+assert.doesNotMatch(retrievalTools, /community_chat_search|community_chat_read/);
 for (const source of [invocationSurface, conciergeTools]) {
   assert.match(source, /polynet_search/);
   assert.match(source, /polynet_read/);

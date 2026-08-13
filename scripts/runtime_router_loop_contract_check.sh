@@ -132,8 +132,8 @@ echo "OK: deleted parser file absent"
 
 require_match_in_file "$TOOL_TYPES_FILE" 'export type RetrievalToolName' \
   "tool name type lives in neutral shared module"
-require_match_in_file "$TOOL_TYPES_FILE" '"community_search"' \
-  "tool name type includes community_search"
+forbid_match_in_file "$TOOL_TYPES_FILE" '"community_search"' \
+  "retired community_search tool is absent from the active tool type"
 require_match_in_file "$TOOL_TYPES_FILE" '"search_product_docs"' \
   "tool name type includes search_product_docs"
 require_match_in_file "$TOOL_TYPES_FILE" '"get_product_doc"' \
@@ -148,10 +148,8 @@ require_match_in_file "$TOOL_TYPES_FILE" '"polynet_write"' \
   "tool name type includes polynet_write"
 require_match_in_file "$TOOL_TYPES_FILE" '"polynet_call"' \
   "tool name type includes polynet_call"
-require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_read"' \
-  "tool name type includes community_resources_read"
-require_match_in_file "$TOOL_TYPES_FILE" '"community_resources_search"' \
-  "tool name type includes community_resources_search"
+forbid_match_in_file "$TOOL_TYPES_FILE" '"polynet_list_communities"|"polynet_get_community"|"community_resources_(read|search)"|"community_memory_(read|search)"|"community_chat_(read|search)"' \
+  "duplicate community façades are absent from the active tool type"
 forbid_match_in_file "$TOOL_TYPES_FILE" '"community_resources_map"|"community_resources_list"|"community_resource_read"' \
   "retired native resource tools are absent from the active tool type"
 forbid_match_in_file "$TOOL_TYPES_FILE" '"community_write"|"community_ai_feed_search"|"community_ai_feed_read"' \
@@ -192,8 +190,8 @@ require_match_in_file "$RESOLUTION_FILE" '"polynet_call"' \
   "runtime capability resolution includes discovered canonical operations"
 forbid_match_in_file "$RESOLUTION_FILE" '"community_resources_(read|search|map|list)"|"community_resource_(read|builder_[^"]+)"|"community_search"' \
   "runtime capability resolution excludes duplicate granular community tools"
-forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'toolName === "community_resources_map"|toolName === "community_resources_list"|toolName === "community_resource_read"' \
-  "runtime dispatch excludes retired native resource tools"
+forbid_match_in_file "$RUNTIME_AGENT_LOOP_FILE" 'toolName === "polynet_list_communities"|toolName === "polynet_get_community"|toolName === "community_(resources|memory|chat)_(read|search)"|toolName === "community_search"' \
+  "runtime dispatch excludes duplicate community façades"
 forbid_match_in_file "$RESOLUTION_FILE" '"community_write"|"community_ai_feed_search"|"community_ai_feed_read"' \
   "runtime capability resolution excludes retired community write and AI Feed tools"
 require_match_in_file "$RESOLUTION_FILE" 'toolNames.push\("search_product_docs", "get_product_doc"\)' \

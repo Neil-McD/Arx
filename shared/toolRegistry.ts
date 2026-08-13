@@ -64,12 +64,6 @@ function getPlatformNativeToolContract(name: RetrievalToolName): {
   };
 }
 
-const POLYNET_LIST_COMMUNITIES_TOOL = getPlatformNativeToolContract(
-  "polynet_list_communities",
-);
-const POLYNET_GET_COMMUNITY_TOOL = getPlatformNativeToolContract(
-  "polynet_get_community",
-);
 const SEARCH_PRODUCT_DOCS_TOOL = getPlatformNativeToolContract(
   "search_product_docs",
 );
@@ -171,105 +165,6 @@ const WEB_CRAWL_TOOL_SCHEMA: JsonSchema = {
   },
 };
 
-const COMMUNITY_SEARCH_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 240,
-    },
-  },
-};
-
-const COMMUNITY_MEMORY_TYPE_SCHEMA: JsonSchema = {
-  type: "string",
-  enum: [
-    "playbook",
-    "insight",
-    "example",
-    "warning_failure",
-    "decision_judgment",
-    "open_question",
-  ],
-};
-
-const COMMUNITY_MEMORY_SEARCH_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 512,
-    },
-    types: {
-      type: "array",
-      maxItems: 6,
-      items: COMMUNITY_MEMORY_TYPE_SCHEMA,
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 12,
-    },
-  },
-};
-
-const COMMUNITY_MEMORY_READ_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["node_id"],
-  properties: {
-    node_id: {
-      type: "string",
-      minLength: 1,
-      maxLength: 128,
-    },
-    retrieval_log_id: {
-      type: "string",
-      minLength: 1,
-      maxLength: 128,
-    },
-  },
-};
-
-const COMMUNITY_CHAT_SEARCH_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 240,
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 20,
-    },
-  },
-};
-
-const COMMUNITY_CHAT_READ_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["ref"],
-  properties: {
-    ref: {
-      type: "string",
-      minLength: 1,
-      maxLength: 512,
-      description:
-        "A stable interaction:root:<id> or interaction:reply:<id> evidence ref returned by community_chat_search.",
-    },
-  },
-};
-
 const MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA: JsonSchema = {
   type: "object",
   additionalProperties: false,
@@ -348,57 +243,6 @@ const MEMBER_CONVERSATION_READ_TOOL_SCHEMA: JsonSchema = {
       type: "string",
       minLength: 1,
       maxLength: 160,
-    },
-  },
-};
-
-const COMMUNITY_RESOURCES_READ_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["refs"],
-  properties: {
-    refs: {
-      type: "array",
-      minItems: 1,
-      maxItems: 10,
-      description:
-        "Resource ids, resources:// directory URIs, or readable resource paths.",
-      items: {
-        type: "string",
-        minLength: 1,
-        maxLength: 1024,
-      },
-    },
-    max_chars: {
-      type: "integer",
-      minimum: 1,
-      maximum: 50000,
-      description:
-        "Maximum total readable content characters returned across all resources.",
-    },
-    per_resource_chars: {
-      type: "integer",
-      minimum: 1,
-      maximum: 20000,
-      description: "Maximum readable content characters returned per resource.",
-    },
-  },
-};
-
-const COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA: JsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["query"],
-  properties: {
-    query: {
-      type: "string",
-      minLength: 1,
-      maxLength: 240,
-    },
-    limit: {
-      type: "integer",
-      minimum: 1,
-      maximum: 100,
     },
   },
 };
@@ -791,61 +635,11 @@ const TOOL_REGISTRY: Record<RetrievalToolName, ToolRegistryEntry> = {
       "Read a bounded user-and-assistant transcript window with lens provenance from one of the signed-in member's private Polynet agent conversation episodes.",
     inputSchema: MEMBER_CONVERSATION_READ_TOOL_SCHEMA,
   },
-  polynet_list_communities: {
-    name: "polynet_list_communities",
-    ...POLYNET_LIST_COMMUNITIES_TOOL,
-  },
-  polynet_get_community: {
-    name: "polynet_get_community",
-    ...POLYNET_GET_COMMUNITY_TOOL,
-  },
   member_profile_confirm_facts: {
     name: "member_profile_confirm_facts",
     description:
       "Write member-approved onboarding interview facts to the active member profile ontology for the active community lens.",
     inputSchema: MEMBER_PROFILE_CONFIRM_FACTS_TOOL_SCHEMA,
-  },
-  community_resources_read: {
-    name: "community_resources_read",
-    description:
-      "Batch-read member-visible active community Resources by stable resource ref, resource id, resources:// URI, or readable path under a bounded character budget.",
-    inputSchema: COMMUNITY_RESOURCES_READ_TOOL_SCHEMA,
-  },
-  community_resources_search: {
-    name: "community_resources_search",
-    description:
-      "Search the active community's live category pages and return resource paths, directory URIs, snippets, and metadata.",
-    inputSchema: COMMUNITY_RESOURCES_SEARCH_TOOL_SCHEMA,
-  },
-  community_search: {
-    name: "community_search",
-    description:
-      "Search the active community's raw recent activity evidence across chat and resources.",
-    inputSchema: COMMUNITY_SEARCH_TOOL_SCHEMA,
-  },
-  community_memory_search: {
-    name: "community_memory_search",
-    description:
-      "Search accepted community intelligence learned by the active community. Returns only promising, validated, or canonical memory plus a retrieval log id; it does not search raw activity evidence.",
-    inputSchema: COMMUNITY_MEMORY_SEARCH_TOOL_SCHEMA,
-  },
-  community_memory_read: {
-    name: "community_memory_read",
-    description:
-      "Read one accepted community memory node and a bounded visibility-filtered subgraph. Pass the retrieval log id from community_memory_search when available.",
-    inputSchema: COMMUNITY_MEMORY_READ_TOOL_SCHEMA,
-  },
-  community_chat_search: {
-    name: "community_chat_search",
-    description:
-      "Search authorized canonical chat interactions in the active community and return stable evidence refs. This reads raw evidence, not community-endorsed memory.",
-    inputSchema: COMMUNITY_CHAT_SEARCH_TOOL_SCHEMA,
-  },
-  community_chat_read: {
-    name: "community_chat_read",
-    description:
-      "Read one authorized canonical community chat interaction by a stable evidence ref returned from community_chat_search.",
-    inputSchema: COMMUNITY_CHAT_READ_TOOL_SCHEMA,
   },
   web_research: {
     name: "web_research",
@@ -1375,87 +1169,6 @@ export function normalizeToolArguments(
     if (!path) throw new Error("list_dir requires path.");
     return { path: path.slice(0, 1024) };
   }
-  if (toolName === "community_search") {
-    const query = normalizeString(args.query);
-    if (!query) throw new Error("community_search requires query.");
-    return { query: query.slice(0, 240) };
-  }
-  if (toolName === "community_memory_search") {
-    const query = normalizeString(args.query);
-    if (!query) throw new Error("community_memory_search requires query.");
-    if (args.types !== undefined && !Array.isArray(args.types)) {
-      throw new Error("community_memory_search types must be an array.");
-    }
-    const allowedTypes = new Set([
-      "playbook",
-      "insight",
-      "example",
-      "warning_failure",
-      "decision_judgment",
-      "open_question",
-    ]);
-    const requestedTypes = Array.isArray(args.types)
-      ? args.types
-          .map((value) => normalizeString(value))
-          .filter((value): value is string => Boolean(value))
-      : [];
-    const unsupportedType = requestedTypes.find(
-      (value) => !allowedTypes.has(value),
-    );
-    if (unsupportedType) {
-      throw new Error(
-        `community_memory_search received unsupported memory type: ${unsupportedType}.`,
-      );
-    }
-    const types = [...new Set(requestedTypes)].slice(0, 6);
-    const limit = normalizeBoundedInteger(
-      args.limit,
-      "community_memory_search limit",
-      1,
-      12,
-    );
-    return {
-      query: query.slice(0, 512),
-      ...(types.length ? { types } : null),
-      ...(limit ? { limit } : null),
-    };
-  }
-  if (toolName === "community_memory_read") {
-    const nodeId = normalizeString(args.node_id ?? args.nodeId);
-    if (!nodeId) throw new Error("community_memory_read requires node_id.");
-    const retrievalLogId = normalizeString(
-      args.retrieval_log_id ?? args.retrievalLogId,
-    );
-    return {
-      nodeId: nodeId.slice(0, 128),
-      ...(retrievalLogId
-        ? { retrievalLogId: retrievalLogId.slice(0, 128) }
-        : null),
-    };
-  }
-  if (toolName === "community_chat_search") {
-    const query = normalizeString(args.query);
-    if (!query) throw new Error("community_chat_search requires query.");
-    const limit = normalizeBoundedInteger(
-      args.limit,
-      "community_chat_search limit",
-      1,
-      20,
-    );
-    return {
-      query: query.slice(0, 240),
-      ...(limit ? { limit } : null),
-    };
-  }
-  if (toolName === "community_chat_read") {
-    const ref = normalizeString(args.ref);
-    if (!ref || !/^interaction:(root|reply):[^\s:]+$/.test(ref)) {
-      throw new Error(
-        "community_chat_read requires a valid interaction evidence ref.",
-      );
-    }
-    return { ref: ref.slice(0, 512) };
-  }
   if (toolName === "member_conversations_list") {
     const limit = normalizeBoundedInteger(
       args.limit,
@@ -1470,69 +1183,6 @@ export function normalizeToolArguments(
     if (!episodeId)
       throw new Error("member_conversation_read requires episode_id.");
     return { episodeId: episodeId.slice(0, 160) };
-  }
-  if (toolName === "polynet_list_communities") {
-    const scope = normalizeString(args.scope)?.toLowerCase() ?? "joined";
-    if (scope !== "joined" && scope !== "discover") {
-      throw new Error(
-        "polynet_list_communities scope must be joined or discover.",
-      );
-    }
-    return { scope };
-  }
-  if (toolName === "polynet_get_community") {
-    const communitySlug = normalizeString(
-      args.community_slug ?? args.communitySlug,
-    )?.toLowerCase();
-    if (!communitySlug || !/^[a-z0-9-]{3,64}$/.test(communitySlug)) {
-      throw new Error("polynet_get_community requires a valid community_slug.");
-    }
-    return { communitySlug };
-  }
-  if (toolName === "community_resources_read") {
-    if (!Array.isArray(args.refs) || args.refs.length < 1) {
-      throw new Error("community_resources_read requires refs.");
-    }
-    if (args.refs.length > 10) {
-      throw new Error("community_resources_read supports at most 10 refs.");
-    }
-    const refs = args.refs
-      .map((ref) => (normalizeString(ref) ?? "").slice(0, 1024))
-      .filter(Boolean);
-    if (refs.length < 1) {
-      throw new Error("community_resources_read requires refs.");
-    }
-    const maxChars = normalizeBoundedInteger(
-      args.max_chars,
-      "community_resources_read max_chars",
-      1,
-      50000,
-    );
-    const perResourceChars = normalizeBoundedInteger(
-      args.per_resource_chars,
-      "community_resources_read per_resource_chars",
-      1,
-      20000,
-    );
-    return {
-      refs,
-      ...(maxChars ? { maxChars } : null),
-      ...(perResourceChars ? { perResourceChars } : null),
-    };
-  }
-  if (toolName === "community_resources_search") {
-    const query = normalizeString(args.query);
-    if (!query) throw new Error("community_resources_search requires query.");
-    const limit = normalizeBoundedInteger(
-      args.limit,
-      "community_resources_search limit",
-      1,
-      20,
-    );
-    return {
-      query: query.slice(0, 240),
-      ...(limit ? { limit } : null),
-    };
   }
   if (toolName === "polynet_list") {
     const validated = validatePolynetSemanticRepositoryOperationInput({
@@ -1572,7 +1222,11 @@ export function normalizeToolArguments(
     const parsedPath = parsePolynetSemanticRepositoryPath(args.path);
     if (!parsedPath.ok) throw new Error(parsedPath.message);
     const query = normalizeString(args.query);
-    if (!query) throw new Error("polynet_search requires query.");
+    if (!query) {
+      throw new Error(
+        "polynet_search requires a non-empty query. For broad inspection, use polynet_list on the same path and follow the returned paths.",
+      );
+    }
     if (
       args.types !== undefined &&
       args.types !== null &&

@@ -38,15 +38,6 @@ const FIXED_TOOL_FAMILIES = {
     "polynet_call",
     "member_conversations_list",
     "member_conversation_read",
-    "polynet_list_communities",
-    "polynet_get_community",
-    "community_resources_read",
-    "community_resources_search",
-    "community_search",
-    "community_memory_search",
-    "community_memory_read",
-    "community_chat_search",
-    "community_chat_read",
     "member_profile_confirm_facts",
   ],
   web: ["web_research", "web_crawl"],
@@ -182,11 +173,6 @@ function proveFixedPolicyBoundaries() {
     "search_product_docs",
     "get_product_doc",
     "polynet_list",
-    "community_resources_read",
-    "community_resources_search",
-    "community_search",
-    "community_chat_search",
-    "community_chat_read",
     "web_research",
     "list_dir",
     "read",
@@ -202,8 +188,7 @@ function proveFixedPolicyBoundaries() {
   }
   for (const toolName of [
     "polynet_read",
-    "community_memory_search",
-    "community_memory_read",
+    "polynet_search",
   ] as const satisfies readonly RetrievalToolName[]) {
     const receiptWritingRead = getFixedRuntimeToolPolicy(toolName);
     assert.equal(receiptWritingRead.riskLevel, "read");
@@ -258,20 +243,19 @@ function proveFixedPolicyBoundaries() {
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").readOnly, false);
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("polynet_read").parallelSafe, false);
-  for (const toolName of [
-    "community_resources_read",
-    "community_resources_search",
-    "community_chat_search",
-    "community_chat_read",
-  ] as const satisfies readonly RetrievalToolName[]) {
-    assert.equal(getFixedRuntimeToolPolicy(toolName).category, "community");
-    assert.equal(getFixedRuntimeToolPolicy(toolName).requiresCommunity, true);
-    assert.equal(getFixedRuntimeToolPolicy(toolName).readOnly, true);
-  }
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").mutatesState, true);
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresCommunity, true);
   assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresWorkspace, false);
   for (const retiredToolName of [
+    "polynet_list_communities",
+    "polynet_get_community",
+    "community_resources_read",
+    "community_resources_search",
+    "community_search",
+    "community_memory_search",
+    "community_memory_read",
+    "community_chat_search",
+    "community_chat_read",
     "community_resource_builder_list",
     "community_resource_builder_read",
     "community_resource_builder_stage_changeset",
@@ -310,13 +294,13 @@ function proveFixedPolicyBoundaries() {
 
 function provePolicySurfaceSummary() {
   const surface = buildRuntimeToolPolicySurface({
-    fixedToolNames: ["community_search", "read", "bash"],
+    fixedToolNames: ["polynet_list", "read", "bash"],
   });
   assert.equal(surface.policies.length, 3);
   assert.equal(surface.summary.total, 3);
   assert.equal(surface.summary.parallelSafe, 2);
   assert.equal(surface.summary.exclusive, 1);
-  assert.equal(surface.summary.requiresCommunity, 1);
+  assert.equal(surface.summary.requiresCommunity, 0);
   assert.equal(surface.summary.byRiskLevel.read, 2);
   assert.equal(surface.summary.byRiskLevel.write, 0);
   assert.equal(surface.summary.byRiskLevel.sensitive, 1);

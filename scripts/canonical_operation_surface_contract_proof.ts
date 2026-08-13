@@ -53,8 +53,6 @@ assert.deepEqual(
     invocationSurface: "member_agent_dock",
     toolNames: [
       ...expected,
-      "community_chat_search",
-      "community_write",
       "search_product_docs",
     ],
   }),

@@ -30,11 +30,7 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
   allowedToolNames: [
     "polynet_list",
     "polynet_read",
-    "community_resources_read",
-    "community_resources_search",
-    "community_memory_search",
-    "community_memory_read",
-    "community_search",
+    "polynet_search",
     "read",
     "write",
     "bash",
@@ -227,13 +223,9 @@ assert.match(prompt, /Use this lens as background context/);
 assert.match(prompt, /Use polynet_list with path \/ to inspect the platform repository root/);
 assert.match(prompt, /Use polynet_list with path \/communities\/ to list communities the signed-in member can currently access/);
 assert.match(prompt, /Use polynet_read with path \/communities\/prompt-community\/community\.md when the answer depends on the active community's full identity/);
-assert.match(prompt, /For active-community Resources, references, knowledge, category contents, and pages/);
-assert.match(prompt, /use the semantic polynet_list\/polynet_read path before product documentation tools/);
-assert.match(prompt, /community_resources_read only when a justified batch read/);
-assert.match(prompt, /Use community_memory_search for what the active community has learned and accepted/);
-assert.match(prompt, /cite the memory title and status/);
-assert.match(prompt, /Use community_search for broad raw recent community activity evidence beyond the canonical resource directory/);
-assert.match(prompt, /Accepted community memory is distinct from raw chat and resource evidence/);
+assert.match(prompt, /Use polynet_list with path \/communities\/prompt-community\/resources\/ to navigate live member-visible resource categories/);
+assert.match(prompt, /Use polynet_search on exact subtrees such as \/communities\/prompt-community\/resources\//);
+assert.match(prompt, /Treat channels as permissioned raw activity evidence, Resources as durable community knowledge, and accepted memory as learned community intelligence/);
 assert.match(prompt, /channels\/ to discover every authorized active channel/);
 assert.match(
   prompt,
@@ -244,11 +236,7 @@ assert.match(prompt, /About excerpt: Used to prove prompt layout/);
 assert.match(prompt, /The about excerpt is not a complete knowledge base/);
 assert.doesNotMatch(prompt, /About: Used to prove prompt layout/);
 assert.doesNotMatch(prompt, /FULL_ABOUT_TAIL_SHOULD_NOT_RENDER/);
-assert.doesNotMatch(
-  prompt,
-  /When community_search returns recent_context/,
-  "community lens should not duplicate detailed community_search result handling",
-);
+assert.doesNotMatch(prompt, /community_(?:resources|memory|chat)_(?:read|search)|community_search/);
 assert.doesNotMatch(
   prompt,
   /## Core Mechanism/,

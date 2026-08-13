@@ -88,8 +88,6 @@ assert.deepEqual(
       searchName,
       readName,
       callName,
-      "community_memory_search",
-      "community_memory_read",
     ],
   }),
   [searchName, readName, callName],

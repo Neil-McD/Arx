@@ -47,7 +47,7 @@ assert.deepEqual([...POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES], [...SANDBOX_PR
 const allowed = [
   "polynet_list",
   "polynet_read",
-  "community_resources_search",
+  "polynet_search",
   "web_research",
   ...SANDBOX_TOOL_NAMES,
 ] as RetrievalToolName[];

@@ -36,11 +36,6 @@ const envelope = buildRuntimeTurnEnvelope({
     "polynet_search",
     "polynet_write",
     "polynet_call",
-    "community_resources_read",
-    "community_memory_search",
-    "community_memory_read",
-    "community_search",
-    "polynet_write",
     "member_profile_confirm_facts",
     "web_research",
     "read",
@@ -98,11 +93,6 @@ const fullManifest = buildRuntimeContextManifest({
     "polynet_search",
     "polynet_write",
     "polynet_call",
-    "community_resources_read",
-    "community_memory_search",
-    "community_memory_read",
-    "community_search",
-    "polynet_write",
     "member_profile_confirm_facts",
     "web_research",
     "read",
@@ -159,17 +149,14 @@ assert.ok(ids(fullManifest.prompts).includes("community_skill:launch"));
 
 assert.ok(ids(fullManifest.resources).includes("product_docs"));
 assert.ok(ids(fullManifest.resources).includes("active_community_context"));
-assert.ok(ids(fullManifest.resources).includes("community_resources"));
-assert.ok(ids(fullManifest.resources).includes("community_compiled_memory"));
-assert.ok(ids(fullManifest.resources).includes("community_activity_archive"));
 assert.ok(ids(fullManifest.resources).includes("workspace_files"));
 assert.ok(ids(fullManifest.resources).includes("web_external_evidence"));
 assert.ok(ids(fullManifest.resources).includes("background_terminal_output"));
 assert.ok(!ids(fullManifest.resources).includes("message_attachments"));
 
 assert.equal(toolByName(fullManifest, "polynet_write")?.effect, "write");
-assert.equal(toolByName(fullManifest, "community_memory_search")?.family, "community_memory");
-assert.equal(toolByName(fullManifest, "community_memory_read")?.effect, "read");
+assert.equal(toolByName(fullManifest, "polynet_search")?.family, "community_context");
+assert.equal(toolByName(fullManifest, "polynet_search")?.effect, "read");
 assert.equal(toolByName(fullManifest, "member_profile_confirm_facts")?.family, "member_profile");
 assert.equal(toolByName(fullManifest, "member_profile_confirm_facts")?.effect, "write");
 assert.equal(toolByName(fullManifest, "read")?.family, "sandbox_read");

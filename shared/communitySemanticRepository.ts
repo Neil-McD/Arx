@@ -16,7 +16,6 @@ export const POLYNET_SELF_PROFILE_PATH = "/self.md";
 export const POLYNET_MEMBERS_DIRECTORY_PATH = "/members/";
 export const POLYNET_RESOURCES_DIRECTORY_PATH = "/resources/";
 export const POLYNET_CHANNELS_DIRECTORY_PATH = "/channels/";
-export const POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH = "/channels/general/";
 export const POLYNET_EVENTS_DIRECTORY_PATH = "/events/";
 export const POLYNET_MEMORY_DIRECTORY_PATH = "/memory/";
 export const POLYNET_CAPABILITIES_DIRECTORY_PATH = "/capabilities/";

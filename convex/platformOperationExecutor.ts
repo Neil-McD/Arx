@@ -26,10 +26,6 @@ import {
 } from "../shared/polynetSemanticRepositoryContract.ts";
 import { parseCommunityResourceEvidenceRef } from "../shared/communityEvidenceContract.ts";
 import { parseCommunityResourceDirectoryUri } from "../shared/communityResourceDirectory.ts";
-import {
-  listCommunityReadSummaries,
-  resolveAccessibleCommunityReadDetail,
-} from "./communityReadKernel.ts";
 import { internal } from "./_generated/api";
 
 const productDocsIndex = productDocsIndexJson as ProductDocsSearchIndex;
@@ -63,56 +59,6 @@ export async function executePlatformOperation(args: {
       ok: false,
       code: "authenticated_user_required",
       message: "An authenticated user is required.",
-    };
-  }
-
-  if (operation.executor === "communityRead.list") {
-    const listed = await listCommunityReadSummaries({
-      ctx: args.ctx,
-      authSubject: String(args.authSubject),
-      scope: args.input.scope,
-    });
-    if (!listed.ok) {
-      return {
-        ok: false,
-        code: listed.code,
-        message: "scope must be joined or discover.",
-      };
-    }
-    return {
-      ok: true,
-      value: {
-        communities: listed.communities,
-      },
-    };
-  }
-
-  if (operation.executor === "communityRead.read") {
-    const communitySlug = requiredString(args.input.communitySlug);
-    if (!communitySlug) {
-      return {
-        ok: false,
-        code: "community_slug_required",
-        message: "community_slug is required.",
-      };
-    }
-    const resolved = await resolveAccessibleCommunityReadDetail({
-      ctx: args.ctx,
-      authSubject: String(args.authSubject),
-      communitySlug,
-    });
-    if (!resolved.ok) {
-      return {
-        ok: false,
-        code: resolved.code,
-        message: "Community not found or not accessible.",
-      };
-    }
-    return {
-      ok: true,
-      value: {
-        community: resolved.community,
-      },
     };
   }
 

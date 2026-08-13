@@ -183,9 +183,7 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
   if (
     toolName === "polynet_list" ||
     toolName === "polynet_read" ||
-    toolName.startsWith("community_") ||
-    toolName === "polynet_list_communities" ||
-    toolName === "polynet_get_community"
+    toolName.startsWith("community_")
   ) return "community";
   return "other";
 }
@@ -217,18 +215,9 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   }
   if (toolName === "member_conversations_list") return "Past conversations";
   if (toolName === "member_conversation_read") return "Recall conversation";
-  if (toolName === "polynet_list_communities") {
-    return args?.scope === "discover" ? "Discover communities" : "Your communities";
-  }
-  if (toolName === "polynet_get_community") {
-    const communitySlug = toStringValue(args?.community_slug) ?? toStringValue(args?.communitySlug);
-    return `Community details${communitySlug ? `: ${communitySlug}` : ""}`;
-  }
   if (toolName === "community_resources_map") return "Resource map";
-  if (toolName === "community_resources_read") return "Read resources";
   if (toolName === "community_resources_list") return `Community resources${path ? `: ${path}` : ""}`;
   if (toolName === "community_resource_read") return `Read resource${ref ? `: ${ref}` : ""}`;
-  if (toolName === "community_resources_search") return `Resource search${query ? `: ${query}` : ""}`;
   if (toolName === "community_resource_builder_list") return "Resource builder";
   if (toolName === "community_resource_builder_read") {
     const target = resourceId || moduleId;
@@ -236,11 +225,6 @@ function buildCallTitle(toolName: string, args: Record<string, unknown> | null):
   }
   if (toolName === "community_resource_builder_stage_changeset") return "Resource changeset";
   if (toolName === "community_resource_builder_apply_changeset") return "Apply resource changeset";
-  if (toolName === "community_search") return `Community search${query ? `: ${query}` : ""}`;
-  if (toolName === "community_memory_search") return `Memory search${query ? `: ${query}` : ""}`;
-  if (toolName === "community_memory_read") return "Read community memory";
-  if (toolName === "community_chat_search") return `Chat search${query ? `: ${query}` : ""}`;
-  if (toolName === "community_chat_read") return "Read chat evidence";
   if (toolName === "community_ai_feed_search") return `AI Feed search${query ? `: ${query}` : ""}`;
   if (toolName === "community_ai_feed_read") return "Read AI Feed evidence";
   if (toolName === "community_write") return "Community write";
@@ -339,9 +323,7 @@ function buildGroupTitle(category: RuntimeToolCategory, calls: RuntimeTimelineTo
     (call) =>
       call.toolName.startsWith("community_") ||
       call.toolName === "polynet_list" ||
-      call.toolName === "polynet_read" ||
-      call.toolName === "polynet_list_communities" ||
-      call.toolName === "polynet_get_community",
+      call.toolName === "polynet_read",
   ).length;
   const prefix =
     category === "exploration"

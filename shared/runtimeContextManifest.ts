@@ -194,27 +194,6 @@ const MEMBER_CONVERSATION_TOOL_NAMES = new Set<RetrievalToolName>([
   "member_conversation_read",
 ]);
 
-const COMMUNITY_DIRECTORY_TOOL_NAMES = new Set<RetrievalToolName>([
-  "polynet_list_communities",
-  "polynet_get_community",
-]);
-
-const COMMUNITY_RESOURCE_TOOL_NAMES = new Set<RetrievalToolName>([
-  "community_resources_read",
-  "community_resources_search",
-]);
-
-const COMMUNITY_ACTIVITY_TOOL_NAMES = new Set<RetrievalToolName>([
-  "community_search",
-  "community_chat_search",
-  "community_chat_read",
-]);
-
-const COMMUNITY_MEMORY_TOOL_NAMES = new Set<RetrievalToolName>([
-  "community_memory_search",
-  "community_memory_read",
-]);
-
 const MEMBER_PROFILE_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
   "member_profile_confirm_facts",
 ]);
@@ -342,26 +321,6 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   }
   if (MEMBER_CONVERSATION_TOOL_NAMES.has(toolName)) {
     return { family: "member_conversations", grantedBy: "authenticated_member_owner_scope", effect: "read" };
-  }
-  if (COMMUNITY_DIRECTORY_TOOL_NAMES.has(toolName)) {
-    return {
-      family: "community_directory",
-      grantedBy: "authenticated_member_per_call_access_resolution",
-      effect: "read",
-    };
-  }
-  if (COMMUNITY_RESOURCE_TOOL_NAMES.has(toolName)) {
-    return {
-      family: "community_resources",
-      grantedBy: "validated_community_resource_lane",
-      effect: "read",
-    };
-  }
-  if (COMMUNITY_MEMORY_TOOL_NAMES.has(toolName)) {
-    return { family: "community_memory", grantedBy: "validated_community_lens", effect: "read" };
-  }
-  if (COMMUNITY_ACTIVITY_TOOL_NAMES.has(toolName)) {
-    return { family: "community_activity", grantedBy: "validated_community_lens", effect: "read" };
   }
   if (MEMBER_PROFILE_WRITE_TOOL_NAMES.has(toolName)) {
     return {
@@ -568,16 +527,6 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       reason: "the member's private episodes are retrievable on demand across community lenses",
     });
   }
-  if (hasAnyTool(params.allowedToolNames, COMMUNITY_DIRECTORY_TOOL_NAMES)) {
-    resources.push({
-      id: "community_directory",
-      owner: "platform",
-      retrieval: "tool_available",
-      visibility: "member",
-      source: "polynet_list_communities/polynet_get_community",
-      reason: "bounded joined and public Discover community context is retrievable without changing the active lens",
-    });
-  }
   if (hasAnyTool(params.allowedToolNames, PRODUCT_DOC_TOOL_NAMES)) {
     resources.push({
       id: "product_docs",
@@ -616,36 +565,6 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       visibility: "member",
       source: "polynet_list/polynet_read",
       reason: "permission-filtered platform semantic repository with exact active-community paths",
-    });
-  }
-  if (hasAnyTool(params.allowedToolNames, COMMUNITY_RESOURCE_TOOL_NAMES)) {
-    resources.push({
-      id: "community_resources",
-      owner: "community",
-      retrieval: "tool_available",
-      visibility: params.resourceLane.lane === "builder" ? "owner" : "member",
-      source: "community_resource_tools",
-      reason: "community wiki/resources/source material",
-    });
-  }
-  if (hasAnyTool(params.allowedToolNames, COMMUNITY_MEMORY_TOOL_NAMES)) {
-    resources.push({
-      id: "community_compiled_memory",
-      owner: "community",
-      retrieval: "tool_available",
-      visibility: "member",
-      source: "community_memory_search/community_memory_read",
-      reason: "accepted community intelligence learned by the compiler and steward",
-    });
-  }
-  if (hasAnyTool(params.allowedToolNames, COMMUNITY_ACTIVITY_TOOL_NAMES)) {
-    resources.push({
-      id: "community_activity_archive",
-      owner: "community",
-      retrieval: "tool_available",
-      visibility: "member",
-      source: "community_search",
-      reason: "raw/recent community activity evidence",
     });
   }
   if (hasAnyTool(params.allowedToolNames, WEB_RESEARCH_TOOL_NAMES)) {

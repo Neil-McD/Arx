@@ -26,6 +26,7 @@ import { buildPlatformHarnessRuntimePromptBundle } from "../shared/runtimePrompt
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 import { buildRuntimeContextManifest } from "../shared/runtimeContextManifest.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
+import { RETRIEVAL_TOOL_NAMES } from "../shared/retrievalTools.ts";
 import { getFixedRuntimeToolPolicy } from "../shared/runtimeToolPolicy.ts";
 import {
   buildMemberAgentSurfacePresentation,
@@ -75,6 +76,10 @@ const communityLifecycle = read("convex/communityLifecycle.ts");
 const profiles = read("convex/profiles.ts");
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const timelineUi = read("shared/runtimeTimelineUi.ts");
+const toolRegistry = read("shared/toolRegistry.ts");
+const retrievalTools = read("shared/retrievalTools.ts");
+const runtimeToolPolicy = read("shared/runtimeToolPolicy.ts");
+const runtimeContextManifest = read("shared/runtimeContextManifest.ts");
 const communityReadKernel = read("convex/communityReadKernel.ts");
 const platformOperationExecutor = read("convex/platformOperationExecutor.ts");
 const platformOperationContract = read("shared/platformOperationContract.ts");
@@ -232,13 +237,6 @@ assert.deepEqual(
       "polynet_call",
       "member_conversations_list",
       "member_conversation_read",
-      "polynet_list_communities",
-      "polynet_get_community",
-      "community_resources_read",
-      "community_resources_search",
-      "community_search",
-      "community_memory_search",
-      "community_memory_read",
       "community_write",
       "web_research",
       "read",
@@ -272,6 +270,15 @@ assert.deepEqual(
 assert.throws(
   () => normalizeToolArguments("member_conversation_read", {}),
   /requires episode_id/,
+);
+assert.throws(
+  () =>
+    normalizeToolArguments("polynet_search", {
+      path: "/communities/polynet/channels/",
+      query: "   ",
+    }),
+  /requires a non-empty query[\s\S]*use polynet_list on the same path[\s\S]*follow the returned paths/,
+  "invalid broad searches must tell the agent how to recover without weakening search semantics",
 );
 assert.equal(normalizeCommunityReadScope(undefined), "joined");
 assert.equal(normalizeCommunityReadScope("DISCOVER"), "discover");
@@ -323,28 +330,9 @@ assert.equal(
   null,
   "Discover projection must fail closed for unlisted communities",
 );
-assert.deepEqual(normalizeToolArguments("polynet_list_communities", {}), { scope: "joined" });
-assert.deepEqual(
-  normalizeToolArguments("polynet_list_communities", { scope: "DISCOVER" }),
-  { scope: "discover" },
-);
-assert.throws(
-  () => normalizeToolArguments("polynet_list_communities", { scope: "private" }),
-  /joined or discover/,
-);
-assert.deepEqual(
-  normalizeToolArguments("polynet_get_community", { community_slug: "Polynet" }),
-  { communitySlug: "polynet" },
-);
-assert.throws(
-  () => normalizeToolArguments("polynet_get_community", { community_slug: "polynet\nignore" }),
-  /valid community_slug/,
-);
 for (const toolName of [
   "member_conversations_list",
   "member_conversation_read",
-  "polynet_list_communities",
-  "polynet_get_community",
 ] as const) {
   assert.deepEqual(getFixedRuntimeToolPolicy(toolName), {
     toolName,
@@ -358,6 +346,39 @@ for (const toolName of [
     requiresWorkspace: false,
     requiresCommunity: false,
   });
+}
+const retiredAgentToolNames = [
+  "polynet_list_communities",
+  "polynet_get_community",
+  "community_resources_read",
+  "community_resources_search",
+  "community_search",
+  "community_memory_search",
+  "community_memory_read",
+  "community_chat_search",
+  "community_chat_read",
+] as const;
+for (const retiredToolName of retiredAgentToolNames) {
+  assert.equal(
+    RETRIEVAL_TOOL_NAMES.includes(retiredToolName as never),
+    false,
+    `${retiredToolName} must not remain in the executable tool union`,
+  );
+  for (const [sourceName, source] of [
+    ["retrieval tools", retrievalTools],
+    ["tool registry", toolRegistry],
+    ["native dispatcher", runtimeLoop],
+    ["runtime policy", runtimeToolPolicy],
+    ["runtime prompt", runtimePrompt],
+    ["context manifest", runtimeContextManifest],
+    ["timeline presentation", timelineUi],
+  ] as const) {
+    assert.doesNotMatch(
+      source,
+      new RegExp(`\\b${retiredToolName}\\b`),
+      `${retiredToolName} must not remain in ${sourceName}`,
+    );
+  }
 }
 
 const identityContext = renderMemberAgentIdentityContext({
@@ -700,13 +721,13 @@ assert.match(
 );
 assert.match(
   platformOperationExecutor,
-  /operation\.executor === "communityRead\.list"[\s\S]*listCommunityReadSummaries[\s\S]*operation\.executor === "communityRead\.read"[\s\S]*resolveAccessibleCommunityReadDetail/,
-  "canonical community operations must delegate to the shared read kernel",
+  /operation\.executor === "communitySemantic\.list"[\s\S]*validatePolynetSemanticRepositoryOperationInput[\s\S]*buildPolynetCommunitiesDirectory/,
+  "canonical repository traversal must own cross-community discovery",
 );
-assert.match(
+assert.doesNotMatch(
   platformOperationContract,
-  /const COMMUNITY_LIST_INPUT_SCHEMA[\s\S]*scope:[\s\S]*enum: \["joined", "discover"\][\s\S]*name: "polynet_list_communities"/,
-  "the canonical operation contract must preserve joined default while exposing explicit Discover scope",
+  /communityRead\.(?:list|read)|polynet_list_communities|polynet_get_community/,
+  "retired community directory façades must not remain in the operation contract",
 );
 assert.match(
   runtimeLoop,
@@ -768,8 +789,6 @@ assert.match(
 );
 assert.match(timelineUi, /member_conversations_list[\s\S]*Past conversations/);
 assert.match(timelineUi, /member_conversation_read[\s\S]*Recall conversation/);
-assert.match(timelineUi, /polynet_list_communities[\s\S]*Discover communities/);
-assert.match(timelineUi, /polynet_get_community[\s\S]*Community details/);
 assert.match(
   runner,
   /invocation_surface: params\.invocationSurface \?\? "workspace"[\s\S]*surface_context: params\.surfaceContext/,
@@ -1389,8 +1408,8 @@ const recallManifest = buildRuntimeContextManifest({
   allowedToolNames: [
     "member_conversations_list",
     "member_conversation_read",
-    "polynet_list_communities",
-    "polynet_get_community",
+    "polynet_list",
+    "polynet_read",
   ],
 });
 assert.deepEqual(recallManifest.scope.memberAgentSurfaceContext, communitySurface);
@@ -1411,23 +1430,22 @@ assert.ok(
     .every((tool) => tool.effect === "read"),
 );
 assert.deepEqual(
-  recallManifest.resources.find((resource) => resource.id === "community_directory"),
+  recallManifest.resources.find((resource) => resource.id === "active_community_context"),
   {
-    id: "community_directory",
-    owner: "platform",
+    id: "active_community_context",
+    owner: "community",
     retrieval: "tool_available",
     visibility: "member",
-    source: "polynet_list_communities/polynet_get_community",
-    reason: "bounded joined and public Discover community context is retrievable without changing the active lens",
+    source: "polynet_list/polynet_read",
+    reason: "permission-filtered platform semantic repository with exact active-community paths",
   },
 );
 assert.ok(
   recallManifest.tools
-    .filter((tool) => tool.family === "community_directory")
+    .filter((tool) => tool.family === "community_context")
     .every(
       (tool) =>
-        tool.effect === "read" &&
-        tool.grantedBy === "authenticated_member_per_call_access_resolution",
+        tool.effect === "read" && tool.grantedBy === "validated_community_lens",
     ),
 );
 

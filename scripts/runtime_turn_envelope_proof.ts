@@ -36,7 +36,6 @@ const builderEnvelope = buildRuntimeTurnEnvelope({
     "polynet_search",
     "polynet_write",
     "polynet_call",
-    "community_resources_read",
   ],
 });
 

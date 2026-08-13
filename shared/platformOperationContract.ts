@@ -20,8 +20,6 @@ export type PlatformOperationJsonSchema =
   | Record<string, unknown>;
 
 export type PlatformOperationId =
-  | "community.list"
-  | "community.read"
   | "community.semantic.list"
   | "community.semantic.read"
   | "product_docs.search"
@@ -40,8 +38,6 @@ export type PlatformOperationAuthority = {
 
 export type PlatformOperationNativeProjection = {
   name:
-    | "polynet_list_communities"
-    | "polynet_get_community"
     | "polynet_list"
     | "polynet_read"
     | "search_product_docs"
@@ -56,8 +52,6 @@ export type PlatformOperationNativeProjection = {
 
 export type PlatformOperationMcpProjection = {
   name:
-    | "polynet_list_communities"
-    | "polynet_get_community"
     | "polynet_list"
     | "polynet_read"
     | "polynet_product_docs_search"
@@ -85,8 +79,6 @@ export type PlatformOperationContract = {
   id: PlatformOperationId;
   version: 1;
   executor:
-    | "communityRead.list"
-    | "communityRead.read"
     | "communitySemantic.list"
     | "communitySemantic.read"
     | "productDocs.search"
@@ -102,139 +94,6 @@ export type PlatformOperationContract = {
     mcp: PlatformOperationMcpProjection;
     worker: PlatformOperationWorkerProjection;
   };
-};
-
-export const PLATFORM_OPERATION_ACCESS_RELATION_VALUES = [
-  "owner",
-  "admin",
-  "moderator",
-  "member",
-  "pending",
-  "no_access",
-] as const;
-
-const COMMUNITY_SUMMARY_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["slug", "name", "relation", "visibility", "entry_policy"],
-  properties: {
-    slug: { type: "string", minLength: 1, maxLength: 160 },
-    name: { type: "string", minLength: 1, maxLength: 180 },
-    one_liner: { type: ["string", "null"], maxLength: 280 },
-    visibility: { type: "string", enum: ["published", "unlisted"] },
-    entry_policy: { type: "string", enum: ["open", "approval", "paid_subscription"] },
-    relation: {
-      type: "string",
-      enum: [...PLATFORM_OPERATION_ACCESS_RELATION_VALUES],
-    },
-  },
-};
-
-const COMMUNITY_LIST_INPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  properties: {
-    scope: {
-      type: "string",
-      enum: ["joined", "discover"],
-      description:
-        "joined lists accessible member communities; discover lists public Published communities. Defaults to joined.",
-    },
-  },
-};
-
-const COMMUNITY_LIST_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["communities"],
-  properties: {
-    communities: {
-      type: "array",
-      items: COMMUNITY_SUMMARY_SCHEMA,
-    },
-  },
-};
-
-const COMMUNITY_READ_INPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["community_slug"],
-  properties: {
-    community_slug: {
-      type: "string",
-      minLength: 1,
-      maxLength: 160,
-      description: "The canonical community slug.",
-    },
-  },
-};
-
-const COMMUNITY_READ_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
-  type: "object",
-  additionalProperties: false,
-  required: ["community"],
-  properties: {
-    community: {
-      type: "object",
-      additionalProperties: false,
-      required: [
-        "slug",
-        "name",
-        "relation",
-        "visibility",
-        "entry_policy",
-        "is_entitled",
-        "capabilities",
-      ],
-      properties: {
-        slug: { type: "string", minLength: 1, maxLength: 160 },
-        name: { type: "string", minLength: 1, maxLength: 180 },
-        one_liner: { type: ["string", "null"], maxLength: 280 },
-        about: { type: ["string", "null"], maxLength: 4000 },
-        visibility: { type: "string", enum: ["published", "unlisted"] },
-        entry_policy: { type: "string", enum: ["open", "approval", "paid_subscription"] },
-        relation: {
-          type: "string",
-          enum: [...PLATFORM_OPERATION_ACCESS_RELATION_VALUES],
-        },
-        is_entitled: { type: "boolean" },
-        capabilities: {
-          type: "object",
-          additionalProperties: false,
-          required: [
-            "can_view",
-            "can_enter_community",
-            "can_read_chat",
-            "can_post_chat",
-            "can_post_message",
-            "can_manage_resources",
-            "can_moderate_content",
-            "can_manage_members",
-            "can_review_join_requests",
-            "can_manage_pricing",
-            "can_manage_branding",
-            "can_manage_publishing",
-            "can_manage_payouts",
-          ],
-          properties: {
-            can_view: { type: "boolean" },
-            can_enter_community: { type: "boolean" },
-            can_read_chat: { type: "boolean" },
-            can_post_chat: { type: "boolean" },
-            can_post_message: { type: "boolean" },
-            can_manage_resources: { type: "boolean" },
-            can_moderate_content: { type: "boolean" },
-            can_manage_members: { type: "boolean" },
-            can_review_join_requests: { type: "boolean" },
-            can_manage_pricing: { type: "boolean" },
-            can_manage_branding: { type: "boolean" },
-            can_manage_publishing: { type: "boolean" },
-            can_manage_payouts: { type: "boolean" },
-          },
-        },
-      },
-    },
-  },
 };
 
 const SEMANTIC_COMMUNITY_SLUG_SCHEMA: PlatformOperationJsonSchema = {
@@ -597,76 +456,6 @@ function readOperationBase(
 }
 
 export const PLATFORM_OPERATION_CONTRACTS = [
-  {
-    ...readOperationBase("community.list", "communityRead.list", "platform"),
-    projections: {
-      native: {
-        name: "polynet_list_communities",
-        description:
-          "List concise Polynet community identity and access summaries. Defaults to the authenticated user's joined communities; discover returns public Published communities.",
-        inputSchema: COMMUNITY_LIST_INPUT_SCHEMA,
-        category: "community",
-        parallelSafe: true,
-        requiresWorkspace: false,
-        requiresCommunity: false,
-      },
-      mcp: {
-        name: "polynet_list_communities",
-        title: "List Polynet Communities",
-        description:
-          "List concise Polynet community identity and access summaries. Defaults to the authenticated user's joined communities; discover returns public Published communities.",
-        annotations: {
-          title: "List Polynet Communities",
-          readOnlyHint: true,
-        },
-        inputSchema: COMMUNITY_LIST_INPUT_SCHEMA,
-        outputSchema: COMMUNITY_LIST_OUTPUT_SCHEMA,
-      },
-      worker: {
-        enabled: false,
-        billingPolicy: "free",
-        requiredCommunityResourceLane: "none",
-      },
-    },
-  },
-  {
-    ...readOperationBase(
-      "community.read",
-      "communityRead.read",
-      "community",
-      "authenticated_user",
-      "accessible",
-    ),
-    projections: {
-      native: {
-        name: "polynet_get_community",
-        description:
-          "Read one Polynet community's canonical identity, access relation, and capability summary by slug.",
-        inputSchema: COMMUNITY_READ_INPUT_SCHEMA,
-        category: "community",
-        parallelSafe: true,
-        requiresWorkspace: false,
-        requiresCommunity: false,
-      },
-      mcp: {
-        name: "polynet_get_community",
-        title: "Get Polynet Community",
-        description:
-          "Read one Polynet community's canonical identity, access relation, and capability summary by slug.",
-        annotations: {
-          title: "Get Polynet Community",
-          readOnlyHint: true,
-        },
-        inputSchema: COMMUNITY_READ_INPUT_SCHEMA,
-        outputSchema: COMMUNITY_READ_OUTPUT_SCHEMA,
-      },
-      worker: {
-        enabled: false,
-        billingPolicy: "free",
-        requiredCommunityResourceLane: "none",
-      },
-    },
-  },
   {
     ...readOperationBase(
       "community.semantic.list",

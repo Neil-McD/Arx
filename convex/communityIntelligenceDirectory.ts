@@ -4045,7 +4045,7 @@ export async function searchCommunityMemoryCore(args: {
     ok: true,
     retrieval_log_id: normalizeIdValue(receipt._id),
     retrieval_receipt: mapCommunityMemoryRetrievalReceipt(receipt),
-    epistemic_note: "community_memory_search returns accepted community intelligence from the directory. Use community_search for raw recent community evidence.",
+    epistemic_note: "This result contains accepted community intelligence. Use the canonical channels/ repository subtree for raw recent community evidence.",
     nodes: nodes.map(mapCompactMemoryNode),
     truncated,
   };
