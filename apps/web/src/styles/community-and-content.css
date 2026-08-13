@@ -1652,7 +1652,7 @@
 }
 .funnel-builder-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(320px, 34%, 400px);
+  grid-template-columns: minmax(0, 1fr) minmax(0, clamp(280px, 34%, 400px));
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -1931,7 +1931,7 @@
     padding-bottom: 8px;
   }
   .funnel-builder-layout {
-    grid-template-columns: minmax(0, 1fr) clamp(280px, 36%, 340px);
+    grid-template-columns: minmax(0, 1fr) minmax(0, clamp(240px, 36%, 320px));
     overflow: hidden;
   }
   .funnel-builder-preview {
@@ -1964,7 +1964,7 @@
     flex: 1;
   }
   .funnel-builder-layout {
-    grid-template-columns: minmax(0, 1fr) minmax(240px, 44%);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 44%);
   }
   .funnel-builder-preview {
     padding-left: 0;

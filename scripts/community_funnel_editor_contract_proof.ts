@@ -111,8 +111,13 @@ assert.match(
 );
 assert.match(
   styles,
-  /grid-template-columns: minmax\(0, 1fr\) clamp\(320px, 34%, 400px\)/,
+  /grid-template-columns: minmax\(0, 1fr\) minmax\(0, clamp\(280px, 34%, 400px\)\)/,
   "the desktop builder must keep a readable bounded inspector beside the flexible preview",
+);
+assert.match(
+  styles,
+  /@container funnel-workspace \(max-width: 560px\)[\s\S]*grid-template-columns: minmax\(0, 1fr\) minmax\(0, 44%\)/,
+  "the compact builder must let both adjacent panes shrink without overflowing the workspace",
 );
 assert.match(
   styles,
