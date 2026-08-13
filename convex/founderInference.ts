@@ -23,6 +23,7 @@ const RECEIPT_LEASE_MS = 10 * 60_000;
 const RATE_LIMIT_WINDOW_MS = 60_000;
 const communityInferenceSurfaceValidator = v.union(
   v.literal("member_agent_dock"),
+  v.literal("community_funnel_builder"),
   v.literal("community_agent_mention"),
   v.literal("community_autonomous_cognition"),
   v.literal("community_setup_generation"),

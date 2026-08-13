@@ -9,8 +9,7 @@ export type RuntimeInvocationSurface =
 
 export type RuntimeInvocationFundingPolicy =
   | "generic_gate"
-  | "community_owner"
-  | "platform_managed";
+  | "community_owner";
 
 export const MEMBER_AGENT_THREAD_KEY_PREFIX = "member-agent";
 export const MEMBER_AGENT_GLOBAL_SCOPE_KEY = "global";
@@ -50,9 +49,11 @@ export function normalizeRuntimeInvocationSurface(
 export function resolveRuntimeInvocationFundingPolicy(
   invocationSurface: RuntimeInvocationSurface,
 ): RuntimeInvocationFundingPolicy {
-  if (invocationSurface === "member_agent_dock") return "community_owner";
-  if (invocationSurface === "community_funnel_builder") {
-    return "platform_managed";
+  if (
+    invocationSurface === "member_agent_dock" ||
+    invocationSurface === "community_funnel_builder"
+  ) {
+    return "community_owner";
   }
   return "generic_gate";
 }

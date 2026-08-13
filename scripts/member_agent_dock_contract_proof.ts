@@ -646,7 +646,7 @@ assert.match(
   "the server must constrain capabilities and tools instead of trusting the web client",
 );
 const memberAgentGateBranch = resolution.match(
-  /if \(isCommunityMemberAgentTurn\) \{([\s\S]*?)\n  \} else \{/,
+  /if \(isCommunityOwnerFundedTurn\) \{([\s\S]*?)\n  \} else \{/,
 )?.[1] ?? "";
 assert.match(
   memberAgentGateBranch,
@@ -1080,10 +1080,10 @@ assert.match(
 );
 
 const firstRuntimeReplayLookup = runtimeHandlers.indexOf("lookupExistingRuntimeReplay");
-const firstMemberFundingClaim = runtimeHandlers.indexOf("claimMemberAgentFundingSession()");
+const firstMemberFundingClaim = runtimeHandlers.indexOf("claimCommunityFundingSession()");
 assert.ok(firstRuntimeReplayLookup >= 0 && firstMemberFundingClaim > firstRuntimeReplayLookup);
 const memberFundingBlock = runtimeHandlers.slice(
-  runtimeHandlers.indexOf("let memberAgentFundingProviderStarted"),
+  runtimeHandlers.indexOf("const communityInferenceSurface"),
   runtimeHandlers.indexOf("const polynetToolSurface"),
 );
 assert.doesNotMatch(memberFundingBlock, /beginCommunityInferenceFundingSession/);
@@ -1091,12 +1091,12 @@ assert.match(memberFundingBlock, /claimCommunityInferenceFundingSession/);
 assert.match(memberFundingBlock, /markCommunityInferenceFundingSessionProviderStarted/);
 assert.match(
   memberFundingBlock,
-  /memberAgentFundingPromptTokens \+= [\s\S]*memberAgentFundingCompletionTokens \+=/,
+  /communityFundingPromptTokens \+= [\s\S]*communityFundingCompletionTokens \+=/,
   "member funding must aggregate every completed provider call instead of trusting the loop's final call only",
 );
 assert.match(
   memberFundingBlock,
-  /usageComplete: memberAgentFundingProviderStarted[\s\S]*memberAgentFundingUsageComplete[\s\S]*: true/,
+  /usageComplete: communityFundingProviderStarted[\s\S]*communityFundingUsageComplete[\s\S]*: true/,
   "member funding should release pre-provider failures and preserve post-provider usage certainty",
 );
 assert.match(
@@ -1110,13 +1110,13 @@ assert.match(
   "already-observed provider usage must not be reclassified as unknown by a later cancellation check",
 );
 assert.equal(
-  (runtimeHandlers.match(/observeProviderResult: observeMemberAgentProviderResult/g) ?? []).length,
+  (runtimeHandlers.match(/observeProviderResult: observeCommunityFundingProviderResult/g) ?? []).length,
   2,
   "streaming and JSON member turns must use the same provider result accounting",
 );
 assert.match(
   runtimeHandlers,
-  /surface: "member_agent_dock"[\s\S]*receiptKey: `member_agent_dock:\$\{runId\}`[\s\S]*settleCommunityInferenceFundingSession[\s\S]*failCommunityInferenceFundingSession/,
+  /invocationSurface === "member_agent_dock" \|\|[\s\S]*invocationSurface === "community_funnel_builder"[\s\S]*surface: communityInferenceSurface[\s\S]*receiptKey: `\$\{communityInferenceSurface\}:\$\{runId\}`[\s\S]*settleCommunityInferenceFundingSession[\s\S]*failCommunityInferenceFundingSession/,
   "member turns must reuse the canonical idempotent community inference receipt lifecycle",
 );
 assert.match(
@@ -1233,7 +1233,7 @@ assert.equal(supportsModelImageInput("unknown-future-model"), false);
 assert.match(packageJson, /"@hey-api\/openapi-ts": "0\.97\.3"[\s\S]*"js-yaml": "5\.2\.2"/);
 assert.match(
   runtimeTurnResolution,
-  /member_agent_image_model_unsupported[\s\S]*member_agent_image_runtime_unsupported[\s\S]*hasMemberAgentImageInput && runtimeExecutionMode !== "agentic"/,
+  /image_model_unsupported[\s\S]*member_agent_image_runtime_unsupported[\s\S]*hasPersistedImageInput && runtimeExecutionMode !== "agentic"/,
   "image turns must fail closed before any text-only model or runtime path can discard the image",
 );
 assert.match(

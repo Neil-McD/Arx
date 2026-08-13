@@ -9,6 +9,7 @@ export const COMMUNITY_FUNDING_POLICY_MANAGED = "managed_required" as const;
 
 export const COMMUNITY_INFERENCE_SURFACES = [
   "member_agent_dock",
+  "community_funnel_builder",
   "community_agent_mention",
   "community_autonomous_cognition",
   "community_setup_generation",

@@ -33,6 +33,7 @@ import {
 import {
   shouldRecordCommunityOnboardingAgentTurn,
 } from "../shared/runtimeInvocationSurface";
+import type { CommunityInferenceSurface } from "../shared/founderInference";
 import {
   communityFunnelTurnPostconditionPassed,
   isCommunityFunnelDraftWriteReceiptEvent,
@@ -123,6 +124,62 @@ export type {
   SseResponseSource,
   SseResponseStreamWriter,
 } from "./httpRuntimeTurnState";
+
+function resolveCommunityFundingClaimFailure(error: unknown): {
+  status: number;
+  code: string;
+  message: string;
+} {
+  const rawCode = error instanceof Error ? error.message : String(error ?? "");
+  if (rawCode === "founder_usage_exhausted") {
+    return {
+      status: 403,
+      code: "community_ai_usage_exhausted",
+      message:
+        "This community has used its included AI allowance for the current billing cycle.",
+    };
+  }
+  if (
+    rawCode === "founder_inference_actor_rate_limited" ||
+    rawCode === "founder_inference_community_rate_limited"
+  ) {
+    return {
+      status: 429,
+      code: "rate_limited",
+      message: "Community AI is busy. Try again shortly.",
+    };
+  }
+  if (
+    rawCode === "inference_receipt_in_progress" ||
+    rawCode === "inference_receipt_already_settled" ||
+    rawCode === "founder_inference_receipt_conflict"
+  ) {
+    return {
+      status: 409,
+      code: "thread_run_in_progress",
+      message: "This community AI turn is already being processed.",
+    };
+  }
+  if (
+    rawCode === "founder_plan_required" ||
+    rawCode === "founder_subscription_inactive" ||
+    rawCode === "founder_subscription_ambiguous" ||
+    rawCode === "founder_subscription_owner_mismatch" ||
+    rawCode === "funding_authority_changed"
+  ) {
+    return {
+      status: 403,
+      code: "community_ai_unavailable",
+      message:
+        "Community AI is currently unavailable. The community owner can restore it from Billing.",
+    };
+  }
+  return {
+    status: 503,
+    code: "community_inference_accounting_unavailable",
+    message: "Community AI accounting is temporarily unavailable. Try again shortly.",
+  };
+}
 export type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
 
 type RuntimeCompletionSuccess = {
@@ -1358,57 +1415,62 @@ export async function handleRuntimeTurnRequest(args: {
         return null;
       }
     };
-    let memberAgentFundingProviderStarted = false;
-    let memberAgentFundingUsageComplete = true;
-    let memberAgentFundingPromptTokens = 0;
-    let memberAgentFundingCompletionTokens = 0;
-    const claimMemberAgentFundingSession = async (): Promise<CommunityInferenceFundingSession | null> => {
-      if (invocationSurface !== "member_agent_dock") return null;
+    const communityInferenceSurface: CommunityInferenceSurface | null =
+      invocationSurface === "member_agent_dock" ||
+      invocationSurface === "community_funnel_builder"
+        ? invocationSurface
+        : null;
+    let communityFundingProviderStarted = false;
+    let communityFundingUsageComplete = true;
+    let communityFundingPromptTokens = 0;
+    let communityFundingCompletionTokens = 0;
+    const claimCommunityFundingSession = async (): Promise<CommunityInferenceFundingSession | null> => {
+      if (!communityInferenceSurface) return null;
       if (!runtimeCommunityId || !communityInferenceAdmission?.ok) {
-        throw new Error("member_agent_community_funding_authority_missing");
+        throw new Error("community_inference_funding_authority_missing");
       }
       return await claimCommunityInferenceFundingSession({
         ctx,
         communityId: runtimeCommunityId,
         actorUserId: actor.dbUserId,
-        surface: "member_agent_dock",
-        receiptKey: `member_agent_dock:${runId}`,
+        surface: communityInferenceSurface,
+        receiptKey: `${communityInferenceSurface}:${runId}`,
         sourceRunId: `runtime:${runId}`,
         admission: communityInferenceAdmission,
       });
     };
-    const markMemberAgentFundingProviderStarted = async (
+    const markCommunityFundingProviderStarted = async (
       session: CommunityInferenceFundingSession | null,
     ): Promise<void> => {
-      if (!session || memberAgentFundingProviderStarted) return;
+      if (!session || communityFundingProviderStarted) return;
       await markCommunityInferenceFundingSessionProviderStarted({ ctx, session });
-      memberAgentFundingProviderStarted = true;
+      communityFundingProviderStarted = true;
     };
-    const observeMemberAgentProviderResult = (result: {
+    const observeCommunityFundingProviderResult = (result: {
       ok: boolean;
       code: string | null;
       promptTokens: number | null;
       completionTokens: number | null;
     }): void => {
-      if (invocationSurface !== "member_agent_dock") return;
-      if (!memberAgentFundingProviderStarted) {
-        memberAgentFundingUsageComplete = false;
+      if (!communityInferenceSurface) return;
+      if (!communityFundingProviderStarted) {
+        communityFundingUsageComplete = false;
         return;
       }
       if (!result.ok) {
         if (!providerFailureIsKnownPreSpend(result.code ?? "provider_error")) {
-          memberAgentFundingUsageComplete = false;
+          communityFundingUsageComplete = false;
         }
         return;
       }
       if (result.promptTokens === null || result.completionTokens === null) {
-        memberAgentFundingUsageComplete = false;
+        communityFundingUsageComplete = false;
         return;
       }
-      memberAgentFundingPromptTokens += Math.max(0, Math.floor(result.promptTokens));
-      memberAgentFundingCompletionTokens += Math.max(0, Math.floor(result.completionTokens));
+      communityFundingPromptTokens += Math.max(0, Math.floor(result.promptTokens));
+      communityFundingCompletionTokens += Math.max(0, Math.floor(result.completionTokens));
     };
-    const failUnhandledMemberAgentFundingSession = async (
+    const failUnhandledCommunityFundingSession = async (
       session: CommunityInferenceFundingSession | null,
       failureCode: string,
     ): Promise<void> => {
@@ -1416,57 +1478,64 @@ export async function handleRuntimeTurnRequest(args: {
       await failCommunityInferenceFundingSession({
         ctx,
         session,
-        promptTokens: memberAgentFundingPromptTokens,
-        completionTokens: memberAgentFundingCompletionTokens,
-        usageComplete: memberAgentFundingProviderStarted
-          ? memberAgentFundingUsageComplete
+        promptTokens: communityFundingPromptTokens,
+        completionTokens: communityFundingCompletionTokens,
+        usageComplete: communityFundingProviderStarted
+          ? communityFundingUsageComplete
           : true,
         failureCode,
-        disposition: memberAgentFundingProviderStarted ? "indeterminate" : "failed",
+        disposition: communityFundingProviderStarted ? "indeterminate" : "failed",
       });
     };
-    const finalizeMemberAgentFundingForLoopResult = async (params: {
+    const finalizeCommunityFundingForLoopResult = async (params: {
       session: CommunityInferenceFundingSession | null;
       result: {
         ok: boolean;
         code?: string;
       };
+      outcomeCode?: string;
     }): Promise<void> => {
       if (!params.session) return;
+      if (!communityInferenceSurface) {
+        throw new Error("community_inference_surface_missing");
+      }
       if (params.result.ok) {
-        if (!memberAgentFundingProviderStarted) {
+        if (!communityFundingProviderStarted) {
           await failCommunityInferenceFundingSession({
             ctx,
             session: params.session,
             promptTokens: 0,
             completionTokens: 0,
             usageComplete: true,
-            failureCode: "member_agent_provider_not_started",
+            failureCode: `${communityInferenceSurface}_provider_not_started`,
             disposition: "failed",
           });
-          throw new Error("member_agent_provider_not_started");
+          throw new Error(`${communityInferenceSurface}_provider_not_started`);
         }
         await settleCommunityInferenceFundingSession({
           ctx,
           session: params.session,
-          promptTokens: memberAgentFundingPromptTokens,
-          completionTokens: memberAgentFundingCompletionTokens,
-          usageComplete: memberAgentFundingUsageComplete,
-          outcomeCode: "member_agent_completed",
+          promptTokens: communityFundingPromptTokens,
+          completionTokens: communityFundingCompletionTokens,
+          usageComplete: communityFundingUsageComplete,
+          outcomeCode:
+            params.outcomeCode ?? `${communityInferenceSurface}_completed`,
         });
         return;
       }
-      const failureCode = String(params.result.code ?? "member_agent_inference_failed").trim();
+      const failureCode = String(
+        params.result.code ?? `${communityInferenceSurface}_inference_failed`,
+      ).trim();
       await failCommunityInferenceFundingSession({
         ctx,
         session: params.session,
-        promptTokens: memberAgentFundingPromptTokens,
-        completionTokens: memberAgentFundingCompletionTokens,
-        usageComplete: memberAgentFundingProviderStarted
-          ? memberAgentFundingUsageComplete
+        promptTokens: communityFundingPromptTokens,
+        completionTokens: communityFundingCompletionTokens,
+        usageComplete: communityFundingProviderStarted
+          ? communityFundingUsageComplete
           : true,
         failureCode,
-        disposition: !memberAgentFundingProviderStarted || providerFailureIsKnownPreSpend(failureCode)
+        disposition: !communityFundingProviderStarted || providerFailureIsKnownPreSpend(failureCode)
           ? "failed"
           : "indeterminate",
       });
@@ -2663,9 +2732,9 @@ export async function handleRuntimeTurnRequest(args: {
           });
           runtimeTurnStage = "agent_loop";
           let loopResult;
-          let memberAgentFundingSession: CommunityInferenceFundingSession | null = null;
+          let communityFundingSession: CommunityInferenceFundingSession | null = null;
           try {
-            memberAgentFundingSession = await claimMemberAgentFundingSession();
+            communityFundingSession = await claimCommunityFundingSession();
             loopResult = await executeChatToolsAgentLoop({
               ctx,
               req,
@@ -2708,21 +2777,40 @@ export async function handleRuntimeTurnRequest(args: {
               },
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
               beforeProviderRequest: async (): Promise<void> => {
-                await markMemberAgentFundingProviderStarted(memberAgentFundingSession);
+                await markCommunityFundingProviderStarted(communityFundingSession);
               },
-              observeProviderResult: observeMemberAgentProviderResult,
+              observeProviderResult: observeCommunityFundingProviderResult,
             });
             await appendContextIntegrityCheckBestEffortForRun();
           } catch (error) {
-            if (memberAgentFundingSession) {
+            if (communityFundingSession) {
               try {
-                await failUnhandledMemberAgentFundingSession(
-                  memberAgentFundingSession,
-                  "member_agent_loop_unhandled",
+                await failUnhandledCommunityFundingSession(
+                  communityFundingSession,
+                  "community_inference_loop_unhandled",
                 );
               } catch {
                 // Preserve the original runtime failure; the receipt remains fail-closed.
               }
+            }
+            if (!communityFundingSession && communityInferenceSurface) {
+              const failure = resolveCommunityFundingClaimFailure(error);
+              await finishRunBestEffortForRun({
+                status: "error",
+                reason: failure.code,
+                errorCode: failure.code,
+                errorMessage: failure.message,
+              });
+              writer.send({
+                event: "error",
+                data: {
+                  code: failure.code,
+                  error: failure.message,
+                  message: failure.message,
+                  status: failure.status,
+                },
+              });
+              return;
             }
             if (isRuntimeRunCancelledError(error)) {
               await persistPartialAssistantMessageBestEffort({
@@ -2761,10 +2849,17 @@ export async function handleRuntimeTurnRequest(args: {
             });
             return;
           }
+          const funnelPostcondition = loopResult.ok
+            ? await verifyFunnelDraftPostcondition()
+            : { ok: true, beforeRevision: 0, afterRevision: 0 };
           try {
-            await finalizeMemberAgentFundingForLoopResult({
-              session: memberAgentFundingSession,
+            await finalizeCommunityFundingForLoopResult({
+              session: communityFundingSession,
               result: loopResult,
+              outcomeCode:
+                !funnelPostcondition.ok && communityInferenceSurface === "community_funnel_builder"
+                  ? "community_funnel_builder_postcondition_failed"
+                  : undefined,
             });
           } catch (error) {
             const message = error instanceof Error ? error.message : String(error);
@@ -2896,7 +2991,6 @@ export async function handleRuntimeTurnRequest(args: {
             });
             return;
           }
-          const funnelPostcondition = await verifyFunnelDraftPostcondition();
           if (!funnelPostcondition.ok) {
             await finishFunnelDraftPostconditionFailure();
             writer.send({
@@ -3015,9 +3109,9 @@ export async function handleRuntimeTurnRequest(args: {
       }
       runtimeTurnStage = "agent_loop";
       let loopResult;
-      let memberAgentFundingSession: CommunityInferenceFundingSession | null = null;
+      let communityFundingSession: CommunityInferenceFundingSession | null = null;
       try {
-        memberAgentFundingSession = await claimMemberAgentFundingSession();
+        communityFundingSession = await claimCommunityFundingSession();
         loopResult = await executeChatToolsAgentLoop({
           ctx,
           req,
@@ -3064,21 +3158,37 @@ export async function handleRuntimeTurnRequest(args: {
           },
           touchRunHeartbeat: touchRunHeartbeatBestEffort,
           beforeProviderRequest: async (): Promise<void> => {
-            await markMemberAgentFundingProviderStarted(memberAgentFundingSession);
+            await markCommunityFundingProviderStarted(communityFundingSession);
           },
-          observeProviderResult: observeMemberAgentProviderResult,
+          observeProviderResult: observeCommunityFundingProviderResult,
         });
         await appendContextIntegrityCheckBestEffortForRun();
       } catch (error) {
-        if (memberAgentFundingSession) {
+        if (communityFundingSession) {
           try {
-            await failUnhandledMemberAgentFundingSession(
-              memberAgentFundingSession,
-              "member_agent_loop_unhandled",
+            await failUnhandledCommunityFundingSession(
+              communityFundingSession,
+              "community_inference_loop_unhandled",
             );
           } catch {
             // Preserve the original runtime failure; the receipt remains fail-closed.
           }
+        }
+        if (!communityFundingSession && communityInferenceSurface) {
+          const failure = resolveCommunityFundingClaimFailure(error);
+          await finishRunBestEffortForRun({
+            status: "error",
+            reason: failure.code,
+            errorCode: failure.code,
+            errorMessage: failure.message,
+          });
+          return runtimeJsonResponse(failure.status, {
+            ok: false,
+            code: failure.code,
+            error: failure.code,
+            message: failure.message,
+            run_id: runId,
+          });
         }
         if (isRuntimeRunCancelledError(error)) {
           await persistPartialAssistantMessageBestEffort({
@@ -3119,10 +3229,17 @@ export async function handleRuntimeTurnRequest(args: {
           run_id: runId,
         });
       }
+      const funnelPostcondition = loopResult.ok
+        ? await verifyFunnelDraftPostcondition()
+        : { ok: true, beforeRevision: 0, afterRevision: 0 };
       try {
-        await finalizeMemberAgentFundingForLoopResult({
-          session: memberAgentFundingSession,
+        await finalizeCommunityFundingForLoopResult({
+          session: communityFundingSession,
           result: loopResult,
+          outcomeCode:
+            !funnelPostcondition.ok && communityInferenceSurface === "community_funnel_builder"
+              ? "community_funnel_builder_postcondition_failed"
+              : undefined,
         });
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -3227,7 +3344,6 @@ export async function handleRuntimeTurnRequest(args: {
           run_id: runId,
         });
       }
-      const funnelPostcondition = await verifyFunnelDraftPostcondition();
       if (!funnelPostcondition.ok) {
         await finishFunnelDraftPostconditionFailure();
         return runtimeJsonResponse(409, {

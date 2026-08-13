@@ -259,6 +259,7 @@ export default defineSchema({
     usageCycleId: v.optional(v.id("founderUsageCycles")),
     surface: v.union(
       v.literal("member_agent_dock"),
+      v.literal("community_funnel_builder"),
       v.literal("community_agent_mention"),
       v.literal("community_autonomous_cognition"),
       v.literal("community_setup_generation"),

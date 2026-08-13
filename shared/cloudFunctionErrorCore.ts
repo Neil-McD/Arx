@@ -80,7 +80,12 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
 
   if (AUTH_CODES.has(code) || code === "auth_required" || includesAuthFailureText(message)) return "auth";
   if (code === "rate_limited") return "rate_limited";
-  if (code === "platform_inference_quota_exceeded" || code === "provider_inference_quota_exceeded") return "quota";
+  if (
+    code === "platform_inference_quota_exceeded" ||
+    code === "provider_inference_quota_exceeded" ||
+    code === "community_ai_usage_exhausted"
+  )
+    return "quota";
   if (
     code === "platform_inference_not_allowed" ||
     code === "tier_required" ||
@@ -100,6 +105,8 @@ export function classifyCloudFunctionErrorCategoryCore(input: {
   if (
     code === "platform_inference_unavailable" ||
     code === "provider_inference_unavailable" ||
+    code === "community_ai_unavailable" ||
+    code === "community_inference_accounting_unavailable" ||
     code === "provider_error"
   )
     return "unavailable";

@@ -34,7 +34,7 @@ import {
   listConvexCloudNewestThreadMessagesByThreadKey,
   type CloudMessageTransportRow,
 } from "../../../../shared/cloudThreadsRead";
-import { DEFAULT_ACTIVE_MODEL_ID } from "../../../../shared/modelCatalog";
+import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../../../../shared/founderInference";
 import { buildCommunityFunnelThreadKey } from "../../../../shared/runtimeInvocationSurface";
 import type {
   CommunityCustomFunnelSlot,
@@ -381,7 +381,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           ? {
               id: threadKey,
               title: `${props.previewCommunity.name} funnel`,
-              model_id: DEFAULT_ACTIVE_MODEL_ID,
+              model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
               runtime_engine: "polynet",
               project_id: null,
               community_id: props.previewCommunity.id,
@@ -429,7 +429,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
           thread: {
             threadId: threadKey,
             title: `${props.previewCommunity.name} funnel`,
-            modelId: DEFAULT_ACTIVE_MODEL_ID,
+            modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
             runtimeEngine: "polynet",
             communityId: props.previewCommunity.id,
             contextVersion: 0,
@@ -516,7 +516,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         thread: {
           threadId: threadKey,
           title: `${props.previewCommunity.name} funnel`,
-          modelId: DEFAULT_ACTIVE_MODEL_ID,
+          modelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
           runtimeEngine: "polynet",
           communityId: props.previewCommunity.id,
           contextVersion: 0,
@@ -545,7 +545,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
       setMessages((current) => [...current, optimisticMessage]);
       setInput("");
       const result = await runAgentTurn(session, threadKey, {
-        preferredModelId: DEFAULT_ACTIVE_MODEL_ID,
+        preferredModelId: COMMUNITY_OWNER_FUNDED_MODEL_ID,
         mode: "respond",
         runIdHint: `community_funnel_builder:${messageId}`,
         userMessageKey: messageId,

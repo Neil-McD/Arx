@@ -66,10 +66,10 @@ describe("community funnel runtime surface", () => {
     ).toEqual(["polynet_list", "polynet_read", "polynet_call"]);
   });
 
-  it("uses platform-managed inference without personal provider gates", () => {
+  it("uses founder-funded community inference without personal provider gates", () => {
     expect(
       resolveRuntimeInvocationFundingPolicy("community_funnel_builder"),
-    ).toBe("platform_managed");
+    ).toBe("community_owner");
     expect(resolveRuntimeInvocationFundingPolicy("member_agent_dock")).toBe(
       "community_owner",
     );
