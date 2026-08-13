@@ -1634,12 +1634,6 @@
   font-size: 12px;
   line-height: 1.45;
 }
-.funnel-builder-workspace-switcher {
-  display: none;
-  flex: 0 0 auto;
-  width: 100%;
-  margin-bottom: 10px;
-}
 .funnel-builder-header-actions {
   display: flex;
   align-items: center;
@@ -1658,7 +1652,7 @@
 }
 .funnel-builder-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) clamp(360px, 32vw, 420px);
+  grid-template-columns: minmax(0, 1fr) clamp(320px, 34%, 400px);
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -1936,11 +1930,8 @@
   .funnel-builder-context {
     padding-bottom: 8px;
   }
-  .funnel-builder-workspace-switcher {
-    display: block;
-  }
   .funnel-builder-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr) clamp(280px, 36%, 340px);
     overflow: hidden;
   }
   .funnel-builder-preview {
@@ -1953,11 +1944,6 @@
   }
   .funnel-builder-conversation {
     min-height: 0;
-    border-left: 0;
-  }
-  .funnel-builder-layout.is-custom[data-workspace-view="preview"] .funnel-builder-conversation,
-  .funnel-builder-layout.is-custom[data-workspace-view="builder"] .funnel-builder-preview {
-    display: none;
   }
 }
 
@@ -1976,6 +1962,22 @@
   }
   .funnel-builder-header-actions button {
     flex: 1;
+  }
+  .funnel-builder-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(240px, 44%);
+  }
+  .funnel-builder-preview {
+    padding-left: 0;
+  }
+  .funnel-builder-conversation-header {
+    padding-inline: 12px;
+  }
+  .funnel-builder-messages {
+    padding: 12px;
+  }
+  .funnel-builder-vsl,
+  .funnel-builder-composer {
+    margin-inline: 10px;
   }
 }
 

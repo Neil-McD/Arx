@@ -83,8 +83,6 @@ type FunnelBuilderMessage = Omit<CloudMessageTransportRow, "role"> & {
   role: "user" | "assistant" | "system";
 };
 
-type FunnelBuilderWorkspaceView = "preview" | "builder";
-
 export type WebCommunityFunnelEditorProps = {
   session: AuthSession | null;
   ensureSession: (
@@ -163,8 +161,6 @@ function formatActivationError(error: unknown): string {
 
 export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
   const [selectedSlot, setSelectedSlot] = useState<CommunityFunnelSlot>("default");
-  const [workspaceView, setWorkspaceView] =
-    useState<FunnelBuilderWorkspaceView>("preview");
   const selectedCustomSlot: CommunityCustomFunnelSlot | null =
     selectedSlot === "default" ? null : selectedSlot;
   const selectedVariant = selectedCustomSlot
@@ -320,7 +316,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     if (selectedCommunityIdRef.current === props.previewCommunity.id) return;
     selectedCommunityIdRef.current = props.previewCommunity.id;
     setSelectedSlot("default");
-    setWorkspaceView("preview");
   }, [props.previewCommunity.id]);
 
   useEffect(() => {
@@ -798,28 +793,13 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
     ),
     [funnelTabs, selectedSlot],
   );
-  const workspaceTabs = useMemo(() => [
-    { id: "preview" as const, label: "Preview" },
-    { id: "builder" as const, label: "AI builder" },
-  ], []);
-  const workspaceSwitcherStyle = useMemo(
-    () => buildPlatformSwitcherStyle(
-      workspaceTabs.length,
-      workspaceView === "preview" ? 0 : 1,
-    ),
-    [workspaceTabs.length, workspaceView],
-  );
-
   return (
     <section className="funnel-builder" aria-labelledby="funnel-builder-title">
       <header className="funnel-builder-toolbar">
         <WebPlatformTabList
           tabs={funnelTabs}
           activeTab={selectedSlot}
-          onSelectTab={(slot) => {
-            setSelectedSlot(slot);
-            setWorkspaceView("preview");
-          }}
+          onSelectTab={(slot) => setSelectedSlot(slot)}
           ariaLabel="Community funnels"
           idPrefix="community-funnel"
           className="platform-switcher funnel-builder-slot-switcher"
@@ -887,21 +867,8 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
             : "Describe what you want. Changes stay private until you save them."}
         </p>
       </div>
-      {selectedCustomSlot ? (
-        <WebPlatformTabList
-          tabs={workspaceTabs}
-          activeTab={workspaceView}
-          onSelectTab={(view) => setWorkspaceView(view)}
-          ariaLabel="Funnel workspace"
-          idPrefix="community-funnel-workspace"
-          className="platform-switcher funnel-builder-workspace-switcher"
-          style={workspaceSwitcherStyle}
-        />
-      ) : null}
-
       <div
         className={`funnel-builder-layout ${selectedSlot === "default" ? "is-default" : "is-custom"}`}
-        data-workspace-view={workspaceView}
       >
         <div
           className={`funnel-builder-preview${selectedSlot === "default" || content ? "" : " is-empty"}`}
