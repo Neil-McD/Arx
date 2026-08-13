@@ -218,7 +218,7 @@ assert.deepEqual(
       "workspace_tools",
     ],
   }),
-  ["product_docs", "community_tools"],
+  ["product_docs", "community_tools", "web_research"],
 );
 assert.deepEqual(
   restrictToolNamesForInvocationSurface({
@@ -251,6 +251,7 @@ assert.deepEqual(
     "polynet_search",
     "polynet_write",
     "polynet_call",
+    "web_research",
   ],
 );
 assert.match(

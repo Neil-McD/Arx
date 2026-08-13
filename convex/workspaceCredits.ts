@@ -13,19 +13,15 @@ import {
 } from "../shared/workspaceCredits";
 import { requireOperatorRole } from "./operatorAccess";
 import { loadBlaxelWorkspaceConfig } from "./blaxelWorkspaceClient";
-import type {
-  ProviderCostBillingDisposition,
-  ProviderCostCategory,
-  ProviderCostComponent,
-  ProviderCostEvidenceType,
-} from "../shared/providerCostAccounting";
+import {
+  recordProviderCostEntry,
+  type ProviderCostEntryInput,
+} from "./providerCostCore";
 import {
   BLAXEL_STANDBY_SNAPSHOT_STORAGE_USD_PER_GB_SECOND,
   BLAXEL_VOLUME_STORAGE_USD_PER_GB_SECOND,
   PROVIDER_COST_COMPONENTS,
   estimateBlaxelStorageCostUsd,
-  roundProviderCostQuantity,
-  roundProviderCostUsd,
   resolveProviderCostAccountingHourBucket,
 } from "../shared/providerCostAccounting";
 import {
@@ -367,174 +363,6 @@ function mergeLedgerMetadata(existing: unknown, patch: unknown): unknown {
     ...normalizeObjectMetadata(existing),
     ...patchObject,
   };
-}
-
-type ProviderCostEntryInput = {
-  costKey: string;
-  userId?: any;
-  projectId?: any;
-  communityId?: any;
-  runId?: string | null;
-  category: ProviderCostCategory;
-  component: ProviderCostComponent;
-  provider: string;
-  resourceId?: string | null;
-  periodStart: number;
-  periodEnd: number;
-  quantityKind: string;
-  quantity: number;
-  rawVendorCostUsd: number;
-  evidence: ProviderCostEvidenceType;
-  billingDisposition: ProviderCostBillingDisposition;
-  linkedCreditKey?: string | null;
-  metadata?: unknown;
-  nowMs?: number;
-};
-
-const PROVIDER_COST_EVIDENCE_RANK: Record<ProviderCostEvidenceType, number> = {
-  estimated: 1,
-  provider_reported: 2,
-  exact: 3,
-};
-
-function resolveProviderCostEvidenceRank(value: unknown): number {
-  const normalized = normalizeOptionalString(value);
-  if (
-    normalized === "estimated" ||
-    normalized === "provider_reported" ||
-    normalized === "exact"
-  ) {
-    return PROVIDER_COST_EVIDENCE_RANK[normalized];
-  }
-  return 0;
-}
-
-function normalizeProviderCostIdentityValue(value: unknown): string | null {
-  return normalizeOptionalString(value) ?? null;
-}
-
-function createProviderCostEntryRow(
-  args: ProviderCostEntryInput,
-  costKey: string,
-  nowMs: number,
-) {
-  const periodStart = normalizeOptionalNumber(args.periodStart) ?? nowMs;
-  const periodEnd = Math.max(periodStart, normalizeOptionalNumber(args.periodEnd) ?? periodStart);
-  const quantity = roundProviderCostQuantity(Math.max(0, Number(args.quantity) || 0));
-  const rawVendorCostUsd = roundProviderCostUsd(
-    Math.max(0, Number(args.rawVendorCostUsd) || 0),
-  );
-  return {
-    costKey,
-    ...(args.userId ? { userId: args.userId } : {}),
-    ...(args.projectId ? { projectId: args.projectId } : {}),
-    ...(args.communityId ? { communityId: args.communityId } : {}),
-    ...(normalizeOptionalString(args.runId) ? { runId: normalizeOptionalString(args.runId) } : {}),
-    category: args.category,
-    component: args.component,
-    provider: String(args.provider ?? "").trim() || "unknown",
-    ...(normalizeOptionalString(args.resourceId)
-      ? { resourceId: normalizeOptionalString(args.resourceId) }
-      : {}),
-    periodStart,
-    periodEnd,
-    quantityKind: String(args.quantityKind ?? "").trim() || "unit",
-    quantity,
-    rawVendorCostUsd,
-    evidence: args.evidence,
-    billingDisposition: args.billingDisposition,
-    ...(normalizeOptionalString(args.linkedCreditKey)
-      ? { linkedCreditKey: normalizeOptionalString(args.linkedCreditKey) }
-      : {}),
-    ...(args.metadata === undefined ? {} : { metadata: args.metadata }),
-    createdAt: nowMs,
-    updatedAt: nowMs,
-  };
-}
-
-function resolveProviderCostIdentityMismatch(
-  existing: any,
-  incoming: ReturnType<typeof createProviderCostEntryRow>,
-): { field: string; existing: string | null; incoming: string | null } | null {
-  const identityFields = [
-    "category",
-    "component",
-    "billingDisposition",
-    "userId",
-    "projectId",
-    "communityId",
-    "linkedCreditKey",
-  ] as const;
-  for (const field of identityFields) {
-    const existingValue = normalizeProviderCostIdentityValue(existing?.[field]);
-    const incomingValue = normalizeProviderCostIdentityValue(incoming?.[field]);
-    if (existingValue !== incomingValue) {
-      return { field, existing: existingValue, incoming: incomingValue };
-    }
-  }
-  return null;
-}
-
-function buildProviderCostEvidenceUpgradePatch(
-  existing: any,
-  incoming: ReturnType<typeof createProviderCostEntryRow>,
-  nowMs: number,
-): Record<string, unknown> | null {
-  const existingRank = resolveProviderCostEvidenceRank(existing?.evidence);
-  const incomingRank = resolveProviderCostEvidenceRank(incoming.evidence);
-  if (incomingRank <= existingRank) return null;
-  const previousEvidence = normalizeOptionalString(existing?.evidence);
-  const previousRawVendorCostUsd = normalizeOptionalNumber(existing?.rawVendorCostUsd);
-  return {
-    provider: incoming.provider,
-    ...(normalizeOptionalString(incoming.resourceId)
-      ? { resourceId: normalizeOptionalString(incoming.resourceId) }
-      : {}),
-    periodStart: incoming.periodStart,
-    periodEnd: incoming.periodEnd,
-    quantityKind: incoming.quantityKind,
-    quantity: incoming.quantity,
-    rawVendorCostUsd: incoming.rawVendorCostUsd,
-    evidence: incoming.evidence,
-    metadata: {
-      ...normalizeObjectMetadata(existing?.metadata),
-      ...normalizeObjectMetadata(incoming.metadata),
-      previous_evidence: previousEvidence ?? null,
-      previous_raw_vendor_cost_usd: previousRawVendorCostUsd ?? null,
-      provider_cost_upgraded_at: nowMs,
-    },
-    updatedAt: nowMs,
-  };
-}
-
-async function recordProviderCostEntry(ctx: any, args: ProviderCostEntryInput): Promise<any> {
-  const costKey = normalizeOptionalString(args.costKey);
-  if (!costKey) throw new Error("provider_cost_key_required");
-  const nowMs = args.nowMs ?? Date.now();
-  const row = createProviderCostEntryRow(args, costKey, nowMs);
-  const existing = await ctx.db
-    .query("providerCostEntries")
-    .withIndex("by_costKey", (q: any) => q.eq("costKey", costKey))
-    .first();
-  if (existing) {
-    const mismatch = resolveProviderCostIdentityMismatch(existing, row);
-    if (mismatch) {
-      console.warn("provider_cost_identity_mismatch", {
-        cost_key: costKey,
-        field: mismatch.field,
-        existing: mismatch.existing,
-        incoming: mismatch.incoming,
-      });
-      return existing;
-    }
-    const upgradePatch = buildProviderCostEvidenceUpgradePatch(existing, row, nowMs);
-    if (!upgradePatch) return existing;
-    await ctx.db.patch(existing._id, upgradePatch);
-    return await ctx.db.get(existing._id);
-  }
-
-  const id = await ctx.db.insert("providerCostEntries", row);
-  return await ctx.db.get(id);
 }
 
 async function readProviderCostEntryByCostKey(ctx: any, costKey: string): Promise<any | null> {

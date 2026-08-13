@@ -257,6 +257,7 @@
     "check:community-founder-welcome-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_founder_welcome_contract_proof.ts && vitest run convex/communityFounderWelcome.test.ts convex/communityBuilderKnowledgeSetup.test.ts",
     "check:founder-inference-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/founder_inference_contract_proof.ts",
     "check:founder-inference-behavior": "vitest run convex/founderInferenceCore.test.ts",
+    "check:founder-paid-tool-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/founder_paid_tool_accounting_contract_proof.ts && vitest run convex/founderPaidTools.test.ts",
     "check:monetization-irreducibility-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/monetization_irreducibility_contract_proof.ts",
     "check:builder-offer-surface-proof": "tsx scripts/builder_offer_surface_contract_proof.ts",
     "check:member-agent-dock-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/member_agent_dock_contract_proof.ts",

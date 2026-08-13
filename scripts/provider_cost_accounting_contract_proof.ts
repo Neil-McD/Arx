@@ -29,6 +29,7 @@ function extractBetween(source: string, start: string, end: string): string {
 const packageJson = read("package.json");
 const schema = read("convex/schema.ts");
 const workspaceCredits = read("convex/workspaceCredits.ts");
+const providerCostCore = read("convex/providerCostCore.ts");
 const crons = read("convex/crons.ts");
 const billingSurface = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const blaxelWorkspaceWake = read("convex/blaxelWorkspaceWake.ts");
@@ -233,27 +234,27 @@ assert.match(
   "provider margin diagnostic must report margin and explicit scan-limit state",
 );
 assert.match(
-  workspaceCredits,
-  /const quantity = roundProviderCostQuantity[\s\S]*const rawVendorCostUsd = roundProviderCostUsd[\s\S]*ctx\.db\.insert\("providerCostEntries"/,
+  providerCostCore,
+  /quantity: roundProviderCostQuantity[\s\S]*rawVendorCostUsd: roundProviderCostUsd[\s\S]*ctx\.db\.insert\("providerCostEntries"/,
   "provider cost recording must preserve sub-cent provider cost precision",
 );
 assert.match(
-  workspaceCredits,
+  providerCostCore,
   /PROVIDER_COST_EVIDENCE_RANK: Record<ProviderCostEvidenceType, number> = \{[\s\S]*estimated: 1[\s\S]*provider_reported: 2[\s\S]*exact: 3/,
   "provider cost evidence must have explicit upgrade precedence",
 );
 assert.match(
-  workspaceCredits,
-  /function buildProviderCostEvidenceUpgradePatch[\s\S]*incomingRank <= existingRank[\s\S]*return null[\s\S]*previous_evidence[\s\S]*previous_raw_vendor_cost_usd[\s\S]*provider_cost_upgraded_at/,
+  providerCostCore,
+  /function buildProviderCostEvidenceUpgradePatch[\s\S]*resolveProviderCostEvidenceRank\(incoming\.evidence\) <=[\s\S]*resolveProviderCostEvidenceRank\(existing\?\.evidence\)[\s\S]*return null[\s\S]*previous_evidence[\s\S]*previous_raw_vendor_cost_usd[\s\S]*provider_cost_upgraded_at/,
   "provider cost recording must upgrade only stronger evidence and preserve previous audit context",
 );
 assert.match(
-  workspaceCredits,
-  /resolveProviderCostIdentityMismatch\(existing, row\)[\s\S]*console\.warn\("provider_cost_identity_mismatch"[\s\S]*return existing[\s\S]*ctx\.db\.patch\(existing\._id, upgradePatch\)/,
+  providerCostCore,
+  /resolveProviderCostIdentityMismatch\(existing, row\)[\s\S]*provider_cost_identity_mismatch[\s\S]*return existing[\s\S]*ctx\.db\.patch\(existing\._id, upgradePatch\)/,
   "provider cost recording must refuse identity drift before patching stronger evidence",
 );
 assert.doesNotMatch(
-  workspaceCredits,
+  providerCostCore,
   /const quantity = roundCurrency[\s\S]*const rawVendorCostUsd = roundCurrency/,
   "provider cost recording must not use user-facing 4-decimal currency rounding",
 );
@@ -265,7 +266,7 @@ assert.match(
 assert.match(
   platformToolCostAccounting,
   /recordProviderCostInternal[\s\S]*billingDisposition: "platform_absorbed"[\s\S]*provider_cost_source: "platform_tool_cost_accounting"/,
-  "platform-absorbed tool cost must retain auditable provider evidence",
+  "generic best-effort platform tool cost must remain platform absorbed",
 );
 assert.match(
   platformToolCostAccounting,
@@ -275,7 +276,7 @@ assert.match(
 assert.match(
   platformToolCostAccounting,
   /costKey\.startsWith\("crawl_"\)[\s\S]*\? "web_crawl_provider_call"[\s\S]*: "web_research_call"/,
-  "web research and crawl calls must classify as absorbed web provider cost",
+  "generic absorbed web costs must retain their legacy cost-key classification",
 );
 assert.match(
   platformToolCostAccounting,

@@ -293,6 +293,53 @@ export default defineSchema({
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_payer_createdAt", ["payerUserId", "createdAt"]),
 
+  communityPaidToolReceipts: defineTable({
+    receiptKey: v.string(),
+    sourceRunId: v.string(),
+    toolCallId: v.string(),
+    communityId: v.id("communities"),
+    actorUserId: v.id("users"),
+    payerUserId: v.id("users"),
+    fundingMode: v.union(
+      v.literal("platform_subscription"),
+      v.literal("platform_operator_grant"),
+    ),
+    founderSubscriptionId: v.optional(v.id("founderSubscriptions")),
+    usageCycleId: v.optional(v.id("founderUsageCycles")),
+    toolName: v.union(v.literal("web_research"), v.literal("web_crawl")),
+    action: v.union(
+      v.literal("search"),
+      v.literal("open_page"),
+      v.literal("find_in_page"),
+      v.literal("crawl"),
+    ),
+    status: v.union(
+      v.literal("authorized"),
+      v.literal("settled"),
+      v.literal("failed"),
+      v.literal("indeterminate"),
+    ),
+    claimToken: v.string(),
+    leaseExpiresAt: v.number(),
+    providerStartedAt: v.optional(v.number()),
+    pricingVersion: v.string(),
+    reservedCostMicros: v.number(),
+    settledCostMicros: v.optional(v.number()),
+    provider: v.optional(v.string()),
+    outcomeCode: v.optional(v.string()),
+    failureCode: v.optional(v.string()),
+    authorizedAt: v.number(),
+    settledAt: v.optional(v.number()),
+    failedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_receipt_key", ["receiptKey"])
+    .index("by_source_run", ["sourceRunId"])
+    .index("by_actor_community_createdAt", ["actorUserId", "communityId", "createdAt"])
+    .index("by_cycle_createdAt", ["usageCycleId", "createdAt"])
+    .index("by_community_createdAt", ["communityId", "createdAt"]),
+
   workspaceCreditBalances: defineTable({
     userId: v.id("users"),
     includedCreditsBalance: v.number(),

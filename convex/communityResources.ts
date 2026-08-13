@@ -9566,11 +9566,10 @@ export const processCommunitySourceCrawlJobInternal = internalAction({
   },
 });
 
-export const crawlWebRoot: any = action({
+export const crawlWebRoot: any = internalAction({
   args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.optional(v.id("communities")),
+    userId: v.id("users"),
+    communityId: v.id("communities"),
     rootUrl: v.string(),
     strategy: v.optional(v.union(v.literal("auto"), v.literal("simple"), v.literal("crawl"))),
     destination: v.optional(v.union(v.literal("context"), v.literal("active_community_sources"))),
@@ -9579,7 +9578,7 @@ export const crawlWebRoot: any = action({
     maxChars: v.optional(v.number()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
-    const userId = args.userId ?? await resolveAuthenticatedActionUserId(ctx, args.authSubject ?? null);
+    const userId = args.userId;
     const rootUrl = requireSafeSourceIngestionUrl(args.rootUrl);
     const destination = args.destination === "active_community_sources"
       ? "active_community_sources"
@@ -9620,72 +9619,32 @@ export const crawlWebRoot: any = action({
     });
     const crawlJobId = String(job?.id ?? "").trim();
     if (!crawlJobId) throw new Error("community_source_crawl_job_create_failed");
-    try {
-      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
-        crawlJobId,
-        status: "crawling",
-        startedAt: Date.now(),
-      });
-      const crawl = await crawlSourceRootWithConfiguredProvider({
-        rootUrl,
-      });
-      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
-        crawlJobId,
-        status: "saving_sources",
-        pageCount: crawl.pages.length,
-        readyPageCount: crawl.pages.filter((page) => page.status === "ready").length,
-        failedPageCount: crawl.pages.filter((page) => page.status !== "ready").length,
-      });
-      const saved = await ctx.runMutation(
-        (internal as any).communityResources.saveCommunitySourceCrawlPagesInternal,
-        {
-          crawlJobId,
-          communityId: args.communityId,
-          userId,
-          rootUrl,
-          provider: crawl.provider,
-          pages: crawl.pages,
-        },
-      );
-      const sourceResourceIds = Array.isArray(saved?.source_resource_ids)
-        ? saved.source_resource_ids.map((id: unknown) => String(id ?? "").trim()).filter(Boolean)
-        : [];
-      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
-        crawlJobId,
-        status: sourceResourceIds.length > 0 ? "ready" : "failed",
-        pageCount: Number(saved?.page_count ?? crawl.pages.length),
-        readyPageCount: Number(saved?.ready_page_count ?? 0),
-        failedPageCount: Number(saved?.failed_page_count ?? 0),
-        savedSourceCount: Number(saved?.saved_source_count ?? 0),
-        skippedSourceCount: Number(saved?.skipped_source_count ?? 0),
-        sourceResourceIds,
-        error: sourceResourceIds.length > 0 ? null : "community_source_crawl_no_usable_sources",
-        completedAt: Date.now(),
-      });
-      return {
-        ok: sourceResourceIds.length > 0,
-        kind: "web_crawl",
-        destination,
-        provider: crawl.provider,
-        root_url: rootUrl,
-        crawl_job_id: crawlJobId,
-        page_count: Number(saved?.page_count ?? crawl.pages.length),
-        ready_page_count: Number(saved?.ready_page_count ?? 0),
-        failed_page_count: Number(saved?.failed_page_count ?? 0),
-        saved_source_count: Number(saved?.saved_source_count ?? 0),
-        skipped_source_count: Number(saved?.skipped_source_count ?? 0),
-        source_resource_ids: sourceResourceIds,
-      };
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "web_crawl_failed";
-      await ctx.runMutation((internal as any).communityResources.patchCommunitySourceCrawlJobInternal, {
-        crawlJobId,
-        status: "failed",
-        error: message,
-        completedAt: Date.now(),
-      });
-      throw error;
+    const processed = (await ctx.runAction(
+      (internal as any).communityResources.processCommunitySourceCrawlJobInternal,
+      { crawlJobId },
+    )) as any;
+    const processedJob = processed?.job;
+    if (!processedJob) throw new Error("community_source_crawl_job_processing_failed");
+    if (processed?.ok === false && processed?.error !== "community_source_crawl_no_usable_sources") {
+      throw new Error(String(processed?.error ?? "web_crawl_failed"));
     }
+    const sourceResourceIds = Array.isArray(processedJob.source_resource_ids)
+      ? processedJob.source_resource_ids.map((id: unknown) => String(id ?? "").trim()).filter(Boolean)
+      : [];
+    return {
+      ok: processed?.ok === true && sourceResourceIds.length > 0,
+      kind: "web_crawl",
+      destination,
+      provider: processedJob.provider,
+      root_url: rootUrl,
+      crawl_job_id: crawlJobId,
+      page_count: Number(processedJob.page_count ?? 0),
+      ready_page_count: Number(processedJob.ready_page_count ?? 0),
+      failed_page_count: Number(processedJob.failed_page_count ?? 0),
+      saved_source_count: Number(processedJob.saved_source_count ?? 0),
+      skipped_source_count: Number(processedJob.skipped_source_count ?? 0),
+      source_resource_ids: sourceResourceIds,
+    };
   },
 });
 

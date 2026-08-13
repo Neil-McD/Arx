@@ -28,11 +28,18 @@ import {
 import { executeWebResearch } from "./webResearchTools";
 import type { WebResearchBillingEvidence } from "./webSearchTypes";
 import { classifyWebResearchUrlAccess } from "../shared/webResearchUrlPolicy.ts";
-import { recordPlatformToolCostBestEffort } from "./platformToolCostAccounting";
+import {
+  authorizeFounderPaidToolFundingSession,
+  failFounderPaidToolFundingSession,
+  markFounderPaidToolProviderStarted,
+  settleFounderPaidToolFundingSession,
+  type FounderPaidToolFundingSession,
+} from "./founderPaidToolRuntime";
 import {
   estimateWebResearchVendorCostUsd,
   type WebResearchCreditAction,
 } from "../shared/workspaceCredits";
+import { founderPaidToolActionForTool } from "../shared/founderPaidTools";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
 import {
   type RetrievalToolName,
@@ -177,10 +184,6 @@ function communityMemoryToolExecutionResult(params: {
   };
 }
 
-function newCostKey(prefix: string): string {
-  return `${prefix}_${crypto.randomUUID().replace(/-/g, "")}`;
-}
-
 function buildWebResearchCostMetadata(params: {
   estimatedVendorCostUsd: number;
   finalVendorCostUsd: number;
@@ -225,6 +228,7 @@ export async function executeRetrievalHarnessTool(params: {
   authSubject?: string | null;
   projectId?: string | null;
   runId: string;
+  toolCallId?: string | null;
   communityId: string | null;
   toolName: RetrievalToolName;
   args: Record<string, unknown>;
@@ -860,19 +864,77 @@ export async function executeRetrievalHarnessTool(params: {
   }
 
   if (params.toolName === "web_crawl") {
+    const access = classifyWebResearchUrlAccess(String(normalizedArgs.url ?? "").trim());
+    if (!access.ok || !access.normalizedUrl) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: access.code ?? "invalid_tool_args",
+        errorMessage: access.message ?? "web_crawl requires a valid public web URL.",
+      };
+    }
+    if (normalizedArgs.destination === "active_community_sources") {
+      try {
+        await params.ctx.runQuery(
+          (internal as any).communityResources.requireCommunitySourceManagerInternal,
+          {
+            userId: params.userId,
+            communityId: params.communityId,
+          },
+        );
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: message || "community_forbidden",
+          errorMessage: "Only community managers can add crawled sources.",
+        };
+      }
+    }
     const webResearchAction = "crawl" as WebResearchCreditAction;
     const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
-    const costKey = newCostKey("crawl");
+    let fundingSession: FounderPaidToolFundingSession;
+    try {
+      fundingSession = await authorizeFounderPaidToolFundingSession({
+        ctx: params.ctx,
+        communityId: params.communityId,
+        actorUserId: params.userId,
+        sourceRunId: params.runId,
+        toolCallId: String(params.toolCallId ?? "").trim(),
+        toolName: "web_crawl",
+        action: "crawl",
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: message || "founder_paid_tool_authorization_failed",
+        errorMessage: "Paid web crawl is unavailable for this community.",
+      };
+    }
+    try {
+      await markFounderPaidToolProviderStarted({ ctx: params.ctx, session: fundingSession });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: message || "founder_paid_tool_provider_blocked",
+        errorMessage: "Paid web crawl could not start.",
+      };
+    }
     let payload: unknown;
     try {
-      payload = await params.ctx.runAction((api as any).community.crawlWebRoot, {
+      payload = await params.ctx.runAction((internal as any).communityResources.crawlWebRoot, {
         userId: params.userId as any,
-        authSubject: params.authSubject ?? undefined,
-        communityId:
-          normalizedArgs.destination === "active_community_sources" && params.communityId
-            ? (params.communityId as any)
-            : undefined,
-        rootUrl: String(normalizedArgs.url ?? ""),
+        communityId: params.communityId as any,
+        rootUrl: access.normalizedUrl,
         strategy: normalizedArgs.strategy,
         destination: normalizedArgs.destination,
         maxPages: normalizedArgs.maxPages,
@@ -880,6 +942,15 @@ export async function executeRetrievalHarnessTool(params: {
         maxChars: normalizedArgs.maxChars,
       });
     } catch (error) {
+      try {
+        await failFounderPaidToolFundingSession({
+          ctx: params.ctx,
+          session: fundingSession,
+          failureCode: "web_crawl_failed",
+        });
+      } catch {
+        // The lease reconciler remains the final financial safety net.
+      }
       const message = error instanceof Error ? error.message : String(error);
       return {
         status: "error",
@@ -890,19 +961,28 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
 
-    await recordPlatformToolCostBestEffort({
+    const settlement = await settleFounderPaidToolFundingSession({
       ctx: params.ctx,
-      costKey,
-      userId: params.userId,
-      communityId: params.communityId ?? undefined,
-      projectId: params.projectId ?? undefined,
-      runId: params.runId,
+      session: fundingSession,
       rawVendorCostUsd: webResearchVendorCostUsd,
+      provider: "source_url_fetcher",
+      evidence: "estimated",
+      projectId: params.projectId ?? undefined,
       metadata: {
         provider: "source_url_fetcher",
         final_cost_source: "estimated",
       },
+      outcomeCode: "web_crawl_completed",
     });
+    if (settlement.status !== "settled") {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "founder_paid_tool_cost_indeterminate",
+        errorMessage: "Web crawl completed, but its provider cost exceeded the reserved ceiling.",
+      };
+    }
     return {
       status: "ok",
       exitCode: 0,
@@ -922,6 +1002,19 @@ export async function executeRetrievalHarnessTool(params: {
         : String(normalizedArgs.action ?? "").trim() === "open_page"
           ? "open_page"
           : "search";
+    const query = String(normalizedArgs.query ?? "").trim();
+    if ((action === "search" || action === "find_in_page") && !query) {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "invalid_tool_args",
+        errorMessage:
+          action === "find_in_page"
+            ? "web_research find_in_page requires a query."
+            : "web_research search requires a query.",
+      };
+    }
     if (action === "open_page" || action === "find_in_page") {
       const access = classifyWebResearchUrlAccess(String(normalizedArgs.url ?? "").trim());
       if (!access.ok) {
@@ -936,19 +1029,60 @@ export async function executeRetrievalHarnessTool(params: {
     }
     const webResearchAction = action as WebResearchCreditAction;
     const webResearchVendorCostUsd = estimateWebResearchVendorCostUsd(webResearchAction);
-    const costKey = newCostKey("web");
+    let fundingSession: FounderPaidToolFundingSession;
+    try {
+      fundingSession = await authorizeFounderPaidToolFundingSession({
+        ctx: params.ctx,
+        communityId: params.communityId,
+        actorUserId: params.userId,
+        sourceRunId: params.runId,
+        toolCallId: String(params.toolCallId ?? "").trim(),
+        toolName: "web_research",
+        action: founderPaidToolActionForTool({
+          toolName: "web_research",
+          action,
+        }),
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: message || "founder_paid_tool_authorization_failed",
+        errorMessage: "Paid web research is unavailable for this community.",
+      };
+    }
+    try {
+      await markFounderPaidToolProviderStarted({ ctx: params.ctx, session: fundingSession });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: message || "founder_paid_tool_provider_blocked",
+        errorMessage: "Paid web research could not start.",
+      };
+    }
     let result: Awaited<ReturnType<typeof executeWebResearch>>;
     try {
       result = await executeWebResearch({
         action,
-        query:
-          typeof normalizedArgs.query === "string"
-            ? normalizedArgs.query
-            : undefined,
+        query: query || undefined,
         url:
           typeof normalizedArgs.url === "string" ? normalizedArgs.url : undefined,
       });
     } catch (error) {
+      try {
+        await failFounderPaidToolFundingSession({
+          ctx: params.ctx,
+          session: fundingSession,
+          failureCode: "web_research_failed",
+        });
+      } catch {
+        // The lease reconciler remains the final financial safety net.
+      }
       const message = error instanceof Error ? error.message : String(error);
       return {
         status: "error",
@@ -959,6 +1093,15 @@ export async function executeRetrievalHarnessTool(params: {
       };
     }
     if (!result.ok) {
+      try {
+        await failFounderPaidToolFundingSession({
+          ctx: params.ctx,
+          session: fundingSession,
+          failureCode: result.code,
+        });
+      } catch {
+        // The lease reconciler remains the final financial safety net.
+      }
       return {
         status: "error",
         exitCode: null,
@@ -971,20 +1114,33 @@ export async function executeRetrievalHarnessTool(params: {
       typeof result.billingEvidence?.rawVendorCostUsd === "number"
         ? Math.max(0, result.billingEvidence.rawVendorCostUsd)
         : webResearchVendorCostUsd;
-    await recordPlatformToolCostBestEffort({
+    const provider = String(result.billingEvidence?.provider ?? "mixed").trim() || "mixed";
+    const settlement = await settleFounderPaidToolFundingSession({
       ctx: params.ctx,
-      costKey,
-      userId: params.userId,
-      communityId: params.communityId ?? undefined,
-      projectId: params.projectId ?? undefined,
-      runId: params.runId,
+      session: fundingSession,
       rawVendorCostUsd: finalVendorCostUsd,
+      provider,
+      evidence:
+        result.billingEvidence?.costSource === "provider_exact"
+          ? "exact"
+          : "estimated",
+      projectId: params.projectId ?? undefined,
       metadata: buildWebResearchCostMetadata({
         estimatedVendorCostUsd: webResearchVendorCostUsd,
         finalVendorCostUsd,
         billingEvidence: result.billingEvidence,
       }),
+      outcomeCode: "web_research_completed",
     });
+    if (settlement.status !== "settled") {
+      return {
+        status: "error",
+        exitCode: null,
+        outputText: "",
+        errorCode: "founder_paid_tool_cost_indeterminate",
+        errorMessage: "Web research completed, but its provider cost exceeded the reserved ceiling.",
+      };
+    }
     return {
       status: "ok",
       exitCode: result.exitCode,
@@ -2146,6 +2302,7 @@ async function executeRetrievalAgentLoop(
                 authSubject: params.authSubject,
                 projectId: params.projectId,
                 runId: params.runId,
+                toolCallId: providerCallId,
                 toolName: toolName as RetrievalToolName,
                 args: normalizedArgs,
                 evidenceSurface:
