@@ -1297,7 +1297,6 @@ export default function App() {
     communityIds: communityAttentionCommunityIds,
     communityTab,
     ensureSession: ensureUsableAuthSession,
-    resumeEpoch: appActivity.resumeEpoch,
     session,
     chat: {
       hasResolved: isActiveCommunityChannelReady && !isLoadingCommunityInteractions,

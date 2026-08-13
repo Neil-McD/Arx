@@ -20,6 +20,7 @@ import {
   listReadableCommunityChannels,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
+import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "../shared/communityAttentionContract";
 
 type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
@@ -71,6 +72,8 @@ type CommunityEventLike = {
   status: "live" | "cancelled";
   updatedAt: number;
 };
+
+const MAX_COMMUNITY_ATTENTION_RECENT_RESOURCES = 50;
 
 function normalizePositiveMarker(value: unknown): number | null {
   if (typeof value !== "number" || !Number.isFinite(value) || value <= 0) return null;
@@ -153,20 +156,32 @@ async function getLatestCommunityResourcesCreatedAt(
   ctx: any,
   communityId: any,
 ): Promise<number | null> {
-  const modules = (await ctx.db
-    .query("communityResourceModules" as any)
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .collect()) as CommunityResourceModuleLike[];
+  const recentRows = (await ctx.db
+    .query("communityResources" as any)
+    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
+    .order("desc")
+    .take(MAX_COMMUNITY_ATTENTION_RECENT_RESOURCES)) as CommunityResourceLike[];
+  const referencedModuleIds = Array.from(
+    new Map(
+      recentRows.flatMap((row) => {
+        const moduleId = normalizeIdValue(row.moduleId);
+        return moduleId ? [[moduleId, row.moduleId] as const] : [];
+      }),
+    ).values(),
+  );
+  const modules = (await Promise.all(
+    referencedModuleIds.map(async (moduleId) =>
+      await ctx.db.get(moduleId as any) as CommunityResourceModuleLike | null,
+    ),
+  )).filter(
+    (module): module is CommunityResourceModuleLike =>
+      module !== null && normalizeIdValue(module.communityId) === normalizeIdValue(communityId),
+  );
   const liveModuleIds = new Set(
     modules
       .filter(communityResourceModuleIsLive)
       .map((module) => String(module._id)),
   );
-  const recentRows = (await ctx.db
-    .query("communityResources" as any)
-    .withIndex("by_community_createdAt", (q: any) => q.eq("communityId", communityId))
-    .order("desc")
-    .take(50)) as CommunityResourceLike[];
   const createdAt = recentRows.find((row) => communityResourceIsLiveModulePage(row, liveModuleIds))?.createdAt;
   return typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0
     ? Math.floor(createdAt)
@@ -489,17 +504,19 @@ export const listMyCommunityAttention = query({
     communityIds: v.array(v.id("communities")),
   },
   handler: async (ctx, args) => {
+    const communityIds = Array.from(
+      new Map(args.communityIds.map((communityId) => [String(communityId), communityId])).values(),
+    );
+    if (communityIds.length > MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY) {
+      throw new Error("community_attention_scope_limit_exceeded");
+    }
     const userId = await resolveUserIdForAuthenticatedRequest({
       ctx,
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    const seenIds = new Set<string>();
     const rows: CommunityAttentionRow[] = [];
-    for (const communityId of args.communityIds) {
-      const normalizedId = String(communityId);
-      if (!normalizedId || seenIds.has(normalizedId)) continue;
-      seenIds.add(normalizedId);
+    for (const communityId of communityIds) {
       try {
         await requireCommunityChatAccess({
           ctx,

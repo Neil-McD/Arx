@@ -14,6 +14,12 @@ The irreducible question is:
 
 This contract covers platform diagnostics only.
 
+Infrastructure cost bounds, recurring-work governance, provider spend
+backstops, and cost-incident containment are defined separately in
+[`platform-cost-safety-contract-v1.md`](./platform-cost-safety-contract-v1.md).
+The diagnostics surface projects evidence from that contract; it does not own
+or duplicate its authority.
+
 In scope:
 
 - security and audit evidence
@@ -128,7 +134,8 @@ Each diagnostic signal should be classified with one of these statuses:
 | p95 turn latency | Tail latency for completed AI turns | Sentry spans or Convex runtime events | Sentry, Convex | now |
 | Provider failures | Model/provider failures by provider/error code | Runtime logs/events | Sentry, Convex | now |
 | Rate-limit failures | Provider or platform rate-limit events | Runtime logs/events | Sentry, Convex | now |
-| Cost per successful turn | Credits/cost divided by successful turns | Convex credits/compute records | Convex | later |
+| Cost per successful turn | Credits/cost divided by successful turns | Convex credits/compute records | Convex | now |
+| Infrastructure amplification | Unexpected invocation, database-read, compute, or bandwidth growth relative to real work | Convex/Vercel/provider evidence under the cost-safety contract | Convex, Vercel | now |
 
 ### Tools, Polynet MCP, and workspace runtime
 

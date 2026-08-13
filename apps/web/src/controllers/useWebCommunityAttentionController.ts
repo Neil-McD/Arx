@@ -50,7 +50,6 @@ type UseWebCommunityAttentionControllerParams = {
   communityIds: string[];
   communityTab: CommunityTab;
   ensureSession: EnsureAuthSession;
-  resumeEpoch: number;
   session: AuthSession | null;
   chat: {
     hasResolved: boolean;
@@ -97,7 +96,6 @@ export function useWebCommunityAttentionModel(
     events,
     interactions,
     resources,
-    resumeEpoch,
     session,
   } = params;
   const isCommunityChatActive =
@@ -118,12 +116,10 @@ export function useWebCommunityAttentionModel(
   const {
     attentionByCommunityId,
     markCommunitySurfaceSeen,
-    refreshCommunityAttention,
   } = useCommunityAttentionController<AuthSession>({
     session,
     ensureSession,
     communityIds,
-    resumeEpoch,
   });
 
   const [chatDividerBoundary, setChatDividerBoundary] = useState<number | null>(null);
@@ -228,7 +224,6 @@ export function useWebCommunityAttentionModel(
           channelId,
           throughAtMs,
         });
-        await refreshCommunityAttention();
       } catch {
         if (seenMarkerBySurfaceRef.current[requestKey] === marker) {
           delete seenMarkerBySurfaceRef.current[requestKey];
@@ -242,7 +237,6 @@ export function useWebCommunityAttentionModel(
     ensureSession,
     isCommunityChatActive,
     latestChatActivityAt,
-    refreshCommunityAttention,
     session,
   ]);
 
@@ -252,7 +246,6 @@ export function useWebCommunityAttentionModel(
     options?: {
       seenAtMs?: number;
       optimistic?: boolean;
-      refreshAfter?: boolean;
     },
   ) => {
     if (!activeCommunityId) return;
@@ -304,7 +297,6 @@ export function useWebCommunityAttentionModel(
       {
         seenAtMs: latestEventsUpdatedAt,
         optimistic: false,
-        refreshAfter: true,
       },
     );
   }, [

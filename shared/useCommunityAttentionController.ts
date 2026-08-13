@@ -1,13 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  listCloudCommunityAttentionRows,
   markCloudCommunitySurfaceSeen,
+  subscribeCloudCommunityAttentionRows,
   type CloudCommunityAttentionRow,
   type CloudCommunityAttentionSurface,
 } from "./cloudCommunityAttentionGateway";
+import { createCloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthPresentationIdentity, type AuthSessionLike } from "./authSession";
-import { useResumeEpochEffect } from "./useResumeEpochEffect";
 import { reuseEquivalentValue } from "./reuseEquivalentValue";
 
 type SessionLike = unknown;
@@ -26,14 +26,17 @@ type UseCommunityAttentionControllerArgs<SessionT extends SessionLike> = {
   session: SessionT | null;
   communityIds: string[];
   ensureSession?: EnsureSessionFn<SessionT>;
-  resumeEpoch: number;
-  pollIntervalMs?: number;
 };
 
 type MarkCommunitySurfaceSeenOptions = {
   seenAtMs?: number;
   optimistic?: boolean;
-  refreshAfter?: boolean;
+};
+
+export type InFlightCommunityAttentionMark = {
+  communityId: string;
+  surface: CloudCommunityAttentionSurface;
+  optimistic: boolean;
 };
 
 function buildAttentionMap(
@@ -66,6 +69,23 @@ function buildAttentionMap(
   return next;
 }
 
+export function applyInFlightCommunityAttentionClears(
+  serverAttentionMap: Record<string, CommunityAttentionIndicators>,
+  inFlightMarks: Iterable<InFlightCommunityAttentionMark>,
+): Record<string, CommunityAttentionIndicators> {
+  const nextAttentionMap = { ...serverAttentionMap };
+  for (const { communityId, surface, optimistic } of inFlightMarks) {
+    if (!optimistic) continue;
+    const indicators = nextAttentionMap[communityId];
+    if (!indicators || !indicators[surface]) continue;
+    nextAttentionMap[communityId] = {
+      ...indicators,
+      [surface]: false,
+    };
+  }
+  return nextAttentionMap;
+}
+
 export function useCommunityAttentionController<SessionT extends SessionLike>(
   args: UseCommunityAttentionControllerArgs<SessionT>,
 ) {
@@ -75,8 +95,8 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
   const [attentionByCommunityId, setAttentionByCommunityId] = useState<
     Record<string, CommunityAttentionIndicators>
   >({});
-  const loadGenerationRef = useRef(0);
-  const inFlightMarkKeysRef = useRef<Set<string>>(new Set());
+  const inFlightMarksRef = useRef<Map<string, InFlightCommunityAttentionMark>>(new Map());
+  const latestServerAttentionMapRef = useRef<Record<string, CommunityAttentionIndicators>>({});
   const sessionIdentity = resolveAuthPresentationIdentity(args.session as AuthSessionLike);
 
   const normalizedCommunityIds = useMemo(
@@ -85,42 +105,16 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
     [args.communityIds],
   );
 
-  const refreshCommunityAttention = useCallback(async () => {
-    const current = argsRef.current;
-    const usableSession = await resolveUsableSession(current.session, current.ensureSession);
-    const communityIds = Array.from(
-      new Set(current.communityIds.map((communityId) => String(communityId ?? "").trim()).filter(Boolean)),
-    ).sort();
-    const generation = (loadGenerationRef.current += 1);
+  const normalizedCommunityIdsKey = normalizedCommunityIds.join("\u0000");
 
-    if (!usableSession || communityIds.length === 0) {
-      setAttentionByCommunityId({});
-      return;
-    }
-
-    try {
-      const rows = await listCloudCommunityAttentionRows({
-        session: usableSession,
-        communityIds,
-      });
-      if (loadGenerationRef.current !== generation) return;
-      const nextAttentionMap = buildAttentionMap(communityIds, rows);
-      for (const key of inFlightMarkKeysRef.current) {
-        const [communityId, surface] = key.split(":");
-        if (
-          !communityId ||
-          (surface !== "chat" && surface !== "resources" && surface !== "events" && surface !== "mentions")
-        ) continue;
-        if (!nextAttentionMap[communityId]) continue;
-        nextAttentionMap[communityId] = {
-          ...nextAttentionMap[communityId],
-          [surface]: false,
-        };
-      }
-      setAttentionByCommunityId((previous) => reuseEquivalentValue(previous, nextAttentionMap));
-    } catch {
-      if (loadGenerationRef.current !== generation) return;
-    }
+  const applyServerRows = useCallback((communityIds: string[], rows: CloudCommunityAttentionRow[]) => {
+    const serverAttentionMap = buildAttentionMap(communityIds, rows);
+    latestServerAttentionMapRef.current = serverAttentionMap;
+    const nextAttentionMap = applyInFlightCommunityAttentionClears(
+      serverAttentionMap,
+      inFlightMarksRef.current.values(),
+    );
+    setAttentionByCommunityId((previous) => reuseEquivalentValue(previous, nextAttentionMap));
   }, []);
 
   const markCommunitySurfaceSeen = useCallback(
@@ -138,9 +132,10 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
           ? String(Math.floor(options.seenAtMs))
           : "";
       const key = `${communityId}:${surface}:${markerKey}`;
-      if (inFlightMarkKeysRef.current.has(key)) return;
-      inFlightMarkKeysRef.current.add(key);
-      if (options.optimistic !== false) {
+      if (inFlightMarksRef.current.has(key)) return;
+      const optimistic = options.optimistic !== false;
+      inFlightMarksRef.current.set(key, { communityId, surface, optimistic });
+      if (optimistic) {
         setAttentionByCommunityId((prev) => {
           const currentIndicators = prev[communityId];
           if (!currentIndicators || !currentIndicators[surface]) return prev;
@@ -160,41 +155,70 @@ export function useCommunityAttentionController<SessionT extends SessionLike>(
           surface,
           seenAtMs: options.seenAtMs,
         });
-        if (options.refreshAfter) {
-          await refreshCommunityAttention();
-        }
       } catch (error) {
-        void refreshCommunityAttention();
+        inFlightMarksRef.current.delete(key);
+        setAttentionByCommunityId((previous) =>
+          reuseEquivalentValue(
+            previous,
+            applyInFlightCommunityAttentionClears(
+              latestServerAttentionMapRef.current,
+              inFlightMarksRef.current.values(),
+            ),
+          ),
+        );
         throw error;
       } finally {
-        inFlightMarkKeysRef.current.delete(key);
+        inFlightMarksRef.current.delete(key);
       }
     },
-    [refreshCommunityAttention],
+    [],
   );
 
   useEffect(() => {
-    void refreshCommunityAttention();
-  }, [normalizedCommunityIds, refreshCommunityAttention, sessionIdentity]);
+    const communityIds = normalizedCommunityIdsKey
+      ? normalizedCommunityIdsKey.split("\u0000")
+      : [];
+    if (!sessionIdentity || communityIds.length === 0) {
+      latestServerAttentionMapRef.current = {};
+      setAttentionByCommunityId({});
+      return;
+    }
 
-  useResumeEpochEffect(args.resumeEpoch, () => {
-    if (!sessionIdentity || normalizedCommunityIds.length === 0) return;
-    void refreshCommunityAttention();
-  });
-
-  useEffect(() => {
-    if (!sessionIdentity || normalizedCommunityIds.length === 0) return;
-    const pollIntervalMs = Math.max(15_000, Math.floor(args.pollIntervalMs ?? 30_000));
-    const intervalId = window.setInterval(() => {
-      if (document.visibilityState !== "visible") return;
-      void refreshCommunityAttention();
-    }, pollIntervalMs);
-    return () => window.clearInterval(intervalId);
-  }, [args.pollIntervalMs, sessionIdentity, normalizedCommunityIds, refreshCommunityAttention]);
+    let cancelled = false;
+    let unsubscribe: (() => void) | null = null;
+    let liveClient: ReturnType<typeof createCloudCommunityChatLiveClient> | null = null;
+    applyServerRows(communityIds, []);
+    void (async () => {
+      const current = argsRef.current;
+      const usableSession = await resolveUsableSession(current.session, current.ensureSession);
+      if (!usableSession || cancelled) return;
+      try {
+        liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession: current.ensureSession,
+        });
+        unsubscribe = subscribeCloudCommunityAttentionRows({
+          liveClient,
+          communityIds,
+          onUpdate: (rows) => {
+            if (cancelled) return;
+            applyServerRows(communityIds, rows);
+          },
+        });
+      } catch {
+        // Attention is presentation state. Community access and navigation
+        // remain authoritative when the opportunistic subscription is down.
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+      liveClient?.close();
+    };
+  }, [applyServerRows, args.ensureSession, normalizedCommunityIdsKey, sessionIdentity]);
 
   return {
     attentionByCommunityId,
-    refreshCommunityAttention,
     markCommunitySurfaceSeen,
   };
 }

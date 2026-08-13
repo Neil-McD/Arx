@@ -82,7 +82,7 @@ describe("web app activity contract", () => {
     expect(hook).toContain("lastHandledResumeEpochRef.current = resumeEpoch");
   });
 
-  it("wires the one resume epoch through every former owner", () => {
+  it("wires the one resume epoch only through lifecycle consumers that still need a refresh", () => {
     const app = read("apps/web/src/App.tsx");
     const auth = read("apps/web/src/controllers/useWebAppAuthController.ts");
     const access = read("apps/web/src/controllers/useWebActiveCommunityShellController.ts");
@@ -92,8 +92,10 @@ describe("web app activity contract", () => {
 
     expect(app).toContain("const appActivity = useWebAppActivityController()");
     expect(auth).toContain("resumeEpoch: params.resumeEpoch");
-    for (const source of [access, directory, profiles, attention]) {
+    for (const source of [access, directory, profiles]) {
       expect(source).toContain("useResumeEpochEffect");
     }
+    expect(attention).not.toContain("useResumeEpochEffect");
+    expect(attention).not.toContain("resumeEpoch");
   });
 });

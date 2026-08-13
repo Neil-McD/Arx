@@ -18,7 +18,8 @@
 4. `polynet-workspace-mcp-contract-v0.md`
 5. `url-routing-contract-v1.md`
 6. `platform-diagnostics-contract-v1.md`
-7. `distribution-engineer-lead-adapter-v1.md`
+7. `platform-cost-safety-contract-v1.md`
+8. `distribution-engineer-lead-adapter-v1.md`
 
 ## Destination architecture
 1. `agent-native-semantic-platform-thesis.md`

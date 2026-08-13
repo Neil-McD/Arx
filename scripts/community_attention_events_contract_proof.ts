@@ -88,8 +88,13 @@ assert.match(
 
 assert.match(
   webAttentionController,
-  /latestEventsUpdatedAt[\s\S]*communityTab !== "events"[\s\S]*events\.hasLoadedVisibleRange[\s\S]*latestEventsUpdatedAt === null[\s\S]*acknowledgeSurface\([\s\S]*"events"[\s\S]*seenAtMs: latestEventsUpdatedAt[\s\S]*optimistic: false[\s\S]*refreshAfter: true/,
-  "Events tab must mark only loaded visible event activity seen and then refresh attention",
+  /latestEventsUpdatedAt[\s\S]*communityTab !== "events"[\s\S]*events\.hasLoadedVisibleRange[\s\S]*latestEventsUpdatedAt === null[\s\S]*acknowledgeSurface\([\s\S]*"events"[\s\S]*seenAtMs: latestEventsUpdatedAt[\s\S]*optimistic: false/,
+  "Events tab must mark only loaded visible event activity seen",
+);
+assert.doesNotMatch(
+  webAttentionController,
+  /refreshCommunityAttention|refreshAfter/,
+  "attention acknowledgements must reconcile through the canonical realtime subscription",
 );
 
 assert.match(
