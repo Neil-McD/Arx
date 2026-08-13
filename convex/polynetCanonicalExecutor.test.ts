@@ -1143,6 +1143,9 @@ test("custom channels discover, isolate, search, read, and write through exact p
   expect(JSON.stringify(general)).not.toContain(String(winsRootId));
   expect(JSON.stringify(wins)).toContain(String(winsRootId));
   expect(JSON.stringify(wins)).not.toContain(String(generalRootId));
+  expect(JSON.stringify(wins)).not.toContain('"lineage"');
+  expect(JSON.stringify(wins)).not.toContain('"object_id"');
+  expect(JSON.stringify(wins)).not.toContain('"root_id"');
   expect(wins).toMatchObject({
     ok: true,
     value: {

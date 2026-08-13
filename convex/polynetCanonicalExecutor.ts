@@ -128,6 +128,28 @@ function virtualDirectory(args: {
   };
 }
 
+const COMMUNITY_CHANNEL_ACTIVITY_DEFAULT_LIST_LIMIT = 5;
+
+function compactCommunityInteractionDirectoryEntry(args: {
+  result: Record<string, unknown>;
+  path: string;
+}) {
+  return {
+    path: args.path,
+    kind: "document",
+    type: "interaction",
+    ref: args.result.ref,
+    interaction_kind: args.result.interaction_kind,
+    channel_slug: args.result.channel_slug,
+    visibility_scope: args.result.visibility_scope,
+    title: args.result.title,
+    snippet: args.result.snippet,
+    actor: args.result.actor,
+    created_at: args.result.created_at,
+    updated_at: args.result.updated_at,
+  };
+}
+
 function canonicalReceipt(args: {
   toolName: PolynetCanonicalToolName;
   principalKind: PolynetPrincipalKind;
@@ -688,7 +710,10 @@ async function executeCanonicalList(args: {
           channelSlug: channel.slug,
           ...(channel.id ? { channelId: channel.id } : {}),
           ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
-          limit: typeof args.input.limit === "number" ? args.input.limit : 20,
+          limit:
+            typeof args.input.limit === "number"
+              ? args.input.limit
+              : COMMUNITY_CHANNEL_ACTIVITY_DEFAULT_LIST_LIMIT,
         },
       )) as Record<string, unknown>;
       const results = Array.isArray(value.results)
@@ -701,15 +726,13 @@ async function executeCanonicalList(args: {
           entries: results.flatMap((result) => {
             const ref = requiredString(result.ref, 512);
             if (!ref || !parseCommunityInteractionEvidenceRef(ref)) return [];
-            return [{
-              ...result,
+            return [compactCommunityInteractionDirectoryEntry({
+              result,
               path: mountedPath(
                 target.communitySlug,
                 `/channels/${channel.slug}/${ref}.md`,
               ),
-              kind: "document",
-              type: "interaction",
-            }];
+            })];
           }),
           nextCursor: requiredString(value.next_cursor, 2_048),
           truncated: value.truncated === true,
