@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 
 import { resolveConvexRuntimeToken } from "../shared/authSession.ts";
-import { createConvexRealtimeTokenFetcher } from "../shared/convexRealtimeAuth.ts";
+import {
+  classifyConvexRealtimeTerminalFailure,
+  createConvexRealtimeTokenFetcher,
+  guardConvexRealtimeWatch,
+  resolveConvexRealtimeAuthRetryDelay,
+} from "../shared/convexRealtimeAuth.ts";
 
 type TestSession = {
   access_token: string;
@@ -82,5 +87,47 @@ assert.equal(
   null,
   "a failed forced refresh must fail closed instead of replaying an expired token",
 );
+
+assert.deepEqual(
+  Array.from({ length: 6 }, (_, attempt) => resolveConvexRealtimeAuthRetryDelay(attempt)),
+  [1_000, 3_000, 10_000, 30_000, null, null],
+  "realtime auth retries must have a finite terminal budget",
+);
+assert.equal(resolveConvexRealtimeAuthRetryDelay(-1), null);
+assert.equal(resolveConvexRealtimeAuthRetryDelay(1.5), null);
+
+assert.equal(
+  classifyConvexRealtimeTerminalFailure(
+    new Error("This deployment is disabled because it exceeded its usage limit"),
+  ),
+  "deployment_disabled",
+);
+assert.equal(
+  classifyConvexRealtimeTerminalFailure("The Convex deployment is paused"),
+  "deployment_paused",
+);
+assert.equal(
+  classifyConvexRealtimeTerminalFailure(new Error("temporary network disconnect")),
+  null,
+  "transient transport failures must remain recoverable",
+);
+
+const terminalSignals: string[] = [];
+const terminalWatch = guardConvexRealtimeWatch({
+  localQueryResult: () => {
+    throw new Error("This deployment is disabled because it exceeded its usage limit");
+  },
+}, (failure) => terminalSignals.push(failure));
+assert.throws(() => terminalWatch.localQueryResult(), /usage limit/);
+assert.deepEqual(terminalSignals, ["deployment_disabled"]);
+
+const transientSignals: string[] = [];
+const transientWatch = guardConvexRealtimeWatch({
+  localQueryResult: () => {
+    throw new Error("temporary network disconnect");
+  },
+}, (failure) => transientSignals.push(failure));
+assert.throws(() => transientWatch.localQueryResult(), /temporary network/);
+assert.deepEqual(transientSignals, []);
 
 console.log("PASS: Convex realtime auth rotates, coalesces, and fails closed.");

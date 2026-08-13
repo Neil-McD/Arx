@@ -25,6 +25,11 @@ export type AuthenticatedConvexRealtimeClient = {
   close: () => void;
 };
 
+export type ConvexRealtimeTerminalFailure =
+  | "deployment_disabled"
+  | "deployment_paused"
+  | "auth_retry_exhausted";
+
 export type AuthenticatedConvexRealtimeLease = {
   client: ConvexReactClient;
   authSubject: string;
@@ -37,18 +42,68 @@ type SharedRealtimeEntry = {
   authState: ConvexRealtimeAuthState<any>;
   refCount: number;
   closeTimer: ReturnType<typeof setTimeout> | null;
+  terminalFailure: ConvexRealtimeTerminalFailure | null;
 };
 
 type RealtimeClientFactory = (params: {
   convexUrl: string;
   authState: ConvexRealtimeAuthState<any>;
   source: string;
+  onTerminalFailure: (failure: ConvexRealtimeTerminalFailure) => void;
 }) => AuthenticatedConvexRealtimeClient;
 
 const SHARED_REALTIME_CLOSE_LINGER_MS = 1_500;
 const SHARED_REALTIME_AUTH_SOURCE = "convex_realtime_shared";
 
 const REAUTH_RETRY_DELAYS_MS = [1_000, 3_000, 10_000, 30_000] as const;
+
+export function classifyConvexRealtimeTerminalFailure(
+  error: unknown,
+): ConvexRealtimeTerminalFailure | null {
+  const message = error instanceof Error
+    ? error.message
+    : typeof error === "string"
+      ? error
+      : "";
+  const normalized = message.toLowerCase();
+  if (
+    normalized.includes("deployment")
+    && normalized.includes("disabled")
+    && normalized.includes("usage limit")
+  ) {
+    return "deployment_disabled";
+  }
+  if (normalized.includes("deployment") && normalized.includes("paused")) {
+    return "deployment_paused";
+  }
+  return null;
+}
+
+export function resolveConvexRealtimeAuthRetryDelay(
+  retryAttempt: number,
+): number | null {
+  if (!Number.isInteger(retryAttempt) || retryAttempt < 0) return null;
+  return REAUTH_RETRY_DELAYS_MS[retryAttempt] ?? null;
+}
+
+export function guardConvexRealtimeWatch<WatchT extends {
+  localQueryResult: () => unknown;
+}>(
+  watch: WatchT,
+  onTerminalFailure: (failure: ConvexRealtimeTerminalFailure) => void,
+): WatchT {
+  const nativeLocalQueryResult = watch.localQueryResult.bind(watch);
+  watch.localQueryResult = () => {
+    try {
+      return nativeLocalQueryResult();
+    } catch (error) {
+      const terminalFailure = classifyConvexRealtimeTerminalFailure(error);
+      if (terminalFailure) onTerminalFailure(terminalFailure);
+      throw error;
+    }
+  };
+  return watch;
+}
 
 export function createConvexRealtimeTokenFetcher<SessionT>(params: {
   authState: ConvexRealtimeAuthState<SessionT>;
@@ -78,6 +133,7 @@ export function createAuthenticatedConvexRealtimeClient<SessionT>(params: {
   convexUrl: string;
   authState: ConvexRealtimeAuthState<SessionT>;
   source: string;
+  onTerminalFailure?: (failure: ConvexRealtimeTerminalFailure) => void;
 }): AuthenticatedConvexRealtimeClient {
   const client = new ConvexReactClient(params.convexUrl, {
     initialAuthTokenReuse: true,
@@ -87,8 +143,28 @@ export function createAuthenticatedConvexRealtimeClient<SessionT>(params: {
     source: params.source,
   });
   let isClosed = false;
+  let isTerminal = false;
   let retryAttempt = 0;
   let retryTimer: ReturnType<typeof setTimeout> | null = null;
+
+  const signalTerminalFailure = (failure: ConvexRealtimeTerminalFailure) => {
+    if (isClosed || isTerminal) return;
+    isTerminal = true;
+    clearRetry();
+    queueMicrotask(() => {
+      if (isClosed) return;
+      params.onTerminalFailure?.(failure);
+      if (isClosed) return;
+      isClosed = true;
+      void client.close();
+    });
+  };
+
+  const nativeWatchQuery = client.watchQuery.bind(client);
+  client.watchQuery = ((query: any, ...argsAndOptions: any[]) => {
+    const watch = (nativeWatchQuery as any)(query, ...argsAndOptions);
+    return guardConvexRealtimeWatch(watch, signalTerminalFailure);
+  }) as typeof client.watchQuery;
 
   const clearRetry = () => {
     if (retryTimer === null) return;
@@ -97,19 +173,21 @@ export function createAuthenticatedConvexRealtimeClient<SessionT>(params: {
   };
 
   const applyAuth = () => {
-    if (isClosed) return;
+    if (isClosed || isTerminal) return;
     clearRetry();
     client.setAuth(fetchToken, (isAuthenticated) => {
-      if (isClosed) return;
+      if (isClosed || isTerminal) return;
       if (isAuthenticated) {
         retryAttempt = 0;
         clearRetry();
         return;
       }
       if (!params.authState.sessionRef.current || retryTimer !== null) return;
-      const delay = REAUTH_RETRY_DELAYS_MS[
-        Math.min(retryAttempt, REAUTH_RETRY_DELAYS_MS.length - 1)
-      ];
+      const delay = resolveConvexRealtimeAuthRetryDelay(retryAttempt);
+      if (delay === null) {
+        signalTerminalFailure("auth_retry_exhausted");
+        return;
+      }
       retryAttempt += 1;
       retryTimer = setTimeout(() => {
         retryTimer = null;
@@ -123,6 +201,7 @@ export function createAuthenticatedConvexRealtimeClient<SessionT>(params: {
   return {
     client,
     reauthenticate: () => {
+      if (isTerminal) return;
       retryAttempt = 0;
       applyAuth();
     },
@@ -181,6 +260,9 @@ export class AuthenticatedConvexRealtimePool {
     const key = `${convexUrl}::${authSubject}`;
     let entry = this.entries.get(key) ?? null;
     if (entry) {
+      if (entry.terminalFailure) {
+        throw new Error(`convex_realtime_dormant:${entry.terminalFailure}`);
+      }
       const previousRuntimeToken = resolveConvexRuntimeToken(
         entry.authState.sessionRef.current as AuthSessionLike,
       );
@@ -201,10 +283,21 @@ export class AuthenticatedConvexRealtimePool {
         sessionRef: { current: params.session },
         ensureSessionRef: { current: params.ensureSession },
       };
+      let ownedEntry: SharedRealtimeEntry | null = null;
       const realtimeClient = this.createClient({
         convexUrl,
         authState,
         source: SHARED_REALTIME_AUTH_SOURCE,
+        onTerminalFailure: (failure) => {
+          if (!ownedEntry || this.entries.get(key) !== ownedEntry) return;
+          if (ownedEntry.terminalFailure) return;
+          ownedEntry.terminalFailure = failure;
+          if (ownedEntry.closeTimer !== null) {
+            this.cancelClose(ownedEntry.closeTimer);
+            ownedEntry.closeTimer = null;
+          }
+          ownedEntry.realtimeClient.close();
+        },
       });
       entry = {
         authSubject,
@@ -212,20 +305,29 @@ export class AuthenticatedConvexRealtimePool {
         authState,
         refCount: 1,
         closeTimer: null,
+        terminalFailure: null,
       };
+      ownedEntry = entry;
       this.entries.set(key, entry);
     }
 
-    const acquired = entry;
+    return this.createLease(key, entry);
+  }
+
+  private createLease(
+    key: string,
+    acquired: SharedRealtimeEntry,
+  ): AuthenticatedConvexRealtimeLease {
     let released = false;
     return {
       client: acquired.realtimeClient.client,
-      authSubject,
+      authSubject: acquired.authSubject,
       close: () => {
         if (released) return;
         released = true;
         if (this.entries.get(key) !== acquired) return;
         acquired.refCount = Math.max(0, acquired.refCount - 1);
+        if (acquired.terminalFailure) return;
         if (acquired.refCount > 0 || acquired.closeTimer !== null) return;
         acquired.closeTimer = this.scheduleClose(() => {
           acquired.closeTimer = null;

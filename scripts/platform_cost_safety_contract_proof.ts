@@ -103,8 +103,18 @@ assert.match(
 );
 assert.match(
   realtimeAuth,
-  /REAUTH_RETRY_DELAYS_MS = \[1_000, 3_000, 10_000, 30_000\][\s\S]*Math\.min\(retryAttempt/,
-  "realtime reauthentication retry behavior changed; update the cost contract",
+  /REAUTH_RETRY_DELAYS_MS = \[1_000, 3_000, 10_000, 30_000\][\s\S]*resolveConvexRealtimeAuthRetryDelay\(retryAttempt\)[\s\S]*signalTerminalFailure\("auth_retry_exhausted"\)/,
+  "realtime reauthentication must retain a finite terminal retry budget",
+);
+assert.match(
+  realtimeAuth,
+  /classifyConvexRealtimeTerminalFailure[\s\S]*deployment_disabled[\s\S]*deployment_paused[\s\S]*client\.watchQuery =/,
+  "terminal deployment failures must be caught at the canonical realtime transport",
+);
+assert.match(
+  realtimeAuth,
+  /if \(entry\.terminalFailure\)[\s\S]*convex_realtime_dormant:/,
+  "a retired terminal transport must not be recreated automatically",
 );
 
 for (const backlogId of [

@@ -112,7 +112,7 @@ Grounded on 2026-08-13 against production and `origin/main` commit
 | Checkout finalization | delayed retries after provider redirect | centralized timeout ref and terminal attempt rules | `keep, prove`: idempotent finalization is required; no indefinite retry |
 | Public Builder purchase attachment | 750-ms bounded post-auth checks | finite loop | `keep, prove`: commercial recovery only |
 | Pending-purchase auto-redemption | delayed post-auth retries | six attempts with increasing delay | `keep`: bounded and tied to an unresolved purchase |
-| Convex realtime authentication | reconnect re-authentication | backoff array and shared realtime client | `investigate`: prove stale/dormant clients cannot maintain an unbounded reconnect loop |
+| Convex realtime authentication | reconnect re-authentication | one shared transport per deployment and actor; finite auth retry budget; terminal provider state retires the transport until explicit session recovery | `implemented; staging proof pending`: prove a disabled deployment produces one failed subscription burst followed by zero recurring calls |
 
 One-second elapsed-time and typing-expiry display timers do not call a backend
 and are excluded. Focus/animation/toast/image-cleanup timers are also excluded.
@@ -161,7 +161,7 @@ writes, and evidence that empty runs are cheap.
 | COST-002 | P0 | Delete attention polling and bound reactive attention reads | `implemented; staging proof pending` | idle tabs have no attention cadence; scopes are bounded; real activity reconciles reactively; update read cost is measured before adding storage |
 | COST-003 | P0 | Remove N+1 bundle hydration from chat root listing | `confirmed` | feed query returns a thin bounded projection; full bundles load only on demand |
 | COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `open` | every retained job satisfies the recurring-work declaration and empty-run proof |
-| COST-005 | P1 | Bound staging/realtime reconnect behavior | `open` | disabled/dormant deployment and stale-client tests terminate without sustained calls |
+| COST-005 | P1 | Bound staging/realtime reconnect behavior | `implemented; staging proof pending` | disabled/dormant deployment and stale-client tests terminate without sustained calls |
 | COST-006 | P1 | Validate auth/session call clusters | `investigate` | calls are attributable to distinct valid lifecycle events or a dedupe fix lands |
 | COST-007 | P1 | Prove rate limiting for public cost-bearing HTTP surfaces | `open` | actor/IP/community limits and abuse tests for runtime, auth, ingestion, billing, and workers |
 | COST-008 | P1 | Configure and prove provider alerts, budgets, and emergency controls | `open` | staging and production evidence from Convex/Vercel/provider consoles and a tested runbook |

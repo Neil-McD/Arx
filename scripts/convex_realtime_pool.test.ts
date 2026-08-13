@@ -5,6 +5,7 @@ import {
   AuthenticatedConvexRealtimePool,
   type AuthenticatedConvexRealtimeClient,
   type ConvexRealtimeAuthState,
+  type ConvexRealtimeTerminalFailure,
 } from "../shared/convexRealtimeAuth";
 
 type TestSession = {
@@ -23,6 +24,7 @@ function createHarness() {
     id: number;
     authState: ConvexRealtimeAuthState<any>;
     source: string;
+    onTerminalFailure: (failure: ConvexRealtimeTerminalFailure) => void;
     reauthenticateCalls: number;
     closeCalls: number;
   }> = [];
@@ -31,11 +33,12 @@ function createHarness() {
   const cancelled: number[] = [];
 
   const pool = new AuthenticatedConvexRealtimePool({
-    createClient: ({ authState, source }): AuthenticatedConvexRealtimeClient => {
+    createClient: ({ authState, source, onTerminalFailure }): AuthenticatedConvexRealtimeClient => {
       const record = {
         id: nextClientId++,
         authState,
         source,
+        onTerminalFailure,
         reauthenticateCalls: 0,
         closeCalls: 0,
       };
@@ -169,6 +172,36 @@ describe("authenticated Convex realtime pool", () => {
     second.close();
     harness.runTimer(1);
     expect(harness.created[1]?.closeCalls).toBe(1);
+  });
+
+  it("retires a terminal transport once and refuses automatic recreation", () => {
+    const harness = createHarness();
+    const leases = Array.from({ length: 5 }, () => harness.pool.acquire({
+      convexUrl: "https://example.convex.cloud",
+      session: session("user-1", "token-a"),
+    }));
+
+    expect(harness.created).toHaveLength(1);
+    harness.created[0]?.onTerminalFailure("deployment_disabled");
+    harness.created[0]?.onTerminalFailure("deployment_disabled");
+    expect(harness.created[0]?.closeCalls).toBe(1);
+
+    expect(() => harness.pool.acquire({
+      convexUrl: "https://example.convex.cloud",
+      session: session("user-1", "token-a"),
+    })).toThrow("convex_realtime_dormant:deployment_disabled");
+    expect(harness.created).toHaveLength(1);
+
+    for (const lease of leases) lease.close();
+    expect(harness.scheduled.size).toBe(0);
+
+    harness.pool.closeForSubject("user-1");
+    const recovered = harness.pool.acquire({
+      convexUrl: "https://example.convex.cloud",
+      session: session("user-1", "token-b"),
+    });
+    expect(harness.created).toHaveLength(2);
+    recovered.close();
   });
 
   it("does not bind browser timer functions to the pool instance", () => {

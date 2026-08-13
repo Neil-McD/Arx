@@ -28,6 +28,15 @@ assert.match(
   "the default canceller must preserve the browser timer receiver",
 );
 assert.match(realtimeAuth, /closeForSubject\(authSubjectInput: string\)/);
+assert.match(realtimeAuth, /classifyConvexRealtimeTerminalFailure/);
+assert.match(realtimeAuth, /client\.watchQuery =/);
+assert.match(realtimeAuth, /convex_realtime_dormant:/);
+assert.match(realtimeAuth, /resolveConvexRealtimeAuthRetryDelay\(retryAttempt\)/);
+assert.doesNotMatch(
+  realtimeAuth,
+  /Math\.min\(retryAttempt, REAUTH_RETRY_DELAYS_MS\.length - 1\)/,
+  "realtime authentication must not clamp to an infinite final retry cadence",
+);
 
 for (const [label, gateway] of [
   ["community chat", chatGateway],
