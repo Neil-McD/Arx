@@ -219,6 +219,7 @@ export async function reserveFounderUsage(args: {
   founderSubscriptionId: any;
   communityId: any;
   nowMs: number;
+  reservationCostMicros?: number;
 }): Promise<
   | { ok: true; cycle: FounderUsageCycleRow; reservationCostMicros: number }
   | { ok: false; code: string }
@@ -256,10 +257,23 @@ export async function reserveFounderUsage(args: {
   if (normalizedId(cycle.communityId) !== normalizedId(args.communityId)) {
     return { ok: false, code: "founder_usage_cycle_community_mismatch" };
   }
-  const reservationCostMicros = cycle.maxRunReservationCostMicros;
-  if (!isPositiveSafeInteger(reservationCostMicros)) {
-    return { ok: false, code: "founder_inference_pricing_misconfigured" };
+  const hasExplicitReservation = args.reservationCostMicros !== undefined;
+  const requestedReservationCostMicros = hasExplicitReservation
+    ? args.reservationCostMicros!
+    : cycle.maxRunReservationCostMicros;
+  if (
+    !Number.isSafeInteger(requestedReservationCostMicros) ||
+    requestedReservationCostMicros <= 0 ||
+    requestedReservationCostMicros > cycle.includedCostMicros
+  ) {
+    return {
+      ok: false,
+      code: hasExplicitReservation
+        ? "founder_usage_reservation_invalid"
+        : "founder_inference_pricing_misconfigured",
+    };
   }
+  const reservationCostMicros = requestedReservationCostMicros;
   const nextReserved = cycle.reservedCostMicros + reservationCostMicros;
   if (!Number.isSafeInteger(nextReserved)) {
     throw new Error("founder_usage_cycle_ledger_invalid");

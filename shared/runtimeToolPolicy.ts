@@ -343,7 +343,7 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     parallelSafe: true,
     exclusive: false,
     requiresWorkspace: false,
-    requiresCommunity: false,
+    requiresCommunity: true,
   },
   web_crawl: {
     toolName: "web_crawl",
@@ -355,7 +355,7 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
     parallelSafe: false,
     exclusive: true,
     requiresWorkspace: false,
-    requiresCommunity: false,
+    requiresCommunity: true,
   },
   list_dir: {
     toolName: "list_dir",

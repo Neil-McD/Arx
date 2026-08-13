@@ -199,7 +199,12 @@ assert.match(toolCosts, /recordProviderCostInternal/);
 for (const runtimeSource of [runtimeAgentLoop, runtimeTurnHandlers, voice]) {
   assert.doesNotMatch(runtimeSource, /reserveCreditsInternal|settleCreditsInternal/);
 }
-assert.match(runtimeAgentLoop, /recordPlatformToolCostBestEffort/);
+assert.doesNotMatch(
+  runtimeAgentLoop,
+  /recordPlatformToolCostBestEffort/,
+  "paid web tools must settle provider cost through their canonical receipt mutation",
+);
+assert.match(runtimeAgentLoop, /settleFounderPaidToolFundingSession/);
 assert.match(runtimeTurnHandlers, /recordPlatformToolCostBestEffort/);
 assert.match(voice, /recordPlatformToolCostBestEffort/);
 assert.doesNotMatch(crons, /auto.?recharge|collectWorkspaceUsageByCard|reconcileExpiredCreditReservations/i);

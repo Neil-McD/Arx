@@ -308,6 +308,24 @@ assert.match(
 );
 assert.match(
   resources,
+  /crawlWebRoot: any = internalAction\(\{[\s\S]*userId: v\.id\("users"\)[\s\S]*communityId: v\.id\("communities"\)/,
+  "agent-visible web crawling must remain internal and require an explicit community funding scope",
+);
+const crawlWebRootActiveSourceSection = resources.match(
+  /if \(!args\.communityId\) throw new Error\("web_crawl_active_community_required"\);[\s\S]*?\n  },\n}\);\n\nexport const crawlCommunitySourceRoot/,
+)?.[0] ?? "";
+assert.match(
+  crawlWebRootActiveSourceSection,
+  /requireCommunityManagerForAction[\s\S]*createCommunitySourceCrawlJobInternal[\s\S]*ctx\.runAction\([\s\S]*processCommunitySourceCrawlJobInternal[\s\S]*kind: "web_crawl"/,
+  "agent-visible active-community crawling should create a durable job and wait on the canonical crawl worker",
+);
+assert.doesNotMatch(
+  crawlWebRootActiveSourceSection,
+  /crawlSourceRootWithConfiguredProvider|saveCommunitySourceCrawlPagesInternal|patchCommunitySourceCrawlJobInternal/,
+  "agent-visible active-community crawling must not duplicate provider, persistence, or job-transition logic",
+);
+assert.match(
+  resources,
   /saveCommunitySourceCrawlPagesInternal = internalMutation\(\{[\s\S]*communitySourceCrawlerPageArg[\s\S]*requireCommunityManager[\s\S]*by_community_role_status[\s\S]*communitySourceCrawlerUrlAliases\(maybeSafeSourceCrawlerUrl, source\.url\)[\s\S]*planCommunitySourceCrawlerPageSave[\s\S]*existingSourcesByAlias: existingByUrl[\s\S]*seenAliases: seenUrls[\s\S]*decision\.action === "skip"[\s\S]*decision\.action === "update_existing"[\s\S]*role: "source"[\s\S]*status: "review"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionKind: "url"[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
   "source crawl pages should dedupe root/redirect URL aliases and persist canonical ready URL source rows through the memory lifecycle",
 );

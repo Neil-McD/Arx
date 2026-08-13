@@ -19,6 +19,7 @@ export const COMMUNITY_FUNNEL_THREAD_KEY_PREFIX = "community-funnel";
 const MEMBER_AGENT_DOCK_CAPABILITY_FAMILY_SET = new Set<CapabilityFamily>([
   "product_docs",
   "community_tools",
+  "web_research",
 ]);
 
 const MEMBER_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
@@ -27,6 +28,8 @@ const MEMBER_AGENT_DOCK_TOOL_NAME_SET = new Set<RetrievalToolName>([
   "polynet_search",
   "polynet_write",
   "polynet_call",
+  "web_research",
+  "web_crawl",
 ]);
 
 const COMMUNITY_FUNNEL_BUILDER_TOOL_NAME_SET = new Set<RetrievalToolName>([

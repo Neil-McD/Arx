@@ -7,7 +7,6 @@ export const WORKSPACE_CREDITS_PER_USD = 100;
 export const WORKSPACE_CREDIT_TOPUP_CREDITS = 500;
 export const WORKSPACE_CREDIT_LOW_BALANCE_THRESHOLD = 100;
 export const WORKSPACE_TOOL_BALANCE_TOPUP_CHECKOUT_TTL_MS = 24 * 60 * 60 * 1000;
-export const WEB_RESEARCH_CREDITS_PER_CALL = 1;
 export const PAID_TOOL_TARGET_GROSS_MARGIN_BPS = 6000;
 export const PAID_TOOL_PRICING_VERSION = "paid_tools_v1";
 export const WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION = {
@@ -165,30 +164,11 @@ export function priceVendorCostUsdToWorkspaceCredits(params: {
   return priceUsdToWorkspaceCredits(priceUsdForTargetGrossMargin(params));
 }
 
-export function priceFixedPaidToolCredits(params: {
-  minimumCredits: number;
-  estimatedVendorCostUsd: number;
-  targetGrossMarginBps?: number;
-}): number {
-  const marginAwareCredits = priceVendorCostUsdToWorkspaceCredits({
-    rawVendorCostUsd: params.estimatedVendorCostUsd,
-    targetGrossMarginBps: params.targetGrossMarginBps,
-  });
-  return Math.max(params.minimumCredits, marginAwareCredits);
-}
-
 export type WebResearchCreditAction = keyof typeof WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION;
 
 export function estimateWebResearchVendorCostUsd(action: WebResearchCreditAction): number {
   return WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION[action] ??
     WEB_RESEARCH_VENDOR_COST_ESTIMATE_USD_BY_ACTION.search;
-}
-
-export function priceWebResearchCredits(action: WebResearchCreditAction): number {
-  return priceFixedPaidToolCredits({
-    minimumCredits: WEB_RESEARCH_CREDITS_PER_CALL,
-    estimatedVendorCostUsd: estimateWebResearchVendorCostUsd(action),
-  });
 }
 
 export type VoiceTranscriptionProvider = "openai" | "groq";

@@ -401,7 +401,7 @@ assert.match(billingContract, /Existing grandfathered communities retain ordinar
 assert.match(billingContract, /Newly created non-operator communities are subscription-required/);
 assert.match(billingContract, /Grandfathering grants platform operation, not hosted AI/);
 assert.match(billingContract, /Funding suspension does not mutate or delete the community/);
-assert.match(billingContract, /Each `\$79` monthly cycle includes up to `\$20` in raw GPT 5\.6 Luna model cost/);
+assert.match(billingContract, /Each `\$79` monthly cycle includes up to `\$20` in combined raw provider cost for hosted AI inference and paid web research or crawl tools/);
 assert.match(billingContract, /Redirects are UX only; verified provider\/webhook state is authoritative/);
 assert.match(billingContract, /2\.9% application fee/);
 assert.match(billingContract, /Community BYOK and requester ChatGPT are retired as authority/);
