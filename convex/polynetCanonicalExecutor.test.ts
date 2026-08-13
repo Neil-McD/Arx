@@ -106,6 +106,18 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    const winsChannelId = await ctx.db.insert("communityChannels", {
+      communityId,
+      slug: "wins",
+      name: "Wins",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 1,
+      createdByUserId: ownerId,
+      createdAt: nowMs + 1,
+      updatedAt: nowMs + 1,
+    });
     await ctx.db.insert("communityChannels", {
       communityId: otherCommunityId,
       systemRole: "general",
@@ -134,6 +146,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       memberId,
       communityId,
       generalChannelId,
+      winsChannelId,
       otherCommunityId,
       ownerSubject: "canonical-owner-subject",
       memberSubject: "canonical-member-subject",
@@ -1023,6 +1036,260 @@ test("community activity and events list directly and round-trip through read", 
       input: { path: "/communities/canonical-community/events/", limit: 20 },
     }),
   ).resolves.toMatchObject({ ok: false });
+});
+
+test("custom channels discover, isolate, search, read, and write through exact paths", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const nowMs = Date.now();
+  const { generalRootId, winsRootId } = await t.run(async (ctx) => {
+    const generalRootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.communityId,
+      channelId: fixture.generalChannelId,
+      actorType: "human",
+      actorUserId: fixture.ownerId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "General channel planning marker.",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: "semantic-general-channel-marker",
+      createdAt: nowMs - 1_000,
+      updatedAt: nowMs - 1_000,
+    });
+    const winsRootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.communityId,
+      channelId: fixture.winsChannelId,
+      actorType: "human",
+      actorUserId: fixture.ownerId,
+      kind: "announcement",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Wins channel launch marker.",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: "semantic-wins-channel-marker",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { generalRootId, winsRootId };
+  });
+  const memberCtx = executionContext(
+    t.withIdentity({ subject: fixture.memberSubject }),
+  );
+  const base = {
+    ctx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent" as const,
+    evidenceSurface: "member_agent_dock" as const,
+  };
+
+  const channels = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_list",
+    input: { path: "/communities/canonical-community/channels/" },
+  });
+  expect(channels).toMatchObject({
+    ok: true,
+    value: {
+      writable: false,
+      entries: [
+        expect.objectContaining({
+          path: "/communities/canonical-community/channels/general/",
+          channel_id: String(fixture.generalChannelId),
+          system_role: "general",
+        }),
+        expect.objectContaining({
+          path: "/communities/canonical-community/channels/wins/",
+          channel_id: String(fixture.winsChannelId),
+          system_role: null,
+        }),
+      ],
+    },
+  });
+
+  await expect(
+    executePolynetCanonicalTool({
+      ...base,
+      toolName: "polynet_write",
+      input: {
+        path: "/communities/canonical-community/channels/",
+        mode: "create",
+        content: { text: "This discovery-root write must fail." },
+        idempotency_key: "semantic-channel-root-write",
+      },
+    }),
+  ).resolves.toMatchObject({ ok: false, code: "semantic_not_writable" });
+
+  const general = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_list",
+    input: {
+      path: "/communities/canonical-community/channels/general/",
+      limit: 20,
+    },
+  });
+  const wins = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_list",
+    input: {
+      path: "/communities/canonical-community/channels/wins/",
+      limit: 20,
+    },
+  });
+  expect(JSON.stringify(general)).toContain(String(generalRootId));
+  expect(JSON.stringify(general)).not.toContain(String(winsRootId));
+  expect(JSON.stringify(wins)).toContain(String(winsRootId));
+  expect(JSON.stringify(wins)).not.toContain(String(generalRootId));
+  expect(wins).toMatchObject({
+    ok: true,
+    value: {
+      entries: [
+        expect.objectContaining({
+          path: `/communities/canonical-community/channels/wins/interaction:root:${winsRootId}.md`,
+          channel_slug: "wins",
+          interaction_kind: "announcement",
+        }),
+      ],
+    },
+  });
+
+  const winsPath = `/communities/canonical-community/channels/wins/interaction:root:${winsRootId}.md`;
+  await expect(
+    executePolynetCanonicalTool({
+      ...base,
+      toolName: "polynet_read",
+      input: { path: winsPath },
+    }),
+  ).resolves.toMatchObject({
+    ok: true,
+    value: {
+      path: winsPath,
+      body: expect.stringContaining('"interaction_kind": "announcement"'),
+    },
+  });
+  await expect(
+    executePolynetCanonicalTool({
+      ...base,
+      toolName: "polynet_read",
+      input: {
+        path: `/communities/canonical-community/channels/general/interaction:root:${winsRootId}.md`,
+      },
+    }),
+  ).resolves.toMatchObject({ ok: false, code: "semantic_not_found" });
+
+  const searched = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_search",
+    input: {
+      path: "/communities/canonical-community/channels/wins/",
+      query: "channel marker",
+      limit: 10,
+    },
+  });
+  expect(JSON.stringify(searched)).toContain(winsPath);
+  expect(JSON.stringify(searched)).not.toContain(String(generalRootId));
+
+  const repositorySearch = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_search",
+    input: {
+      path: "/communities/canonical-community/",
+      query: "Wins channel launch marker",
+      limit: 10,
+    },
+  });
+  expect(JSON.stringify(repositorySearch)).toContain(winsPath);
+
+  const written = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_write",
+    input: {
+      path: "/communities/canonical-community/channels/wins/",
+      mode: "create",
+      content: { text: "A channel-aware personal-agent update." },
+      idempotency_key: "semantic-wins-write",
+    },
+  });
+  expect(written).toMatchObject({
+    ok: true,
+    value: {
+      path: expect.stringMatching(
+        /^\/communities\/canonical-community\/channels\/wins\/interaction:root:/,
+      ),
+    },
+  });
+  const writtenRootId = String((written as any).value.result.interaction.root_id);
+  await t.run(async (ctx) => {
+    const rootId = ctx.db.normalizeId("communityInteractionRoots", writtenRootId);
+    expect(rootId).not.toBeNull();
+    const root = rootId ? await ctx.db.get(rootId) : null;
+    expect(root?.channelId).toBe(fixture.winsChannelId);
+  });
+
+  const communityAgentWritten = await executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject: fixture.ownerSubject })),
+    authSubject: fixture.ownerSubject,
+    userId: fixture.ownerId,
+    principalKind: "community_agent",
+    mountedCommunityId: fixture.communityId,
+    evidenceSurface: "community_concierge",
+    toolName: "polynet_write",
+    input: {
+      path: "/communities/canonical-community/channels/wins/",
+      mode: "create",
+      content: { text: "A channel-aware community-agent update." },
+      idempotency_key: "semantic-wins-community-agent-write",
+    },
+  });
+  expect(communityAgentWritten).toMatchObject({
+    ok: true,
+    value: {
+      path: expect.stringMatching(
+        /^\/communities\/canonical-community\/channels\/wins\/interaction:root:/,
+      ),
+    },
+  });
+
+  await expect(
+    executePolynetCanonicalTool({
+      ...base,
+      toolName: "polynet_write",
+      input: {
+        path: "/communities/canonical-community/channels/wins/",
+        mode: "append",
+        content: {
+          root_id: String(generalRootId),
+          text: "This cross-channel reply must fail.",
+        },
+        idempotency_key: "semantic-cross-channel-reply",
+      },
+    }),
+  ).resolves.toMatchObject({ ok: false });
+
+  await t.run(async (ctx) => {
+    await ctx.db.patch(fixture.winsChannelId, {
+      status: "archived",
+      updatedAt: Date.now(),
+    });
+  });
+  const channelsAfterArchive = await executePolynetCanonicalTool({
+    ...base,
+    toolName: "polynet_list",
+    input: { path: "/communities/canonical-community/channels/" },
+  });
+  expect(JSON.stringify(channelsAfterArchive)).not.toContain(
+    "/channels/wins/",
+  );
+  await expect(
+    executePolynetCanonicalTool({
+      ...base,
+      toolName: "polynet_list",
+      input: { path: "/communities/canonical-community/channels/wins/" },
+    }),
+  ).resolves.toMatchObject({ ok: false, code: "semantic_not_found" });
 });
 
 test("community-root search returns canonical paths that round-trip through read", async () => {

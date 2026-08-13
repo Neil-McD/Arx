@@ -66,7 +66,8 @@ An authorized community is mounted at:
 ├── members/
 ├── resources/
 ├── channels/
-│   └── general/
+│   ├── general/
+│   └── <custom-channel-slug>/
 ├── memory/
 ├── capabilities/
 └── builder/          # owner/admin only
@@ -81,15 +82,15 @@ Paths are selectors, never authority. A client begins at a directory and
 follows returned paths. It does not invent internal ids or pass trusted user,
 community, role, entitlement, or permission decisions.
 
-`channels/general/` resolves the community's canonical `communityChannels`
-row with system role `general`; it is not a hard-coded alias for an unscoped
-chat feed. Directory and search results include that row's channel id, and all
-reads and writes revalidate that the selected interaction belongs to it. A
-duplicate or malformed General identity fails closed. During the bounded
-rolling migration only, a missing row preserves the legacy General path with a
-null channel id; writes lazily create General and release completion still
-requires the backfill to reach zero drift. Private member-agent dock history is
-outside the channel repository.
+`channels/` enumerates the community's active readable `communityChannels`
+rows in canonical order. Each returned `channels/<slug>/` path resolves that
+exact canonical row; it is not an alias for an unscoped chat feed. Directory
+and search results include the row's channel id and slug, and all reads and
+writes revalidate that the selected interaction belongs to it. A duplicate or
+malformed General identity fails closed. During the bounded rolling migration
+only, General may preserve the legacy null-channel read lane; custom channels
+never inherit that compatibility. Private member-agent dock history is outside
+the channel repository.
 
 ## Authority
 
@@ -104,7 +105,7 @@ There are two human authority lanes:
   moderators and members.
 
 Both lanes can list, read, and search the member repository. Both can write
-participation to `channels/general/`. Only the builder lane can
+participation to an exact returned `channels/<slug>/` path. Only the builder lane can
 see `builder/`, stage resource changesets there, and discover or call builder
 changeset operations.
 
@@ -120,7 +121,7 @@ lane.
 
 `polynet_write` writes only through canonical domain owners:
 
-- `channels/general/`: create a post or append a reply.
+- `channels/<slug>/`: create a post or append a reply in that exact channel.
 - `builder/resources/`: stage a bounded changeset; it does not directly edit
   live resources.
 
@@ -142,9 +143,10 @@ result. A same-request retry returns the original result with
 `deduped: true`. Domain mutations are independently retry safe so a process
 failure between the domain effect and receipt completion can be recovered.
 
-The current MCP contract intentionally exposes only General. An All
-aggregation and custom channel paths are not implied by this tree and require
-their own authority and aggregation contract before exposure.
+The MCP contract exposes real active channels only. It does not create an All
+channel or duplicate interaction data. A broad status request lists the bounded
+channel inventory and follows the returned directories; the product cap of ten
+active channels bounds that fanout.
 
 ## Remote MCP Auth Model
 

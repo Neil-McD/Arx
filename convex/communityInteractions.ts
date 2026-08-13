@@ -2032,6 +2032,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
     userId: v.id("users"),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
     idempotencyKey: v.string(),
     text: v.optional(v.string()),
     founderBootstrap: v.optional(v.boolean()),
@@ -2114,6 +2115,13 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         mentions: args.mentions ?? [],
       });
     const nowMs = Date.now();
+    const requestedChannel = await resolveRequestedCommunityChannel({
+      ctx,
+      communityId: args.communityId,
+      channelId: args.channelId,
+      ensureGeneralForWrite: true,
+      nowMs,
+    });
     const idempotencyKey = composerIdempotencyKey(
       normalizeIdempotencyKey(args.idempotencyKey),
       args.rootId ? "reply" : "root",
@@ -2136,15 +2144,23 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       ) {
         throw new Error("interaction_idempotency_key_conflict");
       }
-      if (!root) {
-        const generalChannel = await ensureGeneralChannel({
+      if (root) {
+        const existingChannel = await requireChannelForAddressableRoot({
           ctx,
-          communityId: args.communityId,
+          root,
           nowMs,
         });
+        if (
+          normalizeIdValue(existingChannel._id) !==
+          normalizeIdValue(requestedChannel._id)
+        ) {
+          throw new Error("interaction_idempotency_key_conflict");
+        }
+      }
+      if (!root) {
         const rootId = await ctx.db.insert("communityInteractionRoots" as any, {
           communityId: args.communityId,
-          channelId: generalChannel._id,
+          channelId: requestedChannel._id,
           actorType: "community_agent",
           actorAgentKey: CANONICAL_COMMUNITY_AGENT_KEY,
           kind: "discussion",
@@ -2160,7 +2176,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         await insertContentBlocksForTarget({
           ctx,
           communityId: args.communityId,
-          channelId: generalChannel._id,
+          channelId: requestedChannel._id,
           rootId,
           visibilityScope: "community",
           blocks: contentBlocks,
@@ -2169,7 +2185,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         await insertCommunityInteractionMentionRows({
           ctx,
           communityId: args.communityId,
-          channelId: generalChannel._id,
+          channelId: requestedChannel._id,
           rootId,
           mentionedUserIds,
           actorUserId: sponsorUserId,
@@ -2223,6 +2239,12 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       root,
       nowMs,
     });
+    if (
+      normalizeIdValue(rootChannel._id) !==
+      normalizeIdValue(requestedChannel._id)
+    ) {
+      throw new Error("interaction_channel_mismatch");
+    }
     const replyTarget = await resolveOptionalReplyTargetForCanonicalComposer({
       ctx,
       root,

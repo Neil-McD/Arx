@@ -234,7 +234,11 @@ assert.match(prompt, /Use community_memory_search for what the active community 
 assert.match(prompt, /cite the memory title and status/);
 assert.match(prompt, /Use community_search for broad raw recent community activity evidence beyond the canonical resource directory/);
 assert.match(prompt, /Accepted community memory is distinct from raw chat and resource evidence/);
-assert.match(prompt, /channels\/general\/ for bounded recent community activity and \/communities\/prompt-community\/events\/ for bounded current and upcoming events/);
+assert.match(prompt, /channels\/ to discover every authorized active channel/);
+assert.match(
+  prompt,
+  /inspect \/communities\/prompt-community\/community\.md plus the bounded \/communities\/prompt-community\/members\/, \/communities\/prompt-community\/resources\/, and \/communities\/prompt-community\/events\/ surfaces and every returned channel directory/,
+);
 assert.match(prompt, /Use polynet_search only when you have a specific non-empty topic/);
 assert.match(prompt, /About excerpt: Used to prove prompt layout/);
 assert.match(prompt, /The about excerpt is not a complete knowledge base/);

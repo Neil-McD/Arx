@@ -62,6 +62,10 @@ assert.equal(staging.environment, "staging");
 const mcpSource = read("shared/polynetMcp.ts");
 const httpSource = read("convex/httpMcp.ts");
 const executorSource = read("convex/polynetCanonicalExecutor.ts");
+const channelSource = read("convex/communityChannels.ts");
+const interactionEvidenceSource = read("convex/communityInteractionEvidence.ts");
+const interactionWriterSource = read("convex/communityInteractions.ts");
+const contractSource = read("docs/polynet-workspace-mcp-contract-v0.md");
 const setupSource = read("shared/polynetMcpSetup.ts");
 const mcpAccountSource = read(
   "apps/web/src/components/WebPolynetMcpAccountSection.tsx",
@@ -85,6 +89,17 @@ assert.doesNotMatch(
 assert.match(executorSource, /normalizeToolArguments\(args\.toolName/);
 assert.match(executorSource, /derivePolynetHumanAuthority/);
 assert.match(executorSource, /idempotencyKey/);
+assert.match(executorSource, /listCommunityChannelsInternal/);
+assert.match(executorSource, /parseCommunityChannelSemanticPath/);
+assert.match(executorSource, /expectedChannelId: channel\.id/);
+assert.match(executorSource, /channelId: channel\.id/);
+assert.match(channelSource, /resolveCommunityChannelBySlugInternal/);
+assert.match(interactionEvidenceSource, /listChannelReadableRows<InteractionRow>/);
+assert.match(interactionEvidenceSource, /community_interaction_evidence_channel_mismatch/);
+assert.match(interactionEvidenceSource, /interaction_kind: args\.root\.kind/);
+assert.match(interactionWriterSource, /channelId: v\.optional\(v\.id\("communityChannels"\)\)/);
+assert.match(contractSource, /channels\/<slug>\//);
+assert.doesNotMatch(contractSource, /intentionally exposes only General/);
 assert.match(setupSource, /POLYNET_MCP_PATH = "\/runtime\/mcp"/);
 assert.match(setup.setupBundle, /polynet_list/);
 assert.match(setup.setupBundle, /polynet_read/);

@@ -6,10 +6,10 @@ import {
   POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH,
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
   POLYNET_CHANNELS_DIRECTORY_PATH,
-  POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH,
   POLYNET_EVENTS_DIRECTORY_PATH,
   POLYNET_MEMORY_DIRECTORY_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
+  parseCommunityChannelSemanticPath,
 } from "../shared/communitySemanticRepository.ts";
 import {
   derivePolynetCommunityAgentAuthority,
@@ -38,6 +38,11 @@ type ResolvedCommunityTarget = {
   communitySlug: string;
   localPath: string;
   authority: PolynetResolvedAuthority;
+};
+
+type ResolvedRepositoryChannel = {
+  id: string | null;
+  slug: string;
 };
 
 type PolynetMutatingToolName = "polynet_write" | "polynet_call";
@@ -427,13 +432,45 @@ async function resolveCommunityTarget(args: {
   };
 }
 
+async function resolveRepositoryChannel(args: {
+  ctx: any;
+  userId: string;
+  target: ResolvedCommunityTarget;
+  slug: string;
+}): Promise<ResolvedRepositoryChannel | null> {
+  const value = (await args.ctx.runQuery(
+    (internal as any).communityChannels.resolveCommunityChannelBySlugInternal,
+    {
+      userId: args.userId,
+      communityId: args.target.communityId,
+      slug: args.slug,
+    },
+  )) as Record<string, unknown> | null;
+  const id = requiredString(value?.id, 180);
+  const slug = requiredString(value?.slug, 64);
+  const name = requiredString(value?.name, 180);
+  if (
+    !slug ||
+    !name ||
+    value?.status !== "active" ||
+    (!id && value?.system_role !== "general")
+  ) {
+    return null;
+  }
+  return {
+    id,
+    slug,
+  };
+}
+
 function evidencePath(args: {
   communitySlug: string;
+  channelSlug: string;
   sourceType: string;
   ref: string;
 }): string | null {
   if (args.sourceType === "interaction") {
-    return `/communities/${args.communitySlug}/channels/general/${args.ref}.md`;
+    return `/communities/${args.communitySlug}/channels/${args.channelSlug}/${args.ref}.md`;
   }
   return null;
 }
@@ -450,6 +487,7 @@ function mountSearchResults(args: {
     results: args.results.map((result) => {
       const ref = requiredString(result.ref, 512);
       const sourceType = requiredString(result.source_type, 40);
+      const channelSlug = requiredString(result.channel_slug, 64);
       const localPath = requiredString(result.path, 1_024);
       const canonicalLocalPath =
         localPath &&
@@ -462,9 +500,10 @@ function mountSearchResults(args: {
           : null;
       const path = canonicalLocalPath
         ? mountedPath(args.communitySlug, canonicalLocalPath)
-        : ref && sourceType
+        : ref && sourceType && channelSlug
           ? evidencePath({
               communitySlug: args.communitySlug,
+              channelSlug,
               sourceType,
               ref,
             })
@@ -595,41 +634,59 @@ async function executeCanonicalList(args: {
   const absolutePath = mountedPath(target.communitySlug, target.localPath);
 
   if (target.localPath === POLYNET_CHANNELS_DIRECTORY_PATH) {
-    const generalChannel = (await args.ctx.runQuery(
-      (internal as any).communityChannels.getGeneralChannelInternal,
-      { communityId: target.communityId },
-    )) as Record<string, unknown> | null;
+    const value = (await args.ctx.runQuery(
+      (internal as any).communityChannels.listCommunityChannelsInternal,
+      { userId: args.userId, communityId: target.communityId },
+    )) as Record<string, unknown>;
+    const channels = Array.isArray(value.channels)
+      ? (value.channels as Array<Record<string, unknown>>)
+      : [];
     return {
       ok: true,
       value: virtualDirectory({
         path: absolutePath,
-        entries: [
-          {
-            path: mountedPath(
-              target.communitySlug,
-              POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH,
-            ),
-            kind: "directory",
-            type: "channel",
-            name: String(generalChannel?.name ?? "General"),
-            channel_id: generalChannel?.id ?? null,
-            system_role: "general",
-            access_mode: "all_members",
-          },
-        ],
+        entries: channels.flatMap((channel) => {
+          const slug = requiredString(channel.slug, 64);
+          const channelId = requiredString(channel.id, 180);
+          if (!slug) return [];
+          return [
+            {
+              ...channel,
+              path: mountedPath(target.communitySlug, `/channels/${slug}/`),
+              kind: "directory",
+              type: "channel",
+              channel_id: channelId,
+            },
+          ];
+        }),
         searchable: true,
-        writable: target.authority.canWriteParticipation,
+        writable: false,
       }),
     };
   }
-  if (target.localPath === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH) {
+  const channelPath = parseCommunityChannelSemanticPath(target.localPath);
+  if (channelPath?.kind === "directory") {
     try {
+      const channel = await resolveRepositoryChannel({
+        ctx: args.ctx,
+        userId: args.userId,
+        target,
+        slug: channelPath.slug,
+      });
+      if (!channel) {
+        return canonicalError(
+          "semantic_not_found",
+          "Channel path not found or not accessible.",
+        );
+      }
       const value = (await args.ctx.runQuery(
         (internal as any).communityInteractionEvidence
           .listRecentCommunityInteractionEvidenceInternal,
         {
           userId: args.userId,
           communityId: target.communityId,
+          channelSlug: channel.slug,
+          ...(channel.id ? { channelId: channel.id } : {}),
           ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
           limit: typeof args.input.limit === "number" ? args.input.limit : 20,
         },
@@ -648,7 +705,7 @@ async function executeCanonicalList(args: {
               ...result,
               path: mountedPath(
                 target.communitySlug,
-                `${POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH}${ref}.md`,
+                `/channels/${channel.slug}/${ref}.md`,
               ),
               kind: "document",
               type: "interaction",
@@ -936,15 +993,24 @@ async function executeCanonicalRead(args: {
     );
   }
 
-  const interactionMatch =
-    /^\/channels\/general\/(interaction:(?:root|reply):[A-Za-z0-9_-]+)\.md$/.exec(
-      target.localPath,
-    );
-  if (interactionMatch) {
-    if (!parseCommunityInteractionEvidenceRef(interactionMatch[1])) {
+  const interactionPath = parseCommunityChannelSemanticPath(target.localPath);
+  if (interactionPath?.kind === "document") {
+    if (!parseCommunityInteractionEvidenceRef(interactionPath.ref)) {
       return canonicalError("semantic_not_found", "Evidence not found.");
     }
     try {
+      const channel = await resolveRepositoryChannel({
+        ctx: args.ctx,
+        userId: args.userId,
+        target,
+        slug: interactionPath.slug,
+      });
+      if (!channel) {
+        return canonicalError(
+          "semantic_not_found",
+          "Evidence not found.",
+        );
+      }
       const value = (await args.ctx.runAction(
         (internal as any).communityInteractionEvidence
           .readCommunityInteractionEvidenceForToolInternal,
@@ -952,7 +1018,9 @@ async function executeCanonicalRead(args: {
           userId: args.userId,
           authSubject: args.authSubject,
           communityId: target.communityId,
-          ref: interactionMatch[1],
+          ref: interactionPath.ref,
+          expectedChannelSlug: channel.slug,
+          ...(channel.id ? { expectedChannelId: channel.id } : {}),
           surface: args.evidenceSurface,
         },
       )) as Record<string, unknown>;
@@ -962,7 +1030,7 @@ async function executeCanonicalRead(args: {
           target,
           localPath: target.localPath,
           payload: value.evidence ?? value,
-          ref: interactionMatch[1],
+          ref: interactionPath.ref,
           retrievalId: value.retrieval_id,
         }),
       };
@@ -1203,10 +1271,39 @@ async function executeCanonicalSearch(args: {
       };
     }
     if (target.localPath.startsWith(POLYNET_CHANNELS_DIRECTORY_PATH)) {
+      const channelPath = parseCommunityChannelSemanticPath(target.localPath);
+      if (channelPath?.kind === "document") {
+        return canonicalError(
+          "invalid_tool_args",
+          "Search a channel directory, not an interaction document.",
+        );
+      }
+      const channel = channelPath
+        ? await resolveRepositoryChannel({
+            ctx: args.ctx,
+            userId: args.userId,
+            target,
+            slug: channelPath.slug,
+          })
+        : null;
+      if (channelPath && !channel) {
+        return canonicalError(
+          "semantic_not_found",
+          "Channel path not found or not accessible.",
+        );
+      }
       const value = (await args.ctx.runAction(
         (internal as any).communityInteractionEvidence
           .searchCommunityInteractionEvidenceInternal,
-        common,
+        {
+          ...common,
+          ...(channel
+            ? {
+                channelSlug: channel.slug,
+                ...(channel.id ? { channelId: channel.id } : {}),
+              }
+            : {}),
+        },
       )) as Record<string, unknown>;
       return {
         ok: true,
@@ -1345,14 +1442,26 @@ async function executeCanonicalWrite(args: {
   const mode = String(args.input.mode ?? "");
   const idempotencyKey = String(args.input.idempotencyKey ?? "");
 
-  if (
-    target.localPath === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
-    target.localPath === POLYNET_CHANNELS_DIRECTORY_PATH
-  ) {
+  const writableChannelPath = parseCommunityChannelSemanticPath(
+    target.localPath,
+  );
+  if (writableChannelPath?.kind === "directory") {
     if (!target.authority.canWriteParticipation) {
       return canonicalError(
         "community_write_forbidden",
         "This principal cannot write community chat.",
+      );
+    }
+    const channel = await resolveRepositoryChannel({
+      ctx: args.ctx,
+      userId: args.userId,
+      target,
+      slug: writableChannelPath.slug,
+    });
+    if (!channel) {
+      return canonicalError(
+        "semantic_not_found",
+        "Channel path not found or not accessible.",
       );
     }
     const rootId = requiredString(content.root_id ?? content.rootId, 180);
@@ -1382,6 +1491,7 @@ async function executeCanonicalWrite(args: {
         userId: args.userId,
         authSubject: args.authSubject,
         communityId: target.communityId,
+        ...(channel.id ? { channelId: channel.id } : {}),
         idempotencyKey: canonicalIdempotencyKey,
         text: String(content.text ?? content.body ?? ""),
         ...(rootId ? { rootId } : {}),
@@ -1417,6 +1527,7 @@ async function executeCanonicalWrite(args: {
         ok: true,
         path: evidencePath({
           communitySlug: target.communitySlug,
+          channelSlug: channel.slug,
           sourceType: "interaction",
           ref,
         }),

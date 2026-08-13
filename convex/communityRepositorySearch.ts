@@ -37,7 +37,7 @@ function canonicalInteractionItem(item: SearchItem): SearchItem {
     throw new Error("community_repository_search_interaction_ref_invalid");
   }
   const channelSlug = requiredString(item.channel_slug, 80) ?? "general";
-  if (channelSlug !== "general") {
+  if (!/^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$/.test(channelSlug)) {
     throw new Error("community_repository_search_interaction_channel_invalid");
   }
   return {
@@ -46,7 +46,7 @@ function canonicalInteractionItem(item: SearchItem): SearchItem {
     source_type: "interaction",
     source_id: ref,
     channel_slug: channelSlug,
-    path: `/channels/general/${ref}.md`,
+    path: `/channels/${channelSlug}/${ref}.md`,
   };
 }
 

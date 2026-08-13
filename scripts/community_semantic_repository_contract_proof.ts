@@ -6,6 +6,7 @@ import {
   listCommunitySemanticMembers,
   listCommunitySemanticResources,
   listCommunitySemanticRoot,
+  parseCommunityChannelSemanticPath,
   parsePolynetSemanticPath,
   readCommunitySemanticDocument,
   readCommunitySemanticResourceDocument,
@@ -291,6 +292,36 @@ for (const invalidPath of [
     `selector should fail closed: ${JSON.stringify(invalidPath)}`,
   );
 }
+
+assert.deepEqual(parseCommunityChannelSemanticPath("/channels/wins/"), {
+  kind: "directory",
+  slug: "wins",
+});
+assert.deepEqual(
+  parseCommunityChannelSemanticPath(
+    "/channels/wins/interaction:root:root_123.md",
+  ),
+  {
+    kind: "document",
+    slug: "wins",
+    ref: "interaction:root:root_123",
+  },
+);
+assert.equal(
+  validateCommunitySemanticOperationInput({
+    operation: "list",
+    path: "/channels/wins/",
+  }).ok,
+  true,
+);
+assert.equal(
+  validateCommunitySemanticOperationInput({
+    operation: "read",
+    path: "/channels/wins/interaction:reply:reply_123.md",
+  }).ok,
+  true,
+);
+assert.equal(parseCommunityChannelSemanticPath("/channels/Wins/"), null);
 
 const listed = listCommunitySemanticRoot({ path: "/" });
 assert.equal(listed.ok, true);

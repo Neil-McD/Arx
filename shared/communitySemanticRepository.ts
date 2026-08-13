@@ -23,6 +23,34 @@ export const POLYNET_CAPABILITIES_DIRECTORY_PATH = "/capabilities/";
 export const POLYNET_BUILDER_DIRECTORY_PATH = "/builder/";
 export const POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH = "/builder/resources/";
 
+export type ParsedCommunityChannelSemanticPath =
+  | {
+      kind: "directory";
+      slug: string;
+    }
+  | {
+      kind: "document";
+      slug: string;
+      ref: string;
+    };
+
+export function parseCommunityChannelSemanticPath(
+  value: string,
+): ParsedCommunityChannelSemanticPath | null {
+  const directoryMatch =
+    /^\/channels\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/$/.exec(value);
+  if (directoryMatch) {
+    return { kind: "directory", slug: directoryMatch[1] };
+  }
+  const documentMatch =
+    /^\/channels\/([a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)\/(interaction:(?:root|reply):[A-Za-z0-9_-]+)\.md$/.exec(
+      value,
+    );
+  return documentMatch
+    ? { kind: "document", slug: documentMatch[1], ref: documentMatch[2] }
+    : null;
+}
+
 export type CommunitySemanticSource = {
   slug: string;
   name: string;
@@ -314,6 +342,7 @@ export function parsePolynetSemanticPath(value: unknown) {
       resourceAlias,
     };
   }
+  const channelPath = parseCommunityChannelSemanticPath(value);
   if (
     !value.startsWith("/") ||
     value.includes("//") ||
@@ -322,7 +351,7 @@ export function parsePolynetSemanticPath(value: unknown) {
       value !== POLYNET_MEMBERS_DIRECTORY_PATH &&
       value !== POLYNET_RESOURCES_DIRECTORY_PATH &&
       value !== POLYNET_CHANNELS_DIRECTORY_PATH &&
-      value !== POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH &&
+      channelPath?.kind !== "directory" &&
       value !== POLYNET_EVENTS_DIRECTORY_PATH &&
       value !== POLYNET_MEMORY_DIRECTORY_PATH &&
       value !== POLYNET_CAPABILITIES_DIRECTORY_PATH &&
@@ -349,15 +378,12 @@ export function parsePolynetSemanticPath(value: unknown) {
     value === POLYNET_MEMBERS_DIRECTORY_PATH ||
     value === POLYNET_RESOURCES_DIRECTORY_PATH ||
     value === POLYNET_CHANNELS_DIRECTORY_PATH ||
-    value === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
+    Boolean(channelPath) ||
     value === POLYNET_EVENTS_DIRECTORY_PATH ||
     value === POLYNET_MEMORY_DIRECTORY_PATH ||
     value === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_DIRECTORY_PATH ||
     value === POLYNET_BUILDER_RESOURCES_DIRECTORY_PATH ||
-    /^\/channels\/general\/interaction:(root|reply):[A-Za-z0-9_-]+\.md$/.test(
-      value,
-    ) ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(value) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(value) ||
     /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(value) ||
@@ -440,7 +466,7 @@ export function validateCommunitySemanticOperationInput(args: {
       parsed.path === POLYNET_MEMBERS_DIRECTORY_PATH ||
       parsed.path === POLYNET_RESOURCES_DIRECTORY_PATH ||
       parsed.path === POLYNET_CHANNELS_DIRECTORY_PATH ||
-      parsed.path === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH ||
+      parseCommunityChannelSemanticPath(parsed.path)?.kind === "directory" ||
       parsed.path === POLYNET_EVENTS_DIRECTORY_PATH ||
       parsed.path === POLYNET_MEMORY_DIRECTORY_PATH ||
       parsed.path === POLYNET_CAPABILITIES_DIRECTORY_PATH ||
@@ -489,9 +515,7 @@ export function validateCommunitySemanticOperationInput(args: {
     parsed.path === POLYNET_SELF_PROFILE_PATH ||
     "memberHandle" in parsed;
   const isCanonicalVirtualDocumentRead =
-    /^\/channels\/general\/interaction:(?:root|reply):[A-Za-z0-9_-]+\.md$/.test(
-      parsed.path,
-    ) ||
+    parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(parsed.path) ||
     /^\/memory\/[A-Za-z0-9_-]+\.md$/.test(parsed.path) ||
     /^\/capabilities\/[a-z0-9][a-z0-9._-]*\.json$/.test(parsed.path) ||

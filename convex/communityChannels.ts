@@ -219,3 +219,57 @@ export const getGeneralChannelInternal = internalQuery({
     };
   },
 });
+
+function mapCommunityChannelForRepository(channel: CommunityChannelLike) {
+  return {
+    ...mapCommunityChannel(channel),
+    id: normalizeIdValue(channel._id) || null,
+    access_mode: channel.accessMode,
+    posting_policy: channel.postingPolicy,
+    status: channel.status,
+    pinned_root_id: channel.pinnedRootId
+      ? normalizeIdValue(channel.pinnedRootId)
+      : null,
+  };
+}
+
+export const listCommunityChannelsInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    return {
+      channels: (await listReadableCommunityChannels({
+        ctx,
+        communityId: args.communityId,
+      })).map(mapCommunityChannelForRepository),
+      max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS,
+    };
+  },
+});
+
+export const resolveCommunityChannelBySlugInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    slug: v.string(),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const channel = (await listReadableCommunityChannels({
+      ctx,
+      communityId: args.communityId,
+    })).find((candidate) => candidate.slug === args.slug);
+    return channel ? mapCommunityChannelForRepository(channel) : null;
+  },
+});

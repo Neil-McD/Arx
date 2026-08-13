@@ -33,6 +33,7 @@ import {
   type CommunityChannelLike,
   interactionBelongsToChannel,
   listAllActiveChannelReadableRows,
+  listChannelReadableRows,
   listReadableCommunityChannels,
   requireReadableChannelForAddressableRow,
 } from "./communityChannelCore";
@@ -226,6 +227,7 @@ async function mapEvidenceSearchItem(args: {
     object_type: args.objectType,
     object_id: normalizeIdValue(args.row._id),
     root_id: normalizeIdValue(args.root._id),
+    interaction_kind: args.root.kind ?? "discussion",
     channel_id: normalizeIdValue(args.channel._id) || null,
     channel_slug: args.channel.slug,
     version: Math.max(1, Math.floor(Number(args.row.updatedAt) || 1)),
@@ -243,7 +245,11 @@ async function mapEvidenceSearchItem(args: {
     score: args.score,
     retrieval_source: args.source,
     deep_link: slug
-      ? `/c/${encodeURIComponent(slug)}/chat?evidence=${encodeURIComponent(ref)}`
+      ? `/c/${encodeURIComponent(slug)}/chat${
+          args.channel.systemRole === "general"
+            ? ""
+            : `/${encodeURIComponent(args.channel.slug)}`
+        }?evidence=${encodeURIComponent(ref)}`
       : null,
   };
 }
@@ -254,6 +260,8 @@ async function searchRecentCommunityInteractionEvidence(args: {
   communityId: any;
   query: string;
   limit: number;
+  channelId?: any | null;
+  channelSlug?: string | null;
   beforeCreatedAt?: number | null;
 }) {
   await requireCommunityChatAccess({
@@ -267,21 +275,53 @@ async function searchRecentCommunityInteractionEvidence(args: {
     ctx: args.ctx,
     communityId: args.communityId,
   });
+  const requestedChannelId = normalizeIdValue(args.channelId);
+  const requestedChannelSlug = String(args.channelSlug ?? "").trim();
+  const selectedChannel = requestedChannelId || requestedChannelSlug
+    ? channels.find(
+        (channel) =>
+          (!requestedChannelId ||
+            normalizeIdValue(channel._id) === requestedChannelId) &&
+          (!requestedChannelSlug || channel.slug === requestedChannelSlug),
+      ) ?? null
+    : null;
+  if ((requestedChannelId || requestedChannelSlug) && !selectedChannel) {
+    throw new Error("community_channel_unavailable");
+  }
+  const channelsForRead = selectedChannel ? [selectedChannel] : channels;
   const [roots, replies] = await Promise.all([
-    listAllActiveChannelReadableRows<InteractionRow>({
-      ctx: args.ctx,
-      tableName: "communityInteractionRoots",
-      communityId: args.communityId,
-      limit: RECENT_ROOT_SCAN_LIMIT,
-      beforeCreatedAt: args.beforeCreatedAt,
-    }),
-    listAllActiveChannelReadableRows<InteractionRow>({
-      ctx: args.ctx,
-      tableName: "communityInteractionReplies",
-      communityId: args.communityId,
-      limit: RECENT_REPLY_SCAN_LIMIT,
-      beforeCreatedAt: args.beforeCreatedAt,
-    }),
+    selectedChannel
+      ? listChannelReadableRows<InteractionRow>({
+          ctx: args.ctx,
+          tableName: "communityInteractionRoots",
+          communityId: args.communityId,
+          channel: selectedChannel,
+          limit: RECENT_ROOT_SCAN_LIMIT,
+          beforeCreatedAt: args.beforeCreatedAt,
+        })
+      : listAllActiveChannelReadableRows<InteractionRow>({
+          ctx: args.ctx,
+          tableName: "communityInteractionRoots",
+          communityId: args.communityId,
+          limit: RECENT_ROOT_SCAN_LIMIT,
+          beforeCreatedAt: args.beforeCreatedAt,
+        }),
+    selectedChannel
+      ? listChannelReadableRows<InteractionRow>({
+          ctx: args.ctx,
+          tableName: "communityInteractionReplies",
+          communityId: args.communityId,
+          channel: selectedChannel,
+          limit: RECENT_REPLY_SCAN_LIMIT,
+          beforeCreatedAt: args.beforeCreatedAt,
+        })
+      : listAllActiveChannelReadableRows<InteractionRow>({
+          ctx: args.ctx,
+          tableName: "communityInteractionReplies",
+          communityId: args.communityId,
+          limit: RECENT_REPLY_SCAN_LIMIT,
+          beforeCreatedAt: args.beforeCreatedAt,
+        }),
   ]);
   const readableRoots = new Map<string, InteractionRow>();
   const rootChannels = new Map<string, CommunityChannelLike>();
@@ -293,7 +333,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
       const channel = requireReadableChannelForAddressableRow({
         row: root,
         communityId: args.communityId,
-        channels,
+        channels: channelsForRead,
       });
       const rootId = normalizeIdValue(root._id);
       readableRoots.set(rootId, root);
@@ -400,6 +440,8 @@ export const searchRecentCommunityInteractionEvidenceInternal = internalQuery({
     communityId: v.id("communities"),
     query: v.string(),
     limit: v.number(),
+    channelId: v.optional(v.id("communityChannels")),
+    channelSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) =>
     await searchRecentCommunityInteractionEvidence({
@@ -408,6 +450,8 @@ export const searchRecentCommunityInteractionEvidenceInternal = internalQuery({
       communityId: args.communityId,
       query: args.query,
       limit: normalizeCommunityEvidenceSearchLimit(args.limit),
+      channelId: args.channelId,
+      channelSlug: args.channelSlug,
     }),
 });
 
@@ -417,6 +461,8 @@ export const listRecentCommunityInteractionEvidenceInternal = internalQuery({
     communityId: v.id("communities"),
     cursor: v.optional(v.string()),
     limit: v.number(),
+    channelId: v.optional(v.id("communityChannels")),
+    channelSlug: v.optional(v.string()),
   },
   handler: async (ctx, args) => {
     const requestedLimit = Math.floor(Number(args.limit));
@@ -436,6 +482,8 @@ export const listRecentCommunityInteractionEvidenceInternal = internalQuery({
       communityId: args.communityId,
       query: "",
       limit: limit + 1,
+      channelId: args.channelId,
+      channelSlug: args.channelSlug,
       beforeCreatedAt,
     });
     const results = recent.results.slice(0, limit);
@@ -460,6 +508,8 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
     userId: v.id("users"),
     communityId: v.id("communities"),
     ref: v.string(),
+    expectedChannelId: v.optional(v.id("communityChannels")),
+    expectedChannelSlug: v.optional(v.string()),
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
     await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId: args.userId });
@@ -471,6 +521,15 @@ export const readCommunityInteractionEvidenceInternal = internalQuery({
       objectType: parsed.objectType,
       objectId: parsed.objectId,
     });
+    if (
+      args.expectedChannelId &&
+      normalizeIdValue(channel._id) !== normalizeIdValue(args.expectedChannelId)
+    ) {
+      throw new Error("community_interaction_evidence_channel_mismatch");
+    }
+    if (args.expectedChannelSlug && channel.slug !== args.expectedChannelSlug) {
+      throw new Error("community_interaction_evidence_channel_mismatch");
+    }
     const community = (await ctx.db.get(args.communityId)) as CommunityRow | null;
     if (!community) throw new Error("community_not_found");
     const [blocks, attachments, embeds] = (await Promise.all([
@@ -617,6 +676,8 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     communityId: v.id("communities"),
     query: v.string(),
     limit: v.optional(v.number()),
+    channelId: v.optional(v.id("communityChannels")),
+    channelSlug: v.optional(v.string()),
     surface: communityEvidenceSurfaceValidator,
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
@@ -630,7 +691,14 @@ export const searchCommunityInteractionEvidenceInternal = internalAction({
     const limit = normalizeCommunityEvidenceSearchLimit(args.limit);
     const recent = (await ctx.runQuery(
       (internal as any).communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
-      { userId, communityId: args.communityId, query, limit },
+      {
+        userId,
+        communityId: args.communityId,
+        query,
+        limit,
+        channelId: args.channelId,
+        channelSlug: args.channelSlug,
+      },
     )) as {
       community: Record<string, unknown>;
       results: Array<Record<string, unknown>>;
@@ -670,6 +738,8 @@ export const readCommunityInteractionEvidenceForToolInternal = internalAction({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     ref: v.string(),
+    expectedChannelId: v.optional(v.id("communityChannels")),
+    expectedChannelSlug: v.optional(v.string()),
     surface: communityEvidenceSurfaceValidator,
   },
   handler: async (ctx, args): Promise<Record<string, unknown>> => {
@@ -684,7 +754,13 @@ export const readCommunityInteractionEvidenceForToolInternal = internalAction({
     }
     const evidence: any = await ctx.runQuery(
       (internal as any).communityInteractionEvidence.readCommunityInteractionEvidenceInternal,
-      { userId, communityId: args.communityId, ref },
+      {
+        userId,
+        communityId: args.communityId,
+        ref,
+        expectedChannelId: args.expectedChannelId,
+        expectedChannelSlug: args.expectedChannelSlug,
+      },
     );
     const retrievalId: any = await ctx.runMutation(
       (internal as any).communityEvidenceAudit.recordCommunityEvidenceRetrievalInternal,
