@@ -149,6 +149,8 @@ import type * as founderCheckoutReceiptCore from "../founderCheckoutReceiptCore.
 import type * as founderInference from "../founderInference.js";
 import type * as founderInferenceCore from "../founderInferenceCore.js";
 import type * as founderInferenceRuntime from "../founderInferenceRuntime.js";
+import type * as founderPaidToolRuntime from "../founderPaidToolRuntime.js";
+import type * as founderPaidTools from "../founderPaidTools.js";
 import type * as founderPlanCore from "../founderPlanCore.js";
 import type * as founderPlanPricing from "../founderPlanPricing.js";
 import type * as gates from "../gates.js";
@@ -206,6 +208,7 @@ import type * as profiles from "../profiles.js";
 import type * as projects from "../projects.js";
 import type * as providerConnectionProbes from "../providerConnectionProbes.js";
 import type * as providerConnections from "../providerConnections.js";
+import type * as providerCostCore from "../providerCostCore.js";
 import type * as publicAppUrl from "../publicAppUrl.js";
 import type * as runtimeAgentLoop from "../runtimeAgentLoop.js";
 import type * as runtimeCancellation from "../runtimeCancellation.js";
@@ -396,6 +399,8 @@ declare const fullApi: ApiFromModules<{
   founderInference: typeof founderInference;
   founderInferenceCore: typeof founderInferenceCore;
   founderInferenceRuntime: typeof founderInferenceRuntime;
+  founderPaidToolRuntime: typeof founderPaidToolRuntime;
+  founderPaidTools: typeof founderPaidTools;
   founderPlanCore: typeof founderPlanCore;
   founderPlanPricing: typeof founderPlanPricing;
   gates: typeof gates;
@@ -453,6 +458,7 @@ declare const fullApi: ApiFromModules<{
   projects: typeof projects;
   providerConnectionProbes: typeof providerConnectionProbes;
   providerConnections: typeof providerConnections;
+  providerCostCore: typeof providerCostCore;
   publicAppUrl: typeof publicAppUrl;
   runtimeAgentLoop: typeof runtimeAgentLoop;
   runtimeCancellation: typeof runtimeCancellation;
