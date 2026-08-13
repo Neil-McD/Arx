@@ -369,4 +369,14 @@ assert.match(
   /communityInteractionMentions" as any[\s\S]*mentionKind: spec\.kind[\s\S]*spec\.kind === "user"[\s\S]*mentionedUserId[\s\S]*spec\.kind === "community_agent"[\s\S]*mentionedAgentKey[\s\S]*notifyState: "pending"/,
   "validated user and canonical community-agent mentions should create pending mention rows",
 );
+assert.doesNotMatch(
+  interactions,
+  /block\.blockType === "mention"/,
+  "content blocks must not act as a second mention-row writer",
+);
+assert.match(
+  interactions,
+  /args\.mentions\?\.some\(\(mention\) => Boolean\(String\(mention\.agentKey[\s\S]*interaction_mention_agent_self_reference/,
+  "community-agent-authored turns must reject community-agent self-mentions",
+);
 console.log("community_interactions_write_core_contract_proof: ok");

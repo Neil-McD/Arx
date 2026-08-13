@@ -19,14 +19,6 @@ function functionBlock(source: string, functionName: string): string {
   return source.slice(start, nextFunction === -1 ? source.length : nextFunction);
 }
 
-function exportedFunctionBlock(source: string, exportName: string): string {
-  const startToken = `export const ${exportName} =`;
-  const start = source.indexOf(startToken);
-  assert.notEqual(start, -1, `${exportName} should exist`);
-  const nextConst = source.indexOf("\nexport const ", start + startToken.length);
-  return source.slice(start, nextConst === -1 ? source.length : nextConst);
-}
-
 assert.match(
   packageJson,
   /"check:community-agent-concierge-intake-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_agent_concierge_intake_contract_proof\.ts && vitest run convex\/communityAgentConciergeCore\.test\.ts"/,
@@ -44,11 +36,10 @@ assert.match(
   "serve request table should dedupe canonical source turns while retaining legacy mention lookup",
 );
 
-const block = exportedFunctionBlock(concierge, "consumePendingCommunityAgentMentionsInternal");
-assert.match(
-  block,
-  /export const consumePendingCommunityAgentMentionsInternal = internalMutation/,
-  "Concierge repair drain should be internal-only",
+assert.doesNotMatch(
+  concierge,
+  /consumePendingCommunityAgentMentionsInternal|intakeCommunityAgentMention|CONCIERGE_REPAIR_/,
+  "Concierge must not retain a polling repair consumer or repair-only helpers",
 );
 assert.match(
   interactions,
@@ -64,16 +55,6 @@ assert.match(
   interactions,
   /if \(actorType === "human"\) \{[\s\S]*await intakeCommunityAgentTurn\([\s\S]*replyId: reply\._id/,
   "canonical human replies should enter the same source-turn admission path",
-);
-assert.match(
-  block,
-  /query\("communityInteractionMentions"[\s\S]*withIndex\("by_mentionKind_notifyState_createdAt"[\s\S]*q\.eq\("mentionKind", "community_agent"\)\.eq\("notifyState", "pending"\)[\s\S]*\.take\(limit\)/,
-  "Concierge repair drain should consume only bounded leftover pending community-agent mentions",
-);
-assert.match(
-  block,
-  /repair: true/,
-  "cron path should identify itself as a repair drain, not the primary product path",
 );
 assert.match(
   conciergeCore,
@@ -155,15 +136,25 @@ assert.match(
   /const requestId = await insertServeRequest\([\s\S]*status: "queued"[\s\S]*await settleMentionFromServeRequest[\s\S]*await scheduleImmediateServeWorker\(\{[\s\S]*requestId/,
   "accepted intake should settle the mention and schedule serve after the queued request exists",
 );
+assert.doesNotMatch(
+  crons + concierge + conciergeCore,
+  /process pending community agent mentions|consumePendingCommunityAgentMentionsInternal|intakeCommunityAgentMention/,
+  "community-agent mention intake must not retain a fixed polling repair path",
+);
+assert.doesNotMatch(
+  interactions,
+  /block\.blockType === "mention"/,
+  "content blocks must not retain an alternate mention-row writer",
+);
 assert.match(
-  crons,
-  /"process pending community agent mentions",\s*\{ minutes: 5 \},[\s\S]*communityAgentConcierge\.consumePendingCommunityAgentMentionsInternal[\s\S]*\{ limit: 25 \}/,
-  "Concierge repair drain should run as a bounded deterministic cron",
+  interactions,
+  /args\.mentions\?\.some\(\(mention\) => Boolean\(String\(mention\.agentKey[\s\S]*interaction_mention_agent_self_reference/,
+  "community-agent-authored turns must reject community-agent self-mentions",
 );
 assert.match(
   docs,
-  /birth-time intake[\s\S]*repair drain[\s\S]*No LLM, no reply, no memory write[\s\S]*sponsorUserId == requesterUserId[\s\S]*communityAgentServeRequests/,
-  "architecture docs should describe birth-time Concierge intake plus repair drain",
+  /birth-time intake[\s\S]*No LLM, no reply, no memory write[\s\S]*sponsorUserId == requesterUserId[\s\S]*has no polling repair drain/,
+  "architecture docs should describe atomic birth-time intake without polling",
 );
 assert.match(
   docs,

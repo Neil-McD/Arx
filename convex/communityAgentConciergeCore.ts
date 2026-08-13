@@ -639,18 +639,3 @@ export async function intakeCommunityAgentTurn(args: {
     request_id: normalizeIdValue(requestId),
   };
 }
-
-export async function intakeCommunityAgentMention(args: {
-  ctx: any;
-  mention: ConciergeMentionRow;
-  nowMs: number;
-}): Promise<ConciergeIntakeResult> {
-  return await intakeCommunityAgentTurn({
-    ctx: args.ctx,
-    communityId: args.mention.communityId,
-    rootId: args.mention.rootId,
-    replyId: args.mention.replyId,
-    mention: args.mention,
-    nowMs: args.nowMs,
-  });
-}

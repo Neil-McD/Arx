@@ -205,14 +205,6 @@ type NormalizedContentBlock =
       workspaceRefKind: WorkspaceRefKind;
       workspaceRefId: string;
       text?: string;
-    }
-  | {
-      blockType: "mention";
-      mentionKind: MentionKind;
-      mentionedUserId?: any;
-      mentionedAgentKey?: string;
-      mentionedRoleKey?: string;
-      text?: string;
     };
 
 const MAX_INTERACTION_BLOCKS_PER_WRITE = 24;
@@ -404,7 +396,6 @@ function contentSummary(blocks: NormalizedContentBlock[]): string {
     if (block.blockType === "markdown_text") return block.text;
     if (block.blockType === "link") return block.text ?? block.normalizedSourceUrl;
     if (block.blockType === "workspace_ref") return block.text ?? `${block.workspaceRefKind}:${block.workspaceRefId}`;
-    if (block.blockType === "mention") return block.text ?? `@${block.mentionedRoleKey ?? block.mentionedAgentKey ?? "member"}`;
     return "";
   });
   const summary = parts.join(" ").replace(/\s+/g, " ").trim().slice(0, MAX_INTERACTION_SUMMARY_CHARS);
@@ -917,7 +908,6 @@ async function insertContentBlocksForTarget(args: {
   nowMs: number;
 }) {
   const contentBlockIds: string[] = [];
-  const mentionIds: string[] = [];
   if (Boolean(args.rootId) === Boolean(args.replyId)) {
     throw new Error("interaction_content_target_required");
   }
@@ -938,23 +928,6 @@ async function insertContentBlocksForTarget(args: {
         updatedAt: args.nowMs,
       });
     }
-    if (block.blockType === "mention") {
-      const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
-        communityId: args.communityId,
-        ...(args.channelId ? { channelId: args.channelId } : {}),
-        ...(args.rootId ? { rootId: args.rootId } : {}),
-        ...(args.replyId ? { replyId: args.replyId } : {}),
-        mentionKind: block.mentionKind,
-        ...(block.mentionedUserId ? { mentionedUserId: block.mentionedUserId } : {}),
-        ...(block.mentionedAgentKey ? { mentionedAgentKey: block.mentionedAgentKey } : {}),
-        ...(block.mentionedRoleKey ? { mentionedRoleKey: block.mentionedRoleKey } : {}),
-        notifyState: "pending",
-        createdAt: args.nowMs,
-        updatedAt: args.nowMs,
-      });
-      mentionIds.push(normalizeIdValue(mentionId));
-    }
-
     const contentBlockId = await args.ctx.db.insert("communityInteractionContentBlocks" as any, {
       communityId: args.communityId,
       ...(args.rootId ? { rootId: args.rootId } : {}),
@@ -967,20 +940,12 @@ async function insertContentBlocksForTarget(args: {
       ...(block.blockType === "workspace_ref"
         ? { workspaceRefKind: block.workspaceRefKind, workspaceRefId: block.workspaceRefId }
         : {}),
-      ...(block.blockType === "mention"
-        ? {
-            mentionKind: block.mentionKind,
-            ...(block.mentionedUserId ? { mentionedUserId: block.mentionedUserId } : {}),
-            ...(block.mentionedAgentKey ? { mentionedAgentKey: block.mentionedAgentKey } : {}),
-            ...(block.mentionedRoleKey ? { mentionedRoleKey: block.mentionedRoleKey } : {}),
-          }
-        : {}),
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
     });
     contentBlockIds.push(normalizeIdValue(contentBlockId));
   }
-  return { contentBlockIds, mentionIds };
+  return { contentBlockIds };
 }
 
 export type LegacyChatRootInteractionPlan =
@@ -2097,6 +2062,9 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
     }
     if (args.rootId && textContainsEverybodyMentionToken(text)) {
       throw new Error("interaction_mention_everybody_reply_not_allowed");
+    }
+    if (args.mentions?.some((mention) => Boolean(String(mention.agentKey ?? "").trim()))) {
+      throw new Error("interaction_mention_agent_self_reference");
     }
     const contentBlocks: NormalizedContentBlock[] = text
       ? [

@@ -1746,13 +1746,6 @@ human creates a canonical community root/reply
   -> settle any mention as sent or suppressed
 ```
 
-The cron is only a repair drain:
-
-```txt
-leftover communityInteractionMentions[pending, community_agent]
-  -> retry the same intake core
-```
-
 Rules:
 
 - This slice is intake only: No LLM, no reply, no memory write.
@@ -1775,7 +1768,17 @@ Rules:
   that canonical identity. Targeting a human,
   a general comment under a human-authored root, or prior agent participation
   elsewhere in the thread does not invoke the agent without an explicit mention.
-- The bounded cron consumes only leftover pending canonical `community_agent` mentions as a repair drain, not as the primary product path.
+- Community-agent mention intake has no polling repair drain. The canonical
+  human composer creates the mention row and enters source-turn intake in the
+  same atomic mutation; a scheduling failure rolls the write back instead of
+  leaving a second authority to discover it later.
+- `insertCommunityInteractionMentionRows` is the only writer for new direct
+  interaction mention rows. Bounded `@everybody` expansion remains a separate
+  user-mention fanout. Content blocks cannot create mentions, and
+  community-agent-authored turns cannot mention the community agent itself.
+- The deletion gate was a read-only deployment census on 2026-08-13: staging
+  had 8 historical community-agent mentions and production had 10, with zero
+  pending or malformed community-agent mentions in either deployment.
 - `invocationKey` identifies the canonical source root or reply and is the
   idempotency key across all qualifying signals. `sourceMentionId` remains an
   optional audit pointer and rolling-deploy fallback for historical requests.

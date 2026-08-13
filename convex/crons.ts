@@ -93,16 +93,6 @@ crons.interval(
   { limitCommunities: 500 },
 );
 
-// Concierge repair drain: fresh community-agent mentions are born into
-// community-founder-funded serve requests during the chat write. This
-// deterministic, token-free cron only repairs leftover pending mentions.
-crons.interval(
-  "process pending community agent mentions",
-  { minutes: 5 },
-  (internal as any).communityAgentConcierge.consumePendingCommunityAgentMentionsInternal,
-  { limit: 25 },
-);
-
 // Mention email pings: mentions still "pending" after the in-app grace window
 // get one email each, preference-gated and deduped per mention.
 crons.interval(

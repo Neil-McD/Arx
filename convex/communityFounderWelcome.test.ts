@@ -234,6 +234,67 @@ test("founder bootstrap rejects non-owners and any widened write shape", async (
   )).rejects.toThrow("community_founder_welcome_contract_invalid");
 });
 
+test("community-agent authored turns reject self-mentions", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: "founder-welcome-owner" });
+
+  await expect(asOwner.mutation(
+    internal.communityInteractions.createCommunityAgentCanonicalInteractionInternal,
+    {
+      userId: fixture.ownerId,
+      authSubject: "founder-welcome-owner",
+      communityId: fixture.communityId,
+      idempotencyKey: "agent-self-mention",
+      text: "@Founder Welcome should not wake itself.",
+      mentions: [{ agentKey: "community_agent" }],
+    },
+  )).rejects.toThrow("interaction_mention_agent_self_reference");
+
+  const [roots, mentions, requests] = await t.run(async (ctx) => await Promise.all([
+    ctx.db.query("communityInteractionRoots").collect(),
+    ctx.db.query("communityInteractionMentions").collect(),
+    ctx.db.query("communityAgentServeRequests").collect(),
+  ]));
+  expect(roots).toHaveLength(0);
+  expect(mentions).toHaveLength(0);
+  expect(requests).toHaveLength(0);
+});
+
+test("human-authored turns can still mention the community agent", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: "founder-welcome-owner" });
+
+  await asOwner.mutation(
+    api.communityInteractions.createCommunityInteractionComposerMessage,
+    {
+      communityId: fixture.communityId,
+      channelId: fixture.channelId,
+      idempotencyKey: "human-community-agent-mention",
+      text: "@Founder Welcome what should I do first?",
+      mentions: [{ agentKey: "community_agent" }],
+    },
+  );
+
+  const [mentions, requests] = await t.run(async (ctx) => await Promise.all([
+    ctx.db.query("communityInteractionMentions").collect(),
+    ctx.db.query("communityAgentServeRequests").collect(),
+  ]));
+  expect(mentions).toHaveLength(1);
+  expect(mentions[0]).toMatchObject({
+    mentionKind: "community_agent",
+    mentionedAgentKey: "community_agent",
+    notifyState: "sent",
+  });
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({
+    triggerKind: "mention",
+    requesterUserId: fixture.ownerId,
+    status: "queued",
+  });
+});
+
 test("replying to the welcome root enters the existing direct-reply serve path", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
