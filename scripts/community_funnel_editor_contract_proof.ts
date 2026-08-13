@@ -109,5 +109,30 @@ assert.match(
   /\.funnel-builder-conversation \{[\s\S]*overflow: hidden;/,
   "the composer rail must stay bounded inside the funnel surface",
 );
+assert.match(
+  editor,
+  /ariaLabel="Funnel workspace"[\s\S]*data-workspace-view=\{workspaceView\}/,
+  "narrow funnel workspaces must switch between preview and builder without duplicating either surface",
+);
+assert.match(
+  styles,
+  /grid-template-columns: minmax\(0, 1fr\) clamp\(360px, 32vw, 420px\)/,
+  "the desktop builder must reserve a readable bounded inspector beside the flexible preview",
+);
+assert.match(
+  styles,
+  /data-workspace-view="preview"[\s\S]*funnel-builder-conversation[\s\S]*data-workspace-view="builder"[\s\S]*funnel-builder-preview/,
+  "the narrow shell must swap preview and builder instead of stacking the whole page",
+);
+assert.match(
+  styles,
+  /container: funnel-workspace \/ inline-size[\s\S]*@container funnel-workspace \(max-width: 980px\)/,
+  "responsive funnel composition must follow the actual workspace width rather than the browser viewport",
+);
+assert.doesNotMatch(
+  styles,
+  /\.funnel-builder-layout\.is-custom \{\s*display: block;/,
+  "the funnel workspace must not regress to an unbounded vertical stack",
+);
 
 console.log("community funnel editor contract proof passed");
