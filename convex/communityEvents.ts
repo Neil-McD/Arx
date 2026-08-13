@@ -1,4 +1,4 @@
-import { mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   normalizeIdValue,
@@ -188,6 +188,102 @@ async function listCommunityEventExpansionCandidates(params: {
 
   return dedupeCommunityEventRows(rows);
 }
+
+export const listCommunityEventsForSemanticRepositoryInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    cursor: v.optional(v.string()),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const requestedLimit = Math.floor(Number(args.limit));
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(2, Math.min(50, requestedLimit))
+      : 20;
+    const cursorStartMs = args.cursor ? Number(args.cursor) : Date.now();
+    if (!Number.isSafeInteger(cursorStartMs) || cursorStartMs < 0) {
+      throw new Error("community_event_list_cursor_invalid");
+    }
+    const rows = await listCommunityEventExpansionCandidates({
+      ctx,
+      communityId: args.communityId,
+      startMs: cursorStartMs,
+      endMs: Number.MAX_SAFE_INTEGER,
+      includeCancelled: false,
+    });
+    const expanded = expandCommunityEventRows({
+      rows,
+      startMs: cursorStartMs,
+      endMs: Number.MAX_SAFE_INTEGER,
+      includeCancelled: false,
+      limit: limit + 1,
+    });
+    const events = expanded.slice(0, limit);
+    const hasMore = expanded.length > limit;
+    const lastStartsAt = events.length
+      ? Date.parse(String(events[events.length - 1]?.starts_at ?? ""))
+      : Number.NaN;
+    return {
+      events,
+      truncated: hasMore,
+      next_cursor:
+        hasMore && Number.isSafeInteger(lastStartsAt)
+          ? String(lastStartsAt + 1)
+          : null,
+    };
+  },
+});
+
+export const readCommunityEventForSemanticRepositoryInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    eventId: v.string(),
+    occurrenceStartsAt: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await requireCommunityChatAccess({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+    const eventId = ctx.db.normalizeId("communityEvents", args.eventId);
+    const row = eventId
+      ? ((await ctx.db.get(eventId)) as CommunityEventLike | null)
+      : null;
+    if (
+      !row ||
+      normalizeIdValue(row.communityId) !== normalizeIdValue(args.communityId)
+    ) {
+      throw new Error("community_event_not_found");
+    }
+    const occurrenceStarts = getCommunityEventOccurrenceStartsInRange({
+      startsAt: row.startsAt,
+      rangeStart: args.occurrenceStartsAt,
+      rangeEnd: args.occurrenceStartsAt,
+      frequency: normalizeCommunityEventRecurrenceFrequency(
+        row.recurrenceFrequency,
+      ),
+      interval: normalizeCommunityEventRecurrenceInterval(
+        row.recurrenceInterval,
+      ),
+      recurrenceUntil:
+        typeof row.recurrenceUntil === "number" ? row.recurrenceUntil : null,
+      timeZone: row.timezone,
+      limit: 1,
+    });
+    if (!occurrenceStarts.includes(args.occurrenceStartsAt)) {
+      throw new Error("community_event_occurrence_not_found");
+    }
+    return mapCommunityEventRow(row, args.occurrenceStartsAt);
+  },
+});
 
 export const listCommunityEvents = query({
   args: {

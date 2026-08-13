@@ -18,6 +18,7 @@ const modules = import.meta.glob([
   "./communityCapabilityContext.ts",
   "./communityChannels.ts",
   "./communityEvidenceAudit.ts",
+  "./communityEvents.ts",
   "./communityFunnel.ts",
   "./communityIntelligenceDirectory.ts",
   "./communityInteractionEvidence.ts",
@@ -854,6 +855,174 @@ test("retired AI Feed paths are uniformly absent across canonical operations", a
       message: "Repository path not found or not accessible.",
     });
   }
+});
+
+test("community activity and events list directly and round-trip through read", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const startsAt = Date.now() + 60 * 60 * 1000;
+  const { interactionId, eventId } = await t.run(async (ctx) => {
+    const interactionId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.communityId,
+      channelId: fixture.generalChannelId,
+      actorType: "human",
+      actorUserId: fixture.ownerId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      title: "Current community activity",
+      contentSummary: "Members are coordinating the next community session.",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: "current-community-activity",
+      createdAt: startsAt - 1_000,
+      updatedAt: startsAt - 1_000,
+    });
+    const eventId = await ctx.db.insert("communityEvents", {
+      communityId: fixture.communityId,
+      createdByUserId: fixture.ownerId,
+      title: "Community working session",
+      descriptionMd: "A live working session for members.",
+      startsAt,
+      timezone: "America/New_York",
+      locationType: "online",
+      locationLabel: "Member room",
+      visibility: "members",
+      status: "live",
+      recurrenceFrequency: "none",
+      recurrenceInterval: 1,
+      createdAt: startsAt - 2_000,
+      updatedAt: startsAt - 2_000,
+    });
+    return { interactionId, eventId };
+  });
+  const asMember = t.withIdentity({ subject: fixture.memberSubject });
+  const memberCtx = executionContext(asMember);
+
+  const root = await executePolynetCanonicalTool({
+    ctx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock",
+    toolName: "polynet_list",
+    input: { path: "/communities/canonical-community/" },
+  });
+  expect(root).toMatchObject({
+    ok: true,
+    value: {
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          path: "/communities/canonical-community/events/",
+          kind: "directory",
+        }),
+      ]),
+    },
+  });
+
+  const activity = await executePolynetCanonicalTool({
+    ctx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock",
+    toolName: "polynet_list",
+    input: {
+      path: "/communities/canonical-community/channels/general/",
+      limit: 20,
+    },
+  });
+  const interactionPath = `/communities/canonical-community/channels/general/interaction:root:${interactionId}.md`;
+  expect(activity).toMatchObject({
+    ok: true,
+    value: {
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          path: interactionPath,
+          type: "interaction",
+        }),
+      ]),
+    },
+  });
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: memberCtx,
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      principalKind: "personal_agent",
+      evidenceSurface: "member_agent_dock",
+      toolName: "polynet_read",
+      input: { path: interactionPath },
+    }),
+  ).resolves.toMatchObject({
+    ok: true,
+    value: { path: interactionPath, ref: `interaction:root:${interactionId}` },
+  });
+
+  const events = await executePolynetCanonicalTool({
+    ctx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock",
+    toolName: "polynet_list",
+    input: {
+      path: "/communities/canonical-community/events/",
+      limit: 20,
+    },
+  });
+  const eventPath = `/communities/canonical-community/events/event:${eventId}:${startsAt}.md`;
+  expect(events).toMatchObject({
+    ok: true,
+    value: {
+      entries: expect.arrayContaining([
+        expect.objectContaining({
+          path: eventPath,
+          type: "event",
+          title: "Community working session",
+        }),
+      ]),
+    },
+  });
+  const eventRead = await executePolynetCanonicalTool({
+    ctx: memberCtx,
+    authSubject: fixture.memberSubject,
+    userId: fixture.memberId,
+    principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock",
+    toolName: "polynet_read",
+    input: { path: eventPath },
+  });
+  expect(eventRead).toMatchObject({
+    ok: true,
+    value: { path: eventPath, ref: `event:${eventId}:${startsAt}` },
+  });
+  expect(JSON.parse(String((eventRead as any).value.body))).toMatchObject({
+    title: "Community working session",
+    starts_at: new Date(startsAt).toISOString(),
+  });
+
+  await t.run(async (ctx) => {
+    const membership = await ctx.db
+      .query("communityMemberships")
+      .withIndex("by_community_user", (q) =>
+        q.eq("communityId", fixture.communityId).eq("userId", fixture.memberId),
+      )
+      .unique();
+    if (!membership) throw new Error("test_membership_missing");
+    await ctx.db.patch(membership._id, { active: false, updatedAt: Date.now() });
+  });
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: memberCtx,
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      principalKind: "personal_agent",
+      evidenceSurface: "member_agent_dock",
+      toolName: "polynet_list",
+      input: { path: "/communities/canonical-community/events/", limit: 20 },
+    }),
+  ).resolves.toMatchObject({ ok: false });
 });
 
 test("community-root search returns canonical paths that round-trip through read", async () => {

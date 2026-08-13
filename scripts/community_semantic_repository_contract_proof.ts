@@ -319,6 +319,10 @@ assert.deepEqual(listed.result, {
       kind: "directory",
     },
     {
+      path: "/events/",
+      kind: "directory",
+    },
+    {
       path: "/memory/",
       kind: "directory",
     },
@@ -651,6 +655,11 @@ assert.deepEqual(mountedRoot, {
       path: "/communities/polynet/channels/",
       kind: "directory",
       type: "channels",
+    },
+    {
+      path: "/communities/polynet/events/",
+      kind: "directory",
+      type: "events",
     },
     {
       path: "/communities/polynet/memory/",

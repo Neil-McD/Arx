@@ -600,6 +600,10 @@ test("platform mount exposes communities and permissioned users without leaking 
           type: "channels",
         },
         {
+          path: "/communities/resource-semantic/events/",
+          type: "events",
+        },
+        {
           path: "/communities/resource-semantic/memory/",
           type: "memory",
         },

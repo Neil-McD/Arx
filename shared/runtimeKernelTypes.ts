@@ -91,6 +91,10 @@ export type RuntimeKernelResolvedToolStep<TToolName extends string = string> = {
   toolName: TToolName;
   rawArguments: Record<string, unknown>;
   normalizedArgs: Record<string, unknown>;
+  argumentError?: {
+    code: "invalid_tool_arguments";
+    message: string;
+  };
   assistantToolCallMessage: NativeToolAssistantMessage;
   promptTokens: number | null;
   completionTokens: number | null;

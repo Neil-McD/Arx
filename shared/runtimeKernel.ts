@@ -277,13 +277,18 @@ function resolveToolCallStep<TToolName extends string>(params: {
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return {
-      ok: false,
-      status: 502,
-      code: "invalid_model_output",
-      stopReason: "invalid_model_output",
-      message: message || "Provider returned invalid tool arguments.",
-      pendingToolCallId: providerCallId,
-      pendingToolName: params.toolCall.toolName,
+      kind: "tool_follow_up",
+      providerCallId,
+      toolName: params.toolCall.toolName,
+      rawArguments: params.toolCall.arguments,
+      normalizedArgs: params.toolCall.arguments,
+      argumentError: {
+        code: "invalid_tool_arguments",
+        message: message || "Provider returned invalid tool arguments.",
+      },
+      assistantToolCallMessage: params.assistantToolCallMessage,
+      promptTokens: params.promptTokens,
+      completionTokens: params.completionTokens,
     };
   }
 
@@ -595,14 +600,24 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     const executePreparedToolStep = async (prepared: {
       iteration: number;
       step: RuntimeKernelResolvedToolStep<TToolName>;
-    }): Promise<RuntimeKernelToolExecutionResult> =>
-      params.executeTool({
+    }): Promise<RuntimeKernelToolExecutionResult> => {
+      if (prepared.step.argumentError) {
+        return {
+          status: "error",
+          exitCode: null,
+          outputText: "",
+          errorCode: prepared.step.argumentError.code,
+          errorMessage: prepared.step.argumentError.message,
+        };
+      }
+      return params.executeTool({
         iteration: prepared.iteration,
         providerCallId: prepared.step.providerCallId,
         toolName: prepared.step.toolName,
         normalizedArgs: prepared.step.normalizedArgs,
         rawArguments: prepared.step.rawArguments,
       });
+    };
 
     const processPreparedToolResult = async (
       prepared: {

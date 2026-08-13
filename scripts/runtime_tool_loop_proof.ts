@@ -995,6 +995,109 @@ async function proveNoProgressBudget() {
   console.log("PASS: runtime tool loop no-progress proof");
 }
 
+async function proveInvalidToolArgumentsRecoverInTurn() {
+  let providerInvocation = 0;
+  let executedTools = 0;
+  const result = await runNativeRuntimeKernel<RetrievalToolName>({
+    messages: [
+      { role: "system", content: "You are inspecting a community." },
+      { role: "user", content: "What is happening in this community?" },
+    ],
+    budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+    runCompletion: async (messages) => {
+      providerInvocation += 1;
+      if (providerInvocation === 1) {
+        const rawArguments = JSON.stringify({
+          path: "/communities/canonical-community/channels/",
+        });
+        return {
+          ok: true,
+          type: "tool_call",
+          providerCallId: "invalid-search-1",
+          toolName: "polynet_search",
+          arguments: JSON.parse(rawArguments),
+          assistantToolCallMessage: buildAssistantToolCallMessage({
+            content: null,
+            providerCallId: "invalid-search-1",
+            toolName: "polynet_search",
+            rawArguments,
+          }),
+          promptTokens: 10,
+          completionTokens: 5,
+          resolvedModelId: "mock-model",
+        };
+      }
+      if (providerInvocation === 2) {
+        const failedToolResult = messages.find(
+          (message) =>
+            message.role === "tool" &&
+            message.tool_call_id === "invalid-search-1",
+        );
+        assert.ok(failedToolResult, "expected invalid arguments tool result");
+        assert.equal(failedToolResult?.role, "tool");
+        const envelope = JSON.parse(failedToolResult.content) as Record<
+          string,
+          unknown
+        >;
+        assert.equal(envelope.success, false);
+        assert.equal(envelope.error_code, "invalid_tool_arguments");
+        assert.match(String(envelope.error_message), /requires query/);
+        const rawArguments = JSON.stringify({
+          path: "/communities/canonical-community/channels/",
+          query: "latest activity",
+        });
+        return {
+          ok: true,
+          type: "tool_call",
+          providerCallId: "corrected-search-2",
+          toolName: "polynet_search",
+          arguments: JSON.parse(rawArguments),
+          assistantToolCallMessage: buildAssistantToolCallMessage({
+            content: null,
+            providerCallId: "corrected-search-2",
+            toolName: "polynet_search",
+            rawArguments,
+          }),
+          promptTokens: 20,
+          completionTokens: 5,
+          resolvedModelId: "mock-model",
+        };
+      }
+      return {
+        ok: true,
+        type: "assistant",
+        assistantText: "I recovered and inspected the community.",
+        promptTokens: 30,
+        completionTokens: 6,
+        resolvedModelId: "mock-model",
+      };
+    },
+    normalizeToolArguments,
+    executeTool: async ({ toolName, normalizedArgs }) => {
+      executedTools += 1;
+      assert.equal(toolName, "polynet_search");
+      assert.equal(normalizedArgs.query, "latest activity");
+      return {
+        status: "ok",
+        exitCode: 0,
+        outputText: "recent community activity",
+        errorCode: null,
+        errorMessage: null,
+      };
+    },
+  });
+
+  assert.equal(executedTools, 1, "invalid arguments must not execute the tool");
+  assert.ok(result.ok, "expected the model to recover in the same turn");
+  if (result.ok) {
+    assert.equal(result.stepCount, 2);
+    assert.equal(result.steps[0]?.toolResultErrorCode, "invalid_tool_arguments");
+    assert.equal(result.assistantText, "I recovered and inspected the community.");
+  }
+
+  console.log("PASS: invalid tool arguments recover in-turn proof");
+}
+
 await proveSerialToolBatchLoop();
 await proveParallelReadBatchLoop();
 await proveParallelBatchDrainsCancelledSiblingResults();
@@ -1004,3 +1107,4 @@ await proveFailureBudget();
 await proveToolBudgetExhaustion();
 await proveBatchBudgetExhaustionIsAtomic();
 await proveNoProgressBudget();
+await proveInvalidToolArgumentsRecoverInTurn();

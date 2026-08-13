@@ -204,6 +204,7 @@ Community-owned agents receive a server-selected community mount:
 |- members/
 |- resources/
 |- channels/
+|- events/
 |- memory/
 `- capabilities/
 ```
@@ -256,6 +257,11 @@ Bounded `polynet_list` and `polynet_read` are `IMPLEMENTED` on the staging
 source path. They serve only real platform, community, user, member, resource,
 channel, accepted-memory, capability, and builder mounts. Member
 projections remain bounded relationship views, not generic row browsers.
+
+Channel directories list bounded recent readable activity, and the community
+events directory lists bounded current and upcoming events. Both return exact
+paths that round-trip through `polynet_read` and reuse their canonical domain
+owners and access checks.
 
 `polynet_search` is `IMPLEMENTED` on the staging source path. Exact subtree
 searches reuse canonical domain owners. Community-root search composes the
@@ -377,8 +383,8 @@ The labels mean:
 | Bounded `polynet_search` | `IMPLEMENTED` | staging composes canonical domain owners and returns exact follow-up paths |
 | Naturally scoped `polynet_write` | `IMPLEMENTED` | typed chat and resource changeset owners remain canonical |
 | Discoverable `polynet_call` | `IMPLEMENTED` | versioned capabilities are listed before invocation |
-| Channel, accepted-memory, and capability mounts | `IMPLEMENTED` | each reuses its canonical domain owner and authority |
-| App, workflow, generalized event, and custom UI mounts | `PROPOSED` | each requires a real semantic and authority contract |
+| Channel, community-event, accepted-memory, and capability mounts | `IMPLEMENTED` | each reuses its canonical domain owner and authority |
+| App, workflow, generalized cross-surface event, and custom UI mounts | `PROPOSED` | each requires a real semantic and authority contract |
 | External apps integrating once through resources/capabilities/events/surfaces | `PROPOSED` | prove one real integration before generalizing |
 | Independently enrolled agent/service community members | `DEFERRED` | current membership remains user-based |
 | Arbitrary hosted community code or an unrestricted component platform | `DEFERRED` | not required for MVP |

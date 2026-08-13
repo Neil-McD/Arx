@@ -254,6 +254,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
   communityId: any;
   query: string;
   limit: number;
+  beforeCreatedAt?: number | null;
 }) {
   await requireCommunityChatAccess({
     ctx: args.ctx,
@@ -272,12 +273,14 @@ async function searchRecentCommunityInteractionEvidence(args: {
       tableName: "communityInteractionRoots",
       communityId: args.communityId,
       limit: RECENT_ROOT_SCAN_LIMIT,
+      beforeCreatedAt: args.beforeCreatedAt,
     }),
     listAllActiveChannelReadableRows<InteractionRow>({
       ctx: args.ctx,
       tableName: "communityInteractionReplies",
       communityId: args.communityId,
       limit: RECENT_REPLY_SCAN_LIMIT,
+      beforeCreatedAt: args.beforeCreatedAt,
     }),
   ]);
   const readableRoots = new Map<string, InteractionRow>();
@@ -324,6 +327,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
     }
   }
   const tokens = tokenizeQuery(args.query);
+  const browsingRecentActivity = tokens.length === 0;
   const rankedCandidates = [
     ...Array.from(readableRoots.values()).map((row) => ({
       objectType: "root" as const,
@@ -357,8 +361,12 @@ async function searchRecentCommunityInteractionEvidence(args: {
         } => Boolean(entry.root && entry.channel),
       ),
   ]
-    .filter((entry) => entry.score > 0)
-    .sort((a, b) => b.score - a.score || b.row.createdAt - a.row.createdAt);
+    .filter((entry) => browsingRecentActivity || entry.score > 0)
+    .sort((a, b) =>
+      browsingRecentActivity
+        ? b.row.createdAt - a.row.createdAt
+        : b.score - a.score || b.row.createdAt - a.row.createdAt,
+    );
   const candidates = rankedCandidates.slice(0, args.limit);
   const userIdCache = new Map<string, string | null>();
   return {
@@ -401,6 +409,50 @@ export const searchRecentCommunityInteractionEvidenceInternal = internalQuery({
       query: args.query,
       limit: normalizeCommunityEvidenceSearchLimit(args.limit),
     }),
+});
+
+export const listRecentCommunityInteractionEvidenceInternal = internalQuery({
+  args: {
+    userId: v.id("users"),
+    communityId: v.id("communities"),
+    cursor: v.optional(v.string()),
+    limit: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const requestedLimit = Math.floor(Number(args.limit));
+    const limit = Number.isFinite(requestedLimit)
+      ? Math.max(2, Math.min(50, requestedLimit))
+      : 20;
+    const beforeCreatedAt = args.cursor ? Number(args.cursor) : null;
+    if (
+      beforeCreatedAt !== null &&
+      (!Number.isSafeInteger(beforeCreatedAt) || beforeCreatedAt <= 0)
+    ) {
+      throw new Error("community_interaction_list_cursor_invalid");
+    }
+    const recent = await searchRecentCommunityInteractionEvidence({
+      ctx,
+      userId: args.userId,
+      communityId: args.communityId,
+      query: "",
+      limit: limit + 1,
+      beforeCreatedAt,
+    });
+    const results = recent.results.slice(0, limit);
+    const lastCreatedAt = results.length
+      ? Date.parse(String(results[results.length - 1]?.created_at ?? ""))
+      : Number.NaN;
+    const hasMore = recent.results.length > limit || recent.truncated;
+    return {
+      ...recent,
+      results,
+      truncated: hasMore,
+      next_cursor:
+        hasMore && Number.isSafeInteger(lastCreatedAt)
+          ? String(lastCreatedAt)
+          : null,
+    };
+  },
 });
 
 export const readCommunityInteractionEvidenceInternal = internalQuery({

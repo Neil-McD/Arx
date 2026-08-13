@@ -7,6 +7,7 @@ import {
   POLYNET_CAPABILITIES_DIRECTORY_PATH,
   POLYNET_CHANNELS_DIRECTORY_PATH,
   POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH,
+  POLYNET_EVENTS_DIRECTORY_PATH,
   POLYNET_MEMORY_DIRECTORY_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
 } from "../shared/communitySemanticRepository.ts";
@@ -106,14 +107,16 @@ function mountedPath(communitySlug: string, localPath: string): string {
 function virtualDirectory(args: {
   path: string;
   entries?: Array<Record<string, unknown>>;
+  nextCursor?: string | null;
+  truncated?: boolean;
   searchable?: boolean;
   writable?: boolean;
 }) {
   return {
     path: args.path,
     entries: args.entries ?? [],
-    next_cursor: null,
-    truncated: false,
+    next_cursor: args.nextCursor ?? null,
+    truncated: args.truncated === true,
     skipped_incomplete: 0,
     ...(args.searchable === undefined ? {} : { searchable: args.searchable }),
     ...(args.writable === undefined ? {} : { writable: args.writable }),
@@ -620,14 +623,104 @@ async function executeCanonicalList(args: {
     };
   }
   if (target.localPath === POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH) {
-    return {
-      ok: true,
-      value: virtualDirectory({
-        path: absolutePath,
-        searchable: true,
-        writable: target.authority.canWriteParticipation,
-      }),
-    };
+    try {
+      const value = (await args.ctx.runQuery(
+        (internal as any).communityInteractionEvidence
+          .listRecentCommunityInteractionEvidenceInternal,
+        {
+          userId: args.userId,
+          communityId: target.communityId,
+          ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
+          limit: typeof args.input.limit === "number" ? args.input.limit : 20,
+        },
+      )) as Record<string, unknown>;
+      const results = Array.isArray(value.results)
+        ? (value.results as Array<Record<string, unknown>>)
+        : [];
+      return {
+        ok: true,
+        value: virtualDirectory({
+          path: absolutePath,
+          entries: results.flatMap((result) => {
+            const ref = requiredString(result.ref, 512);
+            if (!ref || !parseCommunityInteractionEvidenceRef(ref)) return [];
+            return [{
+              ...result,
+              path: mountedPath(
+                target.communitySlug,
+                `${POLYNET_DEFAULT_CHANNEL_DIRECTORY_PATH}${ref}.md`,
+              ),
+              kind: "document",
+              type: "interaction",
+            }];
+          }),
+          nextCursor: requiredString(value.next_cursor, 2_048),
+          truncated: value.truncated === true,
+          searchable: true,
+          writable: target.authority.canWriteParticipation,
+        }),
+      };
+    } catch (error) {
+      return canonicalError(
+        "community_interaction_list_failed",
+        error instanceof Error
+          ? error.message
+          : "Community activity could not be listed.",
+      );
+    }
+  }
+  if (target.localPath === POLYNET_EVENTS_DIRECTORY_PATH) {
+    try {
+      const value = (await args.ctx.runQuery(
+        (internal as any).communityEvents
+          .listCommunityEventsForSemanticRepositoryInternal,
+        {
+          userId: args.userId,
+          communityId: target.communityId,
+          ...(args.input.cursor ? { cursor: String(args.input.cursor) } : {}),
+          limit: typeof args.input.limit === "number" ? args.input.limit : 20,
+        },
+      )) as Record<string, unknown>;
+      const events = Array.isArray(value.events)
+        ? (value.events as Array<Record<string, unknown>>)
+        : [];
+      return {
+        ok: true,
+        value: virtualDirectory({
+          path: absolutePath,
+          entries: events.flatMap((event) => {
+            const eventId = requiredString(event.parent_event_id, 180);
+            const startsAtMs = Date.parse(String(event.starts_at ?? ""));
+            if (
+              !eventId ||
+              !/^[A-Za-z0-9_-]+$/.test(eventId) ||
+              !Number.isSafeInteger(startsAtMs)
+            ) {
+              return [];
+            }
+            const ref = `event:${eventId}:${startsAtMs}`;
+            return [{
+              ...event,
+              path: mountedPath(
+                target.communitySlug,
+                `${POLYNET_EVENTS_DIRECTORY_PATH}${ref}.md`,
+              ),
+              kind: "document",
+              type: "event",
+              ref,
+              name: event.title ?? "Community event",
+            }];
+          }),
+          nextCursor: requiredString(value.next_cursor, 2_048),
+          truncated: value.truncated === true,
+        }),
+      };
+    } catch (error) {
+      return canonicalError(
+        "community_event_list_failed",
+        error instanceof Error ? error.message : "Community events could not be listed.",
+      );
+    }
   }
   if (target.localPath === POLYNET_MEMORY_DIRECTORY_PATH) {
     return {
@@ -877,6 +970,43 @@ async function executeCanonicalRead(args: {
       return canonicalError(
         "semantic_not_found",
         error instanceof Error ? error.message : "Evidence not found.",
+      );
+    }
+  }
+
+  const eventMatch =
+    /^\/events\/event:([A-Za-z0-9_-]+):([0-9]{1,16})\.md$/.exec(
+      target.localPath,
+    );
+  if (eventMatch) {
+    const occurrenceStartsAt = Number(eventMatch[2]);
+    if (!Number.isSafeInteger(occurrenceStartsAt)) {
+      return canonicalError("semantic_not_found", "Event not found.");
+    }
+    try {
+      const value = (await args.ctx.runQuery(
+        (internal as any).communityEvents
+          .readCommunityEventForSemanticRepositoryInternal,
+        {
+          userId: args.userId,
+          communityId: target.communityId,
+          eventId: eventMatch[1],
+          occurrenceStartsAt,
+        },
+      )) as Record<string, unknown>;
+      return {
+        ok: true,
+        value: canonicalJsonDocument({
+          target,
+          localPath: target.localPath,
+          payload: value,
+          ref: `event:${eventMatch[1]}:${occurrenceStartsAt}`,
+        }),
+      };
+    } catch (error) {
+      return canonicalError(
+        "semantic_not_found",
+        error instanceof Error ? error.message : "Event not found.",
       );
     }
   }
