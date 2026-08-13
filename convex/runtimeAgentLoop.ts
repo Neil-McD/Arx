@@ -124,6 +124,10 @@ import {
   classifyRuntimeToolSchedule,
   type RuntimeToolSchedulePlan,
 } from "../shared/runtimeToolPolicy";
+import {
+  compactProviderTranscriptForContextRetry,
+  estimateNativeToolTranscriptTokens,
+} from "../shared/providerContextWindow";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -1479,6 +1483,37 @@ async function executeRetrievalAgentLoop(
     const loopResult = await runNativeRuntimeKernel<string>({
       messages: nativeTranscript,
       budget: params.loopBudget,
+      prepareProviderTranscript: ({ transcript, forceCompaction }) => {
+        if (forceCompaction) {
+          return compactProviderTranscriptForContextRetry(transcript);
+        }
+        const estimatedTokens = estimateNativeToolTranscriptTokens(transcript);
+        return {
+          messages: transcript,
+          compactedToolResults: 0,
+          originalEstimatedTokens: estimatedTokens,
+          projectedEstimatedTokens: estimatedTokens,
+        };
+      },
+      onProviderContextCompacted: async (projection) => {
+        try {
+          await params.appendRunEvent({
+            eventType: "provider_context_compacted",
+            eventKey: `${params.runId}:provider_context_compacted:1`,
+            payload: {
+              run_id: params.runId,
+              trigger: projection.trigger,
+              compacted_tool_result_count: projection.compactedToolResults,
+              original_estimated_tokens: projection.originalEstimatedTokens,
+              projected_estimated_tokens: projection.projectedEstimatedTokens,
+              durable_transcript_preserved: true,
+              retry_limit: 1,
+            },
+          });
+        } catch {
+          // Best-effort context receipt only; recovery must not fail on telemetry.
+        }
+      },
       runCompletion: async (messages) => {
         let completion:
           | NativeToolAwareCompletionSuccess<string>

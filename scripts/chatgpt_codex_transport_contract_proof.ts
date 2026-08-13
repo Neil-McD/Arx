@@ -6,6 +6,12 @@ import {
   buildChatgptCodexRequestPayload,
   classifyChatgptCodexHttpFailure,
 } from "../convex/chatgptResponsesTransport.ts";
+import { normalizeMessagesForResponsesApi } from "../convex/openAiNativeToolCompletion.ts";
+import {
+  CONTEXT_WINDOW_EXCEEDED_CODE,
+  CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+  isProviderContextWindowExceeded,
+} from "../shared/providerContextWindow.ts";
 
 function readRepoFile(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -186,7 +192,67 @@ function proveCodexPayloadPreservesReasoningAndMetadata() {
   console.log("PASS: Codex payload preserves metadata, tool choice, streaming, and encrypted reasoning");
 }
 
+function proveTransportsDoNotInventContextLimits() {
+  const longContent = "x".repeat(250_001);
+  const openAiInput = normalizeMessagesForResponsesApi([
+    { role: "user", content: longContent },
+  ]);
+  assert.equal(openAiInput.inputItems.length, 1);
+
+  const manyMessages = Array.from({ length: 81 }, (_, index) => ({
+    role: index % 2 === 0 ? ("user" as const) : ("assistant" as const),
+    content: index === 80 ? longContent : `message-${index}`,
+  }));
+  const chatgptPayload = buildChatgptCodexRequestPayload({
+    modelId: "gpt-5.5",
+    maxTokens: 1200,
+    messages: manyMessages,
+  });
+  assert.equal(Array.isArray(chatgptPayload.input), true);
+  assert.equal((chatgptPayload.input as unknown[]).length, 81);
+
+  console.log("PASS: transports serialize valid input without invented character or message limits");
+}
+
 function proveFailureClassificationAvoidsBlind404s() {
+  assert.equal(
+    isProviderContextWindowExceeded({
+      status: 400,
+      code: "context_length_exceeded",
+      message: "maximum context length exceeded",
+    }),
+    true,
+  );
+  assert.equal(
+    isProviderContextWindowExceeded({
+      status: 400,
+      message: "This model's maximum context length is 128000 tokens.",
+    }),
+    true,
+  );
+  assert.equal(
+    isProviderContextWindowExceeded({
+      status: 400,
+      message: '{"error":{"code":"context_length_exceeded"}}',
+    }),
+    true,
+  );
+  assert.equal(
+    isProviderContextWindowExceeded({
+      status: 429,
+      message: "Too many requests.",
+    }),
+    false,
+  );
+
+  const contextOverflow = classifyChatgptCodexHttpFailure({
+    status: 400,
+    bodyPreview: '{"error":{"code":"context_length_exceeded","message":"maximum context length exceeded"}}',
+  });
+  assert.equal(contextOverflow.code, CONTEXT_WINDOW_EXCEEDED_CODE);
+  assert.equal(contextOverflow.message, CONTEXT_WINDOW_EXCEEDED_MESSAGE);
+  assert.equal(contextOverflow.retryWithFreshAuth, false);
+
   const usageLimit = classifyChatgptCodexHttpFailure({
     status: 404,
     bodyPreview: '{"error":{"code":"usage_limit_reached","message":"usage limit reached"}}',
@@ -218,6 +284,19 @@ function proveRuntimeCallersPassRealRequestMetadata() {
   const httpChatgpt = readRepoFile("convex/httpChatgpt.ts");
   const runtimeTurnHandlers = readRepoFile("convex/runtimeTurnHandlers.ts");
   const runtimeAgentLoop = readRepoFile("convex/runtimeAgentLoop.ts");
+  const openAiTransport = readRepoFile("convex/openAiNativeToolCompletion.ts");
+  const openRouterTransport = readRepoFile("convex/openRouterNativeTransport.ts");
+
+  assert.match(
+    openAiTransport,
+    /isProviderContextWindowExceeded/,
+    "expected direct OpenAI failures to use canonical context-window classification",
+  );
+  assert.match(
+    openRouterTransport,
+    /isProviderContextWindowExceeded/,
+    "expected OpenRouter failures to use canonical context-window classification",
+  );
 
   const wrapperMetadataOccurrences = httpChatgpt.match(/requestMetadata\?: ChatgptCodexRequestMetadata \| null;/g) ?? [];
   assert.equal(
@@ -265,5 +344,6 @@ function proveRuntimeCallersPassRealRequestMetadata() {
 proveCodexHeadersUseChatgptAuthEnvelope();
 proveFallbackIdsAreStableAndHeaderSafe();
 proveCodexPayloadPreservesReasoningAndMetadata();
+proveTransportsDoNotInventContextLimits();
 proveFailureClassificationAvoidsBlind404s();
 proveRuntimeCallersPassRealRequestMetadata();

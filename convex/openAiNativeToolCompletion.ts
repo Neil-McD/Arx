@@ -10,6 +10,11 @@ import {
   NativeProviderToolCallParseError,
   parseNativeProviderFunctionCallItem,
 } from "../shared/nativeToolProviderParsers";
+import {
+  CONTEXT_WINDOW_EXCEEDED_CODE,
+  CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+  isProviderContextWindowExceeded,
+} from "../shared/providerContextWindow";
 
 type OpenAiResponsesFunctionTool = {
   type: "function";
@@ -41,21 +46,12 @@ function readEnv(name: string): string {
   return "";
 }
 
-function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
+export function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
   instructions: string | null;
   inputItems: unknown[];
 } {
-  const MAX_REQUEST_CONTENT_CHARS = 250_000;
   const instructionsParts: string[] = [];
   const inputItems: unknown[] = [];
-  let totalChars = 0;
-
-  const addToBudget = (value: string) => {
-    totalChars += value.length;
-    if (totalChars > MAX_REQUEST_CONTENT_CHARS) {
-      throw new Error("messages_exceed_size_budget");
-    }
-  };
 
   const mapUserContentParts = (parts: NativeToolInputContentPart[]): unknown[] => {
     const mapped: unknown[] = [];
@@ -64,7 +60,6 @@ function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
       if (part.type === "text") {
         const text = String(part.text ?? "").trim();
         if (!text) continue;
-        addToBudget(text);
         mapped.push({
           type: "input_text",
           text,
@@ -74,7 +69,6 @@ function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
       if (part.type === "image") {
         const imageUrl = String(part.imageUrl ?? "").trim();
         if (!imageUrl) continue;
-        addToBudget(imageUrl);
         mapped.push({
           type: "input_image",
           image_url: imageUrl,
@@ -90,7 +84,6 @@ function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
     if (role === "system") {
       const content = String(message.content ?? "").trim();
       if (!content) continue;
-      addToBudget(content);
       instructionsParts.push(content);
       continue;
     }
@@ -102,7 +95,6 @@ function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
         : (() => {
             const text = String(rawContent ?? "").trim();
             if (!text) return [];
-            addToBudget(text);
             return [{ type: "input_text", text }];
           })();
       if (contentParts.length === 0) continue;
@@ -118,7 +110,6 @@ function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
       const assistantMessage = message as Extract<NativeToolAwareMessage, { role: "assistant" }>;
       const content = String(assistantMessage.content ?? "").trim();
       if (content) {
-        addToBudget(content);
         inputItems.push({
           type: "message",
           role: "assistant",
@@ -133,7 +124,6 @@ function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
           if (!callId || !toolName || !toolArguments) {
             throw new Error("assistant_tool_call_incomplete");
           }
-          addToBudget(toolArguments);
           inputItems.push({
             type: "function_call",
             call_id: callId,
@@ -150,7 +140,6 @@ function normalizeMessagesForResponsesApi(messages: NativeToolAwareMessage[]): {
       const callId = String(toolMessage.tool_call_id ?? "").trim();
       const content = String(toolMessage.content ?? "").trim();
       if (!callId || !content) throw new Error("tool_result_incomplete");
-      addToBudget(content);
       inputItems.push({
         type: "function_call_output",
         call_id: callId,
@@ -320,7 +309,15 @@ export async function runOpenAiNativeToolCompletion(params: {
       `OpenAI error (${response.status})`;
     const messageLower = message.toLowerCase();
     let code = "provider_inference_error";
-    if (response.status === 429) {
+    if (
+      isProviderContextWindowExceeded({
+        status: response.status,
+        code: parsed?.error?.code,
+        message,
+      })
+    ) {
+      code = CONTEXT_WINDOW_EXCEEDED_CODE;
+    } else if (response.status === 429) {
       code = "rate_limited";
     } else if (
       response.status === 402 ||
@@ -336,7 +333,10 @@ export async function runOpenAiNativeToolCompletion(params: {
       ok: false,
       status: response.status,
       code,
-      message,
+      message:
+        code === CONTEXT_WINDOW_EXCEEDED_CODE
+          ? CONTEXT_WINDOW_EXCEEDED_MESSAGE
+          : message,
     };
   }
 

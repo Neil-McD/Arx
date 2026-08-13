@@ -18,6 +18,10 @@ import type {
   RuntimeKernelToolExecutionResult,
   RuntimeKernelToolResultEnvelope,
 } from "./runtimeKernelTypes.ts";
+import {
+  CONTEXT_WINDOW_EXCEEDED_CODE,
+  type ProviderContextProjection,
+} from "./providerContextWindow.ts";
 
 function summarizeLongText(value: string, limit = 512): string {
   if (value.length <= limit) return value;
@@ -353,6 +357,15 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
   messages: NativeToolAwareMessage[];
   budget: RuntimeKernelBudget;
   runCompletion: RuntimeKernelRunCompletion<TToolName>;
+  prepareProviderTranscript?: (params: {
+    transcript: NativeToolAwareMessage[];
+    forceCompaction: boolean;
+  }) => ProviderContextProjection;
+  onProviderContextCompacted?: (
+    projection: Omit<ProviderContextProjection, "messages"> & {
+      trigger: "proactive" | "provider_overflow";
+    },
+  ) => Promise<void> | void;
   normalizeToolArguments: (
     toolName: TToolName,
     rawArgs: Record<string, unknown>,
@@ -398,6 +411,8 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
   let repeatedCallCount = 0;
   let consecutiveFailureCount = 0;
   let consecutiveNoProgressCount = 0;
+  let providerContextCompactionActive = false;
+  let providerContextCompactionNotified = false;
 
   type RuntimeKernelTerminalSignal = {
     status: number;
@@ -422,7 +437,61 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
   });
 
   while (true) {
-    const completion = await params.runCompletion(transcript);
+    const prepareProviderTranscript = (
+      forceCompaction: boolean,
+    ): ProviderContextProjection =>
+      params.prepareProviderTranscript?.({
+        transcript: [...transcript],
+        forceCompaction,
+      }) ?? {
+        messages: transcript,
+        compactedToolResults: 0,
+        originalEstimatedTokens: 0,
+        projectedEstimatedTokens: 0,
+      };
+    const notifyProviderContextCompacted = async (
+      projection: ProviderContextProjection,
+      trigger: "proactive" | "provider_overflow",
+    ): Promise<void> => {
+      if (providerContextCompactionNotified) return;
+      providerContextCompactionNotified = true;
+      await params.onProviderContextCompacted?.({
+        compactedToolResults: projection.compactedToolResults,
+        originalEstimatedTokens: projection.originalEstimatedTokens,
+        projectedEstimatedTokens: projection.projectedEstimatedTokens,
+        trigger,
+      });
+    };
+
+    let providerProjection = prepareProviderTranscript(
+      providerContextCompactionActive,
+    );
+    if (providerProjection.compactedToolResults > 0) {
+      providerContextCompactionActive = true;
+      await notifyProviderContextCompacted(providerProjection, "proactive");
+    }
+    let completion = await params.runCompletion(providerProjection.messages);
+    if (
+      completion.ok === false &&
+      completion.code === CONTEXT_WINDOW_EXCEEDED_CODE &&
+      !providerContextCompactionActive &&
+      params.prepareProviderTranscript
+    ) {
+      const recoveryProjection = prepareProviderTranscript(true);
+      if (
+        recoveryProjection.compactedToolResults > 0 &&
+        recoveryProjection.projectedEstimatedTokens <
+          recoveryProjection.originalEstimatedTokens
+      ) {
+        providerContextCompactionActive = true;
+        providerProjection = recoveryProjection;
+        await notifyProviderContextCompacted(
+          recoveryProjection,
+          "provider_overflow",
+        );
+        completion = await params.runCompletion(recoveryProjection.messages);
+      }
+    }
     if (completion.ok === false) {
       return toKernelFailure({
         failure: completion,

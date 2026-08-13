@@ -6,6 +6,11 @@ import {
   type NativeToolChoice,
 } from "../shared/nativeToolProtocol";
 import { parseOpenRouterError } from "./httpRuntimeSupport";
+import {
+  CONTEXT_WINDOW_EXCEEDED_CODE,
+  CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+  isProviderContextWindowExceeded,
+} from "../shared/providerContextWindow";
 
 type OpenAiCompatibleFunctionTool = {
   type: "function";
@@ -138,7 +143,16 @@ export async function runOpenRouterNativeToolCompletion(params: {
     const isFreeModel = params.modelRef.toLowerCase().includes(":free");
     let code = parsed.code || "provider_inference_error";
     let message = parsed.message || `OpenRouter error (${response.status})`;
-    if (response.status === 429) {
+    if (
+      isProviderContextWindowExceeded({
+        status: response.status,
+        code: parsed.code,
+        message: parsed.message,
+      })
+    ) {
+      code = CONTEXT_WINDOW_EXCEEDED_CODE;
+      message = CONTEXT_WINDOW_EXCEEDED_MESSAGE;
+    } else if (response.status === 429) {
       code = "rate_limited";
       message = isFreeModel
         ? "Free model is temporarily saturated. Retry in a moment."

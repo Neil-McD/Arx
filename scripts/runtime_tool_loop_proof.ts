@@ -9,6 +9,7 @@ import {
 import { runSerialNativeToolLoop } from "../shared/nativeToolLoop.ts";
 import { runNativeRuntimeKernel } from "../shared/runtimeKernel.ts";
 import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
+import { compactProviderTranscriptForContextRetry } from "../shared/providerContextWindow.ts";
 import { normalizeToolArguments } from "../shared/toolRegistry.ts";
 import type { RetrievalToolName } from "../shared/retrievalTools.ts";
 
@@ -1041,7 +1042,10 @@ async function proveInvalidToolArgumentsRecoverInTurn() {
         >;
         assert.equal(envelope.success, false);
         assert.equal(envelope.error_code, "invalid_tool_arguments");
-        assert.match(String(envelope.error_message), /requires query/);
+        assert.match(
+          String(envelope.error_message),
+          /requires (?:a non-empty )?query/,
+        );
         const rawArguments = JSON.stringify({
           path: "/communities/canonical-community/channels/",
           query: "latest activity",
@@ -1098,6 +1102,118 @@ async function proveInvalidToolArgumentsRecoverInTurn() {
   console.log("PASS: invalid tool arguments recover in-turn proof");
 }
 
+async function proveContextOverflowCompactsAndRetriesOnce() {
+  let providerInvocation = 0;
+  let projectionReceipt: {
+    compactedToolResults: number;
+    originalEstimatedTokens: number;
+    projectedEstimatedTokens: number;
+  } | null = null;
+  const largeToolOutput = "community activity ".repeat(20_000);
+  const result = await runNativeRuntimeKernel<RetrievalToolName>({
+    messages: [
+      { role: "system", content: "Inspect the active community." },
+      { role: "user", content: "What is happening across this community?" },
+    ],
+    budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+    prepareProviderTranscript: ({ transcript, forceCompaction }) =>
+      forceCompaction
+        ? compactProviderTranscriptForContextRetry(transcript)
+        : {
+            messages: transcript,
+            compactedToolResults: 0,
+            originalEstimatedTokens: 0,
+            projectedEstimatedTokens: 0,
+          },
+    onProviderContextCompacted: async (projection) => {
+      projectionReceipt = projection;
+    },
+    runCompletion: async (messages) => {
+      providerInvocation += 1;
+      if (providerInvocation === 1) {
+        return {
+          ok: true,
+          type: "tool_call",
+          providerCallId: "community-inspect-1",
+          toolName: "read",
+          arguments: { path: "community-activity.json" },
+          assistantToolCallMessage: buildAssistantToolCallMessage({
+            content: null,
+            providerCallId: "community-inspect-1",
+            toolName: "read",
+            rawArguments: JSON.stringify({
+              path: "community-activity.json",
+            }),
+          }),
+          promptTokens: 100,
+          completionTokens: 10,
+          resolvedModelId: "mock-model",
+        };
+      }
+      const toolResult = messages.find(
+        (message) =>
+          message.role === "tool" &&
+          message.tool_call_id === "community-inspect-1",
+      );
+      assert.ok(toolResult, "expected community inspection tool result");
+      assert.equal(toolResult?.role, "tool");
+      if (providerInvocation === 2) {
+        assert.ok(
+          toolResult.content.length > 250_000,
+          `first provider attempt must receive the unmodified tool result (${toolResult.content.length} chars)`,
+        );
+        return {
+          ok: false,
+          status: 400,
+          code: "context_window_exceeded",
+          message: "This conversation exceeded the selected model's context window.",
+        };
+      }
+      assert.ok(
+        toolResult.content.length < 25_000,
+        "context retry must receive a compact model-facing tool result",
+      );
+      return {
+        ok: true,
+        type: "assistant",
+        assistantText: "The community is actively discussing its current work.",
+        promptTokens: 4_000,
+        completionTokens: 20,
+        resolvedModelId: "mock-model",
+      };
+    },
+    normalizeToolArguments,
+    executeTool: async () => ({
+      status: "ok",
+      exitCode: 0,
+      outputText: largeToolOutput,
+      errorCode: null,
+      errorMessage: null,
+    }),
+  });
+
+  assert.ok(result.ok, "expected compact-and-retry recovery");
+  assert.equal(providerInvocation, 3, "expected exactly one context retry");
+  assert.ok(projectionReceipt, "expected a context projection receipt");
+  assert.equal(projectionReceipt?.compactedToolResults, 1);
+  assert.ok(
+    (projectionReceipt?.projectedEstimatedTokens ?? Infinity) <
+      (projectionReceipt?.originalEstimatedTokens ?? 0),
+  );
+  const durableToolResult = result.transcript.find(
+    (message) =>
+      message.role === "tool" &&
+      message.tool_call_id === "community-inspect-1",
+  );
+  assert.equal(durableToolResult?.role, "tool");
+  assert.ok(
+    durableToolResult.content.length > 250_000,
+    "provider projection must not mutate the durable runtime transcript",
+  );
+
+  console.log("PASS: context overflow compacts provider projection and retries once");
+}
+
 await proveSerialToolBatchLoop();
 await proveParallelReadBatchLoop();
 await proveParallelBatchDrainsCancelledSiblingResults();
@@ -1108,3 +1224,4 @@ await proveToolBudgetExhaustion();
 await proveBatchBudgetExhaustionIsAtomic();
 await proveNoProgressBudget();
 await proveInvalidToolArgumentsRecoverInTurn();
+await proveContextOverflowCompactsAndRetriesOnce();

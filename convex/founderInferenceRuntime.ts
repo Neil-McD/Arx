@@ -24,6 +24,7 @@ export function providerFailureIsKnownPreSpend(code: unknown): boolean {
     "provider_inference_misconfigured",
     "provider_inference_quota_exceeded",
     "rate_limited",
+    "context_window_exceeded",
   ]).has(String(code ?? "").trim());
 }
 

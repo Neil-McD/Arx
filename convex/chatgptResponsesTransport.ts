@@ -5,6 +5,11 @@ import type {
   NativeToolInputContentPart,
 } from "../shared/nativeToolProtocol";
 import { parseNativeProviderFunctionCallItem } from "../shared/nativeToolProviderParsers";
+import {
+  CONTEXT_WINDOW_EXCEEDED_CODE,
+  CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+  isProviderContextWindowExceeded,
+} from "../shared/providerContextWindow";
 
 const CHATGPT_CODEX_RESPONSES_URL = "https://chatgpt.com/backend-api/codex/responses";
 const CHATGPT_CODEX_ORIGINATOR = "codex_cli_rs";
@@ -217,6 +222,25 @@ export function classifyChatgptCodexHttpFailure(params: {
     };
   }
 
+  if (
+    isProviderContextWindowExceeded({
+      status,
+      message: params.bodyPreview,
+    })
+  ) {
+    return {
+      ok: false,
+      status,
+      code: CONTEXT_WINDOW_EXCEEDED_CODE,
+      message: CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+      contentType: params.contentType ?? null,
+      bodyPreview: params.bodyPreview ?? null,
+      upstreamRequestId: params.upstreamRequestId ?? null,
+      cfRay: params.cfRay ?? null,
+      retryWithFreshAuth: false,
+    };
+  }
+
   if (looksLikeUsageLimitFailure(status, params.bodyPreview ?? null)) {
     return {
       ok: false,
@@ -370,23 +394,13 @@ function normalizeChatgptResponsesRequest(params: {
   modelId: string;
   messages: Array<RuntimeChatgptMessage | ChatgptToolAwareMessage>;
 }): { instructions: string | null; inputItems: unknown[] } {
-  const MAX_REQUEST_CONTENT_CHARS = 250_000;
   const modelId = String(params.modelId ?? "").trim();
   if (!modelId) throw new Error("model_id_required");
   if (modelId.length > 128) throw new Error("model_id_too_long");
   if (!Array.isArray(params.messages) || params.messages.length === 0) throw new Error("messages_required");
-  if (params.messages.length > 80) throw new Error("messages_exceed_max_count");
 
   const instructionsParts: string[] = [];
   const inputItems: unknown[] = [];
-  let totalChars = 0;
-
-  const addToBudget = (value: string) => {
-    totalChars += value.length;
-    if (totalChars > MAX_REQUEST_CONTENT_CHARS) {
-      throw new Error("messages_exceed_size_budget");
-    }
-  };
 
   const mapUserContentParts = (parts: NativeToolInputContentPart[]): unknown[] => {
     const mapped: unknown[] = [];
@@ -395,7 +409,6 @@ function normalizeChatgptResponsesRequest(params: {
       if (part.type === "text") {
         const text = String(part.text ?? "").trim();
         if (!text) continue;
-        addToBudget(text);
         mapped.push({
           type: "input_text",
           text,
@@ -405,7 +418,6 @@ function normalizeChatgptResponsesRequest(params: {
       if (part.type === "image") {
         const imageUrl = String(part.imageUrl ?? "").trim();
         if (!imageUrl) continue;
-        addToBudget(imageUrl);
         mapped.push({
           type: "input_image",
           image_url: imageUrl,
@@ -421,7 +433,6 @@ function normalizeChatgptResponsesRequest(params: {
     if (role === "system") {
       const content = String((message as RuntimeChatgptMessage).content ?? "").trim();
       if (!content) continue;
-      addToBudget(content);
       instructionsParts.push(content);
       continue;
     }
@@ -432,7 +443,6 @@ function normalizeChatgptResponsesRequest(params: {
         : (() => {
             const text = String(rawContent ?? "").trim();
             if (!text) return [];
-            addToBudget(text);
             return [{ type: "input_text", text }];
           })();
       if (contentParts.length === 0) continue;
@@ -451,13 +461,11 @@ function normalizeChatgptResponsesRequest(params: {
       if (Array.isArray(assistantMessage.reasoningItems)) {
         for (const reasoningItem of assistantMessage.reasoningItems) {
           if (!reasoningItem || typeof reasoningItem !== "object") continue;
-          addToBudget(JSON.stringify(reasoningItem));
           inputItems.push(reasoningItem);
         }
       }
       const content = String(assistantMessage.content ?? "").trim();
       if (content) {
-        addToBudget(content);
         inputItems.push({
           type: "message",
           role: "assistant",
@@ -472,7 +480,6 @@ function normalizeChatgptResponsesRequest(params: {
           if (!callId || !toolName || !toolArguments) {
             throw new Error("assistant_tool_call_incomplete");
           }
-          addToBudget(toolArguments);
           inputItems.push({
             type: "function_call",
             call_id: callId,
@@ -488,7 +495,6 @@ function normalizeChatgptResponsesRequest(params: {
       const callId = String(toolMessage.tool_call_id ?? "").trim();
       const content = String(toolMessage.content ?? "").trim();
       if (!callId || !content) throw new Error("tool_result_incomplete");
-      addToBudget(content);
       inputItems.push({
         type: "function_call_output",
         call_id: callId,
