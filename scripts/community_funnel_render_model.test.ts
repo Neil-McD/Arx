@@ -39,6 +39,28 @@ describe("buildCommunityFunnelRenderModel", () => {
     ).toMatchObject({ mode: "default", headline: "Operators", subheadline: null });
   });
 
+  it("projects an optional profile video into the deterministic default funnel", () => {
+    expect(
+      buildCommunityFunnelRenderModel({
+        communityName: "Operators",
+        oneLiner: "The operating room for builders.",
+        about: "Work through real problems together.",
+        funnel: {
+          active_slot: "default",
+          hero_media_kind: "video",
+          hero_media_url: " https://youtube.com/watch?v=default-vsl ",
+        },
+      }),
+    ).toEqual({
+      mode: "default",
+      headline: "The operating room for builders.",
+      subheadline: null,
+      pillars: [],
+      longFormMarkdown: "Work through real problems together.",
+      vslUrl: "https://youtube.com/watch?v=default-vsl",
+    });
+  });
+
   it("projects only the explicitly published custom snapshot", () => {
     expect(
       buildCommunityFunnelRenderModel({

@@ -44,28 +44,41 @@ assert.equal(
 
 const identity = renderer.indexOf('className="community-funnel-identity');
 const hero = renderer.indexOf('className="community-funnel-hero');
-const defaultPrimaryAction = renderer.indexOf('props.renderModel.mode === "default"');
+const vsl = renderer.indexOf("{media ? (");
+const defaultPrimaryAction = renderer.indexOf('props.renderModel.mode === "default"', vsl);
 const defaultMemberProof = renderer.indexOf("{memberProof}", defaultPrimaryAction);
-const customVsl = renderer.indexOf('props.renderModel.mode === "custom" && media');
-const customPrimaryAction = renderer.indexOf('props.renderModel.mode === "custom"', customVsl + 1);
+const defaultPrimaryCta = renderer.indexOf(
+  '<FunnelAction action={props.action} position="primary" />',
+  defaultMemberProof,
+);
+const customPrimaryAction = renderer.indexOf('props.renderModel.mode === "custom"', defaultPrimaryCta);
 const customMemberProof = renderer.indexOf("{memberProof}", customPrimaryAction);
 const pillars = renderer.indexOf('className="community-funnel-pillars');
 const longForm = renderer.indexOf('className="community-funnel-long-form');
-const defaultVsl = renderer.indexOf('props.renderModel.mode === "default" && media');
 const conversion = renderer.indexOf('className="community-funnel-conversion');
+const finalCta = renderer.indexOf(
+  '<FunnelAction action={props.action} position="final" />',
+  conversion,
+);
 assert.ok(
   identity >= 0 &&
     identity < hero &&
-    hero < defaultPrimaryAction &&
+    hero < vsl &&
+    vsl < defaultPrimaryAction &&
     defaultPrimaryAction < defaultMemberProof &&
-    defaultMemberProof < customVsl &&
-    customVsl < customPrimaryAction &&
+    defaultMemberProof < defaultPrimaryCta &&
+    defaultPrimaryCta < customPrimaryAction &&
     customPrimaryAction < customMemberProof &&
     customMemberProof < pillars &&
     pillars < longForm &&
-    longForm < defaultVsl &&
-    defaultVsl < conversion,
-  "the canonical renderer must keep default conversion above optional media while preserving the custom VSL conversion order",
+    longForm < conversion &&
+    conversion < finalCta,
+  "the canonical renderer must keep identity, hero, optional VSL, member proof, primary CTA, long-form copy, and final CTA in conversion order",
+);
+assert.match(
+  renderer,
+  /props\.renderModel\.mode === "custom" \|\|[\s\S]*props\.renderModel\.mode === "default" && props\.renderModel\.longFormMarkdown[\s\S]*className="community-funnel-conversion"/,
+  "default funnels with About copy must close with a second join action",
 );
 assert.doesNotMatch(
   renderer.slice(conversion),

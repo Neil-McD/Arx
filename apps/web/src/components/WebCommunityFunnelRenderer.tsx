@@ -122,16 +122,16 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           </div>
         ) : null}
 
-        {props.renderModel.mode === "default" ? (
-          <>
-            <FunnelAction action={props.action} position="primary" />
-            <ActionStatusCards action={props.action} />
-            {memberProof}
-          </>
+        {media ? (
+          <section className="community-funnel-vsl community-funnel-reveal">{media}</section>
         ) : null}
 
-        {props.renderModel.mode === "custom" && media ? (
-          <section className="community-funnel-vsl community-funnel-reveal">{media}</section>
+        {props.renderModel.mode === "default" ? (
+          <>
+            {memberProof}
+            <FunnelAction action={props.action} position="primary" />
+            <ActionStatusCards action={props.action} />
+          </>
         ) : null}
 
         {props.renderModel.mode === "custom" ? (
@@ -159,14 +159,11 @@ export function WebCommunityFunnelRenderer(props: WebCommunityFunnelRendererProp
           </section>
         ) : null}
 
-        {props.renderModel.mode === "default" && media ? (
-          <section className="community-funnel-vsl community-funnel-reveal">{media}</section>
-        ) : null}
-
-        {props.renderModel.mode === "custom" ? (
+        {props.renderModel.mode === "custom" ||
+        (props.renderModel.mode === "default" && props.renderModel.longFormMarkdown) ? (
           <section className="community-funnel-conversion">
             <FunnelAction action={props.action} position="final" />
-            <ActionStatusCards action={props.action} />
+            {props.renderModel.mode === "custom" ? <ActionStatusCards action={props.action} /> : null}
           </section>
         ) : null}
       </div>
