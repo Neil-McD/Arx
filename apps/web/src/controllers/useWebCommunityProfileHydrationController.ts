@@ -40,7 +40,6 @@ type UseWebCommunityProfileHydrationControllerParams = {
     session: AuthSession,
     options?: { force?: boolean },
   ) => Promise<void>;
-  loadSelfProfile: (session: AuthSession) => Promise<unknown> | unknown;
 };
 
 export function useWebCommunityProfileHydrationController(
@@ -73,9 +72,7 @@ export function useWebCommunityProfileHydrationController(
         if (actorId) ids.add(actorId);
       }
     }
-    if (params.canonicalSessionUserId) {
-      ids.add(params.canonicalSessionUserId);
-    }
+    if (params.canonicalSessionUserId) ids.delete(params.canonicalSessionUserId);
     return Array.from(ids);
   }, [
     params.activePage,
@@ -159,9 +156,7 @@ export function useWebCommunityProfileHydrationController(
     const currentSession = sessionRef.current;
     if (!currentSession) return;
     void params.loadUserProfiles(visibleProfileIds, currentSession);
-    void params.loadSelfProfile(currentSession);
   }, [
-    params.loadSelfProfile,
     params.loadUserProfiles,
     params.canonicalSessionUserId,
     visibleProfileIds,
@@ -173,7 +168,6 @@ export function useWebCommunityProfileHydrationController(
     void params.loadUserProfiles(visibleProfileIds, currentSession, {
       force: true,
     });
-    void params.loadSelfProfile(currentSession);
   });
 
   return { profilesByUserId, displayName };

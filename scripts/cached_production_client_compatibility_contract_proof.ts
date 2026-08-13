@@ -26,8 +26,8 @@ assert.equal(
   "dbec82f5869384a087ab5ea96d0b25c53f8da284",
 );
 assert.equal(contract.staging_deployment, "quick-porcupine-949");
-assert.equal(contract.required_public_operations.length, 246);
-assert.equal(contract.candidate_already_supported_operations.length, 113);
+assert.equal(contract.required_public_operations.length, 245);
+assert.equal(contract.candidate_already_supported_operations.length, 112);
 assert.equal(Object.keys(contract.compatibility_aliases).length, 116);
 assert.equal(contract.retired_tombstone_operations.length, 17);
 
@@ -59,7 +59,7 @@ const alreadySupported = new Set(
 const aliases = new Set(Object.keys(contract.compatibility_aliases));
 const retired = new Set(contract.retired_tombstone_operations);
 assert.equal(required.size, contract.required_public_operations.length);
-assert.equal(alreadySupported.size, 113);
+assert.equal(alreadySupported.size, 112);
 assert.equal(aliases.size, 116);
 assert.equal(retired.size, 17);
 
@@ -143,5 +143,5 @@ assert.match(
 );
 
 console.log(
-  "PASS: cached production client contract is complete: 113 canonical calls + 116 compatibility aliases + 17 inert retirement tombstones",
+  "PASS: cached production client contract is complete: 112 canonical calls + 116 compatibility aliases + 17 inert retirement tombstones",
 );

@@ -1253,7 +1253,6 @@ export default function App() {
       communityInteractionRoots,
       communityInteractionRepliesByRootId,
       loadUserProfiles,
-      loadSelfProfile,
     });
 
   useWebDiscoverPreloadLifecycle({

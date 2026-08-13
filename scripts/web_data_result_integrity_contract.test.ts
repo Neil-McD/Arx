@@ -163,10 +163,24 @@ describe("web data result integrity contract", () => {
     expect(beginProfileHydrationRequest(registry, ["user-a"])).not.toBeNull();
   });
 
+  it("does not reissue a completed profile hydration during render churn", () => {
+    const registry = createProfileHydrationRequestRegistry();
+    const first = beginProfileHydrationRequest(registry, ["user-a"]);
+    expect(first).not.toBeNull();
+    finishProfileHydrationRequest(registry, first!, { successful: true });
+
+    for (let rerender = 0; rerender < 25; rerender += 1) {
+      expect(beginProfileHydrationRequest(registry, ["user-a"])).toBeNull();
+    }
+  });
+
   it("wires scope guards and keeps image loading outside data commits", () => {
     const directory = read("shared/useCommunityDirectoryController.ts");
     const access = read("shared/useWebCommunityAccessController.ts");
     const admin = read("shared/useCommunityAdminController.ts");
+    const communityProfiles = read(
+      "apps/web/src/controllers/useWebCommunityProfileHydrationController.ts",
+    );
 
     expect(directory).toContain("listCloudCommunityDirectoryWindow");
     expect(directory).toContain("communityDirectoryMembersRef.current.length");
@@ -177,7 +191,25 @@ describe("web data result integrity contract", () => {
     expect(access).toContain("loadingResetKey");
     expect(admin).toContain("selfProfileLoadSeqRef.current !== seq");
     expect(admin).toContain("resolveCanonicalProfileUserId(argsRef.current.session) !== profileUserId");
+    expect(communityProfiles).toContain(
+      "ids.delete(params.canonicalSessionUserId)",
+    );
+    expect(communityProfiles).not.toContain("loadSelfProfile");
     expect(access).not.toContain("preloadImageUrls");
     expect(admin).not.toContain("preloadImageUrls");
+  });
+
+  it("retires the cached provider-connections read that amplified the incident", () => {
+    const providerConnections = read("convex/providerConnections.ts");
+    const compatibility = read(
+      "shared/contracts/cached_production_client_compatibility_v1.json",
+    );
+
+    expect(providerConnections).not.toContain(
+      "export const getCurrentUserProviderConnections",
+    );
+    expect(compatibility).not.toContain(
+      "providerConnections:getCurrentUserProviderConnections",
+    );
   });
 });

@@ -1,7 +1,6 @@
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import { action, internalMutation, internalQuery } from "./_generated/server";
 import { api, internal } from "./_generated/api";
 import { v } from "convex/values";
-import { resolveUserIdForAuthenticatedRequest } from "./authActor";
 
 export type ProviderConnectionProvider = "openrouter" | "openai" | "chatgpt";
 export type ProviderConnectionAuthKind = "api_key" | "oauth_tokens";
@@ -679,28 +678,6 @@ async function pollChatgptDeviceCode(params: {
     codeChallenge,
   };
 }
-
-export const getCurrentUserProviderConnections = query({
-  args: {
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    const [openrouter, openai, chatgpt] = await Promise.all([
-      getProviderConnectionRow(ctx, userId, "openrouter"),
-      getProviderConnectionRow(ctx, userId, "openai"),
-      getProviderConnectionRow(ctx, userId, "chatgpt"),
-    ]);
-    return {
-      openrouter: toPublicOpenRouterConnection(openrouter),
-      openai: toPublicOpenAiConnection(openai),
-      chatgpt: toPublicChatgptConnection(chatgpt),
-    };
-  },
-});
 
 export const getOpenRouterConnectionForUserInternal = internalQuery({
   args: {
