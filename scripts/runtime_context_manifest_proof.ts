@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   buildRuntimeContextManifest,
 } from "../shared/runtimeContextManifest.ts";
+import { buildPlatformHarnessRuntimePromptBundle } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 import { buildRuntimeTurnEnvelope } from "../shared/runtimeTurnEnvelope.ts";
 
@@ -71,6 +72,27 @@ const contextPacket = buildRuntimeTurnContextPacket({
   ],
 });
 
+const fullPromptBundle = buildPlatformHarnessRuntimePromptBundle({
+  loopBudget: { maxToolSteps: 8, maxRepeatedIdenticalCalls: 2, maxConsecutiveFailures: 3, maxNoProgressSteps: 3 },
+  allowedToolNames: envelope.authority.allowedToolNames,
+  harnessName: "chat_tools",
+  communityId: "community_1",
+  communityName: "Launch Community",
+  communitySlug: "launch-community",
+  communityAbout: "A founder launch community.",
+  communitySystemPrompt: "Use the community launch style.",
+  communityResourceLane: envelope.authority.communityResourceLane,
+  agentSoul: "Be direct.",
+  projectLabel: "Launch workspace",
+  runtimeTurnContext: contextPacket,
+  currentDateTimeIso: "2026-06-17T12:00:00.000Z",
+  promptExtensions: [
+    { id: "platform_skill_overlay", layer: "scoped", slot: "instruction", owner: "platform", authority: "platform_policy", source: "fixture", reason: "selected platform skill instructions", text: "\nPLATFORM_SKILL_FIXTURE" },
+    { id: "personal_skill_overlay", layer: "scoped", slot: "instruction", owner: "user", authority: "user_preference", source: "fixture", reason: "selected personal skill instructions", text: "\nPERSONAL_SKILL_FIXTURE" },
+    { id: "community_skill_overlay", layer: "scoped", slot: "instruction", owner: "community", authority: "community_policy", source: "fixture", reason: "selected community skill instructions", text: "\nCOMMUNITY_SKILL_FIXTURE" },
+  ],
+});
+
 const fullManifest = buildRuntimeContextManifest({
   generatedAt: "2026-06-17T12:00:00.000Z",
   userId: "user_1",
@@ -105,34 +127,13 @@ const fullManifest = buildRuntimeContextManifest({
     can_read_live_resources: true,
     can_use_resource_builder: true,
   },
-  communitySystemPrompt: "Use the community launch style.",
   communityAbout: "A founder launch community.",
-  agentSoul: "Be direct.",
+  promptSections: fullPromptBundle.sections,
   runtimeTurnEnvelope: envelope,
   runtimeTurnContext: contextPacket,
-  selectedPlatformSkills: [
-    {
-      name: "Resources Architect",
-      mention_token: "resources-architect",
-    },
-  ],
-  selectedPersonalSkills: [
-    {
-      name: "My QA Checklist",
-      mention_token: "qa",
-      skill_revision_id: "rev_personal_1",
-    },
-  ],
-  selectedCommunitySkills: [
-    {
-      name: "Launch Voice",
-      mention_token: "launch",
-      skill_revision_id: "rev_community_1",
-    },
-  ],
 });
 
-assert.equal(fullManifest.version, 1);
+assert.equal(fullManifest.version, 2);
 assert.equal(fullManifest.scope.communityId, "community_1");
 assert.equal(fullManifest.scope.communityContextVersion, 3);
 assert.equal(fullManifest.scope.resourceLane, "builder");
@@ -142,10 +143,14 @@ assert.equal(fullManifest.request.conversationMessageCount, 2);
 assert.ok(ids(fullManifest.prompts).includes("platform_doctrine"));
 assert.ok(ids(fullManifest.prompts).includes("community_lens"));
 assert.ok(ids(fullManifest.prompts).includes("community_system_prompt"));
-assert.ok(ids(fullManifest.prompts).includes("community_resource_lane:builder"));
-assert.ok(ids(fullManifest.prompts).includes("platform_skill:resources-architect"));
-assert.ok(ids(fullManifest.prompts).includes("personal_skill:qa"));
-assert.ok(ids(fullManifest.prompts).includes("community_skill:launch"));
+assert.ok(ids(fullManifest.prompts).includes("community_resource_lane"));
+assert.ok(ids(fullManifest.prompts).includes("platform_skill_overlay"));
+assert.ok(ids(fullManifest.prompts).includes("personal_skill_overlay"));
+assert.ok(ids(fullManifest.prompts).includes("community_skill_overlay"));
+assert.deepEqual(
+  ids(fullManifest.prompts),
+  ids(fullPromptBundle.sections.filter((section) => section.rendered)),
+);
 
 assert.ok(ids(fullManifest.resources).includes("product_docs"));
 assert.ok(ids(fullManifest.resources).includes("active_community_context"));
@@ -190,6 +195,7 @@ const noCommunityManifest = buildRuntimeContextManifest({
   projectId: null,
   latestUserText: "What is Polynet?",
   allowedToolNames: ["search_product_docs", "get_product_doc", "web_research"],
+  promptSections: [],
 });
 
 assert.ok(!ids(noCommunityManifest.prompts).includes("community_lens"));
@@ -204,14 +210,15 @@ const selectedSkillOnlyManifest = buildRuntimeContextManifest({
   threadId: "thread_3",
   latestUserText: "Use $qa.",
   allowedToolNames: [],
-  selectedPersonalSkills: [
+  promptSections: [
     {
-      name: "My QA Checklist",
-      mention_token: "qa",
+      id: "personal_skill_overlay", layer: "scoped", slot: "instruction",
+      owner: "user", authority: "user_preference", rendered: true,
+      chars: 21, source: "fixture", reason: "selected personal skill instructions",
     },
   ],
 });
-assert.ok(ids(selectedSkillOnlyManifest.prompts).includes("personal_skill:qa"));
+assert.ok(ids(selectedSkillOnlyManifest.prompts).includes("personal_skill_overlay"));
 assert.equal(
   selectedSkillOnlyManifest.tools.length,
   0,

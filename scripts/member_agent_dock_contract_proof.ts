@@ -454,6 +454,7 @@ const identityManifest = buildRuntimeContextManifest({
   memberAgentSurfaceContext: discoverSurface,
   memberIdentityContextMd: identityContext,
   memberIdentityContextStatus: "loaded",
+  promptSections: dockPromptBundle.sections,
 });
 assert.deepEqual(
   identityManifest.resources.find((resource) => resource.id === "member_identity_context"),
@@ -482,6 +483,7 @@ assert.deepEqual(
 const emptyIdentityManifest = buildRuntimeContextManifest({
   invocationSurface: "member_agent_dock",
   memberIdentityContextStatus: "empty",
+  promptSections: [],
 });
 assert.equal(
   emptyIdentityManifest.runtimeState.find((state) => state.id === "member_identity_context")?.status,
@@ -491,6 +493,7 @@ assert.equal(
 const errorIdentityManifest = buildRuntimeContextManifest({
   invocationSurface: "member_agent_dock",
   memberIdentityContextStatus: "error",
+  promptSections: [],
 });
 assert.equal(
   errorIdentityManifest.runtimeState.find((state) => state.id === "member_identity_context")?.status,
@@ -501,6 +504,7 @@ const workspaceIdentityManifest = buildRuntimeContextManifest({
   invocationSurface: "workspace",
   memberIdentityContextMd: identityContext,
   memberIdentityContextStatus: "loaded",
+  promptSections: workspacePromptBundle.sections,
 });
 assert.equal(
   workspaceIdentityManifest.prompts.some((prompt) => prompt.id === "member_identity_context"),
@@ -731,7 +735,7 @@ assert.doesNotMatch(
 );
 assert.match(
   runtimeLoop,
-  /buildRuntimeTurnEnvelope\([\s\S]*memberAgentSurfaceContext: params\.memberAgentSurfaceContext[\s\S]*buildRuntimeContextManifest\([\s\S]*memberAgentSurfaceContext: params\.memberAgentSurfaceContext[\s\S]*buildPlatformHarnessRuntimePromptBundle\([\s\S]*memberAgentSurfaceContext: params\.memberAgentSurfaceContext/,
+  /buildRuntimeTurnEnvelope\([\s\S]*memberAgentSurfaceContext: params\.memberAgentSurfaceContext[\s\S]*buildPlatformHarnessRuntimePromptBundle\([\s\S]*memberAgentSurfaceContext: params\.memberAgentSurfaceContext[\s\S]*buildRuntimeContextManifest\([\s\S]*memberAgentSurfaceContext: params\.memberAgentSurfaceContext/,
   "native turns must carry one normalized surface through prompt and context evidence",
 );
 assert.match(
@@ -1411,6 +1415,7 @@ const recallManifest = buildRuntimeContextManifest({
     "polynet_list",
     "polynet_read",
   ],
+  promptSections: [],
 });
 assert.deepEqual(recallManifest.scope.memberAgentSurfaceContext, communitySurface);
 assert.deepEqual(

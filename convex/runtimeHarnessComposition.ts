@@ -3,6 +3,7 @@ import type { CommunityResourceRuntimeLaneState } from "../shared/communityResou
 import { buildPersonalSkillOverlayRuntimeState } from "../shared/personalSkillOverlayRuntime.ts";
 import { buildPlatformSkillOverlayRuntimeState } from "../shared/platformSkillOverlayRuntime.ts";
 import { DEFAULT_RUNTIME_SKILL_INVENTORY_PROMPT_BUDGET_CHARS } from "../shared/runtimeSkillInventoryPrompt.ts";
+import type { RuntimePromptExtensionSection } from "../shared/runtimePrompt.ts";
 import {
   mapCommunitySkillsToOverlayRuntime,
   mapPlatformSkillsToOverlayRuntime,
@@ -41,7 +42,7 @@ export type ResolvedEffectiveHarness = {
   activeCommunityModule: ResolvedCommunityHarnessModule | null;
   requestedSkillMentionTokens: string[];
   ambiguousSkillMentionTokens: string[];
-  systemPromptSuffix: string;
+  promptExtensions: RuntimePromptExtensionSection[];
 };
 
 export function buildAmbiguousSkillMentionsPromptBlock(
@@ -144,7 +145,51 @@ export function composeResolvedRuntimeHarness(args: {
     ),
     inventoryBudgetChars: remainingSkillInventoryPromptBudgetChars,
   });
-
+  const ambiguousSkillMentionsPrompt = buildAmbiguousSkillMentionsPromptBlock(
+    args.skillResolution.ambiguous_mention_tokens,
+  );
+  const promptExtensions: RuntimePromptExtensionSection[] = [
+    {
+      id: "platform_skill_overlay",
+      layer: "scoped",
+      slot: "instruction",
+      owner: "platform",
+      authority: "platform_policy",
+      source: "shared/platformSkillOverlayRuntime.ts#buildPlatformSkillOverlayRuntimeState",
+      reason: "resolved platform skill inventory and selected instructions",
+      text: activePlatformModule?.systemPromptSuffix ?? "",
+    },
+    {
+      id: "personal_skill_overlay",
+      layer: "scoped",
+      slot: "instruction",
+      owner: "user",
+      authority: "user_preference",
+      source: "shared/personalSkillOverlayRuntime.ts#buildPersonalSkillOverlayRuntimeState",
+      reason: "resolved personal skill inventory and selected instructions",
+      text: personalSkillRuntimeState.systemPromptSuffix,
+    },
+    {
+      id: "ambiguous_skill_mentions",
+      layer: "volatile",
+      slot: "context",
+      owner: "runtime",
+      authority: "runtime_fact",
+      source: "convex/runtimeHarnessComposition.ts#buildAmbiguousSkillMentionsPromptBlock",
+      reason: "ambiguous explicit skill mentions rejected by runtime resolution",
+      text: ambiguousSkillMentionsPrompt,
+    },
+    {
+      id: "community_skill_overlay",
+      layer: "scoped",
+      slot: "instruction",
+      owner: "community",
+      authority: "community_policy",
+      source: "shared/communityOverlayRuntime.ts#buildCommunityOverlayRuntimeState",
+      reason: "resolved community skill inventory and selected instructions",
+      text: activeCommunityModule?.systemPromptSuffix ?? "",
+    },
+  ];
   return {
     communityResourceLane,
     platformSkillInventory,
@@ -155,8 +200,6 @@ export function composeResolvedRuntimeHarness(args: {
     activeCommunityModule,
     requestedSkillMentionTokens: args.skillResolution.requested_mention_tokens,
     ambiguousSkillMentionTokens: args.skillResolution.ambiguous_mention_tokens,
-    systemPromptSuffix: `${activePlatformModule?.systemPromptSuffix ?? ""}${personalSkillRuntimeState.systemPromptSuffix}${buildAmbiguousSkillMentionsPromptBlock(
-      args.skillResolution.ambiguous_mention_tokens,
-    )}${activeCommunityModule?.systemPromptSuffix ?? ""}`,
+    promptExtensions,
   };
 }

@@ -3,13 +3,14 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const worker = readFileSync(join(root, "convex/communityAgentServeWorker.ts"), "utf8");
+const workerSource = readFileSync(join(root, "convex/communityAgentServeWorker.ts"), "utf8");
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const serveContract = readFileSync(join(root, "shared/communityAgentServeContract.ts"), "utf8");
 const threadContext = readFileSync(join(root, "shared/communityAgentThreadContext.ts"), "utf8");
 const conciergeTools = readFileSync(join(root, "shared/communityAgentConciergeTools.ts"), "utf8");
 const context = readFileSync(join(root, "convex/communityAgentContext.ts"), "utf8");
 const boundary = readFileSync(join(root, "shared/communityAgentRuntimeBoundary.ts"), "utf8");
+const servePrompt = readFileSync(join(root, "shared/communityAgentServePrompt.ts"), "utf8");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
@@ -22,16 +23,37 @@ function exportedFunctionBlock(source: string, exportName: string): string {
   return source.slice(start, nextConst === -1 ? source.length : nextConst);
 }
 
-const claimBlock = exportedFunctionBlock(worker, "claimNextCommunityAgentServeRequestInternal");
-const readBlock = exportedFunctionBlock(worker, "readCommunityAgentServeRequestContextInternal");
-const failBlock = exportedFunctionBlock(worker, "failCommunityAgentServeRequestInternal");
-const snapshotBlock = exportedFunctionBlock(worker, "recordCommunityAgentServeContextSnapshotInternal");
-const finalizeBlock = exportedFunctionBlock(worker, "finalizeCommunityAgentServeReplyInternal");
-const actionBlock = exportedFunctionBlock(worker, "processQueuedCommunityAgentServeRequestsInternal");
+function normalizeSourceFormatting(source: string): string {
+  return source
+    .replace(/\s+/g, " ")
+    .replace(/\(\s+/g, "(")
+    .replace(/\s+\)/g, ")")
+    .replace(/,\)/g, ")");
+}
+
+const worker = normalizeSourceFormatting(workerSource);
+const claimBlock = normalizeSourceFormatting(
+  exportedFunctionBlock(workerSource, "claimNextCommunityAgentServeRequestInternal"),
+);
+const readBlock = normalizeSourceFormatting(
+  exportedFunctionBlock(workerSource, "readCommunityAgentServeRequestContextInternal"),
+);
+const failBlock = normalizeSourceFormatting(
+  exportedFunctionBlock(workerSource, "failCommunityAgentServeRequestInternal"),
+);
+const snapshotBlock = normalizeSourceFormatting(
+  exportedFunctionBlock(workerSource, "recordCommunityAgentServeContextSnapshotInternal"),
+);
+const finalizeBlock = normalizeSourceFormatting(
+  exportedFunctionBlock(workerSource, "finalizeCommunityAgentServeReplyInternal"),
+);
+const actionBlock = normalizeSourceFormatting(
+  exportedFunctionBlock(workerSource, "processQueuedCommunityAgentServeRequestsInternal"),
+);
 
 assert.match(
   packageJson,
-  /"check:community-agent-serve-worker-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_agent_serve_worker_contract_proof\.ts && vitest run convex\/communityAgentThreadContext\.test\.ts convex\/communityAgentServeWorker\.test\.ts"/,
+  /"check:community-agent-serve-worker-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts\/community_agent_serve_worker_contract_proof\.ts && vitest run convex\/communityAgentServePrompt\.test\.ts convex\/communityAgentThreadContext\.test\.ts convex\/communityAgentServeWorker\.test\.ts"/,
   "package scripts should expose both the serve worker contract and behavior tests",
 );
 
@@ -42,7 +64,7 @@ assert.match(
 );
 assert.match(
   claimBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*ctx\.db\.get\(args\.requestId as any\)[\s\S]*claimServeRequest/,
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*ctx\.db\.get\([\s\S]*args\.requestId as any[\s\S]*\)[\s\S]*claimServeRequest/,
   "serve worker should support claiming one explicitly scheduled request",
 );
 assert.match(
@@ -72,7 +94,7 @@ assert.doesNotMatch(
 );
 assert.match(
   worker,
-  /serveRequestIsClaimable[\s\S]*agentKey === CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*intakeReason === "accepted"[\s\S]*normalizeIdValue\(request\.requesterUserId\) === normalizeIdValue\(request\.sponsorUserId\)/,
+  /serveRequestIsClaimable[\s\S]*agentKey === CANONICAL_COMMUNITY_AGENT_KEY[\s\S]*intakeReason === "accepted"[\s\S]*normalizeIdValue\(request\.requesterUserId\) ===[\s\S]*normalizeIdValue\(request\.sponsorUserId\)/,
   "serve requests should be canonical-agent accepted rows sponsored by the requester",
 );
 
@@ -93,7 +115,7 @@ assert.match(
 );
 assert.match(
   actionBlock,
-  /const expectedAttempt = normalizeCommunityAgentServeAttempt\(claim\.attempt\)[\s\S]*readCommunityAgentServeRequestContextInternal[\s\S]*expectedAttempt[\s\S]*finalizeCommunityAgentServeReplyInternal[\s\S]*expectedAttempt/,
+  /const expectedAttempt = normalizeCommunityAgentServeAttempt\([\s\S]*claim\.attempt[\s\S]*\)[\s\S]*readCommunityAgentServeRequestContextInternal[\s\S]*expectedAttempt[\s\S]*finalizeCommunityAgentServeReplyInternal[\s\S]*expectedAttempt/,
   "the action should carry one attempt fence through context, failure, and finalization",
 );
 assert.match(
@@ -121,14 +143,14 @@ assert.match(
 );
 assert.match(
   readBlock,
-  /agent:\s*\{[\s\S]*displayName: canonicalContext\.agentDisplayName[\s\S]*systemPrompt: boundedText\(canonicalContext\.communitySystemPrompt, 4_000\)/,
+  /agent:\s*\{[\s\S]*displayName: canonicalContext\.agentDisplayName[\s\S]*systemPrompt: boundedText\([\s\S]*canonicalContext\.communitySystemPrompt,[\s\S]*4_000[\s\S]*\)/,
   "serve context should load the AI Agent community-wide instructions from communityAgentConfigs.systemPrompt",
 );
 assert.match(context, /communityAgentConfigs[\s\S]*by_community_updatedAt[\s\S]*\.order\("desc"\)[\s\S]*\.first\(\)/);
 assert.doesNotMatch(worker, /query\("communityAgentConfigs"/);
 assert.match(boundary, /member_concierge[\s\S]*sponsor: "requester"[\s\S]*toolAuthority: "member_repository"/);
 assert.match(
-  worker,
+  servePrompt,
   /buildCommunityAgentIdentityPrompt\(\{[\s\S]*surface: "member_concierge"/,
   "member-facing turns should identify the canonical agent through the shared runtime boundary",
 );
@@ -177,8 +199,13 @@ assert.doesNotMatch(worker, /lens:\s*\{\s*kind:\s*"self"/);
 
 assert.match(
   snapshotBlock,
-  /expectedAttempt: v\.number\(\)[\s\S]*communityAgentServeAttemptMatches\(request\.attempt, args\.expectedAttempt\)[\s\S]*requireCommunityChatAccess[\s\S]*source_not_live[\s\S]*source_not_readable[\s\S]*seq: 0[\s\S]*kind: "context_snapshot"/,
+  /expectedAttempt: v\.number\(\)[\s\S]*communityAgentServeAttemptMatches\([\s\S]*request\.attempt,[\s\S]*args\.expectedAttempt[\s\S]*\)[\s\S]*requireCommunityChatAccess[\s\S]*source_not_live[\s\S]*source_not_readable[\s\S]*seq: 0[\s\S]*kind: "context_snapshot"/,
   "context snapshots should be mandatory, attempt-fenced, access-checked sequence-zero evidence",
+);
+assert.match(
+  worker,
+  /parseServeContextSnapshot[\s\S]*version !== 1 && version !== 2[\s\S]*prompt_sections[\s\S]*SERVE_PROMPT_SECTION_IDS[\s\S]*existingSnapshot\.version !== parsedSnapshot\.version[\s\S]*JSON\.stringify\(existingSnapshot\.messages\) ===\s*JSON\.stringify\(parsedSnapshot\.messages\)/,
+  "context snapshots should accept v1 and v2 while deduplicating identical messages across rolling versions",
 );
 assert.match(
   schema,
@@ -233,33 +260,33 @@ assert.doesNotMatch(
   "Concierge allowlist must exclude specialized duplicate, premium, filesystem, terminal, and computer tools",
 );
 assert.match(
-  worker,
-  /communityWideInstructions[\s\S]*context\.agent\.systemPrompt[\s\S]*Community-wide instructions from the AI Agent settings:/,
+  servePrompt,
+  /communityInstructions[\s\S]*context\.agent\.systemPrompt[\s\S]*Community-wide instructions from the AI Agent settings:/,
   "serve prompt should augment the base community-agent prompt with AI Agent community-wide instructions",
 );
 assert.match(
-  worker,
+  servePrompt,
   /The five Polynet tools are your only platform operations[\s\S]*restricted to \$\{communityRoot\}[\s\S]*Use polynet_list to navigate, polynet_search on an exact returned subtree, and polynet_read on exact returned paths[\s\S]*Use polynet_write only when the member explicitly requests[\s\S]*Use polynet_call only for a versioned operation returned under capabilities\/[\s\S]*member authority, never builder authority/,
   "serve prompt should orient the Concierge to the canonical five and fixed member authority",
 );
 assert.match(
-  worker,
+  servePrompt,
   /addressed community-agent request[\s\S]*identified requester's addressed turn/,
   "serve prompt should answer the canonical addressed source turn regardless of qualifying signal",
 );
-assert.doesNotMatch(worker, /Thread root:\\n|Mentioned reply:\\n|Mentioned post:\\n/);
+assert.doesNotMatch(servePrompt, /Thread root:\\n|Mentioned reply:\\n|Mentioned post:\\n/);
 assert.match(
   actionBlock,
-  /const initialMessages = buildServeMessages\(context\)[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*claimCommunityInferenceFundingSession[\s\S]*messages: initialMessages/,
+  /const servePromptBundle = buildCommunityAgentServePromptBundle\(context\)[\s\S]*const initialMessages = servePromptBundle\.messages[\s\S]*version: 2[\s\S]*prompt_sections: servePromptBundle\.systemPromptBundle\.sections[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*claimCommunityInferenceFundingSession[\s\S]*messages: initialMessages/,
   "the exact audited initial messages should be persisted before funding claim and reused by the provider",
 );
 assert.match(
-  worker,
+  servePrompt,
   /Format for a narrow chat thread:[\s\S]*compact Markdown is okay[\s\S]*2-5 short bullets[\s\S]*avoid tables and large headings/,
   "serve prompt should keep community-agent replies formatted for compact thread markdown",
 );
 assert.doesNotMatch(
-  worker,
+  servePrompt,
   /@Polynet/,
   "serve prompt must not hard-code the legacy @Polynet visible token",
 );
@@ -291,7 +318,7 @@ assert.match(
 );
 assert.match(
   finalizeBlock,
-  /narrowVisibility\(request\.responseVisibilityScope, sourceVisibilityScope\)/,
+  /narrowVisibility\([\s\S]*request\.responseVisibilityScope,[\s\S]*sourceVisibilityScope[\s\S]*\)/,
   "serve finalization should not widen response visibility beyond the captured/current source boundary",
 );
 assert.match(

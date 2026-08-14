@@ -18,6 +18,8 @@ import {
   buildBoundedSkillInventoryPrompt,
 } from "../shared/runtimeSkillInventoryPrompt.ts";
 import { buildRuntimeContextManifest } from "../shared/runtimeContextManifest.ts";
+import { buildPlatformHarnessRuntimePromptBundle } from "../shared/runtimePrompt.ts";
+import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -151,13 +153,34 @@ const normalized = normalizeRuntimeSkillResolution({
 const harness = composeResolvedRuntimeHarness({
   skillResolution: normalized,
 });
+const compiledHarnessSuffix = harness.promptExtensions
+  .map((section) => String(section.text ?? ""))
+  .join("");
 assert.match(
-  harness.systemPromptSuffix,
+  compiledHarnessSuffix,
   /PLATFORM_SKILL_PACKAGE: Resources Architect \(\$resources-architect\)/,
 );
+assert.deepEqual(harness.promptExtensions.map((section) => section.id), [
+  "platform_skill_overlay",
+  "personal_skill_overlay",
+  "ambiguous_skill_mentions",
+  "community_skill_overlay",
+]);
+const promptParams = {
+  loopBudget: { maxToolSteps: 2, maxRepeatedIdenticalCalls: 1, maxConsecutiveFailures: 1, maxNoProgressSteps: 1 },
+  allowedToolNames: ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"] as const,
+  harnessName: "chat_tools" as const,
+  runtimeTurnContext: buildRuntimeTurnContextPacket({}),
+};
+const basePromptBundle = buildPlatformHarnessRuntimePromptBundle(promptParams);
+const promptBundle = buildPlatformHarnessRuntimePromptBundle({
+  ...promptParams,
+  promptExtensions: harness.promptExtensions,
+});
+assert.equal(promptBundle.text, basePromptBundle.text + compiledHarnessSuffix);
 
 const manifest = buildRuntimeContextManifest({
-  selectedPlatformSkills: normalized.selected_platform_skills,
+  promptSections: promptBundle.sections,
   allowedToolNames: [
     "polynet_list",
     "polynet_read",
@@ -167,10 +190,9 @@ const manifest = buildRuntimeContextManifest({
   ],
 });
 const selectedPrompt = manifest.prompts.find(
-  (prompt) => prompt.id === "platform_skill:resources-architect",
+  (prompt) => prompt.id === "platform_skill_overlay",
 );
-assert.equal(selectedPrompt?.activationRoute, "platform_required");
-assert.equal(selectedPrompt?.activationReason, "active builder resource lane");
+assert.equal(selectedPrompt?.authority, "platform_policy");
 
 assert.match(runtimeSkillResolution, /GLOBAL_PLATFORM_RUNTIME_SKILLS/);
 assert.match(runtimeSkillResolution, /activation_route: "platform_required"/);
@@ -182,6 +204,8 @@ assert.doesNotMatch(
 assert.doesNotMatch(runtimeAgentLoop, /buildEffectiveAllowedToolNames/);
 assert.doesNotMatch(runtimeAgentLoop, /buildPlatformSkillToolNamesForSelection/);
 assert.match(runtimeAgentLoop, /buildRuntimeContextManifest/);
+assert.match(runtimeAgentLoop, /activation_route: selected\?\.activation_route \?\? null/);
+assert.match(runtimeAgentLoop, /activation_reason: selected\?\.activation_reason \?\? null/);
 assert.doesNotMatch(
   runtimeAgentLoop,
   /skillLifecycleTrigger|privateLifecycleContext|onboarding_required_tool/,

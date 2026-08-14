@@ -15,6 +15,13 @@ import {
   normalizeMemberAgentSurfaceContext,
   type MemberAgentSurfaceContextV1,
 } from "./memberAgentSurfaceContext.ts";
+import type {
+  RuntimePromptSection,
+  RuntimePromptSectionAuthority,
+  RuntimePromptSectionLayer,
+  RuntimePromptSectionOwner,
+  RuntimePromptSectionSlot,
+} from "./runtimePrompt.ts";
 
 export type RuntimeContextManifestOwner =
   | "platform"
@@ -25,13 +32,6 @@ export type RuntimeContextManifestOwner =
   | "message"
   | "provider"
   | "runtime";
-
-export type RuntimeContextManifestPromptAuthority =
-  | "platform"
-  | "runtime"
-  | "scoped"
-  | "workflow"
-  | "demo";
 
 export type RuntimeContextManifestRetrieval =
   | "injected_excerpt"
@@ -57,14 +57,14 @@ export type RuntimeContextManifestToolEffect =
 
 export type RuntimeContextManifestPrompt = {
   id: string;
-  owner: RuntimeContextManifestOwner;
-  authority: RuntimeContextManifestPromptAuthority;
+  layer: RuntimePromptSectionLayer;
+  slot: RuntimePromptSectionSlot;
+  owner: RuntimePromptSectionOwner;
+  authority: RuntimePromptSectionAuthority;
   injected: boolean;
+  chars: number;
   source: string;
   reason: string;
-  sourceVersion?: string | null;
-  activationRoute?: string | null;
-  activationReason?: string | null;
 };
 
 export type RuntimeContextManifestResource = {
@@ -100,8 +100,8 @@ export type RuntimeContextManifestExclusion = {
   reason: string;
 };
 
-export type RuntimeContextManifestV1 = {
-  version: 1;
+export type RuntimeContextManifestV2 = {
+  version: 2;
   generatedAt: string | null;
   scope: {
     userId: string | null;
@@ -134,17 +134,6 @@ export type RuntimeContextManifestV1 = {
   };
 };
 
-type ManifestSkillInput = {
-  name?: unknown;
-  mention_token?: unknown;
-  skill_revision_id?: unknown;
-  platform_skill_id?: unknown;
-  user_platform_skill_install_id?: unknown;
-  community_skill_attachment_id?: unknown;
-  activation_route?: unknown;
-  activation_reason?: unknown;
-};
-
 export type BuildRuntimeContextManifestInput = {
   generatedAt?: string | null;
   userId?: string | null;
@@ -158,15 +147,10 @@ export type BuildRuntimeContextManifestInput = {
   messages?: Array<{ role?: string | null; content?: string | null }> | null;
   allowedToolNames?: readonly RetrievalToolName[] | null;
   communityResourceLane?: CommunityResourceRuntimeLaneState | null;
-  communitySystemPrompt?: string | null;
   communityAbout?: string | null;
-  agentSoul?: string | null;
+  promptSections: readonly RuntimePromptSection[];
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
   runtimeTurnContext?: RuntimeTurnContextPacket | null;
-  selectedPlatformSkills?: readonly ManifestSkillInput[] | null;
-  selectedPersonalSkills?: readonly ManifestSkillInput[] | null;
-  selectedCommunitySkills?: readonly ManifestSkillInput[] | null;
-  hasBrowserBuiltDemoPrompt?: boolean | null;
   invocationSurface?: RuntimeInvocationSurface | null;
   memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
   memberIdentityContextMd?: string | null;
@@ -263,48 +247,6 @@ function uniqueToolNames(values: readonly RetrievalToolName[] | null | undefined
   return out;
 }
 
-function selectedSkillId(
-  scope: "platform" | "personal" | "community",
-  skill: ManifestSkillInput,
-): string {
-  const token = compactText(skill.mention_token, 80);
-  if (token) return `${scope}_skill:${token}`;
-  const fallback =
-    compactText(skill.platform_skill_id, 120) ??
-    compactText(skill.user_platform_skill_install_id, 120) ??
-    compactText(skill.community_skill_attachment_id, 120) ??
-    compactText(skill.name, 120) ??
-    "unknown";
-  return `${scope}_skill:${fallback}`;
-}
-
-function pushSelectedSkillPrompts(args: {
-  prompts: RuntimeContextManifestPrompt[];
-  scope: "platform" | "personal" | "community";
-  owner: RuntimeContextManifestOwner;
-  skills: readonly ManifestSkillInput[] | null | undefined;
-}): void {
-  if (!Array.isArray(args.skills)) return;
-  for (const skill of args.skills) {
-    const skillName = compactText(skill.name, 120);
-    const activationRoute = compactText(skill.activation_route, 80);
-    const activationReason = compactText(skill.activation_reason, 300);
-    args.prompts.push({
-      id: selectedSkillId(args.scope, skill),
-      owner: args.owner,
-      authority: "workflow",
-      injected: true,
-      source: "runtime_skill_resolution",
-      reason: skillName
-        ? `selected skill instructions for ${skillName}`
-        : "selected skill instructions",
-      sourceVersion: compactText(skill.skill_revision_id, 120),
-      activationRoute,
-      activationReason,
-    });
-  }
-}
-
 function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextManifestTool, "name" | "source"> {
   if (PRODUCT_DOC_TOOL_NAMES.has(toolName)) {
     return { family: "product_docs", grantedBy: "product_docs_capability", effect: "read" };
@@ -354,152 +296,22 @@ function hasAnyTool(
   return allowedToolNames.some((toolName) => names.has(toolName));
 }
 
-function buildPromptEntries(params: BuildRuntimeContextManifestInput & {
-  resourceLane: CommunityResourceRuntimeLaneState;
-}): RuntimeContextManifestPrompt[] {
-  const prompts: RuntimeContextManifestPrompt[] = [
-    {
-      id: "platform_doctrine",
-      owner: "platform",
-      authority: "platform",
+function projectCompiledPromptEntries(
+  promptSections: readonly RuntimePromptSection[],
+): RuntimeContextManifestPrompt[] {
+  return promptSections
+    .filter((section) => section.rendered)
+    .map((section) => ({
+      id: section.id,
+      layer: section.layer,
+      slot: section.slot,
+      owner: section.owner,
+      authority: section.authority,
       injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "always-on platform product and safety authority",
-    },
-    {
-      id: "agent_soul",
-      owner: "platform",
-      authority: "platform",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "agent posture and identity",
-    },
-    {
-      id: "explanation_contract",
-      owner: "runtime",
-      authority: "runtime",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "communication and uncertainty policy",
-    },
-    {
-      id: "harness_operating_policy",
-      owner: "runtime",
-      authority: "runtime",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "tool-use and loop behavior policy",
-    },
-  ];
-  if (hasText(params.agentSoul)) {
-    prompts.push({
-      id: "user_agent_soul",
-      owner: "user",
-      authority: "scoped",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "member-configured agent posture",
-    });
-  }
-  if (params.invocationSurface === "member_agent_dock") {
-    prompts.push({
-      id: "invocation_surface",
-      owner: "runtime",
-      authority: "runtime",
-      injected: true,
-      source: "shared/runtimeInvocationSurface.ts",
-      reason: "member-owned private agent surface boundary",
-    });
-  }
-  if (params.memberAgentSurfaceContext) {
-    prompts.push({
-      id: "current_surface",
-      owner: "runtime",
-      authority: "scoped",
-      injected: true,
-      source: "shared/memberAgentSurfaceContext.ts",
-      reason: "bounded current-page orientation without capability authority",
-    });
-  }
-  if (hasMemberIdentityContext(params)) {
-    prompts.push({
-      id: "member_identity_context",
-      owner: "user",
-      authority: "scoped",
-      injected: true,
-      source: "shared/memberAgentIdentityContext.ts",
-      reason: "bounded deterministic member identity context",
-    });
-  }
-  if (hasText(params.communityId)) {
-    prompts.push({
-      id: "community_lens",
-      owner: "community",
-      authority: "scoped",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "server-validated community scope and compact identity",
-    });
-  }
-  if (hasText(params.communitySystemPrompt)) {
-    prompts.push({
-      id: "community_system_prompt",
-      owner: "community",
-      authority: "scoped",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "community owner/admin instructions under platform policy",
-    });
-  }
-  if (params.resourceLane.lane !== "none") {
-    prompts.push({
-      id: `community_resource_lane:${params.resourceLane.lane}`,
-      owner: "community",
-      authority: "workflow",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "community resource lane behavior",
-    });
-  }
-  if (hasText(params.projectId)) {
-    prompts.push({
-      id: "workspace_project_context",
-      owner: "workspace",
-      authority: "scoped",
-      injected: true,
-      source: "shared/runtimePrompt.ts",
-      reason: "project-bound workspace context",
-    });
-  }
-  if (params.hasBrowserBuiltDemoPrompt === true) {
-    prompts.push({
-      id: "browser_demo_prompt",
-      owner: "runtime",
-      authority: "demo",
-      injected: true,
-      source: "browser_demo_lane",
-      reason: "anonymous demo-only prompt authority",
-    });
-  }
-  pushSelectedSkillPrompts({
-    prompts,
-    scope: "platform",
-    owner: "platform",
-    skills: params.selectedPlatformSkills,
-  });
-  pushSelectedSkillPrompts({
-    prompts,
-    scope: "personal",
-    owner: "user",
-    skills: params.selectedPersonalSkills,
-  });
-  pushSelectedSkillPrompts({
-    prompts,
-    scope: "community",
-    owner: "community",
-    skills: params.selectedCommunitySkills,
-  });
-  return prompts;
+      chars: section.chars,
+      source: section.source,
+      reason: section.reason,
+    }));
 }
 
 function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
@@ -758,7 +570,7 @@ function buildExclusions(params: BuildRuntimeContextManifestInput & {
 
 export function buildRuntimeContextManifest(
   input: BuildRuntimeContextManifestInput,
-): RuntimeContextManifestV1 {
+): RuntimeContextManifestV2 {
   const allowedToolNames = uniqueToolNames(input.allowedToolNames);
   const resourceLane = input.communityResourceLane
     ? normalizeCommunityResourceRuntimeLaneState(input.communityResourceLane)
@@ -768,7 +580,7 @@ export function buildRuntimeContextManifest(
     allowedToolNames,
     resourceLane,
   };
-  const prompts = buildPromptEntries(manifestBase);
+  const prompts = projectCompiledPromptEntries(input.promptSections);
   const resources = buildResourceEntries(manifestBase);
   const tools = buildToolEntries(manifestBase);
   const runtimeState = buildRuntimeStateEntries(input);
@@ -781,7 +593,7 @@ export function buildRuntimeContextManifest(
     : 0;
 
   return {
-    version: 1,
+    version: 2,
     generatedAt: compactText(input.generatedAt, 80),
     scope: {
       userId: compactText(input.userId, 160),

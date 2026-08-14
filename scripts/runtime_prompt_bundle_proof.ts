@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
 import {
   buildPlatformHarnessRuntimePromptBundle,
   buildPlatformHarnessRuntimeSystemPrompt,
+  compileRuntimePromptSections,
   type RuntimePromptBundle,
 } from "../shared/runtimePrompt.ts";
 import { buildRuntimeTurnContextPacket } from "../shared/runtimeTurnContextPacket.ts";
@@ -156,11 +157,179 @@ for (const heading of orderedHeadings) {
 }
 
 assert.equal(sectionById(fullBundle, "platform_doctrine")?.layer, "stable");
+assert.equal(sectionById(fullBundle, "platform_doctrine")?.slot, "instruction");
+assert.equal(
+  sectionById(fullBundle, "platform_doctrine")?.authority,
+  "platform_policy",
+);
 assert.equal(sectionById(fullBundle, "community_lens")?.layer, "scoped");
-assert.equal(sectionById(fullBundle, "community_lens_authority")?.owner, "community");
-assert.equal(sectionById(fullBundle, "runtime_turn_context")?.layer, "volatile");
+assert.equal(
+  sectionById(fullBundle, "community_lens_authority")?.owner,
+  "community",
+);
+assert.equal(
+  sectionById(fullBundle, "runtime_turn_context")?.layer,
+  "volatile",
+);
 assert.equal(sectionById(fullBundle, "user_agent_soul")?.owner, "user");
-assert.equal(sectionById(fullBundle, "workspace_harness_context")?.owner, "workspace");
+assert.equal(
+  sectionById(fullBundle, "workspace_harness_context")?.owner,
+  "workspace",
+);
+assert.equal(sectionById(fullBundle, "runtime_turn_context")?.slot, "context");
+
+const legacySuffix =
+  "\n\nPLATFORM_SKILL_OVERLAY\nUse the exact fixture.\n\nCOMMUNITY_SKILL_OVERLAY\nKeep community scope.";
+const extensionBundle = buildPlatformHarnessRuntimePromptBundle({
+  ...fullParams,
+  promptExtensions: [
+    {
+      id: "platform_skill_overlay",
+      layer: "scoped",
+      slot: "instruction",
+      owner: "platform",
+      authority: "platform_policy",
+      source: "fixture#platform",
+      reason: "selected platform skill instructions",
+      text: "\n\nPLATFORM_SKILL_OVERLAY\nUse the exact fixture.",
+    },
+    {
+      id: "personal_skill_overlay",
+      layer: "scoped",
+      slot: "instruction",
+      owner: "user",
+      authority: "user_preference",
+      source: "fixture#personal",
+      reason: "selected personal skill instructions",
+      text: "",
+    },
+    {
+      id: "community_skill_overlay",
+      layer: "scoped",
+      slot: "instruction",
+      owner: "community",
+      authority: "community_policy",
+      source: "fixture#community",
+      reason: "selected community skill instructions",
+      text: "\n\nCOMMUNITY_SKILL_OVERLAY\nKeep community scope.",
+    },
+  ],
+});
+assert.equal(extensionBundle.text, fullBundle.text + legacySuffix);
+assert.deepEqual(sectionIds(extensionBundle).slice(-3), [
+  "platform_skill_overlay",
+  "personal_skill_overlay",
+  "community_skill_overlay",
+]);
+assert.equal(sectionById(extensionBundle, "platform_skill_overlay")?.chars, 47);
+assertOmitted(extensionBundle, "personal_skill_overlay");
+
+const funnelBaseBundle = buildPlatformHarnessRuntimePromptBundle({
+  ...fullParams,
+  invocationSurface: "community_funnel_builder",
+});
+const funnelExtensionBundle = buildPlatformHarnessRuntimePromptBundle({
+  ...fullParams,
+  invocationSurface: "community_funnel_builder",
+  promptExtensions: [
+    {
+      id: "community_skill_overlay",
+      layer: "scoped",
+      slot: "instruction",
+      owner: "community",
+      authority: "community_policy",
+      source: "fixture#funnel",
+      reason: "selected funnel workflow instructions",
+      text: "\n\nFUNNEL_WORKFLOW_FIXTURE",
+    },
+  ],
+});
+assert.equal(
+  funnelExtensionBundle.text,
+  `${funnelBaseBundle.text}\n\nFUNNEL_WORKFLOW_FIXTURE`,
+);
+
+assert.throws(
+  () =>
+    buildPlatformHarnessRuntimePromptBundle({
+      ...fullParams,
+      promptExtensions: [
+        {
+          id: "community_lens",
+          layer: "scoped",
+          slot: "instruction",
+          owner: "community",
+          authority: "community_policy",
+          source: "fixture#duplicate-base",
+          reason: "prove duplicate base ids fail closed",
+          text: "\n\nDUPLICATE",
+        },
+      ],
+    }),
+  /runtime_prompt_section_id_duplicate:community_lens/,
+  "an extension must not shadow a canonical base section receipt",
+);
+assert.throws(
+  () =>
+    compileRuntimePromptSections([
+      {
+        id: "duplicate",
+        layer: "scoped",
+        slot: "instruction",
+        owner: "platform",
+        authority: "platform_policy",
+        source: "fixture#one",
+        reason: "first exact section",
+        text: "one",
+      },
+      {
+        id: "duplicate",
+        layer: "scoped",
+        slot: "instruction",
+        owner: "community",
+        authority: "community_policy",
+        source: "fixture#two",
+        reason: "second exact section",
+        text: "two",
+      },
+    ]),
+  /runtime_prompt_section_id_duplicate:duplicate/,
+  "exact-section compilation must reject duplicate receipt ids",
+);
+assert.throws(
+  () =>
+    compileRuntimePromptSections([
+      {
+        id: "   ",
+        layer: "scoped",
+        slot: "instruction",
+        owner: "platform",
+        authority: "platform_policy",
+        source: "fixture#blank",
+        reason: "prove blank ids fail closed",
+        text: "x",
+      },
+    ]),
+  /runtime_prompt_section_id_invalid:/,
+  "exact-section compilation must reject blank receipt ids",
+);
+assert.throws(
+  () =>
+    compileRuntimePromptSections([
+      {
+        id: "Not-Canonical",
+        layer: "scoped",
+        slot: "instruction",
+        owner: "platform",
+        authority: "platform_policy",
+        source: "fixture#invalid",
+        reason: "prove noncanonical ids fail closed",
+        text: "x",
+      },
+    ]),
+  /runtime_prompt_section_id_invalid:Not-Canonical/,
+  "exact-section compilation must reject noncanonical receipt ids",
+);
 
 const omittedBundle = buildPlatformHarnessRuntimePromptBundle({
   loopBudget: {
@@ -202,7 +371,10 @@ assertOmitted(omittedBundle, "runtime_turn_context");
 assertOmitted(omittedBundle, "temporal_context");
 
 const runtimePromptSource = readFileSync("shared/runtimePrompt.ts", "utf8");
-const runtimeAgentLoopSource = readFileSync("convex/runtimeAgentLoop.ts", "utf8");
+const runtimeAgentLoopSource = readFileSync(
+  "convex/runtimeAgentLoop.ts",
+  "utf8",
+);
 
 assert.match(
   runtimePromptSource,
@@ -226,13 +398,18 @@ assert.match(
 );
 assert.match(
   runtimeAgentLoopSource,
-  /systemPrompt\s*=\s*`\$\{runtimePromptBundle\.text\}\$\{promptSuffix\}`/,
-  "final system prompt should be bundle text plus the resolved harness suffix",
+  /systemPrompt\s*=\s*runtimePromptBundle\.text/,
+  "final system prompt should be exactly the compiled bundle text",
 );
 assert.match(
   runtimeAgentLoopSource,
-  /id:\s*"harness_prompt_suffix"/,
-  "prompt receipt should account for the existing harness prompt suffix",
+  /promptExtensions:\s*resolvedHarness\.promptExtensions/,
+  "harness overlays should enter the canonical compiler as explicit sections",
+);
+assert.doesNotMatch(
+  runtimeAgentLoopSource,
+  /buildPromptSuffix\(\)|\$\{runtimePromptBundle\.text\}\$\{promptSuffix\}|id:\s*"harness_prompt_suffix"/,
+  "runtime loop must not append or manually receipt an opaque suffix",
 );
 assert.doesNotMatch(
   runtimeAgentLoopSource,

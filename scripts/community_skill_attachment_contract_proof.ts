@@ -68,8 +68,8 @@ function main() {
   );
   assertIncludes(
     runtimeAgentLoop,
-    "resolvedHarness.systemPromptSuffix",
-    "runtime consumes composed skill prompt suffix",
+    "promptExtensions: resolvedHarness.promptExtensions",
+    "runtime compiles composed skill prompt extensions",
   );
   assertIncludes(
     runtimeAgentLoop,
