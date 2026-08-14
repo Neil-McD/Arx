@@ -93,9 +93,9 @@ const loopParams = {
   authSubject: "user:context-receipt-smoke",
   threadId: "thread_context_receipt_smoke",
   projectId: null,
-  requestedModelId: "context-receipt-smoke-model",
+  requestedModelId: "gpt-oss-120b-free",
   inferenceSource: "free",
-  modelRef: "openrouter/context-receipt-smoke-model",
+  modelRef: "openai/gpt-oss-120b:free",
   messages: [
     {
       role: "user",
@@ -194,6 +194,30 @@ assert.equal(
   failedProviderStartCount,
   0,
   "failed mandatory evidence must make provider start unreachable",
+);
+
+let lifecycleProviderResultCount = 0;
+await assert.rejects(
+  executeChatToolsAgentLoop({
+    ...loopParams,
+    runId: "provider_lifecycle_failure_smoke_run",
+    appendRunEvent: async () => {},
+    recordInitialProviderContextAttestation: async () => ({ ok: true }),
+    beforeProviderRequest: async () => {
+      throw new Error("founder_usage_exhausted");
+    },
+    observeProviderResult: () => {
+      lifecycleProviderResultCount += 1;
+    },
+  }),
+  (error: unknown) =>
+    error instanceof Error && error.message === "founder_usage_exhausted",
+  "pre-provider lifecycle failures must escape unchanged for role-level mapping",
+);
+assert.equal(
+  lifecycleProviderResultCount,
+  0,
+  "a pre-provider lifecycle failure must not be observed as a provider result",
 );
 
 const promptReceipt = events.find((event) => event.eventType === "runtime_prompt_bundle_resolved");

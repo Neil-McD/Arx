@@ -115,6 +115,10 @@ import {
   buildRuntimeProviderContextAttestation,
   type RuntimeProviderContextAttestationV1,
 } from "../shared/runtimeProviderContextAttestation.ts";
+import {
+  buildRuntimeInputBudgetEvidence,
+  resolveRuntimeProviderBudgetIdentity,
+} from "../shared/runtimeInputBudget.ts";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -137,6 +141,20 @@ type RuntimeProviderLifecycleHooks = {
     completionTokens: number | null;
   }) => void;
 };
+
+class RuntimeProviderLifecycleHookError extends Error {
+  readonly originalError: unknown;
+
+  constructor(originalError: unknown) {
+    super(
+      originalError instanceof Error
+        ? originalError.message
+        : String(originalError ?? "provider_lifecycle_hook_failed"),
+    );
+    this.name = "RuntimeProviderLifecycleHookError";
+    this.originalError = originalError;
+  }
+}
 
 type OpenAiCompatibleFunctionTool = ReturnType<
   typeof buildOpenAiFunctionTools
@@ -1011,19 +1029,21 @@ async function executeRetrievalAgentLoop(
       };
     }),
   ];
-  const buildActiveProviderTools = () => {
-    const policySurface = buildRuntimeToolPolicySurface({
-      fixedToolNames: effectiveAllowedToolNames,
-    });
-    return {
-      openAiTools: buildOpenAiFunctionTools(effectiveAllowedToolNames),
-      responsesTools: buildResponsesApiFunctionTools(effectiveAllowedToolNames),
-      activeToolNames: [...effectiveAllowedToolNames],
-      activeToolPolicies: policySurface.policies,
-      activeToolPolicySummary: policySurface.summary,
-    };
+  const providerToolPolicySurface = buildRuntimeToolPolicySurface({
+    fixedToolNames: effectiveAllowedToolNames,
+  });
+  const activeProviderTools = {
+    openAiTools: buildOpenAiFunctionTools(effectiveAllowedToolNames),
+    responsesTools: buildResponsesApiFunctionTools(effectiveAllowedToolNames),
+    activeToolNames: [...effectiveAllowedToolNames],
+    activeToolPolicies: providerToolPolicySurface.policies,
+    activeToolPolicySummary: providerToolPolicySurface.summary,
   };
-  const initialProviderTools = buildActiveProviderTools();
+  const inputBudgetIdentity = resolveRuntimeProviderBudgetIdentity({
+    inferenceSource: params.inferenceSource,
+    requestedModelId: params.requestedModelId,
+    modelRef: params.modelRef,
+  });
   try {
     await params.appendRunEvent({
       eventType: "runtime_prompt_bundle_resolved",
@@ -1312,9 +1332,9 @@ async function executeRetrievalAgentLoop(
         stage: "initial",
         fixed_allowed_tool_count: effectiveAllowedToolNames.length,
         base_fixed_allowed_tool_count: params.allowedToolNames.length,
-        active_tool_count: initialProviderTools.activeToolNames.length,
+        active_tool_count: activeProviderTools.activeToolNames.length,
         tool_policy_enforcement: "full_access_audit",
-        tool_policy_summary: initialProviderTools.activeToolPolicySummary,
+        tool_policy_summary: activeProviderTools.activeToolPolicySummary,
       },
     });
   } catch {
@@ -1374,10 +1394,10 @@ async function executeRetrievalAgentLoop(
           toolSchemaFormat: useResponsesApiTools
             ? "responses_api"
             : "openai_compatible",
-          toolNames: initialProviderTools.activeToolNames,
+          toolNames: activeProviderTools.activeToolNames,
           providerTools: useResponsesApiTools
-            ? initialProviderTools.responsesTools
-            : initialProviderTools.openAiTools,
+            ? activeProviderTools.responsesTools
+            : activeProviderTools.openAiTools,
         });
         const persisted =
           await params.recordInitialProviderContextAttestation(attestation);
@@ -1417,6 +1437,27 @@ async function executeRetrievalAgentLoop(
     const loopResult = await runNativeRuntimeKernel<string>({
       messages: nativeTranscript,
       budget: params.loopBudget,
+      inputBudget: {
+        ...inputBudgetIdentity,
+        reservedOutputTokens: params.maxTokens,
+        toolSchemas:
+          inputBudgetIdentity.transport === "openrouter_chat_completions"
+            ? activeProviderTools.openAiTools
+            : activeProviderTools.responsesTools,
+        recordPlan: async (budgetPlan) => {
+          await params.appendRunEvent({
+            eventType:
+              budgetPlan.kind === "initial"
+                ? "runtime_input_budget_planned"
+                : "runtime_input_budget_delta",
+            eventKey: `${params.runId}:runtime_input_budget:${budgetPlan.sequence}`,
+            payload: {
+              run_id: params.runId,
+              ...buildRuntimeInputBudgetEvidence(budgetPlan),
+            },
+          });
+        },
+      },
       prepareProviderTranscript: ({ transcript, forceCompaction }) => {
         if (forceCompaction) {
           return compactProviderTranscriptForContextRetry(transcript);
@@ -1460,13 +1501,17 @@ async function executeRetrievalAgentLoop(
         });
         reasoningSummaryStreamCount += 1;
         try {
-          const providerTools = buildActiveProviderTools();
           completion = await runAbortableWithRuntimeCancellation({
             ctx: params.ctx,
             ownerId: params.userId,
             runId: params.runId,
             operation: async (signal) => {
-              await params.beforeProviderRequest?.();
+              try {
+                await params.beforeProviderRequest?.();
+              } catch (error) {
+                if (isRuntimeRunCancelledError(error)) throw error;
+                throw new RuntimeProviderLifecycleHookError(error);
+              }
               return await runProviderNativeToolCompletion({
                 ctx: params.ctx,
                 userId: params.userId,
@@ -1475,8 +1520,8 @@ async function executeRetrievalAgentLoop(
                 modelRef: params.modelRef,
                 messages,
                 maxTokens: params.maxTokens,
-                openRouterTools: providerTools.openAiTools,
-                responsesApiTools: providerTools.responsesTools,
+                openRouterTools: activeProviderTools.openAiTools,
+                responsesApiTools: activeProviderTools.responsesTools,
                 apiKeyOverride: params.apiKeyOverride,
                 parallelToolCalls:
                   providerToolChoice === "auto" && parallelReadToolsEnabled,
@@ -1521,17 +1566,15 @@ async function executeRetrievalAgentLoop(
           });
           await throwIfCancelled();
         } catch (error) {
-          if (!providerResultObserved) {
-            params.observeProviderResult?.({
-              ok: false,
-              code: isRuntimeRunCancelledError(error)
-                ? USER_CANCELLED_RUNTIME_CODE
-                : "agent_loop_provider_crash",
-              promptTokens: null,
-              completionTokens: null,
-            });
-          }
           if (isRuntimeRunCancelledError(error)) {
+            if (!providerResultObserved) {
+              params.observeProviderResult?.({
+                ok: false,
+                code: USER_CANCELLED_RUNTIME_CODE,
+                promptTokens: null,
+                completionTokens: null,
+              });
+            }
             return {
               ok: false,
               status: 409,
@@ -1539,6 +1582,15 @@ async function executeRetrievalAgentLoop(
               stopReason: "user_cancelled",
               message: error.message,
             };
+          }
+          if (error instanceof RuntimeProviderLifecycleHookError) throw error;
+          if (!providerResultObserved) {
+            params.observeProviderResult?.({
+              ok: false,
+              code: "agent_loop_provider_crash",
+              promptTokens: null,
+              completionTokens: null,
+            });
           }
           const summary = summarizeErrorForLog(error);
           logStructuredError("agent_loop_provider_completion_crashed", {
@@ -1561,11 +1613,10 @@ async function executeRetrievalAgentLoop(
           };
         }
         if (!completion.ok) return completion;
-        const providerTools = buildActiveProviderTools();
         const completionToolCalls = getNativeToolCompletionToolCalls(completion);
         const unknownToolCall = completionToolCalls.find(
           (toolCall) =>
-            !providerTools.activeToolNames.some(
+            !activeProviderTools.activeToolNames.some(
               (toolName) => toolName === toolCall.toolName,
             ),
         );
@@ -1595,7 +1646,6 @@ async function executeRetrievalAgentLoop(
         remainingToolBudget,
         toolStepCount,
       }) => {
-        const providerToolSurface = buildActiveProviderTools();
         const schedule = classifyRuntimeToolSchedule({
           toolCalls: steps.map((step, index) => ({
             providerCallId: step.providerCallId,
@@ -1603,7 +1653,7 @@ async function executeRetrievalAgentLoop(
             index,
             normalizedArgs: step.normalizedArgs,
           })),
-          policies: providerToolSurface.activeToolPolicies,
+          policies: activeProviderTools.activeToolPolicies,
           enableParallelReadBatches: parallelReadToolsEnabled,
         });
         const actualExecutionMode: RuntimeToolBatchExecutionMode =
@@ -1867,6 +1917,9 @@ async function executeRetrievalAgentLoop(
     }
     return loopResult;
   } catch (error) {
+    if (error instanceof RuntimeProviderLifecycleHookError) {
+      throw error.originalError;
+    }
     if (isRuntimeRunCancelledError(error)) {
       if (activeToolBatchTelemetry) {
         await flushActiveToolBatchTelemetry({

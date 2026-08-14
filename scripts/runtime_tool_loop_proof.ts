@@ -18,6 +18,13 @@ const result = await runNativeRuntimeKernel<RetrievalToolName>({
     { role: "user", content: "What is happening in this community?" },
   ],
   budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+  inputBudget: {
+    transport: "openai_responses",
+    modelRef: "openai/gpt-5.6-sol",
+    reservedOutputTokens: 1_600,
+    toolSchemas: [],
+    recordPlan: () => undefined,
+  },
   runCompletion: async (messages) => {
     providerRequests.push(messages);
     invocation += 1;

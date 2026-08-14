@@ -313,8 +313,8 @@ function proveRuntimeCallersPassRealRequestMetadata() {
   const runtimeTurnMetadataUses = runtimeTurnHandlers.match(/requestMetadata: chatgptCodexRequestMetadata/g) ?? [];
   assert.equal(
     runtimeTurnMetadataUses.length,
-    3,
-    "expected streaming, non-streaming, and failure-finalization ChatGPT calls to pass metadata",
+    1,
+    "expected the direct failure-finalization ChatGPT call to pass durable metadata; normal streaming and non-streaming turns share the native runtime loop",
   );
 
   assert.match(

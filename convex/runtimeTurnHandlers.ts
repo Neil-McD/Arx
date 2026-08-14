@@ -1247,7 +1247,6 @@ export async function handleRuntimeTurnRequest(args: {
         let loopResult;
         let communityFundingSession: CommunityInferenceFundingSession | null = null;
         try {
-          communityFundingSession = await claimCommunityFundingSession();
           loopResult = await executeChatToolsAgentLoop({
             ctx,
             req,
@@ -1289,6 +1288,9 @@ export async function handleRuntimeTurnRequest(args: {
             touchRunHeartbeat: touchRunHeartbeatBestEffort,
             recordInitialProviderContextAttestation,
             beforeProviderRequest: async (): Promise<void> => {
+              if (!communityFundingSession) {
+                communityFundingSession = await claimCommunityFundingSession();
+              }
               await markCommunityFundingProviderStarted(communityFundingSession);
             },
             observeProviderResult: observeCommunityFundingProviderResult,
@@ -1623,7 +1625,6 @@ export async function handleRuntimeTurnRequest(args: {
     let loopResult;
     let communityFundingSession: CommunityInferenceFundingSession | null = null;
     try {
-      communityFundingSession = await claimCommunityFundingSession();
       loopResult = await executeChatToolsAgentLoop({
         ctx,
         req,
@@ -1669,6 +1670,9 @@ export async function handleRuntimeTurnRequest(args: {
         touchRunHeartbeat: touchRunHeartbeatBestEffort,
         recordInitialProviderContextAttestation,
         beforeProviderRequest: async (): Promise<void> => {
+          if (!communityFundingSession) {
+            communityFundingSession = await claimCommunityFundingSession();
+          }
           await markCommunityFundingProviderStarted(communityFundingSession);
         },
         observeProviderResult: observeCommunityFundingProviderResult,

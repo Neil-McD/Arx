@@ -1,10 +1,11 @@
 import type { NativeToolAwareMessage } from "./nativeToolProtocol";
+import { estimateRuntimeMessageInputTokens } from "./runtimeInputBudget.ts";
 
 export const CONTEXT_WINDOW_EXCEEDED_CODE = "context_window_exceeded";
 export const CONTEXT_WINDOW_EXCEEDED_MESSAGE =
   "This conversation exceeded the selected model's context window.";
 
-const ESTIMATED_CHARS_PER_TOKEN = 4;
+const COMPACTION_CHARS_PER_TOKEN = 4;
 const RECENT_TOOL_RESULT_TOKEN_BUDGET = 4_096;
 const OLDER_TOOL_RESULT_TOKEN_BUDGET = 512;
 
@@ -54,37 +55,11 @@ export function isProviderContextWindowExceeded(params: {
 export function estimateNativeToolTranscriptTokens(
   messages: readonly NativeToolAwareMessage[],
 ): number {
-  let characters = 0;
-  for (const message of messages) {
-    if (message.role === "user" && Array.isArray(message.content)) {
-      for (const part of message.content) {
-        characters +=
-          part.type === "text"
-            ? String(part.text ?? "").length
-            : String(part.imageUrl ?? "").length;
-      }
-      continue;
-    }
-    characters += String(message.content ?? "").length;
-    if (message.role === "assistant") {
-      for (const toolCall of message.tool_calls ?? []) {
-        characters += String(toolCall.function?.name ?? "").length;
-        characters += String(toolCall.function?.arguments ?? "").length;
-      }
-      for (const reasoningItem of message.reasoningItems ?? []) {
-        try {
-          characters += JSON.stringify(reasoningItem).length;
-        } catch {
-          // Ignore an unserializable opaque item; provider serialization will reject it separately.
-        }
-      }
-    }
-  }
-  return Math.ceil(characters / ESTIMATED_CHARS_PER_TOKEN);
+  return estimateRuntimeMessageInputTokens(messages).estimatedTokens;
 }
 
 function compactTextForProviderContext(value: string, maxTokens: number): string {
-  const maxCharacters = Math.max(256, maxTokens * ESTIMATED_CHARS_PER_TOKEN);
+  const maxCharacters = Math.max(256, maxTokens * COMPACTION_CHARS_PER_TOKEN);
   if (value.length <= maxCharacters) return value;
   const omittedCharacters = value.length - maxCharacters;
   const marker = `\n...[Polynet compacted ${omittedCharacters} older tool-result characters for model context]...\n`;

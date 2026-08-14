@@ -98,6 +98,11 @@ assert.match(
 );
 assert.match(
   runtime,
+  /fundingClaimAttempted = true[\s\S]*preProviderFundingErrorCode[\s\S]*runtimeErrorCode[\s\S]*errorCode: runtimeErrorCode/,
+  "community cognition should preserve pre-provider funding failures instead of relabeling them as runtime exceptions",
+);
+assert.match(
+  runtime,
   /usageComplete: !providerStarted[\s\S]*disposition: providerStarted \? "indeterminate" : "failed"/,
   "runtime exceptions should release pre-provider reservations and conservatively settle post-provider uncertainty",
 );

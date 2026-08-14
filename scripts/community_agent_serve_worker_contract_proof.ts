@@ -220,8 +220,8 @@ assert.doesNotMatch(
 
 assert.match(
   actionBlock,
-  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: "community_agent_mention"[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
-  "serve action should use canonical hosted funding and mark provider start at the exact model boundary",
+  /requestId: v\.optional\(v\.id\("communityAgentServeRequests"\)\)[\s\S]*iterationLimit = args\.requestId \? 1 : limit[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*inputBudget:[\s\S]*runCompletion: async[\s\S]*claimCommunityInferenceFundingSession\([\s\S]*surface: "community_agent_mention"[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*modelId: fundingSession\.modelId/,
+  "serve action should admit model input before claiming canonical hosted funding and starting the provider",
 );
 assert.doesNotMatch(
   actionBlock,
@@ -277,8 +277,8 @@ assert.match(
 assert.doesNotMatch(servePrompt, /Thread root:\\n|Mentioned reply:\\n|Mentioned post:\\n/);
 assert.match(
   actionBlock,
-  /const servePromptBundle = buildCommunityAgentServePromptBundle\(context\)[\s\S]*const initialMessages = servePromptBundle\.messages[\s\S]*version: 2[\s\S]*prompt_sections: servePromptBundle\.systemPromptBundle\.sections[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*claimCommunityInferenceFundingSession[\s\S]*messages: initialMessages/,
-  "the exact audited initial messages should be persisted before funding claim and reused by the provider",
+  /const servePromptBundle = buildCommunityAgentServePromptBundle\(context\)[\s\S]*const initialMessages = servePromptBundle\.messages[\s\S]*version: 2[\s\S]*prompt_sections: servePromptBundle\.systemPromptBundle\.sections[\s\S]*recordCommunityAgentServeContextSnapshotInternal[\s\S]*runNativeRuntimeKernel<CommunityAgentConciergeToolName>\(\{[\s\S]*messages: initialMessages[\s\S]*inputBudget:[\s\S]*runCompletion: async \(kernelMessages\)[\s\S]*claimCommunityInferenceFundingSession[\s\S]*runOpenAiNativeToolCompletion\(\{[\s\S]*messages: kernelMessages/,
+  "the exact audited initial messages should be persisted and budgeted before funding, then the admitted kernel projection should reach the provider",
 );
 assert.match(
   servePrompt,

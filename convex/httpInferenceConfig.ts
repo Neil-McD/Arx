@@ -7,11 +7,11 @@ const DEFAULT_PUBLIC_MODEL_MAP: Record<string, string> = Object.freeze({
 const DEFAULT_PLATFORM_MODEL_MAP: Record<string, string> = Object.freeze({
   [DEFAULT_ACTIVE_MODEL_ID]: "openai/gpt-5.6-sol",
   "gpt-5.5": "openai/gpt-5.5",
-  "sonnet-4.6": "anthropic/claude-sonnet-4-5",
-  "opus-4.6": "anthropic/claude-opus-4-1",
+  "sonnet-4.6": "anthropic/claude-sonnet-4.6",
+  "opus-4.6": "anthropic/claude-opus-4.6",
   "gemini-3-flash": "google/gemini-2.5-flash",
   "gemini-3.1-pro": "google/gemini-2.5-pro",
-  "grok-4.1": "x-ai/grok-4-fast",
+  "grok-4.3": "x-ai/grok-4.3",
 });
 
 function readEnv(name: string): string {
