@@ -85,9 +85,6 @@ for (const mutationName of [
 const recentContext = read("convex/communityRecentContext.ts");
 assert.doesNotMatch(recentContext, /query\("communityAiFeedPosts"/);
 
-const digest = read("convex/emailDigests.ts");
-assert.doesNotMatch(digest, /query\("communityAiFeedPosts"/);
-
 const compiler = read("convex/communityCompilerEvidenceCore.ts");
 assert.match(compiler, /row\.sourceType !== "ai_feed"/);
 

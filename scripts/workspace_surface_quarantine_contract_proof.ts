@@ -60,7 +60,6 @@ const accountCommerceGateway = read("shared/cloudAccountCommerceGateway.ts");
 const mcp = read("convex/httpMcp.ts");
 const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
 const emailEvents = read("convex/emailEvents.ts");
-const emailDigests = read("convex/emailDigests.ts");
 const eventReminders = read("convex/eventReminders.ts");
 const webSourceCorpus = readSourceCorpus("apps/web/src");
 
@@ -198,7 +197,6 @@ assert.doesNotMatch(
 );
 for (const [label, source] of [
   ["transactional email", emailEvents],
-  ["community digest", emailDigests],
   ["event reminder", eventReminders],
 ] as const) {
   assert.doesNotMatch(source, /["'`]\/workspace(?:[\/"'`]|$)/, `${label} links must not enter Workspace`);

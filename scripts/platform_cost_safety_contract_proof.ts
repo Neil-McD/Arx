@@ -9,6 +9,7 @@ const contract = read("docs/platform-cost-safety-contract-v1.md");
 const docsIndex = read("docs/README.md");
 const diagnosticsContract = read("docs/platform-diagnostics-contract-v1.md");
 const crons = read("convex/crons.ts");
+const emailCore = read("convex/emailCore.ts");
 const attentionController = read("shared/useCommunityAttentionController.ts");
 const attentionGateway = read("shared/cloudCommunityAttentionGateway.ts");
 const attentionBackend = read("convex/communityAttention.ts");
@@ -43,7 +44,7 @@ const declaredCronNames = Array.from(
   crons.matchAll(/crons\.(?:interval|daily)\(\s*\n\s*"([^"]+)"/g),
   (match) => match[1]!,
 );
-assert.equal(declaredCronNames.length, 10, "every Convex cron must remain inventoried");
+assert.equal(declaredCronNames.length, 9, "every Convex cron must remain inventoried");
 for (const cronName of declaredCronNames) {
   assert.ok(
     contract.toLowerCase().includes(cronName.toLowerCase()),
@@ -55,12 +56,23 @@ for (const retiredCronName of [
   "process queued community mention broadcasts",
   "process canceled community mention broadcast cleanups",
   "process pending community agent mentions",
+  "enqueue weekly community digests",
 ]) {
   assert.ok(
     !declaredCronNames.includes(retiredCronName),
     `fixed repair drain must remain deleted: ${retiredCronName}`,
   );
 }
+assert.doesNotMatch(
+  crons,
+  /emailDigests|weekly_(?:member|founder)_digest/,
+  "retired weekly digest scheduling must stay deleted",
+);
+assert.doesNotMatch(
+  emailCore,
+  /weekly_(?:member|founder)_digest/,
+  "retired weekly digest renderers must stay deleted",
+);
 
 assert.match(
   contract,

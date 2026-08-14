@@ -4,8 +4,6 @@ export const EMAIL_TEMPLATE_KEYS = [
   "community_access_granted",
   "billing_issue",
   "founder_checkout_recovery",
-  "weekly_member_digest",
-  "weekly_founder_digest",
   "event_reminder",
   "mention_notification",
   "dm_message_notification",
@@ -17,13 +15,6 @@ export type RenderedEmail = {
   subject: string;
   html: string;
   text: string;
-};
-
-type DigestItem = {
-  title: string;
-  summary?: string;
-  url?: string;
-  meta?: string;
 };
 
 function readEnv(name: string): string {
@@ -78,10 +69,6 @@ function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
-function readArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : [];
-}
-
 function normalizeTemplateKey(value: unknown): EmailTemplateKey {
   const normalized = String(value ?? "").trim();
   if ((EMAIL_TEMPLATE_KEYS as readonly string[]).includes(normalized)) {
@@ -100,40 +87,6 @@ function renderButton(label: string, url: string): string {
       >${escapeHtml(label)}</a>
     </div>
   `;
-}
-
-function renderDigestItems(items: DigestItem[]): { html: string; text: string } {
-  if (items.length === 0) {
-    return { html: "", text: "" };
-  }
-  const html = items
-    .map((item) => {
-      const meta = readString(item.meta);
-      const summary = readString(item.summary);
-      const url = readString(item.url);
-      return `
-        <div style="margin:0 0 16px;padding:16px;border:1px solid #2a2d36;border-radius:14px;background:#171920;">
-          <div style="font-size:16px;font-weight:700;color:#f3f4f6;">${escapeHtml(item.title)}</div>
-          ${meta ? `<div style="margin-top:6px;font-size:12px;color:#98a1b3;">${escapeHtml(meta)}</div>` : ""}
-          ${summary ? `<div style="margin-top:10px;font-size:14px;line-height:1.55;color:#d0d6e0;">${escapeHtml(summary)}</div>` : ""}
-          ${url ? `<div style="margin-top:12px;"><a href="${escapeHtml(url)}" style="color:#f26b9a;text-decoration:none;font-weight:600;">Open</a></div>` : ""}
-        </div>
-      `;
-    })
-    .join("");
-  const text = items
-    .map((item) =>
-      [
-        item.title,
-        readString(item.meta),
-        readString(item.summary),
-        readString(item.url),
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    )
-    .join("\n\n");
-  return { html, text };
 }
 
 function buildEmailShell(params: {
@@ -218,17 +171,7 @@ export function renderEmailTemplate(params: {
   const templateKey = normalizeTemplateKey(params.templateKey);
   const payload = asRecord(params.payload);
   const communityName = readString(payload.communityName) || "your community";
-  const dateLabel = readString(payload.dateLabel);
   const eventTitle = readString(payload.eventTitle) || "Your event";
-  const items = readArray(payload.items)
-    .map((item) => asRecord(item))
-    .filter((item) => readString(item.title))
-    .map((item) => ({
-      title: readString(item.title),
-      summary: readString(item.summary) || undefined,
-      url: readString(item.url) || undefined,
-      meta: readString(item.meta) || undefined,
-    }));
 
   switch (templateKey) {
     case "community_access_granted":
@@ -255,44 +198,6 @@ export function renderEmailTemplate(params: {
         "Sign in with this email to finish your account and launch your community.",
         "Continue setup",
       );
-    case "weekly_member_digest": {
-      const renderedItems = renderDigestItems(items);
-      const shell = buildEmailShell({
-        title: `${communityName} weekly digest`,
-        subtitle: dateLabel ? `For ${dateLabel}` : communityName,
-        intro:
-          readString(payload.intro) ||
-          `Here's what mattered in ${communityName} this week.`,
-        ctaLabel: readString(payload.ctaLabel) || "Catch up",
-        ctaUrl: readString(payload.actionUrl),
-        bodyHtml: renderedItems.html,
-        footerNote: readString(payload.footerNote),
-      });
-      return {
-        subject: `${communityName} weekly digest${dateLabel ? ` for ${dateLabel}` : ""}`,
-        html: shell.html,
-        text: [shell.text, renderedItems.text].filter(Boolean).join("\n\n"),
-      };
-    }
-    case "weekly_founder_digest": {
-      const renderedItems = renderDigestItems(items);
-      const shell = buildEmailShell({
-        title: "Weekly founder digest",
-        subtitle: dateLabel ? `For ${dateLabel}` : communityName,
-        intro:
-          readString(payload.intro) ||
-          `Here's the operator summary for ${communityName}.`,
-        ctaLabel: readString(payload.ctaLabel) || "Open community",
-        ctaUrl: readString(payload.actionUrl),
-        bodyHtml: renderedItems.html,
-        footerNote: readString(payload.footerNote),
-      });
-      return {
-        subject: `Weekly founder digest${dateLabel ? ` for ${dateLabel}` : ""}`,
-        html: shell.html,
-        text: [shell.text, renderedItems.text].filter(Boolean).join("\n\n"),
-      };
-    }
     case "mention_notification": {
       const communityName = readString((payload as any)?.communityName) || "your community";
       const mentionerName = readString((payload as any)?.mentionerName) || "A community member";

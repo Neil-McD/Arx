@@ -17,7 +17,6 @@ const recentContext = read("convex/communityRecentContext.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const httpMcp = read("convex/httpMcp.ts");
 const attention = read("convex/communityAttention.ts");
-const emailDigests = read("convex/emailDigests.ts");
 const resourceDirectory = read("shared/communityResourceDirectory.ts");
 const resourceModuleModal = read("apps/web/src/components/WebCommunityResourceModuleModal.tsx");
 const resourceCourseCatalog = read("apps/web/src/components/ResourceCourseCatalog.tsx");
@@ -429,12 +428,6 @@ assert.match(
   /communityResourceIsLiveModulePage\(row, liveModuleIds\)/,
   "resource attention must not be triggered by draft modules or unusable resources",
 );
-assert.match(
-  emailDigests,
-  /communityResourceIsLiveModulePage\(row as any, liveModuleIds\)/,
-  "weekly digests must not include draft modules or unusable resources",
-);
-
 assert.doesNotMatch(
   resourceViewer,
   /Drafted from|Original source unavailable|Open source|sourceLineage/,

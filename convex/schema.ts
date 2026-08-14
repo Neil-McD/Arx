@@ -888,8 +888,10 @@ export default defineSchema({
 
   emailPreferences: defineTable({
     userId: v.id("users"),
-    weeklyDigestEnabled: v.boolean(),
-    founderDigestEnabled: v.boolean(),
+    // Compatibility-only fields for deployments with pre-retirement rows.
+    // No runtime reads or writes these values.
+    weeklyDigestEnabled: v.optional(v.boolean()),
+    founderDigestEnabled: v.optional(v.boolean()),
     eventReminderEnabled: v.boolean(),
     // Mention ping emails; absent means enabled.
     mentionEmailsEnabled: v.optional(v.boolean()),

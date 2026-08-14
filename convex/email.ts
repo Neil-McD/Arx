@@ -74,20 +74,12 @@ function isStaleSendingRow(row: Record<string, unknown>, nowMs: number): boolean
 
 function isPreferenceControlledTemplate(templateKey: EmailTemplateKey): boolean {
   return (
-    templateKey === "weekly_member_digest" ||
-    templateKey === "weekly_founder_digest" ||
     templateKey === "event_reminder" ||
     templateKey === "mention_notification"
   );
 }
 
 function preferenceAllowsTemplate(preferences: Record<string, unknown>, templateKey: EmailTemplateKey): boolean {
-  if (templateKey === "weekly_member_digest") {
-    return preferences.weeklyDigestEnabled !== false;
-  }
-  if (templateKey === "weekly_founder_digest") {
-    return preferences.founderDigestEnabled !== false;
-  }
   if (templateKey === "mention_notification") {
     return preferences.mentionEmailsEnabled !== false;
   }
@@ -130,16 +122,12 @@ async function getEmailPreferencesByUserId(ctx: any, userId: any): Promise<Recor
     .first();
   return row
     ? {
-        weeklyDigestEnabled: Boolean(row.weeklyDigestEnabled),
-        founderDigestEnabled: Boolean(row.founderDigestEnabled),
         eventReminderEnabled: Boolean(row.eventReminderEnabled),
         // Opt-out (absent = enabled): keeps the outbox-layer gate real so a
         // preference change between enqueue and send is still honored.
         mentionEmailsEnabled: row.mentionEmailsEnabled !== false,
       }
     : {
-        weeklyDigestEnabled: true,
-        founderDigestEnabled: true,
         eventReminderEnabled: true,
         mentionEmailsEnabled: true,
       };

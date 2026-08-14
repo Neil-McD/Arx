@@ -18,7 +18,6 @@ const secondaryPanels = read("apps/web/src/components/WebCommunitySecondaryPanel
 const surfaceProjection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const navigation = read("shared/appShellNavigation.ts");
 const app = read("apps/web/src/App.tsx");
-const emailDigests = read("convex/emailDigests.ts");
 const css = [
   read("apps/web/src/base.css"),
   read("apps/web/src/styles/shell-and-onboarding.css"),
@@ -42,12 +41,6 @@ assert.doesNotMatch(
   /openCommunityTab\([^)]*"polynet"|communityTab:\s*"polynet"/,
   "opening memory should not navigate away from community chat",
 );
-assert.doesNotMatch(
-  emailDigests,
-  /itemUrlPath\(args\.communitySlug, "polynet"\)/,
-  "memory digest links should not emit the retired route",
-);
-
 assert.match(
   gateway,
   /client\.query\("communityIntelligenceDirectory:getCommunityPolynetOverview" as any/,

@@ -30,8 +30,6 @@ for (const { file, source } of activeConvexSources) {
 
 const communityMaintenance = read("convex/communityMaintenance.ts");
 const adminGateway = read("shared/cloudCommunityAdminGateway.ts");
-const emailDigests = read("convex/emailDigests.ts");
-const digestCore = read("shared/weeklyDigestCore.ts");
 const schema = read("convex/schema.ts");
 const cleanup = read("convex/communityCognitionCleanupCore.ts");
 const recentContext = read("convex/communityRecentContext.ts");
@@ -43,9 +41,6 @@ const mcp = read("shared/polynetMcp.ts");
 for (const source of [communityMaintenance, adminGateway]) {
   assert.doesNotMatch(source, /requestCommunityArchiveBackfill|backfillCommunityArchiveInternal/);
 }
-assert.doesNotMatch(emailDigests, /communityArchiveDocuments|archiveDocuments|archiveDocumentCount/);
-assert.doesNotMatch(digestCore, /archiveDocumentCount|knowledge artifact/);
-
 assert.match(schema, /communityArchiveDocuments: defineTable/);
 assert.match(schema, /\.vectorIndex\("by_embedding"/);
 assert.match(cleanup, /table: "communityArchiveDocuments"/);

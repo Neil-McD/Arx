@@ -27,19 +27,6 @@ crons.interval(
   { limit: 3 },
 );
 
-crons.daily(
-  "enqueue weekly community digests",
-  {
-    hourUTC: 13,
-    minuteUTC: 0,
-  },
-  (internal as any).emailDigests.enqueueWeeklyCommunityDigestsInternal,
-  {
-    limitCommunities: 50,
-    limitRecipientsPerCommunity: 500,
-  },
-);
-
 crons.interval(
   "enqueue 24h event reminder emails",
   { minutes: 15 },

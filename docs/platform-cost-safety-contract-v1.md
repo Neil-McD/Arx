@@ -130,14 +130,13 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 
 #### Convex scheduled jobs
 
-`convex/crons.ts` currently declares 10 jobs:
+`convex/crons.ts` currently declares 9 jobs:
 
 | Job | Cadence | Current batch bound | Classification |
 | --- | --- | --- | --- |
 | Process pending email outbox | 5 minutes | 10 | delivery repair; keep only with indexed due-work lookup |
 | Recover distribution attribution deliveries | 5 minutes | 25 | delivery repair; keep only with indexed due-work lookup |
 | Recover archived community billing cleanup | 5 minutes | 3 | billing repair; keep |
-| Enqueue weekly community digests | daily | 50 communities, 500 recipients each | product job; verify fanout accounting |
 | Enqueue 24h event reminder emails | 15 minutes | 500 events, 500 recipients each | product job; verify due-window indexes and fanout accounting |
 | Finalize expired Blaxel project workspace leases | 15 minutes | 100 | infrastructure repair; keep |
 | Record Blaxel storage provider costs | 60 minutes | 100 rows x 5 pages | accounting; keep |
@@ -149,6 +148,10 @@ The existence of a batch limit does not prove cost safety. Each job still needs
 an indexed due-work query, bounded downstream fanout, idempotency where it
 writes, and evidence that empty runs are cheap.
 
+Weekly community digests are retired. Their scheduler, builder, templates, and
+runtime preference gates have no MVP owner and must not be reintroduced without
+a new product requirement and explicit recurring-work declaration.
+
 ## Confirmed Remediation Backlog
 
 | ID | Priority | Work | Current state | Completion evidence |
@@ -156,7 +159,7 @@ writes, and evidence that empty runs are cheap.
 | COST-001 | P0 | Contain repeated profile hydration | `fixed in production` | production build marker plus no recurrence under remount/resume/render-churn proof |
 | COST-002 | P0 | Delete attention polling and bound reactive attention reads | `implemented; staging proof pending` | idle tabs have no attention cadence; scopes are bounded; real activity reconciles reactively; update read cost is measured before adding storage |
 | COST-003 | P0 | Remove N+1 bundle hydration from chat root listing | `confirmed` | feed query returns a thin bounded projection; full bundles load only on demand |
-| COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `partial` | four fixed global repair scans are deleted; every retained job still needs its recurring-work declaration and empty-run proof |
+| COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `partial` | four fixed global repair scans and the weekly digest job are deleted; every retained job still needs its recurring-work declaration and empty-run proof |
 | COST-005 | P1 | Bound staging/realtime reconnect behavior | `implemented; staging proof pending` | disabled/dormant deployment and stale-client tests terminate without sustained calls |
 | COST-006 | P1 | Validate auth/session call clusters | `investigate` | calls are attributable to distinct valid lifecycle events or a dedupe fix lands |
 | COST-007 | P1 | Prove rate limiting for public cost-bearing HTTP surfaces | `open` | actor/IP/community limits and abuse tests for runtime, auth, ingestion, billing, and workers |
