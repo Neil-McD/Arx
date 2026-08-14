@@ -228,7 +228,6 @@ for (const sectionId of [
   "community_system_prompt",
   "community_resource_lane",
   "user_agent_soul",
-  "workspace_harness_context",
   "runtime_turn_context",
   "temporal_context",
   "platform_skill_overlay",

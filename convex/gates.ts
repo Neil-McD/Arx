@@ -24,9 +24,7 @@ type RequestedFundingSource = "demo_public" | "user_key" | "user_chatgpt" | "pla
 type CapabilityFamily =
   | "product_docs"
   | "community_tools"
-  | "web_research"
-  | "sandbox_tools"
-  | "workspace_tools";
+  | "web_research";
 
 type GateDecision = {
   allowed: boolean;
@@ -306,8 +304,6 @@ export const resolveGateBundle = query({
         allowProductDocs: entitledCapabilityFamilies.includes("product_docs"),
         allowCommunityTools: entitledCapabilityFamilies.includes("community_tools"),
         allowWebResearch: entitledCapabilityFamilies.includes("web_research"),
-        allowSandboxTools: entitledCapabilityFamilies.includes("sandbox_tools"),
-        allowWorkspaceTools: entitledCapabilityFamilies.includes("workspace_tools"),
         allowCommunityCreate: args.authState === "authenticated",
         allowPersonalMemory: args.authState === "authenticated",
       },

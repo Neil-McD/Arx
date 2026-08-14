@@ -2,18 +2,12 @@ import { api, internal } from "./_generated/api";
 import {
   buildRuntimeRecentToolAttemptsFromEvents,
   buildRuntimeTurnContextPacket,
-  mapRuntimeBackgroundProcessEventPrompt,
-  mapRuntimeWorkspaceTerminalPrompt,
-  type RuntimeBackgroundProcessEventPrompt,
   type RuntimeRecentToolAttemptPrompt,
   type RuntimeTurnContextSnapshotV1,
   type RuntimeTurnContextPacket,
 } from "../shared/runtimeTurnContextPacket";
 import type { RuntimeContextRunEvent } from "../shared/runtimeContextFragments";
-import type {
-  RuntimeWorkspaceTerminalPrompt,
-  ThreadWorkingStatePrompt,
-} from "../shared/runtimePrompt";
+import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
 import {
   normalizeProjectContextLinks,
   normalizeProjectInstructions,
@@ -78,8 +72,6 @@ export async function loadRuntimeProjectContext(params: {
 export type LoadedRuntimeTurnContext = {
   packet: RuntimeTurnContextPacket;
   threadWorkingState: ThreadWorkingStatePrompt | null;
-  activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
-  recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
 };
 
 export type ActiveRuntimeTurnState = {
@@ -99,52 +91,6 @@ export type ActiveRuntimeTurnState = {
   startedAt: number;
   updatedAt: number;
 };
-
-async function loadProjectBackgroundTerminalContext(params: {
-  ctx: any;
-  ownerId: unknown;
-  projectId?: string | null;
-}): Promise<{
-  activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
-  recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
-}> {
-  const projectId = String(params.projectId ?? "").trim();
-  if (!projectId) {
-    return { activeBackgroundTerminals: [], recentBackgroundProcessEvents: [] };
-  }
-  try {
-    const terminalSnapshot = await params.ctx.runAction(
-      internal.workspaceTerminals.reconcileProjectWorkspaceTerminalsInternal as any,
-      {
-        ownerId: params.ownerId as any,
-        projectId,
-      },
-    );
-    const active = Array.isArray((terminalSnapshot as any)?.active)
-      ? (terminalSnapshot as any).active
-      : [];
-    const recent = Array.isArray((terminalSnapshot as any)?.recent)
-      ? (terminalSnapshot as any).recent
-      : [];
-    const activeBackgroundTerminals = active
-      .map((terminal: unknown) => mapRuntimeWorkspaceTerminalPrompt(terminal))
-      .filter(
-        (
-          terminal: RuntimeWorkspaceTerminalPrompt | null,
-        ): terminal is RuntimeWorkspaceTerminalPrompt => Boolean(terminal),
-      );
-    const recentBackgroundProcessEvents = recent
-      .map((terminal: unknown) => mapRuntimeBackgroundProcessEventPrompt(terminal))
-      .filter(
-        (
-          event: RuntimeBackgroundProcessEventPrompt | null,
-        ): event is RuntimeBackgroundProcessEventPrompt => Boolean(event),
-      );
-    return { activeBackgroundTerminals, recentBackgroundProcessEvents };
-  } catch {
-    return { activeBackgroundTerminals: [], recentBackgroundProcessEvents: [] };
-  }
-}
 
 async function loadWorkingStateForRun(params: {
   ctx: any;
@@ -293,14 +239,6 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
           events: runtimeRunEvents,
         })
       : params.threadWorkingState ?? null;
-  const {
-    activeBackgroundTerminals,
-    recentBackgroundProcessEvents,
-  } = await loadProjectBackgroundTerminalContext({
-    ctx: params.ctx,
-    ownerId: params.ownerId,
-    projectId: params.projectId ?? null,
-  });
   const projectContext = await loadRuntimeProjectContext({
     ctx: params.ctx,
     projectId: params.projectId ?? null,
@@ -317,8 +255,6 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
     runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
     projectContext,
     threadWorkingState,
-    activeBackgroundTerminals,
-    recentBackgroundProcessEvents,
     recentToolAttempts,
     runtimeRunEvents,
     runtimeStop,
@@ -326,8 +262,6 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
   return {
     packet,
     threadWorkingState,
-    activeBackgroundTerminals,
-    recentBackgroundProcessEvents,
   };
 }
 

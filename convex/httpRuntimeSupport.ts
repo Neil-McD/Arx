@@ -21,9 +21,7 @@ type EffectiveTier = "anon_free" | "auth_free" | "architect";
 type CapabilityFamily =
   | "product_docs"
   | "community_tools"
-  | "web_research"
-  | "sandbox_tools"
-  | "workspace_tools";
+  | "web_research";
 type ResolvedGateDecision = {
   allowed: boolean;
   code: GateCode;
@@ -240,9 +238,7 @@ export async function resolveGateDecisionForAuthenticatedActor(params: {
             (value, index, list): value is CapabilityFamily =>
               (value === "community_tools" ||
                 value === "product_docs" ||
-                value === "web_research" ||
-                value === "sandbox_tools" ||
-                value === "workspace_tools") &&
+                value === "web_research") &&
               list.indexOf(value) === index,
           )
       : [],

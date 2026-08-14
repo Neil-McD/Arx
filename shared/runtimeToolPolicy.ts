@@ -1,21 +1,8 @@
 import type { RetrievalToolName } from "./retrievalTools";
 import { findPlatformOperationByNativeToolName } from "./platformOperationContract.ts";
-import {
-  classifyShellCommand,
-  type ShellCommandAuditSeverity,
-  type ShellCommandEffect,
-} from "./shellCommandPolicy.ts";
 
 export type RuntimeToolSource = "fixed" | "unknown";
-export type RuntimeToolCategory =
-  | "docs"
-  | "community"
-  | "web"
-  | "workspace_fs"
-  | "workspace_shell"
-  | "terminal"
-  | "computer"
-  | "unknown";
+export type RuntimeToolCategory = "docs" | "community" | "web" | "unknown";
 export type RuntimeToolRiskLevel = "read" | "write" | "sensitive";
 
 export type RuntimeToolPolicy = {
@@ -71,10 +58,6 @@ export type RuntimeToolScheduleCall = {
   exclusive: boolean;
   requiresWorkspace: boolean;
   requiresCommunity: boolean;
-  shellCommandEffect?: ShellCommandEffect;
-  shellCommandAuditSeverity?: ShellCommandAuditSeverity;
-  shellCommandReasons?: string[];
-  shellCommandParsedCommands?: string[];
   reasons: RuntimeToolScheduleReason[];
 };
 
@@ -108,13 +91,6 @@ export type RuntimeToolScheduleInputCall = {
   normalizedArgs?: Record<string, unknown>;
 };
 
-export type RuntimeShellCommandAuditMetadata = {
-  shell_command_effect: ShellCommandEffect;
-  shell_command_audit_severity: ShellCommandAuditSeverity;
-  shell_command_reasons: string[];
-  shell_command_parsed_commands: string[];
-};
-
 function buildPlatformOperationRuntimePolicy(
   toolName: RetrievalToolName,
 ): RuntimeToolPolicy {
@@ -130,16 +106,17 @@ function buildPlatformOperationRuntimePolicy(
     toolName,
     source: "fixed",
     category: operation.projections.native.category,
-    riskLevel: operation.effects.external !== "none"
-      ? "sensitive"
-      : operation.effects.domainState === "write"
-        ? "write"
-        : "read",
+    riskLevel:
+      operation.effects.external !== "none"
+        ? "sensitive"
+        : operation.effects.domainState === "write"
+          ? "write"
+          : "read",
     readOnly: !mutatesState,
     mutatesState,
     parallelSafe: !mutatesState && operation.projections.native.parallelSafe,
     exclusive: false,
-    requiresWorkspace: operation.projections.native.requiresWorkspace,
+    requiresWorkspace: false,
     requiresCommunity: operation.projections.native.requiresCommunity,
   };
 }
@@ -148,402 +125,80 @@ const FIXED_TOOL_POLICIES: Record<RetrievalToolName, RuntimeToolPolicy> = {
   search_product_docs: buildPlatformOperationRuntimePolicy("search_product_docs"),
   get_product_doc: buildPlatformOperationRuntimePolicy("get_product_doc"),
   polynet_list: {
-    toolName: "polynet_list",
-    source: "fixed",
-    category: "community",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
+    toolName: "polynet_list", source: "fixed", category: "community", riskLevel: "read",
+    readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
+    requiresWorkspace: false, requiresCommunity: false,
   },
   polynet_read: {
-    toolName: "polynet_read",
-    source: "fixed",
-    category: "community",
-    riskLevel: "read",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
+    toolName: "polynet_read", source: "fixed", category: "community", riskLevel: "read",
+    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: false,
+    requiresWorkspace: false, requiresCommunity: false,
   },
   polynet_search: {
-    toolName: "polynet_search",
-    source: "fixed",
-    category: "community",
-    riskLevel: "read",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
+    toolName: "polynet_search", source: "fixed", category: "community", riskLevel: "read",
+    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: false,
+    requiresWorkspace: false, requiresCommunity: false,
   },
   polynet_write: {
-    toolName: "polynet_write",
-    source: "fixed",
-    category: "community",
-    riskLevel: "write",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: false,
-    requiresCommunity: false,
+    toolName: "polynet_write", source: "fixed", category: "community", riskLevel: "write",
+    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: true,
+    requiresWorkspace: false, requiresCommunity: false,
   },
   polynet_call: {
-    toolName: "polynet_call",
-    source: "fixed",
-    category: "community",
-    riskLevel: "write",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: false,
-    requiresCommunity: false,
-  },
-  member_profile_confirm_facts: {
-    toolName: "member_profile_confirm_facts",
-    source: "fixed",
-    category: "community",
-    riskLevel: "write",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: false,
-    requiresCommunity: true,
+    toolName: "polynet_call", source: "fixed", category: "community", riskLevel: "write",
+    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: true,
+    requiresWorkspace: false, requiresCommunity: false,
   },
   member_conversations_list: {
-    toolName: "member_conversations_list",
-    source: "fixed",
-    category: "community",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
+    toolName: "member_conversations_list", source: "fixed", category: "community", riskLevel: "read",
+    readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
+    requiresWorkspace: false, requiresCommunity: false,
   },
   member_conversation_read: {
-    toolName: "member_conversation_read",
-    source: "fixed",
-    category: "community",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: false,
+    toolName: "member_conversation_read", source: "fixed", category: "community", riskLevel: "read",
+    readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
+    requiresWorkspace: false, requiresCommunity: false,
+  },
+  member_profile_confirm_facts: {
+    toolName: "member_profile_confirm_facts", source: "fixed", category: "community", riskLevel: "write",
+    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: true,
+    requiresWorkspace: false, requiresCommunity: true,
   },
   web_research: {
-    toolName: "web_research",
-    source: "fixed",
-    category: "web",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: false,
-    requiresCommunity: true,
+    toolName: "web_research", source: "fixed", category: "web", riskLevel: "read",
+    readOnly: true, mutatesState: false, parallelSafe: true, exclusive: false,
+    requiresWorkspace: false, requiresCommunity: true,
   },
   web_crawl: {
-    toolName: "web_crawl",
-    source: "fixed",
-    category: "web",
-    riskLevel: "write",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: false,
-    requiresCommunity: true,
-  },
-  list_dir: {
-    toolName: "list_dir",
-    source: "fixed",
-    category: "workspace_fs",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  read: {
-    toolName: "read",
-    source: "fixed",
-    category: "workspace_fs",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  glob: {
-    toolName: "glob",
-    source: "fixed",
-    category: "workspace_fs",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  grep: {
-    toolName: "grep",
-    source: "fixed",
-    category: "workspace_fs",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  sha256: {
-    toolName: "sha256",
-    source: "fixed",
-    category: "workspace_fs",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: true,
-    exclusive: false,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  write: {
-    toolName: "write",
-    source: "fixed",
-    category: "workspace_fs",
-    riskLevel: "write",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  edit: {
-    toolName: "edit",
-    source: "fixed",
-    category: "workspace_fs",
-    riskLevel: "write",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  bash: {
-    toolName: "bash",
-    source: "fixed",
-    category: "workspace_shell",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  terminal_start: {
-    toolName: "terminal_start",
-    source: "fixed",
-    category: "terminal",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  terminal_read: {
-    toolName: "terminal_read",
-    source: "fixed",
-    category: "terminal",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  terminal_write: {
-    toolName: "terminal_write",
-    source: "fixed",
-    category: "terminal",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  terminal_stop: {
-    toolName: "terminal_stop",
-    source: "fixed",
-    category: "terminal",
-    riskLevel: "write",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  computer_open_url: {
-    toolName: "computer_open_url",
-    source: "fixed",
-    category: "computer",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  computer_screenshot: {
-    toolName: "computer_screenshot",
-    source: "fixed",
-    category: "computer",
-    riskLevel: "read",
-    readOnly: true,
-    mutatesState: false,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  computer_click: {
-    toolName: "computer_click",
-    source: "fixed",
-    category: "computer",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  computer_type: {
-    toolName: "computer_type",
-    source: "fixed",
-    category: "computer",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  computer_keypress: {
-    toolName: "computer_keypress",
-    source: "fixed",
-    category: "computer",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  computer_scroll: {
-    toolName: "computer_scroll",
-    source: "fixed",
-    category: "computer",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
-  },
-  computer_stop: {
-    toolName: "computer_stop",
-    source: "fixed",
-    category: "computer",
-    riskLevel: "write",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: true,
-    requiresCommunity: false,
+    toolName: "web_crawl", source: "fixed", category: "web", riskLevel: "write",
+    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: true,
+    requiresWorkspace: false, requiresCommunity: true,
   },
 };
 
 function emptyRiskCounts(): Record<RuntimeToolRiskLevel, number> {
-  return {
-    read: 0,
-    write: 0,
-    sensitive: 0,
-  };
+  return { read: 0, write: 0, sensitive: 0 };
 }
 
 function emptyCategoryCounts(): Record<RuntimeToolCategory, number> {
-  return {
-    docs: 0,
-    community: 0,
-    web: 0,
-    workspace_fs: 0,
-    workspace_shell: 0,
-    terminal: 0,
-    computer: 0,
-    unknown: 0,
-  };
+  return { docs: 0, community: 0, web: 0, unknown: 0 };
 }
 
-export function getFixedRuntimeToolPolicy(
-  toolName: RetrievalToolName,
-): RuntimeToolPolicy {
+export function getFixedRuntimeToolPolicy(toolName: RetrievalToolName): RuntimeToolPolicy {
   return FIXED_TOOL_POLICIES[toolName];
 }
 
 export function getUnknownRuntimeToolPolicy(toolName: string): RuntimeToolPolicy {
   return {
-    toolName,
-    source: "unknown",
-    category: "unknown",
-    riskLevel: "sensitive",
-    readOnly: false,
-    mutatesState: true,
-    parallelSafe: false,
-    exclusive: true,
-    requiresWorkspace: false,
-    requiresCommunity: false,
+    toolName, source: "unknown", category: "unknown", riskLevel: "sensitive",
+    readOnly: false, mutatesState: true, parallelSafe: false, exclusive: true,
+    requiresWorkspace: false, requiresCommunity: false,
   };
 }
 
 export function summarizeRuntimeToolPolicies(
   policies: readonly RuntimeToolPolicy[],
 ): RuntimeToolPolicySummary {
-  const byRiskLevel = emptyRiskCounts();
-  const byCategory = emptyCategoryCounts();
   const summary: RuntimeToolPolicySummary = {
     total: policies.length,
     readOnly: 0,
@@ -552,10 +207,9 @@ export function summarizeRuntimeToolPolicies(
     exclusive: 0,
     requiresWorkspace: 0,
     requiresCommunity: 0,
-    byRiskLevel,
-    byCategory,
+    byRiskLevel: emptyRiskCounts(),
+    byCategory: emptyCategoryCounts(),
   };
-
   for (const policy of policies) {
     if (policy.readOnly) summary.readOnly += 1;
     if (policy.mutatesState) summary.mutating += 1;
@@ -563,40 +217,26 @@ export function summarizeRuntimeToolPolicies(
     if (policy.exclusive) summary.exclusive += 1;
     if (policy.requiresWorkspace) summary.requiresWorkspace += 1;
     if (policy.requiresCommunity) summary.requiresCommunity += 1;
-    byRiskLevel[policy.riskLevel] += 1;
-    byCategory[policy.category] += 1;
+    summary.byRiskLevel[policy.riskLevel] += 1;
+    summary.byCategory[policy.category] += 1;
   }
-
   return summary;
 }
 
 export function buildRuntimeToolPolicySurface(params: {
   fixedToolNames: readonly RetrievalToolName[];
-}): {
-  policies: RuntimeToolPolicy[];
-  summary: RuntimeToolPolicySummary;
-} {
+}): { policies: RuntimeToolPolicy[]; summary: RuntimeToolPolicySummary } {
   const policies = params.fixedToolNames.map(getFixedRuntimeToolPolicy);
-  return {
-    policies,
-    summary: summarizeRuntimeToolPolicies(policies),
-  };
+  return { policies, summary: summarizeRuntimeToolPolicies(policies) };
 }
 
-export function isRuntimeToolPolicyParallelEligible(
-  policy: RuntimeToolPolicy,
-): boolean {
+export function isRuntimeToolPolicyParallelEligible(policy: RuntimeToolPolicy): boolean {
   return policy.parallelSafe && policy.readOnly && !policy.exclusive;
 }
 
-function getRuntimeToolScheduleReasons(
-  policy: RuntimeToolPolicy,
-): RuntimeToolScheduleReason[] {
+function getRuntimeToolScheduleReasons(policy: RuntimeToolPolicy): RuntimeToolScheduleReason[] {
+  if (isRuntimeToolPolicyParallelEligible(policy)) return ["parallel_safe_read_only"];
   const reasons: RuntimeToolScheduleReason[] = [];
-  if (isRuntimeToolPolicyParallelEligible(policy)) {
-    reasons.push("parallel_safe_read_only");
-    return reasons;
-  }
   if (policy.source === "unknown") reasons.push("unknown_policy");
   if (policy.exclusive) reasons.push("exclusive_tool");
   if (policy.mutatesState) reasons.push("mutates_state");
@@ -605,86 +245,21 @@ function getRuntimeToolScheduleReasons(
   return reasons;
 }
 
-function riskLevelForShellEffect(effect: ShellCommandEffect): RuntimeToolRiskLevel {
-  if (effect === "read_only") return "read";
-  if (effect === "writes_workspace") return "write";
-  return "sensitive";
-}
-
-export function getShellCommandAuditMetadataForToolCall(params: {
-  toolName: string;
-  normalizedArgs?: Record<string, unknown>;
-}): RuntimeShellCommandAuditMetadata | null {
-  if (String(params.toolName ?? "").trim() !== "bash") return null;
-  const command = String(params.normalizedArgs?.command ?? "").trim();
-  if (!command) return null;
-  const classification = classifyShellCommand(command);
-  return {
-    shell_command_effect: classification.effect,
-    shell_command_audit_severity: classification.auditSeverity,
-    shell_command_reasons: classification.reasons,
-    shell_command_parsed_commands: classification.parsedCommands,
-  };
-}
-
-function getEffectiveRuntimeToolPolicyForSchedule(params: {
-  toolName: string;
-  basePolicy: RuntimeToolPolicy;
-  normalizedArgs?: Record<string, unknown>;
-}): {
-  policy: RuntimeToolPolicy;
-  shellClassification?: ReturnType<typeof classifyShellCommand>;
-} {
-  if (params.toolName !== "bash") {
-    return { policy: params.basePolicy };
-  }
-  const command = String(params.normalizedArgs?.command ?? "").trim();
-  if (!command) {
-    return { policy: params.basePolicy };
-  }
-  const shellClassification = classifyShellCommand(command);
-  const isReadOnlyShell = shellClassification.effect === "read_only";
-  return {
-    policy: {
-      ...params.basePolicy,
-      riskLevel: riskLevelForShellEffect(shellClassification.effect),
-      readOnly: isReadOnlyShell,
-      mutatesState: !isReadOnlyShell,
-      parallelSafe: isReadOnlyShell,
-      exclusive: !isReadOnlyShell,
-    },
-    shellClassification,
-  };
-}
-
 export function classifyRuntimeToolSchedule(params: {
   toolCalls: readonly RuntimeToolScheduleInputCall[];
   policies: readonly RuntimeToolPolicy[];
   enableParallelReadBatches?: boolean;
 }): RuntimeToolSchedulePlan {
-  const policiesByToolName = new Map<string, RuntimeToolPolicy>();
-  for (const policy of params.policies) {
-    if (!policiesByToolName.has(policy.toolName)) {
-      policiesByToolName.set(policy.toolName, policy);
-    }
-  }
-
+  const policiesByToolName = new Map(params.policies.map((policy) => [policy.toolName, policy]));
   const calls = params.toolCalls.map((toolCall, fallbackIndex) => {
     const toolName = String(toolCall.toolName ?? "").trim();
-    const basePolicy =
-      policiesByToolName.get(toolName) ?? getUnknownRuntimeToolPolicy(toolName);
-    const { policy, shellClassification } = getEffectiveRuntimeToolPolicyForSchedule({
-      toolName,
-      basePolicy,
-      normalizedArgs: toolCall.normalizedArgs,
-    });
+    const policy = policiesByToolName.get(toolName) ?? getUnknownRuntimeToolPolicy(toolName);
     return {
       providerCallId: String(toolCall.providerCallId ?? "").trim(),
       toolName,
-      index:
-        typeof toolCall.index === "number" && Number.isFinite(toolCall.index)
-          ? toolCall.index
-          : fallbackIndex,
+      index: typeof toolCall.index === "number" && Number.isFinite(toolCall.index)
+        ? toolCall.index
+        : fallbackIndex,
       source: policy.source,
       category: policy.category,
       riskLevel: policy.riskLevel,
@@ -695,18 +270,9 @@ export function classifyRuntimeToolSchedule(params: {
       exclusive: policy.exclusive,
       requiresWorkspace: policy.requiresWorkspace,
       requiresCommunity: policy.requiresCommunity,
-      ...(shellClassification
-        ? {
-            shellCommandEffect: shellClassification.effect,
-            shellCommandAuditSeverity: shellClassification.auditSeverity,
-            shellCommandReasons: shellClassification.reasons,
-            shellCommandParsedCommands: shellClassification.parsedCommands,
-          }
-        : {}),
       reasons: getRuntimeToolScheduleReasons(policy),
     };
   });
-
   const summary: RuntimeToolScheduleSummary = {
     total: calls.length,
     parallelEligible: 0,
@@ -717,7 +283,6 @@ export function classifyRuntimeToolSchedule(params: {
     requiresWorkspace: 0,
     requiresCommunity: 0,
   };
-
   for (const call of calls) {
     if (call.parallelEligible) summary.parallelEligible += 1;
     if (call.exclusive) summary.exclusive += 1;
@@ -727,30 +292,18 @@ export function classifyRuntimeToolSchedule(params: {
     if (call.requiresWorkspace) summary.requiresWorkspace += 1;
     if (call.requiresCommunity) summary.requiresCommunity += 1;
   }
-
-  const allCallsParallelEligible =
-    calls.length > 1 && summary.parallelEligible === calls.length;
-  if (params.enableParallelReadBatches === true && allCallsParallelEligible) {
-    return {
-      decision: "parallel_read_batch_enabled",
-      executionMode: "parallel_read_batch",
-      reason: "parallel_read_batch_enabled",
-      calls,
-      summary,
-    };
-  }
-
-  const reason =
-    calls.length <= 1
-      ? "single_tool_call_serialized"
-      : allCallsParallelEligible
-        ? "parallel_capable_batch_serialized"
-        : "contains_non_parallel_tools";
-
+  const allParallelEligible = calls.length > 1 && calls.every((call) => call.parallelEligible);
+  const parallelEnabled = params.enableParallelReadBatches === true && allParallelEligible;
   return {
-    decision: "serial_execution_enforced",
-    executionMode: "serial_batch",
-    reason,
+    decision: parallelEnabled ? "parallel_read_batch_enabled" : "serial_execution_enforced",
+    executionMode: parallelEnabled ? "parallel_read_batch" : "serial_batch",
+    reason: calls.length <= 1
+      ? "single_tool_call_serialized"
+      : parallelEnabled
+        ? "parallel_read_batch_enabled"
+        : allParallelEligible
+          ? "parallel_capable_batch_serialized"
+          : "contains_non_parallel_tools",
     calls,
     summary,
   };

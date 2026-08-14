@@ -20,8 +20,8 @@ const webLock = JSON.parse(
 
 assert.equal(
   rootManifest.dependencies?.["@daytona/sdk"],
-  "^0.192.0",
-  "Daytona direct dependency must remain on the accepted runtime version",
+  undefined,
+  "the retired Daytona runtime must not remain a direct dependency",
 );
 assert.equal(
   rootManifest.dependencies?.["@blaxel/core"],
@@ -29,9 +29,9 @@ assert.equal(
   "Blaxel direct dependency must remain unchanged pending its separate retirement",
 );
 assert.equal(
-  rootLock.packages?.["node_modules/@daytona/sdk"]?.version,
-  "0.192.0",
-  "root lock must retain the accepted Daytona SDK",
+  rootLock.packages?.["node_modules/@daytona/sdk"],
+  undefined,
+  "the root lock must not retain the retired Daytona SDK",
 );
 assert.equal(
   rootLock.packages?.["node_modules/@blaxel/core"]?.version,
@@ -42,31 +42,6 @@ assert.equal(
 const exactRootResolutions = {
   "@hono/node-server": "2.0.11",
   "@modelcontextprotocol/sdk": "1.29.0",
-  "@opentelemetry/configuration": "0.221.0",
-  "@opentelemetry/core": "2.10.0",
-  "@opentelemetry/exporter-logs-otlp-grpc": "0.221.0",
-  "@opentelemetry/exporter-logs-otlp-http": "0.221.0",
-  "@opentelemetry/exporter-logs-otlp-proto": "0.221.0",
-  "@opentelemetry/exporter-metrics-otlp-grpc": "0.221.0",
-  "@opentelemetry/exporter-metrics-otlp-http": "0.221.0",
-  "@opentelemetry/exporter-metrics-otlp-proto": "0.221.0",
-  "@opentelemetry/exporter-prometheus": "0.221.0",
-  "@opentelemetry/exporter-trace-otlp-grpc": "0.221.0",
-  "@opentelemetry/exporter-trace-otlp-http": "0.221.0",
-  "@opentelemetry/exporter-trace-otlp-proto": "0.221.0",
-  "@opentelemetry/exporter-zipkin": "2.10.0",
-  "@opentelemetry/instrumentation-http": "0.221.0",
-  "@opentelemetry/otlp-exporter-base": "0.221.0",
-  "@opentelemetry/otlp-grpc-exporter-base": "0.221.0",
-  "@opentelemetry/otlp-transformer": "0.221.0",
-  "@opentelemetry/propagator-b3": "2.10.0",
-  "@opentelemetry/propagator-jaeger": "2.10.0",
-  "@opentelemetry/resources": "2.10.0",
-  "@opentelemetry/sdk-logs": "0.221.0",
-  "@opentelemetry/sdk-metrics": "2.10.0",
-  "@opentelemetry/sdk-node": "0.221.0",
-  "@opentelemetry/sdk-trace-base": "2.10.0",
-  "@opentelemetry/sdk-trace-node": "2.10.0",
   axios: "1.18.1",
   "body-parser": "2.3.0",
   "brace-expansion": "5.0.9",
@@ -74,9 +49,6 @@ const exactRootResolutions = {
   hono: "4.12.34",
   "ip-address": "10.4.0",
   "js-yaml": "5.2.2",
-  protobufjs: "8.7.1",
-  "shell-quote": "1.10.0",
-  tar: "7.5.21",
 };
 
 for (const [packageName, expectedVersion] of Object.entries(exactRootResolutions)) {
@@ -118,15 +90,7 @@ assert.equal(
   "web lock must resolve the patched DOMPurify release",
 );
 
-const [daytonaModule, blaxelModule] = await Promise.all([
-  import("@daytona/sdk"),
-  import("@blaxel/core"),
-]);
-assert.equal(
-  typeof daytonaModule.Daytona,
-  "function",
-  "Daytona SDK must retain its runtime client export",
-);
+const blaxelModule = await import("@blaxel/core");
 assert.ok(
   blaxelModule.SandboxInstance,
   "Blaxel SDK must retain SandboxInstance pending provider retirement",
@@ -186,5 +150,5 @@ try {
 }
 
 console.log(
-  "dependency_security_interlock_proof: ok (provider SDKs unchanged, patched root/web graph, Blaxel archive API compatible)",
+  "dependency_security_interlock_proof: ok (Daytona removed; patched root/web graph and migration-only Blaxel archive API remain compatible)",
 );

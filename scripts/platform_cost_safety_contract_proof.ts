@@ -63,7 +63,6 @@ const checkoutFinalizeController = read("shared/useCheckoutFinalizeController.ts
 const realtimeAuth = read("shared/convexRealtimeAuth.ts");
 const previewProxy = read("apps/preview-proxy/server.js");
 const runtimeCancellation = read("convex/runtimeCancellation.ts");
-const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
 const communityPresenceContract = read("shared/communityPresenceContract.ts");
 const schema = read("convex/schema.ts");
 const communityHeartbeat = read("convex/communityAgentHeartbeat.ts");
@@ -77,7 +76,6 @@ const uiOnlyIntervalFiles = [
 const costBearingIntervalFiles = [
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
   "convex/runtimeCancellation.ts",
-  "convex/runtimeExecutionSession.ts",
 ] as const;
 const expectedIntervalFiles = [...uiOnlyIntervalFiles, ...costBearingIntervalFiles].sort();
 const actualIntervalCallSites = listSetIntervalCallSites();
@@ -245,11 +243,6 @@ assert.match(
   runtimeCancellation,
   /let pollInFlight = false[\s\S]*Math\.max\([\s\S]*100[\s\S]*setInterval[\s\S]*pollInFlight = true[\s\S]*finally\(\(\) => \{[\s\S]*pollInFlight = false[\s\S]*finally \{[\s\S]*clearInterval\(intervalId\)/,
   "runtime cancellation polling must be bounded, non-overlapping, and execution-scoped",
-);
-assert.match(
-  runtimeExecutionSession,
-  /WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 \* 60 \* 1000[\s\S]*let heartbeatInFlight = false[\s\S]*if \(!params\.touchRunHeartbeat \|\| !workspaceSession \|\| heartbeatTimer\) return[\s\S]*heartbeatTimer = setInterval[\s\S]*heartbeatInFlight = true[\s\S]*async dispose\(\)[\s\S]*clearInterval\(heartbeatTimer\)/,
-  "workspace heartbeat must have one timer, one in-flight touch, and deterministic disposal",
 );
 assert.match(
   checkoutFinalizeController,

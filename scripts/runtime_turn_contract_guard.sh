@@ -14,7 +14,7 @@ HANDLERS_FILE="convex/runtimeTurnHandlers.ts"
 RESOLUTION_FILE="convex/runtimeTurnResolution.ts"
 PERSISTENCE_FILE="convex/runtimeTurnPersistence.ts"
 THREADS_FILE="convex/threads.ts"
-EXECUTION_SESSION_FILE="convex/runtimeExecutionSession.ts"
+LOOP_FILE="convex/runtimeAgentLoop.ts"
 MEMBER_AGENT_DOCK_FILE="apps/web/src/components/WebMemberAgentDock.tsx"
 TURN_RUNNER_FILE="shared/useWebTurnRunnerController.ts"
 SCHEMA_FILE="convex/schema.ts"
@@ -43,8 +43,8 @@ if [[ ! -f "$THREADS_FILE" ]]; then
   echo "FAIL: missing $THREADS_FILE"
   exit 1
 fi
-if [[ ! -f "$EXECUTION_SESSION_FILE" ]]; then
-  echo "FAIL: missing $EXECUTION_SESSION_FILE"
+if [[ ! -f "$LOOP_FILE" ]]; then
+  echo "FAIL: missing $LOOP_FILE"
   exit 1
 fi
 if [[ ! -f "$MEMBER_AGENT_DOCK_FILE" ]]; then
@@ -171,7 +171,6 @@ require_match_in_file "$THREADS_FILE" 'throw new Error\("message_key_conflict"\)
 require_match_in_file "$THREADS_FILE" 'return existingByMessageKey;' \
   "threads mutation returns existing row for duplicate messageKey"
 
-echo "[10/10] Guard passed."
 echo "[11/11] Ensuring browser tool routing is structural, not heuristic..."
 require_match_in_file "$MEMBER_AGENT_DOCK_FILE" 'requestedAgenticTools: true' \
   "mounted member-agent turns stay tool-capable by default"
@@ -190,22 +189,19 @@ forbid_match_in_file "$SCHEMA_FILE" 'requestedExecutionTarget' \
 forbid_match_in_file "$SCHEMA_FILE" 'requiresWorkspaceTools' \
   "runtimeRuns schema no longer carries requiresWorkspaceTools compatibility residue"
 require_match_in_file "$SCHEMA_FILE" 'workspaceSessionState' \
-  "runtimeRuns schema persists workspace session state"
+  "historical runtimeRuns workspace state remains readable during migration"
 require_match_in_file "$SCHEMA_FILE" 'workspaceProviderSandboxId' \
-  "runtimeRuns schema persists workspace sandbox id"
+  "historical runtimeRuns sandbox pointers remain readable during migration"
 require_match_in_file "$SCHEMA_FILE" 'workspaceToolboxProxyUrl' \
-  "runtimeRuns schema persists workspace toolbox proxy url"
-require_match_in_file "$THREADS_FILE" 'setCloudRuntimeRunWorkspaceSessionInternal = internalMutation\(' \
-  "threads contract exposes runtime workspace session persistence"
-require_match_in_file "$THREADS_FILE" 'run\.workspaceSessionState' \
-  "live desktop lookup reads runtime run workspace session state"
-require_match_in_file "$THREADS_FILE" 'workspaceSessionState: "none"' \
-  "new runtime runs initialize explicit no-workspace-session state"
-require_match_in_file "$THREADS_FILE" 'run\.workspaceProviderSandboxId' \
-  "live desktop lookup reads runtime run sandbox id"
-require_match_in_file "$THREADS_FILE" 'run\.workspaceToolboxProxyUrl' \
-  "live desktop lookup reads runtime run toolbox proxy url"
-require_match_in_file "$EXECUTION_SESSION_FILE" 'workspace_session_state_persist_failed' \
-  "execution session emits explicit session-state persistence failure evidence"
+  "historical runtimeRuns toolbox pointers remain readable during migration"
+forbid_match_in_file "$THREADS_FILE" 'setCloudRuntimeRunWorkspaceSessionInternal|workspaceSessionState: "none"|run\.workspaceProviderSandboxId|run\.workspaceToolboxProxyUrl' \
+  "threads no longer expose or initialize an active Workspace session"
+forbid_match_in_file "$LOOP_FILE" 'runtimeExecutionSession|workspaceRuntime|workspaceTerminals|daytonaCodexRuntime|executeTerminalTool|executeComputerTool' \
+  "canonical agent loop cannot reach the retired Workspace runtime"
+if [[ -e "convex/runtimeExecutionSession.ts" ]]; then
+  echo "FAIL: retired runtimeExecutionSession.ts must remain deleted"
+  exit 1
+fi
+echo "OK: retired runtimeExecutionSession.ts remains deleted"
 
 echo "PASS: runtime turn contract markers are present and hardened."

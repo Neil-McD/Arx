@@ -1,4 +1,3 @@
-import { isComputerUseToolName } from "./retrievalTools.ts";
 import type { CloudRuntimeRunEventTransportRow } from "./cloudThreadsRead";
 import {
   readRuntimeCommunityContextReceipt,
@@ -62,6 +61,20 @@ export type RuntimeLiveTimelineEntry =
       group: RuntimeTimelineToolGroup;
       isActive: boolean;
     };
+
+const LEGACY_COMPUTER_USE_TOOL_NAMES = new Set([
+  "computer_open_url",
+  "computer_screenshot",
+  "computer_click",
+  "computer_type",
+  "computer_keypress",
+  "computer_scroll",
+  "computer_stop",
+]);
+
+function isHistoricalComputerUseToolName(toolName: string): boolean {
+  return LEGACY_COMPUTER_USE_TOOL_NAMES.has(toolName);
+}
 
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
@@ -175,7 +188,7 @@ function categoryForTool(toolName: string): RuntimeToolCategory {
   ) {
     return "shell";
   }
-  if (isComputerUseToolName(toolName)) {
+  if (isHistoricalComputerUseToolName(toolName)) {
     return "computer";
   }
   if (toolName === "search_product_docs" || toolName === "get_product_doc") return "docs";

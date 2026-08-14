@@ -89,7 +89,6 @@ export type RuntimePromptSectionOwner =
   | "platform"
   | "user"
   | "community"
-  | "workspace"
   | "runtime";
 
 export type RuntimePromptSection = {
@@ -114,77 +113,6 @@ export type RuntimePromptExtensionSection = Omit<
 export type RuntimePromptBundle = {
   text: string;
   sections: RuntimePromptSection[];
-};
-
-export type RuntimeWorkspaceTerminalPrompt = {
-  id: string;
-  status: "starting" | "running" | "exited" | "failed" | "stopped";
-  lifecycleOwner?: "project_background" | null;
-  command: string;
-  cwd?: string | null;
-  previewPort?: number | null;
-  previewPath?: string | null;
-  previewLabel?: string | null;
-  previewStatus?:
-    | "none"
-    | "starting"
-    | "running"
-    | "blank"
-    | "render_error_suspected"
-    | "unreachable"
-    | "server_exited"
-    | null;
-  healthStatus?:
-    | "unknown"
-    | "starting"
-    | "healthy"
-    | "unhealthy"
-    | "exited"
-    | "stale"
-    | null;
-  healthSummary?: string | null;
-  lastPreviewProbeSummary?: string | null;
-  lastBrowserObservationSummary?: string | null;
-  previewTransportStatus?:
-    | "not_started"
-    | "loading"
-    | "loaded"
-    | "failed"
-    | null;
-  previewInspectionStatus?:
-    | "not_attempted"
-    | "same_origin_dom"
-    | "cross_origin_uninspectable"
-    | "dom_unavailable"
-    | null;
-  previewRenderStatus?:
-    | "unknown"
-    | "visible_content"
-    | "blank_suspected"
-    | "transport_error"
-    | null;
-  previewDiagnosis?:
-    | "process_dead"
-    | "preview_unreachable"
-    | "transport_loaded_render_unknown"
-    | "cross_origin_uninspectable"
-    | "blank_suspected"
-    | "visible_content"
-    | "runtime_error_suspected"
-    | null;
-  recommendedPreviewDebugAction?: string | null;
-  exitCode?: number | null;
-  completionRecordedAt?: number | null;
-  completionReason?:
-    | "exited"
-    | "failed"
-    | "stopped"
-    | "sandbox_missing"
-    | "session_missing"
-    | "command_missing"
-    | "preflight_failed"
-    | null;
-  outputTail?: string | null;
 };
 
 export type RuntimePlatformHarnessPromptParams =
@@ -441,84 +369,15 @@ function buildCommunitySystemPromptBlock(
   ].join("\n");
 }
 
-function buildPlatformHarnessContextPrompt(params: {
-  harnessName: "chat_tools";
-  allowedToolNames: readonly RetrievalToolName[];
-  projectLabel?: string | null;
-  projectDescription?: string | null;
-}): string {
-  const hasSandboxFileTools = params.allowedToolNames.some((toolName) =>
-    [
-      "list_dir",
-      "read",
-      "glob",
-      "grep",
-      "sha256",
-      "write",
-      "edit",
-      "bash",
-    ].includes(toolName),
-  );
-  const hasProjectWorkspaceTools = params.allowedToolNames.some((toolName) =>
-    [
-      "terminal_start",
-      "terminal_read",
-      "terminal_write",
-      "terminal_stop",
-      "computer_open_url",
-      "computer_screenshot",
-      "computer_click",
-      "computer_type",
-      "computer_keypress",
-      "computer_scroll",
-      "computer_stop",
-    ].includes(toolName),
-  );
-  const projectLabel = String(params.projectLabel ?? "").trim();
-  const projectDescription = String(params.projectDescription ?? "").trim();
-  const hasProjectContext = Boolean(
-    projectLabel || projectDescription || hasProjectWorkspaceTools,
-  );
-  return [
-    "PLATFORM_HARNESS_CONTEXT",
-    `Active harness: ${params.harnessName}.`,
-    hasSandboxFileTools
-      ? "This run can inspect and modify files inside an active sandbox when needed."
-      : "This run does not have active sandbox file tools.",
-    hasProjectContext
-      ? `Active project: ${projectLabel || "current project"}.`
-      : "Active project: none.",
-    hasProjectContext && projectDescription
-      ? `Project description: ${projectDescription}.`
-      : null,
-    hasSandboxFileTools && hasProjectContext
-      ? "Sandbox filesystem root: current project workspace root."
-      : null,
-    hasSandboxFileTools && !hasProjectContext
-      ? "Sandbox filesystem root: run-scoped scratch sandbox."
-      : null,
-    `Allowed tools: ${params.allowedToolNames.join(",") || "(none)"}.`,
-    hasSandboxFileTools && hasProjectContext
-      ? "All file paths are relative to the project workspace root."
-      : null,
-    hasSandboxFileTools && !hasProjectContext
-      ? "All file paths are relative to the scratch sandbox root."
-      : null,
-    "Only the listed tools are available in this run.",
-  ]
-    .filter(Boolean)
-    .join("\n");
-}
-
 function buildExplanationContractPrompt(): string {
   return [
     "EXPLANATION_CONTRACT",
-    "Keep the user accurately oriented to hidden runtime, workspace, tool, and system state.",
+    "Keep the user accurately oriented to hidden runtime, tool, and system state.",
     "Explain outcomes, verified facts, current state, uncertainty, and the next useful step.",
     "Separate verified facts, inferences, and unknowns. Do not present guesses as facts.",
     "Do not narrate raw tool noise unless the user asks for operational detail.",
     "Use concise prose by default. Use bullets, tables, diagrams, code blocks, or logs only when they make the answer clearer.",
-    "After workspace work, summarize what was inspected, what changed, what was verified, and what remains.",
+    "After tool-backed work, summarize what was inspected, what changed, what was verified, and what remains.",
   ].join("\n");
 }
 
@@ -601,10 +460,6 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   communitySlug?: string | null;
 }): string {
   const toolGuidance: string[] = [];
-  const hasBashTool = params.allowedToolNames.includes("bash");
-  const hasPreviewCapableTerminalTool =
-    params.allowedToolNames.includes("terminal_start");
-  const hasTerminalReadTool = params.allowedToolNames.includes("terminal_read");
   if (
     params.allowedToolNames.includes("member_conversations_list") &&
     params.allowedToolNames.includes("member_conversation_read")
@@ -674,8 +529,8 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   }
   if (params.allowedToolNames.includes("web_research")) {
     toolGuidance.push(
-      "- Use web_research for current external facts, official references, frontier signal, or information unlikely to exist in workspace or product docs.",
-      "- Do not use web_research for localhost, 127.0.0.1, private-network URLs, sandbox preview URLs, or app visual verification. For sandbox-local checks, use workspace bash/terminal evidence and the workspace preview surface.",
+      "- Use web_research for current external facts, official references, frontier signal, or information unlikely to exist in community Resources or product docs.",
+      "- Do not use web_research for localhost, 127.0.0.1, private-network URLs, or app visual verification.",
       "- If you start web research, complete the research loop: find relevant sources, open the best sources, extract facts, synthesize the answer, and name or cite the sources used.",
       "- For latest/current/recent queries, anchor on the runtime date, compare dates when available, and state exact dates when they matter.",
       "- Use short, specific search queries. Refine noisy searches instead of overstuffing the first query.",
@@ -684,86 +539,10 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
   if (params.allowedToolNames.includes("web_crawl")) {
     toolGuidance.push(
       "- Use web_crawl when the user provides a site, wiki, docs, course, or multi-page URL and asks for comprehensive extraction, structure, or page-tree understanding.",
-      "- Use web_research for search and one-page lookup; use web_crawl for bounded same-origin crawling. Do not use workspace shell scraping as the primary crawl path when web_crawl is available.",
+      "- Use web_research for search and one-page lookup; use web_crawl for bounded same-origin crawling.",
       hasCommunityResourceBuilderTools(params.allowedToolNames)
         ? "- For Resources Architect URL extraction/import requests, call web_crawl with destination active_community_sources, then inspect the saved source records before staging resource changes. Report saved versus reused state, page count, source-unit count when visible, failed pages or units, and whether the material is source inbox, draft, or live."
         : "- Use web_crawl with destination context unless the user is explicitly importing into an active community Resources workflow.",
-    );
-  }
-  if (params.allowedToolNames.includes("list_dir")) {
-    toolGuidance.push(
-      "- Use list_dir to discover files and folders before claiming workspace knowledge you have not inspected.",
-    );
-  }
-  if (params.allowedToolNames.includes("read")) {
-    toolGuidance.push(
-      "- Use read to inspect specific files or directories once you know the path. Listing alone is not completion when the task requires file contents.",
-    );
-  }
-  if (params.allowedToolNames.includes("glob")) {
-    toolGuidance.push(
-      "- Use glob to match likely file paths when you know a pattern but not the exact file name.",
-    );
-  }
-  if (params.allowedToolNames.includes("grep")) {
-    toolGuidance.push(
-      "- Use grep to search workspace files for a relevant string or regex pattern before reading whole files blindly.",
-    );
-  }
-  if (params.allowedToolNames.includes("sha256")) {
-    toolGuidance.push(
-      "- Use sha256 when you need a deterministic content fingerprint for a file.",
-    );
-  }
-  if (params.allowedToolNames.includes("write")) {
-    toolGuidance.push(
-      "- Use write to create or fully replace a file only when direct file creation or replacement is required.",
-    );
-  }
-  if (params.allowedToolNames.includes("edit")) {
-    toolGuidance.push(
-      "- Use edit to make a targeted replacement inside an existing workspace file.",
-    );
-  }
-  if (hasBashTool) {
-    toolGuidance.push(
-      "- Use bash only when the task requires a shell command that the other workspace tools do not cover.",
-    );
-    if (!hasPreviewCapableTerminalTool) {
-      toolGuidance.push(
-        "- This run has bash but no preview-capable terminal_start/workspace_serve surface. Do not start persistent app servers or background localhost processes with bash.",
-        "- Do not present localhost, 127.0.0.1, or an internally fetched URL as user-visible or running in the UI. Those addresses are internal to the runtime environment unless a preview card/event is available.",
-        "- If the user asks to build, run, open, preview, or visually inspect an app, site, or UI, explain that visible app previews require a preview-capable Daytona runtime surface. You may plan or create files only when useful, but do not claim the app is visibly running.",
-      );
-    }
-  }
-  if (hasPreviewCapableTerminalTool) {
-    toolGuidance.push(
-      "- Prefer bash for short-lived commands. Use background terminals for long-running or previewable processes.",
-      "- If the user asks to build and run, open, preview, show, visually inspect, or launch an app/site/UI, you must use terminal_start to start the server and expose an inline preview. Do not satisfy that request by running a persistent server with bash only.",
-      hasTerminalReadTool
-        ? "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, use terminal_read for status and logs instead of rerunning the server command in bash."
-        : "- Do not start the same long-running server command with both terminal_start and bash. After terminal_start, rely on the returned preview status and inline preview card; do not claim terminal log streaming is available.",
-      "- For a user-viewable app run, include preview metadata by default so the app can appear inline for the user while the terminal keeps running in the background. Set preview_port to the server port when you know it.",
-      "- For previewable apps, use one dense app shell that fits inline and expanded preview modes without page-level overflow.",
-      "- Prefer one active background terminal. Reuse or stop terminals based on fresh terminal state.",
-      "- For blank or unknown previews, follow the process evidence loop: terminal health, preview probe, browser/computer observation, then app diagnosis. Do not restart a healthy background terminal before proving the process or command is wrong.",
-      hasTerminalReadTool
-        ? "- For localhost app checks, use bash or terminal_read inside the workspace. Do not route localhost through web_research or a generic public web tool."
-        : "- For localhost app checks, use bash for short one-shot probes only. Do not route localhost through web_research or a generic public web tool.",
-      "- After a successful background terminal start, do not echo the returned preview/session fields back to the user unless they asked for operational detail or you are actively debugging a launch problem.",
-    );
-  }
-  if (params.allowedToolNames.includes("terminal_stop")) {
-    toolGuidance.push(
-      '- If a Daytona app preview is active and the user asks to stop the app, call terminal_stop with terminal_session_id "active_daytona_preview".',
-    );
-  }
-  if (params.allowedToolNames.includes("computer_open_url")) {
-    toolGuidance.push(
-      "- Use computer tools only when visual interaction is materially necessary after direct tools or preview links are insufficient.",
-      "- Do not open plain localhost or 127.0.0.1 with computer tools unless the computer surface is explicitly bound to the workspace preview session. Prefer the workspace preview surface for sandbox apps.",
-      "- Treat screenshots and computer-tool errors as ground truth. Stop after one reasonable retry when the same blocker persists.",
     );
   }
   return [
@@ -944,21 +723,6 @@ export function buildPlatformHarnessRuntimePromptBundle(
       text: buildCommunityResourceLanePrompt({
         allowedToolNames: params.allowedToolNames,
         communityResourceLane: params.communityResourceLane,
-      }),
-    }),
-    buildRuntimePromptSection({
-      id: "workspace_harness_context",
-      layer: "scoped",
-      slot: "instruction",
-      owner: "workspace",
-      authority: "platform_policy",
-      source: "shared/runtimePrompt.ts#buildPlatformHarnessContextPrompt",
-      reason: "active harness, project, and granted-tool boundary",
-      text: buildPlatformHarnessContextPrompt({
-        harnessName: params.harnessName,
-        allowedToolNames: params.allowedToolNames,
-        projectLabel: params.projectLabel,
-        projectDescription: params.projectDescription,
       }),
     }),
   ];

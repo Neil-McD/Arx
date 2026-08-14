@@ -13,15 +13,11 @@ export type RequestedFundingSource =
 export type CapabilityFamily =
   | "product_docs"
   | "community_tools"
-  | "web_research"
-  | "sandbox_tools"
-  | "workspace_tools";
+  | "web_research";
 export const AUTHENTICATED_PLATFORM_CAPABILITIES: readonly CapabilityFamily[] = [
   "product_docs",
   "community_tools",
   "web_research",
-  "sandbox_tools",
-  "workspace_tools",
 ];
 export type RuntimeLane = "public" | "platform" | "chatgpt";
 export type GateCode =
@@ -74,8 +70,6 @@ const VALID_CAPABILITY_FAMILY = new Set<CapabilityFamily>([
   "product_docs",
   "community_tools",
   "web_research",
-  "sandbox_tools",
-  "workspace_tools",
 ]);
 
 function toLowerTrimmed(value: unknown): string {
@@ -151,12 +145,7 @@ export function resolveActiveCapabilityFamiliesFromEntitlements(input: {
   if (entitled.includes("web_research")) {
     active.push("web_research");
   }
-  if (entitled.includes("sandbox_tools")) {
-    active.push("sandbox_tools");
-  }
-  if (hasProjectContext && entitled.includes("workspace_tools")) {
-    active.push("workspace_tools");
-  }
+  void hasProjectContext;
   return active.filter(
     (value, index, list) =>
       VALID_CAPABILITY_FAMILY.has(value) && list.indexOf(value) === index,

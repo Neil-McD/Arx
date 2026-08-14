@@ -6,8 +6,8 @@ import {
   type ChatgptToolAwareMessage,
 } from "./httpChatgpt";
 import {
-  appendWorkspaceToolCallFinished,
-  appendWorkspaceToolCallStarted,
+  appendRuntimeToolCallFinished,
+  appendRuntimeToolCallStarted,
 } from "./runtimeToolCallEvents";
 import {
   USER_CANCELLED_RUNTIME_CODE,
@@ -15,16 +15,6 @@ import {
   runAbortableWithRuntimeCancellation,
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
-import {
-  executeRuntimeWorkspaceTool,
-} from "./workspaceRuntimeTools.ts";
-import type {
-  RuntimeWorkspaceSession,
-} from "./workspaceRuntimeSession.ts";
-import {
-  buildWorkspaceRuntimeWindowSignal,
-  isWorkspaceRuntimeWindowExpired,
-} from "./workspaceRuntimeWindowSignal.ts";
 import { executeWebResearch } from "./webResearchTools";
 import type { WebResearchBillingEvidence } from "./webSearchTypes";
 import { classifyWebResearchUrlAccess } from "../shared/webResearchUrlPolicy.ts";
@@ -41,11 +31,7 @@ import {
 } from "../shared/workspaceCredits";
 import { founderPaidToolActionForTool } from "../shared/founderPaidTools";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
-import {
-  type RetrievalToolName,
-  isComputerUseToolName,
-  requiresSandboxSession,
-} from "../shared/retrievalTools";
+import { type RetrievalToolName } from "../shared/retrievalTools";
 import {
   extractTextFromNativeToolMessageContent,
   getNativeToolCompletionToolCalls,
@@ -99,10 +85,6 @@ import { parseProviderModelRef } from "./httpInferenceConfig";
 import { runOpenAiNativeToolCompletion } from "./openAiNativeToolCompletion";
 import { logStructuredError, summarizeErrorForLog } from "./errorLogging";
 import {
-  createPolynetExecutionSession,
-  type ActiveDaytonaRuntimeSubstrateForTools,
-} from "./runtimeExecutionSession";
-import {
   type ActiveRuntimeToolBatchTelemetry,
   type RuntimeToolBatchExecutionMode,
   buildToolBatchTelemetryPayload,
@@ -116,11 +98,11 @@ import {
 import {
   formatJsonToolOutput,
   normalizeRuntimeSkillResolution,
-  readFailureOutputPreview,
   summarizeToolArgsForLog,
 } from "./runtimeHarnessShaping";
 import { composeResolvedRuntimeHarness } from "./runtimeHarnessComposition.ts";
 import {
+  buildRuntimeToolPolicySurface,
   classifyRuntimeToolSchedule,
   type RuntimeToolSchedulePlan,
 } from "../shared/runtimeToolPolicy";
@@ -216,12 +198,6 @@ export async function executeRetrievalHarnessTool(params: {
   args: Record<string, unknown>;
   evidenceSurface?: CommunityEvidenceSurface;
   communityFunnelSlot?: CommunityCustomFunnelSlot | null;
-  workspaceSession?: RuntimeWorkspaceSession | null;
-  activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
-  executeDaytonaWorkspaceTool?: (params: {
-    toolName: RetrievalToolName | string;
-    normalizedArgs: Record<string, unknown>;
-  }) => Promise<NativeToolExecutionResult>;
   signal?: AbortSignal;
 }): Promise<NativeToolExecutionResult> {
   let normalizedArgs: Record<string, unknown>;
@@ -743,136 +719,6 @@ export async function executeRetrievalHarnessTool(params: {
     };
   }
 
-  async function markWorkspaceDirectorySnapshotsStaleBestEffort(
-    activeProjectId: string,
-    reason: string,
-  ) {
-    const ownerId = String(params.userId ?? "").trim();
-    if (!ownerId || !activeProjectId) return;
-    try {
-      await params.ctx.runMutation(
-        (internal as any).workspaceInspector.markWorkspaceDirectorySnapshotsStaleInternal,
-        {
-          projectId: activeProjectId,
-          ownerId,
-          reason,
-        },
-      );
-    } catch (error) {
-      logStructuredError("workspace_directory_snapshot_invalidation_failed", {
-        error,
-        runId: params.runId,
-        toolName: params.toolName,
-        projectId: activeProjectId,
-      });
-    }
-  }
-
-  if (
-    params.toolName === "list_dir" ||
-    params.toolName === "read" ||
-    params.toolName === "glob" ||
-    params.toolName === "grep" ||
-    params.toolName === "sha256" ||
-    params.toolName === "write" ||
-    params.toolName === "edit" ||
-    params.toolName === "bash"
-  ) {
-    if (
-      params.activeDaytonaRuntimeSubstrate?.provider === "daytona" &&
-      params.executeDaytonaWorkspaceTool
-    ) {
-      return await params.executeDaytonaWorkspaceTool({
-        toolName: params.toolName,
-        normalizedArgs,
-      });
-    }
-    const workspaceSession = params.workspaceSession ?? null;
-    const projectId = String(
-      params.projectId ?? workspaceSession?.projectId ?? "",
-    ).trim();
-    if (!workspaceSession) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "sandbox_session_required",
-        errorMessage: `${params.toolName} requires an active sandbox session.`,
-      };
-    }
-    if (isWorkspaceRuntimeWindowExpired(workspaceSession)) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "workspace_runtime_window_expired",
-        errorMessage: "This workspace runtime window expired. Start a new workspace session to continue.",
-      };
-    }
-    const budgetSignal = buildWorkspaceRuntimeWindowSignal(
-      workspaceSession,
-      params.signal,
-    );
-    const startedBeforeBudgetExpiry = !isWorkspaceRuntimeWindowExpired(workspaceSession);
-    const result = await (async () => {
-      try {
-        return await executeRuntimeWorkspaceTool({
-          session: workspaceSession,
-          toolName: params.toolName,
-          normalizedArgs,
-          signal: budgetSignal.signal,
-        });
-      } finally {
-        budgetSignal.cleanup();
-      }
-    })();
-    if (
-      startedBeforeBudgetExpiry &&
-      budgetSignal.signal?.aborted &&
-      isWorkspaceRuntimeWindowExpired(workspaceSession)
-    ) {
-      return {
-        status: "error",
-        exitCode: null,
-        outputText: "",
-        errorCode: "workspace_runtime_window_expired",
-        errorMessage: "This workspace runtime window expired. Start a new workspace session to continue.",
-      };
-    }
-    if (!result.ok) {
-      const detailsExitCode =
-        typeof result.details?.exit_code === "number" &&
-        Number.isFinite(result.details.exit_code)
-          ? Math.floor(result.details.exit_code)
-          : null;
-      return {
-        status: "error",
-        exitCode: detailsExitCode,
-        outputText: String(result.details?.output_preview ?? ""),
-        errorCode: result.code,
-        errorMessage: result.message,
-      };
-    }
-    if (
-      params.toolName === "write" ||
-      params.toolName === "edit" ||
-      params.toolName === "bash"
-    ) {
-      if (workspaceSession.kind === "project_workspace" && projectId) {
-        await markWorkspaceDirectorySnapshotsStaleBestEffort(
-          projectId,
-          `runtime_tool_${params.toolName}`,
-        );
-      }
-    }
-    return {
-      status: "ok",
-      exitCode: result.exitCode,
-      outputText: result.outputText || "(no output)",
-      errorCode: null,
-      errorMessage: null,
-    };
-  }
   return {
     status: "error",
     exitCode: null,
@@ -974,8 +820,6 @@ async function executeRetrievalAgentLoop(
     projectId?: string | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
-    workspaceSession?: RuntimeWorkspaceSession | null;
-    activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;
@@ -1026,19 +870,6 @@ async function executeRetrievalAgentLoop(
     resolvedHarness.activeCommunityModule?.attachedSkills ?? [];
   const selectedCommunitySkills =
     resolvedHarness.activeCommunityModule?.selectedSkills ?? [];
-  const executionSession = createPolynetExecutionSession({
-    ctx: params.ctx,
-    userId: params.userId,
-    authSubject: params.authSubject,
-    projectId: params.projectId,
-    threadId: params.threadId,
-    runId: params.runId,
-    initialWorkspaceSession: params.workspaceSession ?? null,
-    activeDaytonaRuntimeSubstrate: params.activeDaytonaRuntimeSubstrate ?? null,
-    appendRunEvent: params.appendRunEvent,
-    touchRunHeartbeat: params.touchRunHeartbeat,
-  });
-
   const latestUserContent = [...params.messages]
     .reverse()
     .find((message) => message.role === "user")?.content;
@@ -1180,12 +1011,18 @@ async function executeRetrievalAgentLoop(
       };
     }),
   ];
-  const buildActiveProviderTools = () =>
-    executionSession.buildProviderTools({
-      allowedToolNames: effectiveAllowedToolNames,
-      buildFixedOpenAiTools: buildOpenAiFunctionTools,
-      buildFixedResponsesTools: buildResponsesApiFunctionTools,
+  const buildActiveProviderTools = () => {
+    const policySurface = buildRuntimeToolPolicySurface({
+      fixedToolNames: effectiveAllowedToolNames,
     });
+    return {
+      openAiTools: buildOpenAiFunctionTools(effectiveAllowedToolNames),
+      responsesTools: buildResponsesApiFunctionTools(effectiveAllowedToolNames),
+      activeToolNames: [...effectiveAllowedToolNames],
+      activeToolPolicies: policySurface.policies,
+      activeToolPolicySummary: policySurface.summary,
+    };
+  };
   const initialProviderTools = buildActiveProviderTools();
   try {
     await params.appendRunEvent({
@@ -1727,7 +1564,10 @@ async function executeRetrievalAgentLoop(
         const providerTools = buildActiveProviderTools();
         const completionToolCalls = getNativeToolCompletionToolCalls(completion);
         const unknownToolCall = completionToolCalls.find(
-          (toolCall) => !providerTools.activeToolNames.includes(toolCall.toolName),
+          (toolCall) =>
+            !providerTools.activeToolNames.some(
+              (toolName) => toolName === toolCall.toolName,
+            ),
         );
         if (unknownToolCall) {
           return {
@@ -1742,14 +1582,13 @@ async function executeRetrievalAgentLoop(
         }
         return completion as NativeToolAwareCompletionSuccess<string>;
       },
-      normalizeToolArguments: (toolName, rawArgs) => {
-        return executionSession.normalizeToolArguments({
-          toolName,
-          rawArgs,
-          allowedToolNames: effectiveAllowedToolNames,
-          normalizeFixedToolArguments: normalizeRegistryToolArguments,
-        });
-      },
+      normalizeToolArguments: (toolName, rawArgs) =>
+        normalizeRegistryToolArguments(
+          toolName as RetrievalToolName,
+          rawArgs && typeof rawArgs === "object" && !Array.isArray(rawArgs)
+            ? rawArgs
+            : {},
+        ),
       onToolBatchResolved: async ({
         steps,
         isBatch,
@@ -1842,161 +1681,6 @@ async function executeRetrievalAgentLoop(
           };
         }
 
-        if (
-          toolName === "terminal_start" ||
-          toolName === "terminal_read" ||
-          toolName === "terminal_write" ||
-          toolName === "terminal_stop"
-        ) {
-          try {
-            const toolResult = await executionSession.executeTerminalTool({
-              toolName,
-              normalizedArgs,
-            });
-            await throwIfCancelled();
-            return toolResult;
-          } catch (error) {
-            if (isRuntimeRunCancelledError(error)) {
-              return {
-                status: "error",
-                exitCode: null,
-                outputText: "",
-                errorCode: USER_CANCELLED_RUNTIME_CODE,
-                errorMessage: error.message,
-              };
-            }
-            const summary = summarizeErrorForLog(error);
-            logStructuredError("agent_loop_terminal_tool_execution_crashed", {
-              error,
-              runId: params.runId,
-              threadId: params.threadId ?? undefined,
-              communityId: params.communityId ?? undefined,
-              projectId: params.projectId ?? undefined,
-              ...summarizeToolArgsForLog(toolName, normalizedArgs),
-            });
-            return {
-              status: "error",
-              exitCode: null,
-              outputText: "",
-              errorCode: "terminal_operation_failed",
-              errorMessage: `Terminal operation failed: ${summary.message}`,
-            };
-          }
-        }
-
-        if (isComputerUseToolName(toolName as RetrievalToolName)) {
-          try {
-            const toolResult = await runAbortableWithRuntimeCancellation({
-              ctx: params.ctx,
-              ownerId: params.userId,
-              runId: params.runId,
-              operation: async (signal) =>
-                await executionSession.executeComputerTool({
-                  toolName,
-                  normalizedArgs,
-                  signal,
-                }),
-            });
-            await throwIfCancelled();
-            return toolResult;
-          } catch (error) {
-            if (isRuntimeRunCancelledError(error)) {
-              return {
-                status: "error",
-                exitCode: null,
-                outputText: "",
-                errorCode: USER_CANCELLED_RUNTIME_CODE,
-                errorMessage: error.message,
-              };
-            }
-            const summary = summarizeErrorForLog(error);
-            logStructuredError("agent_loop_computer_tool_execution_crashed", {
-              error,
-              runId: params.runId,
-              threadId: params.threadId ?? undefined,
-              communityId: params.communityId ?? undefined,
-              projectId: params.projectId ?? undefined,
-              ...summarizeToolArgsForLog(toolName, normalizedArgs),
-            });
-            return {
-              status: "error",
-              exitCode: null,
-              outputText: "",
-              errorCode: "computer_tool_execute_failed",
-              errorMessage: `Computer tool execution failed: ${summary.message}`,
-            };
-          }
-        }
-
-        const activeDaytonaRuntimeSubstrate =
-          executionSession.getActiveDaytonaRuntimeSubstrate();
-        const needsWorkspaceSession =
-          requiresSandboxSession(toolName as RetrievalToolName) &&
-          activeDaytonaRuntimeSubstrate?.provider !== "daytona";
-
-        if (needsWorkspaceSession && !executionSession.hasWorkspaceSession()) {
-          try {
-            await throwIfCancelled();
-          } catch (error) {
-            return {
-              status: "error",
-              exitCode: null,
-              outputText: "",
-              errorCode: USER_CANCELLED_RUNTIME_CODE,
-              errorMessage: error instanceof Error ? error.message : "Cancelled",
-            };
-          }
-          let created: Awaited<
-            ReturnType<typeof executionSession.ensureWorkspaceForTool>
-          >;
-          try {
-            created = await executionSession.ensureWorkspaceForTool({
-              toolName,
-            });
-          } catch (error) {
-            const summary = summarizeErrorForLog(error);
-            logStructuredError("agent_loop_workspace_session_create_crashed", {
-              error,
-              runId: params.runId,
-              threadId: params.threadId ?? undefined,
-              toolName,
-              projectId: params.projectId ?? undefined,
-              communityId: params.communityId ?? undefined,
-            });
-            return {
-              status: "error",
-              exitCode: null,
-              outputText: "",
-              errorCode: "workspace_session_create_failed",
-              errorMessage: `Workspace session create failed: ${summary.message}`,
-            };
-          }
-          if (!created.ok) {
-            return {
-              status: "error",
-              exitCode: null,
-              outputText: readFailureOutputPreview((created as any).details),
-              errorCode: created.code,
-              errorMessage: created.message,
-              details: (created as { details?: Record<string, unknown> | null }).details ?? null,
-            };
-          }
-          try {
-            await throwIfCancelled();
-          } catch (error) {
-            if (isRuntimeRunCancelledError(error)) {
-              return {
-                status: "error",
-                exitCode: null,
-                outputText: "",
-                errorCode: USER_CANCELLED_RUNTIME_CODE,
-                errorMessage: error.message,
-              };
-            }
-            throw error;
-          }
-        }
-
         try {
           const toolResult = await runAbortableWithRuntimeCancellation({
             ctx: params.ctx,
@@ -2020,10 +1704,6 @@ async function executeRetrievalAgentLoop(
                       ? "community_funnel_builder"
                       : "coding_harness",
                 communityFunnelSlot: params.communityFunnelSlot ?? null,
-                workspaceSession: executionSession.getWorkspaceSession(),
-                activeDaytonaRuntimeSubstrate,
-                executeDaytonaWorkspaceTool: async (toolParams) =>
-                  await executionSession.executeDaytonaWorkspaceTool(toolParams),
                 signal,
               }),
           });
@@ -2052,8 +1732,8 @@ async function executeRetrievalAgentLoop(
             status: "error",
             exitCode: null,
             outputText: "",
-            errorCode: "workspace_tool_execute_failed",
-            errorMessage: `Workspace tool execution failed: ${summary.message}`,
+            errorCode: "runtime_tool_execute_failed",
+            errorMessage: `Runtime tool execution failed: ${summary.message}`,
           };
         }
         } finally {
@@ -2071,7 +1751,7 @@ async function executeRetrievalAgentLoop(
             record.iteration = iteration;
           }
         }
-        await appendWorkspaceToolCallStarted({
+        await appendRuntimeToolCallStarted({
           appendRunEvent: params.appendRunEvent,
           runId: params.runId,
           harnessName: params.harnessName,
@@ -2105,7 +1785,7 @@ async function executeRetrievalAgentLoop(
             record.consecutiveNoProgressCount = consecutiveNoProgressCount;
           }
         }
-        await appendWorkspaceToolCallFinished({
+        await appendRuntimeToolCallFinished({
           appendRunEvent: params.appendRunEvent,
           runId: params.runId,
           harnessName: params.harnessName,
@@ -2252,8 +1932,6 @@ async function executeRetrievalAgentLoop(
       stepCount: 0,
       steps: [],
     };
-  } finally {
-    await executionSession.dispose();
   }
 }
 
@@ -2278,7 +1956,6 @@ async function executeChatToolsAgentLoop(
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
-    activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
     apiKeyOverride?: string | null;
     appendRunEvent: (params: {
       eventType: string;

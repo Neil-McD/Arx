@@ -1,12 +1,7 @@
 import { api, internal } from "./_generated/api";
 import { decryptStoredSecret } from "./providerConnections";
 import { loadPlatformModelMap, loadPublicModelMap } from "./httpInferenceConfig";
-import {
-  PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES,
-  SANDBOX_FILE_SHELL_TOOL_NAMES,
-  SANDBOX_PREVIEW_TOOL_NAMES,
-  type RetrievalToolName,
-} from "../shared/retrievalTools";
+import { type RetrievalToolName } from "../shared/retrievalTools";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
 import {
   resolveActiveCapabilityFamiliesFromEntitlements,
@@ -138,7 +133,6 @@ export type RuntimeTurnResolution = {
   runtimeCommunityLensAuthority: CommunityLensAuthority | null;
   runtimeCommunityFunnelSlot: CommunityCustomFunnelSlot | null;
   runtimeProjectId: string | null;
-  runtimeSandboxMode: "sandbox_write" | "workspace_write" | undefined;
   allowedToolNames: RetrievalToolName[];
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
@@ -281,24 +275,6 @@ export function resolveAllowedToolNames(params: {
   }
   if (params.activeCapabilityFamilies.includes("web_research")) {
     toolNames.push("web_research", "web_crawl");
-  }
-  if (params.activeCapabilityFamilies.includes("sandbox_tools")) {
-    toolNames.push(...SANDBOX_FILE_SHELL_TOOL_NAMES);
-    toolNames.push(...SANDBOX_PREVIEW_TOOL_NAMES);
-  }
-  if (params.activeCapabilityFamilies.includes("workspace_tools")) {
-    toolNames.push(...PROJECT_WORKSPACE_TERMINAL_TOOL_NAMES);
-    if (params.inferenceSource === "chatgpt") {
-      toolNames.push(
-        "computer_open_url",
-        "computer_screenshot",
-        "computer_click",
-        "computer_type",
-        "computer_keypress",
-        "computer_scroll",
-        "computer_stop",
-      );
-    }
   }
   return toolNames.filter((value, index, list) => list.indexOf(value) === index);
 }
@@ -861,11 +837,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunityLensAuthority,
       runtimeCommunityFunnelSlot,
       runtimeProjectId,
-      runtimeSandboxMode: resolvedRuntimeCapabilityFamilies.includes("workspace_tools")
-        ? "workspace_write"
-        : resolvedRuntimeCapabilityFamilies.includes("sandbox_tools")
-          ? "sandbox_write"
-          : undefined,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile: resolveHarnessProfileFromActiveCapabilities({

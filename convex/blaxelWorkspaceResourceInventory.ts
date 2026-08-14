@@ -413,7 +413,7 @@ export const reconcileBlaxelWorkspaceSandboxPointersInternal = internalAction({
     if (!dryRun) {
       for (const candidate of candidates) {
         const updated = await ctx.runMutation(
-          internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
+          internal.providerResourcePointers.clearProjectProviderSandboxInternal as any,
           {
             projectId: candidate.projectId,
             providerSandboxId: candidate.recordedSandboxId,

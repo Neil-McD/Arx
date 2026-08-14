@@ -1,12 +1,8 @@
-import type {
-  RuntimeWorkspaceTerminalPrompt,
-  ThreadWorkingStatePrompt,
-} from "./runtimePrompt.ts";
+import type { ThreadWorkingStatePrompt } from "./runtimePrompt.ts";
 import {
   normalizeRuntimeProjectContext,
   type RuntimeProjectContextPrompt,
 } from "./projectContext.ts";
-import { deriveRuntimePreviewDiagnosis } from "./runtimePreviewDiagnostics.ts";
 import {
   buildRuntimeContextFragmentsFromParts,
   compactRuntimeContextFragmentsForSnapshot,
@@ -25,8 +21,6 @@ export type RuntimeTurnContextPacket = {
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
   projectContext?: RuntimeProjectContextPrompt | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
-  activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
-  recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
   recentToolAttempts: RuntimeRecentToolAttemptPrompt[];
   fragments?: RuntimeContextFragmentV1[];
   runtimeStop?: {
@@ -44,26 +38,9 @@ export type RuntimeTurnContextSnapshotV1 = {
   runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null;
   projectContext: RuntimeProjectContextPrompt | null;
   threadWorkingState: ThreadWorkingStatePrompt | null;
-  activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[];
-  recentBackgroundProcessEvents: RuntimeBackgroundProcessEventPrompt[];
   recentToolAttempts: RuntimeRecentToolAttemptPrompt[];
   fragments?: RuntimeContextFragmentV1[];
   runtimeStop: RuntimeTurnContextPacket["runtimeStop"];
-};
-
-export type RuntimeBackgroundProcessEventPrompt = {
-  terminalId: string;
-  status: "exited" | "failed" | "stopped";
-  completionReason?: RuntimeWorkspaceTerminalPrompt["completionReason"];
-  command: string;
-  cwd?: string | null;
-  previewPort?: number | null;
-  previewStatus?: RuntimeWorkspaceTerminalPrompt["previewStatus"];
-  healthSummary?: string | null;
-  exitCode?: number | null;
-  outputTail?: string | null;
-  finishedAt?: number | null;
-  completionRecordedAt?: number | null;
 };
 
 export type RuntimeRecentToolAttemptPrompt = {
@@ -106,38 +83,6 @@ function truncatePromptSnippet(value: string | null | undefined, limit = 240): s
   if (!normalized) return null;
   if (normalized.length <= limit) return normalized;
   return `${normalized.slice(0, limit - 1).trimEnd()}…`;
-}
-
-function normalizeTerminalStatus(
-  value: unknown,
-): RuntimeWorkspaceTerminalPrompt["status"] | null {
-  const status = String(value ?? "").trim();
-  if (
-    status === "starting" ||
-    status === "running" ||
-    status === "exited" ||
-    status === "failed" ||
-    status === "stopped"
-  ) {
-    return status;
-  }
-  return null;
-}
-
-function readOptionalString(record: Record<string, unknown>, ...keys: string[]): string | null {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "string") return value;
-  }
-  return null;
-}
-
-function readOptionalNumber(record: Record<string, unknown>, ...keys: string[]): number | null {
-  for (const key of keys) {
-    const value = record[key];
-    if (typeof value === "number" && Number.isFinite(value)) return value;
-  }
-  return null;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -308,149 +253,15 @@ export function buildRuntimeRecentToolAttemptsFromEvents(params: {
   return out;
 }
 
-export function mapRuntimeWorkspaceTerminalPrompt(
-  terminal: unknown,
-): RuntimeWorkspaceTerminalPrompt | null {
-  if (!terminal || typeof terminal !== "object") return null;
-  const record = terminal as Record<string, unknown>;
-  const id = String(record.id ?? record.terminal_session_id ?? "").trim();
-  const command = String(record.command ?? "").trim();
-  const status = normalizeTerminalStatus(record.status);
-  if (!id || !command || !status) return null;
-  const mapped: RuntimeWorkspaceTerminalPrompt = {
-    id,
-    status,
-    lifecycleOwner: "project_background",
-    command,
-    cwd: readOptionalString(record, "cwd"),
-    previewPort: readOptionalNumber(record, "preview_port", "previewPort"),
-    previewPath: readOptionalString(record, "preview_path", "previewPath"),
-    previewLabel: readOptionalString(record, "preview_label", "previewLabel"),
-    previewStatus:
-      readOptionalString(record, "preview_status", "previewStatus") as RuntimeWorkspaceTerminalPrompt["previewStatus"],
-    healthStatus:
-      readOptionalString(record, "health_status", "healthStatus") as RuntimeWorkspaceTerminalPrompt["healthStatus"],
-    healthSummary: readOptionalString(record, "health_summary", "healthSummary"),
-    lastPreviewProbeSummary: readOptionalString(
-      record,
-      "last_preview_probe_summary",
-      "lastPreviewProbeSummary",
-    ),
-    lastBrowserObservationSummary: readOptionalString(
-      record,
-      "last_browser_observation_summary",
-      "lastBrowserObservationSummary",
-    ),
-    previewTransportStatus: readOptionalString(
-      record,
-      "preview_transport_status",
-      "previewTransportStatus",
-    ) as RuntimeWorkspaceTerminalPrompt["previewTransportStatus"],
-    previewInspectionStatus: readOptionalString(
-      record,
-      "preview_inspection_status",
-      "previewInspectionStatus",
-    ) as RuntimeWorkspaceTerminalPrompt["previewInspectionStatus"],
-    previewRenderStatus: readOptionalString(
-      record,
-      "preview_render_status",
-      "previewRenderStatus",
-    ) as RuntimeWorkspaceTerminalPrompt["previewRenderStatus"],
-    outputTail: readOptionalString(record, "output_tail", "outputTail"),
-    exitCode: readOptionalNumber(record, "exit_code", "exitCode"),
-    completionRecordedAt: readOptionalNumber(
-      record,
-      "completion_recorded_at",
-      "completionRecordedAt",
-    ),
-    completionReason: readOptionalString(
-      record,
-      "completion_reason",
-      "completionReason",
-    ) as RuntimeWorkspaceTerminalPrompt["completionReason"],
-  };
-  const previewDiagnosis = deriveRuntimePreviewDiagnosis(mapped);
-  if (previewDiagnosis) {
-    mapped.previewDiagnosis = previewDiagnosis.diagnosis;
-    mapped.recommendedPreviewDebugAction = previewDiagnosis.recommendedNextAction;
-  }
-  return mapped;
-}
-
-export function mapRuntimeBackgroundProcessEventPrompt(
-  terminal: unknown,
-): RuntimeBackgroundProcessEventPrompt | null {
-  const mapped = mapRuntimeWorkspaceTerminalPrompt(terminal);
-  if (!mapped || !mapped.command) return null;
-  if (
-    mapped.status !== "exited" &&
-    mapped.status !== "failed" &&
-    mapped.status !== "stopped"
-  ) {
-    return null;
-  }
-  return {
-    terminalId: mapped.id,
-    status: mapped.status,
-    completionReason: mapped.completionReason ?? null,
-    command: mapped.command,
-    cwd: mapped.cwd ?? null,
-    previewPort: mapped.previewPort ?? null,
-    previewStatus: mapped.previewStatus ?? null,
-    healthSummary: mapped.healthSummary ?? null,
-    exitCode: mapped.exitCode ?? null,
-    outputTail: mapped.outputTail ?? null,
-    finishedAt: readOptionalNumber(
-      (terminal && typeof terminal === "object" && !Array.isArray(terminal)
-        ? (terminal as Record<string, unknown>)
-        : {}) as Record<string, unknown>,
-      "finished_at",
-      "finishedAt",
-    ),
-    completionRecordedAt: mapped.completionRecordedAt ?? null,
-  };
-}
-
-function withRuntimePreviewDiagnosis(
-  terminal: RuntimeWorkspaceTerminalPrompt,
-): RuntimeWorkspaceTerminalPrompt {
-  if (terminal.previewDiagnosis && terminal.recommendedPreviewDebugAction) {
-    return terminal;
-  }
-  const previewDiagnosis = deriveRuntimePreviewDiagnosis(terminal);
-  if (!previewDiagnosis) return terminal;
-  return {
-    ...terminal,
-    previewDiagnosis: previewDiagnosis.diagnosis,
-    recommendedPreviewDebugAction: previewDiagnosis.recommendedNextAction,
-  };
-}
-
 export function buildRuntimeTurnContextPacket(params: {
   latestUserText?: string | null;
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
   projectContext?: RuntimeProjectContextPrompt | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
-  activeBackgroundTerminals?: Array<RuntimeWorkspaceTerminalPrompt | null | undefined> | null;
-  recentBackgroundProcessEvents?: Array<RuntimeBackgroundProcessEventPrompt | null | undefined> | null;
   recentToolAttempts?: Array<RuntimeRecentToolAttemptPrompt | null | undefined> | null;
   runtimeRunEvents?: Array<RuntimeContextRunEvent | null | undefined> | null;
   runtimeStop?: RuntimeTurnContextPacket["runtimeStop"];
 }): RuntimeTurnContextPacket {
-  const activeBackgroundTerminals = Array.isArray(params.activeBackgroundTerminals)
-    ? params.activeBackgroundTerminals.filter(
-        (terminal): terminal is RuntimeWorkspaceTerminalPrompt =>
-          Boolean(terminal && terminal.command),
-      ).map((terminal) => withRuntimePreviewDiagnosis(terminal))
-    : [];
-  const recentBackgroundProcessEvents = Array.isArray(params.recentBackgroundProcessEvents)
-    ? params.recentBackgroundProcessEvents
-        .filter(
-          (event): event is RuntimeBackgroundProcessEventPrompt =>
-            Boolean(event && event.terminalId && event.command),
-        )
-        .slice(0, 6)
-    : [];
   const recentToolAttempts = Array.isArray(params.recentToolAttempts)
     ? params.recentToolAttempts
         .filter(
@@ -465,16 +276,12 @@ export function buildRuntimeTurnContextPacket(params: {
     runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
     projectContext,
     threadWorkingState: params.threadWorkingState ?? null,
-    activeBackgroundTerminals,
-    recentBackgroundProcessEvents,
     recentToolAttempts,
     fragments: buildRuntimeContextFragmentsFromParts({
       latestUserText: params.latestUserText ?? null,
       runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
       projectContext,
       threadWorkingState: params.threadWorkingState ?? null,
-      activeBackgroundTerminals,
-      recentBackgroundProcessEvents,
       recentToolAttempts,
       runtimeRunEvents: params.runtimeRunEvents ?? [],
       runtimeStop: params.runtimeStop ?? null,
@@ -535,60 +342,6 @@ function compactThreadWorkingStateSnapshot(
   return out;
 }
 
-function compactTerminalSnapshot(
-  terminal: RuntimeWorkspaceTerminalPrompt,
-): RuntimeWorkspaceTerminalPrompt {
-  return {
-    id: compactSnapshotString(terminal.id, 120) ?? terminal.id,
-    status: terminal.status,
-    lifecycleOwner: terminal.lifecycleOwner,
-    command: compactSnapshotString(terminal.command, 180) ?? terminal.command,
-    cwd: compactSnapshotString(terminal.cwd, 120),
-    previewPort: terminal.previewPort,
-    previewPath: compactSnapshotString(terminal.previewPath, 120),
-    previewLabel: compactSnapshotString(terminal.previewLabel, 120),
-    previewStatus: terminal.previewStatus,
-    healthStatus: terminal.healthStatus,
-    healthSummary: compactSnapshotString(terminal.healthSummary, 180),
-    lastPreviewProbeSummary: compactSnapshotString(terminal.lastPreviewProbeSummary, 180),
-    lastBrowserObservationSummary: compactSnapshotString(
-      terminal.lastBrowserObservationSummary,
-      180,
-    ),
-    previewTransportStatus: terminal.previewTransportStatus,
-    previewInspectionStatus: terminal.previewInspectionStatus,
-    previewRenderStatus: terminal.previewRenderStatus,
-    previewDiagnosis: terminal.previewDiagnosis,
-    recommendedPreviewDebugAction: compactSnapshotString(
-      terminal.recommendedPreviewDebugAction,
-      180,
-    ),
-    outputTail: compactSnapshotString(terminal.outputTail, 240),
-    exitCode: terminal.exitCode,
-    completionRecordedAt: terminal.completionRecordedAt,
-    completionReason: terminal.completionReason,
-  };
-}
-
-function compactBackgroundProcessEventSnapshot(
-  event: RuntimeBackgroundProcessEventPrompt,
-): RuntimeBackgroundProcessEventPrompt {
-  return {
-    terminalId: compactSnapshotString(event.terminalId, 120) ?? event.terminalId,
-    status: event.status,
-    completionReason: event.completionReason,
-    command: compactSnapshotString(event.command, 180) ?? event.command,
-    cwd: compactSnapshotString(event.cwd, 120),
-    previewPort: event.previewPort,
-    previewStatus: event.previewStatus,
-    healthSummary: compactSnapshotString(event.healthSummary, 180),
-    exitCode: event.exitCode,
-    outputTail: compactSnapshotString(event.outputTail, 240),
-    finishedAt: event.finishedAt,
-    completionRecordedAt: event.completionRecordedAt,
-  };
-}
-
 export function buildRuntimeTurnContextSnapshot(params: {
   packet: RuntimeTurnContextPacket;
   capturedAt?: number | null;
@@ -606,12 +359,6 @@ export function buildRuntimeTurnContextSnapshot(params: {
     threadWorkingState: compactThreadWorkingStateSnapshot(
       params.packet.threadWorkingState,
     ),
-    activeBackgroundTerminals: params.packet.activeBackgroundTerminals
-      .slice(0, 3)
-      .map(compactTerminalSnapshot),
-    recentBackgroundProcessEvents: params.packet.recentBackgroundProcessEvents
-      .slice(0, 4)
-      .map(compactBackgroundProcessEventSnapshot),
     recentToolAttempts: params.packet.recentToolAttempts.slice(0, 6).map((attempt) => ({
       ...attempt,
       commandOrTarget: compactSnapshotString(attempt.commandOrTarget, 180),
@@ -637,8 +384,6 @@ export function renderRuntimeTurnContextForPrompt(
         runtimeTurnEnvelope: packet.runtimeTurnEnvelope ?? null,
         projectContext: packet.projectContext ?? null,
         threadWorkingState: packet.threadWorkingState ?? null,
-        activeBackgroundTerminals: packet.activeBackgroundTerminals,
-        recentBackgroundProcessEvents: packet.recentBackgroundProcessEvents,
         recentToolAttempts: packet.recentToolAttempts,
         runtimeStop: packet.runtimeStop ?? null,
       });

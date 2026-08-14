@@ -322,7 +322,7 @@ async function clearProjectWorkspaceLeaseAccounting(params: {
   const providerSandboxId = normalizeOptionalString(params.project.providerSandboxId);
   if (providerSandboxId) {
     await params.ctx.runMutation(
-      internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
+      internal.providerResourcePointers.setProjectProviderSandboxInternal as any,
       {
         projectId,
         providerSandboxId,
@@ -335,7 +335,7 @@ async function clearProjectWorkspaceLeaseAccounting(params: {
     return;
   }
   await params.ctx.runMutation(
-    internal.workspaceTerminals.clearProjectBackgroundSandboxInternal as any,
+    internal.providerResourcePointers.clearProjectProviderSandboxInternal as any,
     {
       projectId,
       providerSandboxProviderId: "blaxel",
@@ -720,7 +720,7 @@ async function resolveReusableProjectWorkspaceLease(params: {
 
   const nowMs = Date.now();
   await params.ctx.runMutation(
-    internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
+    internal.providerResourcePointers.setProjectProviderSandboxInternal as any,
     {
       projectId: params.projectId,
       providerSandboxId: params.providerSandboxId,
@@ -894,7 +894,7 @@ export async function ensureBillableBlaxelWorkspaceComputer(
       nowMs,
     });
     const registered = await params.ctx.runMutation(
-      internal.workspaceTerminals.setProjectBackgroundSandboxInternal as any,
+      internal.providerResourcePointers.setProjectProviderSandboxInternal as any,
       {
         projectId: params.projectId,
         providerSandboxId: ensured.providerSandboxId,

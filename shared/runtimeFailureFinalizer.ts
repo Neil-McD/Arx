@@ -1,4 +1,3 @@
-import type { RuntimeWorkspaceTerminalPrompt } from "./runtimePrompt";
 import type { RuntimeTurnContextPacket } from "./runtimeTurnContextPacket";
 
 export type RuntimeFailureFinalizerInput = {
@@ -24,11 +23,6 @@ function normalizeLine(value: unknown, maxLen = 260): string | null {
 function buildTinyEmergencyFallback(
   input: RuntimeFailureFinalizerInput,
 ): string {
-  const terminal = selectLiveTerminal(input.runtimeTurnContext);
-  const terminalCopy = terminal
-    ? " The background process still appears to be running."
-    : "";
-  const previewCopy = buildPreviewTruthCopy(terminal);
   const reason =
     normalizeLine(input.errorMessage, 180) ??
     normalizeLine(input.errorCode, 120) ??
@@ -38,37 +32,10 @@ function buildTinyEmergencyFallback(
     input.status === "cancelled"
       ? "I stopped before I could finish."
       : "I hit a runtime stop before I could finish.",
-    `${terminalCopy}${previewCopy}${reasonCopy}`.trim(),
+    reasonCopy.trim(),
   ]
     .filter(Boolean)
     .join(" ");
-}
-
-function selectLiveTerminal(
-  runtimeTurnContext: RuntimeTurnContextPacket | null | undefined,
-): RuntimeWorkspaceTerminalPrompt | null {
-  const terminals = runtimeTurnContext?.activeBackgroundTerminals;
-  if (!Array.isArray(terminals)) return null;
-  return (
-    terminals.find((terminal) => terminal?.status === "running") ??
-    terminals.find((terminal) => terminal?.status === "starting") ??
-    null
-  );
-}
-
-function buildPreviewTruthCopy(
-  terminal: RuntimeWorkspaceTerminalPrompt | null,
-): string {
-  if (!terminal) return "";
-  const previewProcessStatus = normalizeLine(terminal.previewStatus, 80);
-  const renderStatus = normalizeLine(terminal.previewRenderStatus, 80);
-  const inspectionStatus = normalizeLine(terminal.previewInspectionStatus, 100);
-  const parts = [
-    previewProcessStatus ? `preview_process=${previewProcessStatus}` : null,
-    renderStatus ? `render=${renderStatus}` : null,
-    inspectionStatus ? `inspection=${inspectionStatus}` : null,
-  ].filter(Boolean);
-  return parts.length > 0 ? ` Preview truth: ${parts.join("; ")}.` : "";
 }
 
 export function buildRuntimeFailureFinalAnswer(

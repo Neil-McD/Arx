@@ -1,7 +1,4 @@
-import {
-  isComputerUseToolName,
-  type RetrievalToolName,
-} from "./retrievalTools.ts";
+import { type RetrievalToolName } from "./retrievalTools.ts";
 import {
   EMPTY_COMMUNITY_RESOURCE_RUNTIME_LANE,
   normalizeCommunityResourceRuntimeLaneState,
@@ -27,7 +24,6 @@ export type RuntimeContextManifestOwner =
   | "platform"
   | "user"
   | "community"
-  | "workspace"
   | "web"
   | "message"
   | "provider"
@@ -187,27 +183,6 @@ const WEB_RESEARCH_TOOL_NAMES = new Set<RetrievalToolName>([
   "web_crawl",
 ]);
 
-const SANDBOX_READ_TOOL_NAMES = new Set<RetrievalToolName>([
-  "list_dir",
-  "read",
-  "glob",
-  "grep",
-  "sha256",
-]);
-
-const SANDBOX_WRITE_TOOL_NAMES = new Set<RetrievalToolName>([
-  "write",
-  "edit",
-  "bash",
-]);
-
-const TERMINAL_TOOL_NAMES = new Set<RetrievalToolName>([
-  "terminal_start",
-  "terminal_read",
-  "terminal_write",
-  "terminal_stop",
-]);
-
 function compactText(value: unknown, limit: number): string | null {
   const text = String(value ?? "").replace(/\s+/g, " ").trim();
   if (!text) return null;
@@ -273,18 +248,6 @@ function classifyFixedTool(toolName: RetrievalToolName): Omit<RuntimeContextMani
   }
   if (WEB_RESEARCH_TOOL_NAMES.has(toolName)) {
     return { family: "web_research", grantedBy: "web_research_capability", effect: "external" };
-  }
-  if (SANDBOX_READ_TOOL_NAMES.has(toolName)) {
-    return { family: "sandbox_read", grantedBy: "authenticated_sandbox_scope", effect: "read" };
-  }
-  if (SANDBOX_WRITE_TOOL_NAMES.has(toolName)) {
-    return { family: "sandbox_write", grantedBy: "authenticated_sandbox_scope", effect: "write" };
-  }
-  if (TERMINAL_TOOL_NAMES.has(toolName)) {
-    return { family: "terminal_control", grantedBy: "project_workspace_scope", effect: "process" };
-  }
-  if (isComputerUseToolName(toolName)) {
-    return { family: "computer_control", grantedBy: "eligible_workspace_runtime", effect: "ui" };
   }
   return { family: "unknown", grantedBy: "runtime_tool_policy", effect: "read" };
 }
@@ -389,29 +352,6 @@ function buildResourceEntries(params: BuildRuntimeContextManifestInput & {
       reason: "external web evidence on demand",
     });
   }
-  if (
-    hasAnyTool(params.allowedToolNames, SANDBOX_READ_TOOL_NAMES) ||
-    hasAnyTool(params.allowedToolNames, SANDBOX_WRITE_TOOL_NAMES)
-  ) {
-    resources.push({
-      id: "workspace_files",
-      owner: "workspace",
-      retrieval: "tool_available",
-      visibility: "private",
-      source: "sandbox_file_tools",
-      reason: "private sandbox filesystem evidence and edit substrate",
-    });
-  }
-  if (params.runtimeTurnContext?.activeBackgroundTerminals?.length) {
-    resources.push({
-      id: "background_terminal_output",
-      owner: "workspace",
-      retrieval: "runtime_fragment",
-      visibility: "private",
-      source: "runtime_context_fragments",
-      reason: "bounded operational terminal evidence",
-    });
-  }
   return resources;
 }
 
@@ -467,26 +407,6 @@ function buildRuntimeStateEntries(params: BuildRuntimeContextManifestInput): Run
       redacted: true,
       source: "shared/runtimeContextFragments.ts",
       reason: "recent runtime action continuity",
-    });
-  }
-  if (packet?.activeBackgroundTerminals?.length) {
-    state.push({
-      id: "active_background_terminals",
-      kind: "active_terminals",
-      rendered: true,
-      redacted: true,
-      source: "shared/runtimeTurnContextPacket.ts",
-      reason: "running process awareness",
-    });
-  }
-  if (packet?.recentBackgroundProcessEvents?.length) {
-    state.push({
-      id: "recent_background_process_events",
-      kind: "recent_background_process_events",
-      rendered: true,
-      redacted: true,
-      source: "shared/runtimeTurnContextPacket.ts",
-      reason: "bounded recent process events",
     });
   }
   if (packet?.recentToolAttempts?.length) {
@@ -557,12 +477,6 @@ function buildExclusions(params: BuildRuntimeContextManifestInput & {
     exclusions.push({
       source: "community_lens",
       reason: "no server-validated community scope for this turn",
-    });
-  }
-  if (!hasText(params.projectId)) {
-    exclusions.push({
-      source: "workspace_project_context",
-      reason: "no active project scope for this turn",
     });
   }
   return exclusions;
