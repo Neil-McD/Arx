@@ -170,6 +170,7 @@ const promptParams = {
   loopBudget: { maxToolSteps: 2, maxRepeatedIdenticalCalls: 1, maxConsecutiveFailures: 1, maxNoProgressSteps: 1 },
   allowedToolNames: ["polynet_list", "polynet_read", "polynet_search", "polynet_write", "polynet_call"] as const,
   harnessName: "chat_tools" as const,
+  invocationSurface: "member_agent_dock" as const,
   runtimeTurnContext: buildRuntimeTurnContextPacket({}),
 };
 const basePromptBundle = buildPlatformHarnessRuntimePromptBundle(promptParams);

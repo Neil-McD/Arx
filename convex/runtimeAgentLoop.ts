@@ -128,6 +128,11 @@ import {
   compactProviderTranscriptForContextRetry,
   estimateNativeToolTranscriptTokens,
 } from "../shared/providerContextWindow";
+import {
+  RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
+  buildRuntimeProviderContextAttestation,
+  type RuntimeProviderContextAttestationV1,
+} from "../shared/runtimeProviderContextAttestation.ts";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
@@ -140,6 +145,9 @@ type RuntimeAgentLoopFailure = RuntimeKernelFailure<string>;
 type RuntimeAgentLoopFailureInput = RuntimeKernelFailureInput;
 type RuntimeProviderLifecycleHooks = {
   beforeProviderRequest?: () => Promise<void>;
+  recordInitialProviderContextAttestation?: (
+    attestation: RuntimeProviderContextAttestationV1,
+  ) => Promise<{ ok: boolean; errorCode?: string | null }>;
   observeProviderResult?: (result: {
     ok: boolean;
     code: string | null;
@@ -958,7 +966,7 @@ async function executeRetrievalAgentLoop(
     harnessName: "chat_tools";
     loopBudget: RuntimeKernelBudget;
     allowedToolNames: readonly RetrievalToolName[];
-    invocationSurface?: RuntimeInvocationSurface;
+    invocationSurface: RuntimeInvocationSurface;
     memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
     communityFunnelSlot?: CommunityCustomFunnelSlot | null;
     communitySystemPrompt?: string | null;
@@ -1009,7 +1017,7 @@ async function executeRetrievalAgentLoop(
   const platformSkills = resolvedHarness.platformSkillInventory;
   const selectedPlatformSkills = resolvedHarness.selectedPlatformSkills;
   const effectiveAllowedToolNames = restrictToolNamesForInvocationSurface({
-    invocationSurface: params.invocationSurface ?? "workspace",
+    invocationSurface: params.invocationSurface,
     toolNames: params.allowedToolNames,
   });
   const installedUserPlatformSkills = resolvedHarness.personalSkillInventory;
@@ -1116,7 +1124,7 @@ async function executeRetrievalAgentLoop(
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,
     currentTimeZone: runtimeTimeZone,
-    invocationSurface: params.invocationSurface ?? "workspace",
+    invocationSurface: params.invocationSurface,
     memberAgentSurfaceContext: params.memberAgentSurfaceContext,
     memberIdentityContextMd,
     promptExtensions: resolvedHarness.promptExtensions,
@@ -1211,6 +1219,7 @@ async function executeRetrievalAgentLoop(
     RUNTIME_PARALLEL_READ_TOOLS_FLAG,
     true,
   );
+  const providerToolChoice: NativeToolChoice = "auto";
   let reasoningSummaryStreamCount = 0;
   let reasoningSummaryPartAddedCount = 0;
   let reasoningSummaryTextDeltaCount = 0;
@@ -1484,6 +1493,90 @@ async function executeRetrievalAgentLoop(
     };
     const loopStartedAt = Date.now();
     const chatgptCodexRequestId = String(params.threadId ?? "").trim() || params.runId;
+    const attestedSurface =
+      params.invocationSurface === "member_agent_dock" ||
+      params.invocationSurface === "community_funnel_builder"
+        ? params.invocationSurface
+        : null;
+    if (attestedSurface) {
+      let attestationPersisted = false;
+      try {
+        await throwIfCancelled();
+        if (
+          !params.recordInitialProviderContextAttestation ||
+          !params.threadId ||
+          !params.communityId ||
+          typeof params.communityContextVersion !== "number"
+        ) {
+          throw new Error("runtime_provider_context_attestation_inputs_missing");
+        }
+        const parsedProviderRef = parseProviderModelRef(params.modelRef);
+        const useResponsesApiTools =
+          params.inferenceSource === "chatgpt" ||
+          ((params.inferenceSource === "platform" ||
+            params.inferenceSource === "user_key") &&
+            parsedProviderRef?.provider === "openai");
+        const attestation = await buildRuntimeProviderContextAttestation({
+          surface: attestedSurface,
+          runId: params.runId,
+          userId: params.userId,
+          threadId: params.threadId,
+          communityId: params.communityId,
+          communityContextVersion: params.communityContextVersion,
+          funnelSlot: params.communityFunnelSlot ?? null,
+          requestedModelId: params.requestedModelId,
+          inferenceSource: params.inferenceSource,
+          modelRef: params.modelRef,
+          maxOutputTokens: params.maxTokens,
+          toolChoice: providerToolChoice,
+          parallelToolCalls:
+            providerToolChoice === "auto" && parallelReadToolsEnabled,
+          messages: nativeTranscript,
+          promptSections: runtimePromptBundle.sections,
+          contextManifest: runtimeContextManifest,
+          toolSchemaFormat: useResponsesApiTools
+            ? "responses_api"
+            : "openai_compatible",
+          toolNames: initialProviderTools.activeToolNames,
+          providerTools: useResponsesApiTools
+            ? initialProviderTools.responsesTools
+            : initialProviderTools.openAiTools,
+        });
+        const persisted =
+          await params.recordInitialProviderContextAttestation(attestation);
+        if (persisted?.ok !== true) {
+          throw new Error(
+            String(persisted?.errorCode ?? "").trim() ||
+              RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
+          );
+        }
+        attestationPersisted = true;
+      } catch (error) {
+        if (isRuntimeRunCancelledError(error)) throw error;
+        logStructuredError("runtime_provider_context_attestation_failed", {
+          error,
+          runId: params.runId,
+          threadId: params.threadId ?? undefined,
+          communityId: params.communityId ?? undefined,
+          invocationSurface: attestedSurface,
+          requestedModelId: params.requestedModelId,
+        });
+      }
+      if (!attestationPersisted) {
+        return {
+          ok: false,
+          status: 503,
+          code: RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
+          stopReason: "model_error",
+          message: "The agent could not safely prepare this turn. Please retry.",
+          promptTokens: null,
+          completionTokens: null,
+          transcript: [...nativeTranscript],
+          stepCount: 0,
+          steps: [],
+        };
+      }
+    }
     const loopResult = await runNativeRuntimeKernel<string>({
       messages: nativeTranscript,
       budget: params.loopBudget,
@@ -1531,7 +1624,6 @@ async function executeRetrievalAgentLoop(
         reasoningSummaryStreamCount += 1;
         try {
           const providerTools = buildActiveProviderTools();
-          const providerToolChoice: NativeToolChoice = "auto";
           completion = await runAbortableWithRuntimeCancellation({
             ctx: params.ctx,
             ownerId: params.userId,
@@ -2180,7 +2272,7 @@ async function executeChatToolsAgentLoop(
     maxTokens: number;
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];
-    invocationSurface?: RuntimeInvocationSurface;
+    invocationSurface: RuntimeInvocationSurface;
     memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
     communityFunnelSlot?: CommunityCustomFunnelSlot | null;
     communitySystemPrompt?: string | null;

@@ -36,6 +36,7 @@ const prompt = buildPlatformHarnessRuntimeSystemPrompt({
     "bash",
   ],
   harnessName: "chat_tools",
+  invocationSurface: "member_agent_dock",
   projectLabel: "Prompt proof",
   projectDescription: "Prompt ordering test project",
   communityId: "community_1",

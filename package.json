@@ -275,6 +275,7 @@
     "check:runtime-context-manifest-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_context_manifest_proof.ts",
     "check:runtime-context-integrity-proof": "tsx scripts/runtime_context_integrity_proof.ts",
     "check:runtime-agent-loop-context-receipt-smoke": "tsx scripts/runtime_agent_loop_context_receipt_smoke.ts",
+    "check:runtime-provider-context-attestation-proof": "vitest run convex/runtimeProviderContextAttestation.test.ts convex/runtimeProviderContextAttestationPersistence.test.ts && npm run check:runtime-agent-loop-context-receipt-smoke",
     "check:runtime-prompt-bundle-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_bundle_proof.ts",
     "check:polynet-harness-isolation-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/polynet_harness_isolation_contract_proof.ts",
     "check:runtime-codex-prompt-projection-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_codex_prompt_projection_proof.ts",

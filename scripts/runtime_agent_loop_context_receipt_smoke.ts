@@ -3,6 +3,12 @@ import {
   RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE,
   buildRuntimeContextIntegrityCheck,
 } from "../shared/runtimeContextIntegrity.ts";
+import {
+  RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
+  RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
+  parseRuntimeProviderContextAttestation,
+  type RuntimeProviderContextAttestationV1,
+} from "../shared/runtimeProviderContextAttestation.ts";
 
 process.env.OPENROUTER_API_KEY = "";
 process.env.OPENAI_API_KEY = "";
@@ -26,7 +32,7 @@ const runRecord = {
   communityContextVersion: 7,
   executionMode: "agentic",
   harnessProfile: "authenticated_cloud_tools",
-  capabilityFamilies: ["product_docs"],
+  capabilityFamilies: ["community_tools"],
 };
 events.push(
   {
@@ -38,7 +44,7 @@ events.push(
       community_id: "community_context_receipt_smoke",
       community_context_version: 7,
       execution_mode: "agentic",
-      capability_families: ["product_docs"],
+      capability_families: ["community_tools"],
     },
   },
   {
@@ -50,8 +56,9 @@ events.push(
       project_id: null,
       community_id: "community_context_receipt_smoke",
       community_context_version: 7,
-      capability_families: ["product_docs"],
+      capability_families: ["community_tools"],
       harness_profile: "authenticated_cloud_tools",
+      invocation_surface: "member_agent_dock",
     },
   },
   {
@@ -59,8 +66,8 @@ events.push(
     eventKey: `${runId}:tool_policy_resolved:1`,
     payload: {
       run_id: runId,
-      allowed_tool_names: ["search_product_docs", "get_product_doc"],
-      capability_families: ["product_docs"],
+      allowed_tool_names: ["polynet_list", "polynet_read"],
+      capability_families: ["community_tools"],
       harness_profile: "authenticated_cloud_tools",
     },
   },
@@ -79,7 +86,7 @@ const ctx = {
   },
 };
 
-const result = await executeChatToolsAgentLoop({
+const loopParams = {
   ctx,
   req: new Request("https://polynet.local/runtime-context-receipt-smoke"),
   userId: "user_context_receipt_smoke",
@@ -97,7 +104,8 @@ const result = await executeChatToolsAgentLoop({
   ],
   maxTokens: 64,
   runId,
-  allowedToolNames: ["search_product_docs", "get_product_doc"],
+  allowedToolNames: ["polynet_list", "polynet_read"] as const,
+  invocationSurface: "member_agent_dock" as const,
   communityId: "community_context_receipt_smoke",
   communityName: "Context Receipt Smoke",
   communitySlug: "context-receipt-smoke",
@@ -118,6 +126,24 @@ const result = await executeChatToolsAgentLoop({
   },
   refreshRuntimeContextSnapshot: async () => {},
   touchRunHeartbeat: async () => {},
+};
+const providerBoundaryOrder: string[] = [];
+let capturedAttestation: RuntimeProviderContextAttestationV1 | null = null;
+const result = await executeChatToolsAgentLoop({
+  ...loopParams,
+  recordInitialProviderContextAttestation: async (attestation) => {
+    providerBoundaryOrder.push("attestation");
+    capturedAttestation = attestation;
+    events.push({
+      eventType: RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
+      eventKey: `${runId}:${RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE}:initial:1`,
+      payload: attestation as unknown as Record<string, unknown>,
+    });
+    return { ok: true };
+  },
+  beforeProviderRequest: async () => {
+    providerBoundaryOrder.push("provider_start");
+  },
 });
 
 assert.equal(result.ok, false, "smoke should stop at provider execution after prompt assembly");
@@ -125,6 +151,49 @@ assert.equal(
   result.code,
   "provider_inference_misconfigured",
   "smoke should fail only because provider inference is intentionally disabled",
+);
+assert.deepEqual(
+  providerBoundaryOrder,
+  ["attestation", "provider_start"],
+  "mandatory evidence must persist before provider start",
+);
+assert.ok(
+  capturedAttestation &&
+    parseRuntimeProviderContextAttestation(capturedAttestation),
+  "member runtime should build a valid provider-context attestation",
+);
+
+let failedProviderStartCount = 0;
+const originalConsoleError = console.error;
+let failedAttestationResult: Awaited<
+  ReturnType<typeof executeChatToolsAgentLoop>
+>;
+try {
+  console.error = () => {};
+  failedAttestationResult = await executeChatToolsAgentLoop({
+    ...loopParams,
+    runId: "context_receipt_failure_smoke_run",
+    appendRunEvent: async () => {},
+    recordInitialProviderContextAttestation: async () => ({
+      ok: false,
+      errorCode: "forced_write_failure",
+    }),
+    beforeProviderRequest: async () => {
+      failedProviderStartCount += 1;
+    },
+  });
+} finally {
+  console.error = originalConsoleError;
+}
+assert.equal(failedAttestationResult.ok, false);
+assert.equal(
+  failedAttestationResult.code,
+  RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
+);
+assert.equal(
+  failedProviderStartCount,
+  0,
+  "failed mandatory evidence must make provider start unreachable",
 );
 
 const promptReceipt = events.find((event) => event.eventType === "runtime_prompt_bundle_resolved");
@@ -193,18 +262,59 @@ assert.deepEqual(
 );
 assert.equal(
   manifest?.runtimeState?.find((state: any) => state.id === "member_identity_context")?.status,
-  "not_applicable",
-  "workspace receipts should explicitly record that private identity projection was not applicable",
+  "empty",
+  "member receipts should explicitly record that private identity projection was empty",
 );
 assert.ok(
   queryCalls.length > 0,
   "smoke should exercise the runtime loop's Convex query boundary",
 );
 
-const integrityVerdict = buildRuntimeContextIntegrityCheck({
+const integrityVerdict = await buildRuntimeContextIntegrityCheck({
   run: runRecord,
   events,
 });
+assert.equal(integrityVerdict.checked.provider_context_attestation_required, true);
+assert.equal(integrityVerdict.checked.provider_context_attestation_present, true);
+assert.equal(integrityVerdict.checked.provider_context_attestation_valid, true);
+const corruptedManifestDigestVerdict = await buildRuntimeContextIntegrityCheck({
+  run: runRecord,
+  events: events.map((event) =>
+    event.eventType === RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE
+      ? {
+          ...event,
+          payload: {
+            ...event.payload,
+            context_manifest_sha256: "b".repeat(64),
+          },
+        }
+      : event,
+  ),
+});
+assert.equal(corruptedManifestDigestVerdict.ok, false);
+assert.equal(
+  corruptedManifestDigestVerdict.checked.provider_context_attestation_valid,
+  false,
+);
+assert.ok(
+  corruptedManifestDigestVerdict.failures.includes(
+    "provider_context_attestation_invalid",
+  ),
+  "a well-formed but incorrect manifest digest must fail integrity",
+);
+const missingAttestationVerdict = await buildRuntimeContextIntegrityCheck({
+  run: runRecord,
+  events: events.filter(
+    (event) =>
+      event.eventType !== RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
+  ),
+});
+assert.equal(missingAttestationVerdict.ok, false);
+assert.ok(
+  missingAttestationVerdict.failures.includes(
+    `missing_event:${RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE}`,
+  ),
+);
 events.push({
   eventType: RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE,
   eventKey: `${runId}:${RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE}:1`,

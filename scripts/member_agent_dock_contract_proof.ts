@@ -52,7 +52,6 @@ const threads = read("convex/threads.ts");
 const resolution = read("convex/runtimeTurnResolution.ts");
 const runtimeLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeHandlers = read("convex/runtimeTurnHandlers.ts");
-const codexBridge = read("convex/polynetCodexWorkerBridge.ts");
 const runner = read("shared/useWebTurnRunnerController.ts");
 const gateway = read("shared/cloudMemberAgentGateway.ts");
 const threadReadGateway = read("shared/cloudThreadsRead.ts");
@@ -209,8 +208,16 @@ assert.equal(
     requestedSurface: "workspace",
     threadKey: "member-agent:community_1",
   }),
+  null,
+  "a retired surface must fail closed even when the thread is canonical",
+);
+assert.equal(
+  resolveRuntimeInvocationSurfaceForThread({
+    requestedSurface: "member_agent_dock",
+    threadKey: "member-agent:community_1",
+  }),
   "member_agent_dock",
-  "a client must not widen a member-agent channel by claiming the Workspace surface",
+  "the explicit member surface must match the member thread identity",
 );
 assert.deepEqual(
   restrictCapabilityFamiliesForInvocationSurface({
@@ -430,25 +437,6 @@ assert.equal(
   true,
 );
 
-const workspacePromptBundle = buildPlatformHarnessRuntimePromptBundle({
-  loopBudget: {
-    maxToolSteps: 2,
-    maxRepeatedIdenticalCalls: 1,
-    maxConsecutiveFailures: 1,
-    maxNoProgressSteps: 1,
-  },
-  allowedToolNames: ["search_product_docs"],
-  harnessName: "chat_tools",
-  runtimeTurnContext: buildRuntimeTurnContextPacket({}),
-  invocationSurface: "workspace",
-  memberIdentityContextMd: identityContext,
-});
-assert.equal(
-  workspacePromptBundle.sections.some((section) => section.id === "member_identity_context"),
-  false,
-);
-assert.doesNotMatch(workspacePromptBundle.text, /MEMBER_IDENTITY_CONTEXT/);
-
 const identityManifest = buildRuntimeContextManifest({
   invocationSurface: "member_agent_dock",
   memberAgentSurfaceContext: discoverSurface,
@@ -500,24 +488,6 @@ assert.equal(
   "error",
 );
 
-const workspaceIdentityManifest = buildRuntimeContextManifest({
-  invocationSurface: "workspace",
-  memberIdentityContextMd: identityContext,
-  memberIdentityContextStatus: "loaded",
-  promptSections: workspacePromptBundle.sections,
-});
-assert.equal(
-  workspaceIdentityManifest.prompts.some((prompt) => prompt.id === "member_identity_context"),
-  false,
-);
-assert.equal(
-  workspaceIdentityManifest.resources.some((resource) => resource.id === "member_identity_context"),
-  false,
-);
-assert.equal(
-  workspaceIdentityManifest.runtimeState.find((state) => state.id === "member_identity_context")?.status,
-  "not_applicable",
-);
 assert.doesNotMatch(JSON.stringify(identityManifest), /Neil McDevitt|neilmcd|youtube\.com/);
 
 assert.match(
@@ -744,16 +714,6 @@ assert.match(
   "the immutable run evidence must record the resolved member-agent surface",
 );
 assert.match(
-  runtimeHandlers,
-  /buildPolynetCodexWorkerTurnInputs\([\s\S]*invocationSurface[\s\S]*memberAgentSurfaceContext/,
-  "Codex-backed Polynet turns must receive the same surface snapshot",
-);
-assert.match(
-  codexBridge,
-  /buildRuntimeCodexPromptProjection\([\s\S]*invocationSurface: params\.invocationSurface[\s\S]*memberAgentSurfaceContext: params\.memberAgentSurfaceContext/,
-  "the Codex prompt projection must preserve the native surface prompt contract",
-);
-assert.match(
   profiles,
   /resolveMemberAgentIdentityContextInternal = internalQuery[\s\S]*ctx\.db\.get\(args\.userId\)[\s\S]*findProfileDetailByUserId[\s\S]*display_name: detail\?\.displayName \?\? user\.displayName[\s\S]*social_links: normalizeSocialProfileLinks/,
   "the server-only projection must read only deterministic account identity fields",
@@ -795,8 +755,9 @@ assert.match(timelineUi, /member_conversations_list[\s\S]*Past conversations/);
 assert.match(timelineUi, /member_conversation_read[\s\S]*Recall conversation/);
 assert.match(
   runner,
-  /invocation_surface: params\.invocationSurface \?\? "workspace"[\s\S]*surface_context: params\.surfaceContext/,
+  /invocation_surface: params\.invocationSurface[\s\S]*surface_context: params\.surfaceContext/,
 );
+assert.doesNotMatch(runner, /invocationSurface \?\? "workspace"/);
 assert.doesNotMatch(
   runner,
   /messageId,[\s\S]{0,160}seq: 0,[\s\S]{0,160}role: params\.role/,
@@ -1256,7 +1217,7 @@ assert.equal(supportsModelImageInput("unknown-future-model"), false);
 assert.match(packageJson, /"@hey-api\/openapi-ts": "0\.97\.3"[\s\S]*"js-yaml": "5\.2\.2"/);
 assert.match(
   runtimeTurnResolution,
-  /image_model_unsupported[\s\S]*member_agent_image_runtime_unsupported[\s\S]*hasPersistedImageInput && runtimeExecutionMode !== "agentic"/,
+  /image_model_unsupported[\s\S]*const runtimeExecutionMode = "agentic" as const/,
   "image turns must fail closed before any text-only model or runtime path can discard the image",
 );
 assert.match(

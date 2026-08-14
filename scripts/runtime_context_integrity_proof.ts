@@ -137,7 +137,7 @@ const baseEvents = [
   },
 ];
 
-const okVerdict = buildRuntimeContextIntegrityCheck({
+const okVerdict = await buildRuntimeContextIntegrityCheck({
   run,
   events: baseEvents,
 });
@@ -153,14 +153,14 @@ assert.equal(okVerdict.checked.manifest_sections_present, true);
 assert.equal(okVerdict.checked.manifest_matches_prompt_receipt, true);
 assert.ok(okVerdict.warnings.includes("manifest_has_additional_effective_tools"));
 
-const missingPromptVerdict = buildRuntimeContextIntegrityCheck({
+const missingPromptVerdict = await buildRuntimeContextIntegrityCheck({
   run,
   events: baseEvents.filter((event) => event.eventType !== "runtime_prompt_bundle_resolved"),
 });
 assert.equal(missingPromptVerdict.ok, false);
 assert.ok(missingPromptVerdict.failures.includes("missing_event:runtime_prompt_bundle_resolved"));
 
-const versionMismatchVerdict = buildRuntimeContextIntegrityCheck({
+const versionMismatchVerdict = await buildRuntimeContextIntegrityCheck({
   run,
   events: baseEvents.map((event) =>
     event.eventType === "runtime_context_manifest_resolved"
@@ -183,7 +183,7 @@ const versionMismatchVerdict = buildRuntimeContextIntegrityCheck({
 assert.equal(versionMismatchVerdict.ok, false);
 assert.ok(versionMismatchVerdict.failures.includes("community_context_version_mismatch"));
 
-const missingToolVerdict = buildRuntimeContextIntegrityCheck({
+const missingToolVerdict = await buildRuntimeContextIntegrityCheck({
   run,
   events: baseEvents.map((event) =>
     event.eventType === "runtime_context_manifest_resolved"
@@ -207,7 +207,7 @@ const missingToolVerdict = buildRuntimeContextIntegrityCheck({
 assert.equal(missingToolVerdict.ok, false);
 assert.ok(missingToolVerdict.failures.includes("tool_policy_missing_from_manifest"));
 
-const runIdMismatchVerdict = buildRuntimeContextIntegrityCheck({
+const runIdMismatchVerdict = await buildRuntimeContextIntegrityCheck({
   run,
   events: baseEvents.map((event) =>
     event.eventType === "runtime_prompt_bundle_resolved"
@@ -224,7 +224,7 @@ const runIdMismatchVerdict = buildRuntimeContextIntegrityCheck({
 assert.equal(runIdMismatchVerdict.ok, false);
 assert.ok(runIdMismatchVerdict.failures.includes("run_id_mismatch"));
 
-const unknownManifestPromptVerdict = buildRuntimeContextIntegrityCheck({
+const unknownManifestPromptVerdict = await buildRuntimeContextIntegrityCheck({
   run,
   events: baseEvents.map((event) =>
     event.eventType === "runtime_context_manifest_resolved"
@@ -280,11 +280,14 @@ const v2Events = baseEvents.map((event) => {
   }
   return event;
 });
-const v2Verdict = buildRuntimeContextIntegrityCheck({ run, events: v2Events });
+const v2Verdict = await buildRuntimeContextIntegrityCheck({
+  run,
+  events: v2Events,
+});
 assert.equal(v2Verdict.ok, true);
 assert.equal(v2Verdict.checked.manifest_matches_prompt_receipt, true);
 
-const missingV2ManifestProjection = buildRuntimeContextIntegrityCheck({
+const missingV2ManifestProjection = await buildRuntimeContextIntegrityCheck({
   run,
   events: v2Events.map((event) => event.eventType === "runtime_context_manifest_resolved"
     ? { ...event, payload: { ...event.payload, manifest: {

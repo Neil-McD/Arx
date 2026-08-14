@@ -117,6 +117,7 @@ import {
   settleCommunityInferenceFundingSession,
   type CommunityInferenceFundingSession,
 } from "./founderInferenceRuntime";
+import type { RuntimeProviderContextAttestationV1 } from "../shared/runtimeProviderContextAttestation";
 
 export type {
   SseResponseEvent,
@@ -790,6 +791,26 @@ export async function handleRuntimeTurnRequest(args: {
       threadId: String(ownedThread._id),
       runId,
     });
+    const recordInitialProviderContextAttestation = async (
+      attestation: RuntimeProviderContextAttestationV1,
+    ): Promise<{ ok: boolean; errorCode?: string | null }> => {
+      const result = await ctx.runMutation(
+        (internal as any).threads
+          .recordRuntimeProviderContextAttestationInternal as any,
+        {
+          ownerId: actor.dbUserId,
+          threadId: ownedThread._id,
+          runId,
+          attestation,
+          nowMs: Date.now(),
+        },
+      );
+      return {
+        ok: result?.ok === true,
+        errorCode:
+          typeof result?.errorCode === "string" ? result.errorCode : null,
+      };
+    };
     let funnelDraftWriteObserved = false;
     const observeFunnelDraftWriteEvent = (event: {
       eventType: string;
@@ -2776,6 +2797,7 @@ export async function handleRuntimeTurnRequest(args: {
                 await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
               },
               touchRunHeartbeat: touchRunHeartbeatBestEffort,
+              recordInitialProviderContextAttestation,
               beforeProviderRequest: async (): Promise<void> => {
                 await markCommunityFundingProviderStarted(communityFundingSession);
               },
@@ -3157,6 +3179,7 @@ export async function handleRuntimeTurnRequest(args: {
             await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
           },
           touchRunHeartbeat: touchRunHeartbeatBestEffort,
+          recordInitialProviderContextAttestation,
           beforeProviderRequest: async (): Promise<void> => {
             await markCommunityFundingProviderStarted(communityFundingSession);
           },

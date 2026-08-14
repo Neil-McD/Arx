@@ -32,6 +32,7 @@ import {
   isGlobalMemberAgentEpisodeThreadKey,
   isMemberAgentThreadKeyForCommunity,
   isReadOnlyLegacyMemberAgentThreadKey,
+  resolveCommunityFunnelThreadSlotForCommunity,
 } from "../shared/runtimeInvocationSurface";
 import { MEMBER_AGENT_CONTEXT_MAX_MESSAGES } from "../shared/memberAgentConversationContext";
 import {
@@ -49,6 +50,11 @@ import {
   normalizeMemberAgentImageName,
 } from "../shared/memberAgentAttachments";
 import { projectRuntimeCommunityContextEventPayload } from "../shared/runtimeCommunityContextReceipt";
+import {
+  RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
+  canonicalRuntimeProviderContextJson,
+  parseRuntimeProviderContextAttestation,
+} from "../shared/runtimeProviderContextAttestation";
 
 type ThreadLike = {
   _id: any;
@@ -3545,6 +3551,131 @@ export const appendCloudRuntimeRunEventInternal = internalMutation({
     const created = (await ctx.db.get(id)) as RuntimeRunEventLike | null;
     if (!created) throw new Error("runtime_event_create_failed");
     return created;
+  },
+});
+
+export const recordRuntimeProviderContextAttestationInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadId: v.id("threads"),
+    runId: v.string(),
+    attestation: v.any(),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const fail = (errorCode: string) => ({ ok: false as const, errorCode });
+    const attestation = parseRuntimeProviderContextAttestation(args.attestation);
+    if (!attestation) {
+      return fail("runtime_provider_context_attestation_invalid");
+    }
+    const thread = await requireOwnedCloudThread({
+      ctx,
+      ownerId: args.ownerId,
+      threadId: args.threadId,
+    });
+    const runId = normalizeRunId(args.runId);
+    const run = await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId: args.ownerId,
+      runId,
+    });
+    if (!run || run.threadId !== thread._id || run.status !== "running") {
+      return fail("runtime_provider_context_attestation_run_invalid");
+    }
+    const ownerId = String(args.ownerId);
+    const threadId = String(thread._id);
+    const communityId = String(run.communityId ?? "").trim();
+    const threadCommunityId = String(thread.communityId ?? "").trim();
+    const modelId = String(run.modelId ?? "").trim();
+    if (
+      attestation.run_id !== runId ||
+      attestation.scope.user_id !== ownerId ||
+      attestation.scope.thread_id !== threadId ||
+      !communityId ||
+      threadCommunityId !== communityId ||
+      attestation.scope.community_id !== communityId ||
+      attestation.scope.community_context_version !==
+        Math.max(0, Math.floor(Number(run.communityContextVersion ?? 0))) ||
+      !modelId ||
+      attestation.model.requested_model_id !== modelId
+    ) {
+      return fail("runtime_provider_context_attestation_scope_conflict");
+    }
+
+    const contextEventKey = `${runId}:runtime_context_resolved:1`;
+    const contextEvent = (await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_eventKey", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", runId).eq("eventKey", contextEventKey),
+      )
+      .first()) as RuntimeRunEventLike | null;
+    const contextPayload = asRecord(contextEvent?.payload);
+    if (
+      !contextPayload ||
+      String(contextPayload.invocation_surface ?? "").trim() !==
+        attestation.surface ||
+      String(contextPayload.community_id ?? "").trim() !== communityId ||
+      Math.max(
+        0,
+        Math.floor(Number(contextPayload.community_context_version ?? 0)),
+      ) !== attestation.scope.community_context_version
+    ) {
+      return fail("runtime_provider_context_attestation_surface_conflict");
+    }
+
+    const threadKey = String(thread.threadKey ?? "").trim();
+    if (attestation.surface === "member_agent_dock") {
+      if (!isMemberAgentThreadKeyForCommunity(threadKey, communityId)) {
+        return fail("runtime_provider_context_attestation_surface_conflict");
+      }
+    } else {
+      const funnelSlot = resolveCommunityFunnelThreadSlotForCommunity(
+        threadKey,
+        communityId,
+      );
+      if (!funnelSlot || funnelSlot !== attestation.scope.funnel_slot) {
+        return fail("runtime_provider_context_attestation_surface_conflict");
+      }
+    }
+
+    const eventKey = `${runId}:${RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE}:initial:1`;
+    const existing = (await ctx.db
+      .query("runtimeRunEvents")
+      .withIndex("by_owner_run_eventKey", (q: any) =>
+        q.eq("ownerId", args.ownerId).eq("runId", runId).eq("eventKey", eventKey),
+      )
+      .first()) as RuntimeRunEventLike | null;
+    if (existing) {
+      try {
+        if (
+          canonicalRuntimeProviderContextJson(existing.payload) ===
+          canonicalRuntimeProviderContextJson(attestation)
+        ) {
+          return { ok: true as const, duplicate: true, eventId: existing._id };
+        }
+      } catch {
+        // Existing malformed evidence is a conflict, never a dedupe match.
+      }
+      return fail("runtime_provider_context_attestation_conflict");
+    }
+
+    const nowMs = args.nowMs ?? Date.now();
+    const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
+    const eventId = await ctx.db.insert("runtimeRunEvents", {
+      ownerId: args.ownerId,
+      threadId: thread._id,
+      runId,
+      seq,
+      eventType: RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
+      eventKey,
+      payload: attestation,
+      createdAt: nowMs,
+    });
+    await ctx.db.patch(run._id, {
+      lastEventSeq: seq,
+      updatedAt: nowMs,
+    });
+    return { ok: true as const, duplicate: false, eventId };
   },
 });
 

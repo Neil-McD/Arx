@@ -203,7 +203,7 @@ export type RuntimePlatformHarnessPromptParams =
     currentDateTimeIso?: string | null;
     currentDateLabel?: string | null;
     currentTimeZone?: string | null;
-    invocationSurface?: RuntimeInvocationSurface;
+    invocationSurface: RuntimeInvocationSurface;
     memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
     memberIdentityContextMd?: string | null;
     promptExtensions?: readonly RuntimePromptExtensionSection[];
@@ -837,7 +837,7 @@ export function buildPlatformHarnessRuntimePromptBundle(
 ): RuntimePromptBundle {
   const communityId = String(params.communityId ?? "").trim();
   const invocationSurfacePrompt = buildRuntimeInvocationSurfacePrompt(
-    params.invocationSurface ?? "workspace",
+    params.invocationSurface,
     params.memberAgentSurfaceContext,
   );
   const stablePromptBlocks = [
