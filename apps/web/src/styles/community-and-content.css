@@ -4248,23 +4248,34 @@
   align-items: center;
   gap: 4px;
   padding: 2px 8px;
-  border: 1px solid transparent;
+  border: 1px solid color-mix(in srgb, var(--accent-attention) 58%, var(--border-default));
   border-radius: 999px;
-  background: color-mix(in srgb, var(--bg-card) 88%, var(--border-default) 12%);
-  color: var(--text-secondary);
+  background: color-mix(in srgb, var(--bg-card) 92%, var(--accent-attention) 8%);
+  color: var(--accent-attention);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
   font-family: inherit;
-  transition: border-color 120ms ease, background 120ms ease, transform 120ms ease;
+  transition:
+    border-color 120ms ease,
+    background 120ms ease,
+    color 120ms ease,
+    box-shadow 120ms ease,
+    transform 120ms ease;
 }
 
 .community-interaction-reaction:hover:not(:disabled) {
-  border-color: var(--border-strong);
+  border-color: var(--accent-attention);
+  background: color-mix(in srgb, var(--bg-card) 86%, var(--accent-attention) 14%);
+}
+
+.community-interaction-reaction:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--accent-attention) 72%, transparent);
+  outline-offset: 2px;
 }
 
 .community-interaction-reaction:active:not(:disabled) {
-  transform: scale(0.9);
+  transform: scale(0.96);
 }
 
 .community-interaction-reaction:disabled {
@@ -4276,8 +4287,14 @@
 }
 
 .community-interaction-reaction.is-mine {
-  background: var(--status-approved);
-  border-color: transparent;
+  background: color-mix(in srgb, var(--bg-card) 82%, var(--accent-attention) 18%);
+  border-color: var(--accent-attention);
+  color: color-mix(in srgb, var(--accent-attention) 88%, var(--text-primary));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--accent-attention) 14%, transparent);
+}
+
+.community-interaction-reaction.is-mine:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--bg-card) 76%, var(--accent-attention) 24%);
 }
 
 .community-interaction-emoji-picker {

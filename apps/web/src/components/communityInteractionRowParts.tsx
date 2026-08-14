@@ -62,18 +62,23 @@ export function ReactionSummary(props: {
   const viewer = new Set(props.viewerEmojis ?? []);
   return (
     <div className="community-interaction-reactions" aria-label="Reactions">
-      {props.rows.map((row) => (
-        <button
-          key={row.emoji}
-          type="button"
-          className={`community-interaction-reaction${viewer.has(row.emoji) ? " is-mine" : ""}`}
-          onClick={() => props.onToggle?.(row.emoji)}
-          disabled={!props.onToggle}
-        >
-          <span>{row.emoji}</span>
-          <span>{row.count}</span>
-        </button>
-      ))}
+      {props.rows.map((row) => {
+        const reactedByViewer = viewer.has(row.emoji);
+        return (
+          <button
+            key={row.emoji}
+            type="button"
+            className={`community-interaction-reaction${reactedByViewer ? " is-mine" : ""}`}
+            onClick={() => props.onToggle?.(row.emoji)}
+            disabled={!props.onToggle}
+            aria-pressed={reactedByViewer}
+            aria-label={`${row.emoji} reaction, ${row.count} ${row.count === 1 ? "reaction" : "reactions"}${reactedByViewer ? ", reacted by you" : ""}`}
+          >
+            <span>{row.emoji}</span>
+            <span>{row.count}</span>
+          </button>
+        );
+      })}
     </div>
   );
 }

@@ -291,6 +291,16 @@ const interactionFeed = read(interactionFeedPath);
   "props.canManagePinnedRoot",
 ].forEach((required) => assertIncludes(interactionFeedPath, interactionFeed, required));
 
+const interactionRowPartsPath = "apps/web/src/components/communityInteractionRowParts.tsx";
+const interactionRowParts = read(interactionRowPartsPath);
+[
+  "const reactedByViewer = viewer.has(row.emoji);",
+  "aria-pressed={reactedByViewer}",
+  '", reacted by you"',
+].forEach((required) =>
+  assertIncludes(interactionRowPartsPath, interactionRowParts, required),
+);
+
 const interactionContractPath = "docs/community-interaction-substrate-contract-v1.md";
 const interactionContract = read(interactionContractPath);
 [
@@ -400,6 +410,26 @@ assertMatches(
   interactionStylesPath,
   interactionStyles,
   /\.community-interaction-message\.is-self-mentioned,[\s\S]*?\.community-interaction-reply\.is-self-mentioned\s*\{[\s\S]*?border-left:\s*2px solid var\(--accent-attention\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-interaction-reply-pill\s*\{[^}]*color:\s*var\(--accent-attention\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-interaction-reaction\s*\{[^}]*border:\s*1px solid color-mix\(in srgb, var\(--accent-attention\)[^}]*color:\s*var\(--accent-attention\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-interaction-reaction\.is-mine\s*\{[^}]*background:\s*color-mix\(in srgb, var\(--bg-card\) 82%, var\(--accent-attention\) 18%\);[^}]*border-color:\s*var\(--accent-attention\);/,
+);
+assertNotMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-interaction-reaction\.is-mine\s*\{[^}]*var\(--status-approved\)/,
 );
 assertMatches(
   interactionStylesPath,
