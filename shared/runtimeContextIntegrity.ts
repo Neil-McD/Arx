@@ -97,7 +97,6 @@ const REQUIRED_PROMPT_SECTION_IDS_V2 = [
   "community_lens_authority",
   "community_system_prompt",
   "community_resource_lane",
-  "workspace_harness_context",
   "runtime_turn_context",
   "temporal_context",
   "platform_skill_overlay",

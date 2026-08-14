@@ -1,7 +1,4 @@
-import type {
-  RuntimeWorkspaceTerminalPrompt,
-  ThreadWorkingStatePrompt,
-} from "./runtimePrompt.ts";
+import type { ThreadWorkingStatePrompt } from "./runtimePrompt.ts";
 import {
   renderProjectContextForPrompt,
   type RuntimeProjectContextPrompt,
@@ -19,8 +16,6 @@ export type RuntimeContextFragmentKind =
   | "project_context"
   | "working_state"
   | "action_ledger"
-  | "active_terminals"
-  | "recent_background_process_events"
   | "recent_tool_attempts"
   | "runtime_stop";
 
@@ -28,8 +23,7 @@ export type RuntimeContextFragmentSource =
   | "runtime_turn_envelope"
   | "cloud_project"
   | "thread_working_state"
-  | "runtime_run_events"
-  | "workspace_terminals";
+  | "runtime_run_events";
 
 export type RuntimeContextFragmentPriority = "critical" | "high" | "normal" | "low";
 
@@ -287,88 +281,6 @@ function buildWorkingStatePrompt(raw: ThreadWorkingStatePrompt | null | undefine
   ].join("\n");
 }
 
-function buildActiveTerminalsPrompt(
-  activeBackgroundTerminals: RuntimeWorkspaceTerminalPrompt[],
-): string | null {
-  const active = activeBackgroundTerminals.filter(
-    (row) => row && typeof row.command === "string",
-  );
-  if (active.length === 0) return null;
-  const lines: string[] = ["WORKSPACE_PROCESS_CONTEXT", "Active background processes:"];
-  for (const terminal of active.slice(0, 3)) {
-    const command = truncatePromptSnippet(terminal.command, 120) ?? "(unknown command)";
-    const cwd = truncatePromptSnippet(terminal.cwd, 80);
-    const tail = truncatePromptSnippet(terminal.outputTail, 140);
-    const lifecycleOwner = truncatePromptSnippet(terminal.lifecycleOwner, 40);
-    const healthStatus = truncatePromptSnippet(terminal.healthStatus, 40);
-    const healthSummary = truncatePromptSnippet(terminal.healthSummary, 120);
-    const previewProcessStatus = truncatePromptSnippet(terminal.previewStatus, 60);
-    const previewTransportStatus = truncatePromptSnippet(terminal.previewTransportStatus, 40);
-    const previewInspectionStatus = truncatePromptSnippet(terminal.previewInspectionStatus, 60);
-    const previewRenderStatus = truncatePromptSnippet(terminal.previewRenderStatus, 60);
-    const previewParts = [
-      typeof terminal.previewPort === "number" ? `port=${terminal.previewPort}` : null,
-      terminal.previewPath ? `path=${truncatePromptSnippet(terminal.previewPath, 80)}` : null,
-      terminal.previewLabel ? `label=${truncatePromptSnippet(terminal.previewLabel, 80)}` : null,
-      previewTransportStatus ? `transport=${previewTransportStatus}` : null,
-      previewInspectionStatus ? `inspection=${previewInspectionStatus}` : null,
-      previewRenderStatus ? `render=${previewRenderStatus}` : null,
-    ].filter(Boolean);
-    const previewProbe = truncatePromptSnippet(terminal.lastPreviewProbeSummary, 120);
-    const browserObservation = truncatePromptSnippet(terminal.lastBrowserObservationSummary, 120);
-    const previewDiagnosis = truncatePromptSnippet(terminal.previewDiagnosis, 80);
-    const recommendedPreviewDebugAction = truncatePromptSnippet(
-      terminal.recommendedPreviewDebugAction,
-      160,
-    );
-    lines.push(
-      `- ${terminal.id}: ${terminal.status}${lifecycleOwner ? `; lifecycle=${lifecycleOwner}` : ""}${healthStatus ? `; health=${healthStatus}` : ""}${healthSummary ? `; health_summary=${healthSummary}` : ""}; command=${command}${cwd ? `; cwd=${cwd}` : ""}${previewProcessStatus ? `; preview_process=${previewProcessStatus}` : ""}${previewParts.length > 0 ? `; ${previewParts.join("; ")}` : ""}${previewDiagnosis ? `; preview_diagnosis=${previewDiagnosis}` : ""}${recommendedPreviewDebugAction ? `; recommended_preview_debug_action=${recommendedPreviewDebugAction}` : ""}${browserObservation ? `; browser_observation=${browserObservation}` : ""}${previewProbe ? `; preview_probe=${previewProbe}` : ""}${tail ? `; recent_output=${tail}` : ""}`,
-    );
-  }
-  lines.push(
-    "Treat active background process rows as canonical live workspace truth. Reuse an existing process when it is still relevant, and stop idle processes when the task no longer needs them.",
-    "For preview debugging, follow the evidence order: terminal health, preview transport/render probe, browser/computer observation, then app root/runtime/CSS diagnosis.",
-    "Treat preview_process as process/transport availability only; app render truth comes from transport, inspection, render, preview_diagnosis, browser_observation, and preview_probe fields.",
-    "If the process is still running but render is blank_suspected or preview_diagnosis is runtime_error_suspected, inspect frontend render/console/root-mount/import/CSS causes before restarting the terminal.",
-  );
-  return lines.join("\n");
-}
-
-function buildRecentBackgroundProcessEventsPrompt(events: Array<{
-  terminalId: string;
-  status: "exited" | "failed" | "stopped";
-  completionReason?: RuntimeWorkspaceTerminalPrompt["completionReason"];
-  command: string;
-  cwd?: string | null;
-  previewPort?: number | null;
-  previewStatus?: RuntimeWorkspaceTerminalPrompt["previewStatus"];
-  healthSummary?: string | null;
-  exitCode?: number | null;
-  outputTail?: string | null;
-}>): string | null {
-  const rows = events.filter((event) => event.terminalId && event.command);
-  if (rows.length === 0) return null;
-  const lines = ["RECENT_BACKGROUND_PROCESS_EVENTS"];
-  for (const event of rows.slice(0, 6)) {
-    const parts = [
-      event.completionReason ? `reason=${truncatePromptSnippet(event.completionReason, 80)}` : null,
-      event.cwd ? `cwd=${truncatePromptSnippet(event.cwd, 80)}` : null,
-      typeof event.previewPort === "number" ? `port=${event.previewPort}` : null,
-      event.previewStatus ? `preview=${truncatePromptSnippet(event.previewStatus, 80)}` : null,
-      typeof event.exitCode === "number" ? `exit=${event.exitCode}` : null,
-      event.healthSummary ? `health=${truncatePromptSnippet(event.healthSummary, 140)}` : null,
-      event.outputTail ? `output=${truncatePromptSnippet(event.outputTail, 220)}` : null,
-    ].filter(Boolean);
-    lines.push(
-      `- ${event.terminalId}: ${event.status}; command=${truncatePromptSnippet(event.command, 140) ?? "(unknown command)"}${parts.length > 0 ? `; ${parts.join("; ")}` : ""}`,
-    );
-  }
-  lines.push(
-    "Treat these as recent lifecycle events from managed background terminals. A completed preview server invalidates older live-preview assumptions unless a newer active process for the same app exists.",
-  );
-  return lines.join("\n");
-}
-
 function buildRecentToolAttemptsPrompt(attempts: Array<{
   toolName: string;
   status: "ok" | "error";
@@ -596,19 +508,6 @@ export function buildRuntimeContextFragmentsFromParts(params: {
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
   projectContext?: RuntimeProjectContextPrompt | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
-  activeBackgroundTerminals?: RuntimeWorkspaceTerminalPrompt[] | null;
-  recentBackgroundProcessEvents?: Array<{
-    terminalId: string;
-    status: "exited" | "failed" | "stopped";
-    completionReason?: RuntimeWorkspaceTerminalPrompt["completionReason"];
-    command: string;
-    cwd?: string | null;
-    previewPort?: number | null;
-    previewStatus?: RuntimeWorkspaceTerminalPrompt["previewStatus"];
-    healthSummary?: string | null;
-    exitCode?: number | null;
-    outputTail?: string | null;
-  }> | null;
   recentToolAttempts?: Array<{
     toolName: string;
     status: "ok" | "error";
@@ -669,26 +568,6 @@ export function buildRuntimeContextFragmentsFromParts(params: {
       maxChars: 2_800,
     }),
     createRuntimeContextFragment({
-      id: "active_terminals:v1",
-      kind: "active_terminals",
-      source: "workspace_terminals",
-      ordinal: 40,
-      priority: "high",
-      title: "Active workspace terminals",
-      body: buildActiveTerminalsPrompt(params.activeBackgroundTerminals ?? []),
-      maxChars: 2_800,
-    }),
-    createRuntimeContextFragment({
-      id: "recent_background_process_events:v1",
-      kind: "recent_background_process_events",
-      source: "workspace_terminals",
-      ordinal: 50,
-      priority: "normal",
-      title: "Recent background process events",
-      body: buildRecentBackgroundProcessEventsPrompt(params.recentBackgroundProcessEvents ?? []),
-      maxChars: 1_800,
-    }),
-    createRuntimeContextFragment({
       id: "recent_tool_attempts:v1",
       kind: "recent_tool_attempts",
       source: "runtime_run_events",
@@ -720,8 +599,6 @@ const fragmentKindOrder: RuntimeContextFragmentKind[] = [
   "project_context",
   "working_state",
   "action_ledger",
-  "active_terminals",
-  "recent_background_process_events",
   "recent_tool_attempts",
   "runtime_stop",
 ];

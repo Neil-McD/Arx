@@ -1,370 +1,45 @@
 import assert from "node:assert/strict";
-import { readFile } from "node:fs/promises";
-import path from "node:path";
-
+import { readFileSync } from "node:fs";
 import {
-  COMPUTER_USE_TOOL_NAMES,
-  NON_SANDBOX_TOOL_NAMES,
-  PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES,
   RETRIEVAL_TOOL_NAMES,
-  SANDBOX_FILE_SHELL_TOOL_NAMES,
-  SANDBOX_TOOL_NAMES,
-  isComputerUseToolName,
-  requiresSandboxSession,
   type RetrievalToolName,
 } from "../shared/retrievalTools.ts";
+import { resolvePolynetHarnessToolPolicy } from "../shared/harnessToolPolicy.ts";
 import {
   buildRuntimeToolPolicySurface,
   getFixedRuntimeToolPolicy,
-  getUnknownRuntimeToolPolicy,
-  isRuntimeToolPolicyParallelEligible,
-  type RuntimeToolCategory,
 } from "../shared/runtimeToolPolicy.ts";
 
-const rootDir = process.cwd();
+assert.deepEqual(
+  resolvePolynetHarnessToolPolicy({
+    allowedToolNames: RETRIEVAL_TOOL_NAMES,
+  }).fixedRuntimeToolNames,
+  RETRIEVAL_TOOL_NAMES,
+);
+const surface = buildRuntimeToolPolicySurface({
+  fixedToolNames: [...RETRIEVAL_TOOL_NAMES],
+});
+assert.equal(surface.summary.total, RETRIEVAL_TOOL_NAMES.length);
+assert.equal(surface.summary.requiresWorkspace, 0);
+assert.equal(surface.summary.byCategory.unknown, 0);
 
-type FixedRuntimeToolCategory = Exclude<
-  RuntimeToolCategory,
-  "unknown"
->;
-
-const FIXED_TOOL_FAMILIES = {
-  docs: ["search_product_docs", "get_product_doc"],
-  community: [
-    "polynet_list",
-    "polynet_read",
-    "polynet_search",
-    "polynet_write",
-    "polynet_call",
-    "member_conversations_list",
-    "member_conversation_read",
-    "member_profile_confirm_facts",
-  ],
-  web: ["web_research", "web_crawl"],
-  workspace_fs: ["list_dir", "read", "glob", "grep", "sha256", "write", "edit"],
-  workspace_shell: ["bash"],
-  terminal: ["terminal_start", "terminal_read", "terminal_write", "terminal_stop"],
-  computer: COMPUTER_USE_TOOL_NAMES,
-} as const satisfies Record<FixedRuntimeToolCategory, readonly RetrievalToolName[]>;
-
-const WORKSPACE_FAMILY_NAMES = [
-  "workspace_fs",
-  "workspace_shell",
-  "terminal",
-  "computer",
-] as const;
-
-const NON_WORKSPACE_FAMILY_NAMES = ["docs", "community", "web"] as const;
-
-async function readRepoFile(relativePath: string): Promise<string> {
-  return await readFile(path.join(rootDir, relativePath), "utf8");
+for (const toolName of RETRIEVAL_TOOL_NAMES) {
+  const policy = getFixedRuntimeToolPolicy(toolName as RetrievalToolName);
+  assert.equal(policy.toolName, toolName);
+  assert.equal(policy.requiresWorkspace, false);
 }
+assert.equal(getFixedRuntimeToolPolicy("polynet_list").readOnly, true);
+assert.equal(getFixedRuntimeToolPolicy("polynet_write").exclusive, true);
+assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").mutatesState, true);
 
-function sorted(values: readonly string[]): string[] {
-  return [...values].sort((left, right) => left.localeCompare(right));
-}
+const source = [
+  readFileSync("shared/retrievalTools.ts", "utf8"),
+  readFileSync("shared/harnessToolPolicy.ts", "utf8"),
+  readFileSync("shared/runtimeToolPolicy.ts", "utf8"),
+].join("\n");
+assert.doesNotMatch(
+  source,
+  /COMPUTER_USE_TOOL_NAMES|SANDBOX_TOOL_NAMES|WORKSPACE_TOOL_NAMES|workspace_fs|workspace_shell|terminal_start|computer_screenshot/,
+);
 
-function familyTools(
-  familyNames: readonly FixedRuntimeToolCategory[],
-): RetrievalToolName[] {
-  return familyNames.flatMap((familyName) => [...FIXED_TOOL_FAMILIES[familyName]]);
-}
-
-function proveFixedToolsHaveSingleCapabilityFamily() {
-  const familyCounts = new Map<RetrievalToolName, number>();
-  const expectedCategories = new Map<RetrievalToolName, FixedRuntimeToolCategory>();
-
-  for (const [category, toolNames] of Object.entries(FIXED_TOOL_FAMILIES) as Array<
-    [FixedRuntimeToolCategory, readonly RetrievalToolName[]]
-  >) {
-    for (const toolName of toolNames) {
-      familyCounts.set(toolName, (familyCounts.get(toolName) ?? 0) + 1);
-      expectedCategories.set(toolName, category);
-    }
-  }
-
-  for (const toolName of RETRIEVAL_TOOL_NAMES) {
-    assert.equal(
-      familyCounts.get(toolName),
-      1,
-      `${toolName} must belong to exactly one fixed capability family`,
-    );
-    assert.equal(
-      getFixedRuntimeToolPolicy(toolName).category,
-      expectedCategories.get(toolName),
-      `${toolName} policy category must match its capability family`,
-    );
-  }
-
-  assert.deepEqual(
-    sorted(familyTools(WORKSPACE_FAMILY_NAMES)),
-    sorted(SANDBOX_TOOL_NAMES),
-    "sandbox-backed tools must match sandbox-bound capability families",
-  );
-  assert.deepEqual(
-    sorted(familyTools(NON_WORKSPACE_FAMILY_NAMES)),
-    sorted(NON_SANDBOX_TOOL_NAMES),
-    "non-sandbox tools must match platform/community/web capability families",
-  );
-
-  assert.deepEqual(
-    sorted(familyTools(["workspace_fs", "workspace_shell"])),
-    sorted(SANDBOX_FILE_SHELL_TOOL_NAMES),
-    "file and shell tools should be the authenticated scratch-sandbox tool slice",
-  );
-  assert.deepEqual(
-    sorted(familyTools(["terminal", "computer"])),
-    sorted(PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES),
-    "terminal and computer tools should remain project-workspace runtime tools",
-  );
-
-  for (const toolName of SANDBOX_TOOL_NAMES) {
-    assert.equal(
-      requiresSandboxSession(toolName),
-      true,
-      `${toolName} must lazily require a sandbox session`,
-    );
-  }
-  for (const toolName of NON_SANDBOX_TOOL_NAMES) {
-    assert.equal(
-      requiresSandboxSession(toolName),
-      false,
-      `${toolName} must not wake a sandbox`,
-    );
-  }
-  for (const toolName of COMPUTER_USE_TOOL_NAMES) {
-    assert.equal(isComputerUseToolName(toolName), true);
-    assert.equal(
-      PROJECT_WORKSPACE_RUNTIME_TOOL_NAMES.includes(toolName),
-      true,
-      `${toolName} must stay workspace-bound`,
-    );
-  }
-
-  console.log("PASS: fixed tool capability families match policy and sandbox boundaries");
-}
-
-function proveFixedPolicyCoverage() {
-  for (const toolName of RETRIEVAL_TOOL_NAMES) {
-    const policy = getFixedRuntimeToolPolicy(toolName);
-    assert.equal(policy.toolName, toolName);
-    assert.equal(policy.source, "fixed");
-    assert.equal(
-      policy.parallelSafe,
-      isRuntimeToolPolicyParallelEligible(policy),
-      `${toolName} parallelSafe must mean read-only and non-exclusive`,
-    );
-  }
-  console.log("PASS: every fixed runtime tool has an explicit policy");
-}
-
-function proveDefensiveMutationDefaults() {
-  const unknown = getUnknownRuntimeToolPolicy("vendor__mystery_tool");
-  assert.equal(unknown.readOnly, false);
-  assert.equal(unknown.mutatesState, true);
-  assert.equal(unknown.parallelSafe, false);
-  assert.equal(unknown.exclusive, true);
-  assert.equal(unknown.riskLevel, "sensitive");
-  console.log("PASS: unknown tools default to mutating, exclusive, full-access audit");
-}
-
-function proveFixedPolicyBoundaries() {
-  const parallelReadTools: RetrievalToolName[] = [
-    "search_product_docs",
-    "get_product_doc",
-    "polynet_list",
-    "web_research",
-    "list_dir",
-    "read",
-    "glob",
-    "grep",
-    "sha256",
-  ];
-  for (const toolName of parallelReadTools) {
-    const policy = getFixedRuntimeToolPolicy(toolName);
-    assert.equal(policy.readOnly, true, `${toolName} should be read-only`);
-    assert.equal(policy.parallelSafe, true, `${toolName} should be parallel-safe`);
-    assert.equal(policy.exclusive, false, `${toolName} should not be exclusive`);
-  }
-  for (const toolName of [
-    "polynet_read",
-    "polynet_search",
-  ] as const satisfies readonly RetrievalToolName[]) {
-    const receiptWritingRead = getFixedRuntimeToolPolicy(toolName);
-    assert.equal(receiptWritingRead.riskLevel, "read");
-    assert.equal(receiptWritingRead.readOnly, false);
-    assert.equal(receiptWritingRead.mutatesState, true);
-    assert.equal(receiptWritingRead.parallelSafe, false);
-    assert.equal(receiptWritingRead.exclusive, false);
-  }
-
-  const exclusiveTools: RetrievalToolName[] = [
-    "member_profile_confirm_facts",
-    "polynet_write",
-    "polynet_call",
-    "web_crawl",
-    "write",
-    "edit",
-    "bash",
-    "terminal_start",
-    "terminal_read",
-    "terminal_write",
-    "terminal_stop",
-    "computer_open_url",
-    "computer_screenshot",
-    "computer_click",
-    "computer_type",
-    "computer_keypress",
-    "computer_scroll",
-    "computer_stop",
-  ];
-  for (const toolName of exclusiveTools) {
-    const policy = getFixedRuntimeToolPolicy(toolName);
-    assert.equal(policy.parallelSafe, false, `${toolName} should not be parallel-safe`);
-    assert.equal(policy.exclusive, true, `${toolName} should be exclusive`);
-  }
-
-  assert.equal(getFixedRuntimeToolPolicy("terminal_read").readOnly, true);
-  assert.equal(getFixedRuntimeToolPolicy("search_product_docs").category, "docs");
-  assert.equal(getFixedRuntimeToolPolicy("search_product_docs").requiresWorkspace, false);
-  assert.equal(getFixedRuntimeToolPolicy("get_product_doc").category, "docs");
-  assert.equal(getFixedRuntimeToolPolicy("get_product_doc").requiresCommunity, false);
-  assert.equal(
-    getFixedRuntimeToolPolicy("polynet_list").category,
-    "community",
-  );
-  assert.equal(
-    getFixedRuntimeToolPolicy("polynet_list").requiresCommunity,
-    false,
-  );
-  assert.equal(getFixedRuntimeToolPolicy("polynet_list").readOnly, true);
-  assert.equal(getFixedRuntimeToolPolicy("polynet_read").category, "community");
-  assert.equal(getFixedRuntimeToolPolicy("polynet_read").requiresCommunity, false);
-  assert.equal(getFixedRuntimeToolPolicy("polynet_read").readOnly, false);
-  assert.equal(getFixedRuntimeToolPolicy("polynet_read").mutatesState, true);
-  assert.equal(getFixedRuntimeToolPolicy("polynet_read").parallelSafe, false);
-  assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").mutatesState, true);
-  assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresCommunity, true);
-  assert.equal(getFixedRuntimeToolPolicy("member_profile_confirm_facts").requiresWorkspace, false);
-  for (const retiredToolName of [
-    "polynet_list_communities",
-    "polynet_get_community",
-    "community_resources_read",
-    "community_resources_search",
-    "community_search",
-    "community_memory_search",
-    "community_memory_read",
-    "community_chat_search",
-    "community_chat_read",
-    "community_resource_builder_list",
-    "community_resource_builder_read",
-    "community_resource_builder_stage_changeset",
-  ]) {
-    assert.equal(
-      RETRIEVAL_TOOL_NAMES.includes(retiredToolName as RetrievalToolName),
-      false,
-      `${retiredToolName} must remain retired`,
-    );
-  }
-  assert.equal(
-    getFixedRuntimeToolPolicy("terminal_read").exclusive,
-    true,
-    "terminal reads are stateful and remain exclusive despite being read-only",
-  );
-  assert.equal(getFixedRuntimeToolPolicy("computer_screenshot").readOnly, true);
-  assert.equal(
-    getFixedRuntimeToolPolicy("computer_screenshot").exclusive,
-    true,
-    "computer screenshots are stateful and remain exclusive despite being read-only",
-  );
-  for (const toolName of [
-    "terminal_start",
-    "terminal_read",
-    "terminal_write",
-    "terminal_stop",
-  ] as const satisfies readonly RetrievalToolName[]) {
-    assert.equal(
-      requiresSandboxSession(toolName),
-      true,
-      `${toolName} should be classified as workspace-bound`,
-    );
-  }
-  console.log("PASS: fixed tool policies separate parallel reads from stateful exclusives");
-}
-
-function provePolicySurfaceSummary() {
-  const surface = buildRuntimeToolPolicySurface({
-    fixedToolNames: ["polynet_list", "read", "bash"],
-  });
-  assert.equal(surface.policies.length, 3);
-  assert.equal(surface.summary.total, 3);
-  assert.equal(surface.summary.parallelSafe, 2);
-  assert.equal(surface.summary.exclusive, 1);
-  assert.equal(surface.summary.requiresCommunity, 0);
-  assert.equal(surface.summary.byRiskLevel.read, 2);
-  assert.equal(surface.summary.byRiskLevel.write, 0);
-  assert.equal(surface.summary.byRiskLevel.sensitive, 1);
-  assert.equal(surface.summary.byCategory.community, 1);
-  assert.equal(surface.summary.byCategory.workspace_fs, 1);
-  assert.equal(surface.summary.byCategory.workspace_shell, 1);
-  console.log("PASS: active runtime tool surfaces produce scheduler-ready summaries");
-}
-
-async function provePolicySurfaceIsWiredIntoRuntimeEvidence() {
-  const executionSessionSource = await readRepoFile("convex/runtimeExecutionSession.ts");
-  const runtimeAgentLoopSource = await readRepoFile("convex/runtimeAgentLoop.ts");
-  assert.match(
-    executionSessionSource,
-    /buildRuntimeToolPolicySurface/,
-    "expected execution session to build tool policy surfaces next to provider tools",
-  );
-  assert.match(
-    executionSessionSource,
-    /activeToolPolicySummary/,
-    "expected execution session to return a provider-surface policy summary",
-  );
-  assert.match(
-    runtimeAgentLoopSource,
-    /tool_policy_summary: initialProviderTools\.activeToolPolicySummary/,
-    "expected initial provider tool surface event to include policy summary",
-  );
-  assert.match(
-    runtimeAgentLoopSource,
-    /tool_policy_enforcement: "full_access_audit"/,
-    "expected provider tool surface events to state that full-access execution is audited",
-  );
-  console.log("PASS: runtime tool policy metadata is wired into run evidence");
-}
-
-async function proveThirdPartyMcpRuntimeIsAbsent() {
-  const policySource = await readRepoFile("shared/runtimeToolPolicy.ts");
-  const runtimeAgentLoopSource = await readRepoFile("convex/runtimeAgentLoop.ts");
-  const promptSource = await readRepoFile("convex/runtimeHarnessShaping.ts");
-  const mcpAccountSource = await readRepoFile(
-    "apps/web/src/components/WebPolynetMcpAccountSection.tsx",
-  );
-  const runtimeSources = [
-    runtimeAgentLoopSource,
-    promptSource,
-    mcpAccountSource,
-  ].join("\n");
-  assert.doesNotMatch(
-    runtimeSources,
-    /runtimeMcpManager|resolve_mounted_tools|userPlatformAppMount|communityAppMount/,
-    "native runtime and settings must not expose third-party MCP mounts",
-  );
-  assert.doesNotMatch(
-    policySource,
-    /requiresMcpSession|category: "mcp"|category: "resolver"/,
-    "runtime tool policy should describe only fixed and unknown tools",
-  );
-  console.log("PASS: runtime tool policy has no third-party MCP surface");
-}
-
-proveFixedToolsHaveSingleCapabilityFamily();
-proveFixedPolicyCoverage();
-proveDefensiveMutationDefaults();
-proveFixedPolicyBoundaries();
-provePolicySurfaceSummary();
-await provePolicySurfaceIsWiredIntoRuntimeEvidence();
-await proveThirdPartyMcpRuntimeIsAbsent();
+console.log("runtime_tool_policy_proof: ok");

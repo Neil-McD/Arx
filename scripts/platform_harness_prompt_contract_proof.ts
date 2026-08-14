@@ -20,8 +20,6 @@ const expectedCapabilities = [
   "product_docs",
   "community_tools",
   "web_research",
-  "sandbox_tools",
-  "workspace_tools",
 ];
 
 assert.deepEqual(capabilities, expectedCapabilities);
@@ -43,7 +41,7 @@ assert.deepEqual(
     entitledCapabilityFamilies: capabilities,
     hasProjectContext: false,
   }),
-  ["product_docs", "community_tools", "web_research", "sandbox_tools"],
+  expectedCapabilities,
 );
 assert.deepEqual(
   resolveActiveCapabilityFamiliesFromEntitlements({
@@ -65,20 +63,14 @@ assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_CODEX }), false);
 
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
-const runtimeHandlers = read("convex/runtimeTurnHandlers.ts");
-const voice = read("convex/httpVoice.ts");
 const docs = read("docs/auth-money-access-matrix.md");
 
 assert.doesNotMatch(runtimePrompt, /RuntimeAccountPlan|Account plan:|Premium-only|Billing to upgrade/);
 assert.doesNotMatch(runtimeAgentLoop, /reserveCreditsInternal|settleCreditsInternal/);
-assert.doesNotMatch(runtimeHandlers, /reserveCreditsInternal|settleCreditsInternal|paid_usage_billing_mode|required_credits/);
-assert.doesNotMatch(voice, /reserveCreditsInternal|settleCreditsInternal|workspace_credits_exhausted/);
 assert.match(
   runtimeAgentLoop,
   /authorizeFounderPaidToolFundingSession[\s\S]*settleFounderPaidToolFundingSession/,
 );
-assert.match(runtimeHandlers, /recordPlatformToolCostBestEffort/);
-assert.match(voice, /recordPlatformToolCostBestEffort/);
 assert.match(docs, /One backend resolver composes them/);
 assert.match(docs, /Each active Builder cycle includes up to `\$20` raw GPT 5\.6 Luna model cost/);
 

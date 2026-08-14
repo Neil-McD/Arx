@@ -4,18 +4,10 @@ import {
 } from "../shared/nativeToolLoop";
 import {
   formatRuntimeDiagnosticSummary,
-  parseRuntimeDiagnosticsFromText,
   selectTopRuntimeDiagnostic,
   type RuntimeDiagnostic,
 } from "../shared/runtimeDiagnostics";
 import { inferRuntimeToolFailureSemantics } from "../shared/runtimeToolFailureSemantics";
-import { getShellCommandAuditMetadataForToolCall } from "../shared/runtimeToolPolicy";
-import { isVerificationShellCommand } from "../shared/runtimeWorkingStateLedger";
-
-function normalizeCommand(args: Record<string, unknown>): string | null {
-  const command = String(args.command ?? "").replace(/\s+/g, " ").trim();
-  return command || null;
-}
 
 function normalizeText(value: unknown, maxLen = 500): string | null {
   const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
@@ -31,7 +23,7 @@ function normalizeExitCode(value: unknown): number | null {
   return numeric;
 }
 
-export async function appendWorkspaceToolCallStarted(params: {
+export async function appendRuntimeToolCallStarted(params: {
   appendRunEvent: (params: {
     eventType: string;
     eventKey?: string;
@@ -46,10 +38,6 @@ export async function appendWorkspaceToolCallStarted(params: {
   args: Record<string, unknown>;
 }): Promise<void> {
   const toolCallId = `runtime_tools:${params.runId}:${params.harnessName}:${params.iteration}`;
-  const shellCommandAuditMetadata = getShellCommandAuditMetadataForToolCall({
-    toolName: params.toolName,
-    normalizedArgs: params.args,
-  });
   await params.appendRunEvent({
     eventType: "tool_call_started",
     eventKey: `${params.runId}:${params.harnessName}_tool_call_started:${params.iteration}`,
@@ -59,7 +47,6 @@ export async function appendWorkspaceToolCallStarted(params: {
       provider_call_id: params.providerCallId,
       tool_name: params.toolName,
       args: params.args,
-      ...(shellCommandAuditMetadata ?? {}),
       attempt: 1,
       community_scope_id: params.communityId ?? null,
       harness: {
@@ -69,7 +56,7 @@ export async function appendWorkspaceToolCallStarted(params: {
   });
 }
 
-export async function appendWorkspaceToolCallFinished(params: {
+export async function appendRuntimeToolCallFinished(params: {
   appendRunEvent: (params: {
     eventType: string;
     eventKey?: string;
@@ -85,11 +72,7 @@ export async function appendWorkspaceToolCallFinished(params: {
   toolResultEnvelope: NativeToolResultEnvelope;
 }): Promise<void> {
   const toolCallId = `runtime_tools:${params.runId}:${params.harnessName}:${params.iteration}`;
-  const shellCommandAuditMetadata = getShellCommandAuditMetadataForToolCall({
-    toolName: params.toolName,
-    normalizedArgs: params.args,
-  });
-  const command = params.toolName === "bash" ? normalizeCommand(params.args) : null;
+  const command = null;
   const outputText = [
     params.toolResult.errorMessage,
     params.toolResult.outputText,
@@ -112,17 +95,7 @@ export async function appendWorkspaceToolCallFinished(params: {
           details: params.toolResult.details ?? null,
         })
       : null;
-  const parsedDiagnostics =
-    params.toolName === "bash" &&
-    params.toolResult.status !== "ok" &&
-    isVerificationShellCommand(command)
-      ? parseRuntimeDiagnosticsFromText({
-          command,
-          outputText,
-        })
-      : [];
   const diagnostics: RuntimeDiagnostic[] = [
-    ...parsedDiagnostics,
     ...(failureSemantics?.diagnostic ? [failureSemantics.diagnostic] : []),
   ];
   const topDiagnosticSummary = formatRuntimeDiagnosticSummary(
@@ -139,7 +112,6 @@ export async function appendWorkspaceToolCallFinished(params: {
       tool_call_id: toolCallId,
       provider_call_id: params.providerCallId,
       args: params.args,
-      ...(shellCommandAuditMetadata ?? {}),
       attempt: 1,
       ...params.toolResultEnvelope,
       tool_name: params.toolName,

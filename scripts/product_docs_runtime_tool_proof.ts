@@ -55,16 +55,11 @@ function proveDocsCapabilityGate() {
     true,
     "authenticated users should receive web research tools without a paid account tier",
   );
-  assert.equal(
-    authenticatedFree.entitledCapabilityFamilies.includes("sandbox_tools"),
-    true,
-    "authenticated users should receive sandbox tools without a paid account tier",
-  );
-  assert.equal(
-    authenticatedFree.entitledCapabilityFamilies.includes("workspace_tools"),
-    true,
-    "authenticated users should receive workspace tools without a paid account tier",
-  );
+  assert.deepEqual(authenticatedFree.entitledCapabilityFamilies, [
+    "product_docs",
+    "community_tools",
+    "web_research",
+  ]);
 
   const retiredArchitectInput = resolveCanonicalGatePolicy({
     surface: "web",

@@ -23,34 +23,13 @@ assert.equal(contract.version, 1);
 assert.equal(contract.production_origin, "https://polynet.ai");
 assert.equal(
   contract.production_build_id,
-  "dbec82f5869384a087ab5ea96d0b25c53f8da284",
+  "e5bf23c48260c2eb56cf7a590ad84e3d91540e5d",
 );
 assert.equal(contract.staging_deployment, "quick-porcupine-949");
-assert.equal(contract.required_public_operations.length, 245);
-assert.equal(contract.candidate_already_supported_operations.length, 112);
-assert.equal(Object.keys(contract.compatibility_aliases).length, 116);
-assert.equal(contract.retired_tombstone_operations.length, 17);
-
-const exactRetiredOperations = [
-  "appOAuth:beginUserPlatformAppOAuth",
-  "appOAuth:finalizeUserPlatformAppOAuth",
-  "community:connectCommunityApp",
-  "community:createCommunityResourcePageDraftFromSource",
-  "community:listCommunityAppMounts",
-  "community:refreshCommunityApp",
-  "community:setupImportedCommunityMcpApp",
-  "community:unmountCommunityApp",
-  "community:updateCommunityAppMount",
-  "harnessMounts:listEffectiveMcpApps",
-  "userPlatformAppMounts:connectUserPlatformApp",
-  "userPlatformAppMounts:listUserPlatformAppMounts",
-  "userPlatformAppMounts:reconnectUserPlatformApp",
-  "userPlatformAppMounts:refreshUserPlatformApp",
-  "userPlatformAppMounts:setupImportedCommunityMcpUserHarness",
-  "userPlatformAppMounts:unmountUserPlatformApp",
-  "userPlatformAppMounts:updateUserPlatformAppMount",
-];
-assert.deepEqual(contract.retired_tombstone_operations, exactRetiredOperations);
+assert.equal(contract.required_public_operations.length, 155);
+assert.equal(contract.candidate_already_supported_operations.length, 155);
+assert.equal(Object.keys(contract.compatibility_aliases).length, 0);
+assert.equal(contract.retired_tombstone_operations.length, 0);
 
 const required = new Set(contract.required_public_operations);
 const alreadySupported = new Set(
@@ -59,9 +38,9 @@ const alreadySupported = new Set(
 const aliases = new Set(Object.keys(contract.compatibility_aliases));
 const retired = new Set(contract.retired_tombstone_operations);
 assert.equal(required.size, contract.required_public_operations.length);
-assert.equal(alreadySupported.size, 112);
-assert.equal(aliases.size, 116);
-assert.equal(retired.size, 17);
+assert.equal(alreadySupported.size, 155);
+assert.equal(aliases.size, 0);
+assert.equal(retired.size, 0);
 
 for (const operation of alreadySupported) {
   assert.ok(required.has(operation));
@@ -143,5 +122,5 @@ assert.match(
 );
 
 console.log(
-  "PASS: cached production client contract is complete: 112 canonical calls + 116 compatibility aliases + 17 inert retirement tombstones",
+  "PASS: cached production client contract is complete: 155 current-production calls are already supported",
 );

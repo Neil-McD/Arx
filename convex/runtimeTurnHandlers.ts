@@ -68,19 +68,8 @@ import {
 import { resolvePolynetRuntimeEngine } from "../shared/runtimeEngine";
 import {
   buildPolynetHarnessToolPolicyReceipt,
-  POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES,
-  POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES,
-  POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
   resolvePolynetHarnessToolPolicy,
 } from "../shared/harnessToolPolicy";
-import {
-  type RetrievalToolName,
-} from "../shared/retrievalTools";
-import { recordPlatformToolCostBestEffort } from "./platformToolCostAccounting";
-import {
-  DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
-  estimateDaytonaWorkspaceComputeVendorCostUsd,
-} from "../shared/workspaceCredits";
 import { createRuntimeReasoningSummaryEmitter } from "./runtimeReasoningSummaryEvents";
 import { logStructuredError } from "./errorLogging";
 import {
@@ -170,44 +159,6 @@ type RuntimeCompletionFailure = {
   message: string;
 };
 
-type RuntimeSubstrateResolution = {
-  provider: "daytona" | "none";
-  status:
-    | "polynet_daytona_runtime"
-    | "polynet_harness_isolated";
-  targetId: string | null;
-  runId: string | null;
-  sandboxId: string | null;
-  workspaceRoot: string | null;
-  activePreviewPorts: number[];
-  previewLeaseActive: boolean;
-  polyNetWorkspaceToolsSuppressed: boolean;
-  suppressedToolNames: RetrievalToolName[];
-};
-
-const POLYNET_DEFERRED_RUNTIME_TOOL_NAMES = new Set<RetrievalToolName>([
-  ...POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
-]);
-const POLYNET_DAYTONA_RUNTIME_TOOL_NAME_SET = new Set<RetrievalToolName>([
-  ...POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES,
-  ...POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES,
-]);
-
-function isolatePolynetHarnessToolNames(params: {
-  allowedToolNames: readonly RetrievalToolName[];
-}): { allowedToolNames: RetrievalToolName[]; suppressedToolNames: RetrievalToolName[] } {
-  const allowedToolNames: RetrievalToolName[] = [];
-  const suppressedToolNames: RetrievalToolName[] = [];
-  for (const toolName of params.allowedToolNames) {
-    if (POLYNET_DEFERRED_RUNTIME_TOOL_NAMES.has(toolName)) {
-      suppressedToolNames.push(toolName);
-    } else {
-      allowedToolNames.push(toolName);
-    }
-  }
-  return { allowedToolNames, suppressedToolNames };
-}
-
 function buildCommunityLensAuthorityReceipt(
   authority: CommunityLensAuthority | null | undefined,
 ) {
@@ -285,8 +236,6 @@ function buildAdaptiveFailureFinalizationMessages(params: {
         "You are writing the final user-facing response after an agent runtime stopped before a normal final answer.",
         "Do not output a fixed ledger template. Answer the user's latest message directly and naturally.",
         "Use the evidence provided, but separate verified facts from unknowns.",
-        "If a dev server or background terminal is running but render evidence says the preview is blank, explicitly distinguish server/process health from app render health.",
-        "Do not claim the app is working just because an iframe or server loaded.",
         "Keep it concise. Usually 2-5 short paragraphs or a few bullets.",
         "Do not mention hidden implementation names unless they help the user debug.",
       ].join("\n"),
@@ -465,7 +414,6 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunityLensAuthority,
       runtimeCommunityFunnelSlot,
       runtimeProjectId,
-      runtimeSandboxMode,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile,
@@ -571,7 +519,6 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeEngineResolved: runtimeEngineResolution.resolvedRuntimeEngine,
       runtimeEngineSource: runtimeEngineResolution.runtimeEngineSource,
       executionMode: "agentic",
-      sandboxMode: runtimeSandboxMode,
       contractName: "capability_composed_tools_v1",
       contractVersion: "v1",
       harnessProfile: resolvedRuntimeHarnessProfile,
@@ -781,9 +728,7 @@ export async function handleRuntimeTurnRequest(args: {
     const refreshActiveContextSnapshotAfterEventBestEffort = async (eventType: string): Promise<void> => {
       if (
         eventType !== "tool_call_finished" &&
-        eventType !== "runtime_diagnostics_detected" &&
-        eventType !== "workspace_terminal_status" &&
-        eventType !== "workspace_preview_observed"
+        eventType !== "runtime_diagnostics_detected"
       ) {
         return;
       }
@@ -799,83 +744,6 @@ export async function handleRuntimeTurnRequest(args: {
       activeSnapshotEventCount = 0;
       activeSnapshotUpdatedAt = nowMs;
       await persistContextSnapshotBestEffort("active");
-    };
-    let polynetDaytonaRuntimeCostKey: string | null = null;
-    let polynetDaytonaRuntimeReserveStartedAtMs: number | null = null;
-    let polynetDaytonaRuntimeCostRecorded = false;
-    const recordPolynetDaytonaRuntimeCostBestEffort = async (
-      terminalReason: string,
-    ): Promise<void> => {
-      if (!polynetDaytonaRuntimeCostKey || polynetDaytonaRuntimeCostRecorded) return;
-      polynetDaytonaRuntimeCostRecorded = true;
-
-      let target: Record<string, unknown> | null = null;
-      try {
-        target = (await ctx.runQuery(
-          (internal as any).daytonaCodexRuntimeTargets
-            .getDaytonaCodexRuntimeTargetByRunIdInternal as any,
-          {
-            ownerId: actor.dbUserId,
-            runId,
-          },
-        )) as Record<string, unknown> | null;
-      } catch (error) {
-        logStructuredError("polynet_daytona_runtime_target_lookup_failed", {
-          error,
-          run_id: runId,
-          cost_key: polynetDaytonaRuntimeCostKey,
-        });
-      }
-
-      const sandboxId = String(target?.sandboxId ?? "").trim();
-      const targetId = String(target?._id ?? "").trim();
-      const startedAtMs = polynetDaytonaRuntimeReserveStartedAtMs ?? runStartedAt;
-      const durationSeconds = Math.max(0, (Date.now() - startedAtMs) / 1000);
-      if (!target || !sandboxId || !(durationSeconds > 0)) {
-        return;
-      }
-
-      const rawVendorCostUsd = estimateDaytonaWorkspaceComputeVendorCostUsd({
-        durationSeconds,
-      });
-      await recordPlatformToolCostBestEffort({
-        ctx,
-        costKey: polynetDaytonaRuntimeCostKey,
-        userId: actor.dbUserId,
-        projectId: runtimeProjectId ?? undefined,
-        runId,
-        rawVendorCostUsd,
-        metadata: {
-          harness: "polynet",
-          provider: "daytona",
-          runtime_engine: "polynet",
-          pricing_model: "daytona_runtime_seconds_estimate",
-          provider_billing_evidence: "estimated_from_runtime_duration",
-          daytona_workspace_compute_usd_per_second:
-            DAYTONA_WORKSPACE_COMPUTE_USD_PER_SECOND,
-          duration_seconds: durationSeconds,
-          duration_source: "convex_observed_run_elapsed",
-          target_id: targetId || null,
-          sandbox_id: sandboxId,
-          terminal_reason: terminalReason,
-        },
-      });
-      try {
-        await appendRunEvent({
-          eventType: "polynet_daytona_runtime_cost_recorded",
-          eventKey: `${runId}:polynet_daytona_runtime_cost_recorded:1`,
-          payload: {
-            run_id: runId,
-            cost_key: polynetDaytonaRuntimeCostKey,
-            raw_vendor_cost_usd: rawVendorCostUsd,
-            duration_seconds: durationSeconds,
-            target_id: targetId || null,
-            sandbox_id: sandboxId,
-          },
-        });
-      } catch {
-        // Cost evidence is authoritative; audit event persistence is best effort.
-      }
     };
     type FinishRunBestEffortParams = Parameters<typeof finishRunBestEffortRaw>[0];
     const finishRunBestEffortForRun = async (
@@ -922,13 +790,6 @@ export async function handleRuntimeTurnRequest(args: {
         if (params.status === "ok") {
           await recordCommunityOnboardingAgentDockTurnBestEffort();
         }
-        await recordPolynetDaytonaRuntimeCostBestEffort(
-          params.status === "ok"
-            ? "completed"
-            : params.status === "cancelled"
-              ? "cancelled"
-              : params.errorCode || params.reason || "error",
-        );
       }
     };
     finishRunBestEffort = finishRunBestEffortForRun;
@@ -1282,120 +1143,7 @@ export async function handleRuntimeTurnRequest(args: {
           : "indeterminate",
       });
     };
-    const polynetToolSurface = isolatePolynetHarnessToolNames({
-      allowedToolNames,
-    });
-    const polynetAllowedToolNamesForRun = polynetToolSurface.allowedToolNames;
-    const suppressedPolynetToolNames = polynetToolSurface.suppressedToolNames;
-    const polynetDaytonaRuntimeEnabled =
-      polynetAllowedToolNamesForRun.some((toolName) =>
-        POLYNET_DAYTONA_RUNTIME_TOOL_NAME_SET.has(toolName),
-      );
-    if (polynetDaytonaRuntimeEnabled) {
-      const costKey = `workspace_compute:daytona:${runId}`;
-      polynetDaytonaRuntimeCostKey = costKey;
-      polynetDaytonaRuntimeReserveStartedAtMs = Date.now();
-      await appendRunEvent({
-        eventType: "polynet_daytona_runtime_cost_tracking_started",
-        eventKey: `${runId}:polynet_daytona_runtime_cost_tracking_started:1`,
-        payload: {
-          run_id: runId,
-          cost_key: costKey,
-        },
-      });
-    }
-    const shouldResolveDaytonaRuntimeSubstrate = polynetDaytonaRuntimeEnabled;
-    const activeDaytonaRuntimeSubstrate = shouldResolveDaytonaRuntimeSubstrate
-      ? ((await ctx.runQuery(
-          (internal as any).daytonaCodexRuntimeTargets
-            .getActiveDaytonaCodexRuntimeSubstrateForThreadInternal as any,
-          {
-            ownerId: actor.dbUserId,
-            threadId: ownedThread._id as any,
-          },
-        )) as {
-          provider?: unknown;
-          targetId?: unknown;
-          runId?: unknown;
-          sandboxId?: unknown;
-          workspaceRoot?: unknown;
-          activePreviewPorts?: unknown;
-          previewLeaseActive?: unknown;
-        } | null)
-      : null;
-    const normalizedDaytonaRuntimeSubstrate = {
-      provider: "daytona" as const,
-      targetId:
-        String(activeDaytonaRuntimeSubstrate?.targetId ?? "").trim() || null,
-      runId:
-        String(activeDaytonaRuntimeSubstrate?.runId ?? "").trim() || runId,
-      sandboxId:
-        String(activeDaytonaRuntimeSubstrate?.sandboxId ?? "").trim() || null,
-      workspaceRoot:
-        String(activeDaytonaRuntimeSubstrate?.workspaceRoot ?? "").trim() ||
-        null,
-      activePreviewPorts: Array.isArray(
-        activeDaytonaRuntimeSubstrate?.activePreviewPorts,
-      )
-        ? activeDaytonaRuntimeSubstrate.activePreviewPorts
-            .map((port) => Number(port))
-            .filter((port) => Number.isFinite(port) && port > 0)
-        : [],
-      previewLeaseActive:
-        activeDaytonaRuntimeSubstrate?.previewLeaseActive === true,
-      previewStartAvailable: polynetAllowedToolNamesForRun.includes("terminal_start"),
-    };
-    const runtimeSubstrateResolution: RuntimeSubstrateResolution =
-      polynetDaytonaRuntimeEnabled
-          ? {
-              provider: "daytona",
-              status: "polynet_daytona_runtime",
-              targetId: normalizedDaytonaRuntimeSubstrate.targetId,
-              runId: normalizedDaytonaRuntimeSubstrate.runId,
-              sandboxId: normalizedDaytonaRuntimeSubstrate.sandboxId,
-              workspaceRoot: normalizedDaytonaRuntimeSubstrate.workspaceRoot,
-              activePreviewPorts:
-                normalizedDaytonaRuntimeSubstrate.activePreviewPorts,
-              previewLeaseActive:
-                normalizedDaytonaRuntimeSubstrate.previewLeaseActive,
-              polyNetWorkspaceToolsSuppressed:
-                suppressedPolynetToolNames.length > 0,
-              suppressedToolNames: suppressedPolynetToolNames,
-            }
-        : {
-            provider: "none",
-            status: "polynet_harness_isolated",
-            targetId: null,
-            runId: null,
-            sandboxId: null,
-            workspaceRoot: null,
-            activePreviewPorts: [],
-            previewLeaseActive: false,
-            polyNetWorkspaceToolsSuppressed:
-              suppressedPolynetToolNames.length > 0,
-            suppressedToolNames: suppressedPolynetToolNames,
-          };
-    const activeDaytonaRuntimeSubstrateForPolynetTools =
-      polynetDaytonaRuntimeEnabled ? normalizedDaytonaRuntimeSubstrate : null;
-    await appendRunEvent({
-      eventType: "runtime_substrate_resolved",
-      eventKey: `${runId}:runtime_substrate_resolved:1`,
-      payload: {
-        run_id: runId,
-        provider: runtimeSubstrateResolution.provider,
-        status: runtimeSubstrateResolution.status,
-        target_id: runtimeSubstrateResolution.targetId,
-        substrate_run_id: runtimeSubstrateResolution.runId,
-        sandbox_id: runtimeSubstrateResolution.sandboxId,
-        workspace_root: runtimeSubstrateResolution.workspaceRoot,
-        active_preview_ports: runtimeSubstrateResolution.activePreviewPorts,
-        preview_lease_active: runtimeSubstrateResolution.previewLeaseActive,
-        polynet_workspace_tools_suppressed:
-          runtimeSubstrateResolution.polyNetWorkspaceToolsSuppressed,
-        suppressed_tool_names: runtimeSubstrateResolution.suppressedToolNames,
-        runtime_engine_resolved: runtimeEngineResolution.resolvedRuntimeEngine,
-      },
-    });
+    const polynetAllowedToolNamesForRun = allowedToolNames;
     await appendRunEvent({
       eventType: "runtime_context_resolved",
       eventKey: `${runId}:runtime_context_resolved:1`,
@@ -1530,8 +1278,6 @@ export async function handleRuntimeTurnRequest(args: {
             allowedToolNames: polynetAllowedToolNamesForRun,
             invocationSurface,
             memberAgentSurfaceContext,
-            activeDaytonaRuntimeSubstrate:
-              activeDaytonaRuntimeSubstrateForPolynetTools,
             apiKeyOverride: providerApiKeyOverride,
             appendRunEvent: streamAppendRunEvent,
             refreshRuntimeContextSnapshot: async (
@@ -1908,8 +1654,6 @@ export async function handleRuntimeTurnRequest(args: {
         allowedToolNames: polynetAllowedToolNamesForRun,
         invocationSurface,
         memberAgentSurfaceContext,
-        activeDaytonaRuntimeSubstrate:
-          activeDaytonaRuntimeSubstrateForPolynetTools,
         apiKeyOverride: providerApiKeyOverride,
         appendRunEvent: async (event): Promise<void> => {
           observeFunnelDraftWriteEvent(event);

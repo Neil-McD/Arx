@@ -205,7 +205,11 @@ assert.doesNotMatch(
   "paid web tools must settle provider cost through their canonical receipt mutation",
 );
 assert.match(runtimeAgentLoop, /settleFounderPaidToolFundingSession/);
-assert.match(runtimeTurnHandlers, /recordPlatformToolCostBestEffort/);
+assert.doesNotMatch(
+  runtimeTurnHandlers,
+  /recordPlatformToolCostBestEffort/,
+  "the native turn handler must not retain retired Workspace provider-cost accounting",
+);
 assert.match(voice, /recordPlatformToolCostBestEffort/);
 assert.doesNotMatch(crons, /auto.?recharge|collectWorkspaceUsageByCard|reconcileExpiredCreditReservations/i);
 assert.match(crons, /recordBlaxelStorageProviderCostsInternal/);

@@ -130,7 +130,6 @@ CI admits exactly these six first-party `setInterval` call sites:
 | `shared/useDirectMessageTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
 | `apps/web/src/controllers/useWebActiveCommunityShellController.ts` | backend presence heartbeat | visible active community; one in-flight call; cleared by effect teardown |
 | `convex/runtimeCancellation.ts` | backend cancellation watcher | active runtime operation; one in-flight check; cleared in `finally` |
-| `convex/runtimeExecutionSession.ts` | backend workspace heartbeat | active workspace session; one timer and in-flight touch; cleared by `dispose()` |
 
 The executable contract scans the first-party source corpus. A new interval or
 a second interval in an allowlisted file fails CI until it is deleted or
@@ -141,7 +140,6 @@ explicitly classified with cadence, isolation, overlap, and cleanup bounds.
 | Operation | Lifetime | Current bounds | Status / required action |
 | --- | --- | --- | --- |
 | Runtime cancellation watcher | active runtime call only | minimum poll interval, one in-flight check, cleared at completion | `keep, prove` |
-| Workspace execution heartbeat | active workspace session only | one in-flight touch, cleared at completion | `keep, prove` |
 
 These loops are allowed only while the owned execution is active. A detached or
 terminal execution must leave no timer, subscription, or scheduled successor.

@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture and runtime convergence through Slice 5B released; remaining roadmap defined
+Status: context architecture and runtime convergence through Slice 5C released; Slice 5D release candidate verified locally
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-14
 
@@ -9,8 +9,8 @@ Program position:
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: Slices 5A and 5B are released; Slices 5C through 10
-  remain.
+- Runtime convergence: Slices 5A through 5C are released; Slice 5D is the
+  current release candidate; Slices 6 through 10 remain.
 - Pi agent-core adoption in Polynet: not started.
 
 ## 1. Purpose
@@ -638,8 +638,8 @@ full-transcript archival, a new table, or a universal receipt storage schema.
 
 ### 17.2 Slice 5: delete Workspace and Codex runtime compatibility
 
-Status: Slices 5A and 5B are landed on `origin/main`, deployed, and proven in
-production. Slice 5C is implemented and verified locally; release proof
+Status: Slices 5A through 5C are landed on `origin/main`, deployed, and proven
+in production. Slice 5D is implemented and verified locally; release proof
 remains.
 
 Release evidence:
@@ -701,10 +701,9 @@ Slice 5A extinguishes active ingress without deleting historical persistence:
    extinction, historical readability, and preservation of external Codex MCP
    setup through the official `/runtime/mcp` boundary.
 
-Slice 5B is implemented and verified locally; release proof remains. It is the
-smallest safe deletion boundary: extinguish the internal Codex worker without
-mixing in the still-reached native Daytona Workspace/session substrate or the
-separate legacy chat branch.
+Slice 5B is released and production-proven. It was the smallest safe deletion
+boundary: extinguish the internal Codex worker without mixing in the then-reached
+native Daytona Workspace/session substrate or the separate legacy chat branch.
 
 Slice 5B changes:
 
@@ -741,9 +740,9 @@ Slice 5B acceptance:
    green.
 4. No schema migration or historical record deletion is introduced.
 
-Slice 5C is implemented and verified locally; release proof remains. It deletes
-the unreachable legacy chat-mode provider branch without changing the governed
-agent loop, community chat, historical runtime records, or external MCP.
+Slice 5C is released and production-proven. It deletes the unreachable legacy
+chat-mode provider branch without changing the governed agent loop, community
+chat, historical runtime records, or external MCP.
 
 Slice 5C changes:
 
@@ -771,20 +770,51 @@ Slice 5C local acceptance:
    Concierge, community-agent, funding, context integrity, provider-context
    attestation, Resources, Events, history, legacy community-chat adapter, and
    external MCP proofs.
-3. The full local release gate passes, including the production web build, all
-   104 behavior-test files and 657 tests, dependency interlock, and
+3. The full local release gate passes, including the production web build, the
+   complete repository behavior suite, dependency interlock, and
    zero-vulnerability root, web, and preview-proxy audits.
 4. The stale community-lens proof now reads its canonical owner,
    `WebMemberAgentDock`, instead of the decomposed `App.tsx` shell.
 5. No schema migration or historical record deletion is introduced.
 
-Do not mix Slice 5C with Workspace/session deletion.
+Slice 5D is implemented and verified locally; release proof remains. It removes
+the legacy general Workspace execution/session/tool substrate while preserving
+native product roles, canonical community context, historical reads, and
+migration-only provider cleanup.
 
-Slice 5D follows separately: prove and remove the legacy general Workspace
-execution/session/tool substrate, repair its stale quarantine proof, and rename
-or delete the remaining Daytona target symbols according to what is still
-reached. Preserve provider infrastructure only when another canonical product
-path owns it.
+Slice 5D changes:
+
+1. The native agent loop no longer exposes filesystem, shell, terminal,
+   computer-use, preview, Workspace-session, or Daytona tools or capability
+   families. Prompt composition and failure handling no longer inject their
+   state or instructions.
+2. Public/internal Workspace session, terminal, computer-use, Daytona preview,
+   target-allocation, and project-ZIP-import entry points are deleted. The
+   refreshed current-production client manifest requires none of their names.
+3. Daytona source modules, browser viewers, command policy, smoke/probe scripts,
+   and the direct SDK dependency are deleted. Daytona-only transitive dependency
+   overrides are deleted with them.
+4. The surviving provider pointer module is migration-only: it can update or
+   clear existing Blaxel resource pointers for inventory and cleanup, but it is
+   not reachable from the agent loop and cannot allocate or execute a runtime.
+5. Historical schema fields, records, tool receipts, and cached-production-client
+   compatibility remain readable. No historical data migration or destructive
+   provider deletion is introduced.
+6. The quarantine proof is now a focused extinction contract over the actual
+   product boundary instead of a broad legacy implementation inventory.
+
+Slice 5D local acceptance:
+
+1. Repository search finds no active Daytona dependency or import and no
+   reference to the deleted runtime/session/tool modules outside deliberately
+   retained historical schema and compatibility contracts.
+2. Convex code generation, web typecheck, runtime loop/scheduler/prompt/context/
+   receipt proofs, role ingress proofs, provider-context attestation, external
+   MCP isolation, cached-client compatibility, and the dependency security
+   interlock pass.
+3. The full local release gate passes, including the production web build, the
+   complete repository behavior suite, dependency interlock, and
+   zero-vulnerability root, web, and preview-proxy audits.
 
 Human product direction remains explicit: there is no standalone general
 coding Workspace agent in the target product. Preserve the community harness,
@@ -1083,10 +1113,12 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Land and release-verify Slice 5C from current `origin/main`, then rerun the
-read-only production execution-mode census and one authenticated Member Agent
-community-inspection canary against the deployed SHA. Slice 5D is the next code
-boundary: remove the legacy general Workspace execution/session/tool substrate
-without touching Pi, budgeting, compaction, historical reads, or external MCP.
+Finish the Slice 5D local release gate, land the isolated slice from the current
+`origin/main`, and verify the exact deployed SHA. Then rerun the read-only
+production Workspace/Daytona reachability census and one authenticated Member
+Agent community-inspection canary. Production proof must show that the native
+roles still inspect authorized community context while no general Workspace
+runtime is reachable.
 
-Do not begin Slice 6, 7, or 8 while the preceding slice is unverified.
+Only after Slice 5D is release-verified should Slice 6 begin: add the one
+canonical model-aware input budget without mixing in compaction or Pi adoption.
