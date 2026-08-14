@@ -61,7 +61,7 @@ Out of scope for this first contract:
 | Workspace runtime | Sandbox and workspace execution evidence | sandbox lifecycle, process logs, terminal output, workspace tool failures | product/business analytics |
 | Stripe | Payment and payout truth | checkout, subscription, invoice/payment state, Connect status, disputes/refunds | product engagement analytics |
 | GitHub Actions / proof scripts | Regression prevention and release confidence | failing checks, contract proofs, build/typecheck/audit guards | runtime observability |
-| Fly | Preview proxy evidence, if active | preview proxy logs, live desktop proxy health | main app diagnostics source |
+| Preview proxy host | Preview transport evidence, if active | preview proxy logs, live desktop proxy health | main app diagnostics source |
 
 ## Status Labels
 
