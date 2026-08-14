@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture and runtime convergence through Slice 5C released; Slice 5D release candidate verified locally
+Status: context architecture and runtime convergence through Slice 5D released and production-proven
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-14
 
@@ -9,8 +9,8 @@ Program position:
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: Slices 5A through 5C are released; Slice 5D is the
-  current release candidate; Slices 6 through 10 remain.
+- Runtime convergence: Slices 5A through 5D are released and production-proven;
+  Slices 6 through 10 remain.
 - Pi agent-core adoption in Polynet: not started.
 
 ## 1. Purpose
@@ -638,9 +638,8 @@ full-transcript archival, a new table, or a universal receipt storage schema.
 
 ### 17.2 Slice 5: delete Workspace and Codex runtime compatibility
 
-Status: Slices 5A through 5C are landed on `origin/main`, deployed, and proven
-in production. Slice 5D is implemented and verified locally; release proof
-remains.
+Status: Slices 5A through 5D are landed on `origin/main`, deployed, and proven
+in production.
 
 Release evidence:
 
@@ -673,6 +672,33 @@ Release evidence:
    bearer token. Production contained 13 released and zero active Codex
    capacity leases, plus 18 historical Daytona Codex targets with zero live
    targets.
+6. Slice 5D landed through PR #100 at merge commit
+   `d1235501ba791d9c9eb6ce770a63963370caea68`. The exact merged SHA passed the
+   local release gate with 107 test files and 677 tests, then passed the
+   canonical main-branch GitHub Release Gate. Production Vercel reported the
+   same build and Sentry release before the matching Convex functions were
+   deployed with no index deletion.
+7. The production Convex function specification contained none of the eight
+   retired Workspace, Daytona, session, terminal, inspector, or project-ZIP
+   identifiers. `/runtime/runtime_turn` remained registered and failed closed
+   with `401` without authentication, while `/runtime/public_turn` returned
+   `404`.
+8. The post-deploy production pointer audit scanned all 72 cloud-project rows.
+   It found zero legacy, unknown, non-Blaxel, or Daytona-hinted resource
+   pointers. The three remaining volume pointers and two remaining sandbox
+   pointers are explicitly Blaxel-owned migration records.
+9. The authenticated Member Agent production canary run
+   `member_agent_dock:f2bd459f-0f29-4691-8c48-2f083ce503d9` finished `ok` under
+   community `jh7ayd0xt55nens0nhegyz6phx852shk`. It persisted a valid
+   provider-context attestation, completed all 16 `polynet_list`/`polynet_read`
+   calls successfully under that same community scope, passed every runtime
+   context-integrity check with zero failures or warnings, and returned a
+   source-grounded summary covering all authorized channels, identity,
+   Resources, Events, members, and memory.
+10. The post-deploy production accounting smoke passed with zero recent
+    provider-cost mirror gaps, zero recent unbilled compute charges, and zero
+    recent compute charges missing provider-cost mirrors. Only the previously
+    identified historical backlog older than 31 days remains.
 
 Slice 5A extinguishes active ingress without deleting historical persistence:
 
@@ -777,10 +803,10 @@ Slice 5C local acceptance:
    `WebMemberAgentDock`, instead of the decomposed `App.tsx` shell.
 5. No schema migration or historical record deletion is introduced.
 
-Slice 5D is implemented and verified locally; release proof remains. It removes
-the legacy general Workspace execution/session/tool substrate while preserving
-native product roles, canonical community context, historical reads, and
-migration-only provider cleanup.
+Slice 5D is released and production-proven. It removes the legacy general
+Workspace execution/session/tool substrate while preserving native product
+roles, canonical community context, historical reads, and migration-only
+provider cleanup.
 
 Slice 5D changes:
 
@@ -803,7 +829,7 @@ Slice 5D changes:
 6. The quarantine proof is now a focused extinction contract over the actual
    product boundary instead of a broad legacy implementation inventory.
 
-Slice 5D local acceptance:
+Slice 5D acceptance:
 
 1. Repository search finds no active Daytona dependency or import and no
    reference to the deleted runtime/session/tool modules outside deliberately
@@ -815,6 +841,11 @@ Slice 5D local acceptance:
 3. The full local release gate passes, including the production web build, the
    complete repository behavior suite, dependency interlock, and
    zero-vulnerability root, web, and preview-proxy audits.
+4. The exact merged SHA passes the canonical GitHub Release Gate, production
+   web reports that SHA, and matching Convex functions are deployed.
+5. Production proves the retired function and route surface is absent while an
+   authenticated Member Agent can still inspect every authorized community
+   surface with one auditable community scope.
 
 Human product direction remains explicit: there is no standalone general
 coding Workspace agent in the target product. Preserve the community harness,
@@ -1113,12 +1144,10 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Finish the Slice 5D local release gate, land the isolated slice from the current
-`origin/main`, and verify the exact deployed SHA. Then rerun the read-only
-production Workspace/Daytona reachability census and one authenticated Member
-Agent community-inspection canary. Production proof must show that the native
-roles still inspect authorized community context while no general Workspace
-runtime is reachable.
+Slice 5D is release-verified: no general Workspace runtime is reachable, while
+the native Member Agent still inspects every authorized community surface under
+one auditable community scope.
 
-Only after Slice 5D is release-verified should Slice 6 begin: add the one
-canonical model-aware input budget without mixing in compaction or Pi adoption.
+Begin Slice 6 with one canonical model-aware input budget. Keep that slice
+limited to deterministic pre-provider fit decisions; do not mix in compaction,
+Pi adoption, a second prompt compiler, or a second runtime.
