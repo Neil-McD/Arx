@@ -1,15 +1,16 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture foundation implemented; runtime convergence roadmap defined
+Status: context architecture and runtime convergence through Slice 5B released; remaining roadmap defined
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
-Last updated: 2026-08-13
+Last updated: 2026-08-14
 
 Program position:
 
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: incomplete; Slices 5 through 10 below remain.
+- Runtime convergence: Slices 5A and 5B are released; Slices 5C through 10
+  remain.
 - Pi agent-core adoption in Polynet: not started.
 
 ## 1. Purpose
@@ -637,8 +638,40 @@ full-transcript archival, a new table, or a universal receipt storage schema.
 
 ### 17.2 Slice 5: delete Workspace and Codex runtime compatibility
 
-Status: Slices 5A and 5B are implemented and verified locally; upstream
-reconciliation, landing, and release proof remain.
+Status: Slices 5A and 5B are landed on `origin/main`, deployed, and proven in
+production. Slice 5C is the next code boundary.
+
+Release evidence:
+
+1. The converged runtime implementation landed through merge commit
+   `63a414bab3963c04db3b41256cb2c1689029b36f`; the canonical GitHub Release
+   Gate, Vercel deployment, production accounting smoke, and Convex production
+   deployment passed.
+2. The first live Member Agent canary exposed one real compatibility defect:
+   provider-context attestation persistence still required the retired
+   per-community thread key while the canonical private agent uses
+   `member-agent:global:episode:*` and binds community scope per run. The narrow
+   validator and regression fix landed in runtime code commit
+   `8e021bce7` and merge commit
+   `9e300ed12b21276e35f6b5bf9303b5106304010e`.
+3. Production Vercel reported build and Sentry release
+   `9e300ed12b21276e35f6b5bf9303b5106304010e`; the matching Convex functions
+   were deployed with no index deletion or schema change.
+4. The post-fix production canary run
+   `member_agent_dock:3e7d7c11-9c99-46dd-9221-dd8714db17b4` completed `ok` on
+   the canonical global episode. It stored one
+   `runtime_provider_context_attested` event before provider work, completed 19
+   `polynet_list`/`polynet_read` calls with `ok` status, passed
+   `runtime_context_integrity_checked` with no failures, and returned a
+   source-grounded summary that separately covered community identity, all
+   four authorized channels, Resources, Events, members, and memory.
+5. Post-deploy production reachability remained closed: direct Convex requests
+   to `/runtime/public_turn` and all three retired internal Codex-worker routes
+   returned `404 No matching routes found`, while authenticated
+   `/runtime/runtime_turn` remained registered and failed closed without a
+   bearer token. Production contained 13 released and zero active Codex
+   capacity leases, plus 18 historical Daytona Codex targets with zero live
+   targets.
 
 Slice 5A extinguishes active ingress without deleting historical persistence:
 
