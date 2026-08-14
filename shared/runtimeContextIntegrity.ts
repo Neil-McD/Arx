@@ -60,7 +60,7 @@ const REQUIRED_EVENT_TYPES = [
   "runtime_context_manifest_resolved",
 ];
 
-const REQUIRED_PROMPT_SECTION_IDS = [
+const REQUIRED_PROMPT_SECTION_IDS_V1 = [
   "platform_doctrine",
   "agent_soul",
   "user_agent_soul",
@@ -73,6 +73,25 @@ const REQUIRED_PROMPT_SECTION_IDS = [
   "runtime_turn_context",
   "temporal_context",
   "harness_prompt_suffix",
+];
+
+const REQUIRED_PROMPT_SECTION_IDS_V2 = [
+  "platform_doctrine",
+  "agent_soul",
+  "user_agent_soul",
+  "explanation_contract",
+  "harness_operating_policy",
+  "community_lens",
+  "community_lens_authority",
+  "community_system_prompt",
+  "community_resource_lane",
+  "workspace_harness_context",
+  "runtime_turn_context",
+  "temporal_context",
+  "platform_skill_overlay",
+  "personal_skill_overlay",
+  "ambiguous_skill_mentions",
+  "community_skill_overlay",
 ];
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -146,6 +165,18 @@ function promptSectionIds(promptPayload: Record<string, unknown> | null): Set<st
   const sections = Array.isArray(promptPayload?.sections) ? promptPayload!.sections : [];
   return new Set(
     sections
+      .map((section) => normalizeText(asRecord(section)?.id))
+      .filter((value): value is string => Boolean(value)),
+  );
+}
+
+function renderedPromptSectionIds(
+  promptPayload: Record<string, unknown> | null,
+): Set<string> {
+  const sections = Array.isArray(promptPayload?.sections) ? promptPayload!.sections : [];
+  return new Set(
+    sections
+      .filter((section) => asRecord(section)?.rendered === true)
       .map((section) => normalizeText(asRecord(section)?.id))
       .filter((value): value is string => Boolean(value)),
   );
@@ -277,8 +308,15 @@ export function buildRuntimeContextIntegrityCheck(params: {
     warnings.push("manifest_has_additional_effective_tools");
   }
 
+  const promptReceiptVersion = normalizeNumberOrNull(promptReceipt?.version) ?? 1;
+  const manifestVersion = normalizeNumberOrNull(manifest?.version) ?? 1;
+  const usesCanonicalPromptProjection =
+    promptReceiptVersion >= 2 && manifestVersion >= 2;
   const sectionIds = promptSectionIds(promptReceipt);
-  const missingSections = REQUIRED_PROMPT_SECTION_IDS.filter((id) => !sectionIds.has(id));
+  const requiredSectionIds = usesCanonicalPromptProjection
+    ? REQUIRED_PROMPT_SECTION_IDS_V2
+    : REQUIRED_PROMPT_SECTION_IDS_V1;
+  const missingSections = requiredSectionIds.filter((id) => !sectionIds.has(id));
   const promptSectionsPresent = Boolean(promptReceipt) && missingSections.length === 0;
   for (const sectionId of missingSections) failures.push(`missing_prompt_section:${sectionId}`);
 
@@ -295,17 +333,28 @@ export function buildRuntimeContextIntegrityCheck(params: {
     Number(manifestSummary?.runtimeStateCount) === runtimeState.length;
   if (!manifestSectionsPresent) failures.push("manifest_sections_invalid");
 
-  const mappedPromptIds = [...manifestPromptIds(manifest)];
-  const missingManifestPromptMappings = mappedPromptIds.filter((id) =>
-    !mappedManifestPromptHasPromptSection({
-      manifestPromptId: id,
-      promptSectionIds: sectionIds,
-    }),
-  );
+  const mappedPromptIds = manifestPromptIds(manifest);
+  const renderedSectionIds = renderedPromptSectionIds(promptReceipt);
+  const missingManifestPromptMappings = usesCanonicalPromptProjection
+    ? [...mappedPromptIds].filter((id) => !renderedSectionIds.has(id))
+    : [...mappedPromptIds].filter((id) =>
+        !mappedManifestPromptHasPromptSection({
+          manifestPromptId: id,
+          promptSectionIds: sectionIds,
+        }),
+      );
+  const missingPromptSectionMappings = usesCanonicalPromptProjection
+    ? [...renderedSectionIds].filter((id) => !mappedPromptIds.has(id))
+    : [];
   const manifestMatchesPromptReceipt =
-    Boolean(promptReceipt && manifest) && missingManifestPromptMappings.length === 0;
+    Boolean(promptReceipt && manifest) &&
+    missingManifestPromptMappings.length === 0 &&
+    missingPromptSectionMappings.length === 0;
   for (const id of missingManifestPromptMappings) {
     failures.push(`manifest_prompt_not_accounted_for:${id}`);
+  }
+  for (const id of missingPromptSectionMappings) {
+    failures.push(`prompt_section_not_accounted_for:${id}`);
   }
 
   const checked: RuntimeContextIntegrityCheckFlags = {

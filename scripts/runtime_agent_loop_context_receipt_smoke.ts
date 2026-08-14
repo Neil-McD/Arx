@@ -140,10 +140,12 @@ assert.equal(promptReceipt.eventKey, `${runId}:runtime_prompt_bundle_resolved:1`
 assert.equal(manifestReceipt.eventKey, `${runId}:runtime_context_manifest_resolved:1`);
 
 const promptPayload = promptReceipt.payload as {
+  version?: unknown;
   sections?: Array<{ id?: unknown; layer?: unknown; owner?: unknown; chars?: unknown; rendered?: unknown }>;
   base_prompt_chars?: unknown;
   system_prompt_chars?: unknown;
 };
+assert.equal(promptPayload.version, 2);
 assert.ok(Number(promptPayload.base_prompt_chars) > 0, "prompt receipt should report rendered prompt chars");
 assert.ok(Number(promptPayload.system_prompt_chars) > 0, "prompt receipt should report full system prompt chars");
 const sectionIds = new Set((promptPayload.sections ?? []).map((section) => String(section.id ?? "")));
@@ -153,18 +155,23 @@ for (const sectionId of [
   "explanation_contract",
   "harness_operating_policy",
   "community_lens",
+  "community_lens_authority",
   "community_system_prompt",
+  "community_resource_lane",
   "user_agent_soul",
   "workspace_harness_context",
   "runtime_turn_context",
   "temporal_context",
-  "harness_prompt_suffix",
+  "platform_skill_overlay",
+  "personal_skill_overlay",
+  "ambiguous_skill_mentions",
+  "community_skill_overlay",
 ]) {
   assert.ok(sectionIds.has(sectionId), `prompt receipt should include ${sectionId}`);
 }
 
 const manifest = (manifestReceipt.payload as { manifest?: any }).manifest;
-assert.equal(manifest?.version, 1);
+assert.equal(manifest?.version, 2);
 assert.equal(manifest?.scope?.userId, "user_context_receipt_smoke");
 assert.equal(manifest?.scope?.threadId, "thread_context_receipt_smoke");
 assert.equal(manifest?.scope?.communityId, "community_context_receipt_smoke");
@@ -176,6 +183,14 @@ assert.equal(manifest?.request?.conversationMessageCount, 1);
 assert.ok(manifest?.summary?.promptCount > 0, "manifest should enumerate prompt inputs");
 assert.ok(manifest?.summary?.toolCount > 0, "manifest should enumerate active tools");
 assert.ok(manifest?.summary?.runtimeStateCount > 0, "manifest should enumerate runtime state");
+assert.deepEqual(
+  new Set(manifest?.prompts?.map((prompt: any) => prompt.id)),
+  new Set(
+    (promptPayload.sections ?? [])
+      .filter((section) => section.rendered === true)
+      .map((section) => section.id),
+  ),
+);
 assert.equal(
   manifest?.runtimeState?.find((state: any) => state.id === "member_identity_context")?.status,
   "not_applicable",

@@ -334,7 +334,10 @@ assert.match(
   memberTurnHandlers,
   /communityFundingPromptTokens \+=[\s\S]*communityFundingCompletionTokens \+=[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingPromptTokens[\s\S]*completionTokens: communityFundingCompletionTokens/,
 );
-assert.match(autonomousRuntime, /resolveCommunityInferenceFundingForAction\(ctx, args\.communityId\)/);
+assert.match(
+  autonomousRuntime,
+  /resolveCommunityInferenceFundingForAction\([\s\S]*ctx,[\s\S]*args\.communityId[\s\S]*\)/,
+);
 assert.match(autonomousRuntime, /surface: "community_autonomous_cognition"/);
 assert.match(autonomousRuntime, /receiptKey: `community_autonomous_cognition:\$\{runId\}`/);
 assert.doesNotMatch(autonomousRuntime, /beginCommunityInferenceFundingSession/);

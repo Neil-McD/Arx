@@ -3,16 +3,38 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 const root = process.cwd();
-const runtime = readFileSync(join(root, "convex/communityAgentRuntime.ts"), "utf8");
+const runtime = readFileSync(
+  join(root, "convex/communityAgentRuntime.ts"),
+  "utf8",
+);
+const stewardPrompt = readFileSync(
+  join(root, "shared/communityAgentStewardPrompt.ts"),
+  "utf8",
+);
 const roles = readFileSync(join(root, "shared/communityAgentRoles.ts"), "utf8");
-const protocol = readFileSync(join(root, "shared/communityAgentToolProtocol.ts"), "utf8");
-const filesystem = readFileSync(join(root, "convex/communityAgentFilesystem.ts"), "utf8");
+const protocol = readFileSync(
+  join(root, "shared/communityAgentToolProtocol.ts"),
+  "utf8",
+);
+const filesystem = readFileSync(
+  join(root, "convex/communityAgentFilesystem.ts"),
+  "utf8",
+);
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 
-assert.match(runtime, /export const runCommunityAgentLoopInternal = internalAction/);
-assert.match(runtime, /export const runCommunityAgentCycleInternal = internalAction/);
+assert.match(
+  runtime,
+  /export const runCommunityAgentLoopInternal = internalAction/,
+);
+assert.match(
+  runtime,
+  /export const runCommunityAgentCycleInternal = internalAction/,
+);
 assert.match(runtime, /readCanonicalCommunityAgentContext/);
-assert.doesNotMatch(runtime, /userPrompt|prompt: v\.string|authSubject|userId: v\.optional/);
+assert.doesNotMatch(
+  runtime,
+  /userPrompt|prompt: v\.string|authSubject|userId: v\.optional/,
+);
 assert.match(
   roles,
   /COMMUNITY_AGENT_CYCLE_ROLES[\s\S]*\[\s*"steward",\s*\]/,
@@ -35,8 +57,8 @@ assert.match(
 );
 assert.doesNotMatch(runtime, /slimCompilerWindowForSteward/);
 assert.match(
-  runtime,
-  /renderCompilerWindowForPrompt[\s\S]*items\.slice\(0, 96\)[\s\S]*work_key:[\s\S]*source_revision:[\s\S]*compiler_group_key:[\s\S]*renderCompilerWindowForPrompt\(params\.compilerWindow\)/,
+  stewardPrompt,
+  /renderCompilerWindowForPrompt[\s\S]*items\.slice\(0, 96\)[\s\S]*work_key:[\s\S]*source_revision:[\s\S]*compiler_group_key:[\s\S]*renderCompilerWindowForPrompt\(context\.compilerWindow\)/,
   "prompt compaction must preserve every bounded work identity instead of truncating serialized JSON",
 );
 assert.doesNotMatch(
@@ -85,6 +107,26 @@ assert.doesNotMatch(
   "community cognition must execute through hosted funding without user-provider state",
 );
 assert.match(runtime, /recordCommunityAgentRunEventsInternal/);
+assert.match(
+  runtime,
+  /recordCommunityAgentStewardContextSnapshotInternal[\s\S]*seq: 0[\s\S]*kind: "context_snapshot"/,
+  "the exact initial Steward messages should have a dedicated sequence-zero receipt",
+);
+assert.match(
+  runtime,
+  /snapshotJson[\s\S]*recordCommunityAgentStewardContextSnapshotInternal[\s\S]*if \(!contextSnapshot\?\.ok\)[\s\S]*runNativeRuntimeKernel/,
+  "context persistence must succeed before the first provider-capable kernel step",
+);
+assert.doesNotMatch(
+  runtime,
+  /kind: "system_prompt", content: String\(messages\[0\]/,
+  "new Steward runs should not retain the lossy split prompt events",
+);
+assert.match(
+  stewardPrompt,
+  /compileRuntimePromptSections[\s\S]*id: "community_agent_identity"[\s\S]*id: "steward_shared_rules"[\s\S]*id: "steward_role_definition"[\s\S]*id: "community_system_prompt"/,
+  "the Steward system prompt should expose four canonical sections",
+);
 assert.match(
   runtime,
   /operation === "settle_compiler_digest_items"[\s\S]*applied_change_request_ids[\s\S]*appliedChangeRequestIds\.add/,

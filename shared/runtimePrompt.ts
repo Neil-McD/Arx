@@ -28,7 +28,13 @@ import {
 export type ThreadWorkingStatePrompt = {
   version?: number | null;
   goal?: string | null;
-  status?: "idle" | "in_progress" | "blocked" | "needs_verification" | "complete" | null;
+  status?:
+    | "idle"
+    | "in_progress"
+    | "blocked"
+    | "needs_verification"
+    | "complete"
+    | null;
   currentStep?: string | null;
   plan?: string[] | null;
   completedSteps?: string[] | null;
@@ -57,12 +63,13 @@ export type RuntimeCommunityIdentityPromptFields = {
   communityAbout?: string | null;
 };
 
-export type RuntimeCommunityPromptFields = RuntimeCommunityIdentityPromptFields & {
-  agentName?: string | null;
-  communitySystemPrompt?: string | null;
-  communityLensAuthority?: CommunityLensAuthority | null;
-  agentSoul?: string | null;
-};
+export type RuntimeCommunityPromptFields =
+  RuntimeCommunityIdentityPromptFields & {
+    agentName?: string | null;
+    communitySystemPrompt?: string | null;
+    communityLensAuthority?: CommunityLensAuthority | null;
+    agentSoul?: string | null;
+  };
 
 export type RuntimeTemporalContextPromptFields = {
   currentDateTimeIso?: string | null;
@@ -71,6 +78,16 @@ export type RuntimeTemporalContextPromptFields = {
 };
 
 export type RuntimePromptSectionLayer = "stable" | "scoped" | "volatile";
+
+export type RuntimePromptSectionSlot = "instruction" | "context";
+
+export type RuntimePromptSectionAuthority =
+  | "platform_policy"
+  | "role_policy"
+  | "community_policy"
+  | "user_preference"
+  | "runtime_fact"
+  | "evidence";
 
 export type RuntimePromptSectionOwner =
   | "platform"
@@ -82,10 +99,20 @@ export type RuntimePromptSectionOwner =
 export type RuntimePromptSection = {
   id: string;
   layer: RuntimePromptSectionLayer;
+  slot: RuntimePromptSectionSlot;
   owner: RuntimePromptSectionOwner;
+  authority: RuntimePromptSectionAuthority;
   rendered: boolean;
   chars: number;
   source: string;
+  reason: string;
+};
+
+export type RuntimePromptExtensionSection = Omit<
+  RuntimePromptSection,
+  "rendered" | "chars"
+> & {
+  text: string | null | undefined;
 };
 
 export type RuntimePromptBundle = {
@@ -111,11 +138,23 @@ export type RuntimeWorkspaceTerminalPrompt = {
     | "unreachable"
     | "server_exited"
     | null;
-  healthStatus?: "unknown" | "starting" | "healthy" | "unhealthy" | "exited" | "stale" | null;
+  healthStatus?:
+    | "unknown"
+    | "starting"
+    | "healthy"
+    | "unhealthy"
+    | "exited"
+    | "stale"
+    | null;
   healthSummary?: string | null;
   lastPreviewProbeSummary?: string | null;
   lastBrowserObservationSummary?: string | null;
-  previewTransportStatus?: "not_started" | "loading" | "loaded" | "failed" | null;
+  previewTransportStatus?:
+    | "not_started"
+    | "loading"
+    | "loaded"
+    | "failed"
+    | null;
   previewInspectionStatus?:
     | "not_attempted"
     | "same_origin_dom"
@@ -152,21 +191,23 @@ export type RuntimeWorkspaceTerminalPrompt = {
   outputTail?: string | null;
 };
 
-export type RuntimePlatformHarnessPromptParams = RuntimeCommunityPromptFields & {
-  loopBudget: RuntimeKernelBudget;
-  allowedToolNames: readonly RetrievalToolName[];
-  communityResourceLane?: CommunityResourceRuntimeLaneState | null;
-  harnessName: "chat_tools";
-  projectLabel?: string | null;
-  projectDescription?: string | null;
-  runtimeTurnContext: RuntimeTurnContextPacket;
-  currentDateTimeIso?: string | null;
-  currentDateLabel?: string | null;
-  currentTimeZone?: string | null;
-  invocationSurface?: RuntimeInvocationSurface;
-  memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
-  memberIdentityContextMd?: string | null;
-};
+export type RuntimePlatformHarnessPromptParams =
+  RuntimeCommunityPromptFields & {
+    loopBudget: RuntimeKernelBudget;
+    allowedToolNames: readonly RetrievalToolName[];
+    communityResourceLane?: CommunityResourceRuntimeLaneState | null;
+    harnessName: "chat_tools";
+    projectLabel?: string | null;
+    projectDescription?: string | null;
+    runtimeTurnContext: RuntimeTurnContextPacket;
+    currentDateTimeIso?: string | null;
+    currentDateLabel?: string | null;
+    currentTimeZone?: string | null;
+    invocationSurface?: RuntimeInvocationSurface;
+    memberAgentSurfaceContext?: MemberAgentSurfaceContextV1 | null;
+    memberIdentityContextMd?: string | null;
+    promptExtensions?: readonly RuntimePromptExtensionSection[];
+  };
 
 function normalizePromptBlock(value: string | null | undefined): string | null {
   const normalized = String(value ?? "").trim();
@@ -187,18 +228,42 @@ type RuntimePromptSectionWithText = RuntimePromptSection & {
 function buildRuntimePromptSection(params: {
   id: string;
   layer: RuntimePromptSectionLayer;
+  slot: RuntimePromptSectionSlot;
   owner: RuntimePromptSectionOwner;
+  authority: RuntimePromptSectionAuthority;
   source: string;
+  reason: string;
   text: string | null | undefined;
 }): RuntimePromptSectionWithText {
   const text = normalizePromptBlock(params.text);
   return {
     id: params.id,
     layer: params.layer,
+    slot: params.slot,
     owner: params.owner,
+    authority: params.authority,
     rendered: Boolean(text),
     chars: text?.length ?? 0,
     source: params.source,
+    reason: params.reason,
+    text,
+  };
+}
+
+function buildRuntimePromptExtensionSection(
+  params: RuntimePromptExtensionSection,
+): RuntimePromptSectionWithText {
+  const text = String(params.text ?? "");
+  return {
+    id: params.id,
+    layer: params.layer,
+    slot: params.slot,
+    owner: params.owner,
+    authority: params.authority,
+    rendered: text.length > 0,
+    chars: text.length,
+    source: params.source,
+    reason: params.reason,
     text,
   };
 }
@@ -209,15 +274,63 @@ function stripPromptSectionText(
   return {
     id: section.id,
     layer: section.layer,
+    slot: section.slot,
     owner: section.owner,
+    authority: section.authority,
     rendered: section.rendered,
     chars: section.chars,
     source: section.source,
+    reason: section.reason,
   };
 }
 
-function truncatePromptSnippet(value: string | null | undefined, limit = 240): string | null {
-  const normalized = String(value ?? "").replace(/\s+/g, " ").trim();
+function assertUniqueRuntimePromptSectionIds(
+  sections: readonly RuntimePromptSectionWithText[],
+): void {
+  const seen = new Set<string>();
+  for (const section of sections) {
+    if (!/^[a-z][a-z0-9_]*$/.test(section.id)) {
+      throw new Error(`runtime_prompt_section_id_invalid:${section.id}`);
+    }
+    if (seen.has(section.id)) {
+      throw new Error(`runtime_prompt_section_id_duplicate:${section.id}`);
+    }
+    seen.add(section.id);
+  }
+}
+
+function finalizeRuntimePromptBundle(
+  sections: readonly RuntimePromptSectionWithText[],
+  text: string,
+): RuntimePromptBundle {
+  assertUniqueRuntimePromptSectionIds(sections);
+  return {
+    text,
+    sections: sections.map(stripPromptSectionText),
+  };
+}
+
+/**
+ * Compiles exact prompt fragments without trimming or inserting separators.
+ * Callers own every byte, including separators at section boundaries.
+ */
+export function compileRuntimePromptSections(
+  sections: readonly RuntimePromptExtensionSection[],
+): RuntimePromptBundle {
+  const sectionsWithText = sections.map(buildRuntimePromptExtensionSection);
+  return finalizeRuntimePromptBundle(
+    sectionsWithText,
+    sectionsWithText.map((section) => section.text ?? "").join(""),
+  );
+}
+
+function truncatePromptSnippet(
+  value: string | null | undefined,
+  limit = 240,
+): string | null {
+  const normalized = String(value ?? "")
+    .replace(/\s+/g, " ")
+    .trim();
   if (!normalized) return null;
   if (normalized.length <= limit) return normalized;
   return `${normalized.slice(0, limit - 1).trimEnd()}…`;
@@ -225,7 +338,9 @@ function truncatePromptSnippet(value: string | null | undefined, limit = 240): s
 
 const COMMUNITY_ABOUT_PROMPT_EXCERPT_CHARS = 900;
 
-function buildRuntimeTemporalContextPrompt(params: RuntimeTemporalContextPromptFields): string | null {
+function buildRuntimeTemporalContextPrompt(
+  params: RuntimeTemporalContextPromptFields,
+): string | null {
   const iso = normalizePromptBlock(params.currentDateTimeIso);
   const label = normalizePromptBlock(params.currentDateLabel);
   const timeZone = normalizePromptBlock(params.currentTimeZone) || "UTC";
@@ -275,14 +390,19 @@ function buildUserAgentSoulPrompt(agentSoul?: string | null): string | null {
   ].join("\n");
 }
 
-function buildAgentSoulPrompt(agentName?: string | null, agentSoul?: string | null): string {
+function buildAgentSoulPrompt(
+  agentName?: string | null,
+  agentSoul?: string | null,
+): string {
   return joinPromptBlocks([
     buildBaseAgentSoulPrompt(agentName),
     buildUserAgentSoulPrompt(agentSoul),
   ]);
 }
 
-function buildCommunityLensBasePrompt(params: RuntimeCommunityPromptFields): string {
+function buildCommunityLensBasePrompt(
+  params: RuntimeCommunityPromptFields,
+): string {
   const communityId = String(params.communityId ?? "").trim();
   const communityName = String(params.communityName ?? "").trim();
   const communitySlug = String(params.communitySlug ?? "").trim();
@@ -335,12 +455,18 @@ function buildCommunitySystemPromptBlock(
   ].join("\n");
 }
 
-function buildCommunityLensPrompt(params: RuntimeCommunityPromptFields): string {
+function buildCommunityLensPrompt(
+  params: RuntimeCommunityPromptFields,
+): string {
   const communityId = String(params.communityId ?? "").trim();
   return joinPromptBlocks([
     buildCommunityLensBasePrompt(params),
-    communityId ? renderCommunityLensAuthorityForPrompt(params.communityLensAuthority) : null,
-    communityId ? buildCommunitySystemPromptBlock(params.communitySystemPrompt) : null,
+    communityId
+      ? renderCommunityLensAuthorityForPrompt(params.communityLensAuthority)
+      : null,
+    communityId
+      ? buildCommunitySystemPromptBlock(params.communitySystemPrompt)
+      : null,
   ]);
 }
 
@@ -379,7 +505,9 @@ function buildPlatformHarnessContextPrompt(params: {
   );
   const projectLabel = String(params.projectLabel ?? "").trim();
   const projectDescription = String(params.projectDescription ?? "").trim();
-  const hasProjectContext = Boolean(projectLabel || projectDescription || hasProjectWorkspaceTools);
+  const hasProjectContext = Boolean(
+    projectLabel || projectDescription || hasProjectWorkspaceTools,
+  );
   return [
     "PLATFORM_HARNESS_CONTEXT",
     `Active harness: ${params.harnessName}.`,
@@ -449,14 +577,13 @@ function buildCommunityResourceLanePrompt(params: {
   const lane = normalizeCommunityResourceRuntimeLaneState(
     params.communityResourceLane,
   );
-  const hasLiveTools = hasLiveCommunityResourceTools(
-    params.allowedToolNames,
-  );
+  const hasLiveTools = hasLiveCommunityResourceTools(params.allowedToolNames);
   const hasBuilderTools = hasCommunityResourceBuilderTools(
     params.allowedToolNames,
   );
   if (lane.lane === "builder" && hasBuilderTools) {
-    const canStageChangesets = params.allowedToolNames.includes("polynet_write");
+    const canStageChangesets =
+      params.allowedToolNames.includes("polynet_write");
     return [
       "COMMUNITY_RESOURCE_BUILDER_LANE",
       "The active user can build Resources for this exact community lens.",
@@ -566,7 +693,8 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
     );
   }
   if (hasCommunityResourceBuilderTools(params.allowedToolNames)) {
-    const canStageChangesets = params.allowedToolNames.includes("polynet_write");
+    const canStageChangesets =
+      params.allowedToolNames.includes("polynet_write");
     toolGuidance.push(
       "- The builder/ repository subtree is owner/admin-only and exposes draft, review, source inbox, and health state that the member projection intentionally hides.",
       "- List builder/resources/ first; its health summary is the deterministic architecture preflight. Read returned entries before proposing edits.",
@@ -716,36 +844,52 @@ export function buildPlatformHarnessRuntimePromptBundle(
     buildRuntimePromptSection({
       id: "platform_doctrine",
       layer: "stable",
+      slot: "instruction",
       owner: "platform",
+      authority: "platform_policy",
       source: "shared/runtimePrompt.ts#buildPlatformDoctrinePrompt",
+      reason: "always-on platform product and safety authority",
       text: buildPlatformDoctrinePrompt(),
     }),
     buildRuntimePromptSection({
       id: "agent_soul",
       layer: "stable",
+      slot: "instruction",
       owner: "platform",
+      authority: "role_policy",
       source: "shared/runtimePrompt.ts#buildBaseAgentSoulPrompt",
+      reason: "agent posture and identity",
       text: buildBaseAgentSoulPrompt(params.agentName),
     }),
     buildRuntimePromptSection({
       id: "user_agent_soul",
       layer: "stable",
+      slot: "instruction",
       owner: "user",
+      authority: "user_preference",
       source: "shared/runtimePrompt.ts#buildUserAgentSoulPrompt",
+      reason: "member-configured agent posture",
       text: buildUserAgentSoulPrompt(params.agentSoul),
     }),
     buildRuntimePromptSection({
       id: "explanation_contract",
       layer: "stable",
+      slot: "instruction",
       owner: "runtime",
+      authority: "platform_policy",
       source: "shared/runtimePrompt.ts#buildExplanationContractPrompt",
+      reason: "communication and uncertainty policy",
       text: buildExplanationContractPrompt(),
     }),
     buildRuntimePromptSection({
       id: "harness_operating_policy",
       layer: "stable",
+      slot: "instruction",
       owner: "runtime",
-      source: "shared/runtimePrompt.ts#buildPlatformHarnessOperatingPolicyPrompt",
+      authority: "platform_policy",
+      source:
+        "shared/runtimePrompt.ts#buildPlatformHarnessOperatingPolicyPrompt",
+      reason: "tool-use and loop behavior policy",
       text: buildPlatformHarnessOperatingPolicyPrompt({
         loopBudget: params.loopBudget,
         allowedToolNames: params.allowedToolNames,
@@ -759,8 +903,12 @@ export function buildPlatformHarnessRuntimePromptBundle(
           buildRuntimePromptSection({
             id: "invocation_surface",
             layer: "scoped",
+            slot: "instruction",
             owner: "runtime",
-            source: "shared/runtimeInvocationSurface.ts#buildRuntimeInvocationSurfacePrompt",
+            authority: "platform_policy",
+            source:
+              "shared/runtimeInvocationSurface.ts#buildRuntimeInvocationSurfacePrompt",
+            reason: "invocation surface behavior and privacy boundary",
             text: invocationSurfacePrompt,
           }),
         ]
@@ -770,8 +918,12 @@ export function buildPlatformHarnessRuntimePromptBundle(
           buildRuntimePromptSection({
             id: "current_surface",
             layer: "scoped",
+            slot: "context",
             owner: "runtime",
-            source: "shared/memberAgentSurfaceContext.ts#renderMemberAgentSurfaceContextForPrompt",
+            authority: "runtime_fact",
+            source:
+              "shared/memberAgentSurfaceContext.ts#renderMemberAgentSurfaceContextForPrompt",
+            reason: "bounded current-page orientation",
             text: renderMemberAgentSurfaceContextForPrompt(
               params.memberAgentSurfaceContext,
               params.communityName,
@@ -780,8 +932,12 @@ export function buildPlatformHarnessRuntimePromptBundle(
           buildRuntimePromptSection({
             id: "member_identity_context",
             layer: "scoped",
+            slot: "context",
             owner: "user",
-            source: "shared/memberAgentIdentityContext.ts#renderMemberAgentIdentityContext",
+            authority: "evidence",
+            source:
+              "shared/memberAgentIdentityContext.ts#renderMemberAgentIdentityContext",
+            reason: "bounded deterministic member identity context",
             text: params.memberIdentityContextMd,
           }),
         ]
@@ -789,8 +945,11 @@ export function buildPlatformHarnessRuntimePromptBundle(
     buildRuntimePromptSection({
       id: "community_lens",
       layer: "scoped",
+      slot: "instruction",
       owner: "community",
+      authority: "platform_policy",
       source: "shared/runtimePrompt.ts#buildCommunityLensBasePrompt",
+      reason: "server-validated community scope and navigation policy",
       text: buildCommunityLensBasePrompt({
         communityId: params.communityId,
         communityName: params.communityName,
@@ -802,8 +961,12 @@ export function buildPlatformHarnessRuntimePromptBundle(
     buildRuntimePromptSection({
       id: "community_lens_authority",
       layer: "scoped",
+      slot: "context",
       owner: "community",
-      source: "shared/communityLensAuthority.ts#renderCommunityLensAuthorityForPrompt",
+      authority: "runtime_fact",
+      source:
+        "shared/communityLensAuthority.ts#renderCommunityLensAuthorityForPrompt",
+      reason: "server-derived community relation and permissions",
       text: communityId
         ? renderCommunityLensAuthorityForPrompt(params.communityLensAuthority)
         : null,
@@ -811,8 +974,11 @@ export function buildPlatformHarnessRuntimePromptBundle(
     buildRuntimePromptSection({
       id: "community_system_prompt",
       layer: "scoped",
+      slot: "instruction",
       owner: "community",
+      authority: "community_policy",
       source: "shared/runtimePrompt.ts#buildCommunitySystemPromptBlock",
+      reason: "community owner/admin instructions under platform policy",
       text: communityId
         ? buildCommunitySystemPromptBlock(params.communitySystemPrompt)
         : null,
@@ -820,8 +986,11 @@ export function buildPlatformHarnessRuntimePromptBundle(
     buildRuntimePromptSection({
       id: "community_resource_lane",
       layer: "scoped",
+      slot: "instruction",
       owner: "community",
+      authority: "platform_policy",
       source: "shared/runtimePrompt.ts#buildCommunityResourceLanePrompt",
+      reason: "server-derived community resource lane behavior",
       text: buildCommunityResourceLanePrompt({
         allowedToolNames: params.allowedToolNames,
         communityResourceLane: params.communityResourceLane,
@@ -830,8 +999,11 @@ export function buildPlatformHarnessRuntimePromptBundle(
     buildRuntimePromptSection({
       id: "workspace_harness_context",
       layer: "scoped",
+      slot: "instruction",
       owner: "workspace",
+      authority: "platform_policy",
       source: "shared/runtimePrompt.ts#buildPlatformHarnessContextPrompt",
+      reason: "active harness, project, and granted-tool boundary",
       text: buildPlatformHarnessContextPrompt({
         harnessName: params.harnessName,
         allowedToolNames: params.allowedToolNames,
@@ -844,15 +1016,22 @@ export function buildPlatformHarnessRuntimePromptBundle(
     buildRuntimePromptSection({
       id: "runtime_turn_context",
       layer: "volatile",
+      slot: "context",
       owner: "runtime",
-      source: "shared/runtimeTurnContextPacket.ts#renderRuntimeTurnContextForPrompt",
+      authority: "runtime_fact",
+      source:
+        "shared/runtimeTurnContextPacket.ts#renderRuntimeTurnContextForPrompt",
+      reason: "bounded turn continuity and operational state",
       text: renderRuntimeTurnContextForPrompt(params.runtimeTurnContext),
     }),
     buildRuntimePromptSection({
       id: "temporal_context",
       layer: "volatile",
+      slot: "context",
       owner: "runtime",
+      authority: "runtime_fact",
       source: "shared/runtimePrompt.ts#buildRuntimeTemporalContextPrompt",
+      reason: "current runtime date, time, and timezone",
       text: buildRuntimeTemporalContextPrompt({
         currentDateTimeIso: params.currentDateTimeIso,
         currentDateLabel: params.currentDateLabel,
@@ -865,10 +1044,16 @@ export function buildPlatformHarnessRuntimePromptBundle(
     ...semiStablePromptBlocks,
     ...volatilePromptBlocks,
   ];
-  return {
-    text: joinPromptBlocks(sectionsWithText.map((section) => section.text)),
-    sections: sectionsWithText.map(stripPromptSectionText),
-  };
+  const extensionSections = (params.promptExtensions ?? []).map(
+    buildRuntimePromptExtensionSection,
+  );
+  const baseText = joinPromptBlocks(
+    sectionsWithText.map((section) => section.text),
+  );
+  return finalizeRuntimePromptBundle(
+    [...sectionsWithText, ...extensionSections],
+    `${baseText}${extensionSections.map((section) => section.text ?? "").join("")}`,
+  );
 }
 
 export function buildPlatformHarnessRuntimeSystemPrompt(
@@ -878,9 +1063,10 @@ export function buildPlatformHarnessRuntimeSystemPrompt(
 }
 
 export function composePlatformChatRuntimeSystemPrompt(
-  params: RuntimeCommunityPromptFields & RuntimeTemporalContextPromptFields & {
-    projectContext?: RuntimeProjectContextPrompt | null;
-  },
+  params: RuntimeCommunityPromptFields &
+    RuntimeTemporalContextPromptFields & {
+      projectContext?: RuntimeProjectContextPrompt | null;
+    },
 ): string {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
@@ -904,7 +1090,9 @@ export function composePlatformChatRuntimeSystemPrompt(
   ]);
 }
 
-export function composePlatformCommunityContextSystemPrompt(params: RuntimeCommunityPromptFields): string {
+export function composePlatformCommunityContextSystemPrompt(
+  params: RuntimeCommunityPromptFields,
+): string {
   return joinPromptBlocks([
     buildPlatformDoctrinePrompt(),
     buildAgentSoulPrompt(params.agentName, params.agentSoul),

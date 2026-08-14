@@ -250,7 +250,6 @@ export function createPolynetExecutionSession(params: {
   projectId?: string | null;
   threadId?: string | null;
   runId: string;
-  promptSuffix?: string | null;
   initialWorkspaceSession?: RuntimeWorkspaceSession | null;
   activeDaytonaRuntimeSubstrate?: ActiveDaytonaRuntimeSubstrateForTools | null;
   appendRunEvent: (event: RuntimeExecutionSessionRunEvent) => Promise<void>;
@@ -442,9 +441,6 @@ export function createPolynetExecutionSession(params: {
   };
 
   return {
-    buildPromptSuffix(): string {
-      return String(params.promptSuffix ?? "");
-    },
     hasWorkspaceSession(): boolean {
       return workspaceSession !== null && workspaceSessionFailure === null;
     },

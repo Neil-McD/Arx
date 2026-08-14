@@ -1801,7 +1801,7 @@ communityAgentServeRequests[queued, accepted]
   -> schedule immediate serve worker for that request
   -> claim request with attempt N and an explicit lease
   -> compile one bounded, requester-readable multi-party thread context
-  -> persist the exact attempt-scoped provider context snapshot
+  -> persist the exact attempt-scoped provider messages and prompt-section receipt
   -> authorize one privacy-bounded funding receipt
   -> run GPT 5.6 Luna through the community's canonical owner funding authority
   -> insert one community-agent reply in that source thread
@@ -1809,6 +1809,12 @@ communityAgentServeRequests[queued, accepted]
 ```
 
 Rules:
+
+- The Concierge system prompt is compiled from canonical, uniquely identified
+  prompt sections without changing its provider-visible bytes. Sequence-zero
+  `context_snapshot` v2 stores the exact initial messages plus privacy-safe
+  section metadata. Historical v1 remains readable, and identical-message v1/v2
+  retries deduplicate safely during rolling deployment.
 
 - This slice is serve only: it does not write source traces, compiler digests,
   directory nodes, directory edges, change requests, mutations, retrieval logs,
@@ -2000,6 +2006,16 @@ surface. `communityAgentRuns` plus ordered `communityAgentRunEvents` are the
 canonical reconstructable execution record. The redundant legacy cycle-ledger
 rows were verified against their exact canonical `note` events, purged, and the
 table was removed.
+
+For new Steward runs, sequence zero is a mandatory exact provider-context
+snapshot recorded before the native kernel can start the provider. It contains
+the exact system and contextual user messages, a verified SHA-256 digest,
+explicit Steward surface/schema identity, and privacy-safe metadata for the
+four canonical system-prompt sections. Identical retries deduplicate and changed
+snapshots fail closed. Later reasoning, tool, and outcome events remain bounded
+best-effort observability beginning at sequence one; historical split
+`system_prompt` and `wake_context` rows remain readable but are no longer
+emitted by the Steward.
 
 ### Promotion Policy (autonomous retention, evidence-gated status)
 

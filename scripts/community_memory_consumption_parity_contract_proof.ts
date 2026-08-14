@@ -106,6 +106,7 @@ assert.doesNotMatch(
 const manifest = buildRuntimeContextManifest({
   communityId: "community_1",
   allowedToolNames: [searchName, readName, callName],
+  promptSections: [],
 });
 assert.equal(
   manifest.tools.find((tool) => tool.name === searchName)?.family,

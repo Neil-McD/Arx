@@ -255,6 +255,51 @@ assert.ok(
   ),
 );
 
+const v2SectionIds = [
+  "platform_doctrine", "agent_soul", "user_agent_soul", "explanation_contract",
+  "harness_operating_policy", "community_lens", "community_lens_authority",
+  "community_system_prompt", "community_resource_lane", "workspace_harness_context",
+  "runtime_turn_context", "temporal_context", "platform_skill_overlay",
+  "personal_skill_overlay", "ambiguous_skill_mentions", "community_skill_overlay",
+];
+const v2RenderedIds = v2SectionIds.filter((id) => ![
+  "user_agent_soul", "community_system_prompt", "personal_skill_overlay",
+  "ambiguous_skill_mentions", "community_skill_overlay",
+].includes(id));
+const v2Events = baseEvents.map((event) => {
+  if (event.eventType === "runtime_prompt_bundle_resolved") {
+    return { ...event, payload: { ...event.payload, version: 2,
+      sections: v2SectionIds.map((id) => ({ id, rendered: v2RenderedIds.includes(id) })) } };
+  }
+  if (event.eventType === "runtime_context_manifest_resolved") {
+    return { ...event, payload: { ...event.payload, manifest: {
+      ...(event.payload as any).manifest, version: 2,
+      prompts: v2RenderedIds.map((id) => ({ id })),
+      summary: { ...(event.payload as any).manifest.summary, promptCount: v2RenderedIds.length },
+    } } };
+  }
+  return event;
+});
+const v2Verdict = buildRuntimeContextIntegrityCheck({ run, events: v2Events });
+assert.equal(v2Verdict.ok, true);
+assert.equal(v2Verdict.checked.manifest_matches_prompt_receipt, true);
+
+const missingV2ManifestProjection = buildRuntimeContextIntegrityCheck({
+  run,
+  events: v2Events.map((event) => event.eventType === "runtime_context_manifest_resolved"
+    ? { ...event, payload: { ...event.payload, manifest: {
+        ...(event.payload as any).manifest,
+        prompts: (event.payload as any).manifest.prompts.slice(1),
+        summary: { ...(event.payload as any).manifest.summary,
+          promptCount: (event.payload as any).manifest.prompts.length - 1 },
+      } } }
+    : event),
+});
+assert.equal(missingV2ManifestProjection.ok, false);
+assert.ok(missingV2ManifestProjection.failures.includes(
+  "prompt_section_not_accounted_for:platform_doctrine",
+));
+
 const handlerSource = readFileSync("convex/runtimeTurnHandlers.ts", "utf8");
 assert.match(
   handlerSource,

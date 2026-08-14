@@ -71,10 +71,11 @@ Database tables:
 Runtime seams:
 
 - `convex/runtimeSkillResolution.ts` resolves inventory and selected skills.
-- `convex/runtimeHarnessComposition.ts` composes bounded prompt suffixes.
+- `convex/runtimeHarnessComposition.ts` emits bounded, explicit prompt overlay sections.
 - `convex/runtimeAgentLoop.ts` assembles prompt, manifest, tools, and execution.
 - `shared/runtimeSkillInventoryPrompt.ts` bounds inventory text.
-- `shared/runtimeContextManifest.ts` records selected-skill evidence.
+- `shared/runtimeContextManifest.ts` projects rendered skill-overlay prompt
+  sections into the context manifest.
 
 Current behavior:
 
@@ -83,7 +84,8 @@ Current behavior:
 - the resource-builder platform skill is selected by its backend lane
 - duplicate mention tokens are shadowed by higher authority
 - ambiguity fails closed without injecting competing bodies
-- selected skills and activation evidence appear in backend manifests
+- rendered skill-overlay sections appear in context manifests; activation route
+  and reason appear in backend skill-resolution events
 - tools are granted by runtime policy and selected capability, never by prompt text alone
 
 ## Dormant Profile Primitive

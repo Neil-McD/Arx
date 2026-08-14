@@ -1025,7 +1025,6 @@ async function executeRetrievalAgentLoop(
     projectId: params.projectId,
     threadId: params.threadId,
     runId: params.runId,
-    promptSuffix: resolvedHarness.systemPromptSuffix,
     initialWorkspaceSession: params.workspaceSession ?? null,
     activeDaytonaRuntimeSubstrate: params.activeDaytonaRuntimeSubstrate ?? null,
     appendRunEvent: params.appendRunEvent,
@@ -1097,35 +1096,6 @@ async function executeRetrievalAgentLoop(
       memberIdentityContextStatus = "error";
     }
   }
-  const runtimeContextManifest = buildRuntimeContextManifest({
-    generatedAt: runtimeDateTimeIso,
-    userId: params.userId ?? null,
-    threadId: params.threadId ?? null,
-    communityId: params.communityId ?? null,
-    communityContextVersion: params.communityContextVersion ?? null,
-    projectId: params.projectId ?? null,
-    harnessName: params.harnessName,
-    inferenceSource: params.inferenceSource,
-    latestUserText: latestUserTextForRuntimeContext,
-    messages: params.messages.map((message) => ({
-      role: message.role,
-      content: extractTextFromNativeToolMessageContent(message.content),
-    })),
-    allowedToolNames: effectiveAllowedToolNames,
-    communityResourceLane: resolvedHarness.communityResourceLane,
-    communitySystemPrompt: params.communitySystemPrompt ?? null,
-    communityAbout: params.communityAbout ?? null,
-    agentSoul: params.agentSoul ?? null,
-    runtimeTurnEnvelope,
-    runtimeTurnContext,
-    selectedPlatformSkills,
-    selectedPersonalSkills: selectedUserPlatformSkills,
-    selectedCommunitySkills,
-    invocationSurface: params.invocationSurface,
-    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
-    memberIdentityContextMd,
-    memberIdentityContextStatus,
-  });
   const runtimePromptBundle = buildPlatformHarnessRuntimePromptBundle({
     loopBudget: params.loopBudget,
     allowedToolNames: effectiveAllowedToolNames,
@@ -1149,9 +1119,38 @@ async function executeRetrievalAgentLoop(
     invocationSurface: params.invocationSurface ?? "workspace",
     memberAgentSurfaceContext: params.memberAgentSurfaceContext,
     memberIdentityContextMd,
+    promptExtensions: resolvedHarness.promptExtensions,
   });
-  const promptSuffix = executionSession.buildPromptSuffix();
-  const systemPrompt = `${runtimePromptBundle.text}${promptSuffix}`;
+  const systemPrompt = runtimePromptBundle.text;
+  const promptSuffixChars = resolvedHarness.promptExtensions.reduce(
+    (total, section) => total + String(section.text ?? "").length,
+    0,
+  );
+  const runtimeContextManifest = buildRuntimeContextManifest({
+    generatedAt: runtimeDateTimeIso,
+    userId: params.userId ?? null,
+    threadId: params.threadId ?? null,
+    communityId: params.communityId ?? null,
+    communityContextVersion: params.communityContextVersion ?? null,
+    projectId: params.projectId ?? null,
+    harnessName: params.harnessName,
+    inferenceSource: params.inferenceSource,
+    latestUserText: latestUserTextForRuntimeContext,
+    messages: params.messages.map((message) => ({
+      role: message.role,
+      content: extractTextFromNativeToolMessageContent(message.content),
+    })),
+    allowedToolNames: effectiveAllowedToolNames,
+    communityResourceLane: resolvedHarness.communityResourceLane,
+    communityAbout: params.communityAbout ?? null,
+    promptSections: runtimePromptBundle.sections,
+    runtimeTurnEnvelope,
+    runtimeTurnContext,
+    invocationSurface: params.invocationSurface,
+    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
+    memberIdentityContextMd,
+    memberIdentityContextStatus,
+  });
   const nativeTranscript: NativeToolAwareMessage[] = [
     {
       role: "system",
@@ -1185,21 +1184,12 @@ async function executeRetrievalAgentLoop(
       eventType: "runtime_prompt_bundle_resolved",
       eventKey: `${params.runId}:runtime_prompt_bundle_resolved:1`,
       payload: {
+        version: 2,
         run_id: params.runId,
-        base_prompt_chars: runtimePromptBundle.text.length,
-        prompt_suffix_chars: promptSuffix.length,
+        base_prompt_chars: runtimePromptBundle.text.length - promptSuffixChars,
+        prompt_suffix_chars: promptSuffixChars,
         system_prompt_chars: systemPrompt.length,
-        sections: [
-          ...runtimePromptBundle.sections,
-          {
-            id: "harness_prompt_suffix",
-            layer: "scoped",
-            owner: "runtime",
-            rendered: promptSuffix.trim().length > 0,
-            chars: promptSuffix.trim().length,
-            source: "convex/runtimeHarnessComposition.ts#systemPromptSuffix",
-          },
-        ],
+        sections: runtimePromptBundle.sections,
       },
     });
   } catch {
@@ -1332,17 +1322,22 @@ async function executeRetrievalAgentLoop(
             skillResolution.requested_mention_tokens,
           ambiguous_skill_mention_tokens:
             skillResolution.ambiguous_mention_tokens,
-          skills: platformSkills.map((skill) => ({
-            platform_skill_id: skill.platform_skill_id,
-            catalog_skill_id: skill.catalog_skill_id,
-            required_capability: skill.requires_capability,
-            skill_name: skill.name,
-            skill_mention_token: skill.mention_token,
-            selected: selectedPlatformSkills.some(
+          skills: platformSkills.map((skill) => {
+            const selected = selectedPlatformSkills.find(
               (candidate) =>
                 candidate.platform_skill_id === skill.platform_skill_id,
-            ),
-          })),
+            );
+            return {
+              platform_skill_id: skill.platform_skill_id,
+              catalog_skill_id: skill.catalog_skill_id,
+              required_capability: skill.requires_capability,
+              skill_name: skill.name,
+              skill_mention_token: skill.mention_token,
+              selected: Boolean(selected),
+              activation_route: selected?.activation_route ?? null,
+              activation_reason: selected?.activation_reason ?? null,
+            };
+          }),
           selected_skill_mention_tokens: selectedPlatformSkills.map(
             (skill) => skill.mention_token,
           ),
@@ -1377,6 +1372,9 @@ async function executeRetrievalAgentLoop(
               skill_revision_id: selected?.skill_revision_id ?? null,
               skill_name: skill.name,
               skill_mention_token: skill.mention_token,
+              selected: Boolean(selected),
+              activation_route: selected?.activation_route ?? null,
+              activation_reason: selected?.activation_reason ?? null,
             };
           }),
           selected_skill_mention_tokens: selectedUserPlatformSkills.map(
@@ -1400,18 +1398,24 @@ async function executeRetrievalAgentLoop(
             skillResolution.requested_mention_tokens,
           ambiguous_skill_mention_tokens:
             skillResolution.ambiguous_mention_tokens,
-          skills: attachedCommunitySkills.map((skill) => ({
-            community_skill_attachment_id: skill.community_skill_attachment_id,
-            skill_package_id: skill.skill_package_id,
-            skill_revision_id:
-              selectedCommunitySkills.find(
+          skills: attachedCommunitySkills.map((skill) => {
+            const selected = selectedCommunitySkills.find(
                 (candidate) =>
                   candidate.community_skill_attachment_id ===
                   skill.community_skill_attachment_id,
-              )?.skill_revision_id ?? null,
-            skill_name: skill.name,
-            skill_mention_token: skill.mention_token,
-          })),
+              );
+            return {
+              community_skill_attachment_id:
+                skill.community_skill_attachment_id,
+              skill_package_id: skill.skill_package_id,
+              skill_revision_id: selected?.skill_revision_id ?? null,
+              skill_name: skill.name,
+              skill_mention_token: skill.mention_token,
+              selected: Boolean(selected),
+              activation_route: selected?.activation_route ?? null,
+              activation_reason: selected?.activation_reason ?? null,
+            };
+          }),
           selected_skill_mention_tokens: selectedCommunitySkills.map(
             (skill) => skill.mention_token,
           ),

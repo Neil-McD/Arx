@@ -10,6 +10,7 @@ import {
   COMMUNITY_AGENT_SERVE_RECOVERY_GRACE_MS,
   COMMUNITY_AGENT_SERVE_RUNTIME_MAX_MS,
 } from "../shared/communityAgentServeContract";
+import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 
 const modules = import.meta.glob([
   "./communityAgentServeWorker.ts",
@@ -489,26 +490,56 @@ test("context snapshots are mandatory, exact, idempotent, and attempt-fenced", a
     internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
     { requestId, nowMs: 10_000 },
   );
+  const promptBundle = buildCommunityAgentServePromptBundle({
+    community: { name: "Snapshot", slug: "snapshot" },
+    agent: { displayName: "Snapshot agent" },
+    threadContext: { rendered: "thread" },
+  });
+  const messages = promptBundle.messages;
+  const promptSections = promptBundle.systemPromptBundle.sections;
   const snapshotJson = JSON.stringify({
     version: 1,
     sha256: "a".repeat(64),
-    messages: [{ role: "system", content: "system" }, { role: "user", content: "thread" }],
+    messages,
+  });
+  const snapshotV2Json = JSON.stringify({
+    version: 2,
+    sha256: "a".repeat(64),
+    messages,
+    prompt_sections: promptSections,
+  });
+  const invalidSnapshotV2Json = JSON.stringify({
+    version: 2,
+    sha256: "a".repeat(64),
+    messages,
+    prompt_sections: promptSections.map((section, index) =>
+      index === 0 ? { ...section, chars: section.chars + 1 } : section
+    ),
   });
   await expect(t.mutation(
     internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
-    { requestId, expectedAttempt: first.attempt, snapshotJson, nowMs: 10_001 },
-  )).resolves.toMatchObject({ ok: true, duplicate: false });
+    {
+      requestId,
+      expectedAttempt: first.attempt,
+      snapshotJson: invalidSnapshotV2Json,
+      nowMs: 10_001,
+    },
+  )).resolves.toMatchObject({ ok: false, errorCode: "serve_context_snapshot_invalid" });
   await expect(t.mutation(
     internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
     { requestId, expectedAttempt: first.attempt, snapshotJson, nowMs: 10_002 },
+  )).resolves.toMatchObject({ ok: true, duplicate: false });
+  await expect(t.mutation(
+    internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
+    { requestId, expectedAttempt: first.attempt, snapshotJson: snapshotV2Json, nowMs: 10_003 },
   )).resolves.toMatchObject({ ok: true, duplicate: true });
   await expect(t.mutation(
     internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
     {
       requestId,
       expectedAttempt: first.attempt,
-      snapshotJson: snapshotJson.replace("thread", "different"),
-      nowMs: 10_003,
+      snapshotJson: snapshotV2Json.replace("thread", "change"),
+      nowMs: 10_004,
     },
   )).resolves.toMatchObject({ ok: false, errorCode: "serve_context_snapshot_conflict" });
 
@@ -522,12 +553,16 @@ test("context snapshots are mandatory, exact, idempotent, and attempt-fenced", a
   )).resolves.toMatchObject({ ok: false, errorCode: "serve_request_attempt_stale" });
   await expect(t.mutation(
     internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
-    { requestId, expectedAttempt: second.attempt, snapshotJson, nowMs: first.leaseExpiresAt + 2 },
+    { requestId, expectedAttempt: second.attempt, snapshotJson: snapshotV2Json, nowMs: first.leaseExpiresAt + 2 },
   )).resolves.toMatchObject({ ok: true, duplicate: false });
+  await expect(t.mutation(
+    internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
+    { requestId, expectedAttempt: second.attempt, snapshotJson, nowMs: first.leaseExpiresAt + 3 },
+  )).resolves.toMatchObject({ ok: true, duplicate: true });
 
   const events = await t.run((ctx) => ctx.db.query("communityAgentRunEvents").collect());
   expect(events).toHaveLength(2);
   expect(events.map((event) => event.seq)).toEqual([0, 0]);
   expect(events.every((event) => event.kind === "context_snapshot")).toBe(true);
-  expect(events.every((event) => event.content === snapshotJson)).toBe(true);
+  expect(events.map((event) => event.content)).toEqual([snapshotJson, snapshotV2Json]);
 });
