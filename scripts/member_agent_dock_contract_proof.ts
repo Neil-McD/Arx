@@ -1217,7 +1217,7 @@ assert.equal(supportsModelImageInput("unknown-future-model"), false);
 assert.match(packageJson, /"@hey-api\/openapi-ts": "0\.97\.3"[\s\S]*"js-yaml": "5\.2\.2"/);
 assert.match(
   runtimeTurnResolution,
-  /image_model_unsupported[\s\S]*const runtimeExecutionMode = "agentic" as const/,
+  /image_model_unsupported[\s\S]*const allowedToolNames/,
   "image turns must fail closed before any text-only model or runtime path can discard the image",
 );
 assert.match(

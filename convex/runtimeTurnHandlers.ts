@@ -1,12 +1,10 @@
 import {
   runChatgptCompletion,
-  runChatgptStreamingCompletion,
 } from "./httpChatgpt";
 import { api, internal } from "./_generated/api";
 import {
   runOpenAiCompletion,
   runOpenRouterCompletion,
-  runOpenRouterStreamingCompletion,
 } from "./httpRuntimeSupport";
 import {
   buildRuntimeRunPersistenceHelpers,
@@ -24,9 +22,6 @@ import {
   runAbortableWithRuntimeCancellation,
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
-import {
-  composePlatformChatRuntimeSystemPrompt,
-} from "../shared/runtimePrompt";
 import {
   shouldRecordCommunityOnboardingAgentTurn,
 } from "../shared/runtimeInvocationSurface";
@@ -56,7 +51,6 @@ import {
   buildRuntimeFailureFinalAnswer,
 } from "../shared/runtimeFailureFinalizer";
 import {
-  loadRuntimeProjectContext,
   loadRuntimeTurnContextPacketForRun,
 } from "./runtimeTurnContext";
 import {
@@ -177,11 +171,10 @@ type RuntimeCompletionFailure = {
 };
 
 type RuntimeSubstrateResolution = {
-  provider: "daytona" | "project_workspace" | "none";
+  provider: "daytona" | "none";
   status:
     | "polynet_daytona_runtime"
-    | "polynet_harness_isolated"
-    | "legacy_project_workspace";
+    | "polynet_harness_isolated";
   targetId: string | null;
   runId: string | null;
   sandboxId: string | null;
@@ -476,7 +469,6 @@ export async function handleRuntimeTurnRequest(args: {
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile,
-      runtimeExecutionMode: resolvedRuntimeExecutionMode,
       invocationSurface,
       memberAgentSurfaceContext,
       communityInferenceAdmission,
@@ -509,7 +501,6 @@ export async function handleRuntimeTurnRequest(args: {
         // agent turn fail. A later successful dock turn retries idempotently.
       }
     };
-    const runtimeExecutionMode: "agentic" | "chat" = resolvedRuntimeExecutionMode;
     const runtimeAgentProfile = await loadUserAgentProfileForRuntime(ctx, actor.dbUserId);
     startedRunId = runId;
     runtimeTurnStage = "run_start";
@@ -523,14 +514,6 @@ export async function handleRuntimeTurnRequest(args: {
       (Array.isArray(latestUserContent) && latestUserContent.some((part) => part.type === "image")
         ? "[Image attached]"
         : "");
-    const conversationTextMessages = conversationMessages.map((message) => ({
-      role: message.role,
-      content:
-        extractTextFromNativeToolMessageContent(message.content) ||
-        (Array.isArray(message.content) && message.content.some((part) => part.type === "image")
-          ? "[Image attached]"
-          : ""),
-    }));
     const runtimeCommunityContextVersion = Number.isFinite(Number(ownedThread.contextVersion ?? 0))
       ? Math.max(0, Math.floor(Number(ownedThread.contextVersion ?? 0)))
       : 0;
@@ -568,7 +551,7 @@ export async function handleRuntimeTurnRequest(args: {
       inferenceSource,
       requestedRuntimeEngine: runtimeEngineResolution.requestedRuntimeEngine ?? undefined,
       resolvedRuntimeEngine: runtimeEngineResolution.resolvedRuntimeEngine,
-      executionMode: runtimeExecutionMode,
+      executionMode: "agentic",
       capabilityFamilies: resolvedRuntimeCapabilityFamilies,
       harnessProfile: resolvedRuntimeHarnessProfile,
       invocationSurface,
@@ -587,12 +570,9 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeEngineRequested: runtimeEngineResolution.requestedRuntimeEngine ?? undefined,
       runtimeEngineResolved: runtimeEngineResolution.resolvedRuntimeEngine,
       runtimeEngineSource: runtimeEngineResolution.runtimeEngineSource,
-      executionMode: runtimeExecutionMode,
+      executionMode: "agentic",
       sandboxMode: runtimeSandboxMode,
-      contractName:
-        runtimeExecutionMode === "agentic"
-          ? "capability_composed_tools_v1"
-          : "capability_composed_chat_v1",
+      contractName: "capability_composed_tools_v1",
       contractVersion: "v1",
       harnessProfile: resolvedRuntimeHarnessProfile,
       harnessProfileSource: "runtime_capability_resolution_v1",
@@ -1308,7 +1288,6 @@ export async function handleRuntimeTurnRequest(args: {
     const polynetAllowedToolNamesForRun = polynetToolSurface.allowedToolNames;
     const suppressedPolynetToolNames = polynetToolSurface.suppressedToolNames;
     const polynetDaytonaRuntimeEnabled =
-      runtimeExecutionMode === "agentic" &&
       polynetAllowedToolNamesForRun.some((toolName) =>
         POLYNET_DAYTONA_RUNTIME_TOOL_NAME_SET.has(toolName),
       );
@@ -1384,12 +1363,8 @@ export async function handleRuntimeTurnRequest(args: {
               suppressedToolNames: suppressedPolynetToolNames,
             }
         : {
-            provider:
-              runtimeExecutionMode === "agentic" ? "none" : "project_workspace",
-            status:
-              runtimeExecutionMode === "agentic"
-                ? "polynet_harness_isolated"
-                : "legacy_project_workspace",
+            provider: "none",
+            status: "polynet_harness_isolated",
             targetId: null,
             runId: null,
             sandboxId: null,
@@ -1472,392 +1447,357 @@ export async function handleRuntimeTurnRequest(args: {
         member_agent_surface_context: memberAgentSurfaceContext,
       },
     });
-    if (runtimeExecutionMode === "agentic") {
-      if (stream) {
-        return runtimeSseResponse(async (writer) => {
-          let streamedContent = "";
-          let streamedPromptTokens: number | null = null;
-          let streamedCompletionTokens: number | null = null;
-          let streamedInferenceSource = resolvedInferenceSource;
-          let streamedInferenceLaneFallbacks = inferenceLaneFallbacks;
-          let assistantMessageId: string | null = null;
-          let assistantMessageKey: string | null = null;
-          let assistantMessageSeq: number | null = null;
+    if (stream) {
+      return runtimeSseResponse(async (writer) => {
+        let streamedContent = "";
+        let streamedPromptTokens: number | null = null;
+        let streamedCompletionTokens: number | null = null;
+        let streamedInferenceSource = resolvedInferenceSource;
+        let streamedInferenceLaneFallbacks = inferenceLaneFallbacks;
+        let assistantMessageId: string | null = null;
+        let assistantMessageKey: string | null = null;
+        let assistantMessageSeq: number | null = null;
 
-          const emitDelta = (delta: string) => {
-            if (!delta) return;
-            streamedContent += delta;
-            writer.send({
-              event: "delta",
-              data: {
-                delta,
-              },
-            });
-          };
-
-          const streamAppendRunEvent = async (event: {
-            eventType: string;
-            eventKey?: string;
-            payload: Record<string, unknown>;
-          }): Promise<void> => {
-            observeFunnelDraftWriteEvent(event);
-            const created = await appendRunEvent(event);
-            await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
-            const mapped = mapPersistedRuntimeEventRow(created);
-            if (!mapped) return;
-            writer.send({
-              event: "runtime_event",
-              data: mapped,
-            });
-          };
+        const emitDelta = (delta: string) => {
+          if (!delta) return;
+          streamedContent += delta;
           writer.send({
-            event: "start",
+            event: "delta",
             data: {
-              run_id: runId,
-              lane,
-              engine_id: "runtime_convex",
-              model_id: requestedModelId,
-              inference_source: streamedInferenceSource,
-              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+              delta,
             },
           });
-          runtimeTurnStage = "agent_loop";
-          let loopResult;
-          let communityFundingSession: CommunityInferenceFundingSession | null = null;
-          try {
-            communityFundingSession = await claimCommunityFundingSession();
-            loopResult = await executeChatToolsAgentLoop({
-              ctx,
-              req,
-              userId: actor.dbUserId,
-              threadId: String(ownedThread._id),
-              authSubject: actor.authSubject,
-              projectId: runtimeProjectId,
-              requestedModelId,
-              inferenceSource,
-              modelRef,
-              messages: conversationMessages,
-              maxTokens,
-              runId,
-              communityId: runtimeCommunityId,
-              communityName: runtimeCommunityName,
-              communitySlug: runtimeCommunitySlug,
-              communityOneLiner: runtimeCommunityOneLiner,
-              communityAbout: runtimeCommunityAbout,
-              communitySystemPrompt: runtimeCommunitySystemPrompt,
-              communityLensAuthority: runtimeCommunityLensAuthority,
-              communityFunnelSlot: runtimeCommunityFunnelSlot,
-              communityContextVersion: runtimeCommunityId
-                ? runtimeCommunityContextVersion
-                : null,
-              agentName: runtimeAgentProfile.agentName,
-              agentSoul: runtimeAgentProfile.agentSoul,
-              threadWorkingState: ownedThread.workingState ?? null,
-              allowedToolNames: polynetAllowedToolNamesForRun,
-              invocationSurface,
-              memberAgentSurfaceContext,
-              activeDaytonaRuntimeSubstrate:
-                activeDaytonaRuntimeSubstrateForPolynetTools,
-              apiKeyOverride: providerApiKeyOverride,
-              appendRunEvent: streamAppendRunEvent,
-              refreshRuntimeContextSnapshot: async (
-                phase: "started" | "active" = "active",
-                runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null = null,
-              ): Promise<void> => {
-                await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
-              },
-              touchRunHeartbeat: touchRunHeartbeatBestEffort,
-              recordInitialProviderContextAttestation,
-              beforeProviderRequest: async (): Promise<void> => {
-                await markCommunityFundingProviderStarted(communityFundingSession);
-              },
-              observeProviderResult: observeCommunityFundingProviderResult,
-            });
-            await appendContextIntegrityCheckBestEffortForRun();
-          } catch (error) {
-            if (communityFundingSession) {
-              try {
-                await failUnhandledCommunityFundingSession(
-                  communityFundingSession,
-                  "community_inference_loop_unhandled",
-                );
-              } catch {
-                // Preserve the original runtime failure; the receipt remains fail-closed.
-              }
+        };
+
+        const streamAppendRunEvent = async (event: {
+          eventType: string;
+          eventKey?: string;
+          payload: Record<string, unknown>;
+        }): Promise<void> => {
+          observeFunnelDraftWriteEvent(event);
+          const created = await appendRunEvent(event);
+          await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
+          const mapped = mapPersistedRuntimeEventRow(created);
+          if (!mapped) return;
+          writer.send({
+            event: "runtime_event",
+            data: mapped,
+          });
+        };
+        writer.send({
+          event: "start",
+          data: {
+            run_id: runId,
+            lane,
+            engine_id: "runtime_convex",
+            model_id: requestedModelId,
+            inference_source: streamedInferenceSource,
+            inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+          },
+        });
+        runtimeTurnStage = "agent_loop";
+        let loopResult;
+        let communityFundingSession: CommunityInferenceFundingSession | null = null;
+        try {
+          communityFundingSession = await claimCommunityFundingSession();
+          loopResult = await executeChatToolsAgentLoop({
+            ctx,
+            req,
+            userId: actor.dbUserId,
+            threadId: String(ownedThread._id),
+            authSubject: actor.authSubject,
+            projectId: runtimeProjectId,
+            requestedModelId,
+            inferenceSource,
+            modelRef,
+            messages: conversationMessages,
+            maxTokens,
+            runId,
+            communityId: runtimeCommunityId,
+            communityName: runtimeCommunityName,
+            communitySlug: runtimeCommunitySlug,
+            communityOneLiner: runtimeCommunityOneLiner,
+            communityAbout: runtimeCommunityAbout,
+            communitySystemPrompt: runtimeCommunitySystemPrompt,
+            communityLensAuthority: runtimeCommunityLensAuthority,
+            communityFunnelSlot: runtimeCommunityFunnelSlot,
+            communityContextVersion: runtimeCommunityId
+              ? runtimeCommunityContextVersion
+              : null,
+            agentName: runtimeAgentProfile.agentName,
+            agentSoul: runtimeAgentProfile.agentSoul,
+            threadWorkingState: ownedThread.workingState ?? null,
+            allowedToolNames: polynetAllowedToolNamesForRun,
+            invocationSurface,
+            memberAgentSurfaceContext,
+            activeDaytonaRuntimeSubstrate:
+              activeDaytonaRuntimeSubstrateForPolynetTools,
+            apiKeyOverride: providerApiKeyOverride,
+            appendRunEvent: streamAppendRunEvent,
+            refreshRuntimeContextSnapshot: async (
+              phase: "started" | "active" = "active",
+              runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null = null,
+            ): Promise<void> => {
+              await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
+            },
+            touchRunHeartbeat: touchRunHeartbeatBestEffort,
+            recordInitialProviderContextAttestation,
+            beforeProviderRequest: async (): Promise<void> => {
+              await markCommunityFundingProviderStarted(communityFundingSession);
+            },
+            observeProviderResult: observeCommunityFundingProviderResult,
+          });
+          await appendContextIntegrityCheckBestEffortForRun();
+        } catch (error) {
+          if (communityFundingSession) {
+            try {
+              await failUnhandledCommunityFundingSession(
+                communityFundingSession,
+                "community_inference_loop_unhandled",
+              );
+            } catch {
+              // Preserve the original runtime failure; the receipt remains fail-closed.
             }
-            if (!communityFundingSession && communityInferenceSurface) {
-              const failure = resolveCommunityFundingClaimFailure(error);
+          }
+          if (!communityFundingSession && communityInferenceSurface) {
+            const failure = resolveCommunityFundingClaimFailure(error);
+            await finishRunBestEffortForRun({
+              status: "error",
+              reason: failure.code,
+              errorCode: failure.code,
+              errorMessage: failure.message,
+            });
+            writer.send({
+              event: "error",
+              data: {
+                code: failure.code,
+                error: failure.message,
+                message: failure.message,
+                status: failure.status,
+              },
+            });
+            return;
+          }
+          if (isRuntimeRunCancelledError(error)) {
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "cancelled",
+              reason: USER_CANCELLED_RUNTIME_CODE,
+              errorCode: USER_CANCELLED_RUNTIME_CODE,
+              errorMessage: "Run cancelled by user.",
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishCancelledRun();
+            return;
+          }
+          const message = error instanceof Error ? error.message : String(error);
+          await persistPartialAssistantMessageBestEffort({
+            content: streamedContent,
+            status: "error",
+            reason: "agent_loop_unhandled",
+            errorCode: "agent_loop_unhandled",
+            errorMessage: message || "Agent loop failed unexpectedly.",
+            inferenceSourceOverride: streamedInferenceSource,
+            inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+          });
+          await finishRunBestEffortForRun({
+            status: "error",
+            reason: "agent_loop_unhandled",
+            errorCode: "agent_loop_unhandled",
+            errorMessage: message || "Agent loop failed unexpectedly.",
+          });
+          writer.send({
+            event: "error",
+            data: {
+              error: message || "Agent loop failed unexpectedly.",
+            },
+          });
+          return;
+        }
+        const funnelPostcondition = loopResult.ok
+          ? await verifyFunnelDraftPostcondition()
+          : { ok: true, beforeRevision: 0, afterRevision: 0 };
+        try {
+          await finalizeCommunityFundingForLoopResult({
+            session: communityFundingSession,
+            result: loopResult,
+            outcomeCode:
+              !funnelPostcondition.ok && communityInferenceSurface === "community_funnel_builder"
+                ? "community_funnel_builder_postcondition_failed"
+                : undefined,
+          });
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await finishRunBestEffortForRun({
+            status: "error",
+            reason: "community_inference_settlement_failed",
+            errorCode: "community_inference_settlement_failed",
+            errorMessage: message || "Community inference accounting could not be finalized.",
+          });
+          writer.send({
+            event: "error",
+            data: {
+              code: "community_inference_settlement_failed",
+              error: "Community AI could not finalize this turn.",
+              message: "Community AI could not finalize this turn.",
+              status: 503,
+            },
+          });
+          return;
+        }
+        if (!loopResult.ok) {
+          if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "cancelled",
+              reason: USER_CANCELLED_RUNTIME_CODE,
+              errorCode: USER_CANCELLED_RUNTIME_CODE,
+              errorMessage: "Run cancelled by user.",
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishCancelledRun();
+            return;
+          }
+          const recoverableLoopStop = isRecoverableRuntimeKernelStopReason(
+            loopResult.code,
+          );
+          const partialAssistant =
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "error",
+              reason: loopResult.code,
+              errorCode: loopResult.code,
+              errorMessage: loopResult.message,
+              markPartialRun: !recoverableLoopStop,
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+          if (recoverableLoopStop) {
+            if (persistVisibleAssistantMessage && !partialAssistant) {
+              const persistMessage = "Failed to persist assistant message.";
               await finishRunBestEffortForRun({
                 status: "error",
-                reason: failure.code,
-                errorCode: failure.code,
-                errorMessage: failure.message,
+                reason: "assistant_message_persist_failed",
+                errorCode: "assistant_message_persist_failed",
+                errorMessage: persistMessage,
               });
               writer.send({
                 event: "error",
                 data: {
-                  code: failure.code,
-                  error: failure.message,
-                  message: failure.message,
-                  status: failure.status,
+                  code: "assistant_message_persist_failed",
+                  error: persistMessage,
+                  message: persistMessage,
+                  status: 500,
                 },
               });
               return;
             }
-            if (isRuntimeRunCancelledError(error)) {
-              await persistPartialAssistantMessageBestEffort({
-                content: streamedContent,
-                status: "cancelled",
-                reason: USER_CANCELLED_RUNTIME_CODE,
-                errorCode: USER_CANCELLED_RUNTIME_CODE,
-                errorMessage: "Run cancelled by user.",
-                inferenceSourceOverride: streamedInferenceSource,
-                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-              });
-              await finishCancelledRun();
-              return;
-            }
-            const message = error instanceof Error ? error.message : String(error);
-            await persistPartialAssistantMessageBestEffort({
-              content: streamedContent,
-              status: "error",
-              reason: "agent_loop_unhandled",
-              errorCode: "agent_loop_unhandled",
-              errorMessage: message || "Agent loop failed unexpectedly.",
-              inferenceSourceOverride: streamedInferenceSource,
-              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-            });
-            await finishRunBestEffortForRun({
-              status: "error",
-              reason: "agent_loop_unhandled",
-              errorCode: "agent_loop_unhandled",
-              errorMessage: message || "Agent loop failed unexpectedly.",
-            });
-            writer.send({
-              event: "error",
-              data: {
-                error: message || "Agent loop failed unexpectedly.",
-              },
-            });
-            return;
-          }
-          const funnelPostcondition = loopResult.ok
-            ? await verifyFunnelDraftPostcondition()
-            : { ok: true, beforeRevision: 0, afterRevision: 0 };
-          try {
-            await finalizeCommunityFundingForLoopResult({
-              session: communityFundingSession,
-              result: loopResult,
-              outcomeCode:
-                !funnelPostcondition.ok && communityInferenceSurface === "community_funnel_builder"
-                  ? "community_funnel_builder_postcondition_failed"
-                  : undefined,
-            });
-          } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            await finishRunBestEffortForRun({
-              status: "error",
-              reason: "community_inference_settlement_failed",
-              errorCode: "community_inference_settlement_failed",
-              errorMessage: message || "Community inference accounting could not be finalized.",
-            });
-            writer.send({
-              event: "error",
-              data: {
-                code: "community_inference_settlement_failed",
-                error: "Community AI could not finalize this turn.",
-                message: "Community AI could not finalize this turn.",
-                status: 503,
-              },
-            });
-            return;
-          }
-          if (!loopResult.ok) {
-            if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
-              await persistPartialAssistantMessageBestEffort({
-                content: streamedContent,
-                status: "cancelled",
-                reason: USER_CANCELLED_RUNTIME_CODE,
-                errorCode: USER_CANCELLED_RUNTIME_CODE,
-                errorMessage: "Run cancelled by user.",
-                inferenceSourceOverride: streamedInferenceSource,
-                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-              });
-              await finishCancelledRun();
-              return;
-            }
-            const recoverableLoopStop = isRecoverableRuntimeKernelStopReason(
-              loopResult.code,
-            );
-            const partialAssistant =
-              await persistPartialAssistantMessageBestEffort({
-                content: streamedContent,
-                status: "error",
-                reason: loopResult.code,
-                errorCode: loopResult.code,
-                errorMessage: loopResult.message,
-                markPartialRun: !recoverableLoopStop,
-                inferenceSourceOverride: streamedInferenceSource,
-                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-              });
-            if (recoverableLoopStop) {
-              if (persistVisibleAssistantMessage && !partialAssistant) {
-                const persistMessage = "Failed to persist assistant message.";
-                await finishRunBestEffortForRun({
-                  status: "error",
-                  reason: "assistant_message_persist_failed",
-                  errorCode: "assistant_message_persist_failed",
-                  errorMessage: persistMessage,
-                });
-                writer.send({
-                  event: "error",
-                  data: {
-                    code: "assistant_message_persist_failed",
-                    error: persistMessage,
-                    message: persistMessage,
-                    status: 500,
-                  },
-                });
-                return;
-              }
-              const fallbackFinalAnswer = buildRuntimeFailureFinalAnswer({
-                partialContent: streamedContent,
-                status: "error",
-                reason: loopResult.code,
-                errorCode: loopResult.code,
-                errorMessage: loopResult.message,
-              });
-              const finalContent =
-                partialAssistant?.content ?? fallbackFinalAnswer.content;
-              if (!streamedContent && finalContent) {
-                emitBufferedAssistantText({
-                  content: finalContent,
-                  emitDelta,
-                });
-              }
-              await finishRunBestEffortForRun({
-                status: "ok",
-                reason: loopResult.code,
-                errorCode: loopResult.code,
-                errorMessage: loopResult.message,
-              });
-              writer.send({
-                event: "done",
-                data: {
-                  run_id: runId,
-                  lane,
-                  engine_id: "runtime_convex",
-                  model_id: requestedModelId,
-                  inference_source: streamedInferenceSource,
-                  inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
-                  full_content: streamedContent || finalContent,
-                  prompt_tokens: streamedPromptTokens,
-                  completion_tokens: streamedCompletionTokens,
-                  user_message_id: userMessageId,
-                  user_message_key: userMessageKey,
-                  user_message_seq: userMessageSeq,
-                  assistant_message_id:
-                    partialAssistant?.assistantMessageId ?? null,
-                  assistant_message_key:
-                    partialAssistant?.assistantMessageKey ?? null,
-                  assistant_message_seq:
-                    partialAssistant?.assistantMessageSeq ?? null,
-                },
-              });
-              return;
-            }
-            await finishRunBestEffortForRun({
+            const fallbackFinalAnswer = buildRuntimeFailureFinalAnswer({
+              partialContent: streamedContent,
               status: "error",
               reason: loopResult.code,
               errorCode: loopResult.code,
               errorMessage: loopResult.message,
             });
-            writer.send({
-              event: "error",
-              data: {
-                code: loopResult.code,
-                error: loopResult.message,
-                message: loopResult.message,
-                status: loopResult.status,
-              },
-            });
-            return;
-          }
-          if (!funnelPostcondition.ok) {
-            await finishFunnelDraftPostconditionFailure();
-            writer.send({
-              event: "error",
-              data: {
-                code: funnelDraftPostconditionFailure.code,
-                error: funnelDraftPostconditionFailure.message,
-                message: funnelDraftPostconditionFailure.message,
-                status: 409,
-              },
-            });
-            return;
-          }
-          runtimeTurnStage = "assistant_emit";
-          streamedPromptTokens = loopResult.promptTokens;
-          streamedCompletionTokens = loopResult.completionTokens;
-          emitBufferedAssistantText({
-            content: loopResult.assistantText,
-            emitDelta,
-          });
-
-          runtimeTurnStage = "assistant_persist";
-          if (persistVisibleAssistantMessage) {
-            try {
-              await throwIfRunCancelled();
-              ({
-                assistantMessageId,
-                assistantMessageKey,
-                assistantMessageSeq,
-              } = await persistRuntimeAssistantMessage({
-                ctx,
-                ownerId: actor.dbUserId,
-                threadId: ownedThread._id,
-                messageKey: assistantMessageKeyForRun,
-                requestedModelId,
-                inferenceSource: streamedInferenceSource,
-                lane,
-                inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
-                runId,
-                content: streamedContent,
-              }));
-            } catch (error) {
-              if (isRuntimeRunCancelledError(error)) {
-                await persistPartialAssistantMessageBestEffort({
-                  content: streamedContent,
-                  status: "cancelled",
-                  reason: USER_CANCELLED_RUNTIME_CODE,
-                  errorCode: USER_CANCELLED_RUNTIME_CODE,
-                  errorMessage: "Run cancelled by user.",
-                  inferenceSourceOverride: streamedInferenceSource,
-                  inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-                });
-                await finishCancelledRun();
-                return;
-              }
-              const message =
-                error instanceof Error ? error.message : String(error);
-              await finishRunBestEffortForRun({
-                status: "error",
-                reason: "assistant_message_persist_failed",
-                errorCode: "assistant_message_persist_failed",
-                errorMessage: message || "Failed to persist assistant message.",
+            const finalContent =
+              partialAssistant?.content ?? fallbackFinalAnswer.content;
+            if (!streamedContent && finalContent) {
+              emitBufferedAssistantText({
+                content: finalContent,
+                emitDelta,
               });
-              writer.send({
-                event: "error",
-                data: {
-                  error: message || "Failed to persist assistant message.",
-                },
-              });
-              return;
             }
+            await finishRunBestEffortForRun({
+              status: "ok",
+              reason: loopResult.code,
+              errorCode: loopResult.code,
+              errorMessage: loopResult.message,
+            });
+            writer.send({
+              event: "done",
+              data: {
+                run_id: runId,
+                lane,
+                engine_id: "runtime_convex",
+                model_id: requestedModelId,
+                inference_source: streamedInferenceSource,
+                inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+                full_content: streamedContent || finalContent,
+                prompt_tokens: streamedPromptTokens,
+                completion_tokens: streamedCompletionTokens,
+                user_message_id: userMessageId,
+                user_message_key: userMessageKey,
+                user_message_seq: userMessageSeq,
+                assistant_message_id:
+                  partialAssistant?.assistantMessageId ?? null,
+                assistant_message_key:
+                  partialAssistant?.assistantMessageKey ?? null,
+                assistant_message_seq:
+                  partialAssistant?.assistantMessageSeq ?? null,
+              },
+            });
+            return;
           }
+          await finishRunBestEffortForRun({
+            status: "error",
+            reason: loopResult.code,
+            errorCode: loopResult.code,
+            errorMessage: loopResult.message,
+          });
+          writer.send({
+            event: "error",
+            data: {
+              code: loopResult.code,
+              error: loopResult.message,
+              message: loopResult.message,
+              status: loopResult.status,
+            },
+          });
+          return;
+        }
+        if (!funnelPostcondition.ok) {
+          await finishFunnelDraftPostconditionFailure();
+          writer.send({
+            event: "error",
+            data: {
+              code: funnelDraftPostconditionFailure.code,
+              error: funnelDraftPostconditionFailure.message,
+              message: funnelDraftPostconditionFailure.message,
+              status: 409,
+            },
+          });
+          return;
+        }
+        runtimeTurnStage = "assistant_emit";
+        streamedPromptTokens = loopResult.promptTokens;
+        streamedCompletionTokens = loopResult.completionTokens;
+        emitBufferedAssistantText({
+          content: loopResult.assistantText,
+          emitDelta,
+        });
 
+        runtimeTurnStage = "assistant_persist";
+        if (persistVisibleAssistantMessage) {
           try {
             await throwIfRunCancelled();
+            ({
+              assistantMessageId,
+              assistantMessageKey,
+              assistantMessageSeq,
+            } = await persistRuntimeAssistantMessage({
+              ctx,
+              ownerId: actor.dbUserId,
+              threadId: ownedThread._id,
+              messageKey: assistantMessageKeyForRun,
+              requestedModelId,
+              inferenceSource: streamedInferenceSource,
+              lane,
+              inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
+              runId,
+              content: streamedContent,
+            }));
           } catch (error) {
             if (isRuntimeRunCancelledError(error)) {
               await persistPartialAssistantMessageBestEffort({
@@ -1872,717 +1812,318 @@ export async function handleRuntimeTurnRequest(args: {
               await finishCancelledRun();
               return;
             }
-            throw error;
-          }
-          await finishRunBestEffortForRun({
-            status: "ok",
-          });
-          writer.send({
-            event: "done",
-            data: {
-              run_id: runId,
-              lane,
-              engine_id: "runtime_convex",
-              model_id: requestedModelId,
-              inference_source: streamedInferenceSource,
-              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
-              full_content: streamedContent,
-              prompt_tokens: streamedPromptTokens,
-              completion_tokens: streamedCompletionTokens,
-              user_message_id: userMessageId,
-              user_message_key: userMessageKey,
-              user_message_seq: userMessageSeq,
-              assistant_message_id: assistantMessageId,
-              assistant_message_key: assistantMessageKey,
-              assistant_message_seq: assistantMessageSeq,
-            },
-          });
-        });
-      }
-      runtimeTurnStage = "agent_loop";
-      let loopResult;
-      let communityFundingSession: CommunityInferenceFundingSession | null = null;
-      try {
-        communityFundingSession = await claimCommunityFundingSession();
-        loopResult = await executeChatToolsAgentLoop({
-          ctx,
-          req,
-          userId: actor.dbUserId,
-          threadId: String(ownedThread._id),
-          authSubject: actor.authSubject,
-          projectId: runtimeProjectId,
-          requestedModelId,
-          inferenceSource,
-          modelRef,
-          messages: conversationMessages,
-          maxTokens,
-          runId,
-          communityId: runtimeCommunityId,
-          communityName: runtimeCommunityName,
-          communitySlug: runtimeCommunitySlug,
-          communityOneLiner: runtimeCommunityOneLiner,
-          communityAbout: runtimeCommunityAbout,
-          communitySystemPrompt: runtimeCommunitySystemPrompt,
-          communityLensAuthority: runtimeCommunityLensAuthority,
-          communityFunnelSlot: runtimeCommunityFunnelSlot,
-          communityContextVersion: runtimeCommunityId
-            ? runtimeCommunityContextVersion
-            : null,
-          agentName: runtimeAgentProfile.agentName,
-          agentSoul: runtimeAgentProfile.agentSoul,
-          threadWorkingState: ownedThread.workingState ?? null,
-          allowedToolNames: polynetAllowedToolNamesForRun,
-          invocationSurface,
-          memberAgentSurfaceContext,
-          activeDaytonaRuntimeSubstrate:
-            activeDaytonaRuntimeSubstrateForPolynetTools,
-          apiKeyOverride: providerApiKeyOverride,
-          appendRunEvent: async (event): Promise<void> => {
-            observeFunnelDraftWriteEvent(event);
-            await appendRunEvent(event);
-            await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
-          },
-          refreshRuntimeContextSnapshot: async (
-            phase: "started" | "active" = "active",
-            runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null = null,
-          ): Promise<void> => {
-            await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
-          },
-          touchRunHeartbeat: touchRunHeartbeatBestEffort,
-          recordInitialProviderContextAttestation,
-          beforeProviderRequest: async (): Promise<void> => {
-            await markCommunityFundingProviderStarted(communityFundingSession);
-          },
-          observeProviderResult: observeCommunityFundingProviderResult,
-        });
-        await appendContextIntegrityCheckBestEffortForRun();
-      } catch (error) {
-        if (communityFundingSession) {
-          try {
-            await failUnhandledCommunityFundingSession(
-              communityFundingSession,
-              "community_inference_loop_unhandled",
-            );
-          } catch {
-            // Preserve the original runtime failure; the receipt remains fail-closed.
-          }
-        }
-        if (!communityFundingSession && communityInferenceSurface) {
-          const failure = resolveCommunityFundingClaimFailure(error);
-          await finishRunBestEffortForRun({
-            status: "error",
-            reason: failure.code,
-            errorCode: failure.code,
-            errorMessage: failure.message,
-          });
-          return runtimeJsonResponse(failure.status, {
-            ok: false,
-            code: failure.code,
-            error: failure.code,
-            message: failure.message,
-            run_id: runId,
-          });
-        }
-        if (isRuntimeRunCancelledError(error)) {
-          await persistPartialAssistantMessageBestEffort({
-            content,
-            status: "cancelled",
-            reason: USER_CANCELLED_RUNTIME_CODE,
-            errorCode: USER_CANCELLED_RUNTIME_CODE,
-            errorMessage: "Run cancelled by user.",
-          });
-          await finishCancelledRun();
-          return runtimeJsonResponse(409, {
-            ok: false,
-            code: USER_CANCELLED_RUNTIME_CODE,
-            error: USER_CANCELLED_RUNTIME_CODE,
-            message: "Run cancelled by user.",
-            run_id: runId,
-          });
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        await persistPartialAssistantMessageBestEffort({
-          content,
-          status: "error",
-          reason: "agent_loop_unhandled",
-          errorCode: "agent_loop_unhandled",
-          errorMessage: message || "Agent loop failed unexpectedly.",
-        });
-        await finishRunBestEffortForRun({
-          status: "error",
-          reason: "agent_loop_unhandled",
-          errorCode: "agent_loop_unhandled",
-          errorMessage: message || "Agent loop failed unexpectedly.",
-        });
-        return runtimeJsonResponse(500, {
-          ok: false,
-          code: "agent_loop_unhandled",
-          error: "agent_loop_unhandled",
-          message: message || "Agent loop failed unexpectedly.",
-          run_id: runId,
-        });
-      }
-      const funnelPostcondition = loopResult.ok
-        ? await verifyFunnelDraftPostcondition()
-        : { ok: true, beforeRevision: 0, afterRevision: 0 };
-      try {
-        await finalizeCommunityFundingForLoopResult({
-          session: communityFundingSession,
-          result: loopResult,
-          outcomeCode:
-            !funnelPostcondition.ok && communityInferenceSurface === "community_funnel_builder"
-              ? "community_funnel_builder_postcondition_failed"
-              : undefined,
-        });
-      } catch (error) {
-        const message = error instanceof Error ? error.message : String(error);
-        await finishRunBestEffortForRun({
-          status: "error",
-          reason: "community_inference_settlement_failed",
-          errorCode: "community_inference_settlement_failed",
-          errorMessage: message || "Community inference accounting could not be finalized.",
-        });
-        return runtimeJsonResponse(503, {
-          ok: false,
-          code: "community_inference_settlement_failed",
-          error: "community_inference_settlement_failed",
-          message: "Community AI could not finalize this turn.",
-          run_id: runId,
-        });
-      }
-      if (!loopResult.ok) {
-        if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
-          await persistPartialAssistantMessageBestEffort({
-            content,
-            status: "cancelled",
-            reason: USER_CANCELLED_RUNTIME_CODE,
-            errorCode: USER_CANCELLED_RUNTIME_CODE,
-            errorMessage: "Run cancelled by user.",
-          });
-          await finishCancelledRun();
-          return runtimeJsonResponse(409, {
-            ok: false,
-            code: USER_CANCELLED_RUNTIME_CODE,
-            error: USER_CANCELLED_RUNTIME_CODE,
-            message: "Run cancelled by user.",
-            run_id: runId,
-          });
-        }
-        const recoverableLoopStop = isRecoverableRuntimeKernelStopReason(
-          loopResult.code,
-        );
-        const partialAssistant = await persistPartialAssistantMessageBestEffort({
-          content,
-          status: "error",
-          reason: loopResult.code,
-          errorCode: loopResult.code,
-          errorMessage: loopResult.message,
-          markPartialRun: !recoverableLoopStop,
-        });
-        if (recoverableLoopStop) {
-          if (persistVisibleAssistantMessage && !partialAssistant) {
-            const persistMessage = "Failed to persist assistant message.";
+            const message =
+              error instanceof Error ? error.message : String(error);
             await finishRunBestEffortForRun({
               status: "error",
               reason: "assistant_message_persist_failed",
               errorCode: "assistant_message_persist_failed",
-              errorMessage: persistMessage,
+              errorMessage: message || "Failed to persist assistant message.",
             });
-            return runtimeJsonResponse(500, {
-              ok: false,
-              code: "assistant_message_persist_failed",
-              error: "assistant_message_persist_failed",
-              message: persistMessage,
-              run_id: runId,
+            writer.send({
+              event: "error",
+              data: {
+                error: message || "Failed to persist assistant message.",
+              },
             });
+            return;
           }
+        }
+
+        try {
+          await throwIfRunCancelled();
+        } catch (error) {
+          if (isRuntimeRunCancelledError(error)) {
+            await persistPartialAssistantMessageBestEffort({
+              content: streamedContent,
+              status: "cancelled",
+              reason: USER_CANCELLED_RUNTIME_CODE,
+              errorCode: USER_CANCELLED_RUNTIME_CODE,
+              errorMessage: "Run cancelled by user.",
+              inferenceSourceOverride: streamedInferenceSource,
+              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
+            });
+            await finishCancelledRun();
+            return;
+          }
+          throw error;
+        }
+        await finishRunBestEffortForRun({
+          status: "ok",
+        });
+        writer.send({
+          event: "done",
+          data: {
+            run_id: runId,
+            lane,
+            engine_id: "runtime_convex",
+            model_id: requestedModelId,
+            inference_source: streamedInferenceSource,
+            inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
+            full_content: streamedContent,
+            prompt_tokens: streamedPromptTokens,
+            completion_tokens: streamedCompletionTokens,
+            user_message_id: userMessageId,
+            user_message_key: userMessageKey,
+            user_message_seq: userMessageSeq,
+            assistant_message_id: assistantMessageId,
+            assistant_message_key: assistantMessageKey,
+            assistant_message_seq: assistantMessageSeq,
+          },
+        });
+      });
+    }
+    runtimeTurnStage = "agent_loop";
+    let loopResult;
+    let communityFundingSession: CommunityInferenceFundingSession | null = null;
+    try {
+      communityFundingSession = await claimCommunityFundingSession();
+      loopResult = await executeChatToolsAgentLoop({
+        ctx,
+        req,
+        userId: actor.dbUserId,
+        threadId: String(ownedThread._id),
+        authSubject: actor.authSubject,
+        projectId: runtimeProjectId,
+        requestedModelId,
+        inferenceSource,
+        modelRef,
+        messages: conversationMessages,
+        maxTokens,
+        runId,
+        communityId: runtimeCommunityId,
+        communityName: runtimeCommunityName,
+        communitySlug: runtimeCommunitySlug,
+        communityOneLiner: runtimeCommunityOneLiner,
+        communityAbout: runtimeCommunityAbout,
+        communitySystemPrompt: runtimeCommunitySystemPrompt,
+        communityLensAuthority: runtimeCommunityLensAuthority,
+        communityFunnelSlot: runtimeCommunityFunnelSlot,
+        communityContextVersion: runtimeCommunityId
+          ? runtimeCommunityContextVersion
+          : null,
+        agentName: runtimeAgentProfile.agentName,
+        agentSoul: runtimeAgentProfile.agentSoul,
+        threadWorkingState: ownedThread.workingState ?? null,
+        allowedToolNames: polynetAllowedToolNamesForRun,
+        invocationSurface,
+        memberAgentSurfaceContext,
+        activeDaytonaRuntimeSubstrate:
+          activeDaytonaRuntimeSubstrateForPolynetTools,
+        apiKeyOverride: providerApiKeyOverride,
+        appendRunEvent: async (event): Promise<void> => {
+          observeFunnelDraftWriteEvent(event);
+          await appendRunEvent(event);
+          await refreshActiveContextSnapshotAfterEventBestEffort(event.eventType);
+        },
+        refreshRuntimeContextSnapshot: async (
+          phase: "started" | "active" = "active",
+          runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null = null,
+        ): Promise<void> => {
+          await persistContextSnapshotBestEffort(phase, runtimeTurnEnvelope);
+        },
+        touchRunHeartbeat: touchRunHeartbeatBestEffort,
+        recordInitialProviderContextAttestation,
+        beforeProviderRequest: async (): Promise<void> => {
+          await markCommunityFundingProviderStarted(communityFundingSession);
+        },
+        observeProviderResult: observeCommunityFundingProviderResult,
+      });
+      await appendContextIntegrityCheckBestEffortForRun();
+    } catch (error) {
+      if (communityFundingSession) {
+        try {
+          await failUnhandledCommunityFundingSession(
+            communityFundingSession,
+            "community_inference_loop_unhandled",
+          );
+        } catch {
+          // Preserve the original runtime failure; the receipt remains fail-closed.
+        }
+      }
+      if (!communityFundingSession && communityInferenceSurface) {
+        const failure = resolveCommunityFundingClaimFailure(error);
+        await finishRunBestEffortForRun({
+          status: "error",
+          reason: failure.code,
+          errorCode: failure.code,
+          errorMessage: failure.message,
+        });
+        return runtimeJsonResponse(failure.status, {
+          ok: false,
+          code: failure.code,
+          error: failure.code,
+          message: failure.message,
+          run_id: runId,
+        });
+      }
+      if (isRuntimeRunCancelledError(error)) {
+        await persistPartialAssistantMessageBestEffort({
+          content,
+          status: "cancelled",
+          reason: USER_CANCELLED_RUNTIME_CODE,
+          errorCode: USER_CANCELLED_RUNTIME_CODE,
+          errorMessage: "Run cancelled by user.",
+        });
+        await finishCancelledRun();
+        return runtimeJsonResponse(409, {
+          ok: false,
+          code: USER_CANCELLED_RUNTIME_CODE,
+          error: USER_CANCELLED_RUNTIME_CODE,
+          message: "Run cancelled by user.",
+          run_id: runId,
+        });
+      }
+      const message = error instanceof Error ? error.message : String(error);
+      await persistPartialAssistantMessageBestEffort({
+        content,
+        status: "error",
+        reason: "agent_loop_unhandled",
+        errorCode: "agent_loop_unhandled",
+        errorMessage: message || "Agent loop failed unexpectedly.",
+      });
+      await finishRunBestEffortForRun({
+        status: "error",
+        reason: "agent_loop_unhandled",
+        errorCode: "agent_loop_unhandled",
+        errorMessage: message || "Agent loop failed unexpectedly.",
+      });
+      return runtimeJsonResponse(500, {
+        ok: false,
+        code: "agent_loop_unhandled",
+        error: "agent_loop_unhandled",
+        message: message || "Agent loop failed unexpectedly.",
+        run_id: runId,
+      });
+    }
+    const funnelPostcondition = loopResult.ok
+      ? await verifyFunnelDraftPostcondition()
+      : { ok: true, beforeRevision: 0, afterRevision: 0 };
+    try {
+      await finalizeCommunityFundingForLoopResult({
+        session: communityFundingSession,
+        result: loopResult,
+        outcomeCode:
+          !funnelPostcondition.ok && communityInferenceSurface === "community_funnel_builder"
+            ? "community_funnel_builder_postcondition_failed"
+            : undefined,
+      });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      await finishRunBestEffortForRun({
+        status: "error",
+        reason: "community_inference_settlement_failed",
+        errorCode: "community_inference_settlement_failed",
+        errorMessage: message || "Community inference accounting could not be finalized.",
+      });
+      return runtimeJsonResponse(503, {
+        ok: false,
+        code: "community_inference_settlement_failed",
+        error: "community_inference_settlement_failed",
+        message: "Community AI could not finalize this turn.",
+        run_id: runId,
+      });
+    }
+    if (!loopResult.ok) {
+      if (loopResult.code === USER_CANCELLED_RUNTIME_CODE) {
+        await persistPartialAssistantMessageBestEffort({
+          content,
+          status: "cancelled",
+          reason: USER_CANCELLED_RUNTIME_CODE,
+          errorCode: USER_CANCELLED_RUNTIME_CODE,
+          errorMessage: "Run cancelled by user.",
+        });
+        await finishCancelledRun();
+        return runtimeJsonResponse(409, {
+          ok: false,
+          code: USER_CANCELLED_RUNTIME_CODE,
+          error: USER_CANCELLED_RUNTIME_CODE,
+          message: "Run cancelled by user.",
+          run_id: runId,
+        });
+      }
+      const recoverableLoopStop = isRecoverableRuntimeKernelStopReason(
+        loopResult.code,
+      );
+      const partialAssistant = await persistPartialAssistantMessageBestEffort({
+        content,
+        status: "error",
+        reason: loopResult.code,
+        errorCode: loopResult.code,
+        errorMessage: loopResult.message,
+        markPartialRun: !recoverableLoopStop,
+      });
+      if (recoverableLoopStop) {
+        if (persistVisibleAssistantMessage && !partialAssistant) {
+          const persistMessage = "Failed to persist assistant message.";
           await finishRunBestEffortForRun({
-            status: "ok",
-            reason: loopResult.code,
-            errorCode: loopResult.code,
-            errorMessage: loopResult.message,
-          });
-          const fallbackFinalAnswer = buildRuntimeFailureFinalAnswer({
-            partialContent: content,
             status: "error",
-            reason: loopResult.code,
-            errorCode: loopResult.code,
-            errorMessage: loopResult.message,
+            reason: "assistant_message_persist_failed",
+            errorCode: "assistant_message_persist_failed",
+            errorMessage: persistMessage,
           });
-          return successResponse({
-            content: partialAssistant?.content ?? fallbackFinalAnswer.content,
-            promptTokens,
-            completionTokens,
-            resolvedInferenceSource,
-            inferenceLaneFallbacks,
-            userMessageId,
-            userMessageKey,
-            userMessageSeq,
-            assistantMessageId: partialAssistant?.assistantMessageId ?? null,
-            assistantMessageKey: partialAssistant?.assistantMessageKey ?? null,
-            assistantMessageSeq: partialAssistant?.assistantMessageSeq ?? null,
+          return runtimeJsonResponse(500, {
+            ok: false,
+            code: "assistant_message_persist_failed",
+            error: "assistant_message_persist_failed",
+            message: persistMessage,
+            run_id: runId,
           });
         }
         await finishRunBestEffortForRun({
+          status: "ok",
+          reason: loopResult.code,
+          errorCode: loopResult.code,
+          errorMessage: loopResult.message,
+        });
+        const fallbackFinalAnswer = buildRuntimeFailureFinalAnswer({
+          partialContent: content,
           status: "error",
           reason: loopResult.code,
           errorCode: loopResult.code,
           errorMessage: loopResult.message,
         });
-        return runtimeJsonResponse(loopResult.status, {
-          ok: false,
-          code: loopResult.code,
-          error: loopResult.code,
-          message: loopResult.message,
-          run_id: runId,
+        return successResponse({
+          content: partialAssistant?.content ?? fallbackFinalAnswer.content,
+          promptTokens,
+          completionTokens,
+          resolvedInferenceSource,
+          inferenceLaneFallbacks,
+          userMessageId,
+          userMessageKey,
+          userMessageSeq,
+          assistantMessageId: partialAssistant?.assistantMessageId ?? null,
+          assistantMessageKey: partialAssistant?.assistantMessageKey ?? null,
+          assistantMessageSeq: partialAssistant?.assistantMessageSeq ?? null,
         });
       }
-      if (!funnelPostcondition.ok) {
-        await finishFunnelDraftPostconditionFailure();
-        return runtimeJsonResponse(409, {
-          ok: false,
-          code: funnelDraftPostconditionFailure.code,
-          error: funnelDraftPostconditionFailure.code,
-          message: funnelDraftPostconditionFailure.message,
-          run_id: runId,
-        });
-      }
-      content = loopResult.assistantText;
-      promptTokens = loopResult.promptTokens;
-      completionTokens = loopResult.completionTokens;
-    } else {
-      const now = new Date();
-      const runtimeTimeZone = "UTC";
-      const runtimeProjectContext = await loadRuntimeProjectContext({
-        ctx,
-        projectId: runtimeProjectId,
-        authSubject: actor.authSubject,
+      await finishRunBestEffortForRun({
+        status: "error",
+        reason: loopResult.code,
+        errorCode: loopResult.code,
+        errorMessage: loopResult.message,
       });
-      const authenticatedScopedSystemPrompt =
-        composePlatformChatRuntimeSystemPrompt({
-          communityId: runtimeCommunityId,
-          communityName: runtimeCommunityName,
-          communitySlug: runtimeCommunitySlug,
-          communityOneLiner: runtimeCommunityOneLiner,
-          communityAbout: runtimeCommunityAbout,
-          communitySystemPrompt: runtimeCommunitySystemPrompt,
-          communityLensAuthority: runtimeCommunityLensAuthority,
-          agentName: runtimeAgentProfile.agentName,
-          agentSoul: runtimeAgentProfile.agentSoul,
-          projectContext: runtimeProjectContext,
-          currentDateTimeIso: now.toISOString(),
-          currentDateLabel: new Intl.DateTimeFormat("en-US", {
-            dateStyle: "full",
-            timeStyle: "long",
-            timeZone: runtimeTimeZone,
-          }).format(now),
-          currentTimeZone: runtimeTimeZone,
-        });
-      const chatMessages = [
-        { role: "system" as const, content: authenticatedScopedSystemPrompt },
-        ...conversationTextMessages,
-      ];
-      if (stream) {
-        return runtimeSseResponse(async (writer) => {
-          let streamedContent = "";
-          let streamedPromptTokens: number | null = null;
-          let streamedCompletionTokens: number | null = null;
-          let streamedInferenceSource = resolvedInferenceSource;
-          let streamedInferenceLaneFallbacks = inferenceLaneFallbacks;
-          let assistantMessageId: string | null = null;
-          let assistantMessageKey: string | null = null;
-          let assistantMessageSeq: number | null = null;
-
-          const emitDelta = (delta: string) => {
-            if (!delta) return;
-            streamedContent += delta;
-            writer.send({
-              event: "delta",
-              data: {
-                delta,
-              },
-            });
-          };
-
-          writer.send({
-            event: "start",
-            data: {
-              run_id: runId,
-              lane,
-              engine_id: "runtime_convex",
-              model_id: requestedModelId,
-              inference_source: streamedInferenceSource,
-              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
-            },
-          });
-          const streamAppendRunEvent = async (event: {
-            eventType: string;
-            eventKey?: string;
-            payload: Record<string, unknown>;
-          }): Promise<void> => {
-            observeFunnelDraftWriteEvent(event);
-            const created = await appendRunEvent(event);
-            const mapped = mapPersistedRuntimeEventRow(created);
-            if (!mapped) return;
-            writer.send({
-              event: "runtime_event",
-              data: mapped,
-            });
-          };
-          const reasoningSummaryEmitter = createRuntimeReasoningSummaryEmitter({
-            runId,
-            summaryStreamId: `${runId}:assistant_completion:0`,
-            appendRunEvent: streamAppendRunEvent,
-          });
-
-          let completion:
-            | Awaited<ReturnType<typeof runChatgptStreamingCompletion>>
-            | Awaited<ReturnType<typeof runOpenAiCompletion>>
-            | Awaited<ReturnType<typeof runOpenRouterStreamingCompletion>>;
-          try {
-            if (inferenceSource === "chatgpt") {
-              runtimeTurnStage = "chatgpt_completion";
-              completion = await runAbortableWithRuntimeCancellation({
-                ctx,
-                ownerId: actor.dbUserId,
-                runId,
-                operation: async (signal) =>
-                  await runChatgptStreamingCompletion({
-                    ctx,
-                    userId: actor.dbUserId,
-                    modelId: requestedModelId,
-                    messages: chatMessages,
-                    maxTokens,
-                    onDelta: emitDelta,
-                    requestMetadata: chatgptCodexRequestMetadata,
-                    onReasoningSummaryPartAdded: ({ summaryIndex }) =>
-                      reasoningSummaryEmitter.onPartAdded(summaryIndex),
-                    onReasoningSummaryTextDelta: ({ delta, summaryIndex }) =>
-                      reasoningSummaryEmitter.onTextDelta(delta, summaryIndex),
-                    signal,
-                  }),
-              });
-            } else if (inferenceSource === "user_key" && openAiModelIdFromRef(modelRef)) {
-              runtimeTurnStage = "openai_completion";
-              completion = await runAbortableWithRuntimeCancellation({
-                ctx,
-                ownerId: actor.dbUserId,
-                runId,
-                operation: async (signal) =>
-                  await runOpenAiCompletion({
-                    req,
-                    modelId: openAiModelIdFromRef(modelRef) || requestedModelId,
-                    messages: chatMessages,
-                    maxTokens,
-                    apiKeyOverride: providerApiKeyOverride,
-                    signal,
-                  }),
-              });
-              if (!isRuntimeCompletionFailure(completion) && completion.content) {
-                emitDelta(completion.content);
-              }
-            } else {
-              runtimeTurnStage = "openrouter_completion";
-              completion = await runAbortableWithRuntimeCancellation({
-                ctx,
-                ownerId: actor.dbUserId,
-                runId,
-                operation: async (signal) =>
-                  await runOpenRouterStreamingCompletion({
-                    req,
-                    modelRef,
-                    messages: chatMessages,
-                    maxTokens,
-                    apiKeyOverride: providerApiKeyOverride,
-                    onDelta: emitDelta,
-                    signal,
-                  }),
-              });
-            }
-          } catch (error) {
-            if (isRuntimeRunCancelledError(error)) {
-              await persistPartialAssistantMessageBestEffort({
-                content: streamedContent,
-                status: "cancelled",
-                reason: USER_CANCELLED_RUNTIME_CODE,
-                errorCode: USER_CANCELLED_RUNTIME_CODE,
-                errorMessage: "Run cancelled by user.",
-                inferenceSourceOverride: streamedInferenceSource,
-                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-              });
-              await finishCancelledRun();
-              return;
-            }
-            const message = error instanceof Error ? error.message : String(error);
-            await persistPartialAssistantMessageBestEffort({
-              content: streamedContent,
-              status: "error",
-              reason: "runtime_completion_unhandled",
-              errorCode: "runtime_completion_unhandled",
-              errorMessage: message || "Runtime completion failed unexpectedly.",
-              inferenceSourceOverride: streamedInferenceSource,
-              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-            });
-            await finishRunBestEffortForRun({
-              status: "error",
-              reason: "runtime_completion_unhandled",
-              errorCode: "runtime_completion_unhandled",
-              errorMessage: message || "Runtime completion failed unexpectedly.",
-            });
-            writer.send({
-              event: "error",
-              data: {
-                error: message || "Runtime completion failed unexpectedly.",
-              },
-            });
-            return;
-          }
-
-          if (isRuntimeCompletionFailure(completion)) {
-            await persistPartialAssistantMessageBestEffort({
-              content: streamedContent,
-              status: "error",
-              reason: completion.code,
-              errorCode: completion.code,
-              errorMessage: completion.message,
-              inferenceSourceOverride: streamedInferenceSource,
-              inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-            });
-            await finishRunBestEffortForRun({
-              status: "error",
-              reason: completion.code,
-              errorCode: completion.code,
-              errorMessage: completion.message,
-            });
-            writer.send({
-              event: "error",
-              data: {
-                error: completion.message,
-              },
-            });
-            return;
-          }
-
-          streamedContent = completion.content;
-          streamedPromptTokens = completion.promptTokens;
-          streamedCompletionTokens = completion.completionTokens;
-
-          runtimeTurnStage = "assistant_persist";
-          if (persistVisibleAssistantMessage) {
-            try {
-              await throwIfRunCancelled();
-              ({
-                assistantMessageId,
-                assistantMessageKey,
-                assistantMessageSeq,
-              } = await persistRuntimeAssistantMessage({
-                ctx,
-                ownerId: actor.dbUserId,
-                threadId: ownedThread._id,
-                messageKey: assistantMessageKeyForRun,
-                requestedModelId,
-                inferenceSource: streamedInferenceSource,
-                lane,
-                inferenceLaneFallbacks: streamedInferenceLaneFallbacks,
-                runId,
-                content: streamedContent,
-              }));
-            } catch (error) {
-              if (isRuntimeRunCancelledError(error)) {
-                await persistPartialAssistantMessageBestEffort({
-                  content: streamedContent,
-                  status: "cancelled",
-                  reason: USER_CANCELLED_RUNTIME_CODE,
-                  errorCode: USER_CANCELLED_RUNTIME_CODE,
-                  errorMessage: "Run cancelled by user.",
-                  inferenceSourceOverride: streamedInferenceSource,
-                  inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-                });
-                await finishCancelledRun();
-                return;
-              }
-              const message =
-                error instanceof Error ? error.message : String(error);
-              await finishRunBestEffortForRun({
-                status: "error",
-                reason: "assistant_message_persist_failed",
-                errorCode: "assistant_message_persist_failed",
-                errorMessage: message || "Failed to persist assistant message.",
-              });
-              writer.send({
-                event: "error",
-                data: {
-                  error: message || "Failed to persist assistant message.",
-                },
-              });
-              return;
-            }
-          }
-
-          try {
-            await throwIfRunCancelled();
-          } catch (error) {
-            if (isRuntimeRunCancelledError(error)) {
-              await persistPartialAssistantMessageBestEffort({
-                content: streamedContent,
-                status: "cancelled",
-                reason: USER_CANCELLED_RUNTIME_CODE,
-                errorCode: USER_CANCELLED_RUNTIME_CODE,
-                errorMessage: "Run cancelled by user.",
-                inferenceSourceOverride: streamedInferenceSource,
-                inferenceLaneFallbacksOverride: streamedInferenceLaneFallbacks,
-              });
-              await finishCancelledRun();
-              return;
-            }
-            throw error;
-          }
-          await finishRunBestEffortForRun({
-            status: "ok",
-          });
-          writer.send({
-            event: "done",
-            data: {
-              run_id: runId,
-              lane,
-              engine_id: "runtime_convex",
-              model_id: requestedModelId,
-              inference_source: streamedInferenceSource,
-              inference_lane_fallbacks: streamedInferenceLaneFallbacks ?? null,
-              full_content: streamedContent,
-              prompt_tokens: streamedPromptTokens,
-              completion_tokens: streamedCompletionTokens,
-              user_message_id: userMessageId,
-              user_message_key: userMessageKey,
-              user_message_seq: userMessageSeq,
-              assistant_message_id: assistantMessageId,
-              assistant_message_key: assistantMessageKey,
-              assistant_message_seq: assistantMessageSeq,
-            },
-          });
-        });
-      }
-      let completion:
-        | Awaited<ReturnType<typeof runChatgptCompletion>>
-        | Awaited<ReturnType<typeof runOpenAiCompletion>>
-        | Awaited<ReturnType<typeof runOpenRouterCompletion>>;
-      try {
-        if (inferenceSource === "chatgpt") {
-          runtimeTurnStage = "chatgpt_completion";
-          completion = await runAbortableWithRuntimeCancellation({
-            ctx,
-            ownerId: actor.dbUserId,
-            runId,
-            operation: async (signal) =>
-              await runChatgptCompletion({
-                ctx,
-                userId: actor.dbUserId,
-                modelId: requestedModelId,
-                messages: chatMessages,
-                maxTokens,
-                requestMetadata: chatgptCodexRequestMetadata,
-                signal,
-              }),
-          });
-        } else if (inferenceSource === "user_key" && openAiModelIdFromRef(modelRef)) {
-          runtimeTurnStage = "openai_completion";
-          completion = await runAbortableWithRuntimeCancellation({
-            ctx,
-            ownerId: actor.dbUserId,
-            runId,
-            operation: async (signal) =>
-              await runOpenAiCompletion({
-                req,
-                modelId: openAiModelIdFromRef(modelRef) || requestedModelId,
-                messages: chatMessages,
-                maxTokens,
-                apiKeyOverride: providerApiKeyOverride,
-                signal,
-              }),
-          });
-        } else {
-          runtimeTurnStage = "openrouter_completion";
-          completion = await runAbortableWithRuntimeCancellation({
-            ctx,
-            ownerId: actor.dbUserId,
-            runId,
-            operation: async (signal) =>
-              await runOpenRouterCompletion({
-                req,
-                modelRef,
-                messages: chatMessages,
-                maxTokens,
-                apiKeyOverride: providerApiKeyOverride,
-                signal,
-              }),
-          });
-        }
-      } catch (error) {
-        if (isRuntimeRunCancelledError(error)) {
-          await persistPartialAssistantMessageBestEffort({
-            content,
-            status: "cancelled",
-            reason: USER_CANCELLED_RUNTIME_CODE,
-            errorCode: USER_CANCELLED_RUNTIME_CODE,
-            errorMessage: "Run cancelled by user.",
-          });
-          await finishCancelledRun();
-          return runtimeJsonResponse(409, {
-            ok: false,
-            code: USER_CANCELLED_RUNTIME_CODE,
-            error: USER_CANCELLED_RUNTIME_CODE,
-            message: "Run cancelled by user.",
-            run_id: runId,
-          });
-        }
-        const message = error instanceof Error ? error.message : String(error);
-        await persistPartialAssistantMessageBestEffort({
-          content,
-          status: "error",
-          reason: "runtime_completion_unhandled",
-          errorCode: "runtime_completion_unhandled",
-          errorMessage: message || "Runtime completion failed unexpectedly.",
-        });
-        await finishRunBestEffortForRun({
-          status: "error",
-          reason: "runtime_completion_unhandled",
-          errorCode: "runtime_completion_unhandled",
-          errorMessage: message || "Runtime completion failed unexpectedly.",
-        });
-        return runtimeJsonResponse(500, {
-          ok: false,
-          code: "runtime_completion_unhandled",
-          error: "runtime_completion_unhandled",
-          message: message || "Runtime completion failed unexpectedly.",
-          run_id: runId,
-        });
-      }
-      if (isRuntimeCompletionFailure(completion)) {
-        await persistPartialAssistantMessageBestEffort({
-          content,
-          status: "error",
-          reason: completion.code,
-          errorCode: completion.code,
-          errorMessage: completion.message,
-        });
-        await finishRunBestEffortForRun({
-          status: "error",
-          reason: completion.code,
-          errorCode: completion.code,
-          errorMessage: completion.message,
-        });
-        return runtimeJsonResponse(completion.status, {
-          ok: false,
-          code: completion.code,
-          error: completion.code,
-          message: completion.message,
-        });
-      }
-      content = completion.content;
-      promptTokens = completion.promptTokens;
-      completionTokens = completion.completionTokens;
+      return runtimeJsonResponse(loopResult.status, {
+        ok: false,
+        code: loopResult.code,
+        error: loopResult.code,
+        message: loopResult.message,
+        run_id: runId,
+      });
     }
-
+    if (!funnelPostcondition.ok) {
+      await finishFunnelDraftPostconditionFailure();
+      return runtimeJsonResponse(409, {
+        ok: false,
+        code: funnelDraftPostconditionFailure.code,
+        error: funnelDraftPostconditionFailure.code,
+        message: funnelDraftPostconditionFailure.message,
+        run_id: runId,
+      });
+    }
+    content = loopResult.assistantText;
+    promptTokens = loopResult.promptTokens;
+    completionTokens = loopResult.completionTokens;
     runtimeTurnStage = "assistant_persist";
     let assistantMessageId: string | null = null;
     let assistantMessageKey: string | null = null;

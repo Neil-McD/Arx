@@ -55,8 +55,14 @@ require_match_in_file "$HANDLERS_FILE" 'executeChatToolsAgentLoop\(' \
   "runtime supports the unified tool loop"
 forbid_match_in_file "$HANDLERS_FILE" 'executeWorkspaceAgentLoop\(' \
   "runtime no longer keeps a separate eager workspace agent loop"
-require_match_in_file "$HANDLERS_FILE" 'runtimeExecutionMode === "agentic"' \
-  "runtime branches on execution mode for tool-capable turns"
+require_match_in_file "$HANDLERS_FILE" 'executionMode: "agentic"' \
+  "runtime persists the one canonical agentic execution mode"
+forbid_match_in_file "$HANDLERS_FILE" 'runtimeExecutionMode' \
+  "runtime has no execution-mode selector"
+forbid_match_in_file "$HANDLERS_FILE" 'capability_composed_chat_v1|legacy_project_workspace|composePlatformChatRuntimeSystemPrompt' \
+  "runtime has no legacy chat provider path"
+forbid_match_in_file "$PROMPT_FILE" 'composePlatformChatRuntimeSystemPrompt|composePlatformCommunityContextSystemPrompt|Active harness: chat\.' \
+  "runtime prompt has no chat-only composer"
 
 forbid_match_in_file "$HANDLERS_FILE" 'resolveRouterLevelDecision' \
   "runtime no longer references router level decisions"

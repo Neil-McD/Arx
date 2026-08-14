@@ -3296,7 +3296,11 @@ export const ensureCloudRuntimeRunStarted = mutation({
     const lane = normalizeRunLane(args.lane);
     const visibility = args.visibility === "internal_hidden" ? "internal_hidden" : "user_visible";
     const internalFollowupKind = String(args.internalFollowupKind ?? "").trim() || undefined;
-    const executionMode = String(args.executionMode ?? "").trim() || "chat";
+    const requestedExecutionMode = String(args.executionMode ?? "").trim();
+    if (requestedExecutionMode && requestedExecutionMode !== "agentic") {
+      throw new Error("unsupported_execution_mode");
+    }
+    const executionMode = "agentic";
     const contractName = String(args.contractName ?? "").trim() || "canonical_cloud_run_v1";
     const contractVersion = String(args.contractVersion ?? "").trim() || "v1";
     const modelId = String(args.modelId ?? "").trim() || undefined;
