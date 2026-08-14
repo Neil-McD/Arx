@@ -46,7 +46,12 @@ assert.match(schema, /\.vectorIndex\("by_embedding"/);
 assert.match(cleanup, /table: "communityArchiveDocuments"/);
 assert.match(communityMaintenance, /purgeOrphanedCommunityUserArtifactsInternal/);
 assert.match(recentContext, /readCommunityRecentContextInternal = internalQuery/);
-assert.match(runtimeAgentLoop, /communityRecentContext\.readCommunityRecentContextInternal/);
+assert.match(runtimeAgentLoop, /executePolynetCanonicalTool/);
+assert.doesNotMatch(
+  runtimeAgentLoop,
+  /communityRecentContext\.readCommunityRecentContextInternal/,
+  "native runtime must not restore the retired community_search wrapper",
+);
 assert.match(httpMcp, /executePolynetCanonicalTool/);
 assert.match(canonicalExecutor, /searchCommunityRepositoryInternal/);
 assert.doesNotMatch(runtimeAgentLoop, /communityArchive\.searchCommunityKnowledgeInternal/);

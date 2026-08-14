@@ -380,7 +380,16 @@ assert.match(
 assert.equal(existsSync("convex/communityArchive.ts"), false, "archive-named runtime wrapper must stay deleted");
 assert.equal(existsSync("convex/communityArchiveRetrieval.ts"), false, "archive retrieval wrapper must stay deleted");
 assert.match(recentContext, /retrieval_version: "recent_context_v2"/);
-assert.match(runtimeAgentLoop, /communityRecentContext\.readCommunityRecentContextInternal/);
+assert.match(
+  runtimeAgentLoop,
+  /executePolynetCanonicalTool/,
+  "native resource access must execute through the canonical five-tool harness",
+);
+assert.doesNotMatch(
+  runtimeAgentLoop,
+  /communityRecentContext\.readCommunityRecentContextInternal/,
+  "native resource access must not restore the retired community_search wrapper",
+);
 assert.match(
   httpMcp,
   /executePolynetCanonicalTool/,
@@ -420,8 +429,18 @@ assert.match(
 );
 assert.match(
   attention,
-  /query\("communityResourceModules"[\s\S]*communityResourceIsLiveModulePage/,
-  "resource attention must filter resources through live modules",
+  /MAX_COMMUNITY_ATTENTION_RECENT_RESOURCES = 50/,
+  "resource attention must keep its recent-resource read bounded",
+);
+assert.match(
+  attention,
+  /referencedModuleIds[\s\S]*ctx\.db\.get\(moduleId[\s\S]*communityResourceIsLiveModulePage/,
+  "resource attention must resolve only referenced modules before applying live-module visibility",
+);
+assert.doesNotMatch(
+  attention,
+  /query\("communityResourceModules"/,
+  "resource attention must not restore the broad community-module scan",
 );
 assert.match(
   attention,
