@@ -225,6 +225,57 @@ describe("community weekly digest schedule foundation", () => {
     });
   });
 
+  it("synchronizes archive and restore immediately without creating a second row", async () => {
+    const t = convexTest(schema, modules);
+    const nowMs = 140_000;
+    const communityId = await t.run((ctx) => insertCommunity(ctx, "lifecycle-sync", nowMs));
+    const created = await t.mutation(
+      internalRefs.communityWeeklyDigestSchedule.ensureCommunityWeeklyDigestScheduleInternal,
+      { communityId, nowMs },
+    );
+    await t.run((ctx) =>
+      ctx.db.patch(communityId, {
+        lifecycleStatus: "archived",
+        lifecycleGeneration: 1,
+        updatedAt: nowMs + 1,
+      }),
+    );
+
+    await expect(
+      t.mutation(
+        internalRefs.communityWeeklyDigestSchedule.ensureCommunityWeeklyDigestScheduleInternal,
+        { communityId, nowMs: nowMs + 1 },
+      ),
+    ).resolves.toEqual({ status: "community_inactive", scheduleId: created.scheduleId });
+    await expect(t.run((ctx) => ctx.db.get(created.scheduleId))).resolves.toMatchObject({
+      status: "paused",
+      lastErrorCode: "community_lifecycle_changed",
+    });
+
+    await t.run((ctx) =>
+      ctx.db.patch(communityId, {
+        lifecycleStatus: "active",
+        lifecycleGeneration: 2,
+        updatedAt: nowMs + 2,
+      }),
+    );
+    await expect(
+      t.mutation(
+        internalRefs.communityWeeklyDigestSchedule.ensureCommunityWeeklyDigestScheduleInternal,
+        { communityId, nowMs: nowMs + 2 },
+      ),
+    ).resolves.toEqual({ status: "rescheduled", scheduleId: created.scheduleId });
+    const rows = await t.run((ctx) => ctx.db.query("communityWeeklyDigestSchedules").collect());
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      communityId,
+      communityLifecycleGeneration: 2,
+      status: "scheduled",
+      failureCount: 0,
+    });
+    expect(rows[0]!.nextAttemptAt).toBeGreaterThan(nowMs + 2);
+  });
+
   it("requires explicit recovery after the finite failure budget is exhausted", async () => {
     const t = convexTest(schema, modules);
     const nowMs = 160_000;

@@ -43,6 +43,7 @@ import {
 } from "./stripeConnectAccountCore";
 import { COMMUNITY_FUNDING_POLICY_MANAGED } from "../shared/founderInference";
 import { ensureGeneralChannel } from "./communityChannelCore";
+import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import {
   COMMUNITY_BUILDER_ACCESS_SUBSCRIPTION_REQUIRED,
@@ -704,6 +705,10 @@ export const createCommunity = mutation({
       activeMemberCount: 1,
       createdAt: nowMs,
       updatedAt: nowMs,
+    });
+    await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
+      communityId,
+      nowMs,
     });
     if (founderSubscription) {
       await ctx.db.patch(founderSubscription._id, {

@@ -177,12 +177,13 @@ per-run ceilings:
 - at most 8 rendered content items.
 
 The schedule foundation, historical member-email renderer, and bounded worker
-are present. The bounded worker is present but dormant: no digest cron or
-automatic schedule enrollment is active. It consumes only indexed due-work,
+are present. Lifecycle enrollment is wired atomically to the canonical
+community create, archive, and restore authorities. The bounded worker remains
+dormant because no digest cron is active. It consumes only indexed due-work,
 checkpoints recipient overflow, reuses one bounded content snapshot, and
-enqueues through the canonical idempotent outbox. Activation still requires an
-authenticated staging canary and explicit review of the resulting cost and
-delivery evidence.
+enqueues through the canonical idempotent outbox. Existing active communities
+must be enrolled once through the same idempotent lifecycle sync after release;
+that enrollment does not send email or activate recurring work.
 
 ## Confirmed Remediation Backlog
 
@@ -200,7 +201,7 @@ delivery evidence.
 | COST-010 | P2 | Project cost health into operator diagnostics | `partial` | invocation/read/write/compute/provider cost rollups link to redacted evidence |
 | COST-011 | P2 | Add the scheduled cost agent in alert-only mode | `deferred` | deterministic inputs, no mutation authority, concise incident report |
 | COST-012 | P3 | Consider bounded automated containment | `deferred` | each action is named, reversible, pre-authorized, tested, and produces a durable receipt |
-| COST-013 | P1 | Restore the protected weekly community digest | `bounded worker implemented; activation disabled` | indexed due-work, lifecycle fence, finite lease/retry, bounded recipient continuation, preference gate, outbox dedupe, staging cost evidence, then explicit cron activation |
+| COST-013 | P1 | Restore the protected weekly community digest | `lifecycle enrollment implemented; worker activation disabled` | indexed due-work, lifecycle fence, finite lease/retry, bounded recipient continuation, preference gate, outbox dedupe, explicit existing-community enrollment, then explicit cron activation |
 
 ## Required Deterministic Controls
 

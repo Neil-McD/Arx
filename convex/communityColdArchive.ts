@@ -26,6 +26,7 @@ import {
   cancelStripeSubscriptionIfActive,
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
+import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 
 const ARCHIVE_BILLING_BATCH_SIZE = 25;
 const ARCHIVE_BILLING_MAX_ATTEMPTS = 12;
@@ -208,6 +209,11 @@ export const archiveCommunity = mutation({
       shouldSchedule = true;
     }
 
+    await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
+      communityId: args.communityId,
+      nowMs,
+    });
+
     if (shouldSchedule && job) {
       await scheduleArchiveBillingWorker(ctx, job._id, 0);
     }
@@ -267,6 +273,10 @@ async function restoreCommunityWithoutPaymentHandler(ctx: any, args: {
 
   const lifecycle = normalizeCommunityLifecycle(community);
   if (lifecycle.status === "active") {
+    await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
+      communityId: args.communityId,
+      nowMs: Date.now(),
+    });
     return {
       ok: true,
       changed: false,
@@ -293,6 +303,10 @@ async function restoreCommunityWithoutPaymentHandler(ctx: any, args: {
     lifecycleStatus: transition.next.status,
     lifecycleGeneration: transition.next.generation,
     updatedAt: nowMs,
+  });
+  await syncCommunityWeeklyDigestScheduleForCommunity(ctx, {
+    communityId: args.communityId,
+    nowMs,
   });
   await recordCriticalAuditEvent(ctx, {
     eventKey: `community_restored:${String(args.communityId)}:${transition.next.generation}`,

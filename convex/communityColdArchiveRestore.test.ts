@@ -270,6 +270,10 @@ test.sequential("only verified paid checkout fulfillment restores exactly once",
           q.eq("eventType", "community_restored"),
         )
         .collect(),
+      digestSchedules: await ctx.db
+        .query("communityWeeklyDigestSchedules")
+        .withIndex("by_community", (q) => q.eq("communityId", fixture.communityId))
+        .collect(),
     }));
     expect(state.community).toMatchObject({
       lifecycleStatus: "active",
@@ -283,6 +287,13 @@ test.sequential("only verified paid checkout fulfillment restores exactly once",
       communityLifecycleGeneration: 1,
     });
     expect(state.audits).toHaveLength(1);
+    expect(state.digestSchedules).toHaveLength(1);
+    expect(state.digestSchedules[0]).toMatchObject({
+      communityLifecycleGeneration: 2,
+      status: "scheduled",
+      failureCount: 0,
+    });
+    expect(state.digestSchedules[0]!.nextAttemptAt).toBeGreaterThan(NOW_MS);
     expect(state.audits[0]).toMatchObject({
       communityId: fixture.communityId,
       provider: "stripe",
@@ -376,6 +387,10 @@ test.sequential("operator owner restoration is direct and idempotent", async () 
         q.eq("eventType", "community_restored"),
       )
       .collect(),
+    digestSchedules: await ctx.db
+      .query("communityWeeklyDigestSchedules")
+      .withIndex("by_community", (q) => q.eq("communityId", fixture.communityId))
+      .collect(),
   }));
   expect(state.community).toMatchObject({
     lifecycleStatus: "active",
@@ -383,6 +398,12 @@ test.sequential("operator owner restoration is direct and idempotent", async () 
     inferenceFundingPolicy: "managed_required",
   });
   expect(state.audits).toHaveLength(1);
+  expect(state.digestSchedules).toHaveLength(1);
+  expect(state.digestSchedules[0]).toMatchObject({
+    communityLifecycleGeneration: 2,
+    status: "scheduled",
+    failureCount: 0,
+  });
   expect(state.audits[0]).toMatchObject({
     actorUserId: fixture.ownerId,
     communityId: fixture.communityId,

@@ -513,6 +513,17 @@ test("a publish-ready first community consumes its verified Builder subscription
         attachedAt: expect.any(Number),
       });
       expect(await ctx.db.query("founderUsageCycles").collect()).toHaveLength(1);
+      const digestSchedules = await ctx.db
+        .query("communityWeeklyDigestSchedules")
+        .withIndex("by_community", (q) => q.eq("communityId", community._id))
+        .collect();
+      expect(digestSchedules).toHaveLength(1);
+      expect(digestSchedules[0]).toMatchObject({
+        communityLifecycleGeneration: 0,
+        status: "scheduled",
+        failureCount: 0,
+      });
+      expect(digestSchedules[0]!.nextAttemptAt).toBeGreaterThan(community.createdAt);
       return await resolveCommunityInferenceFundingAdmission(ctx, community._id);
     })).resolves.toMatchObject({
       ok: true,

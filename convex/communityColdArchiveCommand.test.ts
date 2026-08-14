@@ -9,6 +9,7 @@ import schema from "./schema";
 const modules = import.meta.glob([
   "./communityColdArchive.ts",
   "./communityCommerce.ts",
+  "./communityWeeklyDigestSchedule.ts",
   "./criticalAudit.ts",
   "./founderBilling.ts",
   "./_generated/**/*.*s",
@@ -156,6 +157,11 @@ test("only the owner can archive and repeated commands preserve one generation a
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
 
+  const digestSchedule = await t.mutation(
+    (internal as any).communityWeeklyDigestSchedule.ensureCommunityWeeklyDigestScheduleInternal,
+    { communityId: fixture.communityId, nowMs: NOW_MS },
+  );
+
   await expect(
     asMember.mutation((api as any).communityColdArchive.archiveCommunity, {
       communityId: fixture.communityId,
@@ -195,6 +201,7 @@ test("only the owner can archive and repeated commands preserve one generation a
         q.eq("communityId", fixture.communityId).eq("lifecycleGeneration", 1),
       )
       .collect(),
+    digestSchedule: await ctx.db.get(digestSchedule.scheduleId),
   }));
   expect(state.community).toMatchObject({
     lifecycleStatus: "archived",
@@ -203,6 +210,13 @@ test("only the owner can archive and repeated commands preserve one generation a
   expect(state.membership).toMatchObject({ active: true });
   expect(state.message).toMatchObject({ contentJson: { text: "Preserve me" } });
   expect(state.jobs).toHaveLength(1);
+  expect(state.digestSchedule).toMatchObject({
+    communityId: fixture.communityId,
+    communityLifecycleGeneration: 0,
+    status: "paused",
+    lastErrorCode: "community_lifecycle_changed",
+  });
+  expect((state.digestSchedule as any)?.nextAttemptAt).toBeUndefined();
 });
 
 test("cleanup work is ordered checkouts then connected members then founder and preserves content", async () => {

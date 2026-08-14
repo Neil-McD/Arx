@@ -19,6 +19,9 @@ const crons = read("convex/crons.ts");
 const contract = read("docs/platform-cost-safety-contract-v1.md");
 const agentContract = read("AGENTS.md");
 const snapshotValidators = read("convex/communityWeeklyDigestValidators.ts");
+const communityLifecycle = read("convex/communityLifecycle.ts");
+const communityColdArchive = read("convex/communityColdArchive.ts");
+const founderBilling = read("convex/founderBilling.ts");
 
 assert.equal(COMMUNITY_WEEKLY_DIGEST_MAX_COMMUNITIES_PER_RUN, 5);
 assert.equal(COMMUNITY_WEEKLY_DIGEST_MAX_RECIPIENTS_PER_COMMUNITY_BATCH, 50);
@@ -66,6 +69,41 @@ assert.match(
 );
 assert.match(
   schedule,
+  /syncCommunityWeeklyDigestScheduleForCommunity[\s\S]*if \(!community \|\| !communityIsActive\(community\)\)[\s\S]*status: "paused"[\s\S]*status: "community_inactive"/,
+  "one lifecycle sync authority must pause inactive communities",
+);
+assert.match(
+  schedule,
+  /syncCommunityWeeklyDigestScheduleForCommunity[\s\S]*communityLifecycleGeneration: lifecycle\.generation[\s\S]*status: "scheduled"[\s\S]*nextCommunityWeeklyDigestAt/,
+  "the lifecycle sync authority must schedule active communities",
+);
+assert.match(
+  schedule,
+  /ensureCommunityWeeklyDigestScheduleInternal[\s\S]*handler: syncCommunityWeeklyDigestScheduleForCommunity/,
+  "manual enrollment must delegate to the same lifecycle sync authority",
+);
+assert.match(
+  communityLifecycle,
+  /insert\("communities"[\s\S]*syncCommunityWeeklyDigestScheduleForCommunity\(ctx, \{[\s\S]*communityId,[\s\S]*nowMs/,
+  "community creation must enroll its digest schedule in the creation transaction",
+);
+assert.match(
+  communityColdArchive,
+  /archiveCommunity = mutation[\s\S]*syncCommunityWeeklyDigestScheduleForCommunity\(ctx, \{[\s\S]*communityId: args\.communityId,[\s\S]*nowMs/,
+  "community archive must pause its digest schedule in the archive transaction",
+);
+assert.match(
+  communityColdArchive,
+  /restoreCommunityWithoutPaymentHandler[\s\S]*syncCommunityWeeklyDigestScheduleForCommunity\(ctx, \{[\s\S]*communityId: args\.communityId,[\s\S]*nowMs/,
+  "grandfathered and operator restore must reschedule through the canonical lifecycle sync",
+);
+assert.match(
+  founderBilling,
+  /restoresArchivedCommunity[\s\S]*syncCommunityWeeklyDigestScheduleForCommunity\(args\.ctx, \{[\s\S]*communityId,[\s\S]*nowMs: args\.providerEventCreatedAt/,
+  "verified paid restore must reschedule through the canonical lifecycle sync",
+);
+assert.match(
+  schedule,
   /row\.leaseToken !== args\.leaseToken[\s\S]*status: "stale_lease"/,
   "settlement must reject stale or overlapping workers",
 );
@@ -81,8 +119,8 @@ assert.doesNotMatch(
 );
 assert.match(
   contract,
-  /protected MVP engagement requirement[\s\S]*bounded worker is present but dormant[\s\S]*no digest cron or\s+automatic schedule enrollment is active/,
-  "the contract must distinguish the dormant worker from activation",
+  /protected MVP engagement requirement[\s\S]*lifecycle enrollment is wired[\s\S]*no digest cron is active/i,
+  "the contract must distinguish lifecycle enrollment from worker activation",
 );
 assert.match(
   worker,

@@ -50,56 +50,86 @@ async function pauseInvalidCommunitySchedule(
   return true;
 }
 
+export async function syncCommunityWeeklyDigestScheduleForCommunity(
+  ctx: any,
+  args: {
+    communityId: any;
+    nowMs?: number;
+  },
+) {
+  const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
+  const [community, existing] = await Promise.all([
+    ctx.db.get(args.communityId),
+    ctx.db
+      .query("communityWeeklyDigestSchedules")
+      .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+      .unique(),
+  ]);
+
+  if (!community || !communityIsActive(community)) {
+    if (existing) {
+      await ctx.db.patch(existing._id, {
+        status: "paused",
+        nextAttemptAt: undefined,
+        recipientCursor: undefined,
+        periodStartDay: undefined,
+        periodEndDay: undefined,
+        digestSnapshot: undefined,
+        leaseToken: undefined,
+        leaseExpiresAt: undefined,
+        lastErrorCode: community ? "community_lifecycle_changed" : "community_missing",
+        updatedAt: nowMs,
+      });
+    }
+    return {
+      status: "community_inactive" as const,
+      scheduleId: existing?._id ?? null,
+    };
+  }
+
+  const lifecycle = normalizeCommunityLifecycle(community);
+  if (existing) {
+    if (
+      existing.communityLifecycleGeneration === lifecycle.generation &&
+      existing.status !== "paused"
+    ) {
+      return { status: "existing" as const, scheduleId: existing._id };
+    }
+    await ctx.db.patch(existing._id, {
+      communityLifecycleGeneration: lifecycle.generation,
+      status: "scheduled",
+      nextAttemptAt: nextCommunityWeeklyDigestAt(args.communityId, nowMs),
+      recipientCursor: undefined,
+      periodStartDay: undefined,
+      periodEndDay: undefined,
+      digestSnapshot: undefined,
+      failureCount: 0,
+      leaseToken: undefined,
+      leaseExpiresAt: undefined,
+      lastErrorCode: undefined,
+      updatedAt: nowMs,
+    });
+    return { status: "rescheduled" as const, scheduleId: existing._id };
+  }
+
+  const scheduleId = await ctx.db.insert("communityWeeklyDigestSchedules", {
+    communityId: args.communityId,
+    communityLifecycleGeneration: lifecycle.generation,
+    status: "scheduled",
+    nextAttemptAt: nextCommunityWeeklyDigestAt(args.communityId, nowMs),
+    failureCount: 0,
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  return { status: "created" as const, scheduleId };
+}
+
 export const ensureCommunityWeeklyDigestScheduleInternal = internalMutation({
   args: {
     communityId: v.id("communities"),
     nowMs: v.optional(v.number()),
   },
-  handler: async (ctx, args) => {
-    const nowMs = Number.isFinite(args.nowMs) ? Math.floor(args.nowMs as number) : Date.now();
-    const community = await ctx.db.get(args.communityId);
-    if (!community || !communityIsActive(community)) {
-      return { status: "community_inactive" as const, scheduleId: null };
-    }
-    const lifecycle = normalizeCommunityLifecycle(community);
-    const existing = await ctx.db
-      .query("communityWeeklyDigestSchedules")
-      .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
-      .unique();
-    if (existing) {
-      if (
-        existing.communityLifecycleGeneration === lifecycle.generation &&
-        existing.status !== "paused"
-      ) {
-        return { status: "existing" as const, scheduleId: existing._id };
-      }
-      await ctx.db.patch(existing._id, {
-        communityLifecycleGeneration: lifecycle.generation,
-        status: "scheduled",
-        nextAttemptAt: nextCommunityWeeklyDigestAt(args.communityId, nowMs),
-        recipientCursor: undefined,
-        periodStartDay: undefined,
-        periodEndDay: undefined,
-        digestSnapshot: undefined,
-        failureCount: 0,
-        leaseToken: undefined,
-        leaseExpiresAt: undefined,
-        lastErrorCode: undefined,
-        updatedAt: nowMs,
-      });
-      return { status: "rescheduled" as const, scheduleId: existing._id };
-    }
-    const scheduleId = await ctx.db.insert("communityWeeklyDigestSchedules", {
-      communityId: args.communityId,
-      communityLifecycleGeneration: lifecycle.generation,
-      status: "scheduled",
-      nextAttemptAt: nextCommunityWeeklyDigestAt(args.communityId, nowMs),
-      failureCount: 0,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    });
-    return { status: "created" as const, scheduleId };
-  },
+  handler: syncCommunityWeeklyDigestScheduleForCommunity,
 });
 
 export const claimDueCommunityWeeklyDigestSchedulesInternal = internalMutation({

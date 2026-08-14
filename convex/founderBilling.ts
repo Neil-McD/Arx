@@ -43,6 +43,7 @@ import {
   expireStripeCheckoutSessionIfOpen,
 } from "./stripeSubscriptionCancellation";
 import { requireCompletedCommunityArchiveBillingCleanup } from "./communityColdArchive";
+import { syncCommunityWeeklyDigestScheduleForCommunity } from "./communityWeeklyDigestSchedule";
 import { recordCriticalAuditEvent } from "./criticalAudit";
 import {
   hashFounderCheckoutRecoveryEmail,
@@ -819,6 +820,10 @@ async function syncFounderSubscription(args: {
       lifecycleGeneration: transition.next.generation,
       inferenceFundingPolicy: COMMUNITY_FUNDING_POLICY_MANAGED,
       updatedAt: args.providerEventCreatedAt,
+    });
+    await syncCommunityWeeklyDigestScheduleForCommunity(args.ctx, {
+      communityId,
+      nowMs: args.providerEventCreatedAt,
     });
     await recordCriticalAuditEvent(args.ctx, {
       eventKey: `community_restored:${String(communityId)}:${transition.next.generation}`,
