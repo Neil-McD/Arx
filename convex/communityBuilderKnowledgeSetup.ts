@@ -23,6 +23,7 @@ const SAFE_BUILDER_KNOWLEDGE_FAILURE_CODES = new Set([
   "invalid_architect_proposal",
   "builder_knowledge_content_incomplete",
   "builder_knowledge_build_lease_lost",
+  "builder_knowledge_resource_output_required",
 ]);
 
 const SAFE_ARCHITECT_FAILURE_REASONS = new Set([
@@ -233,6 +234,25 @@ export const completeBuilderKnowledgeBuildInternal = internalMutation({
     if (community.builderKnowledgeBuildStage !== "content") {
       throw new Error("builder_knowledge_build_content_required");
     }
+    const resourceOutput = await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_role_status", (q: any) =>
+        q.eq("communityId", args.communityId).eq("role", "page"),
+      )
+      .filter((q: any) =>
+        q.and(
+          q.neq(q.field("sourceResourceId"), undefined),
+          q.neq(q.field("moduleId"), undefined),
+          q.or(
+            q.eq(q.field("status"), "review"),
+            q.eq(q.field("status"), "published"),
+          ),
+        ),
+      )
+      .first();
+    if (!resourceOutput) {
+      throw new Error("builder_knowledge_resource_output_required");
+    }
     return await completeBuilderKnowledgeSetupCore(ctx, {
       community,
       userId: args.userId,
@@ -375,7 +395,10 @@ export async function buildBuilderKnowledgeResourcesCore(
         ...completed,
         kind: "builder_knowledge_build",
       };
-    } catch {
+    } catch (error) {
+      failureCode = normalizeSafeFailureCode(
+        error instanceof Error ? error.message : failureCode,
+      );
       console.warn("builder_knowledge_build_failed", {
         code: failureCode,
         failure_stage: failureStage,

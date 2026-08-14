@@ -151,7 +151,7 @@ test("Builder knowledge completion is owner-only, active-only, and idempotent", 
   }
 });
 
-test("Builder knowledge build lease is exclusive and resumes from its durable stage", async () => {
+test("Builder knowledge build lease is exclusive and completion requires canonical resource output", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: "builder-knowledge-owner" });
@@ -229,6 +229,77 @@ test("Builder knowledge build lease is exclusive and resumes from its durable st
       userId: fixture.ownerId,
       leaseToken: "lease-three",
       nowMs: nowMs + 5,
+    },
+  )).rejects.toThrow("builder_knowledge_resource_output_required");
+
+  await expect(t.run(async (ctx) => {
+    const community = await ctx.db.get(fixture.pendingCommunityId);
+    const welcomeRoots = await ctx.db
+      .query("communityInteractionRoots")
+      .withIndex("by_community_idempotencyKey", (q) => q
+        .eq("communityId", fixture.pendingCommunityId)
+        .eq(
+          "idempotencyKey",
+          `community_canonical_agent:root:founder_welcome:v1:${fixture.pendingCommunityId}`,
+        ))
+      .collect();
+    return { community, welcomeRoots };
+  })).resolves.toMatchObject({
+    community: {
+      builderKnowledgeSetupPending: true,
+      builderKnowledgeBuildLeaseToken: "lease-three",
+    },
+    welcomeRoots: [],
+  });
+
+  await t.run(async (ctx) => {
+    const sourceId = await ctx.db.insert("communityResources", {
+      communityId: fixture.pendingCommunityId,
+      createdByUserId: fixture.ownerId,
+      type: "link",
+      role: "source",
+      status: "review",
+      title: "Founder source",
+      bodyChars: 100,
+      sourceIngestionStatus: "ready",
+      sourceIngestionKind: "url",
+      pinned: false,
+      createdAt: nowMs + 5,
+      updatedAt: nowMs + 5,
+    });
+    const moduleId = await ctx.db.insert("communityResourceModules", {
+      communityId: fixture.pendingCommunityId,
+      createdByUserId: fixture.ownerId,
+      status: "draft",
+      name: "Getting started",
+      sortOrder: 1000,
+      createdAt: nowMs + 5,
+      updatedAt: nowMs + 5,
+    });
+    await ctx.db.insert("communityResources", {
+      communityId: fixture.pendingCommunityId,
+      moduleId,
+      createdByUserId: fixture.ownerId,
+      type: "post",
+      role: "page",
+      status: "review",
+      sourceResourceId: sourceId,
+      title: "Founder guide",
+      bodyChars: 200,
+      pinned: false,
+      sortOrder: 1000,
+      createdAt: nowMs + 5,
+      updatedAt: nowMs + 5,
+    });
+  });
+
+  await expect(t.mutation(
+    internal.communityBuilderKnowledgeSetup.completeBuilderKnowledgeBuildInternal,
+    {
+      communityId: fixture.pendingCommunityId,
+      userId: fixture.ownerId,
+      leaseToken: "lease-three",
+      nowMs: nowMs + 6,
     },
   )).resolves.toMatchObject({ ok: true, changed: true });
 

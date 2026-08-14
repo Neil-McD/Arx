@@ -94,4 +94,50 @@ describe("builder knowledge build failure boundary", () => {
     expect(result.code).toBe("builder_knowledge_build_failed");
     expect(result).not.toHaveProperty("failure_reason");
   });
+
+  it("preserves onboarding and releases the lease when completion has no resource output", async () => {
+    const warning = vi.spyOn(console, "warn").mockImplementation(() => {});
+    let mutationCount = 0;
+    const ctx = {
+      runMutation: async () => {
+        mutationCount += 1;
+        if (mutationCount <= 2) {
+          return {
+            ok: true,
+            complete: false,
+            user_id: "user_owner",
+            stage: "content",
+          };
+        }
+        if (mutationCount === 3) {
+          throw new Error("builder_knowledge_resource_output_required");
+        }
+        return { ok: true, changed: true };
+      },
+      runAction: async () => ({
+        ok: true,
+        candidates: 0,
+        drafted: 0,
+      }),
+      runQuery: async () => ({ candidates: [] }),
+    };
+
+    const result = await buildBuilderKnowledgeResourcesCore(ctx, {
+      communityId: "community_1",
+    });
+
+    expect(result).toEqual({
+      ok: false,
+      kind: "builder_knowledge_build",
+      code: "builder_knowledge_resource_output_required",
+      failure_stage: "setup_completion",
+      message: "Polynet could not finish building your resources. Try again.",
+    });
+    expect(mutationCount).toBe(4);
+    expect(warning).toHaveBeenCalledWith("builder_knowledge_build_failed", {
+      code: "builder_knowledge_resource_output_required",
+      failure_stage: "setup_completion",
+      failure_reason: null,
+    });
+  });
 });
