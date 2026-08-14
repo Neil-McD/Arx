@@ -49,6 +49,7 @@ import {
 import { useWebPublicCommunityUiController } from "./controllers/useWebPublicCommunityUiController";
 import { useWebAccountSetupSurfaceController } from "./controllers/useWebAccountSetupSurfaceController";
 import { useWebFounderBillingController } from "./controllers/useWebFounderBillingController";
+import { useWebEmailPreferencesController } from "./controllers/useWebEmailPreferencesController";
 import { useWebPublicBuilderCheckoutController } from "./controllers/useWebPublicBuilderCheckoutController";
 import { useWebCommunityVoiceController } from "./controllers/useWebCommunityVoiceController";
 import { useWebCommunityProfileHydrationController } from "./controllers/useWebCommunityProfileHydrationController";
@@ -2500,6 +2501,10 @@ export default function App() {
       enterJoinedCommunity,
       openPublicCommunityFunnel,
     });
+  const emailPreferences = useWebEmailPreferencesController({
+    session,
+    isEnabled: activePage === "settings" && settingsGroup === "account",
+  });
   const settingsPanelsProps: WebSettingsPanelsProps = {
     settingsGroup: settingsGroup as SettingsGroup,
     profile: {
@@ -2525,6 +2530,15 @@ export default function App() {
       onOpenCreateCommunity: () => openNewCommunityPurchaseFlow(),
       retryCommunityArchive: founderBilling.retryArchiveCleanup,
       restoreCommunityWithoutPayment: founderBilling.restoreCommunityWithoutPayment,
+    },
+    emailPreferences: {
+      isVisible: Boolean(session),
+      weeklyDigestEnabled: emailPreferences.weeklyDigestEnabled,
+      hasLoaded: emailPreferences.hasLoaded,
+      isLoading: emailPreferences.isLoading,
+      isSaving: emailPreferences.isSaving,
+      error: emailPreferences.error,
+      onChangeWeeklyDigestEnabled: emailPreferences.updateWeeklyDigestEnabled,
     },
     billing: {
       session,

@@ -49,6 +49,8 @@ This file is the execution contract for agents working in this repository.
   community, not hosted AI. There is no personal paid plan or commercial
   account tier.
 - Provider-cost evidence, usage receipts, and rate/provider-quota enforcement.
+- Weekly community digest email automation with indexed due-work, bounded
+  fanout, recipient preferences, and idempotent delivery.
 - Community-scoped AI agent interactions embedded in community surfaces.
 - Official Polynet MCP access for external agent harnesses.
 - One authenticated capability surface; tool/provider usage is platform-funded

@@ -10,6 +10,7 @@ import {
   communityIsActive,
   communityLifecycleGenerationMatches,
 } from "../shared/communityLifecycle";
+import { communityMembershipRowIsActive } from "./communityCore";
 
 const EMAIL_TEMPLATE_VALIDATOR = v.union(
   ...EMAIL_TEMPLATE_KEYS.map((value) => v.literal(value)),
@@ -74,12 +75,16 @@ function isStaleSendingRow(row: Record<string, unknown>, nowMs: number): boolean
 
 function isPreferenceControlledTemplate(templateKey: EmailTemplateKey): boolean {
   return (
+    templateKey === "weekly_member_digest" ||
     templateKey === "event_reminder" ||
     templateKey === "mention_notification"
   );
 }
 
 function preferenceAllowsTemplate(preferences: Record<string, unknown>, templateKey: EmailTemplateKey): boolean {
+  if (templateKey === "weekly_member_digest") {
+    return preferences.weeklyDigestEnabled !== false;
+  }
   if (templateKey === "mention_notification") {
     return preferences.mentionEmailsEnabled !== false;
   }
@@ -122,12 +127,14 @@ async function getEmailPreferencesByUserId(ctx: any, userId: any): Promise<Recor
     .first();
   return row
     ? {
+        weeklyDigestEnabled: row.weeklyDigestEnabled !== false,
         eventReminderEnabled: Boolean(row.eventReminderEnabled),
         // Opt-out (absent = enabled): keeps the outbox-layer gate real so a
         // preference change between enqueue and send is still honored.
         mentionEmailsEnabled: row.mentionEmailsEnabled !== false,
       }
     : {
+        weeklyDigestEnabled: true,
         eventReminderEnabled: true,
         mentionEmailsEnabled: true,
       };
@@ -138,6 +145,23 @@ async function findExistingDedupeRow(ctx: any, dedupeKey: string) {
     .query("emailOutbox")
     .withIndex("by_dedupeKey", (q: any) => q.eq("dedupeKey", dedupeKey))
     .first();
+}
+
+async function weeklyDigestRecipientHasCommunityAccess(
+  ctx: any,
+  communityId: any,
+  userId: any,
+): Promise<boolean> {
+  const community = await ctx.db.get(communityId);
+  if (!community || !communityIsActive(community)) return false;
+  if (String(community.ownerId) === String(userId)) return true;
+  const membership = await ctx.db
+    .query("communityMemberships")
+    .withIndex("by_community_user", (q: any) =>
+      q.eq("communityId", communityId).eq("userId", userId),
+    )
+    .unique();
+  return communityMembershipRowIsActive(membership);
 }
 
 export const enqueueEmailJobInternal = internalMutation({
@@ -179,7 +203,10 @@ export const enqueueEmailJobInternal = internalMutation({
     const dedupeKey = readString(args.dedupeKey) || null;
     if (dedupeKey) {
       const existing = await findExistingDedupeRow(ctx, dedupeKey);
-      if (existing && ["pending", "sending", "sent"].includes(existing.status)) {
+      if (
+        existing &&
+        ["pending", "sending", "sent", "failed", "suppressed"].includes(existing.status)
+      ) {
         return {
           ok: true,
           deduped: true,
@@ -214,6 +241,20 @@ export const enqueueEmailJobInternal = internalMutation({
       }
     } else {
       recipientEmail = normalizeRecipientEmail(rawRecipientEmail);
+    }
+
+    if (
+      !suppressionReason &&
+      templateKey === "weekly_member_digest" &&
+      args.communityId &&
+      recipientUserId &&
+      !(await weeklyDigestRecipientHasCommunityAccess(
+        ctx,
+        args.communityId,
+        recipientUserId,
+      ))
+    ) {
+      suppressionReason = "community_membership_inactive";
     }
 
     const preferences =
@@ -283,6 +324,33 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
           await ctx.db.patch(row._id, {
             status: "suppressed",
             failureReason: "community_inactive",
+            updatedAt: nowMs,
+          });
+          continue;
+        }
+      }
+      if (row.recipientUserId && isPreferenceControlledTemplate(row.templateKey as EmailTemplateKey)) {
+        if (
+          row.templateKey === "weekly_member_digest" &&
+          row.communityId &&
+          !(await weeklyDigestRecipientHasCommunityAccess(
+            ctx,
+            row.communityId,
+            row.recipientUserId,
+          ))
+        ) {
+          await ctx.db.patch(row._id, {
+            status: "suppressed",
+            failureReason: "community_membership_inactive",
+            updatedAt: nowMs,
+          });
+          continue;
+        }
+        const preferences = await getEmailPreferencesByUserId(ctx, row.recipientUserId);
+        if (!preferenceAllowsTemplate(preferences, row.templateKey as EmailTemplateKey)) {
+          await ctx.db.patch(row._id, {
+            status: "suppressed",
+            failureReason: "email_preference_disabled",
             updatedAt: nowMs,
           });
           continue;

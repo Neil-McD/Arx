@@ -4,6 +4,7 @@ export const EMAIL_TEMPLATE_KEYS = [
   "community_access_granted",
   "billing_issue",
   "founder_checkout_recovery",
+  "weekly_member_digest",
   "event_reminder",
   "mention_notification",
   "dm_message_notification",
@@ -15,6 +16,13 @@ export type RenderedEmail = {
   subject: string;
   html: string;
   text: string;
+};
+
+type DigestItem = {
+  title: string;
+  summary?: string;
+  url?: string;
+  meta?: string;
 };
 
 function readEnv(name: string): string {
@@ -69,6 +77,10 @@ function readString(value: unknown): string {
   return typeof value === "string" ? value.trim() : "";
 }
 
+function readArray(value: unknown): unknown[] {
+  return Array.isArray(value) ? value : [];
+}
+
 function normalizeTemplateKey(value: unknown): EmailTemplateKey {
   const normalized = String(value ?? "").trim();
   if ((EMAIL_TEMPLATE_KEYS as readonly string[]).includes(normalized)) {
@@ -83,10 +95,44 @@ function renderButton(label: string, url: string): string {
     <div style="margin:24px 0 0;">
       <a
         href="${escapeHtml(url)}"
-        style="display:inline-block;padding:12px 18px;border-radius:12px;background:#f26b9a;color:#0c0d11;text-decoration:none;font-weight:700;"
+        style="display:inline-block;padding:12px 18px;border-radius:12px;background:#f1ede5;color:#0a0a0a;text-decoration:none;font-weight:700;"
       >${escapeHtml(label)}</a>
     </div>
   `;
+}
+
+function renderDigestItems(items: DigestItem[]): { html: string; text: string } {
+  if (items.length === 0) {
+    return { html: "", text: "" };
+  }
+  const html = items
+    .map((item) => {
+      const meta = readString(item.meta);
+      const summary = readString(item.summary);
+      const url = readString(item.url);
+      return `
+        <div style="margin:0 0 16px;padding:16px;border:1px solid #3a3a3a;border-radius:14px;background:#222222;">
+          <div style="font-size:16px;font-weight:700;color:#fcf8f0;">${escapeHtml(item.title)}</div>
+          ${meta ? `<div style="margin-top:6px;font-size:12px;color:#b3ad9f;">${escapeHtml(meta)}</div>` : ""}
+          ${summary ? `<div style="margin-top:10px;font-size:14px;line-height:1.55;color:#d6d0c6;">${escapeHtml(summary)}</div>` : ""}
+          ${url ? `<div style="margin-top:12px;"><a href="${escapeHtml(url)}" style="color:#f1ede5;text-decoration:none;font-weight:600;">Open</a></div>` : ""}
+        </div>
+      `;
+    })
+    .join("");
+  const text = items
+    .map((item) =>
+      [
+        item.title,
+        readString(item.meta),
+        readString(item.summary),
+        readString(item.url),
+      ]
+        .filter(Boolean)
+        .join("\n"),
+    )
+    .join("\n\n");
+  return { html, text };
 }
 
 function buildEmailShell(params: {
@@ -110,10 +156,10 @@ function buildEmailShell(params: {
   if (footerNote) textParts.push(footerNote);
   return {
     html: `
-      <div style="margin:0;padding:24px;background:#0f1116;color:#f3f4f6;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
-        <div style="max-width:640px;margin:0 auto;padding:24px 28px 28px;border:1px solid #1f2430;border-radius:20px;background:#12151c;">
+      <div style="margin:0;padding:24px;background:#111113;color:#fcf8f0;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;">
+        <div style="max-width:640px;margin:0 auto;padding:24px 28px 28px;border:1px solid #3a3a3a;border-radius:20px;background:#1a1a1a;">
           <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:14px;">
-            <div style="display:flex;align-items:center;gap:12px;font-size:18px;font-weight:800;color:#f3f4f6;">
+            <div style="display:flex;align-items:center;gap:12px;font-size:18px;font-weight:800;color:#fcf8f0;">
               <img
                 src="${escapeHtml(logoUrl)}"
                 alt=""
@@ -124,14 +170,14 @@ function buildEmailShell(params: {
               <span>Polynet</span>
             </div>
           </div>
-          <div style="font-size:28px;line-height:1.15;font-weight:800;color:#f3f4f6;">${escapeHtml(params.title)}</div>
-          ${subtitle ? `<div style="margin-top:10px;font-size:14px;color:#98a1b3;">${escapeHtml(subtitle)}</div>` : ""}
-          ${intro ? `<div style="margin-top:18px;font-size:15px;line-height:1.6;color:#d0d6e0;">${escapeHtml(intro)}</div>` : ""}
+          <div style="font-size:28px;line-height:1.15;font-weight:800;color:#fcf8f0;">${escapeHtml(params.title)}</div>
+          ${subtitle ? `<div style="margin-top:10px;font-size:14px;color:#b3ad9f;">${escapeHtml(subtitle)}</div>` : ""}
+          ${intro ? `<div style="margin-top:18px;font-size:15px;line-height:1.6;color:#d6d0c6;">${escapeHtml(intro)}</div>` : ""}
           ${bodyHtml ? `<div style="margin-top:20px;">${bodyHtml}</div>` : ""}
           ${renderButton(ctaLabel, ctaUrl)}
           ${
             footerNote
-              ? `<div style="margin-top:24px;font-size:12px;line-height:1.5;color:#7e8698;">${escapeHtml(footerNote)}</div>`
+              ? `<div style="margin-top:24px;font-size:12px;line-height:1.5;color:#9c968a;">${escapeHtml(footerNote)}</div>`
               : ""
           }
         </div>
@@ -171,7 +217,17 @@ export function renderEmailTemplate(params: {
   const templateKey = normalizeTemplateKey(params.templateKey);
   const payload = asRecord(params.payload);
   const communityName = readString(payload.communityName) || "your community";
+  const dateLabel = readString(payload.dateLabel);
   const eventTitle = readString(payload.eventTitle) || "Your event";
+  const items = readArray(payload.items)
+    .map((item) => asRecord(item))
+    .filter((item) => readString(item.title))
+    .map((item) => ({
+      title: readString(item.title),
+      summary: readString(item.summary) || undefined,
+      url: readString(item.url) || undefined,
+      meta: readString(item.meta) || undefined,
+    }));
 
   switch (templateKey) {
     case "community_access_granted":
@@ -198,6 +254,25 @@ export function renderEmailTemplate(params: {
         "Sign in with this email to finish your account and launch your community.",
         "Continue setup",
       );
+    case "weekly_member_digest": {
+      const renderedItems = renderDigestItems(items);
+      const shell = buildEmailShell({
+        title: `${communityName} weekly digest`,
+        subtitle: dateLabel ? `For ${dateLabel}` : communityName,
+        intro:
+          readString(payload.intro) ||
+          `Here's what mattered in ${communityName} this week.`,
+        ctaLabel: readString(payload.ctaLabel) || "Catch up",
+        ctaUrl: readString(payload.actionUrl),
+        bodyHtml: renderedItems.html,
+        footerNote: readString(payload.footerNote),
+      });
+      return {
+        subject: `${communityName} weekly digest${dateLabel ? ` for ${dateLabel}` : ""}`,
+        html: shell.html,
+        text: [shell.text, renderedItems.text].filter(Boolean).join("\n\n"),
+      };
+    }
     case "mention_notification": {
       const communityName = readString((payload as any)?.communityName) || "your community";
       const mentionerName = readString((payload as any)?.mentionerName) || "A community member";

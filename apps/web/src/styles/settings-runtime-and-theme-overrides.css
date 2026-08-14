@@ -4377,6 +4377,60 @@ button.message-citation-chip:hover {
   color: var(--text-primary);
 }
 
+.email-preference-row {
+  min-height: 38px;
+}
+
+.settings-preference-switch {
+  position: relative;
+  width: 38px;
+  height: 22px;
+  flex: 0 0 auto;
+  padding: 0;
+  border: 1px solid var(--border-muted);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card-alt) 92%, transparent);
+  cursor: pointer;
+  transition:
+    background 120ms ease,
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+
+.settings-preference-switch-thumb {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--text-faint);
+  transition:
+    transform 120ms ease,
+    background 120ms ease;
+}
+
+.settings-preference-switch.is-on {
+  border-color: color-mix(in srgb, var(--accent-selection) 54%, var(--border-muted));
+  background: color-mix(in srgb, var(--accent-selection) 18%, transparent);
+}
+
+.settings-preference-switch.is-on .settings-preference-switch-thumb {
+  transform: translateX(16px);
+  background: var(--accent-selection);
+}
+
+.settings-preference-switch:focus-visible {
+  outline: none;
+  border-color: var(--accent-selection);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent-selection) 20%, transparent);
+}
+
+.settings-preference-switch:disabled {
+  cursor: default;
+  opacity: 0.5;
+}
+
 .agent-name-input {
   margin-bottom: 10px;
   font-family: inherit;

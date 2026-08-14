@@ -129,7 +129,6 @@ for (const retiredCronName of [
   "process queued community mention broadcasts",
   "process canceled community mention broadcast cleanups",
   "process pending community agent mentions",
-  "enqueue weekly community digests",
 ]) {
   assert.ok(
     !declaredCronNames.includes(retiredCronName),
@@ -139,7 +138,7 @@ for (const retiredCronName of [
 assert.doesNotMatch(
   crons,
   /emailDigests|weekly_(?:member|founder)_digest/,
-  "retired weekly digest scheduling must stay deleted",
+  "weekly digest delivery must stay disabled until its bounded worker is proven",
 );
 assert.doesNotMatch(
   communityHeartbeat,
@@ -161,10 +160,20 @@ assert.match(
   /currentRevision !== args\.revision[\s\S]*newer_memory_work[\s\S]*memoryMetabolismPending: false/,
   "community memory settlement must preserve newer concurrent work",
 );
+assert.match(
+  emailCore,
+  /"weekly_member_digest"[\s\S]*case "weekly_member_digest"/,
+  "the protected weekly member digest renderer must remain available",
+);
 assert.doesNotMatch(
   emailCore,
-  /weekly_(?:member|founder)_digest/,
-  "retired weekly digest renderers must stay deleted",
+  /weekly_founder_digest/,
+  "the unused founder digest duplicate must remain deleted",
+);
+assert.match(
+  contract,
+  /Weekly community digests are a protected MVP engagement requirement[\s\S]*at most 5 communities claimed[\s\S]*at most 50 recipients from one community batch[\s\S]*at most 100 recipients across the entire run[\s\S]*at most 8 rendered content items/,
+  "weekly digest requirement and hard cost ceilings must remain explicit",
 );
 assert.doesNotMatch(
   previewProxy,

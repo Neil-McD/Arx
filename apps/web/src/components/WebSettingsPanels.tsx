@@ -11,6 +11,10 @@ import {
 } from "./WebAccountSettingsSection";
 import { WebAppearanceSettingsSection } from "./WebAppearanceSettingsSection";
 import {
+  WebEmailPreferencesSection,
+  type WebEmailPreferencesSectionProps,
+} from "./WebEmailPreferencesSection";
+import {
   WebBillingSettingsSection,
   type WebBillingSettingsSectionProps,
 } from "./WebBillingSettingsSection";
@@ -33,6 +37,7 @@ export type WebSettingsPanelsProps = {
     }) => Promise<boolean | void> | boolean | void;
   };
   account: WebAccountSettingsSectionProps;
+  emailPreferences: WebEmailPreferencesSectionProps;
   billing: WebBillingSettingsSectionProps;
   appearance: {
     appTheme: AppTheme;
@@ -91,6 +96,7 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
       return (
         <>
           <WebAccountSettingsSection {...props.account} />
+          <WebEmailPreferencesSection {...props.emailPreferences} />
           <WebPolynetMcpAccountSection session={props.account.session} />
         </>
       );

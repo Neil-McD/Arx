@@ -1,6 +1,7 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
+import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestValidators";
 
 export default defineSchema({
   users: defineTable({
@@ -888,9 +889,9 @@ export default defineSchema({
 
   emailPreferences: defineTable({
     userId: v.id("users"),
-    // Compatibility-only fields for deployments with pre-retirement rows.
-    // No runtime reads or writes these values.
+    // Absent means enabled so restored digest delivery remains migration-free.
     weeklyDigestEnabled: v.optional(v.boolean()),
+    // Compatibility-only field for deployments with pre-retirement rows.
     founderDigestEnabled: v.optional(v.boolean()),
     eventReminderEnabled: v.boolean(),
     // Mention ping emails; absent means enabled.
@@ -901,6 +902,35 @@ export default defineSchema({
     createdAt: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // One bounded scheduling authority per community. This stores only control
+  // state; rendered email payloads and delivery receipts remain in emailOutbox.
+  communityWeeklyDigestSchedules: defineTable({
+    communityId: v.id("communities"),
+    communityLifecycleGeneration: v.number(),
+    status: v.union(
+      v.literal("scheduled"),
+      v.literal("processing"),
+      v.literal("paused"),
+      v.literal("needs_attention"),
+    ),
+    nextAttemptAt: v.optional(v.number()),
+    periodStartDay: v.optional(v.string()),
+    periodEndDay: v.optional(v.string()),
+    recipientCursor: v.optional(v.string()),
+    // One temporary member-safe payload reused across paginated recipient
+    // batches. It is cleared when the weekly run completes.
+    digestSnapshot: v.optional(communityWeeklyDigestSnapshotValidator),
+    failureCount: v.number(),
+    leaseToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    lastErrorCode: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_status_nextAttemptAt", ["status", "nextAttemptAt"])
+    .index("by_status_leaseExpiresAt", ["status", "leaseExpiresAt"]),
 
   emailOutbox: defineTable({
     kind: v.string(),

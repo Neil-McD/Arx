@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { ensureAuthenticatedActor } from "./authActor";
 
 const DEFAULT_EMAIL_PREFERENCES = {
+  weeklyDigestEnabled: true,
   eventReminderEnabled: true,
   founderAdminEmailsEnabled: true,
 } as const;
@@ -28,6 +29,9 @@ async function ensureEmailPreferencesRow(ctx: any, userId: any, nowMs: number) {
 
 function toPublicPreferences(row: any) {
   return {
+    weekly_digest_enabled: Boolean(
+      row?.weeklyDigestEnabled ?? DEFAULT_EMAIL_PREFERENCES.weeklyDigestEnabled,
+    ),
     event_reminder_enabled: Boolean(row?.eventReminderEnabled ?? DEFAULT_EMAIL_PREFERENCES.eventReminderEnabled),
     updated_at: typeof row?.updatedAt === "number" ? row.updatedAt : null,
   };
@@ -50,6 +54,7 @@ export const getMyEmailPreferences = query({
 export const updateMyEmailPreferences = mutation({
   args: {
     authSubject: v.optional(v.string()),
+    weeklyDigestEnabled: v.optional(v.boolean()),
     eventReminderEnabled: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
@@ -60,6 +65,7 @@ export const updateMyEmailPreferences = mutation({
     const nowMs = Date.now();
     const existing = await ensureEmailPreferencesRow(ctx, actor.dbUserId, nowMs);
     const patch: Record<string, unknown> = {};
+    if (typeof args.weeklyDigestEnabled === "boolean") patch.weeklyDigestEnabled = args.weeklyDigestEnabled;
     if (typeof args.eventReminderEnabled === "boolean") patch.eventReminderEnabled = args.eventReminderEnabled;
     if (Object.keys(patch).length === 0) return toPublicPreferences(existing);
     patch.updatedAt = nowMs;
@@ -76,6 +82,7 @@ export const getEmailPreferencesByUserIdInternal = internalQuery({
     const row = await getEmailPreferencesRowByUserId(ctx, args.userId);
     return row
       ? {
+          weeklyDigestEnabled: row.weeklyDigestEnabled !== false,
           eventReminderEnabled: Boolean(row.eventReminderEnabled),
           founderAdminEmailsEnabled: Boolean(row.founderAdminEmailsEnabled),
         }

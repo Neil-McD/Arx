@@ -165,9 +165,24 @@ The existence of a batch limit does not prove cost safety. Each job still needs
 an indexed due-work query, bounded downstream fanout, idempotency where it
 writes, and evidence that empty runs are cheap.
 
-Weekly community digests are retired. Their scheduler, builder, templates, and
-runtime preference gates have no MVP owner and must not be reintroduced without
-a new product requirement and explicit recurring-work declaration.
+Weekly community digests are a protected MVP engagement requirement, but their
+previous broad-scan scheduler remains retired. Restoration is gated on one
+indexed schedule row per community, lifecycle fencing, finite leases and
+retries, paginated recipient continuation, outbox deduplication, and these hard
+per-run ceilings:
+
+- at most 5 communities claimed;
+- at most 50 recipients from one community batch;
+- at most 100 recipients across the entire run;
+- at most 8 rendered content items.
+
+The schedule foundation, historical member-email renderer, and bounded worker
+are present. The bounded worker is present but dormant: no digest cron or
+automatic schedule enrollment is active. It consumes only indexed due-work,
+checkpoints recipient overflow, reuses one bounded content snapshot, and
+enqueues through the canonical idempotent outbox. Activation still requires an
+authenticated staging canary and explicit review of the resulting cost and
+delivery evidence.
 
 ## Confirmed Remediation Backlog
 
@@ -176,7 +191,7 @@ a new product requirement and explicit recurring-work declaration.
 | COST-001 | P0 | Contain repeated profile hydration | `fixed in production` | production build marker plus no recurrence under remount/resume/render-churn proof |
 | COST-002 | P0 | Delete attention polling and bound reactive attention reads | `implemented; staging proof pending` | idle tabs have no attention cadence; scopes are bounded; real activity reconciles reactively; update read cost is measured before adding storage |
 | COST-003 | P0 | Remove N+1 bundle hydration from chat root listing | `confirmed` | feed query returns a thin bounded projection; full bundles load only on demand |
-| COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `partial; blind community sweep deleted` | four fixed global repair scans and the weekly digest job are deleted; community cognition is indexed due-work only; remaining retained jobs still need complete empty-run proof |
+| COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `partial; blind community sweep deleted` | four fixed global repair scans and the unsafe weekly digest job are deleted; its protected replacement is indexed but remains disabled; remaining retained jobs still need complete empty-run proof |
 | COST-005 | P1 | Bound staging/realtime reconnect behavior | `implemented; staging proof pending` | disabled/dormant deployment and stale-client tests terminate without sustained calls |
 | COST-006 | P1 | Validate auth/session call clusters | `investigate` | calls are attributable to distinct valid lifecycle events or a dedupe fix lands |
 | COST-007 | P1 | Prove rate limiting for public cost-bearing HTTP surfaces | `open` | actor/IP/community limits and abuse tests for runtime, auth, ingestion, billing, and workers |
@@ -185,6 +200,7 @@ a new product requirement and explicit recurring-work declaration.
 | COST-010 | P2 | Project cost health into operator diagnostics | `partial` | invocation/read/write/compute/provider cost rollups link to redacted evidence |
 | COST-011 | P2 | Add the scheduled cost agent in alert-only mode | `deferred` | deterministic inputs, no mutation authority, concise incident report |
 | COST-012 | P3 | Consider bounded automated containment | `deferred` | each action is named, reversible, pre-authorized, tested, and produces a durable receipt |
+| COST-013 | P1 | Restore the protected weekly community digest | `bounded worker implemented; activation disabled` | indexed due-work, lifecycle fence, finite lease/retry, bounded recipient continuation, preference gate, outbox dedupe, staging cost evidence, then explicit cron activation |
 
 ## Required Deterministic Controls
 
