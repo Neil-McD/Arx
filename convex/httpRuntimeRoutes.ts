@@ -1,5 +1,4 @@
 import {
-  handlePublicTurnRequest,
   handleRuntimeTurnRequest,
   JsonResponseFn,
   RequireAuthenticatedActor,
@@ -39,25 +38,11 @@ export function registerRuntimeTurnRoutes(args: RegisterRuntimeTurnRoutesArgs): 
   } = args;
 
   http.route({
-    path: "/runtime/public_turn",
-    method: "OPTIONS",
-    handler: httpAction(async (_ctx, req) => optionsResponse(req)),
-  });
-
-  http.route({
     path: "/runtime/runtime_turn",
     method: "OPTIONS",
     handler: httpAction(async (_ctx, req) => optionsResponse(req)),
   });
 
-  http.route({
-    path: "/runtime/public_turn",
-    method: "POST",
-    handler: httpAction(async (_ctx, req) =>
-      handlePublicTurnRequest({ req, jsonResponse, sseResponse }),
-    ),
-  });
-  
   http.route({
     path: "/runtime/runtime_turn",
     method: "POST",

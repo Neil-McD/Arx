@@ -474,7 +474,6 @@ function WebMemberAgentDock(props, ref) {
             context_version: activeThreadContextRef.current.contextVersion,
           }
         : null,
-    fetchCloudPublic: props.fetchPublic,
     fetchAuth: props.fetchAuth,
     extractTextFromContentJson,
     parseMemoryUsedArray: () => [],

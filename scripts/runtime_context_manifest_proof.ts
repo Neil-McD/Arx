@@ -76,6 +76,7 @@ const fullPromptBundle = buildPlatformHarnessRuntimePromptBundle({
   loopBudget: { maxToolSteps: 8, maxRepeatedIdenticalCalls: 2, maxConsecutiveFailures: 3, maxNoProgressSteps: 3 },
   allowedToolNames: envelope.authority.allowedToolNames,
   harnessName: "chat_tools",
+  invocationSurface: "member_agent_dock",
   communityId: "community_1",
   communityName: "Launch Community",
   communitySlug: "launch-community",

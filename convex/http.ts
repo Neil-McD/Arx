@@ -11,18 +11,6 @@ import { registerEmailRoutes } from "./httpEmail";
 import { readAuthenticatedIdentityProfile } from "./authIdentity";
 import { parseBoolish, parseOptionalString } from "./httpInferenceConfig";
 import { registerRuntimeTurnRoutes } from "./httpRuntimeRoutes";
-import {
-  handlePolynetCodexWorkerIngest,
-  POLYNET_CODEX_WORKER_INGEST_PATH,
-} from "./polynetCodexWorkerIngest";
-import {
-  handlePolynetCodexWorkerTerminal,
-  POLYNET_CODEX_WORKER_TERMINAL_PATH,
-} from "./polynetCodexWorkerTerminal";
-import {
-  handlePolynetCodexWorkerTool,
-  POLYNET_CODEX_WORKER_TOOL_PATH,
-} from "./polynetCodexWorkerTool";
 import { registerRuntimeVoiceRoutes } from "./httpVoice";
 import { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
 import type { RequireAuthenticatedActor } from "./runtimeTurnResolution";
@@ -378,24 +366,6 @@ registerRuntimeTurnRoutes({
   optionsResponse,
   sseResponse,
   requireAuthenticatedActor,
-});
-
-http.route({
-  path: POLYNET_CODEX_WORKER_INGEST_PATH,
-  method: "POST",
-  handler: httpAction(async (ctx, req) => handlePolynetCodexWorkerIngest(ctx, req)),
-});
-
-http.route({
-  path: POLYNET_CODEX_WORKER_TERMINAL_PATH,
-  method: "POST",
-  handler: httpAction(async (ctx, req) => handlePolynetCodexWorkerTerminal(ctx, req)),
-});
-
-http.route({
-  path: POLYNET_CODEX_WORKER_TOOL_PATH,
-  method: "POST",
-  handler: httpAction(async (ctx, req) => handlePolynetCodexWorkerTool(ctx, req)),
 });
 
 export default http;

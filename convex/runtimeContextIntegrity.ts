@@ -36,7 +36,7 @@ export async function appendRuntimeContextIntegrityCheckBestEffort(params: {
         },
       ),
     ]);
-    const verdict = buildRuntimeContextIntegrityCheck({
+    const verdict = await buildRuntimeContextIntegrityCheck({
       run: run as any,
       events: Array.isArray(events) ? (events as any[]) : [],
     });

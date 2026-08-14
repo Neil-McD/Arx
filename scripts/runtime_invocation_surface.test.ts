@@ -45,10 +45,16 @@ describe("community funnel runtime surface", () => {
     ).toBe(false);
     expect(
       resolveRuntimeInvocationSurfaceForThread({
-        requestedSurface: "workspace",
+        requestedSurface: "community_funnel_builder",
         threadKey,
       }),
     ).toBe("community_funnel_builder");
+    expect(
+      resolveRuntimeInvocationSurfaceForThread({
+        requestedSurface: "member_agent_dock",
+        threadKey,
+      }),
+    ).toBeNull();
   });
 
   it("exposes only discovery, read, and canonical call tools", () => {
@@ -72,9 +78,6 @@ describe("community funnel runtime surface", () => {
     ).toBe("community_owner");
     expect(resolveRuntimeInvocationFundingPolicy("member_agent_dock")).toBe(
       "community_owner",
-    );
-    expect(resolveRuntimeInvocationFundingPolicy("workspace")).toBe(
-      "generic_gate",
     );
   });
 
@@ -112,17 +115,27 @@ describe("community funnel runtime surface", () => {
     ).toBe(false);
   });
 
-  it("does not add an invocation-surface section to a generic workspace prompt", () => {
-    const bundle = buildPlatformHarnessRuntimePromptBundle({
-      loopBudget: promptBudget,
-      allowedToolNames: ["polynet_list"],
-      harnessName: "chat_tools",
-      runtimeTurnContext: buildRuntimeTurnContextPacket({}),
-      invocationSurface: "workspace",
-    });
-
+  it("rejects retired and missing invocation surfaces", () => {
     expect(
-      bundle.sections.some((section) => section.id === "invocation_surface"),
-    ).toBe(false);
+      resolveRuntimeInvocationSurfaceForThread({
+        requestedSurface: "workspace",
+        threadKey: "workspace:legacy",
+      }),
+    ).toBeNull();
+    expect(
+      resolveRuntimeInvocationSurfaceForThread({
+        requestedSurface: null,
+        threadKey: "member-agent:global:episode:1",
+      }),
+    ).toBeNull();
+    expect(() =>
+      buildPlatformHarnessRuntimePromptBundle({
+        loopBudget: promptBudget,
+        allowedToolNames: ["polynet_list"],
+        harnessName: "chat_tools",
+        runtimeTurnContext: buildRuntimeTurnContextPacket({}),
+        invocationSurface: "workspace" as never,
+      }),
+    ).toThrow("invalid_runtime_invocation_surface");
   });
 });

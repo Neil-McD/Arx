@@ -1,3 +1,10 @@
+import {
+  RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
+  canonicalRuntimeProviderContextJson,
+  parseRuntimeProviderContextAttestation,
+  sha256RuntimeProviderContext,
+} from "./runtimeProviderContextAttestation.ts";
+
 export const RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE = "runtime_context_integrity_checked";
 
 export type RuntimeContextIntegrityEventInput = {
@@ -10,11 +17,13 @@ export type RuntimeContextIntegrityEventInput = {
 };
 
 export type RuntimeContextIntegrityRunInput = {
+  ownerId?: unknown;
   runId?: unknown;
   threadId?: unknown;
   projectId?: unknown;
   communityId?: unknown;
   communityContextVersion?: unknown;
+  modelId?: unknown;
   executionMode?: unknown;
   harnessProfile?: unknown;
   capabilityFamilies?: unknown;
@@ -27,6 +36,9 @@ export type RuntimeContextIntegrityCheckFlags = {
   tool_policy_present: boolean;
   prompt_receipt_present: boolean;
   manifest_receipt_present: boolean;
+  provider_context_attestation_required: boolean;
+  provider_context_attestation_present: boolean;
+  provider_context_attestation_valid: boolean;
   scope_matches_run: boolean;
   community_context_version_matches: boolean;
   capability_families_match_policy: boolean;
@@ -52,7 +64,7 @@ export type RuntimeContextIntegrityVerdict = {
   };
 };
 
-const REQUIRED_EVENT_TYPES = [
+const BASE_REQUIRED_EVENT_TYPES = [
   "run_started",
   "runtime_context_resolved",
   "tool_policy_resolved",
@@ -222,10 +234,10 @@ function mappedManifestPromptHasPromptSection(params: {
   return false;
 }
 
-export function buildRuntimeContextIntegrityCheck(params: {
+export async function buildRuntimeContextIntegrityCheck(params: {
   run?: RuntimeContextIntegrityRunInput | null;
   events: RuntimeContextIntegrityEventInput[];
-}): RuntimeContextIntegrityVerdict {
+}): Promise<RuntimeContextIntegrityVerdict> {
   const failures: string[] = [];
   const warnings: string[] = [];
   const events = Array.isArray(params.events) ? params.events : [];
@@ -234,10 +246,6 @@ export function buildRuntimeContextIntegrityCheck(params: {
     const eventType = normalizeText(event.eventType);
     if (!eventType || eventType === RUNTIME_CONTEXT_INTEGRITY_EVENT_TYPE) continue;
     if (!eventsByType.has(eventType)) eventsByType.set(eventType, event);
-  }
-
-  for (const eventType of REQUIRED_EVENT_TYPES) {
-    if (!eventsByType.has(eventType)) failures.push(`missing_event:${eventType}`);
   }
 
   const runStarted = eventPayload(eventsByType, "run_started");
@@ -249,6 +257,16 @@ export function buildRuntimeContextIntegrityCheck(params: {
   const manifestScope = asRecord(manifest?.scope);
   const manifestSummary = asRecord(manifest?.summary);
   const run = asRecord(params.run ?? null);
+  const invocationSurface = normalizeText(contextResolved?.invocation_surface);
+  const providerContextAttestationRequired =
+    invocationSurface === "member_agent_dock" ||
+    invocationSurface === "community_funnel_builder";
+  const requiredEventTypes = providerContextAttestationRequired
+    ? [...BASE_REQUIRED_EVENT_TYPES, RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE]
+    : BASE_REQUIRED_EVENT_TYPES;
+  for (const eventType of requiredEventTypes) {
+    if (!eventsByType.has(eventType)) failures.push(`missing_event:${eventType}`);
+  }
 
   const runId = normalizeId(
     run?.runId ??
@@ -357,6 +375,68 @@ export function buildRuntimeContextIntegrityCheck(params: {
     failures.push(`prompt_section_not_accounted_for:${id}`);
   }
 
+  const attestationEvent = eventsByType.get(
+    RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
+  );
+  const attestation = parseRuntimeProviderContextAttestation(
+    attestationEvent?.payload,
+  );
+  let providerContextAttestationValid = !providerContextAttestationRequired;
+  if (attestation) {
+    let promptSectionsMatch = false;
+    let contextManifestDigestMatches = false;
+    try {
+      promptSectionsMatch =
+        canonicalRuntimeProviderContextJson(attestation.prompt_sections) ===
+        canonicalRuntimeProviderContextJson(promptReceipt?.sections);
+      contextManifestDigestMatches =
+        Boolean(manifest) &&
+        attestation.context_manifest_sha256 ===
+          (await sha256RuntimeProviderContext(manifest));
+    } catch {
+      promptSectionsMatch = false;
+      contextManifestDigestMatches = false;
+    }
+    providerContextAttestationValid =
+      attestation.surface === invocationSurface &&
+      sameNullableText(attestation.run_id, runId) &&
+      (!normalizeText(run?.ownerId) ||
+        sameNullableText(attestation.scope.user_id, run?.ownerId)) &&
+      sameNullableText(
+        attestation.scope.thread_id,
+        run?.threadId,
+        contextResolved?.thread_id,
+        manifestScope?.threadId,
+      ) &&
+      sameNullableText(
+        attestation.scope.community_id,
+        run?.communityId,
+        contextResolved?.community_id,
+        manifestScope?.communityId,
+      ) &&
+      sameNullableNumber(
+        attestation.scope.community_context_version,
+        run?.communityContextVersion,
+        contextResolved?.community_context_version,
+        manifestScope?.communityContextVersion,
+      ) &&
+      (!normalizeText(run?.modelId) ||
+        sameNullableText(attestation.model.requested_model_id, run?.modelId)) &&
+      sameNullableText(
+        attestation.model.inference_source,
+        manifestScope?.inferenceSource,
+      ) &&
+      sameStringSet(attestation.tool_names, manifestToolNames(manifest)) &&
+      promptSectionsMatch &&
+      contextManifestDigestMatches;
+  }
+  if (
+    (providerContextAttestationRequired || attestationEvent) &&
+    !providerContextAttestationValid
+  ) {
+    failures.push("provider_context_attestation_invalid");
+  }
+
   const checked: RuntimeContextIntegrityCheckFlags = {
     run_id_matches: runIdMatches,
     run_started_present: eventsByType.has("run_started"),
@@ -364,6 +444,11 @@ export function buildRuntimeContextIntegrityCheck(params: {
     tool_policy_present: eventsByType.has("tool_policy_resolved"),
     prompt_receipt_present: eventsByType.has("runtime_prompt_bundle_resolved"),
     manifest_receipt_present: eventsByType.has("runtime_context_manifest_resolved"),
+    provider_context_attestation_required: providerContextAttestationRequired,
+    provider_context_attestation_present: eventsByType.has(
+      RUNTIME_PROVIDER_CONTEXT_ATTESTATION_EVENT_TYPE,
+    ),
+    provider_context_attestation_valid: providerContextAttestationValid,
     scope_matches_run: scopeMatchesRun,
     community_context_version_matches: communityContextVersionMatches,
     capability_families_match_policy: capabilityFamiliesMatchPolicy,
@@ -382,7 +467,7 @@ export function buildRuntimeContextIntegrityCheck(params: {
     evidence: {
       run_id: runId,
       event_count: events.length,
-      required_event_types: REQUIRED_EVENT_TYPES,
+      required_event_types: requiredEventTypes,
       prompt_section_count: sectionIds.size,
       manifest_prompt_count: prompts.length,
       manifest_tool_count: tools.length,

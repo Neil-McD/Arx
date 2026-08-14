@@ -121,7 +121,7 @@ Preview metrics are event-driven through load, resize, `ResizeObserver`, and
 
 #### Fixed-interval source inventory
 
-CI admits exactly these seven first-party `setInterval` call sites:
+CI admits exactly these six first-party `setInterval` call sites:
 
 | Canonical call site | Classification | Required lifetime bound |
 | --- | --- | --- |
@@ -131,7 +131,6 @@ CI admits exactly these seven first-party `setInterval` call sites:
 | `apps/web/src/controllers/useWebActiveCommunityShellController.ts` | backend presence heartbeat | visible active community; one in-flight call; cleared by effect teardown |
 | `convex/runtimeCancellation.ts` | backend cancellation watcher | active runtime operation; one in-flight check; cleared in `finally` |
 | `convex/runtimeExecutionSession.ts` | backend workspace heartbeat | active workspace session; one timer and in-flight touch; cleared by `dispose()` |
-| `convex/runtimeTurnHandlers.ts` | backend worker cancel/steer watcher | active worker turn; one busy watcher; cleared in `finally` |
 
 The executable contract scans the first-party source corpus. A new interval or
 a second interval in an allowlisted file fails CI until it is deleted or
@@ -143,14 +142,13 @@ explicitly classified with cadence, isolation, overlap, and cleanup bounds.
 | --- | --- | --- | --- |
 | Runtime cancellation watcher | active runtime call only | minimum poll interval, one in-flight check, cleared at completion | `keep, prove` |
 | Workspace execution heartbeat | active workspace session only | one in-flight touch, cleared at completion | `keep, prove` |
-| Worker cancel/steer watcher | active worker turn only | one busy watcher, cleared at terminal state | `keep, prove` |
 
 These loops are allowed only while the owned execution is active. A detached or
 terminal execution must leave no timer, subscription, or scheduled successor.
 
 #### Convex scheduled jobs
 
-`convex/crons.ts` currently declares 9 jobs:
+`convex/crons.ts` currently declares 8 jobs:
 
 | Job | Cadence | Current batch bound | Classification |
 | --- | --- | --- | --- |
@@ -160,7 +158,6 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 | Enqueue 24h event reminder emails | 15 minutes | 500 events, 500 recipients each | product job; verify due-window indexes and fanout accounting |
 | Finalize expired Blaxel project workspace leases | 15 minutes | 100 | infrastructure repair; keep |
 | Record Blaxel storage provider costs | 60 minutes | 100 rows x 5 pages | accounting; keep |
-| Sweep expired Daytona Codex runtime targets | 5 minutes | 20 | infrastructure repair; keep |
 | Community memory sweep | 6 hours | 500 oldest due communities across bounded indexed sources | AI-triggering job; idle communities are absent, metabolism is outcome-revision gated, and compiler admission retains founder funding plus per-community caps |
 | Process pending mention emails | 15 minutes | implementation-owned | notification job; declare an explicit batch bound in this registry |
 

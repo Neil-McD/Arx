@@ -13,10 +13,6 @@ const daytonaActions = read("convex/daytonaCodexRuntimeTargetActions.ts");
 const threads = read("convex/threads.ts");
 const cloudThreadsRead = read("shared/cloudThreadsRead.ts");
 const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
-const worker = read("services/polynet-codex-worker/src/server.ts");
-const workerTool = read("convex/polynetCodexWorkerTool.ts");
-const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
-const daytonaCodexConfig = read("services/polynet-codex-worker/src/daytonaCodexConfig.ts");
 const packageJson = read("package.json");
 const daytonaScreenshotActionStart = daytonaActions.indexOf(
   "export const captureDaytonaComputerUseScreenshotInternal",
@@ -189,60 +185,6 @@ assert.match(
   cloudThreadsRead,
   /threads:captureCloudRuntimeRunComputerUseScreenshot/,
   "shared helper must call the authenticated Convex action",
-);
-
-assert.match(
-  worker,
-  /buildComputerScreenshotDynamicToolSpec[\s\S]*name: CODEX_COMPUTER_SCREENSHOT_TOOL_NAME[\s\S]*inputImage/,
-  "Daytona Codex worker must advertise computer_screenshot as a model-visible dynamic tool and return an image observation",
-);
-
-assert.match(
-  worker,
-  /buildComputerOpenUrlDynamicToolSpec[\s\S]*name: CODEX_COMPUTER_OPEN_URL_TOOL_NAME[\s\S]*required: \["url"\]/,
-  "Daytona Codex worker must advertise computer_open_url as a model-visible dynamic tool",
-);
-
-assert.match(
-  worker,
-  /formatComputerUseFailureText[\s\S]*not ready after retry[\s\S]*preview panel/,
-  "Daytona Codex worker must present transient Computer Use failures as clean visual-inspection unavailability",
-);
-
-assert.match(
-  worker,
-  /toolName === CODEX_COMPUTER_SCREENSHOT_TOOL_NAME[\s\S]*handleComputerScreenshotCall/,
-  "Daytona Codex worker must route computer_screenshot dynamic tool calls",
-);
-
-assert.match(
-  worker,
-  /toolName === CODEX_COMPUTER_OPEN_URL_TOOL_NAME[\s\S]*handleComputerOpenUrlCall/,
-  "Daytona Codex worker must route computer_open_url dynamic tool calls",
-);
-
-assert.match(
-  workerTool,
-  /requestedToolName === "computer_screenshot"[\s\S]*captureDaytonaComputerUseScreenshotInternal/,
-  "worker tool endpoint must dispatch computer_screenshot through the Daytona screenshot bridge",
-);
-
-assert.match(
-  workerTool,
-  /requestedToolName === "computer_open_url"[\s\S]*openDaytonaComputerUseUrlInternal/,
-  "worker tool endpoint must dispatch computer_open_url through the Daytona open-url bridge",
-);
-
-assert.match(
-  runtimeTurnHandlers,
-  /workerRuntimeToolBridgeRequired = true[\s\S]*resolveCodexHarnessToolPolicy\(\{[\s\S]*workspaceServeAvailable: workerRuntimeToolBridgeRequired[\s\S]*computerAdaptersAvailable: workerRuntimeToolBridgeRequired[\s\S]*workerPlatformTools\.length > 0\s*\|\|\s*workerRuntimeToolBridgeRequired[\s\S]*buildPolynetCodexWorkerToolTarget[\s\S]*runtime_tool_names: codexHarnessToolPolicy\.runtimeAdapterToolNames/,
-  "Daytona worker turns must mint the tool bridge even when no PolyNet platform tools are projected",
-);
-
-assert.match(
-  daytonaCodexConfig,
-  /workspace_serve[\s\S]*computer_open_url[\s\S]*computer_screenshot/,
-  "Daytona Codex instructions must teach the serve/open/screenshot preview inspection loop",
 );
 
 console.log("daytona_computer_use_screenshot_bridge_proof: ok");

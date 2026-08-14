@@ -3,13 +3,10 @@ import type { RetrievalToolName } from "./retrievalTools.ts";
 import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext.ts";
 
 export type RuntimeInvocationSurface =
-  | "workspace"
   | "member_agent_dock"
   | "community_funnel_builder";
 
-export type RuntimeInvocationFundingPolicy =
-  | "generic_gate"
-  | "community_owner";
+export type RuntimeInvocationFundingPolicy = "community_owner";
 
 export const MEMBER_AGENT_THREAD_KEY_PREFIX = "member-agent";
 export const MEMBER_AGENT_GLOBAL_SCOPE_KEY = "global";
@@ -39,23 +36,23 @@ const COMMUNITY_FUNNEL_BUILDER_TOOL_NAME_SET = new Set<RetrievalToolName>([
 
 export function normalizeRuntimeInvocationSurface(
   raw: unknown,
-): RuntimeInvocationSurface {
+): RuntimeInvocationSurface | null {
   const value = String(raw ?? "").trim();
   if (value === "member_agent_dock" || value === "community_funnel_builder")
     return value;
-  return "workspace";
+  return null;
 }
 
 export function resolveRuntimeInvocationFundingPolicy(
   invocationSurface: RuntimeInvocationSurface,
 ): RuntimeInvocationFundingPolicy {
   if (
-    invocationSurface === "member_agent_dock" ||
-    invocationSurface === "community_funnel_builder"
+    invocationSurface !== "member_agent_dock" &&
+    invocationSurface !== "community_funnel_builder"
   ) {
-    return "community_owner";
+    throw new Error("invalid_runtime_invocation_surface");
   }
-  return "generic_gate";
+  return "community_owner";
 }
 
 export function shouldRecordCommunityOnboardingAgentTurn(params: {
@@ -73,15 +70,20 @@ export function shouldRecordCommunityOnboardingAgentTurn(params: {
 export function resolveRuntimeInvocationSurfaceForThread(params: {
   requestedSurface: unknown;
   threadKey: string;
-}): RuntimeInvocationSurface {
+}): RuntimeInvocationSurface | null {
+  const requestedSurface = normalizeRuntimeInvocationSurface(
+    params.requestedSurface,
+  );
+  if (!requestedSurface) return null;
   const threadKey = String(params.threadKey ?? "").trim();
-  if (threadKey.startsWith(`${MEMBER_AGENT_THREAD_KEY_PREFIX}:`)) {
-    return "member_agent_dock";
-  }
-  if (threadKey.startsWith(`${COMMUNITY_FUNNEL_THREAD_KEY_PREFIX}:`)) {
-    return "community_funnel_builder";
-  }
-  return normalizeRuntimeInvocationSurface(params.requestedSurface);
+  const threadSurface = threadKey.startsWith(
+    `${MEMBER_AGENT_THREAD_KEY_PREFIX}:`,
+  )
+    ? "member_agent_dock"
+    : threadKey.startsWith(`${COMMUNITY_FUNNEL_THREAD_KEY_PREFIX}:`)
+      ? "community_funnel_builder"
+      : null;
+  return requestedSurface === threadSurface ? requestedSurface : null;
 }
 
 export function buildCommunityFunnelThreadKey(
@@ -178,7 +180,7 @@ export function restrictCapabilityFamiliesForInvocationSurface(params: {
     params.invocationSurface !== "member_agent_dock" &&
     params.invocationSurface !== "community_funnel_builder"
   ) {
-    return [...params.capabilityFamilies];
+    throw new Error("invalid_runtime_invocation_surface");
   }
   return params.capabilityFamilies.filter((family) =>
     MEMBER_AGENT_DOCK_CAPABILITY_FAMILY_SET.has(family),
@@ -189,13 +191,16 @@ export function restrictToolNamesForInvocationSurface(params: {
   invocationSurface: RuntimeInvocationSurface;
   toolNames: readonly RetrievalToolName[];
 }): RetrievalToolName[] {
+  if (
+    params.invocationSurface !== "member_agent_dock" &&
+    params.invocationSurface !== "community_funnel_builder"
+  ) {
+    throw new Error("invalid_runtime_invocation_surface");
+  }
   if (params.invocationSurface === "community_funnel_builder") {
     return params.toolNames.filter((toolName) =>
       COMMUNITY_FUNNEL_BUILDER_TOOL_NAME_SET.has(toolName),
     );
-  }
-  if (params.invocationSurface !== "member_agent_dock") {
-    return [...params.toolNames];
   }
   return params.toolNames.filter((toolName) =>
     MEMBER_AGENT_DOCK_TOOL_NAME_SET.has(toolName),
@@ -223,7 +228,9 @@ export function buildRuntimeInvocationSurfacePrompt(
       "After a successful update, briefly summarize the positioning and copy choices. Do not print the full JSON content object to the user.",
     ].join("\n");
   }
-  if (invocationSurface !== "member_agent_dock") return null;
+  if (invocationSurface !== "member_agent_dock") {
+    throw new Error("invalid_runtime_invocation_surface");
+  }
   const hasCommunityLens = surfaceContext?.kind === "community";
   return [
     "INVOCATION_SURFACE",

@@ -383,7 +383,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               context_version: 0,
             }
           : null,
-      fetchCloudPublic: props.fetchPublic,
       fetchAuth: props.fetchAuth,
       extractTextFromContentJson,
       parseMemoryUsedArray: () => [],

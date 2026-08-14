@@ -53,6 +53,7 @@ const fullParams = {
     "terminal_start",
   ] as const,
   harnessName: "chat_tools" as const,
+  invocationSurface: "member_agent_dock" as const,
   communityId: "community_1",
   communityName: "Bundle Community",
   communitySlug: "bundle-community",
@@ -121,6 +122,9 @@ assert.deepEqual(sectionIds(fullBundle), [
   "user_agent_soul",
   "explanation_contract",
   "harness_operating_policy",
+  "invocation_surface",
+  "current_surface",
+  "member_identity_context",
   "community_lens",
   "community_lens_authority",
   "community_system_prompt",
@@ -131,7 +135,11 @@ assert.deepEqual(sectionIds(fullBundle), [
 ]);
 
 for (const id of sectionIds(fullBundle)) {
-  assertRendered(fullBundle, id);
+  if (id === "current_surface" || id === "member_identity_context") {
+    assertOmitted(fullBundle, id);
+  } else {
+    assertRendered(fullBundle, id);
+  }
 }
 
 const orderedHeadings = [
@@ -140,6 +148,7 @@ const orderedHeadings = [
   "USER_AGENT_SOUL",
   "EXPLANATION_CONTRACT",
   "AGENT_OPERATING_POLICY",
+  "INVOCATION_SURFACE",
   "COMMUNITY_LENS",
   "COMMUNITY_LENS_AUTHORITY",
   "COMMUNITY_SYSTEM_PROMPT",
@@ -340,6 +349,7 @@ const omittedBundle = buildPlatformHarnessRuntimePromptBundle({
   },
   allowedToolNames: ["search_product_docs", "get_product_doc"],
   harnessName: "chat_tools",
+  invocationSurface: "member_agent_dock",
   runtimeTurnContext: buildRuntimeTurnContextPacket({}),
 });
 
@@ -354,6 +364,7 @@ assert.equal(
     },
     allowedToolNames: ["search_product_docs", "get_product_doc"],
     harnessName: "chat_tools",
+    invocationSurface: "member_agent_dock",
     runtimeTurnContext: buildRuntimeTurnContextPacket({}),
   }),
   "omitted-section fixture should also preserve legacy prompt output",
@@ -361,6 +372,7 @@ assert.equal(
 
 assertRendered(omittedBundle, "platform_doctrine");
 assertRendered(omittedBundle, "agent_soul");
+assertRendered(omittedBundle, "invocation_surface");
 assertRendered(omittedBundle, "community_lens");
 assertRendered(omittedBundle, "workspace_harness_context");
 assertOmitted(omittedBundle, "user_agent_soul");

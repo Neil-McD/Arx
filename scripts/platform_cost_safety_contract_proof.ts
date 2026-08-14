@@ -64,7 +64,6 @@ const realtimeAuth = read("shared/convexRealtimeAuth.ts");
 const previewProxy = read("apps/preview-proxy/server.js");
 const runtimeCancellation = read("convex/runtimeCancellation.ts");
 const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
-const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const communityPresenceContract = read("shared/communityPresenceContract.ts");
 const schema = read("convex/schema.ts");
 const communityHeartbeat = read("convex/communityAgentHeartbeat.ts");
@@ -79,7 +78,6 @@ const costBearingIntervalFiles = [
   "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
   "convex/runtimeCancellation.ts",
   "convex/runtimeExecutionSession.ts",
-  "convex/runtimeTurnHandlers.ts",
 ] as const;
 const expectedIntervalFiles = [...uiOnlyIntervalFiles, ...costBearingIntervalFiles].sort();
 const actualIntervalCallSites = listSetIntervalCallSites();
@@ -119,7 +117,7 @@ const declaredCronNames = Array.from(
   crons.matchAll(/crons\.(?:interval|daily)\(\s*\n\s*"([^"]+)"/g),
   (match) => match[1]!,
 );
-assert.equal(declaredCronNames.length, 9, "every Convex cron must remain inventoried");
+assert.equal(declaredCronNames.length, 8, "every Convex cron must remain inventoried");
 for (const cronName of declaredCronNames) {
   assert.ok(
     contract.toLowerCase().includes(cronName.toLowerCase()),
@@ -243,11 +241,6 @@ assert.match(
   runtimeExecutionSession,
   /WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 \* 60 \* 1000[\s\S]*let heartbeatInFlight = false[\s\S]*if \(!params\.touchRunHeartbeat \|\| !workspaceSession \|\| heartbeatTimer\) return[\s\S]*heartbeatTimer = setInterval[\s\S]*heartbeatInFlight = true[\s\S]*async dispose\(\)[\s\S]*clearInterval\(heartbeatTimer\)/,
   "workspace heartbeat must have one timer, one in-flight touch, and deterministic disposal",
-);
-assert.match(
-  runtimeTurnHandlers,
-  /let workerWatcherBusy = false[\s\S]*const workerCancelWatcher = setInterval[\s\S]*if \(workerCancelFired \|\| workerWatcherBusy\) return[\s\S]*\}, 3_000\);[\s\S]*try \{[\s\S]*streamPolynetCodexWorkerTurn[\s\S]*finally \{[\s\S]*clearInterval\(workerCancelWatcher\)/,
-  "worker cancel watcher must be non-overlapping, three-second bounded, and cleared after the turn",
 );
 assert.match(
   checkoutFinalizeController,

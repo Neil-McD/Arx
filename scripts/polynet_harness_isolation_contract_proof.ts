@@ -2,13 +2,10 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
-  CODEX_RUNTIME_ADAPTER_TOOL_NAMES,
   POLYNET_HARNESS_DAYTONA_PREVIEW_TOOL_NAMES,
   POLYNET_HARNESS_DAYTONA_WORKSPACE_TOOL_NAMES,
   POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES,
-  buildCodexHarnessToolPolicyReceipt,
   buildPolynetHarnessToolPolicyReceipt,
-  resolveCodexHarnessToolPolicy,
   resolvePolynetHarnessToolPolicy,
 } from "../shared/harnessToolPolicy.ts";
 import {
@@ -26,16 +23,18 @@ import {
   canUseRuntimeEngine,
   getRuntimeEngineAccessLevel,
   normalizeActiveWorkspaceRuntimeEngine,
+  resolvePolynetRuntimeEngine,
 } from "../shared/runtimeEngine.ts";
 
 const read = (path: string) => readFileSync(path, "utf8");
-assert.deepEqual([...ACTIVE_WORKSPACE_RUNTIME_ENGINES], [RUNTIME_ENGINE_POLYNET, RUNTIME_ENGINE_CODEX]);
+assert.deepEqual([...ACTIVE_WORKSPACE_RUNTIME_ENGINES], [RUNTIME_ENGINE_POLYNET]);
 assert.equal(DEFAULT_ACTIVE_RUNTIME_ENGINE, RUNTIME_ENGINE_POLYNET);
 assert.equal(normalizeActiveWorkspaceRuntimeEngine("unknown"), RUNTIME_ENGINE_POLYNET);
 for (const engine of ACTIVE_WORKSPACE_RUNTIME_ENGINES) {
   assert.equal(getRuntimeEngineAccessLevel(engine), "included");
   assert.equal(canUseRuntimeEngine({ engine }), true);
 }
+assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_CODEX }), false);
 
 assert.deepEqual(
   [...POLYNET_HARNESS_FORBIDDEN_RUNTIME_TOOL_NAMES],
@@ -62,25 +61,14 @@ assert.deepEqual(
 );
 assert.equal(buildPolynetHarnessToolPolicyReceipt(polynet).harness_kind, "polynet");
 
-const codex = resolveCodexHarnessToolPolicy({
-  polynetPlatformToolProjection: { hasCommunity: false },
-  workspaceServeAvailable: true,
-  computerAdaptersAvailable: true,
-});
-for (const adapter of CODEX_RUNTIME_ADAPTER_TOOL_NAMES) {
-  assert.ok(codex.runtimeAdapterToolNames.includes(adapter));
-}
-assert.equal(buildCodexHarnessToolPolicyReceipt(codex).harness_kind, "codex");
-
 const app = read("apps/web/src/App.tsx");
 const dock = read("apps/web/src/components/WebMemberAgentDock.tsx");
-const bridge = read("convex/polynetCodexWorkerBridge.ts");
 const handlers = read("convex/runtimeTurnHandlers.ts");
 assert.doesNotMatch(app, /activeRuntimeEngine|RUNTIME_ENGINE_CODEX/);
 assert.match(dock, /runtime_engine: "polynet"[\s\S]*runtimeEngine: "polynet"/);
-assert.match(bridge, /requestedRuntimeEngine === RUNTIME_ENGINE_POLYNET[\s\S]*usePolynetCodexWorkerBridge: false/);
-assert.match(bridge, /requestedRuntimeEngine === RUNTIME_ENGINE_CODEX[\s\S]*usePolynetCodexWorkerBridge: true/);
-assert.doesNotMatch(bridge, /tier_required|plan_required|Premium/);
+assert.equal(resolvePolynetRuntimeEngine({ requestedRuntimeEngine: "polynet" }).ok, true);
+assert.equal(resolvePolynetRuntimeEngine({ requestedRuntimeEngine: "codex" }).ok, false);
+assert.doesNotMatch(handlers, /polynetCodexWorker|POLYNET_CODEX_WORKER/);
 assert.match(handlers, /polynet_daytona_runtime_cost_tracking_started/);
 assert.match(handlers, /polynet_daytona_runtime_cost_recorded/);
 assert.doesNotMatch(handlers, /reserveCreditsInternal|settleCreditsInternal/);

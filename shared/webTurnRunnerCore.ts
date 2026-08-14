@@ -62,7 +62,6 @@ export type UseWebTurnRunnerControllerArgs<
     community_id?: string | null;
     context_version?: number | null;
   } | null;
-  fetchCloudPublic: (url: string, init?: RequestInit) => Promise<Response>;
   fetchAuth: (url: string, init: RequestInit, session: SessionT) => Promise<Response>;
 
   extractTextFromContentJson: (value: unknown) => string;
@@ -91,14 +90,6 @@ export type PublicTurnThreadMessage = {
   content_json: unknown;
 };
 
-export type RunPublicTurnParams<ThreadMessageT extends PublicTurnThreadMessage> = {
-  modelId: string;
-  threadId: string;
-  runIdHint: string;
-  messages: ThreadMessageT[];
-  systemPrompt?: string | null;
-};
-
 export type RunAgentTurnParams = {
   preferredModelId: string;
   mode?: "respond" | "regenerate";
@@ -106,8 +97,8 @@ export type RunAgentTurnParams = {
   userMessageKey?: string;
   systemPrompt?: string | null;
   inferenceSource?: "free" | "user_key" | "chatgpt";
-  runtimeEngine?: RuntimeEngine;
-  invocationSurface?: RuntimeInvocationSurface;
+  runtimeEngine: "polynet";
+  invocationSurface: RuntimeInvocationSurface;
   surfaceContext?: MemberAgentSurfaceContextV1 | null;
   suppressOnboardingProgress?: boolean;
   requestedFundingSource:
@@ -116,7 +107,7 @@ export type RunAgentTurnParams = {
     | "user_chatgpt"
     | "platform"
     | "auto";
-  requestedAgenticTools?: boolean;
+  requestedAgenticTools: true;
   onStreamStart?: (params: { runId: string | null }) => void;
   replyToId?: string;
   messages?: PublicTurnThreadMessage[];

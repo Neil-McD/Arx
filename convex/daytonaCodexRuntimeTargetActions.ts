@@ -5,14 +5,12 @@ import { v } from "convex/values";
 import { internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import {
-  DAYTONA_CODEX_DEFAULT_HUMAN_SAVE_RETENTION_MINUTES,
-  DAYTONA_CODEX_MAX_HUMAN_SAVE_RETENTION_MINUTES,
-  DAYTONA_CODEX_REMOTE_ROOT,
-  DAYTONA_CODEX_WORKER_PORT,
-  DAYTONA_CODEX_WORKSPACE_ROOT,
+  DAYTONA_DEFAULT_HUMAN_SAVE_RETENTION_MINUTES,
+  DAYTONA_MAX_HUMAN_SAVE_RETENTION_MINUTES,
+  DAYTONA_WORKSPACE_ROOT,
   DAYTONA_RUNTIME_POLICY,
   defaultDaytonaProviderEphemeralForLifecycleMode,
-} from "../shared/daytonaCodexRuntimePolicy";
+} from "../shared/daytonaRuntimePolicy";
 import { mintPreviewProxySessionToken } from "./previewProxySessionToken";
 import { normalizeWorkspacePreviewPort } from "../shared/workspacePreviewPort";
 
@@ -75,18 +73,16 @@ type DaytonaSandbox = {
   delete?(timeout?: number): Promise<void>;
 };
 
-const WORKER_PORT = DAYTONA_CODEX_WORKER_PORT;
-const DEFAULT_REMOTE_ROOT = DAYTONA_CODEX_REMOTE_ROOT;
-const DEFAULT_WORKSPACE_ROOT = DAYTONA_CODEX_WORKSPACE_ROOT;
+const DEFAULT_WORKSPACE_ROOT = DAYTONA_WORKSPACE_ROOT;
 const SANITIZED_ERROR_MAX_CHARS = 4000;
 const MAX_COMPUTER_USE_SCREENSHOT_BYTES = 10 * 1024 * 1024;
 const DAYTONA_COMPUTER_USE_MAX_READY_ATTEMPTS = 2;
 const DAYTONA_COMPUTER_USE_READY_WAIT_MS = 1500;
 const DAYTONA_COMPUTER_USE_RETRY_WAIT_MS = 1250;
 const DEFAULT_HUMAN_SAVE_RETENTION_MINUTES =
-  DAYTONA_CODEX_DEFAULT_HUMAN_SAVE_RETENTION_MINUTES;
+  DAYTONA_DEFAULT_HUMAN_SAVE_RETENTION_MINUTES;
 const MAX_HUMAN_SAVE_RETENTION_MINUTES =
-  DAYTONA_CODEX_MAX_HUMAN_SAVE_RETENTION_MINUTES;
+  DAYTONA_MAX_HUMAN_SAVE_RETENTION_MINUTES;
 
 type DaytonaTargetLifecycleConfig = {
   snapshotId: string | null;
@@ -112,11 +108,6 @@ type DaytonaTargetTiming = {
   target_claim_ms: number;
   sandbox_create_or_get_ms: number;
   sandbox_start_ms: number;
-  worker_start_ms: number;
-  worker_http_ready_ms: number;
-  worker_health_ready_mode: "cached" | "http" | "codex";
-  codex_app_server_init_ms: number | null;
-  preview_url_ms: number;
   target_ready_persist_ms: number;
   target_ready_total_ms: number;
   cached_target_ready: boolean;
@@ -191,11 +182,6 @@ function readPositiveNumber(value: unknown, fallback: number): number {
   return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
 }
 
-function readOptionalNonNegativeNumber(value: unknown): number | null {
-  const parsed = Number(value);
-  return Number.isFinite(parsed) && parsed >= 0 ? parsed : null;
-}
-
 function elapsedMs(startedAtMs: number): number {
   return Math.max(0, Date.now() - startedAtMs);
 }
@@ -221,10 +207,7 @@ function sanitizeDaytonaRuntimeError(value: unknown): string {
     readEnv("DAYTONA_API_KEY"),
     readEnv("DAYTONA_JWT_TOKEN"),
     readFirstEnv(["DAYTONA_ORGANIZATION_ID", "DAYTONA_ORG_ID"]),
-    readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN"),
-    readEnv("POLYNET_CODEX_WORKER_RUN_TOKEN_SECRET"),
     readEnv("OPENAI_API_KEY"),
-    readEnv("POLYNET_CODEX_BRIDGE_OPENAI_API_KEY"),
   ].filter((entry) => entry.length >= 8);
   for (const secret of secretValues) {
     text = text.split(secret).join("[redacted-secret]");
@@ -609,7 +592,7 @@ function normalizeSandboxName(value: string): string {
       .replace(/[^a-z0-9-]+/g, "-")
       .replace(/^-+|-+$/g, "")
       .slice(0, 36) || randomBytes(6).toString("hex");
-  return `polynet-codex-${suffix}-${Date.now()}`;
+  return `polynet-runtime-${suffix}-${Date.now()}`;
 }
 
 function buildDaytonaConfig(): JsonRecord {
@@ -868,40 +851,6 @@ async function deleteDaytonaSandbox(params: {
   throw new Error("daytona_direct_provider_delete_unsupported");
 }
 
-function buildWorkerEnv(params: {
-  sandboxId: string;
-  authToken: string;
-  remoteRoot: string;
-}): Record<string, string> {
-  const workspaceRoot = readEnv("POLYNET_DAYTONA_WORKSPACE_ROOT") || DEFAULT_WORKSPACE_ROOT;
-  const env: Record<string, string> = {
-    POLYNET_CODEX_WORKSPACE_HOST: "daytona",
-    POLYNET_DAYTONA_WORKSPACE_ROOT: workspaceRoot,
-    POLYNET_CODEX_WORKER_AGENT_CWD: workspaceRoot,
-    POLYNET_CODEX_WORKER_HOST: "127.0.0.1",
-    POLYNET_CODEX_WORKER_PORT: String(WORKER_PORT),
-    POLYNET_CODEX_WORKER_AUTH_TOKEN: params.authToken,
-    POLYNET_CODEX_WORKER_CODEX_BIN:
-      readEnv("POLYNET_CODEX_WORKER_CODEX_BIN") ||
-      `${params.remoteRoot}/node_modules/.bin/codex`,
-    POLYNET_CODEX_WORKER_MODEL:
-      readEnv("POLYNET_CODEX_WORKER_MODEL") ||
-      DAYTONA_RUNTIME_POLICY.nativeCodex.defaultModelId,
-    POLYNET_DEPLOYMENT_KIND: readEnv("POLYNET_DEPLOYMENT_KIND") || "staging",
-    CONVEX_DEPLOYMENT: readEnv("CONVEX_DEPLOYMENT") || "dev:quick-porcupine-949",
-    DAYTONA_SANDBOX_ID: params.sandboxId,
-  };
-  const previewPattern = readEnv("POLYNET_DAYTONA_PREVIEW_URL_PATTERN");
-  if (previewPattern) env.POLYNET_DAYTONA_PREVIEW_URL_PATTERN = previewPattern;
-  return env;
-}
-
-function envBlock(env: Record<string, string>): string {
-  return Object.entries(env)
-    .map(([key, value]) => `${key}=${shellQuote(value)}`)
-    .join(" ");
-}
-
 async function createOrGetSandbox(params: {
   daytona: DaytonaClient;
   runId: string;
@@ -928,7 +877,7 @@ async function createOrGetSandbox(params: {
 
   const labels: Record<string, string> = {
     app: "polynet",
-    purpose: "codex-runtime-direct",
+    purpose: "polynet-runtime",
     environment: readEnv("POLYNET_DEPLOYMENT_KIND") || "staging",
     run_id: params.runId.slice(0, 96),
     owner_id: params.ownerId.slice(0, 96),
@@ -964,87 +913,6 @@ async function ensureSandboxStarted(sandbox: DaytonaSandbox, timeoutSeconds: num
   await sandbox.waitUntilStarted?.(timeoutSeconds);
 }
 
-async function startWorker(params: {
-  sandbox: DaytonaSandbox;
-  authToken: string;
-}): Promise<JsonRecord> {
-  const remoteRoot = readEnv("POLYNET_DAYTONA_DIRECT_REMOTE_ROOT") || DEFAULT_REMOTE_ROOT;
-  const workerLog = readEnv("POLYNET_DAYTONA_DIRECT_WORKER_LOG") || "/tmp/polynet-codex-worker.log";
-  const workerPid = readEnv("POLYNET_DAYTONA_DIRECT_WORKER_PID") || "/tmp/polynet-codex-worker.pid";
-  const workerEnv = buildWorkerEnv({
-    sandboxId: params.sandbox.id,
-    authToken: params.authToken,
-    remoteRoot,
-  });
-  const defaultStartCommand = [
-    "set -euo pipefail",
-    "test -f package.json || { echo 'daytona_snapshot_runtime_incomplete:package_json_missing' >&2; exit 42; }",
-    "test -d node_modules || { echo 'daytona_snapshot_runtime_incomplete:node_modules_missing' >&2; exit 42; }",
-    "test -x node_modules/.bin/codex || { echo 'daytona_snapshot_runtime_incomplete:codex_cli_missing' >&2; exit 42; }",
-    "test -f scripts/run_polynet_codex_worker_service_local.sh || { echo 'daytona_snapshot_runtime_incomplete:worker_runner_missing' >&2; exit 42; }",
-    `mkdir -p ${shellQuote(workerEnv.POLYNET_DAYTONA_WORKSPACE_ROOT)}`,
-    `if test -f ${shellQuote(workerPid)}; then kill "$(cat ${shellQuote(workerPid)})" 2>/dev/null || true; fi`,
-    `nohup env ${envBlock(workerEnv)} bash scripts/run_polynet_codex_worker_service_local.sh > ${shellQuote(
-      workerLog,
-    )} 2>&1 & echo $! > ${shellQuote(workerPid)}`,
-    `test -s ${shellQuote(workerPid)}`,
-  ].join("\n");
-
-  await runRemoteBash(params.sandbox, defaultStartCommand, {
-    cwd: remoteRoot,
-    timeoutSeconds: readIntegerEnv("POLYNET_DAYTONA_DIRECT_WORKER_START_TIMEOUT_SECONDS", 900),
-  });
-
-  return await checkWorkerHealth({
-    sandbox: params.sandbox,
-    authToken: params.authToken,
-    timeoutMs: readIntegerEnv("POLYNET_DAYTONA_DIRECT_WORKER_HEALTH_TIMEOUT_SECONDS", 120) * 1000,
-    pollMs: readBoundedIntegerEnv(
-      "POLYNET_DAYTONA_DIRECT_WORKER_HEALTH_POLL_MS",
-      250,
-      100,
-      1500,
-    ),
-    workerLog,
-  });
-}
-
-async function checkWorkerHealth(params: {
-  sandbox: DaytonaSandbox;
-  authToken: string;
-  timeoutMs: number;
-  pollMs: number;
-  workerLog: string;
-}): Promise<JsonRecord> {
-  const startedAt = Date.now();
-  let lastOutput = "";
-  while (Date.now() - startedAt < params.timeoutMs) {
-    const result = await runRemote(
-      params.sandbox,
-      `curl -sS -H ${shellQuote(`Authorization: Bearer ${params.authToken}`)} http://127.0.0.1:${WORKER_PORT}/healthz || true`,
-      { timeoutSeconds: 10, allowFailure: true },
-    );
-    lastOutput = result.output.trim();
-    if (lastOutput.startsWith("{")) {
-      const parsed = JSON.parse(lastOutput) as JsonRecord;
-      if (parsed.worker_http_ready === true || parsed.ok === true) return parsed;
-    }
-    await new Promise((resolve) => setTimeout(resolve, params.pollMs));
-  }
-  const logs = await runRemote(
-    params.sandbox,
-    `tail -240 ${shellQuote(params.workerLog)} 2>/dev/null || true`,
-    { timeoutSeconds: 10, allowFailure: true },
-  );
-  throw new Error(
-    [
-      "daytona_direct_worker_health_timeout",
-      `last_health=${lastOutput.slice(0, 2000)}`,
-      `worker_log=${logs.output.slice(0, 6000)}`,
-    ].join("\n"),
-  );
-}
-
 export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
   args: {
     ownerId: v.id("users"),
@@ -1057,10 +925,6 @@ export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
     targetId: string;
     sandboxId: string;
     sandboxName: string | null;
-    workerUrl: string;
-    authToken: string;
-    signedPreviewExpiresAt: number;
-    workerPort: number;
     snapshotId: string | null;
     targetRegion: string | null;
     autoStopMinutes: number;
@@ -1075,10 +939,6 @@ export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
       throw new Error("daytona_direct_credentials_missing");
     }
     const targetStartedAtMs = Date.now();
-    const authToken = readEnv("POLYNET_CODEX_WORKER_AUTH_TOKEN");
-    if (!authToken) {
-      throw new Error("polynet_codex_worker_auth_token_missing");
-    }
     const lifecycleMode = readDaytonaTargetLifecycleMode();
     const lifecycle = buildDaytonaTargetLifecycleConfig(lifecycleMode);
     const workspaceRoot = readEnv("POLYNET_DAYTONA_WORKSPACE_ROOT") || DEFAULT_WORKSPACE_ROOT;
@@ -1111,11 +971,6 @@ export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
       target_claim_ms: elapsedMs(targetClaimStartedAtMs),
       sandbox_create_or_get_ms: 0,
       sandbox_start_ms: 0,
-      worker_start_ms: 0,
-      worker_http_ready_ms: 0,
-      worker_health_ready_mode: "cached",
-      codex_app_server_init_ms: null,
-      preview_url_ms: 0,
       target_ready_persist_ms: 0,
       target_ready_total_ms: 0,
       cached_target_ready: false,
@@ -1129,11 +984,7 @@ export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
         targetId: claimed.targetId,
         sandboxId: String(claimed.target.sandboxId ?? ""),
         sandboxName: String(claimed.target.sandboxName ?? "") || null,
-        workerUrl: String(claimed.target.workerUrl ?? ""),
-        authToken,
         workspaceRoot: String(claimed.target.workspaceRoot ?? workspaceRoot),
-        signedPreviewExpiresAt: Number(claimed.target.signedPreviewExpiresAt ?? 0),
-        workerPort: Number(claimed.target.workerPort ?? WORKER_PORT),
         snapshotId:
           String(claimed.target.snapshotId ?? lifecycle.snapshotId ?? "").trim() || null,
         targetRegion:
@@ -1185,29 +1036,6 @@ export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
         readIntegerEnv("POLYNET_DAYTONA_DIRECT_START_TIMEOUT_SECONDS", 180),
       );
       timing.sandbox_start_ms = elapsedMs(sandboxStartStartedAtMs);
-      const previewSeconds = readIntegerEnv("POLYNET_DAYTONA_DIRECT_PREVIEW_SECONDS", 7200);
-      const workerStartStartedAtMs = Date.now();
-      const previewUrlStartedAtMs = Date.now();
-      const [workerHealth, preview] = await Promise.all([
-        startWorker({ sandbox, authToken }).finally(() => {
-          timing.worker_start_ms = elapsedMs(workerStartStartedAtMs);
-          timing.worker_http_ready_ms = timing.worker_start_ms;
-        }),
-        Promise.resolve(sandbox.getSignedPreviewUrl?.(WORKER_PORT, previewSeconds)).finally(() => {
-          timing.preview_url_ms = elapsedMs(previewUrlStartedAtMs);
-        }),
-      ]);
-      const codexHealth =
-        workerHealth.codex && typeof workerHealth.codex === "object" && !Array.isArray(workerHealth.codex)
-          ? (workerHealth.codex as JsonRecord)
-          : null;
-      timing.codex_app_server_init_ms = readOptionalNonNegativeNumber(codexHealth?.init_latency_ms);
-      timing.worker_health_ready_mode = codexHealth?.initialized === true ? "codex" : "http";
-      const workerUrl = normalizeUrl(
-        typeof preview === "string" ? preview : preview?.url,
-      );
-      if (!workerUrl) throw new Error("daytona_direct_preview_url_missing");
-      const signedPreviewExpiresAt = Date.now() + previewSeconds * 1000;
       const readyPersistStartedAtMs = Date.now();
       const ready = (await ctx.runMutation(
         (internal as any).daytonaCodexRuntimeTargets
@@ -1217,8 +1045,6 @@ export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
           sandboxId: sandbox.id,
           ...(sandbox.name ? { sandboxName: sandbox.name } : {}),
           sandboxState: "started",
-          workerUrl,
-          signedPreviewExpiresAt,
           lastHealthAt: Date.now(),
           nowMs: Date.now(),
         },
@@ -1230,10 +1056,6 @@ export const ensureDaytonaCodexRuntimeTargetInternal = internalAction({
         targetId: claimed.targetId,
         sandboxId: sandbox.id,
         sandboxName: String(ready?.sandboxName ?? sandbox.name ?? "") || null,
-        workerUrl,
-        authToken,
-        signedPreviewExpiresAt,
-        workerPort: WORKER_PORT,
         snapshotId: lifecycle.snapshotId,
         targetRegion: lifecycle.targetRegion,
         autoStopMinutes: lifecycle.autoStopMinutes,
@@ -2374,7 +2196,7 @@ function normalizeActivePreviewPorts(rawPorts: unknown): number[] {
       const port = normalizeWorkspacePreviewPort(rawPort);
       if (port !== null) ports.add(port);
     } catch {
-      // Ignore malformed worker evidence; cleanup should still progress.
+      // Ignore malformed preview evidence; cleanup should still progress.
     }
   }
   return Array.from(ports);
@@ -2422,12 +2244,6 @@ function buildStopDaytonaAppPreviewCommand(params: {
     'printf "stopped_daytona_preview ports=%s pids=%s\\n" "$PORTS" "$PIDS"',
     "exit 0",
   ].join("\n");
-}
-
-function daytonaTeardownReasonForWorkerStatus(status: string): string {
-  if (status === "ok") return "turn_finished";
-  if (status === "cancelled") return "user_cancelled";
-  return "turn_failed";
 }
 
 async function deleteExpiredHumanSaveRetentionTarget(params: {
@@ -3233,162 +3049,6 @@ export const openDaytonaComputerUseUrlInternal = internalAction({
         ok: false,
         code: daytonaRuntimeErrorCode(error),
         message: sanitizeDaytonaRuntimeError(error),
-      };
-    }
-  },
-});
-
-export const finalizeDaytonaCodexRuntimeTargetFromWorkerIngestInternal = internalAction({
-  args: {
-    ownerId: v.id("users"),
-    runId: v.string(),
-    status: v.union(v.literal("ok"), v.literal("error"), v.literal("cancelled")),
-    activePreviewPorts: v.optional(v.array(v.number())),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    ok: boolean;
-    finalized: boolean;
-    reason: string;
-    released?: boolean;
-    scheduled?: boolean;
-  }> => {
-    const nowMs = args.nowMs ?? Date.now();
-    let target: JsonRecord | null = null;
-    try {
-      target = (await ctx.runQuery(
-        (internal as any).daytonaCodexRuntimeTargets
-          .getDaytonaCodexRuntimeTargetByRunIdInternal as any,
-        {
-          ownerId: args.ownerId,
-          runId: args.runId,
-        },
-      )) as JsonRecord | null;
-    } catch (error) {
-      return {
-        ok: false,
-        finalized: false,
-        reason: `target_lookup_failed:${daytonaRuntimeErrorCode(error)}`,
-      };
-    }
-
-    if (!target) {
-      return { ok: true, finalized: false, reason: "target_missing" };
-    }
-    const providerTeardownState = String(target.providerTeardownState ?? "");
-    const sandboxState = String(target.sandboxState ?? "");
-    if (providerTeardownState === "deleted" || sandboxState === "deleted") {
-      return { ok: true, finalized: false, reason: "target_already_deleted" };
-    }
-
-    const teardownReason = daytonaTeardownReasonForWorkerStatus(args.status);
-    const activePreviewPorts = normalizeActivePreviewPorts(args.activePreviewPorts ?? []);
-    let released = false;
-    try {
-      const release = (await ctx.runMutation(
-        (internal as any).daytonaCodexRuntimeTargets
-          .releaseDaytonaCodexRuntimeTargetInternal as any,
-        {
-          ownerId: args.ownerId,
-          runId: args.runId,
-          reason: teardownReason,
-          activePreviewPorts,
-          nowMs,
-        },
-      )) as JsonRecord;
-      released = release.released === true;
-    } catch (error) {
-      await appendTeardownRuntimeEventBestEffort({
-        ctx,
-        ownerId: String(args.ownerId),
-        runId: args.runId,
-        target,
-        eventType: "daytona_codex_runtime_provider_teardown_failed",
-        eventKey: `${args.runId}:daytona_codex_runtime_provider_teardown_failed:durable_ingest_release`,
-        payload: {
-          run_id: args.runId,
-          provider: "daytona",
-          transport: "daytona_direct",
-          target_id: String(target._id ?? "") || null,
-          sandbox_id: String(target.sandboxId ?? "") || null,
-          reason: teardownReason,
-          cleanup_mode: "durable_ingest",
-          failure_stage: "release",
-          message: sanitizeDaytonaRuntimeError(error).slice(0, 1000),
-        },
-      });
-      return {
-        ok: false,
-        finalized: false,
-        reason: `release_failed:${daytonaRuntimeErrorCode(error)}`,
-      };
-    }
-
-    try {
-      await appendTeardownRuntimeEventBestEffort({
-        ctx,
-        ownerId: String(args.ownerId),
-        runId: args.runId,
-        target,
-        eventType: "daytona_codex_runtime_provider_teardown_started",
-        eventKey: `${args.runId}:daytona_codex_runtime_provider_teardown_started:durable_ingest`,
-        payload: {
-          run_id: args.runId,
-          provider: "daytona",
-          transport: "daytona_direct",
-          target_id: String(target._id ?? "") || null,
-          sandbox_id: String(target.sandboxId ?? "") || null,
-          reason: teardownReason,
-          cleanup_mode: "durable_ingest",
-          active_preview_ports: activePreviewPorts,
-        },
-      });
-      await ctx.scheduler.runAfter(
-        0,
-        (internal as any).daytonaCodexRuntimeTargetActions
-          .teardownAndRecordDaytonaCodexRuntimeTargetInternal as any,
-        {
-          ownerId: args.ownerId,
-          runId: args.runId,
-          reason: teardownReason,
-        },
-      );
-      return {
-        ok: true,
-        finalized: true,
-        reason: teardownReason,
-        released,
-        scheduled: true,
-      };
-    } catch (error) {
-      await appendTeardownRuntimeEventBestEffort({
-        ctx,
-        ownerId: String(args.ownerId),
-        runId: args.runId,
-        target,
-        eventType: "daytona_codex_runtime_provider_teardown_failed",
-        eventKey: `${args.runId}:daytona_codex_runtime_provider_teardown_failed:durable_ingest_schedule`,
-        payload: {
-          run_id: args.runId,
-          provider: "daytona",
-          transport: "daytona_direct",
-          target_id: String(target._id ?? "") || null,
-          sandbox_id: String(target.sandboxId ?? "") || null,
-          reason: teardownReason,
-          cleanup_mode: "durable_ingest",
-          failure_stage: "schedule",
-          message: sanitizeDaytonaRuntimeError(error).slice(0, 1000),
-        },
-      });
-      return {
-        ok: false,
-        finalized: false,
-        reason: `schedule_failed:${daytonaRuntimeErrorCode(error)}`,
-        released,
-        scheduled: false,
       };
     }
   },

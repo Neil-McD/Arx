@@ -57,16 +57,6 @@ crons.interval(
   },
 );
 
-crons.interval(
-  "sweep expired daytona codex runtime targets",
-  { minutes: 5 },
-  (internal as any).daytonaCodexRuntimeTargetActions
-    .sweepExpiredDaytonaCodexRuntimeTargetsInternal,
-  {
-    limit: 20,
-  },
-);
-
 // Ignition (contract Amendment v1.1): every 6 hours, refresh each community's
 // compiler digest (free, deterministic) and knock for a memory cycle. The
 // knock is triple-gated — owner off-switch, 2-cycles/day cap, and a delta

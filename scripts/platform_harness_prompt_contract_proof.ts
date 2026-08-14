@@ -59,10 +59,9 @@ assert.equal(
   }),
   "authenticated_cloud_tools",
 );
-for (const engine of [RUNTIME_ENGINE_POLYNET, RUNTIME_ENGINE_CODEX]) {
-  assert.equal(getRuntimeEngineAccessLevel(engine), "included");
-  assert.equal(canUseRuntimeEngine({ engine }), true);
-}
+assert.equal(getRuntimeEngineAccessLevel(RUNTIME_ENGINE_POLYNET), "included");
+assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_POLYNET }), true);
+assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_CODEX }), false);
 
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
@@ -74,10 +73,13 @@ assert.doesNotMatch(runtimePrompt, /RuntimeAccountPlan|Account plan:|Premium-onl
 assert.doesNotMatch(runtimeAgentLoop, /reserveCreditsInternal|settleCreditsInternal/);
 assert.doesNotMatch(runtimeHandlers, /reserveCreditsInternal|settleCreditsInternal|paid_usage_billing_mode|required_credits/);
 assert.doesNotMatch(voice, /reserveCreditsInternal|settleCreditsInternal|workspace_credits_exhausted/);
-assert.match(runtimeAgentLoop, /recordPlatformToolCostBestEffort/);
+assert.match(
+  runtimeAgentLoop,
+  /authorizeFounderPaidToolFundingSession[\s\S]*settleFounderPaidToolFundingSession/,
+);
 assert.match(runtimeHandlers, /recordPlatformToolCostBestEffort/);
 assert.match(voice, /recordPlatformToolCostBestEffort/);
-assert.match(docs, /one authenticated capability surface/);
-assert.match(docs, /platform-absorbed provider cost/);
+assert.match(docs, /One backend resolver composes them/);
+assert.match(docs, /Each active Builder cycle includes up to `\$20` raw GPT 5\.6 Luna model cost/);
 
 console.log("platform_harness_prompt_contract_proof: ok");

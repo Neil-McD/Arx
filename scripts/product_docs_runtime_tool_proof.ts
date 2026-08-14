@@ -195,6 +195,7 @@ function proveDocsToolExecution() {
 function provePromptGuidance() {
   const prompt = buildPlatformHarnessRuntimeSystemPrompt({
     harnessName: "chat_tools",
+    invocationSurface: "member_agent_dock",
     loopBudget: DEFAULT_RUNTIME_KERNEL_BUDGET,
     allowedToolNames: ["search_product_docs", "get_product_doc"],
     communityId: null,
