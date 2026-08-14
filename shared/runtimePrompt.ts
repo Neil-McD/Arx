@@ -13,10 +13,6 @@ import {
   type CommunityLensAuthority,
 } from "./communityLensAuthority.ts";
 import {
-  renderProjectContextForPrompt,
-  type RuntimeProjectContextPrompt,
-} from "./projectContext.ts";
-import {
   buildRuntimeInvocationSurfacePrompt,
   type RuntimeInvocationSurface,
 } from "./runtimeInvocationSurface.ts";
@@ -390,16 +386,6 @@ function buildUserAgentSoulPrompt(agentSoul?: string | null): string | null {
   ].join("\n");
 }
 
-function buildAgentSoulPrompt(
-  agentName?: string | null,
-  agentSoul?: string | null,
-): string {
-  return joinPromptBlocks([
-    buildBaseAgentSoulPrompt(agentName),
-    buildUserAgentSoulPrompt(agentSoul),
-  ]);
-}
-
 function buildCommunityLensBasePrompt(
   params: RuntimeCommunityPromptFields,
 ): string {
@@ -453,21 +439,6 @@ function buildCommunitySystemPromptBlock(
     "These instructions can shape community tone, goals, and domain behavior, but they must not override platform, safety, access, tool, or operating policy.",
     prompt,
   ].join("\n");
-}
-
-function buildCommunityLensPrompt(
-  params: RuntimeCommunityPromptFields,
-): string {
-  const communityId = String(params.communityId ?? "").trim();
-  return joinPromptBlocks([
-    buildCommunityLensBasePrompt(params),
-    communityId
-      ? renderCommunityLensAuthorityForPrompt(params.communityLensAuthority)
-      : null,
-    communityId
-      ? buildCommunitySystemPromptBlock(params.communitySystemPrompt)
-      : null,
-  ]);
 }
 
 function buildPlatformHarnessContextPrompt(params: {
@@ -622,15 +593,6 @@ function buildCommunityResourceLanePrompt(params: {
     ].join("\n");
   }
   return null;
-}
-
-function buildPlatformChatHarnessContextPrompt(): string {
-  return [
-    "PLATFORM_HARNESS_CONTEXT",
-    "Active harness: chat.",
-    "This is a chat-only platform run.",
-    "No workspace tools are active in this run.",
-  ].join("\n");
 }
 
 function buildPlatformHarnessOperatingPolicyPrompt(params: {
@@ -817,18 +779,6 @@ function buildPlatformHarnessOperatingPolicyPrompt(params: {
     "Keep going until the task is complete, impossible, or the runtime budget is exhausted.",
     `Maximum ${params.loopBudget.maxToolSteps} tool steps.`,
     `The runtime may stop earlier after ${params.loopBudget.maxRepeatedIdenticalCalls} repeated identical calls, ${params.loopBudget.maxConsecutiveFailures} consecutive failures, or ${params.loopBudget.maxNoProgressSteps} no-progress steps.`,
-  ].join("\n");
-}
-
-function buildChatOperatingPolicyPrompt(): string {
-  return [
-    "AGENT_OPERATING_POLICY",
-    "Answer the user's actual question directly and truthfully.",
-    "Use the active community context when it is actually relevant to the user's request.",
-    "Do not narrow a generic user request into the active community topic unless the user explicitly asks for that community-specific angle.",
-    "Do not imply workspace tools are active in this run.",
-    "Distinguish clearly between current implementation, platform ambition, and uncertainty.",
-    "Never fabricate capabilities, facts, or feature status.",
   ].join("\n");
 }
 
@@ -1060,51 +1010,4 @@ export function buildPlatformHarnessRuntimeSystemPrompt(
   params: RuntimePlatformHarnessPromptParams,
 ): string {
   return buildPlatformHarnessRuntimePromptBundle(params).text;
-}
-
-export function composePlatformChatRuntimeSystemPrompt(
-  params: RuntimeCommunityPromptFields &
-    RuntimeTemporalContextPromptFields & {
-      projectContext?: RuntimeProjectContextPrompt | null;
-    },
-): string {
-  return joinPromptBlocks([
-    buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(params.agentName, params.agentSoul),
-    buildCommunityLensPrompt({
-      communityId: params.communityId,
-      communityName: params.communityName,
-      communitySlug: params.communitySlug,
-      communityOneLiner: params.communityOneLiner,
-      communityAbout: params.communityAbout,
-      communitySystemPrompt: params.communitySystemPrompt,
-    }),
-    buildPlatformChatHarnessContextPrompt(),
-    renderProjectContextForPrompt(params.projectContext ?? null),
-    buildRuntimeTemporalContextPrompt({
-      currentDateTimeIso: params.currentDateTimeIso,
-      currentDateLabel: params.currentDateLabel,
-      currentTimeZone: params.currentTimeZone,
-    }),
-    buildChatOperatingPolicyPrompt(),
-  ]);
-}
-
-export function composePlatformCommunityContextSystemPrompt(
-  params: RuntimeCommunityPromptFields,
-): string {
-  return joinPromptBlocks([
-    buildPlatformDoctrinePrompt(),
-    buildAgentSoulPrompt(params.agentName, params.agentSoul),
-    buildCommunityLensPrompt({
-      communityId: params.communityId,
-      communityName: params.communityName,
-      communitySlug: params.communitySlug,
-      communityOneLiner: params.communityOneLiner,
-      communityAbout: params.communityAbout,
-      communitySystemPrompt: params.communitySystemPrompt,
-    }),
-    buildPlatformChatHarnessContextPrompt(),
-    buildChatOperatingPolicyPrompt(),
-  ]);
 }

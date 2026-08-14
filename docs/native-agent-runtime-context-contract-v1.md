@@ -639,7 +639,8 @@ full-transcript archival, a new table, or a universal receipt storage schema.
 ### 17.2 Slice 5: delete Workspace and Codex runtime compatibility
 
 Status: Slices 5A and 5B are landed on `origin/main`, deployed, and proven in
-production. Slice 5C is the next code boundary.
+production. Slice 5C is implemented and verified locally; release proof
+remains.
 
 Release evidence:
 
@@ -740,9 +741,44 @@ Slice 5B acceptance:
    green.
 4. No schema migration or historical record deletion is introduced.
 
-Slice 5C is the next code boundary: delete the legacy chat-mode provider branch
-and chat prompt composer after proving no first-party or production caller.
-Do not mix this with Workspace/session deletion.
+Slice 5C is implemented and verified locally; release proof remains. It deletes
+the unreachable legacy chat-mode provider branch without changing the governed
+agent loop, community chat, historical runtime records, or external MCP.
+
+Slice 5C changes:
+
+1. Runtime admission still requires explicit governed agent tools, while
+   runtime resolution no longer returns a redundant execution-mode selector.
+2. The authenticated runtime handler now has one structural execution path:
+   the existing governed agent loop. New run receipts persist `agentic` and
+   `capability_composed_tools_v1` directly.
+3. The duplicate streaming and non-streaming direct-provider chat branches,
+   chat-only message projection, chat prompt composer, and unused cloud
+   community-context envelope are deleted.
+4. New runtime-run creation rejects an explicit non-agentic execution mode and
+   defaults missing input to `agentic`. Historical schema fields, legacy
+   `chat` values, and missing-value trace rendering remain readable.
+5. Community channel/chat storage, adapters, access checks, provider
+   connections, the adaptive failure finalizer, native roles, and external MCP
+   are unchanged.
+
+Slice 5C local acceptance:
+
+1. Repository search finds exactly the two canonical browser callers and no
+   executable chat-mode branch or chat-only prompt composer.
+2. Convex and web typechecks pass, together with native ingress extinction,
+   runtime router/loop, runtime persistence, prompt layout, Member, Funnel,
+   Concierge, community-agent, funding, context integrity, provider-context
+   attestation, Resources, Events, history, legacy community-chat adapter, and
+   external MCP proofs.
+3. The full local release gate passes, including the production web build, all
+   104 behavior-test files and 657 tests, dependency interlock, and
+   zero-vulnerability root, web, and preview-proxy audits.
+4. The stale community-lens proof now reads its canonical owner,
+   `WebMemberAgentDock`, instead of the decomposed `App.tsx` shell.
+5. No schema migration or historical record deletion is introduced.
+
+Do not mix Slice 5C with Workspace/session deletion.
 
 Slice 5D follows separately: prove and remove the legacy general Workspace
 execution/session/tool substrate, repair its stale quarantine proof, and rename
@@ -1047,10 +1083,10 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Reconcile the isolated worktree with current `origin/main`, land and
-release-verify Slices 5A and 5B together, then perform one final production
-reachability check against the deployed SHA. The next code slice is Slice 5C:
-delete the unreachable legacy chat-mode provider branch and composer while
-preserving the native agentic loop, historical reads, and external MCP.
+Land and release-verify Slice 5C from current `origin/main`, then rerun the
+read-only production execution-mode census and one authenticated Member Agent
+community-inspection canary against the deployed SHA. Slice 5D is the next code
+boundary: remove the legacy general Workspace execution/session/tool substrate
+without touching Pi, budgeting, compaction, historical reads, or external MCP.
 
 Do not begin Slice 6, 7, or 8 while the preceding slice is unverified.

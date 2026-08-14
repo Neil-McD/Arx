@@ -142,7 +142,6 @@ export type RuntimeTurnResolution = {
   allowedToolNames: RetrievalToolName[];
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
-  runtimeExecutionMode: "agentic" | "chat";
   invocationSurface: RuntimeInvocationSurface;
   memberAgentSurfaceContext: MemberAgentSurfaceContextV1 | null;
   communityInferenceAdmission: CommunityInferenceFundingAdmission | null;
@@ -834,7 +833,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     };
   }
-  const runtimeExecutionMode = "agentic" as const;
   return {
     ok: true,
     value: {
@@ -874,7 +872,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         authState: "authenticated",
         activeCapabilityFamilies: resolvedRuntimeCapabilityFamilies,
       }),
-      runtimeExecutionMode,
       invocationSurface,
       memberAgentSurfaceContext,
       communityInferenceAdmission,

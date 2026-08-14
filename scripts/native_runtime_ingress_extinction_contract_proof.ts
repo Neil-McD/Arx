@@ -33,6 +33,8 @@ function walkSourceFiles(directory: string): string[] {
 const runtimeSurfaces = read("shared/runtimeInvocationSurface.ts");
 const runtimeEngines = read("shared/runtimeEngine.ts");
 const resolution = read("convex/runtimeTurnResolution.ts");
+const handlers = read("convex/runtimeTurnHandlers.ts");
+const runtimePrompt = read("shared/runtimePrompt.ts");
 const runner = read("shared/useWebTurnRunnerController.ts");
 const transport = read("shared/cloudRuntimeTransport.ts");
 const runtimeRoutes = read("convex/httpRuntimeRoutes.ts");
@@ -126,8 +128,30 @@ assert.match(resolution, /code: "invalid_invocation_surface"/);
 assert.match(resolution, /code: "unsupported_runtime_engine"/);
 assert.match(resolution, /code: "agentic_runtime_required"/);
 assert.match(resolution, /code: "governed_agent_tools_unavailable"/);
-assert.match(resolution, /const runtimeExecutionMode = "agentic" as const/);
-assert.doesNotMatch(resolution, /\?\s*"agentic"\s*:\s*"chat"/);
+assert.doesNotMatch(resolution, /runtimeExecutionMode/);
+assert.doesNotMatch(handlers, /runtimeExecutionMode/);
+assert.match(handlers, /executionMode: "agentic"/);
+assert.doesNotMatch(
+  handlers,
+  /capability_composed_chat_v1|legacy_project_workspace|composePlatformChatRuntimeSystemPrompt/,
+);
+assert.doesNotMatch(
+  runtimePrompt,
+  /composePlatformChatRuntimeSystemPrompt|composePlatformCommunityContextSystemPrompt|Active harness: chat\./,
+);
+assert.equal(
+  existsSync(new URL("shared/communityContextEnvelope.ts", root)),
+  false,
+  "unused chat-only community context envelope must stay deleted",
+);
+assert.match(threads, /requestedExecutionMode !== "agentic"/);
+assert.match(threads, /throw new Error\("unsupported_execution_mode"\)/);
+assert.match(threads, /const executionMode = "agentic"/);
+assert.match(
+  threads,
+  /Execution mode: \$\{args\.run\.executionMode \?\? "chat"\}/,
+  "historical missing execution-mode records remain readable with their legacy interpretation",
+);
 assert.ok(
   resolution.indexOf('code: "invalid_invocation_surface"') <
     resolution.indexOf('setStage("messages")'),
@@ -193,7 +217,7 @@ for (const retiredPath of [
 ]) {
   assert.equal(existsSync(new URL(retiredPath, root)), false, `${retiredPath} must stay deleted`);
 }
-assert.doesNotMatch(read("convex/runtimeTurnHandlers.ts"), /polynetCodexWorker|POLYNET_CODEX_WORKER/);
+assert.doesNotMatch(handlers, /polynetCodexWorker|POLYNET_CODEX_WORKER/);
 assert.doesNotMatch(
   daytonaActions,
   /startWorker\(|run_polynet_codex_worker_service_local|POLYNET_CODEX_WORKER_AUTH_TOKEN|getSignedPreviewUrl\?\.\(WORKER_PORT/,

@@ -8,7 +8,6 @@ import {
   normalizeProjectInstructions,
   renderProjectContextForPrompt,
 } from "../shared/projectContext.ts";
-import { composePlatformChatRuntimeSystemPrompt } from "../shared/runtimePrompt.ts";
 import {
   buildRuntimeTurnContextPacket,
   buildRuntimeTurnContextSnapshot,
@@ -58,43 +57,6 @@ assert.match(boundedPrompt, /\[2 more links omitted\]/);
 assert.match(boundedPrompt, /Link 10: https:\/\/example\.com\/render-10/);
 assert.doesNotMatch(boundedPrompt, /Link 11: https:\/\/example\.com\/render-11/);
 
-const plainChatProjectPrompt = composePlatformChatRuntimeSystemPrompt({
-  agentName: "Polynet agent",
-  projectContext: {
-    label: "Plain Chat Project",
-    description: "Project context should be mode-independent.",
-    instructions: "Use project context in plain chat.",
-    links: [{ title: "Plain Chat Spec", url: "https://example.com/plain-chat" }],
-  },
-  currentDateTimeIso: "2026-06-16T12:00:00.000Z",
-  currentDateLabel: "Tuesday, June 16, 2026 at 12:00:00 PM UTC",
-  currentTimeZone: "UTC",
-});
-assert.match(plainChatProjectPrompt, /PLATFORM_HARNESS_CONTEXT/);
-assert.match(plainChatProjectPrompt, /PROJECT_CONTEXT/);
-assert.match(plainChatProjectPrompt, /Project: Plain Chat Project/);
-assert.match(plainChatProjectPrompt, /Use project context in plain chat/);
-assert.match(plainChatProjectPrompt, /Plain Chat Spec: https:\/\/example\.com\/plain-chat/);
-assert.ok(
-  plainChatProjectPrompt.indexOf("PLATFORM_HARNESS_CONTEXT") <
-    plainChatProjectPrompt.indexOf("PROJECT_CONTEXT"),
-  "plain chat project context should render after harness context",
-);
-assert.ok(
-  plainChatProjectPrompt.indexOf("PROJECT_CONTEXT") <
-    plainChatProjectPrompt.indexOf("TEMPORAL_CONTEXT"),
-  "plain chat project context should render before volatile temporal context",
-);
-
-const looseChatPrompt = composePlatformChatRuntimeSystemPrompt({
-  agentName: "Polynet agent",
-  projectContext: null,
-  currentDateTimeIso: "2026-06-16T12:00:00.000Z",
-  currentDateLabel: "Tuesday, June 16, 2026 at 12:00:00 PM UTC",
-  currentTimeZone: "UTC",
-});
-assert.doesNotMatch(looseChatPrompt, /PROJECT_CONTEXT/);
-
 const schema = read("convex/schema.ts");
 const projects = read("convex/projects.ts");
 const projectContextSource = read("shared/projectContext.ts");
@@ -143,15 +105,9 @@ assert.match(runtimeContextLoader, /loadRuntimeProjectContext/);
 assert.match(runtimeContextLoader, /api\.projects\.getCloudProjectById/);
 assert.match(runtimeContextLoader, /authSubject/);
 assert.match(runtimeContextLoader, /projectContext,/);
-assert.match(runtimePrompt, /projectContext\?: RuntimeProjectContextPrompt \| null/);
-assert.match(runtimePrompt, /renderProjectContextForPrompt\(params\.projectContext \?\? null\)/);
-assert.match(runtimeTurnHandlers, /loadRuntimeProjectContext\(\{/);
-assert.match(runtimeTurnHandlers, /projectContext: runtimeProjectContext/);
-assert.doesNotMatch(
-  runtimeTurnHandlers,
-  /const runtimeProjectContext = await loadRuntimeTurnContextPacketForRun/,
-  "plain chat should not load the full runtime packet just to render project context",
-);
+assert.match(runtimePrompt, /renderRuntimeTurnContextForPrompt\(params\.runtimeTurnContext\)/);
+assert.doesNotMatch(runtimeTurnHandlers, /loadRuntimeProjectContext\(\{/);
+assert.match(runtimeTurnHandlers, /loadRuntimeTurnContextPacketForRun\(\{/);
 assert.match(runtimeAgentLoop, /const projectContext = runtimeTurnContext\.projectContext \?\? null/);
 assert.doesNotMatch(
   runtimeAgentLoop,

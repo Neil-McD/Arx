@@ -24,7 +24,9 @@ function main() {
   const runtimeTurnHandlers = readText(
     join(root, "convex/runtimeTurnHandlers.ts"),
   );
-  const app = readText(join(root, "apps/web/src/App.tsx"));
+  const memberAgentDock = readText(
+    join(root, "apps/web/src/components/WebMemberAgentDock.tsx"),
+  );
   const runtimeSkillResolution = readText(
     join(root, "convex/runtimeSkillResolution.ts"),
   );
@@ -170,9 +172,9 @@ function main() {
     "community workflow context is priority, not exclusive",
   );
   assertIncludes(
-    app,
+    memberAgentDock,
     "Community context was not confirmed.",
-    "workspace lens switch requires confirmed server state",
+    "member-agent lens switch requires confirmed server state",
   );
 
   console.log("community_lens_runtime_contract_proof: ok");
