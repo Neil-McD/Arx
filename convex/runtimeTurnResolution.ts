@@ -90,13 +90,6 @@ export type RuntimeTurnInput = {
   max_tokens?: number | null;
 };
 
-export type PublicTurnInput = {
-  model_id?: string | null;
-  messages?: Array<{ role?: string | null; content?: string | null }> | null;
-  stream?: boolean;
-  max_tokens?: number | null;
-};
-
 export type AuthenticatedActor = {
   userId: string;
   dbUserId: any;
@@ -155,9 +148,6 @@ export type RuntimeTurnResolution = {
   communityInferenceAdmission: CommunityInferenceFundingAdmission | null;
 };
 
-function resolveRequestedAgenticTools(raw: unknown): boolean {
-  return raw === true;
-}
 function readEnv(name: string): string {
   try {
     const value = (globalThis as any)?.process?.env?.[name];
@@ -366,6 +356,45 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     requestedSurface: input.invocation_surface,
     threadKey,
   });
+  if (!invocationSurface) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "invalid_invocation_surface",
+        error: "invalid_invocation_surface",
+        message:
+          "invocation_surface must explicitly match the canonical member agent or funnel thread.",
+      }),
+    };
+  }
+  const rawRuntimeEngine = String(input.runtime_engine ?? "").trim();
+  const requestedRuntimeEngine = normalizeRuntimeEngine(rawRuntimeEngine);
+  if (
+    rawRuntimeEngine.length > 0 &&
+    requestedRuntimeEngine !== "polynet"
+  ) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "unsupported_runtime_engine",
+        error: "unsupported_runtime_engine",
+        message: "The native Polynet runtime is the only supported runtime engine.",
+      }),
+    };
+  }
+  if (input.requested_agentic_tools !== true) {
+    return {
+      ok: false,
+      response: fail(400, {
+        ok: false,
+        code: "agentic_runtime_required",
+        error: "agentic_runtime_required",
+        message: "Native Polynet turns require governed agent tools.",
+      }),
+    };
+  }
   const memberAgentSurfaceContext =
     invocationSurface === "member_agent_dock"
       ? normalizeMemberAgentSurfaceContext(input.surface_context)
@@ -489,42 +518,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     };
   }
   const publicRef = publicMap[requestedModelId];
-  const requestedRuntimeEngine =
-    isCommunityOwnerFundedTurn
-    ? "polynet"
-    : normalizeRuntimeEngine(input.runtime_engine);
-  if (
-    invocationFundingPolicy === "generic_gate" &&
-    input.runtime_engine !== undefined &&
-    input.runtime_engine !== null &&
-    String(input.runtime_engine).trim().length > 0 &&
-    !requestedRuntimeEngine
-  ) {
-    return {
-      ok: false,
-      response: fail(400, {
-        ok: false,
-        code: "invalid_runtime_engine",
-        error: "invalid_runtime_engine",
-        message: "runtime_engine must be either polynet or codex.",
-      }),
-    };
-  }
-  if (hasPersistedImageInput && requestedRuntimeEngine === "codex") {
-    return {
-      ok: false,
-      response: fail(400, {
-        ok: false,
-        code: "member_agent_image_runtime_unsupported",
-        error: "member_agent_image_runtime_unsupported",
-        message: "Image turns use the Polynet runtime. Start a new image turn with that runtime selected.",
-      }),
-    };
-  }
-  const requestedAgenticTools =
-    isCommunityOwnerFundedTurn
-    ? true
-    : resolveRequestedAgenticTools(input.requested_agentic_tools);
   const fallbackPublicRef = Object.values(publicMap).find(
     (value) => typeof value === "string" && value.trim().length > 0,
   );
@@ -830,21 +823,18 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       }),
     ],
   });
-  const runtimeExecutionMode: "agentic" | "chat" =
-    requestedAgenticTools && allowedToolNames.length > 0
-      ? "agentic"
-      : "chat";
-  if (hasPersistedImageInput && runtimeExecutionMode !== "agentic") {
+  if (allowedToolNames.length === 0) {
     return {
       ok: false,
-      response: fail(400, {
+      response: fail(403, {
         ok: false,
-        code: "member_agent_image_runtime_unsupported",
-        error: "member_agent_image_runtime_unsupported",
-        message: "Image turns require the Polynet agent runtime.",
+        code: "governed_agent_tools_unavailable",
+        error: "governed_agent_tools_unavailable",
+        message: "No governed tools are available for this agent surface.",
       }),
     };
   }
+  const runtimeExecutionMode = "agentic" as const;
   return {
     ok: true,
     value: {

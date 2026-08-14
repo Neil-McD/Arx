@@ -19,7 +19,6 @@ import {
 } from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
 import {
-  normalizeActiveWorkspaceRuntimeEngine,
   normalizeRuntimeEngine,
   type RuntimeEngine,
 } from "../shared/runtimeEngine";
@@ -544,8 +543,8 @@ function normalizeOptionalRuntimeEngine(raw: unknown): RuntimeEngine | undefined
   const value = String(raw ?? "").trim();
   if (!value) return undefined;
   const engine = normalizeRuntimeEngine(value);
-  if (!engine) throw new Error("invalid_runtime_engine");
-  return normalizeActiveWorkspaceRuntimeEngine(engine);
+  if (engine !== "polynet") throw new Error("unsupported_runtime_engine");
+  return engine;
 }
 
 function normalizeThreadTitle(raw: unknown): string | undefined {
@@ -1493,7 +1492,7 @@ export const ensureCloudThread = mutation({
     title: v.optional(v.string()),
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
     modelId: v.optional(v.string()),
-    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
+    runtimeEngine: v.optional(v.literal("polynet")),
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
     contextVersion: v.optional(v.number()),
@@ -1949,7 +1948,7 @@ export const updateCloudThread = mutation({
     title: v.optional(v.string()),
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
     modelId: v.optional(v.string()),
-    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
+    runtimeEngine: v.optional(v.literal("polynet")),
     projectId: v.optional(v.id("cloudProjects")),
     lastSeq: v.optional(v.number()),
     archivedAt: v.optional(v.union(v.number(), v.null())),

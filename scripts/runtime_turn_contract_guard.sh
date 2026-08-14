@@ -88,15 +88,16 @@ RUN_ID_COUNT="$(
     | wc -l \
     | tr -d '[:space:]'
 )"
-if [[ -z "$RUN_ID_COUNT" || "$RUN_ID_COUNT" -lt 2 ]]; then
-  echo "FAIL: expected >=2 idempotent runId assignments (public_turn + runtime_turn), found ${RUN_ID_COUNT:-0}"
+if [[ "$RUN_ID_COUNT" != "1" ]]; then
+  echo "FAIL: expected exactly one native runtime_turn runId assignment, found ${RUN_ID_COUNT:-0}"
   exit 1
 fi
-echo "OK: found $RUN_ID_COUNT idempotent runId assignments."
+echo "OK: found the one canonical runtime_turn runId assignment."
 
-echo "[2/10] Ensuring no run_id override in public turn path..."
-forbid_match_in_file "$HANDLERS_FILE" 'const runId = `convex_public:\$\{crypto\.randomUUID\(\)\}`' \
-  "no public_turn runId override after idempotency assignment"
+echo "[2/10] Ensuring the retired public turn ingress is absent..."
+forbid_match_in_file "$HTTP_FILE" 'public_turn' "runtime route registry excludes public_turn"
+forbid_match_in_file "$HANDLERS_FILE" 'handlePublicTurnRequest' "runtime handlers exclude public turn execution"
+forbid_match_in_file "$TURN_RUNNER_FILE" 'runPublicTurn|invokeCloudPublicTurn' "browser runner excludes public turns"
 
 echo "[3/10] Ensuring runtime turn persists user/assistant messages by deterministic keys..."
 require_match_in_file "$HANDLERS_FILE" 'const explicitUserMessageKey = String\(input\.user_message_key \?\? ""\)\.trim\(\)' \

@@ -3,10 +3,7 @@ import {
   runChatgptStreamingCompletion,
 } from "./httpChatgpt";
 import { api, internal } from "./_generated/api";
-import { loadPublicModelMap } from "./httpInferenceConfig";
 import {
-  normalizeMaxTokens,
-  normalizeMessages,
   runOpenAiCompletion,
   runOpenRouterCompletion,
   runOpenRouterStreamingCompletion,
@@ -63,7 +60,6 @@ import {
   loadRuntimeTurnContextPacketForRun,
 } from "./runtimeTurnContext";
 import {
-  PublicTurnInput,
   RequireAuthenticatedActor,
   resolveAuthenticatedRuntimeTurn,
   RuntimeTurnInput,
@@ -375,139 +371,6 @@ function mapPersistedRuntimeEventRow(value: unknown): {
       Number.isFinite(createdAtMs) ? Math.floor(createdAtMs) : Date.now(),
     ).toISOString(),
   };
-}
-
-export async function handlePublicTurnRequest(args: {
-  req: Request;
-  jsonResponse: JsonResponseFn;
-  sseResponse: SseResponseFn;
-}): Promise<Response> {
-  const { req, jsonResponse, sseResponse } = args;
-  let input: PublicTurnInput;
-  try {
-    input = (await req.json()) as PublicTurnInput;
-  } catch {
-    return jsonResponse(req, 400, {
-      ok: false,
-      code: "invalid_request",
-      error: "invalid_request",
-      message: "Invalid JSON payload.",
-    });
-  }
-
-  const publicMap = loadPublicModelMap();
-  const modelId =
-    String(input.model_id ?? "").trim() ||
-    Object.keys(publicMap)[0] ||
-    "gpt-oss-120b-free";
-  const modelRef = publicMap[modelId];
-  if (!modelRef) {
-    return jsonResponse(req, 403, {
-      ok: false,
-      code: "model_not_allowed",
-      error: "model_not_allowed",
-      message: "Requested guest model is not allowed.",
-      model_id: modelId,
-    });
-  }
-
-  const messages = normalizeMessages(input.messages);
-  if (messages.length === 0 || messages[messages.length - 1]?.role !== "user") {
-    return jsonResponse(req, 400, {
-      ok: false,
-      code: "no_user_message",
-      error: "no_user_message",
-      message: "A trailing user message is required.",
-    });
-  }
-
-  const maxTokens = normalizeMaxTokens(input.max_tokens, 2048);
-  const runId =
-    String(
-      (input as { idempotency_key?: unknown }).idempotency_key ?? "",
-    ).trim() || `convex_runtime:${crypto.randomUUID()}`;
-  const stream = input.stream !== false;
-  if (stream) {
-    return sseResponse(req, async (writer) => {
-      writer.send({
-        event: "start",
-        data: {
-          run_id: runId,
-          lane: "public",
-          engine_id: "public_convex",
-          model_id: modelId,
-          inference_source: "free",
-        },
-      });
-      const completion = await runOpenRouterStreamingCompletion({
-        req,
-        modelRef,
-        messages,
-        maxTokens,
-        onDelta: (delta) => {
-          writer.send({
-            event: "delta",
-            data: {
-              delta,
-            },
-          });
-        },
-      });
-      if (isRuntimeCompletionFailure(completion)) {
-        writer.send({
-          event: "error",
-          data: {
-            error: completion.message,
-          },
-        });
-        writer.close();
-        return;
-      }
-      writer.send({
-        event: "done",
-        data: {
-          run_id: runId,
-          lane: "public",
-          engine_id: "public_convex",
-          model_id: modelId,
-          inference_source: "free",
-          full_content: completion.content,
-          prompt_tokens: completion.promptTokens,
-          completion_tokens: completion.completionTokens,
-        },
-      });
-    });
-  }
-
-  const completion = await runOpenRouterCompletion({
-    req,
-    modelRef,
-    messages,
-    maxTokens,
-  });
-  if (isRuntimeCompletionFailure(completion)) {
-    return jsonResponse(req, completion.status, {
-      ok: false,
-      code: completion.code,
-      error: completion.code,
-      message: completion.message,
-    });
-  }
-
-  const content = completion.content;
-  const promptTokens = completion.promptTokens;
-  const completionTokens = completion.completionTokens;
-  return jsonResponse(req, 200, {
-    ok: true,
-    run_id: runId,
-    lane: "public",
-    engine_id: "public_convex",
-    model_id: modelId,
-    inference_source: "free",
-    content,
-    prompt_tokens: promptTokens,
-    completion_tokens: completionTokens,
-  });
 }
 
 export async function handleRuntimeTurnRequest(args: {

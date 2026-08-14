@@ -331,6 +331,16 @@ assert.match(
   /operation: async \(signal\) => \{[\s\S]*beforeProviderRequest\?\.\(\)[\s\S]*runProviderNativeToolCompletion/,
 );
 assert.match(
+  memberRuntime,
+  /recordInitialProviderContextAttestation\(attestation\)[\s\S]*runNativeRuntimeKernel/,
+  "Member and Funnel evidence must persist before the provider/tool kernel starts",
+);
+assert.match(
+  memberTurnHandlers,
+  /communityFundingProviderStarted[\s\S]*usageComplete: communityFundingProviderStarted[\s\S]*disposition: communityFundingProviderStarted \? "indeterminate" : "failed"/,
+  "pre-provider attestation failures must finalize claimed funding as failed, not indeterminate",
+);
+assert.match(
   memberTurnHandlers,
   /communityFundingPromptTokens \+=[\s\S]*communityFundingCompletionTokens \+=[\s\S]*settleCommunityInferenceFundingSession\([\s\S]*promptTokens: communityFundingPromptTokens[\s\S]*completionTokens: communityFundingCompletionTokens/,
 );
