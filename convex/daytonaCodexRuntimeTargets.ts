@@ -1,17 +1,13 @@
 import { v } from "convex/values";
 import { internalMutation, internalQuery } from "./_generated/server";
 import {
-  DAYTONA_CODEX_DEFAULT_AUTO_ARCHIVE_MINUTES,
-  DAYTONA_CODEX_DEFAULT_AUTO_DELETE_MINUTES,
-  DAYTONA_CODEX_DEFAULT_AUTO_STOP_MINUTES,
-  DAYTONA_CODEX_DEFAULT_PREVIEW_LEASE_MINUTES,
-  DAYTONA_CODEX_WORKER_PORT,
-} from "../shared/daytonaCodexRuntimePolicy";
-
-const WORKER_PORT = DAYTONA_CODEX_WORKER_PORT;
-const READY_URL_REFRESH_BUFFER_MS = 60_000;
+  DAYTONA_DEFAULT_AUTO_ARCHIVE_MINUTES,
+  DAYTONA_DEFAULT_AUTO_DELETE_MINUTES,
+  DAYTONA_DEFAULT_AUTO_STOP_MINUTES,
+  DAYTONA_DEFAULT_PREVIEW_LEASE_MINUTES,
+} from "../shared/daytonaRuntimePolicy";
 const DEFAULT_PREVIEW_LEASE_MINUTES =
-  DAYTONA_CODEX_DEFAULT_PREVIEW_LEASE_MINUTES;
+  DAYTONA_DEFAULT_PREVIEW_LEASE_MINUTES;
 const DEFAULT_EXPIRED_TARGET_SWEEP_LIMIT = 20;
 
 function readEnv(name: string): string {
@@ -224,8 +220,7 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
     const claimExistingTarget = async (target: any) => {
       if (
         String(target.workerState ?? "") === "ready" &&
-        String(target.workerUrl ?? "").trim() &&
-        Number(target.signedPreviewExpiresAt ?? 0) > nowMs + READY_URL_REFRESH_BUFFER_MS
+        String(target.sandboxId ?? "").trim()
       ) {
         await ctx.db.patch(target._id, {
           threadId: args.threadId,
@@ -333,8 +328,6 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
       scope: args.lifecycleMode === "thread_ephemeral" ? "thread" : "run",
       provider: "daytona",
       workerState: "creating",
-      workerPort: WORKER_PORT,
-      workerAuthMode: "shared_env_token",
       ...(expectedWorkspaceRoot ? { workspaceRoot: expectedWorkspaceRoot } : {}),
       ...(args.snapshotId ? { snapshotId: args.snapshotId } : {}),
       ...(args.targetRegion ? { targetRegion: args.targetRegion } : {}),
@@ -345,19 +338,19 @@ export const claimDaytonaCodexRuntimeTargetInternal = internalMutation({
         args.autoStopMinutes ??
         readIntegerEnv(
           "POLYNET_DAYTONA_DIRECT_AUTO_STOP_MINUTES",
-          DAYTONA_CODEX_DEFAULT_AUTO_STOP_MINUTES,
+          DAYTONA_DEFAULT_AUTO_STOP_MINUTES,
         ),
       autoArchiveMinutes:
         args.autoArchiveMinutes ??
         readIntegerEnv(
           "POLYNET_DAYTONA_DIRECT_AUTO_ARCHIVE_MINUTES",
-          DAYTONA_CODEX_DEFAULT_AUTO_ARCHIVE_MINUTES,
+          DAYTONA_DEFAULT_AUTO_ARCHIVE_MINUTES,
         ),
       autoDeleteMinutes:
         args.autoDeleteMinutes ??
         readIntegerEnv(
           "POLYNET_DAYTONA_DIRECT_AUTO_DELETE_MINUTES",
-          DAYTONA_CODEX_DEFAULT_AUTO_DELETE_MINUTES,
+          DAYTONA_DEFAULT_AUTO_DELETE_MINUTES,
         ),
       providerTeardownState: "pending",
       lastUsedAt: nowMs,
@@ -379,8 +372,8 @@ export const markDaytonaCodexRuntimeTargetReadyInternal = internalMutation({
     sandboxId: v.string(),
     sandboxName: v.optional(v.string()),
     sandboxState: v.optional(v.string()),
-    workerUrl: v.string(),
-    signedPreviewExpiresAt: v.number(),
+    workerUrl: v.optional(v.string()),
+    signedPreviewExpiresAt: v.optional(v.number()),
     lastHealthAt: v.number(),
     nowMs: v.optional(v.number()),
   },
@@ -391,8 +384,10 @@ export const markDaytonaCodexRuntimeTargetReadyInternal = internalMutation({
       ...(args.sandboxName ? { sandboxName: args.sandboxName } : {}),
       ...(args.sandboxState ? { sandboxState: args.sandboxState } : {}),
       workerState: "ready",
-      workerUrl: args.workerUrl,
-      signedPreviewExpiresAt: args.signedPreviewExpiresAt,
+      ...(args.workerUrl ? { workerUrl: args.workerUrl } : {}),
+      ...(args.signedPreviewExpiresAt !== undefined
+        ? { signedPreviewExpiresAt: args.signedPreviewExpiresAt }
+        : {}),
       lastHealthAt: args.lastHealthAt,
       lastUsedAt: nowMs,
       providerTeardownState: "pending",

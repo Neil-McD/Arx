@@ -20,9 +20,6 @@ function assertNotMatch(source: string, pattern: RegExp, label: string): void {
 const threads = read("convex/threads.ts");
 const daytonaActions = read("convex/daytonaCodexRuntimeTargetActions.ts");
 const cloudThreadsRead = read("shared/cloudThreadsRead.ts");
-const daytonaCodexConfig = read("services/polynet-codex-worker/src/daytonaCodexConfig.ts");
-const workerServer = read("services/polynet-codex-worker/src/server.ts");
-const workerToolSpecs = read("services/polynet-codex-worker/src/workerToolSpecs.ts");
 const daytonaRuntimeAppPreview = read("apps/web/src/components/DaytonaRuntimeAppPreview.tsx");
 const previewProxy = read("apps/preview-proxy/server.js");
 const previewProxySessionToken = read("apps/preview-proxy/previewProxySessionToken.js");
@@ -154,30 +151,6 @@ assertMatch(
   daytonaRuntimeAppPreview,
   /buildWorkspacePreviewProxyUrl/,
   "Daytona preview UI must retain the gateway path that can send Daytona skip-warning headers",
-);
-
-assertNotMatch(
-  daytonaCodexConfig,
-  /Daytona preview URL follows this pattern|proxy\.daytona\.works|returns a preview URL/,
-  "Daytona Codex developer instructions must not expose raw provider preview URL patterns",
-);
-
-assertMatch(
-  daytonaCodexConfig,
-  /PolyNet attaches the app to the user's preview panel[\s\S]*Never print raw provider preview URLs/,
-  "Daytona Codex developer instructions must route preview UX through PolyNet",
-);
-
-assertNotMatch(
-  workerServer,
-  /returns a preview URL and shows the app in the user's preview panel/,
-  "worker tool guidance must not tell Codex to expect or print raw preview URLs",
-);
-
-assertMatch(
-  workerToolSpecs,
-  /PolyNet attaches the app to the user's preview panel[\s\S]*Never print raw provider preview URLs/,
-  "worker tool guidance must route preview UX through PolyNet",
 );
 
 assertMatch(

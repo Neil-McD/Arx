@@ -16,8 +16,6 @@ const modelCatalog = read("shared/modelCatalog.ts");
 const inferenceConfig = read("convex/httpInferenceConfig.ts");
 const runtimeResolution = read("convex/runtimeTurnResolution.ts");
 const providerProbes = read("convex/providerConnectionProbes.ts");
-const daytonaPolicy = read("shared/daytonaCodexRuntimePolicy.ts");
-const app = read("apps/web/src/App.tsx");
 
 assert.equal(DEFAULT_ACTIVE_MODEL_ID, "gpt-5.6-sol");
 assert.equal(DEFAULT_ACTIVE_MODEL_LABEL, "GPT 5.6 Sol");
@@ -51,7 +49,7 @@ assert.match(
 );
 assert.match(
   runtimeResolution,
-  /requestedModelId = String\(input\.model_id \?\? ""\)\.trim\(\) \|\| DEFAULT_ACTIVE_MODEL_ID/,
+  /const requestedModelId = isCommunityOwnerFundedTurn[\s\S]*COMMUNITY_OWNER_FUNDED_MODEL_ID[\s\S]*String\(input\.model_id \?\? ""\)\.trim\(\) \|\| DEFAULT_ACTIVE_MODEL_ID/,
   "ordinary Polynet turns must default through the canonical model",
 );
 assert.match(
@@ -68,15 +66,5 @@ assert.equal(
   existsSync("shared/cloudProviderConnectionsGateway.ts"),
   false,
   "the retired personal-provider web gateway must stay deleted",
-);
-assert.match(
-  daytonaPolicy,
-  /defaultModelId: DEFAULT_ACTIVE_MODEL_ID/,
-  "Daytona Codex must inherit the same canonical Sol default",
-);
-assert.match(
-  app,
-  /DEFAULT_ACTIVE_MODEL_LABEL[\s\S]*defaultOpenAiModel\?\.label \?\? DEFAULT_ACTIVE_MODEL_LABEL/,
-  "the primary web shell must render the canonical Sol label without a GPT-5.5 fallback",
 );
 console.log("gpt_5_6_sol_default_contract_proof: ok");

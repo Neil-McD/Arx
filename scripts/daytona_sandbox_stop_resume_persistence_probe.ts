@@ -1,12 +1,12 @@
 import { randomBytes } from "node:crypto";
 import {
-  DAYTONA_CODEX_WORKSPACE_ROOT,
+  DAYTONA_WORKSPACE_ROOT,
   DAYTONA_RUNTIME_POLICY,
-} from "../shared/daytonaCodexRuntimePolicy.ts";
+} from "../shared/daytonaRuntimePolicy.ts";
 
 const EXPECTED_CONVEX_DEPLOYMENT = "dev:quick-porcupine-949";
 const EXPECTED_DEPLOYMENT_KIND = "staging";
-const MARKER_FILE = `${DAYTONA_CODEX_WORKSPACE_ROOT}/polynet-stop-resume-marker.txt`;
+const MARKER_FILE = `${DAYTONA_WORKSPACE_ROOT}/polynet-stop-resume-marker.txt`;
 
 type ProbeArgs = {
   compareEphemeral: boolean;
@@ -243,7 +243,7 @@ async function runPersistenceCase(params: {
         shellQuote(
           [
             "set -euo pipefail",
-            `mkdir -p ${shellQuote(DAYTONA_CODEX_WORKSPACE_ROOT)}`,
+            `mkdir -p ${shellQuote(DAYTONA_WORKSPACE_ROOT)}`,
             `printf ${shellQuote(marker)} > ${shellQuote(MARKER_FILE)}`,
             `cat ${shellQuote(MARKER_FILE)}`,
           ].join("\n"),

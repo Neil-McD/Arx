@@ -104,7 +104,9 @@ function reasoningDelta(seq: number, delta: string): ProofEvent {
 }
 
 const timelineComponent = readText("apps/web/src/components/RuntimeLiveTimeline.tsx");
-const timelineStyles = readText("apps/web/src/base.css");
+const timelineStyles = readText(
+  "apps/web/src/styles/settings-runtime-and-theme-overrides.css",
+);
 
 for (const [source, token, label] of [
   [timelineComponent, "buildRuntimeLiveTimeline", "shared runtime live timeline builder"],
