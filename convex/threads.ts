@@ -3624,7 +3624,10 @@ export const recordRuntimeProviderContextAttestationInternal = internalMutation(
 
     const threadKey = String(thread.threadKey ?? "").trim();
     if (attestation.surface === "member_agent_dock") {
-      if (!isMemberAgentThreadKeyForCommunity(threadKey, communityId)) {
+      if (
+        !isGlobalMemberAgentEpisodeThreadKey(threadKey) &&
+        !isMemberAgentThreadKeyForCommunity(threadKey, communityId)
+      ) {
         return fail("runtime_provider_context_attestation_surface_conflict");
       }
     } else {

@@ -11,7 +11,7 @@ import {
 } from "../shared/runtimeProviderContextAttestation";
 import {
   buildCommunityFunnelThreadKey,
-  buildMemberAgentThreadKey,
+  buildGlobalMemberAgentEpisodeThreadKey,
 } from "../shared/runtimeInvocationSurface";
 
 const modules = import.meta.glob(["./threads.ts", "./_generated/**/*.*s"]);
@@ -46,7 +46,7 @@ async function createFixture(
     const threadKey =
       surface === "community_funnel_builder"
         ? buildCommunityFunnelThreadKey(communityIdText, "custom_2")
-        : buildMemberAgentThreadKey(communityIdText);
+        : buildGlobalMemberAgentEpisodeThreadKey(1);
     const threadId = await ctx.db.insert("threads", {
       ownerId: userId,
       threadKey,
