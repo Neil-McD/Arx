@@ -1500,6 +1500,7 @@ export const runCommunityWikiArchitectProposal: any = action({
         ok: false,
         kind: "community_wiki_architect_proposal",
         code: "invalid_architect_output",
+        failure_reason: "json_parse_failed",
         message: error instanceof Error ? error.message : "Wiki Architect returned invalid JSON.",
         output_preview: completion.outputText.slice(0, 1600),
       };
@@ -1525,6 +1526,7 @@ export const runCommunityWikiArchitectProposal: any = action({
         ok: false,
         kind: "community_wiki_architect_proposal",
         code: "invalid_architect_output",
+        failure_reason: "proposal_validation_failed",
         message: "Wiki Architect proposal failed validation.",
         errors: validation.errors,
         output_preview: completion.outputText.slice(0, 1600),
@@ -1558,6 +1560,7 @@ export const runCommunityWikiArchitectProposal: any = action({
         ok: false,
         kind: "community_wiki_architect_proposal",
         code: "invalid_architect_output",
+        failure_reason: "source_lineage_invalid",
         message: "Wiki Architect proposed source lineage outside the visible source window.",
         errors: proposedVisibleSourceErrors.map((row) => ({
           path: row.path,
@@ -1577,6 +1580,7 @@ export const runCommunityWikiArchitectProposal: any = action({
         ok: false,
         kind: "community_wiki_architect_proposal",
         code: "invalid_architect_output",
+        failure_reason: "page_window_truncated",
         message: "Wiki Architect cannot propose draft writes from a truncated page window.",
         errors: [
           {

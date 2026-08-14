@@ -14,6 +14,7 @@ function read(path: string): string {
 
 const packageJson = read("package.json");
 const validatorSource = read("shared/communityWikiArchitectProposal.ts");
+const architectRuntimeSource = read("convex/communityWikiArchitect.ts");
 
 assert.match(
   packageJson,
@@ -35,6 +36,18 @@ assert.doesNotMatch(
   /COMMUNITY_WIKI_ARCHITECT_SCAFFOLD_ONLY_TITLES|scaffoldOnlyTitles|scaffold-whitelist/,
   "validator must not preserve a source-less draft whitelist",
 );
+for (const failureReason of [
+  "json_parse_failed",
+  "proposal_validation_failed",
+  "source_lineage_invalid",
+  "page_window_truncated",
+]) {
+  assert.match(
+    architectRuntimeSource,
+    new RegExp(`failure_reason: "${failureReason}"`),
+    `Wiki Architect must classify ${failureReason} without exposing raw output`,
+  );
+}
 
 const baseInput: Omit<CommunityWikiArchitectProposalValidationInput, "proposal"> = {
   existingModules: [

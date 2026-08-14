@@ -13,6 +13,37 @@ import { applyCommunityWikiArchitectProposalCore } from "./communityWikiArchitec
 
 const BUILDER_KNOWLEDGE_BUILD_LEASE_MS = 15 * 60 * 1000;
 
+const SAFE_BUILDER_KNOWLEDGE_FAILURE_CODES = new Set([
+  "no_ready_sources",
+  "provider_inference_misconfigured",
+  "provider_inference_unavailable",
+  "provider_inference_error",
+  "provider_token_usage_missing",
+  "invalid_architect_output",
+  "invalid_architect_proposal",
+  "builder_knowledge_content_incomplete",
+  "builder_knowledge_build_lease_lost",
+]);
+
+const SAFE_ARCHITECT_FAILURE_REASONS = new Set([
+  "json_parse_failed",
+  "proposal_validation_failed",
+  "source_lineage_invalid",
+  "page_window_truncated",
+]);
+
+function normalizeSafeFailureCode(value: unknown): string {
+  const code = String(value ?? "").trim();
+  return SAFE_BUILDER_KNOWLEDGE_FAILURE_CODES.has(code)
+    ? code
+    : "builder_knowledge_build_failed";
+}
+
+function normalizeSafeArchitectFailureReason(value: unknown): string | null {
+  const reason = String(value ?? "").trim();
+  return SAFE_ARCHITECT_FAILURE_REASONS.has(reason) ? reason : null;
+}
+
 async function requireBuilderKnowledgeOwner(ctx: any, args: {
   authSubject?: string | null;
   communityId: any;
@@ -210,12 +241,10 @@ export const completeBuilderKnowledgeBuildInternal = internalMutation({
   },
 });
 
-export const buildBuilderKnowledgeResources: any = action({
-  args: {
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args): Promise<Record<string, unknown>> => {
+export async function buildBuilderKnowledgeResourcesCore(
+  ctx: any,
+  args: { authSubject?: string | null; communityId: any },
+): Promise<Record<string, unknown>> {
     const leaseToken = crypto.randomUUID();
     const claim: any = await ctx.runMutation(
       (internal as any).communityBuilderKnowledgeSetup.claimBuilderKnowledgeBuildInternal,
@@ -244,8 +273,12 @@ export const buildBuilderKnowledgeResources: any = action({
       };
     }
     const userId = String(claim.user_id ?? "").trim();
+    let failureStage = "architecture_proposal";
+    let failureCode = "builder_knowledge_build_failed";
+    let failureReason: string | null = null;
     try {
       if (claim.stage === "architecture") {
+        failureStage = "architecture_proposal";
         const architect: any = await ctx.runAction(
           (api as any).communityWikiArchitect.runCommunityWikiArchitectProposal,
           {
@@ -257,8 +290,11 @@ export const buildBuilderKnowledgeResources: any = action({
           },
         );
         if (!architect?.ok || !architect?.proposal) {
-          throw new Error(String(architect?.code ?? architect?.message ?? "community_wiki_architect_failed"));
+          failureCode = normalizeSafeFailureCode(architect?.code);
+          failureReason = normalizeSafeArchitectFailureReason(architect?.failure_reason);
+          throw new Error(failureCode);
         }
+        failureStage = "architecture_apply";
         const applied: any = await ctx.runMutation(
           (internal as any).communityBuilderKnowledgeSetup.applyBuilderKnowledgeArchitectureInternal,
           {
@@ -273,10 +309,12 @@ export const buildBuilderKnowledgeResources: any = action({
           },
         );
         if (!applied?.ok) {
-          throw new Error(String(applied?.code ?? applied?.message ?? "community_wiki_architect_apply_failed"));
+          failureCode = normalizeSafeFailureCode(applied?.code);
+          throw new Error(failureCode);
         }
       }
 
+      failureStage = "content_writer";
       for (let batch = 1; batch <= 2; batch += 1) {
         const renewed: any = await ctx.runMutation(
           (internal as any).communityBuilderKnowledgeSetup.claimBuilderKnowledgeBuildInternal,
@@ -288,6 +326,7 @@ export const buildBuilderKnowledgeResources: any = action({
           },
         );
         if (!renewed?.ok || renewed?.complete || renewed?.stage !== "content") {
+          failureCode = "builder_knowledge_build_lease_lost";
           throw new Error("builder_knowledge_build_lease_lost");
         }
         const writer: any = await ctx.runAction(
@@ -302,10 +341,12 @@ export const buildBuilderKnowledgeResources: any = action({
         );
         if (Number(writer?.candidates ?? 0) <= 0) break;
         if (writer?.ok !== true && Number(writer?.drafted ?? 0) <= 0) {
-          throw new Error(String(writer?.code ?? writer?.message ?? "resource_content_writer_failed"));
+          failureCode = normalizeSafeFailureCode(writer?.code);
+          throw new Error(failureCode);
         }
       }
 
+      failureStage = "content_completion";
       const remaining: any = await ctx.runQuery(
         (internal as any).communityWikiArchitect.buildCommunityResourceContentWriterRunContextInternal,
         {
@@ -316,9 +357,11 @@ export const buildBuilderKnowledgeResources: any = action({
         },
       );
       if (Array.isArray(remaining?.candidates) && remaining.candidates.length > 0) {
+        failureCode = "builder_knowledge_content_incomplete";
         throw new Error("builder_knowledge_content_incomplete");
       }
 
+      failureStage = "setup_completion";
       const completed: any = await ctx.runMutation(
         (internal as any).communityBuilderKnowledgeSetup.completeBuilderKnowledgeBuildInternal,
         {
@@ -333,6 +376,11 @@ export const buildBuilderKnowledgeResources: any = action({
         kind: "builder_knowledge_build",
       };
     } catch {
+      console.warn("builder_knowledge_build_failed", {
+        code: failureCode,
+        failure_stage: failureStage,
+        failure_reason: failureReason,
+      });
       await ctx.runMutation(
         (internal as any).communityBuilderKnowledgeSetup.releaseBuilderKnowledgeBuildInternal,
         { communityId: args.communityId, leaseToken, nowMs: Date.now() },
@@ -340,9 +388,18 @@ export const buildBuilderKnowledgeResources: any = action({
       return {
         ok: false,
         kind: "builder_knowledge_build",
-        code: "builder_knowledge_build_failed",
+        code: failureCode,
+        failure_stage: failureStage,
+        ...(failureReason ? { failure_reason: failureReason } : {}),
         message: "Polynet could not finish building your resources. Try again.",
       };
     }
+}
+
+export const buildBuilderKnowledgeResources: any = action({
+  args: {
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
   },
+  handler: buildBuilderKnowledgeResourcesCore,
 });
