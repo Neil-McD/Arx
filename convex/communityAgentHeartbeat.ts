@@ -450,13 +450,122 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
 export const listCommunityMemorySweepTargetsInternal = internalQuery({
   args: {
     limit: v.optional(v.number()),
+    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const limit = Math.max(1, Math.min(1000, Math.floor(Number(args.limit ?? 500))));
-    const rows = (await ctx.db.query("communities" as any).take(limit)) as Array<Record<string, any>>;
-    return rows.map((row) => ({
-      communityId: normalizeIdValue(row._id),
-    }));
+    const nowMs = args.nowMs ?? Date.now();
+    const staleClaimedBefore = nowMs - COMMUNITY_AGENT_HANDOFF_LEASE_MS;
+    const [memoryRows, pendingTraces, pendingHandoffs, runningHandoffs] = await Promise.all([
+      ctx.db
+        .query("communities" as any)
+        .withIndex("by_memoryMetabolismPending_requestedAt", (q: any) =>
+          q.eq("memoryMetabolismPending", true),
+        )
+        .order("asc")
+        .take(limit) as Promise<Array<Record<string, any>>>,
+      ctx.db
+        .query("communitySourceTraces" as any)
+        .withIndex("by_compilerState_pendingSince", (q: any) =>
+          q.eq("compilerState", "pending"),
+        )
+        .order("asc")
+        .take(limit) as Promise<Array<Record<string, any>>>,
+      ctx.db
+        .query("communityCompilerDigests" as any)
+        .withIndex("by_agentHandoffState_createdAt", (q: any) =>
+          q.eq("agentHandoffState", "pending"),
+        )
+        .order("asc")
+        .take(limit) as Promise<Array<Record<string, any>>>,
+      ctx.db
+        .query("communityCompilerDigests" as any)
+        .withIndex("by_agentHandoffState_agentClaimedAt", (q: any) =>
+          q.eq("agentHandoffState", "running").lt("agentClaimedAt", staleClaimedBefore),
+        )
+        .order("asc")
+        .take(limit) as Promise<Array<Record<string, any>>>,
+    ]);
+    const targets = new Map<string, {
+      communityId: any;
+      dueAt: number;
+      memoryMetabolismRevision: number | null;
+      hasMemoryWork: boolean;
+      hasCompilerWork: boolean;
+    }>();
+    const upsertTarget = (params: {
+      communityId: any;
+      dueAt: number;
+      memoryMetabolismRevision?: number | null;
+      hasMemoryWork?: boolean;
+      hasCompilerWork?: boolean;
+    }) => {
+      const key = normalizeIdValue(params.communityId);
+      if (!key) return;
+      const existing = targets.get(key);
+      targets.set(key, {
+        communityId: params.communityId,
+        dueAt: Math.min(existing?.dueAt ?? Number.POSITIVE_INFINITY, params.dueAt),
+        memoryMetabolismRevision:
+          params.memoryMetabolismRevision ?? existing?.memoryMetabolismRevision ?? null,
+        hasMemoryWork: Boolean(existing?.hasMemoryWork || params.hasMemoryWork),
+        hasCompilerWork: Boolean(existing?.hasCompilerWork || params.hasCompilerWork),
+      });
+    };
+    for (const community of memoryRows) {
+      upsertTarget({
+        communityId: community._id,
+        dueAt: Number(community.memoryMetabolismRequestedAt ?? community.createdAt ?? nowMs),
+        memoryMetabolismRevision: Math.max(
+          0,
+          Math.floor(Number(community.memoryMetabolismRevision ?? 0)),
+        ),
+        hasMemoryWork: true,
+      });
+    }
+    for (const trace of pendingTraces) {
+      upsertTarget({
+        communityId: trace.communityId,
+        dueAt: Number(trace.compilerPendingSince ?? trace.createdAt ?? nowMs),
+        hasCompilerWork: true,
+      });
+    }
+    for (const handoff of [...pendingHandoffs, ...runningHandoffs]) {
+      upsertTarget({
+        communityId: handoff.communityId,
+        dueAt: Number(handoff.agentClaimedAt ?? handoff.createdAt ?? nowMs),
+        hasCompilerWork: true,
+      });
+    }
+    return [...targets.values()]
+      .sort((a, b) => a.dueAt - b.dueAt || normalizeIdValue(a.communityId).localeCompare(normalizeIdValue(b.communityId)))
+      .slice(0, limit);
+  },
+});
+
+export const settleCommunityMemoryMetabolismRevisionInternal = internalMutation({
+  args: {
+    communityId: v.id("communities"),
+    revision: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const community = await ctx.db.get(args.communityId) as Record<string, any> | null;
+    if (!community) return { settled: false, reason: "community_missing" as const };
+    const currentRevision = Math.max(
+      0,
+      Math.floor(Number(community.memoryMetabolismRevision ?? 0)),
+    );
+    if (currentRevision !== args.revision) {
+      return { settled: false, reason: "newer_memory_work" as const, currentRevision };
+    }
+    if (community.memoryMetabolismPending !== true) {
+      return { settled: false, reason: "already_settled" as const, currentRevision };
+    }
+    await ctx.db.patch(community._id as any, {
+      memoryMetabolismPending: false,
+      memoryMetabolismSettledRevision: args.revision,
+    });
+    return { settled: true, reason: "settled" as const, currentRevision };
   },
 });
 
@@ -556,38 +665,59 @@ export const runCommunityMemorySweepInternal = internalAction({
   handler: async (ctx, args) => {
     const targets = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.listCommunityMemorySweepTargetsInternal, {
       limit: args.limitCommunities,
-    })) as Array<{ communityId: string }>;
+    })) as Array<{
+      communityId: string;
+      memoryMetabolismRevision: number | null;
+      hasMemoryWork: boolean;
+      hasCompilerWork: boolean;
+    }>;
     let enqueued = 0;
     let metabolized = 0;
+    let memorySettled = 0;
+    let memoryTargets = 0;
+    let compilerTargets = 0;
     const skipped: Record<string, number> = {};
     for (const target of targets) {
-      // Mechanical memory metabolism is independent of paid cognition work.
-      try {
-        const metabolizerResult = (await ctx.runMutation(
-          internalRefs.communityMemoryMetabolizer.settleCommunityMemorySignalsInternal,
-          {
-            communityId: target.communityId,
-            trigger: "sweep",
-          },
-        )) as Record<string, any>;
-        if (Number(metabolizerResult.settled_node_count ?? 0) > 0) metabolized += 1;
-      } catch (error) {
-        // Score settlement is mechanical memory metabolism; it should not
-        // block the heartbeat's evidence gate or role cycle.
+      if (target.hasMemoryWork && target.memoryMetabolismRevision !== null) {
+        memoryTargets += 1;
+        // Mechanical memory metabolism is independent of paid cognition work.
         try {
-          await ctx.runMutation(
-            internalRefs.communityMemoryMetabolizer.recordCommunityMemoryMetabolizerErrorRunInternal,
+          const metabolizerResult = (await ctx.runMutation(
+            internalRefs.communityMemoryMetabolizer.settleCommunityMemorySignalsInternal,
             {
               communityId: target.communityId,
               trigger: "sweep",
-              errorCode: error instanceof Error ? error.message.slice(0, 120) : "community_metabolizer_error",
-              errorMessage: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
             },
-          );
-        } catch {
-          // Error ledger failure must not block the heartbeat either.
+          )) as Record<string, any>;
+          if (Number(metabolizerResult.settled_node_count ?? 0) > 0) metabolized += 1;
+          const settlement = (await ctx.runMutation(
+            internalRefs.communityAgentHeartbeat.settleCommunityMemoryMetabolismRevisionInternal,
+            {
+              communityId: target.communityId,
+              revision: target.memoryMetabolismRevision,
+            },
+          )) as { settled?: boolean };
+          if (settlement.settled) memorySettled += 1;
+        } catch (error) {
+          // Score settlement is mechanical memory metabolism; it should not
+          // block compiler work for the same community. Pending remains true.
+          try {
+            await ctx.runMutation(
+              internalRefs.communityMemoryMetabolizer.recordCommunityMemoryMetabolizerErrorRunInternal,
+              {
+                communityId: target.communityId,
+                trigger: "sweep",
+                errorCode: error instanceof Error ? error.message.slice(0, 120) : "community_metabolizer_error",
+                errorMessage: error instanceof Error ? error.message.slice(0, 500) : String(error).slice(0, 500),
+              },
+            );
+          } catch {
+            // Error ledger failure must not clear or hide pending work.
+          }
         }
       }
+      if (!target.hasCompilerWork) continue;
+      compilerTargets += 1;
       const assessment = (await ctx.runQuery(internalRefs.communityAgentHeartbeat.assessCommunityAgentCycleInternal, {
         communityId: target.communityId,
       })) as { enqueue: boolean; reason: string };
@@ -601,6 +731,15 @@ export const runCommunityMemorySweepInternal = internalAction({
       });
       enqueued += 1;
     }
-    return { ok: true, targets: targets.length, enqueued, metabolized, skipped };
+    return {
+      ok: true,
+      targets: targets.length,
+      memoryTargets,
+      compilerTargets,
+      memorySettled,
+      enqueued,
+      metabolized,
+      skipped,
+    };
   },
 });

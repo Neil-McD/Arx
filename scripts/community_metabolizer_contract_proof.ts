@@ -6,6 +6,7 @@ const root = process.cwd();
 const schema = readFileSync(join(root, "convex/schema.ts"), "utf8");
 const metabolizer = readFileSync(join(root, "convex/communityMemoryMetabolizer.ts"), "utf8");
 const heartbeat = readFileSync(join(root, "convex/communityAgentHeartbeat.ts"), "utf8");
+const directory = readFileSync(join(root, "convex/communityIntelligenceDirectory.ts"), "utf8");
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const docs = readFileSync(join(root, "docs/community-agent-cognition-contract-v1.md"), "utf8");
 
@@ -47,6 +48,21 @@ assert.match(
   heartbeat,
   /internalRefs\.communityMemoryMetabolizer\.settleCommunityMemorySignalsInternal/,
   "memory sweep should call the dedicated metabolizer module, not the directory module",
+);
+assert.match(
+  schema,
+  /memoryMetabolismPending: v\.optional\(v\.boolean\(\)\)[\s\S]*memoryMetabolismRevision: v\.optional\(v\.number\(\)\)[\s\S]*memoryMetabolismSettledRevision: v\.optional\(v\.number\(\)\)[\s\S]*by_memoryMetabolismPending_requestedAt/,
+  "community rows should carry the minimal indexed memory due-work revision",
+);
+assert.match(
+  directory,
+  /recordCommunityOutcomeObservationCore[\s\S]*memoryMetabolismRevision[\s\S]*memoryMetabolismPending: true[\s\S]*memoryMetabolismRequestedAt: nowMs/,
+  "new canonical outcomes should atomically mark their community for metabolism",
+);
+assert.match(
+  heartbeat,
+  /settleCommunityMemoryMetabolismRevisionInternal[\s\S]*currentRevision !== args\.revision[\s\S]*newer_memory_work[\s\S]*memoryMetabolismPending: false/,
+  "sweep settlement should clear only the exact observed memory revision",
 );
 
 const block = exportedFunctionBlock(metabolizer, "settleCommunityMemorySignalsInternal");

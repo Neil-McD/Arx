@@ -59,8 +59,13 @@ assert.doesNotMatch(
 }
 assert.match(
   heartbeat,
-  /listCommunityMemorySweepTargetsInternal[\s\S]*query\("communities" as any\)\.take\(limit\)/,
-  "only the platform sweep target lister should enumerate communities, and it must be bounded",
+  /listCommunityMemorySweepTargetsInternal[\s\S]*by_memoryMetabolismPending_requestedAt[\s\S]*by_compilerState_pendingSince[\s\S]*by_agentHandoffState_createdAt[\s\S]*by_agentHandoffState_agentClaimedAt/,
+  "the platform sweep should discover only indexed due memory, compiler, and handoff work",
+);
+assert.doesNotMatch(
+  heartbeat,
+  /query\("communities" as any\)\.take\(limit\)/,
+  "the platform sweep must not enumerate the first communities regardless of work",
 );
 
 assert.match(
@@ -153,8 +158,8 @@ assert.doesNotMatch(
 );
 assert.match(
   sweepBlock,
-  /settleCommunityMemorySignalsInternal[\s\S]*assessCommunityAgentCycleInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
-  "memory sweep should metabolize independently, plan work, and enqueue immediately",
+  /target\.hasMemoryWork[\s\S]*settleCommunityMemorySignalsInternal[\s\S]*settleCommunityMemoryMetabolismRevisionInternal[\s\S]*target\.hasCompilerWork[\s\S]*assessCommunityAgentCycleInternal[\s\S]*enqueueCommunityAgentHeartbeatInternal/,
+  "memory sweep should conditionally metabolize and conditionally enqueue compiler work",
 );
 assert.doesNotMatch(
   sweepBlock,
@@ -169,13 +174,20 @@ assert.match(
 );
 assert.match(
   sweepBlock,
-  /catch \(error\) \{[\s\S]*Score settlement is mechanical memory metabolism[\s\S]*block the heartbeat's evidence gate/,
+  /catch \(error\) \{[\s\S]*Score settlement is mechanical memory metabolism[\s\S]*block compiler work for the same community/,
   "metabolizer failures should not block heartbeat evidence assessment",
 );
 assert.match(
   sweepBlock,
-  /metabolized[\s\S]*settled_node_count[\s\S]*return \{ ok: true, targets: targets\.length, enqueued, metabolized, skipped \}/,
-  "memory sweep should expose compact metabolizer settlement diagnostics",
+  /memoryTargets[\s\S]*compilerTargets[\s\S]*memorySettled/,
+  "memory sweep should expose compact due-work and settlement diagnostics",
+);
+assert.match(sweepBlock, /settled_node_count[\s\S]*metabolized/);
+assert.match(sweepBlock, /skipped/);
+assert.match(
+  heartbeat,
+  /settleCommunityMemoryMetabolismRevisionInternal[\s\S]*currentRevision !== args\.revision[\s\S]*newer_memory_work[\s\S]*memoryMetabolismPending: false[\s\S]*memoryMetabolismSettledRevision: args\.revision/,
+  "memory settlement must leave a newer concurrent revision pending",
 );
 
 assert.match(

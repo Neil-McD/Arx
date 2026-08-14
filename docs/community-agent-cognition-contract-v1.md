@@ -1718,18 +1718,31 @@ The memory sweep now wires metabolism into cadence:
 
 ```txt
 6-hour memory sweep
-  -> refresh compiler digest
-  -> settle metabolizer scores
-  -> enqueue delayed heartbeat
+  -> indexed due-work discovery
+  -> settle scores only for outcome-dirty communities
+  -> assess only pending compiler or handoff communities
+  -> enqueue immediate heartbeat
   -> heartbeat evidence gate decides whether roles wake
 ```
 
 Rules:
 
-- Settlement runs for the same explicit `communityId` as the sweep target.
-- Digest refresh still runs before score settlement so the compiler window is fresh before the knock.
-- Metabolizer failure does not block the delayed heartbeat; derived score settlement is learning pressure, not the source of truth or the wake gate.
-- The sweep returns compact `metabolized` diagnostics. Changed-node audit remains in `communityIntelligenceMutations`; run/no-op/error audit lives in `communityMemoryMetabolizerRuns`.
+- The sweep never enumerates the first N communities. It joins bounded indexed
+  due work from community outcome revisions, pending compiler traces, and
+  pending or stale digest handoffs.
+- A new canonical outcome increments the owning community's metabolism
+  revision and marks it pending in the same mutation.
+- Settlement runs for the same explicit `communityId` and clears pending only
+  when the observed revision is still current. Newer concurrent outcomes leave
+  the community pending for the next sweep.
+- Metabolism and compiler assessment are independent. A memory-only target
+  never pays for compiler assessment; a compiler-only target never runs the
+  metabolizer.
+- Metabolizer failure does not block compiler work for the same community;
+  derived score settlement is learning pressure, not the wake gate.
+- The sweep returns compact target, settlement, metabolized, and enqueue
+  diagnostics. Changed-node audit remains in `communityIntelligenceMutations`;
+  run/no-op/error audit lives in `communityMemoryMetabolizerRuns`.
 
 ## Twenty-Third Implementation Slice
 
@@ -2093,9 +2106,10 @@ Two payment lanes, split by what the spend produces:
 
 ### Cadence (resolved 2026-07-01)
 
-A memory sweep runs every six hours. It settles metabolizer scores from
-retrieval/outcome signals independently, measures canonical compiler and
-handoff work, and immediately schedules eligible communities. The heartbeat
+A memory sweep runs every six hours. It discovers only indexed due community
+work, settles metabolizer scores for outcome-dirty communities, measures
+canonical compiler and handoff work only where pending evidence exists, and
+immediately schedules eligible communities. The heartbeat
 rechecks the owner off-switch and daily cycle cap, then the canonical runtime
 admits founder funding before tokens can be spent. The heartbeat owns the
 compile -> claim -> Steward pass -> settlement transition. Unchanged handled

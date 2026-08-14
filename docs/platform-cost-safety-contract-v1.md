@@ -84,7 +84,7 @@ New undeclared recurring cost-bearing work is forbidden.
 ## Ground Truth Baseline
 
 Grounded on 2026-08-13 against production and `origin/main` commit
-`91b7111be5412d7fb1a4cc49721ddd434c6974c6`.
+`4a32c17fc4a1a4e1216d67038f2dbfbcbbe9120e`.
 
 ### Incident evidence
 
@@ -116,6 +116,26 @@ Grounded on 2026-08-13 against production and `origin/main` commit
 
 One-second elapsed-time and typing-expiry display timers do not call a backend
 and are excluded. Focus/animation/toast/image-cleanup timers are also excluded.
+Preview metrics are event-driven through load, resize, `ResizeObserver`, and
+`MutationObserver`; their redundant 1.2-second fixed timer is retired.
+
+#### Fixed-interval source inventory
+
+CI admits exactly these seven first-party `setInterval` call sites:
+
+| Canonical call site | Classification | Required lifetime bound |
+| --- | --- | --- |
+| `apps/web/src/components/RuntimeLiveTimeline.tsx` | UI-only elapsed clock | active unfinished run; cleared by effect teardown |
+| `shared/useCommunityTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
+| `shared/useDirectMessageTypingPresence.ts` | UI-only typing-expiry clock | visible typing users; cleared by effect teardown |
+| `apps/web/src/controllers/useWebActiveCommunityShellController.ts` | backend presence heartbeat | visible active community; one in-flight call; cleared by effect teardown |
+| `convex/runtimeCancellation.ts` | backend cancellation watcher | active runtime operation; one in-flight check; cleared in `finally` |
+| `convex/runtimeExecutionSession.ts` | backend workspace heartbeat | active workspace session; one timer and in-flight touch; cleared by `dispose()` |
+| `convex/runtimeTurnHandlers.ts` | backend worker cancel/steer watcher | active worker turn; one busy watcher; cleared in `finally` |
+
+The executable contract scans the first-party source corpus. A new interval or
+a second interval in an allowlisted file fails CI until it is deleted or
+explicitly classified with cadence, isolation, overlap, and cleanup bounds.
 
 #### Execution-scoped runtime work
 
@@ -141,7 +161,7 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 | Finalize expired Blaxel project workspace leases | 15 minutes | 100 | infrastructure repair; keep |
 | Record Blaxel storage provider costs | 60 minutes | 100 rows x 5 pages | accounting; keep |
 | Sweep expired Daytona Codex runtime targets | 5 minutes | 20 | infrastructure repair; keep |
-| Community memory sweep | 6 hours | 500 communities plus downstream gates | AI-triggering job; retain only with founder funding, per-community caps, and delta gating proven |
+| Community memory sweep | 6 hours | 500 oldest due communities across bounded indexed sources | AI-triggering job; idle communities are absent, metabolism is outcome-revision gated, and compiler admission retains founder funding plus per-community caps |
 | Process pending mention emails | 15 minutes | implementation-owned | notification job; declare an explicit batch bound in this registry |
 
 The existence of a batch limit does not prove cost safety. Each job still needs
@@ -159,12 +179,12 @@ a new product requirement and explicit recurring-work declaration.
 | COST-001 | P0 | Contain repeated profile hydration | `fixed in production` | production build marker plus no recurrence under remount/resume/render-churn proof |
 | COST-002 | P0 | Delete attention polling and bound reactive attention reads | `implemented; staging proof pending` | idle tabs have no attention cadence; scopes are bounded; real activity reconciles reactively; update read cost is measured before adding storage |
 | COST-003 | P0 | Remove N+1 bundle hydration from chat root listing | `confirmed` | feed query returns a thin bounded projection; full bundles load only on demand |
-| COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `partial` | four fixed global repair scans and the weekly digest job are deleted; every retained job still needs its recurring-work declaration and empty-run proof |
+| COST-004 | P1 | Audit, delete, reduce, or consolidate scheduled repair drains | `partial; blind community sweep deleted` | four fixed global repair scans and the weekly digest job are deleted; community cognition is indexed due-work only; remaining retained jobs still need complete empty-run proof |
 | COST-005 | P1 | Bound staging/realtime reconnect behavior | `implemented; staging proof pending` | disabled/dormant deployment and stale-client tests terminate without sustained calls |
 | COST-006 | P1 | Validate auth/session call clusters | `investigate` | calls are attributable to distinct valid lifecycle events or a dedupe fix lands |
 | COST-007 | P1 | Prove rate limiting for public cost-bearing HTTP surfaces | `open` | actor/IP/community limits and abuse tests for runtime, auth, ingestion, billing, and workers |
 | COST-008 | P1 | Configure and prove provider alerts, budgets, and emergency controls | `open` | staging and production evidence from Convex/Vercel/provider consoles and a tested runbook |
-| COST-009 | P1 | Add a recurring-work contract proof | `missing` | CI rejects undeclared or unbounded cost-bearing loops/jobs |
+| COST-009 | P1 | Add a recurring-work contract proof | `implemented for fixed-cadence surfaces` | CI rejects cron inventory drift and any undeclared `setInterval`; scheduler continuation census remains under COST-004 |
 | COST-010 | P2 | Project cost health into operator diagnostics | `partial` | invocation/read/write/compute/provider cost rollups link to redacted evidence |
 | COST-011 | P2 | Add the scheduled cost agent in alert-only mode | `deferred` | deterministic inputs, no mutation authority, concise incident report |
 | COST-012 | P3 | Consider bounded automated containment | `deferred` | each action is named, reversible, pre-authorized, tested, and produces a durable receipt |

@@ -1,8 +1,51 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 
 function read(relativePath: string): string {
   return readFileSync(new URL(`../${relativePath}`, import.meta.url), "utf8");
+}
+
+const RECURRING_SOURCE_EXTENSIONS = new Set([".cjs", ".js", ".jsx", ".mjs", ".ts", ".tsx"]);
+const RECURRING_SOURCE_EXCLUDED_DIRECTORIES = new Set([
+  "_generated",
+  "build",
+  "dist",
+  "node_modules",
+]);
+
+function listRecurringSourceFiles(relativeDirectory: string): string[] {
+  const entries = readdirSync(new URL(`../${relativeDirectory}/`, import.meta.url), {
+    withFileTypes: true,
+  });
+  return entries.flatMap((entry) => {
+    const relativePath = `${relativeDirectory}/${entry.name}`;
+    if (entry.isDirectory()) {
+      return RECURRING_SOURCE_EXCLUDED_DIRECTORIES.has(entry.name)
+        ? []
+        : listRecurringSourceFiles(relativePath);
+    }
+    const extension = entry.name.slice(entry.name.lastIndexOf("."));
+    return entry.isFile() && RECURRING_SOURCE_EXTENSIONS.has(extension)
+      ? [relativePath]
+      : [];
+  });
+}
+
+function listSetIntervalCallSites(): Array<{ file: string; line: number }> {
+  const sourceFiles = [
+    ...listRecurringSourceFiles("apps/preview-proxy"),
+    ...listRecurringSourceFiles("apps/web/src"),
+    ...listRecurringSourceFiles("convex"),
+    ...listRecurringSourceFiles("shared"),
+  ];
+  return sourceFiles.flatMap((file) =>
+    read(file)
+      .split("\n")
+      .flatMap((line, index) => {
+        const matches = line.match(/\b(?:(?:globalThis|window)\.)?setInterval\s*\(/g) ?? [];
+        return matches.map(() => ({ file, line: index + 1 }));
+      }),
+  );
 }
 
 const contract = read("docs/platform-cost-safety-contract-v1.md");
@@ -18,6 +61,38 @@ const activeCommunityController = read(
 );
 const checkoutFinalizeController = read("shared/useCheckoutFinalizeController.ts");
 const realtimeAuth = read("shared/convexRealtimeAuth.ts");
+const previewProxy = read("apps/preview-proxy/server.js");
+const runtimeCancellation = read("convex/runtimeCancellation.ts");
+const runtimeExecutionSession = read("convex/runtimeExecutionSession.ts");
+const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
+const communityPresenceContract = read("shared/communityPresenceContract.ts");
+const schema = read("convex/schema.ts");
+const communityHeartbeat = read("convex/communityAgentHeartbeat.ts");
+const communityDirectory = read("convex/communityIntelligenceDirectory.ts");
+
+const uiOnlyIntervalFiles = [
+  "apps/web/src/components/RuntimeLiveTimeline.tsx",
+  "shared/useCommunityTypingPresence.ts",
+  "shared/useDirectMessageTypingPresence.ts",
+] as const;
+const costBearingIntervalFiles = [
+  "apps/web/src/controllers/useWebActiveCommunityShellController.ts",
+  "convex/runtimeCancellation.ts",
+  "convex/runtimeExecutionSession.ts",
+  "convex/runtimeTurnHandlers.ts",
+] as const;
+const expectedIntervalFiles = [...uiOnlyIntervalFiles, ...costBearingIntervalFiles].sort();
+const actualIntervalCallSites = listSetIntervalCallSites();
+assert.deepEqual(
+  actualIntervalCallSites.map(({ file }) => file).sort(),
+  expectedIntervalFiles,
+  `setInterval inventory drifted: ${actualIntervalCallSites
+    .map(({ file, line }) => `${file}:${line}`)
+    .join(", ")}`,
+);
+for (const file of expectedIntervalFiles) {
+  assert.ok(contract.includes(`\`${file}\``), `cost contract must classify interval: ${file}`);
+}
 
 assert.match(
   contract,
@@ -69,9 +144,39 @@ assert.doesNotMatch(
   "retired weekly digest scheduling must stay deleted",
 );
 assert.doesNotMatch(
+  communityHeartbeat,
+  /query\("communities" as any\)\.take\(limit\)/,
+  "community memory sweep must not enumerate idle communities",
+);
+assert.match(
+  schema,
+  /by_memoryMetabolismPending_requestedAt[\s\S]*by_compilerState_pendingSince[\s\S]*by_agentHandoffState_createdAt[\s\S]*by_agentHandoffState_agentClaimedAt/,
+  "community memory sweep must discover work through bounded due-work indexes",
+);
+assert.match(
+  communityDirectory,
+  /memoryMetabolismPending: true[\s\S]*memoryMetabolismRevision[\s\S]*memoryMetabolismRequestedAt: nowMs|memoryMetabolismRevision[\s\S]*memoryMetabolismPending: true[\s\S]*memoryMetabolismRequestedAt: nowMs/,
+  "new memory outcomes must mark their community for due-work discovery",
+);
+assert.match(
+  communityHeartbeat,
+  /currentRevision !== args\.revision[\s\S]*newer_memory_work[\s\S]*memoryMetabolismPending: false/,
+  "community memory settlement must preserve newer concurrent work",
+);
+assert.doesNotMatch(
   emailCore,
   /weekly_(?:member|founder)_digest/,
   "retired weekly digest renderers must stay deleted",
+);
+assert.doesNotMatch(
+  previewProxy,
+  /\b(?:(?:globalThis|window)\.)?setInterval\s*\(/,
+  "preview metrics must remain event-driven instead of polling forever",
+);
+assert.match(
+  previewProxy,
+  /window\.addEventListener\("resize", scheduleMetrics\)[\s\S]*ResizeObserver[\s\S]*MutationObserver/,
+  "preview metrics must retain event-driven layout and content observation",
 );
 
 assert.match(
@@ -118,6 +223,31 @@ assert.match(
   activeCommunityController,
   /document\.visibilityState !== "visible"[\s\S]*window\.setInterval[\s\S]*COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS/,
   "presence heartbeat ground truth changed; update the cost contract",
+);
+assert.match(
+  communityPresenceContract,
+  /COMMUNITY_PRESENCE_HEARTBEAT_INTERVAL_MS = 30_000/,
+  "presence heartbeat must retain its declared 30-second cadence",
+);
+assert.match(
+  activeCommunityController,
+  /if \(cancelled \|\| inFlight \|\| document\.visibilityState !== "visible"\) return[\s\S]*window\.setInterval[\s\S]*cancelled = true[\s\S]*window\.clearInterval\(intervalId\)/,
+  "presence heartbeat must prevent overlap and stop on teardown",
+);
+assert.match(
+  runtimeCancellation,
+  /let pollInFlight = false[\s\S]*Math\.max\([\s\S]*100[\s\S]*setInterval[\s\S]*pollInFlight = true[\s\S]*finally\(\(\) => \{[\s\S]*pollInFlight = false[\s\S]*finally \{[\s\S]*clearInterval\(intervalId\)/,
+  "runtime cancellation polling must be bounded, non-overlapping, and execution-scoped",
+);
+assert.match(
+  runtimeExecutionSession,
+  /WORKSPACE_RUN_HEARTBEAT_INTERVAL_MS = 2 \* 60 \* 1000[\s\S]*let heartbeatInFlight = false[\s\S]*if \(!params\.touchRunHeartbeat \|\| !workspaceSession \|\| heartbeatTimer\) return[\s\S]*heartbeatTimer = setInterval[\s\S]*heartbeatInFlight = true[\s\S]*async dispose\(\)[\s\S]*clearInterval\(heartbeatTimer\)/,
+  "workspace heartbeat must have one timer, one in-flight touch, and deterministic disposal",
+);
+assert.match(
+  runtimeTurnHandlers,
+  /let workerWatcherBusy = false[\s\S]*const workerCancelWatcher = setInterval[\s\S]*if \(workerCancelFired \|\| workerWatcherBusy\) return[\s\S]*\}, 3_000\);[\s\S]*try \{[\s\S]*streamPolynetCodexWorkerTurn[\s\S]*finally \{[\s\S]*clearInterval\(workerCancelWatcher\)/,
+  "worker cancel watcher must be non-overlapping, three-second bounded, and cleared after the turn",
 );
 assert.match(
   checkoutFinalizeController,

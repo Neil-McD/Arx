@@ -1236,12 +1236,23 @@ export default defineSchema({
       ),
     ),
     activeMemberCount: v.optional(v.number()),
+    // Durable activity marker for bounded memory metabolism. The revision is
+    // incremented with each new canonical outcome; settlement clears pending
+    // only when no newer outcome arrived during the sweep.
+    memoryMetabolismPending: v.optional(v.boolean()),
+    memoryMetabolismRevision: v.optional(v.number()),
+    memoryMetabolismSettledRevision: v.optional(v.number()),
+    memoryMetabolismRequestedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_createdAt", ["ownerId", "createdAt"])
     .index("by_slug", ["slug"])
+    .index("by_memoryMetabolismPending_requestedAt", [
+      "memoryMetabolismPending",
+      "memoryMetabolismRequestedAt",
+    ])
     .index("by_visibility_updatedAt", ["visibility", "updatedAt"]),
 
   // Canonical public conversation containers. Every active channel has the
@@ -3028,6 +3039,10 @@ export default defineSchema({
       "visibilityScope",
       "compilerPendingSince",
     ])
+    .index("by_compilerState_pendingSince", [
+      "compilerState",
+      "compilerPendingSince",
+    ])
     .index("by_community_source", ["communityId", "sourceType", "sourceId"])
     .index("by_community_workflow", ["communityId", "workflowId"]),
 
@@ -3564,6 +3579,14 @@ export default defineSchema({
       "communityId",
       "agentHandoffState",
       "createdAt",
+    ])
+    .index("by_agentHandoffState_createdAt", [
+      "agentHandoffState",
+      "createdAt",
+    ])
+    .index("by_agentHandoffState_agentClaimedAt", [
+      "agentHandoffState",
+      "agentClaimedAt",
     ]),
 
   memberAgentChannels: defineTable({

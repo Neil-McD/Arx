@@ -503,8 +503,6 @@ function injectPreviewMetricsReporter(html) {
       characterData: true,
     });
   }
-
-  window.setInterval(sendMetrics, 1200);
 })();
 </script>`;
 

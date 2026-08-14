@@ -4318,6 +4318,15 @@ async function recordCommunityOutcomeObservationCore(args: {
     createdAt: nowMs,
     updatedAt: nowMs,
   });
+  const community = (await args.ctx.db.get(args.communityId)) as Record<string, any> | null;
+  if (!community) throw new Error("community_intelligence_outcome_community_not_found");
+  const memoryMetabolismRevision =
+    Math.max(0, Math.floor(Number(community.memoryMetabolismRevision ?? 0))) + 1;
+  await args.ctx.db.patch(community._id as any, {
+    memoryMetabolismPending: true,
+    memoryMetabolismRevision,
+    memoryMetabolismRequestedAt: nowMs,
+  });
   await insertChangeRequest({
     ctx: args.ctx,
     communityId: args.communityId,
