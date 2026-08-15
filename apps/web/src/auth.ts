@@ -15,7 +15,6 @@ export {
   isLikelyAuthJwt,
   logoutAuthSessionRemote,
   readAuthError,
-  refreshAuthSession,
   refreshAuthSessionResult,
   refreshAuthSessionWithLockResult,
 } from "../../../shared/authCore";

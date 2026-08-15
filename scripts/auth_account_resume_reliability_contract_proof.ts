@@ -7,7 +7,9 @@ import {
 } from "../shared/asyncDeadline.ts";
 import { commitIfAsyncEpochCurrent } from "../shared/asyncEpoch.ts";
 import {
+  fetchWithAuthShared,
   refreshAuthSessionWithLockResult,
+  type AuthSession,
   type AuthSessionRefreshResult,
 } from "../shared/authCore.ts";
 
@@ -91,48 +93,168 @@ const refreshInFlightRef: {
 let resolveOldRefresh!: (result: AuthSessionRefreshResult) => void;
 let resolveCurrentRefresh!: (result: AuthSessionRefreshResult) => void;
 let refreshCalls = 0;
+let currentRefreshEpoch = 0;
+let oldEpochAdoptions = 0;
+let currentEpochAdoptions = 0;
 const oldRefresh = refreshAuthSessionWithLockResult({
   inFlightRef: refreshInFlightRef,
   lockKey: 0,
+  isLockKeyCurrent: (lockKey) => currentRefreshEpoch === lockKey,
   refreshSession: () => {
     refreshCalls += 1;
     return new Promise<AuthSessionRefreshResult>((resolve) => {
       resolveOldRefresh = resolve;
     });
   },
-  onRefreshed: () => {},
+  onRefreshed: () => {
+    oldEpochAdoptions += 1;
+  },
 });
+const joinedOldRefresh = refreshAuthSessionWithLockResult({
+  inFlightRef: refreshInFlightRef,
+  lockKey: 0,
+  isLockKeyCurrent: (lockKey) => currentRefreshEpoch === lockKey,
+  refreshSession: async () => {
+    throw new Error("same_epoch_refresh_must_join_existing_work");
+  },
+  onRefreshed: () => {
+    oldEpochAdoptions += 1;
+  },
+});
+assert.equal(refreshCalls, 1, "same-epoch refreshes must share one request");
+currentRefreshEpoch = 1;
 const currentRefresh = refreshAuthSessionWithLockResult({
   inFlightRef: refreshInFlightRef,
   lockKey: 1,
+  isLockKeyCurrent: (lockKey) => currentRefreshEpoch === lockKey,
   refreshSession: () => {
     refreshCalls += 1;
     return new Promise<AuthSessionRefreshResult>((resolve) => {
       resolveCurrentRefresh = resolve;
     });
   },
-  onRefreshed: () => {},
+  onRefreshed: () => {
+    currentEpochAdoptions += 1;
+  },
 });
-resolveOldRefresh({ status: "transient_failure", reason: "old_epoch" });
+const oldEpochSession: AuthSession = {
+  access_token: "old-epoch-token",
+  expires_at: Math.floor(Date.now() / 1000) + 3600,
+  user: { id: "old-epoch-user" },
+};
+resolveOldRefresh({ status: "refreshed", session: oldEpochSession });
 assert.deepEqual(await oldRefresh, {
   status: "transient_failure",
-  reason: "old_epoch",
+  reason: "session_changed",
 });
+assert.deepEqual(await joinedOldRefresh, {
+  status: "transient_failure",
+  reason: "session_changed",
+});
+assert.equal(
+  oldEpochAdoptions,
+  0,
+  "a stale refreshed session must not reach its adoption callback",
+);
 assert.equal(
   refreshInFlightRef.current?.lockKey,
   1,
   "settling stale refresh work must not clear the current epoch lock",
 );
-resolveCurrentRefresh({ status: "transient_failure", reason: "current_epoch" });
+const currentEpochSession: AuthSession = {
+  access_token: "current-epoch-token",
+  expires_at: Math.floor(Date.now() / 1000) + 3600,
+  user: { id: "current-epoch-user" },
+};
+resolveCurrentRefresh({ status: "refreshed", session: currentEpochSession });
 assert.deepEqual(await currentRefresh, {
-  status: "transient_failure",
-  reason: "current_epoch",
+  status: "refreshed",
+  session: currentEpochSession,
 });
+assert.equal(currentEpochAdoptions, 1, "the current epoch must still adopt refreshes");
 assert.equal(
   refreshCalls,
   2,
   "a new authentication epoch must not join stale refresh work",
 );
+
+const expiredSession: AuthSession = {
+  access_token: "expired-token",
+  expires_at: 0,
+  user: { id: "stale-send-user" },
+};
+const staleSendInFlightRef = { current: null } as {
+  current: {
+    lockKey: number;
+    promise: Promise<AuthSessionRefreshResult>;
+  } | null;
+};
+let staleSendEpoch = 0;
+let resolveStaleSendRefresh!: (result: AuthSessionRefreshResult) => void;
+let markStaleSendRefreshStarted!: () => void;
+const staleSendRefreshStarted = new Promise<void>((resolve) => {
+  markStaleSendRefreshStarted = resolve;
+});
+let authenticatedFetchCalls = 0;
+let expiredCallbacks = 0;
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async () => {
+  authenticatedFetchCalls += 1;
+  return new Response(null, { status: 200 });
+};
+try {
+  const staleSendRequest = fetchWithAuthShared({
+    url: "https://example.invalid/private",
+    init: {},
+    session: expiredSession,
+    sessionRef: { current: expiredSession },
+    refreshLocked: async () => null,
+    refreshLockedResult: () => refreshAuthSessionWithLockResult({
+      inFlightRef: staleSendInFlightRef,
+      lockKey: 0,
+      isLockKeyCurrent: (lockKey) => staleSendEpoch === lockKey,
+      refreshSession: () => {
+        markStaleSendRefreshStarted();
+        return new Promise<AuthSessionRefreshResult>((resolve) => {
+          resolveStaleSendRefresh = resolve;
+        });
+      },
+      onRefreshed: () => {
+        throw new Error("stale_refresh_must_not_be_adopted");
+      },
+    }),
+    onSessionExpired: () => {
+      expiredCallbacks += 1;
+    },
+  });
+  await staleSendRefreshStarted;
+  staleSendEpoch = 1;
+  resolveStaleSendRefresh({
+    status: "refreshed",
+    session: {
+      ...expiredSession,
+      access_token: "obsolete-refreshed-token",
+      expires_at: Math.floor(Date.now() / 1000) + 3600,
+    },
+  });
+  await assert.rejects(
+    staleSendRequest,
+    /Auth refresh is temporarily unavailable/,
+    "a request waiting on a stale refresh must fail transiently",
+  );
+  assert.equal(
+    authenticatedFetchCalls,
+    0,
+    "a stale refreshed token must never trigger an authenticated send",
+  );
+  assert.equal(
+    expiredCallbacks,
+    0,
+    "a stale refresh is transient and must not expire the current session",
+  );
+} finally {
+  globalThis.fetch = originalFetch;
+}
 
 assert.equal(
   await withAsyncDeadline(Promise.resolve("ready"), {

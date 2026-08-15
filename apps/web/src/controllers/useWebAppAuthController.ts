@@ -256,16 +256,14 @@ export function useWebAppAuthController(
     return await refreshAuthSessionWithLockResult({
       inFlightRef: refreshResultInFlightRef,
       lockKey: epochAtRefreshStart,
+      isLockKeyCurrent: (lockKey) => authSessionEpochRef.current === lockKey,
       refreshSession: refreshAuthSessionResult,
       onRefreshed: (refreshed) => {
-        if (authSessionEpochRef.current !== epochAtRefreshStart) return;
+        if (!adoptAuthSession(refreshed, epochAtRefreshStart)) return;
         setAuthError(null);
-        closeRealtimeTransportForReplacedIdentity(sessionRef.current, refreshed);
-        setAuthSession(refreshed);
-        sessionRef.current = refreshed;
       },
     });
-  }, []);
+  }, [adoptAuthSession]);
 
   const refreshAuthSessionLocked = useCallback(async (): Promise<AuthSession | null> => {
     const refreshed = await refreshAuthSessionLockedResult();
