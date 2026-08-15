@@ -401,7 +401,6 @@ export const settleFounderPaidToolReceiptInternal = internalMutation({
       v.literal("provider_reported"),
       v.literal("exact"),
     ),
-    projectId: v.optional(v.id("cloudProjects")),
     metadata: v.optional(v.any()),
     outcomeCode: v.string(),
     nowMs: v.number(),
@@ -437,7 +436,6 @@ export const settleFounderPaidToolReceiptInternal = internalMutation({
       {
         costKey: providerCostKey,
         userId: receipt.actorUserId,
-        ...(args.projectId ? { projectId: args.projectId } : {}),
         communityId: receipt.communityId,
         runId: receipt.sourceRunId,
         category: "web",

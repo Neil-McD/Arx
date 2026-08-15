@@ -321,7 +321,6 @@ export function useWebTurnRunnerController<
           title: thread?.title ?? null,
           modelId: thread?.model_id ?? null,
           runtimeEngine: thread?.runtime_engine ?? null,
-          projectId: thread?.project_id ?? null,
           communityId: thread?.community_id ?? null,
           contextVersion:
             typeof thread?.context_version === "number" && Number.isFinite(thread.context_version)

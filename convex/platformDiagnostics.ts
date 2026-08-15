@@ -46,7 +46,6 @@ type PlatformDiagnosticEventInput = {
   surface?: string | null;
   userId?: unknown;
   communityId?: unknown;
-  projectId?: unknown;
   threadId?: unknown;
   runId?: string | null;
   requestId?: string | null;
@@ -201,7 +200,6 @@ export async function recordPlatformDiagnosticEvent(ctx: any, input: PlatformDia
     surface: cleanString(input.surface),
     userId: input.userId || undefined,
     communityId: input.communityId || undefined,
-    projectId: input.projectId || undefined,
     threadId: input.threadId || undefined,
     runId: cleanString(input.runId),
     requestId: cleanString(input.requestId),
@@ -241,7 +239,6 @@ export const recordPlatformDiagnosticEventInternal = internalMutation({
     surface: v.optional(v.union(v.string(), v.null())),
     userId: v.optional(v.id("users")),
     communityId: v.optional(v.id("communities")),
-    projectId: v.optional(v.id("cloudProjects")),
     threadId: v.optional(v.id("threads")),
     runId: v.optional(v.union(v.string(), v.null())),
     requestId: v.optional(v.union(v.string(), v.null())),

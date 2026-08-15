@@ -263,13 +263,12 @@ single local decision before proposing a release:
 cd /Users/neilmcdevitt/code/arx
 npm ci
 npm --prefix apps/web ci
-npm --prefix apps/preview-proxy ci
 npm run release:gate
 ```
 
 The local gate runs checked-in Convex generated-surface sanity and typechecking,
 web typechecking, a production web build with an unambiguous Git build marker,
-bundle budget, preview-proxy validation, foundation invariants, all conventional
+bundle budget, foundation invariants, all conventional
 behavior tests, and dependency security checks. It writes machine-readable
 evidence to `artifacts/release-gate.json`.
 

@@ -25,14 +25,6 @@
 1. `agent-native-semantic-platform-thesis.md`
 2. `community-agent-cognition-contract-v1.md`
 
-## Protected coding-harness contracts
-1. `bounded-workspace-loop-v2.md`
-2. `workspace-context-contract-v1.md`
-
-These files describe protected coding/runtime substrate, not the deleted
-standalone Workspace product or the member-agent/community-agent operation
-contract.
-
 Implementation status is owned by current code, executable proof, Git/ref state,
 and release evidence. The execution-status routing contract must not become a
 replacement milestone ledger.

@@ -104,7 +104,6 @@ export type RuntimeContextManifestV2 = {
     threadId: string | null;
     communityId: string | null;
     communityContextVersion: number | null;
-    projectId: string | null;
     resourceLane: CommunityResourceRuntimeLaneState["lane"];
     harnessName: string | null;
     inferenceSource: string | null;
@@ -136,7 +135,6 @@ export type BuildRuntimeContextManifestInput = {
   threadId?: string | null;
   communityId?: string | null;
   communityContextVersion?: number | null;
-  projectId?: string | null;
   harnessName?: string | null;
   inferenceSource?: string | null;
   latestUserText?: string | null;
@@ -518,7 +516,6 @@ export function buildRuntimeContextManifest(
         Number.isFinite(input.communityContextVersion)
           ? input.communityContextVersion
           : null,
-      projectId: compactText(input.projectId, 160),
       resourceLane: resourceLane.lane,
       harnessName: compactText(input.harnessName, 80),
       inferenceSource: compactText(input.inferenceSource, 80),

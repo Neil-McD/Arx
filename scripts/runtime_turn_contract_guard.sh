@@ -188,12 +188,8 @@ forbid_match_in_file "$SCHEMA_FILE" 'requestedExecutionTarget' \
   "runtimeRuns schema no longer carries requestedExecutionTarget compatibility residue"
 forbid_match_in_file "$SCHEMA_FILE" 'requiresWorkspaceTools' \
   "runtimeRuns schema no longer carries requiresWorkspaceTools compatibility residue"
-require_match_in_file "$SCHEMA_FILE" 'workspaceSessionState' \
-  "historical runtimeRuns workspace state remains readable during migration"
-require_match_in_file "$SCHEMA_FILE" 'workspaceProviderSandboxId' \
-  "historical runtimeRuns sandbox pointers remain readable during migration"
-require_match_in_file "$SCHEMA_FILE" 'workspaceToolboxProxyUrl' \
-  "historical runtimeRuns toolbox pointers remain readable during migration"
+forbid_match_in_file "$SCHEMA_FILE" 'workspaceSessionState|workspaceProviderSandboxId|workspaceToolboxProxyUrl' \
+  "runtimeRuns schema no longer carries retired Workspace state or pointers"
 forbid_match_in_file "$THREADS_FILE" 'setCloudRuntimeRunWorkspaceSessionInternal|workspaceSessionState: "none"|run\.workspaceProviderSandboxId|run\.workspaceToolboxProxyUrl' \
   "threads no longer expose or initialize an active Workspace session"
 forbid_match_in_file "$LOOP_FILE" 'runtimeExecutionSession|workspaceRuntime|workspaceTerminals|daytonaCodexRuntime|executeTerminalTool|executeComputerTool' \

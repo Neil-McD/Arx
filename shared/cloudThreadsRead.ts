@@ -16,7 +16,6 @@ type ConvexThreadRow = {
   title?: string | null;
   modelId?: string | null;
   runtimeEngine?: string | null;
-  projectId?: string | null;
   communityId?: string | null;
   contextVersion?: number | null;
   latestUserVisibleCompletedRunId?: string | null;
@@ -68,7 +67,6 @@ export type CloudThreadTransportRow = {
   title: string | null;
   model_id: string | null;
   runtime_engine: RuntimeEngine | null;
-  project_id: string | null;
   community_id: string | null;
   context_version: number;
   agent_attention: boolean;
@@ -150,7 +148,6 @@ function mapConvexThreadRow(row: ConvexThreadRow): CloudThreadTransportRow | nul
     title: typeof row.title === "string" ? row.title : null,
     model_id: typeof row.modelId === "string" ? row.modelId : null,
     runtime_engine: normalizeRuntimeEngine(row.runtimeEngine),
-    project_id: typeof row.projectId === "string" ? row.projectId : null,
     community_id: typeof row.communityId === "string" ? row.communityId : null,
     context_version: Math.max(0, Math.floor(toFiniteNumber(row.contextVersion, 0))),
     agent_attention:

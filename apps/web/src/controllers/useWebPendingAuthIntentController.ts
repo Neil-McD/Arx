@@ -24,13 +24,6 @@ export function persistWebCreateCommunityIntent(
 
 export function useWebPendingAuthIntentController(params: {
   session: AuthSession | null;
-  resolveAndEnterMemberDestination: (options: {
-    replace: true;
-  }) => Promise<boolean>;
-  navigateTo: (
-    path: string,
-    options?: { replace?: boolean },
-  ) => void;
   showToast: (message: string) => void;
   openCreateCommunity: (
     draft: CreateCommunityIntentDraft | null,
@@ -59,13 +52,6 @@ export function useWebPendingAuthIntentController(params: {
     try {
       const handled = await routePendingAuthIntent(resumeState.intent, {
         select_model: () => true,
-        open_workspace_draft: async () => {
-          const entered = await params.resolveAndEnterMemberDestination({ replace: true });
-          if (!entered) {
-            params.navigateTo("/discover", { replace: true });
-          }
-          return true;
-        },
         connect_provider: () => {
           params.showToast(
             "Personal AI connections are no longer supported. Community AI is provided by the community.",
@@ -102,11 +88,9 @@ export function useWebPendingAuthIntentController(params: {
     }
   }, [
     params.joinPublicCommunity,
-    params.navigateTo,
     params.openCreateCommunity,
     params.redeemPendingPurchases,
     params.redeemPurchaseClaim,
-    params.resolveAndEnterMemberDestination,
     params.resumeBuilderCheckout,
     params.routeTryPolynetFree,
     params.session,

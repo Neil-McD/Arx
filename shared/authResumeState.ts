@@ -12,10 +12,6 @@ export type PendingAuthIntent =
       payload: { model_id: string };
     }
   | {
-      reason: "open_workspace_draft";
-      payload: { project_id: string | null };
-    }
-  | {
       reason: "connect_provider";
       payload: { provider: "chatgpt" | "openai" | "openrouter" };
     }
@@ -71,11 +67,6 @@ function normalizePendingAuthIntent(
     const model_id = typeof payload.model_id === "string" ? payload.model_id.trim() : "";
     if (!model_id) return null;
     return { reason, payload: { model_id } };
-  }
-
-  if (reason === "open_workspace_draft") {
-    const project_id = typeof payload.project_id === "string" ? payload.project_id.trim() || null : null;
-    return { reason, payload: { project_id } };
   }
 
   if (reason === "connect_provider") {

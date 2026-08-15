@@ -176,8 +176,8 @@ PROJECT_TIER_GATE_PATTERNS=(
 
 for pattern in "${PROJECT_TIER_GATE_PATTERNS[@]}"; do
   if ! guard_rg_assert_absent \
-    "project/workspace tier gate: $pattern" \
-    -n -S "$pattern" convex/projects.ts convex/threads.ts; then
+    "thread tier gate: $pattern" \
+    -n -S "$pattern" convex/threads.ts; then
     failed=1
   fi
 done

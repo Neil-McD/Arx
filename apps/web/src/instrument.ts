@@ -19,7 +19,6 @@ type SentryUiContext = {
   activeView?: string | null;
   communityId?: string | null;
   communitySlug?: string | null;
-  projectId?: string | null;
   threadId?: string | null;
   runId?: string | null;
 };
@@ -129,7 +128,6 @@ export function updateSentryUiContext(context: SentryUiContext): void {
   Sentry.setTag("route_kind", normalizeTagValue(context.publicRouteKind));
   Sentry.setTag("active_page", normalizeTagValue(context.activePage));
   Sentry.setTag("active_view", normalizeTagValue(context.activeView));
-  Sentry.setTag("has_project", normalizeTagValue(Boolean(context.projectId)));
   Sentry.setTag("has_thread", normalizeTagValue(Boolean(context.threadId)));
   Sentry.setTag("has_run", normalizeTagValue(Boolean(context.runId)));
   Sentry.setTag("has_community", normalizeTagValue(Boolean(context.communityId || context.communitySlug)));
@@ -158,10 +156,9 @@ export function updateSentryUiContext(context: SentryUiContext): void {
   );
 
   Sentry.setContext(
-    "workspace",
-    context.projectId || context.threadId || context.runId
+    "agent_runtime",
+    context.threadId || context.runId
       ? {
-          projectId: String(context.projectId ?? "").trim() || null,
           threadId: String(context.threadId ?? "").trim() || null,
           runId: String(context.runId ?? "").trim() || null,
         }

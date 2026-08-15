@@ -13,7 +13,6 @@ AUTH_FILE="convex/auth.ts"
 AUTH_ACTOR_FILE="convex/authActor.ts"
 GATES_FILE="convex/gates.ts"
 THREADS_FILE="convex/threads.ts"
-PROJECTS_FILE="convex/projects.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
 AUTH_IDENTITY_FILE="convex/authIdentity.ts"
 
@@ -63,11 +62,9 @@ require_contains "$AUTH_FILE" 'ensureAuthenticatedActor\(|findAuthenticatedActor
 require_contains "$GATES_FILE" 'resolveAuthenticatedSubject\(' \
   "convex/gates.ts must resolve authenticated subject via identity helper"
 
-echo "[6/13] Ensuring thread/project functions resolve owner via authenticated subject..."
+echo "[6/13] Ensuring thread functions resolve owner via verified identity..."
 require_contains "$THREADS_FILE" 'resolveOwnerIdForAuthenticatedRequest\(' \
   "convex/threads.ts must resolve owner identity through authenticated subject helper"
-require_contains "$PROJECTS_FILE" 'resolveOwnerIdForAuthenticatedRequest\(' \
-  "convex/projects.ts must resolve owner identity through authenticated subject helper"
 
 echo "[7/13] Ensuring community create path resolves actor identity via authenticated subject..."
 require_contains "$COMMUNITY_LIFECYCLE_FILE" 'resolveUserIdForAuthenticatedRequest\(' \
@@ -83,8 +80,8 @@ guard_rg_assert_absent \
   -n --fixed-strings 'if (!authSubject) throw new Error("auth_subject_required")' "$GATES_FILE"
 echo "OK: gates relies on authenticated subject helper."
 
-echo "[9/13] Ensuring thread/project APIs are no longer hard-required to caller ownerId..."
-if ! python - "$THREADS_FILE" "$PROJECTS_FILE" <<'PY'
+echo "[9/13] Ensuring thread APIs are no longer hard-required to caller ownerId..."
+if ! python - "$THREADS_FILE" <<'PY'
 import pathlib
 import re
 import sys
@@ -108,14 +105,14 @@ if bad:
     sys.exit(1)
 PY
 then
-  echo "FAIL: required ownerId argument reintroduced in public thread/project Convex functions."
+  echo "FAIL: required ownerId argument reintroduced in public thread Convex functions."
   exit 1
 fi
-echo "OK: public thread/project APIs allow authenticated-subject-first identity resolution."
+echo "OK: public thread APIs allow authenticated-subject-first identity resolution."
 guard_rg_assert_absent \
-  "ownerId-only fallback in thread/project resolvers" \
-  -n --fixed-strings 'owner_identity_required' "$THREADS_FILE" "$PROJECTS_FILE"
-echo "OK: thread/project resolvers do not allow ownerId-only fallback."
+  "ownerId-only fallback in thread resolvers" \
+  -n --fixed-strings 'owner_identity_required' "$THREADS_FILE"
+echo "OK: thread resolvers do not allow ownerId-only fallback."
 
 echo "[10/13] Ensuring community create API accepts authSubject..."
 if ! rg -n --fixed-strings 'authSubject: v.optional(v.string())' "$COMMUNITY_LIFECYCLE_FILE" >/dev/null; then

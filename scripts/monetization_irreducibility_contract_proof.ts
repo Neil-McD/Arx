@@ -22,7 +22,7 @@ const stripeCore = read("convex/stripeCore.ts");
 const creatorCommerce = read("convex/creatorCommerce.ts");
 const premiumBilling = read("convex/premiumBilling.ts");
 const stripeCustomers = read("convex/stripeCustomers.ts");
-const toolCosts = read("convex/platformToolCostAccounting.ts");
+const toolCosts = read("convex/voiceProviderCostAccounting.ts");
 const workspaceCredits = read("convex/workspaceCredits.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
@@ -201,18 +201,17 @@ for (const runtimeSource of [runtimeAgentLoop, runtimeTurnHandlers, voice]) {
 }
 assert.doesNotMatch(
   runtimeAgentLoop,
-  /recordPlatformToolCostBestEffort/,
+  /recordVoiceProviderCostBestEffort/,
   "paid web tools must settle provider cost through their canonical receipt mutation",
 );
 assert.match(runtimeAgentLoop, /settleFounderPaidToolFundingSession/);
 assert.doesNotMatch(
   runtimeTurnHandlers,
-  /recordPlatformToolCostBestEffort/,
+  /recordVoiceProviderCostBestEffort/,
   "the native turn handler must not retain retired Workspace provider-cost accounting",
 );
-assert.match(voice, /recordPlatformToolCostBestEffort/);
+assert.match(voice, /recordVoiceProviderCostBestEffort/);
 assert.doesNotMatch(crons, /auto.?recharge|collectWorkspaceUsageByCard|reconcileExpiredCreditReservations/i);
-assert.match(crons, /recordBlaxelStorageProviderCostsInternal/);
 for (const retiredEndpoint of [
   "collectWorkspaceUsageByCardInternal",
   "getWorkspaceCreditBalance",

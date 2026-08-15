@@ -18,7 +18,7 @@ const workspaceCreditsSource = read("convex/workspaceCredits.ts");
 const invariantDiagnosticSource = sourceFromExport(
   workspaceCreditsSource,
   "getWorkspaceAccountingInvariantDiagnosticsForOperator",
-  "export const listBlaxelStorageAccountingProjectIdsInternal",
+  "export const getWorkspaceToolBalance",
 );
 assert.match(
   packageJson,

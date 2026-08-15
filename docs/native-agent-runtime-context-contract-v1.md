@@ -797,7 +797,7 @@ Slice 5C local acceptance:
    external MCP proofs.
 3. The full local release gate passes, including the production web build, the
    complete repository behavior suite, dependency interlock, and
-   zero-vulnerability root, web, and preview-proxy audits.
+   zero-vulnerability root and web audits.
 4. The stale community-lens proof now reads its canonical owner,
    `WebMemberAgentDock`, instead of the decomposed `App.tsx` shell.
 5. No schema migration or historical record deletion is introduced.
@@ -839,7 +839,7 @@ Slice 5D acceptance:
    interlock pass.
 3. The full local release gate passes, including the production web build, the
    complete repository behavior suite, dependency interlock, and
-   zero-vulnerability root, web, and preview-proxy audits.
+   zero-vulnerability root and web audits.
 4. The exact merged SHA passes the canonical GitHub Release Gate, production
    web reports that SHA, and matching Convex functions are deployed.
 5. Production proves the retired function and route surface is absent while an
@@ -850,6 +850,39 @@ Human product direction remains explicit: there is no standalone general
 coding Workspace agent in the target product. Preserve the community harness,
 community compiler, community resources/memory, references, native product
 roles, historical thread/message data, and external MCP.
+
+### 17.2.1 Slice 5E: project and provider residue extinction
+
+Status: implemented locally; production release is blocked on the explicit data
+cleanup gate below.
+
+Objective: finish the deletion started by Slice 5D so no project or provider
+resource concept remains in native runtime authority, context, tools, APIs, or
+schema ownership.
+
+Changes:
+
+1. Delete the Cloud Project API, Blaxel client/lifecycle/pointer modules,
+   preview proxy, project resource contracts, diagnostics, probes, cron jobs,
+   dependency, and stale Workspace documents.
+2. Remove project context from thread mutations, turn resolution, capability
+   selection, prompt envelopes, context fragments/manifests, runtime receipts,
+   tool settlement, telemetry, and browser transport.
+3. Delete the Cloud Project, terminal, directory snapshot, file-preview cache,
+   Daytona target, and Codex capacity-lease schema definitions.
+4. Preserve old project identifiers only inside immutable accounting and
+   operator evidence rows. They cannot authorize, resolve, or inject context.
+5. Preserve the community harness/compiler/resources/memory, native product
+   roles, canonical Polynet tools, and official external MCP.
+
+Production release gate:
+
+1. Export or otherwise preserve any required historical evidence.
+2. Clear rows from the deleted legacy tables and remove obsolete project fields
+   from non-accounting records before deploying the narrowed Convex schema.
+3. Re-run provider inventory and require zero Blaxel sandboxes and volumes.
+4. Deploy Convex intentionally, then prove the retired functions and schema
+   surfaces are absent and native community inspection still passes.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 

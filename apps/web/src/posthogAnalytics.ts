@@ -10,7 +10,6 @@ type AnalyticsUiContext = {
   activeView?: string | null;
   communityId?: string | null;
   communitySlug?: string | null;
-  projectId?: string | null;
   threadId?: string | null;
   runId?: string | null;
 };
@@ -70,7 +69,6 @@ function buildContextProperties(): Record<string, string | number | boolean> {
     active_view: currentUiContext.activeView,
     community_id: currentUiContext.communityId,
     community_slug: currentUiContext.communitySlug,
-    project_id: currentUiContext.projectId,
     thread_id: currentUiContext.threadId,
     run_id: currentUiContext.runId,
   });

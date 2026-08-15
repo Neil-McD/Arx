@@ -121,8 +121,6 @@ export type RuntimePlatformHarnessPromptParams =
     allowedToolNames: readonly RetrievalToolName[];
     communityResourceLane?: CommunityResourceRuntimeLaneState | null;
     harnessName: "chat_tools";
-    projectLabel?: string | null;
-    projectDescription?: string | null;
     runtimeTurnContext: RuntimeTurnContextPacket;
     currentDateTimeIso?: string | null;
     currentDateLabel?: string | null;

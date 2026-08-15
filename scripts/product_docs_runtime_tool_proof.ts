@@ -199,8 +199,6 @@ function provePromptGuidance() {
     communityOneLiner: null,
     communityAbout: null,
     communitySystemPrompt: null,
-    projectLabel: null,
-    projectDescription: null,
     runtimeTurnContext: buildRuntimeTurnContextPacket({}),
   });
   assert.match(prompt, /Use product documentation tools for canonical Polynet platform definitions/);

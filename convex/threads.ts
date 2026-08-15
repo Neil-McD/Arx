@@ -59,7 +59,6 @@ type ThreadLike = {
   ownerId: any;
   title?: string;
   titleSource: "auto" | "manual";
-  projectId?: any;
   communityId?: string;
   modelId?: string;
   runtimeEngine?: RuntimeEngine;
@@ -165,23 +164,16 @@ type RuntimeRunLike = {
   lane: string;
   visibility?: "user_visible" | "internal_hidden";
   internalFollowupKind?: string;
-  projectId?: any;
   communityId?: any;
   communityContextVersion?: number;
   modelId?: string;
   engineId?: string;
   executionMode?: string;
-  sandboxMode?: string;
   contractName?: string;
   contractVersion?: string;
   harnessProfile?: string;
   harnessProfileSource?: string;
   capabilityFamilies?: string[];
-  workspaceSessionState?: string;
-  workspaceProviderSandboxId?: string;
-  workspaceToolboxProxyUrl?: string;
-  workspaceSessionRegion?: string;
-  workspaceSessionUpdatedAt?: number;
   runtimeHarnessTelemetrySummary?: RuntimeHarnessTelemetrySummary;
   startedContextSnapshot?: unknown;
   activeContextSnapshot?: unknown;
@@ -1012,19 +1004,6 @@ function normalizeRunLane(raw: unknown): string {
   return value.slice(0, 64);
 }
 
-async function validateOwnedCloudProjectId(args: {
-  ctx: any;
-  ownerId: any;
-  projectId: any;
-}): Promise<any> {
-  const row = await args.ctx.db.get(args.projectId);
-  if (!row) throw new Error("project_not_found");
-  if (row.ownerId !== args.ownerId) throw new Error("project_forbidden");
-  const status = String(row.status ?? "active").trim().toLowerCase();
-  if (status === "archived" || status === "deleted") throw new Error("project_not_found");
-  return args.projectId;
-}
-
 async function getCloudThreadByThreadKeyInternal(args: {
   ctx: any;
   ownerId: any;
@@ -1332,7 +1311,6 @@ export const listCloudThreadsByOwner = query({
     ownerId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     includeArchived: v.optional(v.boolean()),
-    projectId: v.optional(v.id("cloudProjects")),
   },
   handler: async (ctx, args) => {
     const ownerId = await resolveOwnerIdForAuthenticatedRequest({
@@ -1347,7 +1325,6 @@ export const listCloudThreadsByOwner = query({
       .collect();
     const filtered = rows.filter((row) => {
       if (!includeArchived && typeof row.archivedAt === "number") return false;
-      if (args.projectId && row.projectId !== args.projectId) return false;
       return true;
     });
     return filtered.sort((a, b) => b.updatedAt - a.updatedAt);
@@ -1492,7 +1469,6 @@ export const ensureCloudThread = mutation({
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
     modelId: v.optional(v.string()),
     runtimeEngine: v.optional(v.literal("polynet")),
-    projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
     contextVersion: v.optional(v.number()),
     nowMs: v.optional(v.number()),
@@ -1506,13 +1482,6 @@ export const ensureCloudThread = mutation({
     const nowMs = args.nowMs ?? Date.now();
     const threadKey = normalizeThreadKey(args.threadKey);
     const requestedRuntimeEngine = normalizeOptionalRuntimeEngine(args.runtimeEngine);
-    const requestedProjectId = args.projectId
-      ? await validateOwnedCloudProjectId({
-          ctx,
-          ownerId,
-          projectId: args.projectId,
-        })
-      : null;
     const existing = await getCloudThreadByThreadKeyInternal({
       ctx,
       ownerId,
@@ -1520,9 +1489,6 @@ export const ensureCloudThread = mutation({
     });
     if (existing) {
       const patch: Record<string, unknown> = { updatedAt: nowMs };
-      if (requestedProjectId && existing.projectId !== requestedProjectId) {
-        patch.projectId = requestedProjectId;
-      }
       if (typeof args.modelId === "string" && args.modelId.trim() && existing.modelId !== args.modelId.trim()) {
         patch.modelId = args.modelId.trim();
       }
@@ -1553,7 +1519,6 @@ export const ensureCloudThread = mutation({
       threadKey,
       title: normalizeThreadTitle(args.title) ?? "New thread",
       titleSource: args.titleSource ?? "auto",
-      ...(requestedProjectId ? { projectId: requestedProjectId } : {}),
       communityId: initialCommunityId,
       modelId: String(args.modelId ?? "").trim() || undefined,
       runtimeEngine: requestedRuntimeEngine,
@@ -1948,7 +1913,6 @@ export const updateCloudThread = mutation({
     titleSource: v.optional(v.union(v.literal("auto"), v.literal("manual"))),
     modelId: v.optional(v.string()),
     runtimeEngine: v.optional(v.literal("polynet")),
-    projectId: v.optional(v.id("cloudProjects")),
     lastSeq: v.optional(v.number()),
     archivedAt: v.optional(v.union(v.number(), v.null())),
     nowMs: v.optional(v.number()),
@@ -1965,13 +1929,6 @@ export const updateCloudThread = mutation({
       ownerId,
       threadId: args.threadId,
     });
-    const requestedProjectId = args.projectId
-      ? await validateOwnedCloudProjectId({
-          ctx,
-          ownerId,
-          projectId: args.projectId,
-        })
-      : null;
     const patch: Record<string, unknown> = {
       updatedAt: nowMs,
     };
@@ -1982,7 +1939,6 @@ export const updateCloudThread = mutation({
     if (typeof args.modelId === "string") patch.modelId = args.modelId.trim() || undefined;
     const requestedRuntimeEngine = normalizeOptionalRuntimeEngine(args.runtimeEngine);
     if (requestedRuntimeEngine) patch.runtimeEngine = requestedRuntimeEngine;
-    if (requestedProjectId) patch.projectId = requestedProjectId;
     if (typeof args.lastSeq === "number" && Number.isFinite(args.lastSeq)) {
       patch.lastSeq = Math.max(0, Math.floor(args.lastSeq));
     }
@@ -3200,7 +3156,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
     lane: v.optional(v.string()),
     visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
     internalFollowupKind: v.optional(v.string()),
-    projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.id("communities")),
     communityContextVersion: v.optional(v.number()),
     modelId: v.optional(v.string()),
@@ -3209,7 +3164,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
     runtimeEngineResolved: v.optional(v.string()),
     runtimeEngineSource: v.optional(v.string()),
     executionMode: v.optional(v.string()),
-    sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),
     contractVersion: v.optional(v.string()),
     harnessProfile: v.optional(v.string()),
@@ -3302,10 +3256,8 @@ export const ensureCloudRuntimeRunStarted = mutation({
       String(args.runtimeEngineResolved ?? "").trim() || undefined;
     const runtimeEngineSource =
       String(args.runtimeEngineSource ?? "").trim() || undefined;
-    const projectId = args.projectId;
     const communityId = runtimeCommunityLens.communityId;
     const communityContextVersion = runtimeCommunityLens.communityContextVersion;
-    const sandboxMode = String(args.sandboxMode ?? "").trim() || undefined;
     const harnessProfile = String(args.harnessProfile ?? "").trim() || undefined;
     const harnessProfileSource = String(args.harnessProfileSource ?? "").trim() || undefined;
     const capabilityFamilies = Array.isArray(args.capabilityFamilies)
@@ -3329,13 +3281,11 @@ export const ensureCloudRuntimeRunStarted = mutation({
       lane,
       visibility,
       internalFollowupKind,
-      projectId,
       communityId,
       communityContextVersion,
       modelId,
       engineId,
       executionMode,
-      sandboxMode,
       contractName,
       contractVersion,
       harnessProfile,
@@ -3361,7 +3311,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
         lane,
         visibility,
         internal_followup_kind: internalFollowupKind ?? null,
-        project_id: projectId ?? null,
         community_id: communityId ?? null,
         community_context_version: communityContextVersion ?? null,
         model_id: modelId ?? null,
@@ -3370,7 +3319,6 @@ export const ensureCloudRuntimeRunStarted = mutation({
         runtime_engine_resolved: runtimeEngineResolved ?? null,
         runtime_engine_source: runtimeEngineSource ?? null,
         execution_mode: executionMode,
-        sandbox_mode: sandboxMode ?? null,
         contract_name: contractName,
         contract_version: contractVersion,
         harness_profile: harnessProfile ?? null,
@@ -3842,7 +3790,6 @@ export const getActiveRuntimeTurnStateInternal = internalQuery({
     return {
       runId: run.runId,
       threadId: String(run.threadId),
-      projectId: run.projectId ? String(run.projectId) : null,
       status: run.status,
       reason: run.reason ?? null,
       errorCode: run.errorCode ?? null,

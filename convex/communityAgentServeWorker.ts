@@ -444,7 +444,6 @@ export async function executeConciergeTool(args: {
     ctx: args.ctx,
     userId: normalizeIdValue(args.context.request.sponsorUserId),
     authSubject: normalizeIdValue(args.context.request.authSubject),
-    projectId: null,
     runId: buildCommunityAgentServeRunId(
       normalizeIdValue(args.requestId),
       args.context.request.attempt,

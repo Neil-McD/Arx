@@ -1560,8 +1560,6 @@ export default function App() {
   const { resumePendingAuthIntent } =
     useWebPendingAuthIntentController({
       session,
-      resolveAndEnterMemberDestination,
-      navigateTo,
       showToast: showAppToastMessage,
       openCreateCommunity: openNewCommunityPurchaseFlow,
       redeemPurchaseClaim,

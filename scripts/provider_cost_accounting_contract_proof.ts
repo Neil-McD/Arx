@@ -2,16 +2,12 @@ import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 
 import {
-  BLAXEL_STANDBY_SNAPSHOT_STORAGE_USD_PER_GB_SECOND,
-  BLAXEL_VOLUME_STORAGE_USD_PER_GB_SECOND,
   PROVIDER_COST_BILLING_DISPOSITIONS,
   PROVIDER_COST_CATEGORIES,
   PROVIDER_COST_COMPONENTS,
   PROVIDER_COST_EVIDENCE_TYPES,
-  estimateBlaxelStorageCostUsd,
   roundProviderCostQuantity,
   roundProviderCostUsd,
-  resolveProviderCostAccountingHourBucket,
 } from "../shared/providerCostAccounting.ts";
 
 function read(relativePath: string): string {
@@ -30,10 +26,8 @@ const packageJson = read("package.json");
 const schema = read("convex/schema.ts");
 const workspaceCredits = read("convex/workspaceCredits.ts");
 const providerCostCore = read("convex/providerCostCore.ts");
-const crons = read("convex/crons.ts");
 const billingSurface = read("apps/web/src/components/WebBillingSettingsSection.tsx");
-const blaxelWorkspaceWake = read("convex/blaxelWorkspaceWake.ts");
-const platformToolCostAccounting = read("convex/platformToolCostAccounting.ts");
+const voiceProviderCostAccounting = read("convex/voiceProviderCostAccounting.ts");
 const providerCostReconciliationDiagnostic = extractBetween(
   workspaceCredits,
   "export const getProviderCostReconciliationDiagnosticInternal = internalQuery",
@@ -56,25 +50,8 @@ assert.deepEqual(PROVIDER_COST_BILLING_DISPOSITIONS, [
   "platform_absorbed",
 ]);
 assert.ok(!PROVIDER_COST_BILLING_DISPOSITIONS.includes("charged" as never));
-assert.equal(BLAXEL_VOLUME_STORAGE_USD_PER_GB_SECOND, 0.00000004629);
-assert.equal(BLAXEL_STANDBY_SNAPSHOT_STORAGE_USD_PER_GB_SECOND, 0.00000007716);
 assert.equal(roundProviderCostUsd(0.000333288), 0.00033329);
 assert.equal(roundProviderCostQuantity(7200.1234567), 7200.123457);
-assert.equal(
-  Number(
-    estimateBlaxelStorageCostUsd({
-      sizeGb: 2,
-      durationSeconds: 3600,
-      usdPerGbSecond: BLAXEL_VOLUME_STORAGE_USD_PER_GB_SECOND,
-    }).toFixed(7),
-  ),
-  0.0003333,
-);
-assert.deepEqual(resolveProviderCostAccountingHourBucket(3_900_000), {
-  periodStart: 0,
-  periodEnd: 3_600_000,
-  bucketKey: "0",
-});
 
 assert.match(
   packageJson,
@@ -117,12 +94,6 @@ assert.match(
   /\.index\("by_status_settledAt", \["status", "settledAt"\]\)/,
   "credit ledger entries must be queryable by settled period for margin diagnostics",
 );
-assert.match(
-  schema,
-  /by_providerVolumeProviderId_updatedAt[\s\S]*"providerVolumeProviderId"[\s\S]*"updatedAt"/,
-  "cloud projects must be indexed for bounded Blaxel storage accounting scans",
-);
-
 assert.match(
   workspaceCredits,
   /export const recordProviderCostInternal = internalMutation/,
@@ -259,74 +230,14 @@ assert.doesNotMatch(
   "provider cost recording must not use user-facing 4-decimal currency rounding",
 );
 assert.match(
-  blaxelWorkspaceWake,
-  /recordPlatformToolCostBestEffort\(\{[\s\S]*rawVendorCostUsd: computeCostUsd[\s\S]*provider: "blaxel"[\s\S]*settlement_source: "project_workspace_lease"/,
-  "released Blaxel workspace leases must still submit absorbed provider runtime cost",
+  voiceProviderCostAccounting,
+  /recordProviderCostInternal[\s\S]*component: "voice_transcription"[\s\S]*billingDisposition: "platform_absorbed"[\s\S]*provider_cost_source: "voice_provider_cost_accounting"/,
+  "voice provider cost must remain platform absorbed",
 );
 assert.match(
-  platformToolCostAccounting,
-  /recordProviderCostInternal[\s\S]*billingDisposition: "platform_absorbed"[\s\S]*provider_cost_source: "platform_tool_cost_accounting"/,
-  "generic best-effort platform tool cost must remain platform absorbed",
-);
-assert.match(
-  platformToolCostAccounting,
-  /provider === "daytona"[\s\S]*component: "daytona_codex_runtime_active"[\s\S]*quantityKind: "runtime_seconds"/,
-  "Daytona-backed Codex turns must classify as absorbed workspace runtime cost",
-);
-assert.match(
-  platformToolCostAccounting,
-  /costKey\.startsWith\("crawl_"\)[\s\S]*\? "web_crawl_provider_call"[\s\S]*: "web_research_call"/,
-  "generic absorbed web costs must retain their legacy cost-key classification",
-);
-assert.match(
-  platformToolCostAccounting,
-  /costKey\.startsWith\("voice_"\)[\s\S]*component: "voice_transcription"/,
+  voiceProviderCostAccounting,
+  /category: "voice"[\s\S]*component: "voice_transcription"[\s\S]*quantityKind: "audio_seconds"/,
   "voice calls must classify as absorbed transcription provider cost",
-);
-assert.match(
-  workspaceCredits,
-  /export const listBlaxelStorageAccountingProjectIdsInternal = internalQuery/,
-  "Blaxel storage accounting must list project ids through a paginated internal query",
-);
-assert.match(
-  workspaceCredits,
-  /listBlaxelStorageAccountingProjectIdsInternal[\s\S]*paginationOptsValidator[\s\S]*withIndex\("by_providerVolumeProviderId_updatedAt"[\s\S]*q\.eq\("providerVolumeProviderId", "blaxel"\)[\s\S]*\.paginate\(/,
-  "Blaxel storage accounting must use provider-volume pagination instead of a fixed take limit",
-);
-assert.match(
-  workspaceCredits,
-  /export const recordBlaxelStorageProviderCostsForProjectsInternal = internalMutation/,
-  "Blaxel storage accounting must record page results through a bounded mutation",
-);
-assert.match(
-  workspaceCredits,
-  /export const recordBlaxelStorageProviderCostsInternal = internalAction/,
-  "Blaxel storage accounting must use an action orchestrator so scans can continue across pages",
-);
-assert.match(
-  workspaceCredits,
-  /costKey: `blaxel_volume_storage:\$\{project\._id\}:\$\{volumeId\}:\$\{bucket\.bucketKey\}`[\s\S]*component: "blaxel_volume_storage"[\s\S]*billingDisposition: "tracked_only"/,
-  "Blaxel volume storage costs must be idempotent by project, volume, and bucket, and tracked-only",
-);
-assert.match(
-  workspaceCredits,
-  /costKey: `blaxel_standby_snapshot:\$\{project\._id\}:\$\{sandboxId\}:\$\{bucket\.bucketKey\}`[\s\S]*component: "blaxel_standby_snapshot"[\s\S]*billingDisposition: "tracked_only"/,
-  "Blaxel standby snapshot costs must be idempotent and tracked-only",
-);
-assert.match(
-  workspaceCredits,
-  /sandboxState !== "standby"/,
-  "standby snapshot accounting must only record explicit standby state",
-);
-assert.match(
-  workspaceCredits,
-  /ctx\.scheduler\.runAfter\([\s\S]*recordBlaxelStorageProviderCostsInternal[\s\S]*bucketStart: bucket\.periodStart[\s\S]*bucketEnd: bucket\.periodEnd[\s\S]*bucketKey: bucket\.bucketKey/,
-  "Blaxel storage accounting must schedule continuation with the same accounting bucket",
-);
-assert.match(
-  crons,
-  /"record blaxel storage provider costs"[\s\S]*recordBlaxelStorageProviderCostsInternal[\s\S]*pageSize: 100[\s\S]*maxPages: 5/,
-  "Blaxel storage accounting cron must run bounded pages and let the action continue if needed",
 );
 
 for (const forbidden of [

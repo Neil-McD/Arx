@@ -1,9 +1,9 @@
 import { type Dispatch, type SetStateAction } from "react";
 import type { AuthSession } from "../auth";
 import {
-  emitWorkspaceEvent,
-  formatWorkspaceInstrumentationError,
-} from "../lib/workspaceInstrumentation";
+  emitAgentRuntimeEvent,
+  formatRuntimeInstrumentationError,
+} from "../lib/runtimeInstrumentation";
 import { startCloudConnectOnboarding } from "../../../../shared/cloudAccountCommerceGateway";
 
 type UseWebAccountCommerceActionsArgs = {
@@ -30,7 +30,7 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
     const communitySlug = opts?.communitySlug ?? null;
     const country = String(opts?.country ?? "").trim().toUpperCase() || null;
     const session = args.getSession() ?? (args.ensureSession ? await args.ensureSession() : null);
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name: "stripe_connect_preflight",
       status: session ? "success" : "skip",
@@ -44,7 +44,7 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
 
     args.setAccountCommerceError(null);
     args.setIsStartingStripeConnectOnboarding(true);
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name: "stripe_connect_request",
       status: "start",
@@ -64,7 +64,7 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
           : "";
       if (!url) throw new Error("Missing Stripe Connect onboarding URL.");
       args.onConnectOnboardingStarted?.({ context, communitySlug, country });
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name: "stripe_connect_request",
         status: "success",
@@ -87,12 +87,12 @@ export function useWebAccountCommerceActions(args: UseWebAccountCommerceActionsA
             ? "Stripe Connect setup for Polynet is still incomplete. Finish the Connect platform-profile acknowledgements in Stripe, then retry."
             : message;
       args.setAccountCommerceError(friendly);
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name: "stripe_connect_request",
         status: "failure",
         detail: { billing_context: context, community_slug: communitySlug, country },
-        error: formatWorkspaceInstrumentationError(friendly),
+        error: formatRuntimeInstrumentationError(friendly),
       });
     } finally {
       args.setIsStartingStripeConnectOnboarding(false);

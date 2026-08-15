@@ -388,19 +388,6 @@ async function main() {
     );
 
     await runStep(
-      "preview_proxy_build",
-      "Preview proxy build",
-      "npm --prefix apps/preview-proxy run build",
-      () =>
-        runCommand("npm", [
-          "--prefix",
-          "apps/preview-proxy",
-          "run",
-          "build",
-        ]),
-    );
-
-    await runStep(
       "app_theme_contract",
       "App theme contract",
       "npm run check:app-theme-contract-proof",
@@ -438,16 +425,6 @@ async function main() {
         id: "web_dependency_audit",
         label: "Web dependency audit",
         args: ["--prefix", "apps/web", "audit", "--audit-level=low"],
-      },
-      {
-        id: "preview_proxy_dependency_audit",
-        label: "Preview proxy dependency audit",
-        args: [
-          "--prefix",
-          "apps/preview-proxy",
-          "audit",
-          "--audit-level=low",
-        ],
       },
     ]) {
       await runStep(

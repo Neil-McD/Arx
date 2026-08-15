@@ -378,7 +378,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
               title: `${props.previewCommunity.name} funnel`,
               model_id: COMMUNITY_OWNER_FUNDED_MODEL_ID,
               runtime_engine: "polynet",
-              project_id: null,
               community_id: props.previewCommunity.id,
               context_version: 0,
             }
