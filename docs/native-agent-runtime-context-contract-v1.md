@@ -312,7 +312,7 @@ Program status:
 | 3 | Canonical Steward context and receipt | Complete |
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
 | 5 | Workspace and Codex runtime deletion | Complete and production-proven |
-| 6 | Canonical model-aware input budget | Production partial; input-cap hotfix pending |
+| 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection | Not started |
 | 8 | Pi value/feasibility adapter and deterministic parity | Not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
@@ -854,10 +854,7 @@ roles, historical thread/message data, and external MCP.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 
-Status: implemented, released, and partially production-proven on 2026-08-14.
-The normal authenticated canary passed. The oversized canary exposed and now
-owns removal of a legacy 8,000-character composer and persistence ceiling;
-deployment and the resumed oversized canary remain.
+Status: complete and production-proven on 2026-08-14.
 
 Objective: decide whether a complete provider request fits before sending it.
 
@@ -935,6 +932,31 @@ Implemented shape:
     persistence path before the canonical runtime input budget evaluates the
     complete provider projection. Attachment count, type, and byte limits stay
     independently bounded.
+
+Production evidence:
+
+1. Runtime budget release merge `1cacbde83677ddcdf1cc90e544396c9d821899a7`
+   passed the exact-main GitHub Release Gate, was reported by production web,
+   and was deployed to production Convex.
+2. The authenticated normal community-inspection canary completed `ok` as run
+   `member_agent_dock:fbe96adc-a62e-476e-aa5f-b57570e4e2d1`. Its initial
+   plan and every later delta fit; the final projection estimated 97,247 input
+   tokens, and its context-integrity receipt passed with no failures or
+   warnings. Four malformed directory reads failed argument validation before
+   the agent
+   recovered through returned exact paths; this is a separate tool-efficiency
+   follow-up, not an input-budget or context-integrity failure.
+3. That canary exposed a remaining legacy 8,000-character browser and
+   persistence ceiling. Hotfix merge
+   `24c3f5d2ad94536e41d4776c16655a6ac99a27bf` deleted only those two caps,
+   preserved attachment bounds, passed the exact-main GitHub Release Gate, was
+   reported by production web, and was deployed to production Convex.
+4. The resumed authenticated oversized canary persisted exactly 300,000 text
+   characters and returned `OVERSIZED_CANARY_OK` as run
+   `member_agent_dock:787c46cd-1d81-4c1c-addd-c0ce4975f4ad`. Its canonical
+   initial plan estimated 168,037 input tokens against the 1,050,000-token Luna
+   context window, admitted the request with 823,319 input tokens remaining,
+   and passed context integrity with no failures or warnings.
 
 ### 17.4 Slice 7: shared deterministic model-visible projection
 
