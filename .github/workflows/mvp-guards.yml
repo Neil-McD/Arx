@@ -37,9 +37,6 @@ jobs:
       - name: Install web dependencies
         run: npm --prefix apps/web ci
 
-      - name: Install preview proxy dependencies
-        run: npm --prefix apps/preview-proxy ci
-
       - name: Run canonical release gate
         env:
           CANDIDATE_SHA: ${{ github.sha }}
