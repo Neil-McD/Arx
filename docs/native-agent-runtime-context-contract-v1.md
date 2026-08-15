@@ -312,7 +312,7 @@ Program status:
 | 3 | Canonical Steward context and receipt | Complete |
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
 | 5 | Workspace and Codex runtime deletion | Complete and production-proven |
-| 6 | Canonical model-aware input budget | Locally verified; release pending |
+| 6 | Canonical model-aware input budget | Production partial; input-cap hotfix pending |
 | 7 | Shared deterministic model-visible projection | Not started |
 | 8 | Pi value/feasibility adapter and deterministic parity | Not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
@@ -854,8 +854,10 @@ roles, historical thread/message data, and external MCP.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 
-Status: implemented, hardened, and locally verified on 2026-08-14. Merge,
-deployment, and production-canary proof remain.
+Status: implemented, released, and partially production-proven on 2026-08-14.
+The normal authenticated canary passed. The oversized canary exposed and now
+owns removal of a legacy 8,000-character composer and persistence ceiling;
+deployment and the resumed oversized canary remain.
 
 Objective: decide whether a complete provider request fits before sending it.
 
@@ -929,6 +931,10 @@ Implemented shape:
    funding, rate-limit, and conflict mappings. Steward separately preserves a
    failed pre-provider funding claim's bounded error code. These failures
    produce no provider-result observation or provider request.
+11. Member Agent text is not clipped by the browser composer or message
+    persistence path before the canonical runtime input budget evaluates the
+    complete provider projection. Attachment count, type, and byte limits stay
+    independently bounded.
 
 ### 17.4 Slice 7: shared deterministic model-visible projection
 

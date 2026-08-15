@@ -285,7 +285,7 @@ async function normalizeMemberAgentMessageContent(args: {
     args.contentJson && typeof args.contentJson === "object" && !Array.isArray(args.contentJson)
       ? (args.contentJson as Record<string, unknown>)
       : {};
-  const text = String(record.text ?? "").trim().slice(0, 8000);
+  const text = String(record.text ?? "").trim();
   const rawAttachments = Array.isArray(record.attachments) ? record.attachments : [];
   if (rawAttachments.length > MEMBER_AGENT_MAX_IMAGE_ATTACHMENTS) {
     throw new Error("member_agent_attachment_limit_exceeded");
