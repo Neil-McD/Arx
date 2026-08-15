@@ -71,6 +71,14 @@ test("the Release-A operator is dry-run-first, bounded, ordered, and preserves a
       projectId,
       createdAt: now,
     });
+    await ctx.db.insert("platformDiagnosticEvents", {
+      eventKey: "current-diagnostic",
+      eventType: "runtime",
+      subsystem: "runtime",
+      severity: "info",
+      status: "succeeded",
+      createdAt: now,
+    });
     const runDocumentId = await ctx.db.insert("runtimeRuns", {
       ownerId: userId,
       threadId,
@@ -85,6 +93,18 @@ test("the Release-A operator is dry-run-first, bounded, ordered, and preserves a
       workspaceSessionRegion: "legacy-region",
       workspaceSessionUpdatedAt: now,
       status: "error",
+      lastEventSeq: 0,
+      startedAt: now,
+      finishedAt: now,
+      createdAt: now,
+      updatedAt: now,
+    });
+    await ctx.db.insert("runtimeRuns", {
+      ownerId: userId,
+      threadId,
+      runId: "current-run",
+      lane: "native",
+      status: "ok",
       lastEventSeq: 0,
       startedAt: now,
       finishedAt: now,
@@ -160,14 +180,19 @@ test("the Release-A operator is dry-run-first, bounded, ordered, and preserves a
 
   const dryRun = await t.mutation(
     internalRefs.projectResidueRetirement.cleanProjectResidueBatchInternal,
-    { target: "runtimeRuns", cursor: null, pageSize: 10, dryRun: true },
+    { target: "runtimeRuns", pageSize: 10, dryRun: true },
   );
-  expect(dryRun).toMatchObject({ dryRun: true, patched: 0, wouldPatch: 1 });
+  expect(dryRun).toMatchObject({
+    dryRun: true,
+    scanned: 1,
+    patched: 0,
+    wouldPatch: 1,
+  });
   expect(dryRun.candidateDocumentIds).toEqual([String(fixture.runDocumentId)]);
   await expect(
     t.mutation(
       internalRefs.projectResidueRetirement.cleanProjectResidueBatchInternal,
-      { target: "runtimeRuns", cursor: null, pageSize: 10, dryRun: false },
+      { target: "runtimeRuns", pageSize: 10, dryRun: false },
     ),
   ).rejects.toThrow("project_residue_expected_documents_required");
   await expect(
@@ -175,7 +200,6 @@ test("the Release-A operator is dry-run-first, bounded, ordered, and preserves a
       internalRefs.projectResidueRetirement.cleanProjectResidueBatchInternal,
       {
         target: "runtimeRuns",
-        cursor: null,
         pageSize: 10,
         dryRun: false,
         expectedDocumentIds: ["wrong-document"],
@@ -200,24 +224,21 @@ test("the Release-A operator is dry-run-first, bounded, ordered, and preserves a
   ).rejects.toThrow("project_residue_dependency_blocked");
 
   const cleanTarget = async (target: ProjectResidueTarget) => {
-    let cursor: string | null = null;
     for (let batch = 0; batch < 20; batch += 1) {
       const preview: any = await t.mutation(
         internalRefs.projectResidueRetirement.cleanProjectResidueBatchInternal,
-        { target, cursor, pageSize: 2, dryRun: true },
+        { target, pageSize: 2, dryRun: true },
       );
       const written: any = await t.mutation(
         internalRefs.projectResidueRetirement.cleanProjectResidueBatchInternal,
         {
           target,
-          cursor,
           pageSize: 2,
           dryRun: false,
           expectedDocumentIds: preview.candidateDocumentIds,
         },
       );
       if (written.isDone) return;
-      cursor = written.continueCursor;
     }
     throw new Error(`project_residue_test_did_not_converge:${target}`);
   };

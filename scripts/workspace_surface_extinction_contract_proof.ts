@@ -117,6 +117,10 @@ assert.match(retirement, /project_residue_expected_documents_required/,
   "writes must be bound to the reviewed dry-run document IDs");
 assert.match(retirement, /project_residue_dependency_blocked/,
   "cloud-project deletion must fail closed while dependencies remain");
+assert.match(retirement, /queryResidueTarget\(ctx\.db, args\.target\)\.paginate/,
+  "the census must scan only residue-bearing rows");
+assert.match(retirement, /queryResidueTarget\(ctx\.db, args\.target\)\.take\(pageSize\)/,
+  "the writer must repeatedly take only residue-bearing rows");
 assert.doesNotMatch(
   retirement,
   /workspaceComputeCharges|providerCostEntries|creditLedgerEntries/,

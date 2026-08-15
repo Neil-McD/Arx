@@ -118,18 +118,17 @@ Cleanup order is fixed:
 8. `runtimeRuns`
 9. `cloudProjects`
 
-For each page, dry-run first. Review the returned document IDs, then pass those
-exact IDs to the write call. For surviving tables, pass the same input cursor
-to both calls and continue from the write result's `continueCursor`. For the
-six deleted tables, keep the cursor null and repeat until a write returns
+For each bounded residue batch, dry-run first. Review the returned document
+IDs, then pass those exact IDs to the write call. Every batch queries only
+residue-bearing rows; repeat without a cursor until a write returns
 `isDone: true`:
 
 ```bash
 npx convex run projectResidueRetirement:cleanProjectResidueBatchInternal \
-  '{"target":"runtimeRuns","cursor":null,"pageSize":100,"dryRun":true}' --prod
+  '{"target":"runtimeRuns","pageSize":100,"dryRun":true}' --prod
 
 npx convex run projectResidueRetirement:cleanProjectResidueBatchInternal \
-  '{"target":"runtimeRuns","cursor":null,"pageSize":100,"dryRun":false,"expectedDocumentIds":["<reviewed-id>"]}' --prod
+  '{"target":"runtimeRuns","pageSize":100,"dryRun":false,"expectedDocumentIds":["<reviewed-id>"]}' --prod
 ```
 
 The operator refuses to delete `cloudProjects` while any dependency remains.
