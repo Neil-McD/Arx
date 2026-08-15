@@ -61,6 +61,7 @@ import {
   lookupExistingRuntimeReplay,
   persistRuntimeAssistantMessage,
   persistRuntimeUserMessage,
+  resolveRuntimeRunContinuation,
 } from "./runtimeTurnPersistence";
 import { resolvePolynetRuntimeEngine } from "../shared/runtimeEngine";
 import {
@@ -501,6 +502,17 @@ export async function handleRuntimeTurnRequest(args: {
       startedAt: runStartedAt,
       nowMs: runStartedAt,
     };
+    const successResponse = buildRuntimeTurnSuccessResponder({
+      req,
+      stream,
+      runId,
+      requestId,
+      lane,
+      requestedModelId,
+      jsonResponse: (_req, status, payload) =>
+        runtimeJsonResponse(status, payload as Record<string, unknown>),
+      sseResponse: (_req, events) => runtimeSseResponse(events),
+    });
     const runStart = await ensureRuntimeRunStarted({
       ctx,
       ownerId: actor.dbUserId,
@@ -510,6 +522,31 @@ export async function handleRuntimeTurnRequest(args: {
     });
     if (!runStart.ok) {
       return runStart.response;
+    }
+    const runContinuation = await resolveRuntimeRunContinuation({
+      runStatus: runStart.runStatus,
+      ctx,
+      ownerId: actor.dbUserId,
+      threadId: ownedThread._id,
+      assistantMessageKeyForRun,
+      userMessageKeyForRun,
+      inferenceSource,
+      replayVisibleMessages:
+        persistVisibleUserMessage && persistVisibleAssistantMessage,
+    });
+    if (runContinuation.kind === "replay") {
+      return successResponse(runContinuation.replay);
+    }
+    if (runContinuation.kind === "not_resumable") {
+      return runtimeJsonResponse(409, {
+        ok: false,
+        code: "runtime_run_not_resumable",
+        error: "runtime_run_not_resumable",
+        message:
+          "This run has already finished and cannot be resumed. Retry to start a new run.",
+        run_id: runId,
+        run_status: runContinuation.runStatus,
+      });
     }
 
     const {
@@ -776,18 +813,6 @@ export async function handleRuntimeTurnRequest(args: {
         runId,
       });
     };
-    const successResponse = buildRuntimeTurnSuccessResponder({
-      req,
-      stream,
-      runId,
-      requestId,
-      lane,
-      requestedModelId,
-      jsonResponse: (_req, status, payload) =>
-        runtimeJsonResponse(status, payload as Record<string, unknown>),
-      sseResponse: (_req, events) => runtimeSseResponse(events),
-    });
-
     runtimeTurnStage = "idempotency_lookup";
     if (persistVisibleUserMessage && persistVisibleAssistantMessage) {
       const existingReplay = await lookupExistingRuntimeReplay({
@@ -903,6 +928,7 @@ export async function handleRuntimeTurnRequest(args: {
               ctx,
               ownerId: actor.dbUserId,
               runId,
+              touchHeartbeat: touchRunHeartbeatBestEffort,
               operation: async (signal) => {
                 if (inferenceSource === "chatgpt") {
                   return await runChatgptCompletion({

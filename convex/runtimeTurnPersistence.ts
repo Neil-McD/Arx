@@ -8,6 +8,8 @@ import {
   normalizePersistedSeq,
 } from "./httpRuntimeTurnState";
 
+export type RuntimeRunStatus = "running" | "ok" | "error" | "cancelled";
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)
     ? (value as Record<string, unknown>)
@@ -28,14 +30,26 @@ export async function ensureRuntimeRunStarted(args: {
   threadId: string;
   runStartArgs: Record<string, unknown>;
   fail: (status: number, payload: Record<string, unknown>) => Response;
-}): Promise<{ ok: true } | { ok: false; response: Response }> {
+}): Promise<
+  | { ok: true; runStatus: RuntimeRunStatus }
+  | { ok: false; response: Response }
+> {
   const { ctx, runStartArgs, fail } = args;
   try {
-    await ctx.runMutation(
+    const run = (await ctx.runMutation(
       (api as any).threads.ensureCloudRuntimeRunStarted as any,
       runStartArgs,
-    );
-    return { ok: true };
+    )) as { status?: unknown } | null;
+    const runStatus = String(run?.status ?? "").trim();
+    if (
+      runStatus !== "running" &&
+      runStatus !== "ok" &&
+      runStatus !== "error" &&
+      runStatus !== "cancelled"
+    ) {
+      throw new Error("runtime_run_status_invalid");
+    }
+    return { ok: true, runStatus };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     if (message === "thread_run_in_progress" || message.includes("thread_run_in_progress")) {
@@ -101,6 +115,27 @@ export async function lookupExistingRuntimeReplay(args: {
     assistantMessageId: normalizePersistedId(existingAssistant?._id),
     assistantMessageKey: normalizePersistedId(existingAssistant?.messageKey),
     assistantMessageSeq: normalizePersistedSeq(existingAssistant?.seq),
+  };
+}
+
+export async function resolveRuntimeRunContinuation(args: {
+  runStatus: RuntimeRunStatus;
+  ctx: any;
+  ownerId: any;
+  threadId: string;
+  assistantMessageKeyForRun: string;
+  userMessageKeyForRun: string;
+  inferenceSource: "free" | "platform" | "user_key" | "chatgpt";
+  replayVisibleMessages: boolean;
+}) {
+  if (args.runStatus === "running") return { kind: "active" as const };
+  if (args.replayVisibleMessages) {
+    const replay = await lookupExistingRuntimeReplay(args);
+    if (replay) return { kind: "replay" as const, replay };
+  }
+  return {
+    kind: "not_resumable" as const,
+    runStatus: args.runStatus,
   };
 }
 

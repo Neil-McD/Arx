@@ -33,6 +33,7 @@ const runRecord = {
   executionMode: "agentic",
   harnessProfile: "authenticated_cloud_tools",
   capabilityFamilies: ["community_tools"],
+  status: "running",
 };
 events.push(
   {
@@ -76,6 +77,15 @@ events.push(
 const ctx = {
   async runQuery(_functionRef: unknown, args: unknown): Promise<unknown> {
     queryCalls.push({ args });
+    const record = args && typeof args === "object" ? args as Record<string, unknown> : null;
+    if (
+      record &&
+      typeof record.ownerId === "string" &&
+      typeof record.runId === "string" &&
+      Object.keys(record).length === 2
+    ) {
+      return { ...runRecord, runId: record.runId, status: "running" };
+    }
     return [];
   },
   async runMutation(): Promise<unknown> {

@@ -3435,6 +3435,7 @@ export const appendCloudRuntimeRunEvent = mutation({
         .first()) as RuntimeRunEventLike | null;
       if (existing) return existing;
     }
+    if (run.status !== "running") throw new Error("runtime_run_not_active");
 
     const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
     const createdAt =
@@ -3509,6 +3510,7 @@ export const appendCloudRuntimeRunEventInternal = internalMutation({
         .first()) as RuntimeRunEventLike | null;
       if (existing) return existing;
     }
+    if (run.status !== "running") throw new Error("runtime_run_not_active");
 
     const seq = Math.max(0, Math.floor(run.lastEventSeq ?? 0)) + 1;
     const createdAt =
@@ -3749,6 +3751,7 @@ export const setCloudRuntimeRunContextSnapshotInternal = internalMutation({
     });
     if (!run) return null;
     if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+    if (run.status !== "running") return run;
     const patch =
       args.phase === "started"
         ? {
