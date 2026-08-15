@@ -25,9 +25,7 @@ import type * as blaxelWorkspaceComputerProvider from "../blaxelWorkspaceCompute
 import type * as blaxelWorkspaceDiagnostics from "../blaxelWorkspaceDiagnostics.js";
 import type * as blaxelWorkspaceProjectNames from "../blaxelWorkspaceProjectNames.js";
 import type * as blaxelWorkspaceResourceInventory from "../blaxelWorkspaceResourceInventory.js";
-import type * as blaxelWorkspaceSandboxSmoke from "../blaxelWorkspaceSandboxSmoke.js";
 import type * as blaxelWorkspaceVolumeQuota from "../blaxelWorkspaceVolumeQuota.js";
-import type * as blaxelWorkspaceVolumeSmoke from "../blaxelWorkspaceVolumeSmoke.js";
 import type * as blaxelWorkspaceWake from "../blaxelWorkspaceWake.js";
 import type * as builderPartners from "../builderPartners.js";
 import type * as businessAnalytics from "../businessAnalytics.js";
@@ -259,9 +257,7 @@ declare const fullApi: ApiFromModules<{
   blaxelWorkspaceDiagnostics: typeof blaxelWorkspaceDiagnostics;
   blaxelWorkspaceProjectNames: typeof blaxelWorkspaceProjectNames;
   blaxelWorkspaceResourceInventory: typeof blaxelWorkspaceResourceInventory;
-  blaxelWorkspaceSandboxSmoke: typeof blaxelWorkspaceSandboxSmoke;
   blaxelWorkspaceVolumeQuota: typeof blaxelWorkspaceVolumeQuota;
-  blaxelWorkspaceVolumeSmoke: typeof blaxelWorkspaceVolumeSmoke;
   blaxelWorkspaceWake: typeof blaxelWorkspaceWake;
   builderPartners: typeof builderPartners;
   businessAnalytics: typeof businessAnalytics;

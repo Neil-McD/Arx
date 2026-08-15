@@ -25,6 +25,8 @@ const retiredFiles = [
   "convex/workspaceInspector.ts",
   "convex/workspaceTerminals.ts",
   "convex/workspaceTerminalProcessCore.ts",
+  "convex/blaxelWorkspaceSandboxSmoke.ts",
+  "convex/blaxelWorkspaceVolumeSmoke.ts",
   "convex/daytonaCodexRuntimeTargetActions.ts",
   "convex/daytonaCodexRuntimeTargets.ts",
   "apps/web/src/components/DaytonaRuntimeAppPreview.tsx",
@@ -97,7 +99,7 @@ for (const [label, source] of [
 
 assert.doesNotMatch(
   generatedApi,
-  /workspaceTerminals|getCloudRuntimeRunComputerUseLiveSession|captureCloudRuntimeRunComputerUseScreenshot|getCloudRuntimeRunDaytonaPreviewSession|stopCloudRuntimeRunDaytonaPreview|daytonaCodexRuntimeTarget/,
+  /workspaceTerminals|getCloudRuntimeRunComputerUseLiveSession|captureCloudRuntimeRunComputerUseScreenshot|getCloudRuntimeRunDaytonaPreviewSession|stopCloudRuntimeRunDaytonaPreview|daytonaCodexRuntimeTarget|blaxelWorkspaceSandboxSmoke|blaxelWorkspaceVolumeSmoke|smokeBlaxelConvexSandbox|smokeBlaxelConvexVolume/,
   "generated Convex APIs must not expose the retired execution substrate",
 );
 assert.doesNotMatch(
