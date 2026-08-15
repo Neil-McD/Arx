@@ -61,7 +61,7 @@ const CONNECTED_PROVIDER_MODELS: readonly CatalogModelEntry[] = [
   { id: "opus-4.6", label: "Opus 4.6", section: "anthropic", description: "Anthropic", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
   { id: "gemini-3-flash", label: "Gemini 3 Flash", section: "google", description: "Google", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
   { id: "gemini-3.1-pro", label: "Gemini 3.1 Pro", section: "google", description: "Google", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
-  { id: "grok-4.3", label: "Grok 4.3", section: "x-ai", description: "xAI", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
+  { id: "grok-4.1", label: "Grok 4.1", section: "x-ai", description: "xAI", supportedFundingSources: ["user_key"], surfaces: ["web"], defaultEnabled: true, supportsImageInput: true },
 ];
 
 export const DEFAULT_GUEST_MODEL_ID = FREE_MODELS[0]!.id;

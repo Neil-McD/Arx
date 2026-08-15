@@ -11,7 +11,7 @@ const DEFAULT_PLATFORM_MODEL_MAP: Record<string, string> = Object.freeze({
   "opus-4.6": "anthropic/claude-opus-4.6",
   "gemini-3-flash": "google/gemini-2.5-flash",
   "gemini-3.1-pro": "google/gemini-2.5-pro",
-  "grok-4.3": "x-ai/grok-4.3",
+  "grok-4.1": "x-ai/grok-4.3",
 });
 
 function readEnv(name: string): string {

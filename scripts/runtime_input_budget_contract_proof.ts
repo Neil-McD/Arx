@@ -18,13 +18,18 @@ assert.doesNotMatch(
 );
 assert.match(
   kernel,
-  /runBudgetedCompletion\(providerProjection\.messages\)/,
+  /runBudgetedCompletion\([\s\S]*providerProjection\.messages/,
   "the initial provider attempt must pass through canonical admission",
 );
 assert.match(
   kernel,
-  /runBudgetedCompletion\(recoveryProjection\.messages\)/,
+  /runBudgetedCompletion\([\s\S]*recoveryProjection\.messages/,
   "the provider-overflow retry must pass through canonical admission",
+);
+assert.match(
+  kernel,
+  /completion\.code === CONTEXT_WINDOW_EXCEEDED_CODE[\s\S]*budgetedCompletion\.providerAttempted[\s\S]*prepareProviderTranscript/,
+  "a preflight budget rejection must not trigger the legacy provider-overflow compaction retry",
 );
 assert.equal(
   count(kernel, /params\.runCompletion\(/g),
@@ -39,6 +44,15 @@ assert.match(
   "provider-overflow evidence must reuse the canonical message estimator",
 );
 assert.doesNotMatch(providerContext, /ESTIMATED_CHARS_PER_TOKEN/);
+
+const memberConversationContext = read(
+  "shared/memberAgentConversationContext.ts",
+);
+assert.doesNotMatch(
+  memberConversationContext,
+  /MEMBER_AGENT_CONTEXT_MAX_CHARS|MEMBER_AGENT_CONTEXT_MAX_MESSAGE_CHARS|maxCharacters/,
+  "Member provider context must not apply a separate raw character budget before model-aware admission",
+);
 
 for (const path of [
   "convex/runtimeAgentLoop.ts",
@@ -144,7 +158,7 @@ assert.doesNotMatch(
   /claude-sonnet-4-5|claude-opus-4-1|grok-4-fast/,
   "active aliases must not resolve to retired or nonexistent OpenRouter slugs",
 );
-assert.match(inferenceConfig, /"grok-4\.3": "x-ai\/grok-4\.3"/);
+assert.match(inferenceConfig, /"grok-4\.1": "x-ai\/grok-4\.3"/);
 const defaultResolvedModelRefs = Array.from(
   inferenceConfig.matchAll(/:\s*"([a-z0-9-]+\/[^"\s]+)"/gi),
   (match) => match[1],

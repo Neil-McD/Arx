@@ -5,6 +5,7 @@ import {
 } from "../shared/nativeToolProtocol.ts";
 import { runNativeRuntimeKernel } from "../shared/runtimeKernel.ts";
 import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
+import { compactProviderTranscriptForContextRetry } from "../shared/providerContextWindow.ts";
 import {
   listRuntimeModelCapacityProfiles,
   planRuntimeInputBudget,
@@ -246,6 +247,64 @@ describe("runtime input budget", () => {
     expect(result.ok).toBe(false);
     expect(result.ok ? null : result.code).toBe("context_window_exceeded");
     expect(providerCalls).toBe(0);
+  });
+
+  it("does not treat a preflight rejection as a provider-overflow retry", async () => {
+    let providerCalls = 0;
+    let compactionEvents = 0;
+    const result = await runNativeRuntimeKernel({
+      messages: [
+        { role: "user", content: "Inspect the community." },
+        {
+          role: "tool",
+          tool_call_id: "oversized-result",
+          content: "x".repeat(300_000),
+        },
+      ],
+      budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+      inputBudget: {
+        transport: "openrouter_chat_completions",
+        modelRef: "openai/gpt-oss-120b:free",
+        reservedOutputTokens: 1_600,
+        toolSchemas: [],
+        recordPlan: () => undefined,
+      },
+      prepareProviderTranscript: ({ transcript, forceCompaction }) =>
+        forceCompaction
+          ? compactProviderTranscriptForContextRetry(transcript)
+          : {
+              messages: transcript,
+              compactedToolResults: 0,
+              originalEstimatedTokens: 0,
+              projectedEstimatedTokens: 0,
+            },
+      onProviderContextCompacted: () => {
+        compactionEvents += 1;
+      },
+      runCompletion: async () => {
+        providerCalls += 1;
+        return {
+          ok: true,
+          type: "assistant",
+          assistantText: "must not run",
+          promptTokens: 1,
+          completionTokens: 1,
+          resolvedModelId: "gpt-oss-120b",
+        };
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => ({
+        status: "ok",
+        exitCode: 0,
+        outputText: "",
+        errorCode: null,
+        errorMessage: null,
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : result.code).toBe("context_window_exceeded");
+    expect(providerCalls).toBe(0);
+    expect(compactionEvents).toBe(0);
   });
 
   it("records changed follow-up plans as deltas", async () => {

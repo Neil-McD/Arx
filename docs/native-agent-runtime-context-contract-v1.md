@@ -311,8 +311,8 @@ Program status:
 | 2 | Canonical Concierge context and receipt | Complete |
 | 3 | Canonical Steward context and receipt | Complete |
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
-| 5 | Workspace and Codex runtime deletion | Not started |
-| 6 | Canonical model-aware input budget | Not started |
+| 5 | Workspace and Codex runtime deletion | Complete and production-proven |
+| 6 | Canonical model-aware input budget | Locally verified; release pending |
 | 7 | Shared deterministic model-visible projection | Not started |
 | 8 | Pi value/feasibility adapter and deterministic parity | Not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
@@ -909,14 +909,22 @@ Implemented shape:
    after the shared plan admits the request. Unknown capacity, invalid budget,
    missing evidence, and estimated overflow stop before funding/provider work.
 6. Active OpenRouter aliases resolve to currently advertised exact references:
-   Claude Sonnet 4.6, Claude Opus 4.6, Gemini 2.5 Flash/Pro, and Grok 4.3.
+   Claude Sonnet 4.6, Claude Opus 4.6, Gemini 2.5 Flash/Pro, and Grok 4.3. The
+   persisted `grok-4.1` product alias remains stable while its provider target
+   advances independently.
 7. Tool/resource response bounds and pagination remain unchanged. The deleted
-   request-wide transport character ceiling remains absent.
+   request-wide transport character ceiling remains absent, and Member history
+   no longer applies separate 60,000-total or 20,000-per-message truncation.
+   The existing bounded 60-row storage read remains until Slice 7 owns paginated
+   model-visible history projection.
 8. Each role resolves one provider tool surface per run. The same immutable
    schema value is used for initial context evidence, input budgeting,
    provider transmission, and returned-tool validation; the budget seam cannot
    rebuild a second schema through a callback.
-9. Member and Funnel pre-provider lifecycle failures escape the provider-only
+9. A failed preflight budget does not trigger the legacy provider-overflow
+   compaction retry. Only an attempted provider request can activate that
+   existing recovery path; deterministic projection remains Slice 7.
+10. Member and Funnel pre-provider lifecycle failures escape the provider-only
    crash classifier unchanged so the turn handler retains its existing
    funding, rate-limit, and conflict mappings. Steward separately preserves a
    failed pre-provider funding claim's bounded error code. These failures

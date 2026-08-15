@@ -483,7 +483,10 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
 
   const runBudgetedCompletion = async (
     messages: NativeToolAwareMessage[],
-  ): ReturnType<RuntimeKernelRunCompletion<TToolName>> => {
+  ): Promise<{
+    completion: Awaited<ReturnType<RuntimeKernelRunCompletion<TToolName>>>;
+    providerAttempted: boolean;
+  }> => {
     let plan: RuntimeInputBudgetPlan;
     try {
       plan = planRuntimeInputBudget({
@@ -495,11 +498,14 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       });
     } catch {
       return {
-        ok: false,
-        status: 503,
-        code: RUNTIME_INPUT_BUDGET_INVALID_CODE,
-        stopReason: "model_error",
-        message: "The agent could not safely calculate the model input budget.",
+        providerAttempted: false,
+        completion: {
+          ok: false,
+          status: 503,
+          code: RUNTIME_INPUT_BUDGET_INVALID_CODE,
+          stopReason: "model_error",
+          message: "The agent could not safely calculate the model input budget.",
+        },
       };
     }
 
@@ -524,11 +530,14 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
         });
       } catch {
         return {
-          ok: false,
-          status: 503,
-          code: "runtime_input_budget_evidence_unavailable",
-          stopReason: "model_error",
-          message: "The agent could not record the model input budget safely.",
+          providerAttempted: false,
+          completion: {
+            ok: false,
+            status: 503,
+            code: "runtime_input_budget_evidence_unavailable",
+            stopReason: "model_error",
+            message: "The agent could not record the model input budget safely.",
+          },
         };
       }
       previousInputBudgetPlan = plan;
@@ -537,27 +546,36 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     if (!plan.fits) {
       if (plan.failureCode === CONTEXT_WINDOW_EXCEEDED_CODE) {
         return {
-          ok: false,
-          status: 413,
-          code: CONTEXT_WINDOW_EXCEEDED_CODE,
-          stopReason: "model_error",
-          message: CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+          providerAttempted: false,
+          completion: {
+            ok: false,
+            status: 413,
+            code: CONTEXT_WINDOW_EXCEEDED_CODE,
+            stopReason: "model_error",
+            message: CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+          },
         };
       }
       return {
-        ok: false,
-        status: 503,
-        code:
-          plan.failureCode ?? RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE,
-        stopReason: "model_error",
-        message:
-          plan.failureCode === RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE
-            ? "The selected provider model does not have a reviewed context capacity."
-            : "The selected provider model has an invalid input budget configuration.",
+        providerAttempted: false,
+        completion: {
+          ok: false,
+          status: 503,
+          code:
+            plan.failureCode ?? RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE,
+          stopReason: "model_error",
+          message:
+            plan.failureCode === RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE
+              ? "The selected provider model does not have a reviewed context capacity."
+              : "The selected provider model has an invalid input budget configuration.",
+        },
       };
     }
 
-    return await params.runCompletion(messages);
+    return {
+      providerAttempted: true,
+      completion: await params.runCompletion(messages),
+    };
   };
 
   while (true) {
@@ -594,10 +612,14 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       providerContextCompactionActive = true;
       await notifyProviderContextCompacted(providerProjection, "proactive");
     }
-    let completion = await runBudgetedCompletion(providerProjection.messages);
+    let budgetedCompletion = await runBudgetedCompletion(
+      providerProjection.messages,
+    );
+    let completion = budgetedCompletion.completion;
     if (
       completion.ok === false &&
       completion.code === CONTEXT_WINDOW_EXCEEDED_CODE &&
+      budgetedCompletion.providerAttempted &&
       !providerContextCompactionActive &&
       params.prepareProviderTranscript
     ) {
@@ -613,7 +635,10 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
           recoveryProjection,
           "provider_overflow",
         );
-        completion = await runBudgetedCompletion(recoveryProjection.messages);
+        budgetedCompletion = await runBudgetedCompletion(
+          recoveryProjection.messages,
+        );
+        completion = budgetedCompletion.completion;
       }
     }
     if (completion.ok === false) {
