@@ -895,8 +895,10 @@ Release A is a no-writer compatibility release:
 
 Production cleanup gate:
 
-1. Run a read-only Blaxel control-plane inventory and require zero sandboxes
-   and volumes.
+1. Run a read-only Blaxel control-plane inventory and require zero
+   Polynet-owned sandboxes and volumes, including every resource named by a
+   persisted `pn-p-*` pointer. Shared-workspace resources that are not owned by
+   Polynet are out of scope and must never be deleted.
 2. Export the canonical production Convex database outside the repository and
    record the export path and SHA-256.
 3. Run a complete, non-truncated census over all nine retirement targets.
@@ -904,9 +906,9 @@ Production cleanup gate:
    preview snapshots, directory snapshots, terminal sessions, Codex leases,
    Daytona targets, diagnostic events, threads, runtime runs, then projects.
 5. Re-run the complete census twice and require zero residue both times.
-6. Re-run provider inventory and accounting diagnostics. Stop if provider
-   inventory is nonzero or any accounting count, identifier count, cost total,
-   or credit total changes.
+6. Re-run provider inventory and accounting diagnostics. Stop if any
+   Polynet-owned provider resource remains or any accounting count, identifier
+   count, cost total, or credit total changes.
 
 Release B is terminal deletion:
 
