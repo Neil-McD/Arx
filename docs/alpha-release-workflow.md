@@ -86,9 +86,11 @@ write:
 1. Prove the exact Release A SHA is live in Vercel and Convex.
 2. Prove retired public/internal writer functions are absent.
 3. Pass the authenticated Member Agent community-inspection canary.
-4. Run a read-only Blaxel control-plane inventory and require zero sandboxes
-   and volumes. If either count is nonzero, stop; this operator cannot delete
-   provider resources.
+4. Run a read-only Blaxel control-plane inventory and require zero
+   Polynet-owned sandboxes and volumes, including every resource named by a
+   persisted `pn-p-*` pointer. Shared-workspace resources that are not owned by
+   Polynet are out of scope and must never be deleted. If any Polynet-owned
+   resource remains, stop; this operator cannot delete provider resources.
 5. Back up production outside the repository and record its SHA-256:
 
 ```bash

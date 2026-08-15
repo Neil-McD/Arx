@@ -82,6 +82,8 @@ const routes = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
 const webSource = readSourceCorpus("apps/web/src");
 const mcp = read("convex/httpMcp.ts");
+const runtimeContract = read("docs/native-agent-runtime-context-contract-v1.md");
+const releaseWorkflow = read("docs/alpha-release-workflow.md");
 
 assert.doesNotMatch(runtimeCorpus, /workspaceRuntime|runtimeExecutionSession|workspaceTerminals|daytonaCodexRuntime|blaxelWorkspace|PROJECT_CONTEXT|projectContext|projectLabel|projectDescription/, "the native runtime must not depend on retired Workspace or project context");
 for (const table of [
@@ -120,6 +122,18 @@ assert.doesNotMatch(
   /workspaceComputeCharges|providerCostEntries|creditLedgerEntries/,
   "the retirement operator must not read or mutate accounting evidence",
 );
+for (const releaseContract of [runtimeContract, releaseWorkflow]) {
+  assert.match(
+    releaseContract,
+    /zero\s+Polynet-owned sandboxes and volumes/,
+    "provider cleanup must be scoped to Polynet-owned resources",
+  );
+  assert.match(
+    releaseContract,
+    /not owned by\s+Polynet are out of scope and must never be deleted/,
+    "shared provider resources must be protected explicitly",
+  );
+}
 assert.doesNotMatch(generatedApi, /projects:|blaxelWorkspace|providerResourcePointers|workspaceComputerProviderPolicy|previewProxySessionToken|workspaceTerminals|daytonaCodexRuntimeTarget/, "generated Convex APIs must not expose the retired Workspace substrate");
 assert.doesNotMatch(webSource, /threads:(?:getCloudRuntimeRunComputerUseLiveSession|captureCloudRuntimeRunComputerUseScreenshot|getCloudRuntimeRunDaytonaPreviewSession|stopCloudRuntimeRunDaytonaPreview)/, "the browser must not call retired runtime actions");
 assert.doesNotMatch(app, /WebWorkspaceSurfaceHost|useWebWorkspaceCoreController|activePage === "workspace"/, "App must not mount or own a general Workspace surface");
