@@ -36,10 +36,6 @@ export type AuthSessionBootstrapResult = {
   trace: AuthBridgeBootstrapTrace | null;
 };
 
-export type AuthSessionRefreshInFlightRef = {
-  current: Promise<AuthSession | null> | null;
-};
-
 export type AuthSessionRefreshResult =
   | { status: "refreshed"; session: AuthSession }
   | { status: "transient_failure"; reason: string }
@@ -79,7 +75,7 @@ export class VoiceTranscriptionRequestError extends Error {
 
 function readFirstNonEmptyEnv(keys: readonly string[]): string | null {
   for (const key of keys) {
-    const value = (import.meta.env[key as keyof ImportMetaEnv] as string | undefined) ?? "";
+    const value = (import.meta.env?.[key as keyof ImportMetaEnv] as string | undefined) ?? "";
     const trimmed = value.trim();
     if (trimmed) return trimmed;
   }
@@ -781,14 +777,6 @@ export async function refreshAuthSessionResult(): Promise<AuthSessionRefreshResu
   }
 }
 
-export async function refreshAuthSession(): Promise<AuthSession | null> {
-  const refreshed = await refreshAuthSessionResult();
-  if (refreshed.status === "refreshed") {
-    return refreshed.session;
-  }
-  return null;
-}
-
 export async function fetchAuthUser(token: string): Promise<AuthUser | null> {
   return decodeAuthUserFromIdentityToken(token);
 }
@@ -799,43 +787,33 @@ async function isAuthSessionAcceptedForRuntime(
   return await probeConvexAuthenticatedActorSessionDetailed(session);
 }
 
-export async function refreshAuthSessionWithLock(params: {
-  inFlightRef: AuthSessionRefreshInFlightRef;
-  refreshSession: () => Promise<AuthSession | null>;
-  onRefreshed: (session: AuthSession) => void | Promise<void>;
-}): Promise<AuthSession | null> {
-  const { inFlightRef, refreshSession, onRefreshed } = params;
-  if (inFlightRef.current) {
-    return await inFlightRef.current;
-  }
-  const promise = (async () => {
-    const refreshed = await refreshSession();
-    if (!refreshed) return null;
-    await onRefreshed(refreshed);
-    return refreshed;
-  })();
-  inFlightRef.current = promise;
-  try {
-    return await promise;
-  } finally {
-    inFlightRef.current = null;
-  }
-}
-
 export async function refreshAuthSessionWithLockResult(params: {
   inFlightRef: AuthSessionRefreshResultInFlightRef;
   lockKey: number;
+  isLockKeyCurrent: (lockKey: number) => boolean;
   refreshSession: () => Promise<AuthSessionRefreshResult>;
   onRefreshed: (session: AuthSession) => void | Promise<void>;
 }): Promise<AuthSessionRefreshResult> {
-  const { inFlightRef, lockKey, refreshSession, onRefreshed } = params;
+  const {
+    inFlightRef,
+    lockKey,
+    isLockKeyCurrent,
+    refreshSession,
+    onRefreshed,
+  } = params;
   if (inFlightRef.current?.lockKey === lockKey) {
     return await inFlightRef.current.promise;
   }
-  const promise = (async () => {
+  const promise = (async (): Promise<AuthSessionRefreshResult> => {
     const refreshed = await refreshSession();
     if (refreshed.status !== "refreshed") return refreshed;
+    if (!isLockKeyCurrent(lockKey)) {
+      return { status: "transient_failure", reason: "session_changed" };
+    }
     await onRefreshed(refreshed.session);
+    if (!isLockKeyCurrent(lockKey)) {
+      return { status: "transient_failure", reason: "session_changed" };
+    }
     return refreshed;
   })();
   inFlightRef.current = { lockKey, promise };
