@@ -883,7 +883,9 @@ Release A is a no-writer compatibility release:
    the exact obsolete optional fields on surviving records.
 2. Expose one internal-only `projectResidueRetirement` operator. Its writes are
    bounded, dry-run by default, idempotent, and bound to the exact document IDs
-   returned by the immediately preceding dry-run.
+   returned by the immediately preceding dry-run. One temporary selective
+   index on `platformDiagnosticEvents.projectId` prevents cleanup from scanning
+   current diagnostic history; Release B deletes it with the field.
 3. Refuse to delete `cloudProjects` while any dependent legacy table or
    surviving-record field remains.
 4. Never read or mutate `workspaceComputeCharges`, `providerCostEntries`, or

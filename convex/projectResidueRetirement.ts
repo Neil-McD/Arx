@@ -121,7 +121,9 @@ function queryResidueTarget(db: any, target: ProjectResidueTarget): any {
   const query = queryTarget(db, target);
   if (LEGACY_TABLE_TARGETS.has(target)) return query;
   if (target === "platformDiagnosticEvents") {
-    return query.filter((q: any) => q.neq(q.field("projectId"), undefined));
+    return query.withIndex("by_projectId", (q: any) =>
+      q.gt("projectId", undefined),
+    );
   }
   if (target === "threads") {
     return query.filter((q: any) =>
