@@ -75,6 +75,10 @@ product traffic can no longer create or refresh them.
 
 ### Workspace project residue retirement
 
+Status: completed on 2026-08-15. The procedure below is retained as the
+production evidence contract; the temporary operator and compatibility schema
+must not be restored.
+
 Slice 5E uses the same two-release rule, but it never deletes provider
 resources or accounting evidence.
 
@@ -139,11 +143,11 @@ It cannot query or mutate `workspaceComputeCharges`, `providerCostEntries`, or
 then re-run provider inventory and accounting diagnostics. Stop if provider
 inventory is nonzero or any accounting evidence changes.
 
-Release B deletes the six empty schemas, obsolete compatibility fields, and
-the temporary operator. Run the full release gate, release through `main`,
-deploy Convex intentionally, and prove the exact production SHA, native
-community inspection, official external MCP, and accounting diagnostics. Do
-not retain the migration code after this proof.
+Release B deletes the six empty schemas, obsolete compatibility fields,
+temporary selective index, and temporary operator. The completed cleanup
+deleted 160 obsolete rows, patched 853 surviving rows, produced two complete
+zero censuses, preserved all accounting totals exactly, and left zero
+Polynet-owned Blaxel resources. Do not restore the migration code.
 
 ### AI Feed retirement
 

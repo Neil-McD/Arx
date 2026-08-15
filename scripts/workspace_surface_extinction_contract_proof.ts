@@ -50,6 +50,8 @@ const retiredFiles = [
   "shared/runtimePreviewDiagnostics.ts",
   "shared/daytonaRuntimePolicy.ts",
   "shared/shellCommandPolicy.ts",
+  "convex/projectResidueRetirement.ts",
+  "convex/projectResidueRetirement.test.ts",
 ];
 for (const path of retiredFiles) {
   assert.equal(existsSync(path), false, `${path} must remain deleted`);
@@ -77,7 +79,6 @@ const runtimeCorpus = [
 ].join("\n");
 const generatedApi = read("convex/_generated/api.d.ts");
 const schema = read("convex/schema.ts");
-const retirement = read("convex/projectResidueRetirement.ts");
 const routes = read("shared/webAppRouteState.ts");
 const app = read("apps/web/src/App.tsx");
 const webSource = readSourceCorpus("apps/web/src");
@@ -94,42 +95,26 @@ for (const table of [
   "polynetCodexWorkerCapacityLeases",
   "daytonaCodexRuntimeTargets",
 ]) {
-  assert.match(
-    schema,
-    new RegExp(`${table}: defineTable\\(v\\.any\\(\\)\\)`),
-    `${table} must be a Release-A compatibility tombstone only`,
-  );
-  assert.match(
-    retirement,
-    new RegExp(`"${table}"`),
-    `${table} must be owned by the bounded retirement operator`,
-  );
+  assert.doesNotMatch(schema, new RegExp(`\\b${table}:`), `${table} must be absent after Release B`);
 }
-assert.match(retirement, /internalQuery\(\{/,
-  "the retirement census must be internal-only");
-assert.match(retirement, /internalMutation\(\{/,
-  "the retirement writer must be internal-only");
-assert.doesNotMatch(retirement, /\b(?:query|mutation|action)\(\{/,
-  "the retirement operator must expose no public Convex function");
-assert.match(retirement, /dryRun = args\.dryRun !== false/,
-  "the retirement writer must default to dry-run");
-assert.match(retirement, /project_residue_expected_documents_required/,
-  "writes must be bound to the reviewed dry-run document IDs");
-assert.match(retirement, /project_residue_dependency_blocked/,
-  "cloud-project deletion must fail closed while dependencies remain");
-assert.match(retirement, /queryResidueTarget\(ctx\.db, args\.target\)\.paginate/,
-  "the census must scan only residue-bearing rows");
-assert.match(retirement, /queryResidueTarget\(ctx\.db, args\.target\)\.take\(pageSize\)/,
-  "the writer must repeatedly take only residue-bearing rows");
-assert.match(schema, /platformDiagnosticEvents: defineTable\([\s\S]*?\.index\("by_projectId", \["projectId"\]\)/,
-  "the large diagnostic table needs one temporary selective cleanup index");
-assert.match(retirement, /withIndex\("by_projectId"[\s\S]*?q\.gt\("projectId", undefined\)/,
-  "diagnostic cleanup must exclude rows without project residue at the index boundary");
-assert.doesNotMatch(
-  retirement,
-  /workspaceComputeCharges|providerCostEntries|creditLedgerEntries/,
-  "the retirement operator must not read or mutate accounting evidence",
-);
+assert.doesNotMatch(generatedApi, /projectResidueRetirement/, "generated Convex APIs must not retain the temporary retirement operator");
+for (const field of [
+  "sandboxMode",
+  "workspaceSessionState",
+  "workspaceProviderSandboxId",
+  "workspaceToolboxProxyUrl",
+  "workspaceSessionRegion",
+  "workspaceSessionUpdatedAt",
+]) {
+  assert.doesNotMatch(schema, new RegExp(`\\b${field}:`), `${field} must be absent after Release B`);
+}
+const diagnosticSchema = schema.match(/platformDiagnosticEvents: defineTable\([\s\S]*?checkoutSessions: defineTable/)?.[0] ?? "";
+const threadSchema = schema.match(/threads: defineTable\([\s\S]*?runtimeRuns: defineTable/)?.[0] ?? "";
+const runtimeRunSchema = schema.match(/runtimeRuns: defineTable\([\s\S]*?runtimeRunEvents: defineTable/)?.[0] ?? "";
+assert.doesNotMatch(diagnosticSchema, /\bprojectId:|by_projectId/, "diagnostic project compatibility must be absent");
+assert.doesNotMatch(threadSchema, /\bprojectId:|v\.literal\("codex"\)/, "thread project and Codex compatibility must be absent");
+assert.match(threadSchema, /runtimeEngine: v\.optional\(v\.literal\("polynet"\)\)/, "thread wire compatibility is narrowed to the one native runtime");
+assert.doesNotMatch(runtimeRunSchema, /\bprojectId:|\bruntimeEngine:/, "runtime-run project compatibility must be absent");
 for (const releaseContract of [runtimeContract, releaseWorkflow]) {
   assert.match(
     releaseContract,
@@ -142,7 +127,7 @@ for (const releaseContract of [runtimeContract, releaseWorkflow]) {
     "shared provider resources must be protected explicitly",
   );
 }
-assert.doesNotMatch(generatedApi, /projects:|blaxelWorkspace|providerResourcePointers|workspaceComputerProviderPolicy|previewProxySessionToken|workspaceTerminals|daytonaCodexRuntimeTarget/, "generated Convex APIs must not expose the retired Workspace substrate");
+assert.doesNotMatch(generatedApi, /projects:|blaxelWorkspace|providerResourcePointers|workspaceComputerProviderPolicy|previewProxySessionToken|workspaceTerminals|daytonaCodexRuntimeTarget|projectResidueRetirement/, "generated Convex APIs must not expose the retired Workspace substrate");
 assert.doesNotMatch(webSource, /threads:(?:getCloudRuntimeRunComputerUseLiveSession|captureCloudRuntimeRunComputerUseScreenshot|getCloudRuntimeRunDaytonaPreviewSession|stopCloudRuntimeRunDaytonaPreview)/, "the browser must not call retired runtime actions");
 assert.doesNotMatch(app, /WebWorkspaceSurfaceHost|useWebWorkspaceCoreController|activePage === "workspace"/, "App must not mount or own a general Workspace surface");
 assert.doesNotMatch(routes, /page: "workspace"|buildWorkspaceThreadPath|buildWorkspaceDraftPath/, "routing must not produce a Workspace destination");
