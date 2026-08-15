@@ -581,7 +581,10 @@ export default defineSchema({
     .index("by_severity_createdAt", ["severity", "createdAt"])
     .index("by_status_createdAt", ["status", "createdAt"])
     .index("by_user_createdAt", ["userId", "createdAt"])
-    .index("by_community_createdAt", ["communityId", "createdAt"]),
+    .index("by_community_createdAt", ["communityId", "createdAt"])
+    // Slice 5E Release-A cleanup only. Release B removes this index with the
+    // retired projectId compatibility field.
+    .index("by_projectId", ["projectId"]),
 
   checkoutSessions: defineTable({
     sessionId: v.string(),

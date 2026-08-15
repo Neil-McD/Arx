@@ -121,6 +121,10 @@ assert.match(retirement, /queryResidueTarget\(ctx\.db, args\.target\)\.paginate/
   "the census must scan only residue-bearing rows");
 assert.match(retirement, /queryResidueTarget\(ctx\.db, args\.target\)\.take\(pageSize\)/,
   "the writer must repeatedly take only residue-bearing rows");
+assert.match(schema, /platformDiagnosticEvents: defineTable\([\s\S]*?\.index\("by_projectId", \["projectId"\]\)/,
+  "the large diagnostic table needs one temporary selective cleanup index");
+assert.match(retirement, /withIndex\("by_projectId"[\s\S]*?q\.gt\("projectId", undefined\)/,
+  "diagnostic cleanup must exclude rows without project residue at the index boundary");
 assert.doesNotMatch(
   retirement,
   /workspaceComputeCharges|providerCostEntries|creditLedgerEntries/,

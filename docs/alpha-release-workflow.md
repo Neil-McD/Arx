@@ -80,8 +80,10 @@ resources or accounting evidence.
 
 Release A removes all project, Workspace, Daytona, Codex-worker, preview, and
 Blaxel writer surfaces. It temporarily retains six permissive schema tombstones
-and the internal-only `projectResidueRetirement.ts` operator. Before any data
-write:
+and the internal-only `projectResidueRetirement.ts` operator. The large
+diagnostic table has one temporary `projectId` cleanup index so zero-residue
+queries never scan current diagnostic history; Release B removes it with the
+field. Before any data write:
 
 1. Prove the exact Release A SHA is live in Vercel and Convex.
 2. Prove retired public/internal writer functions are absent.
