@@ -38,14 +38,14 @@ const communitySettingsPaneContract = navigation.slice(
   navigation.indexOf("export type CommunitySettingsPane"),
 );
 
-for (const pane of ["community", "workflows", "agent", "danger"] as const) {
+for (const pane of ["community", "agent", "danger"] as const) {
   assert.match(navigation, new RegExp(`"${pane}"`), `navigation contract missing ${pane} pane slug`);
   assert.match(settingsSection, new RegExp(`${pane}`), `settings UI missing ${pane} pane`);
 }
 
 assert.match(
   navigation,
-  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"workflows"[\s\S]*"agent"[\s\S]*"danger"[\s\S]*\] as const/,
+  /export const COMMUNITY_SETTINGS_PANES = \[[\s\S]*"community"[\s\S]*"agent"[\s\S]*"danger"[\s\S]*\] as const/,
   "community settings panes must be a shared slug union",
 );
 assert.doesNotMatch(
@@ -244,15 +244,10 @@ assert.match(
   /activePane: CommunitySettingsPane/,
   "settings section must receive the active pane as a controlled prop",
 );
-assert.match(
+assert.doesNotMatch(
   settingsSection,
-  /selectedSettingsPane === "workflows"[\s\S]*WebCommunityOnboardingWorkflowSection/,
-  "the route-backed Workflows pane must render the onboarding workflow",
-);
-assert.match(
-  settingsSection,
-  /workflows: "Workflows"/,
-  "the configuration category must be visibly named Workflows",
+  /workflows|WebCommunityOnboardingWorkflowSection/,
+  "retired deterministic onboarding must not survive as a settings pane",
 );
 assert.match(
   settingsSection,

@@ -23,7 +23,6 @@ import {
 import type {
   AppRouteState,
   AppShellVariant,
-  CommunityExperienceMode,
   PublicRoute,
 } from "../../../../shared/webAppRouteState";
 import {
@@ -65,10 +64,6 @@ export function useWebShellState() {
   const [mobileOverlay, setMobileOverlay] = useState<MobileOverlay>(null);
   const [mobileRootPage, setMobileRootPage] =
     useState<MobileRootPage>("community");
-  const [
-    communityOnboardingFirstPostFocusRequest,
-    setCommunityOnboardingFirstPostFocusRequest,
-  ] = useState(0);
   const [mobileSettingsView, setMobileSettingsView] =
     useState<"index" | "detail">(
       initialAppRoute?.page === "settings" && initialAppRoute.settingsIndex
@@ -100,12 +95,6 @@ export function useWebShellState() {
       ? initialAppRoute.communityChannelSlug ?? null
       : null,
   );
-  const [communityExperienceMode, setCommunityExperienceMode] =
-    useState<CommunityExperienceMode>(
-      initialAppRoute?.page === "community"
-        ? initialAppRoute.communityExperienceMode ?? "standard"
-        : "standard",
-    );
   const [communityResourceModuleId, setCommunityResourceModuleId] =
     useState<string | null>(
       initialAppRoute?.page === "community"
@@ -151,8 +140,6 @@ export function useWebShellState() {
     setMobileOverlay,
     mobileRootPage,
     setMobileRootPage,
-    communityOnboardingFirstPostFocusRequest,
-    setCommunityOnboardingFirstPostFocusRequest,
     mobileSettingsView,
     setMobileSettingsView,
     mobileChromeReadingMode,
@@ -174,8 +161,6 @@ export function useWebShellState() {
     setCommunityTab,
     communityChannelSlug,
     setCommunityChannelSlug,
-    communityExperienceMode,
-    setCommunityExperienceMode,
     communityResourceModuleId,
     setCommunityResourceModuleId,
     communitySettingsPane,

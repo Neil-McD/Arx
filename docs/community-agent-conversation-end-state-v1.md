@@ -28,8 +28,8 @@ this journey:
   persistence, visibility, attachments, mentions, and moderation;
 - `community-agent-cognition-contract-v1.md` owns runtime, funding, tools,
   memory, and cognition mechanics; and
-- `community-onboarding-workflow-v1.md` owns member onboarding after membership
-  activation, not founder post-purchase launch.
+- `community-member-arrival-v1.md` owns the irreducible member-entry and
+  passive-arrival boundary, not founder post-purchase launch.
 
 Supporting contracts may make implementation more restrictive for safety, but
 must not silently weaken this experience. Change this contract explicitly

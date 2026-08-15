@@ -18,7 +18,6 @@ import type {
   WebMemberAgentDockHandle,
   WebMemberAgentDockProps,
 } from "./WebMemberAgentDock";
-import { WebCommunityOnboardingController } from "./WebCommunityOnboardingController";
 import { WebShellChromeHost } from "./WebShellChromeHost";
 import type { WebShellChromeHostProps } from "./WebShellChromeHost";
 
@@ -34,10 +33,6 @@ const WebMemberAgentDock = lazy(() =>
   })),
 );
 
-type WebCommunityOnboardingControllerProps = ComponentProps<
-  typeof WebCommunityOnboardingController
->;
-
 export function WebAppCompositionRoot(props: {
   globalOverlayHostProps: WebGlobalOverlayHostProps;
   memberAgentDockRef: Ref<WebMemberAgentDockHandle>;
@@ -47,10 +42,6 @@ export function WebAppCompositionRoot(props: {
   shellChromeHostProps: Omit<
     WebShellChromeHostProps,
     "mainSurface" | "globalOverlays"
-  >;
-  onboardingProps: Omit<
-    WebCommunityOnboardingControllerProps,
-    "children"
   >;
 }) {
   const globalOverlays = (
@@ -74,12 +65,10 @@ export function WebAppCompositionRoot(props: {
   );
 
   return (
-    <WebCommunityOnboardingController {...props.onboardingProps}>
-      <WebShellChromeHost
-        {...props.shellChromeHostProps}
-        mainSurface={mainSurface}
-        globalOverlays={globalOverlays}
-      />
-    </WebCommunityOnboardingController>
+    <WebShellChromeHost
+      {...props.shellChromeHostProps}
+      mainSurface={mainSurface}
+      globalOverlays={globalOverlays}
+    />
   );
 }

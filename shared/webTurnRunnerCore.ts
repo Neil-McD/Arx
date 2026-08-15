@@ -100,7 +100,6 @@ export type RunAgentTurnParams = {
   runtimeEngine: "polynet";
   invocationSurface: RuntimeInvocationSurface;
   surfaceContext?: MemberAgentSurfaceContextV1 | null;
-  suppressOnboardingProgress?: boolean;
   requestedFundingSource:
     | "demo_public"
     | "user_key"

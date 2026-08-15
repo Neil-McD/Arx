@@ -8,7 +8,6 @@ import type {
 } from "../../../../shared/appShellNavigation";
 import {
   deriveWebDestination,
-  type CommunityExperienceMode,
   type PublicRoute,
   type WebDestination,
 } from "../../../../shared/webAppRouteState";
@@ -19,7 +18,6 @@ type WebDestinationShellState = {
   settingsPage: SettingsPage;
   mobileSettingsView: "index" | "detail";
   communityTab: CommunityTab;
-  communityExperienceMode: CommunityExperienceMode;
   communityChannelSlug: string | null;
   communityResourceModuleId: string | null;
   communitySettingsPane: CommunitySettingsPane;
@@ -44,7 +42,6 @@ export function buildWebDestinationFromShellState(params: {
         : {}),
       communitySlug: params.selectedCommunitySlug,
       communityTab: state.communityTab,
-      communityExperienceMode: state.communityExperienceMode,
       communityChannelSlug: state.communityChannelSlug,
       communityResourceModuleId: state.communityResourceModuleId,
       communitySettingsPane: state.communitySettingsPane,

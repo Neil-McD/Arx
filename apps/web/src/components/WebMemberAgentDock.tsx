@@ -58,10 +58,6 @@ import {
   buildMemberAgentSurfacePresentation,
   type MemberAgentSurfaceContextV1,
 } from "../../../../shared/memberAgentSurfaceContext";
-import {
-  shouldPresentCommunityOnboardingAgentReview,
-  shouldPresentCommunityOnboardingAgentStep,
-} from "../../../../shared/communityOnboarding";
 import { useWebTurnRunnerController } from "../../../../shared/useWebTurnRunnerController";
 import type {
   InferenceIssueModalState,
@@ -75,7 +71,6 @@ import {
   RuntimeResourceChangesetApprovalCards,
   type ResourceChangesetCardModel,
 } from "./RuntimeResourceChangesetApprovalCards";
-import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import type { WebCommunityRecord } from "../webAppContracts";
 import "./WebMemberAgentDock.css";
 
@@ -194,7 +189,6 @@ export const WebMemberAgentDock = forwardRef<WebMemberAgentDockHandle, WebMember
 function WebMemberAgentDock(props, ref) {
   const communityId = props.community?.id ?? null;
   const communityName = String(props.community?.name ?? "").trim();
-  const onboarding = useWebCommunityOnboarding();
   const [isOpen, setIsOpen] = useState(false);
   const isOpenSurface = props.mobileShellActive
     ? Boolean(props.mobileRoot)
@@ -224,9 +218,6 @@ function WebMemberAgentDock(props, ref) {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const composerFormRef = useRef<HTMLFormElement | null>(null);
-  const onboardingOpenedSessionIdsRef = useRef(new Set<string>());
-  const onboardingSeededSessionIdsRef = useRef(new Set<string>());
-  const onboardingFocusSessionIdRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const attachmentsRef = useRef<MemberAgentImageDraft[]>([]);
   const draftTextRef = useRef("");
@@ -251,7 +242,6 @@ function WebMemberAgentDock(props, ref) {
   });
   const scopeUserId = props.session?.user.id ?? null;
   const surfaceKind = props.surfaceContext?.kind ?? null;
-  const onboardingSession = onboarding?.activeSession ?? null;
   const isConversationSurfaceActive = isOpenSurface;
   if (
     agentScopeRef.current.userId !== scopeUserId ||
@@ -617,18 +607,6 @@ function WebMemberAgentDock(props, ref) {
   const composerIsBusy = turnIsActive || isUploadingAttachments || isSubmitting;
   const visibleMessages = messages.filter((message) => message.role !== "system");
   const dockError = localError ?? formatInferenceIssue(inferenceIssue);
-  const showOnboardingAgentFocus = Boolean(
-    communityId &&
-    communityName &&
-    onboardingSession?.community_id === communityId &&
-    !onboarding?.firstPostAcknowledgementPending &&
-    (
-      shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
-      shouldPresentCommunityOnboardingAgentReview(onboardingSession)
-    ),
-  );
-  const onboardingDescriptionId = "community-onboarding-agent-description";
-
   useEffect(() => {
     const request = pendingResourceBuildRef.current;
     if (
@@ -731,84 +709,6 @@ function WebMemberAgentDock(props, ref) {
     props.canManageResources,
     props.ensureSession,
     props.session,
-    turnIsActive,
-  ]);
-
-  useEffect(() => {
-    if (
-      !showOnboardingAgentFocus ||
-      !onboardingSession ||
-      !props.isVisible ||
-      onboardingOpenedSessionIdsRef.current.has(onboardingSession.id)
-    ) {
-      return;
-    }
-    onboardingOpenedSessionIdsRef.current.add(onboardingSession.id);
-    onboardingFocusSessionIdRef.current = onboardingSession.id;
-    if (props.mobileShellActive) {
-      props.onRequestOpen?.();
-      return;
-    }
-    setIsOpen(true);
-  }, [
-    onboardingSession,
-    props.isVisible,
-    props.mobileShellActive,
-    props.onRequestOpen,
-    showOnboardingAgentFocus,
-  ]);
-
-  useEffect(() => {
-    if (
-      !showOnboardingAgentFocus ||
-      !shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
-      !onboardingSession ||
-      !communityName ||
-      onboardingSeededSessionIdsRef.current.has(onboardingSession.id)
-    ) {
-      return;
-    }
-    onboardingSeededSessionIdsRef.current.add(onboardingSession.id);
-    setInput((current) => {
-      if (current.trim()) {
-        draftTextRef.current = current;
-        return current;
-      }
-      const seededPrompt =
-        `What is one useful first action I should take in ${communityName}?`;
-      draftTextRef.current = seededPrompt;
-      return seededPrompt;
-    });
-  }, [communityName, onboardingSession, showOnboardingAgentFocus]);
-
-  useEffect(() => {
-    if (
-      !showOnboardingAgentFocus ||
-      !shouldPresentCommunityOnboardingAgentStep(onboardingSession) ||
-      !onboardingSession ||
-      onboardingFocusSessionIdRef.current !== onboardingSession.id ||
-      !isOpenSurface ||
-      !threadKey ||
-      turnIsActive ||
-      isPreparing ||
-      isStartingNewChat
-    ) {
-      return;
-    }
-    const frame = window.requestAnimationFrame(() => {
-      const textarea = textareaRef.current;
-      if (!textarea || textarea.disabled || !document.contains(textarea)) return;
-      textarea.focus({ preventScroll: true });
-      onboardingFocusSessionIdRef.current = null;
-    });
-    return () => window.cancelAnimationFrame(frame);
-  }, [
-    isOpenSurface,
-    isPreparing,
-    isStartingNewChat,
-    onboardingSession,
-    showOnboardingAgentFocus,
-    threadKey,
     turnIsActive,
   ]);
 
@@ -1161,7 +1061,6 @@ function WebMemberAgentDock(props, ref) {
         runtimeEngine: "polynet",
         invocationSurface: "member_agent_dock",
         surfaceContext,
-        suppressOnboardingProgress: onboarding?.mode === "preview",
         requestedFundingSource: "platform",
         requestedAgenticTools: true,
         replyToId: messageId,
@@ -1171,7 +1070,6 @@ function WebMemberAgentDock(props, ref) {
       if (result.error) throw new Error(result.error);
       if (isCurrentScope(scope)) {
         await loadMessages(thread.thread_key, usableSession);
-        if (onboarding?.mode === "preview") onboarding.completeAgentTurnPreview();
       }
       revokeDraftPreviews(workingDrafts);
     } catch (error) {
@@ -1241,13 +1139,13 @@ function WebMemberAgentDock(props, ref) {
     <>
     <aside
       id="polynet-member-agent-surface"
-      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
+      className={`member-agent-dock${isOpenSurface ? " is-open" : ""}${props.mobileRoot ? " mobile-root" : ""}${props.isSuppressed ? " is-suppressed" : ""}`}
       aria-live="polite"
     >
       {!props.mobileShellActive ? (
         <button
           type="button"
-          className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
+          className={`member-agent-dock-launcher${composerIsBusy ? " is-working" : ""}`}
           onClick={() => setIsOpen((open) => !open)}
           aria-label={isOpen ? presentation.closeLabel : presentation.openLabel}
           title={isOpen ? presentation.closeLabel : presentation.openLabel}
@@ -1293,7 +1191,6 @@ function WebMemberAgentDock(props, ref) {
               type="button"
               onClick={() => void startNewChat()}
               disabled={
-                showOnboardingAgentFocus ||
                 composerIsBusy ||
                 isPreparing ||
                 isStartingNewChat ||
@@ -1308,7 +1205,6 @@ function WebMemberAgentDock(props, ref) {
               <button
                 type="button"
                 onClick={() => setIsOpen(false)}
-                disabled={showOnboardingAgentFocus}
                 aria-label="Close"
                 title="Close"
               >
@@ -1426,7 +1322,7 @@ function WebMemberAgentDock(props, ref) {
           ) : null}
           <form
             ref={composerFormRef}
-            className={`member-agent-dock-composer${isAttachmentDragOver ? " is-dragging" : ""}${showOnboardingAgentFocus ? " is-onboarding" : ""}`}
+            className={`member-agent-dock-composer${isAttachmentDragOver ? " is-dragging" : ""}`}
             onSubmit={submit}
             onDragEnter={(event) => {
               if (!Array.from(event.dataTransfer.types ?? []).includes("Files")) return;
@@ -1485,7 +1381,6 @@ function WebMemberAgentDock(props, ref) {
               }}
               placeholder={presentation.composerLabel}
               aria-label={presentation.composerLabel}
-              aria-describedby={showOnboardingAgentFocus ? onboardingDescriptionId : undefined}
               rows={1}
               disabled={composerIsBusy || isPreparing || isStartingNewChat}
             />

@@ -12,7 +12,6 @@ import { confirmDiscardUnsavedCommunitySettingsWeb } from "../../../../shared/co
 import {
   applyShellVariantToPublicPath,
   buildCommunityFunnelPreviewPath,
-  buildCommunityOnboardingPreviewPath,
   buildCommunityTabPath,
   type AppShellVariant,
 } from "../../../../shared/webAppRouteState";
@@ -26,7 +25,6 @@ export function useWebCommunityNavigationActions(params: {
   selectedActiveCommunitySlug: string | null;
   communities: WebCommunityRecord[];
   shellVariant: AppShellVariant;
-  isOnboardingPreviewMode: boolean;
   communitySettingsDirtyRef: MutableRefObject<boolean>;
   communityAgentConfigDirtyRef: MutableRefObject<boolean>;
   syncCommunitySelection: (value: {
@@ -39,9 +37,6 @@ export function useWebCommunityNavigationActions(params: {
   setCommunitySettingsPane: (pane: CommunitySettingsPane) => void;
   setCommunityResourceModuleId: (value: null) => void;
   setMobileOverlay: (value: MobileOverlay) => void;
-  setCommunityOnboardingFirstPostFocusRequest: (
-    update: (current: number) => number,
-  ) => void;
   applyCommunityShellState: (value: {
     communityTab: CommunityTab;
   }) => void;
@@ -157,39 +152,6 @@ export function useWebCommunityNavigationActions(params: {
     ],
   );
 
-  const handlePreviewCommunityOnboarding = useCallback(() => {
-    const slug = String(
-      params.selectedActiveCommunitySlug ??
-        params.activeCommunity?.slug ??
-        "",
-    ).trim();
-    const path = buildCommunityOnboardingPreviewPath(slug);
-    if (path) params.navigateTo(path);
-  }, [
-    params.activeCommunity?.slug,
-    params.navigateTo,
-    params.selectedActiveCommunitySlug,
-  ]);
-
-  const handleExitCommunityOnboardingPreview = useCallback(() => {
-    const slug = String(
-      params.selectedActiveCommunitySlug ??
-        params.activeCommunity?.slug ??
-        "",
-    ).trim();
-    const path = buildCommunityTabPath(
-      slug,
-      "settings",
-      null,
-      "workflows",
-    );
-    if (path) params.navigateTo(path, { replace: true });
-  }, [
-    params.activeCommunity?.slug,
-    params.navigateTo,
-    params.selectedActiveCommunitySlug,
-  ]);
-
   const handleSelectCommunityTab = useCallback(
     (tab: CommunityTab) => {
       params.setCommunityResourceModuleId(null);
@@ -241,28 +203,11 @@ export function useWebCommunityNavigationActions(params: {
     ],
   );
 
-  const handleCommunityOnboardingOrientationCompleted =
-    useCallback(() => {
-      params.setCommunityOnboardingFirstPostFocusRequest(
-        (current) => current + 1,
-      );
-      if (!params.isOnboardingPreviewMode) {
-        handleSelectCommunityTab("chat");
-      }
-    }, [
-      handleSelectCommunityTab,
-      params.isOnboardingPreviewMode,
-      params.setCommunityOnboardingFirstPostFocusRequest,
-    ]);
-
   return {
     handlePreviewCommunityFunnel,
     handleSelectActiveCommunity,
     handleSelectCommunitySettingsPane,
-    handlePreviewCommunityOnboarding,
-    handleExitCommunityOnboardingPreview,
     handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
-    handleCommunityOnboardingOrientationCompleted,
   };
 }

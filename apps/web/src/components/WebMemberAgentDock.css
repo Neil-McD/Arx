@@ -68,17 +68,6 @@
   --member-agent-launcher-glyph-filter: none;
 }
 
-.member-agent-dock.is-onboarding {
-  z-index: 9997;
-}
-
-.member-agent-dock.is-onboarding .member-agent-dock-panel {
-  border-color: color-mix(in srgb, var(--member-agent-accent) 42%, var(--stroke-strong));
-  box-shadow:
-    0 24px 70px rgba(0, 0, 0, 0.5),
-    0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 12%, transparent);
-}
-
 .member-agent-dock-launcher {
   position: absolute;
   right: 0;
@@ -139,12 +128,6 @@
 .member-agent-dock-launcher.is-working:hover,
 .member-agent-dock-launcher.is-working:focus-visible {
   animation: none;
-}
-
-.member-agent-dock-launcher.is-onboarding:not(.is-working) {
-  color: var(--member-agent-accent-strong);
-  border-color: color-mix(in srgb, var(--member-agent-accent) 58%, transparent);
-  animation: member-agent-dock-onboarding-pulse 1.8s ease-in-out infinite;
 }
 
 .member-agent-dock-launcher:hover svg,
@@ -490,12 +473,6 @@
   display: none;
 }
 
-.member-agent-dock-composer.is-onboarding {
-  border-color: color-mix(in srgb, var(--member-agent-accent) 58%, var(--stroke-default));
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--member-agent-accent) 10%, transparent);
-  animation: member-agent-dock-composer-focus 420ms ease-out both;
-}
-
 .member-agent-dock-composer textarea {
   min-width: 0;
   max-height: 112px;
@@ -598,34 +575,6 @@
   }
 }
 
-@keyframes member-agent-dock-onboarding-pulse {
-  0%, 100% {
-    box-shadow:
-      var(--member-agent-launcher-state-elevation),
-      0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 12%, transparent),
-      0 0 12px color-mix(in srgb, var(--member-agent-accent) 20%, transparent),
-      var(--member-agent-launcher-state-highlight);
-  }
-  50% {
-    box-shadow:
-      var(--member-agent-launcher-state-elevation),
-      0 0 0 1px color-mix(in srgb, var(--member-agent-accent) 30%, transparent),
-      0 0 22px color-mix(in srgb, var(--member-agent-accent) 38%, transparent),
-      var(--member-agent-launcher-state-highlight);
-  }
-}
-
-@keyframes member-agent-dock-composer-focus {
-  from { box-shadow: 0 0 0 7px color-mix(in srgb, var(--member-agent-accent) 18%, transparent); }
-  to { box-shadow: 0 0 0 3px color-mix(in srgb, var(--member-agent-accent) 10%, transparent); }
-}
-
-@media (max-width: 920px) and (min-width: 701px) {
-  .member-agent-dock.is-onboarding .member-agent-dock-panel {
-    width: min(420px, calc(100vw - 32px));
-  }
-}
-
 @media (max-width: 700px) {
   .member-agent-dock {
     right: 12px;
@@ -648,15 +597,6 @@
     left: var(--mobile-community-rail-width);
     z-index: 30;
     pointer-events: auto;
-  }
-
-  .member-agent-dock.mobile-root.is-onboarding {
-    top: calc(298px + env(safe-area-inset-top, 0px));
-    z-index: 9997;
-  }
-
-  .member-agent-dock.is-onboarding:not(.mobile-root) .member-agent-dock-panel {
-    height: max(260px, calc(100svh - 310px - env(safe-area-inset-top, 0px)));
   }
 
   .member-agent-dock.mobile-root .member-agent-dock-panel {
@@ -688,7 +628,6 @@
 
   .member-agent-dock-reasoning svg,
   .member-agent-dock-launcher,
-  .member-agent-dock-composer.is-onboarding,
   .is-spinning {
     animation: none;
   }

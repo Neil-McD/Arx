@@ -93,7 +93,6 @@ for (const directPresentationOwner of [
   "WebShellChromeHost",
   "WebGlobalOverlayHost",
   "WebDirectMessagesHost",
-  "WebCommunityOnboardingController",
 ] as const) {
   assert.doesNotMatch(
     app,
