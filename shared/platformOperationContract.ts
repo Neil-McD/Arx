@@ -115,7 +115,7 @@ const COMMUNITY_SEMANTIC_LIST_NATIVE_INPUT_SCHEMA: PlatformOperationJsonSchema =
       minLength: 1,
       maxLength: 1024,
       description:
-        "Canonical platform repository path or a stable resource-directory ref returned by list. The root contains communities/ and users/.",
+        "Exact returned directory path, including any path ending in /, or a stable resource-directory ref. Use polynet_read only for entries whose kind is document.",
     },
     cursor: {
       type: ["string", "null"],
@@ -218,7 +218,7 @@ const COMMUNITY_SEMANTIC_READ_NATIVE_INPUT_SCHEMA: PlatformOperationJsonSchema =
       minLength: 1,
       maxLength: 1024,
       description:
-        "Canonical platform repository document path or an exact stable resource ref returned by list.",
+        "Exact returned entry whose kind is document, or an exact readable stable resource ref. Never pass a directory or a path ending in /; use polynet_list with the same path.",
     },
     offset: {
       type: "integer",
