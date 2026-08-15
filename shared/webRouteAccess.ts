@@ -7,13 +7,15 @@ import {
 export type WebRouteAuthState =
   | "signed_out"
   | "recovering_signed_in"
+  | "verification_failed"
   | "signed_in";
 
 export type WebRouteScopedAccessState =
   | "not_applicable"
   | "resolving"
   | "allowed"
-  | "denied";
+  | "denied"
+  | "failed";
 
 export type WebRouteAccessRequirement =
   | "public"
@@ -115,7 +117,10 @@ export function resolveWebRouteAccessProjection(params: {
       : { kind: "hold", requirement };
   }
 
-  if (params.authState === "recovering_signed_in") {
+  if (
+    params.authState === "recovering_signed_in" ||
+    params.authState === "verification_failed"
+  ) {
     return { kind: "hold", requirement };
   }
 
@@ -139,7 +144,10 @@ export function resolveWebRouteAccessProjection(params: {
   }
 
   const accountSetupAccessState = params.accountSetupAccessState ?? "allowed";
-  if (accountSetupAccessState === "resolving") {
+  if (
+    accountSetupAccessState === "resolving" ||
+    accountSetupAccessState === "failed"
+  ) {
     return { kind: "hold", requirement };
   }
   if (accountSetupAccessState === "denied") {

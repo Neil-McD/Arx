@@ -47,6 +47,10 @@ for (const pathname of ["/", "/m"] as const) {
     kind: "hold",
     requirement: "member_entry",
   });
+  assert.deepEqual(project({ pathname, authState: "verification_failed" }), {
+    kind: "hold",
+    requirement: "member_entry",
+  });
   assert.deepEqual(project({ pathname, authState: "signed_in" }), {
     kind: "hold",
     requirement: "member_entry",
@@ -144,6 +148,15 @@ assert.deepEqual(
     activePage: "settings",
     pathname: "/settings/billing",
     authState: "signed_in",
+    accountSetupAccessState: "failed",
+  }),
+  { kind: "hold", requirement: "authenticated" },
+);
+assert.deepEqual(
+  project({
+    activePage: "settings",
+    pathname: "/settings/billing",
+    authState: "signed_in",
     accountSetupAccessState: "denied",
   }),
   { kind: "redirect_account_setup", requirement: "authenticated" },
@@ -177,6 +190,16 @@ assert.deepEqual(
     authState: "signed_in",
     communitySlug: "polynet",
     communityAccessState: "resolving",
+  }),
+  { kind: "hold", requirement: "community" },
+);
+assert.deepEqual(
+  project({
+    activePage: "community",
+    pathname: "/c/polynet/chat",
+    authState: "signed_in",
+    communitySlug: "polynet",
+    communityAccessState: "failed",
   }),
   { kind: "hold", requirement: "community" },
 );
@@ -368,6 +391,11 @@ assert.match(
   "a held route must expose visible, recoverable failure UI only after a real error",
 );
 assert.match(
+  routeAccessHold,
+  /setTimeout\(\(\) => setShowProgress\(true\), 500\)[\s\S]*role="status"[\s\S]*Opening Polynet…/,
+  "a slow healthy admission must explain its progress without replacing the held shell",
+);
+assert.match(
   app,
   /useWebMemberAgentSurfaceController[\s\S]*if \(shouldHoldRouteForAccess\) \{[\s\S]*WebRouteAccessHold/,
   "the composition root must hold before rendering authorized overlays",
@@ -377,6 +405,11 @@ assert.match(
   /params\.navigateTo\(destination, \{ replace: true \}\)/,
 );
 assert.match(boundary, /setCommunityResolution\(\{ slug, state: "denied" \}\)/);
+assert.match(
+  boundary,
+  /catch \(error\)[\s\S]*setCommunityResolution\(\{ slug, state: "failed" \}\)[\s\S]*communityResolutionError[\s\S]*retryCommunityResolution/,
+  "unavailable community authority must stay held and retryable rather than becoming a denial",
+);
 assert.doesNotMatch(
   onboarding,
   /activePage !== "onboarding"[\s\S]{0,240}requireSignIn/,

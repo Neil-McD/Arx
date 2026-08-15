@@ -8,6 +8,9 @@ import {
 import { readConvexUrl } from "./convexRuntime";
 import { normalizeGatewayNullableString, readGatewayConvexIdMaybe } from "./cloudGateway";
 import { readPersistedDistributionAttribution } from './distributionAttribution';
+import { withAsyncDeadline } from "./asyncDeadline";
+
+export const CONVEX_AUTH_ADMISSION_TIMEOUT_MS = 10_000;
 
 export type ConvexAuthenticatedClientContext = {
   client: ConvexHttpClient;
@@ -116,12 +119,18 @@ export async function bootstrapConvexAuthenticatedClient(
     let actor: Record<string, unknown> | null = null;
     const sessionEmail = resolveAuthSessionEmail(session);
     try {
-      actor = (await client.mutation("auth:bootstrapActor" as any, {
-        authState: "authenticated",
-        authSubject,
-        email: sessionEmail,
-        distributionAttribution: readPersistedDistributionAttribution() ?? undefined,
-      })) as Record<string, unknown>;
+      actor = (await withAsyncDeadline(
+        client.mutation("auth:bootstrapActor" as any, {
+          authState: "authenticated",
+          authSubject,
+          email: sessionEmail,
+          distributionAttribution: readPersistedDistributionAttribution() ?? undefined,
+        }),
+        {
+          timeoutMs: CONVEX_AUTH_ADMISSION_TIMEOUT_MS,
+          code: "convex_bootstrap_actor_timeout",
+        },
+      )) as Record<string, unknown>;
     } catch (error) {
       rethrowBootstrapActorError(error);
     }

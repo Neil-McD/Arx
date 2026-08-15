@@ -1,8 +1,10 @@
 import { type AuthSessionLike } from "./authSession";
 import {
   bootstrapConvexAuthenticatedClient,
+  CONVEX_AUTH_ADMISSION_TIMEOUT_MS,
   type ConvexAuthenticatedBootstrapResult,
 } from "./convexAuthenticatedClient";
+import { withAsyncDeadline } from "./asyncDeadline";
 
 export type ConvexAuthenticatedSessionProbeResult = {
   accepted: boolean;
@@ -33,10 +35,16 @@ export async function probeConvexAuthenticatedActorSessionDetailed(
     const { client, authSubject, bootstrap } = await bootstrapConvexAuthenticatedClient(session);
     bootstrapActorMs = Date.now() - bootstrapStartedAt;
     const getActorStartedAt = Date.now();
-    const actor = (await client.query("auth:getActor" as any, {
-      authState: "authenticated",
-      authSubject,
-    })) as { authSubject?: unknown } | null;
+    const actor = (await withAsyncDeadline(
+      client.query("auth:getActor" as any, {
+        authState: "authenticated",
+        authSubject,
+      }),
+      {
+        timeoutMs: CONVEX_AUTH_ADMISSION_TIMEOUT_MS,
+        code: "convex_get_actor_timeout",
+      },
+    )) as { authSubject?: unknown } | null;
     getActorMs = Date.now() - getActorStartedAt;
     const actorAuthSubject = String(actor?.authSubject ?? bootstrap?.authSubject ?? authSubject ?? "").trim() || null;
     return {

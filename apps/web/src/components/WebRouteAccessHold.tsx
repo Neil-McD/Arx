@@ -1,4 +1,4 @@
-import type { ComponentProps } from "react";
+import { useEffect, useState, type ComponentProps } from "react";
 
 import { WebAppMainSurfaceFallback } from "./WebAppMainSurfaceFallback";
 import { WebShellChromeHost } from "./WebShellChromeHost";
@@ -10,7 +10,8 @@ type WebShellChromeHostProps = ComponentProps<typeof WebShellChromeHost>;
  *
  * The shell projection is reduced to non-sensitive geometry before render,
  * and the whole frame stays inert until authorization has resolved. A real
- * verification failure is the only state that adds visible explanatory UI.
+ * A delayed status explains healthy work without flashing during fast loads;
+ * a real verification failure exposes the explicit recovery action.
  */
 export function WebRouteAccessHold(props: {
   shellChromeHostProps: Omit<
@@ -22,9 +23,19 @@ export function WebRouteAccessHold(props: {
   errorMessage?: string;
   onRetry: () => void;
 }) {
+  const [showProgress, setShowProgress] = useState(false);
   const shellChromeHostProps = props.shellChromeHostProps;
   const mobileTopBarProps = shellChromeHostProps.mobileTopBarProps;
   const communityShell = shellChromeHostProps.communityShell;
+
+  useEffect(() => {
+    if (props.error) {
+      setShowProgress(false);
+      return;
+    }
+    const timeoutId = window.setTimeout(() => setShowProgress(true), 500);
+    return () => window.clearTimeout(timeoutId);
+  }, [props.error]);
 
   const heldShellChromeHostProps: Omit<
     WebShellChromeHostProps,
@@ -107,6 +118,10 @@ export function WebRouteAccessHold(props: {
             Try again
           </button>
         </div>
+      ) : showProgress ? (
+        <p className="web-route-access-hold-progress" role="status" aria-live="polite">
+          Opening Polynet…
+        </p>
       ) : null}
     </div>
   );

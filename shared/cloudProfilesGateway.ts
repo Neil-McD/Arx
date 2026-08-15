@@ -3,6 +3,9 @@ import { coerceGatewayRows, firstGatewayRow } from "./cloudGateway";
 import type { AccountSetupStatus } from "./accountSetup";
 import type { CommunityAvatarSummary, ProfileCommunityContext } from "./communityTypes";
 import type { SocialProfileLinks } from "./socialProfileLinks";
+import { withAsyncDeadline } from "./asyncDeadline";
+
+const ACCOUNT_ADMISSION_RPC_TIMEOUT_MS = 10_000;
 
 type CloudProfilesGatewayParams<SessionT> = {
   session: SessionT;
@@ -215,10 +218,16 @@ export async function resolveCloudOnboardingProfileDetail<SessionT, TProfile ext
   },
 ): Promise<TProfile | null> {
   const { client, authSubject } = await bootstrapConvexUser(params.session);
-  const payload = await client.mutation("profiles:resolveOnboardingProfileDetail" as any, {
-    authSubject,
-    userId: params.userId,
-  });
+  const payload = await withAsyncDeadline(
+    client.mutation("profiles:resolveOnboardingProfileDetail" as any, {
+      authSubject,
+      userId: params.userId,
+    }),
+    {
+      timeoutMs: ACCOUNT_ADMISSION_RPC_TIMEOUT_MS,
+      code: "onboarding_profile_resolution_timeout",
+    },
+  );
   return firstGatewayRow<TProfile>(payload);
 }
 
@@ -226,9 +235,15 @@ export async function loadCloudAccountSetupStatus<SessionT>(
   params: CloudProfilesGatewayParams<SessionT>,
 ): Promise<AccountSetupStatus | null> {
   const { client, authSubject } = await bootstrapConvexUser(params.session);
-  return (await client.query("profiles:getMyAccountSetupStatus" as any, {
-    authSubject,
-  })) as AccountSetupStatus | null;
+  return (await withAsyncDeadline(
+    client.query("profiles:getMyAccountSetupStatus" as any, {
+      authSubject,
+    }),
+    {
+      timeoutMs: ACCOUNT_ADMISSION_RPC_TIMEOUT_MS,
+      code: "account_setup_status_timeout",
+    },
+  )) as AccountSetupStatus | null;
 }
 
 export async function checkCloudProfileHandleAvailability<SessionT>(

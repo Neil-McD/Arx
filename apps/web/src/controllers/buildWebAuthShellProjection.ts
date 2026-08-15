@@ -7,6 +7,7 @@ import {
 type AuthPresentationState =
   | "signed_out"
   | "recovering_signed_in"
+  | "verification_failed"
   | "signed_in";
 
 export function buildWebAuthShellProjection(params: {
@@ -22,7 +23,8 @@ export function buildWebAuthShellProjection(params: {
       isAppRoute && params.authPresentationState !== "signed_out",
     isAuthRecoveringSignedInAppShell:
       isAppRoute &&
-      params.authPresentationState === "recovering_signed_in",
+      (params.authPresentationState === "recovering_signed_in" ||
+        params.authPresentationState === "verification_failed"),
     shouldHoldLandingForAuth:
       isAppRoute &&
       params.activePage === "landing" &&
