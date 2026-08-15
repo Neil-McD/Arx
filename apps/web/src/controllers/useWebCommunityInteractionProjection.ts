@@ -12,8 +12,10 @@ import {
 import type { AuthSession } from "../auth";
 import {
   createCloudCommunityChatLiveClient,
+  subscribeCloudCommunityActivityEvents,
   type CloudCommunityChatLiveClient,
 } from "../../../../shared/cloudCommunityChatGateway";
+import type { CommunityActivityEvent } from "../../../../shared/communityTypes";
 import {
   subscribeCloudCommunityAgentServeIssue,
   type CloudCommunityAgentServeIssue,
@@ -77,6 +79,7 @@ type PendingCanonicalInteraction<AttachmentT> =
 type UseWebCommunityInteractionProjectionParams = {
   activeCommunityId: string | null;
   activeChannelId: string | null;
+  activeChannelIsGeneral: boolean;
   canonicalSessionUserId: string | null;
   ensureSession: EnsureAuthSession;
   isCommunityChatActive: boolean;
@@ -289,18 +292,31 @@ function rootMatchesChannel(
   );
 }
 
+function activityWindowsEqual(
+  current: CommunityActivityEvent[],
+  incoming: CommunityActivityEvent[],
+): boolean {
+  return current.length === incoming.length && current.every((event, index) => (
+    event.id === incoming[index]?.id &&
+    event.actor_user_id === incoming[index]?.actor_user_id &&
+    event.created_at === incoming[index]?.created_at
+  ));
+}
+
 export function useWebCommunityInteractionProjection<
   AttachmentT extends OptimisticAttachment,
 >(params: UseWebCommunityInteractionProjectionParams) {
   const {
     activeCommunityId,
     activeChannelId,
+    activeChannelIsGeneral,
     canonicalSessionUserId,
     ensureSession,
     isCommunityChatActive,
     session,
   } = params;
   const [roots, setRoots] = useState<CommunityInteractionRootBundle[]>([]);
+  const [activityEvents, setActivityEvents] = useState<CommunityActivityEvent[]>([]);
   const [nextBeforeCreatedAt, setNextBeforeCreatedAt] = useState<number | null>(null);
   const [isLoadingOlderRoots, setIsLoadingOlderRoots] = useState(false);
   const [rootChangeReason, setRootChangeReason] =
@@ -323,6 +339,7 @@ export function useWebCommunityInteractionProjection<
   const [pinnedRootError, setPinnedRootError] = useState<string | null>(null);
 
   const rootsRef = useRef<CommunityInteractionRootBundle[]>([]);
+  const activityEventsRef = useRef<CommunityActivityEvent[]>([]);
   const repliesByRootIdRef = useRef<Record<string, CommunityInteractionReplyBundle[]>>({});
   const nextBeforeCreatedAtRef = useRef<number | null>(null);
   const isLoadingOlderRootsRef = useRef(false);
@@ -341,6 +358,7 @@ export function useWebCommunityInteractionProjection<
 
   sessionRef.current = session;
   rootsRef.current = roots;
+  activityEventsRef.current = activityEvents;
   repliesByRootIdRef.current = repliesByRootId;
   nextBeforeCreatedAtRef.current = nextBeforeCreatedAt;
   isLoadingOlderRootsRef.current = isLoadingOlderRoots;
@@ -371,6 +389,7 @@ export function useWebCommunityInteractionProjection<
     rootsRequestIdRef.current += 1;
     repliesRequestIdRef.current = {};
     setRoots([]);
+    setActivityEvents([]);
     setNextBeforeCreatedAt(null);
     setIsLoadingOlderRoots(false);
     setRootChangeReason("reset");
@@ -628,6 +647,81 @@ export function useWebCommunityInteractionProjection<
       liveClient?.close();
     };
   }, [activeChannelId, activeCommunityId, canonicalSessionUserId, ensureSession]);
+
+  useEffect(() => {
+    if (
+      !isCommunityChatActive ||
+      !activeChannelIsGeneral ||
+      !activeCommunityId ||
+      !canonicalSessionUserId
+    ) {
+      setActivityEvents([]);
+      return;
+    }
+    const communityId = activeCommunityId;
+    const channelId = activeChannelId;
+    const expectedBoundary = `${canonicalSessionUserId}:${communityId}:${channelId ?? "general"}`;
+    let cancelled = false;
+    let liveClient: CloudCommunityChatLiveClient | null = null;
+    let unsubscribe: (() => void) | null = null;
+    setActivityEvents([]);
+    void (async () => {
+      const usableSession = await ensureSession(sessionRef.current);
+      if (!usableSession || cancelled) return;
+      try {
+        liveClient = createCloudCommunityChatLiveClient({
+          session: usableSession,
+          ensureSession,
+        });
+        unsubscribe = subscribeCloudCommunityActivityEvents<CommunityActivityEvent>({
+          liveClient,
+          communityId,
+          type: "member_joined",
+          limit: 50,
+          onUpdate: (rows) => {
+            if (
+              cancelled ||
+              boundaryRef.current !== expectedBoundary ||
+              activeCommunityIdRef.current !== communityId ||
+              activeChannelIdRef.current !== channelId
+            ) return;
+            const nextRows = rows.filter((row) => (
+              row.community_id === communityId && row.type === "member_joined"
+            ));
+            if (activityWindowsEqual(activityEventsRef.current, nextRows)) return;
+            const hadLoadedTimeline =
+              activityEventsRef.current.length > 0 ||
+              rootsRef.current.some((bundle) => (
+                rootMatchesChannel(bundle, communityId, channelId)
+              ));
+            setRootChangeReason(hadLoadedTimeline ? "newer" : "initial");
+            setActivityEvents(nextRows);
+          },
+          onError: () => {
+            if (!cancelled && boundaryRef.current === expectedBoundary) {
+              setActivityEvents([]);
+            }
+          },
+        });
+      } catch {
+        if (!cancelled && boundaryRef.current === expectedBoundary) {
+          setActivityEvents([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+      unsubscribe?.();
+      liveClient?.close();
+    };
+  }, [
+    activeChannelId,
+    activeChannelIsGeneral,
+    activeCommunityId,
+    canonicalSessionUserId,
+    ensureSession,
+    isCommunityChatActive,
+  ]);
 
   useEffect(() => {
     if (
@@ -1033,6 +1127,10 @@ export function useWebCommunityInteractionProjection<
     requestedBoundary && boundaryRef.current === requestedBoundary,
   );
   const presentedRoots = isPresentationScopedToBoundary ? roots : [];
+  const presentedActivityEvents =
+    isPresentationScopedToBoundary && activeChannelIsGeneral
+      ? activityEvents
+      : [];
   const presentedRepliesByRootId = isPresentationScopedToBoundary ? repliesByRootId : {};
   const presentedSelectedRootId = isPresentationScopedToBoundary ? selectedRootId : null;
   const presentedSelectedRoot = isPresentationScopedToBoundary ? selectedRoot : null;
@@ -1058,6 +1156,7 @@ export function useWebCommunityInteractionProjection<
 
   return {
     roots: presentedRoots,
+    activityEvents: presentedActivityEvents,
     repliesByRootId: presentedRepliesByRootId,
     visibleRoots,
     selectedReplies,
