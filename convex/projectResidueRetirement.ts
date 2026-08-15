@@ -117,6 +117,34 @@ function queryTarget(db: any, target: ProjectResidueTarget): any {
   }
 }
 
+function queryResidueTarget(db: any, target: ProjectResidueTarget): any {
+  const query = queryTarget(db, target);
+  if (LEGACY_TABLE_TARGETS.has(target)) return query;
+  if (target === "platformDiagnosticEvents") {
+    return query.filter((q: any) => q.neq(q.field("projectId"), undefined));
+  }
+  if (target === "threads") {
+    return query.filter((q: any) =>
+      q.or(
+        q.neq(q.field("projectId"), undefined),
+        q.eq(q.field("runtimeEngine"), "codex"),
+      ),
+    );
+  }
+  return query.filter((q: any) =>
+    q.or(
+      q.neq(q.field("projectId"), undefined),
+      q.neq(q.field("runtimeEngine"), undefined),
+      q.neq(q.field("sandboxMode"), undefined),
+      q.neq(q.field("workspaceSessionState"), undefined),
+      q.neq(q.field("workspaceProviderSandboxId"), undefined),
+      q.neq(q.field("workspaceToolboxProxyUrl"), undefined),
+      q.neq(q.field("workspaceSessionRegion"), undefined),
+      q.neq(q.field("workspaceSessionUpdatedAt"), undefined),
+    ),
+  );
+}
+
 function documentIds(rows: Array<Record<string, unknown>>): string[] {
   return rows.map((row) => String(row._id));
 }
@@ -136,36 +164,7 @@ function assertExpectedDocumentIds(
 async function assertCloudProjectDependenciesCleared(db: any): Promise<void> {
   for (const target of PROJECT_RESIDUE_TARGETS) {
     if (target === "cloudProjects") continue;
-    const query = queryTarget(db, target);
-    const firstResidue = LEGACY_TABLE_TARGETS.has(target)
-      ? await query.first()
-      : target === "platformDiagnosticEvents"
-        ? await query
-            .filter((q: any) => q.neq(q.field("projectId"), undefined))
-            .first()
-        : target === "threads"
-          ? await query
-              .filter((q: any) =>
-                q.or(
-                  q.neq(q.field("projectId"), undefined),
-                  q.eq(q.field("runtimeEngine"), "codex"),
-                ),
-              )
-              .first()
-          : await query
-              .filter((q: any) =>
-                q.or(
-                  q.neq(q.field("projectId"), undefined),
-                  q.neq(q.field("runtimeEngine"), undefined),
-                  q.neq(q.field("sandboxMode"), undefined),
-                  q.neq(q.field("workspaceSessionState"), undefined),
-                  q.neq(q.field("workspaceProviderSandboxId"), undefined),
-                  q.neq(q.field("workspaceToolboxProxyUrl"), undefined),
-                  q.neq(q.field("workspaceSessionRegion"), undefined),
-                  q.neq(q.field("workspaceSessionUpdatedAt"), undefined),
-                ),
-              )
-              .first();
+    const firstResidue = await queryResidueTarget(db, target).first();
     if (firstResidue) {
       throw new Error("project_residue_dependency_blocked");
     }
@@ -180,7 +179,7 @@ export const inspectProjectResiduePageInternal = internalQuery({
   },
   handler: async (ctx, args) => {
     const pageSize = normalizePageSize(args.pageSize);
-    const page = await queryTarget(ctx.db, args.target).paginate({
+    const page = await queryResidueTarget(ctx.db, args.target).paginate({
       cursor: args.cursor ?? null,
       numItems: pageSize,
     });
@@ -202,7 +201,6 @@ export const inspectProjectResiduePageInternal = internalQuery({
 export const cleanProjectResidueBatchInternal = internalMutation({
   args: {
     target: projectResidueTargetValidator,
-    cursor: v.optional(v.union(v.string(), v.null())),
     pageSize: v.optional(v.number()),
     dryRun: v.optional(v.boolean()),
     expectedDocumentIds: v.optional(v.array(v.string())),
@@ -211,16 +209,11 @@ export const cleanProjectResidueBatchInternal = internalMutation({
     const pageSize = normalizePageSize(args.pageSize);
     const dryRun = args.dryRun !== false;
     const legacyTable = LEGACY_TABLE_TARGETS.has(args.target);
-    const page = legacyTable
-      ? {
-          page: await queryTarget(ctx.db, args.target).take(pageSize),
-          continueCursor: null,
-          isDone: false,
-        }
-      : await queryTarget(ctx.db, args.target).paginate({
-          cursor: args.cursor ?? null,
-          numItems: pageSize,
-        });
+    const page = {
+      page: await queryResidueTarget(ctx.db, args.target).take(pageSize),
+      continueCursor: null,
+      isDone: false,
+    };
     const candidates = page.page.filter((row: Record<string, unknown>) =>
       rowHasProjectResidue(args.target, row),
     );
@@ -256,8 +249,7 @@ export const cleanProjectResidueBatchInternal = internalMutation({
       wouldPatch: legacyTable ? 0 : candidates.length,
       patched: !dryRun && !legacyTable ? candidates.length : 0,
       candidateDocumentIds,
-      continueCursor: legacyTable ? null : page.continueCursor,
-      isDone: legacyTable ? candidates.length === 0 : page.isDone,
+      isDone: candidates.length === 0,
     };
   },
 });
