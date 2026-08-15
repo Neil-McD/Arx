@@ -44,7 +44,8 @@ import {
 import type { CommunityCustomFunnelSlot } from "../shared/communityTypes";
 import {
   buildMemberAgentConversationContext,
-  type MemberAgentStoredMessage,
+  type MemberAgentPersistedHistorySeed,
+  type MemberAgentRuntimeHistoryPage,
 } from "../shared/memberAgentConversationContext";
 import {
   normalizeMemberAgentSurfaceContext,
@@ -116,6 +117,7 @@ export type RuntimeTurnResolution = {
     role: "user" | "assistant";
     content: string | NativeToolInputContentPart[];
   }>;
+  persistedConversationHistory: MemberAgentPersistedHistorySeed | null;
   requestedModelId: string;
   lane: "public" | "platform" | "chatgpt";
   modelRef: string;
@@ -406,6 +408,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     content: string | NativeToolInputContentPart[];
   }>;
   let hasPersistedImageInput = false;
+  let persistedConversationHistory: MemberAgentPersistedHistorySeed | null = null;
   const usesPersistedConversation =
     invocationSurface === "member_agent_dock" ||
     invocationSurface === "community_funnel_builder";
@@ -423,21 +426,28 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       };
     }
     try {
-      const storedRows = (await ctx.runQuery(
+      const historyPage = (await ctx.runQuery(
         internal.threads.listMemberAgentRuntimeMessagesInternal as any,
         {
           ownerId: actor.dbUserId,
           threadId: ownedThread._id,
           expectedUserMessageKey,
         },
-      )) as MemberAgentStoredMessage[];
+      )) as MemberAgentRuntimeHistoryPage;
       const context = buildMemberAgentConversationContext({
-        rows: storedRows,
+        rows: historyPage.rows,
         expectedUserMessageKey,
       });
       if (!context.ok) throw new Error(context.code);
+      if (context.expectedUserSeq !== historyPage.expectedUserSeq) {
+        throw new Error("persisted_user_message_seq_mismatch");
+      }
       conversationMessages = context.messages;
       hasPersistedImageInput = context.hasImageInput;
+      persistedConversationHistory = {
+        ...historyPage,
+        expectedUserMessageKey,
+      };
     } catch {
       return {
         ok: false,
@@ -820,6 +830,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
         workingState: normalizeThreadWorkingState(ownedThread.workingState),
       },
       conversationMessages,
+      persistedConversationHistory,
       requestedModelId,
       lane,
       modelRef,

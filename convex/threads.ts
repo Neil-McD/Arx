@@ -32,7 +32,7 @@ import {
   isReadOnlyLegacyMemberAgentThreadKey,
   resolveCommunityFunnelThreadSlotForCommunity,
 } from "../shared/runtimeInvocationSurface";
-import { MEMBER_AGENT_CONTEXT_MAX_MESSAGES } from "../shared/memberAgentConversationContext";
+import { MEMBER_AGENT_CONTEXT_PAGE_SIZE } from "../shared/memberAgentConversationContext";
 import {
   MEMBER_CONVERSATION_LIST_DEFAULT_LIMIT,
   MEMBER_CONVERSATION_LIST_MAX_LIMIT,
@@ -2102,6 +2102,7 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
     ownerId: v.id("users"),
     threadId: v.id("threads"),
     expectedUserMessageKey: v.string(),
+    beforeSeq: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const thread = (await ctx.db.get(args.threadId)) as ThreadLike | null;
@@ -2121,14 +2122,24 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
     }
     if (expected.role !== "user") throw new Error("member_agent_expected_message_not_user");
 
-    const newestFirst = (await ctx.db
+    const beforeSeq = Number.isFinite(args.beforeSeq)
+      ? Math.min(expected.seq, Math.floor(Number(args.beforeSeq)))
+      : null;
+    const pageWithLookahead = (await ctx.db
       .query("cloudMessages")
-      .withIndex("by_thread_seq", (q) =>
-        q.eq("threadId", thread._id).lte("seq", expected.seq),
-      )
+      .withIndex("by_thread_seq", (q) => {
+        const threadRange = q.eq("threadId", thread._id);
+        return beforeSeq === null
+          ? threadRange.lte("seq", expected.seq)
+          : threadRange.lt("seq", beforeSeq);
+      })
       .order("desc")
-      .take(MEMBER_AGENT_CONTEXT_MAX_MESSAGES)) as CloudMessageLike[];
-    return await Promise.all(
+      .take(MEMBER_AGENT_CONTEXT_PAGE_SIZE + 1)) as CloudMessageLike[];
+    const newestFirst = pageWithLookahead.slice(
+      0,
+      MEMBER_AGENT_CONTEXT_PAGE_SIZE,
+    );
+    const rows = await Promise.all(
       newestFirst.map(async (row) => ({
         messageKey: row.messageKey,
         seq: row.seq,
@@ -2139,6 +2150,13 @@ export const listMemberAgentRuntimeMessagesInternal = internalQuery({
             : row.contentJson,
       })),
     );
+    return {
+      expectedUserSeq: expected.seq,
+      rows,
+      hasMore: pageWithLookahead.length > MEMBER_AGENT_CONTEXT_PAGE_SIZE,
+      nextBeforeSeq:
+        rows.length > 0 ? Math.min(...rows.map((row) => row.seq)) : null,
+    };
   },
 });
 

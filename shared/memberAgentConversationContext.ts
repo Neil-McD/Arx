@@ -5,7 +5,8 @@ import {
 import { isAllowedMemberAgentImageMime } from "./memberAgentAttachments.ts";
 import type { NativeToolInputContentPart } from "./nativeToolProtocol.ts";
 
-export const MEMBER_AGENT_CONTEXT_MAX_MESSAGES = 60;
+export const MEMBER_AGENT_CONTEXT_PAGE_SIZE = 60;
+export const MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN = 32;
 
 export type MemberAgentStoredMessage = {
   messageKey: string;
@@ -18,6 +19,37 @@ export type MemberAgentConversationMessage = {
   role: "user" | "assistant";
   content: string | NativeToolInputContentPart[];
 };
+
+export type MemberAgentConversationEntry = MemberAgentConversationMessage & {
+  messageKey: string;
+  seq: number;
+};
+
+export type MemberAgentRuntimeHistoryPage = {
+  expectedUserSeq: number;
+  rows: MemberAgentStoredMessage[];
+  hasMore: boolean;
+  nextBeforeSeq: number | null;
+};
+
+export type MemberAgentPersistedHistorySeed = MemberAgentRuntimeHistoryPage & {
+  expectedUserMessageKey: string;
+};
+
+export type MemberAgentConversationEntriesResult =
+  | {
+      ok: true;
+      expectedUserSeq: number;
+      entries: MemberAgentConversationEntry[];
+      hasImageInput: boolean;
+    }
+  | {
+      ok: false;
+      code:
+        | "expected_user_message_missing"
+        | "expected_message_not_user"
+        | "expected_user_message_empty";
+    };
 
 export type MemberAgentConversationContextResult =
   | {
@@ -41,11 +73,10 @@ function normalizePositiveInteger(raw: unknown, fallback: number, ceiling: numbe
   return Math.max(1, Math.min(ceiling, Math.floor(value)));
 }
 
-export function buildMemberAgentConversationContext(params: {
+export function buildMemberAgentConversationEntries(params: {
   rows: readonly MemberAgentStoredMessage[];
   expectedUserMessageKey: string;
-  maxMessages?: number;
-}): MemberAgentConversationContextResult {
+}): MemberAgentConversationEntriesResult {
   const expectedUserMessageKey = String(params.expectedUserMessageKey ?? "").trim();
   const expected = params.rows.find(
     (row) => String(row.messageKey ?? "").trim() === expectedUserMessageKey,
@@ -66,20 +97,13 @@ export function buildMemberAgentConversationContext(params: {
     return { ok: false, code: "expected_user_message_empty" };
   }
 
-  const maxMessages = normalizePositiveInteger(
-    params.maxMessages,
-    MEMBER_AGENT_CONTEXT_MAX_MESSAGES,
-    MEMBER_AGENT_CONTEXT_MAX_MESSAGES,
-  );
   const eligible = params.rows
     .filter((row) => row.seq <= expected.seq)
     .slice()
     .sort((a, b) => b.seq - a.seq);
 
-  const newestFirst: MemberAgentConversationMessage[] = [];
-  let characterCount = 0;
+  const newestFirst: MemberAgentConversationEntry[] = [];
   for (const row of eligible) {
-    if (newestFirst.length >= maxMessages) break;
     if (row.role !== "user" && row.role !== "assistant") continue;
     const content = extractTextFromContentJson(row.contentJson).trim();
     const isExpected = row.messageKey === expectedUserMessageKey;
@@ -92,12 +116,13 @@ export function buildMemberAgentConversationContext(params: {
       }
     }
     newestFirst.push({
+      messageKey: row.messageKey,
+      seq: row.seq,
       role: row.role,
       content: multimodalContent.some((part) => part.type === "image")
         ? multimodalContent
         : content,
     });
-    characterCount += content.length;
   }
 
   if (
@@ -113,8 +138,40 @@ export function buildMemberAgentConversationContext(params: {
   return {
     ok: true,
     expectedUserSeq: expected.seq,
-    messages: newestFirst.reverse(),
-    characterCount,
+    entries: newestFirst.reverse(),
     hasImageInput: expectedImages.length > 0,
+  };
+}
+
+export function buildMemberAgentConversationContext(params: {
+  rows: readonly MemberAgentStoredMessage[];
+  expectedUserMessageKey: string;
+  maxMessages?: number;
+}): MemberAgentConversationContextResult {
+  const built = buildMemberAgentConversationEntries(params);
+  if (!built.ok) return built;
+  const maxMessages = normalizePositiveInteger(
+    params.maxMessages,
+    Math.max(1, built.entries.length),
+    Math.max(1, built.entries.length),
+  );
+  const entries = built.entries.slice(-maxMessages);
+  return {
+    ok: true,
+    expectedUserSeq: built.expectedUserSeq,
+    messages: entries.map(({ role, content }) => ({ role, content })),
+    characterCount: entries.reduce((total, entry) => {
+      const text =
+        typeof entry.content === "string"
+          ? entry.content
+          : entry.content
+              .filter((part): part is Extract<NativeToolInputContentPart, { type: "text" }> =>
+                part.type === "text",
+              )
+              .map((part) => part.text)
+              .join("");
+      return total + text.length;
+    }, 0),
+    hasImageInput: built.hasImageInput,
   };
 }

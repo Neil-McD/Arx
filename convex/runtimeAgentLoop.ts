@@ -118,12 +118,37 @@ import {
   buildRuntimeInputBudgetEvidence,
   resolveRuntimeProviderBudgetIdentity,
 } from "../shared/runtimeInputBudget.ts";
+import {
+  MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN,
+  MEMBER_AGENT_CONTEXT_PAGE_SIZE,
+  type MemberAgentPersistedHistorySeed,
+  type MemberAgentRuntimeHistoryPage,
+} from "../shared/memberAgentConversationContext.ts";
+import { selectMemberAgentHistoryForBudget } from "../shared/memberAgentHistorySelection.ts";
 
 type InferenceRole = "user" | "assistant" | "system";
 type InferenceMessage = {
   role: InferenceRole;
   content: string | NativeToolInputContentPart[];
 };
+
+function toNativeInferenceMessage(
+  message: InferenceMessage,
+): NativeToolAwareMessage {
+  if (message.role === "user") {
+    return { role: "user", content: message.content };
+  }
+  if (message.role === "assistant") {
+    return {
+      role: "assistant",
+      content: extractTextFromNativeToolMessageContent(message.content),
+    };
+  }
+  return {
+    role: "system",
+    content: extractTextFromNativeToolMessageContent(message.content),
+  };
+}
 
 type RuntimeAgentLoopSuccess = RuntimeKernelSuccess<string>;
 type RuntimeAgentLoopFailure = RuntimeKernelFailure<string>;
@@ -824,6 +849,7 @@ async function executeRetrievalAgentLoop(
     inferenceSource: RuntimeInferenceSource;
     modelRef: string;
     messages: InferenceMessage[];
+    persistedConversationHistory?: MemberAgentPersistedHistorySeed | null;
     maxTokens: number;
     runId: string;
     harnessName: "chat_tools";
@@ -982,52 +1008,6 @@ async function executeRetrievalAgentLoop(
     (total, section) => total + String(section.text ?? "").length,
     0,
   );
-  const runtimeContextManifest = buildRuntimeContextManifest({
-    generatedAt: runtimeDateTimeIso,
-    userId: params.userId ?? null,
-    threadId: params.threadId ?? null,
-    communityId: params.communityId ?? null,
-    communityContextVersion: params.communityContextVersion ?? null,
-    projectId: params.projectId ?? null,
-    harnessName: params.harnessName,
-    inferenceSource: params.inferenceSource,
-    latestUserText: latestUserTextForRuntimeContext,
-    messages: params.messages.map((message) => ({
-      role: message.role,
-      content: extractTextFromNativeToolMessageContent(message.content),
-    })),
-    allowedToolNames: effectiveAllowedToolNames,
-    communityResourceLane: resolvedHarness.communityResourceLane,
-    communityAbout: params.communityAbout ?? null,
-    promptSections: runtimePromptBundle.sections,
-    runtimeTurnEnvelope,
-    runtimeTurnContext,
-    invocationSurface: params.invocationSurface,
-    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
-    memberIdentityContextMd,
-    memberIdentityContextStatus,
-  });
-  const nativeTranscript: NativeToolAwareMessage[] = [
-    {
-      role: "system",
-      content: systemPrompt,
-    },
-    ...params.messages.map((message): NativeToolAwareMessage => {
-      if (message.role === "user") {
-        return { role: "user", content: message.content };
-      }
-      if (message.role === "assistant") {
-        return {
-          role: "assistant",
-          content: extractTextFromNativeToolMessageContent(message.content),
-        };
-      }
-      return {
-        role: "system",
-        content: extractTextFromNativeToolMessageContent(message.content),
-      };
-    }),
-  ];
   const providerToolPolicySurface = buildRuntimeToolPolicySurface({
     fixedToolNames: effectiveAllowedToolNames,
   });
@@ -1043,6 +1023,167 @@ async function executeRetrievalAgentLoop(
     requestedModelId: params.requestedModelId,
     modelRef: params.modelRef,
   });
+  const resolvedProviderToolSchemas =
+    inputBudgetIdentity.transport === "openrouter_chat_completions"
+      ? activeProviderTools.openAiTools
+      : activeProviderTools.responsesTools;
+  let conversationMessagesForProvider = params.messages;
+  if (params.persistedConversationHistory) {
+    const historySeed = params.persistedConversationHistory;
+    let loadedRows = [...historySeed.rows];
+    let pagesRead = 1;
+    let hasMore = historySeed.hasMore;
+    let nextBeforeSeq = historySeed.nextBeforeSeq;
+    let selection = selectMemberAgentHistoryForBudget({
+      rows: loadedRows,
+      expectedUserMessageKey: historySeed.expectedUserMessageKey,
+      systemPrompt,
+      ...inputBudgetIdentity,
+      toolSchemas: resolvedProviderToolSchemas,
+      reservedOutputTokens: params.maxTokens,
+    });
+    try {
+      if (!selection.ok) throw new Error(selection.code);
+      while (
+        hasMore &&
+        !selection.blockedByBudget &&
+        pagesRead < MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN
+      ) {
+        if (typeof nextBeforeSeq !== "number") {
+          throw new Error("persisted_history_cursor_missing");
+        }
+        const previousBeforeSeq = nextBeforeSeq;
+        const page = (await params.ctx.runQuery(
+          internal.threads.listMemberAgentRuntimeMessagesInternal as any,
+          {
+            ownerId: params.userId as any,
+            threadId: params.threadId as any,
+            expectedUserMessageKey: historySeed.expectedUserMessageKey,
+            beforeSeq: previousBeforeSeq,
+          },
+        )) as MemberAgentRuntimeHistoryPage;
+        if (
+          page.expectedUserSeq !== historySeed.expectedUserSeq ||
+          page.rows.some((row) => row.seq >= previousBeforeSeq) ||
+          (page.hasMore &&
+            (typeof page.nextBeforeSeq !== "number" ||
+              page.nextBeforeSeq >= previousBeforeSeq))
+        ) {
+          throw new Error("persisted_history_page_invalid");
+        }
+        loadedRows = [...loadedRows, ...page.rows];
+        pagesRead += 1;
+        hasMore = page.hasMore;
+        nextBeforeSeq = page.nextBeforeSeq;
+        selection = selectMemberAgentHistoryForBudget({
+          rows: loadedRows,
+          expectedUserMessageKey: historySeed.expectedUserMessageKey,
+          systemPrompt,
+          ...inputBudgetIdentity,
+          toolSchemas: resolvedProviderToolSchemas,
+          reservedOutputTokens: params.maxTokens,
+        });
+        if (!selection.ok) throw new Error(selection.code);
+      }
+      const stopReason = selection.blockedByBudget
+        ? selection.budgetPlan.failureCode &&
+          selection.budgetPlan.failureCode !== "context_window_exceeded"
+          ? "budget_unavailable"
+          : "input_budget"
+        : hasMore
+          ? "page_limit"
+          : "history_exhausted";
+      const selectedSeqs = selection.selectedEntries.map((entry) => entry.seq);
+      conversationMessagesForProvider = selection.selectedEntries.map(
+        (entry): InferenceMessage => ({
+          role: entry.role,
+          content: entry.content,
+        }),
+      );
+      await params.appendRunEvent({
+        eventType: "runtime_persisted_history_selected",
+        eventKey: `${params.runId}:runtime_persisted_history_selected:1`,
+        payload: {
+          version: 1,
+          run_id: params.runId,
+          invocation_surface: params.invocationSurface,
+          expected_user_message_key: historySeed.expectedUserMessageKey,
+          expected_user_seq: historySeed.expectedUserSeq,
+          oldest_selected_seq:
+            selectedSeqs.length > 0 ? Math.min(...selectedSeqs) : null,
+          newest_selected_seq:
+            selectedSeqs.length > 0 ? Math.max(...selectedSeqs) : null,
+          selected_message_count: selection.selectedEntries.length,
+          selected_episode_count: selection.selectedEpisodeCount,
+          loaded_row_count: loadedRows.length,
+          loaded_complete_episode_count: selection.loadedCompleteEpisodeCount,
+          ignored_leading_message_count: selection.ignoredLeadingMessageCount,
+          page_size: MEMBER_AGENT_CONTEXT_PAGE_SIZE,
+          pages_read: pagesRead,
+          max_pages_per_turn: MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN,
+          has_older:
+            hasMore ||
+            selection.loadedCompleteEpisodeCount > selection.selectedEpisodeCount ||
+            selection.ignoredLeadingMessageCount > 0,
+          stop_reason: stopReason,
+          budget_profile_key: selection.budgetPlan.profileKey,
+          budget_failure_code: selection.budgetPlan.failureCode,
+        },
+      });
+    } catch (error) {
+      logStructuredError("persisted_history_selection_failed", {
+        error,
+        runId: params.runId,
+        threadId: params.threadId ?? undefined,
+        invocationSurface: params.invocationSurface,
+      });
+      const fallbackTranscript: NativeToolAwareMessage[] = [
+        { role: "system", content: systemPrompt },
+        ...params.messages.map(toNativeInferenceMessage),
+      ];
+      return {
+        ok: false,
+        status: 503,
+        code: "persisted_history_selection_failed",
+        stopReason: "model_error",
+        message: "The agent could not safely load this conversation. Please retry.",
+        promptTokens: null,
+        completionTokens: null,
+        transcript: fallbackTranscript,
+        stepCount: 0,
+        steps: [],
+      };
+    }
+  }
+  const runtimeContextManifest = buildRuntimeContextManifest({
+    generatedAt: runtimeDateTimeIso,
+    userId: params.userId ?? null,
+    threadId: params.threadId ?? null,
+    communityId: params.communityId ?? null,
+    communityContextVersion: params.communityContextVersion ?? null,
+    projectId: params.projectId ?? null,
+    harnessName: params.harnessName,
+    inferenceSource: params.inferenceSource,
+    latestUserText: latestUserTextForRuntimeContext,
+    messages: conversationMessagesForProvider.map((message) => ({
+      role: message.role,
+      content: extractTextFromNativeToolMessageContent(message.content),
+    })),
+    allowedToolNames: effectiveAllowedToolNames,
+    communityResourceLane: resolvedHarness.communityResourceLane,
+    communityAbout: params.communityAbout ?? null,
+    promptSections: runtimePromptBundle.sections,
+    runtimeTurnEnvelope,
+    runtimeTurnContext,
+    invocationSurface: params.invocationSurface,
+    memberAgentSurfaceContext: params.memberAgentSurfaceContext,
+    memberIdentityContextMd,
+    memberIdentityContextStatus,
+  });
+  const nativeTranscript: NativeToolAwareMessage[] = [
+    { role: "system", content: systemPrompt },
+    ...conversationMessagesForProvider.map(toNativeInferenceMessage),
+  ];
   try {
     await params.appendRunEvent({
       eventType: "runtime_prompt_bundle_resolved",
@@ -1436,10 +1577,7 @@ async function executeRetrievalAgentLoop(
       inputBudget: {
         ...inputBudgetIdentity,
         reservedOutputTokens: params.maxTokens,
-        toolSchemas:
-          inputBudgetIdentity.transport === "openrouter_chat_completions"
-            ? activeProviderTools.openAiTools
-            : activeProviderTools.responsesTools,
+        toolSchemas: resolvedProviderToolSchemas,
         recordPlan: async (budgetPlan) => {
           await params.appendRunEvent({
             eventType:
@@ -1978,6 +2116,7 @@ async function executeChatToolsAgentLoop(
     inferenceSource: RuntimeInferenceSource;
     modelRef: string;
     messages: InferenceMessage[];
+    persistedConversationHistory?: MemberAgentPersistedHistorySeed | null;
     maxTokens: number;
     runId: string;
     allowedToolNames: readonly RetrievalToolName[];

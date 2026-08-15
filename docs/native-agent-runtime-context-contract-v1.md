@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7A released and production-proven; Slice 7B pending
+Status: context architecture through Slice 7A released and production-proven; Slice 7B implemented with release proof pending
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-15
 
@@ -10,7 +10,8 @@ Program position:
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 7A are released and production-proven;
-  Slice 7B and Slices 8 through 10 remain.
+  Slice 7B is implemented and awaiting release proof; Slices 8 through 10
+  remain.
 - Pi agent-core adoption in Polynet: not started.
 
 ## 1. Purpose
@@ -272,7 +273,7 @@ paths.
 
 The context architecture is done. The complete runtime program is not.
 
-The landed system already has:
+The released base plus the locally verified Slice 7B candidate has:
 
 1. One deterministic prompt-section model and compiler boundary.
 2. Exact prompt-to-manifest projection.
@@ -287,12 +288,14 @@ The landed system already has:
    compaction path for Member and Funnel Composer.
 9. Removal of the former fixed 250,000-character request transport ceiling.
 10. First-party Workspace UI quarantine.
+11. Budget-guided newest-first persisted-history pagination for Member and
+    Funnel Composer, with complete-episode selection and mandatory bounded
+    lineage in the existing runtime event store.
 
 The remaining gaps are:
 
-1. The bounded 60-row persisted-history read shared by Member and Funnel
-   Composer still precedes model-visible projection; budget-guided newest-first
-   pagination remains Slice 7B.
+1. Slice 7B has not yet received exact-main release and production runtime
+   evidence.
 2. Pi agent core has not been admitted, parity-tested, or used by a production
    Polynet turn.
 3. Pi agent core has not yet proved that it removes more runtime complexity
@@ -308,7 +311,7 @@ Program status:
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
 | 5 | Workspace and Codex runtime deletion | Complete and production-proven |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
-| 7 | Shared deterministic model-visible projection | 7A complete and production-proven; 7B not started |
+| 7 | Shared deterministic model-visible projection and persisted-history pagination | 7A complete and production-proven; 7B implemented, release proof pending |
 | 8 | Pi value/feasibility adapter and deterministic parity | Not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
@@ -1026,9 +1029,33 @@ Slice 7A implemented shape:
 6. The optional Member/Funnel-owned compaction callbacks and their
    tool-result-only retry path are deleted. Concierge and Steward inherit the
    same kernel behavior without role-specific projection code.
-7. Slice 7B separately owns budget-guided pagination beyond the existing newest
-   60 persisted messages shared by Member and Funnel Composer. Pi remains
-   excluded until all of Slice 7 is complete.
+7. Slice 7B separately owns budget-guided pagination beyond the former newest
+   60 persisted-message ceiling shared by Member and Funnel Composer. Pi
+   remains excluded until all of Slice 7 is production-proven.
+
+Slice 7B implemented shape:
+
+1. The existing authorized persisted-history query now treats 60 rows as a
+   newest-first page size with lookahead and a strict sequence cursor. Every
+   page revalidates owner, thread, exact initiating user message, and role.
+2. Member and Funnel Composer share one persisted-history seed and one runtime
+   pagination path. No role-specific selector or second history transport was
+   added.
+3. After the exact system prompt, model identity, and provider tool schemas are
+   known, the runtime pages older rows only while the canonical input-budget
+   planner admits every loaded complete episode in strict recency order.
+4. The current user episode is never dropped. An orphan assistant split across
+   a page boundary is not sent to the provider, and an older episode is omitted
+   atomically when it does not fit.
+5. Database work is bounded to 32 pages per turn. Exhaustion, budget stop,
+   unknown capacity, and the operational page stop are explicit evidence—not
+   silent claims that all history was loaded.
+6. `runtime_persisted_history_selected` records bounded sequence lineage,
+   counts, pages read, stop reason, and budget profile in the existing run event
+   store before provider execution. Raw message content is not duplicated.
+7. The same provider tool-schema projection is used for history admission and
+   the native kernel's final budget plan. The kernel remains the final
+   projection owner; no second budget policy or compaction system exists.
 
 Slice 7A production evidence:
 
@@ -1261,7 +1288,9 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Plan and implement Slice 7B as budget-guided newest-first persisted-history
-pagination for Member and Funnel Composer over the same projector. Do not mix
-in Pi adoption, semantic summarization, a second prompt compiler, a second event
-store, or a second runtime.
+Land Slice 7B on exact `origin/main`, deploy through the canonical GitHub and
+Convex paths, and prove one Member or Funnel turn whose persisted-history
+selection event and provider-context attestation agree. Only after that proof
+may Slice 8 begin as a reversible Pi agent-core feasibility adapter. Do not mix
+the Slice 7B release with Pi adoption, semantic summarization, a second prompt
+compiler, a second event store, or a second runtime.
