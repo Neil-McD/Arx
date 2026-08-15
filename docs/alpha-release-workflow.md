@@ -73,6 +73,75 @@ npm run check:third-party-mcp-retirement-complete-proof
 Never delete the production rows before the first release proves ordinary
 product traffic can no longer create or refresh them.
 
+### Workspace project residue retirement
+
+Slice 5E uses the same two-release rule, but it never deletes provider
+resources or accounting evidence.
+
+Release A removes all project, Workspace, Daytona, Codex-worker, preview, and
+Blaxel writer surfaces. It temporarily retains six permissive schema tombstones
+and the internal-only `projectResidueRetirement.ts` operator. Before any data
+write:
+
+1. Prove the exact Release A SHA is live in Vercel and Convex.
+2. Prove retired public/internal writer functions are absent.
+3. Pass the authenticated Member Agent community-inspection canary.
+4. Run a read-only Blaxel control-plane inventory and require zero sandboxes
+   and volumes. If either count is nonzero, stop; this operator cannot delete
+   provider resources.
+5. Back up production outside the repository and record its SHA-256:
+
+```bash
+npx convex export --prod --path /absolute/operator-controlled/path/polynet-pre-project-residue.zip
+shasum -a 256 /absolute/operator-controlled/path/polynet-pre-project-residue.zip
+```
+
+Inspect every target page with the internal census. Continue with the returned
+cursor until `isDone` is true and aggregate `residueCount` without truncation:
+
+```bash
+npx convex run projectResidueRetirement:inspectProjectResiduePageInternal \
+  '{"target":"runtimeRuns","cursor":null,"pageSize":500}' --prod
+```
+
+Cleanup order is fixed:
+
+1. `workspaceFilePreviewSnapshots`
+2. `workspaceDirectorySnapshots`
+3. `workspaceTerminalSessions`
+4. `polynetCodexWorkerCapacityLeases`
+5. `daytonaCodexRuntimeTargets`
+6. `platformDiagnosticEvents`
+7. `threads`
+8. `runtimeRuns`
+9. `cloudProjects`
+
+For each page, dry-run first. Review the returned document IDs, then pass those
+exact IDs to the write call. For surviving tables, pass the same input cursor
+to both calls and continue from the write result's `continueCursor`. For the
+six deleted tables, keep the cursor null and repeat until a write returns
+`isDone: true`:
+
+```bash
+npx convex run projectResidueRetirement:cleanProjectResidueBatchInternal \
+  '{"target":"runtimeRuns","cursor":null,"pageSize":100,"dryRun":true}' --prod
+
+npx convex run projectResidueRetirement:cleanProjectResidueBatchInternal \
+  '{"target":"runtimeRuns","cursor":null,"pageSize":100,"dryRun":false,"expectedDocumentIds":["<reviewed-id>"]}' --prod
+```
+
+The operator refuses to delete `cloudProjects` while any dependency remains.
+It cannot query or mutate `workspaceComputeCharges`, `providerCostEntries`, or
+`creditLedgerEntries`. Re-run the full census twice and require zero residue,
+then re-run provider inventory and accounting diagnostics. Stop if provider
+inventory is nonzero or any accounting evidence changes.
+
+Release B deletes the six empty schemas, obsolete compatibility fields, and
+the temporary operator. Run the full release gate, release through `main`,
+deploy Convex intentionally, and prove the exact production SHA, native
+community inspection, official external MCP, and accounting diagnostics. Do
+not retain the migration code after this proof.
+
 ### AI Feed retirement
 
 AI Feed removal is also a two-release data retirement. Release A removes the
@@ -263,13 +332,12 @@ single local decision before proposing a release:
 cd /Users/neilmcdevitt/code/arx
 npm ci
 npm --prefix apps/web ci
-npm --prefix apps/preview-proxy ci
 npm run release:gate
 ```
 
 The local gate runs checked-in Convex generated-surface sanity and typechecking,
 web typechecking, a production web build with an unambiguous Git build marker,
-bundle budget, preview-proxy validation, foundation invariants, all conventional
+bundle budget, foundation invariants, all conventional
 behavior tests, and dependency security checks. It writes machine-readable
 evidence to `artifacts/release-gate.json`.
 

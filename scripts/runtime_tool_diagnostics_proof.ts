@@ -14,7 +14,7 @@ const operatorPanel = [
   read("apps/web/src/components/OperatorPlatformPanelView.tsx"),
   read("apps/web/src/components/OperatorBusinessPanelView.tsx"),
 ].join("\n");
-const platformCostAccounting = read("convex/platformToolCostAccounting.ts");
+const voiceCostAccounting = read("convex/voiceProviderCostAccounting.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const runtimeTurnHandlers = read("convex/runtimeTurnHandlers.ts");
 const httpVoice = read("convex/httpVoice.ts");
@@ -57,8 +57,8 @@ assert.match(
   "platform revenue must exclude archived tool-credit sales",
 );
 
-assert.match(platformCostAccounting, /billingDisposition: "platform_absorbed"/);
-assert.match(platformCostAccounting, /recordProviderCostInternal/);
+assert.match(voiceCostAccounting, /billingDisposition: "platform_absorbed"/);
+assert.match(voiceCostAccounting, /recordProviderCostInternal/);
 for (const runtimeSource of [runtimeAgentLoop, runtimeTurnHandlers, httpVoice]) {
   assert.doesNotMatch(
     runtimeSource,

@@ -105,7 +105,7 @@ If a cleanup touches any of the above, require explicit human confirmation.
 
 ### Canonical Data
 - Cloud is canonical for users, communities, memberships/entitlements, billing state, threads/messages, and memory records.
-- Runtime event storage is operational evidence and workspace policy state; it is not the product source of truth.
+- Runtime event storage is operational evidence and agent policy state; it is not the product source of truth.
 
 ### Community Access + Visibility
 - Visibility has only two states: `Published` and `Unlisted`.

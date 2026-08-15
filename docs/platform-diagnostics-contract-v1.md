@@ -58,10 +58,8 @@ Out of scope for this first contract:
 | Sentry | Execution observability | frontend errors, traces, performance, release correlation, AI/model/tool spans | canonical product state |
 | PostHog | Product behavior analytics | activation, funnels, community/member actions, builder behavior | security or billing truth |
 | Vercel | Web host and release evidence | deployment status, build failures, route/runtime host logs, asset availability | product analytics source |
-| Workspace runtime | Sandbox and workspace execution evidence | sandbox lifecycle, process logs, terminal output, workspace tool failures | product/business analytics |
 | Stripe | Payment and payout truth | checkout, subscription, invoice/payment state, Connect status, disputes/refunds | product engagement analytics |
 | GitHub Actions / proof scripts | Regression prevention and release confidence | failing checks, contract proofs, build/typecheck/audit guards | runtime observability |
-| Preview proxy host | Preview transport evidence, if active | preview proxy logs, live desktop proxy health | main app diagnostics source |
 
 ## Status Labels
 
@@ -82,8 +80,8 @@ Each diagnostic signal should be classified with one of these statuses:
 | Web and deploy health | Vercel app, SPA shell, route loading, assets | Is production reachable and running the expected release? | Vercel, Sentry, Convex probe | deploy status, build ID, route load errors, frontend crash rate, failed asset loads, p95 page load | partial |
 | Auth and access | sign-in, auth bootstrap, session refresh, entitlements, community gates, operator gate | Can users get in and only access what they should? | Convex, Sentry, critical audit, PostHog | sign-in/session established, auth bootstrap failures, session refresh failures, entitlement mismatches, denied access, operator access granted/denied | partial |
 | Security and audit | privileged mutations, destructive actions, webhooks, operator access | Are trust boundaries holding? | Convex critical audit, Sentry, Stripe | permission denied events, webhook signature failures, account deletion events, operator role changes, suspicious retries | partial |
-| Runtime and AI | workspace turns, model calls, streaming, provider calls | Can the intelligence layer complete work reliably? | Sentry, Convex runtime events, Vercel/Convex logs | turn success rate, time to first token, p95 turn latency, provider failures, rate limits, cost per successful turn | partial |
-| Tools, Polynet MCP, and workspace runtime | fixed tool calls, official MCP requests, terminal/computer use, sandbox lifecycle | Can tools and the official external gateway execute safely? | Blaxel, Convex runtime events, Sentry spans, MCP request diagnostics | tool success rate, tool failures by tool, MCP auth/access failures, sandbox create failures, timeout rate | partial |
+| Runtime and AI | native agent turns, model calls, streaming, provider calls | Can the intelligence layer complete work reliably? | Sentry, Convex runtime events, Vercel/Convex logs | turn success rate, time to first token, p95 turn latency, provider failures, rate limits, cost per successful turn | partial |
+| Tools and Polynet MCP | fixed product tools and official MCP requests | Can native tools and the official external gateway execute safely? | Convex runtime events, Sentry spans, MCP request diagnostics | tool success rate, tool failures by tool, MCP auth/access failures, timeout rate | partial |
 | Skills and harness | Settings-managed personal/community skills and fixed runtime tools | Are skills and fixed tools projected correctly? | Convex, PostHog, Sentry | skill resolution failures, duplicate skill conflicts, runtime tool-policy mismatches | partial |
 | Community core | chat, feed, resources, events, members, settings | Are communities usable once joined? | Convex, PostHog, Sentry | message send failures, resource load failures, event creation failures, member action failures, community route errors | partial |
 | Funnel and join | public funnel, join request, paid join, claim flow | Can visitors become members? | PostHog, Convex, Stripe, Sentry | page visits, join starts, join completions, conversion rate, checkout failures, pending claim age | partial |
@@ -137,7 +135,7 @@ Each diagnostic signal should be classified with one of these statuses:
 | Cost per successful turn | Credits/cost divided by successful turns | Convex credits/compute records | Convex | now |
 | Infrastructure amplification | Unexpected invocation, database-read, compute, or bandwidth growth relative to real work | Convex/Vercel/provider evidence under the cost-safety contract | Convex, Vercel | now |
 
-### Tools, Polynet MCP, and workspace runtime
+### Tools and Polynet MCP
 
 | KPI | Definition | Source of Truth | Tool | Panel Priority |
 | --- | --- | --- | --- | --- |
@@ -145,9 +143,6 @@ Each diagnostic signal should be classified with one of these statuses:
 | Tool failures by tool | Failed calls grouped by fixed tool | `runtimeRunEvents` and Sentry spans | Convex, Sentry | now |
 | Polynet MCP auth failures | Official provider requests rejected by OAuth/authentication reason | MCP HTTP logs and Sentry spans | Convex, Sentry | now |
 | Polynet MCP access failures | Official provider calls rejected by membership, entitlement, or capability reason | community access evidence and MCP HTTP logs | Convex, Sentry | now |
-| Sandbox create failures | Blaxel sandbox create/start failures | Blaxel client logs and structured errors | Blaxel, Convex, Sentry | now |
-| Workspace command failures | Failed terminal/process commands and exit code | workspace command logs and runtime events | Blaxel, Convex | now |
-| Stuck sandbox/process age | Oldest active sandbox/process past expected lifetime | workspace reconciliation state | Blaxel, Convex | later |
 
 ### Skills and Harness
 
@@ -265,7 +260,6 @@ type PlatformDiagnosticEvent = {
   surface?: string;
   userId?: string;
   communityId?: string;
-  projectId?: string;
   threadId?: string;
   runId?: string;
   requestId?: string;
@@ -327,7 +321,7 @@ This contract is ready to implement from when we can answer:
 1. Which tool owns each signal?
 2. Which source is canonical?
 3. Which metrics belong in the operator panel now?
-4. Which details should stay in Sentry/PostHog/Vercel/Stripe/Blaxel?
+4. Which details should stay in Sentry, PostHog, Vercel, or Stripe?
 5. Which events are missing?
 6. Which first slice can be implemented without widening scope?
 

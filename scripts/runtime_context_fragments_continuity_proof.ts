@@ -95,7 +95,6 @@ const nextEnvelope = buildRuntimeTurnEnvelope({
   threadWorkingState: turnOneWorkingState,
   threadId: "thread_access_gate",
   communityId: "community_alpha",
-  projectId: "project_access",
   allowedToolNames: ["read", "edit", "bash"],
 });
 

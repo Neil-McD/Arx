@@ -258,7 +258,7 @@ assert.ok(
 const v2SectionIds = [
   "platform_doctrine", "agent_soul", "user_agent_soul", "explanation_contract",
   "harness_operating_policy", "community_lens", "community_lens_authority",
-  "community_system_prompt", "community_resource_lane", "workspace_harness_context",
+  "community_system_prompt", "community_resource_lane",
   "runtime_turn_context", "temporal_context", "platform_skill_overlay",
   "personal_skill_overlay", "ambiguous_skill_mentions", "community_skill_overlay",
 ];

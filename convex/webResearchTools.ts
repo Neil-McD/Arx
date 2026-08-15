@@ -11,7 +11,7 @@ import type {
 import {
   estimateWebResearchVendorCostUsd,
   type WebResearchCreditAction,
-} from "../shared/workspaceCredits";
+} from "../shared/providerPricing";
 import {
   classifyWebResearchUrlAccess,
   normalizeWebResearchUrl,

@@ -2,8 +2,8 @@ import {
   estimateVoiceTranscriptionVendorCostUsd,
   VOICE_TRANSCRIPTION_FALLBACK_DURATION_SECONDS,
   type VoiceTranscriptionProvider,
-} from "../shared/workspaceCredits";
-import { recordPlatformToolCostBestEffort } from "./platformToolCostAccounting";
+} from "../shared/providerPricing";
+import { recordVoiceProviderCostBestEffort } from "./voiceProviderCostAccounting";
 
 type VoiceTranscribeInput = {
   audio_base64?: unknown;
@@ -659,7 +659,7 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             model: primary.model,
             durationSeconds: settledDurationSeconds,
           });
-          await recordPlatformToolCostBestEffort({
+          await recordVoiceProviderCostBestEffort({
             ctx,
             costKey: providerCostKey,
             userId: auth.actor.userId,
@@ -712,7 +712,7 @@ export function registerRuntimeVoiceRoutes(args: RegisterRuntimeVoiceRoutesArgs)
             model: fallback.model,
             durationSeconds: settledDurationSeconds,
           });
-          await recordPlatformToolCostBestEffort({
+          await recordVoiceProviderCostBestEffort({
             ctx,
             costKey: providerCostKey,
             userId: auth.actor.userId,

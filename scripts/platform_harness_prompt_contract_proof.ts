@@ -8,7 +8,6 @@ import {
   resolveHarnessProfileFromActiveCapabilities,
 } from "../shared/canonicalGateEngine.ts";
 import {
-  RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
   canUseRuntimeEngine,
   getRuntimeEngineAccessLevel,
@@ -59,7 +58,6 @@ assert.equal(
 );
 assert.equal(getRuntimeEngineAccessLevel(RUNTIME_ENGINE_POLYNET), "included");
 assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_POLYNET }), true);
-assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_CODEX }), false);
 
 const runtimePrompt = read("shared/runtimePrompt.ts");
 const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");

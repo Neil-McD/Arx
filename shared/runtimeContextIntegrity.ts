@@ -20,7 +20,6 @@ export type RuntimeContextIntegrityRunInput = {
   ownerId?: unknown;
   runId?: unknown;
   threadId?: unknown;
-  projectId?: unknown;
   communityId?: unknown;
   communityContextVersion?: unknown;
   modelId?: unknown;
@@ -294,7 +293,6 @@ export async function buildRuntimeContextIntegrityCheck(params: {
   const scopeMatchesRun =
     Boolean(run && runStarted && contextResolved && manifestScope) &&
     sameNullableText(run?.threadId, contextResolved?.thread_id, manifestScope?.threadId) &&
-    sameNullableText(run?.projectId, runStarted?.project_id, contextResolved?.project_id, manifestScope?.projectId) &&
     sameNullableText(run?.communityId, runStarted?.community_id, contextResolved?.community_id, manifestScope?.communityId);
   if (!scopeMatchesRun) failures.push("scope_mismatch");
 

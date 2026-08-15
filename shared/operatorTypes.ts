@@ -387,7 +387,6 @@ export type OperatorDiagnosticEventRecord = {
   surface: string | null;
   userId: string | null;
   communityId: string | null;
-  projectId: string | null;
   threadId: string | null;
   runId: string | null;
   requestId: string | null;

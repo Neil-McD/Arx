@@ -1,4 +1,4 @@
-import { api, internal } from "./_generated/api";
+import { internal } from "./_generated/api";
 import {
   buildRuntimeRecentToolAttemptsFromEvents,
   buildRuntimeTurnContextPacket,
@@ -8,14 +8,6 @@ import {
 } from "../shared/runtimeTurnContextPacket";
 import type { RuntimeContextRunEvent } from "../shared/runtimeContextFragments";
 import type { ThreadWorkingStatePrompt } from "../shared/runtimePrompt";
-import {
-  normalizeProjectContextLinks,
-  normalizeProjectInstructions,
-  normalizeRuntimeProjectContext,
-  type ProjectContextLink,
-  type RuntimeProjectContextPrompt,
-} from "../shared/projectContext";
-import { normalizeProjectDisplayName } from "../shared/projectNaming";
 import type { RuntimeTurnEnvelopeV1 } from "../shared/runtimeTurnEnvelope";
 import {
   mergeRuntimeWorkingStateTaskLedger,
@@ -23,51 +15,6 @@ import {
 } from "../shared/runtimeWorkingStateLedger";
 
 type RuntimeStopContext = NonNullable<RuntimeTurnContextPacket["runtimeStop"]>;
-
-export async function loadRuntimeProjectContext(params: {
-  ctx: any;
-  projectId?: string | null;
-  authSubject?: string | null;
-}): Promise<RuntimeProjectContextPrompt | null> {
-  const projectId = String(params.projectId ?? "").trim();
-  const authSubject = String(params.authSubject ?? "").trim();
-  if (!projectId || !authSubject) return null;
-  try {
-    const row = await params.ctx.runQuery(api.projects.getCloudProjectById as any, {
-      projectId,
-      authSubject,
-    });
-    if (!row || typeof row !== "object") return null;
-    const record = row as Record<string, unknown>;
-    const label = normalizeProjectDisplayName(
-      typeof record.name === "string" ? record.name : null,
-    );
-    const description =
-      typeof record.description === "string" && record.description.trim()
-        ? record.description.trim()
-        : null;
-    let instructions: string | null = null;
-    try {
-      instructions = normalizeProjectInstructions(record.instructions) ?? null;
-    } catch {
-      instructions = null;
-    }
-    let links: ProjectContextLink[] = [];
-    try {
-      links = normalizeProjectContextLinks(record.contextLinks ?? []);
-    } catch {
-      links = [];
-    }
-    return normalizeRuntimeProjectContext({
-      label,
-      description,
-      instructions,
-      links,
-    });
-  } catch {
-    return null;
-  }
-}
 
 export type LoadedRuntimeTurnContext = {
   packet: RuntimeTurnContextPacket;
@@ -77,7 +24,6 @@ export type LoadedRuntimeTurnContext = {
 export type ActiveRuntimeTurnState = {
   runId: string;
   threadId: string;
-  projectId: string | null;
   status: "running";
   pendingUserSteering: Array<{
     text: string;
@@ -208,8 +154,6 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
   ctx: any;
   ownerId: unknown;
   threadId?: unknown;
-  projectId?: string | null;
-  authSubject?: string | null;
   runId?: string | null;
   latestUserText?: string | null;
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
@@ -239,11 +183,6 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
           events: runtimeRunEvents,
         })
       : params.threadWorkingState ?? null;
-  const projectContext = await loadRuntimeProjectContext({
-    ctx: params.ctx,
-    projectId: params.projectId ?? null,
-    authSubject: params.authSubject ?? null,
-  });
   const recentToolAttempts = await loadRecentToolAttempts({
     ctx: params.ctx,
     ownerId: params.ownerId,
@@ -253,7 +192,6 @@ export async function loadRuntimeTurnContextPacketForRun(params: {
   const packet = buildRuntimeTurnContextPacket({
     latestUserText: params.latestUserText ?? null,
     runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
-    projectContext,
     threadWorkingState,
     recentToolAttempts,
     runtimeRunEvents,
@@ -315,7 +253,6 @@ export async function loadActiveRuntimeTurnState(params: {
     return {
       runId,
       threadId,
-      projectId: String(record.projectId ?? "").trim() || null,
       status: "running",
       pendingUserSteering,
       stopRequestedAt: Number.isFinite(Number(record.stopRequestedAt))

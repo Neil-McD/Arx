@@ -100,7 +100,6 @@ export async function settleFounderPaidToolFundingSession(args: {
   rawVendorCostUsd: number;
   provider: string;
   evidence: "estimated" | "provider_reported" | "exact";
-  projectId?: unknown;
   metadata?: Record<string, unknown>;
   outcomeCode: string;
 }): Promise<{ status: "settled" | "indeterminate"; settledCostMicros: number }> {
@@ -112,7 +111,6 @@ export async function settleFounderPaidToolFundingSession(args: {
       rawVendorCostUsd: args.rawVendorCostUsd,
       provider: String(args.provider ?? "").trim() || "unknown",
       evidence: args.evidence,
-      projectId: args.projectId,
       metadata: args.metadata,
       outcomeCode: boundedCode(args.outcomeCode, "completed"),
       nowMs: Date.now(),

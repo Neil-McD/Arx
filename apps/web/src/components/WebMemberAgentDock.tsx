@@ -459,7 +459,6 @@ function WebMemberAgentDock(props, ref) {
             title: "Your agent",
             model_id: DEFAULT_ACTIVE_MODEL_ID,
             runtime_engine: "polynet",
-            project_id: null,
             community_id: activeThreadContextRef.current.communityId,
             context_version: activeThreadContextRef.current.contextVersion,
           }

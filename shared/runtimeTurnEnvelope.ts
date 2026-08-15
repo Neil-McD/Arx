@@ -15,7 +15,6 @@ export type RuntimeTurnEnvelopeV1 = {
   authority: {
     threadId: string | null;
     communityId: string | null;
-    projectId: string | null;
     communityResourceLane: CommunityResourceRuntimeLaneState["lane"];
     communityRelation: string | null;
     communityEffectiveRole: string | null;
@@ -70,7 +69,6 @@ export function buildRuntimeTurnEnvelope(params: {
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   threadId?: string | null;
   communityId?: string | null;
-  projectId?: string | null;
   communityResourceLane?: CommunityResourceRuntimeLaneState | null;
   communityLensAuthority?: CommunityLensAuthority | null;
   allowedToolNames?: readonly (string | null | undefined)[] | null;
@@ -91,7 +89,6 @@ export function buildRuntimeTurnEnvelope(params: {
     authority: {
       threadId: compactText(params.threadId, 120),
       communityId: compactText(params.communityId, 120),
-      projectId: compactText(params.projectId, 120),
       communityResourceLane: communityResourceLane.lane,
       communityRelation: compactText(communityLensAuthority?.relation, 40),
       communityEffectiveRole: compactText(communityLensAuthority?.effectiveRole, 40),
@@ -129,7 +126,7 @@ export function renderRuntimeTurnEnvelopeForPrompt(
     "RUNTIME_TURN_ENVELOPE",
     `Current request: ${envelope.currentRequest || "(none)"}`,
     `Continuity goal: ${envelope.continuityGoal || "(none)"}`,
-    `Authority: thread=${authority.threadId || "(none)"}; community=${authority.communityId || "(none)"}; project=${authority.projectId || "(none)"}; resource_lane=${authority.communityResourceLane}; role=${authority.communityRelation || "(none)"}; effective_role=${authority.communityEffectiveRole || "(none)"}; can_moderate=${authority.canModerate ? "yes" : "no"}; can_manage_resources=${authority.canManageResources ? "yes" : "no"}`,
+    `Authority: thread=${authority.threadId || "(none)"}; community=${authority.communityId || "(none)"}; resource_lane=${authority.communityResourceLane}; role=${authority.communityRelation || "(none)"}; effective_role=${authority.communityEffectiveRole || "(none)"}; can_moderate=${authority.canModerate ? "yes" : "no"}; can_manage_resources=${authority.canManageResources ? "yes" : "no"}`,
     `Available tools: ${renderToolList(authority.allowedToolNames)}`,
     `Current step: ${state.currentStep || "(none)"}`,
     `Verified: ${state.verified.length > 0 ? state.verified.join(" | ") : "(none)"}`,

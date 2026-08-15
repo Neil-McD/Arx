@@ -6,20 +6,17 @@ import {
 } from "../shared/harnessToolPolicy.ts";
 import { RETRIEVAL_TOOL_NAMES } from "../shared/retrievalTools.ts";
 import {
-  ACTIVE_WORKSPACE_RUNTIME_ENGINES,
+  ACTIVE_RUNTIME_ENGINES,
   DEFAULT_ACTIVE_RUNTIME_ENGINE,
-  RUNTIME_ENGINE_CODEX,
   RUNTIME_ENGINE_POLYNET,
   canUseRuntimeEngine,
   resolvePolynetRuntimeEngine,
 } from "../shared/runtimeEngine.ts";
 
-assert.deepEqual([...ACTIVE_WORKSPACE_RUNTIME_ENGINES], [RUNTIME_ENGINE_POLYNET]);
+assert.deepEqual([...ACTIVE_RUNTIME_ENGINES], [RUNTIME_ENGINE_POLYNET]);
 assert.equal(DEFAULT_ACTIVE_RUNTIME_ENGINE, RUNTIME_ENGINE_POLYNET);
 assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_POLYNET }), true);
-assert.equal(canUseRuntimeEngine({ engine: RUNTIME_ENGINE_CODEX }), false);
 assert.equal(resolvePolynetRuntimeEngine({ requestedRuntimeEngine: "polynet" }).ok, true);
-assert.equal(resolvePolynetRuntimeEngine({ requestedRuntimeEngine: "codex" }).ok, false);
 
 const policy = resolvePolynetHarnessToolPolicy({
   allowedToolNames: RETRIEVAL_TOOL_NAMES,

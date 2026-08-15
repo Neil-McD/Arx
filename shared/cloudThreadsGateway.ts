@@ -2,10 +2,7 @@ import { type AuthSessionLike } from "./authSession";
 import { resolveConvexRuntimeToken } from "./authSession";
 import { type ConvexClient } from "./convexAuthenticatedClient";
 import { readConvexRuntimeUrl } from "./convexRuntime";
-import {
-  bootstrapGatewayAuthContextIfAvailable,
-  readGatewayConvexIdMaybe,
-} from "./cloudGateway";
+import { bootstrapGatewayAuthContextIfAvailable } from "./cloudGateway";
 import type { RuntimeEngine } from "./runtimeEngine";
 import {
   MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH,
@@ -17,7 +14,6 @@ export type CloudThreadRecordInput = {
   title?: string | null;
   modelId?: string | null;
   runtimeEngine?: RuntimeEngine | null;
-  projectId?: string | null;
   communityId?: string | null;
   contextVersion?: number | null;
 };
@@ -57,7 +53,6 @@ export async function ensureCloudThreadRecord(params: {
   const { client, authSubject } = bootstrapped;
   const threadId = String(params.thread.threadId ?? "").trim();
   if (!threadId) return;
-  const maybeProjectId = readGatewayConvexIdMaybe(params.thread.projectId);
   await client.mutation("threads:ensureCloudThread" as any, {
     authSubject,
     threadKey: threadId,
@@ -65,7 +60,6 @@ export async function ensureCloudThreadRecord(params: {
     titleSource: "auto",
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
     runtimeEngine: params.thread.runtimeEngine ?? undefined,
-    projectId: maybeProjectId ?? undefined,
     communityId: String(params.thread.communityId ?? "").trim() || undefined,
     contextVersion:
       typeof params.thread.contextVersion === "number" && Number.isFinite(params.thread.contextVersion)
@@ -98,7 +92,6 @@ export async function updateCloudThreadRecord(params: {
     });
     return;
   }
-  const maybeProjectId = readGatewayConvexIdMaybe(params.thread.projectId);
   await client.mutation("threads:updateCloudThread" as any, {
     authSubject,
     threadId: internalThreadId,
@@ -106,7 +99,6 @@ export async function updateCloudThreadRecord(params: {
     titleSource: "auto",
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
     runtimeEngine: params.thread.runtimeEngine ?? undefined,
-    projectId: maybeProjectId ?? undefined,
     nowMs: params.nowMs ?? Date.now(),
   });
 }

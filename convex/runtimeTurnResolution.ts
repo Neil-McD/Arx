@@ -109,7 +109,6 @@ export type RuntimeTurnResolution = {
     _id: string;
     communityId?: unknown;
     contextVersion?: unknown;
-    projectId?: unknown;
     workingState?: ThreadWorkingStatePrompt | null;
   };
   conversationMessages: Array<{
@@ -133,7 +132,6 @@ export type RuntimeTurnResolution = {
   runtimeCommunitySystemPrompt: string | null;
   runtimeCommunityLensAuthority: CommunityLensAuthority | null;
   runtimeCommunityFunnelSlot: CommunityCustomFunnelSlot | null;
-  runtimeProjectId: string | null;
   allowedToolNames: RetrievalToolName[];
   resolvedRuntimeCapabilityFamilies: RuntimeCapabilityFamily[];
   resolvedRuntimeHarnessProfile: string;
@@ -315,7 +313,7 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       ownerId: actor.dbUserId,
       threadKey,
     },
-  )) as { _id?: string; communityId?: unknown; contextVersion?: unknown; projectId?: unknown; workingState?: unknown } | null;
+  )) as { _id?: string; communityId?: unknown; contextVersion?: unknown; workingState?: unknown } | null;
   if (!ownedThread?._id) {
     return {
       ok: false,
@@ -789,12 +787,11 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
     communityInferenceAdmission = admission;
   }
 
-  const runtimeProjectId = String(ownedThread.projectId ?? "").trim() || null;
   const resolvedRuntimeCapabilityFamilies = restrictCapabilityFamiliesForInvocationSurface({
     invocationSurface,
     capabilityFamilies: resolveActiveCapabilityFamiliesFromEntitlements({
       entitledCapabilityFamilies,
-      hasProjectContext: Boolean(runtimeProjectId),
+      hasProjectContext: false,
       hasCommunityContext: Boolean(runtimeCommunityId),
     }) as RuntimeCapabilityFamily[],
   });
@@ -846,7 +843,6 @@ export async function resolveAuthenticatedRuntimeTurn(args: {
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
       runtimeCommunityFunnelSlot,
-      runtimeProjectId,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile: resolveHarnessProfileFromActiveCapabilities({

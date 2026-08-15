@@ -24,7 +24,6 @@ const builderEnvelope = buildRuntimeTurnEnvelope({
   },
   threadId: "thread_1",
   communityId: "community_1",
-  projectId: null,
   communityResourceLane: {
     lane: "builder",
     can_read_live_resources: true,
@@ -88,7 +87,6 @@ const continuationEnvelope = buildRuntimeTurnEnvelope({
     currentStep: "Inspect the auth callback.",
   },
   threadId: "thread_continuation",
-  projectId: "project_1",
   allowedToolNames: ["read", "grep", "bash"],
 });
 assert.equal(

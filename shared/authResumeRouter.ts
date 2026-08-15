@@ -2,9 +2,6 @@ import type { PendingAuthIntent } from "./authResumeState";
 
 type PendingAuthIntentHandlers = {
   select_model: (payload: Extract<PendingAuthIntent, { reason: "select_model" }>["payload"]) => boolean | Promise<boolean>;
-  open_workspace_draft: (
-    payload: Extract<PendingAuthIntent, { reason: "open_workspace_draft" }>["payload"],
-  ) => boolean | Promise<boolean>;
   connect_provider: (payload: Extract<PendingAuthIntent, { reason: "connect_provider" }>["payload"]) => boolean | Promise<boolean>;
   create_community: (payload: Extract<PendingAuthIntent, { reason: "create_community" }>["payload"]) => boolean | Promise<boolean>;
   redeem_purchase_claim: (
@@ -31,8 +28,6 @@ export function routePendingAuthIntent(
   switch (intent.reason) {
     case "select_model":
       return handlers.select_model(intent.payload);
-    case "open_workspace_draft":
-      return handlers.open_workspace_draft(intent.payload);
     case "connect_provider":
       return handlers.connect_provider(intent.payload);
     case "create_community":

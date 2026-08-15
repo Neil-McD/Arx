@@ -12,7 +12,6 @@ import {
 export type ProviderCostEntryInput = {
   costKey: string;
   userId?: any;
-  projectId?: any;
   communityId?: any;
   runId?: string | null;
   category: ProviderCostCategory;
@@ -82,7 +81,6 @@ function createProviderCostEntryRow(
   return {
     costKey,
     ...(args.userId ? { userId: args.userId } : {}),
-    ...(args.projectId ? { projectId: args.projectId } : {}),
     ...(args.communityId ? { communityId: args.communityId } : {}),
     ...(normalizeOptionalString(args.runId)
       ? { runId: normalizeOptionalString(args.runId) }
@@ -120,7 +118,6 @@ function resolveProviderCostIdentityMismatch(
     "component",
     "billingDisposition",
     "userId",
-    "projectId",
     "communityId",
     "linkedCreditKey",
   ] as const;

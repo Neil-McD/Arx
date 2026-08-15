@@ -360,7 +360,7 @@ export default defineSchema({
   workspaceComputeCharges: defineTable({
     chargeKey: v.string(),
     userId: v.id("users"),
-    projectId: v.optional(v.id("cloudProjects")),
+    projectId: v.optional(v.string()),
     runId: v.string(),
     providerSandboxId: v.string(),
     startedAt: v.number(),
@@ -389,7 +389,7 @@ export default defineSchema({
   providerCostEntries: defineTable({
     costKey: v.string(),
     userId: v.optional(v.id("users")),
-    projectId: v.optional(v.id("cloudProjects")),
+    projectId: v.optional(v.string()),
     communityId: v.optional(v.id("communities")),
     runId: v.optional(v.string()),
     category: v.union(
@@ -432,7 +432,6 @@ export default defineSchema({
   })
     .index("by_costKey", ["costKey"])
     .index("by_user_period", ["userId", "periodStart"])
-    .index("by_project_period", ["projectId", "periodStart"])
     .index("by_community_period", ["communityId", "periodStart"])
     .index("by_category_period", ["category", "periodStart"])
     .index("by_component_period", ["component", "periodStart"])
@@ -468,7 +467,7 @@ export default defineSchema({
     creditKey: v.string(),
     userId: v.id("users"),
     communityId: v.optional(v.id("communities")),
-    projectId: v.optional(v.id("cloudProjects")),
+    projectId: v.optional(v.string()),
     runId: v.optional(v.string()),
     toolName: v.string(),
     action: v.optional(v.string()),
@@ -510,53 +509,6 @@ export default defineSchema({
     .index("by_status_settledAt", ["status", "settledAt"])
     .index("by_status_expiresAt", ["status", "expiresAt"])
     .index("by_pendingSettlementStatus_nextAttemptAt", ["pendingSettlementStatus", "pendingSettlementNextAttemptAt"]),
-
-  workspaceDirectorySnapshots: defineTable({
-    projectId: v.id("cloudProjects"),
-    ownerId: v.id("users"),
-    path: v.string(),
-    providerId: v.optional(v.literal("blaxel")),
-    providerSandboxId: v.optional(v.string()),
-    entries: v.array(v.object({
-      name: v.string(),
-      path: v.string(),
-      type: v.union(v.literal("directory"), v.literal("file")),
-      extension: v.union(v.string(), v.null()),
-      heavy: v.boolean(),
-      previewable: v.boolean(),
-    })),
-    truncated: v.boolean(),
-    checkedAt: v.number(),
-    staleAt: v.optional(v.number()),
-    staleReason: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_project_path", ["projectId", "path"])
-    .index("by_project_updatedAt", ["projectId", "updatedAt"]),
-
-  workspaceFilePreviewSnapshots: defineTable({
-    projectId: v.id("cloudProjects"),
-    ownerId: v.id("users"),
-    path: v.string(),
-    providerId: v.optional(v.literal("blaxel")),
-    providerSandboxId: v.optional(v.string()),
-    name: v.string(),
-    type: v.union(v.literal("file"), v.literal("directory"), v.literal("other")),
-    previewKind: v.union(v.literal("text"), v.literal("directory"), v.literal("unsupported")),
-    sizeBytes: v.optional(v.union(v.number(), v.null())),
-    mimeType: v.optional(v.union(v.string(), v.null())),
-    text: v.optional(v.string()),
-    truncated: v.optional(v.boolean()),
-    reason: v.optional(v.string()),
-    checkedAt: v.number(),
-    staleAt: v.optional(v.number()),
-    staleReason: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_project_path", ["projectId", "path"])
-    .index("by_project_updatedAt", ["projectId", "updatedAt"]),
 
   criticalAuditEvents: defineTable({
     eventKey: v.string(),
@@ -612,6 +564,7 @@ export default defineSchema({
     surface: v.optional(v.string()),
     userId: v.optional(v.id("users")),
     communityId: v.optional(v.id("communities")),
+    // Release-A compatibility only. No active writer may set this field.
     projectId: v.optional(v.id("cloudProjects")),
     threadId: v.optional(v.id("threads")),
     runId: v.optional(v.string()),
@@ -1053,172 +1006,15 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
 
-  cloudProjects: defineTable({
-    ownerId: v.id("users"),
-    name: v.optional(v.string()),
-    slug: v.optional(v.string()),
-    description: v.optional(v.string()),
-    instructions: v.optional(v.string()),
-    contextLinks: v.optional(v.array(v.object({
-      title: v.optional(v.string()),
-      url: v.string(),
-    }))),
-    status: v.optional(v.string()),
-    providerSandboxId: v.optional(v.string()),
-    providerSandboxProviderId: v.optional(
-      v.literal("blaxel"),
-    ),
-    providerSandboxState: v.optional(v.string()),
-    providerSandboxLastSeenAt: v.optional(v.number()),
-    providerSandboxLastActivityAt: v.optional(v.number()),
-    providerSandboxStartedAt: v.optional(v.number()),
-    providerSandboxIdleExpiresAt: v.optional(v.number()),
-    providerSandboxCreditReservationKey: v.optional(v.string()),
-    providerSandboxCreditBudgetCredits: v.optional(v.number()),
-    providerSandboxCreditBudgetExpiresAt: v.optional(v.number()),
-    providerVolumeId: v.optional(v.string()),
-    providerVolumeProviderId: v.optional(
-      v.literal("blaxel"),
-    ),
-    providerVolumeName: v.optional(v.string()),
-    providerVolumeState: v.optional(v.string()),
-    providerVolumeLastSeenAt: v.optional(v.number()),
-    workspaceVolumeRetentionState: v.optional(
-      v.union(
-        v.literal("active"),
-        v.literal("suspended"),
-        v.literal("pending_delete"),
-        v.literal("deleted"),
-      ),
-    ),
-    workspaceVolumeRetainUntil: v.optional(v.number()),
-    workspaceVolumeDeleteAfter: v.optional(v.number()),
-    workspaceVolumeDeletionWarningSentAt: v.optional(v.number()),
-    workspaceVolumeDeletedAt: v.optional(v.number()),
-    workspaceVolumeDeletionReason: v.optional(v.string()),
-    workspaceDirectorySnapshotInvalidatedAt: v.optional(v.number()),
-    workspaceDirectorySnapshotInvalidationReason: v.optional(v.string()),
-    importLeaseExpiresAt: v.optional(v.number()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_owner", ["ownerId"])
-    .index("by_providerVolumeProviderId_updatedAt", [
-      "providerVolumeProviderId",
-      "updatedAt",
-    ])
-    .index("by_sandboxProvider_creditBudgetExpiresAt", [
-      "providerSandboxProviderId",
-      "providerSandboxCreditBudgetExpiresAt",
-    ])
-    .index("by_workspaceVolumeRetentionState_deleteAfter", [
-      "workspaceVolumeRetentionState",
-      "workspaceVolumeDeleteAfter",
-    ]),
-
-  workspaceTerminalSessions: defineTable({
-    ownerId: v.id("users"),
-    projectId: v.id("cloudProjects"),
-    threadId: v.optional(v.id("threads")),
-    // Compatibility tombstone for production rows written before terminal
-    // ownership moved to lifecycleOwner + startedByRunId. Active code must not
-    // write or read this field.
-    runIdStartedBy: v.optional(v.string()),
-    lifecycleOwner: v.optional(
-      v.literal("project_background"),
-    ),
-    startedByThreadId: v.optional(v.string()),
-    startedByRunId: v.optional(v.string()),
-    providerSandboxId: v.string(),
-    providerSandboxProviderId: v.optional(
-      v.literal("blaxel"),
-    ),
-    providerSessionId: v.string(),
-    providerCommandId: v.string(),
-    command: v.string(),
-    cwd: v.optional(v.string()),
-    previewPort: v.optional(v.number()),
-    previewPath: v.optional(v.string()),
-    previewLabel: v.optional(v.string()),
-    status: v.union(
-      v.literal("starting"),
-      v.literal("running"),
-      v.literal("exited"),
-      v.literal("failed"),
-      v.literal("stopped"),
-    ),
-    startedAt: v.number(),
-    updatedAt: v.number(),
-    finishedAt: v.optional(v.number()),
-    exitCode: v.optional(v.number()),
-    completionRecordedAt: v.optional(v.number()),
-    completionReason: v.optional(
-      v.union(
-        v.literal("exited"),
-        v.literal("failed"),
-        v.literal("stopped"),
-        v.literal("sandbox_missing"),
-        v.literal("session_missing"),
-        v.literal("command_missing"),
-        v.literal("preflight_failed"),
-      ),
-    ),
-    lastOutputTail: v.optional(v.string()),
-    lastHeartbeatAt: v.optional(v.number()),
-    healthStatus: v.optional(
-      v.union(
-        v.literal("unknown"),
-        v.literal("starting"),
-        v.literal("healthy"),
-        v.literal("unhealthy"),
-        v.literal("exited"),
-        v.literal("stale"),
-      ),
-    ),
-    healthSummary: v.optional(v.string()),
-    previewStatus: v.optional(
-      v.union(
-        v.literal("none"),
-        v.literal("starting"),
-        v.literal("running"),
-        v.literal("blank"),
-        v.literal("render_error_suspected"),
-        v.literal("unreachable"),
-        v.literal("server_exited"),
-      ),
-    ),
-    lastPreviewProbeAt: v.optional(v.number()),
-    lastPreviewProbeSummary: v.optional(v.string()),
-    lastBrowserObservationAt: v.optional(v.number()),
-    lastBrowserObservationSummary: v.optional(v.string()),
-    previewTransportStatus: v.optional(
-      v.union(
-        v.literal("not_started"),
-        v.literal("loading"),
-        v.literal("loaded"),
-        v.literal("failed"),
-      ),
-    ),
-    previewInspectionStatus: v.optional(
-      v.union(
-        v.literal("not_attempted"),
-        v.literal("same_origin_dom"),
-        v.literal("cross_origin_uninspectable"),
-        v.literal("dom_unavailable"),
-      ),
-    ),
-    previewRenderStatus: v.optional(
-      v.union(
-        v.literal("unknown"),
-        v.literal("visible_content"),
-        v.literal("blank_suspected"),
-        v.literal("transport_error"),
-      ),
-    ),
-  })
-    .index("by_owner_project", ["ownerId", "projectId"])
-    .index("by_providerSessionId", ["providerSessionId"])
-    .index("by_providerSandboxId", ["providerSandboxId"]),
+  // Slice 5E Release A tombstones. All product/runtime writers are deleted;
+  // these permissive table validators exist only long enough to inventory and
+  // delete historical production rows before Release B removes the tables.
+  cloudProjects: defineTable(v.any()),
+  workspaceTerminalSessions: defineTable(v.any()),
+  workspaceDirectorySnapshots: defineTable(v.any()),
+  workspaceFilePreviewSnapshots: defineTable(v.any()),
+  polynetCodexWorkerCapacityLeases: defineTable(v.any()),
+  daytonaCodexRuntimeTargets: defineTable(v.any()),
 
   communities: defineTable({
     ownerId: v.id("users"),
@@ -3659,6 +3455,7 @@ export default defineSchema({
     threadKey: v.optional(v.string()),
     title: v.optional(v.string()),
     titleSource: v.union(v.literal("auto"), v.literal("manual")),
+    // Release-A compatibility only. No active writer may set this field.
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
     modelId: v.optional(v.string()),
@@ -3712,8 +3509,7 @@ export default defineSchema({
   })
     .index("by_owner", ["ownerId"])
     .index("by_owner_updatedAt", ["ownerId", "updatedAt"])
-    .index("by_owner_threadKey", ["ownerId", "threadKey"])
-    .index("by_project", ["projectId"]),
+    .index("by_owner_threadKey", ["ownerId", "threadKey"]),
 
   cloudMessages: defineTable({
     ownerId: v.id("users"),
@@ -3763,173 +3559,6 @@ export default defineSchema({
     .index("by_owner_createdAt", ["ownerId", "createdAt"])
     .index("by_thread", ["threadId"]),
 
-  polynetCodexWorkerCapacityLeases: defineTable({
-    runId: v.string(),
-    ownerId: v.id("users"),
-    threadId: v.id("threads"),
-    projectId: v.optional(v.id("cloudProjects")),
-    status: v.union(
-      v.literal("active"),
-      v.literal("released"),
-      v.literal("expired"),
-    ),
-    acquiredAt: v.number(),
-    expiresAt: v.number(),
-    releasedAt: v.optional(v.number()),
-    releaseReason: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_runId", ["runId"])
-    .index("by_owner_runId", ["ownerId", "runId"])
-    .index("by_status_expiresAt", ["status", "expiresAt"])
-    .index("by_owner_status_expiresAt", ["ownerId", "status", "expiresAt"])
-    .index("by_project_status_expiresAt", ["projectId", "status", "expiresAt"]),
-
-  daytonaCodexRuntimeTargets: defineTable({
-    ownerId: v.id("users"),
-    threadId: v.id("threads"),
-    projectId: v.optional(v.id("cloudProjects")),
-    runId: v.string(),
-    scope: v.union(v.literal("run"), v.literal("thread"), v.literal("project")),
-    provider: v.literal("daytona"),
-    sandboxId: v.optional(v.string()),
-    sandboxName: v.optional(v.string()),
-    sandboxState: v.optional(v.string()),
-    workerState: v.union(
-      v.literal("creating"),
-      v.literal("starting"),
-      v.literal("ready"),
-      v.literal("error"),
-      v.literal("released"),
-    ),
-    workspaceRoot: v.optional(v.string()),
-    workerPort: v.number(),
-    workerUrl: v.optional(v.string()),
-    workerAuthMode: v.optional(v.string()),
-    signedPreviewExpiresAt: v.optional(v.number()),
-    snapshotId: v.optional(v.string()),
-    targetRegion: v.optional(v.string()),
-    leaseRunId: v.optional(v.string()),
-    lifecycleMode: v.optional(
-      v.union(
-        v.literal("prepared_staging_reuse"),
-        v.literal("thread_ephemeral"),
-        v.literal("per_turn_ephemeral"),
-      ),
-    ),
-    providerEphemeral: v.optional(v.boolean()),
-    autoStopMinutes: v.optional(v.number()),
-    autoArchiveMinutes: v.optional(v.number()),
-    autoDeleteMinutes: v.optional(v.number()),
-    sandboxCpu: v.optional(v.number()),
-    sandboxMemoryGiB: v.optional(v.number()),
-    sandboxDiskGiB: v.optional(v.number()),
-    billingCreditKey: v.optional(v.string()),
-    billingReservedCredits: v.optional(v.number()),
-    billingIntervalStartedAt: v.optional(v.number()),
-    billingIntervalClosedAt: v.optional(v.number()),
-    billingIntervalSequence: v.optional(v.number()),
-    billingIntervalStartReason: v.optional(v.string()),
-    billingIntervalCloseReason: v.optional(v.string()),
-    billingIntervalResourceSource: v.optional(v.string()),
-    billingSettlementState: v.optional(v.string()),
-    billingSettlementReason: v.optional(v.string()),
-    billingSettlementAttemptCount: v.optional(v.number()),
-    billingSettlementCredits: v.optional(v.number()),
-    billingSettlementRawVendorCostUsd: v.optional(v.number()),
-    billingSettlementProviderCostKey: v.optional(v.string()),
-    billingSettlementCreditReservationKey: v.optional(v.string()),
-    billingSettlementCreditsDebited: v.optional(v.number()),
-    billingSettlementDurationSeconds: v.optional(v.number()),
-    billingSettlementMeasuredDurationSeconds: v.optional(v.number()),
-    billingSettlementProviderStandbyGraceSeconds: v.optional(v.number()),
-    billingSettlementErrorCode: v.optional(v.string()),
-    billingSettlementErrorMessage: v.optional(v.string()),
-    billingSettlementUpdatedAt: v.optional(v.number()),
-    providerTeardownState: v.optional(
-      v.union(
-        v.literal("pending"),
-        v.literal("skipped"),
-        v.literal("stopped"),
-        v.literal("deleted"),
-        v.literal("failed"),
-      ),
-    ),
-    providerTeardownReason: v.optional(v.string()),
-    providerTeardownAt: v.optional(v.number()),
-    providerTeardownErrorCode: v.optional(v.string()),
-    providerTeardownErrorMessage: v.optional(v.string()),
-    workspaceChangeState: v.optional(
-      v.union(
-        v.literal("unknown"),
-        v.literal("clean"),
-        v.literal("dirty"),
-        v.literal("scan_failed"),
-      ),
-    ),
-    workspaceRetentionState: v.optional(
-      v.union(
-        v.literal("none"),
-        v.literal("human_save_pending"),
-        v.literal("discarded"),
-        v.literal("saved"),
-        v.literal("expired"),
-      ),
-    ),
-    workspaceRetentionExpiresAt: v.optional(v.number()),
-    workspaceMeaningfulFileCount: v.optional(v.number()),
-    workspaceMeaningfulFilePreview: v.optional(v.array(v.string())),
-    lastWorkspaceScanAt: v.optional(v.number()),
-    activePreviewPorts: v.optional(v.array(v.number())),
-    previewLeaseState: v.optional(
-      v.union(
-        v.literal("none"),
-        v.literal("active"),
-        v.literal("released"),
-        v.literal("expired"),
-      ),
-    ),
-    previewLeaseExpiresAt: v.optional(v.number()),
-    cleanupDecision: v.optional(
-      v.union(
-        v.literal("delete_clean_workspace"),
-        v.literal("delete_without_active_lease"),
-        v.literal("stop_for_human_save"),
-        v.literal("keep_running_active_preview"),
-        v.literal("keep_thread_ephemeral_reuse"),
-        v.literal("skip_prepared_staging_reuse"),
-        v.literal("retain_scan_failed"),
-        v.literal("delete_expired_retention"),
-        v.literal("cleanup_failed"),
-      ),
-    ),
-    cleanupEligibleAt: v.optional(v.number()),
-    lastHealthAt: v.optional(v.number()),
-    lastUsedAt: v.optional(v.number()),
-    releasedAt: v.optional(v.number()),
-    releaseReason: v.optional(v.string()),
-    errorCode: v.optional(v.string()),
-    errorMessage: v.optional(v.string()),
-    createdAt: v.number(),
-    updatedAt: v.number(),
-  })
-    .index("by_owner_runId", ["ownerId", "runId"])
-    .index("by_runId", ["runId"])
-    .index("by_owner_threadId", ["ownerId", "threadId"])
-    .index("by_workerState_updatedAt", ["workerState", "updatedAt"])
-    .index("by_sandboxId", ["sandboxId"])
-    .index("by_workspaceRetentionState_expiresAt", [
-      "workspaceRetentionState",
-      "workspaceRetentionExpiresAt",
-    ])
-    .index("by_previewLeaseState_expiresAt", [
-      "previewLeaseState",
-      "previewLeaseExpiresAt",
-    ])
-    .index("by_owner_workerState_lastUsedAt", ["ownerId", "workerState", "lastUsedAt"])
-    .index("by_project_workerState_lastUsedAt", ["projectId", "workerState", "lastUsedAt"]),
-
   runtimeRuns: defineTable({
     ownerId: v.id("users"),
     threadId: v.id("threads"),
@@ -3937,6 +3566,8 @@ export default defineSchema({
     lane: v.string(),
     visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
     internalFollowupKind: v.optional(v.string()),
+    // Slice 5E Release-A compatibility fields. Runtime code cannot write or
+    // consume them; the retirement operator removes them before Release B.
     projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.id("communities")),
     communityContextVersion: v.optional(v.number()),

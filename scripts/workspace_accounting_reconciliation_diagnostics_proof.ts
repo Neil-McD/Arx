@@ -27,7 +27,7 @@ const workspaceCreditsSource = read("convex/workspaceCredits.ts");
 const diagnosticsSource = sourceFromExport(
   workspaceCreditsSource,
   "getWorkspaceAccountingReconciliationDiagnosticsForOperator",
-  "export const listBlaxelStorageAccountingProjectIdsInternal",
+  "export const getWorkspaceAccountingInvariantDiagnosticsForOperator",
 );
 const providerCostEntriesSchema = sourceBetween(
   schemaSource,

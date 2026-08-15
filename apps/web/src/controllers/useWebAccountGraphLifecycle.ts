@@ -2,9 +2,9 @@ import { useCallback, useRef } from "react";
 
 import type { AuthSession } from "../auth";
 import {
-  emitWorkspaceEvent,
-  formatWorkspaceInstrumentationError,
-} from "../lib/workspaceInstrumentation";
+  emitAgentRuntimeEvent,
+  formatRuntimeInstrumentationError,
+} from "../lib/runtimeInstrumentation";
 
 type SignedOutReason = "session_lost" | "session_missing_after_bootstrap";
 
@@ -43,7 +43,7 @@ export function useWebAccountGraphLifecycle() {
     loadPhase: string,
     load: (session: AuthSession) => Promise<unknown>,
   ) => {
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name,
       status: "start",
@@ -51,26 +51,26 @@ export function useWebAccountGraphLifecycle() {
     });
     try {
       await load(session);
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name,
         status: "success",
         detail: { phase: loadPhase },
       });
     } catch (error) {
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name,
         status: "failure",
         detail: { phase: loadPhase },
-        error: formatWorkspaceInstrumentationError(error),
+        error: formatRuntimeInstrumentationError(error),
       });
       throw error;
     }
   }, []);
 
   const onSignedOut = useCallback(async (reason: SignedOutReason) => {
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name: "auth_full_signed_out_reset",
       status: "start",
@@ -78,7 +78,7 @@ export function useWebAccountGraphLifecycle() {
     });
     await actionsRef.current.resetSessionState();
     await actionsRef.current.onSignedOut(reason);
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name: "auth_full_signed_out_reset",
       status: "success",
@@ -92,7 +92,7 @@ export function useWebAccountGraphLifecycle() {
     const communitiesAreCritical =
       actions.shouldTreatCommunitiesAsCritical();
     const criticalStartedAt = Date.now();
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name: "account_graph_hydrate",
       status: "start",
@@ -112,7 +112,7 @@ export function useWebAccountGraphLifecycle() {
     const criticalFailureCount = criticalResults.filter(
       (result) => result.status === "rejected",
     ).length;
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name: "account_graph_hydrate",
       status: criticalFailureCount > 0 ? "failure" : "success",
@@ -125,7 +125,7 @@ export function useWebAccountGraphLifecycle() {
       },
       error:
         criticalFailureCount > 0
-          ? formatWorkspaceInstrumentationError(
+          ? formatRuntimeInstrumentationError(
               firstRejectedReason(criticalResults),
             )
           : undefined,
@@ -154,7 +154,7 @@ export function useWebAccountGraphLifecycle() {
       ));
     }
     const secondaryStartedAt = Date.now();
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name: "account_graph_secondary_hydrate",
       status: "start",
@@ -164,7 +164,7 @@ export function useWebAccountGraphLifecycle() {
       const failureCount = results.filter(
         (result) => result.status === "rejected",
       ).length;
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name: "account_graph_secondary_hydrate",
         status: failureCount > 0 ? "failure" : "success",
@@ -176,7 +176,7 @@ export function useWebAccountGraphLifecycle() {
         },
         error:
           failureCount > 0
-            ? formatWorkspaceInstrumentationError(firstRejectedReason(results))
+            ? formatRuntimeInstrumentationError(firstRejectedReason(results))
             : undefined,
       });
     });
@@ -185,7 +185,7 @@ export function useWebAccountGraphLifecycle() {
   const onSessionResumeReady = useCallback(async (session: AuthSession) => {
     const userId = String(session.user?.id ?? "").trim() || null;
     const actions = actionsRef.current;
-    emitWorkspaceEvent({
+    emitAgentRuntimeEvent({
       scope: "lifecycle",
       name: "account_graph_refresh",
       status: "start",
@@ -209,7 +209,7 @@ export function useWebAccountGraphLifecycle() {
       const failureCount = results.filter(
         (result) => result.status === "rejected",
       ).length;
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name: "account_graph_refresh",
         status: failureCount > 0 ? "failure" : "success",
@@ -221,7 +221,7 @@ export function useWebAccountGraphLifecycle() {
         },
         error:
           failureCount > 0
-            ? formatWorkspaceInstrumentationError(firstRejectedReason(results))
+            ? formatRuntimeInstrumentationError(firstRejectedReason(results))
             : undefined,
       });
     });

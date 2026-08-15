@@ -412,7 +412,6 @@ export async function handleRuntimeTurnRequest(args: {
       runtimeCommunitySystemPrompt,
       runtimeCommunityLensAuthority,
       runtimeCommunityFunnelSlot,
-      runtimeProjectId,
       allowedToolNames,
       resolvedRuntimeCapabilityFamilies,
       resolvedRuntimeHarnessProfile,
@@ -450,23 +449,12 @@ export async function handleRuntimeTurnRequest(args: {
     const runtimeEngineResolution = resolvePolynetRuntimeEngine({
       requestedRuntimeEngine,
     });
-    if (!runtimeEngineResolution.ok) {
-      return runtimeJsonResponse(runtimeEngineResolution.status, {
-        ok: false,
-        code: runtimeEngineResolution.code,
-        error: runtimeEngineResolution.code,
-        message: runtimeEngineResolution.message,
-        runtime_engine_requested: runtimeEngineResolution.requestedRuntimeEngine,
-        runtime_engine_resolved: null,
-      });
-    }
     const runtimeEngineId = runtimeEngineResolution.engineId;
     runtimeTurnLogContext = {
       runId,
       threadId: String(ownedThread._id),
       threadKey,
       userId: actor.dbUserId,
-      projectId: runtimeProjectId ?? undefined,
       communityId: runtimeCommunityId ?? undefined,
       requestedModelId,
       lane,
@@ -484,7 +472,6 @@ export async function handleRuntimeTurnRequest(args: {
       runId,
       lane,
       visibility: runVisibility,
-      projectId: runtimeProjectId ?? undefined,
       communityId: runtimeCommunityId ? (runtimeCommunityId as any) : undefined,
       communityContextVersion: runtimeCommunityId ? runtimeCommunityContextVersion : undefined,
       modelId: requestedModelId,
@@ -706,8 +693,6 @@ export async function handleRuntimeTurnRequest(args: {
           ctx,
           ownerId: actor.dbUserId,
           threadId: ownedThread._id,
-          projectId: runtimeProjectId,
-          authSubject: actor.authSubject,
           runId,
           latestUserText,
           runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
@@ -766,8 +751,6 @@ export async function handleRuntimeTurnRequest(args: {
             ctx,
             ownerId: actor.dbUserId,
             threadId: ownedThread._id,
-            projectId: runtimeProjectId,
-            authSubject: actor.authSubject,
             runId,
             latestUserText,
             runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
@@ -902,8 +885,6 @@ export async function handleRuntimeTurnRequest(args: {
           ctx,
           ownerId: actor.dbUserId,
           threadId: ownedThread._id,
-          projectId: runtimeProjectId,
-          authSubject: actor.authSubject,
           runId,
           latestUserText,
           runtimeTurnEnvelope: runtimeTurnEnvelopeForRun,
@@ -1143,7 +1124,6 @@ export async function handleRuntimeTurnRequest(args: {
       payload: {
         run_id: runId,
         thread_id: String(ownedThread._id),
-        project_id: runtimeProjectId ?? null,
         community_id: runtimeCommunityId ?? null,
         community_context_version: runtimeCommunityId ? runtimeCommunityContextVersion : null,
         community_lens_authority:
@@ -1246,7 +1226,6 @@ export async function handleRuntimeTurnRequest(args: {
             userId: actor.dbUserId,
             threadId: String(ownedThread._id),
             authSubject: actor.authSubject,
-            projectId: runtimeProjectId,
             requestedModelId,
             inferenceSource,
             modelRef,
@@ -1625,7 +1604,6 @@ export async function handleRuntimeTurnRequest(args: {
         userId: actor.dbUserId,
         threadId: String(ownedThread._id),
         authSubject: actor.authSubject,
-        projectId: runtimeProjectId,
         requestedModelId,
         inferenceSource,
         modelRef,

@@ -116,9 +116,6 @@ Grounded on 2026-08-13 against production and `origin/main` commit
 
 One-second elapsed-time and typing-expiry display timers do not call a backend
 and are excluded. Focus/animation/toast/image-cleanup timers are also excluded.
-Preview metrics are event-driven through load, resize, `ResizeObserver`, and
-`MutationObserver`; their redundant 1.2-second fixed timer is retired.
-
 #### Fixed-interval source inventory
 
 CI admits exactly these six first-party `setInterval` call sites:
@@ -146,7 +143,7 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 
 #### Convex scheduled jobs
 
-`convex/crons.ts` currently declares 8 jobs:
+`convex/crons.ts` currently declares 6 jobs:
 
 | Job | Cadence | Current batch bound | Classification |
 | --- | --- | --- | --- |
@@ -154,8 +151,6 @@ terminal execution must leave no timer, subscription, or scheduled successor.
 | Recover distribution attribution deliveries | 5 minutes | 25 | delivery repair; keep only with indexed due-work lookup |
 | Recover archived community billing cleanup | 5 minutes | 3 | billing repair; keep |
 | Enqueue 24h event reminder emails | 15 minutes | 500 events, 500 recipients each | product job; verify due-window indexes and fanout accounting |
-| Finalize expired Blaxel project workspace leases | 15 minutes | 100 | infrastructure repair; keep |
-| Record Blaxel storage provider costs | 60 minutes | 100 rows x 5 pages | accounting; keep |
 | Community memory sweep | 6 hours | 500 oldest due communities across bounded indexed sources | AI-triggering job; idle communities are absent, metabolism is outcome-revision gated, and compiler admission retains founder funding plus per-community caps |
 | Process pending mention emails | 15 minutes | implementation-owned | notification job; declare an explicit batch bound in this registry |
 

@@ -33,7 +33,6 @@ function listRecurringSourceFiles(relativeDirectory: string): string[] {
 
 function listSetIntervalCallSites(): Array<{ file: string; line: number }> {
   const sourceFiles = [
-    ...listRecurringSourceFiles("apps/preview-proxy"),
     ...listRecurringSourceFiles("apps/web/src"),
     ...listRecurringSourceFiles("convex"),
     ...listRecurringSourceFiles("shared"),
@@ -61,7 +60,6 @@ const activeCommunityController = read(
 );
 const checkoutFinalizeController = read("shared/useCheckoutFinalizeController.ts");
 const realtimeAuth = read("shared/convexRealtimeAuth.ts");
-const previewProxy = read("apps/preview-proxy/server.js");
 const runtimeCancellation = read("convex/runtimeCancellation.ts");
 const communityPresenceContract = read("shared/communityPresenceContract.ts");
 const schema = read("convex/schema.ts");
@@ -115,7 +113,7 @@ const declaredCronNames = Array.from(
   crons.matchAll(/crons\.(?:interval|daily)\(\s*\n\s*"([^"]+)"/g),
   (match) => match[1]!,
 );
-assert.equal(declaredCronNames.length, 8, "every Convex cron must remain inventoried");
+assert.equal(declaredCronNames.length, 6, "every Convex cron must remain inventoried");
 for (const cronName of declaredCronNames) {
   assert.ok(
     contract.toLowerCase().includes(cronName.toLowerCase()),
@@ -173,17 +171,6 @@ assert.match(
   /Weekly community digests are a protected MVP engagement requirement[\s\S]*at most 5 communities claimed[\s\S]*at most 50 recipients from one community batch[\s\S]*at most 100 recipients across the entire run[\s\S]*at most 8 rendered content items/,
   "weekly digest requirement and hard cost ceilings must remain explicit",
 );
-assert.doesNotMatch(
-  previewProxy,
-  /\b(?:(?:globalThis|window)\.)?setInterval\s*\(/,
-  "preview metrics must remain event-driven instead of polling forever",
-);
-assert.match(
-  previewProxy,
-  /window\.addEventListener\("resize", scheduleMetrics\)[\s\S]*ResizeObserver[\s\S]*MutationObserver/,
-  "preview metrics must retain event-driven layout and content observation",
-);
-
 assert.match(
   contract,
   /Community attention subscription[\s\S]*one pooled realtime transport[\s\S]*no fixed poll[\s\S]*scope-bounded/,

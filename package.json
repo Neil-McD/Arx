@@ -66,7 +66,7 @@
     "check:global-settings-surface-contract": "tsx scripts/global_settings_surface_contract_proof.ts",
     "check:app-theme-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/app_theme_contract_proof.ts",
     "check:workspace-account-lifecycle-retirement-contract": "tsx scripts/workspace_account_lifecycle_retirement_contract_proof.ts",
-    "check:workspace-surface-quarantine-contract": "tsx scripts/workspace_surface_quarantine_contract_proof.ts",
+    "check:workspace-surface-extinction-contract": "tsx scripts/workspace_surface_extinction_contract_proof.ts",
     "check:app-shell-decomposition-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/app_shell_decomposition_contract_proof.ts",
     "check:web-route-access-boundary-proof": "tsx scripts/web_route_access_boundary_contract_proof.ts",
     "check:critical-audit-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/critical_audit_events_proof.ts",
@@ -191,14 +191,6 @@
     "check:runtime-context-fragments-redaction-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_context_fragments_redaction_proof.ts",
     "check:runtime-context-fragments-continuity-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_context_fragments_continuity_proof.ts",
     "check:runtime-skill-inventory-budget-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_skill_inventory_budget_proof.ts",
-    "check:project-context-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/project_context_contract_proof.ts",
-    "check:workspace-resource-truth-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_resource_truth_proof.ts",
-    "check:workspace-resource-inventory-diagnostic-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_resource_inventory_diagnostic_proof.ts",
-    "check:workspace-provider-pointer-production-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_provider_pointer_production_audit_proof.ts",
-    "audit:workspace-provider-pointers:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_provider_pointer_production_audit.ts",
-    "check:workspace-provider-pointer-production-preflight-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_provider_pointer_production_preflight_proof.ts",
-    "preflight:workspace-provider-pointers:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_provider_pointer_production_preflight.ts --mode=gate",
-    "plan:workspace-provider-pointer-clear:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_provider_pointer_production_preflight.ts --mode=plan",
     "check:provider-cost-accounting-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/provider_cost_accounting_contract_proof.ts",
     "check:workspace-accounting-reconciliation-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_accounting_reconciliation_diagnostics_proof.ts",
     "check:workspace-accounting-invariant-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_accounting_invariant_proof.ts",
@@ -206,7 +198,6 @@
     "smoke:workspace-credit-accounting-health": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_health_smoke.ts",
     "smoke:workspace-credit-accounting-prod-data": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_prod_data_smoke.ts",
     "plan:workspace-credit-accounting-reconciliation-backlog:prod": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_credit_accounting_reconciliation_backlog_plan.ts",
-    "check:workspace-file-preview-cache-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/workspace_file_preview_cache_proof.ts",
     "check:runtime-prompt-layout-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_prompt_layout_proof.ts",
     "check:platform-harness-prompt-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/platform_harness_prompt_contract_proof.ts",
     "check:runtime-failure-finalization-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_failure_finalization_proof.ts",
@@ -286,7 +277,6 @@
     "check:community-everybody-mention-row-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_everybody_mention_row_contract_proof.ts"
   },
   "dependencies": {
-    "@blaxel/core": "^0.2.94",
     "convex": "^1.42.1",
     "fflate": "^0.8.3",
     "highlight.js": "^11.11.1",
@@ -314,17 +304,6 @@
     "vitest": "^4.1.10"
   },
   "overrides": {
-    "@hono/node-server": "2.0.11",
-    "@modelcontextprotocol/sdk": "1.29.0",
-    "@hey-api/openapi-ts": "0.97.3",
-    "axios": "1.18.1",
-    "body-parser": "2.3.0",
-    "brace-expansion": "5.0.9",
-    "fast-uri": "4.1.2",
-    "form-data": "^4.0.6",
-    "hono": "4.12.34",
-    "ip-address": "10.4.0",
-    "js-yaml": "5.2.2",
     "nanoid": "3.3.18"
   }
 }

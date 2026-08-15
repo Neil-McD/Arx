@@ -17,7 +17,7 @@ const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const communityResources = read("convex/communityResources.ts");
 const runtimePolicy = read("shared/runtimeToolPolicy.ts");
 const runtimeInvocationSurface = read("shared/runtimeInvocationSurface.ts");
-const workspaceCredits = read("shared/workspaceCredits.ts");
+const providerPricing = read("shared/providerPricing.ts");
 
 assert.match(packageJson, /"check:founder-paid-tool-accounting-proof"/);
 assert.match(founderPlan, /POLYNET_FOUNDER_PLAN_INCLUDED_COST_MICROS = 20_000_000/);
@@ -76,7 +76,7 @@ for (const toolName of ["web_crawl", "web_research"]) {
   assert.match(branch, /markFounderPaidToolProviderStarted\(\{/);
   assert.match(branch, /toolCallId: String\(params\.toolCallId \?\? ""\)\.trim\(\)/);
   assert.match(branch, /settleFounderPaidToolFundingSession\(\{/);
-  assert.doesNotMatch(branch, /recordPlatformToolCostBestEffort\(\{/);
+  assert.doesNotMatch(branch, /recordVoiceProviderCostBestEffort\(\{/);
 }
 const webResearchBranchStart = runtimeAgentLoop.indexOf('if (params.toolName === "web_research")');
 const webResearchBranch = runtimeAgentLoop.slice(webResearchBranchStart, webResearchBranchStart + 12_000);
@@ -104,8 +104,8 @@ assert.match(
   runtimeInvocationSurface,
   /MEMBER_AGENT_DOCK_TOOL_NAME_SET[\s\S]*"web_research"[\s\S]*"web_crawl"/,
 );
-assert.doesNotMatch(workspaceCredits, /WEB_RESEARCH_CREDITS_PER_CALL/);
-assert.doesNotMatch(workspaceCredits, /priceWebResearchCredits/);
-assert.doesNotMatch(workspaceCredits, /priceFixedPaidToolCredits/);
+assert.doesNotMatch(providerPricing, /WEB_RESEARCH_CREDITS_PER_CALL/);
+assert.doesNotMatch(providerPricing, /priceWebResearchCredits/);
+assert.doesNotMatch(providerPricing, /priceFixedPaidToolCredits/);
 
 console.log("PASS founder paid tool accounting contract proof");

@@ -8,7 +8,7 @@ import {
   PAID_TOOL_LEDGER_TOOL_NAMES,
   PAID_TOOL_TARGET_GROSS_MARGIN_BPS,
   WORKSPACE_CREDITS_PER_USD,
-} from "../shared/workspaceCredits";
+} from "../shared/historicalToolCredits";
 import {
   ACCOUNT_SETUP_MISSING_FIELDS,
   ACCOUNT_SETUP_STEPS,
@@ -403,7 +403,6 @@ function mapDiagnosticEvent(row: any) {
     surface: row.surface ?? null,
     userId: row.userId ? String(row.userId) : null,
     communityId: row.communityId ? String(row.communityId) : null,
-    projectId: row.projectId ? String(row.projectId) : null,
     threadId: row.threadId ? String(row.threadId) : null,
     runId: row.runId ?? null,
     requestId: row.requestId ?? null,

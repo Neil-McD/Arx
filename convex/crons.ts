@@ -38,25 +38,6 @@ crons.interval(
   },
 );
 
-crons.interval(
-  "finalize expired blaxel project workspace leases",
-  { minutes: 15 },
-  (internal as any).blaxelWorkspaceWake.finalizeExpiredBlaxelProjectWorkspaceLeasesInternal,
-  {
-    limit: 100,
-  },
-);
-
-crons.interval(
-  "record blaxel storage provider costs",
-  { minutes: 60 },
-  (internal as any).workspaceCredits.recordBlaxelStorageProviderCostsInternal,
-  {
-    pageSize: 100,
-    maxPages: 5,
-  },
-);
-
 // Ignition (contract Amendment v1.1): every 6 hours, refresh each community's
 // compiler digest (free, deterministic) and knock for a memory cycle. The
 // knock is triple-gated — owner off-switch, 2-cycles/day cap, and a delta

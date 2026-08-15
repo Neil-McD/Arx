@@ -7,12 +7,6 @@ import {
 
 const fragments = buildRuntimeContextFragmentsFromParts({
   latestUserText: "What is happening in this community?",
-  projectContext: {
-    label: "Community research",
-    description: "Inspect only authorized product context.",
-    instructions: null,
-    links: [],
-  },
   threadWorkingState: {
     goal: "Produce a verified community summary.",
     currentStep: "Read current chat, resources, events, and members.",
@@ -30,10 +24,10 @@ const fragments = buildRuntimeContextFragmentsFromParts({
 });
 assert.deepEqual(
   fragments.map((fragment) => fragment.kind),
-  ["project_context", "working_state", "recent_tool_attempts"],
+  ["working_state", "recent_tool_attempts"],
 );
 const rendered = renderRuntimeContextFragmentsForPrompt(fragments);
-assert.match(rendered, /PROJECT_CONTEXT/);
+assert.doesNotMatch(rendered, /PROJECT_CONTEXT/);
 assert.match(rendered, /THREAD_WORKING_STATE/);
 assert.match(rendered, /polynet_search error/);
 assert.doesNotMatch(rendered, /WORKSPACE_PROCESS_CONTEXT|active terminal|preview_process/);

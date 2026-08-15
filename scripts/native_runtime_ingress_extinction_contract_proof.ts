@@ -49,7 +49,6 @@ assert.deepEqual(resolvePolynetRuntimeEngine({ requestedRuntimeEngine: null }), 
   runtimeEngineSource: "default",
   engineId: "runtime_convex",
 });
-assert.equal(resolvePolynetRuntimeEngine({ requestedRuntimeEngine: "codex" }).ok, false);
 
 for (const path of [
   "convex/daytonaCodexRuntimeTargetActions.ts",
@@ -74,6 +73,7 @@ const schema = read("convex/schema.ts");
 assert.doesNotMatch(handlers, /runtimeExecutionMode|polynetCodexWorker|legacy_project_workspace/);
 assert.match(resolution, /code: "invalid_invocation_surface"/);
 assert.match(resolution, /code: "unsupported_runtime_engine"/);
+assert.doesNotMatch(read("shared/runtimeEngine.ts"), /codex|workspace/i);
 assert.doesNotMatch(
   generatedApi,
   /workspaceTerminals|daytonaCodexRuntimeTarget|getCloudRuntimeRunDaytonaPreviewSession|getCloudRuntimeRunComputerUseLiveSession/,
@@ -83,10 +83,10 @@ assert.doesNotMatch(
   /threads:(?:getCloudRuntimeRunDaytonaPreviewSession|getCloudRuntimeRunComputerUseLiveSession|captureCloudRuntimeRunComputerUseScreenshot)/,
 );
 assert.doesNotMatch(packageJson, /@daytona\/sdk|polynet-codex-worker/);
-assert.match(
+assert.doesNotMatch(
   schema,
-  /daytonaCodexRuntimeTargets: defineTable/,
-  "historical target rows remain readable until a separate data migration",
+  /daytonaCodexRuntimeTargets: defineTable|polynetCodexWorkerCapacityLeases: defineTable/,
+  "the schema must not retain dead provider-runtime tables",
 );
 assert.match(read("convex/httpMcp.ts"), /path: "\/runtime\/mcp"/);
 

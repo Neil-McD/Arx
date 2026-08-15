@@ -58,7 +58,6 @@ export type UseWebTurnRunnerControllerArgs<
     title?: string | null;
     model_id?: string | null;
     runtime_engine?: RuntimeEngine | null;
-    project_id?: string | null;
     community_id?: string | null;
     context_version?: number | null;
   } | null;

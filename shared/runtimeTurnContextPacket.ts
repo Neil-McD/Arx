@@ -1,9 +1,5 @@
 import type { ThreadWorkingStatePrompt } from "./runtimePrompt.ts";
 import {
-  normalizeRuntimeProjectContext,
-  type RuntimeProjectContextPrompt,
-} from "./projectContext.ts";
-import {
   buildRuntimeContextFragmentsFromParts,
   compactRuntimeContextFragmentsForSnapshot,
   renderRuntimeContextFragmentsForPrompt,
@@ -19,7 +15,6 @@ import {
 export type RuntimeTurnContextPacket = {
   latestUserText?: string | null;
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
-  projectContext?: RuntimeProjectContextPrompt | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   recentToolAttempts: RuntimeRecentToolAttemptPrompt[];
   fragments?: RuntimeContextFragmentV1[];
@@ -36,7 +31,6 @@ export type RuntimeTurnContextSnapshotV1 = {
   capturedAt: number;
   latestUserText: string | null;
   runtimeTurnEnvelope: RuntimeTurnEnvelopeV1 | null;
-  projectContext: RuntimeProjectContextPrompt | null;
   threadWorkingState: ThreadWorkingStatePrompt | null;
   recentToolAttempts: RuntimeRecentToolAttemptPrompt[];
   fragments?: RuntimeContextFragmentV1[];
@@ -256,7 +250,6 @@ export function buildRuntimeRecentToolAttemptsFromEvents(params: {
 export function buildRuntimeTurnContextPacket(params: {
   latestUserText?: string | null;
   runtimeTurnEnvelope?: RuntimeTurnEnvelopeV1 | null;
-  projectContext?: RuntimeProjectContextPrompt | null;
   threadWorkingState?: ThreadWorkingStatePrompt | null;
   recentToolAttempts?: Array<RuntimeRecentToolAttemptPrompt | null | undefined> | null;
   runtimeRunEvents?: Array<RuntimeContextRunEvent | null | undefined> | null;
@@ -270,17 +263,14 @@ export function buildRuntimeTurnContextPacket(params: {
         )
         .slice(0, 8)
     : [];
-  const projectContext = normalizeRuntimeProjectContext(params.projectContext ?? null);
   return {
     latestUserText: params.latestUserText ?? null,
     runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
-    projectContext,
     threadWorkingState: params.threadWorkingState ?? null,
     recentToolAttempts,
     fragments: buildRuntimeContextFragmentsFromParts({
       latestUserText: params.latestUserText ?? null,
       runtimeTurnEnvelope: params.runtimeTurnEnvelope ?? null,
-      projectContext,
       threadWorkingState: params.threadWorkingState ?? null,
       recentToolAttempts,
       runtimeRunEvents: params.runtimeRunEvents ?? [],
@@ -355,7 +345,6 @@ export function buildRuntimeTurnContextSnapshot(params: {
     capturedAt,
     latestUserText: compactSnapshotString(params.packet.latestUserText, 500),
     runtimeTurnEnvelope: params.packet.runtimeTurnEnvelope ?? null,
-    projectContext: normalizeRuntimeProjectContext(params.packet.projectContext ?? null),
     threadWorkingState: compactThreadWorkingStateSnapshot(
       params.packet.threadWorkingState,
     ),
@@ -382,7 +371,6 @@ export function renderRuntimeTurnContextForPrompt(
     : buildRuntimeContextFragmentsFromParts({
         latestUserText: packet.latestUserText ?? null,
         runtimeTurnEnvelope: packet.runtimeTurnEnvelope ?? null,
-        projectContext: packet.projectContext ?? null,
         threadWorkingState: packet.threadWorkingState ?? null,
         recentToolAttempts: packet.recentToolAttempts,
         runtimeStop: packet.runtimeStop ?? null,

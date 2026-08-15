@@ -30,7 +30,7 @@ import {
 import {
   estimateWebResearchVendorCostUsd,
   type WebResearchCreditAction,
-} from "../shared/workspaceCredits";
+} from "../shared/providerPricing";
 import { founderPaidToolActionForTool } from "../shared/founderPaidTools";
 import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
 import { type RetrievalToolName } from "../shared/retrievalTools";
@@ -233,7 +233,6 @@ export async function executeRetrievalHarnessTool(params: {
   ctx: any;
   userId: string;
   authSubject?: string | null;
-  projectId?: string | null;
   runId: string;
   toolCallId?: string | null;
   communityId: string | null;
@@ -575,7 +574,6 @@ export async function executeRetrievalHarnessTool(params: {
       rawVendorCostUsd: webResearchVendorCostUsd,
       provider: "source_url_fetcher",
       evidence: "estimated",
-      projectId: params.projectId ?? undefined,
       metadata: {
         provider: "source_url_fetcher",
         final_cost_source: "estimated",
@@ -732,7 +730,6 @@ export async function executeRetrievalHarnessTool(params: {
         result.billingEvidence?.costSource === "provider_exact"
           ? "exact"
           : "estimated",
-      projectId: params.projectId ?? undefined,
       metadata: buildWebResearchCostMetadata({
         estimatedVendorCostUsd: webResearchVendorCostUsd,
         finalVendorCostUsd,
@@ -861,7 +858,6 @@ async function executeRetrievalAgentLoop(
     communityFunnelSlot?: CommunityCustomFunnelSlot | null;
     communitySystemPrompt?: string | null;
     communityContextVersion?: number | null;
-    projectId?: string | null;
     threadWorkingState?: ThreadWorkingStatePrompt | null;
     authSubject?: string | null;
     apiKeyOverride?: string | null;
@@ -927,7 +923,6 @@ async function executeRetrievalAgentLoop(
     threadWorkingState: params.threadWorkingState,
     threadId: params.threadId ?? null,
     communityId: params.communityId ?? null,
-    projectId: params.projectId ?? null,
     communityResourceLane: resolvedHarness.communityResourceLane,
     communityLensAuthority: params.communityLensAuthority ?? null,
     allowedToolNames: effectiveAllowedToolNames,
@@ -943,15 +938,12 @@ async function executeRetrievalAgentLoop(
       ctx: params.ctx,
       ownerId: params.userId,
       threadId: params.threadId ?? undefined,
-      projectId: params.projectId ?? null,
-      authSubject: params.authSubject ?? null,
       runId: params.runId,
       latestUserText: latestUserTextForRuntimeContext,
       runtimeTurnEnvelope,
       threadWorkingState: params.threadWorkingState,
     })
   ).packet;
-  const projectContext = runtimeTurnContext.projectContext ?? null;
   let memberIdentityContextMd: string | null = null;
   let memberIdentityContextStatus: MemberIdentityContextStatus = "not_applicable";
   if (params.invocationSurface === "member_agent_dock") {
@@ -993,8 +985,6 @@ async function executeRetrievalAgentLoop(
     communityLensAuthority: params.communityLensAuthority,
     agentName: params.agentName,
     agentSoul: params.agentSoul,
-    projectLabel: projectContext?.label ?? null,
-    projectDescription: projectContext?.description ?? null,
     runtimeTurnContext,
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,
@@ -1155,7 +1145,6 @@ async function executeRetrievalAgentLoop(
     threadId: params.threadId ?? null,
     communityId: params.communityId ?? null,
     communityContextVersion: params.communityContextVersion ?? null,
-    projectId: params.projectId ?? null,
     harnessName: params.harnessName,
     inferenceSource: params.inferenceSource,
     latestUserText: latestUserTextForRuntimeContext,
@@ -1735,7 +1724,6 @@ async function executeRetrievalAgentLoop(
             error,
             runId: params.runId,
             threadId: params.threadId ?? undefined,
-            projectId: params.projectId ?? undefined,
             communityId: params.communityId ?? undefined,
             inferenceSource: params.inferenceSource,
             requestedModelId: params.requestedModelId,
@@ -1881,7 +1869,6 @@ async function executeRetrievalAgentLoop(
                 userId: params.userId,
                 communityId: params.communityId ?? null,
                 authSubject: params.authSubject,
-                projectId: params.projectId,
                 runId: params.runId,
                 toolCallId: providerCallId,
                 toolName: toolName as RetrievalToolName,
@@ -1914,7 +1901,6 @@ async function executeRetrievalAgentLoop(
             runId: params.runId,
             threadId: params.threadId ?? undefined,
             communityId: params.communityId ?? undefined,
-            projectId: params.projectId ?? undefined,
             ...summarizeToolArgsForLog(toolName, normalizedArgs),
           });
           return {
@@ -1993,7 +1979,6 @@ async function executeRetrievalAgentLoop(
             providerCallId: step.providerCallId,
             iteration,
             communityId: params.communityId ?? undefined,
-            projectId: params.projectId ?? undefined,
             errorCode: toolResult.errorCode,
             errorMessage: toolResult.errorMessage,
             exitCode: toolResult.exitCode,
@@ -2104,7 +2089,6 @@ async function executeRetrievalAgentLoop(
       error,
       runId: params.runId,
       threadId: params.threadId ?? undefined,
-      projectId: params.projectId ?? undefined,
       communityId: params.communityId ?? undefined,
       inferenceSource: params.inferenceSource,
       requestedModelId: params.requestedModelId,
@@ -2154,7 +2138,6 @@ async function executeChatToolsAgentLoop(
     userId: string;
     threadId?: string | null;
     authSubject?: string | null;
-    projectId?: string | null;
     requestedModelId: string;
     inferenceSource: RuntimeInferenceSource;
     modelRef: string;

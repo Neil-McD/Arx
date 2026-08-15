@@ -35,9 +35,9 @@ import { clearOAuthCallbackParamsFromLocation } from "../../../../shared/cloudPk
 import { resolveAuthSubject } from "../../../../shared/authSession";
 import { closeAuthenticatedConvexRealtimeClientsForSubject } from "../../../../shared/convexRealtimeAuth";
 import {
-  emitWorkspaceEvent,
-  formatWorkspaceInstrumentationError,
-} from "../lib/workspaceInstrumentation";
+  emitAgentRuntimeEvent,
+  formatRuntimeInstrumentationError,
+} from "../lib/runtimeInstrumentation";
 import { captureAppException } from "../instrument";
 import { captureProductAnalyticsEvent } from "../posthogAnalytics";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
@@ -288,7 +288,7 @@ export function useWebAppAuthController(
       }
       if (refreshed.status === "terminal_failure") {
         ensuredSessionCacheRef.current = null;
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_session_ensure",
           status: "failure",
@@ -303,7 +303,7 @@ export function useWebAppAuthController(
         return { status: "terminal_failure", reason: refreshed.reason };
       }
       if (refreshed.status !== "refreshed") {
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_session_ensure",
           status: "failure",
@@ -319,7 +319,7 @@ export function useWebAppAuthController(
       if (!adoptAuthSession(refreshed.session, epochAtRequestStart)) {
         return { status: "transient_failure", reason: "session_changed" };
       }
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name: "auth_session_ensure",
         status: "success",
@@ -349,7 +349,7 @@ export function useWebAppAuthController(
             return { status: "transient_failure", reason: "session_changed" };
           }
         }
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_session_ensure",
           status: "success",
@@ -369,7 +369,7 @@ export function useWebAppAuthController(
         if (authSessionEpochRef.current !== epochAtRequestStart) {
           return { status: "transient_failure", reason: "session_changed" };
         }
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_session_ensure",
           status: ensuredResult.status === "ready" ? "success" : "failure",
@@ -394,7 +394,7 @@ export function useWebAppAuthController(
       }
       if (ensured.status === "terminal_failure") {
         ensuredSessionCacheRef.current = null;
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_session_ensure",
           status: "failure",
@@ -409,7 +409,7 @@ export function useWebAppAuthController(
         return { status: "terminal_failure", reason: ensured.reason };
       }
       if (ensured.status !== "ready") {
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_session_ensure",
           status: "failure",
@@ -439,7 +439,7 @@ export function useWebAppAuthController(
             }
           : null;
       }
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name: "auth_session_ensure",
         status: "success",
@@ -613,7 +613,7 @@ export function useWebAppAuthController(
     onSessionMissing: () => {
       if (!authBootstrapCompleteRef.current) return;
       void (async () => {
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_session_missing_after_bootstrap",
           status: "start",
@@ -626,7 +626,7 @@ export function useWebAppAuthController(
         sessionReadyIdentityRef.current = null;
         setAuthSession(null);
         await onSessionMissingAfterBootstrapRef.current();
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_session_missing_after_bootstrap",
           status: "success",
@@ -665,7 +665,7 @@ export function useWebAppAuthController(
     void (async () => {
       const hadPendingAuthFlow = hasRecentAuthFlowPending();
       const bootstrapStartedAt = Date.now();
-      emitWorkspaceEvent({
+      emitAgentRuntimeEvent({
         scope: "lifecycle",
         name: "auth_bridge_bootstrap",
         status: "start",
@@ -677,7 +677,7 @@ export function useWebAppAuthController(
         const bootstrapResult = await bootstrapSessionDetailed();
         const bootstrapDurationMs = Date.now() - bootstrapStartedAt;
         const currentSession = bootstrapResult.session;
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_bridge_bootstrap",
           status: "success",
@@ -729,7 +729,7 @@ export function useWebAppAuthController(
       } catch (error) {
         if (!isCurrentAttempt()) return;
         const bootstrapDurationMs = Date.now() - bootstrapStartedAt;
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_bridge_bootstrap",
           status: "failure",
@@ -737,16 +737,16 @@ export function useWebAppAuthController(
             hadPendingAuthFlow,
             durationMs: bootstrapDurationMs,
           },
-          error: formatWorkspaceInstrumentationError(error),
+          error: formatRuntimeInstrumentationError(error),
         });
-        emitWorkspaceEvent({
+        emitAgentRuntimeEvent({
           scope: "lifecycle",
           name: "auth_recover_session",
           status: "failure",
           detail: {
             phase: "bootstrap",
           },
-          error: formatWorkspaceInstrumentationError(error),
+          error: formatRuntimeInstrumentationError(error),
         });
         captureAppException(error, {
           tags: {

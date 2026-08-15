@@ -27,7 +27,6 @@ const runId = "context_receipt_smoke_run";
 const runRecord = {
   runId,
   threadId: "thread_context_receipt_smoke",
-  projectId: null,
   communityId: "community_context_receipt_smoke",
   communityContextVersion: 7,
   executionMode: "agentic",
@@ -41,7 +40,6 @@ events.push(
     eventKey: "run_started",
     payload: {
       run_id: runId,
-      project_id: null,
       community_id: "community_context_receipt_smoke",
       community_context_version: 7,
       execution_mode: "agentic",
@@ -54,7 +52,6 @@ events.push(
     payload: {
       run_id: runId,
       thread_id: "thread_context_receipt_smoke",
-      project_id: null,
       community_id: "community_context_receipt_smoke",
       community_context_version: 7,
       capability_families: ["community_tools"],
@@ -102,7 +99,6 @@ const loopParams = {
   userId: "user_context_receipt_smoke",
   authSubject: "user:context-receipt-smoke",
   threadId: "thread_context_receipt_smoke",
-  projectId: null,
   requestedModelId: "gpt-oss-120b-free",
   inferenceSource: "free",
   modelRef: "openai/gpt-oss-120b:free",

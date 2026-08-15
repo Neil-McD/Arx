@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B and pre-Slice 8 liveness released and production-proven; Slices 8 through 10 remain
+Status: context architecture through Slice 7B and pre-Slice 8 liveness released and production-proven; Slice 5E terminal production retirement and Slices 8 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-15
 
@@ -9,9 +9,10 @@ Program position:
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: Slices 5A through 7B are released and production-proven;
-  pre-Slice 8 liveness is released and production-proven, and Slices 8 through
-  10 remain.
+- Runtime convergence: Slices 5A through 5D and 6 through 7B are released and
+  production-proven; Slice 5E Release A is implemented locally, pre-Slice 8
+  liveness is released and production-proven, and the Slice 5E production
+  retirement plus Slices 8 through 10 remain.
 - Pi agent-core adoption in Polynet: no canonical implementation; an isolated
   admission experiment exists outside the released tree, while parity and
   cutover have not started.
@@ -309,7 +310,7 @@ Program status:
 | 2 | Canonical Concierge context and receipt | Complete |
 | 3 | Canonical Steward context and receipt | Complete |
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
-| 5 | Workspace and Codex runtime deletion | Complete and production-proven |
+| 5 | Workspace and Codex runtime deletion | 5A-5D production-proven; 5E Release A implemented locally and awaiting two-release production retirement |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
@@ -797,7 +798,7 @@ Slice 5C local acceptance:
    external MCP proofs.
 3. The full local release gate passes, including the production web build, the
    complete repository behavior suite, dependency interlock, and
-   zero-vulnerability root, web, and preview-proxy audits.
+   zero-vulnerability root and web audits.
 4. The stale community-lens proof now reads its canonical owner,
    `WebMemberAgentDock`, instead of the decomposed `App.tsx` shell.
 5. No schema migration or historical record deletion is introduced.
@@ -839,7 +840,7 @@ Slice 5D acceptance:
    interlock pass.
 3. The full local release gate passes, including the production web build, the
    complete repository behavior suite, dependency interlock, and
-   zero-vulnerability root, web, and preview-proxy audits.
+   zero-vulnerability root and web audits.
 4. The exact merged SHA passes the canonical GitHub Release Gate, production
    web reports that SHA, and matching Convex functions are deployed.
 5. Production proves the retired function and route surface is absent while an
@@ -850,6 +851,72 @@ Human product direction remains explicit: there is no standalone general
 coding Workspace agent in the target product. Preserve the community harness,
 community compiler, community resources/memory, references, native product
 roles, historical thread/message data, and external MCP.
+
+### 17.2.1 Slice 5E: project and provider residue extinction
+
+Status: Release A is implemented locally; production migration and Release B
+remain blocked on the explicit gates below.
+
+Objective: finish the deletion started by Slice 5D so no project or provider
+resource concept remains in native runtime authority, context, tools, APIs, or
+schema ownership.
+
+Changes:
+
+1. Delete the Cloud Project API, Blaxel client/lifecycle/pointer modules,
+   preview proxy, project resource contracts, diagnostics, probes, cron jobs,
+   dependency, and stale Workspace documents.
+2. Remove project context from thread mutations, turn resolution, capability
+   selection, prompt envelopes, context fragments/manifests, runtime receipts,
+   tool settlement, telemetry, and browser transport.
+3. Delete the Cloud Project, terminal, directory snapshot, file-preview cache,
+   Daytona target, and Codex capacity-lease schema definitions.
+4. Preserve old project identifiers only inside immutable accounting and
+   operator evidence rows. They cannot authorize, resolve, or inject context.
+5. Preserve the community harness/compiler/resources/memory, native product
+   roles, canonical Polynet tools, and official external MCP.
+
+Release A is a no-writer compatibility release:
+
+1. Remove every product, runtime, cron, and provider writer while temporarily
+   retaining only permissive schema tombstones for the six retired tables and
+   the exact obsolete optional fields on surviving records.
+2. Expose one internal-only `projectResidueRetirement` operator. Its writes are
+   bounded, dry-run by default, idempotent, and bound to the exact document IDs
+   returned by the immediately preceding dry-run.
+3. Refuse to delete `cloudProjects` while any dependent legacy table or
+   surviving-record field remains.
+4. Never read or mutate `workspaceComputeCharges`, `providerCostEntries`, or
+   `creditLedgerEntries`; their project identifiers are immutable accounting
+   evidence strings.
+5. Release through GitHub `main`, deploy Convex intentionally, prove the
+   retired writer surface is absent, and pass an authenticated Member Agent
+   community-inspection canary before deleting production data.
+
+Production cleanup gate:
+
+1. Run a read-only Blaxel control-plane inventory and require zero sandboxes
+   and volumes.
+2. Export the canonical production Convex database outside the repository and
+   record the export path and SHA-256.
+3. Run a complete, non-truncated census over all nine retirement targets.
+4. Dry-run and then execute matching bounded batches in dependency order:
+   preview snapshots, directory snapshots, terminal sessions, Codex leases,
+   Daytona targets, diagnostic events, threads, runtime runs, then projects.
+5. Re-run the complete census twice and require zero residue both times.
+6. Re-run provider inventory and accounting diagnostics. Stop if provider
+   inventory is nonzero or any accounting count, identifier count, cost total,
+   or credit total changes.
+
+Release B is terminal deletion:
+
+1. Delete the six empty tombstone schemas, obsolete compatibility fields, and
+   the temporary retirement operator.
+2. Run the complete release gate, release through GitHub `main`, and deploy
+   Convex intentionally.
+3. Prove the retired functions and schema surfaces are absent, the exact web
+   SHA is live, authenticated native community inspection succeeds, official
+   external MCP succeeds, and accounting diagnostics remain green.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 
@@ -1372,9 +1439,14 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Begin Slice 8 only as a reversible Pi agent-core feasibility adapter with no
-production routing. First prove actual Convex runtime compatibility, governed
-tool-executor containment, deterministic loop parity, and a net reduction in
-maintained complexity. Adopt or reject Pi from that evidence; do not add
-semantic summarization, a second prompt compiler, a second event store, or a
-permanent second runtime.
+Release and production-prove Slice 5E through the two-release retirement above.
+Do not begin Slice 8 until Release B has removed the compatibility schema and
+temporary operator and the final production community-inspection, MCP, and
+accounting proofs are green.
+
+Then begin Slice 8 only as a reversible Pi agent-core feasibility adapter with
+no production routing. First prove actual Convex runtime compatibility,
+governed tool-executor containment, deterministic loop parity, and a net
+reduction in maintained complexity. Adopt or reject Pi from that evidence; do
+not add semantic summarization, a second prompt compiler, a second event store,
+or a permanent second runtime.

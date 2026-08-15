@@ -33,8 +33,6 @@ const INDEXED_USER_REFERENCES: IndexedReferenceSpec[] = [
   { table: "emailPreferences", index: "by_user", field: "userId" },
   { table: "emailOutbox", index: "by_recipientUserId", field: "recipientUserId" },
   { table: "personalMemoryItems", index: "by_user", field: "userId" },
-  { table: "cloudProjects", index: "by_owner", field: "ownerId" },
-  { table: "workspaceTerminalSessions", index: "by_owner_project", field: "ownerId" },
   { table: "communities", index: "by_owner", field: "ownerId" },
   { table: "communityMemberships", index: "by_user", field: "userId" },
   { table: "communityPresence", index: "by_user", field: "userId" },
