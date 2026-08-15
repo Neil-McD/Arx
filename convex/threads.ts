@@ -4101,6 +4101,53 @@ export const markCloudThreadAgentAttentionSeen = mutation({
   },
 });
 
+async function cancelRuntimeRunByThreadKeyForOwner(args: {
+  ctx: any;
+  ownerId: any;
+  threadKey: string;
+  runId?: string;
+  nowMs?: number;
+}) {
+  const { ctx, ownerId } = args;
+  const nowMs = args.nowMs ?? Date.now();
+  const threadKey = String(args.threadKey ?? "").trim();
+  if (!threadKey) throw new Error("thread_key_required");
+  const thread = await getCloudThreadByThreadKeyInternal({
+    ctx,
+    ownerId,
+    threadKey,
+  });
+  if (!thread) return null;
+
+  const explicitRunId = String(args.runId ?? "").trim();
+  const run = explicitRunId
+    ? await getRuntimeRunByOwnerRunId({
+      ctx,
+      ownerId,
+      runId: normalizeRunId(explicitRunId),
+    })
+    : await getRunningRuntimeRunByThread({
+      ctx,
+      threadId: thread._id,
+    });
+  if (!run) return null;
+  if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
+  if (run.status !== "running") return run;
+
+  return await finalizeRuntimeRunRecord({
+    ctx,
+    ownerId,
+    thread,
+    run,
+    status: "cancelled",
+    reason: "user_cancelled",
+    errorCode: "user_cancelled",
+    errorMessage: "Run cancelled by user.",
+    nowMs,
+    finishedAt: nowMs,
+  });
+}
+
 export const cancelCloudRuntimeRunByThreadKey = mutation({
   args: {
     ownerId: v.optional(v.id("users")),
@@ -4115,42 +4162,30 @@ export const cancelCloudRuntimeRunByThreadKey = mutation({
       ownerId: args.ownerId,
       authSubject: args.authSubject ?? null,
     });
-    const nowMs = args.nowMs ?? Date.now();
-    const threadKey = String(args.threadKey ?? "").trim();
-    if (!threadKey) throw new Error("thread_key_required");
-    const thread = await getCloudThreadByThreadKeyInternal({
+    return await cancelRuntimeRunByThreadKeyForOwner({
       ctx,
       ownerId,
-      threadKey,
+      threadKey: args.threadKey,
+      runId: args.runId,
+      nowMs: args.nowMs,
     });
-    if (!thread) return null;
+  },
+});
 
-    const explicitRunId = String(args.runId ?? "").trim();
-    const run = explicitRunId
-      ? await getRuntimeRunByOwnerRunId({
-          ctx,
-          ownerId,
-          runId: normalizeRunId(explicitRunId),
-        })
-      : await getRunningRuntimeRunByThread({
-          ctx,
-          threadId: thread._id,
-        });
-    if (!run) return null;
-    if (run.threadId !== thread._id) throw new Error("run_thread_conflict");
-    if (run.status !== "running") return run;
-
-    return await finalizeRuntimeRunRecord({
+export const cancelCloudRuntimeRunByThreadKeyInternal = internalMutation({
+  args: {
+    ownerId: v.id("users"),
+    threadKey: v.string(),
+    runId: v.optional(v.string()),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    return await cancelRuntimeRunByThreadKeyForOwner({
       ctx,
-      ownerId,
-      thread,
-      run,
-      status: "cancelled",
-      reason: "user_cancelled",
-      errorCode: "user_cancelled",
-      errorMessage: "Run cancelled by user.",
-      nowMs,
-      finishedAt: nowMs,
+      ownerId: args.ownerId,
+      threadKey: args.threadKey,
+      runId: args.runId,
+      nowMs: args.nowMs,
     });
   },
 });

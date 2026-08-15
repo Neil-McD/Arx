@@ -5,6 +5,7 @@ import {
   readCloudFunctionError,
 } from "./cloudFunctionErrors";
 import {
+  cancelCloudRuntimeTurn,
   invokeCloudRuntimeTurn,
   requireCloudRuntimeBaseUrl,
   type CloudRuntimeTransport,
@@ -12,7 +13,6 @@ import {
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
 import {
   addCloudThreadMessage,
-  cancelCloudRuntimeRunByThreadKey,
   deleteCloudThreadMessage,
   ensureCloudThreadRecord,
 } from "./cloudThreadsGateway";
@@ -333,6 +333,21 @@ export function useWebTurnRunnerController<
     [],
   );
 
+  const cancelRuntimeRun = useCallback(
+    async (session: SessionT, threadId: string, runId: string): Promise<void> => {
+      const current = argsRef.current;
+      const baseUrl = requireCloudRuntimeBaseUrl(current.getCloudRuntimeBaseUrl);
+      const response = await cancelCloudRuntimeTurn({
+        transport: { baseUrl, fetchAuth: current.fetchAuth },
+        session,
+        threadId,
+        runId,
+      });
+      if (!response.ok) throw new Error(`runtime_cancel_failed:${response.status}`);
+    },
+    [],
+  );
+
   const stopStreamingTurn = useCallback((threadId?: string): void => {
     const resolvedThreadId = (threadId ?? argsRef.current.activeThreadId ?? "").trim();
     if (!resolvedThreadId) return;
@@ -343,12 +358,8 @@ export function useWebTurnRunnerController<
     const threadAbort = threadStreamingAbortRefById.current[resolvedThreadId] ?? null;
     threadStreamingUserCancelledRefById.current[resolvedThreadId] = true;
     if (threadAbort) {
-      if (session) {
-        void cancelCloudRuntimeRunByThreadKey({
-          session: session as any,
-          threadId: resolvedThreadId,
-          runId: activeRunId,
-        })
+      if (session && activeRunId) {
+        void cancelRuntimeRun(session, resolvedThreadId, activeRunId)
           .catch(() => null)
           .finally(() => threadAbort.abort());
         return;
@@ -357,11 +368,7 @@ export function useWebTurnRunnerController<
       return;
     }
     if (session && activeRunId) {
-      void cancelCloudRuntimeRunByThreadKey({
-        session: session as any,
-        threadId: resolvedThreadId,
-        runId: activeRunId,
-      })
+      void cancelRuntimeRun(session, resolvedThreadId, activeRunId)
         .catch(() => null)
         .finally(() => {
           resetThreadStreamingState(resolvedThreadId);
@@ -373,7 +380,7 @@ export function useWebTurnRunnerController<
     }
     resetThreadStreamingState(resolvedThreadId);
     current.setThreadErrorForThread(resolvedThreadId, null);
-  }, [resetThreadStreamingState]);
+  }, [cancelRuntimeRun, resetThreadStreamingState]);
 
   const stopAllStreamingTurns = useCallback((): void => {
     const current = argsRef.current;
@@ -384,18 +391,18 @@ export function useWebTurnRunnerController<
       if (session) {
         const streamingState = current.threadStreamingStateById[threadId] ?? null;
         const activeRunId = String(streamingState?.runId ?? "").trim() || null;
-        void cancelCloudRuntimeRunByThreadKey({
-          session: session as any,
-          threadId,
-          runId: activeRunId,
-        })
+        if (!activeRunId) {
+          abort?.abort();
+          continue;
+        }
+        void cancelRuntimeRun(session, threadId, activeRunId)
           .catch(() => null)
           .finally(() => abort?.abort());
         continue;
       }
       abort?.abort();
     }
-  }, []);
+  }, [cancelRuntimeRun]);
 
   const runAgentTurn = useCallback(
     async (session: SessionT, threadId: string, params: RunAgentTurnParams): Promise<{ cancelled: boolean; error: string | null }> => {

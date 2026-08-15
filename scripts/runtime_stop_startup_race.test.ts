@@ -37,10 +37,35 @@ describe("runtime Stop startup race", () => {
     const stopOne = controller.slice(stopOneStart, stopAllStart);
     const stopAll = controller.slice(stopAllStart, runTurnStart);
     expect(stopOne).toMatch(
-      /cancelCloudRuntimeRunByThreadKey\(\{[\s\S]*?runId: activeRunId,[\s\S]*?\.finally\(\(\) => threadAbort\.abort\(\)\);[\s\S]*?return;/,
+      /cancelRuntimeRun\(session, resolvedThreadId, activeRunId\)[\s\S]*?\.finally\(\(\) => threadAbort\.abort\(\)\);[\s\S]*?return;/,
     );
     expect(stopAll).toMatch(
-      /cancelCloudRuntimeRunByThreadKey\(\{[\s\S]*?runId: activeRunId,[\s\S]*?\.finally\(\(\) => abort\?\.abort\(\)\);[\s\S]*?continue;/,
+      /cancelRuntimeRun\(session, threadId, activeRunId\)[\s\S]*?\.finally\(\(\) => abort\?\.abort\(\)\);[\s\S]*?continue;/,
+    );
+  });
+
+  it("uses the runtime auth transport and server-derived owner for Stop", () => {
+    const root = path.resolve(import.meta.dirname, "..");
+    const transport = fs.readFileSync(
+      path.join(root, "shared/cloudRuntimeTransport.ts"),
+      "utf8",
+    );
+    const routes = fs.readFileSync(
+      path.join(root, "convex/httpRuntimeRoutes.ts"),
+      "utf8",
+    );
+    const cloudThreadsGateway = fs.readFileSync(
+      path.join(root, "shared/cloudThreadsGateway.ts"),
+      "utf8",
+    );
+    expect(transport).toMatch(
+      /cancelCloudRuntimeTurn[\s\S]*?"\/runtime\/runtime_cancel"[\s\S]*?thread_id: params\.threadId,[\s\S]*?run_id: params\.runId/,
+    );
+    expect(routes).toMatch(
+      /path: "\/runtime\/runtime_cancel"[\s\S]*?method: "POST"[\s\S]*?requireAuthenticatedActor\(ctx, req\)[\s\S]*?cancelCloudRuntimeRunByThreadKeyInternal[\s\S]*?ownerId: auth\.actor\.dbUserId/,
+    );
+    expect(cloudThreadsGateway).not.toContain(
+      "cancelCloudRuntimeRunByThreadKey",
     );
   });
 });
