@@ -208,6 +208,17 @@
   min-height: inherit;
 }
 
+.web-route-access-hold-progress {
+  position: fixed;
+  z-index: 100;
+  bottom: 24px;
+  left: 50%;
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 13px;
+  transform: translateX(-50%);
+}
+
 .web-route-access-hold-failure {
   position: fixed;
   z-index: 100;

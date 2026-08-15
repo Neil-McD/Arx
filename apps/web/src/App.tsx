@@ -271,6 +271,7 @@ export default function App() {
     isAuthBootstrapComplete,
     authPresentationState,
     authError,
+    retryAuthBootstrap,
     requireSignIn,
     handleSignOut,
     ensureUsableAuthSession,
@@ -1682,7 +1683,11 @@ export default function App() {
         : effectiveAccountSetupStatus?.completed
           ? "allowed" as const
           : "denied" as const;
-  const { shouldHoldRouteForAccess } =
+  const {
+    shouldHoldRouteForAccess,
+    communityResolutionError,
+    retryCommunityResolution,
+  } =
     useWebRouteAccessBoundaryController<
       AuthSession,
       CommunityRecord,
@@ -2968,9 +2973,12 @@ export default function App() {
       ? funnelDraftPreview.error
       : null;
     const routeAdmissionError =
-      authError ?? onboardingError ?? previewAdmissionError;
+      authError ?? onboardingError ?? communityResolutionError ?? previewAdmissionError;
     const isPreviewAdmissionFailure = Boolean(
-      previewAdmissionError && !authError && !onboardingError,
+      previewAdmissionError &&
+        !authError &&
+        !onboardingError &&
+        !communityResolutionError,
     );
     const retryRouteAdmission = () => {
       if (isPreviewAdmissionFailure) {
@@ -2978,7 +2986,11 @@ export default function App() {
         return;
       }
       if (authError) {
-        window.location.reload();
+        retryAuthBootstrap();
+        return;
+      }
+      if (communityResolutionError) {
+        retryCommunityResolution();
         return;
       }
       setOnboardingError(null);

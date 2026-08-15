@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AppPage } from "../../../../shared/appShellNavigation";
+import { withAsyncDeadline } from "../../../../shared/asyncDeadline";
 import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
 import type { PublicRoute } from "../../../../shared/webAppRouteState";
 import {
@@ -64,6 +65,9 @@ export function useWebRouteAccessBoundaryController<
       slug: null,
       state: "not_applicable",
     });
+  const [communityResolutionError, setCommunityResolutionError] =
+    useState<string | null>(null);
+  const [communityResolutionAttempt, setCommunityResolutionAttempt] = useState(0);
   const redirectKeyRef = useRef<string | null>(null);
 
   const slug = String(params.activeCommunitySlug ?? "").trim();
@@ -88,6 +92,7 @@ export function useWebRouteAccessBoundaryController<
           ? current
           : { slug: null, state: "not_applicable" },
       );
+      setCommunityResolutionError(null);
       return;
     }
 
@@ -97,19 +102,24 @@ export function useWebRouteAccessBoundaryController<
           ? current
           : { slug, state: "allowed" },
       );
+      setCommunityResolutionError(null);
       return;
     }
 
     let cancelled = false;
     setCommunityResolution({ slug, state: "resolving" });
+    setCommunityResolutionError(null);
     void (async () => {
-      const session = await params.ensureSession(params.session);
-      if (cancelled) return;
-      if (!session) {
-        setCommunityResolution({ slug, state: "denied" });
-        return;
-      }
       try {
+        const session = await params.ensureSession(params.session);
+        if (cancelled) return;
+        if (!session) {
+          setCommunityResolution({ slug, state: "failed" });
+          setCommunityResolutionError(
+            "Polynet could not finish verifying community access. Try again.",
+          );
+          return;
+        }
         const access =
           await fetchCloudMyCommunityAccessBySlug<SessionT, TCommunityAccess>({
             session,
@@ -117,7 +127,10 @@ export function useWebRouteAccessBoundaryController<
           });
         if (cancelled) return;
         if (access && (access.can_enter_community || access.is_owner)) {
-          await params.loadCommunities(session);
+          await withAsyncDeadline(params.loadCommunities(session), {
+            timeoutMs: 10_000,
+            code: "community_list_hydration_timeout",
+          });
           if (cancelled) return;
           params.syncCommunitySelection({
             communityId: access.community_id,
@@ -131,7 +144,10 @@ export function useWebRouteAccessBoundaryController<
       } catch (error) {
         if (cancelled) return;
         console.warn("Failed to resolve joined community route by slug:", error);
-        setCommunityResolution({ slug, state: "denied" });
+        setCommunityResolution({ slug, state: "failed" });
+        setCommunityResolutionError(
+          "Polynet could not finish verifying community access. Try again.",
+        );
       }
     })();
 
@@ -148,6 +164,7 @@ export function useWebRouteAccessBoundaryController<
     params.publicRoute.kind,
     params.session,
     params.syncCommunitySelection,
+    communityResolutionAttempt,
     slug,
   ]);
 
@@ -227,6 +244,11 @@ export function useWebRouteAccessBoundaryController<
 
   return {
     projection,
+    communityResolutionError,
+    retryCommunityResolution: () => {
+      setCommunityResolutionError(null);
+      setCommunityResolutionAttempt((attempt) => attempt + 1);
+    },
     shouldHoldRouteForAccess: projection.kind === "hold" ||
       projection.kind === "redirect_landing" ||
       projection.kind === "redirect_member_entry" ||

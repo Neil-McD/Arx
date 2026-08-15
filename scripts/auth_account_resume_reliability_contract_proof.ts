@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import {
+  AsyncDeadlineError,
+  withAsyncDeadline,
+} from "../shared/asyncDeadline.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -22,6 +26,9 @@ const authController = read(
   "apps/web/src/controllers/useWebAppAuthController.ts",
 );
 const authCore = read("shared/authCore.ts");
+const asyncDeadline = read("shared/asyncDeadline.ts");
+const convexAuthenticatedClient = read("shared/convexAuthenticatedClient.ts");
+const convexAuthSessionProbe = read("shared/convexAuthSessionProbe.ts");
 const onboardingController = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
@@ -39,6 +46,26 @@ const voiceController = read(
 );
 const createController = read("shared/useCommunityCreateController.ts");
 const app = read("apps/web/src/App.tsx");
+
+assert.equal(
+  await withAsyncDeadline(Promise.resolve("ready"), {
+    timeoutMs: 50,
+    code: "proof_timeout",
+  }),
+  "ready",
+  "deadline helper must preserve work that settles in time",
+);
+await assert.rejects(
+  withAsyncDeadline(new Promise<never>(() => {}), {
+    timeoutMs: 5,
+    code: "proof_timeout",
+  }),
+  (error: unknown) =>
+    error instanceof AsyncDeadlineError &&
+    error.code === "proof_timeout" &&
+    error.timeoutMs === 5,
+  "deadline helper must reject stalled work with a stable typed error",
+);
 
 assert.match(
   accountSetup,
@@ -82,6 +109,26 @@ assert.match(
   "session bootstrap must use the bounded auth request",
 );
 assert.match(
+  asyncDeadline,
+  /AsyncDeadlineError[\s\S]*Promise\.race[\s\S]*clearTimeout/,
+  "critical remote admission work must have a reusable finite deadline",
+);
+assert.match(
+  convexAuthenticatedClient,
+  /withAsyncDeadline\([\s\S]*auth:bootstrapActor[\s\S]*convex_bootstrap_actor_timeout/,
+  "Convex actor bootstrap must terminate with an explicit timeout",
+);
+assert.match(
+  convexAuthSessionProbe,
+  /withAsyncDeadline\([\s\S]*auth:getActor[\s\S]*convex_get_actor_timeout/,
+  "Convex actor verification must terminate with an explicit timeout",
+);
+assert.match(
+  authCore,
+  /refreshAuthSessionResult[\s\S]*timeoutMs: AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS/,
+  "session refresh must use the same finite auth gateway boundary",
+);
+assert.match(
   authController,
   /ensured\.status === "terminal_failure"[\s\S]*expireAuthSessionLocally\(\)[\s\S]*status: "terminal_failure"/,
   "only terminal auth verification may expire the local session",
@@ -104,7 +151,7 @@ assert.match(
 );
 assert.match(
   bootstrapEffect,
-  /setAuthError\([\s\S]*could not verify your session yet/,
+  /setAuthBootstrapStatus\("failed"\)[\s\S]*setAuthError\([\s\S]*could not verify your session yet/,
   "bootstrap recovery must explain the temporary state",
 );
 const bootstrapCatchStart = bootstrapEffect.lastIndexOf("} catch (error) {");
@@ -121,10 +168,30 @@ assert.doesNotMatch(
   /markAuthBootstrapComplete/,
   "a thrown bootstrap request must not become a signed-out presentation",
 );
-assert.match(
+assert.doesNotMatch(
   bootstrapEffect,
   /params\.resumeEpoch/,
-  "an incomplete bootstrap must retry when the installed app resumes",
+  "resume events must not restart an in-flight initial bootstrap",
+);
+assert.match(
+  authController,
+  /const retryAuthBootstrap = useCallback[\s\S]*setAuthBootstrapStatus\("resolving"\)[\s\S]*setAuthBootstrapAttempt/,
+  "failed bootstrap must expose an explicit in-app retry attempt",
+);
+assert.match(
+  authController,
+  /verification_failed[\s\S]*retryAuthBootstrap/,
+  "temporary verification failure must be distinct from signed-out state",
+);
+assert.match(
+  app,
+  /if \(authError\) \{[\s\S]*retryAuthBootstrap\(\)/,
+  "auth recovery must retry in-app instead of reloading the document",
+);
+assert.doesNotMatch(
+  app,
+  /if \(authError\) \{[\s\S]{0,120}window\.location\.reload/,
+  "auth recovery must not depend on a full-page reload",
 );
 const sessionAvailableCallback = sliceBetween(
   authController,

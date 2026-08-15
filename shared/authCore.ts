@@ -747,6 +747,7 @@ export async function refreshAuthSessionResult(): Promise<AuthSessionRefreshResu
     path: AUTH_GATEWAY_REFRESH_PATH,
     method: "POST",
     payload: {},
+    timeoutMs: AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS,
   });
   if (!response) {
     return { status: "transient_failure", reason: "auth_gateway_unavailable" };

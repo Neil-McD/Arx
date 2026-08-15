@@ -36,6 +36,8 @@ import {
   emitWorkspaceEvent,
   formatWorkspaceInstrumentationError,
 } from "../lib/workspaceInstrumentation";
+import { captureAppException } from "../instrument";
+import { captureProductAnalyticsEvent } from "../posthogAnalytics";
 import { useWebAuthSessionLifecycle } from "./useWebAuthSessionLifecycle";
 
 type AsyncVoid = void | Promise<void>;
@@ -64,8 +66,13 @@ type UseWebAppAuthControllerResult = {
   sessionRef: MutableRefObject<AuthSession | null>;
   isAuthBootstrapComplete: boolean;
   isAuthResolvingSignedInState: boolean;
-  authPresentationState: "signed_out" | "recovering_signed_in" | "signed_in";
+  authPresentationState:
+    | "signed_out"
+    | "recovering_signed_in"
+    | "verification_failed"
+    | "signed_in";
   authError: string | null;
+  retryAuthBootstrap: () => void;
   requireSignIn: (intentInput?: unknown) => void;
   handleSignOut: () => Promise<void>;
   ensureUsableAuthSession: (
@@ -147,7 +154,11 @@ export function useWebAppAuthController(
   params: UseWebAppAuthControllerParams,
 ): UseWebAppAuthControllerResult {
   const [session, setAuthSession] = useState<AuthSession | null>(null);
-  const [isAuthBootstrapComplete, setIsAuthBootstrapComplete] = useState(false);
+  const [authBootstrapStatus, setAuthBootstrapStatus] = useState<
+    "resolving" | "ready" | "failed"
+  >("resolving");
+  const isAuthBootstrapComplete = authBootstrapStatus === "ready";
+  const [authBootstrapAttempt, setAuthBootstrapAttempt] = useState(0);
   const [authError, setAuthError] = useState<string | null>(null);
   const [isAuthSigningOut, setIsAuthSigningOut] = useState(false);
 
@@ -157,6 +168,7 @@ export function useWebAppAuthController(
   const didJustSignInRef = useRef(false);
   const authSessionEpochRef = useRef(0);
   const authBootstrapCompleteRef = useRef(false);
+  const authBootstrapAttemptIdRef = useRef(0);
   const sessionReadyIdentityRef = useRef<string | null>(null);
   const ensuredSessionCacheRef = useRef<{
     key: string;
@@ -186,7 +198,14 @@ export function useWebAppAuthController(
 
   const markAuthBootstrapComplete = useCallback(() => {
     authBootstrapCompleteRef.current = true;
-    setIsAuthBootstrapComplete(true);
+    setAuthBootstrapStatus("ready");
+  }, []);
+
+  const retryAuthBootstrap = useCallback(() => {
+    authBootstrapCompleteRef.current = false;
+    setAuthBootstrapStatus("resolving");
+    setAuthError(null);
+    setAuthBootstrapAttempt((attempt) => attempt + 1);
   }, []);
 
   const clearSessionLocally = useCallback(async (): Promise<void> => {
@@ -595,6 +614,9 @@ export function useWebAppAuthController(
   useEffect(() => {
     if (authBootstrapCompleteRef.current) return;
     let cancelled = false;
+    const attemptId = ++authBootstrapAttemptIdRef.current;
+    const isCurrentAttempt = () =>
+      !cancelled && authBootstrapAttemptIdRef.current === attemptId;
 
     void (async () => {
       const hadPendingAuthFlow = hasRecentAuthFlowPending();
@@ -624,13 +646,13 @@ export function useWebAppAuthController(
             rotatedSessionFollowed: bootstrapResult.trace?.rotatedSessionFollowed ?? false,
           },
         });
-        if (cancelled) return;
+        if (!isCurrentAttempt()) return;
         if (currentSession) {
           const usableSessionResult = await ensureUsableAuthSessionResult(
             currentSession,
             "bootstrap",
           );
-          if (cancelled) return;
+          if (!isCurrentAttempt()) return;
           if (usableSessionResult.status === "ready") {
             markAuthBootstrapComplete();
             clearAuthSignedOutIntentMarker();
@@ -651,21 +673,22 @@ export function useWebAppAuthController(
 
         if (sessionRef.current) {
           await clearSessionLocally();
-          if (cancelled) return;
+          if (!isCurrentAttempt()) return;
         }
         markAuthBootstrapComplete();
         if (hadPendingAuthFlow) {
           clearAuthFlowPending();
         }
       } catch (error) {
-        if (cancelled) return;
+        if (!isCurrentAttempt()) return;
+        const bootstrapDurationMs = Date.now() - bootstrapStartedAt;
         emitWorkspaceEvent({
           scope: "lifecycle",
           name: "auth_bridge_bootstrap",
           status: "failure",
           detail: {
             hadPendingAuthFlow,
-            durationMs: Date.now() - bootstrapStartedAt,
+            durationMs: bootstrapDurationMs,
           },
           error: formatWorkspaceInstrumentationError(error),
         });
@@ -678,8 +701,23 @@ export function useWebAppAuthController(
           },
           error: formatWorkspaceInstrumentationError(error),
         });
+        captureAppException(error, {
+          tags: {
+            surface: "web_auth_bootstrap",
+            phase: "session_admission",
+          },
+          extras: {
+            durationMs: bootstrapDurationMs,
+            attempt: authBootstrapAttempt + 1,
+          },
+        });
+        captureProductAnalyticsEvent("auth_bootstrap_failed", {
+          duration_ms: bootstrapDurationMs,
+          attempt: authBootstrapAttempt + 1,
+        });
+        setAuthBootstrapStatus("failed");
         setAuthError(
-          "We could not verify your session yet. Reopen Polynet or reconnect to try again.",
+          "We could not verify your session yet. Try again.",
         );
       }
     })();
@@ -692,19 +730,22 @@ export function useWebAppAuthController(
     clearSessionLocally,
     ensureUsableAuthSessionResult,
     markAuthBootstrapComplete,
-    params.resumeEpoch,
+    authBootstrapAttempt,
   ]);
 
   const isAuthResolvingSignedInState = useMemo(() => {
     if (isAuthSigningOut) return false;
-    return !isAuthBootstrapComplete;
-  }, [isAuthBootstrapComplete, isAuthSigningOut]);
+    return authBootstrapStatus !== "ready";
+  }, [authBootstrapStatus, isAuthSigningOut]);
 
-  const authPresentationState = useMemo<"signed_out" | "recovering_signed_in" | "signed_in">(() => {
+  const authPresentationState = useMemo<
+    "signed_out" | "recovering_signed_in" | "verification_failed" | "signed_in"
+  >(() => {
     if (session) return "signed_in";
-    if (isAuthResolvingSignedInState) return "recovering_signed_in";
+    if (authBootstrapStatus === "failed") return "verification_failed";
+    if (authBootstrapStatus === "resolving") return "recovering_signed_in";
     return "signed_out";
-  }, [isAuthResolvingSignedInState, session]);
+  }, [authBootstrapStatus, session]);
 
   useEffect(() => {
     const onStorage = (event: StorageEvent) => {
@@ -732,6 +773,7 @@ export function useWebAppAuthController(
     isAuthResolvingSignedInState,
     authPresentationState,
     authError,
+    retryAuthBootstrap,
     requireSignIn,
     handleSignOut,
     ensureUsableAuthSession,
