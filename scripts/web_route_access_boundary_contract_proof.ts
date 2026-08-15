@@ -291,6 +291,15 @@ assert.deepEqual(
     activePage: "operator",
     pathname: "/operator/platform",
     authState: "signed_in",
+    operatorAccessState: "failed",
+  }),
+  { kind: "hold", requirement: "operator" },
+);
+assert.deepEqual(
+  project({
+    activePage: "operator",
+    pathname: "/operator/platform",
+    authState: "signed_in",
     operatorAccessState: "allowed",
   }),
   { kind: "render_authenticated", requirement: "operator" },
@@ -313,6 +322,15 @@ assert.deepEqual(project({ pathname: "/workspace", authState: "signed_in" }), {
 const boundary = read(
   "apps/web/src/controllers/useWebRouteAccessBoundaryController.ts",
 );
+const funnelGateway = read("shared/cloudCommunityFunnelGateway.ts");
+const operatorGateway = read("shared/cloudOperatorDashboardGateway.ts");
+const operatorIdentity = read(
+  "apps/web/src/controllers/useWebAuthenticatedIdentityController.ts",
+);
+const memberEntryGateway = read(
+  "shared/cloudMemberEntryDestinationGateway.ts",
+);
+const asyncDeadline = read("shared/asyncDeadline.ts");
 const onboarding = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
@@ -409,6 +427,37 @@ assert.match(
   boundary,
   /catch \(error\)[\s\S]*setCommunityResolution\(\{ slug, state: "failed" \}\)[\s\S]*communityResolutionError[\s\S]*retryCommunityResolution/,
   "unavailable community authority must stay held and retryable rather than becoming a denial",
+);
+assert.match(
+  asyncDeadline,
+  /APP_ADMISSION_TIMEOUT_MS = 10_000/,
+  "route admission must share one finite deadline",
+);
+for (const [name, source, code] of [
+  ["funnel preview", funnelGateway, "community_funnel_draft_preview_timeout"],
+  ["operator access", operatorGateway, "operator_access_resolution_timeout"],
+  ["member entry", memberEntryGateway, "member_entry_destination_timeout"],
+] as const) {
+  assert.match(
+    source,
+    new RegExp(`withAsyncDeadline\\([\\s\\S]*${code}`),
+    `${name} authority must terminate instead of holding the shell forever`,
+  );
+  assert.match(
+    source,
+    /timeoutMs: APP_ADMISSION_TIMEOUT_MS/,
+    `${name} authority must use the canonical admission deadline`,
+  );
+}
+assert.match(
+  operatorIdentity,
+  /operatorAccessError[\s\S]*retryOperatorAccess/,
+  "transient operator authority failure must remain held and retryable",
+);
+assert.match(
+  app,
+  /operatorAccessError[\s\S]*retryOperatorAccess\(\)/,
+  "operator route recovery must stay in-app",
 );
 assert.doesNotMatch(
   onboarding,

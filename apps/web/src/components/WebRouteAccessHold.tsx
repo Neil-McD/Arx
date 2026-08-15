@@ -9,8 +9,8 @@ type WebShellChromeHostProps = ComponentProps<typeof WebShellChromeHost>;
  * Keeps route admission fail-closed without replacing the product frame.
  *
  * The shell projection is reduced to non-sensitive geometry before render,
- * and the whole frame stays inert until authorization has resolved. A real
- * A delayed status explains healthy work without flashing during fast loads;
+ * and the whole frame stays inert until authorization has resolved. A delayed
+ * status explains healthy work without flashing during fast loads;
  * a real verification failure exposes the explicit recovery action.
  */
 export function WebRouteAccessHold(props: {

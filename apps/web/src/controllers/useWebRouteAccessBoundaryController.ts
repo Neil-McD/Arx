@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 
 import type { AppPage } from "../../../../shared/appShellNavigation";
-import { withAsyncDeadline } from "../../../../shared/asyncDeadline";
+import {
+  APP_ADMISSION_TIMEOUT_MS,
+  withAsyncDeadline,
+} from "../../../../shared/asyncDeadline";
 import { fetchCloudMyCommunityAccessBySlug } from "../../../../shared/cloudCommunityAccessGateway";
 import type { PublicRoute } from "../../../../shared/webAppRouteState";
 import {
@@ -128,7 +131,7 @@ export function useWebRouteAccessBoundaryController<
         if (cancelled) return;
         if (access && (access.can_enter_community || access.is_owner)) {
           await withAsyncDeadline(params.loadCommunities(session), {
-            timeoutMs: 10_000,
+            timeoutMs: APP_ADMISSION_TIMEOUT_MS,
             code: "community_list_hydration_timeout",
           });
           if (cancelled) return;

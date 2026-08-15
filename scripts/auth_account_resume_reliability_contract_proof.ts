@@ -1,9 +1,15 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import {
+  APP_ADMISSION_TIMEOUT_MS,
   AsyncDeadlineError,
   withAsyncDeadline,
 } from "../shared/asyncDeadline.ts";
+import { commitIfAsyncEpochCurrent } from "../shared/asyncEpoch.ts";
+import {
+  refreshAuthSessionWithLockResult,
+  type AuthSessionRefreshResult,
+} from "../shared/authCore.ts";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -46,6 +52,87 @@ const voiceController = read(
 );
 const createController = read("shared/useCommunityCreateController.ts");
 const app = read("apps/web/src/App.tsx");
+
+assert.equal(
+  APP_ADMISSION_TIMEOUT_MS,
+  10_000,
+  "all app-admission authorities must share one finite deadline",
+);
+
+const epochRef = { current: 0 };
+let adoptedSession = "none";
+const staleAdoption = Promise.resolve().then(() =>
+  commitIfAsyncEpochCurrent(epochRef, 0, () => {
+    adoptedSession = "stale";
+  })
+);
+epochRef.current += 1;
+assert.equal(
+  await staleAdoption,
+  false,
+  "async work from an obsolete authentication epoch must not commit",
+);
+assert.equal(adoptedSession, "none");
+assert.equal(
+  commitIfAsyncEpochCurrent(epochRef, 1, () => {
+    adoptedSession = "current";
+  }),
+  true,
+  "the current authentication epoch must still be able to commit",
+);
+assert.equal(adoptedSession, "current");
+
+const refreshInFlightRef: {
+  current: {
+    lockKey: number;
+    promise: Promise<AuthSessionRefreshResult>;
+  } | null;
+} = { current: null };
+let resolveOldRefresh!: (result: AuthSessionRefreshResult) => void;
+let resolveCurrentRefresh!: (result: AuthSessionRefreshResult) => void;
+let refreshCalls = 0;
+const oldRefresh = refreshAuthSessionWithLockResult({
+  inFlightRef: refreshInFlightRef,
+  lockKey: 0,
+  refreshSession: () => {
+    refreshCalls += 1;
+    return new Promise<AuthSessionRefreshResult>((resolve) => {
+      resolveOldRefresh = resolve;
+    });
+  },
+  onRefreshed: () => {},
+});
+const currentRefresh = refreshAuthSessionWithLockResult({
+  inFlightRef: refreshInFlightRef,
+  lockKey: 1,
+  refreshSession: () => {
+    refreshCalls += 1;
+    return new Promise<AuthSessionRefreshResult>((resolve) => {
+      resolveCurrentRefresh = resolve;
+    });
+  },
+  onRefreshed: () => {},
+});
+resolveOldRefresh({ status: "transient_failure", reason: "old_epoch" });
+assert.deepEqual(await oldRefresh, {
+  status: "transient_failure",
+  reason: "old_epoch",
+});
+assert.equal(
+  refreshInFlightRef.current?.lockKey,
+  1,
+  "settling stale refresh work must not clear the current epoch lock",
+);
+resolveCurrentRefresh({ status: "transient_failure", reason: "current_epoch" });
+assert.deepEqual(await currentRefresh, {
+  status: "transient_failure",
+  reason: "current_epoch",
+});
+assert.equal(
+  refreshCalls,
+  2,
+  "a new authentication epoch must not join stale refresh work",
+);
 
 assert.equal(
   await withAsyncDeadline(Promise.resolve("ready"), {
@@ -99,13 +186,13 @@ const bootstrapSession = sliceBetween(
   "export async function bootstrapSession()",
 );
 assert.match(
-  authCore,
-  /AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS = 10_000/,
-  "session bootstrap must define a finite recovery boundary",
+  asyncDeadline,
+  /APP_ADMISSION_TIMEOUT_MS = 10_000/,
+  "app admission must define one finite recovery boundary",
 );
 assert.match(
   bootstrapSession,
-  /timeoutMs: AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS/,
+  /timeoutMs: APP_ADMISSION_TIMEOUT_MS/,
   "session bootstrap must use the bounded auth request",
 );
 assert.match(
@@ -125,7 +212,7 @@ assert.match(
 );
 assert.match(
   authCore,
-  /refreshAuthSessionResult[\s\S]*timeoutMs: AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS/,
+  /refreshAuthSessionResult[\s\S]*timeoutMs: APP_ADMISSION_TIMEOUT_MS/,
   "session refresh must use the same finite auth gateway boundary",
 );
 assert.match(
@@ -177,6 +264,31 @@ assert.match(
   authController,
   /const retryAuthBootstrap = useCallback[\s\S]*setAuthBootstrapStatus\("resolving"\)[\s\S]*setAuthBootstrapAttempt/,
   "failed bootstrap must expose an explicit in-app retry attempt",
+);
+assert.match(
+  authController,
+  /commitIfAsyncEpochCurrent\([\s\S]*authSessionEpochRef[\s\S]*expectedEpoch/,
+  "session adoption must commit only inside its captured authentication epoch",
+);
+assert.match(
+  authCore,
+  /lockKey: number[\s\S]*inFlightRef\.current\?\.lockKey === lockKey[\s\S]*inFlightRef\.current\?\.promise === promise/,
+  "session refresh locking must not share or clear work across authentication epochs",
+);
+assert.match(
+  authController,
+  /epochAtBootstrapStart[\s\S]*adoptAuthSession\([\s\S]*epochAtBootstrapStart/,
+  "initial bootstrap must adopt only inside its captured authentication epoch",
+);
+assert.match(
+  authController,
+  /AUTH_SIGNED_OUT_INTENT_KEY[\s\S]*authBootstrapAttemptIdRef\.current \+= 1;[\s\S]*markAuthBootstrapComplete\(\)/,
+  "cross-tab sign-out must invalidate old bootstrap work and finish signed-out presentation",
+);
+assert.match(
+  authController,
+  /epochAtSessionAvailable[\s\S]*onSessionReadyRef\.current[\s\S]*onSessionLostRef\.current/,
+  "late session-ready work must be cleaned up when its authentication epoch becomes stale",
 );
 assert.match(
   authController,

@@ -1,4 +1,8 @@
 import type { AuthSessionLike } from "./authSession";
+import {
+  APP_ADMISSION_TIMEOUT_MS,
+  withAsyncDeadline,
+} from "./asyncDeadline";
 import { bootstrapConvexAuthenticatedClient, requireConvexUrl } from "./convexAuthenticatedClient";
 import type {
   OperatorAccessSnapshot,
@@ -364,9 +368,15 @@ export async function loadOptionalOperatorAccessCanonical(params: {
   session: AuthSessionLike;
 }): Promise<OperatorAccessSnapshot | null> {
   const { client, authSubject, bootstrap } = await withOperatorAuth(params.session);
-  const access = (await client.query("operatorAccess:getMyOperatorAccessOptional" as any, {
-    authSubject,
-  })) as OperatorAccessSnapshot | null;
+  const access = (await withAsyncDeadline(
+    client.query("operatorAccess:getMyOperatorAccessOptional" as any, {
+      authSubject,
+    }),
+    {
+      timeoutMs: APP_ADMISSION_TIMEOUT_MS,
+      code: "operator_access_resolution_timeout",
+    },
+  )) as OperatorAccessSnapshot | null;
   if (!access) return null;
   const dbUserId = String(bootstrap?.dbUserId ?? "").trim();
   if (dbUserId && access.userId !== dbUserId) {

@@ -1,4 +1,8 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+import {
+  APP_ADMISSION_TIMEOUT_MS,
+  withAsyncDeadline,
+} from "./asyncDeadline";
 import type {
   CommunityCustomFunnelSlot,
   CommunityFunnelActivationTarget,
@@ -47,10 +51,16 @@ export async function fetchCloudCommunityFunnelDraftPreview<SessionT, TConfig = 
   params: CloudCommunityFunnelGatewayParams<SessionT> & { communitySlug: string },
 ): Promise<TConfig | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityFunnel:getCommunityFunnelDraftPreview" as any, {
-    authSubject,
-    slug: params.communitySlug,
-  });
+  const payload = await withAsyncDeadline(
+    client.query("communityFunnel:getCommunityFunnelDraftPreview" as any, {
+      authSubject,
+      slug: params.communitySlug,
+    }),
+    {
+      timeoutMs: APP_ADMISSION_TIMEOUT_MS,
+      code: "community_funnel_draft_preview_timeout",
+    },
+  );
   return firstObjectRow(payload) as TConfig | null;
 }
 

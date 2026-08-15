@@ -1,10 +1,12 @@
 import { type AuthSessionLike } from "./authSession";
 import {
   bootstrapConvexAuthenticatedClient,
-  CONVEX_AUTH_ADMISSION_TIMEOUT_MS,
   type ConvexAuthenticatedBootstrapResult,
 } from "./convexAuthenticatedClient";
-import { withAsyncDeadline } from "./asyncDeadline";
+import {
+  APP_ADMISSION_TIMEOUT_MS,
+  withAsyncDeadline,
+} from "./asyncDeadline";
 
 export type ConvexAuthenticatedSessionProbeResult = {
   accepted: boolean;
@@ -41,7 +43,7 @@ export async function probeConvexAuthenticatedActorSessionDetailed(
         authSubject,
       }),
       {
-        timeoutMs: CONVEX_AUTH_ADMISSION_TIMEOUT_MS,
+        timeoutMs: APP_ADMISSION_TIMEOUT_MS,
         code: "convex_get_actor_timeout",
       },
     )) as { authSubject?: unknown } | null;

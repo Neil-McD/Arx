@@ -35,6 +35,8 @@ export function useWebAuthenticatedIdentityController(
     subject: string;
     access: OperatorAccessSnapshot | null;
   } | null>(null);
+  const [operatorAccessError, setOperatorAccessError] = useState<string | null>(null);
+  const [operatorAccessAttempt, setOperatorAccessAttempt] = useState(0);
   const isOperatorAccessResolved =
     Boolean(canonicalUserId)
     && operatorAccessState?.subject === canonicalUserId;
@@ -46,13 +48,16 @@ export function useWebAuthenticatedIdentityController(
     const subject = String(canonicalUserId ?? "").trim();
     if (!session || !subject) {
       setOperatorAccessState(null);
+      setOperatorAccessError(null);
       return;
     }
 
+    setOperatorAccessError(null);
     loadOptionalOperatorAccessCanonical({ session }).then(
       (access) => {
         if (!isAlive) return;
         setOperatorAccessState({ subject, access: access ?? null });
+        setOperatorAccessError(null);
       },
       (error) => {
         if (!isAlive) return;
@@ -62,21 +67,31 @@ export function useWebAuthenticatedIdentityController(
           || message.includes("operator_access_identity_mismatch")
         ) {
           setOperatorAccessState({ subject, access: null });
+          setOperatorAccessError(null);
           return;
         }
         console.warn("Failed to resolve operator access:", error);
         setOperatorAccessState({ subject, access: null });
+        setOperatorAccessError(
+          "Polynet could not finish verifying operator access. Try again.",
+        );
       },
     );
     return () => {
       isAlive = false;
     };
-  }, [canonicalUserId, session]);
+  }, [canonicalUserId, operatorAccessAttempt, session]);
 
   return {
     canonicalUserId,
     isOperatorAccessResolved,
     operatorAccess,
+    operatorAccessError,
+    retryOperatorAccess: () => {
+      setOperatorAccessState(null);
+      setOperatorAccessError(null);
+      setOperatorAccessAttempt((attempt) => attempt + 1);
+    },
     hasOperatorAccess: Boolean(session && operatorAccess),
   };
 }
