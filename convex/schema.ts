@@ -1608,6 +1608,7 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_community_createdAt", ["communityId", "createdAt"])
+    .index("by_community_type_createdAt", ["communityId", "type", "createdAt"])
     .index("by_community_dedupeKey", ["communityId", "dedupeKey"]),
 
   communityMessageReactions: defineTable({

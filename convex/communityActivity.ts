@@ -37,6 +37,14 @@ const MAX_ACTIVITY_TITLE_CHARS = 180;
 const MAX_ACTIVITY_DEDUPE_KEY_CHARS = 256;
 const MAX_ACTIVITY_EVENTS_PER_READ = 100;
 
+const communityActivityEventTypeValidator = v.union(
+  v.literal("member_joined"),
+  v.literal("resource_added"),
+  v.literal("event_soon"),
+  v.literal("event_starting"),
+  v.literal("ai_feed_post_added"),
+);
+
 function normalizeActivityTitle(raw: unknown): string | undefined {
   const value = String(raw ?? "").trim().replace(/\s+/g, " ");
   if (!value) return undefined;
@@ -120,6 +128,7 @@ export const listCommunityActivityEvents = query({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
+    type: v.optional(communityActivityEventTypeValidator),
     beforeCreatedAt: v.optional(v.union(v.number(), v.null())),
     limit: v.optional(v.number()),
   },
@@ -140,15 +149,26 @@ export const listCommunityActivityEvents = query({
       typeof args.beforeCreatedAt === "number" && Number.isFinite(args.beforeCreatedAt)
         ? Math.max(0, Math.floor(args.beforeCreatedAt))
         : null;
-    const rows = (await ctx.db
-      .query("communityActivityEvents" as any)
-      .withIndex("by_community_createdAt", (q: any) =>
-        beforeCreatedAt === null
-          ? q.eq("communityId", args.communityId)
-          : q.eq("communityId", args.communityId).lt("createdAt", beforeCreatedAt),
-      )
-      .order("desc")
-      .take(safeLimit)) as CommunityActivityEventRow[];
+    const rows = (args.type
+      ? await ctx.db
+          .query("communityActivityEvents" as any)
+          .withIndex("by_community_type_createdAt", (q: any) => {
+            const typed = q.eq("communityId", args.communityId).eq("type", args.type);
+            return beforeCreatedAt === null
+              ? typed
+              : typed.lt("createdAt", beforeCreatedAt);
+          })
+          .order("desc")
+          .take(safeLimit)
+      : await ctx.db
+          .query("communityActivityEvents" as any)
+          .withIndex("by_community_createdAt", (q: any) =>
+            beforeCreatedAt === null
+              ? q.eq("communityId", args.communityId)
+              : q.eq("communityId", args.communityId).lt("createdAt", beforeCreatedAt),
+          )
+          .order("desc")
+          .take(safeLimit)) as CommunityActivityEventRow[];
     const userIdCache = new Map<string, string | null>();
     const mapped = await Promise.all(rows.map((row) => mapCommunityActivityEventRow(ctx, row, userIdCache)));
     return mapped.reverse();

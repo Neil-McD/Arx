@@ -4519,6 +4519,29 @@
   max-width: 80%;
 }
 
+.community-interaction-member-arrivals {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 32px;
+  padding: 4px 14px;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1.4;
+  text-align: center;
+}
+
+.community-interaction-member-arrival-faces {
+  --member-avatar-stack-face-size: 24px;
+}
+
+.community-interaction-member-arrivals > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .community-interaction-group {
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr);

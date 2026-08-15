@@ -139,6 +139,22 @@ test("legacy generation-zero checkout remains redeemable on an active legacy com
     communityId: String(fixture.communityId),
     accessGranted: true,
   });
+  const arrivalEvents = await t.run(async (ctx) =>
+    await ctx.db
+      .query("communityActivityEvents")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", fixture.communityId),
+      )
+      .collect(),
+  );
+  expect(arrivalEvents).toEqual([
+    expect.objectContaining({
+      type: "member_joined",
+      actorUserId: fixture.memberId,
+      targetType: "membership",
+      dedupeKey: expect.stringMatching(/^member_joined:.+:1$/),
+    }),
+  ]);
 });
 
 test("archived communities cannot start or persist a member checkout", async () => {

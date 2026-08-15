@@ -5,6 +5,7 @@ import {
   normalizeCommunityRoleForOutput,
   syncCommunityActiveMemberCount,
 } from "./communityCore";
+import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { createCommunityOnboardingSessionForActivation } from "./communityOnboardingCore";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
@@ -102,6 +103,16 @@ export async function activateCommunityMembershipCore(args: {
     baselineAt: args.nowMs,
   });
   await syncCommunityActiveMemberCount({ ctx: args.ctx, communityId: args.communityId });
+  await recordCommunityActivityEventBestEffort({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    type: "member_joined",
+    actorUserId: args.userId,
+    targetType: "membership",
+    targetId: membershipId,
+    dedupeKey: `member_joined:${String(membershipId)}:${activationSequence}`,
+    nowMs: args.nowMs,
+  });
   try {
     await createCommunityOnboardingSessionForActivation({
       ctx: args.ctx,
