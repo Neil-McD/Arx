@@ -43,6 +43,7 @@ import {
   type CommunityInferenceFundingSession,
 } from "./founderInferenceRuntime";
 import { buildRuntimeInputBudgetEvidence } from "../shared/runtimeInputBudget.ts";
+import { buildRuntimeContextProjectionEvidence } from "../shared/providerContextWindow.ts";
 
 const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 12;
 const COMMUNITY_AGENT_RUNTIME_MAX_OUTPUT_CHARS = 12_000;
@@ -808,6 +809,7 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
           v.literal("tool_call"),
           v.literal("tool_result"),
           v.literal("input_budget"),
+          v.literal("context_projection"),
           v.literal("final"),
           v.literal("error"),
         ),
@@ -998,6 +1000,7 @@ export const runCommunityAgentLoopInternal = internalAction({
           | "tool_call"
           | "tool_result"
           | "input_budget"
+          | "context_projection"
           | "final"
           | "error";
         toolName?: string;
@@ -1023,7 +1026,7 @@ export const runCommunityAgentLoopInternal = internalAction({
     };
     const emitRequiredRunEvents = async (
       events: Array<{
-        kind: "input_budget";
+        kind: "input_budget" | "context_projection";
         status?: string;
         errorCode?: string;
         content: string;
@@ -1143,6 +1146,17 @@ export const runCommunityAgentLoopInternal = internalAction({
                 errorCode: budgetPlan.plan.failureCode ?? undefined,
                 content: JSON.stringify(
                   buildRuntimeInputBudgetEvidence(budgetPlan),
+                ),
+              },
+            ]);
+          },
+          recordProjection: async (projection) => {
+            await emitRequiredRunEvents([
+              {
+                kind: "context_projection",
+                status: "projected",
+                content: JSON.stringify(
+                  buildRuntimeContextProjectionEvidence(projection),
                 ),
               },
             ]);

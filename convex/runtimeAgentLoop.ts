@@ -107,8 +107,7 @@ import {
   type RuntimeToolSchedulePlan,
 } from "../shared/runtimeToolPolicy";
 import {
-  compactProviderTranscriptForContextRetry,
-  estimateNativeToolTranscriptTokens,
+  buildRuntimeContextProjectionEvidence,
 } from "../shared/providerContextWindow";
 import {
   RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
@@ -1355,8 +1354,11 @@ async function executeRetrievalAgentLoop(
       params.invocationSurface === "community_funnel_builder"
         ? params.invocationSurface
         : null;
-    if (attestedSurface) {
-      let attestationPersisted = false;
+    let initialProviderContextAttested = !attestedSurface;
+    const ensureInitialProviderContextAttestation = async (
+      providerMessages: NativeToolAwareMessage[],
+    ): Promise<RuntimeAgentLoopFailureInput | null> => {
+      if (initialProviderContextAttested || !attestedSurface) return null;
       try {
         await throwIfCancelled();
         if (
@@ -1388,7 +1390,7 @@ async function executeRetrievalAgentLoop(
           toolChoice: providerToolChoice,
           parallelToolCalls:
             providerToolChoice === "auto" && parallelReadToolsEnabled,
-          messages: nativeTranscript,
+          messages: providerMessages,
           promptSections: runtimePromptBundle.sections,
           contextManifest: runtimeContextManifest,
           toolSchemaFormat: useResponsesApiTools
@@ -1407,7 +1409,8 @@ async function executeRetrievalAgentLoop(
               RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
           );
         }
-        attestationPersisted = true;
+        initialProviderContextAttested = true;
+        return null;
       } catch (error) {
         if (isRuntimeRunCancelledError(error)) throw error;
         logStructuredError("runtime_provider_context_attestation_failed", {
@@ -1418,22 +1421,15 @@ async function executeRetrievalAgentLoop(
           invocationSurface: attestedSurface,
           requestedModelId: params.requestedModelId,
         });
-      }
-      if (!attestationPersisted) {
         return {
           ok: false,
           status: 503,
           code: RUNTIME_PROVIDER_CONTEXT_ATTESTATION_FAILURE_CODE,
           stopReason: "model_error",
           message: "The agent could not safely prepare this turn. Please retry.",
-          promptTokens: null,
-          completionTokens: null,
-          transcript: [...nativeTranscript],
-          stepCount: 0,
-          steps: [],
         };
       }
-    }
+    };
     const loopResult = await runNativeRuntimeKernel<string>({
       messages: nativeTranscript,
       budget: params.loopBudget,
@@ -1457,39 +1453,21 @@ async function executeRetrievalAgentLoop(
             },
           });
         },
-      },
-      prepareProviderTranscript: ({ transcript, forceCompaction }) => {
-        if (forceCompaction) {
-          return compactProviderTranscriptForContextRetry(transcript);
-        }
-        const estimatedTokens = estimateNativeToolTranscriptTokens(transcript);
-        return {
-          messages: transcript,
-          compactedToolResults: 0,
-          originalEstimatedTokens: estimatedTokens,
-          projectedEstimatedTokens: estimatedTokens,
-        };
-      },
-      onProviderContextCompacted: async (projection) => {
-        try {
+        recordProjection: async (projection) => {
           await params.appendRunEvent({
-            eventType: "provider_context_compacted",
-            eventKey: `${params.runId}:provider_context_compacted:1`,
+            eventType: "runtime_context_projected",
+            eventKey: `${params.runId}:runtime_context_projection:${projection.sequence}`,
             payload: {
               run_id: params.runId,
-              trigger: projection.trigger,
-              compacted_tool_result_count: projection.compactedToolResults,
-              original_estimated_tokens: projection.originalEstimatedTokens,
-              projected_estimated_tokens: projection.projectedEstimatedTokens,
-              durable_transcript_preserved: true,
-              retry_limit: 1,
+              ...buildRuntimeContextProjectionEvidence(projection),
             },
           });
-        } catch {
-          // Best-effort context receipt only; recovery must not fail on telemetry.
-        }
+        },
       },
       runCompletion: async (messages) => {
+        const attestationFailure =
+          await ensureInitialProviderContextAttestation(messages);
+        if (attestationFailure) return attestationFailure;
         let completion:
           | NativeToolAwareCompletionSuccess<string>
           | RuntimeAgentLoopFailureInput;

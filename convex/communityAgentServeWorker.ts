@@ -57,6 +57,7 @@ import {
   type CommunityInferenceFundingSession,
 } from "./founderInferenceRuntime";
 import { buildRuntimeInputBudgetEvidence } from "../shared/runtimeInputBudget.ts";
+import { buildRuntimeContextProjectionEvidence } from "../shared/providerContextWindow.ts";
 import { COMMUNITY_OWNER_FUNDED_MODEL_ID } from "../shared/founderInference";
 import {
   COMMUNITY_AGENT_THREAD_CONTEXT_MAX_CANDIDATE_REPLIES,
@@ -291,6 +292,7 @@ type ServeRunEventKind =
   | "tool_call"
   | "tool_result"
   | "input_budget"
+  | "context_projection"
   | "final"
   | "error";
 
@@ -1769,6 +1771,15 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                 errorCode: budgetPlan.plan.failureCode ?? undefined,
                 content: JSON.stringify(
                   buildRuntimeInputBudgetEvidence(budgetPlan),
+                ),
+              });
+            },
+            recordProjection: async (projection) => {
+              await eventRecorder.recordRequired({
+                kind: "context_projection",
+                status: "projected",
+                content: JSON.stringify(
+                  buildRuntimeContextProjectionEvidence(projection),
                 ),
               });
             },

@@ -24,6 +24,7 @@ const result = await runNativeRuntimeKernel<RetrievalToolName>({
     reservedOutputTokens: 1_600,
     toolSchemas: [],
     recordPlan: () => undefined,
+    recordProjection: () => undefined,
   },
   runCompletion: async (messages) => {
     providerRequests.push(messages);

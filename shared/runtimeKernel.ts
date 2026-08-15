@@ -21,8 +21,11 @@ import type {
 import {
   CONTEXT_WINDOW_EXCEEDED_CODE,
   CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+  estimateNativeToolTranscriptTokens,
+  projectProviderContextToBudget,
   type ProviderContextProjection,
 } from "./providerContextWindow.ts";
+import { sha256RuntimeProviderContext } from "./runtimeProviderContextAttestation.ts";
 import {
   planRuntimeInputBudget,
   RUNTIME_INPUT_BUDGET_INVALID_CODE,
@@ -376,6 +379,12 @@ export type RuntimeKernelInputBudgetConfig = {
       remainingInputTokens: number;
     } | null;
   }) => Promise<void> | void;
+  recordProjection: (params: {
+    sequence: number;
+    trigger: "preflight_overflow" | "provider_overflow";
+    digest: string;
+    projection: Omit<ProviderContextProjection, "messages">;
+  }) => Promise<void> | void;
 };
 
 function sameRuntimeInputBudgetPlan(
@@ -400,15 +409,6 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
   budget: RuntimeKernelBudget;
   inputBudget: RuntimeKernelInputBudgetConfig;
   runCompletion: RuntimeKernelRunCompletion<TToolName>;
-  prepareProviderTranscript?: (params: {
-    transcript: NativeToolAwareMessage[];
-    forceCompaction: boolean;
-  }) => ProviderContextProjection;
-  onProviderContextCompacted?: (
-    projection: Omit<ProviderContextProjection, "messages"> & {
-      trigger: "proactive" | "provider_overflow";
-    },
-  ) => Promise<void> | void;
   normalizeToolArguments: (
     toolName: TToolName,
     rawArgs: Record<string, unknown>,
@@ -454,9 +454,8 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
   let repeatedCallCount = 0;
   let consecutiveFailureCount = 0;
   let consecutiveNoProgressCount = 0;
-  let providerContextCompactionActive = false;
-  let providerContextCompactionNotified = false;
   let inputBudgetPlanSequence = 0;
+  let contextProjectionSequence = 0;
   let previousInputBudgetPlan: RuntimeInputBudgetPlan | null = null;
 
   type RuntimeKernelTerminalSignal = {
@@ -481,11 +480,11 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     steps: [...steps],
   });
 
-  const runBudgetedCompletion = async (
+  const planProviderMessages = async (
     messages: NativeToolAwareMessage[],
   ): Promise<{
-    completion: Awaited<ReturnType<RuntimeKernelRunCompletion<TToolName>>>;
-    providerAttempted: boolean;
+    plan: RuntimeInputBudgetPlan | null;
+    failure: RuntimeKernelFailureInput | null;
   }> => {
     let plan: RuntimeInputBudgetPlan;
     try {
@@ -498,8 +497,8 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       });
     } catch {
       return {
-        providerAttempted: false,
-        completion: {
+        plan: null,
+        failure: {
           ok: false,
           status: 503,
           code: RUNTIME_INPUT_BUDGET_INVALID_CODE,
@@ -530,8 +529,8 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
         });
       } catch {
         return {
-          providerAttempted: false,
-          completion: {
+          plan: null,
+          failure: {
             ok: false,
             status: 503,
             code: "runtime_input_budget_evidence_unavailable",
@@ -543,22 +542,10 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       previousInputBudgetPlan = plan;
     }
 
-    if (!plan.fits) {
-      if (plan.failureCode === CONTEXT_WINDOW_EXCEEDED_CODE) {
-        return {
-          providerAttempted: false,
-          completion: {
-            ok: false,
-            status: 413,
-            code: CONTEXT_WINDOW_EXCEEDED_CODE,
-            stopReason: "model_error",
-            message: CONTEXT_WINDOW_EXCEEDED_MESSAGE,
-          },
-        };
-      }
+    if (!plan.fits && plan.failureCode !== CONTEXT_WINDOW_EXCEEDED_CODE) {
       return {
-        providerAttempted: false,
-        completion: {
+        plan,
+        failure: {
           ok: false,
           status: 503,
           code:
@@ -573,72 +560,183 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
     }
 
     return {
-      providerAttempted: true,
-      completion: await params.runCompletion(messages),
+      plan,
+      failure: null,
     };
   };
 
-  while (true) {
-    const prepareProviderTranscript = (
-      forceCompaction: boolean,
-    ): ProviderContextProjection =>
-      params.prepareProviderTranscript?.({
-        transcript: [...transcript],
-        forceCompaction,
-      }) ?? {
-        messages: transcript,
-        compactedToolResults: 0,
-        originalEstimatedTokens: 0,
-        projectedEstimatedTokens: 0,
-      };
-    const notifyProviderContextCompacted = async (
-      projection: ProviderContextProjection,
-      trigger: "proactive" | "provider_overflow",
-    ): Promise<void> => {
-      if (providerContextCompactionNotified) return;
-      providerContextCompactionNotified = true;
-      await params.onProviderContextCompacted?.({
-        compactedToolResults: projection.compactedToolResults,
-        originalEstimatedTokens: projection.originalEstimatedTokens,
-        projectedEstimatedTokens: projection.projectedEstimatedTokens,
-        trigger,
-      });
-    };
+  const contextOverflowFailure = (): RuntimeKernelFailureInput => ({
+    ok: false,
+    status: 413,
+    code: CONTEXT_WINDOW_EXCEEDED_CODE,
+    stopReason: "model_error",
+    message: CONTEXT_WINDOW_EXCEEDED_MESSAGE,
+  });
 
-    let providerProjection = prepareProviderTranscript(
-      providerContextCompactionActive,
-    );
-    if (providerProjection.compactedToolResults > 0) {
-      providerContextCompactionActive = true;
-      await notifyProviderContextCompacted(providerProjection, "proactive");
+  const imageInputTokensForPlan = (
+    plan: RuntimeInputBudgetPlan,
+  ): number | undefined =>
+    plan.imageCount > 0
+      ? Math.max(0, Math.floor(plan.imageTokens / plan.imageCount))
+      : undefined;
+
+  const recordProjection = async (paramsToRecord: {
+    projection: ProviderContextProjection;
+    trigger: "preflight_overflow" | "provider_overflow";
+  }): Promise<RuntimeKernelFailureInput | null> => {
+    contextProjectionSequence += 1;
+    try {
+      const { messages, ...projectionEvidence } = paramsToRecord.projection;
+      await params.inputBudget.recordProjection({
+        sequence: contextProjectionSequence,
+        trigger: paramsToRecord.trigger,
+        digest: await sha256RuntimeProviderContext(messages),
+        projection: projectionEvidence,
+      });
+      return null;
+    } catch {
+      return {
+        ok: false,
+        status: 503,
+        code: "runtime_context_projection_evidence_unavailable",
+        stopReason: "model_error",
+        message: "The agent could not record the projected model context safely.",
+      };
     }
-    let budgetedCompletion = await runBudgetedCompletion(
-      providerProjection.messages,
-    );
-    let completion = budgetedCompletion.completion;
+  };
+
+  const runProviderCompletion = async (
+    messages: NativeToolAwareMessage[],
+  ): Promise<Awaited<ReturnType<RuntimeKernelRunCompletion<TToolName>>>> =>
+    await params.runCompletion(messages);
+
+  while (true) {
+    let providerMessages = [...transcript];
+    let planned = await planProviderMessages(providerMessages);
+    if (planned.failure) {
+      return toKernelFailure({
+        failure: planned.failure,
+        transcript,
+        steps,
+        stepCount: toolStepCount,
+        promptTokens,
+        completionTokens,
+      });
+    }
+    if (!planned.plan) {
+      return buildTerminalFailure({
+        status: 503,
+        code: RUNTIME_INPUT_BUDGET_INVALID_CODE,
+        stopReason: "model_error",
+        message: "The agent could not safely calculate the model input budget.",
+      });
+    }
+    if (!planned.plan.fits) {
+      const projection = projectProviderContextToBudget({
+        messages: transcript,
+        targetInputTokens: Math.max(
+          0,
+          planned.plan.usableInputTokens - planned.plan.toolSchemaTokens,
+        ),
+        imageInputTokens: imageInputTokensForPlan(planned.plan),
+      });
+      if (!projection.changed || !projection.fitsTarget) {
+        return toKernelFailure({
+          failure: contextOverflowFailure(),
+          transcript,
+          steps,
+          stepCount: toolStepCount,
+          promptTokens,
+          completionTokens,
+        });
+      }
+      const projectionFailure = await recordProjection({
+        projection,
+        trigger: "preflight_overflow",
+      });
+      if (projectionFailure) {
+        return toKernelFailure({
+          failure: projectionFailure,
+          transcript,
+          steps,
+          stepCount: toolStepCount,
+          promptTokens,
+          completionTokens,
+        });
+      }
+      providerMessages = projection.messages;
+      planned = await planProviderMessages(providerMessages);
+      if (planned.failure || !planned.plan?.fits) {
+        return toKernelFailure({
+          failure: planned.failure ?? contextOverflowFailure(),
+          transcript,
+          steps,
+          stepCount: toolStepCount,
+          promptTokens,
+          completionTokens,
+        });
+      }
+    }
+
+    let completion = await runProviderCompletion(providerMessages);
     if (
       completion.ok === false &&
       completion.code === CONTEXT_WINDOW_EXCEEDED_CODE &&
-      budgetedCompletion.providerAttempted &&
-      !providerContextCompactionActive &&
-      params.prepareProviderTranscript
+      planned.plan
     ) {
-      const recoveryProjection = prepareProviderTranscript(true);
+      const currentProviderTokens = estimateNativeToolTranscriptTokens(
+        providerMessages,
+        imageInputTokensForPlan(planned.plan),
+      );
+      const recoveryProjection = projectProviderContextToBudget({
+        messages: transcript,
+        targetInputTokens: Math.max(0, Math.floor(currentProviderTokens * 0.9)),
+        imageInputTokens: imageInputTokensForPlan(planned.plan),
+      });
       if (
-        recoveryProjection.compactedToolResults > 0 &&
+        recoveryProjection.changed &&
+        recoveryProjection.fitsTarget &&
         recoveryProjection.projectedEstimatedTokens <
-          recoveryProjection.originalEstimatedTokens
+          currentProviderTokens
       ) {
-        providerContextCompactionActive = true;
-        providerProjection = recoveryProjection;
-        await notifyProviderContextCompacted(
-          recoveryProjection,
-          "provider_overflow",
-        );
-        budgetedCompletion = await runBudgetedCompletion(
+        const projectionFailure = await recordProjection({
+          projection: recoveryProjection,
+          trigger: "provider_overflow",
+        });
+        if (projectionFailure) {
+          return toKernelFailure({
+            failure: projectionFailure,
+            transcript,
+            steps,
+            stepCount: toolStepCount,
+            promptTokens,
+            completionTokens,
+          });
+        }
+        const recoveryPlan = await planProviderMessages(
           recoveryProjection.messages,
         );
-        completion = budgetedCompletion.completion;
+        if (recoveryPlan.failure) {
+          return toKernelFailure({
+            failure: recoveryPlan.failure,
+            transcript,
+            steps,
+            stepCount: toolStepCount,
+            promptTokens,
+            completionTokens,
+          });
+        }
+        if (!recoveryPlan.plan?.fits) {
+          return toKernelFailure({
+            failure: contextOverflowFailure(),
+            transcript,
+            steps,
+            stepCount: toolStepCount,
+            promptTokens,
+            completionTokens,
+          });
+        }
+        completion = await runProviderCompletion(recoveryProjection.messages);
       }
     }
     if (completion.ok === false) {

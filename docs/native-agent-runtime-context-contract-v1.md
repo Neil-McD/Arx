@@ -1,16 +1,17 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 5D released; Slice 6 hardened and locally verified, release proof pending
+Status: context architecture through Slice 6 released; Slice 7A implemented and locally verified, Slice 7B pending
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
-Last updated: 2026-08-14
+Last updated: 2026-08-15
 
 Program position:
 
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: Slices 5A through 5D are released and production-proven;
-  Slice 6 is hardened and locally verified; Slices 7 through 10 remain.
+- Runtime convergence: Slices 5A through 6 are released and production-proven;
+  Slice 7A is implemented and locally verified; Slice 7B and Slices 8 through 10
+  remain.
 - Pi agent-core adoption in Polynet: not started.
 
 ## 1. Purpose
@@ -290,17 +291,14 @@ The landed system already has:
 
 The remaining gaps are:
 
-1. The runtime has no canonical model-capacity registry or model-aware input
-   budget.
-2. Current compaction is a coarse four-characters-per-token estimate that trims
-   tool results only, and it is not shared by Concierge and Steward.
-3. Workspace, Codex worker, chat-mode, and workspace-oriented prompt/tool
-   compatibility remain in backend code and schemas.
-4. Unknown invocation surfaces still normalize to `workspace` instead of
-   failing closed.
-5. Pi agent core has not been admitted, parity-tested, or used by a production
+1. The bounded 60-row persisted-history read shared by Member and Funnel
+   Composer still precedes model-visible projection; budget-guided newest-first
+   pagination remains Slice 7B.
+2. Slice 7A has local deterministic proof but has not been merged, deployed, or
+   production-proven.
+3. Pi agent core has not been admitted, parity-tested, or used by a production
    Polynet turn.
-6. Pi agent core has not yet proved that it removes more runtime complexity
+4. Pi agent core has not yet proved that it removes more runtime complexity
    than its adapter and hosted-runtime requirements add.
 
 Program status:
@@ -313,7 +311,7 @@ Program status:
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
 | 5 | Workspace and Codex runtime deletion | Complete and production-proven |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
-| 7 | Shared deterministic model-visible projection | Not started |
+| 7 | Shared deterministic model-visible projection | 7A locally complete; 7B not started |
 | 8 | Pi value/feasibility adapter and deterministic parity | Not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
@@ -914,8 +912,9 @@ Implemented shape:
 7. Tool/resource response bounds and pagination remain unchanged. The deleted
    request-wide transport character ceiling remains absent, and Member history
    no longer applies separate 60,000-total or 20,000-per-message truncation.
-   The existing bounded 60-row storage read remains until Slice 7 owns paginated
-   model-visible history projection.
+   The existing bounded 60-row storage read shared by Member and Funnel
+   Composer remains until Slice 7 owns paginated model-visible history
+   projection.
 8. Each role resolves one provider tool surface per run. The same immutable
    schema value is used for initial context evidence, input budgeting,
    provider transmission, and returned-tool validation; the budget seam cannot
@@ -968,8 +967,11 @@ policy.
 
 Projection order:
 
-1. Recompile current canonical system instructions from live state.
-2. Preserve the latest user request and all unresolved tool-call/result pairs.
+1. Preserve the exact canonical system instructions compiled for this run.
+   Canonical state changes affect subsequent turns only; projection never
+   reloads policy or mutates the current turn's authority.
+2. Preserve the latest user request and every message in its current episode
+   byte-for-byte, including unresolved tool-call/result pairs.
 3. Preserve recent conversational turns within the budget.
 4. Deterministically compact older large tool results and media references.
 5. Use existing episodic recall or authorized community retrieval for omitted
@@ -1005,6 +1007,31 @@ Acceptance:
 Non-goals: semantic/LLM summarization, provider cache-control abstraction,
 background self-improvement, a new memory backend, a general context engine
 plugin system, or Hermes-scale compression infrastructure.
+
+Slice 7A implemented shape:
+
+1. `shared/providerContextWindow.ts` is the single deterministic projector. It
+   preserves current-run system instructions and every message in the latest
+   user episode byte-for-byte, compacts retained older tool/media evidence, and
+   omits only complete older conversation segments.
+2. `runNativeRuntimeKernel` owns projection for every native role. An estimated
+   overflow projects and re-plans before provider/funding execution; a provider
+   overflow receives at most one retry and only after measurable savings.
+3. Projection operates on a provider-only copy. Durable messages, tool results,
+   memory, and the kernel result transcript remain unchanged.
+4. Existing role event stores record mandatory versioned lineage: trigger,
+   attempt sequence, exact projected-context digest, included/omitted ranges,
+   compacted indexes, and before/after estimates. No projection database or
+   second event model was added.
+5. Member and Funnel initial provider-context attestation now occurs after the
+   final projection and before their existing funding hook, so it attests the
+   bytes actually offered to the provider.
+6. The optional Member/Funnel-owned compaction callbacks and their
+   tool-result-only retry path are deleted. Concierge and Steward inherit the
+   same kernel behavior without role-specific projection code.
+7. Slice 7B separately owns budget-guided pagination beyond the existing newest
+   60 persisted messages shared by Member and Funnel Composer. Pi remains
+   excluded until all of Slice 7 is complete.
 
 ### 17.5 Slice 8: Pi value/feasibility adapter and deterministic parity
 
@@ -1222,10 +1249,8 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Slice 6 is locally complete at the intended boundary: one model-aware admission
-owner, all four native roles, mandatory plan evidence, and no funding/provider
-execution on rejection. The next gate is merge/deploy proof plus one normal
-community-inspection canary and one synthetic oversized canary proving no
-provider-start or billing receipt. Only after that evidence is captured should
-Slice 7 begin deterministic projection; do not mix in Pi adoption, a second
-prompt compiler, or a second runtime.
+Finish Slice 7A review and release proof without a user-visible UI canary. Then
+implement Slice 7B as budget-guided newest-first persisted-history pagination
+for Member and Funnel Composer over the same projector. Do not mix in Pi
+adoption, semantic summarization, a second prompt compiler, a second event
+store, or a second runtime.

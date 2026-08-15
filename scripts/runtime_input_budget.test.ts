@@ -5,7 +5,6 @@ import {
 } from "../shared/nativeToolProtocol.ts";
 import { runNativeRuntimeKernel } from "../shared/runtimeKernel.ts";
 import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
-import { compactProviderTranscriptForContextRetry } from "../shared/providerContextWindow.ts";
 import {
   listRuntimeModelCapacityProfiles,
   planRuntimeInputBudget,
@@ -181,6 +180,7 @@ describe("runtime input budget", () => {
         recordPlan: ({ kind, plan }) => {
           evidence.push({ kind, fits: plan.fits });
         },
+        recordProjection: () => undefined,
       },
       runCompletion: async () => {
         providerCalls += 1;
@@ -223,6 +223,7 @@ describe("runtime input budget", () => {
         reservedOutputTokens: 1_600,
         toolSchemas: [],
         recordPlan: () => undefined,
+        recordProjection: () => undefined,
       },
       runCompletion: async () => {
         providerCalls += 1;
@@ -249,17 +250,18 @@ describe("runtime input budget", () => {
     expect(providerCalls).toBe(0);
   });
 
-  it("does not treat a preflight rejection as a provider-overflow retry", async () => {
+  it("projects an oversized preflight context before the first provider request", async () => {
     let providerCalls = 0;
-    let compactionEvents = 0;
+    const projections: Array<{
+      trigger: string;
+      omittedRanges: Array<{ start: number; end: number }>;
+    }> = [];
     const result = await runNativeRuntimeKernel({
       messages: [
-        { role: "user", content: "Inspect the community." },
-        {
-          role: "tool",
-          tool_call_id: "oversized-result",
-          content: "x".repeat(300_000),
-        },
+        { role: "system", content: "Inspect only the authorized community." },
+        { role: "user", content: "x".repeat(300_000) },
+        { role: "assistant", content: "Prior answer." },
+        { role: "user", content: "What is happening now?" },
       ],
       budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
       inputBudget: {
@@ -268,25 +270,23 @@ describe("runtime input budget", () => {
         reservedOutputTokens: 1_600,
         toolSchemas: [],
         recordPlan: () => undefined,
+        recordProjection: ({ trigger, projection }) => {
+          projections.push({
+            trigger,
+            omittedRanges: projection.omittedRanges,
+          });
+        },
       },
-      prepareProviderTranscript: ({ transcript, forceCompaction }) =>
-        forceCompaction
-          ? compactProviderTranscriptForContextRetry(transcript)
-          : {
-              messages: transcript,
-              compactedToolResults: 0,
-              originalEstimatedTokens: 0,
-              projectedEstimatedTokens: 0,
-            },
-      onProviderContextCompacted: () => {
-        compactionEvents += 1;
-      },
-      runCompletion: async () => {
+      runCompletion: async (messages) => {
         providerCalls += 1;
+        expect(messages).toEqual([
+          { role: "system", content: "Inspect only the authorized community." },
+          { role: "user", content: "What is happening now?" },
+        ]);
         return {
           ok: true,
           type: "assistant",
-          assistantText: "must not run",
+          assistantText: "Current answer.",
           promptTokens: 1,
           completionTokens: 1,
           resolvedModelId: "gpt-oss-120b",
@@ -301,10 +301,20 @@ describe("runtime input budget", () => {
         errorMessage: null,
       }),
     });
-    expect(result.ok).toBe(false);
-    expect(result.ok ? null : result.code).toBe("context_window_exceeded");
-    expect(providerCalls).toBe(0);
-    expect(compactionEvents).toBe(0);
+    expect(result.ok).toBe(true);
+    expect(providerCalls).toBe(1);
+    expect(projections).toEqual([
+      {
+        trigger: "preflight_overflow",
+        omittedRanges: [{ start: 1, end: 2 }],
+      },
+    ]);
+    expect(result.transcript.slice(0, 4)).toEqual([
+      { role: "system", content: "Inspect only the authorized community." },
+      { role: "user", content: "x".repeat(300_000) },
+      { role: "assistant", content: "Prior answer." },
+      { role: "user", content: "What is happening now?" },
+    ]);
   });
 
   it("records changed follow-up plans as deltas", async () => {
@@ -323,6 +333,7 @@ describe("runtime input budget", () => {
         recordPlan: ({ kind }) => {
           evidenceKinds.push(kind);
         },
+        recordProjection: () => undefined,
       },
       runCompletion: async () => {
         providerCalls += 1;

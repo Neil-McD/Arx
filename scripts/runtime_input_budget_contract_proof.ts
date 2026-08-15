@@ -18,18 +18,18 @@ assert.doesNotMatch(
 );
 assert.match(
   kernel,
-  /runBudgetedCompletion\([\s\S]*providerProjection\.messages/,
-  "the initial provider attempt must pass through canonical admission",
+  /!planned\.plan\.fits[\s\S]*projectProviderContextToBudget\([\s\S]*planProviderMessages\(providerMessages\)/,
+  "a preflight overflow must project and re-plan before provider execution",
 );
 assert.match(
   kernel,
-  /runBudgetedCompletion\([\s\S]*recoveryProjection\.messages/,
-  "the provider-overflow retry must pass through canonical admission",
+  /completion\.code === CONTEXT_WINDOW_EXCEEDED_CODE[\s\S]*projectProviderContextToBudget\([\s\S]*planProviderMessages\([\s\S]*recoveryProjection\.messages[\s\S]*runProviderCompletion\(recoveryProjection\.messages\)/,
+  "the single provider-overflow retry must make measurable savings and re-plan",
 );
-assert.match(
+assert.doesNotMatch(
   kernel,
-  /completion\.code === CONTEXT_WINDOW_EXCEEDED_CODE[\s\S]*budgetedCompletion\.providerAttempted[\s\S]*prepareProviderTranscript/,
-  "a preflight budget rejection must not trigger the legacy provider-overflow compaction retry",
+  /prepareProviderTranscript|onProviderContextCompacted|providerContextCompactionActive/,
+  "the optional role-owned legacy compaction path must be deleted",
 );
 assert.equal(
   count(kernel, /params\.runCompletion\(/g),
@@ -40,7 +40,7 @@ assert.equal(
 const providerContext = read("shared/providerContextWindow.ts");
 assert.match(
   providerContext,
-  /estimateRuntimeMessageInputTokens\(messages\)\.estimatedTokens/,
+  /estimateRuntimeMessageInputTokens\(\s*messages,\s*imageInputTokens,\s*\)\.estimatedTokens/,
   "provider-overflow evidence must reuse the canonical message estimator",
 );
 assert.doesNotMatch(providerContext, /ESTIMATED_CHARS_PER_TOKEN/);
@@ -69,6 +69,8 @@ for (const path of [
     `${path} must configure admission before its provider callback`,
   );
   assert.match(source, /buildRuntimeInputBudgetEvidence/);
+  assert.match(source, /recordProjection:/);
+  assert.match(source, /buildRuntimeContextProjectionEvidence/);
   assert.doesNotMatch(
     source,
     /getToolSchemas/,
@@ -81,6 +83,11 @@ assert.match(
   memberRuntime,
   /const activeProviderTools = \{[\s\S]*toolSchemas:[\s\S]*activeProviderTools\.(?:openAiTools|responsesTools)[\s\S]*openRouterTools: activeProviderTools\.openAiTools[\s\S]*responsesApiTools: activeProviderTools\.responsesTools/,
   "Member and Funnel must budget and send one resolved provider tool surface",
+);
+assert.match(
+  memberRuntime,
+  /ensureInitialProviderContextAttestation\(messages\)[\s\S]*beforeProviderRequest/,
+  "Member and Funnel must attest the actual projected provider messages before funding",
 );
 assert.doesNotMatch(memberRuntime, /buildActiveProviderTools/);
 assert.match(
@@ -150,6 +157,7 @@ for (const path of [
 
 const runtimeEvents = read("convex/communityAgentRuntime.ts");
 assert.match(runtimeEvents, /v\.literal\("input_budget"\)/);
+assert.match(runtimeEvents, /v\.literal\("context_projection"\)/);
 
 const inferenceConfig = read("convex/httpInferenceConfig.ts");
 const capacityRegistry = read("shared/runtimeInputBudget.ts");
