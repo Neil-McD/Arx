@@ -21,4 +21,26 @@ describe("runtime Stop startup race", () => {
       /\{runtimeEvents\.length > 0 \? \([\s\S]*?aria-label="Stop"/,
     );
   });
+
+  it("persists authoritative cancellation before aborting the local stream", () => {
+    const root = path.resolve(import.meta.dirname, "..");
+    const controller = fs.readFileSync(
+      path.join(root, "shared/useWebTurnRunnerController.ts"),
+      "utf8",
+    );
+    const stopOneStart = controller.indexOf("const stopStreamingTurn");
+    const stopAllStart = controller.indexOf("const stopAllStreamingTurns");
+    const runTurnStart = controller.indexOf("const runAgentTurn");
+    expect(stopOneStart).toBeGreaterThanOrEqual(0);
+    expect(stopAllStart).toBeGreaterThan(stopOneStart);
+    expect(runTurnStart).toBeGreaterThan(stopAllStart);
+    const stopOne = controller.slice(stopOneStart, stopAllStart);
+    const stopAll = controller.slice(stopAllStart, runTurnStart);
+    expect(stopOne).toMatch(
+      /cancelCloudRuntimeRunByThreadKey\(\{[\s\S]*?runId: activeRunId,[\s\S]*?\.finally\(\(\) => threadAbort\.abort\(\)\);[\s\S]*?return;/,
+    );
+    expect(stopAll).toMatch(
+      /cancelCloudRuntimeRunByThreadKey\(\{[\s\S]*?runId: activeRunId,[\s\S]*?\.finally\(\(\) => abort\?\.abort\(\)\);[\s\S]*?continue;/,
+    );
+  });
 });

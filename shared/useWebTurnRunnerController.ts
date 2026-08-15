@@ -348,7 +348,10 @@ export function useWebTurnRunnerController<
           session: session as any,
           threadId: resolvedThreadId,
           runId: activeRunId,
-        }).catch(() => null);
+        })
+          .catch(() => null)
+          .finally(() => threadAbort.abort());
+        return;
       }
       threadAbort.abort();
       return;
@@ -385,7 +388,10 @@ export function useWebTurnRunnerController<
           session: session as any,
           threadId,
           runId: activeRunId,
-        }).catch(() => null);
+        })
+          .catch(() => null)
+          .finally(() => abort?.abort());
+        continue;
       }
       abort?.abort();
     }
