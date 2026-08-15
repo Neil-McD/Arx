@@ -10,10 +10,12 @@ import {
   appendRuntimeToolCallStarted,
 } from "./runtimeToolCallEvents";
 import {
+  RUNTIME_RUN_NOT_ACTIVE_CODE,
   USER_CANCELLED_RUNTIME_CODE,
   isRuntimeRunCancelledError,
+  isRuntimeRunInactiveError,
   runAbortableWithRuntimeCancellation,
-  throwIfRuntimeRunCancelled,
+  throwIfRuntimeRunCannotContinue,
 } from "./runtimeCancellation";
 import { executeWebResearch } from "./webResearchTools";
 import type { WebResearchBillingEvidence } from "./webSearchTypes";
@@ -1473,8 +1475,8 @@ async function executeRetrievalAgentLoop(
     // Best-effort runtime evidence only.
   }
   try {
-    const throwIfCancelled = async (): Promise<void> => {
-      await throwIfRuntimeRunCancelled({
+    const throwIfRunCannotContinue = async (): Promise<void> => {
+      await throwIfRuntimeRunCannotContinue({
         ctx: params.ctx,
         ownerId: params.userId,
         runId: params.runId,
@@ -1493,7 +1495,7 @@ async function executeRetrievalAgentLoop(
     ): Promise<RuntimeAgentLoopFailureInput | null> => {
       if (initialProviderContextAttested || !attestedSurface) return null;
       try {
-        await throwIfCancelled();
+        await throwIfRunCannotContinue();
         if (
           !params.recordInitialProviderContextAttestation ||
           !params.threadId ||
@@ -1545,7 +1547,12 @@ async function executeRetrievalAgentLoop(
         initialProviderContextAttested = true;
         return null;
       } catch (error) {
-        if (isRuntimeRunCancelledError(error)) throw error;
+        if (
+          isRuntimeRunCancelledError(error) ||
+          isRuntimeRunInactiveError(error)
+        ) {
+          throw error;
+        }
         logStructuredError("runtime_provider_context_attestation_failed", {
           error,
           runId: params.runId,
@@ -1613,11 +1620,17 @@ async function executeRetrievalAgentLoop(
             ctx: params.ctx,
             ownerId: params.userId,
             runId: params.runId,
+            touchHeartbeat: params.touchRunHeartbeat,
             operation: async (signal) => {
               try {
                 await params.beforeProviderRequest?.();
               } catch (error) {
-                if (isRuntimeRunCancelledError(error)) throw error;
+                if (
+                  isRuntimeRunCancelledError(error) ||
+                  isRuntimeRunInactiveError(error)
+                ) {
+                  throw error;
+                }
                 throw new RuntimeProviderLifecycleHookError(error);
               }
               return await runProviderNativeToolCompletion({
@@ -1672,7 +1685,7 @@ async function executeRetrievalAgentLoop(
             promptTokens: completion.ok === false ? null : completion.promptTokens,
             completionTokens: completion.ok === false ? null : completion.completionTokens,
           });
-          await throwIfCancelled();
+          await throwIfRunCannotContinue();
         } catch (error) {
           if (isRuntimeRunCancelledError(error)) {
             if (!providerResultObserved) {
@@ -1688,6 +1701,23 @@ async function executeRetrievalAgentLoop(
               status: 409,
               code: USER_CANCELLED_RUNTIME_CODE,
               stopReason: "user_cancelled",
+              message: error.message,
+            };
+          }
+          if (isRuntimeRunInactiveError(error)) {
+            if (!providerResultObserved) {
+              params.observeProviderResult?.({
+                ok: false,
+                code: RUNTIME_RUN_NOT_ACTIVE_CODE,
+                promptTokens: null,
+                completionTokens: null,
+              });
+            }
+            return {
+              ok: false,
+              status: 409,
+              code: RUNTIME_RUN_NOT_ACTIVE_CODE,
+              stopReason: "model_error",
               message: error.message,
             };
           }
@@ -1813,7 +1843,7 @@ async function executeRetrievalAgentLoop(
         });
         try {
           try {
-            await throwIfCancelled();
+            await throwIfRunCannotContinue();
           } catch (error) {
             if (isRuntimeRunCancelledError(error)) {
               return {
@@ -1844,6 +1874,7 @@ async function executeRetrievalAgentLoop(
             ctx: params.ctx,
             ownerId: params.userId,
             runId: params.runId,
+            touchHeartbeat: params.touchRunHeartbeat,
             operation: async (signal) =>
               await executeRetrievalHarnessTool({
                 ctx: params.ctx,
@@ -1865,7 +1896,7 @@ async function executeRetrievalAgentLoop(
                 signal,
               }),
           });
-          await throwIfCancelled();
+          await throwIfRunCannotContinue();
           return toolResult;
         } catch (error) {
           if (isRuntimeRunCancelledError(error)) {
@@ -2040,6 +2071,26 @@ async function executeRetrievalAgentLoop(
         status: 409,
         code: USER_CANCELLED_RUNTIME_CODE,
         stopReason: "user_cancelled",
+        message: error.message,
+        promptTokens: null,
+        completionTokens: null,
+        transcript: [...nativeTranscript],
+        stepCount: 0,
+        steps: [],
+      };
+    }
+    if (isRuntimeRunInactiveError(error)) {
+      if (activeToolBatchTelemetry) {
+        await flushActiveToolBatchTelemetry({
+          terminalStopReason: "model_error",
+          terminalFailureCode: RUNTIME_RUN_NOT_ACTIVE_CODE,
+        });
+      }
+      return {
+        ok: false,
+        status: 409,
+        code: RUNTIME_RUN_NOT_ACTIVE_CODE,
+        stopReason: "model_error",
         message: error.message,
         promptTokens: null,
         completionTokens: null,

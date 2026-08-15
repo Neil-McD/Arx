@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B released and production-proven; Slices 8 through 10 remain
+Status: context architecture through Slice 7B released and production-proven; pre-Slice 8 liveness implemented locally and pending release; Slices 8 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-15
 
@@ -10,8 +10,10 @@ Program position:
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 7B are released and production-proven;
-  Slices 8 through 10 remain.
-- Pi agent-core adoption in Polynet: not started.
+  pre-Slice 8 liveness is locally proven, and Slices 8 through 10 remain.
+- Pi agent-core adoption in Polynet: no canonical implementation; an isolated
+  admission experiment exists outside the released tree, while parity and
+  cutover have not started.
 
 ## 1. Purpose
 
@@ -293,9 +295,11 @@ The released architecture through Slice 7B has:
 
 The remaining gaps are:
 
-1. Pi agent core has not been admitted, parity-tested, or used by a production
-   Polynet turn.
-2. Pi agent core has not yet proved that it removes more runtime complexity
+1. The pre-Slice 8 runtime-liveness correction is locally proven but has not
+   been released or authenticated-canary proven.
+2. Pi agent core has not been admitted into the canonical tree, parity-tested,
+   or used by a production Polynet turn.
+3. Pi agent core has not yet proved that it removes more runtime complexity
    than its adapter and hosted-runtime requirements add.
 
 Program status:
@@ -309,7 +313,8 @@ Program status:
 | 5 | Workspace and Codex runtime deletion | Complete and production-proven |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
-| 8 | Pi value/feasibility adapter and deterministic parity | Not started |
+| Pre-8 | Member/Funnel active-run liveness closure | Implemented and locally proven; release pending |
+| 8 | Pi value/feasibility adapter and deterministic parity | Isolated admission experiment exists; canonical parity not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
 
@@ -1092,6 +1097,40 @@ Slice 7B production evidence:
    fixture proves multi-page depth without manufacturing visible community
    activity.
 
+### 17.4.1 Pre-Slice 8 runtime-liveness closure
+
+Objective: close the existing Member/Funnel stale-run overlap before either
+runtime kernel is used as a parity baseline.
+
+Contract:
+
+1. The durable `runtimeRuns.status` is the execution authority. Only a
+   `running` run may begin provider work, admit a tool, persist a new runtime
+   event, or update an active context snapshot.
+2. The existing `updatedAt` field remains the liveness signal. Provider and
+   tool waits renew it through the existing heartbeat mutation at a bounded
+   cadence substantially shorter than the eight-minute stale window.
+3. Runtime cancellation polling observes every terminal status, not only
+   explicit user cancellation. A stale-reconciled, completed, missing, or
+   invalid run aborts with `runtime_run_not_active`.
+4. The durable `tool_call_started` event is the single tool-admission fence for
+   serial and parallel execution. A terminal run cannot persist a new start
+   event, so it cannot admit another tool. Do not add per-tool liveness policy.
+5. Existing event keys remain replayable after terminalization, but no new
+   event key may be written and no terminal heartbeat may update `updatedAt`.
+6. Retrying a completed run id replays its complete persisted assistant answer.
+   A terminal run without a complete answer returns
+   `runtime_run_not_resumable`; it never re-enters provider execution.
+
+Acceptance:
+
+1. Deterministic tests prove periodic heartbeat, terminal abort, event and
+   context fencing, idempotent event replay, complete-answer replay, and
+   incomplete terminal refusal.
+2. Existing context-attestation and runtime source-trace proofs remain green.
+3. No schema, cron, lease table, stale-window change, Pi route, Workspace
+   cleanup, Concierge behavior, or Steward behavior is added to this slice.
+
 ### 17.5 Slice 8: Pi value/feasibility adapter and deterministic parity
 
 Objective: determine whether Pi core can replace loop mechanics with a net
@@ -1308,9 +1347,11 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Begin Slice 8 only as a reversible Pi agent-core feasibility adapter with no
-production routing. First prove actual Convex runtime compatibility, governed
-tool-executor containment, deterministic loop parity, and a net reduction in
-maintained complexity. Adopt or reject Pi from that evidence; do not add
-semantic summarization, a second prompt compiler, a second event store, or a
-permanent second runtime.
+Complete and release the pre-Slice 8 runtime-liveness closure, including an
+authenticated staging concurrency/Stop/retry proof. Then begin Slice 8 only as
+a reversible Pi agent-core feasibility adapter with no production routing.
+First prove actual Convex runtime compatibility, governed tool-executor
+containment, deterministic loop parity, and a net reduction in maintained
+complexity. Adopt or reject Pi from that evidence; do not add semantic
+summarization, a second prompt compiler, a second event store, or a permanent
+second runtime.
