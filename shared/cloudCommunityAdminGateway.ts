@@ -214,6 +214,7 @@ export type CloudCommunitySourceIngestionResult = {
   processed: number;
   succeeded: number;
   failed: number;
+  failed_sources: number;
   ready_sources: number;
   total_sources: number;
   pending_url_sources: number;
@@ -1668,6 +1669,7 @@ export async function ingestCloudCommunitySources<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
     limit?: number;
+    retryFailed?: boolean;
   },
 ): Promise<CloudCommunitySourceIngestionResult | null> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -1678,7 +1680,7 @@ export async function ingestCloudCommunitySources<SessionT>(
       typeof params.limit === "number" && Number.isFinite(params.limit)
         ? Math.max(1, Math.floor(params.limit))
         : undefined,
-    retryFailed: true,
+    retryFailed: params.retryFailed === true,
   });
   return firstGatewayRow<CloudCommunitySourceIngestionResult>(payload)
     ?? ((payload && typeof payload === "object" && !Array.isArray(payload))

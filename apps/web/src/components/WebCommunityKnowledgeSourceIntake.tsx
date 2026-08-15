@@ -87,7 +87,7 @@ export function WebCommunityKnowledgeSourceIntake(props: {
         setFiles([]);
       }
       const readyCount = result.ingestion?.ready_sources ?? 0;
-      const failedCount = result.ingestion?.failed ?? 0;
+      const failedCount = result.ingestion?.failed_sources ?? 0;
       if (result.errors.length > 0 || result.rejected > 0 || failedCount > 0) {
         const primaryError = humanizeCommunitySourceError(result.errors[0]
           ?? result.ingestion?.failures[0]?.message

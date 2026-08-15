@@ -18,6 +18,8 @@ const sourceUrlPolicy = read("convex/communitySourceUrlPolicy.ts");
 const sourceIntegrationHttp = read("convex/httpCommunitySourceIntegrations.ts");
 const http = read("convex/http.ts");
 const gateway = read("shared/cloudCommunityAdminGateway.ts");
+const resourceController = read("shared/useCommunityResourceController.ts");
+const sourceIntake = read("apps/web/src/components/WebCommunityKnowledgeSourceIntake.tsx");
 const sourceCrawler = read("shared/communitySourceCrawler.ts");
 const sourceCrawlerServicePath = join(root, "services/community-source-crawler/app.py");
 const app = read("apps/web/src/App.tsx");
@@ -113,6 +115,11 @@ assert.match(
   schema,
   /sourceIngestionError:[\s\S]*sourceIngestionAttemptedAt:[\s\S]*sourceIngestedAt:/,
   "source ingestion should persist failure and timing evidence",
+);
+assert.match(
+  schema,
+  /sourceIngestionLeaseId:[\s\S]*sourceIngestionLeaseExpiresAt:[\s\S]*sourceIngestionAttempt:/,
+  "source ingestion should persist one bounded ownership fence on the canonical source row",
 );
 assert.match(
   schema,
@@ -331,6 +338,11 @@ assert.match(
 );
 assert.match(
   resources,
+  /decision\.action === "update_existing"[\s\S]*sourceIngestionStatus: "ready"[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceIngestionLeaseExpiresAt: undefined[\s\S]*sourceIngestionAttempt: undefined/,
+  "a crawler update should invalidate any older direct-ingestion claim on the same source",
+);
+assert.match(
+  resources,
   /getCommunitySourceCrawlerStatus = query\(\{[\s\S]*requireCommunityManager[\s\S]*getCommunitySourceCrawlerStatusValue[\s\S]*listCommunitySourceCrawlJobs = query\(\{[\s\S]*requireCommunityManager[\s\S]*by_community_createdAt[\s\S]*mapCommunitySourceCrawlJob[\s\S]*getCommunitySourceCrawlJob = query\(\{[\s\S]*community_source_crawl_job_not_found/,
   "source crawl jobs should have manager-gated status and progress queries for launch polling",
 );
@@ -376,23 +388,33 @@ assert.match(
 );
 assert.match(
   resources,
-  /const urlSources = sources\.filter\(isPlainUrlSource\)[\s\S]*const fileSources = sources\.filter\(isPlainFileSource\)[\s\S]*if \(sourceKind === "url"\) return isPlainUrlSource\(row\)[\s\S]*if \(sourceKind === "file"\) return isPlainFileSource\(row\)/,
-  "link-only and file-only ingestion should use exclusive manual source filters",
+  /function isIngestibleCommunitySource[\s\S]*isPlainUrlSource\(row\) \|\| isPlainFileSource\(row\) \|\| hasGoogleDriveSource \|\| hasGitHubSource[\s\S]*const urlSources = sources\.filter\(isPlainUrlSource\)[\s\S]*const fileSources = sources\.filter\(isPlainFileSource\)/,
+  "the one combined ingestion path should select valid manual, Drive, and GitHub sources",
+);
+assert.doesNotMatch(
+  resources,
+  /communitySourceMatchesIngestionKind|function countPendingSourceIngestion|sourceKind:|resultKind:/,
+  "the combined ingestion path must not retain obsolete provider-specific generalization",
 );
 assert.match(
   resources,
-  /function countPendingSourceIngestion[\s\S]*pending_url_sources[\s\S]*pending_file_sources[\s\S]*pending_google_drive_sources[\s\S]*pending_github_sources/,
-  "source ingestion should count pending work in the requested source scope",
+  /runCommunitySourceIngestion[\s\S]*const invalidMessage[\s\S]*status: "failed"[\s\S]*const failedSources = Number\(after\?\.failed_sources \?\? 0\)[\s\S]*const remainingPendingSources = Number\(after\?\.pending_sources \?\? 0\)[\s\S]*const ok = readySources > 0 && failedSources === 0 && remainingPendingSources === 0[\s\S]*failed_sources: failedSources[\s\S]*source_ingestion_partial_failure[\s\S]*source_ingestion_incomplete/,
+  "source ingestion should derive truthful completion from persisted failed and pending state",
 );
 assert.match(
   resources,
-  /runCommunitySourceIngestion[\s\S]*const invalidMessage[\s\S]*status: "failed"[\s\S]*const remainingPendingSources = countPendingSourceIngestion\(after, args\.sourceKind\)[\s\S]*const ok = readySources > 0 && failed === 0 && remainingPendingSources === 0[\s\S]*source_ingestion_partial_failure[\s\S]*source_ingestion_incomplete/,
-  "source ingestion should fail the action result when selected sources fail or remain pending",
+  /claimNextCommunitySourceIngestionInternal = internalMutation\([\s\S]*requireCommunityManager[\s\S]*status === "queued"[\s\S]*status === "failed"[\s\S]*status === "processing" && leaseExpired[\s\S]*sourceIngestionLeaseId: leaseId[\s\S]*sourceIngestionAttempt: nextAttempt/,
+  "source ingestion should claim one canonical source atomically with authorization, a lease, and an attempt fence",
 );
 assert.match(
   resources,
-  /export const patchCommunitySourceIngestionInternal = internalMutation\(/,
-  "source ingestion should patch readiness through an internal mutation",
+  /const claimedResourceIds:[\s\S]*excludeResourceIds: claimedResourceIds[\s\S]*claimedResourceIds\.push\(candidate\.resourceId\)/,
+  "one ingestion action should claim each source at most once instead of burning retries in a tight loop",
+);
+assert.match(
+  resources,
+  /isExplicitFailedRetry[\s\S]*attempt >= COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_ATTEMPTS && !isExplicitFailedRetry[\s\S]*isExplicitFailedRetry && attempt >= COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_ATTEMPTS[\s\S]*\? 1[\s\S]*: attempt \+ 1/,
+  "automatic retries should stop while an explicit retry can restart an exhausted source once",
 );
 assert.doesNotMatch(
   resources,
@@ -401,8 +423,13 @@ assert.doesNotMatch(
 );
 assert.match(
   resources,
-  /patchCommunitySourceIngestionInternal = internalMutation\([\s\S]*if \(!existing\) return null[\s\S]*if \(!updated\) return null/,
-  "source ingestion patching should tolerate source rows removed while an ingestion run is in flight",
+  /finalizeCommunitySourceIngestionInternal = internalMutation\([\s\S]*if \(!existing\) return \{ ok: false, code: "community_source_not_found" \}[\s\S]*requireActiveCommunity[\s\S]*community_source_ingestion_community_inactive[\s\S]*sourceIngestionLeaseId[\s\S]*sourceIngestionLeaseExpiresAt[\s\S]*community_source_ingestion_claim_lost/,
+  "source finalization should reject inactive communities, deletion, and stale or expired ownership",
+);
+assert.match(
+  resources,
+  /args\.status === "ready"[\s\S]*community_source_ingestion_body_required[\s\S]*args\.status === "failed"[\s\S]*community_source_ingestion_failed_body_forbidden[\s\S]*sourceIngestedAt: nowMs/,
+  "source finalization should require readable ready content, forbid failed bodies, and own terminal timing",
 );
 assert.match(
   resources,
@@ -416,7 +443,7 @@ assert.doesNotMatch(
 );
 assert.match(
   resources,
-  /sourceIngestionStatus: args\.status[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
+  /finalizeCommunitySourceIngestionInternal[\s\S]*sourceIngestionStatus: args\.status[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceOriginalFilename[\s\S]*writeCommunityResourceBodyContent[\s\S]*syncCommunityResourceMemoryProjection/,
   "source ingestion should persist extracted text and keep canonical memory projections in sync",
 );
 assert.match(
@@ -426,8 +453,8 @@ assert.match(
 );
 assert.match(
   resources,
-  /const nextSourceIngestionKind = Object\.prototype\.hasOwnProperty\.call\(payload, "source_ingestion_kind"\)[\s\S]*fileChanged[\s\S]*urlChanged[\s\S]*normalizeResourceSourceIngestionKind\(\{[\s\S]*\.\.\.existing/,
-  "generic resource edits should preserve existing integration ingestion kind unless the source payload changes",
+  /const nextSourceIngestionKind = Object\.prototype\.hasOwnProperty\.call\(payload, "source_ingestion_kind"\)[\s\S]*fileChanged[\s\S]*urlChanged[\s\S]*normalizeResourceSourceIngestionKind\(\{[\s\S]*\.\.\.existing[\s\S]*sourceRevisionChanged[\s\S]*sourceIngestionLeaseId: undefined[\s\S]*sourceIngestionAttempt: undefined/,
+  "generic resource edits should preserve source kind while invalidating stale ingestion ownership when the source changes",
 );
 assert.doesNotMatch(
   resources,
@@ -508,12 +535,12 @@ assert.match(
 );
 assert.match(
   resources,
-  /getCommunitySourceIngestionStateInternal[\s\S]*google_drive_sources:[\s\S]*pending_google_drive_sources:[\s\S]*sourceExternalProvider:[\s\S]*sourceExternalConnectionUserId: normalizeIdValue\(row\.sourceExternalConnectionUserId \?\? row\.createdByUserId\)[\s\S]*sourceExternalId:[\s\S]*sourceExternalMimeType:/,
-  "source ingestion state should count and return queued Google Drive source candidates",
+  /getCommunitySourceIngestionStateInternal[\s\S]*google_drive_sources:[\s\S]*pending_google_drive_sources:[\s\S]*claimNextCommunitySourceIngestionInternal[\s\S]*sourceExternalProvider:[\s\S]*sourceExternalConnectionUserId: normalizeIdValue\([\s\S]*row\.sourceExternalConnectionUserId \?\? row\.createdByUserId[\s\S]*sourceExternalId:[\s\S]*sourceExternalMimeType:/,
+  "source ingestion state should count Drive work while the atomic claim returns its credential authority",
 );
 assert.match(
   resources,
-  /runCommunitySourceIngestion[\s\S]*externalConnectionUserId[\s\S]*kind === "google_drive"[\s\S]*extractSourceTextFromGoogleDrive[\s\S]*userId: externalConnectionUserId \|\| actingUserId[\s\S]*buildIngestedGoogleDriveSourceBody[\s\S]*kind: "google_drive"[\s\S]*pending_google_drive_sources:/,
+  /runCommunitySourceIngestion[\s\S]*externalConnectionUserId[\s\S]*kind === "google_drive"[\s\S]*extractSourceTextFromGoogleDrive[\s\S]*userId: externalConnectionUserId \|\| actingUserId[\s\S]*buildIngestedGoogleDriveSourceBody[\s\S]*finalizeClaim\(\{[\s\S]*status: "ready"[\s\S]*pending_google_drive_sources:/,
   "source ingestion should read Drive file text with stored credential authority and persist ready Google Drive source bodies",
 );
 assert.match(
@@ -563,12 +590,12 @@ assert.match(
 );
 assert.match(
   resources,
-  /getCommunitySourceIngestionStateInternal[\s\S]*github_sources:[\s\S]*pending_github_sources:[\s\S]*parseGitHubFileExternalId/,
-  "source ingestion state should count and return queued GitHub source candidates",
+  /isIngestibleCommunitySource[\s\S]*parseGitHubFileExternalId[\s\S]*getCommunitySourceIngestionStateInternal[\s\S]*github_sources:[\s\S]*pending_github_sources:[\s\S]*claimNextCommunitySourceIngestionInternal/,
+  "source ingestion state should count GitHub work while the atomic claim selects valid GitHub files",
 );
 assert.match(
   resources,
-  /runCommunitySourceIngestion[\s\S]*kind === "github"[\s\S]*extractSourceTextFromGitHub[\s\S]*userId: externalConnectionUserId \|\| actingUserId[\s\S]*buildIngestedGitHubSourceBody[\s\S]*kind: "github"[\s\S]*pending_github_sources:/,
+  /runCommunitySourceIngestion[\s\S]*kind === "github"[\s\S]*extractSourceTextFromGitHub[\s\S]*userId: externalConnectionUserId \|\| actingUserId[\s\S]*buildIngestedGitHubSourceBody[\s\S]*finalizeClaim\(\{[\s\S]*status: "ready"[\s\S]*pending_github_sources:/,
   "source ingestion should read GitHub file text with stored credential authority and persist ready GitHub source bodies",
 );
 const publicGoogleDriveConnectionSection =
@@ -615,6 +642,21 @@ assert.match(
   gateway,
   /(?=[\s\S]*communityResources:generateCommunityResourceSourceUploadUrl)(?=[\s\S]*uploadCloudCommunityResourceSourceFile)(?=[\s\S]*getCloudCommunitySourceCrawlerStatus[\s\S]*client\.query\("communityResources:getCommunitySourceCrawlerStatus" as any)(?=[\s\S]*crawlCloudCommunitySourceRoot[\s\S]*client\.action\("communityResources:crawlCommunitySourceRoot" as any)(?=[\s\S]*getCloudCommunitySourceCrawlJob[\s\S]*client\.query\("communityResources:getCommunitySourceCrawlJob" as any)(?=[\s\S]*listCloudCommunitySourceCrawlJobs[\s\S]*communityResources:listCommunitySourceCrawlJobs)(?=[\s\S]*ingestCloudCommunitySources[\s\S]*client\.action\("communityResources:ingestCommunitySources" as any)(?=[\s\S]*listCloudCommunityLaunchKnowledgeSources[\s\S]*communityResources:listCommunityLaunchKnowledgeSources)(?=[\s\S]*beginCloudCommunityGoogleDriveSourceOAuth[\s\S]*communityResources:beginGoogleDriveSourceOAuth)(?=[\s\S]*beginCloudCommunityGitHubSourceOAuth[\s\S]*communityResources:beginGitHubSourceOAuth)(?=[\s\S]*disconnectCloudCommunityGoogleDriveSourceConnection[\s\S]*communityResources:disconnectGoogleDriveSourceConnection)(?=[\s\S]*disconnectCloudCommunityGitHubSourceConnection[\s\S]*communityResources:disconnectGitHubSourceConnection)(?=[\s\S]*finalizeCloudCommunityGoogleDriveSourceOAuth[\s\S]*communityResources:finalizeGoogleDriveSourceOAuth)(?=[\s\S]*finalizeCloudCommunityGitHubSourceOAuth[\s\S]*communityResources:finalizeGitHubSourceOAuth)(?=[\s\S]*listCloudCommunityGoogleDriveSourceFiles[\s\S]*communityResources:listGoogleDriveSourceFiles)(?=[\s\S]*listCloudCommunityGitHubSourceRepositories[\s\S]*communityResources:listGitHubSourceRepositories)(?=[\s\S]*listCloudCommunityGitHubSourceFiles[\s\S]*communityResources:listGitHubSourceFiles)(?=[\s\S]*file_limit:[\s\S]*payload\?\.file_limit)(?=[\s\S]*importCloudCommunityGoogleDriveSourceFiles[\s\S]*communityResources:importGoogleDriveSourceFiles)(?=[\s\S]*importCloudCommunityGitHubSourceFiles[\s\S]*communityResources:importGitHubSourceFiles)/,
   "web gateway should call source ingestion and Drive/GitHub integration actions",
+);
+assert.match(
+  gateway,
+  /ingestCloudCommunitySources[\s\S]*retryFailed\?: boolean[\s\S]*retryFailed: params\.retryFailed === true/,
+  "the source gateway should make failed-source retry an explicit caller choice",
+);
+assert.match(
+  resourceController,
+  /ingestCloudCommunitySources\(\{[\s\S]*retryFailed: input\.retryExisting === true/,
+  "only the explicit retry UI path should retry historical failed sources",
+);
+assert.match(
+  sourceIntake,
+  /const failedCount = result\.ingestion\?\.failed_sources \?\? 0/,
+  "source intake feedback should use persisted failed-source truth",
 );
 assert.match(
   gateway,

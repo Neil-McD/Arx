@@ -33,6 +33,7 @@ import {
   normalizeResourceStatus,
   normalizeResourceType,
   parseIsoMs,
+  requireActiveCommunity,
   requireCommunityChatAccess,
   requireCommunityManager,
   requireResourceSourceIngestionKindForWrite,
@@ -127,6 +128,8 @@ const COMMUNITY_RESOURCE_SOURCE_INGESTION_TIMEOUT_MS = 12_000;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_REDIRECTS = 3;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS = 10;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES = 10;
+const COMMUNITY_RESOURCE_SOURCE_INGESTION_LEASE_MS = 60_000;
+const COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_ATTEMPTS = 3;
 const COMMUNITY_RESOURCE_SOURCE_INGESTION_USER_AGENT =
   "Polynet Community Source Ingestion/1.0";
 const COMMUNITY_RESOURCE_SOURCE_URL_FETCHER_ENDPOINT_ENV = "ARX_SOURCE_URL_FETCHER_ENDPOINT";
@@ -556,6 +559,21 @@ function isPlainFileSource(row: CommunityResourceLike): boolean {
   return Boolean(String(row.fileKey ?? "").trim()) &&
     kind !== "url" &&
     !isSourceIntegrationSource(row);
+}
+
+function isIngestibleCommunitySource(row: CommunityResourceLike): boolean {
+  const hasGoogleDriveSource =
+    isGoogleDriveSourceResource(row) &&
+    Boolean(normalizeSourceIntegrationString(row.sourceExternalId, 500));
+  const hasGitHubSource =
+    isGitHubSourceResource(row) &&
+    Boolean(parseGitHubFileExternalId(row.sourceExternalId));
+  return isPlainUrlSource(row) || isPlainFileSource(row) || hasGoogleDriveSource || hasGitHubSource;
+}
+
+function normalizeCommunitySourceIngestionAttempt(value: unknown): number {
+  const attempt = Math.floor(Number(value ?? 0));
+  return Number.isFinite(attempt) && attempt > 0 ? attempt : 0;
 }
 
 function readEnv(name: string): string {
@@ -8316,17 +8334,6 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
     userId: v.optional(v.id("users")),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
-    limit: v.optional(v.number()),
-    retryFailed: v.optional(v.boolean()),
-    sourceKind: v.optional(
-      v.union(
-        v.literal("any"),
-        v.literal("url"),
-        v.literal("file"),
-        v.literal("google_drive"),
-        v.literal("github"),
-      ),
-    ),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -8339,22 +8346,6 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
       communityId: args.communityId,
       userId,
     });
-    const limit = Math.max(
-      1,
-      Math.min(
-        COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS +
-          COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES +
-          GOOGLE_DRIVE_SOURCE_MAX_FILES +
-          GITHUB_SOURCE_MAX_FILES,
-        Math.floor(
-          args.limit ??
-            COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS +
-              COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES +
-              GOOGLE_DRIVE_SOURCE_MAX_FILES +
-              GITHUB_SOURCE_MAX_FILES,
-        ),
-      ),
-    );
     const rows = (await ctx.db
       .query("communityResources" as any)
       .withIndex("by_community_role_status", (q: any) =>
@@ -8367,29 +8358,13 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
     const fileSources = sources.filter(isPlainFileSource);
     const googleDriveSources = sources.filter(isGoogleDriveSourceResource);
     const githubSources = sources.filter(isGitHubSourceResource);
-    const sourceKind = args.sourceKind ?? "any";
-    const ingestibleSources = sources.filter((row) => {
-      const hasGoogleDriveSource =
-        isGoogleDriveSourceResource(row) &&
-        Boolean(normalizeSourceIntegrationString(row.sourceExternalId, 500));
-      const hasGitHubSource =
-        isGitHubSourceResource(row) &&
-        Boolean(parseGitHubFileExternalId(row.sourceExternalId));
-      if (sourceKind === "url") return isPlainUrlSource(row);
-      if (sourceKind === "file") return isPlainFileSource(row);
-      if (sourceKind === "google_drive") return hasGoogleDriveSource;
-      if (sourceKind === "github") return hasGitHubSource;
-      return isPlainUrlSource(row) || isPlainFileSource(row) || hasGoogleDriveSource || hasGitHubSource;
+    const failedSources = sources.filter(
+      (row) => normalizeResourceSourceIngestionStatus(row) === "failed",
+    );
+    const pendingSources = sources.filter((row) => {
+      const status = normalizeResourceSourceIngestionStatus(row);
+      return status === "queued" || status === "processing";
     });
-    const candidates = ingestibleSources
-      .filter((row) => {
-        const status = normalizeResourceSourceIngestionStatus(row);
-        if (status === "ready") return false;
-        if (status === "failed" && !args.retryFailed) return false;
-        return true;
-      })
-      .sort((left, right) => left.updatedAt - right.updatedAt || left.createdAt - right.createdAt)
-      .slice(0, limit);
     return {
       ok: true,
       kind: "community_source_ingestion_state",
@@ -8399,7 +8374,8 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
       file_sources: fileSources.length,
       google_drive_sources: googleDriveSources.length,
       github_sources: githubSources.length,
-      failed_sources: sources.filter((row) => normalizeResourceSourceIngestionStatus(row) === "failed").length,
+      failed_sources: failedSources.length,
+      pending_sources: pendingSources.length,
       pending_url_sources: urlSources.filter((row) => {
         const status = normalizeResourceSourceIngestionStatus(row);
         return status === "queued" || status === "processing";
@@ -8416,63 +8392,173 @@ export const getCommunitySourceIngestionStateInternal = internalQuery({
         const status = normalizeResourceSourceIngestionStatus(row);
         return status === "queued" || status === "processing";
       }).length,
-      candidates: candidates.map((row) => ({
-        id: normalizeIdValue(row._id),
-        title: String(row.title ?? ""),
-        url: String(row.url ?? "").trim(),
-        fileKey: String(row.fileKey ?? "").trim(),
-        sourceExternalProvider: normalizeSourceIntegrationString(row.sourceExternalProvider, 80),
-        sourceExternalConnectionUserId: normalizeIdValue(row.sourceExternalConnectionUserId ?? row.createdByUserId),
-        sourceExternalId: normalizeSourceIntegrationString(row.sourceExternalId, 1_000),
-        sourceExternalUrl: normalizeSourceIntegrationString(row.sourceExternalUrl, 2_000),
-        sourceExternalMimeType: normalizeSourceIntegrationString(row.sourceExternalMimeType, 300),
-        source_ingestion_kind: normalizeResourceSourceIngestionKind(row),
-        source_ingestion_status: normalizeResourceSourceIngestionStatus(row),
-        updated_at_ms: row.updatedAt,
-      })),
     };
   },
 });
 
-export const patchCommunitySourceIngestionInternal = internalMutation({
+export const claimNextCommunitySourceIngestionInternal = internalMutation({
+  args: {
+    userId: v.optional(v.id("users")),
+    authSubject: v.optional(v.string()),
+    communityId: v.id("communities"),
+    retryFailed: v.optional(v.boolean()),
+    excludeResourceIds: v.optional(v.array(v.id("communityResources"))),
+    nowMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({
+      ctx,
+      userId: args.userId,
+      authSubject: args.authSubject ?? null,
+    });
+    await requireCommunityManager({
+      ctx,
+      communityId: args.communityId,
+      userId,
+    });
+    const nowMs = args.nowMs ?? Date.now();
+    const excludedResourceIds = new Set(
+      (args.excludeResourceIds ?? []).map((resourceId) => normalizeIdValue(resourceId)),
+    );
+    const rows = ((await ctx.db
+      .query("communityResources" as any)
+      .withIndex("by_community_role_status", (q: any) =>
+        q.eq("communityId", args.communityId).eq("role", "source"),
+      )
+      .collect()) as CommunityResourceLike[])
+      .filter((row) =>
+        normalizeResourceRole(row.role) === "source" &&
+        !excludedResourceIds.has(normalizeIdValue(row._id)) &&
+        isIngestibleCommunitySource(row),
+      )
+      .sort((left, right) => left.updatedAt - right.updatedAt || left.createdAt - right.createdAt);
+
+    for (const row of rows) {
+      const status = normalizeResourceSourceIngestionStatus(row);
+      const attempt = normalizeCommunitySourceIngestionAttempt(row.sourceIngestionAttempt);
+      const leaseExpired = Number(row.sourceIngestionLeaseExpiresAt ?? 0) <= nowMs;
+      const claimable =
+        status === "queued" ||
+        (status === "failed" && args.retryFailed === true) ||
+        (status === "processing" && leaseExpired);
+      if (!claimable) continue;
+      const isExplicitFailedRetry = status === "failed" && args.retryFailed === true;
+      if (attempt >= COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_ATTEMPTS && !isExplicitFailedRetry) {
+        if (status === "processing") {
+          await ctx.db.patch(row._id as any, {
+            sourceIngestionStatus: "failed",
+            sourceIngestionError: "community_source_ingestion_attempts_exhausted",
+            sourceIngestionLeaseId: undefined,
+            sourceIngestionLeaseExpiresAt: undefined,
+            updatedAt: nowMs,
+          });
+        }
+        continue;
+      }
+
+      const leaseId = crypto.randomUUID();
+      const nextAttempt = isExplicitFailedRetry && attempt >= COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_ATTEMPTS
+        ? 1
+        : attempt + 1;
+      const leaseExpiresAt = nowMs + COMMUNITY_RESOURCE_SOURCE_INGESTION_LEASE_MS;
+      await ctx.db.patch(row._id as any, {
+        sourceIngestionStatus: "processing",
+        sourceIngestionError: undefined,
+        sourceIngestionAttemptedAt: nowMs,
+        sourceIngestionLeaseId: leaseId,
+        sourceIngestionLeaseExpiresAt: leaseExpiresAt,
+        sourceIngestionAttempt: nextAttempt,
+        updatedAt: nowMs,
+      });
+      return {
+        ok: true,
+        claim: {
+          resourceId: row._id,
+          leaseId,
+          leaseExpiresAt,
+          attempt: nextAttempt,
+          title: String(row.title ?? ""),
+          url: String(row.url ?? "").trim(),
+          fileKey: String(row.fileKey ?? "").trim(),
+          sourceExternalProvider: normalizeSourceIntegrationString(row.sourceExternalProvider, 80),
+          sourceExternalConnectionUserId: normalizeIdValue(
+            row.sourceExternalConnectionUserId ?? row.createdByUserId,
+          ),
+          sourceExternalId: normalizeSourceIntegrationString(row.sourceExternalId, 1_000),
+          sourceExternalUrl: normalizeSourceIntegrationString(row.sourceExternalUrl, 2_000),
+          sourceExternalMimeType: normalizeSourceIntegrationString(row.sourceExternalMimeType, 300),
+          sourceIngestionKind: normalizeResourceSourceIngestionKind(row),
+        },
+      };
+    }
+    return { ok: true, claim: null };
+  },
+});
+
+export const finalizeCommunitySourceIngestionInternal = internalMutation({
   args: {
     resourceId: v.id("communityResources"),
-    status: v.union(
-      v.literal("queued"),
-      v.literal("processing"),
-      v.literal("ready"),
-      v.literal("failed"),
-    ),
-    kind: v.optional(
-      v.union(
-        v.literal("manual"),
-        v.literal("url"),
-        v.literal("file"),
-        v.literal("google_drive"),
-        v.literal("github"),
-      ),
+    leaseId: v.string(),
+    attempt: v.number(),
+    status: v.union(v.literal("ready"), v.literal("failed")),
+    kind: v.union(
+      v.literal("url"),
+      v.literal("file"),
+      v.literal("google_drive"),
+      v.literal("github"),
     ),
     bodyMd: v.optional(v.union(v.string(), v.null())),
     url: v.optional(v.union(v.string(), v.null())),
     error: v.optional(v.union(v.string(), v.null())),
-    attemptedAt: v.optional(v.number()),
-    ingestedAt: v.optional(v.number()),
     sourceOriginalFilename: v.optional(v.union(v.string(), v.null())),
     sourceOriginalMimeType: v.optional(v.union(v.string(), v.null())),
     sourceOriginalBytes: v.optional(v.union(v.number(), v.null())),
+    nowMs: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
     const existing = (await ctx.db.get(args.resourceId as any)) as CommunityResourceLike | null;
-    if (!existing) return null;
+    if (!existing) return { ok: false, code: "community_source_not_found" };
     if (normalizeResourceRole(existing.role) !== "source") {
       throw new Error("community_source_resource_required");
     }
-    const nowMs = Date.now();
+    const community = await ctx.db.get(existing.communityId as any);
+    if (!community) {
+      return { ok: false, code: "community_source_ingestion_community_inactive" };
+    }
+    try {
+      requireActiveCommunity(community as any);
+    } catch {
+      return { ok: false, code: "community_source_ingestion_community_inactive" };
+    }
+    const nowMs = args.nowMs ?? Date.now();
+    const ownsClaim =
+      normalizeResourceSourceIngestionStatus(existing) === "processing" &&
+      String(existing.sourceIngestionLeaseId ?? "") === args.leaseId &&
+      normalizeCommunitySourceIngestionAttempt(existing.sourceIngestionAttempt) ===
+        normalizeCommunitySourceIngestionAttempt(args.attempt) &&
+      Number(existing.sourceIngestionLeaseExpiresAt ?? 0) > nowMs;
+    if (!ownsClaim) {
+      return { ok: false, code: "community_source_ingestion_claim_lost" };
+    }
+    const hasBody = Object.prototype.hasOwnProperty.call(args, "bodyMd");
+    const normalizedBodyMd = hasBody
+      ? normalizeCommunityResourceBodyMd(
+          args.bodyMd,
+          COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
+        )
+      : null;
+    if (args.status === "ready" && !String(normalizedBodyMd ?? "").trim()) {
+      throw new Error("community_source_ingestion_body_required");
+    }
+    if (args.status === "failed" && hasBody) {
+      throw new Error("community_source_ingestion_failed_body_forbidden");
+    }
     const patch: Record<string, unknown> = {
       sourceIngestionStatus: args.status,
-      ...(args.kind ? { sourceIngestionKind: args.kind } : {}),
-      ...(typeof args.attemptedAt === "number" ? { sourceIngestionAttemptedAt: args.attemptedAt } : {}),
-      ...(typeof args.ingestedAt === "number" ? { sourceIngestedAt: args.ingestedAt } : {}),
+      sourceIngestionKind: args.kind,
+      sourceIngestedAt: nowMs,
+      sourceIngestionLeaseId: undefined,
+      sourceIngestionLeaseExpiresAt: undefined,
       ...(Object.prototype.hasOwnProperty.call(args, "error")
         ? { sourceIngestionError: normalizeOptionalText(args.error, 1000) ?? undefined }
         : {}),
@@ -8492,11 +8578,7 @@ export const patchCommunitySourceIngestionInternal = internalMutation({
         : {}),
       updatedAt: nowMs,
     };
-    if (Object.prototype.hasOwnProperty.call(args, "bodyMd")) {
-      const normalizedBodyMd = normalizeCommunityResourceBodyMd(
-        args.bodyMd,
-        COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
-      );
+    if (hasBody) {
       patch.bodyChars = normalizedBodyMd ? normalizedBodyMd.trim().length : 0;
     }
     if (Object.prototype.hasOwnProperty.call(args, "url")) {
@@ -8504,36 +8586,21 @@ export const patchCommunitySourceIngestionInternal = internalMutation({
     }
     await ctx.db.patch(existing._id as any, patch);
     const updated = (await ctx.db.get(existing._id as any)) as CommunityResourceLike | null;
-    if (!updated) return null;
-    if (Object.prototype.hasOwnProperty.call(args, "bodyMd")) {
+    if (!updated) return { ok: false, code: "community_source_not_found" };
+    if (hasBody) {
       await writeCommunityResourceBodyContent(ctx, {
         communityId: updated.communityId,
         resourceId: updated._id,
-        bodyMd: args.bodyMd,
+        bodyMd: normalizedBodyMd,
         nowMs,
         maxChars: COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_BODY_CHARS,
       });
     }
     const hydrated = await hydrateCommunityResourceBody(ctx, updated) ?? updated;
     await syncCommunityResourceMemoryProjection(ctx, hydrated, nowMs);
-    return await mapCommunityResourceRow(ctx, hydrated);
+    return { ok: true, resource: await mapCommunityResourceRow(ctx, hydrated) };
   },
 });
-
-function countPendingSourceIngestion(
-  state: any,
-  sourceKind: "any" | "url" | "file" | "google_drive" | "github",
-): number {
-  const pendingUrlSources = Number(state?.pending_url_sources ?? 0);
-  const pendingFileSources = Number(state?.pending_file_sources ?? 0);
-  const pendingGoogleDriveSources = Number(state?.pending_google_drive_sources ?? 0);
-  const pendingGitHubSources = Number(state?.pending_github_sources ?? 0);
-  if (sourceKind === "url") return pendingUrlSources;
-  if (sourceKind === "file") return pendingFileSources;
-  if (sourceKind === "google_drive") return pendingGoogleDriveSources;
-  if (sourceKind === "github") return pendingGitHubSources;
-  return pendingUrlSources + pendingFileSources + pendingGoogleDriveSources + pendingGitHubSources;
-}
 
 async function runCommunitySourceIngestion(args: {
   ctx: any;
@@ -8542,34 +8609,50 @@ async function runCommunitySourceIngestion(args: {
   communityId: any;
   limit?: number;
   retryFailed?: boolean;
-  sourceKind: "any" | "url" | "file" | "google_drive" | "github";
-  resultKind: string;
 }): Promise<Record<string, unknown>> {
     const startedAt = Date.now();
     const actingUserId = args.userId ?? await resolveAuthenticatedActionUserId(args.ctx, args.authSubject ?? null);
-    const before = (await args.ctx.runQuery(
-      (internal as any).communityResources.getCommunitySourceIngestionStateInternal,
-      {
-        userId: actingUserId,
-        authSubject: args.authSubject ?? null,
-        communityId: args.communityId,
-        limit:
+    const limit = Math.max(
+      1,
+      Math.min(
+        COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS +
+          COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES +
+          GOOGLE_DRIVE_SOURCE_MAX_FILES +
+          GITHUB_SOURCE_MAX_FILES,
+        Math.floor(
           args.limit ??
-          COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS +
-            COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES +
-            GOOGLE_DRIVE_SOURCE_MAX_FILES +
-            GITHUB_SOURCE_MAX_FILES,
-        retryFailed: args.retryFailed ?? true,
-        sourceKind: args.sourceKind,
-      },
-    )) as any;
-    const candidates = Array.isArray(before?.candidates) ? before.candidates : [];
+            COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS +
+              COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES +
+              GOOGLE_DRIVE_SOURCE_MAX_FILES +
+              GITHUB_SOURCE_MAX_FILES,
+        ),
+      ),
+    );
+    let processed = 0;
     let succeeded = 0;
     let failed = 0;
+    let lostClaims = 0;
+    const claimedResourceIds: any[] = [];
     const failures: Array<{ resource_id: string; title: string; url: string | null; message: string }> = [];
 
-    for (const candidate of candidates) {
-      const resourceId = String(candidate.id ?? "").trim();
+    for (let iteration = 0; iteration < limit; iteration += 1) {
+      const claimed = (await args.ctx.runMutation(
+        (internal as any).communityResources.claimNextCommunitySourceIngestionInternal,
+        {
+          userId: actingUserId,
+          authSubject: args.authSubject ?? undefined,
+          communityId: args.communityId,
+          retryFailed: args.retryFailed === true,
+          excludeResourceIds: claimedResourceIds,
+        },
+      )) as any;
+      const candidate = claimed?.claim;
+      if (!candidate) break;
+      processed += 1;
+      claimedResourceIds.push(candidate.resourceId);
+      const resourceId = String(candidate.resourceId ?? "").trim();
+      const leaseId = String(candidate.leaseId ?? "").trim();
+      const attempt = normalizeCommunitySourceIngestionAttempt(candidate.attempt);
       const url = String(candidate.url ?? "").trim();
       const fileKey = String(candidate.fileKey ?? "").trim();
       const title = String(candidate.title ?? "").trim();
@@ -8578,7 +8661,7 @@ async function runCommunitySourceIngestion(args: {
       const externalId = String(candidate.sourceExternalId ?? "").trim();
       const externalUrl = String(candidate.sourceExternalUrl ?? "").trim();
       const externalMimeType = String(candidate.sourceExternalMimeType ?? "").trim();
-      const ingestionKind = String(candidate.source_ingestion_kind ?? "").trim();
+      const ingestionKind = String(candidate.sourceIngestionKind ?? "").trim();
       const kind = ingestionKind === "google_drive" && externalProvider === GOOGLE_DRIVE_SOURCE_PROVIDER
         ? "google_drive"
         : ingestionKind === "github" && externalProvider === GITHUB_SOURCE_PROVIDER
@@ -8598,33 +8681,40 @@ async function runCommunitySourceIngestion(args: {
                 : kind === "github" && !parseGitHubFileExternalId(externalId)
                   ? "github_file_id_invalid"
                   : null;
-      if (invalidMessage) {
-        failed += 1;
-        failures.push({
-          resource_id: resourceId,
-          title,
-          url: url || externalUrl || null,
-          message: invalidMessage,
-        });
-        if (resourceId) {
-          await args.ctx.runMutation((internal as any).communityResources.patchCommunitySourceIngestionInternal, {
+      const finalizeClaim = async (payload: Record<string, unknown>) => {
+        return await args.ctx.runMutation(
+          (internal as any).communityResources.finalizeCommunitySourceIngestionInternal,
+          {
             resourceId,
-            status: "failed",
+            leaseId,
+            attempt,
             kind,
-            error: invalidMessage,
-            ingestedAt: Date.now(),
+            ...payload,
+          },
+        ) as any;
+      };
+      if (invalidMessage) {
+        const finalized = resourceId
+          ? await finalizeClaim({
+              status: "failed",
+              error: invalidMessage,
+            })
+          : null;
+        if (finalized?.ok) {
+          failed += 1;
+          failures.push({
+            resource_id: resourceId,
+            title,
+            url: url || externalUrl || null,
+            message: invalidMessage,
           });
+        } else {
+          lostClaims += 1;
         }
         continue;
       }
-      await args.ctx.runMutation((internal as any).communityResources.patchCommunitySourceIngestionInternal, {
-        resourceId,
-        status: "processing",
-        kind,
-        attemptedAt: Date.now(),
-        error: null,
-      });
       try {
+        let finalized: any;
         if (kind === "file") {
           const extracted = await extractSourceTextFromFile({
             ctx: args.ctx,
@@ -8638,13 +8728,10 @@ async function runCommunitySourceIngestion(args: {
             text: extracted.text,
           });
           if (!bodyMd.trim()) throw new Error("community_source_file_no_readable_content");
-          await args.ctx.runMutation((internal as any).communityResources.patchCommunitySourceIngestionInternal, {
-            resourceId,
+          finalized = await finalizeClaim({
             status: "ready",
-            kind: "file",
             bodyMd,
             error: null,
-            ingestedAt: Date.now(),
             sourceOriginalFilename: title || null,
             sourceOriginalMimeType: extracted.contentType || null,
             sourceOriginalBytes: extracted.bytes,
@@ -8666,13 +8753,10 @@ async function runCommunitySourceIngestion(args: {
             text: extracted.text,
           });
           if (!bodyMd.trim()) throw new Error("google_drive_file_no_readable_content");
-          await args.ctx.runMutation((internal as any).communityResources.patchCommunitySourceIngestionInternal, {
-            resourceId,
+          finalized = await finalizeClaim({
             status: "ready",
-            kind: "google_drive",
             bodyMd,
             error: null,
-            ingestedAt: Date.now(),
           });
         } else if (kind === "github") {
           const extracted = await extractSourceTextFromGitHub({
@@ -8688,13 +8772,10 @@ async function runCommunitySourceIngestion(args: {
             text: extracted.text,
           });
           if (!bodyMd.trim()) throw new Error("github_file_no_readable_content");
-          await args.ctx.runMutation((internal as any).communityResources.patchCommunitySourceIngestionInternal, {
-            resourceId,
+          finalized = await finalizeClaim({
             status: "ready",
-            kind: "github",
             bodyMd,
             error: null,
-            ingestedAt: Date.now(),
             sourceOriginalFilename: extracted.title || title || null,
             sourceOriginalMimeType: extracted.contentType || null,
             sourceOriginalBytes: extracted.size,
@@ -8707,33 +8788,35 @@ async function runCommunitySourceIngestion(args: {
             text: extracted.text,
           });
           if (!bodyMd.trim()) throw new Error("community_source_url_no_readable_content");
-          await args.ctx.runMutation((internal as any).communityResources.patchCommunitySourceIngestionInternal, {
-            resourceId,
+          finalized = await finalizeClaim({
             status: "ready",
-            kind: "url",
             bodyMd,
             url: extracted.finalUrl,
             error: null,
-            ingestedAt: Date.now(),
           });
         }
-        succeeded += 1;
+        if (finalized?.ok) {
+          succeeded += 1;
+        } else {
+          lostClaims += 1;
+        }
       } catch (error) {
-        failed += 1;
         const message = error instanceof Error ? error.message : "community_source_ingestion_failed";
-        failures.push({
-          resource_id: resourceId,
-          title,
-          url: url || externalUrl || null,
-          message,
-        });
-        await args.ctx.runMutation((internal as any).communityResources.patchCommunitySourceIngestionInternal, {
-          resourceId,
+        const finalized = await finalizeClaim({
           status: "failed",
-          kind,
           error: message,
-          ingestedAt: Date.now(),
         });
+        if (finalized?.ok) {
+          failed += 1;
+          failures.push({
+            resource_id: resourceId,
+            title,
+            url: url || externalUrl || null,
+            message,
+          });
+        } else {
+          lostClaims += 1;
+        }
       }
     }
 
@@ -8741,25 +8824,18 @@ async function runCommunitySourceIngestion(args: {
       (internal as any).communityResources.getCommunitySourceIngestionStateInternal,
       {
         userId: actingUserId,
-        authSubject: args.authSubject ?? null,
+        authSubject: args.authSubject ?? undefined,
         communityId: args.communityId,
-        limit:
-          args.limit ??
-          COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_LINKS +
-            COMMUNITY_RESOURCE_SOURCE_INGESTION_MAX_FILES +
-            GOOGLE_DRIVE_SOURCE_MAX_FILES +
-            GITHUB_SOURCE_MAX_FILES,
-        retryFailed: args.retryFailed ?? true,
-        sourceKind: args.sourceKind,
       },
     )) as any;
     const readySources = Number(after?.ready_sources ?? 0);
     const totalSources = Number(after?.total_sources ?? 0);
-    const remainingPendingSources = countPendingSourceIngestion(after, args.sourceKind);
-    const ok = readySources > 0 && failed === 0 && remainingPendingSources === 0;
+    const failedSources = Number(after?.failed_sources ?? 0);
+    const remainingPendingSources = Number(after?.pending_sources ?? 0);
+    const ok = readySources > 0 && failedSources === 0 && remainingPendingSources === 0;
     const code = ok
       ? null
-      : failed > 0
+      : failedSources > 0
         ? "source_ingestion_partial_failure"
         : remainingPendingSources > 0
           ? "source_ingestion_incomplete"
@@ -8768,10 +8844,12 @@ async function runCommunitySourceIngestion(args: {
             : "source_material_required";
     return {
       ok,
-      kind: args.resultKind,
-      processed: candidates.length,
+      kind: "community_source_ingestion",
+      processed,
       succeeded,
       failed,
+      failed_sources: failedSources,
+      lost_claims: lostClaims,
       ready_sources: readySources,
       total_sources: totalSources,
       pending_url_sources: Number(after?.pending_url_sources ?? 0),
@@ -8850,8 +8928,6 @@ export const ingestCommunitySources: any = action({
       communityId: args.communityId,
       limit: args.limit,
       retryFailed: args.retryFailed,
-      sourceKind: "any",
-      resultKind: "community_source_ingestion",
     });
   },
 });
@@ -9369,6 +9445,9 @@ export const saveCommunitySourceCrawlPagesInternal = internalMutation({
           sourceIngestionError: undefined,
           sourceIngestionAttemptedAt: nowMs,
           sourceIngestedAt: nowMs,
+          sourceIngestionLeaseId: undefined,
+          sourceIngestionLeaseExpiresAt: undefined,
+          sourceIngestionAttempt: undefined,
           updatedAt: nowMs,
         });
         await writeCommunityResourceBodyContent(ctx, {
@@ -9805,6 +9884,12 @@ export const saveCommunityResource = mutation({
                   url: nextUrl,
                   fileKey: nextFileKey,
                 });
+      const sourceRevisionChanged =
+        bodyChanged ||
+        urlChanged ||
+        fileChanged ||
+        nextRole !== normalizeResourceRole(existing.role) ||
+        nextSourceIngestionKind !== normalizeResourceSourceIngestionKind(existing);
       const nextModuleId = await requireResourceModuleForRole({
         ctx,
         communityId: existing.communityId,
@@ -9831,6 +9916,13 @@ export const saveCommunityResource = mutation({
         fileKey: nextFileKey,
         sourceIngestionStatus: nextSourceIngestionStatus,
         sourceIngestionKind: nextSourceIngestionKind,
+        ...(sourceRevisionChanged
+          ? {
+              sourceIngestionLeaseId: undefined,
+              sourceIngestionLeaseExpiresAt: undefined,
+              sourceIngestionAttempt: undefined,
+            }
+          : {}),
         ...(Object.prototype.hasOwnProperty.call(payload, "source_ingestion_error")
           ? { sourceIngestionError: normalizeOptionalText(payload.source_ingestion_error, 1000) ?? undefined }
           : {}),

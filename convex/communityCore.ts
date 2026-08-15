@@ -227,6 +227,9 @@ export type CommunityResourceLike = {
   sourceIngestionError?: string;
   sourceIngestionAttemptedAt?: number;
   sourceIngestedAt?: number;
+  sourceIngestionLeaseId?: string;
+  sourceIngestionLeaseExpiresAt?: number;
+  sourceIngestionAttempt?: number;
   sourceOriginalFilename?: string;
   sourceOriginalMimeType?: string;
   sourceOriginalBytes?: number;

@@ -806,6 +806,7 @@ export function useCommunityResourceController<
             session,
             communityId,
             limit: COMMUNITY_SOURCE_INTAKE_MAX_ITEMS,
+            retryFailed: input.retryExisting === true,
           });
           if (!ingestion) {
             errors.push("Sources were saved, but readiness could not be confirmed. Retry them here.");
