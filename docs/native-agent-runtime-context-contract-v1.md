@@ -854,8 +854,8 @@ roles, historical thread/message data, and external MCP.
 
 ### 17.2.1 Slice 5E: project and provider residue extinction
 
-Status: Release A is implemented locally; production migration and Release B
-remain blocked on the explicit gates below.
+Status: complete. Release A, production cleanup, and Release B have passed
+their explicit gates.
 
 Objective: finish the deletion started by Slice 5D so no project or provider
 resource concept remains in native runtime authority, context, tools, APIs, or
@@ -921,6 +921,28 @@ Release B is terminal deletion:
 3. Prove the retired functions and schema surfaces are absent, the exact web
    SHA is live, authenticated native community inspection succeeds, official
    external MCP succeeds, and accounting diagnostics remain green.
+
+Production cleanup evidence on 2026-08-15:
+
+1. Release A and its bounded-query hardening landed through PRs #113-#116.
+   Every candidate passed the full local release gate and its exact GitHub
+   Release Gate before the matching production Convex deploy.
+2. The production backup is 92 MB, passed ZIP integrity, and has SHA-256
+   `e99e3ce845113303ddda8315bf5f1def5e84984cc7c2d4a6c1a74506254ff085`.
+3. Blaxel contained zero Polynet-owned resources. Two unrelated CRIS volumes
+   remained protected. None of the five persisted `pn-p-*` resource pointers
+   existed in the provider control plane.
+4. The complete pre-cleanup census found 1,013 residue records. Exact-ID
+   batches deleted 160 obsolete rows and patched 853 surviving records.
+5. Two subsequent complete censuses independently returned zero residue for
+   all nine targets.
+6. Before/after accounting counts, project-identifier counts, cost totals, and
+   credit totals were numerically identical. Release B deletes only the
+   now-empty compatibility schemas, fields, index, and operator.
+7. `threads.runtimeEngine` remains an active fixed `"polynet"` wire marker for
+   current clients; it is narrowed to that single literal. All `"codex"`
+   values were cleanup residue. Removing the constant marker is a later ABI
+   simplification, not part of project/provider data retirement.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 
