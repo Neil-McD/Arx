@@ -18,6 +18,7 @@ LOOP_FILE="convex/runtimeAgentLoop.ts"
 MEMBER_AGENT_DOCK_FILE="apps/web/src/components/WebMemberAgentDock.tsx"
 TURN_RUNNER_FILE="shared/useWebTurnRunnerController.ts"
 SCHEMA_FILE="convex/schema.ts"
+PROJECT_RESIDUE_RETIREMENT_FILE="convex/projectResidueRetirement.ts"
 
 if [[ ! -f "$HTTP_FILE" ]]; then
   echo "FAIL: missing $HTTP_FILE"
@@ -57,6 +58,10 @@ if [[ ! -f "$TURN_RUNNER_FILE" ]]; then
 fi
 if [[ ! -f "$SCHEMA_FILE" ]]; then
   echo "FAIL: missing $SCHEMA_FILE"
+  exit 1
+fi
+if [[ ! -f "$PROJECT_RESIDUE_RETIREMENT_FILE" ]]; then
+  echo "FAIL: missing $PROJECT_RESIDUE_RETIREMENT_FILE"
   exit 1
 fi
 require_match_in_file() {
@@ -188,8 +193,12 @@ forbid_match_in_file "$SCHEMA_FILE" 'requestedExecutionTarget' \
   "runtimeRuns schema no longer carries requestedExecutionTarget compatibility residue"
 forbid_match_in_file "$SCHEMA_FILE" 'requiresWorkspaceTools' \
   "runtimeRuns schema no longer carries requiresWorkspaceTools compatibility residue"
-forbid_match_in_file "$SCHEMA_FILE" 'workspaceSessionState|workspaceProviderSandboxId|workspaceToolboxProxyUrl' \
-  "runtimeRuns schema no longer carries retired Workspace state or pointers"
+require_match_in_file "$SCHEMA_FILE" 'Slice 5E Release-A compatibility fields' \
+  "runtimeRuns labels retired Workspace fields as temporary Release-A compatibility"
+for field in workspaceSessionState workspaceProviderSandboxId workspaceToolboxProxyUrl; do
+  require_match_in_file "$PROJECT_RESIDUE_RETIREMENT_FILE" "$field: undefined" \
+    "the internal retirement operator removes temporary $field"
+done
 forbid_match_in_file "$THREADS_FILE" 'setCloudRuntimeRunWorkspaceSessionInternal|workspaceSessionState: "none"|run\.workspaceProviderSandboxId|run\.workspaceToolboxProxyUrl' \
   "threads no longer expose or initialize an active Workspace session"
 forbid_match_in_file "$LOOP_FILE" 'runtimeExecutionSession|workspaceRuntime|workspaceTerminals|daytonaCodexRuntime|executeTerminalTool|executeComputerTool' \
