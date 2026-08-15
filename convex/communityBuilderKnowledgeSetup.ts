@@ -414,7 +414,9 @@ export async function buildBuilderKnowledgeResourcesCore(
         code: failureCode,
         failure_stage: failureStage,
         ...(failureReason ? { failure_reason: failureReason } : {}),
-        message: "Polynet could not finish building your resources. Try again.",
+        message: failureCode === "builder_knowledge_resource_output_required"
+          ? "Polynet read your source material, but could not turn it into a resource. Add more substantive material or skip for now."
+          : "Polynet could not finish building your resources. Try again.",
       };
     }
 }

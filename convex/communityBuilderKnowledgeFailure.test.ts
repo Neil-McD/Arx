@@ -131,7 +131,7 @@ describe("builder knowledge build failure boundary", () => {
       kind: "builder_knowledge_build",
       code: "builder_knowledge_resource_output_required",
       failure_stage: "setup_completion",
-      message: "Polynet could not finish building your resources. Try again.",
+      message: "Polynet read your source material, but could not turn it into a resource. Add more substantive material or skip for now.",
     });
     expect(mutationCount).toBe(4);
     expect(warning).toHaveBeenCalledWith("builder_knowledge_build_failed", {

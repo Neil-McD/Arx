@@ -58,6 +58,9 @@ test("Skip and ready-source continuation share the canonical completion command"
   expect(knowledgeControllerSource).toMatch(
     /mode === "build"[\s\S]*buildCloudBuilderKnowledgeResources[\s\S]*completeCloudBuilderKnowledgeSetup/,
   );
+  expect(knowledgeControllerSource).toMatch(
+    /if \(!result\.ok\)[\s\S]*throw new Error\([\s\S]*result\.message/,
+  );
 });
 
 test("a source-loading failure cannot trap the buyer in onboarding", () => {

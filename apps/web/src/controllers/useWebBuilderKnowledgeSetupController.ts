@@ -120,7 +120,12 @@ export function useWebBuilderKnowledgeCompletionController<
           session,
           communityId: community.id,
         });
-    if (!result.ok) return false;
+    if (!result.ok) {
+      throw new Error(
+        String(result.message ?? "").trim()
+          || "Polynet could not finish setup. Try again.",
+      );
+    }
     params.setCommunities((current) => current.map((candidate) => (
       candidate.id === community.id
         ? { ...candidate, builder_knowledge_setup_pending: false }
