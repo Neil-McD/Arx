@@ -1031,7 +1031,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                   }
                 }}
               />
-              {turnIsActive ? (
+              {streamingState ? (
                 <button
                   type="button"
                   className="funnel-builder-send"

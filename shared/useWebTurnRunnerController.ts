@@ -37,6 +37,7 @@ import {
   mapInferenceIssueReason,
 } from "./webTurnRunnerCore";
 import { isRecoverableRuntimeKernelStopReason } from "./runtimeKernelTypes";
+import { cancelRuntimeRunWithBoundedRetry } from "./runtimeCancellationRetry";
 
 export function useWebTurnRunnerController<
   SessionT,
@@ -343,23 +344,27 @@ export function useWebTurnRunnerController<
     const threadAbort = threadStreamingAbortRefById.current[resolvedThreadId] ?? null;
     threadStreamingUserCancelledRefById.current[resolvedThreadId] = true;
     if (threadAbort) {
-      if (session) {
-        void cancelCloudRuntimeRunByThreadKey({
-          session: session as any,
-          threadId: resolvedThreadId,
-          runId: activeRunId,
-        }).catch(() => null);
+      if (session && activeRunId) {
+        void cancelRuntimeRunWithBoundedRetry({
+          cancel: () => cancelCloudRuntimeRunByThreadKey({
+            session: session as any,
+            threadId: resolvedThreadId,
+            runId: activeRunId,
+          }),
+        }).finally(() => threadAbort.abort());
+        return;
       }
       threadAbort.abort();
       return;
     }
     if (session && activeRunId) {
-      void cancelCloudRuntimeRunByThreadKey({
-        session: session as any,
-        threadId: resolvedThreadId,
-        runId: activeRunId,
+      void cancelRuntimeRunWithBoundedRetry({
+        cancel: () => cancelCloudRuntimeRunByThreadKey({
+          session: session as any,
+          threadId: resolvedThreadId,
+          runId: activeRunId,
+        }),
       })
-        .catch(() => null)
         .finally(() => {
           resetThreadStreamingState(resolvedThreadId);
           current.setThreadErrorForThread(resolvedThreadId, null);
