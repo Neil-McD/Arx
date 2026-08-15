@@ -1007,6 +1007,14 @@ assert.throws(() =>
     cursor: "unexpected",
   }),
 );
+assert.throws(
+  () =>
+    normalizeToolArguments("polynet_read", {
+      path: "/communities/polynet/channels/general/",
+    }),
+  /directory or path ending in \/[\s\S]*polynet_list with the same path/,
+  "directory reads must fail closed with the exact list recovery",
+);
 
 const nativeTools = buildResponsesApiFunctionTools([
   "polynet_list",
@@ -1017,6 +1025,16 @@ assert.deepEqual(nativeTools[0]?.parameters.required, ["path", "cursor", "limit"
 assert.deepEqual(nativeTools[1]?.parameters.required, ["path", "offset", "limit"]);
 assert.equal(nativeTools[1]?.parameters.properties?.offset?.maximum, 1_000_000);
 assert.equal(nativeTools[1]?.parameters.properties?.limit?.maximum, 20_000);
+assert.match(
+  String(nativeTools[0]?.parameters.properties?.path?.description ?? ""),
+  /directory path[\s\S]*path ending in \/[\s\S]*polynet_read only[\s\S]*kind is document/,
+  "the provider-facing list path schema must distinguish directories from documents",
+);
+assert.match(
+  String(nativeTools[1]?.parameters.properties?.path?.description ?? ""),
+  /kind is document[\s\S]*Never pass a directory[\s\S]*polynet_list with the same path/,
+  "the provider-facing read path schema must reject directory selection",
+);
 assert.equal(
   "community_slug" in (nativeTools[0]?.parameters.properties ?? {}),
   false,

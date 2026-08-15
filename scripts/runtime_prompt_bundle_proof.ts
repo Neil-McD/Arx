@@ -76,6 +76,16 @@ assert.doesNotMatch(
   bundle.text,
   /PLATFORM_HARNESS_CONTEXT|WORKSPACE_PROCESS_CONTEXT|terminal_start|computer_screenshot|\bbash\b/,
 );
+assert.match(
+  bundle.text,
+  /Follow every returned entry by its kind:[\s\S]*polynet_list when kind is directory[\s\S]*path ends in \/[\s\S]*polynet_read only when kind is document/,
+  "the canonical prompt must route directory and document entries to different tools",
+);
+assert.doesNotMatch(
+  bundle.text,
+  /inspect returned paths with polynet_read/,
+  "the canonical prompt must not direct every returned path to polynet_read",
+);
 
 const headings = [
   "PLATFORM_DOCTRINE",

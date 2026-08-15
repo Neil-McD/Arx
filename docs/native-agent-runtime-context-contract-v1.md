@@ -943,9 +943,12 @@ Production evidence:
    plan and every later delta fit; the final projection estimated 97,247 input
    tokens, and its context-integrity receipt passed with no failures or
    warnings. Four malformed directory reads failed argument validation before
-   the agent
-   recovered through returned exact paths; this is a separate tool-efficiency
-   follow-up, not an input-budget or context-integrity failure.
+   the agent recovered through returned exact paths. The pre-Slice-7 repair
+   makes the directory/document routing rule explicit in the canonical prompt,
+   provider-facing path schemas, and fail-closed recovery error without changing
+   the five-tool ABI, executor semantics, authority, or runtime kernel. Its
+   verification is deterministic and must not write synthetic payloads into a
+   user-visible thread.
 3. That canary exposed a remaining legacy 8,000-character browser and
    persistence ceiling. Hotfix merge
    `24c3f5d2ad94536e41d4776c16655a6ac99a27bf` deleted only those two caps,

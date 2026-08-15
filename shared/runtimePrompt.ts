@@ -345,7 +345,7 @@ function buildCommunityLensBasePrompt(
       "Use this lens as background context; do not force generic requests into the community topic.",
       "Narrow to the community when the user asks for the community angle, asks about the community itself, or requests output for the shared community surface.",
       "Use the canonical Polynet repository tools for community identity, members, Resources, channels, events, accepted memory, and discoverable capabilities.",
-      "Navigate with polynet_list, search one exact subtree with polynet_search, and inspect returned paths with polynet_read.",
+      "Follow every returned entry by its kind: use polynet_list when kind is directory or the path ends in /; use polynet_read only when kind is document or the selector is an exact readable stable resource ref. Search one exact subtree with polynet_search.",
       "For broad requests about what is currently happening in a community, inspect community identity and use polynet_list on members, Resources, events, and every returned channel directory. Read exact returned documents when relevant. Use polynet_search only when you have a specific non-empty topic.",
       "Resources are durable community knowledge; accepted memory is learned community intelligence; channels are raw community evidence. Do not collapse those evidence classes.",
       "Use polynet_write only on a returned writable path and polynet_call only for an operation discovered under capabilities/.",

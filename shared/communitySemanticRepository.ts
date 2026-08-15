@@ -522,7 +522,7 @@ export function validateCommunitySemanticOperationInput(args: {
   if (!isProfileRead && !isResourceRead && !isCanonicalVirtualDocumentRead) {
     return semanticError(
       "invalid_selector",
-      "polynet_read path must be an exact returned document path or stable ref.",
+      "polynet_read requires an exact returned document path or readable stable ref. For a directory or path ending in /, call polynet_list with the same path.",
     );
   }
   const offset = optionalSemanticInteger({
