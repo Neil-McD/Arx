@@ -1393,7 +1393,7 @@ function WebMemberAgentDock(props, ref) {
                 isStartingNewChat
               }
             />
-            {streamingState && threadKey ? (
+            {runtimeEvents.length > 0 && threadKey ? (
               <button
                 className="member-agent-dock-send chat-send ask-send-btn ask-send-btn-v2"
                 type="button"

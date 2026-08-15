@@ -1031,7 +1031,7 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
                   }
                 }}
               />
-              {streamingState ? (
+              {runtimeEvents.length > 0 ? (
                 <button
                   type="button"
                   className="funnel-builder-send"
