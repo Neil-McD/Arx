@@ -67,7 +67,6 @@ export type RuntimeTurnInput = {
   surface?: "web";
   invocation_surface?: RuntimeInvocationSurface | null;
   surface_context?: unknown;
-  suppress_onboarding_progress?: boolean | null;
   requested_agentic_tools?: boolean | null;
   requested_funding_source?:
     | "demo_public"

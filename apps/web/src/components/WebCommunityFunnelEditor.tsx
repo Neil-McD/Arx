@@ -547,7 +547,6 @@ export function WebCommunityFunnelEditor(props: WebCommunityFunnelEditorProps) {
         invocationSurface: "community_funnel_builder",
         requestedFundingSource: "platform",
         requestedAgenticTools: true,
-        suppressOnboardingProgress: true,
         onStreamStart: () => setIsAwaitingStream(false),
         replyToId: messageId,
         messages: [optimisticMessage],

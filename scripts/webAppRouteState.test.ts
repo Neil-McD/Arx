@@ -203,7 +203,7 @@ describe("canonical web destinations", () => {
     ["/c/polynet", { kind: "community_funnel", slug: "polynet" }],
     ["/m/c/polynet", { kind: "community_funnel", slug: "polynet" }],
     ["/c/polynet/preview", { kind: "community_funnel_preview", slug: "polynet" }],
-    ["/m/c/polynet/onboarding/preview", { kind: "community_onboarding_preview", slug: "polynet" }],
+    ["/m/c/polynet/onboarding/preview", { kind: "community_chat", slug: "polynet", channelSlug: null }],
     ["/m/c/polynet/home", { kind: "community_home", slug: "polynet" }],
     ["/m/c/polynet/members", { kind: "community_members", slug: "polynet" }],
     ["/m/c/polynet/chat", { kind: "community_chat", slug: "polynet", channelSlug: null }],

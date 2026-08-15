@@ -22,9 +22,6 @@ const communitySettingsGovernanceController = read(
 const agentSettings = read(
   "apps/web/src/components/WebCommunityAiAgentSection.tsx",
 );
-const onboardingSettings = read(
-  "apps/web/src/components/WebCommunityOnboardingWorkflowSection.tsx",
-);
 const settingsNav = read("shared/SettingsNavList.tsx");
 const settingsStyles = read(
   "apps/web/src/styles/settings-runtime-and-theme-overrides.css",
@@ -104,7 +101,6 @@ assert.doesNotMatch(
 
 for (const [source, label] of [
   [communitySettings, "community settings"],
-  [onboardingSettings, "onboarding preview"],
 ] as const) {
   assert.match(
     source,

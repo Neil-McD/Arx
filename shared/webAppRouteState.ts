@@ -24,8 +24,6 @@ export type PublicRoute =
 
 export type AppShellVariant = "standard" | "mobile";
 
-export type CommunityExperienceMode = "standard" | "onboarding_preview";
-
 export type AppRouteState = {
   page: AppPage;
   view: AppView;
@@ -33,7 +31,6 @@ export type AppRouteState = {
   settingsIndex?: boolean;
   communitySlug: string | null;
   communityTab: CommunityTab;
-  communityExperienceMode?: CommunityExperienceMode;
   communityChannelSlug?: string | null;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
@@ -48,7 +45,6 @@ export type AppRoutePathState = {
   settingsIndex?: boolean;
   communitySlug: string | null;
   communityTab: CommunityTab;
-  communityExperienceMode?: CommunityExperienceMode;
   communityChannelSlug?: string | null;
   communityResourceModuleId?: string | null;
   communitySettingsPane?: CommunitySettingsPane | null;
@@ -73,7 +69,6 @@ export type WebDestination =
   | { kind: "global_settings"; page: SettingsPage; index: boolean }
   | { kind: "community_funnel"; slug: string }
   | { kind: "community_funnel_preview"; slug: string }
-  | { kind: "community_onboarding_preview"; slug: string }
   | { kind: "community_home"; slug: string }
   | { kind: "community_members"; slug: string }
   | { kind: "community_chat"; slug: string; channelSlug: string | null }
@@ -266,14 +261,6 @@ export function buildCommunityFunnelPreviewPath(
   if (!slug) return null;
   const path = `/c/${encodeURIComponent(slug)}/preview?slot=${encodeURIComponent(slot)}`;
   return path;
-}
-
-export function buildCommunityOnboardingPreviewPath(
-  communitySlug: string | null | undefined,
-): string | null {
-  const slug = String(communitySlug ?? "").trim();
-  if (!slug) return null;
-  return `/c/${encodeURIComponent(slug)}/onboarding/preview`;
 }
 
 export function buildCommunityFunnelPath(communitySlug: string | null | undefined): string | null {
@@ -486,7 +473,7 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       settingsPage: "profile",
       communitySlug: slug,
       communityTab: "chat",
-      communityExperienceMode: "onboarding_preview",
+      communityChannelSlug: null,
     };
   }
 
@@ -499,7 +486,6 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       settingsPage: "profile",
       communitySlug: slug,
       communityTab: "chat",
-      communityExperienceMode: "standard",
       communityChannelSlug: null,
       communityResourceModuleId: null,
       communitySettingsPane: null,
@@ -515,7 +501,6 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       settingsPage: "profile",
       communitySlug: slug,
       communityTab: "chat",
-      communityExperienceMode: "standard",
       communityChannelSlug: null,
       communityResourceModuleId: null,
       communitySettingsPane: null,
@@ -552,7 +537,6 @@ export function parseAppRouteFromPathname(pathname: string): AppRoutePathState |
       settingsPage: "profile",
       communitySlug: slug,
       communityTab,
-      communityExperienceMode: "standard",
       communityChannelSlug,
       communityResourceModuleId,
       communitySettingsPane,
@@ -585,9 +569,6 @@ export function deriveWebDestinationFromAppRoute(
     case "community": {
       const slug = String(route.communitySlug ?? "").trim();
       if (!slug) return { kind: "platform_entry" };
-      if (route.communityExperienceMode === "onboarding_preview") {
-        return { kind: "community_onboarding_preview", slug };
-      }
       if (route.view === "community_home") {
         return { kind: "community_home", slug };
       }
@@ -664,7 +645,6 @@ export function isWebCommunityDetailDestination(
   destination: WebDestination,
 ): boolean {
   switch (destination.kind) {
-    case "community_onboarding_preview":
     case "community_chat":
     case "community_resources":
     case "community_events":
@@ -693,7 +673,6 @@ export function webDestinationHasCommunityNavSelection(
   switch (destination.kind) {
     case "community_funnel":
     case "community_funnel_preview":
-    case "community_onboarding_preview":
     case "community_chat":
     case "community_resources":
     case "community_events":
@@ -768,9 +747,6 @@ export function readAppRouteFromLocation(): AppRouteState {
       ...(fromPath.settingsIndex ? { settingsIndex: true } : {}),
       communitySlug: fromPath.communitySlug,
       communityTab: fromPath.communityTab,
-      ...(fromPath.communityExperienceMode === "onboarding_preview"
-        ? { communityExperienceMode: "onboarding_preview" as const }
-        : {}),
       communityChannelSlug: fromPath.communityChannelSlug ?? null,
       communityResourceModuleId: fromPath.communityResourceModuleId ?? null,
       communitySettingsPane: fromPath.communitySettingsPane ?? null,
@@ -801,9 +777,6 @@ export function buildAppRoutePath(state: AppRoutePathState): string | null {
   }
 
   if (state.page === "community") {
-    if (state.communityExperienceMode === "onboarding_preview") {
-      return buildCommunityOnboardingPreviewPath(state.communitySlug);
-    }
     if (state.view === "community_home") {
       return buildCommunityHomePath(state.communitySlug);
     }

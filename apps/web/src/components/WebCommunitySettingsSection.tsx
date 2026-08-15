@@ -15,7 +15,6 @@ import {
 import { buildStripeConnectPresentation } from "../controllers/buildStripeConnectPresentation";
 import { StripeConnectCountrySelect } from "./StripeConnectCountrySelect";
 import { StripeSetupButton } from "./StripeSetupButton";
-import { WebCommunityOnboardingWorkflowSection } from "./WebCommunityOnboardingWorkflowSection";
 import { WebCommunityAiAgentSection } from "./WebCommunityAiAgentSection";
 import {
   platformTabId,
@@ -51,7 +50,6 @@ type WebCommunitySettingsSectionProps = {
   communitySettingsLayer: CommunitySettingsLayer;
   activePane: CommunitySettingsPane;
   onSelectPane: (pane: CommunitySettingsPane, opts?: { replace?: boolean }) => void;
-  onPreviewCommunityOnboarding: () => void;
   canManageCommunitySettings: boolean;
   canManageMembersActiveCommunity: boolean;
   aiAgentProps: ComponentProps<typeof WebCommunityAiAgentSection>;
@@ -145,7 +143,6 @@ type SharedSettingsProps = Pick<WebCommunitySettingsSectionProps, "state" | "act
 
 const COMMUNITY_SETTINGS_PANE_LABELS: Record<CommunitySettingsPane, string> = {
   community: "General",
-  workflows: "Workflows",
   agent: "Agent",
   danger: "Danger",
 };
@@ -946,19 +943,6 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   ) : null}
                 </div>
               </div>
-              ) : null}
-              {selectedSettingsPane === "workflows" ? (
-              <WebCommunityOnboardingWorkflowSection
-                session={props.session}
-                ensureSession={props.ensureSession}
-                communityId={resolvedActiveCommunity.id}
-                communityName={resolvedActiveCommunity.name}
-                communityAvatarUrl={resolvedActiveCommunity.avatar_url}
-                communityAvatarFocusX={resolvedActiveCommunity.avatar_focus_x}
-                communityAvatarFocusY={resolvedActiveCommunity.avatar_focus_y}
-                communityAvatarZoom={resolvedActiveCommunity.avatar_zoom}
-                onPreview={props.onPreviewCommunityOnboarding}
-              />
               ) : null}
               {selectedSettingsPane === "agent" ? (
               <WebCommunityAiAgentSection {...aiAgentProps} embedded />

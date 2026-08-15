@@ -39,7 +39,6 @@ import {
   readShellVariantFromPathname,
   type AppRouteState,
   type AppShellVariant,
-  type CommunityExperienceMode,
   type PublicRoute,
 } from "../../../../shared/webAppRouteState";
 import type { WebNavSnapshot } from "../webAppContracts";
@@ -77,10 +76,6 @@ export function useWebShellNavigationController(params: {
   communityTab: CommunityTab;
   communityChannelSlug: string | null;
   setCommunityChannelSlug: Dispatch<SetStateAction<string | null>>;
-  communityExperienceMode: CommunityExperienceMode;
-  setCommunityExperienceMode: Dispatch<
-    SetStateAction<CommunityExperienceMode>
-  >;
   communityResourceModuleId: string | null;
   setCommunityResourceModuleId: Dispatch<SetStateAction<string | null>>;
   communitySettingsPane: CommunitySettingsPane;
@@ -119,9 +114,6 @@ export function useWebShellNavigationController(params: {
       current.setActiveOperatorTab(nextAppRoute.operatorTab ?? "platform");
     }
     if (nextAppRoute.page === "community") {
-      current.setCommunityExperienceMode(
-        nextAppRoute.communityExperienceMode ?? "standard",
-      );
       current.applyCommunityShellState({
         communitySlug,
         communityTab: nextAppRoute.communityTab,
@@ -142,7 +134,6 @@ export function useWebShellNavigationController(params: {
       );
       return;
     }
-    current.setCommunityExperienceMode("standard");
     current.setCommunityChannelSlug(null);
     current.setCommunityResourceModuleId(null);
     current.setCommunitySettingsPane("community");
@@ -350,7 +341,6 @@ export function useWebShellNavigationController(params: {
     activeCommunitySlug: params.selectedActiveCommunitySlug,
     communityTab: params.communityTab,
     communityChannelSlug: params.communityChannelSlug,
-    communityExperienceMode: params.communityExperienceMode,
     communityResourceModuleId: params.communityResourceModuleId,
     communitySettingsPane: params.communitySettingsPane,
     docsSlug:

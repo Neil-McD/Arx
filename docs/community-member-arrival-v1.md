@@ -1,6 +1,12 @@
-# Community Member Arrival v1
+# Community Member Entry and Arrival v1
 
 ## Irreducible contract
+
+A member authenticates, completes the required platform profile, receives an
+authorized membership, lands in the community's canonical General channel, and
+uses the ordinary product. Member entry does not create a separate onboarding
+session or require an orientation, first post, agent turn, acknowledgement, or
+MCP handoff.
 
 Community membership is canonical access truth. A `member_joined` activity row
 is an ambient, recoverable projection of one real inactive-to-active membership
@@ -43,4 +49,10 @@ create unread-message state, replies, reactions, notifications, or agent turns.
 ## Deliberately absent
 
 No scheduler, poller, inference, notification, concierge welcome, founder
-setting, workflow execution, or legacy-onboarding deletion is introduced here.
+setting, workflow execution, forced introduction, onboarding preview, or MCP
+handoff is part of member entry.
+
+The retained `communityOnboarding` operations are authenticated, stateless
+compatibility tombstones for cached clients. They never read or write the
+retired onboarding tables. The tables remain temporarily only as rollback and
+bounded data-retirement substrate; they are not product authority.
