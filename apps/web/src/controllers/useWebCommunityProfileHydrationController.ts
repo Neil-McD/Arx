@@ -22,6 +22,10 @@ type ActorReply = {
   };
 };
 
+type ActivityActor = {
+  actor_user_id?: string | null;
+};
+
 type UseWebCommunityProfileHydrationControllerParams = {
   activePage: string;
   canonicalSessionUserId: string | null;
@@ -30,6 +34,7 @@ type UseWebCommunityProfileHydrationControllerParams = {
   cloudProfile: UserProfileDetail | null;
   profilesByUserId: Record<string, UserProfile>;
   communityDirectoryMembers: readonly { user_id?: string | null }[];
+  communityActivityEvents: readonly ActivityActor[];
   communityInteractionRoots: readonly ActorRoot[];
   communityInteractionRepliesByRootId: Record<
     string,
@@ -62,6 +67,10 @@ export function useWebCommunityProfileHydrationController(
       if (actorId) ids.add(actorId);
       if (lastReplyActorId) ids.add(lastReplyActorId);
     }
+    for (const event of params.communityActivityEvents) {
+      const actorId = String(event.actor_user_id ?? "").trim();
+      if (actorId) ids.add(actorId);
+    }
     for (
       const replies of Object.values(
         params.communityInteractionRepliesByRootId,
@@ -78,6 +87,7 @@ export function useWebCommunityProfileHydrationController(
     params.activePage,
     params.canonicalSessionUserId,
     params.communityDirectoryMembers,
+    params.communityActivityEvents,
     params.communityInteractionRepliesByRootId,
     params.communityInteractionRoots,
   ]);
