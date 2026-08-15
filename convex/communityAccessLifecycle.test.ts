@@ -12,6 +12,7 @@ import schema from "./schema";
 
 const modules = import.meta.glob([
   "./communityPublic.ts",
+  "./communityActivity.ts",
   "./communityAdmin.ts",
   "./communityAccessQueries.ts",
   "./communityCapabilityContext.ts",
@@ -260,6 +261,12 @@ test("open public join is authenticated, immediately authorized, and idempotent"
           .eq("userId", fixture.memberId),
       )
       .collect(),
+    arrivalEvents: await ctx.db
+      .query("communityActivityEvents")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", fixture.openCommunityId),
+      )
+      .collect(),
   }));
   expect(state.community?.activeMemberCount).toBe(2);
   expect(state.memberships).toHaveLength(1);
@@ -269,6 +276,40 @@ test("open public join is authenticated, immediately authorized, and idempotent"
     active: true,
     activationSequence: 1,
   });
+  expect(state.arrivalEvents).toEqual([
+    expect.objectContaining({
+      type: "member_joined",
+      actorUserId: fixture.memberId,
+      targetType: "membership",
+      targetId: String(state.memberships[0]._id),
+      dedupeKey: `member_joined:${String(state.memberships[0]._id)}:1`,
+    }),
+  ]);
+
+  await t.run(async (ctx) => {
+    await ctx.db.insert("communityActivityEvents", {
+      communityId: fixture.openCommunityId,
+      type: "resource_added",
+      targetType: "resource",
+      targetId: "resource-after-join",
+      dedupeKey: "resource_added:resource-after-join",
+      createdAt: 1_750_000_100_000,
+    });
+  });
+  const filteredArrivals = await asMember.query(
+    api.communityActivity.listCommunityActivityEvents,
+    {
+      communityId: fixture.openCommunityId,
+      type: "member_joined",
+      limit: 50,
+    },
+  );
+  expect(filteredArrivals).toEqual([
+    expect.objectContaining({
+      type: "member_joined",
+      actor_user_id: MEMBER_SUBJECT,
+    }),
+  ]);
 });
 
 test("community owner admission is a no-op with no request or membership row", async () => {
@@ -701,11 +742,18 @@ test("approval join fails closed until manager approval and closes again after r
           .eq("userId", fixture.memberId),
       )
       .collect(),
+    arrivalEvents: await ctx.db
+      .query("communityActivityEvents")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", fixture.approvalCommunityId),
+      )
+      .collect(),
   }));
   expect(pendingState.community?.activeMemberCount).toBe(1);
   expect(pendingState.memberships).toHaveLength(0);
   expect(pendingState.requests).toHaveLength(1);
   expect(pendingState.requests[0].status).toBe("pending");
+  expect(pendingState.arrivalEvents).toHaveLength(0);
   const requestId = pendingState.requests[0]._id;
   await expect(
     asOwner.query(api.communityAdmin.listCommunityJoinRequests, {
@@ -774,6 +822,12 @@ test("approval join fails closed until manager approval and closes again after r
           .eq("userId", fixture.memberId),
       )
       .collect(),
+    arrivalEvents: await ctx.db
+      .query("communityActivityEvents")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", fixture.approvalCommunityId),
+      )
+      .collect(),
   }));
   expect(approvedState.community?.activeMemberCount).toBe(2);
   expect(approvedState.request).toBeNull();
@@ -782,6 +836,14 @@ test("approval join fails closed until manager approval and closes again after r
     active: true,
     activationSequence: 1,
   });
+  expect(approvedState.arrivalEvents).toEqual([
+    expect.objectContaining({
+      type: "member_joined",
+      actorUserId: fixture.memberId,
+      targetType: "membership",
+      targetId: String(approvedState.memberships[0]._id),
+    }),
+  ]);
   const membershipId = approvedState.memberships[0]._id;
 
   const approvedNativeAccess = await executeSemanticList({
@@ -931,7 +993,14 @@ test("paid public join never materializes access without an entitlement", async 
           .eq("userId", fixture.memberId),
       )
       .collect(),
+    arrivalEvents: await ctx.db
+      .query("communityActivityEvents")
+      .withIndex("by_community_createdAt", (q) =>
+        q.eq("communityId", fixture.paidCommunityId),
+      )
+      .collect(),
   }));
   expect(state.community?.activeMemberCount).toBe(1);
   expect(state.memberships).toHaveLength(0);
+  expect(state.arrivalEvents).toHaveLength(0);
 });

@@ -243,7 +243,7 @@ describe("canonical join-request kernel", () => {
       userId: fixture.userId,
       nowMs: fixture.nowMs + 1,
     }));
-    await t.run(async (ctx) => activateCommunityMembershipCore({
+    const first = await t.run(async (ctx) => activateCommunityMembershipCore({
       ctx,
       communityId: fixture.communityId,
       userId: fixture.userId,
@@ -251,8 +251,69 @@ describe("canonical join-request kernel", () => {
       activationReason: "test",
       nowMs: fixture.nowMs + 2,
     }));
+    expect(first).toMatchObject({ accessGranted: true });
     expect(await t.run(async (ctx) => ctx.db.query("communityJoinRequests").collect()))
       .toHaveLength(0);
+
+    const replay = await t.run(async (ctx) => activateCommunityMembershipCore({
+      ctx,
+      communityId: fixture.communityId,
+      userId: fixture.userId,
+      accessSource: "free_grant",
+      activationReason: "test_replay",
+      nowMs: fixture.nowMs + 3,
+    }));
+    expect(replay).toMatchObject({ accessGranted: false, activationMarker: null });
+
+    const firstEvents = await t.run(async (ctx) =>
+      await ctx.db
+        .query("communityActivityEvents")
+        .withIndex("by_community_createdAt", (q) =>
+          q.eq("communityId", fixture.communityId),
+        )
+        .collect(),
+    );
+    expect(firstEvents).toEqual([
+      expect.objectContaining({
+        type: "member_joined",
+        actorUserId: fixture.userId,
+        targetType: "membership",
+        targetId: String(first.membership._id),
+        dedupeKey: `member_joined:${String(first.membership._id)}:1`,
+      }),
+    ]);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(first.membership._id, {
+        active: false,
+        revokedAt: fixture.nowMs + 4,
+        revokedReason: "test_reactivation",
+        updatedAt: fixture.nowMs + 4,
+      });
+    });
+    const reactivated = await t.run(async (ctx) => activateCommunityMembershipCore({
+      ctx,
+      communityId: fixture.communityId,
+      userId: fixture.userId,
+      accessSource: "free_grant",
+      activationReason: "test_reactivation",
+      nowMs: fixture.nowMs + 5,
+    }));
+    expect(reactivated).toMatchObject({ accessGranted: true });
+    expect(reactivated.membership).toMatchObject({ activationSequence: 2 });
+
+    const reactivationEvents = await t.run(async (ctx) =>
+      await ctx.db
+        .query("communityActivityEvents")
+        .withIndex("by_community_createdAt", (q) =>
+          q.eq("communityId", fixture.communityId),
+        )
+        .collect(),
+    );
+    expect(reactivationEvents).toEqual([
+      expect.objectContaining({ dedupeKey: `member_joined:${String(first.membership._id)}:1` }),
+      expect.objectContaining({ dedupeKey: `member_joined:${String(first.membership._id)}:2` }),
+    ]);
   });
 
   test("membership activation fails closed on duplicate membership authority", async () => {

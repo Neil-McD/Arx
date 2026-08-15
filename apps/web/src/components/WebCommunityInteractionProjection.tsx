@@ -38,6 +38,7 @@ import type {
   CommunityTypingPresenceBundle,
   CommunityTypingPresenceUser,
   CommunityPresenceSummary,
+  CommunityActivityEvent,
   UserProfile,
 } from "../../../../shared/communityTypes";
 import { UserAvatar } from "../../../../shared/UserAvatar";
@@ -71,6 +72,7 @@ export type WebCommunityInteractionProjectionProps = {
   canManagePinnedRoot?: boolean;
   onSetPinnedRoot?: (rootId: string | null) => Promise<boolean> | boolean;
   roots: CommunityInteractionRootBundle[];
+  activityEvents: CommunityActivityEvent[];
   selectedRootId: string | null;
   mobileThreadPage?: boolean;
   floatingComposers?: boolean;
@@ -652,6 +654,10 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
     () => props.roots.map((bundle) => bundle.root.id).join("|"),
     [props.roots],
   );
+  const activityWindowSignature = useMemo(
+    () => props.activityEvents.map((event) => event.id).join("|"),
+    [props.activityEvents],
+  );
 
   useLayoutEffect(() => {
     const el = scrollRef.current;
@@ -701,7 +707,12 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
         setShowJumpToLatest(true);
       }
     }
-  }, [prepareProgrammaticMobileScroll, props.rootChangeReason, rootWindowSignature]);
+  }, [
+    activityWindowSignature,
+    prepareProgrammaticMobileScroll,
+    props.rootChangeReason,
+    rootWindowSignature,
+  ]);
 
   // Reset reply animation tracking on thread switch so a thread's initial replies don't animate.
   useEffect(() => {
@@ -787,6 +798,7 @@ export function WebCommunityInteractionProjection(props: WebCommunityInteraction
               {...props}
               key={props.pinnedRoot.root.id}
               roots={[props.pinnedRoot]}
+              activityEvents={[]}
               selectedRootId={null}
               chatLastSeenAt={null}
               error={null}

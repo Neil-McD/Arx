@@ -5,6 +5,7 @@ import {
   acquireAuthenticatedConvexRealtimeClient,
   type ConvexRealtimeEnsureSession,
 } from "./convexRealtimeAuth";
+import type { CommunityActivityEventType } from "./communityTypes";
 
 type CloudCommunityChatGatewayParams<SessionT> = {
   session: SessionT;
@@ -156,6 +157,7 @@ export function subscribeCloudCommunityActivityEvents<TRow = unknown>(
   params: {
     liveClient: CloudCommunityChatLiveClient;
     communityId: string;
+    type?: CommunityActivityEventType;
     limit?: number;
     onUpdate: (rows: TRow[]) => void;
     onError?: (error: unknown) => void;
@@ -166,6 +168,7 @@ export function subscribeCloudCommunityActivityEvents<TRow = unknown>(
     {
       authSubject: params.liveClient.authSubject,
       communityId: params.communityId as any,
+      ...(params.type ? { type: params.type } : null),
       beforeCreatedAt: null,
       limit: params.limit ?? 50,
     } as any,
@@ -368,6 +371,7 @@ export async function listCloudThreadMessages<SessionT, TRow = unknown>(
 export async function listCloudCommunityActivityEvents<SessionT, TRow = unknown>(
   params: CloudCommunityChatGatewayParams<SessionT> & {
     communityId: string;
+    type?: CommunityActivityEventType;
     beforeCreatedAt?: number | null;
     limit?: number;
   },
@@ -376,6 +380,7 @@ export async function listCloudCommunityActivityEvents<SessionT, TRow = unknown>
   const payload = await client.query("communityActivity:listCommunityActivityEvents" as any, {
     authSubject,
     communityId: params.communityId,
+    ...(params.type ? { type: params.type } : null),
     beforeCreatedAt: params.beforeCreatedAt ?? null,
     limit: params.limit ?? 50,
   });

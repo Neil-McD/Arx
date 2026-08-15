@@ -12,6 +12,7 @@ import {
 import { EmojiPickerButton, QUICK_REACTIONS, ReactionSummary } from "./communityInteractionRowParts";
 import { DeferredYouTubeEmbed } from "./DeferredYouTubeEmbed";
 import { groupInteractionFeed } from "./groupInteractionFeed";
+import { MemberAvatarStack, type MemberAvatarStackFace } from "./MemberAvatarStack";
 import type { WebCommunityInteractionProjectionProps } from "./WebCommunityInteractionProjection";
 import type {
   CommunityInteractionAttachment,
@@ -853,7 +854,7 @@ export function CommunityInteractionFeedList(
   const setEditText = props.onEditTextChange;
   const saveEdit = props.onSaveEdit;
   const cancelEdit = props.onCancelEdit;
-  const segments = groupInteractionFeed(props.roots);
+  const segments = groupInteractionFeed(props.roots, props.activityEvents);
   const unreadBoundary = typeof props.chatLastSeenAt === "number" ? props.chatLastSeenAt : null;
   const firstUnreadRootId = unreadBoundary
     ? props.roots.find(
@@ -868,19 +869,19 @@ export function CommunityInteractionFeedList(
     : null;
   const unreadDivider = <div className="community-interaction-unread-divider"><span>New</span></div>;
   return (
-          props.error && props.roots.length === 0 ? (
+          props.error && props.roots.length === 0 && props.activityEvents.length === 0 ? (
             <div className="community-interaction-state" role="alert">
               <div>{props.error}</div>
               <button type="button" onClick={props.onRetryRoots}>
                 {props.errorActionLabel ?? "Retry"}
               </button>
             </div>
-          ) : props.isLoadingRoots && props.roots.length === 0 ? (
+          ) : props.isLoadingRoots && props.roots.length === 0 && props.activityEvents.length === 0 ? (
             <div className="community-interaction-state" aria-live="polite">
               <div>Loading threads...</div>
               <div className="community-interaction-loading web-skeleton-pill" aria-hidden="true" />
             </div>
-          ) : props.roots.length === 0 ? (
+          ) : props.roots.length === 0 && props.activityEvents.length === 0 ? (
             <div className="community-interaction-empty">
               <MessageSquare size={22} aria-hidden="true" />
               <div>No threads yet</div>
@@ -919,6 +920,51 @@ export function CommunityInteractionFeedList(
                       {dividerBefore}
                       <div className="community-interaction-system">
                         <span>{body}</span>
+                      </div>
+                    </Fragment>
+                  );
+                }
+                if (segment.type === "member_arrivals") {
+                  const actorIds = Array.from(new Set(
+                    segment.events
+                      .map((event) => String(event.actor_user_id ?? "").trim())
+                      .filter(Boolean),
+                  ));
+                  const faces: MemberAvatarStackFace[] = actorIds.map((userId) => {
+                    const profile = props.profilesByUserId[userId] ?? null;
+                    const name = props.displayName(userId);
+                    return {
+                      user_id: userId,
+                      display_name: name,
+                      avatar_url: profile?.avatar_url ?? null,
+                      avatar_focus_x: profile?.avatar_focus_x ?? null,
+                      avatar_focus_y: profile?.avatar_focus_y ?? null,
+                      avatar_zoom: profile?.avatar_zoom ?? null,
+                      avatar_color: props.getAvatarColor(userId),
+                      initials: props.getInitials(name),
+                    };
+                  });
+                  const names = actorIds.map(props.displayName);
+                  const label = names.length === 0
+                    ? "A new member joined the community"
+                    : names.length === 1
+                      ? `${names[0]} joined the community`
+                      : names.length === 2
+                        ? `${names[0]} and ${names[1]} joined the community`
+                        : `${names[0]}, ${names[1]}, and ${names.length - 2} ${names.length === 3 ? "other" : "others"} joined the community`;
+                  return (
+                    <Fragment key={segment.key}>
+                      {dividerBefore}
+                      <div className="community-interaction-member-arrivals">
+                        <MemberAvatarStack
+                          faces={faces}
+                          totalCount={faces.length}
+                          limit={4}
+                          decorative
+                          className="community-interaction-member-arrival-faces"
+                          imageLoading="lazy"
+                        />
+                        <span>{label}</span>
                       </div>
                     </Fragment>
                   );

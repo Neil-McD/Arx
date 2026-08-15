@@ -595,6 +595,7 @@ export default function App() {
   const communityInteractionProjection = useWebCommunityInteractionProjection<MessageAttachment>({
     activeCommunityId: activeChannelCommunityId,
     activeChannelId,
+    activeChannelIsGeneral: Boolean(activeCommunityChannel?.is_general),
     canonicalSessionUserId,
     ensureSession: ensureUsableAuthSession,
     isCommunityChatActive:
@@ -605,6 +606,7 @@ export default function App() {
   });
   const {
     roots: communityInteractionRoots,
+    activityEvents: communityActivityEvents,
     repliesByRootId: communityInteractionRepliesByRootId,
     visibleRoots: visibleCommunityInteractionRoots,
     selectedReplies: selectedCommunityInteractionReplies,
@@ -1251,6 +1253,7 @@ export default function App() {
       cloudProfile,
       profilesByUserId,
       communityDirectoryMembers,
+      communityActivityEvents,
       communityInteractionRoots,
       communityInteractionRepliesByRootId,
       loadUserProfiles,
@@ -2384,6 +2387,10 @@ export default function App() {
         roots: isActiveCommunityChannelReady
           ? visibleCommunityInteractionRoots
           : [],
+        activityEvents:
+          isActiveCommunityChannelReady && activeCommunityChannel?.is_general
+            ? communityActivityEvents
+            : [],
         selectedRootId: isActiveCommunityChannelReady
           ? selectedCommunityInteractionRootId
           : null,
