@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 6 released; Slice 7A implemented and locally verified, Slice 7B pending
+Status: context architecture through Slice 7A released and production-proven; Slice 7B pending
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-15
 
@@ -9,9 +9,8 @@ Program position:
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: Slices 5A through 6 are released and production-proven;
-  Slice 7A is implemented and locally verified; Slice 7B and Slices 8 through 10
-  remain.
+- Runtime convergence: Slices 5A through 7A are released and production-proven;
+  Slice 7B and Slices 8 through 10 remain.
 - Pi agent-core adoption in Polynet: not started.
 
 ## 1. Purpose
@@ -294,11 +293,9 @@ The remaining gaps are:
 1. The bounded 60-row persisted-history read shared by Member and Funnel
    Composer still precedes model-visible projection; budget-guided newest-first
    pagination remains Slice 7B.
-2. Slice 7A has local deterministic proof but has not been merged, deployed, or
-   production-proven.
-3. Pi agent core has not been admitted, parity-tested, or used by a production
+2. Pi agent core has not been admitted, parity-tested, or used by a production
    Polynet turn.
-4. Pi agent core has not yet proved that it removes more runtime complexity
+3. Pi agent core has not yet proved that it removes more runtime complexity
    than its adapter and hosted-runtime requirements add.
 
 Program status:
@@ -311,7 +308,7 @@ Program status:
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
 | 5 | Workspace and Codex runtime deletion | Complete and production-proven |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
-| 7 | Shared deterministic model-visible projection | 7A locally complete; 7B not started |
+| 7 | Shared deterministic model-visible projection | 7A complete and production-proven; 7B not started |
 | 8 | Pi value/feasibility adapter and deterministic parity | Not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
@@ -1033,6 +1030,21 @@ Slice 7A implemented shape:
    60 persisted messages shared by Member and Funnel Composer. Pi remains
    excluded until all of Slice 7 is complete.
 
+Slice 7A production evidence:
+
+1. Runtime context projection release `bd228822a6acc79631d64fdca512f52523aaaa4d`
+   passed the exact-main GitHub Release Gate, was reported by production web,
+   and was deployed to production Convex.
+2. The required read-only production accounting smoke reported `health: pass`
+   with zero duplicate balances, negative balances, stale reservations, due
+   pending settlements, price drift, recent provider-cost mirror gaps, recent
+   unbilled compute charges, or recent compute rows missing provider-cost
+   mirrors.
+3. No synthetic user-visible agent turn or UI canary was executed. Exact
+   current-episode preservation, bounded projection recovery, evidence failure,
+   and no-retry terminal behavior are covered by the deterministic release
+   suite.
+
 ### 17.5 Slice 8: Pi value/feasibility adapter and deterministic parity
 
 Objective: determine whether Pi core can replace loop mechanics with a net
@@ -1249,8 +1261,7 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Finish Slice 7A review and release proof without a user-visible UI canary. Then
-implement Slice 7B as budget-guided newest-first persisted-history pagination
-for Member and Funnel Composer over the same projector. Do not mix in Pi
-adoption, semantic summarization, a second prompt compiler, a second event
+Plan and implement Slice 7B as budget-guided newest-first persisted-history
+pagination for Member and Funnel Composer over the same projector. Do not mix
+in Pi adoption, semantic summarization, a second prompt compiler, a second event
 store, or a second runtime.
