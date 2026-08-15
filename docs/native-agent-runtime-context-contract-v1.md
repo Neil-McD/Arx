@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7A released and production-proven; Slice 7B implemented with release proof pending
+Status: context architecture through Slice 7B released and production-proven; Slices 8 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-15
 
@@ -9,9 +9,8 @@ Program position:
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: Slices 5A through 7A are released and production-proven;
-  Slice 7B is implemented and awaiting release proof; Slices 8 through 10
-  remain.
+- Runtime convergence: Slices 5A through 7B are released and production-proven;
+  Slices 8 through 10 remain.
 - Pi agent-core adoption in Polynet: not started.
 
 ## 1. Purpose
@@ -273,7 +272,7 @@ paths.
 
 The context architecture is done. The complete runtime program is not.
 
-The released base plus the locally verified Slice 7B candidate has:
+The released architecture through Slice 7B has:
 
 1. One deterministic prompt-section model and compiler boundary.
 2. Exact prompt-to-manifest projection.
@@ -294,11 +293,9 @@ The released base plus the locally verified Slice 7B candidate has:
 
 The remaining gaps are:
 
-1. Slice 7B has not yet received exact-main release and production runtime
-   evidence.
-2. Pi agent core has not been admitted, parity-tested, or used by a production
+1. Pi agent core has not been admitted, parity-tested, or used by a production
    Polynet turn.
-3. Pi agent core has not yet proved that it removes more runtime complexity
+2. Pi agent core has not yet proved that it removes more runtime complexity
    than its adapter and hosted-runtime requirements add.
 
 Program status:
@@ -311,7 +308,7 @@ Program status:
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
 | 5 | Workspace and Codex runtime deletion | Complete and production-proven |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
-| 7 | Shared deterministic model-visible projection and persisted-history pagination | 7A complete and production-proven; 7B implemented, release proof pending |
+| 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | 8 | Pi value/feasibility adapter and deterministic parity | Not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
@@ -1073,6 +1070,28 @@ Slice 7A production evidence:
    and no-retry terminal behavior are covered by the deterministic release
    suite.
 
+Slice 7B production evidence:
+
+1. Persisted-history pagination release
+   `f5324d7df4ca6f445a8f89fd9882e43a12a5fa6c` passed the exact-main GitHub
+   Release Gate, was reported by production web as both its build and Sentry
+   release, and was deployed intentionally to production Convex.
+2. One normal Member Agent browser turn in the selected Polynet community at
+   2026-08-15T14:21:36Z completed with a substantive summary of chat,
+   resources, events, and members. Its
+   `runtime_persisted_history_selected` event selected three messages across
+   two complete episodes, included the initiating user message, read one
+   60-row database page, and stopped with `history_exhausted`.
+3. The same run emitted a matching
+   `runtime_provider_context_attestation_v1` event before provider execution.
+   Both bounded SHA-256 digests were valid, and neither
+   `max_pages_per_turn` nor the legacy `page_limit` stop value was present.
+4. The deterministic release proof separately selected all 1,941 short fixture
+   messages under the admitted model budget, beyond the former 1,920-row fixed
+   ceiling. The production turn proves reachability and receipt agreement; the
+   fixture proves multi-page depth without manufacturing visible community
+   activity.
+
 ### 17.5 Slice 8: Pi value/feasibility adapter and deterministic parity
 
 Objective: determine whether Pi core can replace loop mechanics with a net
@@ -1289,9 +1308,9 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Land Slice 7B on exact `origin/main`, deploy through the canonical GitHub and
-Convex paths, and prove one Member or Funnel turn whose persisted-history
-selection event and provider-context attestation agree. Only after that proof
-may Slice 8 begin as a reversible Pi agent-core feasibility adapter. Do not mix
-the Slice 7B release with Pi adoption, semantic summarization, a second prompt
-compiler, a second event store, or a second runtime.
+Begin Slice 8 only as a reversible Pi agent-core feasibility adapter with no
+production routing. First prove actual Convex runtime compatibility, governed
+tool-executor containment, deterministic loop parity, and a net reduction in
+maintained complexity. Adopt or reject Pi from that evidence; do not add
+semantic summarization, a second prompt compiler, a second event store, or a
+permanent second runtime.
