@@ -564,6 +564,8 @@ export default defineSchema({
     surface: v.optional(v.string()),
     userId: v.optional(v.id("users")),
     communityId: v.optional(v.id("communities")),
+    // Release-A compatibility only. No active writer may set this field.
+    projectId: v.optional(v.id("cloudProjects")),
     threadId: v.optional(v.id("threads")),
     runId: v.optional(v.string()),
     requestId: v.optional(v.string()),
@@ -1003,6 +1005,16 @@ export default defineSchema({
     factCount: v.number(),
     updatedAt: v.number(),
   }).index("by_user", ["userId"]),
+
+  // Slice 5E Release A tombstones. All product/runtime writers are deleted;
+  // these permissive table validators exist only long enough to inventory and
+  // delete historical production rows before Release B removes the tables.
+  cloudProjects: defineTable(v.any()),
+  workspaceTerminalSessions: defineTable(v.any()),
+  workspaceDirectorySnapshots: defineTable(v.any()),
+  workspaceFilePreviewSnapshots: defineTable(v.any()),
+  polynetCodexWorkerCapacityLeases: defineTable(v.any()),
+  daytonaCodexRuntimeTargets: defineTable(v.any()),
 
   communities: defineTable({
     ownerId: v.id("users"),
@@ -3443,9 +3455,11 @@ export default defineSchema({
     threadKey: v.optional(v.string()),
     title: v.optional(v.string()),
     titleSource: v.union(v.literal("auto"), v.literal("manual")),
+    // Release-A compatibility only. No active writer may set this field.
+    projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.string()),
     modelId: v.optional(v.string()),
-    runtimeEngine: v.optional(v.literal("polynet")),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     contextVersion: v.optional(v.number()),
     workingState: v.optional(
       v.object({
@@ -3552,18 +3566,28 @@ export default defineSchema({
     lane: v.string(),
     visibility: v.optional(v.union(v.literal("user_visible"), v.literal("internal_hidden"))),
     internalFollowupKind: v.optional(v.string()),
+    // Slice 5E Release-A compatibility fields. Runtime code cannot write or
+    // consume them; the retirement operator removes them before Release B.
+    projectId: v.optional(v.id("cloudProjects")),
     communityId: v.optional(v.id("communities")),
     communityContextVersion: v.optional(v.number()),
     modelId: v.optional(v.string()),
     engineId: v.optional(v.string()),
+    runtimeEngine: v.optional(v.union(v.literal("polynet"), v.literal("codex"))),
     executionMode: v.optional(v.string()),
+    sandboxMode: v.optional(v.string()),
     contractName: v.optional(v.string()),
     contractVersion: v.optional(v.string()),
     harnessProfile: v.optional(v.string()),
     harnessProfileSource: v.optional(v.string()),
     capabilityFamilies: v.optional(v.array(v.string())),
     accountPlan: v.optional(v.union(v.literal("free"), v.literal("premium"))),
+    workspaceSessionState: v.optional(v.string()),
     runtimeHarnessTelemetrySummary: v.optional(v.any()),
+    workspaceProviderSandboxId: v.optional(v.string()),
+    workspaceToolboxProxyUrl: v.optional(v.string()),
+    workspaceSessionRegion: v.optional(v.string()),
+    workspaceSessionUpdatedAt: v.optional(v.number()),
     startedContextSnapshot: v.optional(v.any()),
     activeContextSnapshot: v.optional(v.any()),
     activeContextSnapshotUpdatedAt: v.optional(v.number()),

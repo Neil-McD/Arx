@@ -185,6 +185,7 @@ import type * as probe from "../probe.js";
 import type * as profileCore from "../profileCore.js";
 import type * as profileRelationshipCore from "../profileRelationshipCore.js";
 import type * as profiles from "../profiles.js";
+import type * as projectResidueRetirement from "../projectResidueRetirement.js";
 import type * as providerConnectionProbes from "../providerConnectionProbes.js";
 import type * as providerConnections from "../providerConnections.js";
 import type * as providerCostCore from "../providerCostCore.js";
@@ -406,6 +407,7 @@ declare const fullApi: ApiFromModules<{
   profileCore: typeof profileCore;
   profileRelationshipCore: typeof profileRelationshipCore;
   profiles: typeof profiles;
+  projectResidueRetirement: typeof projectResidueRetirement;
   providerConnectionProbes: typeof providerConnectionProbes;
   providerConnections: typeof providerConnections;
   providerCostCore: typeof providerCostCore;
