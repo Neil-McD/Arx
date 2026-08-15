@@ -1,0 +1,368 @@
+import { describe, expect, it } from "vitest";
+import {
+  buildAssistantToolCallMessage,
+  type NativeToolAwareMessage,
+} from "../shared/nativeToolProtocol.ts";
+import { runNativeRuntimeKernel } from "../shared/runtimeKernel.ts";
+import { DEFAULT_RUNTIME_KERNEL_BUDGET } from "../shared/runtimeKernelTypes.ts";
+import { compactProviderTranscriptForContextRetry } from "../shared/providerContextWindow.ts";
+import {
+  listRuntimeModelCapacityProfiles,
+  planRuntimeInputBudget,
+  resolveRuntimeProviderBudgetIdentity,
+  RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE,
+} from "../shared/runtimeInputBudget.ts";
+
+const baseMessages: NativeToolAwareMessage[] = [
+  { role: "system", content: "Inspect the authorized community." },
+  { role: "user", content: "What is happening here?" },
+];
+
+describe("runtime input budget", () => {
+  it("admits every reviewed runtime capacity profile", () => {
+    for (const profile of listRuntimeModelCapacityProfiles()) {
+      const plan = planRuntimeInputBudget({
+        transport: profile.transport,
+        modelRef: profile.modelRef,
+        messages: baseMessages,
+        toolSchemas: [],
+        reservedOutputTokens: 1_600,
+      });
+      expect(plan.fits, plan.profileKey).toBe(true);
+      expect(plan.contextWindowTokens).toBe(profile.contextWindowTokens);
+    }
+  });
+
+  it("proves deterministic fit and overflow boundaries for every profile", () => {
+    for (const profile of listRuntimeModelCapacityProfiles()) {
+      const emptyPlan = planRuntimeInputBudget({
+        transport: profile.transport,
+        modelRef: profile.modelRef,
+        messages: [{ role: "user", content: "" }],
+        toolSchemas: [],
+        reservedOutputTokens: 1_600,
+      });
+      const availableTokens =
+        emptyPlan.usableInputTokens - emptyPlan.estimatedInputTokens;
+      const nearLimitCharacters = Math.max(0, availableTokens * 2 - 2);
+      const fit = planRuntimeInputBudget({
+        transport: profile.transport,
+        modelRef: profile.modelRef,
+        messages: [{ role: "user", content: "x".repeat(nearLimitCharacters) }],
+        toolSchemas: [],
+        reservedOutputTokens: 1_600,
+      });
+      const overflow = planRuntimeInputBudget({
+        transport: profile.transport,
+        modelRef: profile.modelRef,
+        messages: [
+          { role: "user", content: "x".repeat(nearLimitCharacters + 8) },
+        ],
+        toolSchemas: [],
+        reservedOutputTokens: 1_600,
+      });
+      expect(fit.fits, `${profile.transport}:${profile.modelRef}`).toBe(true);
+      expect(overflow.fits, `${profile.transport}:${profile.modelRef}`).toBe(
+        false,
+      );
+    }
+  });
+
+  it("fails closed for an unreviewed resolved model reference", () => {
+    const plan = planRuntimeInputBudget({
+      transport: "openai_responses",
+      modelRef: "openai/unreviewed-override",
+      messages: baseMessages,
+      toolSchemas: [],
+      reservedOutputTokens: 1_600,
+    });
+    expect(plan.fits).toBe(false);
+    expect(plan.failureCode).toBe(RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE);
+  });
+
+  it("counts tool schemas, output reserve, and images", () => {
+    const withoutExtras = planRuntimeInputBudget({
+      transport: "openai_responses",
+      modelRef: "openai/gpt-5.6-sol",
+      messages: baseMessages,
+      toolSchemas: [],
+      reservedOutputTokens: 1_600,
+    });
+    const withExtras = planRuntimeInputBudget({
+      transport: "openai_responses",
+      modelRef: "openai/gpt-5.6-sol",
+      messages: [
+        ...baseMessages,
+        {
+          role: "user",
+          content: [
+            { type: "text", text: "Inspect this image." },
+            { type: "image", imageUrl: "data:image/png;base64,AAAA" },
+          ],
+        },
+      ],
+      toolSchemas: [
+        {
+          type: "function",
+          name: "polynet_search",
+          parameters: { type: "object", properties: { query: { type: "string" } } },
+        },
+      ],
+      reservedOutputTokens: 3_200,
+    });
+    expect(withExtras.messageTokens).toBeGreaterThan(withoutExtras.messageTokens);
+    expect(withExtras.toolSchemaTokens).toBeGreaterThan(withoutExtras.toolSchemaTokens);
+    expect(withExtras.imageCount).toBe(1);
+    expect(withExtras.imageTokens).toBeGreaterThan(0);
+    expect(withExtras.usableInputTokens).toBeLessThan(
+      withoutExtras.usableInputTokens,
+    );
+  });
+
+  it("is monotonic as transcript content grows", () => {
+    const shortPlan = planRuntimeInputBudget({
+      transport: "openrouter_chat_completions",
+      modelRef: "openai/gpt-oss-120b:free",
+      messages: baseMessages,
+      toolSchemas: [],
+      reservedOutputTokens: 1_600,
+    });
+    const longPlan = planRuntimeInputBudget({
+      transport: "openrouter_chat_completions",
+      modelRef: "openai/gpt-oss-120b:free",
+      messages: [
+        ...baseMessages,
+        { role: "user", content: "x".repeat(300_000) },
+      ],
+      toolSchemas: [],
+      reservedOutputTokens: 1_600,
+    });
+    expect(longPlan.estimatedInputTokens).toBeGreaterThan(
+      shortPlan.estimatedInputTokens,
+    );
+    expect(longPlan.fits).toBe(false);
+    expect(longPlan.failureCode).toBe("context_window_exceeded");
+  });
+
+  it("binds admission to the provider transport and exact effective reference", () => {
+    expect(
+      resolveRuntimeProviderBudgetIdentity({
+        inferenceSource: "chatgpt",
+        requestedModelId: "gpt-5.6-sol",
+        modelRef: "openai/ignored-for-chatgpt",
+      }),
+    ).toEqual({
+      transport: "chatgpt_responses",
+      modelRef: "openai/gpt-5.6-sol",
+    });
+    expect(
+      resolveRuntimeProviderBudgetIdentity({
+        inferenceSource: "user_key",
+        requestedModelId: "sonnet-4.6",
+        modelRef: "anthropic/claude-sonnet-4.6",
+      }),
+    ).toEqual({
+      transport: "openrouter_chat_completions",
+      modelRef: "anthropic/claude-sonnet-4.6",
+    });
+  });
+
+  it("rejects unknown capacity before provider execution and records the plan", async () => {
+    let providerCalls = 0;
+    const evidence: Array<{ kind: string; fits: boolean }> = [];
+    const result = await runNativeRuntimeKernel({
+      messages: baseMessages,
+      budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+      inputBudget: {
+        transport: "openai_responses",
+        modelRef: "openai/unreviewed-override",
+        reservedOutputTokens: 1_600,
+        toolSchemas: [],
+        recordPlan: ({ kind, plan }) => {
+          evidence.push({ kind, fits: plan.fits });
+        },
+      },
+      runCompletion: async () => {
+        providerCalls += 1;
+        return {
+          ok: true,
+          type: "assistant",
+          assistantText: "must not run",
+          promptTokens: 1,
+          completionTokens: 1,
+          resolvedModelId: "unreviewed-override",
+        };
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => ({
+        status: "ok",
+        exitCode: 0,
+        outputText: "",
+        errorCode: null,
+        errorMessage: null,
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : result.code).toBe(
+      RUNTIME_MODEL_CAPACITY_UNKNOWN_CODE,
+    );
+    expect(providerCalls).toBe(0);
+    expect(evidence).toEqual([{ kind: "initial", fits: false }]);
+  });
+
+  it("rejects oversized input before provider execution", async () => {
+    let providerCalls = 0;
+    const result = await runNativeRuntimeKernel({
+      messages: [
+        { role: "user", content: "x".repeat(300_000) },
+      ],
+      budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+      inputBudget: {
+        transport: "openrouter_chat_completions",
+        modelRef: "openai/gpt-oss-120b:free",
+        reservedOutputTokens: 1_600,
+        toolSchemas: [],
+        recordPlan: () => undefined,
+      },
+      runCompletion: async () => {
+        providerCalls += 1;
+        return {
+          ok: true,
+          type: "assistant",
+          assistantText: "must not run",
+          promptTokens: 1,
+          completionTokens: 1,
+          resolvedModelId: "gpt-oss-120b",
+        };
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => ({
+        status: "ok",
+        exitCode: 0,
+        outputText: "",
+        errorCode: null,
+        errorMessage: null,
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : result.code).toBe("context_window_exceeded");
+    expect(providerCalls).toBe(0);
+  });
+
+  it("does not treat a preflight rejection as a provider-overflow retry", async () => {
+    let providerCalls = 0;
+    let compactionEvents = 0;
+    const result = await runNativeRuntimeKernel({
+      messages: [
+        { role: "user", content: "Inspect the community." },
+        {
+          role: "tool",
+          tool_call_id: "oversized-result",
+          content: "x".repeat(300_000),
+        },
+      ],
+      budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+      inputBudget: {
+        transport: "openrouter_chat_completions",
+        modelRef: "openai/gpt-oss-120b:free",
+        reservedOutputTokens: 1_600,
+        toolSchemas: [],
+        recordPlan: () => undefined,
+      },
+      prepareProviderTranscript: ({ transcript, forceCompaction }) =>
+        forceCompaction
+          ? compactProviderTranscriptForContextRetry(transcript)
+          : {
+              messages: transcript,
+              compactedToolResults: 0,
+              originalEstimatedTokens: 0,
+              projectedEstimatedTokens: 0,
+            },
+      onProviderContextCompacted: () => {
+        compactionEvents += 1;
+      },
+      runCompletion: async () => {
+        providerCalls += 1;
+        return {
+          ok: true,
+          type: "assistant",
+          assistantText: "must not run",
+          promptTokens: 1,
+          completionTokens: 1,
+          resolvedModelId: "gpt-oss-120b",
+        };
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => ({
+        status: "ok",
+        exitCode: 0,
+        outputText: "",
+        errorCode: null,
+        errorMessage: null,
+      }),
+    });
+    expect(result.ok).toBe(false);
+    expect(result.ok ? null : result.code).toBe("context_window_exceeded");
+    expect(providerCalls).toBe(0);
+    expect(compactionEvents).toBe(0);
+  });
+
+  it("records changed follow-up plans as deltas", async () => {
+    let providerCalls = 0;
+    const evidenceKinds: string[] = [];
+    const result = await runNativeRuntimeKernel<"polynet_search">({
+      messages: baseMessages,
+      budget: DEFAULT_RUNTIME_KERNEL_BUDGET,
+      inputBudget: {
+        transport: "openai_responses",
+        modelRef: "openai/gpt-5.6-sol",
+        reservedOutputTokens: 1_600,
+        toolSchemas: [
+          { type: "function", name: "polynet_search" },
+        ],
+        recordPlan: ({ kind }) => {
+          evidenceKinds.push(kind);
+        },
+      },
+      runCompletion: async () => {
+        providerCalls += 1;
+        if (providerCalls === 1) {
+          return {
+            ok: true,
+            type: "tool_call",
+            providerCallId: "search-1",
+            toolName: "polynet_search",
+            arguments: { query: "recent activity" },
+            assistantToolCallMessage: buildAssistantToolCallMessage({
+              providerCallId: "search-1",
+              toolName: "polynet_search",
+              rawArguments: JSON.stringify({ query: "recent activity" }),
+            }),
+            promptTokens: 10,
+            completionTokens: 5,
+            resolvedModelId: "gpt-5.6-sol",
+          };
+        }
+        return {
+          ok: true,
+          type: "assistant",
+          assistantText: "The community is active.",
+          promptTokens: 20,
+          completionTokens: 8,
+          resolvedModelId: "gpt-5.6-sol",
+        };
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => ({
+        status: "ok",
+        exitCode: 0,
+        outputText: "Two recent discussions.",
+        errorCode: null,
+        errorMessage: null,
+      }),
+    });
+    expect(result.ok).toBe(true);
+    expect(providerCalls).toBe(2);
+    expect(evidenceKinds).toEqual(["initial", "delta"]);
+  });
+});

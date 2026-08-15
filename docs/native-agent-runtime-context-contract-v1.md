@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture and runtime convergence through Slice 5D released and production-proven
+Status: context architecture through Slice 5D released; Slice 6 hardened and locally verified, release proof pending
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-14
 
@@ -10,7 +10,7 @@ Program position:
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 5D are released and production-proven;
-  Slices 6 through 10 remain.
+  Slice 6 is hardened and locally verified; Slices 7 through 10 remain.
 - Pi agent-core adoption in Polynet: not started.
 
 ## 1. Purpose
@@ -311,8 +311,8 @@ Program status:
 | 2 | Canonical Concierge context and receipt | Complete |
 | 3 | Canonical Steward context and receipt | Complete |
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
-| 5 | Workspace and Codex runtime deletion | Not started |
-| 6 | Canonical model-aware input budget | Not started |
+| 5 | Workspace and Codex runtime deletion | Complete and production-proven |
+| 6 | Canonical model-aware input budget | Locally verified; release pending |
 | 7 | Shared deterministic model-visible projection | Not started |
 | 8 | Pi value/feasibility adapter and deterministic parity | Not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
@@ -854,12 +854,17 @@ roles, historical thread/message data, and external MCP.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 
+Status: implemented, hardened, and locally verified on 2026-08-14. Merge,
+deployment, and production-canary proof remain.
+
 Objective: decide whether a complete provider request fits before sending it.
 
 Work:
 
-1. Give the canonical model catalog an explicit context-window capacity for
-   every admitted provider/model pair. Unknown capacity rejects admission.
+1. Give the canonical runtime model-capacity registry an explicit
+   context-window capacity for every admitted resolved transport/model
+   reference. Product/UI aliases are not capacity authority. Unknown capacity
+   rejects admission.
 2. Build one `RuntimeInputBudgetPlan` from:
    context-window capacity, reserved output tokens, serialized tool-schema
    estimate, compiled system prompt, conversation/tool projection, provider
@@ -882,6 +887,48 @@ Acceptance:
 4. Missing model capacity fails before funding/provider execution.
 
 Non-goals: summarization, semantic compaction, Pi, or provider cache tuning.
+
+Implemented shape:
+
+1. `shared/runtimeInputBudget.ts` is the only capacity registry, estimator,
+   plan, and privacy-safe evidence contract.
+2. Capacity keys are exact `(transport, resolved model reference)` pairs. The
+   current reviewed windows are 1,050,000 for OpenAI GPT-5.6 Sol/Luna and
+   GPT-5.5, 131,072 for OpenRouter GPT OSS 120B Free, 1,000,000 for OpenRouter
+   Claude Sonnet 4.6, Claude Opus 4.6, and Grok 4.3, and 1,048,576 for
+   OpenRouter Gemini 2.5 Flash/Pro.
+3. Estimator v1 counts serialized messages and active tool schemas at one token
+   per two UTF-8 bytes, reserves 8,192 tokens per image, reserves 4,096 provider
+   envelope tokens, and withholds five percent of the context window with a
+   4,096-token minimum safety margin. Provider-reported usage remains the
+   calibration signal; it does not split policy ownership.
+4. `runNativeRuntimeKernel` plans every provider attempt, including the single
+   provider-overflow retry. Initial evidence is mandatory and changed plans are
+   recorded as deltas without prompt content.
+5. Member, Funnel Composer, Concierge, and Steward claim hosted funding only
+   after the shared plan admits the request. Unknown capacity, invalid budget,
+   missing evidence, and estimated overflow stop before funding/provider work.
+6. Active OpenRouter aliases resolve to currently advertised exact references:
+   Claude Sonnet 4.6, Claude Opus 4.6, Gemini 2.5 Flash/Pro, and Grok 4.3. The
+   persisted `grok-4.1` product alias remains stable while its provider target
+   advances independently.
+7. Tool/resource response bounds and pagination remain unchanged. The deleted
+   request-wide transport character ceiling remains absent, and Member history
+   no longer applies separate 60,000-total or 20,000-per-message truncation.
+   The existing bounded 60-row storage read remains until Slice 7 owns paginated
+   model-visible history projection.
+8. Each role resolves one provider tool surface per run. The same immutable
+   schema value is used for initial context evidence, input budgeting,
+   provider transmission, and returned-tool validation; the budget seam cannot
+   rebuild a second schema through a callback.
+9. A failed preflight budget does not trigger the legacy provider-overflow
+   compaction retry. Only an attempted provider request can activate that
+   existing recovery path; deterministic projection remains Slice 7.
+10. Member and Funnel pre-provider lifecycle failures escape the provider-only
+   crash classifier unchanged so the turn handler retains its existing
+   funding, rate-limit, and conflict mappings. Steward separately preserves a
+   failed pre-provider funding claim's bounded error code. These failures
+   produce no provider-result observation or provider request.
 
 ### 17.4 Slice 7: shared deterministic model-visible projection
 
@@ -1119,16 +1166,16 @@ Closed decisions:
 6. Preserve bounded resource/tool pagination while removing request-wide
    character ceilings.
 7. End with one runtime, not permanent native/Pi dual execution.
+8. Model capacity authority is the resolved runtime transport/model registry,
+   not the UI alias catalog or live provider metadata.
 
 Questions that must be answered by proof, not architectural speculation:
 
 1. Can the pinned Pi core bundle run in Convex's default action runtime, or is
    an isolated Node 22 action adapter required?
-2. What are the canonical context-window capacities for every currently
-   admitted model/provider pair?
-3. Do production records show any caller of Workspace, chat-mode, or Codex
+2. Do production records show any caller of Workspace, chat-mode, or Codex
    runtime compatibility that source reachability does not reveal?
-4. What is the smallest server-owned canary/rollback mechanism that reuses
+3. What is the smallest server-owned canary/rollback mechanism that reuses
    current runtime configuration?
 
 Do not build:
@@ -1144,10 +1191,10 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Slice 5D is release-verified: no general Workspace runtime is reachable, while
-the native Member Agent still inspects every authorized community surface under
-one auditable community scope.
-
-Begin Slice 6 with one canonical model-aware input budget. Keep that slice
-limited to deterministic pre-provider fit decisions; do not mix in compaction,
-Pi adoption, a second prompt compiler, or a second runtime.
+Slice 6 is locally complete at the intended boundary: one model-aware admission
+owner, all four native roles, mandatory plan evidence, and no funding/provider
+execution on rejection. The next gate is merge/deploy proof plus one normal
+community-inspection canary and one synthetic oversized canary proving no
+provider-start or billing receipt. Only after that evidence is captured should
+Slice 7 begin deterministic projection; do not mix in Pi adoption, a second
+prompt compiler, or a second runtime.

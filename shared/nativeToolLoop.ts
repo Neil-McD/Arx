@@ -11,6 +11,7 @@ import {
   buildToolResultContent,
   buildToolResultEnvelope,
   runNativeRuntimeKernel,
+  type RuntimeKernelInputBudgetConfig,
 } from "./runtimeKernel.ts";
 import type {
   NativeToolAwareCompletionSuccess,
@@ -33,6 +34,7 @@ export { buildToolResultContent, buildToolResultEnvelope };
 export async function runSerialNativeToolLoop<TToolName extends string>(params: {
   messages: NativeToolAwareMessage[];
   maxIterations: number;
+  inputBudget: RuntimeKernelInputBudgetConfig;
   runCompletion: (
     messages: NativeToolAwareMessage[],
   ) => Promise<
@@ -66,6 +68,7 @@ export async function runSerialNativeToolLoop<TToolName extends string>(params: 
       ...DEFAULT_RUNTIME_KERNEL_BUDGET,
       maxToolSteps: params.maxIterations,
     },
+    inputBudget: params.inputBudget,
     runCompletion: params.runCompletion,
     normalizeToolArguments: params.normalizeToolArguments,
     executeTool: params.executeTool,

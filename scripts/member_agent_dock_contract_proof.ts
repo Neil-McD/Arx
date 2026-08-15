@@ -1247,20 +1247,22 @@ assert.deepEqual(canonicalContext, {
   ],
 });
 
-const boundedContext = buildMemberAgentConversationContext({
+const untruncatedContext = buildMemberAgentConversationContext({
   expectedUserMessageKey: "user-2",
-  maxCharacters: 8,
   rows: [
-    { messageKey: "user-2", seq: 2, role: "user", contentJson: { text: "123456789" } },
+    { messageKey: "user-2", seq: 2, role: "user", contentJson: { text: "x".repeat(25_001) } },
     { messageKey: "assistant-1", seq: 1, role: "assistant", contentJson: { text: "older" } },
   ],
 });
-assert.deepEqual(boundedContext, {
+assert.deepEqual(untruncatedContext, {
   ok: true,
   expectedUserSeq: 2,
-  characterCount: 8,
+  characterCount: 25_006,
   hasImageInput: false,
-  messages: [{ role: "user", content: "12345678" }],
+  messages: [
+    { role: "assistant", content: "older" },
+    { role: "user", content: "x".repeat(25_001) },
+  ],
 });
 const imageOnlyContext = buildMemberAgentConversationContext({
   expectedUserMessageKey: "user-image",

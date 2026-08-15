@@ -6,8 +6,6 @@ import { isAllowedMemberAgentImageMime } from "./memberAgentAttachments.ts";
 import type { NativeToolInputContentPart } from "./nativeToolProtocol.ts";
 
 export const MEMBER_AGENT_CONTEXT_MAX_MESSAGES = 60;
-export const MEMBER_AGENT_CONTEXT_MAX_CHARS = 60_000;
-export const MEMBER_AGENT_CONTEXT_MAX_MESSAGE_CHARS = 20_000;
 
 export type MemberAgentStoredMessage = {
   messageKey: string;
@@ -47,7 +45,6 @@ export function buildMemberAgentConversationContext(params: {
   rows: readonly MemberAgentStoredMessage[];
   expectedUserMessageKey: string;
   maxMessages?: number;
-  maxCharacters?: number;
 }): MemberAgentConversationContextResult {
   const expectedUserMessageKey = String(params.expectedUserMessageKey ?? "").trim();
   const expected = params.rows.find(
@@ -74,14 +71,6 @@ export function buildMemberAgentConversationContext(params: {
     MEMBER_AGENT_CONTEXT_MAX_MESSAGES,
     MEMBER_AGENT_CONTEXT_MAX_MESSAGES,
   );
-  const maxCharacters = normalizePositiveInteger(
-    params.maxCharacters,
-    MEMBER_AGENT_CONTEXT_MAX_CHARS,
-    MEMBER_AGENT_CONTEXT_MAX_CHARS,
-  );
-  const expectedBoundedContent = expectedContent
-    .slice(0, Math.min(MEMBER_AGENT_CONTEXT_MAX_MESSAGE_CHARS, maxCharacters))
-    .trimEnd();
   const eligible = params.rows
     .filter((row) => row.seq <= expected.seq)
     .slice()
@@ -95,13 +84,8 @@ export function buildMemberAgentConversationContext(params: {
     const content = extractTextFromContentJson(row.contentJson).trim();
     const isExpected = row.messageKey === expectedUserMessageKey;
     if (!content && !(isExpected && expectedImages.length > 0)) continue;
-    const perMessageBounded = content.slice(0, MEMBER_AGENT_CONTEXT_MAX_MESSAGE_CHARS);
-    const remaining = maxCharacters - characterCount;
-    if (remaining <= 0) break;
-    const bounded = perMessageBounded.slice(0, remaining).trimEnd();
-    if (!bounded && !(isExpected && expectedImages.length > 0)) break;
     const multimodalContent: NativeToolInputContentPart[] = [];
-    if (bounded) multimodalContent.push({ type: "text", text: bounded });
+    if (content) multimodalContent.push({ type: "text", text: content });
     if (isExpected) {
       for (const attachment of expectedImages) {
         multimodalContent.push({ type: "image", imageUrl: String(attachment.url).trim() });
@@ -111,16 +95,16 @@ export function buildMemberAgentConversationContext(params: {
       role: row.role,
       content: multimodalContent.some((part) => part.type === "image")
         ? multimodalContent
-        : bounded,
+        : content,
     });
-    characterCount += bounded.length;
+    characterCount += content.length;
   }
 
   if (
     newestFirst.length === 0 ||
     newestFirst[0]?.role !== "user" ||
     (typeof newestFirst[0]?.content === "string"
-      ? newestFirst[0]?.content !== expectedBoundedContent
+      ? newestFirst[0]?.content !== expectedContent
       : !newestFirst[0]?.content.some((part) => part.type === "image"))
   ) {
     return { ok: false, code: "expected_user_message_empty" };

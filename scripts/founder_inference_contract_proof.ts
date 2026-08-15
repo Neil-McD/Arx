@@ -332,6 +332,16 @@ assert.match(
 );
 assert.match(
   memberRuntime,
+  /class RuntimeProviderLifecycleHookError[\s\S]*throw new RuntimeProviderLifecycleHookError\(error\)[\s\S]*throw error\.originalError/,
+  "pre-provider funding failures must reach the existing turn-level funding mapper unchanged",
+);
+assert.match(
+  memberTurnHandlers,
+  /function resolveCommunityFundingClaimFailure\([\s\S]*rawCode === "founder_usage_exhausted"[\s\S]*code: "community_ai_usage_exhausted"/,
+  "Member and Funnel must retain their specific pre-provider funding error mapping",
+);
+assert.match(
+  memberRuntime,
   /recordInitialProviderContextAttestation\(attestation\)[\s\S]*runNativeRuntimeKernel/,
   "Member and Funnel evidence must persist before the provider/tool kernel starts",
 );
@@ -355,6 +365,11 @@ assert.match(autonomousRuntime, /claimCommunityInferenceFundingSession/);
 assert.match(
   autonomousRuntime,
   /runCompletion: async[\s\S]*if \(!providerStarted\)[\s\S]*markCommunityInferenceFundingSessionProviderStarted\([\s\S]*providerStarted = true[\s\S]*runOpenAiNativeToolCompletion/,
+);
+assert.match(
+  autonomousRuntime,
+  /fundingClaimAttempted = true[\s\S]*preProviderFundingErrorCode[\s\S]*errorCode: runtimeErrorCode/,
+  "Steward must retain a failed pre-provider funding claim's original bounded code",
 );
 assert.match(
   autonomousRuntime,

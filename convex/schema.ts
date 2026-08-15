@@ -2341,6 +2341,7 @@ export default defineSchema({
       v.literal("assistant"),
       v.literal("tool_call"),
       v.literal("tool_result"),
+      v.literal("input_budget"),
       v.literal("final"),
       v.literal("error"),
     ),

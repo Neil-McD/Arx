@@ -42,6 +42,7 @@ import {
   settleCommunityInferenceFundingSession,
   type CommunityInferenceFundingSession,
 } from "./founderInferenceRuntime";
+import { buildRuntimeInputBudgetEvidence } from "../shared/runtimeInputBudget.ts";
 
 const COMMUNITY_AGENT_RUNTIME_MAX_TOOL_STEPS = 12;
 const COMMUNITY_AGENT_RUNTIME_MAX_OUTPUT_CHARS = 12_000;
@@ -806,6 +807,7 @@ export const recordCommunityAgentRunEventsInternal = internalMutation({
           v.literal("assistant"),
           v.literal("tool_call"),
           v.literal("tool_result"),
+          v.literal("input_budget"),
           v.literal("final"),
           v.literal("error"),
         ),
@@ -975,43 +977,7 @@ export const runCommunityAgentLoopInternal = internalAction({
     let aggregateUsageComplete = true;
     let fundingFinalized = false;
     let providerStarted = false;
-    try {
-      fundingSession = await claimCommunityInferenceFundingSession({
-        ctx,
-        communityId: args.communityId,
-        actorUserId: resolved.sponsorUserId,
-        surface: "community_autonomous_cognition",
-        receiptKey: `community_autonomous_cognition:${runId}`,
-        sourceRunId: `community-agent-runtime:${runId}`,
-        admission: funding,
-      });
-    } catch (error) {
-      const errorCode =
-        boundedText(
-        error instanceof Error ? error.message : String(error),
-        120,
-      ) || "founder_inference_receipt_unavailable";
-      const finished: unknown = await ctx.runMutation(
-        internalRefs.communityAgentRuntime.finishCommunityAgentRunInternal,
-        {
-          runId,
-          status: "error",
-          stopReason: errorCode,
-          toolStepCount: 0,
-          appliedChangeRequestIds: [],
-          errorCode,
-          errorMessage: "Community inference funding could not be authorized.",
-        },
-      );
-      return {
-        ok: false,
-        skipped: false,
-        run: finished,
-        stop_reason: errorCode,
-        tool_step_count: 0,
-        applied_change_request_ids: [],
-      };
-    }
+    let fundingClaimAttempted = false;
     const filesystemContext: CommunityAgentFilesystemContext = {
       communityId: args.communityId,
       agentKey,
@@ -1031,6 +997,7 @@ export const runCommunityAgentLoopInternal = internalAction({
           | "assistant"
           | "tool_call"
           | "tool_result"
+          | "input_budget"
           | "final"
           | "error";
         toolName?: string;
@@ -1053,6 +1020,25 @@ export const runCommunityAgentLoopInternal = internalAction({
       } catch {
         // ignore: observability is best-effort
       }
+    };
+    const emitRequiredRunEvents = async (
+      events: Array<{
+        kind: "input_budget";
+        status?: string;
+        errorCode?: string;
+        content: string;
+      }>,
+    ) => {
+      const numbered = events.map((event) => ({ ...event, seq: eventSeq++ }));
+      await ctx.runMutation(
+        internalRefs.communityAgentRuntime
+          .recordCommunityAgentRunEventsInternal as any,
+        {
+          communityId: args.communityId,
+          runId,
+          events: numbered,
+        },
+      );
     };
     try {
     // Front-load the exact claimed digest. Legacy/manual callers without an
@@ -1106,6 +1092,9 @@ export const runCommunityAgentLoopInternal = internalAction({
       role: roleDefinition,
     });
       const messages = prompt.messages;
+      const stewardProviderTools = buildCommunityAgentFunctionTools(
+        roleDefinition?.toolNames,
+      );
       const serializedMessages = JSON.stringify(messages);
       const snapshotJson = JSON.stringify({
         version: 1,
@@ -1141,9 +1130,37 @@ export const runCommunityAgentLoopInternal = internalAction({
           maxNoProgressSteps: 3,
           maxRepeatedIdenticalCalls: 2,
         },
+        inputBudget: {
+          transport: "openai_responses",
+          modelRef: `openai/${COMMUNITY_OWNER_FUNDED_MODEL_ID}`,
+          reservedOutputTokens: 1_600,
+          toolSchemas: stewardProviderTools,
+          recordPlan: async (budgetPlan) => {
+            await emitRequiredRunEvents([
+              {
+                kind: "input_budget",
+                status: budgetPlan.plan.fits ? "fits" : "rejected",
+                errorCode: budgetPlan.plan.failureCode ?? undefined,
+                content: JSON.stringify(
+                  buildRuntimeInputBudgetEvidence(budgetPlan),
+                ),
+              },
+            ]);
+          },
+        },
         runCompletion: async (kernelMessages) => {
-          if (!fundingSession)
-            throw new Error("community_inference_funding_session_missing");
+          if (!fundingSession) {
+            fundingClaimAttempted = true;
+            fundingSession = await claimCommunityInferenceFundingSession({
+              ctx,
+              communityId: args.communityId,
+              actorUserId: resolved.sponsorUserId,
+              surface: "community_autonomous_cognition",
+              receiptKey: `community_autonomous_cognition:${runId}`,
+              sourceRunId: `community-agent-runtime:${runId}`,
+              admission: funding,
+            });
+          }
           if (!providerStarted) {
             await markCommunityInferenceFundingSessionProviderStarted({
               ctx,
@@ -1156,7 +1173,7 @@ export const runCommunityAgentLoopInternal = internalAction({
             messages: kernelMessages,
             maxTokens: 1600,
             // Authority by absence: only this role's tool schemas are sent.
-            tools: buildCommunityAgentFunctionTools(roleDefinition?.toolNames),
+            tools: stewardProviderTools,
             parallelToolCalls: false,
           });
           if (completion.ok !== false) {
@@ -1315,6 +1332,15 @@ export const runCommunityAgentLoopInternal = internalAction({
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
+      const preProviderFundingErrorCode =
+        fundingClaimAttempted && !fundingSession && !providerStarted
+          ? boundedText(message, 120) || "founder_inference_receipt_unavailable"
+          : null;
+      const runtimeErrorCode =
+        preProviderFundingErrorCode ?? "community_agent_runtime_exception";
+      const runtimeStopReason = preProviderFundingErrorCode
+        ? runtimeErrorCode
+        : "runtime_exception";
       if (fundingSession && !fundingFinalized) {
         try {
           await failCommunityInferenceFundingSession({
@@ -1334,8 +1360,10 @@ export const runCommunityAgentLoopInternal = internalAction({
       await emitRunEvents([
         {
           kind: "error",
-          status: "runtime_exception",
-          errorCode: "community_agent_runtime_exception",
+          status: preProviderFundingErrorCode
+            ? "funding_unavailable"
+            : "runtime_exception",
+          errorCode: runtimeErrorCode,
           content: message,
         },
       ]);
@@ -1345,18 +1373,20 @@ export const runCommunityAgentLoopInternal = internalAction({
         {
         runId,
         status: "error",
-        stopReason: "runtime_exception",
+        stopReason: runtimeStopReason,
         toolStepCount: 0,
         appliedChangeRequestIds: [...appliedChangeRequestIds],
-        errorCode: "community_agent_runtime_exception",
-        errorMessage: message,
+        errorCode: runtimeErrorCode,
+        errorMessage: preProviderFundingErrorCode
+          ? "Community inference funding could not be authorized."
+          : message,
         },
       );
       return {
         ok: false,
         skipped: false,
         run: finished,
-        stop_reason: "runtime_exception",
+        stop_reason: runtimeStopReason,
         tool_step_count: 0,
         applied_change_request_ids: [...appliedChangeRequestIds],
       };

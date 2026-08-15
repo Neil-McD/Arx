@@ -178,6 +178,7 @@
     "check:native-runtime-ingress-extinction-proof": "tsx scripts/native_runtime_ingress_extinction_contract_proof.ts",
     "check:runtime-router-loop-contract-guard": "bash scripts/runtime_router_loop_contract_check.sh",
     "check:runtime-tool-loop-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_loop_proof.ts",
+    "check:runtime-input-budget-proof": "tsx scripts/runtime_input_budget_contract_proof.ts && vitest run scripts/runtime_input_budget.test.ts",
     "check:runtime-responses-tool-schema-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_responses_tool_schema_proof.ts",
     "check:chatgpt-codex-transport-proof": "tsx scripts/chatgpt_codex_transport_contract_proof.ts",
     "check:runtime-tool-policy-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_policy_proof.ts",
