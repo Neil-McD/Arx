@@ -309,25 +309,6 @@ export async function archiveCloudThreadRecord(params: {
   });
 }
 
-export async function cancelCloudRuntimeRunByThreadKey(params: {
-  session: AuthSessionLike;
-  threadId: string;
-  runId?: string | null;
-  nowMs?: number;
-}): Promise<void> {
-  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
-  if (!bootstrapped) return;
-  const { client, authSubject } = bootstrapped;
-  const threadKey = String(params.threadId ?? "").trim();
-  if (!threadKey) return;
-  await client.mutation("threads:cancelCloudRuntimeRunByThreadKey" as any, {
-    authSubject,
-    threadKey,
-    runId: String(params.runId ?? "").trim() || undefined,
-    nowMs: params.nowMs ?? Date.now(),
-  });
-}
-
 export async function markCloudThreadAgentAttentionSeen(params: {
   session: AuthSessionLike;
   threadId: string;

@@ -39,3 +39,23 @@ export async function invokeCloudRuntimeTurn<SessionT>(params: {
     params.session,
   );
 }
+
+export async function cancelCloudRuntimeTurn<SessionT>(params: {
+  transport: CloudRuntimeTransport<SessionT>;
+  session: SessionT;
+  threadId: string;
+  runId: string;
+}): Promise<Response> {
+  return await params.transport.fetchAuth(
+    buildConvexRuntimeUrl(params.transport.baseUrl, "/runtime/runtime_cancel"),
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        thread_id: params.threadId,
+        run_id: params.runId,
+      }),
+    },
+    params.session,
+  );
+}
