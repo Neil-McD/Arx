@@ -1118,6 +1118,11 @@ assert.match(
   /Paperclip[\s\S]*type="file"[\s\S]*accept=\{MEMBER_AGENT_IMAGE_ACCEPT\}[\s\S]*VoiceInputButton[\s\S]*member-agent-dock-send/,
   "the dock composer must expose the canonical attachment, microphone, and send controls",
 );
+assert.doesNotMatch(
+  component,
+  /<textarea[\s\S]*maxLength=\{8000\}/,
+  "the member-agent composer must not impose a fixed character ceiling before model-aware budgeting",
+);
 assert.match(
   component,
   /handleAttachmentPaste[\s\S]*handleAttachmentDrop[\s\S]*member-agent-dock-composer-attachments/,
@@ -1162,6 +1167,11 @@ assert.match(
   threads,
   /normalizeMemberAgentMessageContent[\s\S]*claim\.messageKey !== args\.messageKey[\s\S]*member_agent_attachment_message_mismatch[\s\S]*attachMemberAgentClaimsToMessage[\s\S]*status: "attached"/,
   "persisted member-agent image metadata must consume a claim bound to the exact message",
+);
+assert.doesNotMatch(
+  threads,
+  /const text = String\(record\.text \?\? ""\)\.trim\(\)\.slice\(0, 8000\)/,
+  "member-agent persistence must preserve submitted text for canonical model-aware budgeting",
 );
 assert.match(
   component,

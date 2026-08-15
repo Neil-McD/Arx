@@ -1487,7 +1487,6 @@ function WebMemberAgentDock(props, ref) {
               aria-label={presentation.composerLabel}
               aria-describedby={showOnboardingAgentFocus ? onboardingDescriptionId : undefined}
               rows={1}
-              maxLength={8000}
               disabled={composerIsBusy || isPreparing || isStartingNewChat}
             />
             <VoiceInputButton
