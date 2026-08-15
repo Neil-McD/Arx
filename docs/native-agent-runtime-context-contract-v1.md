@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B released and production-proven; pre-Slice 8 liveness implemented locally and pending release; Slices 8 through 10 remain
+Status: context architecture through Slice 7B and pre-Slice 8 liveness released and production-proven; Slices 8 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-15
 
@@ -10,7 +10,8 @@ Program position:
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 7B are released and production-proven;
-  pre-Slice 8 liveness is locally proven, and Slices 8 through 10 remain.
+  pre-Slice 8 liveness is released and production-proven, and Slices 8 through
+  10 remain.
 - Pi agent-core adoption in Polynet: no canonical implementation; an isolated
   admission experiment exists outside the released tree, while parity and
   cutover have not started.
@@ -295,11 +296,9 @@ The released architecture through Slice 7B has:
 
 The remaining gaps are:
 
-1. The pre-Slice 8 runtime-liveness correction is locally proven but has not
-   been released or authenticated-canary proven.
-2. Pi agent core has not been admitted into the canonical tree, parity-tested,
+1. Pi agent core has not been admitted into the canonical tree, parity-tested,
    or used by a production Polynet turn.
-3. Pi agent core has not yet proved that it removes more runtime complexity
+2. Pi agent core has not yet proved that it removes more runtime complexity
    than its adapter and hosted-runtime requirements add.
 
 Program status:
@@ -313,7 +312,7 @@ Program status:
 | 5 | Workspace and Codex runtime deletion | Complete and production-proven |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
-| Pre-8 | Member/Funnel active-run liveness closure | Implemented and locally proven; release pending |
+| Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
 | 8 | Pi value/feasibility adapter and deterministic parity | Isolated admission experiment exists; canonical parity not started |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
@@ -1131,6 +1130,32 @@ Acceptance:
 3. No schema, cron, lease table, stale-window change, Pi route, Workspace
    cleanup, Concierge behavior, or Steward behavior is added to this slice.
 
+Production evidence on 2026-08-15:
+
+1. Runtime liveness and terminal-write fences shipped through merged release
+   `14f87946301b3711d7253112703c50e95de90b24`, passed its exact-main Release
+   Gate, and were deployed intentionally to production Convex
+   `wry-hawk-715`.
+2. The final Stop transport correction shipped through merged release
+   `873b6f04958f3179085fc4e8ef1fee02aca39c28`, passed exact-main Release Gate
+   run `31900439379`, and was reported by production web as both build and
+   Sentry release before the same code was deployed intentionally to production
+   Convex.
+3. The active Member/Funnel web controller now exposes Stop only after the
+   first durable runtime receipt and sends exact thread/run cancellation through
+   the same authenticated HTTP runtime transport that starts a turn. The server
+   derives the owner from the verified actor and calls the shared cancellation
+   core; the duplicate active browser Convex cancellation gateway was deleted.
+4. Authenticated Member production canary
+   `member_agent_dock:a8686749-5083-40df-872f-b8c59bb92d79` terminalized as
+   `cancelled` with `reason=user_cancelled` and `errorCode=user_cancelled` at
+   sequence 14. Five seconds later its `updatedAt`, `finishedAt`, event count,
+   and maximum sequence remained unchanged, with no tool admission after the
+   terminal event.
+5. The production canary exercises the shared Member/Funnel controller and
+   server route from the Member surface. Funnel has deterministic shared-path
+   coverage; it does not have a separate browser canary in this evidence set.
+
 ### 17.5 Slice 8: Pi value/feasibility adapter and deterministic parity
 
 Objective: determine whether Pi core can replace loop mechanics with a net
@@ -1347,11 +1372,9 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Complete and release the pre-Slice 8 runtime-liveness closure, including an
-authenticated staging concurrency/Stop/retry proof. Then begin Slice 8 only as
-a reversible Pi agent-core feasibility adapter with no production routing.
-First prove actual Convex runtime compatibility, governed tool-executor
-containment, deterministic loop parity, and a net reduction in maintained
-complexity. Adopt or reject Pi from that evidence; do not add semantic
-summarization, a second prompt compiler, a second event store, or a permanent
-second runtime.
+Begin Slice 8 only as a reversible Pi agent-core feasibility adapter with no
+production routing. First prove actual Convex runtime compatibility, governed
+tool-executor containment, deterministic loop parity, and a net reduction in
+maintained complexity. Adopt or reject Pi from that evidence; do not add
+semantic summarization, a second prompt compiler, a second event store, or a
+permanent second runtime.
