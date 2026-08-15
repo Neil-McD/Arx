@@ -6,7 +6,6 @@ import { isAllowedMemberAgentImageMime } from "./memberAgentAttachments.ts";
 import type { NativeToolInputContentPart } from "./nativeToolProtocol.ts";
 
 export const MEMBER_AGENT_CONTEXT_PAGE_SIZE = 60;
-export const MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN = 32;
 
 export type MemberAgentStoredMessage = {
   messageKey: string;

@@ -35,8 +35,13 @@ assert.equal(
 );
 assert.match(
   runtimeLoop,
-  /MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN[\s\S]*selectMemberAgentHistoryForBudget[\s\S]*runtime_persisted_history_selected[\s\S]*resolvedProviderToolSchemas/,
-  "the runtime must page under one bounded loop and persist selection lineage",
+  /while \(hasMore && !selection\.blockedByBudget\)[\s\S]*selectMemberAgentHistoryForBudget[\s\S]*runtime_persisted_history_selected[\s\S]*resolvedProviderToolSchemas/,
+  "the runtime must page until model budget or history exhaustion and persist selection lineage",
+);
+assert.doesNotMatch(
+  `${runtimeLoop}\n${contextBuilder}`,
+  /MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN|max_pages_per_turn|page_limit/,
+  "persisted history must not retain a fixed page-count ceiling under another name",
 );
 assert.match(
   runtimeLoop,
@@ -88,6 +93,49 @@ assert.equal(beyondSixty.selectedEpisodeCount, 32);
 assert.equal(beyondSixty.blockedByBudget, false);
 assert.equal(beyondSixty.selectedEntries[0]?.messageKey, "user-1");
 assert.equal(beyondSixty.selectedEntries.at(-1)?.messageKey, "user-current");
+
+const beyondFormerPageCeilingRows: MemberAgentStoredMessage[] = [];
+seq = 1;
+for (let episode = 1; episode <= 970; episode += 1) {
+  beyondFormerPageCeilingRows.push({
+    messageKey: `deep-user-${episode}`,
+    seq: seq++,
+    role: "user",
+    contentJson: { text: `q${episode}` },
+  });
+  beyondFormerPageCeilingRows.push({
+    messageKey: `deep-assistant-${episode}`,
+    seq: seq++,
+    role: "assistant",
+    contentJson: { text: `a${episode}` },
+  });
+}
+beyondFormerPageCeilingRows.push({
+  messageKey: "deep-user-current",
+  seq: seq++,
+  role: "user",
+  contentJson: { text: "current" },
+});
+
+const beyondFormerPageCeiling = selectMemberAgentHistoryForBudget({
+  rows: beyondFormerPageCeilingRows,
+  expectedUserMessageKey: "deep-user-current",
+  systemPrompt: "system",
+  transport: "openai_responses",
+  modelRef: "openai/gpt-5.6-sol",
+  toolSchemas: [],
+  reservedOutputTokens: 8_192,
+});
+assert.equal(beyondFormerPageCeiling.ok, true);
+if (!beyondFormerPageCeiling.ok) {
+  throw new Error(beyondFormerPageCeiling.code);
+}
+assert.equal(
+  beyondFormerPageCeiling.selectedEntries.length,
+  beyondFormerPageCeilingRows.length,
+  "otherwise admissible history beyond the former 1,920-row page ceiling must remain selectable",
+);
+assert.equal(beyondFormerPageCeiling.blockedByBudget, false);
 
 const budgetBoundary = selectMemberAgentHistoryForBudget({
   rows: [

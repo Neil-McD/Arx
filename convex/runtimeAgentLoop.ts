@@ -119,7 +119,6 @@ import {
   resolveRuntimeProviderBudgetIdentity,
 } from "../shared/runtimeInputBudget.ts";
 import {
-  MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN,
   MEMBER_AGENT_CONTEXT_PAGE_SIZE,
   type MemberAgentPersistedHistorySeed,
   type MemberAgentRuntimeHistoryPage,
@@ -1044,11 +1043,7 @@ async function executeRetrievalAgentLoop(
     });
     try {
       if (!selection.ok) throw new Error(selection.code);
-      while (
-        hasMore &&
-        !selection.blockedByBudget &&
-        pagesRead < MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN
-      ) {
+      while (hasMore && !selection.blockedByBudget) {
         if (typeof nextBeforeSeq !== "number") {
           throw new Error("persisted_history_cursor_missing");
         }
@@ -1090,9 +1085,7 @@ async function executeRetrievalAgentLoop(
           selection.budgetPlan.failureCode !== "context_window_exceeded"
           ? "budget_unavailable"
           : "input_budget"
-        : hasMore
-          ? "page_limit"
-          : "history_exhausted";
+        : "history_exhausted";
       const selectedSeqs = selection.selectedEntries.map((entry) => entry.seq);
       conversationMessagesForProvider = selection.selectedEntries.map(
         (entry): InferenceMessage => ({
@@ -1120,7 +1113,6 @@ async function executeRetrievalAgentLoop(
           ignored_leading_message_count: selection.ignoredLeadingMessageCount,
           page_size: MEMBER_AGENT_CONTEXT_PAGE_SIZE,
           pages_read: pagesRead,
-          max_pages_per_turn: MEMBER_AGENT_CONTEXT_MAX_PAGES_PER_TURN,
           has_older:
             hasMore ||
             selection.loadedCompleteEpisodeCount > selection.selectedEpisodeCount ||

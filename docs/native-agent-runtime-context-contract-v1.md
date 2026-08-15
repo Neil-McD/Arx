@@ -1047,10 +1047,11 @@ Slice 7B implemented shape:
 4. The current user episode is never dropped. An orphan assistant split across
    a page boundary is not sent to the provider, and an older episode is omitted
    atomically when it does not fit.
-5. Database work is bounded to 32 pages per turn. Exhaustion, budget stop,
-   unknown capacity, and the operational page stop are explicit evidence—not
-   silent claims that all history was loaded.
-6. `runtime_persisted_history_selected` records bounded sequence lineage,
+5. Sixty rows remains a database page size, not a semantic history ceiling.
+   The strict decreasing sequence cursor continues until the exact model input
+   budget is full or persisted history is exhausted; no fixed page-count stop
+   may silently truncate otherwise admissible history.
+6. `runtime_persisted_history_selected` records sequence lineage,
    counts, pages read, stop reason, and budget profile in the existing run event
    store before provider execution. Raw message content is not duplicated.
 7. The same provider tool-schema projection is used for history admission and
