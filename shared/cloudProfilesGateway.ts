@@ -3,9 +3,10 @@ import { coerceGatewayRows, firstGatewayRow } from "./cloudGateway";
 import type { AccountSetupStatus } from "./accountSetup";
 import type { CommunityAvatarSummary, ProfileCommunityContext } from "./communityTypes";
 import type { SocialProfileLinks } from "./socialProfileLinks";
-import { withAsyncDeadline } from "./asyncDeadline";
-
-const ACCOUNT_ADMISSION_RPC_TIMEOUT_MS = 10_000;
+import {
+  APP_ADMISSION_TIMEOUT_MS,
+  withAsyncDeadline,
+} from "./asyncDeadline";
 
 type CloudProfilesGatewayParams<SessionT> = {
   session: SessionT;
@@ -224,7 +225,7 @@ export async function resolveCloudOnboardingProfileDetail<SessionT, TProfile ext
       userId: params.userId,
     }),
     {
-      timeoutMs: ACCOUNT_ADMISSION_RPC_TIMEOUT_MS,
+      timeoutMs: APP_ADMISSION_TIMEOUT_MS,
       code: "onboarding_profile_resolution_timeout",
     },
   );
@@ -240,7 +241,7 @@ export async function loadCloudAccountSetupStatus<SessionT>(
       authSubject,
     }),
     {
-      timeoutMs: ACCOUNT_ADMISSION_RPC_TIMEOUT_MS,
+      timeoutMs: APP_ADMISSION_TIMEOUT_MS,
       code: "account_setup_status_timeout",
     },
   )) as AccountSetupStatus | null;

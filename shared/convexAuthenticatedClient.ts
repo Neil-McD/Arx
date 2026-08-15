@@ -8,9 +8,10 @@ import {
 import { readConvexUrl } from "./convexRuntime";
 import { normalizeGatewayNullableString, readGatewayConvexIdMaybe } from "./cloudGateway";
 import { readPersistedDistributionAttribution } from './distributionAttribution';
-import { withAsyncDeadline } from "./asyncDeadline";
-
-export const CONVEX_AUTH_ADMISSION_TIMEOUT_MS = 10_000;
+import {
+  APP_ADMISSION_TIMEOUT_MS,
+  withAsyncDeadline,
+} from "./asyncDeadline";
 
 export type ConvexAuthenticatedClientContext = {
   client: ConvexHttpClient;
@@ -127,7 +128,7 @@ export async function bootstrapConvexAuthenticatedClient(
           distributionAttribution: readPersistedDistributionAttribution() ?? undefined,
         }),
         {
-          timeoutMs: CONVEX_AUTH_ADMISSION_TIMEOUT_MS,
+          timeoutMs: APP_ADMISSION_TIMEOUT_MS,
           code: "convex_bootstrap_actor_timeout",
         },
       )) as Record<string, unknown>;

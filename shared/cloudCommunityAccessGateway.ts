@@ -1,7 +1,8 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
-import { withAsyncDeadline } from "./asyncDeadline";
-
-const COMMUNITY_ADMISSION_RPC_TIMEOUT_MS = 10_000;
+import {
+  APP_ADMISSION_TIMEOUT_MS,
+  withAsyncDeadline,
+} from "./asyncDeadline";
 
 type CloudCommunityAccessGatewayParams<SessionT> = {
   session: SessionT;
@@ -42,7 +43,7 @@ export async function fetchCloudMyCommunityAccessBySlug<SessionT, TAccess = unkn
       communitySlug: params.communitySlug,
     }),
     {
-      timeoutMs: COMMUNITY_ADMISSION_RPC_TIMEOUT_MS,
+      timeoutMs: APP_ADMISSION_TIMEOUT_MS,
       code: "community_access_resolution_timeout",
     },
   );

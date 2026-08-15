@@ -294,6 +294,8 @@ export default function App() {
     canonicalUserId: canonicalSessionUserId,
     isOperatorAccessResolved,
     operatorAccess,
+    operatorAccessError,
+    retryOperatorAccess,
     hasOperatorAccess,
   } = authenticatedIdentity;
   const profileStorageUserId = canonicalSessionUserId;
@@ -1670,6 +1672,8 @@ export default function App() {
   const operatorRouteAccessState =
     activePage !== "operator"
       ? "not_applicable" as const
+      : operatorAccessError
+        ? "failed" as const
       : !isOperatorAccessResolved
         ? "resolving" as const
         : operatorAccess
@@ -2972,8 +2976,15 @@ export default function App() {
     const previewAdmissionError = isPublicFunnelPreviewRoute
       ? funnelDraftPreview.error
       : null;
+    const operatorAdmissionError = activePage === "operator"
+      ? operatorAccessError
+      : null;
     const routeAdmissionError =
-      authError ?? onboardingError ?? communityResolutionError ?? previewAdmissionError;
+      authError ??
+      onboardingError ??
+      communityResolutionError ??
+      previewAdmissionError ??
+      operatorAdmissionError;
     const isPreviewAdmissionFailure = Boolean(
       previewAdmissionError &&
         !authError &&
@@ -2991,6 +3002,10 @@ export default function App() {
       }
       if (communityResolutionError) {
         retryCommunityResolution();
+        return;
+      }
+      if (operatorAdmissionError) {
+        retryOperatorAccess();
         return;
       }
       setOnboardingError(null);

@@ -1,3 +1,5 @@
+export const APP_ADMISSION_TIMEOUT_MS = 10_000;
+
 export class AsyncDeadlineError extends Error {
   readonly code: string;
   readonly timeoutMs: number;

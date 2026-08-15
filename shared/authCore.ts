@@ -5,6 +5,7 @@ import {
 import { readConvexRuntimeUrl } from "./convexRuntime";
 import { isStandaloneWebApp } from "./browserRuntimeMode";
 import { VOICE_TRANSCRIPTION_UPLOAD_TIMEOUT_MS } from "./voiceCapture";
+import { APP_ADMISSION_TIMEOUT_MS } from "./asyncDeadline";
 
 export type AuthUser = {
   id: string;
@@ -45,7 +46,10 @@ export type AuthSessionRefreshResult =
   | { status: "terminal_failure"; reason: string };
 
 export type AuthSessionRefreshResultInFlightRef = {
-  current: Promise<AuthSessionRefreshResult> | null;
+  current: {
+    lockKey: number;
+    promise: Promise<AuthSessionRefreshResult>;
+  } | null;
 };
 
 export type AuthSessionEnsureResult =
@@ -198,7 +202,6 @@ const AUTH_GATEWAY_BEGIN_PATH = "/api/auth/google/start";
 const AUTH_GATEWAY_SESSION_PATH = "/api/auth/session";
 const AUTH_GATEWAY_REFRESH_PATH = "/api/auth/refresh";
 const AUTH_GATEWAY_LOGOUT_PATH = "/api/auth/logout";
-const AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS = 10_000;
 
 function trimTrailingSlashes(value: string): string {
   return value.replace(/\/+$/, "");
@@ -512,7 +515,7 @@ export async function bootstrapSessionDetailed(): Promise<AuthSessionBootstrapRe
   const response = await callSameOriginAuthEndpoint({
     path: AUTH_GATEWAY_SESSION_PATH,
     method: "GET",
-    timeoutMs: AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS,
+    timeoutMs: APP_ADMISSION_TIMEOUT_MS,
   });
   if (!response) throw new Error("Auth gateway is unavailable.");
   if (!response.ok) throw new Error(await readAuthError(response));
@@ -747,7 +750,7 @@ export async function refreshAuthSessionResult(): Promise<AuthSessionRefreshResu
     path: AUTH_GATEWAY_REFRESH_PATH,
     method: "POST",
     payload: {},
-    timeoutMs: AUTH_SESSION_BOOTSTRAP_TIMEOUT_MS,
+    timeoutMs: APP_ADMISSION_TIMEOUT_MS,
   });
   if (!response) {
     return { status: "transient_failure", reason: "auth_gateway_unavailable" };
@@ -821,12 +824,13 @@ export async function refreshAuthSessionWithLock(params: {
 
 export async function refreshAuthSessionWithLockResult(params: {
   inFlightRef: AuthSessionRefreshResultInFlightRef;
+  lockKey: number;
   refreshSession: () => Promise<AuthSessionRefreshResult>;
   onRefreshed: (session: AuthSession) => void | Promise<void>;
 }): Promise<AuthSessionRefreshResult> {
-  const { inFlightRef, refreshSession, onRefreshed } = params;
-  if (inFlightRef.current) {
-    return await inFlightRef.current;
+  const { inFlightRef, lockKey, refreshSession, onRefreshed } = params;
+  if (inFlightRef.current?.lockKey === lockKey) {
+    return await inFlightRef.current.promise;
   }
   const promise = (async () => {
     const refreshed = await refreshSession();
@@ -834,11 +838,13 @@ export async function refreshAuthSessionWithLockResult(params: {
     await onRefreshed(refreshed.session);
     return refreshed;
   })();
-  inFlightRef.current = promise;
+  inFlightRef.current = { lockKey, promise };
   try {
     return await promise;
   } finally {
-    inFlightRef.current = null;
+    if (inFlightRef.current?.promise === promise) {
+      inFlightRef.current = null;
+    }
   }
 }
 
