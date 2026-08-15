@@ -309,8 +309,6 @@ export default function App() {
     setMobileOverlay,
     mobileRootPage,
     setMobileRootPage,
-    communityOnboardingFirstPostFocusRequest,
-    setCommunityOnboardingFirstPostFocusRequest,
     mobileSettingsView,
     setMobileSettingsView,
     mobileChromeReadingMode,
@@ -332,8 +330,6 @@ export default function App() {
     setCommunityTab,
     communityChannelSlug,
     setCommunityChannelSlug,
-    communityExperienceMode,
-    setCommunityExperienceMode,
     communityResourceModuleId,
     setCommunityResourceModuleId,
     communitySettingsPane,
@@ -492,8 +488,6 @@ export default function App() {
     communityTab,
     communityChannelSlug,
     setCommunityChannelSlug,
-    communityExperienceMode,
-    setCommunityExperienceMode,
     communityResourceModuleId,
     setCommunityResourceModuleId,
     communitySettingsPane,
@@ -2014,26 +2008,18 @@ export default function App() {
       closeThreadPage: handleCloseCommunityInteractionDrawer,
       openCommunityCreateFlow: openNewCommunityPurchaseFlow,
     });
-  const isCommunityOnboardingPreviewMode =
-    publicRoute.kind === "app" &&
-    activePage === "community" &&
-    communityExperienceMode === "onboarding_preview";
   const {
     handlePreviewCommunityFunnel,
     handleSelectActiveCommunity,
     handleSelectCommunitySettingsPane,
-    handlePreviewCommunityOnboarding,
-    handleExitCommunityOnboardingPreview,
     handleSelectCommunityTab,
     handleSelectCommunityTabFromMobile,
-    handleCommunityOnboardingOrientationCompleted,
   } = useWebCommunityNavigationActions({
     activeCommunity,
     selectedActiveCommunityId,
     selectedActiveCommunitySlug,
     communities,
     shellVariant,
-    isOnboardingPreviewMode: isCommunityOnboardingPreviewMode,
     communitySettingsDirtyRef,
     communityAgentConfigDirtyRef,
     syncCommunitySelection,
@@ -2041,7 +2027,6 @@ export default function App() {
     setCommunitySettingsPane,
     setCommunityResourceModuleId,
     setMobileOverlay,
-    setCommunityOnboardingFirstPostFocusRequest,
     applyCommunityShellState,
     openCommunityTab,
     navigateTo,
@@ -2111,7 +2096,6 @@ export default function App() {
       communitySettingsLayer,
       communitySettingsPane,
       onSelectCommunitySettingsPane: handleSelectCommunitySettingsPane,
-      onPreviewCommunityOnboarding: handlePreviewCommunityOnboarding,
       canManageCommunitySettings,
       requireSignIn,
       accountCommerceStatus,
@@ -2787,8 +2771,6 @@ export default function App() {
     communityHostProps: {
       activeView,
       communityTab,
-      onSelectCommunityTab: handleSelectCommunityTab,
-      firstPostFocusRequest: communityOnboardingFirstPostFocusRequest,
       chatPanelProps: {
         ...communityChatPanelProps,
       },
@@ -3068,30 +3050,6 @@ export default function App() {
       }}
       mainSurfaceHostProps={mainSurfaceHostProps}
       shellChromeHostProps={shellChromeHostProps}
-      onboardingProps={{
-        session: communityChatPanelProps.session,
-        ensureSession: ensureUsableAuthSession,
-        communityId: memberAgentDockCommunity?.id ?? null,
-        communityName: memberAgentDockCommunity?.name ?? null,
-        communityAvatarUrl:
-          memberAgentDockCommunity?.avatar_url ?? null,
-        communityAvatarFocusX:
-          memberAgentDockCommunity?.avatar_focus_x ?? null,
-        communityAvatarFocusY:
-          memberAgentDockCommunity?.avatar_focus_y ?? null,
-        communityAvatarZoom:
-          memberAgentDockCommunity?.avatar_zoom ?? null,
-        isEnabled: Boolean(
-          memberAgentDockCommunity &&
-          communityChatPanelProps.hasAuthenticatedPresentation &&
-          communityChatPanelProps.hasSession
-        ),
-        previewMode: isCommunityOnboardingPreviewMode,
-        canPreview: canManageCommunitySettings,
-        onExitPreview: handleExitCommunityOnboardingPreview,
-        onOrientationCompleted:
-          handleCommunityOnboardingOrientationCompleted,
-      }}
     />
   );
 }

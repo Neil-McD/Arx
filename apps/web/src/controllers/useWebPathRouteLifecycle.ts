@@ -14,7 +14,6 @@ import type {
 } from "../../../../shared/appShellNavigation";
 import {
   isLegacyWorkspaceRoutePath,
-  type CommunityExperienceMode,
   type PublicRoute,
 } from "../../../../shared/webAppRouteState";
 
@@ -41,7 +40,6 @@ export function useWebPathRouteLifecycle(params: {
   activeCommunitySlug: string | null;
   communityTab: CommunityTab;
   communityChannelSlug: string | null;
-  communityExperienceMode: CommunityExperienceMode;
   communityResourceModuleId: string | null;
   communitySettingsPane: CommunitySettingsPane;
   docsSlug: string | null;
@@ -55,7 +53,6 @@ export function useWebPathRouteLifecycle(params: {
     settingsIndex?: boolean;
     communitySlug: string | null;
     communityTab: CommunityTab;
-    communityExperienceMode?: CommunityExperienceMode;
     communityChannelSlug?: string | null;
     communityResourceModuleId?: string | null;
     communitySettingsPane?: CommunitySettingsPane | null;
@@ -100,8 +97,6 @@ export function useWebPathRouteLifecycle(params: {
         params.activePage === "community" && params.communityTab === "chat"
           ? params.communityChannelSlug
           : null,
-      communityExperienceMode:
-        params.activePage === "community" ? params.communityExperienceMode : "standard",
       communityResourceModuleId:
         params.activePage === "community" && params.communityTab === "resources"
           ? params.communityResourceModuleId
@@ -127,7 +122,6 @@ export function useWebPathRouteLifecycle(params: {
     params.activeCommunitySlug,
     params.communityTab,
     params.communityChannelSlug,
-    params.communityExperienceMode,
     params.communityResourceModuleId,
     params.communitySettingsPane,
     params.docsSlug,

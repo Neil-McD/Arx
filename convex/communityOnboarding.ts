@@ -1,73 +1,35 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
-  normalizeIdValue,
   requireCommunityChatAccess,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
-  toIsoString,
 } from "./communityCore";
-import {
-  deriveCommunityOnboardingPhase,
-  normalizeCommunityOnboardingVideoUrl,
-} from "../shared/communityOnboarding";
-import {
-  findActiveCommunityOnboardingSession,
-  recordCommunityOnboardingMilestone,
-  recordCommunityOnboardingSessionMilestone,
-} from "./communityOnboardingCore";
 
-function mapConfig(row: Record<string, any> | null) {
-  return {
-    enabled: Boolean(row?.enabled),
-    intro_video_url: String(row?.introVideoUrl ?? "").trim() || null,
-    updated_at: row?.updatedAt ? toIsoString(row.updatedAt) : null,
-  };
-}
+/**
+ * Authenticated, stateless compatibility tombstones for cached clients that
+ * predate the irreducible member-entry flow. These operations intentionally
+ * retain their API names while never reading or writing retired onboarding
+ * state. Remove them only after the cached-client compatibility window closes.
+ */
 
-function mapSession(row: Record<string, any>) {
-  return {
-    id: normalizeIdValue(row._id),
-    community_id: normalizeIdValue(row.communityId),
-    status: row.status,
-    phase: deriveCommunityOnboardingPhase(row),
-    intro_video_url: String(row.introVideoUrlSnapshot ?? "").trim() || null,
-    activated_at: toIsoString(row.activatedAt),
-    orientation_completed_at: row.orientationCompletedAt
-      ? toIsoString(row.orientationCompletedAt)
-      : null,
-    first_community_post_at: row.firstCommunityPostAt
-      ? toIsoString(row.firstCommunityPostAt)
-      : null,
-    first_agent_dock_turn_at: row.firstAgentDockTurnAt
-      ? toIsoString(row.firstAgentDockTurnAt)
-      : null,
-    agent_turn_acknowledged_at: row.agentTurnAcknowledgedAt
-      ? toIsoString(row.agentTurnAcknowledgedAt)
-      : null,
-    mcp_handoff_completed_at: row.mcpHandoffCompletedAt
-      ? toIsoString(row.mcpHandoffCompletedAt)
-      : null,
-    completed_at: row.completedAt ? toIsoString(row.completedAt) : null,
-  };
-}
+const disabledConfig = {
+  enabled: false,
+  intro_video_url: null,
+  updated_at: null,
+} as const;
 
-async function requireOwnedActiveSession(args: {
-  ctx: any;
-  sessionId: any;
+async function requireAuthenticatedCommunityMember(ctx: any, args: {
+  userId?: any;
+  authSubject?: string;
   communityId: any;
-  userId: any;
 }) {
-  const session = await args.ctx.db.get(args.sessionId);
-  if (
-    !session ||
-    session.status !== "active" ||
-    normalizeIdValue(session.communityId) !== normalizeIdValue(args.communityId) ||
-    normalizeIdValue(session.userId) !== normalizeIdValue(args.userId)
-  ) {
-    throw new Error("community_onboarding_session_not_found");
-  }
-  return session;
+  const userId = await resolveUserIdForAuthenticatedRequest({
+    ctx,
+    userId: args.userId,
+    authSubject: args.authSubject ?? null,
+  });
+  await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
 }
 
 export const getCommunityOnboardingConfig = query({
@@ -83,11 +45,7 @@ export const getCommunityOnboardingConfig = query({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const row = await ctx.db
-      .query("communityOnboardingConfigs")
-      .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
-      .first();
-    return mapConfig(row);
+    return disabledConfig;
   },
 });
 
@@ -106,36 +64,7 @@ export const saveCommunityOnboardingConfig = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityManager({ ctx, communityId: args.communityId, userId });
-    const rawIntroVideoUrl = String(args.introVideoUrl ?? "").trim();
-    const introVideoUrl = normalizeCommunityOnboardingVideoUrl(rawIntroVideoUrl);
-    if (rawIntroVideoUrl && !introVideoUrl) {
-      throw new Error("community_onboarding_video_url_invalid");
-    }
-
-    const nowMs = Date.now();
-    const existing = await ctx.db
-      .query("communityOnboardingConfigs")
-      .withIndex("by_community", (q) => q.eq("communityId", args.communityId))
-      .first();
-    const next = {
-      enabled: args.enabled,
-      updatedByUserId: userId,
-      updatedAt: nowMs,
-    };
-    if (existing) {
-      await ctx.db.patch(existing._id, {
-        ...next,
-        introVideoUrl: introVideoUrl ?? undefined,
-      });
-      return mapConfig(await ctx.db.get(existing._id));
-    }
-    const id = await ctx.db.insert("communityOnboardingConfigs", {
-      communityId: args.communityId,
-      ...next,
-      ...(introVideoUrl ? { introVideoUrl } : {}),
-      createdAt: nowMs,
-    });
-    return mapConfig(await ctx.db.get(id));
+    return disabledConfig;
   },
 });
 
@@ -146,169 +75,46 @@ export const getMyCommunityOnboardingSession = query({
     communityId: v.id("communities"),
   },
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const session = await findActiveCommunityOnboardingSession({
-      ctx,
-      communityId: args.communityId,
-      userId,
-    });
-    return session ? mapSession(session) : null;
+    await requireAuthenticatedCommunityMember(ctx, args);
+    return null;
   },
 });
 
+const retiredSessionMutationArgs = {
+  userId: v.optional(v.id("users")),
+  authSubject: v.optional(v.string()),
+  communityId: v.id("communities"),
+  sessionId: v.id("communityOnboardingSessions"),
+};
+
 export const completeMyCommunityOnboardingOrientation = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    sessionId: v.id("communityOnboardingSessions"),
-  },
+  args: retiredSessionMutationArgs,
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const ownedSession = await requireOwnedActiveSession({
-      ctx,
-      sessionId: args.sessionId,
-      communityId: args.communityId,
-      userId,
-    });
-    const session = await recordCommunityOnboardingSessionMilestone({
-      ctx,
-      session: ownedSession,
-      milestone: "orientation_completed",
-      nowMs: Date.now(),
-    });
-    return session ? mapSession(session) : null;
+    await requireAuthenticatedCommunityMember(ctx, args);
+    return null;
   },
 });
 
 export const dismissMyCommunityOnboardingSession = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    sessionId: v.id("communityOnboardingSessions"),
-  },
+  args: retiredSessionMutationArgs,
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const session = await requireOwnedActiveSession({
-      ctx,
-      sessionId: args.sessionId,
-      communityId: args.communityId,
-      userId,
-    });
-    const nowMs = Date.now();
-    await ctx.db.patch(session._id, {
-      status: "dismissed",
-      dismissedAt: nowMs,
-      updatedAt: nowMs,
-    });
+    await requireAuthenticatedCommunityMember(ctx, args);
     return { dismissed: true };
   },
 });
 
 export const completeMyCommunityOnboardingMcpHandoff = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    sessionId: v.id("communityOnboardingSessions"),
-  },
+  args: retiredSessionMutationArgs,
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const ownedSession = await requireOwnedActiveSession({
-      ctx,
-      sessionId: args.sessionId,
-      communityId: args.communityId,
-      userId,
-    });
-    if (deriveCommunityOnboardingPhase(ownedSession) !== "mcp_handoff") {
-      throw new Error("community_onboarding_mcp_handoff_not_ready");
-    }
-    const session = await recordCommunityOnboardingSessionMilestone({
-      ctx,
-      session: ownedSession,
-      milestone: "mcp_handoff_completed",
-      nowMs: Date.now(),
-    });
-    return session ? mapSession(session) : null;
+    await requireAuthenticatedCommunityMember(ctx, args);
+    return null;
   },
 });
 
 export const acknowledgeMyCommunityOnboardingAgentTurn = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-    sessionId: v.id("communityOnboardingSessions"),
-  },
+  args: retiredSessionMutationArgs,
   handler: async (ctx, args) => {
-    const userId = await resolveUserIdForAuthenticatedRequest({
-      ctx,
-      userId: args.userId,
-      authSubject: args.authSubject ?? null,
-    });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const ownedSession = await requireOwnedActiveSession({
-      ctx,
-      sessionId: args.sessionId,
-      communityId: args.communityId,
-      userId,
-    });
-    if (deriveCommunityOnboardingPhase(ownedSession) !== "agent_turn_review") {
-      throw new Error("community_onboarding_agent_turn_review_not_ready");
-    }
-    const session = await recordCommunityOnboardingSessionMilestone({
-      ctx,
-      session: ownedSession,
-      milestone: "agent_turn_acknowledged",
-      nowMs: Date.now(),
-    });
-    return session ? mapSession(session) : null;
-  },
-});
-
-export const recordPersonalAgentDockTurnInternal = internalMutation({
-  args: {
-    userId: v.id("users"),
-    communityId: v.id("communities"),
-    occurredAt: v.number(),
-  },
-  handler: async (ctx, args) => {
-    const activeSession = await findActiveCommunityOnboardingSession({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-    });
-    if (!activeSession || deriveCommunityOnboardingPhase(activeSession) !== "first_agent_dock_turn") {
-      return { recorded: false };
-    }
-    const session = await recordCommunityOnboardingMilestone({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-      milestone: "first_agent_dock_turn",
-      nowMs: args.occurredAt,
-    });
-    return { recorded: Boolean(session?.firstAgentDockTurnAt) };
+    await requireAuthenticatedCommunityMember(ctx, args);
+    return null;
   },
 });

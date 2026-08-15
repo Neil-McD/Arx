@@ -479,9 +479,6 @@ export function useWebTurnRunnerController<
               ...(params.surfaceContext
                 ? { surface_context: params.surfaceContext }
                 : null),
-              ...(params.suppressOnboardingProgress
-                ? { suppress_onboarding_progress: true }
-                : null),
               model_id: params.preferredModelId,
               runtime_engine: params.runtimeEngine,
               requested_funding_source: params.requestedFundingSource,

@@ -55,18 +55,6 @@ export function resolveRuntimeInvocationFundingPolicy(
   return "community_owner";
 }
 
-export function shouldRecordCommunityOnboardingAgentTurn(params: {
-  invocationSurface: RuntimeInvocationSurface;
-  surfaceKind: string | null;
-  hasCommunityId: boolean;
-}): boolean {
-  return (
-    params.invocationSurface === "member_agent_dock" &&
-    params.surfaceKind === "community" &&
-    params.hasCommunityId
-  );
-}
-
 export function resolveRuntimeInvocationSurfaceForThread(params: {
   requestedSurface: unknown;
   threadKey: string;

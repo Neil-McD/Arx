@@ -22,9 +22,6 @@ import {
   runAbortableWithRuntimeCancellation,
   throwIfRuntimeRunCancelled,
 } from "./runtimeCancellation";
-import {
-  shouldRecordCommunityOnboardingAgentTurn,
-} from "../shared/runtimeInvocationSurface";
 import type { CommunityInferenceSurface } from "../shared/founderInference";
 import {
   communityFunnelTurnPostconditionPassed,
@@ -425,31 +422,6 @@ export async function handleRuntimeTurnRequest(args: {
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
-    const recordCommunityOnboardingAgentDockTurnBestEffort = async (): Promise<void> => {
-      // Preview uses the builder's real personal agent, but it must not mutate
-      // an unrelated live onboarding session the builder may also own.
-      if (input.suppress_onboarding_progress === true) return;
-      if (!shouldRecordCommunityOnboardingAgentTurn({
-        invocationSurface,
-        surfaceKind: memberAgentSurfaceContext?.kind ?? null,
-        hasCommunityId: Boolean(runtimeCommunityId),
-      })) {
-        return;
-      }
-      try {
-        await ctx.runMutation(
-          (internal as any).communityOnboarding.recordPersonalAgentDockTurnInternal as any,
-          {
-            userId: actor.dbUserId,
-            communityId: runtimeCommunityId,
-            occurredAt: Date.now(),
-          },
-        );
-      } catch {
-        // Onboarding progress must never make an otherwise successful personal
-        // agent turn fail. A later successful dock turn retries idempotently.
-      }
-    };
     const runtimeAgentProfile = await loadUserAgentProfileForRuntime(ctx, actor.dbUserId);
     startedRunId = runId;
     runtimeTurnStage = "run_start";
@@ -782,16 +754,10 @@ export async function handleRuntimeTurnRequest(args: {
           contextSnapshot = null;
         }
       }
-      try {
-        await finishRunBestEffortRaw({
-          ...params,
-          contextSnapshot,
-        });
-      } finally {
-        if (params.status === "ok") {
-          await recordCommunityOnboardingAgentDockTurnBestEffort();
-        }
-      }
+      await finishRunBestEffortRaw({
+        ...params,
+        contextSnapshot,
+      });
     };
     finishRunBestEffort = finishRunBestEffortForRun;
     await persistContextSnapshotBestEffort("started");

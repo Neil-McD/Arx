@@ -23,19 +23,12 @@ import {
 } from "../../../../shared/cloudCommunityDirectoryGateway";
 import type { CommunityMessageAttachment } from "../../../../shared/communityMessageParsing";
 import { textContainsMentionToken } from "../../../../shared/communityMentionRendering";
-import {
-  buildCommunityOnboardingIntroductionDraft,
-  isCommunityOnboardingIntroductionReady,
-  shouldPresentCommunityOnboardingFirstPost,
-} from "../../../../shared/communityOnboarding";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import { useMessageAttachmentInputController } from "../../../../shared/useMessageAttachmentInputController";
 import { mergeVoiceTranscript } from "../../../../shared/voiceCapture";
 import { VoiceInputButton } from "../../../../shared/VoiceInputButton";
 import { WebCommunityChatLightboxModal } from "./WebCommunityChatLightboxModal";
 import { WebCommunityInteractionBootstrap } from "./WebCommunityInteractionBootstrap";
-import { WebCommunityOnboardingConciergeGuide } from "./WebCommunityOnboardingConciergeGuide";
-import { useWebCommunityOnboarding } from "./WebCommunityOnboardingController";
 import {
   WebCommunityInteractionProjection,
   type WebCommunityInteractionProjectionProps,
@@ -107,7 +100,6 @@ const EMPTY_MENTION_CANDIDATES: MentionCandidate[] = [];
 const COMMUNITY_ATTACHMENT_ACCEPT =
   "image/*,video/*,audio/*,.mp4,.webm,.mov,.m4v,.mp3,.wav,.m4a,.ogg,.aac,.flac,.txt,.md,.csv,.json,.ts,.tsx,.js,.jsx,.py,.rs,.go,.html,.css,.yml,.yaml,.pdf";
 const COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY = "(min-width: 901px)";
-const COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID = "community-onboarding-first-post-description";
 const COMMUNITY_MAIN_MENTION_MENU_ID = "community-main-mention-autocomplete";
 const COMMUNITY_REPLY_MENTION_MENU_ID = "community-reply-mention-autocomplete";
 
@@ -380,40 +372,10 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     lightboxModalProps,
     interactionProjection,
   } = props;
-  const communityOnboarding = useWebCommunityOnboarding();
   const isProfileSetupGateActive = hasSession && Boolean(activeCommunity) && canPostMessages && !isProfileSetupComplete;
   const canPresentComposer = canPostMessages && !isProfileSetupGateActive;
-  const isCommunityOnboardingPreview = communityOnboarding?.mode === "preview";
-  const activeOnboardingSession =
-    activeCommunity && communityOnboarding?.activeSession?.community_id === activeCommunity.id
-      ? communityOnboarding.activeSession
-      : null;
-  const isOnboardingFirstPostPhase = Boolean(
-    activeOnboardingSession && shouldPresentCommunityOnboardingFirstPost(activeOnboardingSession),
-  );
-  const isOnboardingFirstPostAcknowledgement = Boolean(
-    activeOnboardingSession && communityOnboarding?.firstPostAcknowledgementPending,
-  );
-  const isOnboardingFirstPostInteraction =
-    isOnboardingFirstPostPhase && !isOnboardingFirstPostAcknowledgement;
-  const canUseComposer =
-    canPresentComposer &&
-    !isOnboardingFirstPostAcknowledgement &&
-    (!isCommunityOnboardingPreview || isOnboardingFirstPostInteraction);
-  const canUseCommunityAttachments = canUseComposer && !isCommunityOnboardingPreview;
-  const showOnboardingFirstPostGuide = Boolean(
-    canPresentComposer &&
-    activeCommunity &&
-    activeOnboardingSession &&
-    (isOnboardingFirstPostPhase || isOnboardingFirstPostAcknowledgement),
-  );
-  const onboardingIntroductionDraft = buildCommunityOnboardingIntroductionDraft({
-    displayName: sessionUserId ? displayName(sessionUserId) : null,
-  });
-  const isOnboardingIntroductionReady = isCommunityOnboardingIntroductionReady({
-    text: communityMessageInput,
-    seededDraft: onboardingIntroductionDraft,
-  });
+  const canUseComposer = canPresentComposer;
+  const canUseCommunityAttachments = canUseComposer;
   const [profilePanelUserId, setProfilePanelUserId] = useState<string | null>(null);
   const [profileCommunityContextByUserId, setProfileCommunityContextByUserId] = useState<
     Record<string, ProfileCommunityContext>
@@ -427,10 +389,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
   const drawerReplyFileInputRef = useRef<HTMLInputElement | null>(null);
   const drawerReplyInputRef = useRef<HTMLTextAreaElement | null>(null);
   const lastCommunityComposerFocusTargetRef = useRef<string | null>(null);
-  const seededOnboardingIntroductionSessionIdsRef = useRef(new Set<string>());
-  const previewComposerSnapshotRef = useRef<{ sessionId: string; text: string } | null>(null);
-  const onCommunityMessageInputChangeRef = useRef(onCommunityMessageInputChange);
-  onCommunityMessageInputChangeRef.current = onCommunityMessageInputChange;
   const [isDesktopCommunityFocusViewport, setIsDesktopCommunityFocusViewport] = useState(() =>
     typeof window === "undefined" ? false : window.matchMedia(COMMUNITY_COMPOSER_FOCUS_MEDIA_QUERY).matches,
   );
@@ -536,79 +494,12 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     return true;
   }, [isDesktopCommunityFocusViewport]);
 
-  const restorePreviewComposerSnapshot = useCallback((sessionId?: string) => {
-    const snapshot = previewComposerSnapshotRef.current;
-    if (!snapshot || (sessionId && snapshot.sessionId !== sessionId)) return;
-    previewComposerSnapshotRef.current = null;
-    onCommunityMessageInputChangeRef.current(snapshot.text);
-  }, []);
-
-  useEffect(() => {
-    const sessionId = activeOnboardingSession?.id ?? null;
-    if (!isCommunityOnboardingPreview || !sessionId) return;
-    return () => restorePreviewComposerSnapshot(sessionId);
-  }, [activeOnboardingSession?.id, isCommunityOnboardingPreview, restorePreviewComposerSnapshot]);
-
-  useEffect(() => {
-    if (!activeOnboardingSession || !isOnboardingFirstPostInteraction) return;
-    const sessionId = activeOnboardingSession.id;
-    if (seededOnboardingIntroductionSessionIdsRef.current.has(sessionId)) return;
-    seededOnboardingIntroductionSessionIdsRef.current.add(sessionId);
-
-    if (isCommunityOnboardingPreview && !previewComposerSnapshotRef.current) {
-      previewComposerSnapshotRef.current = {
-        sessionId,
-        text: communityMessageInput,
-      };
-    }
-    if (
-      communityMessageInput.trim() ||
-      replyingToMessage ||
-      communityAttachments.length > 0 ||
-      communityMessageMentions.length > 0
-    ) {
-      return;
-    }
-
-    onCommunityMessageInputChangeRef.current(onboardingIntroductionDraft);
-    window.requestAnimationFrame(() => {
-      focusCommunityComposerSafely(chatInputRef, { force: true, maxHeightPx: 120 });
-    });
-  }, [
-    activeOnboardingSession?.id,
-    communityAttachments.length,
-    communityMessageInput,
-    communityMessageMentions.length,
-    focusCommunityComposerSafely,
-    isCommunityOnboardingPreview,
-    isOnboardingFirstPostInteraction,
-    onboardingIntroductionDraft,
-    replyingToMessage,
-  ]);
-
   const handleMainCommunityComposerSubmit = useCallback(async () => {
-    if (isOnboardingFirstPostInteraction) {
-      if (!isOnboardingIntroductionReady || isSendingCommunityMessage) return;
-      if (isCommunityOnboardingPreview) {
-        const sessionId = activeOnboardingSession?.id;
-        if (!sessionId) return;
-        restorePreviewComposerSnapshot(sessionId);
-        communityOnboarding?.completeFirstPostPreview();
-        return;
-      }
-    }
     onCommunityTypingClear?.(null);
     await onSendCommunityMessage();
   }, [
-    activeOnboardingSession?.id,
-    communityOnboarding,
-    isCommunityOnboardingPreview,
-    isOnboardingFirstPostInteraction,
-    isOnboardingIntroductionReady,
-    isSendingCommunityMessage,
     onSendCommunityMessage,
     onCommunityTypingClear,
-    restorePreviewComposerSnapshot,
   ]);
 
   const handleMainCommunityComposerUserInput = useCallback((
@@ -1260,23 +1151,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
     <>
       {renderCommunityAgentServeNotice()}
 
-      {showOnboardingFirstPostGuide && activeCommunity && communityOnboarding ? (
-        <WebCommunityOnboardingConciergeGuide
-          communityName={activeCommunity.name}
-          communityAvatarUrl={activeCommunity.avatar_url}
-          communityAvatarFocusX={activeCommunity.avatar_focus_x}
-          communityAvatarFocusY={activeCommunity.avatar_focus_y}
-          communityAvatarZoom={activeCommunity.avatar_zoom}
-          descriptionId={COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID}
-          isComplete={isOnboardingFirstPostAcknowledgement}
-          isPending={communityOnboarding.pendingAction !== null}
-          error={communityOnboarding.error}
-          onContinue={communityOnboarding.continueAfterFirstPost}
-          onDismiss={communityOnboarding.dismiss}
-        />
-      ) : null}
-
-      <div className={`chat-input-bar${showOnboardingFirstPostGuide ? " is-onboarding-first-post" : ""}`}>
+      <div className="chat-input-bar">
         <MentionAutocompleteMenu
           id={COMMUNITY_MAIN_MENTION_MENU_ID}
           autocomplete={mainMention}
@@ -1329,31 +1204,25 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
               }}
               className="chat-input"
               aria-label={mainCommunityComposerPlaceholder}
-              aria-describedby={
-                showOnboardingFirstPostGuide
-                  ? COMMUNITY_ONBOARDING_FIRST_POST_DESCRIPTION_ID
-                  : undefined
-              }
               placeholder={mainCommunityComposerPlaceholder}
               value={communityMessageInput}
               onChange={(event) => {
                 handleMainCommunityComposerUserInput(event.target.value, event.target);
-                if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.target);
+                mainMention.syncFromTextarea(event.target);
                 syncMentionComposerHighlightScroll(event.target);
               }}
               onClick={(event) => {
-                if (!isCommunityOnboardingPreview) mainMention.syncFromTextarea(event.currentTarget);
+                mainMention.syncFromTextarea(event.currentTarget);
               }}
               onBlur={() => {
                 mainMention.close();
                 onCommunityTypingClear?.(null);
               }}
               onScroll={(event) => syncMentionComposerHighlightScroll(event.currentTarget)}
-              onPaste={isCommunityOnboardingPreview ? undefined : onCommunityAttachmentPaste}
+              onPaste={onCommunityAttachmentPaste}
               onKeyDown={(event) => {
-                if (!isCommunityOnboardingPreview && mainMention.handleKeyDown(event)) return;
+                if (mainMention.handleKeyDown(event)) return;
                 if (
-                  !isCommunityOnboardingPreview &&
                   handleMentionTokenBackspace({
                     event,
                     mentions: communityMessageMentions,
@@ -1362,7 +1231,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                   })
                 ) return;
                 if (
-                  !isCommunityOnboardingPreview &&
                   handleCommunityComposerAuthoringKeyDown(event, handleMainCommunityComposerUserInput)
                 ) return;
                 if (event.key === "Enter" && !event.shiftKey) {
@@ -1375,8 +1243,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 isAuthRecoveringSignedIn ||
                 !hasSession ||
                 !activeCommunity ||
-                !canUseComposer ||
-                isOnboardingFirstPostAcknowledgement
+                !canUseComposer
               }
               rows={1}
             />
@@ -1394,8 +1261,6 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             !hasSession ||
             !activeCommunity ||
             !canUseComposer ||
-            isCommunityOnboardingPreview ||
-            isOnboardingFirstPostAcknowledgement ||
             isSendingCommunityMessage
           }
           attachDisabled={
@@ -1412,9 +1277,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
             <VoiceInputButton
               {...voiceButtonProps}
               disabled={
-                voiceButtonProps.disabled ||
-                isCommunityOnboardingPreview ||
-                isOnboardingFirstPostAcknowledgement
+                voiceButtonProps.disabled
               }
             />
           )}
@@ -1427,9 +1290,7 @@ export function WebCommunityChatPanel(props: WebCommunityChatPanelProps) {
                 !hasSession ||
                 !activeCommunity ||
                 !canUseComposer ||
-                isOnboardingFirstPostAcknowledgement ||
                 isSendingCommunityMessage ||
-                (isOnboardingFirstPostInteraction && !isOnboardingIntroductionReady) ||
                 (communityMessageInput.trim().length === 0 && communityAttachments.length === 0)
               }
               type="button"

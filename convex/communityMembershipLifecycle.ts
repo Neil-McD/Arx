@@ -6,7 +6,6 @@ import {
   syncCommunityActiveMemberCount,
 } from "./communityCore";
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
-import { createCommunityOnboardingSessionForActivation } from "./communityOnboardingCore";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
 
@@ -113,19 +112,6 @@ export async function activateCommunityMembershipCore(args: {
     dedupeKey: `member_joined:${String(membershipId)}:${activationSequence}`,
     nowMs: args.nowMs,
   });
-  try {
-    await createCommunityOnboardingSessionForActivation({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      membershipId,
-      userId: args.userId,
-      activationSequence,
-      activatedAt: args.nowMs,
-    });
-  } catch {
-    // Community access is authoritative. Optional onboarding state must never
-    // turn an otherwise-valid membership activation into a failed join.
-  }
   await deleteCommunityJoinRequestByPair({
     ctx: args.ctx,
     communityId: args.communityId,
