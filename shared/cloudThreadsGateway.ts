@@ -66,39 +66,6 @@ export async function ensureCloudThreadRecord(params: {
   });
 }
 
-export async function updateCloudThreadRecord(params: {
-  session: AuthSessionLike;
-  thread: Omit<CloudThreadRecordInput, "communityId" | "contextVersion">;
-  nowMs?: number;
-}): Promise<void> {
-  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
-  if (!bootstrapped) return;
-  const { client, authSubject } = bootstrapped;
-  const threadKey = String(params.thread.threadId ?? "").trim();
-  if (!threadKey) return;
-  const internalThreadId = await resolveInternalThreadId({
-    client,
-    authSubject,
-    threadKey,
-  });
-  if (!internalThreadId) {
-    await ensureCloudThreadRecord({
-      session: params.session,
-      thread: params.thread,
-      nowMs: params.nowMs,
-    });
-    return;
-  }
-  await client.mutation("threads:updateCloudThread" as any, {
-    authSubject,
-    threadId: internalThreadId,
-    title: typeof params.thread.title === "string" ? params.thread.title.trim() || undefined : undefined,
-    titleSource: "auto",
-    modelId: String(params.thread.modelId ?? "").trim() || undefined,
-    nowMs: params.nowMs ?? Date.now(),
-  });
-}
-
 export async function addCloudThreadMessage(params: {
   session: AuthSessionLike;
   message: CloudThreadMessageInput;
@@ -137,55 +104,6 @@ export async function addCloudThreadMessage(params: {
     runId: String(params.message.runId ?? "").trim() || undefined,
     nowMs: params.nowMs ?? Date.now(),
   });
-}
-
-export async function requestCloudThreadAttachmentUploadUrl(params: {
-  session: AuthSessionLike;
-  threadId: string;
-}): Promise<string> {
-  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
-  if (!bootstrapped) throw new Error("Failed to start thread attachment upload.");
-  const { client, authSubject } = bootstrapped;
-  const threadKey = String(params.threadId ?? "").trim();
-  if (!threadKey) throw new Error("Failed to start thread attachment upload.");
-  const internalThreadId = await resolveInternalThreadId({
-    client,
-    authSubject,
-    threadKey,
-  });
-  if (!internalThreadId) throw new Error("Failed to start thread attachment upload.");
-  const payload = (await client.mutation("threads:generateCloudThreadAttachmentUploadUrl" as any, {
-    authSubject,
-    threadId: internalThreadId,
-  })) as { uploadUrl?: string | null } | null;
-  const uploadUrl = String(payload?.uploadUrl ?? "").trim();
-  if (!uploadUrl) throw new Error("Failed to start thread attachment upload.");
-  return uploadUrl;
-}
-
-export async function uploadCloudThreadAttachmentFile(params: {
-  session: AuthSessionLike;
-  threadId: string;
-  file: File | Blob;
-}): Promise<string> {
-  const uploadUrl = await requestCloudThreadAttachmentUploadUrl({
-    session: params.session,
-    threadId: params.threadId,
-  });
-  const contentType =
-    params.file && typeof params.file === "object" && "type" in params.file
-      ? String((params.file as File | Blob).type ?? "").trim() || "application/octet-stream"
-      : "application/octet-stream";
-  const response = await fetch(uploadUrl, {
-    method: "POST",
-    headers: { "Content-Type": contentType },
-    body: params.file as BodyInit,
-  });
-  if (!response.ok) throw new Error("Failed to upload attachment.");
-  const payload = (await response.json()) as { storageId?: string | null };
-  const storageId = String(payload?.storageId ?? "").trim();
-  if (!storageId) throw new Error("Failed to upload attachment.");
-  return storageId;
 }
 
 export async function uploadCloudMemberAgentImageFile(params: {
@@ -270,29 +188,6 @@ export async function deleteCloudThreadMessage(params: {
     authSubject,
     threadId: internalThreadId,
     messageKey,
-    nowMs: params.nowMs ?? Date.now(),
-  });
-}
-
-export async function archiveCloudThreadRecord(params: {
-  session: AuthSessionLike;
-  threadId: string;
-  nowMs?: number;
-}): Promise<void> {
-  const bootstrapped = await bootstrapGatewayAuthContextIfAvailable(params.session);
-  if (!bootstrapped) return;
-  const { client, authSubject } = bootstrapped;
-  const threadKey = String(params.threadId ?? "").trim();
-  if (!threadKey) return;
-  const internalThreadId = await resolveInternalThreadId({
-    client,
-    authSubject,
-    threadKey,
-  });
-  if (!internalThreadId) return;
-  await client.mutation("threads:archiveCloudThread" as any, {
-    authSubject,
-    threadId: internalThreadId,
     nowMs: params.nowMs ?? Date.now(),
   });
 }
