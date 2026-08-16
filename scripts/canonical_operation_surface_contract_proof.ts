@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES } from "../shared/communityAgentConciergeTools.ts";
@@ -11,7 +11,6 @@ import {
   getPolynetMcpToolDefinition,
   getPolynetMcpToolDefinitions,
 } from "../shared/polynetMcp.ts";
-import { POLYNET_PLATFORM_TOOL_SURFACE } from "../shared/polynetPlatformToolSurface.ts";
 import { restrictToolNamesForInvocationSurface } from "../shared/runtimeInvocationSurface.ts";
 import { getFixedRuntimeToolPolicy } from "../shared/runtimeToolPolicy.ts";
 import { getToolDefinition } from "../shared/toolRegistry.ts";
@@ -38,10 +37,10 @@ assert.deepEqual(
   expected,
   "official MCP must be a direct five-tool canonical projection",
 );
-assert.deepEqual(
-  POLYNET_PLATFORM_TOOL_SURFACE.map((tool) => tool.toolName),
-  expected,
-  "native platform harness must project the same five tools",
+assert.equal(
+  existsSync(join(root, "shared/polynetPlatformToolSurface.ts")),
+  false,
+  "the native harness must not keep a duplicate five-tool authority",
 );
 assert.deepEqual(
   COMMUNITY_AGENT_CONCIERGE_TOOL_NAMES,

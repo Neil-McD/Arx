@@ -1283,7 +1283,6 @@ for (const sourcePath of [
   "shared/runtimePrompt.ts",
   "shared/runtimeInvocationSurface.ts",
   "shared/runtimeContextManifest.ts",
-  "shared/polynetPlatformToolSurface.ts",
   "convex/runtimeAgentLoop.ts",
   "convex/runtimeTurnResolution.ts",
 ]) {
