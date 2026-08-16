@@ -395,11 +395,16 @@ async function resolveCommunityTarget(args: {
         : parsed.message,
     };
   }
+  const communityAgentPrincipal = args.principalKind === "community_agent";
   const resolved = (await args.ctx.runQuery(
-    (internal as any).communityCapabilityContext
-      .resolveCommunityCapabilityContextInternal,
+    communityAgentPrincipal
+      ? (internal as any).communityCapabilityContext
+          .resolveCommunityCapabilityContextForTrustedActorInternal
+      : (internal as any).communityCapabilityContext
+          .resolveCommunityCapabilityContextInternal,
     {
       authSubject: args.authSubject,
+      ...(communityAgentPrincipal ? { userId: args.userId } : {}),
       communitySlug: parsed.communitySlug,
     },
   )) as

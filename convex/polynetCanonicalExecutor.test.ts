@@ -437,6 +437,7 @@ test("canonical five-tool executor derives member, builder, and community-agent 
   const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
   const memberCtx = executionContext(asMember);
   const ownerCtx = executionContext(asOwner);
+  const scheduledCommunityAgentCtx = executionContext(t as any);
 
   const platformRoot = await executePolynetCanonicalTool({
     ctx: memberCtx,
@@ -501,7 +502,7 @@ test("canonical five-tool executor derives member, builder, and community-agent 
   );
 
   const communityAgentList = await executePolynetCanonicalTool({
-    ctx: ownerCtx,
+    ctx: scheduledCommunityAgentCtx,
     authSubject: fixture.ownerSubject,
     userId: fixture.ownerId,
     principalKind: "community_agent",
@@ -520,9 +521,29 @@ test("canonical five-tool executor derives member, builder, and community-agent 
     "/communities/canonical-community/builder/",
   );
 
+  for (const path of [
+    "/communities/canonical-community/channels/",
+    "/communities/canonical-community/resources/",
+    "/communities/canonical-community/events/",
+    "/communities/canonical-community/members/",
+  ]) {
+    await expect(
+      executePolynetCanonicalTool({
+        ctx: scheduledCommunityAgentCtx,
+        authSubject: fixture.ownerSubject,
+        userId: fixture.ownerId,
+        principalKind: "community_agent",
+        mountedCommunityId: fixture.communityId,
+        evidenceSurface: "community_concierge",
+        toolName: "polynet_list",
+        input: { path },
+      }),
+    ).resolves.toMatchObject({ ok: true });
+  }
+
   await expect(
     executePolynetCanonicalTool({
-      ctx: ownerCtx,
+      ctx: scheduledCommunityAgentCtx,
       authSubject: fixture.ownerSubject,
       userId: fixture.ownerId,
       principalKind: "community_agent",
@@ -534,6 +555,22 @@ test("canonical five-tool executor derives member, builder, and community-agent 
   ).resolves.toMatchObject({
     ok: false,
     code: "community_context_mismatch",
+  });
+
+  await expect(
+    executePolynetCanonicalTool({
+      ctx: scheduledCommunityAgentCtx,
+      authSubject: fixture.memberSubject,
+      userId: fixture.ownerId,
+      principalKind: "community_agent",
+      mountedCommunityId: fixture.communityId,
+      evidenceSurface: "community_concierge",
+      toolName: "polynet_list",
+      input: { path: "/communities/canonical-community/" },
+    }),
+  ).resolves.toMatchObject({
+    ok: false,
+    code: "semantic_not_found",
   });
 });
 
