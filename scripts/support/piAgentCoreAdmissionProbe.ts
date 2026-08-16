@@ -7,6 +7,20 @@ import {
   type StreamFn,
 } from "@earendil-works/pi-agent-core";
 import { Type } from "typebox";
+import {
+  DEFAULT_RUNTIME_KERNEL_BUDGET,
+  type RuntimeKernelToolExecutionResult,
+  type RuntimeKernelToolResultEnvelope,
+} from "../../shared/runtimeKernelTypes.ts";
+import {
+  advanceRuntimeToolResultState,
+  buildRuntimeToolExecutionExceptionResult,
+  buildRuntimeToolResultContent,
+  buildRuntimeToolResultEnvelope,
+  INITIAL_RUNTIME_TOOL_RESULT_STATE,
+  type RuntimeToolResultState,
+  type RuntimeToolResultTerminalSignal,
+} from "../../shared/runtimeToolResultState.ts";
 import { buildRuntimeToolCallSignature } from "../../shared/runtimeToolSignatures.ts";
 
 export type PiAdmissionScenario =
@@ -25,6 +39,25 @@ export type PiAdmissionScenario =
   | "mixed_valid_invalid_batch"
   | "mixed_unknown_batch"
   | "duplicate_call_ids";
+
+export type PiResultFixtureCall = {
+  id: string;
+  name?: (typeof ADMITTED_TOOL_NAMES)[number];
+  query: string;
+  result?: RuntimeKernelToolExecutionResult;
+  throwMessage?: string;
+  abort?: boolean;
+  waitForCallId?: string;
+  forgeTransport?: boolean;
+};
+
+export type PiResultFixture = {
+  batches: PiResultFixtureCall[][];
+  executionMode?: "sequential" | "parallel";
+  maxRepeatedIdenticalCalls?: number;
+  maxConsecutiveFailures?: number;
+  maxNoProgressSteps?: number;
+};
 
 type PiAssistantMessage = Extract<AgentMessage, { role: "assistant" }>;
 type PiToolResultMessage = Extract<AgentMessage, { role: "toolResult" }>;
@@ -156,6 +189,53 @@ function toolResults(context: PiProviderContext): PiToolResultMessage[] {
   );
 }
 
+function projectCanonicalToolResults(
+  messages: AgentMessage[],
+  canonicalResults: ReadonlyMap<string, RuntimeKernelToolExecutionResult>,
+): AgentMessage[] {
+  return messages.map((message) => {
+    if (message.role !== "toolResult") return message;
+    const toolResult = canonicalResults.get(message.toolCallId);
+    if (!toolResult) return message;
+    return {
+      ...message,
+      content: [
+        {
+          type: "text",
+          text: buildRuntimeToolResultContent({
+            toolName: message.toolName,
+            toolResult,
+          }),
+        },
+      ],
+      details: { canonicalToolResult: toolResult },
+      isError: toolResult.status === "error",
+    };
+  });
+}
+
+function removeSerialCancellationArtifacts(params: {
+  messages: AgentMessage[];
+  cancelledToolCallId: string | null;
+}): AgentMessage[] {
+  if (!params.cancelledToolCallId) return params.messages;
+  return params.messages.flatMap((message) => {
+    if (
+      message.role === "toolResult" &&
+      message.toolCallId === params.cancelledToolCallId
+    ) {
+      return [];
+    }
+    if (message.role !== "assistant") return [message];
+    const content = message.content.filter(
+      (part) =>
+        part.type !== "toolCall" ||
+        part.id !== params.cancelledToolCallId,
+    );
+    return content.length > 0 ? [{ ...message, content }] : [];
+  });
+}
+
 export type PiAdmissionProbeResult = {
   scenario: PiAdmissionScenario;
   providerCalls: number;
@@ -193,10 +273,23 @@ export type PiAdmissionProbeResult = {
   finalAssistantText: string;
   finalStopReason: PiAssistantMessage["stopReason"] | null;
   maxInFlight: number;
+  resultSteps: Array<{
+    toolCallId: string;
+    toolName: string;
+    envelope: RuntimeKernelToolResultEnvelope;
+    toolResultSignature: string;
+    madeProgress: boolean;
+    consecutiveFailureCount: number;
+    consecutiveNoProgressCount: number;
+  }>;
+  terminalSignal: RuntimeToolResultTerminalSignal | null;
+  projectedToolResultIds: string[];
+  projectedAssistantToolCallIds: string[];
 };
 
 export async function runPiAgentCoreAdmissionProbe(
   scenario: PiAdmissionScenario,
+  resultFixture?: PiResultFixture,
 ): Promise<PiAdmissionProbeResult> {
   const executedToolNames: string[] = [];
   const executedToolCallIds: string[] = [];
@@ -213,6 +306,15 @@ export async function runPiAgentCoreAdmissionProbe(
   let lastToolSignature: string | null = null;
   let repeatedCallCount = 0;
   let activeCheckCount = 0;
+  let toolResultState: RuntimeToolResultState = {
+    ...INITIAL_RUNTIME_TOOL_RESULT_STATE,
+  };
+  let terminalSignal: RuntimeToolResultTerminalSignal | null = null;
+  const canonicalToolResults = new Map<
+    string,
+    RuntimeKernelToolExecutionResult
+  >();
+  const resultSteps: PiAdmissionProbeResult["resultSteps"] = [];
 
   type AdmissionFailure = NonNullable<PiAdmissionProbeResult["admissionFailure"]>;
   type BatchDecision = {
@@ -222,6 +324,11 @@ export async function runPiAgentCoreAdmissionProbe(
     nextToolStepCount: number;
     nextLastToolSignature: string | null;
     nextRepeatedCallCount: number;
+    preparedCalls: Array<{
+      id: string;
+      name: (typeof ADMITTED_TOOL_NAMES)[number];
+      toolSignature: string;
+    }>;
   };
 
   let currentBatchDecision: BatchDecision | null = null;
@@ -229,9 +336,19 @@ export async function runPiAgentCoreAdmissionProbe(
 
   const maxToolSteps = scenario === "over_budget_batch" ? 1 : 50;
   const maxRepeatedIdenticalCalls =
-    scenario === "repeated_batch" || scenario === "repeated_across_turns"
+    resultFixture?.maxRepeatedIdenticalCalls ??
+    (scenario === "repeated_batch" || scenario === "repeated_across_turns"
       ? 1
-      : 2;
+      : 2);
+  const resultBudget = {
+    ...DEFAULT_RUNTIME_KERNEL_BUDGET,
+    maxConsecutiveFailures:
+      resultFixture?.maxConsecutiveFailures ??
+      DEFAULT_RUNTIME_KERNEL_BUDGET.maxConsecutiveFailures,
+    maxNoProgressSteps:
+      resultFixture?.maxNoProgressSteps ??
+      DEFAULT_RUNTIME_KERNEL_BUDGET.maxNoProgressSteps,
+  };
   const isRunActive = () => {
     activeCheckCount += 1;
     if (scenario === "inactive_before_admission") return false;
@@ -295,6 +412,7 @@ export async function runPiAgentCoreAdmissionProbe(
     } else {
       let simulatedLastSignature = lastToolSignature;
       let simulatedRepeatedCount = repeatedCallCount;
+      const preparedCalls: BatchDecision["preparedCalls"] = [];
       for (const call of calls) {
         let normalizedArgs: Record<string, unknown>;
         try {
@@ -302,8 +420,15 @@ export async function runPiAgentCoreAdmissionProbe(
             call.name as (typeof ADMITTED_TOOL_NAMES)[number],
             call.arguments,
           );
-        } catch {
+        } catch (error) {
           normalizedArgs = call.arguments;
+          canonicalToolResults.set(call.id, {
+            status: "error",
+            exitCode: null,
+            outputText: "",
+            errorCode: "invalid_tool_arguments",
+            errorMessage: error instanceof Error ? error.message : String(error),
+          });
         }
         const signature = buildRuntimeToolCallSignature({
           toolName: call.name,
@@ -321,6 +446,11 @@ export async function runPiAgentCoreAdmissionProbe(
         }
         simulatedLastSignature = signature;
         simulatedRepeatedCount = nextRepeatedCount;
+        preparedCalls.push({
+          id: call.id,
+          name: call.name as (typeof ADMITTED_TOOL_NAMES)[number],
+          toolSignature: signature,
+        });
       }
       if (!failure && !isRunActive()) {
         failure = {
@@ -336,6 +466,7 @@ export async function runPiAgentCoreAdmissionProbe(
         nextToolStepCount: toolStepCount + calls.length,
         nextLastToolSignature: simulatedLastSignature,
         nextRepeatedCallCount: simulatedRepeatedCount,
+        preparedCalls,
       };
     }
 
@@ -347,7 +478,43 @@ export async function runPiAgentCoreAdmissionProbe(
       nextToolStepCount: toolStepCount,
       nextLastToolSignature: lastToolSignature,
       nextRepeatedCallCount: repeatedCallCount,
+      preparedCalls: [],
     };
+  };
+
+  const fixtureCalls = new Map(
+    (resultFixture?.batches.flat() ?? []).map((call) => [call.id, call]),
+  );
+  const callStarted = new Map<string, Promise<void>>();
+  const markCallStarted = new Map<string, () => void>();
+  for (const id of fixtureCalls.keys()) {
+    callStarted.set(
+      id,
+      new Promise<void>((resolve) => markCallStarted.set(id, resolve)),
+    );
+  }
+
+  const executeCanonicalTool = async (params: {
+    toolCallId: string;
+    query: string;
+  }): Promise<RuntimeKernelToolExecutionResult> => {
+    const fixture = fixtureCalls.get(params.toolCallId);
+    markCallStarted.get(params.toolCallId)?.();
+    if (fixture?.waitForCallId) {
+      await callStarted.get(fixture.waitForCallId);
+    }
+    if (fixture?.throwMessage) throw new Error(fixture.throwMessage);
+    if (fixture?.abort) controller.abort("user_cancelled");
+    return (
+      fixture?.result ?? {
+        status: "ok",
+        exitCode: 0,
+        outputText: `result:${params.query}`,
+        errorCode: null,
+        errorMessage: null,
+        details: { authority: "closed_probe_registry" },
+      }
+    );
   };
 
   const buildTool = (toolName: (typeof ADMITTED_TOOL_NAMES)[number]): AgentTool => ({
@@ -355,7 +522,9 @@ export async function runPiAgentCoreAdmissionProbe(
     label: `Read with ${toolName}`,
     description: "Read only the already-authorized Polynet community.",
     parameters: QUERY_PARAMETERS,
-    executionMode: scenario === "serial_batch" ? "sequential" : "parallel",
+    executionMode:
+      resultFixture?.executionMode ??
+      (scenario === "serial_batch" ? "sequential" : "parallel"),
     prepareArguments: (args) => normalizeToolArguments(toolName, args),
     execute: async (toolCallId, args) => {
       if (
@@ -369,20 +538,30 @@ export async function runPiAgentCoreAdmissionProbe(
       executedToolCallIds.push(toolCallId);
       inFlight += 1;
       maxInFlight = Math.max(maxInFlight, inFlight);
-      await Promise.resolve();
-      inFlight -= 1;
+      let toolResult: RuntimeKernelToolExecutionResult;
+      try {
+        toolResult = await executeCanonicalTool({
+          toolCallId,
+          query: String((args as { query?: unknown }).query ?? ""),
+        });
+      } catch (error) {
+        toolResult = buildRuntimeToolExecutionExceptionResult(error);
+      } finally {
+        inFlight -= 1;
+      }
+      canonicalToolResults.set(toolCallId, toolResult);
       return {
         content: [
           {
             type: "text",
-            text: JSON.stringify({
-              success: true,
-              tool_name: toolName,
-              query: String((args as { query?: unknown }).query ?? ""),
-            }),
+            text: fixtureCalls.get(toolCallId)?.forgeTransport
+              ? JSON.stringify({ forged: true })
+              : buildRuntimeToolResultContent({ toolName, toolResult }),
           },
         ],
-        details: { authority: "closed_probe_registry" },
+        details: fixtureCalls.get(toolCallId)?.forgeTransport
+          ? { authority: "untrusted_transport" }
+          : { canonicalToolResult: toolResult },
       };
     },
   });
@@ -412,6 +591,22 @@ export async function runPiAgentCoreAdmissionProbe(
           errorMessage: "Run cancelled by user.",
         }),
       );
+    }
+
+    const fixtureBatch = resultFixture?.batches[providerCalls - 1];
+    if (fixtureBatch) {
+      return completedStream(
+        toolCallMessage(
+          fixtureBatch.map((call) => ({
+            id: call.id,
+            name: call.name ?? ADMITTED_TOOL_NAMES[0],
+            arguments: { query: call.query },
+          })),
+        ),
+      );
+    }
+    if (resultFixture) {
+      return completedStream(textMessage("Pi admission probe complete."));
     }
 
     if (
@@ -570,8 +765,11 @@ export async function runPiAgentCoreAdmissionProbe(
     context,
     {
       model: PROBE_MODEL,
-      convertToLlm: (input) => input as PiProviderContext["messages"],
-      toolExecution: scenario === "serial_batch" ? "sequential" : "parallel",
+      convertToLlm: (input) =>
+        projectCanonicalToolResults(input, canonicalToolResults) as PiProviderContext["messages"],
+      toolExecution:
+        resultFixture?.executionMode ??
+        (scenario === "serial_batch" ? "sequential" : "parallel"),
       beforeToolCall: async ({ toolCall }) => {
         if (
           !currentBatchDecision?.allowed ||
@@ -587,7 +785,25 @@ export async function runPiAgentCoreAdmissionProbe(
         }
         return undefined;
       },
-      shouldStopAfterTurn: () => admissionFailure !== null,
+      afterToolCall: async ({ toolCall }) => {
+        const toolResult = canonicalToolResults.get(toolCall.id);
+        if (!toolResult) return undefined;
+        return {
+          content: [
+            {
+              type: "text",
+              text: buildRuntimeToolResultContent({
+                toolName: toolCall.name,
+                toolResult,
+              }),
+            },
+          ],
+          details: { canonicalToolResult: toolResult },
+          isError: toolResult.status === "error",
+        };
+      },
+      shouldStopAfterTurn: () =>
+        admissionFailure !== null || terminalSignal !== null,
     },
     (event) => {
       eventTypes.push(event.type);
@@ -620,6 +836,31 @@ export async function runPiAgentCoreAdmissionProbe(
         return;
       }
       if (event.type === "turn_end" && currentBatchDecision?.allowed) {
+        for (const prepared of currentBatchDecision.preparedCalls) {
+          const toolResult = canonicalToolResults.get(prepared.id);
+          if (!toolResult) continue;
+          const transition = advanceRuntimeToolResultState({
+            state: toolResultState,
+            toolSignature: prepared.toolSignature,
+            toolResult,
+            budget: resultBudget,
+          });
+          toolResultState = transition.state;
+          resultSteps.push({
+            toolCallId: prepared.id,
+            toolName: prepared.name,
+            envelope: buildRuntimeToolResultEnvelope({
+              toolName: prepared.name,
+              toolResult,
+            }),
+            toolResultSignature: transition.toolResultSignature,
+            madeProgress: transition.madeProgress,
+            consecutiveFailureCount: transition.state.consecutiveFailureCount,
+            consecutiveNoProgressCount:
+              transition.state.consecutiveNoProgressCount,
+          });
+          terminalSignal ??= transition.terminalSignal;
+        }
         toolStepCount = currentBatchDecision.nextToolStepCount;
         lastToolSignature = currentBatchDecision.nextLastToolSignature;
         repeatedCallCount = currentBatchDecision.nextRepeatedCallCount;
@@ -641,7 +882,22 @@ export async function runPiAgentCoreAdmissionProbe(
   const finalAssistant = [...messages]
     .reverse()
     .find((message): message is PiAssistantMessage => message.role === "assistant");
-  const returnedToolResults = messages
+  const canonicalMessages = projectCanonicalToolResults(
+    messages,
+    canonicalToolResults,
+  );
+  const cancelledToolCallId =
+    resultFixture?.executionMode === "sequential" &&
+    terminalSignal?.code === "user_cancelled"
+      ? resultSteps.find(
+          (step) => step.envelope.error_code === "user_cancelled",
+        )?.toolCallId ?? null
+      : null;
+  const projectedMessages = removeSerialCancellationArtifacts({
+    messages: canonicalMessages,
+    cancelledToolCallId,
+  });
+  const returnedToolResults = projectedMessages
     .filter((message): message is PiToolResultMessage => message.role === "toolResult")
     .map((message) => ({
       toolCallId: message.toolCallId,
@@ -652,6 +908,16 @@ export async function runPiAgentCoreAdmissionProbe(
         .map((part) => part.text)
         .join(""),
     }));
+  const projectedToolResultIds = returnedToolResults.map(
+    (entry) => entry.toolCallId,
+  );
+  const projectedAssistantToolCallIds = projectedMessages.flatMap((message) =>
+    message.role === "assistant"
+      ? message.content.flatMap((part) =>
+          part.type === "toolCall" ? [part.id] : [],
+        )
+      : [],
+  );
 
   return {
     scenario,
@@ -669,6 +935,10 @@ export async function runPiAgentCoreAdmissionProbe(
     finalAssistantText: extractAssistantText(messages),
     finalStopReason: finalAssistant?.stopReason ?? null,
     maxInFlight,
+    resultSteps,
+    terminalSignal,
+    projectedToolResultIds,
+    projectedAssistantToolCallIds,
   };
 }
 

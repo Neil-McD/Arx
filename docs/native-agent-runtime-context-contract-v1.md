@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; the Slice 8 native baseline, Pi core admission, and model-free governed tool-admission proof are complete, while the remaining governed parity and Slices 9 through 10 remain
+Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; the Slice 8 native baseline, Pi core admission, governed tool admission, and canonical tool-result state parity are complete, while provider/context parity, the Pi value decision, and Slices 9 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-16
 
@@ -315,7 +315,7 @@ Program status:
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
-| 8 | Pi value/feasibility adapter and deterministic parity | Native baseline, core/default-runtime admission, and model-free governed tool-admission proof complete; remaining parity and value decision remain |
+| 8 | Pi value/feasibility adapter and deterministic parity | Native baseline, core/default-runtime admission, governed tool admission, and canonical tool-result state parity complete; provider/context parity and value decision remain |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
 
@@ -1408,6 +1408,32 @@ Slice 8 entry evidence on 2026-08-16:
     test-only local evidence: no production callsite, feature flag, provider,
     schema, staging deployment, or production deployment changed, and the
     governed bridge has not been re-executed inside a deployed Convex action.
+11. Canonical tool-result identity and state policy now live in two small shared
+    modules: one stable result signature and one pure transition for envelopes,
+    progress, consecutive failures, no-progress bounds, cancellation, and
+    terminal signals. The native kernel calls this policy instead of retaining
+    a second implementation. Unexpected serial executor throws now become the
+    same `tool_execution_exception` result already used for parallel failures.
+12. The model-free Pi bridge retains exact canonical executor outcomes by call
+    ID. `afterToolCall` projects those outcomes into Pi's model-visible result
+    shape but does not decide progress or stopping. At `turn_end`, the bridge
+    advances state in assistant source order, even when Pi emits parallel
+    completion events in the opposite order; `shouldStopAfterTurn` prevents
+    provider request N+1 after a canonical terminal result. A declarative test
+    fixture supplies data only and exposes no executor or provider callback.
+13. Differential fixtures prove exact native/Pi equality for successful and
+    failed envelopes, result signatures, failure recovery, failure and
+    no-progress exhaustion, changed-result progress, inverted parallel
+    completion, serial/parallel cancellation projection, and executor
+    exceptions. A forged Pi transport payload is replaced by the retained
+    canonical result rather than becoming evidence authority.
+14. Under exact Node `22.19.0`, the focused native/Pi suite passes 42 tests. The
+    complete local release gate passes 121 test files and 771 tests, all 66
+    foundation checks, the production web build, and both dependency audits
+    with zero findings. This remains local test evidence only: no production
+    callsite, provider, context projection, funding path, schema, feature flag,
+    staging deployment, or production deployment changed. Pi has not yet earned
+    adoption; the next parity slice must justify its added bridge surface.
 
 Acceptance:
 

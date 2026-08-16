@@ -33,92 +33,17 @@ import {
   type RuntimeInputBudgetPlan,
   type RuntimeProviderTransport,
 } from "./runtimeInputBudget.ts";
+import { buildRuntimeToolCallSignature } from "./runtimeToolSignatures.ts";
 import {
-  buildRuntimeToolCallSignature,
-  stableSerializeRuntimeValue,
-} from "./runtimeToolSignatures.ts";
+  advanceRuntimeToolResultState,
+  buildRuntimeToolExecutionExceptionResult,
+  buildRuntimeToolResultEnvelope,
+} from "./runtimeToolResultState.ts";
 
 function summarizeLongText(value: string, limit = 512): string {
   if (value.length <= limit) return value;
   const half = Math.max(32, Math.floor((limit - 5) / 2));
   return `${value.slice(0, half)}...${value.slice(-half)}`;
-}
-
-function buildObservationSignature(
-  observationContent: NativeToolInputContentPart[] | null | undefined,
-): string | null {
-  if (!Array.isArray(observationContent) || observationContent.length === 0) {
-    return null;
-  }
-  return observationContent
-    .map((part) => {
-      if (part.type === "text") {
-        return `text:${summarizeLongText(part.text, 320)}`;
-      }
-      return `image:${summarizeLongText(String(part.imageUrl ?? ""), 96)}:${
-        String(part.imageUrl ?? "").length
-      }`;
-    })
-    .join("|");
-}
-
-function buildToolResultSignature(params: {
-  toolResult: RuntimeKernelToolExecutionResult;
-}): string {
-  const detailsSignature =
-    params.toolResult.details && typeof params.toolResult.details === "object"
-      ? summarizeLongText(
-          stableSerializeRuntimeValue(params.toolResult.details),
-          1024,
-        )
-      : null;
-  return stableSerializeRuntimeValue({
-    status: params.toolResult.status,
-    exitCode: params.toolResult.exitCode,
-    errorCode: params.toolResult.errorCode,
-    errorMessage: params.toolResult.errorMessage,
-    outputPreview: summarizeLongText(params.toolResult.outputText, 1024),
-    outputLength: params.toolResult.outputText.length,
-    detailsSignature,
-    observationSignature: buildObservationSignature(
-      params.toolResult.observationContent,
-    ),
-  });
-}
-
-export function buildToolResultEnvelope<TToolName extends string>(params: {
-  toolName: TToolName;
-  toolResult: RuntimeKernelToolExecutionResult;
-}): RuntimeKernelToolResultEnvelope<TToolName> {
-  return {
-    tool_name: params.toolName,
-    success: params.toolResult.status === "ok",
-    status: params.toolResult.status,
-    exit_code: params.toolResult.exitCode,
-    error_code: params.toolResult.errorCode,
-    error_message: params.toolResult.errorMessage,
-    output: params.toolResult.outputText,
-  };
-}
-
-export function buildToolResultContent<TToolName extends string>(params: {
-  toolName: TToolName;
-  toolResult: RuntimeKernelToolExecutionResult;
-}): string {
-  return JSON.stringify(buildToolResultEnvelope(params));
-}
-
-function buildToolExecutionExceptionResult(
-  error: unknown,
-): RuntimeKernelToolExecutionResult {
-  const message = error instanceof Error ? error.message : String(error);
-  return {
-    status: "error",
-    exitCode: null,
-    outputText: "",
-    errorCode: "tool_execution_exception",
-    errorMessage: message || "Tool execution failed.",
-  };
 }
 
 function toKernelFailure<TToolName extends string>(params: {
@@ -900,13 +825,17 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
           errorMessage: prepared.step.argumentError.message,
         };
       }
-      return params.executeTool({
-        iteration: prepared.iteration,
-        providerCallId: prepared.step.providerCallId,
-        toolName: prepared.step.toolName,
-        normalizedArgs: prepared.step.normalizedArgs,
-        rawArguments: prepared.step.rawArguments,
-      });
+      try {
+        return await params.executeTool({
+          iteration: prepared.iteration,
+          providerCallId: prepared.step.providerCallId,
+          toolName: prepared.step.toolName,
+          normalizedArgs: prepared.step.normalizedArgs,
+          rawArguments: prepared.step.rawArguments,
+        });
+      } catch (error) {
+        return buildRuntimeToolExecutionExceptionResult(error);
+      }
     };
 
     const processPreparedToolResult = async (
@@ -924,23 +853,28 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       const { iteration, step: toolStep, toolSignature } = prepared;
       repeatedCallCount = prepared.repeatedCallCount;
 
-      const toolResultEnvelope = buildToolResultEnvelope({
+      const toolResultEnvelope = buildRuntimeToolResultEnvelope({
         toolName: toolStep.toolName,
         toolResult,
       });
-      const toolResultSignature = buildToolResultSignature({
+      const transition = advanceRuntimeToolResultState({
+        state: {
+          lastToolSignature,
+          lastToolResultSignature,
+          consecutiveFailureCount,
+          consecutiveNoProgressCount,
+        },
+        toolSignature,
         toolResult,
+        budget: params.budget,
       });
-      const madeProgress =
-        toolResult.status === "ok" &&
-        (toolSignature !== lastToolSignature ||
-          toolResultSignature !== lastToolResultSignature);
-
-      consecutiveFailureCount =
-        toolResult.status === "ok" ? 0 : consecutiveFailureCount + 1;
-      consecutiveNoProgressCount = madeProgress
-        ? 0
-        : consecutiveNoProgressCount + 1;
+      const { toolResultSignature, madeProgress } = transition;
+      ({
+        lastToolSignature,
+        lastToolResultSignature,
+        consecutiveFailureCount,
+        consecutiveNoProgressCount,
+      } = transition.state);
 
       steps.push({
         iteration,
@@ -995,38 +929,7 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
       }
 
       toolStepCount = iteration;
-      lastToolSignature = toolSignature;
-      lastToolResultSignature = toolResultSignature;
-
-      if (toolResult.errorCode === "user_cancelled") {
-        return {
-          status: 409,
-          code: "user_cancelled",
-          stopReason: "user_cancelled",
-          message: toolResult.errorMessage || "Run cancelled by user.",
-        };
-      }
-
-      if (consecutiveFailureCount >= params.budget.maxConsecutiveFailures) {
-        return {
-          status: 502,
-          code: "consecutive_failures_exhausted",
-          stopReason: "consecutive_failures_exhausted",
-          message:
-            "Tool loop stopped after repeated tool failures without recovery.",
-        };
-      }
-
-      if (consecutiveNoProgressCount >= params.budget.maxNoProgressSteps) {
-        return {
-          status: 502,
-          code: "no_progress_exhausted",
-          stopReason: "no_progress_exhausted",
-          message:
-            "Tool loop stopped because recent tool steps were not making meaningful progress.",
-        };
-      }
-      return null;
+      return transition.terminalSignal;
     };
 
     if (executeBatchInParallel) {
@@ -1047,7 +950,7 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
         const toolResult =
           settled?.status === "fulfilled"
             ? settled.value
-            : buildToolExecutionExceptionResult(settled?.reason);
+            : buildRuntimeToolExecutionExceptionResult(settled?.reason);
         const terminalFailure = await processPreparedToolResult(
           prepared,
           toolResult,

@@ -373,6 +373,32 @@ describe("native runtime kernel behavioral baseline", () => {
     });
   });
 
+  it("canonicalizes an unexpected serial executor exception", async () => {
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget({ maxConsecutiveFailures: 1 }),
+      inputBudget,
+      runCompletion: async () => toolCall({ providerCallId: "exception-1" }),
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => {
+        throw new Error("unexpected executor failure");
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "consecutive_failures_exhausted",
+      stopReason: "consecutive_failures_exhausted",
+      stepCount: 1,
+      steps: [
+        {
+          toolResultStatus: "error",
+          toolResultErrorCode: "tool_execution_exception",
+        },
+      ],
+    });
+  });
+
   it("stops after a configured number of successful but stagnant steps", async () => {
     let providerCalls = 0;
     const result = await runNativeRuntimeKernel<TestToolName>({
