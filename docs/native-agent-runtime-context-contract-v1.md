@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; Slices 8 through 10 remain
+Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; the Slice 8 native baseline and Pi core admission are complete, while governed parity and Slices 9 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-16
 
@@ -11,9 +11,10 @@ Program position:
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 5F and 6 through 7B plus pre-Slice 8
   liveness are released and production-proven. Slices 8 through 10 remain.
-- Pi agent-core adoption in Polynet: no canonical implementation; an isolated
-  admission experiment exists outside the released tree, while parity and
-  cutover have not started.
+- Pi agent-core adoption in Polynet: the reviewed core is pinned only as a
+  feasibility dependency, and its model-free admission probe passes in the
+  default Convex action runtime. A governed adapter, full parity, value
+  decision, and cutover have not started.
 
 ## 1. Purpose
 
@@ -295,8 +296,9 @@ The released architecture through Slice 7B has:
 
 The remaining gaps are:
 
-1. Pi agent core has not been admitted into the canonical tree, parity-tested,
-   or used by a production Polynet turn.
+1. Pi agent core has not been placed behind the governed-loop interface,
+   parity-tested against the native baseline, or used by a production Polynet
+   turn.
 2. Pi agent core has not yet proved that it removes more runtime complexity
    than its adapter and hosted-runtime requirements add.
 
@@ -312,7 +314,7 @@ Program status:
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
-| 8 | Pi value/feasibility adapter and deterministic parity | Isolated admission experiment exists; canonical parity not started |
+| 8 | Pi value/feasibility adapter and deterministic parity | Native baseline and core/default-runtime admission complete; governed adapter, full parity, and value decision remain |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
 
@@ -363,7 +365,7 @@ The local reference snapshots used for this contract are:
 
 - Hermes Agent `461c4939725b8c85aebb78abeda92993a9f53efd` from 2026-08-09.
 - Codex `b9a2e400018c219e3010a5a5b8ded8645184da0b` from 2026-03-07.
-- Installed adjacent Pi core package `@earendil-works/pi-agent-core@0.82.1`.
+- Pinned Pi core package `@earendil-works/pi-agent-core@0.84.2`.
 
 These references inform mechanics. They do not become Polynet authority.
 
@@ -1350,6 +1352,43 @@ Parity must cover:
 7. Context projection and overflow retry behavior.
 8. Tool-result envelopes, hashes, receipts, and idempotent replay.
 
+Slice 8 entry evidence on 2026-08-16:
+
+1. The native behavioral baseline is merged on `origin/main` through
+   `256e8f75286cab972b0b6013513269025ba68999`. It covers final response and
+   tool-result round trips, invalid arguments, admitted-tool rejection,
+   cancellation, bounded failure/no-progress/tool-budget stops, batch
+   atomicity, and serial/parallel ordering without changing production routing.
+2. `@earendil-works/pi-agent-core@0.84.2` is exact-pinned as a development-only
+   feasibility dependency. Its only additional Pi-namespaced packages are
+   matching `pi-ai` and `pi-telemetry`; `typebox@1.3.7` is direct-pinned because
+   the public tool contract requires a TypeBox parameter schema. No Pi coding
+   agent, storage/session, prompt-loader, or extension package is installed.
+   However, the mandatory `pi-ai` dependency transitively installs Anthropic,
+   Bedrock, Google, and OpenAI provider SDKs even though this probe imports none
+   of them.
+3. A closed, model-free probe accepts only seven enumerated scenarios and owns
+   a private two-tool registry. It accepts no arbitrary executor, credentials,
+   prompt loader, storage, runtime selector, or provider network function.
+4. The probe proves exact prompt and admitted tool exposure, final response,
+   admitted execution, unknown-tool rejection by Pi, argument rejection before
+   execution, pre-aborted cancellation, sequential execution, permitted
+   parallel execution, and source-ordered tool results.
+5. All seven scenarios pass under exact Node `22.19.0` and execute successfully
+   after bundling into an unmodified default Convex action runtime on an
+   isolated local deployment. No Node action split is required. The temporary
+   Convex probe function is removed after the proof; no schema, data, route, or
+   production runtime is changed.
+6. The same bundle reached staging schema validation, but staging deployment
+   and invocation were blocked by a pre-existing `platformDiagnosticEvents`
+   row containing the retired `projectId` field. This is not a Pi bundle or
+   execution failure, but it is also not staging execution evidence. The slice
+   does not mutate unrelated staging data or restore the retired field.
+7. Admission adds 86 package-lock entries, and the pinned core declares Node
+   `>=22.19.0`. Successful default-runtime execution removes the need for a
+   Convex runtime split, but dependency footprint and the local Node floor are
+   explicit costs that Pi must offset through net code deletion before adoption.
+
 Acceptance:
 
 1. Pi passes deterministic parity without production routing, and the value
@@ -1503,11 +1542,9 @@ Closed decisions:
 
 Questions that must be answered by proof, not architectural speculation:
 
-1. Can the pinned Pi core bundle run in Convex's default action runtime, or is
-   an isolated Node 22 action adapter required?
-2. Do production records show any caller of Workspace, chat-mode, or Codex
-   runtime compatibility that source reachability does not reveal?
-3. What is the smallest server-owned canary/rollback mechanism that reuses
+1. Does the governed Pi adapter preserve every native baseline behavior while
+   deleting enough native loop machinery to reduce net maintained complexity?
+2. What is the smallest server-owned canary/rollback mechanism that reuses
    current runtime configuration?
 
 Do not build:
@@ -1523,16 +1560,15 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Begin Slice 8 with an executable behavioral baseline for the canonical native
-kernel: final response handling, tool-result round trips, bounded stop reasons,
-cancellation, argument failure, batch budget atomicity, deterministic serial
-ordering, parallel execution, and server-admitted provider tool names. Delete
-only the proven-dead serial compatibility wrapper. This baseline changes no
-production routing and adds no Pi dependency.
+Build the thinnest reversible Pi agent-core adapter behind the existing
+governed-loop interface, outside production routing. It may translate the
+already-resolved model transport, compiled context, admitted tool definitions,
+cancellation signal, and lifecycle events; it may not resolve authority, call
+providers directly, accept an arbitrary executor, persist Pi state, or create a
+second event vocabulary.
 
-Then build one reversible Pi agent-core feasibility adapter outside production
-routing. Prove actual Convex runtime compatibility, governed tool-executor
-containment, deterministic parity against the native baseline, and a net
-reduction in maintained complexity. Adopt or reject Pi from that evidence; do
-not add semantic summarization, a second prompt compiler, a second event store,
-or a permanent second runtime.
+Drive the native kernel and Pi adapter through the same deterministic fixtures,
+then measure dependency/build impact, adapter lines, removable native lines,
+and behavioral gaps. Adopt or reject Pi from that evidence. Do not add semantic
+summarization, a second prompt compiler, a second event store, a Node runtime
+split, provider migration, production routing, or a permanent second runtime.
