@@ -1,24 +1,11 @@
 import { type AuthSessionLike } from "./authSession";
 import {
   bootstrapConvexAuthenticatedClient,
-  hasConvexUrl,
   type ConvexClient,
 } from "./convexAuthenticatedClient";
 
 type ConvexThreadRow = {
   _id?: string | null;
-  context?: string | null;
-  threadKey?: string | null;
-  title?: string | null;
-  modelId?: string | null;
-  communityId?: string | null;
-  contextVersion?: number | null;
-  latestUserVisibleCompletedRunId?: string | null;
-  lastSeenUserVisibleCompletedRunId?: string | null;
-  lastSeq?: number | null;
-  createdAt?: number | null;
-  updatedAt?: number | null;
-  archivedAt?: number | null;
 };
 
 type ConvexMessageRow = {
@@ -57,18 +44,6 @@ type ConvexRuntimeRunEventRow = {
   createdAt?: number | null;
 };
 
-export type CloudThreadTransportRow = {
-  id: string;
-  title: string | null;
-  model_id: string | null;
-  community_id: string | null;
-  context_version: number;
-  agent_attention: boolean;
-  created_at: string;
-  updated_at: string;
-  last_seq: number;
-};
-
 export type CloudMessageTransportRow = {
   id: string;
   thread_id: string;
@@ -102,10 +77,6 @@ export type CloudRuntimeRunEventTransportRow = {
   created_at: string;
 };
 
-export function isConvexCloudThreadsEnabled(): boolean {
-  return hasConvexUrl();
-}
-
 async function bootstrapConvexOwnerId(session: AuthSessionLike): Promise<{
   client: ConvexClient;
   authSubject: string;
@@ -130,27 +101,6 @@ function toFiniteNumber(value: unknown, fallback = 0): number {
     if (Number.isFinite(parsed)) return parsed;
   }
   return fallback;
-}
-
-function mapConvexThreadRow(row: ConvexThreadRow): CloudThreadTransportRow | null {
-  if (!row) return null;
-  if (typeof row.archivedAt === "number" && Number.isFinite(row.archivedAt)) return null;
-  const id = String(row.threadKey ?? "").trim() || String(row._id ?? "").trim();
-  if (!id) return null;
-  return {
-    id,
-    title: typeof row.title === "string" ? row.title : null,
-    model_id: typeof row.modelId === "string" ? row.modelId : null,
-    community_id: typeof row.communityId === "string" ? row.communityId : null,
-    context_version: Math.max(0, Math.floor(toFiniteNumber(row.contextVersion, 0))),
-    agent_attention:
-      String(row.latestUserVisibleCompletedRunId ?? "").trim().length > 0 &&
-      String(row.latestUserVisibleCompletedRunId ?? "").trim() !==
-        String(row.lastSeenUserVisibleCompletedRunId ?? "").trim(),
-    created_at: toIsoStringFromMs(row.createdAt),
-    updated_at: toIsoStringFromMs(row.updatedAt),
-    last_seq: Math.max(0, Math.floor(toFiniteNumber(row.lastSeq, 0))),
-  };
 }
 
 function mapConvexMessageRow(
@@ -210,79 +160,6 @@ function mapConvexRuntimeRunEventRow(
   };
 }
 
-export async function listConvexCloudThreadRows(
-  session: AuthSessionLike,
-): Promise<CloudThreadTransportRow[] | null> {
-  const bootstrapped = await bootstrapConvexOwnerId(session);
-  if (!bootstrapped) return null;
-  const { client, authSubject } = bootstrapped;
-  const rows = (await client.query("threads:listCloudThreadsByOwner" as any, {
-    authSubject,
-    includeArchived: false,
-  })) as ConvexThreadRow[];
-  return rows
-    .map((row) => mapConvexThreadRow(row))
-    .filter((row): row is CloudThreadTransportRow => Boolean(row))
-    .sort((a, b) => Date.parse(b.updated_at) - Date.parse(a.updated_at));
-}
-
-export async function getConvexCloudThreadRowByThreadKey(params: {
-  session: AuthSessionLike;
-  threadKey: string;
-}): Promise<CloudThreadTransportRow | null> {
-  const bootstrapped = await bootstrapConvexOwnerId(params.session);
-  if (!bootstrapped) return null;
-  const { client, authSubject } = bootstrapped;
-  const key = String(params.threadKey ?? "").trim();
-  if (!key) return null;
-  const row = (await client.query("threads:getCloudThreadByThreadKey" as any, {
-    authSubject,
-    threadKey: key,
-  })) as ConvexThreadRow | null;
-  if (!row) return null;
-  return mapConvexThreadRow(row);
-}
-
-export async function listConvexCloudThreadMessagesPageByThreadKey(params: {
-  session: AuthSessionLike;
-  threadKey: string;
-  pageSize: number;
-  beforeSeq?: number;
-  maxScan?: number;
-}): Promise<CloudMessageTransportRow[] | null> {
-  const bootstrapped = await bootstrapConvexOwnerId(params.session);
-  if (!bootstrapped) return null;
-  const { client, authSubject } = bootstrapped;
-  const threadKey = String(params.threadKey ?? "").trim();
-  if (!threadKey) return [];
-
-  const thread = (await client.query("threads:getCloudThreadByThreadKey" as any, {
-    authSubject,
-    threadKey,
-  })) as ConvexThreadRow | null;
-  const internalThreadId = String(thread?._id ?? "").trim();
-  if (!internalThreadId) return [];
-
-  const maxScan = Math.max(1, Math.min(10_000, Math.floor(params.maxScan ?? 2000)));
-  const scanned = (await client.query("threads:listCloudThreadMessages" as any, {
-    authSubject,
-    threadId: internalThreadId,
-    limit: maxScan,
-  })) as ConvexMessageRow[];
-
-  const beforeSeq =
-    typeof params.beforeSeq === "number" && Number.isFinite(params.beforeSeq)
-      ? Math.floor(params.beforeSeq)
-      : null;
-  const filtered = beforeSeq === null ? scanned : scanned.filter((row) => toFiniteNumber(row.seq, -1) < beforeSeq);
-  const pageSize = Math.max(1, Math.min(5000, Math.floor(params.pageSize)));
-  const page = filtered.slice(Math.max(0, filtered.length - pageSize));
-
-  return page
-    .map((row) => mapConvexMessageRow(row, threadKey))
-    .filter((row): row is CloudMessageTransportRow => Boolean(row));
-}
-
 export async function listConvexCloudNewestThreadMessagesByThreadKey(params: {
   session: AuthSessionLike;
   threadKey: string;
@@ -310,71 +187,6 @@ export async function listConvexCloudNewestThreadMessagesByThreadKey(params: {
   return rows
     .map((row) => mapConvexMessageRow(row, threadKey))
     .filter((row): row is CloudMessageTransportRow => Boolean(row));
-}
-
-export async function listConvexCloudThreadMessagesByThreadKey(params: {
-  session: AuthSessionLike;
-  threadKey: string;
-  limit?: number;
-}): Promise<CloudMessageTransportRow[] | null> {
-  const bootstrapped = await bootstrapConvexOwnerId(params.session);
-  if (!bootstrapped) return null;
-  const { client, authSubject } = bootstrapped;
-  const threadKey = String(params.threadKey ?? "").trim();
-  if (!threadKey) return [];
-
-  const thread = (await client.query("threads:getCloudThreadByThreadKey" as any, {
-    authSubject,
-    threadKey,
-  })) as ConvexThreadRow | null;
-  const internalThreadId = String(thread?._id ?? "").trim();
-  if (!internalThreadId) return [];
-
-  const targetLimit = Math.max(1, Math.min(10_000, Math.floor(params.limit ?? 10_000)));
-  const rows: CloudMessageTransportRow[] = [];
-  let afterSeq: number | undefined;
-  while (rows.length < targetLimit) {
-    const batchLimit = Math.max(1, Math.min(2_000, targetLimit - rows.length));
-    const batch = (await client.query("threads:listCloudThreadMessages" as any, {
-      authSubject,
-      threadId: internalThreadId,
-      limit: batchLimit,
-      ...(typeof afterSeq === "number" ? { afterSeq } : null),
-    })) as ConvexMessageRow[];
-    if (!Array.isArray(batch) || batch.length === 0) break;
-
-    let maxSeq = Number.NEGATIVE_INFINITY;
-    for (const row of batch) {
-      const mapped = mapConvexMessageRow(row, threadKey);
-      if (mapped) rows.push(mapped);
-      maxSeq = Math.max(maxSeq, toFiniteNumber(row.seq, Number.NEGATIVE_INFINITY));
-      if (rows.length >= targetLimit) break;
-    }
-
-    if (batch.length < batchLimit) break;
-    if (!Number.isFinite(maxSeq) || maxSeq < 0) break;
-    if (typeof afterSeq === "number" && maxSeq <= afterSeq) break;
-    afterSeq = Math.floor(maxSeq);
-  }
-
-  return rows;
-}
-
-export async function getConvexCloudRunningRuntimeRunByThreadKey(params: {
-  session: AuthSessionLike;
-  threadKey: string;
-}): Promise<CloudRuntimeRunTransportRow | null> {
-  const bootstrapped = await bootstrapConvexOwnerId(params.session);
-  if (!bootstrapped) return null;
-  const { client, authSubject } = bootstrapped;
-  const threadKey = String(params.threadKey ?? "").trim();
-  if (!threadKey) return null;
-  const row = (await client.query("threads:getCloudRunningRuntimeRunByThreadKey" as any, {
-    authSubject,
-    threadKey,
-  })) as ConvexRuntimeRunRow | null;
-  if (!row) return null;
-  return mapConvexRuntimeRunRow(row);
 }
 
 export async function getConvexCloudRuntimeRunByRunId(params: {

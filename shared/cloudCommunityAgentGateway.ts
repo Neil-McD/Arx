@@ -4,11 +4,6 @@ type CloudCommunityAgentGatewayParams<SessionT> = {
   session: SessionT;
 };
 
-type RawCloudCommunityAgentPromptRow = {
-  community_system_prompt?: unknown;
-  system_prompt?: unknown;
-};
-
 type CloudCommunityAgentConfigMutationRow = {
   id?: unknown;
   updated_at?: unknown;
@@ -46,50 +41,10 @@ function coerceObjectRows<TRow>(payload: unknown): TRow[] {
   return [payload as TRow];
 }
 
-export type CloudCommunityAgentSystemPromptResult = {
-  communitySystemPrompt: string;
-};
-
 export type CloudCommunityAgentConfigMutationResult = {
   id: string;
   updated_at: string;
 };
-
-export async function fetchActiveCloudCommunityAgentSystemPrompt<SessionT>(
-  params: CloudCommunityAgentGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudCommunityAgentSystemPromptResult | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = (await client.query("communityAgent:getActiveCommunityAgentSystemPrompt" as any, {
-    authSubject,
-    communityId: params.communityId,
-  })) as RawCloudCommunityAgentPromptRow | null;
-  const row = firstObjectRow(payload) as RawCloudCommunityAgentPromptRow | null;
-  const communitySystemPrompt =
-    toOptionalString(row?.community_system_prompt) ?? toOptionalString(row?.system_prompt);
-  if (!communitySystemPrompt) return null;
-  return {
-    communitySystemPrompt,
-  };
-}
-
-export async function fetchActiveCloudCommunityAgentLanding<SessionT>(
-  params: CloudCommunityAgentGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<unknown | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityAgent:getActiveCommunityAgentLanding" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  const row = firstObjectRow(payload);
-  if (row && Object.prototype.hasOwnProperty.call(row, "landing_json")) {
-    return row.landing_json ?? null;
-  }
-  return payload ?? null;
-}
 
 export async function fetchCloudCommunityAgentConfig<SessionT, TConfig = unknown>(
   params: CloudCommunityAgentGatewayParams<SessionT> & {

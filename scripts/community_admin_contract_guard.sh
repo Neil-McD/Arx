@@ -164,16 +164,16 @@ require_block_no_match() {
   echo "OK: $description"
 }
 
-echo "[1/12] Ensuring admin gateway forwards authSubject for member/admin queries..."
-require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
-  'export async function listCloudCommunityMembershipAdminPage<[\s\S]*?client\.query\("communityAdmin:listCommunityMembershipsAdminPage" as any, \{\s*authSubject,\s*communityId:' \
-  "paginated members admin gateway forwards authSubject"
+echo "[1/12] Ensuring live admin gateways forward authSubject..."
 require_multiline_match "$MEMBERSHIP_GATEWAY_FILE" \
   'export async function countCloudCommunityMembershipRows<[\s\S]*?client\.mutation\("communityAdmin:syncCommunityMembershipCount" as any, \{\s*authSubject,\s*communityId:' \
   "member count gateway forwards authSubject through durable count sync"
-require_multiline_match "$ADMIN_GATEWAY_FILE" \
-  'export async function listCloudCommunityRevenueSeriesRows<[\s\S]*?client\.query\("communityAdmin:listCommunityRevenueSeries" as any, \{\s*authSubject,\s*communityId:' \
-  "revenue series gateway forwards authSubject"
+require_no_match "$MEMBERSHIP_GATEWAY_FILE" \
+  'listCloudCommunityMembershipAdminPage|listCloudCommunityMembershipCreatedAtRows' \
+  "deleted roster and created-at client wrappers stay extinct"
+require_no_match "$ADMIN_GATEWAY_FILE" \
+  'listCloudCommunityRevenueSeriesRows|listCloudCommunityFunnelVisitCreatedAtRows|fetchCloudCommunityAnalyticsSummary|countCloudCommunityResourceRows' \
+  "deleted analytics client wrappers stay extinct"
 
 echo "[2/12] Ensuring admin/member analytics queries accept authSubject..."
 require_multiline_match "$COMMUNITY_ADMIN_FILE" \

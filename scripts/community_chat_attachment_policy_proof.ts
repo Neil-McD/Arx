@@ -5,7 +5,6 @@ import { join } from "node:path";
 const root = process.cwd();
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const communityChat = readFileSync(join(root, "convex/communityChat.ts"), "utf8");
-const gateway = readFileSync(join(root, "shared/cloudCommunityChatGateway.ts"), "utf8");
 const composerController = readFileSync(join(root, "apps/web/src/controllers/useWebCommunityChatController.ts"), "utf8");
 
 function extractNumberConst(source: string, name: string): number {
@@ -60,17 +59,6 @@ assert.match(
   communityChat,
   /normalizeStoredChatAttachments\(\(args\.contentJson as Record<string, unknown>\)\.attachments, \{ enforceWritePolicy: true \}\)/,
   "message edits should use write-enforced attachment normalization",
-);
-
-assert.equal(
-  extractNumberConst(gateway, "MAX_REACTION_MESSAGE_IDS_PER_REQUEST"),
-  extractNumberConst(communityChat, "MAX_REACTION_MESSAGE_IDS_PER_REQUEST"),
-  "live reaction subscription cap should match the backend reaction read cap",
-);
-assert.match(
-  gateway,
-  /\.slice\(0, MAX_REACTION_MESSAGE_IDS_PER_REQUEST\)/,
-  "live reaction subscriptions should use the named reaction cap",
 );
 
 assert.match(

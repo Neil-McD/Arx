@@ -13,27 +13,6 @@ type CloudCommunityAdminGatewayParams<SessionT> = {
   session: SessionT;
 };
 
-export type CloudCommunityRevenueSeriesRow = {
-  bucket_start: string;
-  net_base_units: number | string | null;
-  currency: string | null;
-  currency_decimals: number | null;
-};
-
-export type CloudCommunityCreatedAtRow = {
-  created_at: string;
-};
-
-export type CloudCommunityAnalyticsSummaryRow = {
-  page_visits_window: number | null;
-  total_members: number | null;
-  new_members_window: number | null;
-  conversion_rate_window: number | null;
-  mrr_base_units: number | null;
-  currency: string | null;
-  currency_decimals: number | null;
-};
-
 export type CloudCommunityMemberBillingHistoryEvent = {
   id: string;
   kind: "checkout" | "subscription" | "subscription_event";
@@ -942,19 +921,6 @@ export async function listCloudCommunitySourceCrawlJobs<SessionT>(
   };
 }
 
-export async function loadCloudCommunityGoogleDriveSourceConnection<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudGoogleDriveSourceConnectionStatus> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityResources:getGoogleDriveSourceConnectionStatus" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return normalizeGoogleDriveSourceConnection(payload);
-}
-
 export async function beginCloudCommunityGoogleDriveSourceOAuth<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -1114,19 +1080,6 @@ export async function importCloudCommunityGoogleDriveSourceFiles<SessionT>(
           .filter((failure) => failure.id)
       : [],
   };
-}
-
-export async function loadCloudCommunityGitHubSourceConnection<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-  },
-): Promise<CloudGitHubSourceConnectionStatus> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityResources:getGitHubSourceConnectionStatus" as any, {
-    authSubject,
-    communityId: params.communityId,
-  });
-  return normalizeGitHubSourceConnection(payload);
 }
 
 export async function beginCloudCommunityGitHubSourceOAuth<SessionT>(
@@ -1353,53 +1306,6 @@ export async function prepareCloudCommunityBrandingField<SessionT>(
   };
 }
 
-export async function listCloudCommunityRevenueSeriesRows<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    range: string;
-  },
-): Promise<CloudCommunityRevenueSeriesRow[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityAdmin:listCommunityRevenueSeries" as any, {
-    authSubject,
-    communityId: params.communityId,
-    range: params.range,
-  });
-  return coerceGatewayRows<CloudCommunityRevenueSeriesRow>(payload);
-}
-
-export async function listCloudCommunityFunnelVisitCreatedAtRows<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    sinceIso?: string | null;
-    limit?: number;
-  },
-): Promise<CloudCommunityCreatedAtRow[]> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityAdmin:listCommunityFunnelVisitCreatedAtRows" as any, {
-    authSubject,
-    communityId: params.communityId,
-    sinceIso: params.sinceIso ?? null,
-    limit: params.limit,
-  });
-  return coerceGatewayRows<CloudCommunityCreatedAtRow>(payload);
-}
-
-export async function fetchCloudCommunityAnalyticsSummary<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    range: string;
-  },
-): Promise<CloudCommunityAnalyticsSummaryRow | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  const payload = await client.query("communityAdmin:getCommunityAnalyticsSummary" as any, {
-    authSubject,
-    communityId: params.communityId,
-    range: params.range,
-  });
-  return firstGatewayRow<CloudCommunityAnalyticsSummaryRow>(payload);
-}
-
 export async function fetchCloudCommunityAnalyticsSnapshot<SessionT>(
   params: CloudCommunityAdminGatewayParams<SessionT> & {
     communityId: string;
@@ -1474,25 +1380,6 @@ export async function banCloudCommunityMember<SessionT>(
     communityId: params.communityId,
     targetMembershipId: params.membershipId,
   });
-}
-
-export async function countCloudCommunityResourceRows<SessionT>(
-  params: CloudCommunityAdminGatewayParams<SessionT> & {
-    communityId: string;
-    sinceIso?: string | null;
-  },
-): Promise<number | null> {
-  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
-  try {
-    const payload = await client.query("communityResources:countCommunityResources" as any, {
-      authSubject,
-      communityId: params.communityId,
-      sinceIso: params.sinceIso ?? null,
-    });
-    return parseGatewayNumberLike(payload);
-  } catch {
-    return null;
-  }
 }
 
 export async function listCloudCommunityJoinRequestRows<SessionT, TJoinRequest = unknown>(
