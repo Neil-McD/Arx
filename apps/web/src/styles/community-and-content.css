@@ -3204,7 +3204,11 @@
 }
 
 .community-channel-pinned-root {
-  --community-channel-pinned-surface: color-mix(in srgb, var(--bg-workspace) 92%, var(--accent) 8%);
+  --community-channel-pinned-surface: color-mix(
+    in srgb,
+    var(--bg-workspace) 92%,
+    var(--accent-attention) 8%
+  );
   position: relative;
   flex: 0 0 auto;
   min-width: 0;
@@ -3296,7 +3300,7 @@
   background: var(--community-channel-pinned-surface);
   backdrop-filter: blur(16px) saturate(130%);
   -webkit-backdrop-filter: blur(16px) saturate(130%);
-  color: var(--accent);
+  color: var(--accent-attention);
   font: inherit;
   font-size: 12px;
   font-weight: 650;
@@ -3304,7 +3308,7 @@
 }
 
 .community-channel-pinned-root-open:focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }
 
@@ -3322,7 +3326,7 @@
   justify-content: center;
   width: 28px;
   height: 28px;
-  color: var(--accent);
+  color: var(--accent-attention);
   pointer-events: none;
 }
 
@@ -3338,7 +3342,7 @@
 .community-channel-pinned-root-pin.is-action:hover:not(:disabled),
 .community-channel-pinned-root-pin.is-action:focus-visible {
   background: var(--hover-overlay);
-  color: var(--accent);
+  color: var(--accent-attention);
 }
 
 .community-channel-pinned-root-pin.is-action:disabled {

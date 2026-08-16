@@ -394,7 +394,7 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root\s*\{[\s\S]*?--community-channel-pinned-surface:\s*color-mix\(in srgb, var\(--bg-workspace\) 92%, var\(--accent\) 8%\);[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(23dvh, 196px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?border-bottom:\s*2px solid var\(--community-chat-surface\);[\s\S]*?background:\s*var\(--community-channel-pinned-surface\);/,
+  /\.community-channel-pinned-root\s*\{[\s\S]*?--community-channel-pinned-surface:\s*color-mix\(\s*in srgb,\s*var\(--bg-workspace\) 92%,\s*var\(--accent-attention\) 8%\s*\);[\s\S]*?position:\s*relative;[\s\S]*?max-block-size:\s*min\(23dvh, 196px\);[\s\S]*?grid-template-rows:\s*minmax\(0, 1fr\);[\s\S]*?overflow:\s*hidden;[\s\S]*?border-bottom:\s*2px solid var\(--community-chat-surface\);[\s\S]*?background:\s*var\(--community-channel-pinned-surface\);/,
 );
 assertMatches(
   interactionStylesPath,
@@ -444,7 +444,7 @@ assertNotMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root-pin\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?color:\s*var\(--accent\);[\s\S]*?pointer-events:\s*none;/,
+  /\.community-channel-pinned-root-pin\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?color:\s*var\(--accent-attention\);[\s\S]*?pointer-events:\s*none;/,
 );
 assertMatches(
   interactionStylesPath,
@@ -469,7 +469,12 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-channel-pinned-root-open\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*18px;[\s\S]*?bottom:\s*10px;[\s\S]*?padding:\s*4px 8px;[\s\S]*?border:\s*1px solid transparent;[\s\S]*?border-radius:\s*10px;[\s\S]*?background:\s*var\(--community-channel-pinned-surface\);[\s\S]*?backdrop-filter:\s*blur\(16px\) saturate\(130%\);[\s\S]*?-webkit-backdrop-filter:\s*blur\(16px\) saturate\(130%\);[\s\S]*?color:\s*var\(--accent\);/,
+  /\.community-channel-pinned-root-open\s*\{[\s\S]*?position:\s*absolute;[\s\S]*?right:\s*18px;[\s\S]*?bottom:\s*10px;[\s\S]*?padding:\s*4px 8px;[\s\S]*?border:\s*1px solid transparent;[\s\S]*?border-radius:\s*10px;[\s\S]*?background:\s*var\(--community-channel-pinned-surface\);[\s\S]*?backdrop-filter:\s*blur\(16px\) saturate\(130%\);[\s\S]*?-webkit-backdrop-filter:\s*blur\(16px\) saturate\(130%\);[\s\S]*?color:\s*var\(--accent-attention\);/,
+);
+assertMatches(
+  interactionStylesPath,
+  interactionStyles,
+  /\.community-channel-pinned-root-open:focus-visible\s*\{[^}]*outline:\s*2px solid var\(--focus-ring\);/,
 );
 assertNotMatches(
   interactionStylesPath,
