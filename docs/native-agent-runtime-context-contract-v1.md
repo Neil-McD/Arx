@@ -308,7 +308,7 @@ Program status:
 | 2 | Canonical Concierge context and receipt | Complete |
 | 3 | Canonical Steward context and receipt | Complete |
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
-| 5 | Workspace and Codex runtime deletion | 5A-5D production-proven; 5E Release A implemented locally and awaiting two-release production retirement |
+| 5 | Workspace and Codex runtime deletion | 5A-5F complete and production-proven |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
