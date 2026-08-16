@@ -12,6 +12,7 @@ export type CommunitySettingsSavedSnapshot = {
   oneLiner: string;
   about: string;
   visibility: "published" | "unlisted";
+  conciergeWelcomesEnabled: boolean;
   avatarUrl: string | null;
   avatarStorageId: string | null;
   avatarFocusX: number;
@@ -36,6 +37,8 @@ export function useWebCommunitySettingsUiController() {
   const [communitySettingsAbout, setCommunitySettingsAbout] = useState("");
   const [communitySettingsVisibility, setCommunitySettingsVisibility] =
     useState("unlisted");
+  const [communitySettingsConciergeWelcomesEnabled, setCommunitySettingsConciergeWelcomesEnabled] =
+    useState(true);
   const [communitySettingsAvatarUrl, setCommunitySettingsAvatarUrl] = useState<string | null>(null);
   const [communitySettingsAvatarFocusX, setCommunitySettingsAvatarFocusX] = useState(0.5);
   const [communitySettingsAvatarFocusY, setCommunitySettingsAvatarFocusY] = useState(0.5);
@@ -91,6 +94,7 @@ export function useWebCommunitySettingsUiController() {
     setCommunitySettingsOneLiner("");
     setCommunitySettingsAbout("");
     setCommunitySettingsVisibility("unlisted");
+    setCommunitySettingsConciergeWelcomesEnabled(true);
     setCommunitySettingsAvatarUrl(null);
     setCommunitySettingsAvatarFocusX(0.5);
     setCommunitySettingsAvatarFocusY(0.5);
@@ -132,6 +136,7 @@ export function useWebCommunitySettingsUiController() {
     setCommunitySettingsOneLiner(snapshot.oneLiner);
     setCommunitySettingsAbout(snapshot.about);
     setCommunitySettingsVisibility(snapshot.visibility);
+    setCommunitySettingsConciergeWelcomesEnabled(snapshot.conciergeWelcomesEnabled);
     setCommunitySettingsAvatarUrl(snapshot.avatarUrl);
     setCommunitySettingsAvatarFocusX(snapshot.avatarFocusX);
     setCommunitySettingsAvatarFocusY(snapshot.avatarFocusY);
@@ -195,6 +200,7 @@ export function useWebCommunitySettingsUiController() {
       communitySettingsSlug !== saved.slug ||
       communitySettingsOneLiner !== saved.oneLiner ||
       communitySettingsVisibility !== saved.visibility ||
+      communitySettingsConciergeWelcomesEnabled !== saved.conciergeWelcomesEnabled ||
       communitySettingsAvatarUrl !== saved.avatarUrl ||
       changedNumber(communitySettingsAvatarFocusX, saved.avatarFocusX) ||
       changedNumber(communitySettingsAvatarFocusY, saved.avatarFocusY) ||
@@ -223,6 +229,7 @@ export function useWebCommunitySettingsUiController() {
     communitySettingsPricingMode,
     communitySettingsSlug,
     communitySettingsVisibility,
+    communitySettingsConciergeWelcomesEnabled,
     getSavedCommunitySettingsSnapshot,
   ]);
 
@@ -237,6 +244,8 @@ export function useWebCommunitySettingsUiController() {
     setCommunitySettingsAbout,
     communitySettingsVisibility,
     setCommunitySettingsVisibility,
+    communitySettingsConciergeWelcomesEnabled,
+    setCommunitySettingsConciergeWelcomesEnabled,
     communitySettingsAvatarUrl,
     setCommunitySettingsAvatarUrl,
     communitySettingsAvatarFocusX,

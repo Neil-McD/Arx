@@ -49,6 +49,7 @@ export type CommunityLike = {
   bannerZoom?: number;
   brandingRevision?: number;
   settingsRevision?: number;
+  conciergeWelcomesEnabled?: boolean;
   visibility: "published" | "unlisted";
   entryPolicy?: CommunityEntryPolicy;
   activeMemberCount?: number;

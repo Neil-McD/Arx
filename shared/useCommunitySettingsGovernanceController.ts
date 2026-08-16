@@ -47,6 +47,7 @@ type UseCommunitySettingsGovernanceControllerArgs<SessionT extends SessionLike> 
   communitySettingsOneLiner: string;
   communitySettingsAbout: string;
   communitySettingsVisibility: string;
+  communitySettingsConciergeWelcomesEnabled: boolean;
   communitySettingsAvatarUrl: string | null;
   communitySettingsAvatarFocusX: number;
   communitySettingsAvatarFocusY: number;
@@ -308,6 +309,7 @@ export function useCommunitySettingsGovernanceController<SessionT extends Sessio
         bannerFocusY: current.communitySettingsBannerFocusY,
         bannerZoom: current.communitySettingsBannerZoom,
         visibility,
+        conciergeWelcomesEnabled: current.communitySettingsConciergeWelcomesEnabled,
         monthlyAmountBaseUnits: monthlyAmount,
         annualAmountBaseUnits: annualAmount,
       });

@@ -1035,6 +1035,9 @@ export default defineSchema({
     bannerZoom: v.optional(v.number()),
     brandingRevision: v.optional(v.number()),
     settingsRevision: v.optional(v.number()),
+    // Absent means enabled. This keeps the founder-owned concierge behavior
+    // default-on without requiring a migration for existing communities.
+    conciergeWelcomesEnabled: v.optional(v.boolean()),
     visibility: v.union(v.literal("published"), v.literal("unlisted")),
     inferenceFundingPolicy: v.literal("managed_required"),
     entryPolicy: v.union(
@@ -1113,7 +1116,28 @@ export default defineSchema({
     .index("by_user_createdAt", ["userId", "createdAt"])
     .index("by_community", ["communityId"])
     .index("by_community_user", ["communityId", "userId"])
+    .index("by_community_active_activatedAt", ["communityId", "active", "activatedAt"])
     .index("by_community_createdAt", ["communityId", "createdAt"]),
+
+  // Event-driven control receipts for grouped member welcomes. Rows exist only
+  // when a real membership activation opens a batch; there is no polling cron.
+  communityMemberWelcomeBatches: defineTable({
+    communityId: v.id("communities"),
+    lifecycleGeneration: v.number(),
+    windowStartAt: v.number(),
+    dueAt: v.number(),
+    status: v.union(
+      v.literal("scheduled"),
+      v.literal("published"),
+      v.literal("skipped"),
+    ),
+    publishedRootId: v.optional(v.id("communityInteractionRoots")),
+    skipReason: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community_status_dueAt", ["communityId", "status", "dueAt"])
+    .index("by_community_dueAt", ["communityId", "dueAt"]),
 
   communityOnboardingConfigs: defineTable({
     communityId: v.id("communities"),

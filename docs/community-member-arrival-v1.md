@@ -5,8 +5,8 @@
 A member authenticates, completes the required platform profile, receives an
 authorized membership, lands in the community's canonical General channel, and
 uses the ordinary product. Member entry does not create a separate onboarding
-session or require an orientation, first post, agent turn, acknowledgement, or
-MCP handoff.
+session or block on orientation, first post, agent turn, acknowledgement, or MCP
+handoff.
 
 Community membership is canonical access truth. A `member_joined` activity row
 is an ambient, recoverable projection of one real inactive-to-active membership
@@ -46,11 +46,21 @@ grouped visually at read time; human, agent, or system posts break the group.
 The activity failure path stays independent from chat. Arrival rows do not
 create unread-message state, replies, reactions, notifications, or agent turns.
 
+## Post-admission concierge
+
+Member entry remains complete as soon as membership activates. Separately, one
+bounded, founder-controlled concierge batch may project newly activated members
+into the canonical General conversation after a twelve-hour collection window.
+That projection is defined by
+[`community-member-concierge-welcome-v1.md`](./community-member-concierge-welcome-v1.md).
+It cannot grant, revoke, delay, or repair membership.
+
 ## Deliberately absent
 
-No scheduler, poller, inference, notification, concierge welcome, founder
-setting, workflow execution, forced introduction, onboarding preview, or MCP
-handoff is part of member entry.
+No poller, inference, email notification, workflow execution, forced
+introduction, onboarding preview, or MCP handoff is part of member entry. The
+post-admission concierge projection is optional community behavior, not an
+entry requirement or onboarding state machine.
 
 The retained `communityOnboarding` operations are authenticated, stateless
 compatibility tombstones for cached clients. They never read or write the

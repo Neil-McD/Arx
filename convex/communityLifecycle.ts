@@ -237,6 +237,7 @@ async function mapCommunitySettingsSnapshot(
   updated_at: string;
   branding_revision: number;
   settings_revision: number;
+  concierge_welcomes_enabled: boolean;
   visual_identity: ReturnType<typeof buildCommunityVisualIdentity>;
   pricing: {
     mode: "free" | "monthly" | "annual";
@@ -273,6 +274,7 @@ async function mapCommunitySettingsSnapshot(
     updated_at: record.updated_at,
     branding_revision: record.branding_revision,
     settings_revision: record.settings_revision,
+    concierge_welcomes_enabled: community.conciergeWelcomesEnabled !== false,
     visual_identity: record.visual_identity,
     pricing: {
       mode,
@@ -350,6 +352,10 @@ function resolveCommunitySettingsState(args: any, community: CommunityLike, curr
   const nextVisibility = args.visibility !== undefined
     ? normalizeVisibility(args.visibility)
     : community.visibility;
+  const nextConciergeWelcomesEnabled =
+    typeof args.conciergeWelcomesEnabled === "boolean"
+      ? args.conciergeWelcomesEnabled
+      : community.conciergeWelcomesEnabled !== false;
 
   return {
     normalizedSlug,
@@ -373,6 +379,7 @@ function resolveCommunitySettingsState(args: any, community: CommunityLike, curr
     nextBannerFocusY,
     nextBannerZoom,
     nextVisibility,
+    nextConciergeWelcomesEnabled,
     identityChanged: nextName !== community.name || normalizedSlug !== community.slug,
     brandingChanged:
       !sameOptionalText(nextAvatarUrl, community.avatarUrl) ||
@@ -386,6 +393,8 @@ function resolveCommunitySettingsState(args: any, community: CommunityLike, curr
       !sameNumber(nextBannerFocusY, normalizeBannerFocus(community.bannerFocusY)) ||
       !sameNumber(nextBannerZoom, normalizeBannerZoom(community.bannerZoom)),
     visibilityChanged: nextVisibility !== community.visibility,
+    conciergeWelcomesChanged:
+      nextConciergeWelcomesEnabled !== (community.conciergeWelcomesEnabled !== false),
   };
 }
 
@@ -441,6 +450,13 @@ async function requireCommunitySettingsPermissions(args: {
     });
   }
   if (args.state.visibilityChanged) {
+    await requireCommunityOwner({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+    });
+  }
+  if (args.state.conciergeWelcomesChanged) {
     await requireCommunityOwner({
       ctx: args.ctx,
       communityId: args.communityId,
@@ -814,6 +830,7 @@ export const saveCommunitySettings = mutation({
     bannerFocusY: v.optional(v.number()),
     bannerZoom: v.optional(v.number()),
     visibility: v.optional(v.string()),
+    conciergeWelcomesEnabled: v.optional(v.boolean()),
     monthlyAmountBaseUnits: v.optional(v.union(v.number(), v.null())),
     annualAmountBaseUnits: v.optional(v.union(v.number(), v.null())),
     currency: v.optional(v.string()),
@@ -875,6 +892,7 @@ export const saveCommunitySettings = mutation({
       bannerZoom: settingsState.nextBannerZoom,
       visibility: settingsState.nextVisibility,
       entryPolicy: settingsState.nextEntryPolicy,
+      conciergeWelcomesEnabled: settingsState.nextConciergeWelcomesEnabled,
       ...(
         settingsState.identityChanged || settingsState.brandingChanged
           ? { brandingRevision: nextCommunityBrandingRevision(community) }

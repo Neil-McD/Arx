@@ -29,7 +29,9 @@ this journey:
 - `community-agent-cognition-contract-v1.md` owns runtime, funding, tools,
   memory, and cognition mechanics; and
 - `community-member-arrival-v1.md` owns the irreducible member-entry and
-  passive-arrival boundary, not founder post-purchase launch.
+  passive-arrival boundary, not founder post-purchase launch; and
+- `community-member-concierge-welcome-v1.md` owns the bounded post-admission
+  grouped welcome that enters this same canonical conversation path.
 
 Supporting contracts may make implementation more restrictive for safety, but
 must not silently weaken this experience. Change this contract explicitly

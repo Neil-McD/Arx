@@ -44,6 +44,7 @@ function toSavedSnapshot(
     oneLiner: result.one_liner ?? "",
     about: result.about ?? "",
     visibility: result.visibility,
+    conciergeWelcomesEnabled: result.concierge_welcomes_enabled,
     avatarUrl: result.avatar_url,
     avatarStorageId: result.avatar_storage_id,
     avatarFocusX: result.avatar_focus_x,
@@ -195,6 +196,8 @@ export function useWebCommunitySettingsController(params: {
     communitySettingsOneLiner: settingsUi.communitySettingsOneLiner,
     communitySettingsAbout: settingsUi.communitySettingsAbout,
     communitySettingsVisibility: settingsUi.communitySettingsVisibility,
+    communitySettingsConciergeWelcomesEnabled:
+      settingsUi.communitySettingsConciergeWelcomesEnabled,
     communitySettingsAvatarUrl: settingsUi.communitySettingsAvatarUrl,
     communitySettingsAvatarFocusX: settingsUi.communitySettingsAvatarFocusX,
     communitySettingsAvatarFocusY: settingsUi.communitySettingsAvatarFocusY,

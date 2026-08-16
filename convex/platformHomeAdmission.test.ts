@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS } from "./communityJoinRequestCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
@@ -63,6 +63,7 @@ async function fixture(t: Runtime, suffix: string) {
       visibility: "published",
       entryPolicy: "open",
       inferenceFundingPolicy: "managed_required",
+      conciergeWelcomesEnabled: false,
       activeMemberCount: 1,
       createdAt: nowMs,
       updatedAt: nowMs,
@@ -204,11 +205,17 @@ describe("platform-home admission authority", () => {
     const f = await fixture(t, "cooldown");
     const activated = await activate(t, f);
     await revoke(t, f, activated.membership._id);
-    await expect(
-      t.withIdentity({ subject: f.memberSubject }).mutation(
-        api.communityPublic.joinPublicCommunity,
-        { communityId: f.communityId },
-      ),
-    ).resolves.toMatchObject({ outcome: "approval_denied" });
+    vi.useFakeTimers();
+    vi.setSystemTime(f.nowMs + 3);
+    try {
+      await expect(
+        t.withIdentity({ subject: f.memberSubject }).mutation(
+          api.communityPublic.joinPublicCommunity,
+          { communityId: f.communityId },
+        ),
+      ).resolves.toMatchObject({ outcome: "approval_denied" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

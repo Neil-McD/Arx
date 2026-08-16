@@ -8,6 +8,7 @@ import {
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
+import { registerCommunityMemberWelcomeActivationCore } from "./communityMemberWelcome";
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -112,6 +113,14 @@ export async function activateCommunityMembershipCore(args: {
     dedupeKey: `member_joined:${String(membershipId)}:${activationSequence}`,
     nowMs: args.nowMs,
   });
+  try {
+    await registerCommunityMemberWelcomeActivationCore(args.ctx, {
+      membershipId,
+      activationSequence,
+    });
+  } catch (error) {
+    console.warn("community_member_welcome_registration_failed", error);
+  }
   await deleteCommunityJoinRequestByPair({
     ctx: args.ctx,
     communityId: args.communityId,

@@ -70,6 +70,7 @@ export type CloudCommunitySettingsSaveResult = {
   updated_at: string;
   branding_revision?: number | null;
   settings_revision: number;
+  concierge_welcomes_enabled: boolean;
   pricing: {
     mode: "free" | "monthly" | "annual";
     monthly_amount_base_units: number | null;
@@ -167,6 +168,7 @@ export function parseCloudCommunitySettingsSnapshot(
     updated_at: updatedAt,
     branding_revision: brandingRevision,
     settings_revision: Math.floor(Number(settingsRevision)),
+    concierge_welcomes_enabled: row.concierge_welcomes_enabled !== false,
     pricing: {
       mode: pricingMode as "free" | "monthly" | "annual",
       monthly_amount_base_units: nullableAmount(
@@ -1840,6 +1842,7 @@ export async function saveCloudCommunitySettings<SessionT>(
     bannerFocusY?: number | null;
     bannerZoom?: number | null;
     visibility: string;
+    conciergeWelcomesEnabled: boolean;
     monthlyAmountBaseUnits: number | null;
     annualAmountBaseUnits: number | null;
   },
@@ -1866,6 +1869,7 @@ export async function saveCloudCommunitySettings<SessionT>(
     bannerFocusY: params.bannerFocusY ?? 0.5,
     bannerZoom: params.bannerZoom ?? 1,
     visibility: params.visibility,
+    conciergeWelcomesEnabled: params.conciergeWelcomesEnabled,
     monthlyAmountBaseUnits: params.monthlyAmountBaseUnits,
     annualAmountBaseUnits: params.annualAmountBaseUnits,
     currency: "usd",

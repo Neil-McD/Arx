@@ -83,6 +83,7 @@ type WebCommunitySettingsSectionProps = {
     communitySettingsOneLiner: string;
     communitySettingsAbout: string;
     communitySettingsVisibility: string;
+    communitySettingsConciergeWelcomesEnabled: boolean;
     communitySettingsPricingMode: CommunityPricingMode;
     communitySettingsPriceUsdMonthly: string;
     communitySettingsPriceUsdAnnual: string;
@@ -127,6 +128,7 @@ type WebCommunitySettingsSectionProps = {
     setCommunitySettingsOneLiner: (value: string) => void;
     setCommunitySettingsAbout: (value: string) => void;
     setCommunitySettingsVisibility: (value: string) => void;
+    setCommunitySettingsConciergeWelcomesEnabled: (value: boolean) => void;
     setCommunitySettingsPricingMode: (value: CommunityPricingMode) => void;
     setCommunitySettingsPriceUsdMonthly: (value: string) => void;
     setCommunitySettingsPriceUsdAnnual: (value: string) => void;
@@ -444,6 +446,34 @@ function CommunityProfileSettingsSection({ state, actions }: SharedSettingsProps
             actions.markCommunitySettingsDirty();
           }}
         />
+      </label>
+    </div>
+  );
+}
+
+function CommunityConciergeSettingsSection({ state, actions }: SharedSettingsProps) {
+  return (
+    <div className="settings-section">
+      <div className="settings-section-title">Member welcomes</div>
+      <div className="settings-section-desc">
+        Let the community concierge welcome new members together after they join.
+      </div>
+      <label className="community-member-toggle" style={{ marginTop: 16 }}>
+        <input
+          type="checkbox"
+          checked={state.communitySettingsConciergeWelcomesEnabled}
+          onChange={(event) => {
+            actions.setCommunitySettingsConciergeWelcomesEnabled(event.target.checked);
+            actions.markCommunitySettingsDirty();
+          }}
+        />
+        <span className="community-member-toggle-copy">
+          <strong>Concierge welcomes</strong>
+          <span>
+            Groups recent arrivals into one welcome post, at most once every 12 hours.
+          </span>
+        </span>
+        <span className="community-member-switch" aria-hidden="true" />
       </label>
     </div>
   );
@@ -867,6 +897,9 @@ export function WebCommunitySettingsSection(props: WebCommunitySettingsSectionPr
                   ) : null}
                   <div className="community-general-settings-secondary">
                     <CommunityProfileSettingsSection state={state} actions={actions} />
+                    {isOwnerSettingsLayer ? (
+                      <CommunityConciergeSettingsSection state={state} actions={actions} />
+                    ) : null}
                     <CommunityMonetizationConfigSection
                       activeCommunity={resolvedActiveCommunity}
                       accountCommerceStatus={accountCommerceStatus}

@@ -106,6 +106,7 @@ test("authorized managers read one canonical settings snapshot", async () => {
   ).resolves.toMatchObject({
     community_id: String(fixture.communityId),
     settings_revision: 0,
+    concierge_welcomes_enabled: true,
     about: "Initial settings snapshot.",
     pricing: {
       mode: "free",
@@ -125,6 +126,40 @@ test("authorized managers read one canonical settings snapshot", async () => {
       communityId: fixture.communityId,
     }),
   ).rejects.toThrow("community_forbidden");
+});
+
+test("only the owner can change the versioned concierge welcome switch", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asAdmin = t.withIdentity({ subject: ADMIN_SUBJECT });
+
+  await expect(asOwner.mutation(
+    api.communityLifecycle.saveCommunitySettings,
+    {
+      ...settingsInput(fixture.communityId, 0, "Concierge disabled by owner."),
+      conciergeWelcomesEnabled: false,
+    },
+  )).resolves.toMatchObject({
+    settings_revision: 1,
+    concierge_welcomes_enabled: false,
+  });
+
+  await expect(asAdmin.mutation(
+    api.communityLifecycle.saveCommunitySettings,
+    {
+      ...settingsInput(fixture.communityId, 1, "Admin cannot re-enable concierge."),
+      conciergeWelcomesEnabled: true,
+    },
+  )).rejects.toThrow("community_owner_required");
+
+  await expect(asAdmin.mutation(
+    api.communityLifecycle.saveCommunitySettings,
+    settingsInput(fixture.communityId, 1, "Admin can still edit permitted settings."),
+  )).resolves.toMatchObject({
+    settings_revision: 2,
+    concierge_welcomes_enabled: false,
+  });
 });
 
 test("settings saves reject stale revisions without changing canonical state", async () => {

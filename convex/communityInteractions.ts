@@ -1,6 +1,6 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
-import { v } from "convex/values";
+import { v, type Infer } from "convex/values";
 import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
@@ -42,6 +42,7 @@ import {
   buildCommunityFounderWelcomeText,
   communityFounderWelcomeIdempotencyKey,
 } from "../shared/communityFounderWelcome";
+import { communityMemberWelcomeIdempotencyKey } from "../shared/communityMemberWelcome";
 import {
   EVERYBODY_MENTION_ROLE_KEY,
   cancelEverybodyMentionBroadcastsForInteractionSource,
@@ -1591,6 +1592,7 @@ async function insertCommunityInteractionMentionRows(args: {
   mentionedUserIds: InteractionMentionSpec[];
   actorUserId: any;
   nowMs: number;
+  userMentionEmailEligible?: boolean;
 }): Promise<{ communityAgentMention: ConciergeMentionRow | null }> {
   let communityAgentMention: ConciergeMentionRow | null = null;
   const orderedMentionSpecs = args.mentionedUserIds
@@ -1613,10 +1615,13 @@ async function insertCommunityInteractionMentionRows(args: {
       ...(args.replyId ? { replyId: args.replyId } : {}),
       mentionKind: spec.kind,
       ...(spec.kind === "user" ? { mentionedUserId: spec.userId } : {}),
+      ...(spec.kind === "user" && typeof args.userMentionEmailEligible === "boolean"
+        ? { emailEligible: args.userMentionEmailEligible }
+        : {}),
       ...(spec.kind === "community_agent" ? { mentionedAgentKey: spec.agentKey } : {}),
       ...(spec.kind === "user" && spec.sourceRoleKey ? { mentionedRoleKey: spec.sourceRoleKey } : {}),
       ...(spec.kind === "role" ? { mentionedRoleKey: spec.roleKey } : {}),
-      notifyState: "pending",
+      notifyState: args.userMentionEmailEligible === false ? "sent" : "pending",
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
     });
@@ -1965,8 +1970,7 @@ export const createCommunityInteractionComposerMessage = mutation({
   },
 });
 
-export const createCommunityAgentCanonicalInteractionInternal = internalMutation({
-  args: {
+const communityAgentCanonicalInteractionArgs = {
     userId: v.id("users"),
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
@@ -1974,6 +1978,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
     idempotencyKey: v.string(),
     text: v.optional(v.string()),
     founderBootstrap: v.optional(v.boolean()),
+    memberWelcomeBatchId: v.optional(v.id("communityMemberWelcomeBatches")),
     rootId: v.optional(v.union(v.id("communityInteractionRoots"), v.null())),
     replyToMessageId: v.optional(v.union(v.string(), v.null())),
     mentions: v.optional(
@@ -1986,9 +1991,34 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       ),
     ),
     attachments: v.optional(v.array(interactionAttachmentInputValidator)),
-  },
-  handler: async (ctx, args) => {
+};
+
+type CommunityAgentCanonicalInteractionArgs = {
+  [Key in keyof typeof communityAgentCanonicalInteractionArgs as undefined extends Infer<
+    (typeof communityAgentCanonicalInteractionArgs)[Key]
+  >
+    ? never
+    : Key]: Infer<(typeof communityAgentCanonicalInteractionArgs)[Key]>;
+} & {
+  [Key in keyof typeof communityAgentCanonicalInteractionArgs as undefined extends Infer<
+    (typeof communityAgentCanonicalInteractionArgs)[Key]
+  >
+    ? Key
+    : never]?: Exclude<
+    Infer<(typeof communityAgentCanonicalInteractionArgs)[Key]>,
+    undefined
+  >;
+};
+
+export async function createCommunityAgentCanonicalInteractionCore(
+  ctx: any,
+  args: CommunityAgentCanonicalInteractionArgs,
+) {
     const founderBootstrap = args.founderBootstrap === true;
+    const memberWelcomeBootstrap = Boolean(args.memberWelcomeBatchId);
+    if (founderBootstrap && memberWelcomeBootstrap) {
+      throw new Error("community_agent_bootstrap_mode_conflict");
+    }
     let sponsorUserId: any;
     let canonicalText = args.text ?? "";
     if (founderBootstrap) {
@@ -2013,6 +2043,30 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         founderDisplayName: founderIdentity.displayName,
         communityName: community.name,
       });
+    } else if (memberWelcomeBootstrap) {
+      if (
+        args.authSubject ||
+        args.rootId ||
+        args.replyToMessageId ||
+        (args.attachments?.length ?? 0) > 0
+      ) {
+        throw new Error("community_member_welcome_contract_invalid");
+      }
+      const [batch, community] = await Promise.all([
+        ctx.db.get(args.memberWelcomeBatchId as any),
+        ctx.db.get(args.communityId),
+      ]) as [any, any];
+      if (
+        !batch ||
+        batch.status !== "scheduled" ||
+        normalizeIdValue(batch.communityId) !== normalizeIdValue(args.communityId) ||
+        !community ||
+        normalizeIdValue(community.ownerId) !== normalizeIdValue(args.userId) ||
+        args.idempotencyKey !== communityMemberWelcomeIdempotencyKey(batch._id)
+      ) {
+        throw new Error("community_member_welcome_contract_invalid");
+      }
+      sponsorUserId = args.userId;
     } else {
       sponsorUserId = await resolveUserIdForAuthenticatedRequest({
         ctx,
@@ -2131,6 +2185,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
           mentionedUserIds,
           actorUserId: sponsorUserId,
           nowMs,
+          ...(memberWelcomeBootstrap ? { userMentionEmailEligible: false } : {}),
         });
         root = (await ctx.db.get(rootId)) as InteractionRootRow | null;
         if (!root) throw new Error("interaction_root_create_failed");
@@ -2290,7 +2345,11 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         idempotency_key: idempotencyKey,
       },
     };
-  },
+}
+
+export const createCommunityAgentCanonicalInteractionInternal = internalMutation({
+  args: communityAgentCanonicalInteractionArgs,
+  handler: createCommunityAgentCanonicalInteractionCore,
 });
 
 export const listCommunityInteractionRoots = query({
