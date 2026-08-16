@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5E terminal retirement are production-proven; Slice 5F Release A is in progress and Slices 8 through 10 remain
+Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5E terminal retirement are production-proven; Slice 5F production cleanup is complete, its terminal Release B remains, and Slices 8 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-15
 
@@ -10,8 +10,9 @@ Program position:
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 5E and 6 through 7B plus pre-Slice 8
-  liveness are released and production-proven. Slice 5F removes the last
-  constant thread/client runtime marker; Slices 8 through 10 remain.
+  liveness are released and production-proven. Slice 5F production cleanup is
+  complete and its terminal schema/operator deletion is the current release;
+  Slices 8 through 10 remain.
 - Pi agent-core adoption in Polynet: no canonical implementation; an isolated
   admission experiment exists outside the released tree, while parity and
   cutover have not started.
@@ -944,8 +945,8 @@ Production cleanup evidence on 2026-08-15:
 
 ### 17.2.2 Slice 5F: constant thread runtime marker retirement
 
-Status: Release A implemented on 2026-08-15; production cleanup and terminal
-Release B remain.
+Status: Release A is production-proven and cleanup completed on 2026-08-15;
+terminal Release B is the current release candidate.
 
 Objective: remove a value that carries no information. Polynet has one native
 runtime; clients do not select it, threads do not own it, and persisting
@@ -985,6 +986,19 @@ Release B deletes the schema validator, compatibility mutation arguments,
 temporary operator/test/API exposure, and migration runbook commands. It must
 preserve `shared/runtimeEngine.ts`, runtime run/event telemetry, and the native
 ingress rejection of any explicitly unsupported engine value.
+
+Production cleanup evidence:
+
+1. Release A merged through PR #118 at
+   `6038228024974bf41c44d9e4678e5ffa87287149`; GitHub Release Gate run
+   `31917503875` passed and production web plus Convex were proven on the exact
+   release before cleanup.
+2. The production backup is 92 MB, passed ZIP integrity, and has SHA-256
+   `c6ca6d7a56a4aea98a8b96d9a602c3123cda387bec7db52523f254101334d3f6`.
+3. The complete pre-cleanup census found 50 marked threads in one finished
+   page. The exact-ID guarded batch patched those 50 rows and deleted none.
+4. The subsequent empty dry-run and two complete independent censuses all
+   returned zero residue.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 

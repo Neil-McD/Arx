@@ -151,40 +151,20 @@ Polynet-owned Blaxel resources. Do not restore the migration code.
 
 ### Thread runtime marker retirement
 
-Status: Release A implemented on 2026-08-15. This migration removes only the
-constant `threads.runtimeEngine: "polynet"` field; canonical runtime resolution
-and run/event telemetry are not part of the cleanup.
+Status: production cleanup completed on 2026-08-15; terminal Release B is the
+current release candidate. The temporary operator and execution commands must
+not be restored.
 
-Before data cleanup, require the exact Release A SHA in Vercel and production
-Convex, then export production outside the repository:
-
-```bash
-npx convex export --prod --path /absolute/operator-controlled/path/polynet-pre-thread-runtime-marker.zip
-shasum -a 256 /absolute/operator-controlled/path/polynet-pre-thread-runtime-marker.zip
-```
-
-Run the complete census page by page until `isDone` is true:
-
-```bash
-npx convex run threadRuntimeMarkerRetirement:inspectThreadRuntimeMarkerPageInternal \
-  '{"cursor":null,"pageSize":500}' --prod
-```
-
-For each bounded batch, review the dry-run IDs and pass the exact same IDs to
-the write. Repeat from the first residue batch until the operator returns
-`isDone: true`:
-
-```bash
-npx convex run threadRuntimeMarkerRetirement:cleanThreadRuntimeMarkerBatchInternal \
-  '{"pageSize":100,"dryRun":true}' --prod
-
-npx convex run threadRuntimeMarkerRetirement:cleanThreadRuntimeMarkerBatchInternal \
-  '{"pageSize":100,"dryRun":false,"expectedDocumentIds":["<reviewed-id>"]}' --prod
-```
-
-Run the complete census twice and require zero both times. Release B then
-deletes the field validators, temporary operator/test/API exposure, and these
-execution commands. It does not delete runtime resolution or telemetry.
+This migration removed only the constant
+`threads.runtimeEngine: "polynet"` field. Release A was proven live at
+`6038228024974bf41c44d9e4678e5ffa87287149` before data cleanup. A 92 MB
+off-repository backup passed ZIP integrity with SHA-256
+`c6ca6d7a56a4aea98a8b96d9a602c3123cda387bec7db52523f254101334d3f6`.
+The complete census found 50 marked threads; one exact-ID guarded batch patched
+all 50 and deleted none. The next dry-run and two complete censuses returned
+zero. Release B deletes the field validators, temporary operator/test/API
+exposure, and migration commands. Canonical runtime resolution and run/event
+telemetry remain protected.
 
 ### AI Feed retirement
 
