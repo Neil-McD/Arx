@@ -160,6 +160,18 @@ export function getNativeToolCompletionToolCalls<TToolName extends string>(
   return [];
 }
 
+export function findFirstUnadmittedNativeToolCall<TToolName extends string>(params: {
+  completion: NativeToolAwareCompletionSuccess<TToolName>;
+  admittedToolNames: readonly TToolName[];
+}): NativeToolCallRequest<TToolName> | null {
+  const admittedToolNames = new Set<TToolName>(params.admittedToolNames);
+  return (
+    getNativeToolCompletionToolCalls(params.completion).find(
+      (toolCall) => !admittedToolNames.has(toolCall.toolName),
+    ) ?? null
+  );
+}
+
 export function parseNativeToolArguments(params: {
   rawArguments: string;
   malformedMessage: string;
