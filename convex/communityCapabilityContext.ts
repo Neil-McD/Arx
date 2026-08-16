@@ -474,6 +474,60 @@ export const resolveCommunityCapabilityContextInternal = internalQuery({
   },
 });
 
+export const resolveCommunityCapabilityContextForTrustedActorInternal =
+  internalQuery({
+    args: {
+      authSubject: v.string(),
+      userId: v.id("users"),
+      communitySlug: v.string(),
+    },
+    handler: async (ctx, args) => {
+      let actorUserId: any;
+      try {
+        actorUserId = (
+          await resolveAuthenticatedActorByTrustedSubject({
+            ctx,
+            authSubject: args.authSubject,
+            userId: args.userId,
+          })
+        ).dbUserId;
+      } catch {
+        return {
+          ok: false as const,
+          code: "community_not_accessible" as const,
+        };
+      }
+      const communitySlug = normalizeCommunityCapabilitySlug(
+        args.communitySlug,
+      );
+      if (!communitySlug) {
+        return { ok: false as const, code: "invalid_community_slug" as const };
+      }
+      const rows = (await ctx.db
+        .query("communities")
+        .withIndex("by_slug", (q: any) => q.eq("slug", communitySlug))
+        .take(2)) as CommunityLike[];
+      if (rows.length > 1) {
+        return {
+          ok: false as const,
+          code: "community_access_unavailable" as const,
+        };
+      }
+      const community = rows[0] ?? null;
+      if (!community) {
+        return {
+          ok: false as const,
+          code: "community_not_accessible" as const,
+        };
+      }
+      return await buildCommunityCapabilityContextForUser({
+        ctx,
+        userId: actorUserId,
+        community,
+      });
+    },
+  });
+
 function buildCommunitySemanticSource(args: {
   context: ResolvedCommunityCapabilityContext;
 }): CommunitySemanticSource {
