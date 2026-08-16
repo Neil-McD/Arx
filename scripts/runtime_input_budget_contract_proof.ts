@@ -183,5 +183,20 @@ assert.match(capacityRegistry, /openai\/gpt-5\.6-luna/);
 const contract = read("docs/native-agent-runtime-context-contract-v1.md");
 assert.match(contract, /resolved transport\/model\s+reference/);
 assert.match(contract, /Unknown capacity\s+rejects admission/);
+assert.match(
+  contract,
+  /native-only Slice 10 cleanup are production-released/,
+  "the runtime contract must record the released losing-kernel cleanup",
+);
+assert.match(
+  contract,
+  /final role-by-role live acceptance matrix remains/,
+  "the runtime contract must preserve the exact open evidence gate",
+);
+assert.doesNotMatch(
+  contract,
+  /Slice 10 cleanup is locally complete|Slice 10 final release proof remains|Pi feasibility residue deleted locally/,
+  "the runtime contract must not regress to the pre-release Slice 10 status",
+);
 
 console.log("runtime_input_budget_contract_proof: ok");

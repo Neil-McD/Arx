@@ -1,6 +1,6 @@
 # Canonical Polynet operation contract v1
 
-Status: staging contract.
+Status: production-released; current-SHA authenticated acceptance remains open.
 
 ## Outcome
 
@@ -129,5 +129,7 @@ search/read round trips, global search bounds, member-visible memory projection,
 mutation idempotency/conflict behavior, and staged builder calls against an
 isolated Convex backend.
 
-The release gate and live staging MCP acceptance remain required before this
-contract can leave staging.
+The release gate has passed and the production metadata smoke against
+`https://www.polynet.ai/runtime/mcp` passed on 2026-08-16. An authenticated
+production MCP acceptance bound to the exact current production SHA remains
+required before the runtime architecture program can close.

@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; Slice 8 is complete with an evidence-backed Pi rejection, Slice 9 is skipped, and Slice 10 cleanup is locally complete with final release acceptance remaining
+Status: context architecture, pre-Slice 8 liveness, and native-only Slice 10 cleanup are production-released; Slice 8 rejected Pi, Slice 9 is skipped, and the final role-by-role live acceptance matrix remains
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-16
 
@@ -11,14 +11,15 @@ Program position:
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 5F and 6 through 7B plus pre-Slice 8
   liveness are released and production-proven. Slice 8 selected the native
-  kernel, Slice 9 is skipped, and Slice 10 final release proof remains.
+  kernel, Slice 9 is skipped, and Slice 10's losing-kernel deletion is released.
+  Only the final role-by-role live acceptance matrix remains.
 - Pi agent-core adoption in Polynet: rejected at the Slice 8 value gate. The
   model-free probes proved core/default-runtime compatibility, governed tool
   admission, and canonical tool-result parity, but the smallest
   production-shaped provider/context adapter crossed the explicit complexity
   stop before it reached a test matrix. No production callsite or route changed.
-  The feasibility dependency, probe, and Pi-only parity files are now deleted
-  locally; only historical evidence remains in this contract.
+  The feasibility dependency, probe, and Pi-only parity files are deleted from
+  canonical `main`; only historical evidence remains in this contract.
 
 ## 1. Purpose
 
@@ -298,9 +299,9 @@ The released architecture through Slice 7B has:
     Funnel Composer, with complete-episode selection and mandatory bounded
     lineage in the existing runtime event store.
 
-The remaining gap is to land the native-only cleanup on canonical `main` and
-complete the final production role verification matrix. A Convex deployment is
-required only if the released diff changes the production Convex bundle.
+The native-only cleanup is on canonical `main` and production. The remaining
+gap is the final production role verification matrix. A Convex deployment is
+required only if a future diff changes the production Convex bundle.
 
 Program status:
 
@@ -316,7 +317,7 @@ Program status:
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
 | 8 | Pi value/feasibility adapter and deterministic parity | Complete: Pi rejected at the measured complexity/value gate; native kernel selected |
 | 9 | Reversible role-by-role Pi cutover if earned | Skipped because Pi did not earn adoption |
-| 10 | Losing-kernel deletion and final production acceptance | Cleanup complete locally; canonical release and final production acceptance remain |
+| 10 | Losing-kernel deletion and final production acceptance | Losing-kernel deletion is production-released; final role-by-role live acceptance remains |
 
 ## 13. Irreducible end state
 
@@ -1538,8 +1539,8 @@ Acceptance for each role:
 
 Objective: finish convergence rather than retaining two permanent runtimes.
 
-Status: native kernel selected and Pi feasibility residue deleted locally;
-canonical release and final native-only production acceptance remain.
+Status: native kernel selected and Pi feasibility residue deleted from
+production; final native-only role acceptance remains.
 
 Work:
 
@@ -1580,6 +1581,19 @@ Slice 10 cleanup evidence on 2026-08-16:
    tests, all 66 foundation checks, Convex and web typechecks, the production
    web build, and both dependency audits with zero findings. This is local
    deletion evidence, not canonical release or production-role evidence.
+
+Canonical release evidence on 2026-08-16:
+
+1. The rejected Pi feasibility surface landed through PR #123 at merge commit
+   `0dd9185dcb4c68a2393de4c93d3f588481e85b0c`.
+2. Follow-on unreachable shared harness projections landed through PR #129 at
+   merge commit `12ad45157d19fdba0c310b6dd83991d15e284b5d`.
+3. The canonical release gate passed for that exact final merge commit, and
+   production `/version.json` reported the same build and Sentry release SHA.
+4. The production web shell, community Chat, Resources, Events, right-rail
+   member context, and page-aware member-agent dock rendered without console
+   errors. This is deployment and UI evidence, not final model-execution proof
+   for every role.
 
 Acceptance:
 
@@ -1683,15 +1697,13 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Publish the locally proven decision and its mechanical consequence as one
-canonical change, then close the remaining production evidence gap:
+Close the remaining production evidence gap without changing runtime behavior:
 
-1. Land the contract, dependency deletion, Pi-file deletion, and preserved
-   native regressions together on GitHub `main`.
-2. Confirm the exact released SHA on every production surface changed by the
-   diff. Do not deploy Convex merely to restamp unchanged function code.
-3. Close the program with the Member, Funnel, Concierge, Steward, and external
-   MCP verification matrix against the selected native kernel.
+1. Bind the acceptance run to the exact production SHA under test.
+2. Close the Member, Funnel Composer, Concierge, Steward, and external MCP
+   verification matrix against the selected native kernel.
+3. Mark this program complete only after every required role and negative
+   authority cell has durable, reviewable evidence.
 
 Do not reopen Pi adaptation, add a runtime selector, or combine final
 acceptance with prompt, provider, funding, compaction, or UI behavior changes.

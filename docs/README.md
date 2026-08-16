@@ -8,26 +8,24 @@
 ## Current Release Truth
 1. `alpha-release-workflow.md`
 
-## Execution Status Routing
-1. `polynet-reduction-execution-contract-v1.md`
-
 ## Active contracts
 1. `auth-money-access-matrix.md`
 2. `irreducible-core-contract.md`
 3. `canonical-platform-operation-contract-v1.md`
-4. `polynet-workspace-mcp-contract-v0.md`
-5. `url-routing-contract-v1.md`
-6. `platform-diagnostics-contract-v1.md`
-7. `platform-cost-safety-contract-v1.md`
-8. `distribution-engineer-lead-adapter-v1.md`
+4. `native-agent-runtime-context-contract-v1.md`
+5. `polynet-workspace-mcp-contract-v0.md`
+6. `url-routing-contract-v1.md`
+7. `platform-diagnostics-contract-v1.md`
+8. `platform-cost-safety-contract-v1.md`
+9. `distribution-engineer-lead-adapter-v1.md`
 
 ## Destination architecture
 1. `agent-native-semantic-platform-thesis.md`
 2. `community-agent-cognition-contract-v1.md`
 
 Implementation status is owned by current code, executable proof, Git/ref state,
-and release evidence. The execution-status routing contract must not become a
-replacement milestone ledger.
+deployment markers, and live evidence. Do not create a replacement milestone
+ledger.
 
 ## Active operational guides
 1. `auth-runtime-setup-workos-authkit.md`
