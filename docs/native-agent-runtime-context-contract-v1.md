@@ -1,18 +1,16 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5E terminal retirement are production-proven; Slice 5F production cleanup is complete, its terminal Release B remains, and Slices 8 through 10 remain
+Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; Slices 8 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
-Last updated: 2026-08-15
+Last updated: 2026-08-16
 
 Program position:
 
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: Slices 5A through 5E and 6 through 7B plus pre-Slice 8
-  liveness are released and production-proven. Slice 5F production cleanup is
-  complete and its terminal schema/operator deletion is the current release;
-  Slices 8 through 10 remain.
+- Runtime convergence: Slices 5A through 5F and 6 through 7B plus pre-Slice 8
+  liveness are released and production-proven. Slices 8 through 10 remain.
 - Pi agent-core adoption in Polynet: no canonical implementation; an isolated
   admission experiment exists outside the released tree, while parity and
   cutover have not started.
@@ -310,7 +308,7 @@ Program status:
 | 2 | Canonical Concierge context and receipt | Complete |
 | 3 | Canonical Steward context and receipt | Complete |
 | 4 | Mandatory initial-provider-context evidence parity | Complete |
-| 5 | Workspace and Codex runtime deletion | 5A-5D production-proven; 5E Release A implemented locally and awaiting two-release production retirement |
+| 5 | Workspace and Codex runtime deletion | 5A-5F complete and production-proven |
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
@@ -638,7 +636,7 @@ full-transcript archival, a new table, or a universal receipt storage schema.
 
 ### 17.2 Slice 5: delete Workspace and Codex runtime compatibility
 
-Status: Slices 5A through 5D are landed on `origin/main`, deployed, and proven
+Status: Slices 5A through 5F are landed on `origin/main`, deployed, and proven
 in production.
 
 Release evidence:
@@ -1525,14 +1523,16 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Release and production-prove Slice 5E through the two-release retirement above.
-Do not begin Slice 8 until Release B has removed the compatibility schema and
-temporary operator and the final production community-inspection, MCP, and
-accounting proofs are green.
+Begin Slice 8 with an executable behavioral baseline for the canonical native
+kernel: final response handling, tool-result round trips, bounded stop reasons,
+cancellation, argument failure, batch budget atomicity, deterministic serial
+ordering, parallel execution, and server-admitted provider tool names. Delete
+only the proven-dead serial compatibility wrapper. This baseline changes no
+production routing and adds no Pi dependency.
 
-Then begin Slice 8 only as a reversible Pi agent-core feasibility adapter with
-no production routing. First prove actual Convex runtime compatibility,
-governed tool-executor containment, deterministic loop parity, and a net
+Then build one reversible Pi agent-core feasibility adapter outside production
+routing. Prove actual Convex runtime compatibility, governed tool-executor
+containment, deterministic parity against the native baseline, and a net
 reduction in maintained complexity. Adopt or reject Pi from that evidence; do
 not add semantic summarization, a second prompt compiler, a second event store,
 or a permanent second runtime.

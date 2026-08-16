@@ -1,7 +1,7 @@
 import {
-  type NativeToolExecutionResult,
-  type NativeToolResultEnvelope,
-} from "../shared/nativeToolLoop";
+  type RuntimeKernelToolExecutionResult as NativeToolExecutionResult,
+  type RuntimeKernelToolResultEnvelope as NativeToolResultEnvelope,
+} from "../shared/runtimeKernelTypes";
 import {
   formatRuntimeDiagnosticSummary,
   selectTopRuntimeDiagnostic,

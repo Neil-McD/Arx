@@ -36,15 +36,12 @@ import { runOpenRouterNativeToolCompletion } from "./openRouterNativeTransport";
 import { type RetrievalToolName } from "../shared/retrievalTools";
 import {
   extractTextFromNativeToolMessageContent,
-  getNativeToolCompletionToolCalls,
+  findFirstUnadmittedNativeToolCall,
   type NativeToolAwareCompletionSuccess,
   type NativeToolAwareMessage,
   type NativeToolInputContentPart,
   type NativeToolChoice,
 } from "../shared/nativeToolProtocol";
-import {
-  type NativeToolExecutionResult,
-} from "../shared/nativeToolLoop";
 import { runNativeRuntimeKernel } from "../shared/runtimeKernel";
 import {
   DEFAULT_RUNTIME_KERNEL_BUDGET,
@@ -52,6 +49,7 @@ import {
   type RuntimeKernelFailure,
   type RuntimeKernelFailureInput,
   type RuntimeKernelSuccess,
+  type RuntimeKernelToolExecutionResult as NativeToolExecutionResult,
 } from "../shared/runtimeKernelTypes";
 import {
   buildOpenAiFunctionTools,
@@ -1739,13 +1737,10 @@ async function executeRetrievalAgentLoop(
           };
         }
         if (!completion.ok) return completion;
-        const completionToolCalls = getNativeToolCompletionToolCalls(completion);
-        const unknownToolCall = completionToolCalls.find(
-          (toolCall) =>
-            !activeProviderTools.activeToolNames.some(
-              (toolName) => toolName === toolCall.toolName,
-            ),
-        );
+        const unknownToolCall = findFirstUnadmittedNativeToolCall({
+          completion,
+          admittedToolNames: activeProviderTools.activeToolNames,
+        });
         if (unknownToolCall) {
           return {
             ok: false,

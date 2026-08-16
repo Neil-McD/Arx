@@ -1,4 +1,4 @@
-import type { NativeToolExecutionResult } from "../shared/nativeToolLoop";
+import type { RuntimeKernelToolExecutionResult as NativeToolExecutionResult } from "../shared/runtimeKernelTypes";
 import type { RuntimeToolSchedulePlan } from "../shared/runtimeToolPolicy";
 
 export type RuntimeToolBatchExecutionMode = "serial" | "parallel";
