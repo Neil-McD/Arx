@@ -17,6 +17,8 @@ export type CloudCommunityEvent = {
   description_md: string | null;
   starts_at: string;
   ends_at: string | null;
+  starts_at_zoned: string;
+  ends_at_zoned: string | null;
   series_starts_at: string;
   series_ends_at: string | null;
   timezone: string;

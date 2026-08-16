@@ -12,7 +12,9 @@ import {
   toIsoString,
 } from "./communityCore";
 import {
+  formatCommunityEventZonedDateTime,
   getCommunityEventOccurrenceStartsInRange,
+  isValidCommunityEventTimeZone,
   normalizeCommunityEventRecurrenceFrequency,
   normalizeCommunityEventRecurrenceInterval,
   normalizeCommunityEventTimeZone,
@@ -72,9 +74,20 @@ function parseOptionalIsoMs(raw: unknown, code: string): number | null {
   return parsed;
 }
 
+function requireCommunityEventTimeZone(raw: unknown): string {
+  const value = String(raw ?? "").trim();
+  if (!value) return "UTC";
+  if (!isValidCommunityEventTimeZone(value)) {
+    throw new Error("community_event_timezone_invalid");
+  }
+  return value;
+}
+
 function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: number) {
   const startsAt = occurrenceStartsAt ?? row.startsAt;
   const durationMs = typeof row.endsAt === "number" ? Math.max(0, row.endsAt - row.startsAt) : null;
+  const endsAt = durationMs === null ? null : startsAt + durationMs;
+  const timeZone = normalizeCommunityEventTimeZone(row.timezone);
   const recurrenceFrequency = normalizeCommunityEventRecurrenceFrequency(row.recurrenceFrequency);
   const parentId = normalizeIdValue(row._id);
   return {
@@ -84,10 +97,15 @@ function mapCommunityEventRow(row: CommunityEventLike, occurrenceStartsAt?: numb
     title: row.title,
     description_md: row.descriptionMd ?? null,
     starts_at: toIsoString(startsAt),
-    ends_at: durationMs === null ? null : toIsoString(startsAt + durationMs),
+    ends_at: endsAt === null ? null : toIsoString(endsAt),
+    starts_at_zoned: formatCommunityEventZonedDateTime(startsAt, timeZone),
+    ends_at_zoned:
+      endsAt === null
+        ? null
+        : formatCommunityEventZonedDateTime(endsAt, timeZone),
     series_starts_at: toIsoString(row.startsAt),
     series_ends_at: typeof row.endsAt === "number" ? toIsoString(row.endsAt) : null,
-    timezone: normalizeCommunityEventTimeZone(row.timezone),
+    timezone: timeZone,
     location_type: row.locationType,
     location_label: row.locationLabel ?? null,
     url: row.url ?? null,
@@ -385,9 +403,9 @@ export const saveCommunityEvent = mutation({
         ),
         startsAt,
         endsAt: endsAt ?? undefined,
-        timezone: normalizeCommunityEventTimeZone(
-          Object.prototype.hasOwnProperty.call(payload, "timezone") ? payload.timezone : existing.timezone,
-        ),
+        timezone: Object.prototype.hasOwnProperty.call(payload, "timezone")
+          ? requireCommunityEventTimeZone(payload.timezone)
+          : normalizeCommunityEventTimeZone(existing.timezone),
         locationType: normalizeLocationType(
           Object.prototype.hasOwnProperty.call(payload, "location_type")
             ? payload.location_type
@@ -451,7 +469,7 @@ export const saveCommunityEvent = mutation({
       descriptionMd: normalizeOptionalText(payload.description_md, 10_000),
       startsAt,
       endsAt: endsAt ?? undefined,
-      timezone: normalizeCommunityEventTimeZone(payload.timezone),
+      timezone: requireCommunityEventTimeZone(payload.timezone),
       locationType: normalizeLocationType(payload.location_type),
       locationLabel: normalizeOptionalText(payload.location_label, 500),
       url: normalizeOptionalUrl(payload.url),

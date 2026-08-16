@@ -64,6 +64,11 @@ const runtimeAgentLoop = read("convex/runtimeAgentLoop.ts");
 const docs = read("docs/auth-money-access-matrix.md");
 
 assert.doesNotMatch(runtimePrompt, /RuntimeAccountPlan|Account plan:|Premium-only|Billing to upgrade/);
+assert.match(
+  runtimePrompt,
+  /When stating an event time, use starts_at_zoned and ends_at_zoned\. The unsuffixed event timestamps are UTC transport instants\./,
+  "the harness must use server-projected zoned event times instead of calculating them from UTC",
+);
 assert.doesNotMatch(runtimeAgentLoop, /reserveCreditsInternal|settleCreditsInternal/);
 assert.match(
   runtimeAgentLoop,

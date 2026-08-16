@@ -6,6 +6,7 @@ import { expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { executePolynetCanonicalTool } from "./polynetCanonicalExecutor";
 import schema from "./schema";
+import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { buildCommunityFunnelContentTestFixture } from "../scripts/community_funnel_test_fixture";
 
@@ -910,6 +911,7 @@ test("community activity and events list directly and round-trip through read", 
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const startsAt = Date.now() + 60 * 60 * 1000;
+  const endsAt = startsAt + 60 * 60 * 1000;
   const { interactionId, eventId } = await t.run(async (ctx) => {
     const interactionId = await ctx.db.insert("communityInteractionRoots", {
       communityId: fixture.communityId,
@@ -933,6 +935,7 @@ test("community activity and events list directly and round-trip through read", 
       title: "Community working session",
       descriptionMd: "A live working session for members.",
       startsAt,
+      endsAt,
       timezone: "America/New_York",
       locationType: "online",
       locationLabel: "Member room",
@@ -1029,6 +1032,14 @@ test("community activity and events list directly and round-trip through read", 
           path: eventPath,
           type: "event",
           title: "Community working session",
+          starts_at_zoned: formatCommunityEventZonedDateTime(
+            startsAt,
+            "America/New_York",
+          ),
+          ends_at_zoned: formatCommunityEventZonedDateTime(
+            endsAt,
+            "America/New_York",
+          ),
         }),
       ]),
     },
@@ -1049,6 +1060,15 @@ test("community activity and events list directly and round-trip through read", 
   expect(JSON.parse(String((eventRead as any).value.body))).toMatchObject({
     title: "Community working session",
     starts_at: new Date(startsAt).toISOString(),
+    ends_at: new Date(endsAt).toISOString(),
+    starts_at_zoned: formatCommunityEventZonedDateTime(
+      startsAt,
+      "America/New_York",
+    ),
+    ends_at_zoned: formatCommunityEventZonedDateTime(
+      endsAt,
+      "America/New_York",
+    ),
   });
 
   await t.run(async (ctx) => {
@@ -1072,6 +1092,23 @@ test("community activity and events list directly and round-trip through read", 
       input: { path: "/communities/canonical-community/events/", limit: 20 },
     }),
   ).resolves.toMatchObject({ ok: false });
+});
+
+test("community event writes reject an explicitly invalid timezone", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: fixture.ownerSubject });
+
+  await expect(
+    asOwner.mutation(api.communityEvents.saveCommunityEvent, {
+      payload: {
+        community_id: fixture.communityId,
+        title: "Invalid timezone event",
+        starts_at: "2026-08-13T14:00:00.000Z",
+        timezone: "Mars/Olympus_Mons",
+      },
+    }),
+  ).rejects.toThrow("community_event_timezone_invalid");
 });
 
 test("custom channels discover, isolate, search, read, and write through exact paths", async () => {

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import {
   communityEventDateTimeInputToIso,
+  formatCommunityEventZonedDateTime,
   getCommunityEventOccurrenceStartsInRange,
 } from "../shared/communityEventTime.ts";
 
@@ -92,6 +93,57 @@ assert.equal(
   "2026-03-02T14:00:00.000Z",
 );
 
+assert.equal(
+  formatCommunityEventZonedDateTime(
+    "2026-08-13T14:00:00.000Z",
+    "America/New_York",
+  ),
+  "2026-08-13T10:00:00.000-04:00[America/New_York]",
+);
+
+assert.equal(
+  formatCommunityEventZonedDateTime(
+    "2026-08-14T00:30:00.000Z",
+    "America/Los_Angeles",
+  ),
+  "2026-08-13T17:30:00.000-07:00[America/Los_Angeles]",
+);
+
+assert.equal(
+  formatCommunityEventZonedDateTime(
+    "2026-08-13T00:00:00.000Z",
+    "Asia/Kathmandu",
+  ),
+  "2026-08-13T05:45:00.000+05:45[Asia/Kathmandu]",
+);
+
+assert.equal(
+  communityEventDateTimeInputToIso(
+    "2026-03-08T02:30",
+    "America/New_York",
+  ),
+  null,
+  "a nonexistent spring-forward wall time must fail closed",
+);
+
+assert.equal(
+  communityEventDateTimeInputToIso(
+    "2026-08-13T10:00",
+    "Mars/Olympus_Mons",
+  ),
+  null,
+  "an explicitly invalid timezone must fail closed instead of becoming UTC",
+);
+
+assert.equal(
+  communityEventDateTimeInputToIso(
+    "2026-11-01T01:30",
+    "America/New_York",
+  ),
+  "2026-11-01T05:30:00.000Z",
+  "a repeated fall-back wall time must deterministically use the earlier occurrence",
+);
+
 assert.deepEqual(
   expandIso({
     startsAt: "2026-03-02T14:00:00.000Z",
@@ -104,6 +156,40 @@ assert.deepEqual(
     "2026-03-02T14:00:00.000Z",
     "2026-03-09T13:00:00.000Z",
     "2026-03-16T13:00:00.000Z",
+  ],
+);
+
+assert.deepEqual(
+  expandIso({
+    startsAt: "2026-03-02T14:00:00.000Z",
+    frequency: "weekly",
+    rangeStart: "2026-03-02T00:00:00.000Z",
+    rangeEnd: "2026-03-17T00:00:00.000Z",
+    timeZone: "America/New_York",
+  }).map((iso) =>
+    formatCommunityEventZonedDateTime(iso, "America/New_York"),
+  ),
+  [
+    "2026-03-02T09:00:00.000-05:00[America/New_York]",
+    "2026-03-09T09:00:00.000-04:00[America/New_York]",
+    "2026-03-16T09:00:00.000-04:00[America/New_York]",
+  ],
+);
+
+assert.deepEqual(
+  expandIso({
+    startsAt: "2026-10-26T13:00:00.000Z",
+    frequency: "weekly",
+    rangeStart: "2026-10-26T00:00:00.000Z",
+    rangeEnd: "2026-11-10T00:00:00.000Z",
+    timeZone: "America/New_York",
+  }).map((iso) =>
+    formatCommunityEventZonedDateTime(iso, "America/New_York"),
+  ),
+  [
+    "2026-10-26T09:00:00.000-04:00[America/New_York]",
+    "2026-11-02T09:00:00.000-05:00[America/New_York]",
+    "2026-11-09T09:00:00.000-05:00[America/New_York]",
   ],
 );
 
