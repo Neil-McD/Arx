@@ -6,7 +6,7 @@ const root = process.cwd();
 const packageJson = readFileSync(join(root, "package.json"), "utf8");
 const attachmentUi = readFileSync(join(root, "shared/communityAttachmentUi.ts"), "utf8");
 const mediaGrid = readFileSync(join(root, "shared/CommunityChatMediaGrid.tsx"), "utf8");
-const messageRow = readFileSync(join(root, "shared/CommunityChatMessageRow.tsx"), "utf8");
+const interactionFeed = readFileSync(join(root, "apps/web/src/components/communityInteractionFeed.tsx"), "utf8");
 const lightbox = readFileSync(join(root, "apps/web/src/components/WebCommunityChatLightboxModal.tsx"), "utf8");
 const css = [
   readFileSync(join(root, "apps/web/src/base.css"), "utf8"),
@@ -38,9 +38,9 @@ assert.match(
 );
 
 assert.match(
-  messageRow,
-  /id: item\.attachment\.id,[\s\S]*url: item\.previewUrl,[\s\S]*previewUrl: item\.previewUrl,[\s\S]*fullUrl: item\.fullUrl,/,
-  "message rows should pass image identity plus preview and full image URLs to the media/lightbox model",
+  interactionFeed,
+  /id: item\.attachment\.id,[\s\S]*url: item\.url,[\s\S]*previewUrl: item\.previewUrl,[\s\S]*fullUrl: item\.fullUrl,/,
+  "projected interaction attachments should pass image identity plus preview and full image URLs to the media/lightbox model",
 );
 
 assert.match(

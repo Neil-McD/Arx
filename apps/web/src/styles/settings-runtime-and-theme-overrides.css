@@ -805,51 +805,6 @@
   animation-delay: 0s;
 }
 
-.message-citations {
-  margin-top: 8px;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.message-citation-chip {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-  padding: 4px 8px;
-  border-radius: 999px;
-  border: none;
-  background: var(--bg-card-alt);
-  color: var(--text-secondary);
-  font-size: 11px;
-  line-height: 1.25;
-  text-align: left;
-}
-
-button.message-citation-chip {
-  cursor: pointer;
-  font: inherit;
-}
-
-button.message-citation-chip:hover {
-  color: var(--text-primary);
-  background: var(--hover-overlay);
-}
-
-.message-citation-kind {
-  font-family: var(--font-mono);
-  color: var(--text-muted);
-  flex-shrink: 0;
-}
-
-.message-citation-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  max-width: min(52vw, 460px);
-}
-
 .modal-overlay {
   position: fixed;
   inset: 0;

@@ -25,7 +25,7 @@ const account = read("convex/account.ts");
 const anonymousCleanup = read("convex/anonymousUserCleanup.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
-const messageRow = read("shared/CommunityChatMessageRow.tsx");
+const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const projection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const dmPanel = read("apps/web/src/components/WebDirectMessagePanel.tsx");
 const dmHost = read("apps/web/src/components/WebDirectMessagesHost.tsx");
@@ -349,8 +349,8 @@ assert.doesNotMatch(chatPanel, /follow|follower|following/i, "DM UI slice must n
 assert.match(profilePanel, /onMessage\?: \(\) => void \| Promise<void>/, "right profile card must expose a message action");
 assert.match(profilePanel, /canMessageProfile = !isSelfProfile && communityContext\.can_message && !isMessageDisabled && Boolean\(onMessage\)/, "right profile message action must be disabled for self or unavailable contexts");
 assert.match(profilePanel, /disabled=\{!canMessageProfile\}/, "right profile message button must use resolved profile message eligibility");
-assert.match(messageRow, /onMessageSender\?: \(userId: string\) => void \| Promise<void>/, "hover profile card must expose a message action");
-assert.match(messageRow, /disabled=\{!canMessageSender\}/, "hover profile message action must be disabled until DM context is available");
+assert.match(interactionFeed, /onMessageUser\?: \(userId: string\) => void/, "hover profile card must expose a message action");
+assert.match(interactionFeed, /disabled=\{!canMessage\}/, "hover profile message action must be disabled until DM context is available");
 
 assert.match(dmPanel, /From \{communityName\}/, "DM panel must surface source community context");
 assert.match(dmPanel, /participant_type === "user"/, "DM panel must resolve the human peer from participants");
