@@ -1368,9 +1368,10 @@ Slice 8 entry evidence on 2026-08-16:
    However, the mandatory `pi-ai` dependency transitively installs Anthropic,
    Bedrock, Google, and OpenAI provider SDKs even though this probe imports none
    of them.
-3. A closed, model-free probe accepts only seven enumerated scenarios and owns
-   a private two-tool registry. It accepts no arbitrary executor, credentials,
-   prompt loader, storage, runtime selector, or provider network function.
+3. A closed, model-free probe accepts fixed named admission scenarios plus an
+   optional declarative, data-only result fixture and owns a private two-tool
+   registry. It accepts no arbitrary executor, credentials, prompt loader,
+   storage, runtime selector, or provider network function.
 4. The probe proves exact prompt and admitted tool exposure, final response,
    admitted execution, unknown-tool rejection by Pi, argument rejection before
    execution, pre-aborted cancellation, sequential execution, permitted
@@ -1424,9 +1425,10 @@ Slice 8 entry evidence on 2026-08-16:
 13. Differential fixtures prove exact native/Pi equality for successful and
     failed envelopes, result signatures, failure recovery, failure and
     no-progress exhaustion, changed-result progress, inverted parallel
-    completion, serial/parallel cancellation projection, and executor
-    exceptions. A forged Pi transport payload is replaced by the retained
-    canonical result rather than becoming evidence authority.
+    completion, single-call cancellation, mixed serial success-then-cancellation,
+    parallel cancellation projection, and executor exceptions. A forged Pi
+    transport payload is replaced by the retained canonical result rather than
+    becoming evidence authority.
 14. Under exact Node `22.19.0`, the focused native/Pi suite passes 42 tests. The
     complete local release gate passes 121 test files and 771 tests, all 66
     foundation checks, the production web build, and both dependency audits

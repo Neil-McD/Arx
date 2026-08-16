@@ -259,6 +259,30 @@ function appendToolResultToTranscript<TToolName extends string>(params: {
   });
 }
 
+function removeSerialToolCallsFromLatestAssistantMessage(params: {
+  transcript: NativeToolAwareMessage[];
+  cancelledProviderCallId: string;
+}): void {
+  for (let index = params.transcript.length - 1; index >= 0; index -= 1) {
+    const message = params.transcript[index]!;
+    if (message.role !== "assistant" || !message.tool_calls) continue;
+    const cancelledCallIndex = message.tool_calls.findIndex(
+      (call) => call.id === params.cancelledProviderCallId,
+    );
+    if (cancelledCallIndex < 0) continue;
+    const remainingToolCalls = message.tool_calls.slice(0, cancelledCallIndex);
+    if (remainingToolCalls.length === 0) {
+      params.transcript.splice(index, 1);
+    } else {
+      params.transcript[index] = {
+        ...message,
+        tool_calls: remainingToolCalls,
+      };
+    }
+    return;
+  }
+}
+
 export type RuntimeKernelToolBatchPlan = {
   executionMode: "serial" | "parallel";
 };
@@ -918,6 +942,11 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
           appendAssistantMessage: !assistantMessageAppended,
         });
         assistantMessageAppended = true;
+      } else if (assistantMessageAppended) {
+        removeSerialToolCallsFromLatestAssistantMessage({
+          transcript,
+          cancelledProviderCallId: toolStep.providerCallId,
+        });
       }
 
       if (

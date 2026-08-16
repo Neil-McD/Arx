@@ -31,6 +31,7 @@ type ParityScenario =
   | "changed_result"
   | "parallel_mixed_results"
   | "tool_cancelled_serial"
+  | "tool_cancelled_serial_after_success"
   | "tool_cancelled_parallel"
   | "executor_exception";
 
@@ -188,6 +189,25 @@ function nextCompletion(
       },
     ]);
   }
+  if (scenario === "tool_cancelled_serial_after_success") {
+    return toolBatch([
+      {
+        id: "serial-success",
+        toolName: "polynet_read_one",
+        query: "success",
+      },
+      {
+        id: "serial-cancelled",
+        toolName: "polynet_read_two",
+        query: "cancel",
+      },
+      {
+        id: "serial-unreached",
+        toolName: "polynet_read_one",
+        query: "must not execute",
+      },
+    ]);
+  }
   const id =
     scenario === "admitted_tool"
       ? "admitted-1"
@@ -328,6 +348,9 @@ async function runNativeParityScenario(scenario: ParityScenario) {
     releaseSlowResult = resolve;
   });
   const envelopes = new Map<string, RuntimeKernelToolResultEnvelope>();
+  const executedToolCallIds: string[] = [];
+  const startedToolCallIds: string[] = [];
+  const finishedToolCallIds: string[] = [];
 
   const result = await runNativeRuntimeKernel<ToolName>({
     messages: baseMessages,
@@ -339,6 +362,7 @@ async function runNativeParityScenario(scenario: ParityScenario) {
     },
     normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
     executeTool: async ({ providerCallId, normalizedArgs }) => {
+      executedToolCallIds.push(providerCallId);
       if (providerCallId === "parallel-slow-success") {
         await slowResultReleased;
       }
@@ -349,8 +373,14 @@ async function runNativeParityScenario(scenario: ParityScenario) {
       });
     },
     onToolBatchResolved: ({ isBatch }) =>
-      isBatch ? { executionMode: "parallel" } : { executionMode: "serial" },
+      isBatch && scenario !== "tool_cancelled_serial_after_success"
+        ? { executionMode: "parallel" }
+        : { executionMode: "serial" },
+    onToolStepStart: ({ step }) => {
+      startedToolCallIds.push(step.providerCallId);
+    },
     onToolStepFinish: ({ step, toolResultEnvelope }) => {
+      finishedToolCallIds.push(step.providerCallId);
       envelopes.set(step.providerCallId, toolResultEnvelope);
     },
   });
@@ -369,8 +399,22 @@ async function runNativeParityScenario(scenario: ParityScenario) {
   const projectedToolResultIds = result.transcript
     .filter((message) => message.role === "tool")
     .map((message) => message.tool_call_id);
+  const projectedAssistantToolCallIds = result.transcript.flatMap((message) =>
+    message.role === "assistant"
+      ? (message.tool_calls ?? []).map((call) => call.id)
+      : [],
+  );
 
-  return { providerCalls, result, resultSteps, projectedToolResultIds };
+  return {
+    providerCalls,
+    result,
+    resultSteps,
+    projectedToolResultIds,
+    projectedAssistantToolCallIds,
+    executedToolCallIds,
+    startedToolCallIds,
+    finishedToolCallIds,
+  };
 }
 
 async function expectParity(scenario: ParityScenario) {
@@ -387,6 +431,9 @@ async function expectParity(scenario: ParityScenario) {
     native.result.ok ? null : native.result.stopReason,
   );
   expect(pi.projectedToolResultIds).toEqual(native.projectedToolResultIds);
+  expect(pi.projectedAssistantToolCallIds).toEqual(
+    native.projectedAssistantToolCallIds,
+  );
   return { native, pi };
 }
 
@@ -442,6 +489,40 @@ describe("Pi canonical tool-result state parity", () => {
     expect(serial.pi.providerCalls).toBe(1);
     expect(serial.pi.projectedToolResultIds).toEqual([]);
     expect(serial.pi.projectedAssistantToolCallIds).toEqual([]);
+
+    const mixedSerial = await expectParity(
+      "tool_cancelled_serial_after_success",
+    );
+    expect(mixedSerial.pi.providerCalls).toBe(1);
+    expect(mixedSerial.pi.resultSteps.map((step) => step.toolCallId)).toEqual([
+      "serial-success",
+      "serial-cancelled",
+    ]);
+    expect(mixedSerial.pi.projectedToolResultIds).toEqual(["serial-success"]);
+    expect(mixedSerial.pi.projectedAssistantToolCallIds).toEqual([
+      "serial-success",
+    ]);
+    expect(mixedSerial.native.executedToolCallIds).toEqual([
+      "serial-success",
+      "serial-cancelled",
+    ]);
+    expect(mixedSerial.pi.executedToolCallIds).toEqual(
+      mixedSerial.native.executedToolCallIds,
+    );
+    expect(mixedSerial.native.startedToolCallIds).toEqual([
+      "serial-success",
+      "serial-cancelled",
+    ]);
+    expect(mixedSerial.pi.admittedToolStartIds).toEqual(
+      mixedSerial.native.startedToolCallIds,
+    );
+    expect(mixedSerial.native.finishedToolCallIds).toEqual([
+      "serial-success",
+      "serial-cancelled",
+    ]);
+    expect(
+      mixedSerial.pi.admittedToolFinishes.map((entry) => entry.toolCallId),
+    ).toEqual(mixedSerial.native.finishedToolCallIds);
 
     const parallel = await expectParity("tool_cancelled_parallel");
     expect(parallel.pi.providerCalls).toBe(1);

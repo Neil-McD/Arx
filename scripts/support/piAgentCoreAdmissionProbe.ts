@@ -227,11 +227,12 @@ function removeSerialCancellationArtifacts(params: {
       return [];
     }
     if (message.role !== "assistant") return [message];
-    const content = message.content.filter(
-      (part) =>
-        part.type !== "toolCall" ||
-        part.id !== params.cancelledToolCallId,
-    );
+    let cancelledCallReached = false;
+    const content = message.content.filter((part) => {
+      if (part.type !== "toolCall") return true;
+      if (part.id === params.cancelledToolCallId) cancelledCallReached = true;
+      return !cancelledCallReached;
+    });
     return content.length > 0 ? [{ ...message, content }] : [];
   });
 }
