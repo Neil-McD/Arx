@@ -945,8 +945,10 @@ Production cleanup evidence on 2026-08-15:
 
 ### 17.2.2 Slice 5F: constant thread runtime marker retirement
 
-Status: Release A is production-proven and cleanup completed on 2026-08-15;
-terminal Release B is the current release candidate.
+Status: production complete on 2026-08-15. Terminal Release B merged through
+PR #119 at `930d261c6707d10cadfa57388ebc49dbde3a6805`; GitHub Release Gate run
+`31918189774` passed, and the exact web release plus production Convex schema
+were proven live.
 
 Objective: remove a value that carries no information. Polynet has one native
 runtime; clients do not select it, threads do not own it, and persisting
@@ -999,6 +1001,8 @@ Production cleanup evidence:
    page. The exact-ID guarded batch patched those 50 rows and deleted none.
 4. The subsequent empty dry-run and two complete independent censuses all
    returned zero residue.
+5. Release B exposed zero `threadRuntimeMarkerRetirement` functions in the
+   production Convex function specification.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 

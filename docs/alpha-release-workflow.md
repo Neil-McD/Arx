@@ -151,9 +151,11 @@ Polynet-owned Blaxel resources. Do not restore the migration code.
 
 ### Thread runtime marker retirement
 
-Status: production cleanup completed on 2026-08-15; terminal Release B is the
-current release candidate. The temporary operator and execution commands must
-not be restored.
+Status: production complete on 2026-08-15. Terminal Release B merged through
+PR #119 at `930d261c6707d10cadfa57388ebc49dbde3a6805`; GitHub Release Gate run
+`31918189774` passed, and the exact web release plus production Convex schema
+were proven live. The temporary operator and execution commands must not be
+restored.
 
 This migration removed only the constant
 `threads.runtimeEngine: "polynet"` field. Release A was proven live at
