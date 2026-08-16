@@ -18,20 +18,24 @@ These surfaces are non-negotiable for MVP and must not be deleted during reducti
 
 ## Community Surface (Must Keep)
 
-Community nav tabs:
+Canonical community surfaces:
 
-- Chat
-- Resources
-- Members
-- Settings
-- AI Agent
-- Analytics
+- Channel-based Chat.
+- Resources.
+- Events.
+- Member context in the community right rail; there is no standalone Members
+  tab or page.
+- The member's personal agent in the bottom-right dock under the selected
+  community context; there is no standalone AI Agent tab.
+- Builder-only Settings, canonical funnel management, and Analytics.
 
 Core AI-agent paths:
 
-- Active community agent landing
-- Active community system prompt
-- Draft list/upsert/activate RPC paths
+- Member personal-agent dock under explicit, server-validated community
+  context.
+- Separate community-owned Concierge and Steward execution.
+- Active community system prompt.
+- Draft list/upsert/activate RPC paths.
 
 ## Inference and Auth (Must Keep)
 

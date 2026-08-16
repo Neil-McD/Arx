@@ -5,7 +5,9 @@ Status: active destination architecture; implementation remains cleanup-led and 
 This contract owns architectural direction. It does not make a proposed
 component implemented, authorize a slice, or override canonical schema,
 authorization code, runtime evidence, `AGENTS.md`, or the MVP boundary. Current
-execution status lives in `docs/polynet-reduction-execution-contract-v1.md`.
+execution status is the reconciled intersection of the exact source diff,
+executable proofs, `origin/main`, deployment markers, and live evidence. This
+thesis does not maintain a parallel milestone ledger.
 
 ## Product definition
 
@@ -393,7 +395,7 @@ The labels mean:
 ## Cleanup-led implementation sequence
 
 The active destination does not justify building every proposed abstraction
-now. Execution follows `docs/polynet-reduction-execution-contract-v1.md`:
+now. Implementation remains cleanup-led and evidence-gated:
 
 1. finish payment/provider recovery and ordinary creator settlement;
 2. complete resumable account/community deletion and privacy propagation;

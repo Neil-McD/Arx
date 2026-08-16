@@ -84,6 +84,19 @@ assertIncludes(
   "Canonical community interaction substrate + canonical community UX.",
 );
 assertExcludes(corePath, core, "Canonical chat + canonical community UX.");
+assertIncludes(corePath, core, "- Events.");
+assertIncludes(
+  corePath,
+  core,
+  "Member context in the community right rail; there is no standalone Members",
+);
+assertIncludes(
+  corePath,
+  core,
+  "The member's personal agent in the bottom-right dock under the selected",
+);
+assertExcludes(corePath, core, "\n- Members\n");
+assertExcludes(corePath, core, "\n- AI Agent\n");
 
 function blockBetween(path: string, source: string, startToken: string, endToken: string): string {
   const start = source.indexOf(startToken);

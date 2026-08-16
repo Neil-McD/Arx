@@ -19,6 +19,36 @@ const root = process.cwd();
 const read = (relativePath: string): string =>
   readFileSync(join(root, relativePath), "utf8");
 
+const architectureThesis = read("docs/agent-native-semantic-platform-thesis.md");
+const operationContract = read("docs/canonical-platform-operation-contract-v1.md");
+const docsIndex = read("docs/README.md");
+
+assert.equal(
+  existsSync(join(root, "docs/polynet-reduction-execution-contract-v1.md")),
+  false,
+  "execution status must come from source, proofs, release refs, and live evidence rather than a parallel status ledger",
+);
+assert.doesNotMatch(
+  architectureThesis,
+  /polynet-reduction-execution-contract-v1/,
+  "the architecture thesis must not point to the deleted parallel status ledger",
+);
+assert.doesNotMatch(
+  docsIndex,
+  /polynet-reduction-execution-contract-v1/,
+  "the docs index must not route execution truth through a parallel status ledger",
+);
+assert.match(
+  architectureThesis,
+  /exact source diff[\s\S]*executable proofs[\s\S]*`origin\/main`[\s\S]*deployment markers[\s\S]*live evidence/,
+  "the architecture thesis must name the canonical execution truth layers",
+);
+assert.match(
+  operationContract,
+  /Status: production-released; current-SHA authenticated acceptance remains open\./,
+  "the canonical operation contract must separate released code from open authenticated acceptance",
+);
+
 const expected = [
   "polynet_list",
   "polynet_read",
