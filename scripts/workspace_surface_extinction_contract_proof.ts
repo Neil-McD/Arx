@@ -113,7 +113,7 @@ const threadSchema = schema.match(/threads: defineTable\([\s\S]*?runtimeRuns: de
 const runtimeRunSchema = schema.match(/runtimeRuns: defineTable\([\s\S]*?runtimeRunEvents: defineTable/)?.[0] ?? "";
 assert.doesNotMatch(diagnosticSchema, /\bprojectId:|by_projectId/, "diagnostic project compatibility must be absent");
 assert.doesNotMatch(threadSchema, /\bprojectId:|v\.literal\("codex"\)/, "thread project and Codex compatibility must be absent");
-assert.match(threadSchema, /runtimeEngine: v\.optional\(v\.literal\("polynet"\)\)/, "thread wire compatibility is narrowed to the one native runtime");
+assert.doesNotMatch(threadSchema, /\bruntimeEngine\b|\bruntime_engine\b/, "thread runtime compatibility marker must be absent");
 assert.doesNotMatch(runtimeRunSchema, /\bprojectId:|\bruntimeEngine:/, "runtime-run project compatibility must be absent");
 for (const releaseContract of [runtimeContract, releaseWorkflow]) {
   assert.match(

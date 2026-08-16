@@ -3445,7 +3445,6 @@ export default defineSchema({
     titleSource: v.union(v.literal("auto"), v.literal("manual")),
     communityId: v.optional(v.string()),
     modelId: v.optional(v.string()),
-    runtimeEngine: v.optional(v.literal("polynet")),
     contextVersion: v.optional(v.number()),
     workingState: v.optional(
       v.object({

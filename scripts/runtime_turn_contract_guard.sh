@@ -192,10 +192,15 @@ for field in sandboxMode workspaceSessionState workspaceProviderSandboxId worksp
   forbid_match_in_file "$SCHEMA_FILE" "$field:" \
     "schema no longer carries retired $field compatibility residue"
 done
-require_match_in_file "$SCHEMA_FILE" 'runtimeEngine: v\.optional\(v\.literal\("polynet"\)\)' \
-  "Release A temporarily accepts persisted thread marker residue"
-require_match_in_file "convex/threadRuntimeMarkerRetirement.ts" 'runtimeEngine: undefined' \
-  "the bounded retirement operator removes only the obsolete thread marker"
+forbid_match_in_file "$SCHEMA_FILE" '\bruntimeEngine\b|\bruntime_engine\b' \
+  "thread schema no longer carries the constant native runtime marker"
+forbid_match_in_file "$THREADS_FILE" '\bruntimeEngine\b|\bruntime_engine\b' \
+  "thread APIs no longer accept, return, or write the constant native runtime marker"
+if [[ -e "convex/threadRuntimeMarkerRetirement.ts" ]]; then
+  echo "FAIL: temporary threadRuntimeMarkerRetirement.ts must be deleted after Release B"
+  exit 1
+fi
+echo "OK: temporary threadRuntimeMarkerRetirement.ts is deleted"
 for file in \
   shared/cloudThreadsRead.ts \
   shared/cloudThreadsGateway.ts \
