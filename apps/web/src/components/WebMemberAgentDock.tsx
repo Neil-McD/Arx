@@ -458,7 +458,6 @@ function WebMemberAgentDock(props, ref) {
             id: targetThreadKey,
             title: "Your agent",
             model_id: DEFAULT_ACTIVE_MODEL_ID,
-            runtime_engine: "polynet",
             community_id: activeThreadContextRef.current.communityId,
             context_version: activeThreadContextRef.current.contextVersion,
           }
@@ -1057,7 +1056,6 @@ function WebMemberAgentDock(props, ref) {
         mode: "respond",
         runIdHint: `member_agent_dock:${messageId}`,
         userMessageKey: messageId,
-        runtimeEngine: "polynet",
         invocationSurface: "member_agent_dock",
         surfaceContext,
         requestedFundingSource: "platform",

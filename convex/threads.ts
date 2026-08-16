@@ -18,10 +18,6 @@ import {
   requireCommunityManager,
 } from "./communityCore";
 import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDirectory";
-import {
-  normalizeRuntimeEngine,
-  type RuntimeEngine,
-} from "../shared/runtimeEngine";
 import { DEFAULT_ACTIVE_MODEL_ID } from "../shared/modelCatalog";
 import {
   MEMBER_AGENT_GLOBAL_SCOPE_KEY,
@@ -61,7 +57,6 @@ type ThreadLike = {
   titleSource: "auto" | "manual";
   communityId?: string;
   modelId?: string;
-  runtimeEngine?: RuntimeEngine;
   contextVersion?: number;
   workingState?: ThreadWorkingStateLike;
   latestUserVisibleCompletedRunId?: string;
@@ -528,14 +523,6 @@ function normalizeThreadKey(raw: unknown): string {
   const value = String(raw ?? "").trim();
   if (!value) throw new Error("thread_key_required");
   return value.slice(0, 200);
-}
-
-function normalizeOptionalRuntimeEngine(raw: unknown): RuntimeEngine | undefined {
-  const value = String(raw ?? "").trim();
-  if (!value) return undefined;
-  const engine = normalizeRuntimeEngine(value);
-  if (engine !== "polynet") throw new Error("unsupported_runtime_engine");
-  return engine;
 }
 
 function normalizeThreadTitle(raw: unknown): string | undefined {
@@ -1481,7 +1468,6 @@ export const ensureCloudThread = mutation({
     });
     const nowMs = args.nowMs ?? Date.now();
     const threadKey = normalizeThreadKey(args.threadKey);
-    const requestedRuntimeEngine = normalizeOptionalRuntimeEngine(args.runtimeEngine);
     const existing = await getCloudThreadByThreadKeyInternal({
       ctx,
       ownerId,
@@ -1491,9 +1477,6 @@ export const ensureCloudThread = mutation({
       const patch: Record<string, unknown> = { updatedAt: nowMs };
       if (typeof args.modelId === "string" && args.modelId.trim() && existing.modelId !== args.modelId.trim()) {
         patch.modelId = args.modelId.trim();
-      }
-      if (requestedRuntimeEngine && existing.runtimeEngine !== requestedRuntimeEngine) {
-        patch.runtimeEngine = requestedRuntimeEngine;
       }
       if (
         typeof args.contextVersion === "number" &&
@@ -1521,7 +1504,6 @@ export const ensureCloudThread = mutation({
       titleSource: args.titleSource ?? "auto",
       communityId: initialCommunityId,
       modelId: String(args.modelId ?? "").trim() || undefined,
-      runtimeEngine: requestedRuntimeEngine,
       contextVersion:
         typeof args.contextVersion === "number" && Number.isFinite(args.contextVersion)
           ? Math.floor(args.contextVersion)
@@ -1633,7 +1615,6 @@ async function prepareActiveGlobalMemberAgentThread(args: {
   }
   const patch: Record<string, unknown> = {};
   if (args.thread.modelId !== DEFAULT_ACTIVE_MODEL_ID) patch.modelId = DEFAULT_ACTIVE_MODEL_ID;
-  if (args.thread.runtimeEngine !== "polynet") patch.runtimeEngine = "polynet";
   if (typeof args.thread.archivedAt === "number") patch.archivedAt = undefined;
   if (Object.keys(patch).length === 0) return args.thread;
   patch.updatedAt = args.nowMs;
@@ -1657,7 +1638,6 @@ function buildMemberAgentChannelResponse(args: {
     thread_key: threadKey,
     community_id: args.communityId,
     model_id: DEFAULT_ACTIVE_MODEL_ID,
-    runtime_engine: "polynet" as const,
     context_version: normalizeContextVersion(args.thread.contextVersion),
   };
 }
@@ -1713,7 +1693,6 @@ export async function ensureGlobalMemberAgentChannelCore(args: {
     titleSource: "auto",
     ...(communityId ? { communityId } : null),
     modelId: DEFAULT_ACTIVE_MODEL_ID,
-    runtimeEngine: "polynet",
     contextVersion: 0,
     lastSeq: 0,
     createdAt: args.nowMs,
@@ -1866,7 +1845,6 @@ export const startNewMemberAgentGlobalEpisode = mutation({
       titleSource: "auto",
       ...(communityId ? { communityId } : null),
       modelId: DEFAULT_ACTIVE_MODEL_ID,
-      runtimeEngine: "polynet",
       contextVersion: 0,
       lastSeq: 0,
       createdAt: nowMs,
@@ -1937,8 +1915,6 @@ export const updateCloudThread = mutation({
     }
     if (args.titleSource) patch.titleSource = args.titleSource;
     if (typeof args.modelId === "string") patch.modelId = args.modelId.trim() || undefined;
-    const requestedRuntimeEngine = normalizeOptionalRuntimeEngine(args.runtimeEngine);
-    if (requestedRuntimeEngine) patch.runtimeEngine = requestedRuntimeEngine;
     if (typeof args.lastSeq === "number" && Number.isFinite(args.lastSeq)) {
       patch.lastSeq = Math.max(0, Math.floor(args.lastSeq));
     }

@@ -211,6 +211,7 @@ import type * as stripeCustomers from "../stripeCustomers.js";
 import type * as stripeSubscriptionCancellation from "../stripeSubscriptionCancellation.js";
 import type * as thirdPartyMcpCompatibility from "../thirdPartyMcpCompatibility.js";
 import type * as thirdPartyMcpRetirement from "../thirdPartyMcpRetirement.js";
+import type * as threadRuntimeMarkerRetirement from "../threadRuntimeMarkerRetirement.js";
 import type * as threads from "../threads.js";
 import type * as userPlatformAppMounts from "../userPlatformAppMounts.js";
 import type * as userPlatformSkills from "../userPlatformSkills.js";
@@ -432,6 +433,7 @@ declare const fullApi: ApiFromModules<{
   stripeSubscriptionCancellation: typeof stripeSubscriptionCancellation;
   thirdPartyMcpCompatibility: typeof thirdPartyMcpCompatibility;
   thirdPartyMcpRetirement: typeof thirdPartyMcpRetirement;
+  threadRuntimeMarkerRetirement: typeof threadRuntimeMarkerRetirement;
   threads: typeof threads;
   userPlatformAppMounts: typeof userPlatformAppMounts;
   userPlatformSkills: typeof userPlatformSkills;

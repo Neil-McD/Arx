@@ -174,6 +174,7 @@
     "check:community-subscription-lifecycle-policy-proof": "tsx scripts/community_subscription_lifecycle_policy_proof.ts",
     "check:no-legacy-community-policy-mirrors": "bash scripts/no_legacy_community_policy_mirrors_guard.sh",
     "check:runtime-turn-contract-guard": "bash scripts/runtime_turn_contract_guard.sh",
+    "check:thread-runtime-marker-retirement-proof": "tsx scripts/thread_runtime_marker_retirement_contract_proof.ts && vitest run convex/threadRuntimeMarkerRetirement.test.ts",
     "check:native-runtime-ingress-extinction-proof": "tsx scripts/native_runtime_ingress_extinction_contract_proof.ts",
     "check:runtime-router-loop-contract-guard": "bash scripts/runtime_router_loop_contract_check.sh",
     "check:runtime-tool-loop-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/runtime_tool_loop_proof.ts",

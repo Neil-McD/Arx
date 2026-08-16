@@ -149,6 +149,43 @@ deleted 160 obsolete rows, patched 853 surviving rows, produced two complete
 zero censuses, preserved all accounting totals exactly, and left zero
 Polynet-owned Blaxel resources. Do not restore the migration code.
 
+### Thread runtime marker retirement
+
+Status: Release A implemented on 2026-08-15. This migration removes only the
+constant `threads.runtimeEngine: "polynet"` field; canonical runtime resolution
+and run/event telemetry are not part of the cleanup.
+
+Before data cleanup, require the exact Release A SHA in Vercel and production
+Convex, then export production outside the repository:
+
+```bash
+npx convex export --prod --path /absolute/operator-controlled/path/polynet-pre-thread-runtime-marker.zip
+shasum -a 256 /absolute/operator-controlled/path/polynet-pre-thread-runtime-marker.zip
+```
+
+Run the complete census page by page until `isDone` is true:
+
+```bash
+npx convex run threadRuntimeMarkerRetirement:inspectThreadRuntimeMarkerPageInternal \
+  '{"cursor":null,"pageSize":500}' --prod
+```
+
+For each bounded batch, review the dry-run IDs and pass the exact same IDs to
+the write. Repeat from the first residue batch until the operator returns
+`isDone: true`:
+
+```bash
+npx convex run threadRuntimeMarkerRetirement:cleanThreadRuntimeMarkerBatchInternal \
+  '{"pageSize":100,"dryRun":true}' --prod
+
+npx convex run threadRuntimeMarkerRetirement:cleanThreadRuntimeMarkerBatchInternal \
+  '{"pageSize":100,"dryRun":false,"expectedDocumentIds":["<reviewed-id>"]}' --prod
+```
+
+Run the complete census twice and require zero both times. Release B then
+deletes the field validators, temporary operator/test/API exposure, and these
+execution commands. It does not delete runtime resolution or telemetry.
+
 ### AI Feed retirement
 
 AI Feed removal is also a two-release data retirement. Release A removes the

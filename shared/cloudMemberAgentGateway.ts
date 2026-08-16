@@ -9,7 +9,6 @@ export type CloudMemberAgentChannel = {
   thread_key: string;
   community_id: string | null;
   model_id: string;
-  runtime_engine: "polynet";
   context_version: number;
 };
 
@@ -30,7 +29,6 @@ function normalizeMemberAgentChannel(payload: CloudMemberAgentChannel | null): C
     thread_key: threadKey,
     community_id: String(payload.community_id ?? "").trim() || null,
     model_id: String(payload.model_id ?? "").trim(),
-    runtime_engine: "polynet",
     context_version: Number.isFinite(payload.context_version)
       ? Math.max(0, Math.floor(payload.context_version))
       : 0,

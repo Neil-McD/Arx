@@ -1,6 +1,5 @@
 import type { Dispatch, MutableRefObject, SetStateAction } from "react";
 import { sanitizeUserFacingAssistantText } from "./communityUserFacingOutputSanitizer";
-import type { RuntimeEngine } from "./runtimeEngine";
 import type { RuntimeInvocationSurface } from "./runtimeInvocationSurface";
 import type { MemberAgentSurfaceContextV1 } from "./memberAgentSurfaceContext";
 
@@ -57,7 +56,6 @@ export type UseWebTurnRunnerControllerArgs<
     id: string;
     title?: string | null;
     model_id?: string | null;
-    runtime_engine?: RuntimeEngine | null;
     community_id?: string | null;
     context_version?: number | null;
   } | null;
@@ -96,7 +94,6 @@ export type RunAgentTurnParams = {
   userMessageKey?: string;
   systemPrompt?: string | null;
   inferenceSource?: "free" | "user_key" | "chatgpt";
-  runtimeEngine: "polynet";
   invocationSurface: RuntimeInvocationSurface;
   surfaceContext?: MemberAgentSurfaceContextV1 | null;
   requestedFundingSource:
