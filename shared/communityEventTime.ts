@@ -80,8 +80,10 @@ export function getZonedCommunityEventTimeParts(
   };
 }
 
-function getTimeZoneOffsetMs(utcMs: number, rawTimeZone: unknown): number {
-  const parts = getZonedCommunityEventTimeParts(utcMs, rawTimeZone);
+function getTimeZoneOffsetMsFromParts(
+  utcMs: number,
+  parts: CommunityEventTimeParts,
+): number {
   const zonedAsUtcMs = Date.UTC(
     parts.year,
     parts.month - 1,
@@ -92,6 +94,49 @@ function getTimeZoneOffsetMs(utcMs: number, rawTimeZone: unknown): number {
     parts.millisecond,
   );
   return zonedAsUtcMs - utcMs;
+}
+
+function getTimeZoneOffsetMs(utcMs: number, rawTimeZone: unknown): number {
+  return getTimeZoneOffsetMsFromParts(
+    utcMs,
+    getZonedCommunityEventTimeParts(utcMs, rawTimeZone),
+  );
+}
+
+function formatCommunityEventUtcOffset(offsetMs: number): string {
+  const totalMinutes = Math.round(offsetMs / (60 * 1000));
+  const sign = totalMinutes < 0 ? "-" : "+";
+  const absoluteMinutes = Math.abs(totalMinutes);
+  const hours = String(Math.floor(absoluteMinutes / 60)).padStart(2, "0");
+  const minutes = String(absoluteMinutes % 60).padStart(2, "0");
+  return `${sign}${hours}:${minutes}`;
+}
+
+/**
+ * RFC 9557-style exact instant projected into the event's named IANA zone.
+ * The stored UTC instant and zone remain authoritative; this value keeps
+ * agents and external clients from having to calculate the local clock time.
+ */
+export function formatCommunityEventZonedDateTime(
+  value: Date | number | string,
+  rawTimeZone: unknown,
+): string {
+  const date = value instanceof Date ? value : new Date(value);
+  const utcMs = date.getTime();
+  if (!Number.isFinite(utcMs)) throw new Error("community_event_datetime_invalid");
+  const timeZone = normalizeCommunityEventTimeZone(rawTimeZone);
+  const parts = getZonedCommunityEventTimeParts(date, timeZone);
+  const year = String(parts.year).padStart(4, "0");
+  const month = String(parts.month).padStart(2, "0");
+  const day = String(parts.day).padStart(2, "0");
+  const hour = String(parts.hour).padStart(2, "0");
+  const minute = String(parts.minute).padStart(2, "0");
+  const second = String(parts.second).padStart(2, "0");
+  const millisecond = String(parts.millisecond).padStart(3, "0");
+  const offset = formatCommunityEventUtcOffset(
+    getTimeZoneOffsetMsFromParts(utcMs, parts),
+  );
+  return `${year}-${month}-${day}T${hour}:${minute}:${second}.${millisecond}${offset}[${timeZone}]`;
 }
 
 export function communityEventWallTimePartsToUtcMs(
@@ -307,7 +352,23 @@ export function parseCommunityEventDateTimeInputValue(value: string): CommunityE
 export function communityEventDateTimeInputToIso(value: string, rawTimeZone: unknown): string | null {
   const parts = parseCommunityEventDateTimeInputValue(value);
   if (!parts) return null;
-  const utcMs = communityEventWallTimePartsToUtcMs(parts, rawTimeZone);
+  const requestedTimeZone = String(rawTimeZone ?? "").trim();
+  if (requestedTimeZone && !isValidCommunityEventTimeZone(requestedTimeZone)) {
+    return null;
+  }
+  const timeZone = normalizeCommunityEventTimeZone(rawTimeZone);
+  const utcMs = communityEventWallTimePartsToUtcMs(parts, timeZone);
+  const resolvedParts = getZonedCommunityEventTimeParts(utcMs, timeZone);
+  if (
+    resolvedParts.year !== parts.year ||
+    resolvedParts.month !== parts.month ||
+    resolvedParts.day !== parts.day ||
+    resolvedParts.hour !== parts.hour ||
+    resolvedParts.minute !== parts.minute ||
+    resolvedParts.second !== parts.second
+  ) {
+    return null;
+  }
   return Number.isFinite(utcMs) ? new Date(utcMs).toISOString() : null;
 }
 

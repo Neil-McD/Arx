@@ -464,7 +464,11 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     const timezone = normalizeCommunityEventTimeZone(draft.timezone);
     const startsAt = communityEventDateTimeInputToIso(draft.starts_at, timezone);
     if (!startsAt) {
-      setLocalError("Start time is required.");
+      setLocalError(
+        draft.starts_at
+          ? "Start time is invalid in the selected timezone."
+          : "Start time is required.",
+      );
       return;
     }
     const endsAt = draft.ends_at ? communityEventDateTimeInputToIso(draft.ends_at, timezone) : null;

@@ -261,7 +261,9 @@ projections remain bounded relationship views, not generic row browsers.
 Channel directories list bounded recent readable activity, and the community
 events directory lists bounded current and upcoming events. Both return exact
 paths that round-trip through `polynet_read` and reuse their canonical domain
-owners and access checks.
+owners and access checks. Event records retain UTC transport instants and their
+IANA timezone, and also project RFC 9557-style zoned start and end values so
+models never need to calculate authoritative event clock times.
 
 `polynet_search` is `IMPLEMENTED` on the staging source path. Exact subtree
 searches reuse canonical domain owners. Community-root search composes the
