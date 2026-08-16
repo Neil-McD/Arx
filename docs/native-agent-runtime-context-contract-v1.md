@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; the Slice 8 native baseline, Pi core admission, governed tool admission, and canonical tool-result state parity are complete, while provider/context parity, the Pi value decision, and Slices 9 through 10 remain
+Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; Slice 8 is complete with an evidence-backed Pi rejection, Slice 9 is skipped, and Slice 10 cleanup is locally complete with final release acceptance remaining
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-16
 
@@ -10,12 +10,15 @@ Program position:
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 5F and 6 through 7B plus pre-Slice 8
-  liveness are released and production-proven. Slices 8 through 10 remain.
-- Pi agent-core adoption in Polynet: the reviewed core is pinned only as a
-  feasibility dependency, and its model-free admission probe passes in the
-  default Convex action runtime. Its test-only governed tool-admission bridge
-  now preserves the native batch, repetition, liveness, and lifecycle boundary.
-  Provider/context/result parity, a value decision, and cutover have not started.
+  liveness are released and production-proven. Slice 8 selected the native
+  kernel, Slice 9 is skipped, and Slice 10 final release proof remains.
+- Pi agent-core adoption in Polynet: rejected at the Slice 8 value gate. The
+  model-free probes proved core/default-runtime compatibility, governed tool
+  admission, and canonical tool-result parity, but the smallest
+  production-shaped provider/context adapter crossed the explicit complexity
+  stop before it reached a test matrix. No production callsite or route changed.
+  The feasibility dependency, probe, and Pi-only parity files are now deleted
+  locally; only historical evidence remains in this contract.
 
 ## 1. Purpose
 
@@ -295,13 +298,9 @@ The released architecture through Slice 7B has:
     Funnel Composer, with complete-episode selection and mandatory bounded
     lineage in the existing runtime event store.
 
-The remaining gaps are:
-
-1. Pi agent core has not been placed behind the governed-loop interface,
-   parity-tested against the native baseline, or used by a production Polynet
-   turn.
-2. Pi agent core has not yet proved that it removes more runtime complexity
-   than its adapter and hosted-runtime requirements add.
+The remaining gap is to land the native-only cleanup on canonical `main` and
+complete the final production role verification matrix. A Convex deployment is
+required only if the released diff changes the production Convex bundle.
 
 Program status:
 
@@ -315,9 +314,9 @@ Program status:
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
-| 8 | Pi value/feasibility adapter and deterministic parity | Native baseline, core/default-runtime admission, governed tool admission, and canonical tool-result state parity complete; provider/context parity and value decision remain |
-| 9 | Reversible role-by-role Pi cutover if earned | Not started |
-| 10 | Losing-kernel deletion and final production acceptance | Not started |
+| 8 | Pi value/feasibility adapter and deterministic parity | Complete: Pi rejected at the measured complexity/value gate; native kernel selected |
+| 9 | Reversible role-by-role Pi cutover if earned | Skipped because Pi did not earn adoption |
+| 10 | Losing-kernel deletion and final production acceptance | Cleanup complete locally; canonical release and final production acceptance remain |
 
 ## 13. Irreducible end state
 
@@ -432,6 +431,11 @@ Do not adopt:
 
 ### 14.3 Pi: adopt only the loop engine if it earns adoption
 
+Decision: Pi did not earn adoption. Slice 8's compatibility and deterministic
+parity probes were valuable evidence, but the provider/context boundary failed
+the explicit net-complexity gate. The requirements below remain the reason the
+candidate was rejected, not unfinished destination work.
+
 If adopted, the target is Pi agent core, not the Pi coding agent and not a
 Python harness.
 
@@ -476,8 +480,8 @@ the backend merely to satisfy Pi without first re-evaluating its benefit.
 ## 15. End-state invariants
 
 1. Exactly one production native loop implementation serves all four native
-   roles after convergence. Pi is the preferred candidate, not an authority or
-   unconditional completion requirement.
+   roles after convergence. Slice 8 selected `runNativeRuntimeKernel`; Pi never
+   became an authority or production requirement.
 2. Every native run has mandatory pre-first-provider context evidence. Bounded
    Concierge and Steward inputs retain exact snapshots; potentially long
    Member and Funnel inputs retain exact cryptographic attestations over the
@@ -1434,8 +1438,42 @@ Slice 8 entry evidence on 2026-08-16:
     foundation checks, the production web build, and both dependency audits
     with zero findings. This remains local test evidence only: no production
     callsite, provider, context projection, funding path, schema, feature flag,
-    staging deployment, or production deployment changed. Pi has not yet earned
-    adoption; the next parity slice must justify its added bridge surface.
+    staging deployment, or production deployment changed. At this checkpoint,
+    Pi had not earned adoption; the following value-gate evidence records why it
+    was rejected.
+15. The exact merged Slice 8 parity state at `1438f6128349289adf39aad60c6c247ad1e5586f`
+    was subsequently deployed to production Convex. A normal Member Agent
+    community-inspection run completed `ok`, executed ten successful
+    `polynet_list`/`polynet_read` calls, passed context-integrity checks with no
+    failures or warnings, fit the reviewed model budget, and settled its
+    community-inference receipt. This proves the native release baseline; it
+    did not route a production turn through Pi.
+16. The provider/context value gate began with a deliberately disposable,
+    production-shaped adapter spike. Before its differential tests existed, the
+    smallest honest boundary had reached 845 lines to reconstruct native
+    provider messages from Pi state, restore Polynet-held opaque reasoning,
+    preserve canonical provider tool schemas, duplicate budget/projection
+    orchestration, translate provider outcomes, and mirror funding lifecycle
+    signals. The spike was deleted immediately rather than optimized.
+17. At the same ref, `shared/runtimeKernel.ts` is 1,027 lines. The retained Pi
+    feasibility helper is already 950 lines and its three focused test files are
+    another 864 lines. Pi admission added 86 package-lock package entries, zero
+    removals, and the three direct Pi packages occupy about 11.3 MB installed
+    before counting their transitive provider SDKs. The complete Pi evidence
+    surface therefore exceeded the native kernel before a production adapter,
+    provider canary, rollback path, or role migration existed.
+18. Pi could not produce the desired token-efficiency gain at this boundary.
+    Polynet must continue to own prompt compilation, durable-history projection,
+    model-aware budgeting, provider schemas, and the final provider request.
+    Wrapping those same bytes in Pi changes loop mechanics, not the number of
+    model-visible tokens. Reusing the existing transports also means Pi's
+    transitive provider SDKs add footprint without replacing a provider owner.
+19. Decision: reject Pi for this architecture. The candidate is compatible and
+    behaviorally capable, but it does not delete enough Polynet-owned machinery
+    to offset its adapter, translation, dependency, and verification surface.
+    Slice 9 is skipped. Slice 10 must delete the Pi dependency and probe while
+    retaining the shared canonical tool-result and signature policy now used by
+    the selected native kernel.
 
 Acceptance:
 
@@ -1451,10 +1489,18 @@ Acceptance:
    duplicates provider transports, weakens final enforcement, or adds as much
    maintained complexity as it removes without a material reliability gain.
 
+Acceptance result: complete by rejection. Items 2 through 4 are proven, runtime
+compatibility is proven, and item 6 fired on measured maintained complexity and
+dependency footprint before production routing. Provider/context parity is no
+longer destination work because the candidate failed the preceding value gate.
+
 ### 17.6 Slice 9: reversible role-by-role Pi cutover if earned
 
 Objective: if Pi wins Slice 8's value and parity gate, move production roles
 gradually with a server-owned rollback path. If Pi loses, skip this slice.
+
+Status: skipped. Slice 8 rejected Pi; no canary or rollback routing should be
+built.
 
 Order:
 
@@ -1492,6 +1538,9 @@ Acceptance for each role:
 
 Objective: finish convergence rather than retaining two permanent runtimes.
 
+Status: native kernel selected and Pi feasibility residue deleted locally;
+canonical release and final native-only production acceptance remain.
+
 Work:
 
 1. If Pi wins and all four roles meet their stability window, delete
@@ -1504,9 +1553,33 @@ Work:
    contract.
 4. Update all architecture, cognition, MCP, release, and operational docs to
    name the final owners.
-5. Run the complete release gate, deploy Convex intentionally, release through
-   GitHub `main`, and prove the exact production build marker and live role
-   canaries.
+5. Run the complete release gate and release through GitHub `main`. Deploy
+   Convex intentionally only when the final diff changes its production bundle;
+   then prove the exact applicable production marker and live role canaries.
+
+Slice 10 cleanup evidence on 2026-08-16:
+
+1. The three Pi-only test files and the 950-line closed feasibility probe are
+   deleted. No production runtime file, route, prompt, provider, funding,
+   schema, or UI behavior changed.
+2. Four native invariants that were uniquely explicit in the differential
+   suite moved into `runtime_kernel_baseline.test.ts`: failure recovery resets
+   its counter, changed canonical results count as progress, serial cancellation
+   preserves only completed artifacts, and parallel cancellation preserves
+   provider source order.
+3. Removing `@earendil-works/pi-agent-core` and direct `typebox` pruned all 86
+   packages added by admission. `package.json` and `package-lock.json` now match
+   the exact pre-Pi dependency state at
+   `256e8f75286cab972b0b6013513269025ba68999`.
+4. `shared/runtimeToolResultState.ts` and
+   `shared/runtimeToolSignatures.ts` remain reached by
+   `runNativeRuntimeKernel`; they are selected-kernel policy, not losing-kernel
+   residue.
+5. The focused native kernel, input-budget, and context-projection suite passes
+   39 tests. The complete local release gate passes 118 test files and 749
+   tests, all 66 foundation checks, Convex and web typechecks, the production
+   web build, and both dependency audits with zero findings. This is local
+   deletion evidence, not canonical release or production-role evidence.
 
 Acceptance:
 
@@ -1534,7 +1607,7 @@ Every remaining slice runs the applicable cells:
 | Loop | stream, cancellation, parallel-safe reads, mutation serialization, stop reasons |
 | Roles | Member, Funnel, Concierge, Steward fixtures and live canaries |
 | External | MCP explicit community scope and domain-executor parity |
-| Release | clean final tree, release gate, Convex deployment, production SHA and browser/live canary |
+| Release | clean final tree, release gate, applicable deployment, production SHA and browser/live canary |
 
 Local green tests are not production proof. Provider canaries do not prove
 deployment. A production build marker does not prove role behavior. Each claim
@@ -1575,8 +1648,9 @@ rejection does not block completion; permanent dual runtimes do.
 
 Closed decisions:
 
-1. Pi is the preferred candidate, not an unconditional requirement. If it earns
-   adoption, use Pi agent core only; never adopt the Pi coding agent.
+1. Pi was the preferred candidate, not an unconditional requirement. Slice 8
+   rejected it on measured net complexity; retain the native kernel and never
+   adopt the Pi coding agent.
 2. Preserve Polynet governance and canonical cloud state.
 3. Keep external MCP outside the native loop.
 4. Use one selected community authority boundary; channel/page state is a
@@ -1588,12 +1662,13 @@ Closed decisions:
 8. Model capacity authority is the resolved runtime transport/model registry,
    not the UI alias catalog or live provider metadata.
 
-Questions that must be answered by proof, not architectural speculation:
+Questions answered by Slice 8 proof:
 
-1. Does the governed Pi adapter preserve every native baseline behavior while
-   deleting enough native loop machinery to reduce net maintained complexity?
-2. What is the smallest server-owned canary/rollback mechanism that reuses
-   current runtime configuration?
+1. The governed Pi probe preserves the tested native baseline behaviors, but a
+   production-shaped provider/context adapter does not delete enough native
+   machinery to reduce net maintained complexity.
+2. No Pi canary/rollback mechanism is needed because Pi did not pass the value
+   gate and never became production-reachable.
 
 Do not build:
 
@@ -1608,14 +1683,15 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Extend the same test-only governed bridge through one next semantic plane:
-canonical tool-result envelopes, failure/no-progress counters, cancellation
-during execution, and terminal stop mapping. Reuse the native fixtures and the
-single shared signature authority; do not add a production callsite yet.
+Publish the locally proven decision and its mechanical consequence as one
+canonical change, then close the remaining production evidence gap:
 
-Only after that plane passes should the adapter translate the already-resolved
-Polynet model transport and canonical context projection. Then measure adapter
-code, dependencies, removable native code, build impact, and behavioral gaps
-and make the explicit adopt/reject decision. Do not add semantic summarization,
-a second prompt compiler, a second event store, a Node runtime split, provider
-migration, production routing, or a permanent second runtime.
+1. Land the contract, dependency deletion, Pi-file deletion, and preserved
+   native regressions together on GitHub `main`.
+2. Confirm the exact released SHA on every production surface changed by the
+   diff. Do not deploy Convex merely to restamp unchanged function code.
+3. Close the program with the Member, Funnel, Concierge, Steward, and external
+   MCP verification matrix against the selected native kernel.
+
+Do not reopen Pi adaptation, add a runtime selector, or combine final
+acceptance with prompt, provider, funding, compaction, or UI behavior changes.

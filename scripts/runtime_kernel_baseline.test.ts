@@ -373,6 +373,33 @@ describe("native runtime kernel behavioral baseline", () => {
     });
   });
 
+  it("resets the consecutive failure count after a successful tool result", async () => {
+    let providerCalls = 0;
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget(),
+      inputBudget,
+      runCompletion: async () => {
+        providerCalls += 1;
+        if (providerCalls === 1) {
+          return toolCall({ providerCallId: "failure-1" });
+        }
+        if (providerCalls === 2) {
+          return toolCall({ providerCallId: "success-2" });
+        }
+        return assistant("Recovered after the tool failure.");
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async ({ providerCallId }) =>
+        providerCallId === "failure-1" ? failure() : success("recovered"),
+    });
+
+    expect(result.ok).toBe(true);
+    expect(
+      result.steps.map((step) => step.consecutiveFailureCount),
+    ).toEqual([1, 0]);
+  });
+
   it("canonicalizes an unexpected serial executor exception", async () => {
     const result = await runNativeRuntimeKernel<TestToolName>({
       messages: baseMessages,
@@ -428,6 +455,37 @@ describe("native runtime kernel behavioral baseline", () => {
     });
   });
 
+  it("treats a changed canonical result as progress", async () => {
+    let providerCalls = 0;
+    let executorCalls = 0;
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget({
+        maxRepeatedIdenticalCalls: 10,
+        maxNoProgressSteps: 1,
+      }),
+      inputBudget,
+      runCompletion: async () => {
+        providerCalls += 1;
+        if (providerCalls <= 2) {
+          return toolCall({ providerCallId: `changed-${providerCalls}` });
+        }
+        return assistant("The result changed.");
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => {
+        executorCalls += 1;
+        return success(`result-${executorCalls}`);
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(result.steps.map((step) => step.madeProgress)).toEqual([true, true]);
+    expect(
+      result.steps.map((step) => step.consecutiveNoProgressCount),
+    ).toEqual([0, 0]);
+  });
+
   it("maps provider cancellation to the canonical terminal reason", async () => {
     const result = await runNativeRuntimeKernel<TestToolName>({
       messages: baseMessages,
@@ -469,6 +527,98 @@ describe("native runtime kernel behavioral baseline", () => {
       stepCount: 1,
     });
     expect(result.transcript).toEqual(baseMessages);
+  });
+
+  it("keeps completed serial artifacts but omits cancelled and unreached calls", async () => {
+    const executedToolCallIds: string[] = [];
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget(),
+      inputBudget,
+      runCompletion: async () =>
+        toolBatch([
+          { providerCallId: "serial-success", toolName: "read_one" },
+          { providerCallId: "serial-cancelled", toolName: "read_two" },
+          { providerCallId: "serial-unreached", toolName: "read_one" },
+        ]),
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async ({ providerCallId }) => {
+        executedToolCallIds.push(providerCallId);
+        return providerCallId === "serial-cancelled"
+          ? failure("user_cancelled", "Run cancelled by user.")
+          : success(providerCallId);
+      },
+      onToolBatchResolved: () => ({ executionMode: "serial" }),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "user_cancelled",
+      stopReason: "user_cancelled",
+      stepCount: 2,
+    });
+    expect(executedToolCallIds).toEqual([
+      "serial-success",
+      "serial-cancelled",
+    ]);
+    expect(result.steps.map((step) => step.providerCallId)).toEqual([
+      "serial-success",
+      "serial-cancelled",
+    ]);
+    expect(
+      result.transcript
+        .filter((message) => message.role === "tool")
+        .map((message) => message.tool_call_id),
+    ).toEqual(["serial-success"]);
+    expect(
+      result.transcript.flatMap((message) =>
+        message.role === "assistant"
+          ? (message.tool_calls ?? []).map((call) => call.id)
+          : [],
+      ),
+    ).toEqual(["serial-success"]);
+  });
+
+  it("records parallel cancellation artifacts in provider source order", async () => {
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget(),
+      inputBudget,
+      runCompletion: async () =>
+        toolBatch([
+          { providerCallId: "parallel-cancelled", toolName: "read_one" },
+          { providerCallId: "parallel-success", toolName: "read_two" },
+        ]),
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async ({ providerCallId }) =>
+        providerCallId === "parallel-cancelled"
+          ? failure("user_cancelled", "Run cancelled by user.")
+          : success(providerCallId),
+      onToolBatchResolved: () => ({ executionMode: "parallel" }),
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "user_cancelled",
+      stopReason: "user_cancelled",
+      stepCount: 2,
+    });
+    expect(result.steps.map((step) => step.providerCallId)).toEqual([
+      "parallel-cancelled",
+      "parallel-success",
+    ]);
+    expect(
+      result.transcript
+        .filter((message) => message.role === "tool")
+        .map((message) => message.tool_call_id),
+    ).toEqual(["parallel-cancelled", "parallel-success"]);
+    expect(
+      result.transcript.flatMap((message) =>
+        message.role === "assistant"
+          ? (message.tool_calls ?? []).map((call) => call.id)
+          : [],
+      ),
+    ).toEqual(["parallel-cancelled", "parallel-success"]);
   });
 
   it("executes admitted parallel batches concurrently and records results in source order", async () => {
