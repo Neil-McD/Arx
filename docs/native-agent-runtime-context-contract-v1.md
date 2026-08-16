@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B and pre-Slice 8 liveness released and production-proven; Slice 5E terminal production retirement and Slices 8 through 10 remain
+Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5E terminal retirement are production-proven; Slice 5F Release A is in progress and Slices 8 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-15
 
@@ -9,10 +9,9 @@ Program position:
 - Architecture boundary: complete.
 - Production context foundation: complete for Member, Funnel Composer,
   Concierge, and Steward.
-- Runtime convergence: Slices 5A through 5D and 6 through 7B are released and
-  production-proven; Slice 5E Release A is implemented locally, pre-Slice 8
-  liveness is released and production-proven, and the Slice 5E production
-  retirement plus Slices 8 through 10 remain.
+- Runtime convergence: Slices 5A through 5E and 6 through 7B plus pre-Slice 8
+  liveness are released and production-proven. Slice 5F removes the last
+  constant thread/client runtime marker; Slices 8 through 10 remain.
 - Pi agent-core adoption in Polynet: no canonical implementation; an isolated
   admission experiment exists outside the released tree, while parity and
   cutover have not started.
@@ -939,10 +938,53 @@ Production cleanup evidence on 2026-08-15:
 6. Before/after accounting counts, project-identifier counts, cost totals, and
    credit totals were numerically identical. Release B deletes only the
    now-empty compatibility schemas, fields, index, and operator.
-7. `threads.runtimeEngine` remains an active fixed `"polynet"` wire marker for
-   current clients; it is narrowed to that single literal. All `"codex"`
-   values were cleanup residue. Removing the constant marker is a later ABI
-   simplification, not part of project/provider data retirement.
+7. `threads.runtimeEngine` remained a fixed `"polynet"` compatibility marker
+   after this cleanup. Slice 5F retires it separately so project/provider
+   retirement evidence stays isolated from native-runtime ABI simplification.
+
+### 17.2.2 Slice 5F: constant thread runtime marker retirement
+
+Status: Release A implemented on 2026-08-15; production cleanup and terminal
+Release B remain.
+
+Objective: remove a value that carries no information. Polynet has one native
+runtime; clients do not select it, threads do not own it, and persisting
+`"polynet"` on every thread cannot grant authority.
+
+The irreducible boundary is:
+
+1. `shared/runtimeEngine.ts` continues to own native runtime resolution and the
+   stable `runtime_convex` engine identifier.
+2. Runtime run/event telemetry continues to record requested, resolved, source,
+   and engine-identifier evidence for each turn.
+3. Harness profile, model selection, context, authority, funding, and tool
+   policy remain unchanged.
+4. Thread records and browser transport carry no `runtimeEngine` or
+   `runtime_engine` field.
+
+Release A is a rolling-client compatibility release:
+
+1. Stop all product writers and readers of the thread marker.
+2. Stop native web clients from sending the constant marker on turn requests;
+   the server continues to accept the optional legacy request field and rejects
+   unsupported values.
+3. Temporarily keep only the `threads` schema validator and the two mutation
+   argument validators so cached clients and persisted rows remain valid.
+4. Expose one internal-only bounded, dry-run-first, exact-ID guarded operator
+   that can only patch `threads.runtimeEngine` to `undefined`.
+
+Production cleanup gate:
+
+1. Prove the exact Release A SHA is live in Vercel and Convex.
+2. Export production Convex outside the repository and record its checksum.
+3. Run a complete paginated census, then dry-run and execute exact matching
+   batches until no residue remains.
+4. Run two complete zero censuses. Stop on any mismatch.
+
+Release B deletes the schema validator, compatibility mutation arguments,
+temporary operator/test/API exposure, and migration runbook commands. It must
+preserve `shared/runtimeEngine.ts`, runtime run/event telemetry, and the native
+ingress rejection of any explicitly unsupported engine value.
 
 ### 17.3 Slice 6: canonical model-aware input budget
 

@@ -193,7 +193,20 @@ for field in sandboxMode workspaceSessionState workspaceProviderSandboxId worksp
     "schema no longer carries retired $field compatibility residue"
 done
 require_match_in_file "$SCHEMA_FILE" 'runtimeEngine: v\.optional\(v\.literal\("polynet"\)\)' \
-  "the active thread wire marker is narrowed to the one native runtime"
+  "Release A temporarily accepts persisted thread marker residue"
+require_match_in_file "convex/threadRuntimeMarkerRetirement.ts" 'runtimeEngine: undefined' \
+  "the bounded retirement operator removes only the obsolete thread marker"
+for file in \
+  shared/cloudThreadsRead.ts \
+  shared/cloudThreadsGateway.ts \
+  shared/cloudMemberAgentGateway.ts \
+  shared/webTurnRunnerCore.ts \
+  shared/useWebTurnRunnerController.ts \
+  apps/web/src/components/WebMemberAgentDock.tsx \
+  apps/web/src/components/WebCommunityFunnelEditor.tsx; do
+  forbid_match_in_file "$file" '\bruntimeEngine\b|\bruntime_engine\b' \
+    "$file no longer transports the constant native runtime marker"
+done
 forbid_match_in_file "$SCHEMA_FILE" 'v\.literal\("codex"\)' \
   "schema contains no Codex runtime variant"
 if [[ -e "convex/projectResidueRetirement.ts" ]]; then

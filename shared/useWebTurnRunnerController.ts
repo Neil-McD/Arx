@@ -320,7 +320,6 @@ export function useWebTurnRunnerController<
           threadId,
           title: thread?.title ?? null,
           modelId: thread?.model_id ?? null,
-          runtimeEngine: thread?.runtime_engine ?? null,
           communityId: thread?.community_id ?? null,
           contextVersion:
             typeof thread?.context_version === "number" && Number.isFinite(thread.context_version)
@@ -492,7 +491,6 @@ export function useWebTurnRunnerController<
                 ? { surface_context: params.surfaceContext }
                 : null),
               model_id: params.preferredModelId,
-              runtime_engine: params.runtimeEngine,
               requested_funding_source: params.requestedFundingSource,
               idempotency_key: params.runIdHint,
               user_message_key: params.userMessageKey ?? undefined,

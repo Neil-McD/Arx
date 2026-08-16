@@ -608,8 +608,13 @@ assert.match(
 );
 assert.match(
   threads,
-  /modelId: DEFAULT_ACTIVE_MODEL_ID[\s\S]*runtimeEngine: "polynet"/,
-  "the member-agent channel must remain on the default Polynet runtime",
+  /prepareActiveGlobalMemberAgentThread[\s\S]*modelId: DEFAULT_ACTIVE_MODEL_ID/,
+  "the member-agent channel must remain on the default model",
+);
+assert.doesNotMatch(
+  component,
+  /\bruntimeEngine\b|\bruntime_engine\b/,
+  "the dock must not transport a constant runtime marker",
 );
 
 assert.match(

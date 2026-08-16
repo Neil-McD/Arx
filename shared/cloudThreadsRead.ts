@@ -4,10 +4,6 @@ import {
   hasConvexUrl,
   type ConvexClient,
 } from "./convexAuthenticatedClient";
-import {
-  normalizeRuntimeEngine,
-  type RuntimeEngine,
-} from "./runtimeEngine";
 
 type ConvexThreadRow = {
   _id?: string | null;
@@ -15,7 +11,6 @@ type ConvexThreadRow = {
   threadKey?: string | null;
   title?: string | null;
   modelId?: string | null;
-  runtimeEngine?: string | null;
   communityId?: string | null;
   contextVersion?: number | null;
   latestUserVisibleCompletedRunId?: string | null;
@@ -66,7 +61,6 @@ export type CloudThreadTransportRow = {
   id: string;
   title: string | null;
   model_id: string | null;
-  runtime_engine: RuntimeEngine | null;
   community_id: string | null;
   context_version: number;
   agent_attention: boolean;
@@ -147,7 +141,6 @@ function mapConvexThreadRow(row: ConvexThreadRow): CloudThreadTransportRow | nul
     id,
     title: typeof row.title === "string" ? row.title : null,
     model_id: typeof row.modelId === "string" ? row.modelId : null,
-    runtime_engine: normalizeRuntimeEngine(row.runtimeEngine),
     community_id: typeof row.communityId === "string" ? row.communityId : null,
     context_version: Math.max(0, Math.floor(toFiniteNumber(row.contextVersion, 0))),
     agent_attention:

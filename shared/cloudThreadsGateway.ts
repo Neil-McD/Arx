@@ -3,7 +3,6 @@ import { resolveConvexRuntimeToken } from "./authSession";
 import { type ConvexClient } from "./convexAuthenticatedClient";
 import { readConvexRuntimeUrl } from "./convexRuntime";
 import { bootstrapGatewayAuthContextIfAvailable } from "./cloudGateway";
-import type { RuntimeEngine } from "./runtimeEngine";
 import {
   MEMBER_AGENT_ATTACHMENT_UPLOAD_PATH,
   type MemberAgentImageAttachment,
@@ -13,7 +12,6 @@ export type CloudThreadRecordInput = {
   threadId: string;
   title?: string | null;
   modelId?: string | null;
-  runtimeEngine?: RuntimeEngine | null;
   communityId?: string | null;
   contextVersion?: number | null;
 };
@@ -59,7 +57,6 @@ export async function ensureCloudThreadRecord(params: {
     title: typeof params.thread.title === "string" ? params.thread.title.trim() || undefined : undefined,
     titleSource: "auto",
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
-    runtimeEngine: params.thread.runtimeEngine ?? undefined,
     communityId: String(params.thread.communityId ?? "").trim() || undefined,
     contextVersion:
       typeof params.thread.contextVersion === "number" && Number.isFinite(params.thread.contextVersion)
@@ -98,7 +95,6 @@ export async function updateCloudThreadRecord(params: {
     title: typeof params.thread.title === "string" ? params.thread.title.trim() || undefined : undefined,
     titleSource: "auto",
     modelId: String(params.thread.modelId ?? "").trim() || undefined,
-    runtimeEngine: params.thread.runtimeEngine ?? undefined,
     nowMs: params.nowMs ?? Date.now(),
   });
 }
