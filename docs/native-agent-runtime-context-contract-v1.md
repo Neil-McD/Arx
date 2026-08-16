@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; Slices 8 through 10 remain
+Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; the Slice 8 native baseline, Pi core admission, governed tool admission, and canonical tool-result state parity are complete, while provider/context parity, the Pi value decision, and Slices 9 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-16
 
@@ -11,9 +11,11 @@ Program position:
   Concierge, and Steward.
 - Runtime convergence: Slices 5A through 5F and 6 through 7B plus pre-Slice 8
   liveness are released and production-proven. Slices 8 through 10 remain.
-- Pi agent-core adoption in Polynet: no canonical implementation; an isolated
-  admission experiment exists outside the released tree, while parity and
-  cutover have not started.
+- Pi agent-core adoption in Polynet: the reviewed core is pinned only as a
+  feasibility dependency, and its model-free admission probe passes in the
+  default Convex action runtime. Its test-only governed tool-admission bridge
+  now preserves the native batch, repetition, liveness, and lifecycle boundary.
+  Provider/context/result parity, a value decision, and cutover have not started.
 
 ## 1. Purpose
 
@@ -295,8 +297,9 @@ The released architecture through Slice 7B has:
 
 The remaining gaps are:
 
-1. Pi agent core has not been admitted into the canonical tree, parity-tested,
-   or used by a production Polynet turn.
+1. Pi agent core has not been placed behind the governed-loop interface,
+   parity-tested against the native baseline, or used by a production Polynet
+   turn.
 2. Pi agent core has not yet proved that it removes more runtime complexity
    than its adapter and hosted-runtime requirements add.
 
@@ -312,7 +315,7 @@ Program status:
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
-| 8 | Pi value/feasibility adapter and deterministic parity | Isolated admission experiment exists; canonical parity not started |
+| 8 | Pi value/feasibility adapter and deterministic parity | Native baseline, core/default-runtime admission, governed tool admission, and canonical tool-result state parity complete; provider/context parity and value decision remain |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
 
@@ -363,7 +366,7 @@ The local reference snapshots used for this contract are:
 
 - Hermes Agent `461c4939725b8c85aebb78abeda92993a9f53efd` from 2026-08-09.
 - Codex `b9a2e400018c219e3010a5a5b8ded8645184da0b` from 2026-03-07.
-- Installed adjacent Pi core package `@earendil-works/pi-agent-core@0.82.1`.
+- Pinned Pi core package `@earendil-works/pi-agent-core@0.84.2`.
 
 These references inform mechanics. They do not become Polynet authority.
 
@@ -1350,6 +1353,90 @@ Parity must cover:
 7. Context projection and overflow retry behavior.
 8. Tool-result envelopes, hashes, receipts, and idempotent replay.
 
+Slice 8 entry evidence on 2026-08-16:
+
+1. The native behavioral baseline is merged on `origin/main` through
+   `256e8f75286cab972b0b6013513269025ba68999`. It covers final response and
+   tool-result round trips, invalid arguments, admitted-tool rejection,
+   cancellation, bounded failure/no-progress/tool-budget stops, batch
+   atomicity, and serial/parallel ordering without changing production routing.
+2. `@earendil-works/pi-agent-core@0.84.2` is exact-pinned as a development-only
+   feasibility dependency. Its only additional Pi-namespaced packages are
+   matching `pi-ai` and `pi-telemetry`; `typebox@1.3.7` is direct-pinned because
+   the public tool contract requires a TypeBox parameter schema. No Pi coding
+   agent, storage/session, prompt-loader, or extension package is installed.
+   However, the mandatory `pi-ai` dependency transitively installs Anthropic,
+   Bedrock, Google, and OpenAI provider SDKs even though this probe imports none
+   of them.
+3. A closed, model-free probe accepts fixed named admission scenarios plus an
+   optional declarative, data-only result fixture and owns a private two-tool
+   registry. It accepts no arbitrary executor, credentials, prompt loader,
+   storage, runtime selector, or provider network function.
+4. The probe proves exact prompt and admitted tool exposure, final response,
+   admitted execution, unknown-tool rejection by Pi, argument rejection before
+   execution, pre-aborted cancellation, sequential execution, permitted
+   parallel execution, and source-ordered tool results.
+5. All seven scenarios pass under exact Node `22.19.0` and execute successfully
+   after bundling into an unmodified default Convex action runtime on an
+   isolated local deployment. No Node action split is required. The temporary
+   Convex probe function is removed after the proof; no schema, data, route, or
+   production runtime is changed.
+6. The same bundle reached staging schema validation, but staging deployment
+   and invocation were blocked by a pre-existing `platformDiagnosticEvents`
+   row containing the retired `projectId` field. This is not a Pi bundle or
+   execution failure, but it is also not staging execution evidence. The slice
+   does not mutate unrelated staging data or restore the retired field.
+7. Admission adds 86 package-lock entries, and the pinned core declares Node
+   `>=22.19.0`. Successful default-runtime execution removes the need for a
+   Convex runtime split, but dependency footprint and the local Node floor are
+   explicit costs that Pi must offset through net code deletion before adoption.
+8. The first governed parity slice preflights the complete Pi assistant tool
+   batch before translating any Pi lifecycle event into a Polynet-admitted
+   start. Unknown tools, duplicate call IDs, over-budget batches, repeated calls
+   within a batch or across turns, and inactive runs produce zero admitted
+   starts and zero executor invocations. Pi's earlier raw
+   `tool_execution_start` event is therefore observability only, never the
+   durable admission authority.
+9. The proof preserves the native malformed-argument distinction: an admitted
+   call receives one start and one error finish but cannot invoke its executor.
+   Mixed valid/invalid batches preserve source order and execute only the valid
+   admitted member. Serial batches remain single-flight; permitted parallel
+   batches reach two concurrent executions and return results in source order.
+10. Native and Pi use one extracted pure tool-call signature function; the Pi
+    bridge does not carry a second repetition-identity implementation. The
+    focused admission/native suite passes 33 tests, and the local release gate
+    passes 120 files and 762 tests with zero dependency-audit findings. This is
+    test-only local evidence: no production callsite, feature flag, provider,
+    schema, staging deployment, or production deployment changed, and the
+    governed bridge has not been re-executed inside a deployed Convex action.
+11. Canonical tool-result identity and state policy now live in two small shared
+    modules: one stable result signature and one pure transition for envelopes,
+    progress, consecutive failures, no-progress bounds, cancellation, and
+    terminal signals. The native kernel calls this policy instead of retaining
+    a second implementation. Unexpected serial executor throws now become the
+    same `tool_execution_exception` result already used for parallel failures.
+12. The model-free Pi bridge retains exact canonical executor outcomes by call
+    ID. `afterToolCall` projects those outcomes into Pi's model-visible result
+    shape but does not decide progress or stopping. At `turn_end`, the bridge
+    advances state in assistant source order, even when Pi emits parallel
+    completion events in the opposite order; `shouldStopAfterTurn` prevents
+    provider request N+1 after a canonical terminal result. A declarative test
+    fixture supplies data only and exposes no executor or provider callback.
+13. Differential fixtures prove exact native/Pi equality for successful and
+    failed envelopes, result signatures, failure recovery, failure and
+    no-progress exhaustion, changed-result progress, inverted parallel
+    completion, single-call cancellation, mixed serial success-then-cancellation,
+    parallel cancellation projection, and executor exceptions. A forged Pi
+    transport payload is replaced by the retained canonical result rather than
+    becoming evidence authority.
+14. Under exact Node `22.19.0`, the focused native/Pi suite passes 42 tests. The
+    complete local release gate passes 121 test files and 771 tests, all 66
+    foundation checks, the production web build, and both dependency audits
+    with zero findings. This remains local test evidence only: no production
+    callsite, provider, context projection, funding path, schema, feature flag,
+    staging deployment, or production deployment changed. Pi has not yet earned
+    adoption; the next parity slice must justify its added bridge surface.
+
 Acceptance:
 
 1. Pi passes deterministic parity without production routing, and the value
@@ -1503,11 +1590,9 @@ Closed decisions:
 
 Questions that must be answered by proof, not architectural speculation:
 
-1. Can the pinned Pi core bundle run in Convex's default action runtime, or is
-   an isolated Node 22 action adapter required?
-2. Do production records show any caller of Workspace, chat-mode, or Codex
-   runtime compatibility that source reachability does not reveal?
-3. What is the smallest server-owned canary/rollback mechanism that reuses
+1. Does the governed Pi adapter preserve every native baseline behavior while
+   deleting enough native loop machinery to reduce net maintained complexity?
+2. What is the smallest server-owned canary/rollback mechanism that reuses
    current runtime configuration?
 
 Do not build:
@@ -1523,16 +1608,14 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Begin Slice 8 with an executable behavioral baseline for the canonical native
-kernel: final response handling, tool-result round trips, bounded stop reasons,
-cancellation, argument failure, batch budget atomicity, deterministic serial
-ordering, parallel execution, and server-admitted provider tool names. Delete
-only the proven-dead serial compatibility wrapper. This baseline changes no
-production routing and adds no Pi dependency.
+Extend the same test-only governed bridge through one next semantic plane:
+canonical tool-result envelopes, failure/no-progress counters, cancellation
+during execution, and terminal stop mapping. Reuse the native fixtures and the
+single shared signature authority; do not add a production callsite yet.
 
-Then build one reversible Pi agent-core feasibility adapter outside production
-routing. Prove actual Convex runtime compatibility, governed tool-executor
-containment, deterministic parity against the native baseline, and a net
-reduction in maintained complexity. Adopt or reject Pi from that evidence; do
-not add semantic summarization, a second prompt compiler, a second event store,
-or a permanent second runtime.
+Only after that plane passes should the adapter translate the already-resolved
+Polynet model transport and canonical context projection. Then measure adapter
+code, dependencies, removable native code, build impact, and behavioral gaps
+and make the explicit adopt/reject decision. Do not add semantic summarization,
+a second prompt compiler, a second event store, a Node runtime split, provider
+migration, production routing, or a permanent second runtime.
