@@ -7,7 +7,6 @@ function read(path: string): string {
 
 const panel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
-const messageRow = read("shared/CommunityChatMessageRow.tsx");
 const interactionFeed = read("apps/web/src/components/communityInteractionFeed.tsx");
 const projection = read("apps/web/src/controllers/buildWebCommunitySurfaceProjection.ts");
 const app = read("apps/web/src/App.tsx");
@@ -36,12 +35,11 @@ assert.doesNotMatch(panel, /In this community/, "profile panel must not keep the
 assert.doesNotMatch(panel, /activeCommunityName|isActiveCommunityOwner/, "profile panel must not synthesize context from current community props");
 assert.match(panel, /community-profile-message-action community-profile-panel-message/, "full profile must use the canonical neutral profile action");
 assert.match(interactionFeed, /className="community-profile-message-action"/, "interaction profile preview must use the canonical neutral profile action");
-assert.match(messageRow, /className="community-profile-message-action"/, "legacy message preview must inherit the canonical neutral profile action while it remains migration substrate");
 assert.doesNotMatch(panel, /chat-profile-message-button/, "full profile must not retain the bespoke profile message button");
 
-assert.doesNotMatch(messageRow, /No handle yet|No bio yet|chat-profile-hover-bio\\$|chat-profile-hover-bio\$\{/, "profile hover card must not show placeholder handle or bio rows");
-assert.match(messageRow, /profileHandleLabel \? \([\s\S]*chat-profile-hover-handle[\s\S]*\) : null/, "profile hover handle row must render only when a handle exists");
-assert.match(messageRow, /profileBio \? <div className="chat-profile-hover-bio">\{profileBio\}<\/div> : null/, "profile hover bio row must render only when a bio exists");
+assert.doesNotMatch(interactionFeed, /No handle yet|No bio yet|chat-profile-hover-bio\\$|chat-profile-hover-bio\$\{/, "profile hover card must not show placeholder handle or bio rows");
+assert.match(interactionFeed, /handleLabel \? <div className="chat-profile-hover-handle">\{handleLabel\}<\/div> : null/, "profile hover handle row must render only when a handle exists");
+assert.match(interactionFeed, /bio \? <div className="chat-profile-hover-bio">\{bio\}<\/div> : null/, "profile hover bio row must render only when a bio exists");
 
 assert.match(
   chatPanel,
