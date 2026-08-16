@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; the Slice 8 native baseline and Pi core admission are complete, while governed parity and Slices 9 through 10 remain
+Status: context architecture through Slice 7B, pre-Slice 8 liveness, and Slice 5 terminal retirement are production-proven; the Slice 8 native baseline, Pi core admission, and model-free governed tool-admission proof are complete, while the remaining governed parity and Slices 9 through 10 remain
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-16
 
@@ -13,8 +13,9 @@ Program position:
   liveness are released and production-proven. Slices 8 through 10 remain.
 - Pi agent-core adoption in Polynet: the reviewed core is pinned only as a
   feasibility dependency, and its model-free admission probe passes in the
-  default Convex action runtime. A governed adapter, full parity, value
-  decision, and cutover have not started.
+  default Convex action runtime. Its test-only governed tool-admission bridge
+  now preserves the native batch, repetition, liveness, and lifecycle boundary.
+  Provider/context/result parity, a value decision, and cutover have not started.
 
 ## 1. Purpose
 
@@ -314,7 +315,7 @@ Program status:
 | 6 | Canonical model-aware input budget | Complete and production-proven |
 | 7 | Shared deterministic model-visible projection and persisted-history pagination | Complete and production-proven |
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
-| 8 | Pi value/feasibility adapter and deterministic parity | Native baseline and core/default-runtime admission complete; governed adapter, full parity, and value decision remain |
+| 8 | Pi value/feasibility adapter and deterministic parity | Native baseline, core/default-runtime admission, and model-free governed tool-admission proof complete; remaining parity and value decision remain |
 | 9 | Reversible role-by-role Pi cutover if earned | Not started |
 | 10 | Losing-kernel deletion and final production acceptance | Not started |
 
@@ -1388,6 +1389,25 @@ Slice 8 entry evidence on 2026-08-16:
    `>=22.19.0`. Successful default-runtime execution removes the need for a
    Convex runtime split, but dependency footprint and the local Node floor are
    explicit costs that Pi must offset through net code deletion before adoption.
+8. The first governed parity slice preflights the complete Pi assistant tool
+   batch before translating any Pi lifecycle event into a Polynet-admitted
+   start. Unknown tools, duplicate call IDs, over-budget batches, repeated calls
+   within a batch or across turns, and inactive runs produce zero admitted
+   starts and zero executor invocations. Pi's earlier raw
+   `tool_execution_start` event is therefore observability only, never the
+   durable admission authority.
+9. The proof preserves the native malformed-argument distinction: an admitted
+   call receives one start and one error finish but cannot invoke its executor.
+   Mixed valid/invalid batches preserve source order and execute only the valid
+   admitted member. Serial batches remain single-flight; permitted parallel
+   batches reach two concurrent executions and return results in source order.
+10. Native and Pi use one extracted pure tool-call signature function; the Pi
+    bridge does not carry a second repetition-identity implementation. The
+    focused admission/native suite passes 33 tests, and the local release gate
+    passes 120 files and 762 tests with zero dependency-audit findings. This is
+    test-only local evidence: no production callsite, feature flag, provider,
+    schema, staging deployment, or production deployment changed, and the
+    governed bridge has not been re-executed inside a deployed Convex action.
 
 Acceptance:
 
@@ -1560,15 +1580,14 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Build the thinnest reversible Pi agent-core adapter behind the existing
-governed-loop interface, outside production routing. It may translate the
-already-resolved model transport, compiled context, admitted tool definitions,
-cancellation signal, and lifecycle events; it may not resolve authority, call
-providers directly, accept an arbitrary executor, persist Pi state, or create a
-second event vocabulary.
+Extend the same test-only governed bridge through one next semantic plane:
+canonical tool-result envelopes, failure/no-progress counters, cancellation
+during execution, and terminal stop mapping. Reuse the native fixtures and the
+single shared signature authority; do not add a production callsite yet.
 
-Drive the native kernel and Pi adapter through the same deterministic fixtures,
-then measure dependency/build impact, adapter lines, removable native lines,
-and behavioral gaps. Adopt or reject Pi from that evidence. Do not add semantic
-summarization, a second prompt compiler, a second event store, a Node runtime
-split, provider migration, production routing, or a permanent second runtime.
+Only after that plane passes should the adapter translate the already-resolved
+Polynet model transport and canonical context projection. Then measure adapter
+code, dependencies, removable native code, build impact, and behavioral gaps
+and make the explicit adopt/reject decision. Do not add semantic summarization,
+a second prompt compiler, a second event store, a Node runtime split, provider
+migration, production routing, or a permanent second runtime.

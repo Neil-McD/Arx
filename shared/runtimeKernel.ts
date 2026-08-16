@@ -33,37 +33,15 @@ import {
   type RuntimeInputBudgetPlan,
   type RuntimeProviderTransport,
 } from "./runtimeInputBudget.ts";
+import {
+  buildRuntimeToolCallSignature,
+  stableSerializeRuntimeValue,
+} from "./runtimeToolSignatures.ts";
 
 function summarizeLongText(value: string, limit = 512): string {
   if (value.length <= limit) return value;
   const half = Math.max(32, Math.floor((limit - 5) / 2));
   return `${value.slice(0, half)}...${value.slice(-half)}`;
-}
-
-function stableSerialize(value: unknown): string {
-  const seen = new WeakSet<object>();
-
-  const encode = (input: unknown): string => {
-    if (input === null || typeof input !== "object") {
-      return JSON.stringify(input);
-    }
-    if (Array.isArray(input)) {
-      return `[${input.map((entry) => encode(entry)).join(",")}]`;
-    }
-    if (seen.has(input)) {
-      return JSON.stringify("[Circular]");
-    }
-    seen.add(input);
-    const objectValue = input as Record<string, unknown>;
-    const entries = Object.entries(objectValue).sort(([left], [right]) =>
-      left.localeCompare(right),
-    );
-    return `{${entries
-      .map(([key, entry]) => `${JSON.stringify(key)}:${encode(entry)}`)
-      .join(",")}}`;
-  };
-
-  return encode(value);
 }
 
 function buildObservationSignature(
@@ -84,21 +62,17 @@ function buildObservationSignature(
     .join("|");
 }
 
-function buildToolCallSignature<TToolName extends string>(params: {
-  toolName: TToolName;
-  normalizedArgs: Record<string, unknown>;
-}): string {
-  return `${params.toolName}:${stableSerialize(params.normalizedArgs)}`;
-}
-
 function buildToolResultSignature(params: {
   toolResult: RuntimeKernelToolExecutionResult;
 }): string {
   const detailsSignature =
     params.toolResult.details && typeof params.toolResult.details === "object"
-      ? summarizeLongText(stableSerialize(params.toolResult.details), 1024)
+      ? summarizeLongText(
+          stableSerializeRuntimeValue(params.toolResult.details),
+          1024,
+        )
       : null;
-  return stableSerialize({
+  return stableSerializeRuntimeValue({
     status: params.toolResult.status,
     exitCode: params.toolResult.exitCode,
     errorCode: params.toolResult.errorCode,
@@ -813,7 +787,7 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
         toolSteps[Math.min(remainingToolBudget, toolSteps.length - 1)] ??
         toolSteps[0]!;
       const blockedIteration = toolStepCount + remainingToolBudget + 1;
-      const blockedToolSignature = buildToolCallSignature({
+      const blockedToolSignature = buildRuntimeToolCallSignature({
         toolName: blockedStep.toolName,
         normalizedArgs: blockedStep.normalizedArgs,
       });
@@ -861,7 +835,7 @@ export async function runNativeRuntimeKernel<TToolName extends string>(params: {
 
     for (const toolStep of toolSteps) {
       const iteration = simulatedToolStepCount + 1;
-      const toolSignature = buildToolCallSignature({
+      const toolSignature = buildRuntimeToolCallSignature({
         toolName: toolStep.toolName,
         normalizedArgs: toolStep.normalizedArgs,
       });

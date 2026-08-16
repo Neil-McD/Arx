@@ -203,6 +203,8 @@ describe("native runtime kernel behavioral baseline", () => {
   it("turns invalid arguments into a tool error without invoking the executor", async () => {
     let providerCalls = 0;
     let executorCalls = 0;
+    const startedToolCallIds: string[] = [];
+    const finishedToolCallIds: string[] = [];
     const result = await runNativeRuntimeKernel<TestToolName>({
       messages: baseMessages,
       budget: budget(),
@@ -228,10 +230,18 @@ describe("native runtime kernel behavioral baseline", () => {
         executorCalls += 1;
         return success("must not run");
       },
+      onToolStepStart: ({ step }) => {
+        startedToolCallIds.push(step.providerCallId);
+      },
+      onToolStepFinish: ({ step }) => {
+        finishedToolCallIds.push(step.providerCallId);
+      },
     });
 
     expect(result.ok).toBe(true);
     expect(executorCalls).toBe(0);
+    expect(startedToolCallIds).toEqual(["invalid-1"]);
+    expect(finishedToolCallIds).toEqual(["invalid-1"]);
     expect(result.steps[0]).toMatchObject({
       toolResultStatus: "error",
       toolResultErrorCode: "invalid_tool_arguments",
@@ -240,6 +250,7 @@ describe("native runtime kernel behavioral baseline", () => {
 
   it("blocks an over-budget batch before executing any member of it", async () => {
     let executorCalls = 0;
+    const startedToolCallIds: string[] = [];
     const result = await runNativeRuntimeKernel<TestToolName>({
       messages: baseMessages,
       budget: budget({ maxToolSteps: 1 }),
@@ -254,6 +265,9 @@ describe("native runtime kernel behavioral baseline", () => {
         executorCalls += 1;
         return success("must not run");
       },
+      onToolStepStart: ({ step }) => {
+        startedToolCallIds.push(step.providerCallId);
+      },
     });
 
     expect(result).toMatchObject({
@@ -264,6 +278,49 @@ describe("native runtime kernel behavioral baseline", () => {
       stepCount: 0,
     });
     expect(executorCalls).toBe(0);
+    expect(startedToolCallIds).toEqual([]);
+    expect(result.transcript).toEqual(baseMessages);
+  });
+
+  it("blocks a repeated call inside a batch before executing any batch member", async () => {
+    let executorCalls = 0;
+    const startedToolCallIds: string[] = [];
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget({ maxRepeatedIdenticalCalls: 1 }),
+      inputBudget,
+      runCompletion: async () =>
+        toolBatch([
+          {
+            providerCallId: "repeat-batch-1",
+            toolName: "read_one",
+            arguments: { query: "same" },
+          },
+          {
+            providerCallId: "repeat-batch-2",
+            toolName: "read_one",
+            arguments: { query: "same" },
+          },
+        ]),
+      normalizeToolArguments: (_toolName, rawArgs) => rawArgs,
+      executeTool: async () => {
+        executorCalls += 1;
+        return success("must not run");
+      },
+      onToolStepStart: ({ step }) => {
+        startedToolCallIds.push(step.providerCallId);
+      },
+    });
+
+    expect(result).toMatchObject({
+      ok: false,
+      code: "repeated_call_blocked",
+      stopReason: "repeated_call_blocked",
+      pendingToolCallId: "repeat-batch-2",
+      stepCount: 0,
+    });
+    expect(executorCalls).toBe(0);
+    expect(startedToolCallIds).toEqual([]);
     expect(result.transcript).toEqual(baseMessages);
   });
 
@@ -433,6 +490,63 @@ describe("native runtime kernel behavioral baseline", () => {
     expect(result.ok).toBe(true);
     expect(result.stepCount).toBe(2);
     expect(maxInFlight).toBe(2);
+  });
+
+  it("starts every admitted mixed batch member but executes only valid arguments", async () => {
+    let providerCalls = 0;
+    const startedToolCallIds: string[] = [];
+    const finishedToolCallIds: string[] = [];
+    const executedToolCallIds: string[] = [];
+    const result = await runNativeRuntimeKernel<TestToolName>({
+      messages: baseMessages,
+      budget: budget(),
+      inputBudget,
+      runCompletion: async (messages) => {
+        providerCalls += 1;
+        if (providerCalls === 1) {
+          return toolBatch([
+            {
+              providerCallId: "mixed-invalid",
+              toolName: "read_one",
+              arguments: { query: { nested: "invalid" } },
+            },
+            {
+              providerCallId: "mixed-valid",
+              toolName: "read_two",
+              arguments: { query: "valid" },
+            },
+          ]);
+        }
+        expect(
+          messages
+            .filter((message) => message.role === "tool")
+            .map((message) => message.tool_call_id),
+        ).toEqual(["mixed-invalid", "mixed-valid"]);
+        return assistant("Mixed batch complete.");
+      },
+      normalizeToolArguments: (_toolName, rawArgs) => {
+        if (typeof rawArgs.query !== "string") {
+          throw new Error("query must be a string");
+        }
+        return rawArgs;
+      },
+      executeTool: async ({ providerCallId }) => {
+        executedToolCallIds.push(providerCallId);
+        return success(providerCallId);
+      },
+      onToolBatchResolved: () => ({ executionMode: "parallel" }),
+      onToolStepStart: ({ step }) => {
+        startedToolCallIds.push(step.providerCallId);
+      },
+      onToolStepFinish: ({ step }) => {
+        finishedToolCallIds.push(step.providerCallId);
+      },
+    });
+
+    expect(result.ok).toBe(true);
+    expect(startedToolCallIds).toEqual(["mixed-invalid", "mixed-valid"]);
+    expect(finishedToolCallIds).toEqual(["mixed-invalid", "mixed-valid"]);
+    expect(executedToolCallIds).toEqual(["mixed-valid"]);
   });
 
   it("keeps serial batch execution and transcript order deterministic", async () => {

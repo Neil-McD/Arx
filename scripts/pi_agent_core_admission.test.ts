@@ -25,6 +25,10 @@ describe("Pi agent-core admission", () => {
 
     expect(result.providerCalls).toBe(2);
     expect(result.executedToolNames).toEqual(["polynet_read_one"]);
+    expect(result.admittedToolStartIds).toEqual(["admitted-1"]);
+    expect(result.admittedToolFinishes).toEqual([
+      { toolCallId: "admitted-1", isError: false },
+    ]);
     expect(result.observedToolResults.at(-1)).toMatchObject({
       toolCallId: "admitted-1",
       toolName: "polynet_read_one",
@@ -38,19 +42,29 @@ describe("Pi agent-core admission", () => {
     const result = await runPiAgentCoreAdmissionProbe("unknown_tool");
 
     expect(result.executedToolNames).toEqual([]);
-    expect(result.observedToolResults.at(-1)).toMatchObject({
+    expect(result.providerCalls).toBe(1);
+    expect(result.admissionFailure).toMatchObject({
+      code: "invalid_model_output",
+      pendingToolCallId: "unknown-1",
+    });
+    expect(result.admittedToolStartIds).toEqual([]);
+    expect(result.returnedToolResults.at(-1)).toMatchObject({
       toolCallId: "unknown-1",
       toolName: PI_AGENT_CORE_ADMISSION_CONSTANTS.unknownToolName,
       isError: true,
     });
-    expect(result.observedToolResults.at(-1)?.text).toContain("not found");
+    expect(result.returnedToolResults.at(-1)?.text).toContain("not found");
   });
 
   it("rejects invalid arguments before the admitted implementation runs", async () => {
     const result = await runPiAgentCoreAdmissionProbe("invalid_arguments");
 
     expect(result.executedToolNames).toEqual([]);
-    expect(result.observedToolResults.at(-1)).toMatchObject({
+    expect(result.admittedToolStartIds).toEqual(["invalid-1"]);
+    expect(result.admittedToolFinishes).toEqual([
+      { toolCallId: "invalid-1", isError: true },
+    ]);
+    expect(result.returnedToolResults.at(-1)).toMatchObject({
       toolCallId: "invalid-1",
       toolName: "polynet_read_one",
       isError: true,
