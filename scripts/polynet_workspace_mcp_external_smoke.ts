@@ -378,23 +378,46 @@ async function runAuthenticatedSmoke(args: {
   assert.ok(firstPath(root, (path) => path === "/communities/"));
   assert.ok(firstPath(root, (path) => path === "/users/"));
 
-  const communities = await callTool({
+  let communities = await callTool({
     mcpUrl: args.mcpUrl,
     token,
     name: "polynet_list",
-    toolArgs: { path: "/communities/" },
+    toolArgs: { path: "/communities/", limit: 50 },
   });
+  const accessibleCommunities = entries(communities);
+  const seenCommunityCursors = new Set<string>();
+  let nextCommunityCursor = asString(communities.next_cursor);
+  while (nextCommunityCursor) {
+    assert.equal(
+      seenCommunityCursors.has(nextCommunityCursor),
+      false,
+      "Community pagination cursor must advance.",
+    );
+    seenCommunityCursors.add(nextCommunityCursor);
+    communities = await callTool({
+      mcpUrl: args.mcpUrl,
+      token,
+      name: "polynet_list",
+      toolArgs: {
+        path: "/communities/",
+        limit: 50,
+        cursor: nextCommunityCursor,
+      },
+    });
+    accessibleCommunities.push(...entries(communities));
+    nextCommunityCursor = asString(communities.next_cursor);
+  }
   const requestedPath = requestedSlug ? `/communities/${requestedSlug}/` : null;
   if (requestedPath) {
     assert.ok(
-      entries(communities).some((row) => row.path === requestedPath),
+      accessibleCommunities.some((row) => row.path === requestedPath),
       `Requested community ${requestedPath} is not accessible; refusing to substitute another community.`,
     );
   }
   const communityPath =
     requestedPath ??
     firstPath(
-      communities,
+      { entries: accessibleCommunities },
       (path, row) => row.type === "community" && path.endsWith("/"),
     );
   assert.ok(
