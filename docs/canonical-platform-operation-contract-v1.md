@@ -1,6 +1,6 @@
 # Canonical Polynet operation contract v1
 
-Status: production-released; current-SHA authenticated acceptance remains open.
+Status: production-released and current-SHA authenticated acceptance complete.
 
 ## Outcome
 
@@ -129,7 +129,31 @@ search/read round trips, global search bounds, member-visible memory projection,
 mutation idempotency/conflict behavior, and staged builder calls against an
 isolated Convex backend.
 
-The release gate has passed and the production metadata smoke against
-`https://www.polynet.ai/runtime/mcp` passed on 2026-08-16. An authenticated
-production MCP acceptance bound to the exact current production SHA remains
-required before the runtime architecture program can close.
+The release gate and production metadata smoke against
+`https://www.polynet.ai/runtime/mcp` passed on 2026-08-16.
+
+The authenticated read-only production acceptance also passed on 2026-08-16,
+bound to web build and Sentry release
+`a17e3104ec1f47e304d69dae5677d5d1698af1d6` and production Convex
+function-spec digest
+`97cd9011d9d91d375535dddc8425579e0654a2387c2acc7f26b7b6e3e5fe368e`:
+
+1. OAuth completed through the advertised protected-resource and authorization-
+   server metadata. The short-lived access and refresh credentials remained in
+   memory only and were cleared after the read-only checks.
+2. `tools/list` returned exactly the canonical five tools. Listing `/` returned
+   only `/communities/` and `/users/`.
+3. The explicit `/communities/polynet/` root resolved server-derived
+   `builder`/`owner` authority and exposed identity, members, resources,
+   channels, events, memory, capabilities, and builder paths.
+4. The client traversed and read a real resource, searched the community, and
+   read a returned canonical evidence path. It invoked no `polynet_write` or
+   `polynet_call` mutation.
+5. Canonical production state independently confirmed that
+   `/communities/testing/` exists; the OAuth actor received
+   `semantic_not_found` when attempting that unauthorized community root.
+   Deterministic executor tests retain the complete member, builder, community-
+   agent, stale-authority, and idempotency matrix.
+6. The external smoke now follows every advancing `/communities/` cursor before
+   validating an explicitly requested community. A repeated cursor fails
+   closed instead of silently substituting a first-page community.

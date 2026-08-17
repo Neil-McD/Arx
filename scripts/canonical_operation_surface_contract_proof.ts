@@ -45,8 +45,13 @@ assert.match(
 );
 assert.match(
   operationContract,
-  /Status: production-released; current-SHA authenticated acceptance remains open\./,
-  "the canonical operation contract must separate released code from open authenticated acceptance",
+  /Status: production-released and current-SHA authenticated acceptance complete\./,
+  "the canonical operation contract must record completed authenticated acceptance",
+);
+assert.match(
+  operationContract,
+  /tools\/list[\s\S]*semantic_not_found[\s\S]*every advancing `\/communities\/` cursor/,
+  "completed MCP acceptance must retain positive, negative, and pagination evidence",
 );
 
 const expected = [

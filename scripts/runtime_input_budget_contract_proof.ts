@@ -190,8 +190,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /final role-by-role live acceptance matrix remains/,
-  "the runtime contract must preserve the exact open evidence gate",
+  /only final Steward live acceptance remains/,
+  "the runtime contract must preserve the exact remaining Steward evidence gate",
 );
 assert.doesNotMatch(
   contract,

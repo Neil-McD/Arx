@@ -1,6 +1,6 @@
 # Native Agent Runtime Context Contract v1
 
-Status: context architecture, pre-Slice 8 liveness, and native-only Slice 10 cleanup are production-released; Slice 8 rejected Pi, Slice 9 is skipped, and the final role-by-role live acceptance matrix remains
+Status: context architecture, pre-Slice 8 liveness, and native-only Slice 10 cleanup are production-released; Slice 8 rejected Pi, Slice 9 is skipped, and only final Steward live acceptance remains
 Scope: canonical prompt compilation, context projection, governed loop migration, and legacy deletion
 Last updated: 2026-08-16
 
@@ -12,7 +12,8 @@ Program position:
 - Runtime convergence: Slices 5A through 5F and 6 through 7B plus pre-Slice 8
   liveness are released and production-proven. Slice 8 selected the native
   kernel, Slice 9 is skipped, and Slice 10's losing-kernel deletion is released.
-  Only the final role-by-role live acceptance matrix remains.
+  Member, Funnel Composer, Concierge, and external MCP acceptance are complete.
+  Only final Steward live acceptance remains.
 - Pi agent-core adoption in Polynet: rejected at the Slice 8 value gate. The
   model-free probes proved core/default-runtime compatibility, governed tool
   admission, and canonical tool-result parity, but the smallest
@@ -299,9 +300,11 @@ The released architecture through Slice 7B has:
     Funnel Composer, with complete-episode selection and mandatory bounded
     lineage in the existing runtime event store.
 
-The native-only cleanup is on canonical `main` and production. The remaining
-gap is the final production role verification matrix. A Convex deployment is
-required only if a future diff changes the production Convex bundle.
+The native-only cleanup is on canonical `main` and production. Member, Funnel
+Composer, Concierge, and external MCP production acceptance are complete. The
+remaining gap is one qualifying Steward run on the current runtime. A Convex
+deployment is required only if a future diff changes the production Convex
+bundle.
 
 Program status:
 
@@ -317,7 +320,7 @@ Program status:
 | Pre-8 | Member/Funnel active-run liveness closure | Complete and production-proven |
 | 8 | Pi value/feasibility adapter and deterministic parity | Complete: Pi rejected at the measured complexity/value gate; native kernel selected |
 | 9 | Reversible role-by-role Pi cutover if earned | Skipped because Pi did not earn adoption |
-| 10 | Losing-kernel deletion and final production acceptance | Losing-kernel deletion is production-released; final role-by-role live acceptance remains |
+| 10 | Losing-kernel deletion and final production acceptance | Losing-kernel deletion is production-released; Member, Funnel Composer, Concierge, and external MCP are accepted; Steward remains |
 
 ## 13. Irreducible end state
 
@@ -1595,6 +1598,43 @@ Canonical release evidence on 2026-08-16:
    errors. This is deployment and UI evidence, not final model-execution proof
    for every role.
 
+Final production matrix evidence on 2026-08-16:
+
+1. Production web build and Sentry release both resolved to
+   `a17e3104ec1f47e304d69dae5677d5d1698af1d6`; the production Convex function
+   specification hashed to
+   `97cd9011d9d91d375535dddc8425579e0654a2387c2acc7f26b7b6e3e5fe368e`.
+   The complete clean-source release gate passed 118 test files and 749 tests,
+   all 66 foundation checks, both typechecks, the production web build, and
+   both dependency audits.
+2. Member run
+   `member_agent_dock:b7468fb2-5e45-4ca5-9ac3-bf81f5f00d92` completed `ok`
+   with 42 durable events, provider-context attestation, input-budget and
+   persisted-history evidence, context-integrity success, ten successful
+   `polynet_list`/`polynet_read` calls, and a settled inference receipt.
+3. Funnel Composer run
+   `community_funnel_builder:9f71546e-bb94-4a8b-97d1-0cc5c602c105`
+   completed `ok` with 32 durable events, provider-context attestation,
+   input-budget and persisted-history evidence, context-integrity and funnel
+   postcondition success, three successful canonical tool calls, and a settled
+   inference receipt.
+4. Concierge request `h17prsz3x569gt4h5cj5t828s18cjj0v` completed as a
+   direct mention. Attempt 1 recorded an initial context snapshot, four fitting
+   input-budget decisions, four successful `polynet_list` calls/results, a
+   completed final event, and a settled inference receipt.
+5. The official external MCP completed an OAuth-authenticated read-only
+   production acceptance: exact five-tool discovery, explicit Polynet
+   `builder`/`owner` scope, community/resource/search/read traversal, and a
+   `semantic_not_found` denial for a separately confirmed real unauthorized
+   community. No write or call mutation ran.
+6. Steward remains deliberately open. Its last successful heartbeat predates
+   later shared projection/runtime changes. Read-only assessments found no
+   legitimate compiler work in the operator-owned Polynet, CRIS, or test
+   communities. Eligible queues owned by other builders were not accelerated
+   for acceptance. Completion requires the next organic qualifying Steward run
+   on the current runtime; do not manufacture community activity or bypass its
+   scheduler/funding gates.
+
 Acceptance:
 
 1. One production loop implementation remains.
@@ -1697,13 +1737,15 @@ Do not build:
 
 ## 21. Immediate next gate
 
-Close the remaining production evidence gap without changing runtime behavior:
+Close the one remaining production evidence gap without changing runtime
+behavior:
 
-1. Bind the acceptance run to the exact production SHA under test.
-2. Close the Member, Funnel Composer, Concierge, Steward, and external MCP
-   verification matrix against the selected native kernel.
-3. Mark this program complete only after every required role and negative
-   authority cell has durable, reviewable evidence.
+1. Wait for a legitimate operator-owned community to satisfy the canonical
+   Steward assessment gate.
+2. Certify that organic run's current-runtime context snapshot, budget/tool
+   events, terminal state, and settled funding receipt.
+3. Mark this program complete only after that Steward evidence is durable and
+   reviewable.
 
 Do not reopen Pi adaptation, add a runtime selector, or combine final
 acceptance with prompt, provider, funding, compaction, or UI behavior changes.
