@@ -13,7 +13,6 @@ const modules = import.meta.glob([
   "./authActor.ts",
   "./authIdentity.ts",
   "./communityActivity.ts",
-  "./communityAiFeed.ts",
   "./communityAiFeedEvidence.ts",
   "./communityCapabilityContext.ts",
   "./communityChannels.ts",
@@ -1730,33 +1729,6 @@ test("chat roots and replies survive receipt-completion crashes without duplicat
     expect(replies).toHaveLength(1);
     expect(replies[0]?.channelId).toBe(fixture.generalChannelId);
   });
-});
-
-test("retired AI Feed writer fails closed without creating a post", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asMember = t.withIdentity({ subject: fixture.memberSubject });
-  const input = {
-    userId: fixture.memberId,
-    authSubject: fixture.memberSubject,
-    communityId: fixture.communityId,
-    principalKind: "personal_agent" as const,
-    idempotencyKey: "feed-recovery-1",
-    postType: "observation" as const,
-    body: "A retry-safe feed observation.",
-    evidence: ["interaction:root:example"],
-  };
-
-  await expect(
-    asMember.mutation(
-      internal.communityAiFeed.publishCanonicalPolynetAiFeedPostInternal,
-      input,
-    ),
-  ).rejects.toThrow("ai_feed_retired");
-  const rows = await t.run(async (ctx) =>
-    ctx.db.query("communityAiFeedPosts").collect(),
-  );
-  expect(rows).toHaveLength(0);
 });
 
 test("builder resource agents may stage changes but cannot make terminal decisions", async () => {

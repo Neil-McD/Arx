@@ -32,7 +32,6 @@ function sourceFiles(path: string): string[] {
 }
 
 const packageJson = read("package.json");
-const productionFacade = read("convex/community.ts");
 const lifecycle = read("convex/communityLifecycle.ts");
 const launchStatus = read("convex/communityLaunchSetup.ts");
 const launchStatusModel = read("shared/communityLaunchSetup.ts");
@@ -47,17 +46,10 @@ assert.match(
   "the rolling launch-contract transition proof must remain runnable",
 );
 
-assert.match(
-  productionFacade,
-  /export const saveCommunityLaunchProfile =[\s\S]*communityLifecycle\.saveCommunityLaunchProfile[\s\S]*export const getCommunityLaunchSetupStatus =[\s\S]*communityLaunchSetup\.getCommunityLaunchSetupStatus/,
-  "the production compatibility facade must delegate to canonical domain owners",
-);
-assert.doesNotMatch(
-  productionFacade.split(
-    "// Cached clients may still invoke the retired third-party MCP names.",
-  )[0],
-  /\b(?:query|mutation|action)\s*\(|\bctx\.|\bdb\./,
-  "the community alias facade must not own transport, authorization, or data logic",
+assert.equal(
+  existsSync(join(root, "convex/community.ts")),
+  false,
+  "the retired community alias facade must stay deleted",
 );
 
 assert.match(
@@ -92,10 +84,10 @@ assert.match(
   "the compatibility query must retain the known launch-status response model",
 );
 
-assert.match(
+assert.doesNotMatch(
   generatedApi,
   /import type \* as community from "\.\.\/community\.js";/,
-  "the generated Convex API must include the production compatibility facade",
+  "the generated Convex API must not restore the retired community facade",
 );
 assert.match(
   generatedApi,
@@ -114,8 +106,6 @@ assert.equal(
 );
 
 const allowedLegacySymbolPaths = new Set([
-  "convex/community.ts",
-  "convex/communityLaunchCompatibility.test.ts",
   "convex/communityLifecycle.ts",
   "convex/communityLaunchSetup.ts",
   "convex/_generated/api.d.ts",

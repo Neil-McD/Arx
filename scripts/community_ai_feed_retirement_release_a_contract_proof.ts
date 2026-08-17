@@ -62,25 +62,11 @@ for (const retiredTool of [
 const crons = read("convex/crons.ts");
 assert.doesNotMatch(crons, /communityAiFeed|ai feed/i);
 
-const feedBackend = read("convex/communityAiFeed.ts");
-assert.match(feedBackend, /return \{ live: \[\], ranked: \[\] \};/);
-assert.match(
-  feedBackend,
-  /function retired\(\): never \{[\s\S]*ai_feed_retired/,
+assert.equal(
+  existsSync(resolve(root, "convex/communityAiFeed.ts")),
+  false,
+  "the retired AI Feed callable module must stay deleted",
 );
-for (const mutationName of [
-  "reactToCommunityAiFeedPost",
-  "hideCommunityAiFeedPost",
-  "publishCommunityAiFeedAgentPost",
-  "publishCommunityAiFeedAgentPostInternal",
-  "publishCanonicalPolynetAiFeedPostInternal",
-]) {
-  assert.match(
-    feedBackend,
-    new RegExp(`export const ${mutationName}[\\s\\S]*?retired\\(\\);`),
-    `${mutationName} must fail through the retirement tombstone`,
-  );
-}
 
 const recentContext = read("convex/communityRecentContext.ts");
 assert.doesNotMatch(recentContext, /query\("communityAiFeedPosts"/);

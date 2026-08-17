@@ -11,11 +11,9 @@ import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import schema from "./schema";
 
 const modules = import.meta.glob([
-  "./communityAppMounts.ts",
   "./communityAdmin.ts",
   "./communityPublic.ts",
   "./email.ts",
-  "./userPlatformAppMounts.ts",
   "./_generated/**/*.*s",
 ]);
 

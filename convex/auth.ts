@@ -1,10 +1,9 @@
 import { internal } from "./_generated/api";
-import { action, internalQuery, mutation, query } from "./_generated/server";
+import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
   ensureAuthenticatedActorDetailed,
   findAuthenticatedActorState,
-  resolveAuthenticatedActor,
 } from "./authActor";
 import { resolveAuthenticatedIdentityProfile } from "./authIdentity";
 import {
@@ -171,30 +170,6 @@ export const bootstrapActor = mutation({
       avatarUrl: null,
       createdAt: nowMs,
       updatedAt: nowMs,
-    };
-  },
-});
-
-// Rolling production clients still call this action after bootstrap. Email
-// verification is now persisted by the same-origin auth bridge, so this
-// compatibility surface only authenticates the caller and acknowledges the
-// old request. It must not perform provider lookups or mutate canonical state.
-export const syncAuthenticatedEmailVerification = action({
-  args: {
-    authSubject: v.optional(v.string()),
-    email: v.optional(v.string()),
-    nowMs: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const identity = await resolveAuthenticatedIdentityProfile({
-      ctx,
-      authSubject: args.authSubject ?? null,
-    });
-    return {
-      ok: true,
-      synced: false,
-      reason: "verification_owned_by_auth_bridge",
-      emailVerifiedAtPresent: identity.emailVerified,
     };
   },
 });

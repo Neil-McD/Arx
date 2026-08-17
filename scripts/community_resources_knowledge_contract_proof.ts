@@ -281,10 +281,10 @@ assert.doesNotMatch(
   /buildPageDraftBodyFromSource|extractDraftSummary|extractDraftKeyIdeas/,
   "the obsolete one-source page copier must remain deleted",
 );
-assert.match(
+assert.doesNotMatch(
   resources,
-  /export const createCommunityResourcePageDraftFromSource = mutation\([\s\S]*community_resource_page_draft_from_source_retired/,
-  "the cached one-source copier address must remain a fail-closed tombstone",
+  /createCommunityResourcePageDraftFromSource|community_resource_page_draft_from_source_retired/,
+  "the retired one-source copier address must stay deleted",
 );
 assert.match(
   resourceController,

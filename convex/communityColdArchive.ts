@@ -333,13 +333,6 @@ export const restoreCommunityWithoutPayment = mutation({
   handler: restoreCommunityWithoutPaymentHandler,
 });
 
-// Cached clients may still call the historical operator-specific function.
-// It intentionally delegates to the one canonical restore authority handler.
-export const restoreOperatorCommunity = mutation({
-  args: restoreWithoutPaymentArgs,
-  handler: restoreCommunityWithoutPaymentHandler,
-});
-
 export const getCommunityArchiveBillingJobWorkInternal = internalQuery({
   args: { jobId: v.id("communityArchiveBillingJobs") },
   handler: async (ctx, args) => {

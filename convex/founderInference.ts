@@ -1,4 +1,4 @@
-import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import {
@@ -104,45 +104,6 @@ async function finalizeExpiredAuthorizedFounderInferenceReceipt(args: {
     errorCode: "authorization_expired_before_provider",
   };
 }
-
-const FOUNDER_INFERENCE_BYOK_RETIRED = "founder_inference_byok_retired";
-
-// Cached-client compatibility only. These public names preserve the previous
-// web bundle's wire contract during the rolling Builder cutover. They expose
-// no credential, grant, billing, or community authority.
-export const getCurrentFounderInferenceStatus = query({
-  args: { authSubject: v.optional(v.string()) },
-  handler: async () => ({
-    eligible: false,
-    cohort_key: null,
-    status: null,
-    key_connected: false,
-    key_last_four: null,
-    activated_at: null,
-    suspended_at: null,
-    communities: [],
-  }),
-});
-
-export const activateFounderInference = action({
-  args: {
-    authSubject: v.optional(v.string()),
-    acceptedTerms: v.boolean(),
-    acceptedTermsVersion: v.string(),
-  },
-  handler: async () => {
-    throw new Error(FOUNDER_INFERENCE_BYOK_RETIRED);
-  },
-});
-
-export const suspendFounderInference = mutation({
-  args: { authSubject: v.optional(v.string()) },
-  handler: async () => ({
-    ok: true,
-    status: "retired" as const,
-    reason: FOUNDER_INFERENCE_BYOK_RETIRED,
-  }),
-});
 
 function fundingAuthorityMatches(args: {
   admission: CommunityInferenceFundingAdmission;

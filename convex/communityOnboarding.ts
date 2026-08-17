@@ -68,18 +68,6 @@ export const saveCommunityOnboardingConfig = mutation({
   },
 });
 
-export const getMyCommunityOnboardingSession = query({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    communityId: v.id("communities"),
-  },
-  handler: async (ctx, args) => {
-    await requireAuthenticatedCommunityMember(ctx, args);
-    return null;
-  },
-});
-
 const retiredSessionMutationArgs = {
   userId: v.optional(v.id("users")),
   authSubject: v.optional(v.string()),

@@ -93,9 +93,6 @@ test("cached community onboarding endpoints stay authorized and stateless", asyn
     intro_video_url: null,
     updated_at: null,
   });
-  await expect(asMember.query(api.communityOnboarding.getMyCommunityOnboardingSession, {
-    communityId: fixture.communityId,
-  })).resolves.toBeNull();
   await expect(asMember.mutation(api.communityOnboarding.completeMyCommunityOnboardingOrientation, {
     communityId: fixture.communityId,
     sessionId: fixture.sessionId,

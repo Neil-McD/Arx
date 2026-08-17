@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(path: string): string {
   return readFileSync(path, "utf8");
@@ -16,7 +16,6 @@ const billingGateway = read("shared/cloudFounderBillingGateway.ts");
 const billingUi = read("apps/web/src/components/WebBillingSettingsSection.tsx");
 const billingController = read("apps/web/src/controllers/useWebFounderBillingController.ts");
 const auth = read("convex/auth.ts");
-const premiumBilling = read("convex/premiumBilling.ts");
 const schema = read("convex/schema.ts");
 
 assert.match(
@@ -94,16 +93,7 @@ assert.doesNotMatch(
   /startCheckoutAfterCommunityCreated/,
   "community creation must never use create-before-checkout redirect logic",
 );
-assert.match(
-  premiumBilling,
-  /startPremiumSubscriptionCheckout[\s\S]*throw new Error\("premium_subscription_retired"\)/,
-  "the cached Premium endpoint must fail closed",
-);
-assert.doesNotMatch(
-  premiumBilling,
-  /getStripeClient|ensureStripeCustomerForUser|checkout\.sessions|ctx\.runMutation/,
-  "the cached Premium endpoint must not create Stripe or Convex state",
-);
+assert.equal(existsSync("convex/premiumBilling.ts"), false);
 assert.match(
   billingUi,
   /community\.funding_mode === "operator_comp"[\s\S]*Operator access included[\s\S]*isOperatorComped \? null/,

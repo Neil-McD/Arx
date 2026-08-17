@@ -1,8 +1,7 @@
 import { internal } from "./_generated/api";
-import { action, internalMutation, internalQuery, query } from "./_generated/server";
+import { internalMutation, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { getStripeClient } from "./stripeCore";
-import { resolveAuthenticatedActor } from "./authActor";
 import { buildAttachStripeCustomerPatchForExisting } from "../shared/stripeCustomerIdempotency";
 
 function normalizeStripeCustomerId(value: unknown): string | undefined {
@@ -230,40 +229,5 @@ export const attachUserStripeCustomerInternal = internalMutation({
       replaceExisting: args.replaceExisting,
       nowMs: args.nowMs,
     });
-  },
-});
-
-export const refreshWorkspaceCardOnFileStatus = action({
-  args: {
-    authSubject: v.optional(v.string()),
-  },
-  handler: async () => {
-    throw new Error("workspace_tool_billing_retired");
-  },
-});
-
-export const getWorkspaceCardOnFileStatus = query({
-  args: {
-    authSubject: v.optional(v.string()),
-  },
-  handler: async (ctx, args) => {
-    await resolveAuthenticatedActor({ ctx, authSubject: args.authSubject ?? null });
-    return {
-      ok: false,
-      retired: true,
-      has_card_on_file: false,
-      payment_method_status: "retired",
-    };
-  },
-});
-
-export const startWorkspaceCardSetupCheckout = action({
-  args: {
-    authSubject: v.optional(v.string()),
-    successUrl: v.string(),
-    cancelUrl: v.string(),
-  },
-  handler: async () => {
-    throw new Error("workspace_tool_billing_retired");
   },
 });

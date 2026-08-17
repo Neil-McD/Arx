@@ -8,7 +8,6 @@ cd "$ROOT_DIR"
 
 echo "== Community admin contract guard =="
 
-COMMUNITY_COMPATIBILITY_FACADE_FILE="convex/community.ts"
 COMMUNITY_ADMIN_FILE="convex/communityAdmin.ts"
 COMMUNITY_CORE_FILE="convex/communityCore.ts"
 COMMUNITY_LIFECYCLE_FILE="convex/communityLifecycle.ts"
@@ -30,22 +29,8 @@ WEB_MEMBER_MANAGEMENT_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityM
 WEB_JOIN_REQUESTS_CONTROLLER_FILE="apps/web/src/controllers/useWebCommunityJoinRequestsController.ts"
 ADMIN_CONTROLLER_FILE="shared/useCommunityAdminController.ts"
 
-if [[ ! -f "$COMMUNITY_COMPATIBILITY_FACADE_FILE" ]]; then
-  echo "FAIL: missing bounded rolling compatibility facade: $COMMUNITY_COMPATIBILITY_FACADE_FILE"
-  exit 1
-fi
-community_compatibility_export_count="$(
-  awk '/^export const / { count += 1 } END { print count + 0 }' \
-    "$COMMUNITY_COMPATIBILITY_FACADE_FILE"
-)"
-if [[ "$community_compatibility_export_count" -ne 114 ]]; then
-  echo "FAIL: cached-production community facade must expose exactly 114 pinned operations"
-  exit 1
-fi
-if sed '/Cached clients may still invoke the retired third-party MCP names/,$d' \
-  "$COMMUNITY_COMPATIBILITY_FACADE_FILE" |
-  rg -n '\b(query|mutation|action)[[:space:]]*\(|\bctx\.|\bdb\.' >/dev/null; then
-  echo "FAIL: cached-production community aliases must not own behavior"
+if [[ -f "convex/community.ts" ]]; then
+  echo "FAIL: retired community compatibility facade must stay deleted"
   exit 1
 fi
 if [[ ! -f "$COMMUNITY_ADMIN_FILE" ]]; then

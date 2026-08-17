@@ -97,10 +97,10 @@ assert.match(
   /row\.lifecycle_status === "active"[\s\S]*row\.funding_mode === "managed"/,
   "billing management must not charge archived communities in active totals",
 );
-assert.match(
+assert.doesNotMatch(
   founderInference,
-  /getCurrentFounderInferenceStatus[\s\S]*communities: \[\]/,
-  "the retired legacy founder projection must expose no communities",
+  /getCurrentFounderInferenceStatus|founder_inference_byok_retired/,
+  "the retired founder projection must stay deleted",
 );
 assert.match(
   memberOntology,

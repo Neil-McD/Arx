@@ -39,7 +39,6 @@ const resources = read("apps/web/src/components/CommunityResourcesPanel.tsx");
 const funnel = read("apps/web/src/components/WebCommunityFunnelSection.tsx");
 const protectedResources = read("convex/communityResources.ts");
 const protectedGateway = read("shared/cloudCommunityAdminGateway.ts");
-const productionCompatibilityFacade = read("convex/community.ts");
 const retiredRuntimePaths = [
   "apps/web/src/components/WebCommunityLaunchSetupModal.tsx",
   "apps/web/src/components/webCommunityLaunchKnowledgeModel.ts",
@@ -84,22 +83,10 @@ assert.equal(
   true,
   "the server-only launch status compatibility model must remain during the rolling transition",
 );
-assert.match(
-  productionCompatibilityFacade,
-  /export const saveCommunityLaunchProfile =[\s\S]*communityLifecycle\.saveCommunityLaunchProfile/,
-  "the retired launch-profile address must delegate to its canonical owner",
-);
-assert.match(
-  productionCompatibilityFacade,
-  /export const getCommunityLaunchSetupStatus =[\s\S]*communityLaunchSetup\.getCommunityLaunchSetupStatus/,
-  "the retired launch-status address must delegate to its canonical owner",
-);
-assert.doesNotMatch(
-  productionCompatibilityFacade.split(
-    "// Cached clients may still invoke the retired third-party MCP names.",
-  )[0],
-  /\b(?:query|mutation|action)\s*\(|\bctx\.|\bdb\./,
-  "the community alias facade must not restore facade-owned behavior",
+assert.equal(
+  existsSync(join(root, "convex/community.ts")),
+  false,
+  "the retired community alias facade must stay deleted",
 );
 assert.doesNotMatch(
   [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n"),
@@ -180,10 +167,10 @@ assert.doesNotMatch(
   /createCloudCommunityResourcePageDraftFromSource/,
   "the retired one-source page copier must not remain callable from first-party cloud surfaces",
 );
-assert.match(
+assert.doesNotMatch(
   protectedResources,
-  /createCommunityResourcePageDraftFromSource = mutation\([\s\S]*community_resource_page_draft_from_source_retired/,
-  "the cached one-source copier address must fail closed in its canonical module",
+  /createCommunityResourcePageDraftFromSource|community_resource_page_draft_from_source_retired/,
+  "the retired one-source copier address must stay deleted",
 );
 
 console.log("PASS: community launcher frontend is retired and creation converges on the canonical modal");

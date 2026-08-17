@@ -187,10 +187,11 @@ assert.doesNotMatch(
   backend,
   /export const (?:prepareFounderInferenceActivationInternal|completeFounderInferenceActivationInternal)\b/,
 );
-assert.match(backend, /FOUNDER_INFERENCE_BYOK_RETIRED = "founder_inference_byok_retired"/);
-assert.match(backend, /getCurrentFounderInferenceStatus = query/);
-assert.match(backend, /activateFounderInference = action/);
-assert.match(backend, /suspendFounderInference = mutation/);
+assert.doesNotMatch(
+  backend,
+  /getCurrentFounderInferenceStatus|activateFounderInference|suspendFounderInference|founder_inference_byok_retired/,
+  "retired founder BYOK compatibility functions must stay deleted",
+);
 assert.doesNotMatch(backend, /decryptStoredSecret|apiKeyOverride|userProviderConnections/);
 assert.match(backend, /claimCommunityInferenceReceiptInternal = internalMutation/);
 assert.match(backend, /surface: communityInferenceSurfaceValidator/);

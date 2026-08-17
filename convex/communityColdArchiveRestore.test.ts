@@ -352,7 +352,7 @@ test.sequential("operator owner restoration is direct and idempotent", async () 
   const asOwner = t.withIdentity({ subject: "restore-owner-operator" });
 
   const restored = await asOwner.mutation(
-    (api as any).communityColdArchive.restoreOperatorCommunity,
+    (api as any).communityColdArchive.restoreCommunityWithoutPayment,
     {
       communityId: fixture.communityId,
       lifecycleGeneration: 1,
@@ -366,7 +366,7 @@ test.sequential("operator owner restoration is direct and idempotent", async () 
   });
 
   const replay = await asOwner.mutation(
-    (api as any).communityColdArchive.restoreOperatorCommunity,
+    (api as any).communityColdArchive.restoreCommunityWithoutPayment,
     {
       communityId: fixture.communityId,
       lifecycleGeneration: 1,
@@ -466,7 +466,7 @@ test.sequential("direct restoration requires payment for subscription-required c
 
   await expect(
     asOwner.mutation(
-      (api as any).communityColdArchive.restoreOperatorCommunity,
+      (api as any).communityColdArchive.restoreCommunityWithoutPayment,
       {
         communityId: fixture.communityId,
         lifecycleGeneration: 1,
@@ -488,7 +488,7 @@ test.sequential("direct restoration requires payment for subscription-required c
   const asOther = t.withIdentity({ subject: "restore-other-operator-auth" });
   await expect(
     asOther.mutation(
-      (api as any).communityColdArchive.restoreOperatorCommunity,
+      (api as any).communityColdArchive.restoreCommunityWithoutPayment,
       {
         communityId: fixture.communityId,
         lifecycleGeneration: 1,
@@ -505,7 +505,7 @@ test.sequential("operator restoration requires current completed cleanup", async
 
   await expect(
     asOwner.mutation(
-      (api as any).communityColdArchive.restoreOperatorCommunity,
+      (api as any).communityColdArchive.restoreCommunityWithoutPayment,
       {
         communityId: fixture.communityId,
         lifecycleGeneration: 1,
@@ -522,7 +522,7 @@ test.sequential("operator restoration requires current completed cleanup", async
   });
   await expect(
     asOwner.mutation(
-      (api as any).communityColdArchive.restoreOperatorCommunity,
+      (api as any).communityColdArchive.restoreCommunityWithoutPayment,
       {
         communityId: fixture.communityId,
         lifecycleGeneration: 2,
@@ -541,7 +541,7 @@ test.sequential("platform home cannot enter operator restoration", async () => {
   const asOwner = t.withIdentity({ subject: "restore-owner-operator-home" });
   await expect(
     asOwner.mutation(
-      (api as any).communityColdArchive.restoreOperatorCommunity,
+      (api as any).communityColdArchive.restoreCommunityWithoutPayment,
       {
         communityId: fixture.communityId,
         lifecycleGeneration: 1,

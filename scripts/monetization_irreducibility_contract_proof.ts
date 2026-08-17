@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -20,7 +20,6 @@ const auth = read("convex/auth.ts");
 const httpBilling = read("convex/httpBilling.ts");
 const stripeCore = read("convex/stripeCore.ts");
 const creatorCommerce = read("convex/creatorCommerce.ts");
-const premiumBilling = read("convex/premiumBilling.ts");
 const stripeCustomers = read("convex/stripeCustomers.ts");
 const toolCosts = read("convex/voiceProviderCostAccounting.ts");
 const workspaceCredits = read("convex/workspaceCredits.ts");
@@ -150,8 +149,7 @@ assert.match(httpBilling, /communityApplicationFeeRefunds/);
 assert.match(httpBilling, /applicationFees\.createRefund/);
 assert.match(httpBilling, /syncCommunitySubscriptionFromStripeSubscription/);
 
-assert.match(premiumBilling, /premium_subscription_retired/);
-assert.doesNotMatch(premiumBilling, /getStripeClient|checkout\.sessions|ctx\.runMutation/);
+assert.equal(existsSync(resolve(root, "convex/premiumBilling.ts")), false);
 assert.doesNotMatch(billingUi, /Premium|tool balance|auto recharge|Add credits/i);
 assert.match(billingUi, /Polynet-hosted community AI/);
 const founderCustomerSurface = [
@@ -183,16 +181,14 @@ assert.doesNotMatch(
   /export const (?:prepareFounderInferenceActivationInternal|completeFounderInferenceActivationInternal)\b/,
   "community BYOK activation internals must not remain deployable",
 );
-assert.match(founderInferenceApi, /FOUNDER_INFERENCE_BYOK_RETIRED = "founder_inference_byok_retired"/);
-assert.match(founderInferenceApi, /getCurrentFounderInferenceStatus = query/);
-assert.match(founderInferenceApi, /activateFounderInference = action/);
-assert.match(founderInferenceApi, /suspendFounderInference = mutation/);
-
-const retiredCardFunctions = stripeCustomers.slice(
-  stripeCustomers.indexOf("export const refreshWorkspaceCardOnFileStatus"),
+assert.doesNotMatch(
+  founderInferenceApi,
+  /getCurrentFounderInferenceStatus|activateFounderInference|suspendFounderInference|founder_inference_byok_retired/,
 );
-assert.match(retiredCardFunctions, /workspace_tool_billing_retired/);
-assert.doesNotMatch(retiredCardFunctions, /checkout\.sessions\.create|paymentMethods\.list/);
+assert.doesNotMatch(
+  stripeCustomers,
+  /refreshWorkspaceCardOnFileStatus|getWorkspaceCardOnFileStatus|startWorkspaceCardSetupCheckout|workspace_tool_billing_retired/,
+);
 
 assert.match(toolCosts, /billingDisposition: "platform_absorbed"/);
 assert.match(toolCosts, /recordProviderCostInternal/);

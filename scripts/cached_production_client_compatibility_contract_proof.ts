@@ -114,13 +114,6 @@ for (const [moduleName, expectedNames] of expectedFacadeExports) {
   );
 }
 
-const compatibilityHelper = read("convex/thirdPartyMcpCompatibility.ts");
-assert.match(compatibilityHelper, /third_party_mcp_retired/);
-assert.match(
-  compatibilityHelper,
-  /Third-party MCP connections are no longer supported by Polynet\./,
-);
-
 console.log(
   "PASS: cached production client contract is complete: 155 current-production calls are already supported",
 );

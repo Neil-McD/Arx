@@ -35,9 +35,10 @@ assert.match(
 );
 assert.match(
   archive,
-  /restoreCommunityWithoutPayment = mutation[\s\S]*handler: restoreCommunityWithoutPaymentHandler[\s\S]*restoreOperatorCommunity = mutation[\s\S]*handler: restoreCommunityWithoutPaymentHandler/,
-  "canonical and cached-client restore entrypoints must converge on one authority handler",
+  /restoreCommunityWithoutPayment = mutation[\s\S]*handler: restoreCommunityWithoutPaymentHandler/,
+  "the canonical restoration entrypoint must use the one authority handler",
 );
+assert.doesNotMatch(archive, /restoreOperatorCommunity/);
 assert.match(
   founderBilling,
   /createPendingFounderSubscriptionCheckoutInternal[\s\S]*requireFounderCheckoutLifecycle\(ctx, community\)[\s\S]*mode: "founder_subscription"[\s\S]*communityLifecycleGeneration: lifecycle\.generation/,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 
 function read(path: string): string {
   return readFileSync(new URL(`../${path}`, import.meta.url), "utf8");
@@ -11,7 +11,6 @@ const auth = read("convex/auth.ts");
 const billingCore = read("convex/billingCore.ts");
 const communityCommerce = read("convex/communityCommerce.ts");
 const founderBilling = read("convex/founderBilling.ts");
-const premiumBilling = read("convex/premiumBilling.ts");
 const httpBilling = read("convex/httpBilling.ts");
 const refundCore = read("convex/communityApplicationFeeRefundCore.ts");
 const refundLedger = read("convex/communityApplicationFeeRefunds.ts");
@@ -137,7 +136,7 @@ assert.match(
   "Connected-account events must not mutate platform founder subscriptions.",
 );
 assert.doesNotMatch(founderBilling, /stripeAccount\s*:/);
-assert.doesNotMatch(premiumBilling, /stripeAccount\s*:/);
+assert.equal(existsSync(new URL("../convex/premiumBilling.ts", import.meta.url)), false);
 
 assert.match(refundCore, /Math\.floor\(\(applicationFeeAmount \* refundedBefore\) \/ chargeAmount\)/);
 assert.match(refundCore, /Math\.floor\(\(applicationFeeAmount \* refundedAfter\) \/ chargeAmount\)/);

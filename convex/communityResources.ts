@@ -10263,17 +10263,3 @@ export const deleteCommunityResource = mutation({
     return { ok: true };
   },
 });
-
-// Cached clients may still call this retired one-source copier. Keep the
-// address fail-closed while all resource generation goes through the canonical
-// builder knowledge loop.
-export const createCommunityResourcePageDraftFromSource = mutation({
-  args: {
-    userId: v.optional(v.id("users")),
-    authSubject: v.optional(v.string()),
-    sourceResourceId: v.string(),
-  },
-  handler: async () => {
-    throw new Error("community_resource_page_draft_from_source_retired");
-  },
-});

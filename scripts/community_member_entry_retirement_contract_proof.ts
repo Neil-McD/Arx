@@ -66,6 +66,7 @@ assert.deepEqual(
 assert.match(compatibility, /requireCommunityManager/);
 assert.match(compatibility, /requireCommunityChatAccess/);
 assert.match(compatibility, /enabled: false/);
+assert.doesNotMatch(compatibility, /getMyCommunityOnboardingSession/);
 assert.doesNotMatch(compatibility, /ctx\.db|\.query\("communityOnboarding|\.insert\(|\.patch\(/);
 assert.match(schema, /communityOnboardingConfigs: defineTable/);
 assert.match(schema, /communityOnboardingSessions: defineTable/);
