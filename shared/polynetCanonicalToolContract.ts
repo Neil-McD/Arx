@@ -71,6 +71,7 @@ const LIST_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
     },
     truncated: { type: "boolean" },
     skipped_incomplete: { type: "integer", minimum: 0 },
+    total_count: { type: ["integer", "null"], minimum: 0 },
   },
 };
 

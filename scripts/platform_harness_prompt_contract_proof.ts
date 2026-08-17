@@ -69,6 +69,11 @@ assert.match(
   /When stating an event time, use starts_at_zoned and ends_at_zoned\. The unsuffixed event timestamps are UTC transport instants\./,
   "the harness must use server-projected zoned event times instead of calculating them from UTC",
 );
+assert.match(
+  runtimePrompt,
+  /Use total_count for community size, never describe a page as the complete roster while next_cursor is non-null/,
+  "the harness must distinguish a bounded member page from the complete authorized roster",
+);
 assert.doesNotMatch(runtimeAgentLoop, /reserveCreditsInternal|settleCreditsInternal/);
 assert.match(
   runtimeAgentLoop,

@@ -1081,7 +1081,13 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
     }
     const memberHandle =
       "memberHandle" in parsedPath ? parsedPath.memberHandle : null;
-    if (parsedPath.path === POLYNET_SELF_PROFILE_PATH || memberHandle) {
+    const memberUserId =
+      "memberUserId" in parsedPath ? parsedPath.memberUserId : null;
+    if (
+      parsedPath.path === POLYNET_SELF_PROFILE_PATH ||
+      memberHandle ||
+      memberUserId
+    ) {
       try {
         if (parsedPath.path === POLYNET_SELF_PROFILE_PATH) {
           selfProfile = await buildSelfProfileSemanticSource({
@@ -1089,11 +1095,12 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
             userId: actorUserId,
             context: resolved.context,
           });
-        } else if (memberHandle) {
+        } else if (memberHandle || memberUserId) {
           memberProfile = await resolveMemberSemanticProfile({
             ctx,
             context: resolved.context,
             handle: memberHandle,
+            userId: memberUserId,
           });
         }
       } catch {

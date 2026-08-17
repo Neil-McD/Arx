@@ -47,6 +47,12 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    const legacyMemberId = await ctx.db.insert("users", {
+      authSubject: "resource-semantic-legacy",
+      displayName: "Resource semantic legacy member",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
     const communityId = await ctx.db.insert("communities", {
       ownerId,
       slug: "resource-semantic",
@@ -54,7 +60,7 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       visibility: "unlisted",
       inferenceFundingPolicy: "managed_required",
       entryPolicy: "open",
-      activeMemberCount: 3,
+      activeMemberCount: 4,
       createdAt: nowMs,
       updatedAt: nowMs,
     });
@@ -90,6 +96,17 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       activatedAt: nowMs,
       createdAt: nowMs + 1,
       updatedAt: nowMs + 1,
+    });
+    const legacyMembershipId = await ctx.db.insert("communityMemberships", {
+      communityId,
+      userId: legacyMemberId,
+      role: "member",
+      accessSource: "free_grant",
+      active: true,
+      activationSequence: 3,
+      activatedAt: nowMs,
+      createdAt: nowMs + 2,
+      updatedAt: nowMs + 2,
     });
     await ctx.db.insert("userProfileDetails", {
       userId: memberId,
@@ -205,8 +222,10 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       otherCommunityId,
       otherCommunityModuleId,
       membershipId,
+      legacyMembershipId,
       memberId,
       peerId,
+      legacyMemberId,
       firstModuleId,
       collisionModuleId,
       firstPageId,
@@ -760,6 +779,8 @@ test("platform mount exposes communities and permissioned users without leaking 
     (entry: any) => entry.ref,
   );
   expect(globalRefs).toEqual(localRefs);
+  expect(localMembers.value).toMatchObject({ total_count: 4 });
+  expect(globalMembers.value).toMatchObject({ total_count: 4 });
 
   await t.run(async (dbCtx) => {
     await dbCtx.db.patch(fixture.membershipId, {
@@ -1056,6 +1077,7 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     result: {
       path: "/members/",
       skipped_incomplete: 0,
+      total_count: 4,
     },
   });
   if (
@@ -1072,8 +1094,58 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
       "/members/semantic-owner.md",
       "/members/semantic-member.md",
       "/members/semantic-peer.md",
+      `/members/by-user/${String(fixture.legacyMemberId)}.md`,
     ]),
   );
+
+  const firstMemberPage = await asMember.query(
+    internal.communityCapabilityContext
+      .resolveCommunitySemanticRepositoryInternal,
+    {
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      communityId: fixture.communityId,
+      operation: "list",
+      path: "/members/",
+      limit: 2,
+    },
+  );
+  expect(firstMemberPage).toMatchObject({
+    ok: true,
+    result: {
+      total_count: 4,
+      truncated: true,
+      next_cursor: expect.any(String),
+    },
+  });
+  if (
+    !firstMemberPage.ok ||
+    !("result" in firstMemberPage) ||
+    !("next_cursor" in firstMemberPage.result)
+  ) {
+    throw new Error("semantic_member_first_page_missing");
+  }
+  const secondMemberPage = await asMember.query(
+    internal.communityCapabilityContext
+      .resolveCommunitySemanticRepositoryInternal,
+    {
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      communityId: fixture.communityId,
+      operation: "list",
+      path: "/members/",
+      cursor: firstMemberPage.result.next_cursor,
+      limit: 2,
+    },
+  );
+  expect(secondMemberPage).toMatchObject({
+    ok: true,
+    result: {
+      total_count: 4,
+      truncated: false,
+      next_cursor: null,
+    },
+  });
 
   const selfProfile = await asMember.action(
     internal.communityCapabilityContext.readCommunitySemanticRepositoryInternal,
@@ -1115,6 +1187,45 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     },
   });
   expect(peerProfile.result.body).toContain("Semantic peer profile");
+  const legacyMemberProfile = await asMember.action(
+    internal.communityCapabilityContext.readCommunitySemanticRepositoryInternal,
+    {
+      authSubject: fixture.memberSubject,
+      userId: fixture.memberId,
+      communitySlug: "resource-semantic",
+      path: `/members/by-user/${String(fixture.legacyMemberId)}.md`,
+      surface: "external_mcp",
+    },
+  );
+  expect(legacyMemberProfile).toMatchObject({
+    ok: true,
+    result: {
+      body: expect.stringContaining("Resource semantic legacy member"),
+      truncated: false,
+    },
+  });
+  expect(legacyMemberProfile.result.body).toContain("Handle: _Not provided._");
+  await t.run(async (dbCtx) => {
+    await dbCtx.db.patch(fixture.legacyMembershipId, {
+      active: false,
+      revokedAt: 1_750_000_000_150,
+      revokedReason: "legacy_member_projection_revocation_test",
+    });
+    await dbCtx.db.patch(fixture.communityId, { activeMemberCount: 3 });
+  });
+  await expect(
+    asMember.action(
+      internal.communityCapabilityContext
+        .readCommunitySemanticRepositoryInternal,
+      {
+        authSubject: fixture.memberSubject,
+        userId: fixture.memberId,
+        communitySlug: "resource-semantic",
+        path: `/members/by-user/${String(fixture.legacyMemberId)}.md`,
+        surface: "external_mcp",
+      },
+    ),
+  ).resolves.toMatchObject({ ok: false, code: "semantic_context_unavailable" });
   const selfProfileWithIrrelevantPagination = await asMember.action(
     internal.communityCapabilityContext.readCommunitySemanticRepositoryInternal,
     {
