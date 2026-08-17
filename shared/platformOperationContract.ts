@@ -205,6 +205,10 @@ const COMMUNITY_SEMANTIC_LIST_OUTPUT_SCHEMA: PlatformOperationJsonSchema = {
       minimum: 0,
       maximum: 1000,
     },
+    total_count: {
+      type: ["integer", "null"],
+      minimum: 0,
+    },
   },
 };
 

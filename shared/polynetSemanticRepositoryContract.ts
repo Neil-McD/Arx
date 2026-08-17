@@ -77,6 +77,7 @@ export type PolynetSemanticDirectoryResult = {
   next_cursor: string | null;
   truncated: boolean;
   skipped_incomplete: number;
+  total_count?: number | null;
 };
 
 type RepositoryPathError = {

@@ -2,6 +2,7 @@ import {
   communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
   normalizeCommunityRoleForOutput,
+  readCommunityActiveMemberCount,
   requireCommunityChatAccess,
   type CommunityLike,
   type CommunityMembershipLike,
@@ -86,9 +87,6 @@ async function buildMemberDirectoryEntry(args: {
   const validatedHandle = validateProfileHandle(
     user.normalizedHandle ?? user.handle,
   );
-  if (!isSelf && !validatedHandle.ok) {
-    return { entry: null, skippedIncomplete: true };
-  }
   if (validatedHandle.ok) {
     const uniqueUser =
       await getUniqueUserByNormalizedHandle<SemanticMemberUserRow>(
@@ -109,7 +107,7 @@ async function buildMemberDirectoryEntry(args: {
       userRef: `user:${String(user._id)}`,
       profilePath: validatedHandle.ok
         ? `/users/${validatedHandle.normalizedHandle}/profile.md`
-        : "/users/me/profile.md",
+        : null,
       displayName: detail?.displayName ?? user.displayName ?? null,
       handle: validatedHandle.ok ? validatedHandle.normalizedHandle : null,
       role: normalizeSemanticMemberRole(args.role),
@@ -179,20 +177,34 @@ export async function listMemberSemanticDirectory(args: {
     entries,
     nextCursor: rawPage.isDone ? null : rawPage.continueCursor,
     skippedIncomplete,
+    totalCount: readCommunityActiveMemberCount(community),
   };
 }
 
 export async function resolveMemberSemanticProfile(args: {
   ctx: any;
   context: ResolvedCommunityCapabilityContext;
-  handle: string;
+  handle?: string | null;
+  userId?: string | null;
 }): Promise<MemberProfileSemanticSource | null> {
-  const validatedHandle = validateProfileHandle(args.handle);
-  if (!validatedHandle.ok) return null;
-  const user = await getUniqueUserByNormalizedHandle<SemanticMemberUserRow>(
-    args.ctx,
-    validatedHandle.normalizedHandle,
-  );
+  const validatedHandle = args.handle
+    ? validateProfileHandle(args.handle)
+    : null;
+  if (args.handle && !validatedHandle?.ok) return null;
+  const normalizedUserId = args.userId
+    ? args.ctx.db.normalizeId("users", args.userId)
+    : null;
+  if (args.userId && !normalizedUserId) return null;
+  const user = validatedHandle?.ok
+    ? await getUniqueUserByNormalizedHandle<SemanticMemberUserRow>(
+        args.ctx,
+        validatedHandle.normalizedHandle,
+      )
+    : normalizedUserId
+      ? ((await args.ctx.db.get(
+          normalizedUserId,
+        )) as SemanticMemberUserRow | null)
+      : null;
   if (!user) return null;
   const communityId = normalizeCommunityId(args.ctx, args.context);
   const { community } = await requireCommunityChatAccess({
@@ -221,9 +233,11 @@ export async function resolveMemberSemanticProfile(args: {
     );
   return {
     userRef: `user:${String(user._id)}`,
-    profilePath: `/users/${validatedHandle.normalizedHandle}/profile.md`,
+    profilePath: validatedHandle?.ok
+      ? `/users/${validatedHandle.normalizedHandle}/profile.md`
+      : null,
     displayName: detail?.displayName ?? user.displayName ?? null,
-    handle: validatedHandle.normalizedHandle,
+    handle: validatedHandle?.ok ? validatedHandle.normalizedHandle : null,
     currentCommunity: {
       slug: args.context.communitySlug,
       name:

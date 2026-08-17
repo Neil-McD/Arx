@@ -221,6 +221,14 @@ The self profile remains user-owned even when projected inside a community.
 Other-member projections under `/members/` are community-scoped and must not
 expose self-only facts.
 
+The member directory is a bounded projection of canonical active membership.
+`total_count` reports the durable authorized roster size when that aggregate is
+available, while `next_cursor` is the only completeness signal for the current
+enumeration. A non-null cursor means the returned page is not the complete
+roster. Active legacy members without a public handle remain visible through a
+stable membership document under `/members/by-user/`; that relationship view
+does not invent a handle or expose a user-profile path.
+
 A readable path is a current location. A canonical semantic URI or typed
 reference is stable identity. Renaming a community, category, handle, or
 resource may change its path without changing its identity. Opaque IDs,

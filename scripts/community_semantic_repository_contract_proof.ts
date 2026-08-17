@@ -199,6 +199,11 @@ assert.deepEqual(parsePolynetSemanticPath("/members/emma.md"), {
   path: "/members/emma.md",
   memberHandle: "emma",
 });
+assert.deepEqual(parsePolynetSemanticPath("/members/by-user/user-legacy.md"), {
+  ok: true,
+  path: "/members/by-user/user-legacy.md",
+  memberUserId: "user-legacy",
+});
 assert.deepEqual(parsePolynetSemanticPath("/resources/"), {
   ok: true,
   path: "/resources/",
@@ -388,8 +393,16 @@ const listedMembers = listCommunitySemanticMembers({
         isSelf: false,
       },
       {
+        userRef: "user:user-legacy",
+        profilePath: null,
+        displayName: "Legacy member",
+        handle: null,
+        role: "member",
+        isSelf: false,
+      },
+      {
         userRef: "",
-        profilePath: "",
+        profilePath: null,
         displayName: "Incomplete",
         handle: null,
         role: "member",
@@ -398,6 +411,7 @@ const listedMembers = listCommunitySemanticMembers({
     ],
     nextCursor: "opaque-cursor",
     skippedIncomplete: 1,
+    totalCount: 3,
   },
 });
 assert.equal(listedMembers.ok, true);
@@ -419,10 +433,18 @@ assert.deepEqual(listedMembers.result, {
       ref: "user:user-emma",
       role: "moderator",
     },
+    {
+      path: "/members/by-user/user-legacy.md",
+      kind: "document",
+      name: "Legacy member",
+      ref: "user:user-legacy",
+      role: "member",
+    },
   ],
   next_cursor: "opaque-cursor",
   truncated: true,
   skipped_incomplete: 1,
+  total_count: 3,
 });
 
 const listedResourceModules = listCommunitySemanticResources({
@@ -659,6 +681,28 @@ assert.match(renderedPlatformUser, /^# User profile/m);
 assert.match(renderedPlatformUser, /- User ref: `user:user-emma`/);
 assert.match(renderedMember, /- Profile: `\/users\/emma\/profile\.md`/);
 assert.doesNotMatch(renderedMember, /## Bio|## Social links/);
+const legacyMemberProfile: MemberProfileSemanticSource = {
+  userRef: "user:user-legacy",
+  profilePath: null,
+  displayName: "Legacy member",
+  handle: null,
+  currentCommunity: {
+    slug: "polynet",
+    name: "Polynet",
+    role: "member",
+  },
+};
+const renderedLegacyMember = renderMemberProfileMarkdown(legacyMemberProfile);
+assert.match(renderedLegacyMember, /- Handle: _Not provided\._/);
+assert.match(renderedLegacyMember, /- Profile: _Not provided\._/);
+const legacyMemberRead = readCommunitySemanticDocument({
+  source,
+  memberProfile: legacyMemberProfile,
+  path: "/members/by-user/user-legacy.md",
+});
+assert.equal(legacyMemberRead.ok, true);
+if (!legacyMemberRead.ok) throw new Error(legacyMemberRead.code);
+assert.equal(legacyMemberRead.result.body, renderedLegacyMember);
 
 const mountedRoot = mountCommunitySemanticResult({
   communitySlug: "polynet",

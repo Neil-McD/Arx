@@ -83,9 +83,9 @@ export type SelfProfileSemanticSource = {
 
 export type MemberProfileSemanticSource = {
   userRef: string;
-  profilePath: string;
+  profilePath: string | null;
   displayName: string | null;
-  handle: string;
+  handle: string | null;
   currentCommunity: SelfProfileCommunitySummary & {
     role: "owner" | "admin" | "moderator" | "member";
   };
@@ -109,7 +109,7 @@ export type PlatformUserProfileSemanticSource = {
 export type MemberSemanticDirectorySource = {
   entries: Array<{
     userRef: string;
-    profilePath: string;
+    profilePath: string | null;
     displayName: string | null;
     handle: string | null;
     role: "owner" | "admin" | "moderator" | "member";
@@ -117,6 +117,7 @@ export type MemberSemanticDirectorySource = {
   }>;
   nextCursor: string | null;
   skippedIncomplete: number;
+  totalCount: number | null;
 };
 
 export type CommunityResourceSemanticDirectorySource =
@@ -255,12 +256,16 @@ function parseMemberProfilePath(value: string) {
   ) {
     return null;
   }
-  const rawHandle = value.slice(
+  const selector = value.slice(
     POLYNET_MEMBERS_DIRECTORY_PATH.length,
     -".md".length,
   );
-  const validated = validateProfileHandle(rawHandle);
-  return validated.ok && validated.normalizedHandle === rawHandle
+  const userIdMatch = /^by-user\/([A-Za-z0-9_-]+)$/.exec(selector);
+  if (userIdMatch) {
+    return { userId: userIdMatch[1] };
+  }
+  const validated = validateProfileHandle(selector);
+  return validated.ok && validated.normalizedHandle === selector
     ? { handle: validated.normalizedHandle }
     : null;
 }
@@ -368,7 +373,9 @@ export function parsePolynetSemanticPath(value: unknown) {
     return {
       ok: true as const,
       path: value,
-      memberHandle: memberProfile.handle,
+      ...(memberProfile.handle
+        ? { memberHandle: memberProfile.handle }
+        : { memberUserId: memberProfile.userId }),
     };
   }
   return value === POLYNET_SEMANTIC_ROOT_PATH ||
@@ -512,7 +519,8 @@ export function validateCommunitySemanticOperationInput(args: {
   const isProfileRead =
     parsed.path === POLYNET_COMMUNITY_PROFILE_PATH ||
     parsed.path === POLYNET_SELF_PROFILE_PATH ||
-    "memberHandle" in parsed;
+    "memberHandle" in parsed ||
+    "memberUserId" in parsed;
   const isCanonicalVirtualDocumentRead =
     parseCommunityChannelSemanticPath(parsed.path)?.kind === "document" ||
     /^\/events\/event:[A-Za-z0-9_-]+:[0-9]{1,16}\.md$/.test(parsed.path) ||
@@ -790,16 +798,21 @@ export function renderSelfProfileMarkdown(
 export function renderMemberProfileMarkdown(
   source: MemberProfileSemanticSource,
 ): string {
-  const validatedHandle = validateProfileHandle(source.handle);
+  const validatedHandle = source.handle
+    ? validateProfileHandle(source.handle)
+    : null;
   const currentCommunity = normalizeCommunitySummary(source.currentCommunity);
   const userRef = normalizeInlineText(source.userRef, 160);
-  const profilePath = normalizeInlineText(source.profilePath, 1_024);
+  const profilePath = source.profilePath
+    ? normalizeInlineText(source.profilePath, 1_024)
+    : null;
   if (
-    !validatedHandle.ok ||
     !currentCommunity ||
     !userRef ||
     !/^user:[^\s:]+$/.test(userRef) ||
-    profilePath !== `/users/${validatedHandle.normalizedHandle}/profile.md`
+    (validatedHandle?.ok
+      ? profilePath !== `/users/${validatedHandle.normalizedHandle}/profile.md`
+      : profilePath !== null)
   ) {
     throw new Error("member_profile_semantic_source_invalid");
   }
@@ -818,9 +831,9 @@ export function renderMemberProfileMarkdown(
     "## Member reference",
     "",
     `- Display name: ${displayName ? JSON.stringify(displayName) : "_Not provided._"}`,
-    `- Handle: @${validatedHandle.normalizedHandle}`,
+    `- Handle: ${validatedHandle?.ok ? `@${validatedHandle.normalizedHandle}` : "_Not provided._"}`,
     `- User ref: \`${userRef}\``,
-    `- Profile: \`${profilePath}\``,
+    `- Profile: ${profilePath ? `\`${profilePath}\`` : "_Not provided._"}`,
     "",
     "## Community relationship",
     "",
@@ -1011,10 +1024,11 @@ export function listCommunitySemanticMembers(args: {
   for (const row of args.source.entries) {
     const displayName = normalizeInlineText(row.displayName, 120) ?? "Member";
     const validatedHandle = validateProfileHandle(row.handle);
+    const userId = /^user:([^\s:]+)$/.exec(row.userRef)?.[1] ?? null;
     const path = validatedHandle.ok
       ? `${POLYNET_MEMBERS_DIRECTORY_PATH}${validatedHandle.normalizedHandle}.md`
-      : row.isSelf
-        ? POLYNET_SELF_PROFILE_PATH
+      : userId
+        ? `${POLYNET_MEMBERS_DIRECTORY_PATH}by-user/${userId}.md`
         : null;
     if (!path) continue;
     if (paths.has(path)) throw new Error("member_semantic_directory_ambiguous");
@@ -1035,6 +1049,11 @@ export function listCommunitySemanticMembers(args: {
     0,
     Math.min(1_000, Math.floor(args.source.skippedIncomplete)),
   );
+  const rawTotalCount = Number(args.source.totalCount);
+  const totalCount =
+    Number.isFinite(rawTotalCount) && rawTotalCount >= 0
+      ? Math.floor(rawTotalCount)
+      : null;
   return {
     ok: true as const,
     result: {
@@ -1043,6 +1062,7 @@ export function listCommunitySemanticMembers(args: {
       next_cursor: nextCursor,
       truncated: Boolean(nextCursor),
       skipped_incomplete: skippedIncomplete,
+      total_count: totalCount,
     },
   };
 }
@@ -1288,10 +1308,12 @@ export function readCommunitySemanticDocument(args: {
   const parsed = parsePolynetSemanticPath(args.path);
   if (!parsed.ok) return parsed;
   const memberHandle = "memberHandle" in parsed ? parsed.memberHandle : null;
+  const memberUserId = "memberUserId" in parsed ? parsed.memberUserId : null;
   if (
     parsed.path !== POLYNET_COMMUNITY_PROFILE_PATH &&
     parsed.path !== POLYNET_SELF_PROFILE_PATH &&
-    !memberHandle
+    !memberHandle &&
+    !memberUserId
   ) {
     return semanticError(
       "semantic_not_found",
@@ -1305,7 +1327,9 @@ export function readCommunitySemanticDocument(args: {
     );
   }
   const memberProfileHandle = args.memberProfile
-    ? validateProfileHandle(args.memberProfile.handle)
+    ? args.memberProfile.handle
+      ? validateProfileHandle(args.memberProfile.handle)
+      : null
     : null;
   if (
     memberHandle &&
@@ -1317,10 +1341,16 @@ export function readCommunitySemanticDocument(args: {
       "Semantic path not found or not accessible.",
     );
   }
+  if (memberUserId && args.memberProfile?.userRef !== `user:${memberUserId}`) {
+    return semanticError(
+      "semantic_not_found",
+      "Semantic path not found or not accessible.",
+    );
+  }
   const body =
     parsed.path === POLYNET_SELF_PROFILE_PATH
       ? renderSelfProfileMarkdown(args.selfProfile!)
-      : memberHandle
+      : memberHandle || memberUserId
         ? renderMemberProfileMarkdown(args.memberProfile!)
         : renderCommunityProfileMarkdown(args.source);
   return {
