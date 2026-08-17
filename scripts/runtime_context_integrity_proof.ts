@@ -256,14 +256,14 @@ assert.ok(
 );
 
 const v2SectionIds = [
-  "platform_doctrine", "agent_soul", "user_agent_soul", "explanation_contract",
+  "platform_doctrine", "explanation_contract",
   "harness_operating_policy", "community_lens", "community_lens_authority",
   "community_system_prompt", "community_resource_lane",
   "runtime_turn_context", "temporal_context", "platform_skill_overlay",
   "personal_skill_overlay", "ambiguous_skill_mentions", "community_skill_overlay",
 ];
 const v2RenderedIds = v2SectionIds.filter((id) => ![
-  "user_agent_soul", "community_system_prompt", "personal_skill_overlay",
+  "community_system_prompt", "personal_skill_overlay",
   "ambiguous_skill_mentions", "community_skill_overlay",
 ].includes(id));
 const v2Events = baseEvents.map((event) => {

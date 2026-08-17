@@ -14,7 +14,6 @@ import {
 } from "react";
 import {
   LoaderCircle,
-  MessageCircle,
   MessageSquarePlus,
   Paperclip,
   Sparkles,
@@ -28,7 +27,6 @@ import {
   parseMessageAttachments,
 } from "../../../../shared/communityMessageParsing";
 import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
-import { CommunityAvatar } from "../../../../shared/CommunityAvatar";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
 import {
   MEMBER_AGENT_IMAGE_ACCEPT,
@@ -1116,9 +1114,6 @@ function WebMemberAgentDock(props, ref) {
     props.surfaceContext,
     communityName,
   );
-  const hasCommunityIntelligence = Boolean(
-    presentation.communityIntelligenceName,
-  );
   const shouldRenderStreamedText =
     Boolean(streamedText) && !hasSequencedAssistantText(runtimeEvents);
 
@@ -1155,23 +1150,9 @@ function WebMemberAgentDock(props, ref) {
       <section className="member-agent-dock-panel" aria-label={presentation.title}>
         <header className="member-agent-dock-header">
           <div className="member-agent-dock-identity">
-            {hasCommunityIntelligence ? (
-              <CommunityAvatar
-                communityId={communityId}
-                visualIdentity={props.community?.visual_identity}
-                name={communityName}
-                imageUrl={props.community?.avatar_url}
-                focusX={props.community?.avatar_focus_x}
-                focusY={props.community?.avatar_focus_y}
-                zoom={props.community?.avatar_zoom}
-                className="member-agent-dock-community-avatar"
-                aria-hidden={true}
-              />
-            ) : (
-              <span className="member-agent-dock-avatar" aria-hidden="true">
-                <Sparkles />
-              </span>
-            )}
+            <span className="member-agent-dock-avatar" aria-hidden="true">
+              <Sparkles />
+            </span>
             <span>
               <strong>{presentation.title}</strong>
               <small>
@@ -1217,9 +1198,7 @@ function WebMemberAgentDock(props, ref) {
           !isPreparing &&
           !isStartingNewChat ? (
             <div className="member-agent-dock-empty">
-              {hasCommunityIntelligence
-                ? <Sparkles aria-hidden="true" />
-                : <MessageCircle aria-hidden="true" />}
+              <Sparkles aria-hidden="true" />
               <p>
                 {presentation.emptyLabel}
               </p>

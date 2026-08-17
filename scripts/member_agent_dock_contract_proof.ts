@@ -31,7 +31,6 @@ import { getFixedRuntimeToolPolicy } from "../shared/runtimeToolPolicy.ts";
 import {
   buildMemberAgentSurfacePresentation,
   describeMemberAgentSurface,
-  formatCommunityIntelligenceName,
   normalizeMemberAgentSurfaceContext,
   renderMemberAgentSurfaceContextForPrompt,
 } from "../shared/memberAgentSurfaceContext.ts";
@@ -141,40 +140,33 @@ assert.equal(
 assert.deepEqual(
   buildMemberAgentSurfacePresentation(communitySurface!, "Polynet"),
   {
-    communityIntelligenceName: "Polynet Intelligence",
     surfaceLabel: "Polynet · Resources",
     title: "Polynet Intelligence",
     openLabel: "Open Polynet Intelligence",
     closeLabel: "Close Polynet Intelligence",
     composerLabel: "Message Polynet Intelligence",
-    emptyLabel: "Talk with Polynet Intelligence.",
+    emptyLabel: "Ask Polynet Intelligence about Polynet · Resources.",
     loadingLabel: "Opening Polynet Intelligence",
   },
-  "one presentation contract must drive every community-facing dock label",
+  "a community surface must preserve the global personal-agent identity while exposing its context label",
 );
 assert.deepEqual(
   buildMemberAgentSurfacePresentation(discoverSurface!),
   {
-    communityIntelligenceName: null,
     surfaceLabel: "Discover",
-    title: "Your agent",
-    openLabel: "Open your agent",
-    closeLabel: "Close your agent",
-    composerLabel: "Message your agent in Discover",
-    emptyLabel: "Ask your agent to help you explore communities.",
-    loadingLabel: "Opening your agent",
+    title: "Polynet Intelligence",
+    openLabel: "Open Polynet Intelligence",
+    closeLabel: "Close Polynet Intelligence",
+    composerLabel: "Message Polynet Intelligence",
+    emptyLabel: "Ask Polynet Intelligence to help you explore communities.",
+    loadingLabel: "Opening Polynet Intelligence",
   },
-  "surfaces without a community lens must not retain stale community branding",
+  "the global personal-agent identity must remain stable without a community lens",
 );
 assert.equal(
   buildMemberAgentSurfacePresentation(communitySurface!, null).loadingLabel,
-  "Opening your agent",
-  "an unresolved community name must fail back to grammatical generic copy",
-);
-assert.equal(
-  formatCommunityIntelligenceName("Collective Intelligence"),
-  "Collective Intelligence",
-  "community names already ending in Intelligence must not be duplicated",
+  "Opening Polynet Intelligence",
+  "an unresolved community name must not change the personal-agent identity",
 );
 assert.match(
   renderMemberAgentSurfaceContextForPrompt(discoverSurface) ?? "",
@@ -863,33 +855,33 @@ assert.match(
 );
 assert.match(
   component,
-  /community: WebCommunityRecord \| null;[\s\S]*?const hasCommunityIntelligence = Boolean\([\s\S]*?presentation\.communityIntelligenceName[\s\S]*?hasCommunityIntelligence \? \([\s\S]*?<CommunityAvatar[\s\S]*?communityId=\{communityId\}[\s\S]*?visualIdentity=\{props\.community\?\.visual_identity\}[\s\S]*?imageUrl=\{props\.community\?\.avatar_url\}[\s\S]*?className="member-agent-dock-community-avatar"[\s\S]*?<strong>\{presentation\.title\}<\/strong>/,
-  "the dock header must use the canonical active-community identity and intelligence name",
+  /member-agent-dock-identity[\s\S]*?member-agent-dock-avatar[\s\S]*?<Sparkles \/>[\s\S]*?<strong>\{presentation\.title\}<\/strong>/,
+  "the dock header must use one canonical personal-agent identity on every surface",
 );
 assert.match(
   component,
-  /hasCommunityIntelligence[\s\S]*?\? <Sparkles aria-hidden="true" \/>[\s\S]*?: <MessageCircle aria-hidden="true" \/>[\s\S]*?\{presentation\.emptyLabel\}/,
-  "community empty states must use the intelligence glyph while generic contexts retain the message glyph",
+  /member-agent-dock-empty[\s\S]*?<Sparkles aria-hidden="true" \/>[\s\S]*?\{presentation\.emptyLabel\}/,
+  "empty states must retain the same personal-agent identity across contexts",
 );
-assert.equal(
-  component.match(/<CommunityAvatar/g)?.length,
-  1,
-  "the dock must render exactly one canonical community avatar",
+assert.doesNotMatch(
+  component,
+  /CommunityAvatar|hasCommunityIntelligence|communityIntelligenceName|MessageCircle/,
+  "community branding must not replace the member's global personal-agent identity",
 );
 assert.match(
   component,
   /placeholder=\{presentation\.composerLabel\}[\s\S]*?aria-label=\{presentation\.composerLabel\}/,
-  "the composer and accessibility label must share the community intelligence identity",
+  "the composer and accessibility label must share the canonical personal-agent identity",
 );
 assert.match(
   component,
   /formatInferenceIssue\(inferenceIssue\)[\s\S]*?<span>\{presentation\.loadingLabel\}<\/span>/,
-  "the loading presentation must use the visible community identity",
+  "the loading presentation must use the visible personal-agent identity",
 );
 assert.doesNotMatch(
   component,
   /aria-label="Your Polynet agent"|<strong>Your agent<\/strong>|<span>Opening Your agent<\/span>/,
-  "community-facing chrome must not hard-code the personal-agent identity",
+  "visible dock identity must remain owned by the canonical presentation",
 );
 assert.match(
   component,
@@ -898,20 +890,8 @@ assert.match(
 );
 assert.doesNotMatch(
   styles,
-  /member-agent-dock-empty-avatar|member-agent-dock-launcher img|member-agent-dock-community-avatar img/,
-  "the dock must not retain duplicate-avatar or surface-owned image presentation rules",
-);
-const communityAvatarStyleBlock =
-  styles.match(/\.member-agent-dock-community-avatar \{[\s\S]*?\}/)?.[0] ?? "";
-assert.match(
-  communityAvatarStyleBlock,
-  /width: 32px;[\s\S]*?height: 32px;[\s\S]*?flex: 0 0 32px;/,
-  "the header community avatar rule must own layout only",
-);
-assert.doesNotMatch(
-  communityAvatarStyleBlock,
-  /(?:background|border|border-radius|object-fit|overflow)\s*:/,
-  "the dock must leave community-avatar framing to the canonical shared owner",
+  /member-agent-dock-empty-avatar|member-agent-dock-launcher img|member-agent-dock-community-avatar/,
+  "the dock must not retain community-owned or duplicate identity styles",
 );
 assert.match(
   styles,
@@ -1183,11 +1163,6 @@ assert.match(
   /if \(submitInFlightRef\.current\) return;[\s\S]*submitInFlightRef\.current = true;/,
   "submission must use a synchronous lock, immutable draft snapshot, and post-commit completion boundary",
 );
-assert.match(
-  component,
-  /onboardingSeededSessionIdsRef\.current\.add[\s\S]*const seededPrompt[\s\S]*draftTextRef\.current = seededPrompt;[\s\S]*return seededPrompt;/,
-  "programmatic onboarding prompts must update the submit ref as well as the rendered textarea",
-);
 assert.match(component, /Detach the submitted snapshot immediately/);
 assert.match(component, /committed = true;/);
 assert.match(component, /Finish its captured turn even if navigation/);
@@ -1229,7 +1204,6 @@ assert.match(
 assert.equal(supportsModelImageInput("gpt-5.6-sol"), true);
 assert.equal(supportsModelImageInput("gpt-oss-120b-free"), false);
 assert.equal(supportsModelImageInput("unknown-future-model"), false);
-assert.match(packageJson, /"@hey-api\/openapi-ts": "0\.97\.3"[\s\S]*"js-yaml": "5\.2\.2"/);
 assert.match(
   runtimeTurnResolution,
   /image_model_unsupported[\s\S]*const allowedToolNames/,

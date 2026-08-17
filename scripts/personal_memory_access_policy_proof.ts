@@ -11,7 +11,6 @@ function assertIncludes(haystack: string, needle: string, label: string) {
 
 function main() {
   const personalMemory = readText(new URL("../convex/personalMemory.ts", import.meta.url));
-  const settings = readText(new URL("../convex/settings.ts", import.meta.url));
   const settingsPanels = readText(
     new URL("../apps/web/src/components/WebSettingsPanels.tsx", import.meta.url),
   );
@@ -26,10 +25,10 @@ function main() {
     "personal_memory_item_access_denied",
     "personal memory item mutations enforce ownership",
   );
-  assertIncludes(
-    settings,
-    "resolveUserIdForAuthenticatedRequest({",
-    "memory settings APIs resolve authenticated user",
+  assert.equal(
+    existsSync(new URL("../convex/settings.ts", import.meta.url)),
+    false,
+    "retired hidden agent identity and memory settings API must stay deleted",
   );
   assert.ok(
     !settingsPanels.includes("Personal memory") &&
@@ -42,7 +41,7 @@ function main() {
     "retired personal Account presentation must be deleted",
   );
 
-  console.log("PASS: personal memory backend remains authenticated-user scoped while its global Account UI is retired.");
+  console.log("PASS: personal memory remains authenticated-user scoped while retired global settings stay deleted.");
 }
 
 main();

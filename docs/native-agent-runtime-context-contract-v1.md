@@ -114,6 +114,9 @@ The dimensions are independent:
 10. Section IDs use canonical lower snake case and are unique within a bundle;
     compilation fails before provider execution if an ID is invalid or a base
     or extension section would duplicate an ID.
+11. The Member Dock's invocation-surface section owns its fixed personal-agent
+    identity. Hidden user name or soul settings do not enter prompt compilation,
+    and that identity does not enter the Funnel Composer runtime.
 
 ## 5. Harness overlay sections
 

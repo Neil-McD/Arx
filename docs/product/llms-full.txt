@@ -1760,8 +1760,12 @@ Higher layers constrain lower layers.
 
 ## Agent Identities
 
-The member's personal agent acts with the member's current authority. The
-community-owned agent acts only inside its mounted community with member
+Polynet Intelligence is the authenticated member's personal agent across
+Polynet. Polynet provides and hosts it, but it acts for the member and does not
+belong to any community. Its platform-owned role and visible identity do not
+come from hidden user naming or soul settings.
+
+The community-owned agent acts only inside its mounted community with member
 authority. The two identities never collapse into one another.
 
 ## Community Context
@@ -1770,6 +1774,9 @@ A community page can supply one explicit community context to the personal
 agent. Discover and generic platform pages carry no community context.
 External MCP requests select community paths explicitly. Every operation
 revalidates access.
+
+A community lens changes relevant context for subsequent turns. It does not
+rename, own, or redefine the member's personal agent.
 
 Reading another authorized community is temporary inspection and does not
 mutate the current page or personal-agent context.
@@ -1846,6 +1853,9 @@ never replace them.
 
 - Anonymous use receives only the public/demo path.
 - Authenticated users use one platform prompt stack.
+- The Member Dock's platform-owned invocation-surface policy defines Polynet
+  Intelligence as the authenticated member's personal agent across Polynet.
+- No hidden user-configured agent name or soul changes that role or identity.
 - A validated community context adds compact community identity, instructions,
   skills, and bounded knowledge.
 - The member personal-agent dock exposes exactly the canonical five Polynet
@@ -1866,6 +1876,7 @@ never replace them.
 6. Tool availability must match executable runtime policy.
 7. Prompt changes should remain auditable.
 8. Product-facing plan labels must not fork the authority stack.
+9. A community lens cannot rename, own, or redefine the member's personal agent.
 
 ## Related Concepts
 

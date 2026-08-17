@@ -61,10 +61,8 @@ export type RuntimeCommunityIdentityPromptFields = {
 
 export type RuntimeCommunityPromptFields =
   RuntimeCommunityIdentityPromptFields & {
-    agentName?: string | null;
     communitySystemPrompt?: string | null;
     communityLensAuthority?: CommunityLensAuthority | null;
-    agentSoul?: string | null;
   };
 
 export type RuntimeTemporalContextPromptFields = {
@@ -283,32 +281,6 @@ function buildPlatformDoctrinePrompt(): string {
     "The value compounds as the community accumulates context, resources, feedback, and reusable intelligence. The moat is the agent plus the community, memory, access layer, tools, and distribution loop.",
     "Do not reduce Polynet to an IDE, generic chatbot, course platform, social network, or generic automation tool.",
     "For exact product truth, setup flows, roles, access, billing, memory, community lens behavior, prompts, or implementation status, use search_product_docs/get_product_doc instead of relying on this summary.",
-  ].join("\n");
-}
-
-function buildBaseAgentSoulPrompt(agentName?: string | null): string {
-  const userAgentName = String(agentName ?? "").trim();
-  return [
-    "AGENT_SOUL",
-    userAgentName
-      ? `Configured agent name: ${userAgentName}.`
-      : "Configured agent name: Polynet agent.",
-    "When the member asks your name, answer with the configured agent name.",
-    "You are the member's Polynet agent: a sharp little intelligence with good taste, useful instincts, and a low tolerance for nonsense.",
-    "Think from first principles. Find the real objective, the bottleneck, the leverage point, and the thing that should probably be deleted.",
-    "Prefer truth over comfort, clarity over jargon, and working systems over impressive-sounding theater.",
-    "Be warm, direct, and funny when it helps. Keep the personality alive, but never let it outrun the work.",
-    "Never fake certainty. If something is unknown, say so and figure out how to verify it.",
-  ].join("\n");
-}
-
-function buildUserAgentSoulPrompt(agentSoul?: string | null): string | null {
-  const userAgentSoul = String(agentSoul ?? "").trim();
-  if (!userAgentSoul) return null;
-  return [
-    "USER_AGENT_SOUL",
-    "Apply these personal instructions from the member for their agent:",
-    userAgentSoul,
   ].join("\n");
 }
 
@@ -577,26 +549,6 @@ export function buildPlatformHarnessRuntimePromptBundle(
       source: "shared/runtimePrompt.ts#buildPlatformDoctrinePrompt",
       reason: "always-on platform product and safety authority",
       text: buildPlatformDoctrinePrompt(),
-    }),
-    buildRuntimePromptSection({
-      id: "agent_soul",
-      layer: "stable",
-      slot: "instruction",
-      owner: "platform",
-      authority: "role_policy",
-      source: "shared/runtimePrompt.ts#buildBaseAgentSoulPrompt",
-      reason: "agent posture and identity",
-      text: buildBaseAgentSoulPrompt(params.agentName),
-    }),
-    buildRuntimePromptSection({
-      id: "user_agent_soul",
-      layer: "stable",
-      slot: "instruction",
-      owner: "user",
-      authority: "user_preference",
-      source: "shared/runtimePrompt.ts#buildUserAgentSoulPrompt",
-      reason: "member-configured agent posture",
-      text: buildUserAgentSoulPrompt(params.agentSoul),
     }),
     buildRuntimePromptSection({
       id: "explanation_contract",
