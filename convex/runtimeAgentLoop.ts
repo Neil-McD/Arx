@@ -981,8 +981,6 @@ async function executeRetrievalAgentLoop(
     communityAbout: params.communityAbout,
     communitySystemPrompt: params.communitySystemPrompt,
     communityLensAuthority: params.communityLensAuthority,
-    agentName: params.agentName,
-    agentSoul: params.agentSoul,
     runtimeTurnContext,
     currentDateTimeIso: runtimeDateTimeIso,
     currentDateLabel: runtimeDateLabel,

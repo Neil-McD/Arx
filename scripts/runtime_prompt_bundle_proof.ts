@@ -34,8 +34,12 @@ const params = {
     can_read_live_resources: true,
     can_use_resource_builder: true,
   },
-  agentName: "James",
-  agentSoul: "Keep the receipt exact.",
+  memberAgentSurfaceContext: {
+    version: 1,
+    kind: "community",
+    community_slug: "bundle-community",
+    section: "resources",
+  } as const,
   runtimeTurnContext: buildRuntimeTurnContextPacket({
     latestUserText: "Inspect the active community.",
     threadWorkingState: {
@@ -56,8 +60,6 @@ assert.deepEqual(
   bundle.sections.map((section) => section.id),
   [
     "platform_doctrine",
-    "agent_soul",
-    "user_agent_soul",
     "explanation_contract",
     "harness_operating_policy",
     "invocation_surface",
@@ -72,6 +74,16 @@ assert.deepEqual(
   ],
 );
 assert.ok(bundle.sections.every((section) => section.owner !== "workspace"));
+assert.match(
+  bundle.text,
+  /You are Polynet Intelligence, the authenticated member's personal agent in Polynet\.[\s\S]*You do not belong to any community\.[\s\S]*active community lens/,
+  "the member dock must use one platform-owned personal identity under the optional community lens",
+);
+assert.doesNotMatch(
+  bundle.text,
+  /AGENT_SOUL|USER_AGENT_SOUL|Configured agent name|James|Keep the receipt exact/,
+  "hidden member naming and soul instructions must not enter the canonical prompt",
+);
 assert.doesNotMatch(
   bundle.text,
   /PLATFORM_HARNESS_CONTEXT|WORKSPACE_PROCESS_CONTEXT|terminal_start|computer_screenshot|\bbash\b/,
@@ -89,7 +101,6 @@ assert.doesNotMatch(
 
 const headings = [
   "PLATFORM_DOCTRINE",
-  "AGENT_SOUL",
   "AGENT_OPERATING_POLICY",
   "INVOCATION_SURFACE",
   "COMMUNITY_LENS",
@@ -103,5 +114,37 @@ for (const heading of headings) {
   assert.ok(next > previous, `${heading} must retain canonical prompt order`);
   previous = next;
 }
+
+const globalBundle = buildPlatformHarnessRuntimePromptBundle({
+  ...params,
+  communityId: null,
+  communityName: null,
+  communitySlug: null,
+  communityAbout: null,
+  communitySystemPrompt: null,
+  communityLensAuthority: null,
+  memberAgentSurfaceContext: {
+    version: 1,
+    kind: "discover",
+    section: "communities",
+  } as const,
+});
+assert.match(
+  globalBundle.text,
+  /Polynet Intelligence[\s\S]*No community lens is active on this surface/,
+  "the same personal agent must remain available without a community lens",
+);
+
+const funnelBundle = buildPlatformHarnessRuntimePromptBundle({
+  ...params,
+  invocationSurface: "community_funnel_builder",
+  memberAgentSurfaceContext: null,
+});
+assert.match(funnelBundle.text, /bounded community funnel composer/);
+assert.doesNotMatch(
+  funnelBundle.text,
+  /Polynet Intelligence|authenticated member's personal agent|You do not belong to any community/,
+  "the member's personal identity must not leak into the funnel composer",
+);
 
 console.log("runtime_prompt_bundle_proof: ok");

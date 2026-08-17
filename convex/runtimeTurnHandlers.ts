@@ -185,28 +185,6 @@ function isRuntimeCompletionFailure(
   return "ok" in completion && completion.ok === false;
 }
 
-async function loadUserAgentProfileForRuntime(
-  ctx: any,
-  userId: string,
-): Promise<{ agentName: string | null; agentSoul: string | null }> {
-  try {
-    const row = (await ctx.runQuery(internal.settings.getUserAgentSoulInternal as any, {
-      userId: userId as any,
-    })) as { agent_name?: unknown; agent_soul?: unknown } | null;
-    const agentName = String(row?.agent_name ?? "").trim();
-    const agentSoul = String(row?.agent_soul ?? "").trim();
-    return {
-      agentName: agentName || null,
-      agentSoul: agentSoul || null,
-    };
-  } catch {
-    return {
-      agentName: null,
-      agentSoul: null,
-    };
-  }
-}
-
 function emitBufferedAssistantText(params: {
   content: string;
   emitDelta: (delta: string) => void;
@@ -422,7 +400,6 @@ export async function handleRuntimeTurnRequest(args: {
     const runId =
       String(input.idempotency_key ?? "").trim() ||
       `convex_runtime:${crypto.randomUUID()}`;
-    const runtimeAgentProfile = await loadUserAgentProfileForRuntime(ctx, actor.dbUserId);
     startedRunId = runId;
     runtimeTurnStage = "run_start";
     const explicitUserMessageKey = String(input.user_message_key ?? "").trim();
@@ -1244,8 +1221,6 @@ export async function handleRuntimeTurnRequest(args: {
             communityContextVersion: runtimeCommunityId
               ? runtimeCommunityContextVersion
               : null,
-            agentName: runtimeAgentProfile.agentName,
-            agentSoul: runtimeAgentProfile.agentSoul,
             threadWorkingState: ownedThread.workingState ?? null,
             allowedToolNames: polynetAllowedToolNamesForRun,
             invocationSurface,
@@ -1622,8 +1597,6 @@ export async function handleRuntimeTurnRequest(args: {
         communityContextVersion: runtimeCommunityId
           ? runtimeCommunityContextVersion
           : null,
-        agentName: runtimeAgentProfile.agentName,
-        agentSoul: runtimeAgentProfile.agentSoul,
         threadWorkingState: ownedThread.workingState ?? null,
         allowedToolNames: polynetAllowedToolNamesForRun,
         invocationSurface,

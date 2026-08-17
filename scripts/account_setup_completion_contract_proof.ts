@@ -9,7 +9,6 @@ const schema = read("convex/schema.ts");
 const profiles = read("convex/profiles.ts");
 const accountSetupCore = read("convex/accountSetupCore.ts");
 const authBootstrap = read("convex/auth.ts");
-const settings = read("convex/settings.ts");
 const profileGateway = read("shared/cloudProfilesGateway.ts");
 const convexAuthenticatedClient = read("shared/convexAuthenticatedClient.ts");
 const communityTypes = read("shared/communityTypes.ts");
@@ -35,7 +34,6 @@ assert.match(schema, /avatarUrl: v\.optional\(v\.string\(\)\)/, "profile details
 assert.match(schema, /avatarStorageId: v\.optional\(v\.id\("_storage"\)\)/, "profile details must support storage-backed avatars");
 assert.match(schema, /avatarFocusX: v\.optional\(v\.number\(\)\)/, "profile details must store avatar framing");
 assert.match(schema, /avatarZoom: v\.optional\(v\.number\(\)\)/, "profile details must store avatar zoom");
-assert.match(schema, /agentName: v\.optional\(v\.string\(\)\)/, "user memory settings must store agent name");
 
 assert.match(profileHandle, /export function validateProfileHandle/, "profile handle validator must be shared");
 assert.match(profileHandle, /RESERVED_PROFILE_HANDLES/, "profile handles must have a reserved namespace list");
@@ -95,9 +93,6 @@ assert.match(profiles, /recordCurrentPlatformLegalAcceptance/, "profile onboardi
 assert.match(profiles, /platform_legal_versions_required/, "profile onboarding must require both legal document versions together");
 assert.match(profiles, /acceptedAt: Date\.now\(\)/, "legal acceptance time must be server-authoritative");
 
-assert.match(settings, /agentName: v\.optional\(v\.string\(\)\)/, "settings mutation must accept agent name");
-assert.match(settings, /agent_name: row\.agentName/, "settings query must return agent_name");
-assert.match(settings, /agentName: nextAgentName/, "settings mutation must persist agent name");
 
 assert.match(profileGateway, /type \{ AccountSetupStatus \}/, "profile gateway must expose setup status type");
 assert.match(profileGateway, /handle\?: string \| null/, "profile gateway must expose handle");

@@ -119,8 +119,6 @@ const loopParams = {
   communityAbout: "This fixture proves prompt and manifest receipts are emitted from the real agent loop.",
   communitySystemPrompt: "Stay focused on context receipt verification.",
   communityContextVersion: 7,
-  agentName: "Receipt Agent",
-  agentSoul: "Prefer auditable context over hidden prompt behavior.",
   threadWorkingState: {
     version: 3,
     goal: "Verify runtime prompt and context receipts.",
@@ -250,14 +248,12 @@ assert.ok(Number(promptPayload.system_prompt_chars) > 0, "prompt receipt should 
 const sectionIds = new Set((promptPayload.sections ?? []).map((section) => String(section.id ?? "")));
 for (const sectionId of [
   "platform_doctrine",
-  "agent_soul",
   "explanation_contract",
   "harness_operating_policy",
   "community_lens",
   "community_lens_authority",
   "community_system_prompt",
   "community_resource_lane",
-  "user_agent_soul",
   "runtime_turn_context",
   "temporal_context",
   "platform_skill_overlay",

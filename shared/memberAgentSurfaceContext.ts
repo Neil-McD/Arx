@@ -120,7 +120,6 @@ export function describeMemberAgentSurface(
 }
 
 export type MemberAgentSurfacePresentation = {
-  communityIntelligenceName: string | null;
   surfaceLabel: string;
   title: string;
   openLabel: string;
@@ -130,46 +129,21 @@ export type MemberAgentSurfacePresentation = {
   loadingLabel: string;
 };
 
-export function formatCommunityIntelligenceName(
-  communityName: string | null | undefined,
-): string | null {
-  const name = String(communityName ?? "").trim();
-  if (!name) return null;
-  return /intelligence$/i.test(name) ? name : `${name} Intelligence`;
-}
-
 export function buildMemberAgentSurfacePresentation(
   surface: MemberAgentSurfaceContextV1,
   communityName?: string | null,
 ): MemberAgentSurfacePresentation {
   const surfaceLabel = describeMemberAgentSurface(surface, communityName);
-  const communityIntelligenceName = surface.kind === "community"
-    ? formatCommunityIntelligenceName(communityName)
-    : null;
-  if (communityIntelligenceName) {
-    return {
-      communityIntelligenceName,
-      surfaceLabel,
-      title: communityIntelligenceName,
-      openLabel: `Open ${communityIntelligenceName}`,
-      closeLabel: `Close ${communityIntelligenceName}`,
-      composerLabel: `Message ${communityIntelligenceName}`,
-      emptyLabel: `Talk with ${communityIntelligenceName}.`,
-      loadingLabel: `Opening ${communityIntelligenceName}`,
-    };
-  }
-
   return {
-    communityIntelligenceName: null,
     surfaceLabel,
-    title: "Your agent",
-    openLabel: "Open your agent",
-    closeLabel: "Close your agent",
-    composerLabel: `Message your agent in ${surfaceLabel}`,
+    title: "Polynet Intelligence",
+    openLabel: "Open Polynet Intelligence",
+    closeLabel: "Close Polynet Intelligence",
+    composerLabel: "Message Polynet Intelligence",
     emptyLabel: surface.kind === "discover"
-      ? "Ask your agent to help you explore communities."
-      : `Ask your agent about ${surfaceLabel}.`,
-    loadingLabel: "Opening your agent",
+      ? "Ask Polynet Intelligence to help you explore communities."
+      : `Ask Polynet Intelligence about ${surfaceLabel}.`,
+    loadingLabel: "Opening Polynet Intelligence",
   };
 }
 

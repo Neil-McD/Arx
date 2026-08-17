@@ -3,7 +3,7 @@ id: product.reference.prompt_context_model
 title: Prompt Context Model
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-08-16
 ---
 
 # Prompt Context Model
@@ -35,6 +35,9 @@ never replace them.
 
 - Anonymous use receives only the public/demo path.
 - Authenticated users use one platform prompt stack.
+- The Member Dock's platform-owned invocation-surface policy defines Polynet
+  Intelligence as the authenticated member's personal agent across Polynet.
+- No hidden user-configured agent name or soul changes that role or identity.
 - A validated community context adds compact community identity, instructions,
   skills, and bounded knowledge.
 - The member personal-agent dock exposes exactly the canonical five Polynet
@@ -55,6 +58,7 @@ never replace them.
 6. Tool availability must match executable runtime policy.
 7. Prompt changes should remain auditable.
 8. Product-facing plan labels must not fork the authority stack.
+9. A community lens cannot rename, own, or redefine the member's personal agent.
 
 ## Related Concepts
 

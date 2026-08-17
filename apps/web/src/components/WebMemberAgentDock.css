@@ -220,12 +220,6 @@
   height: 16px;
 }
 
-.member-agent-dock-community-avatar {
-  width: 32px;
-  height: 32px;
-  flex: 0 0 32px;
-}
-
 .member-agent-dock-header-actions {
   display: flex;
   align-items: center;

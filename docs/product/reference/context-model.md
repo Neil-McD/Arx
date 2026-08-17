@@ -3,7 +3,7 @@ id: product.reference.context_model
 title: Context Model
 audience: builder, llm, operator
 status: alpha-current
-last_verified: 2026-07-30
+last_verified: 2026-08-16
 ---
 
 # Context Model
@@ -30,8 +30,12 @@ Higher layers constrain lower layers.
 
 ## Agent Identities
 
-The member's personal agent acts with the member's current authority. The
-community-owned agent acts only inside its mounted community with member
+Polynet Intelligence is the authenticated member's personal agent across
+Polynet. Polynet provides and hosts it, but it acts for the member and does not
+belong to any community. Its platform-owned role and visible identity do not
+come from hidden user naming or soul settings.
+
+The community-owned agent acts only inside its mounted community with member
 authority. The two identities never collapse into one another.
 
 ## Community Context
@@ -40,6 +44,9 @@ A community page can supply one explicit community context to the personal
 agent. Discover and generic platform pages carry no community context.
 External MCP requests select community paths explicitly. Every operation
 revalidates access.
+
+A community lens changes relevant context for subsequent turns. It does not
+rename, own, or redefine the member's personal agent.
 
 Reading another authorized community is temporary inspection and does not
 mutate the current page or personal-agent context.

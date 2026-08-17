@@ -88,8 +88,6 @@ const REQUIRED_PROMPT_SECTION_IDS_V1 = [
 
 const REQUIRED_PROMPT_SECTION_IDS_V2 = [
   "platform_doctrine",
-  "agent_soul",
-  "user_agent_soul",
   "explanation_contract",
   "harness_operating_policy",
   "community_lens",
