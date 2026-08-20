@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useId, useRef, useState, type UIEvent } from "react";
-import { Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "lucide-react";
+import { ArrowRight, Check, ChevronDown, Lock, MessageCircle, MoreHorizontal, X } from "lucide-react";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { CommunityMemoryGraphPreview } from "./CommunityMemoryGraphPreview";
@@ -46,6 +46,8 @@ type CommunityContextPanelProps = {
   isLoadingMoreMembers?: boolean;
   membersLoadError?: string | null;
   onLoadMoreMembers?: () => void;
+  onOpenMembers?: () => void;
+  memberPreviewLimit?: number | null;
   isLoadingPresence?: boolean;
   onlineUserIds?: Set<string> | null;
   ownerId?: string | null;
@@ -130,6 +132,15 @@ function isCommunityMemoryNode(node: CloudCommunityPolynetOverviewNode): boolean
 export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const sectionMode = props.sectionMode ?? "all";
   const members = props.members ?? [];
+  const isCompactMemberPreview =
+    sectionMode === "all" &&
+    typeof props.memberPreviewLimit === "number" &&
+    props.memberPreviewLimit > 0;
+  const compactMemberIds = new Set(
+    isCompactMemberPreview
+      ? members.slice(0, props.memberPreviewLimit ?? 0).map((member) => member.id)
+      : members.map((member) => member.id),
+  );
   const pendingJoinRequests = props.pendingJoinRequests ?? [];
   const hasPendingJoinRequestOverflow =
     pendingJoinRequests.length > PENDING_JOIN_REQUEST_DISPLAY_LIMIT;
@@ -146,6 +157,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   const recentlyActiveMembers = !props.isLoadingPresence && !hasResolvedPresence
     ? members
     : [];
+  const visibleOnlineMembers = onlineMembers.filter((member) => compactMemberIds.has(member.id));
+  const visibleOfflineMembers = offlineMembers.filter((member) => compactMemberIds.has(member.id));
+  const visibleRecentlyActiveMembers = recentlyActiveMembers.filter((member) => compactMemberIds.has(member.id));
   const onlineTotal = typeof props.onlineCount === "number"
     ? props.onlineCount
     : onlineMembers.length;
@@ -188,8 +202,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       : `Showing ${loadedMemberCount}`;
   const hasUnloadedKnownMembers =
     knownMemberCount !== null && loadedMemberCount < knownMemberCount;
-  const shouldShowMembersFooter =
-    loadedMemberCount > 0 || props.membersHasMore || hasUnloadedKnownMembers;
+  const shouldShowMembersFooter = !isCompactMemberPreview && (
+    loadedMemberCount > 0 || props.membersHasMore || hasUnloadedKnownMembers
+  );
   const loadMoreRequestedRef = useRef(false);
   const membersViewportRef = useRef<HTMLDivElement | null>(null);
   const loadMoreSentinelRef = useRef<HTMLDivElement | null>(null);
@@ -249,6 +264,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   }, [canShowJoinRequests]);
 
   const requestLoadMoreMembers = useCallback((options?: { force?: boolean }) => {
+    if (isCompactMemberPreview) return;
     if (!props.membersHasMore) return;
     if (props.isLoadingMembers || props.isLoadingMoreMembers) return;
     if (!props.onLoadMoreMembers) return;
@@ -257,6 +273,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
     loadMoreRequestedRef.current = true;
     props.onLoadMoreMembers();
   }, [
+    isCompactMemberPreview,
     props.isLoadingMembers,
     props.isLoadingMoreMembers,
     props.membersHasMore,
@@ -277,12 +294,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
   }, [isMembersViewportNearBottom, requestLoadMoreMembers]);
 
   const handleMembersScroll = useCallback((event: UIEvent<HTMLDivElement>) => {
+    if (isCompactMemberPreview) return;
     const target = event.currentTarget;
     const remainingScroll = target.scrollHeight - target.scrollTop - target.clientHeight;
     if (remainingScroll <= LOAD_MORE_SCROLL_THRESHOLD_PX) {
       requestLoadMoreMembers();
     }
-  }, [requestLoadMoreMembers]);
+  }, [isCompactMemberPreview, requestLoadMoreMembers]);
 
   useEffect(() => {
     if (!props.membersHasMore || props.isLoadingMembers || props.isLoadingMoreMembers || props.membersLoadError) {
@@ -354,6 +372,13 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       isOnline,
     );
     const isOwnerMember = member.user_id === props.ownerId || member.role === "owner";
+    const roleLabel = isOwnerMember
+      ? "Founder"
+      : member.role === "moderator"
+        ? "Moderator"
+        : member.role === "admin"
+          ? "Admin"
+          : "Member";
     const canOpenSettings = Boolean(
       props.canManageMembers &&
         props.onOpenMemberSettings &&
@@ -391,9 +416,9 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
           </span>
           <span className="community-context-member-copy">
             <span className={`community-context-member-name${isAdmin ? " is-admin" : ""}`}>{name}</span>
-            {activityLabel ? (
-              <span className="community-context-member-activity">{activityLabel}</span>
-            ) : null}
+            <span className="community-context-member-activity">
+              {roleLabel}{activityLabel ? ` · ${activityLabel}` : ""}
+            </span>
           </span>
         </button>
         {canMessage ? (
@@ -570,6 +595,16 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
                 </>
               )}
             </div>
+            {props.onOpenMemory ? (
+              <button
+                type="button"
+                className="community-context-memory-open"
+                onClick={props.onOpenMemory}
+              >
+                <span>Explore memory</span>
+                <ArrowRight size={14} strokeWidth={1.8} aria-hidden="true" />
+              </button>
+            ) : null}
           </div>
         ) : (
           <div className="community-context-memory-empty">
@@ -593,6 +628,16 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
       >
         <div className="community-context-section community-context-members-total">
           <span>Members — {memberCountLabel}</span>
+          <span className="community-context-members-head-actions">
+          {isCompactMemberPreview && props.onOpenMembers ? (
+            <button
+              className="community-context-members-open"
+              type="button"
+              onClick={props.onOpenMembers}
+            >
+              View all
+            </button>
+          ) : null}
           {canShowFreeAccessSwitch ? (
             <button
               className={`community-context-autojoin${autoJoinEnabled ? " is-on" : ""}`}
@@ -615,6 +660,7 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
               </span>
             </button>
           ) : null}
+          </span>
         </div>
         {props.freeAccessModeError ? (
           <div className="community-context-admission-status">{props.freeAccessModeError}</div>
@@ -706,24 +752,26 @@ export function CommunityContextPanel(props: CommunityContextPanelProps) {
             <span>See who&apos;s here when you&apos;re in.</span>
           </button>
         ) : null}
-        {!lockedMembers && hasResolvedPresence && onlineTotal > 0 ? (
+        {!lockedMembers && hasResolvedPresence && visibleOnlineMembers.length > 0 ? (
           <>
             <div className="community-context-section">Online — {onlineCountLabel}</div>
-            {onlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
+            {visibleOnlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
         {!lockedMembers && hasResolvedPresence && (
-          offlineMembers.length > 0 || (!props.onlineCountCapped && offlineTotal > 0)
+          visibleOfflineMembers.length > 0 || (
+            !isCompactMemberPreview && !props.onlineCountCapped && offlineTotal > 0
+          )
         ) ? (
           <>
             <div className="community-context-section">Offline — {offlineCountLabel}</div>
-            {offlineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
+            {visibleOfflineMembers.map((member) => renderMember(member, isAdminRole(member, props.ownerId)))}
           </>
         ) : null}
-        {!lockedMembers && recentlyActiveMembers.length > 0 ? (
+        {!lockedMembers && visibleRecentlyActiveMembers.length > 0 ? (
           <>
             <div className="community-context-section">Recently active</div>
-            {recentlyActiveMembers.map((member) =>
+            {visibleRecentlyActiveMembers.map((member) =>
               renderMember(member, isAdminRole(member, props.ownerId))
             )}
           </>

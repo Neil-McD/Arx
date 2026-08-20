@@ -2455,6 +2455,10 @@ export default function App() {
           if (!activeCommunityId || !session) return;
           void loadMoreCommunityDirectoryMembers(activeCommunityId, session);
         },
+        onOpenMembers: () => {
+          const slug = String(activeCommunity?.slug ?? "").trim();
+          if (slug) openCommunityMembers(slug);
+        },
         communityId: activeCommunityId,
         communityOwnerId: activeCommunity?.owner_id ?? null,
         canManageCommunityMembers: canManageMembersActiveCommunity,

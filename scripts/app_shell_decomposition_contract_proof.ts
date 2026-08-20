@@ -152,6 +152,16 @@ assert.doesNotMatch(
   /\n\s{4}showDesktopCommunity(?:Rail|Nav): params\.showDesktopCommunity(?:Rail|Nav),\n\s{4}isGlobalSettings:/,
   "the shell props builder must not duplicate nested visibility state at the host boundary",
 );
+assert.match(
+  entryStyles,
+  /\.product-shell-surface--community \{[\s\S]*gap: 8px;[\s\S]*background: transparent;/,
+  "desktop community chrome should keep navigation and workspace surfaces structurally separate",
+);
+assert.match(
+  entryStyles,
+  /\.product-shell-surface--community \.community-interaction-projection\.has-context-panel \{[\s\S]*gap: 8px;/,
+  "desktop chat and context surfaces should retain a visible structural gap",
+);
 
 const boundedFeatureOwners = [
   "apps/web/src/components/WebAppCompositionRoot.tsx",

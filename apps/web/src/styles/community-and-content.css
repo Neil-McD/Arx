@@ -2485,6 +2485,29 @@
   line-height: 1.3;
 }
 
+.community-context-memory-open {
+  justify-self: center;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  min-height: 32px;
+  padding: 6px 14px;
+  border: 1px solid var(--border-default);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--bg-card) 58%, transparent);
+  color: var(--text-secondary);
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
+}
+
+.community-context-memory-open:hover,
+.community-context-memory-open:focus-visible {
+  border-color: var(--border-strong);
+  color: var(--text-primary);
+  outline: none;
+}
+
 .community-context-memory-loading-status {
   width: 38%;
   height: 9px;
@@ -2554,6 +2577,32 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.community-context-members-head-actions {
+  display: flex !important;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 7px;
+  overflow: visible !important;
+}
+
+.community-context-members-open {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--accent-attention, var(--accent));
+  font: inherit;
+  font-size: 10px;
+  font-weight: 650;
+  text-transform: none;
+  cursor: pointer;
+}
+
+.community-context-members-open:hover,
+.community-context-members-open:focus-visible {
+  color: var(--text-primary);
+  outline: none;
 }
 
 .community-context-autojoin {

@@ -432,6 +432,21 @@ assert.match(
   "context panel should attach the load-more scroll handler to the member rail",
 );
 assert.match(
+  projection,
+  /memberPreviewLimit=\{props\.sectionMode === "members" \? null : 5\}/,
+  "the resting context rail should show a bounded member preview while the members page remains complete",
+);
+assert.match(
+  contextPanel,
+  /className="community-context-members-open"[\s\S]*onClick=\{props\.onOpenMembers\}[\s\S]*View all/,
+  "the compact roster should open the canonical members page",
+);
+assert.match(
+  contextPanel,
+  /className="community-context-memory-open"[\s\S]*Explore memory/,
+  "the memory preview should expose the canonical memory destination as a visible action",
+);
+assert.match(
   contextPanel,
   /membersViewportRef[\s\S]*loadMoreSentinelRef[\s\S]*IntersectionObserver[\s\S]*observer\.observe\(sentinel\)/,
   "context panel should observe a footer sentinel so visible additional pages load without requiring another scroll event",
