@@ -13,11 +13,17 @@ import {
 } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
+import { UserAvatar } from "./UserAvatar";
 import { usePointerSortableList } from "./usePointerSortableList";
 
 type CommunityNavCommunityLike = {
   slug?: string | null;
   name?: string | null;
+  one_liner?: string | null;
+  avatar_url?: string | null;
+  avatar_focus_x?: number | null;
+  avatar_focus_y?: number | null;
+  avatar_zoom?: number | null;
   banner_url?: string | null;
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
@@ -208,6 +214,7 @@ export const CommunityNav = memo(function CommunityNav({
   const memberCountLabel = formatMemberCount(memberCount);
   const showMembersItem = Boolean(canViewMembersActiveCommunity && onOpenMembers);
   const activeCommunityName = activeCommunity?.name?.trim() || null;
+  const activeCommunityOneLiner = activeCommunity?.one_liner?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
@@ -391,8 +398,22 @@ export const CommunityNav = memo(function CommunityNav({
         <div
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
         >
-          <span className="community-nav-identity-name" title={activeCommunityName}>
-            {activeCommunityName}
+          <span className="community-nav-identity-main">
+            <UserAvatar
+              className="community-nav-identity-avatar"
+              readyClassName="has-image"
+              name={activeCommunityName}
+              imageUrl={activeCommunity?.avatar_url}
+              focusX={activeCommunity?.avatar_focus_x}
+              focusY={activeCommunity?.avatar_focus_y}
+              zoom={activeCommunity?.avatar_zoom}
+              alt=""
+              aria-hidden={true}
+              fallback={<span>{activeCommunityName.slice(0, 1).toUpperCase()}</span>}
+            />
+            <span className="community-nav-identity-name" title={activeCommunityName}>
+              {activeCommunityName}
+            </span>
           </span>
           {showSettingsButton ? (
             <button
@@ -423,8 +444,14 @@ export const CommunityNav = memo(function CommunityNav({
             fetchPriority="high"
             aria-hidden
           />
+          {activeCommunityOneLiner ? (
+            <div className="community-nav-banner-copy">
+              <span>{activeCommunityOneLiner}</span>
+            </div>
+          ) : null}
         </div>
       ) : null}
+      <div className="community-nav-section-label">Channels</div>
       <div
         className="community-channel-list"
         aria-label="Channels"
@@ -555,6 +582,7 @@ export const CommunityNav = memo(function CommunityNav({
         ) : null}
       </div>
       <div className="community-nav-divider" aria-hidden="true" />
+      <div className="community-nav-section-label">Resources</div>
       {isLoadingAccess ? (
         <div className="community-nav-access-loading community-nav-utility-loading" aria-label="Loading community navigation">
           {Array.from({ length: 3 }).map((_, index) => (
@@ -629,6 +657,7 @@ export const CommunityNav = memo(function CommunityNav({
       ) : showManagementSection ? (
         <>
           <div className="community-nav-divider" />
+          <div className="community-nav-section-label">Insights</div>
           {canManageMembersActiveCommunity && (
             <button
               className={showActiveSelection && communityTab === "funnel" ? "nav-item active" : "nav-item"}

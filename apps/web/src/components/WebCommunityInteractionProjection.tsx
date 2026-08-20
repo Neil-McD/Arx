@@ -137,6 +137,7 @@ export type WebCommunityInteractionProjectionProps = {
   isLoadingMoreCommunityMembers?: boolean;
   communityMembersLoadError?: string | null;
   onLoadMoreCommunityMembers?: () => void;
+  onOpenMembers?: () => void;
   communityId?: string | null;
   communityOwnerId?: string | null;
   canManageCommunityMembers?: boolean;
@@ -209,6 +210,7 @@ const COMMUNITY_CONTEXT_PROJECTION_KEYS = [
   "isLoadingMoreCommunityMembers",
   "communityMembersLoadError",
   "onLoadMoreCommunityMembers",
+  "onOpenMembers",
   "communityId",
   "communityOwnerId",
   "canManageCommunityMembers",
@@ -328,6 +330,8 @@ const StableCommunityInteractionContextPanelSurface = memo(function StableCommun
           isLoadingMoreMembers={props.isLoadingMoreCommunityMembers}
           membersLoadError={props.communityMembersLoadError}
           onLoadMoreMembers={props.onLoadMoreCommunityMembers}
+          onOpenMembers={props.onOpenMembers}
+          memberPreviewLimit={props.sectionMode === "members" ? null : 5}
           ownerId={props.communityOwnerId ?? null}
           canManageMembers={canManageCommunityMembers}
           entryPolicy={props.communityEntryPolicy ?? null}

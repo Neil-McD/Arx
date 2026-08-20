@@ -1678,6 +1678,133 @@
     min-width: 0;
     min-height: 0;
   }
+
+  /* Reference shell experiment: every workspace is a legible, independent
+     surface. The gaps are structural, while all product controls keep their
+     existing routes and authority. */
+  .product-shell-surface--community {
+    grid-template-columns: clamp(244px, 20vw, 310px) minmax(0, 1fr);
+    gap: 8px;
+    overflow: visible;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+  }
+
+  .product-shell-surface--community > .community-nav {
+    overflow-x: hidden;
+    overflow-y: auto;
+    border: 1px solid var(--community-shell-stroke);
+    border-radius: var(--community-shell-radius);
+    box-shadow: none;
+  }
+
+  .product-shell-surface--community > .community-nav .community-nav-identity {
+    margin: 0;
+    flex: 0 0 52px;
+    min-height: 52px;
+    height: 52px;
+    padding: 0 8px 0 14px;
+    border-bottom-color: transparent;
+    background: var(--surface-nav, var(--surface-panel));
+    color: var(--text-primary);
+    text-shadow: none;
+  }
+
+  .product-shell-surface--community > .community-nav .community-nav-identity::before,
+  .product-shell-surface--community > .community-nav .community-nav-identity::after {
+    display: none;
+  }
+
+  .product-shell-surface--community > .community-nav .community-nav-identity.has-banner + .community-nav-header,
+  .product-shell-surface--community > .community-nav .community-nav-header {
+    margin: 0;
+    padding-bottom: 18px;
+  }
+
+  .product-shell-surface--community > .community-nav .community-nav-banner {
+    aspect-ratio: 2.2 / 1;
+    border-radius: 0;
+  }
+
+  .product-shell-surface--community > .community-body {
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+    border-radius: var(--community-shell-radius);
+    background: transparent;
+  }
+
+  .product-shell-surface--community .community-interaction-projection.has-context-panel {
+    grid-template-columns: minmax(0, 1fr) clamp(292px, 23vw, 340px);
+    gap: 8px;
+    background: transparent;
+  }
+
+  .product-shell-surface--community .community-interaction-main,
+  .product-shell-surface--community .community-context-panel {
+    overflow: hidden;
+    border: 1px solid var(--community-shell-stroke);
+    border-radius: var(--community-shell-radius);
+    background: var(--community-chat-surface, var(--surface-workspace));
+  }
+
+  .product-shell-surface--community .community-context-panel {
+    border-left: 1px solid var(--community-shell-stroke);
+    background: color-mix(in srgb, var(--bg-workspace) 92%, var(--bg-card) 8%);
+  }
+
+  .product-shell-surface--community .community-context-rail-head,
+  .product-shell-surface--community .community-context-facepile {
+    display: none;
+  }
+
+  .product-shell-surface--community .community-context-memory {
+    margin: 14px 14px 0;
+    padding: 0 0 14px;
+    border-bottom: 1px solid var(--stroke-divider-accent);
+  }
+
+  .product-shell-surface--community .community-context-memory-preview {
+    height: 152px;
+    border-radius: 12px;
+  }
+
+  .product-shell-surface--community .community-context-members {
+    margin: 14px;
+    padding: 0;
+    overflow-y: auto;
+  }
+
+  .product-shell-surface--community .community-context-member {
+    min-height: 52px;
+    padding: 6px 8px;
+    border-bottom: 1px solid color-mix(in srgb, var(--stroke-divider-accent) 70%, transparent);
+  }
+
+  .product-shell-surface--community .community-channel-header {
+    flex-basis: 56px;
+    height: 56px;
+    padding: 0 20px;
+  }
+
+  .product-shell-surface--community .community-channel-header-identity h1 {
+    font-size: 16px;
+    font-weight: 650;
+  }
+
+  .product-shell-surface--community .community-channel-pinned-root {
+    max-block-size: 118px;
+  }
+
+  .product-shell-surface--community .community-channel-pinned-root.has-rich-content .community-interaction-attachments,
+  .product-shell-surface--community .community-channel-pinned-root.has-rich-content .community-interaction-link-preview {
+    display: none;
+  }
+
+  .product-shell-surface--community .community-channel-pinned-root.has-rich-content .community-interaction-body {
+    max-height: 3em;
+  }
 }
 
 /* Tighter windows: keep the nav from spilling its labels as it approaches the floor. */
