@@ -110,6 +110,26 @@ assert.equal(desktopProjection.isGlobalSettings, true);
 assert.equal(desktopProjection.showDesktopCommunityRail, true);
 assert.equal(desktopProjection.hasLeftPanel, true);
 
+const desktopCommunityProjection = buildWebShellProjection({
+  publicRouteKind: "app",
+  shellVariant: "standard",
+  destination: {
+    kind: "community_chat",
+    slug: "polynet",
+    channelSlug: null,
+  },
+  mobileRootPage: "community",
+  mobileSettingsView: "detail",
+  isPublicCommunityFunnel: false,
+});
+assert.equal(desktopCommunityProjection.showDesktopCommunityNav, true);
+assert.equal(
+  desktopCommunityProjection.showDesktopCommunityRail,
+  false,
+  "desktop community destinations should replace the permanent rail with the identity switcher",
+);
+assert.equal(desktopCommunityProjection.hasLeftPanel, true);
+
 const mobileProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "mobile",
@@ -128,7 +148,11 @@ assert.equal(mobileProjection.showMobileGlobalShell, true);
 const mobileCommunitySettingsProjection = buildWebShellProjection({
   publicRouteKind: "app",
   shellVariant: "mobile",
-  destination: { kind: "community_settings", slug: "polynet", pane: "community" },
+  destination: {
+    kind: "community_settings",
+    slug: "polynet",
+    pane: "community",
+  },
   mobileRootPage: "community",
   mobileSettingsView: "detail",
   isPublicCommunityFunnel: false,
@@ -141,11 +165,16 @@ assert.equal(
 assert.equal(mobileCommunitySettingsProjection.mobileShellMode, "settings");
 
 for (const communityTab of ["chat", "resources", "events"] as const) {
-  const destination = communityTab === "chat"
-    ? { kind: "community_chat" as const, slug: "polynet", channelSlug: null }
-    : communityTab === "resources"
-      ? { kind: "community_resources" as const, slug: "polynet", moduleId: null }
-      : { kind: "community_events" as const, slug: "polynet" };
+  const destination =
+    communityTab === "chat"
+      ? { kind: "community_chat" as const, slug: "polynet", channelSlug: null }
+      : communityTab === "resources"
+        ? {
+            kind: "community_resources" as const,
+            slug: "polynet",
+            moduleId: null,
+          }
+        : { kind: "community_events" as const, slug: "polynet" };
   const contentProjection = buildWebShellProjection({
     publicRouteKind: "app",
     shellVariant: "mobile",
@@ -175,10 +204,18 @@ const onboardingProfile = read(
   "apps/web/src/controllers/useWebOnboardingProfileController.ts",
 );
 const mainSurface = read("apps/web/src/components/WebAppMainSurfaceHost.tsx");
-const settingsSurface = read("apps/web/src/components/WebSettingsSurfaceHost.tsx");
-const mobileController = read("apps/web/src/controllers/useWebMobileShellController.ts");
-const mobileCommunityShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
-const globalOverlays = read("apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts");
+const settingsSurface = read(
+  "apps/web/src/components/WebSettingsSurfaceHost.tsx",
+);
+const mobileController = read(
+  "apps/web/src/controllers/useWebMobileShellController.ts",
+);
+const mobileCommunityShell = read(
+  "apps/web/src/components/WebMobileCommunityShell.tsx",
+);
+const globalOverlays = read(
+  "apps/web/src/controllers/buildWebGlobalOverlayHostProps.ts",
+);
 
 assert.match(navigation, /\| "settings"/);
 assert.match(
@@ -203,7 +240,10 @@ assert.match(
   /activePage === "settings"[\s\S]*WebSettingsSurfaceHost/,
 );
 assert.match(settingsSurface, /SettingsNavList[\s\S]*WebSettingsPanels/);
-assert.doesNotMatch(mainSurface, /WebWorkspaceSurfaceHost|workspaceSurfaceHostProps/);
+assert.doesNotMatch(
+  mainSurface,
+  /WebWorkspaceSurfaceHost|workspaceSurfaceHostProps/,
+);
 assert.match(
   shellNavigation,
   /const openGlobalSettings = useCallback[\s\S]*current\.activePage === "settings" && current\.settingsPage === page[\s\S]*pushNavSnapshot\(\)[\s\S]*navigateTo\(buildSettingsPath\(page\)\)/,
@@ -249,10 +289,13 @@ assert.match(
   "account setup callbacks must not churn when App supplies a render-local session getter",
 );
 assert.doesNotMatch(app, /setActiveView\("settings"\)/);
-assert.doesNotMatch(transitions, /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/);
+assert.doesNotMatch(
+  transitions,
+  /ToggleWorkspaceSettings|deriveToggleWorkspaceSettingsTransition/,
+);
 assert.match(
   mobileCommunityShell,
-  /communityShell\.onOpenGlobalSettings\(\)[\s\S]*mobile-community-selector-name">Settings</,
+  /label: "Settings"[\s\S]*onSelect: communityShell\.onOpenGlobalSettings/,
   "global Settings should remain reachable from the mobile community selector",
 );
 assert.doesNotMatch(mobileController, /setActivePage\("workspace"\)/);

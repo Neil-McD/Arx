@@ -13,13 +13,21 @@ const registry = read("shared/CommunityVisualIdentityRegistry.tsx");
 const accessController = read("shared/useWebCommunityAccessController.ts");
 const discoverController = read("shared/useWebDiscoverController.ts");
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
-const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const rail = read("apps/web/src/components/WebCommunityRail.tsx");
 const discoverCard = read("shared/DiscoverCommunityCard.tsx");
-const profilePanel = read("apps/web/src/components/WebCommunityProfilePanel.tsx");
+const profilePanel = read(
+  "apps/web/src/components/WebCommunityProfilePanel.tsx",
+);
 const mobileShell = read("apps/web/src/components/WebMobileCommunityShell.tsx");
 const mobileTopBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const communityNav = read("shared/CommunityNav.tsx");
+const communitySwitcher = read("shared/CommunitySwitcherMenu.tsx");
+const communityNavSurface = read(
+  "apps/web/src/components/WebCommunityNavSurface.tsx",
+);
+const shellProjection = read(
+  "apps/web/src/controllers/buildWebShellProjection.ts",
+);
 const shellCss = read("apps/web/src/styles/shell-and-onboarding.css");
 const webCss = read("apps/web/src/index.css");
 const css = read("apps/web/src/styles/community-and-content.css");
@@ -45,14 +53,21 @@ assert.match(chatPanel, /upsertCommunityVisualIdentities/);
 
 for (const [label, source] of [
   ["rail", rail],
-  ["member agent dock", memberAgentDock],
   ["discover", discoverCard],
   ["profile", profilePanel],
-  ["mobile selector", mobileShell],
+  ["community switcher", communitySwitcher],
   ["mobile top bar", mobileTopBar],
 ] as const) {
-  assert.match(source, /communityId=/, `${label} must select by immutable community id`);
-  assert.match(source, /visualIdentity=/, `${label} must provide canonical identity fallback`);
+  assert.match(
+    source,
+    /communityId=/,
+    `${label} must select by immutable community id`,
+  );
+  assert.match(
+    source,
+    /visualIdentity=/,
+    `${label} must provide canonical identity fallback`,
+  );
 }
 
 assert.match(
@@ -70,6 +85,41 @@ assert.match(
   communityNav,
   /const activeCommunityBannerUrl = activeCommunity\?\.banner_url\?\.trim\(\) \|\| null;/,
   "community navigation should normalize an absent banner to no rendered media",
+);
+assert.match(
+  communityNav,
+  /community-nav-switcher-trigger[\s\S]*CommunityAvatar[\s\S]*community-nav-identity-name[\s\S]*ChevronDown/,
+  "the canonical identity row should expose avatar, name, and chevron as one switcher trigger",
+);
+assert.match(
+  communitySwitcher,
+  />Discover<[\s\S]*>Create<[\s\S]*My communities/,
+  "the shared switcher should preserve the approved action order",
+);
+assert.doesNotMatch(
+  communitySwitcher,
+  />Settings</,
+  "the canonical community switcher must not own Settings",
+);
+assert.match(
+  communitySwitcher,
+  /attentionByCommunityId\[community\.id\][\s\S]*community-switcher-attention/,
+  "community attention must survive rail retirement inside the switcher",
+);
+assert.match(
+  communityNavSurface,
+  /communitySwitcher=\{[\s\S]*isMobileHome[\s\S]*\? null[\s\S]*communities: communityShell\.railCommunities[\s\S]*onOpenDiscover:[\s\S]*onOpenCreate:[\s\S]*onOpenCommunityHome/,
+  "the canonical desktop nav adapter should wire the shared community switcher",
+);
+assert.match(
+  shellProjection,
+  /const showDesktopCommunityRail =[\s\S]*!isCommunityAppDestination/,
+  "desktop community destinations should retire the permanent global rail",
+);
+assert.match(
+  mobileShell,
+  /<CommunitySwitcherMenu[\s\S]*presentation="mobile"/,
+  "mobile should reuse the canonical switcher instead of maintaining a parallel community list",
 );
 assert.match(
   communityNav,
