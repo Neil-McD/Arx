@@ -11,7 +11,9 @@ const appCompositionRoot = read(
 );
 const shellState = read("apps/web/src/controllers/useWebShellState.ts");
 const shared = read("apps/web/src/components/webShellChromeShared.ts");
-const controller = read("apps/web/src/controllers/useWebMobileShellController.ts");
+const controller = read(
+  "apps/web/src/controllers/useWebMobileShellController.ts",
+);
 const shellHost = read("apps/web/src/components/WebShellChromeHost.tsx");
 const shellChromeProps = read(
   "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
@@ -25,6 +27,7 @@ const shellProjection = read(
 const communityShell = read(
   "apps/web/src/components/WebMobileCommunityShell.tsx",
 );
+const communitySwitcher = read("shared/CommunitySwitcherMenu.tsx");
 const mobileGlobalShell = read(
   "apps/web/src/components/WebMobileGlobalShell.tsx",
 );
@@ -32,13 +35,13 @@ const communityNavSurface = read(
   "apps/web/src/components/WebCommunityNavSurface.tsx",
 );
 const communityNav = read("shared/CommunityNav.tsx");
-const communityRail = read(
-  "apps/web/src/components/WebCommunityRail.tsx",
-);
+const communityRail = read("apps/web/src/components/WebCommunityRail.tsx");
 const routeState = read("shared/webAppRouteState.ts");
 const topBar = read("apps/web/src/components/WebMobileTopBar.tsx");
 const bottomRail = read("apps/web/src/components/WebMobileBottomRail.tsx");
-const presenceFacepile = read("apps/web/src/components/CommunityPresenceFacepile.tsx");
+const presenceFacepile = read(
+  "apps/web/src/components/CommunityPresenceFacepile.tsx",
+);
 const contextPanel = read("apps/web/src/components/CommunityContextPanel.tsx");
 const memberAgentDock = read("apps/web/src/components/WebMemberAgentDock.tsx");
 const memberAgentDockCss = read(
@@ -49,7 +52,9 @@ const directMessagesHost = read(
 );
 const chatPanel = read("apps/web/src/components/WebCommunityChatPanel.tsx");
 const communityHost = read("apps/web/src/components/WebCommunityHost.tsx");
-const membersPanel = read("apps/web/src/components/WebCommunityMembersPanel.tsx");
+const membersPanel = read(
+  "apps/web/src/components/WebCommunityMembersPanel.tsx",
+);
 const communityRouteController = read(
   "apps/web/src/controllers/useWebCommunityRouteController.ts",
 );
@@ -64,7 +69,12 @@ const mobileReadingModePolicy = read(
 );
 const indexHtml = read("apps/web/index.html");
 const indexCss = read("apps/web/src/index.css");
-const baseCss = [read("apps/web/src/base.css"), read("apps/web/src/styles/shell-and-onboarding.css"), read("apps/web/src/styles/community-and-content.css"), read("apps/web/src/styles/settings-runtime-and-theme-overrides.css")].join("\n");
+const baseCss = [
+  read("apps/web/src/base.css"),
+  read("apps/web/src/styles/shell-and-onboarding.css"),
+  read("apps/web/src/styles/community-and-content.css"),
+  read("apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
+].join("\n");
 const packageJson = read("package.json");
 
 assert.match(
@@ -327,14 +337,19 @@ assert.doesNotMatch(
 );
 
 assert.match(
-  communityShell,
-  /mobile-community-selector-name">Discover<[\s\S]*mobile-community-selector-name">Create</,
+  communitySwitcher,
+  />Discover<[\s\S]*>Create</,
   "Discover and Create should live in the community selector",
 );
 assert.doesNotMatch(
-  communityShell,
-  /mobile-community-selector-name">Messages</,
+  communitySwitcher,
+  />Messages</,
   "Messages should not be duplicated inside the community selector",
+);
+assert.match(
+  communityShell,
+  /<CommunitySwitcherMenu[\s\S]*presentation="mobile"[\s\S]*supplementalActions=\{\[[\s\S]*label: "Settings"/,
+  "the existing mobile-only Settings reachability should remain an explicit temporary supplement",
 );
 assert.match(
   communityShell,
@@ -373,7 +388,7 @@ assert.match(
 );
 assert.match(
   communityNavSurface,
-  /memberCount=\{isMobileHome \? communityShell\.activeCommunityMemberCount : null\}[\s\S]*onOpenMembers=\{isMobileHome \? communityShell\.onOpenMembers : undefined\}/,
+  /memberCount=\{[\s\S]*isMobileHome \? communityShell\.activeCommunityMemberCount : null[\s\S]*\}[\s\S]*onOpenMembers=\{isMobileHome \? communityShell\.onOpenMembers : undefined\}/,
   "the mobile adapter should expose the canonical member total and overlay only on community home",
 );
 assert.match(
@@ -392,7 +407,11 @@ assert.match(
   "one discriminated destination contract should cover platform, funnel, and community routes",
 );
 assert.doesNotMatch(
-  shellProjection + shellChromeProps + shellHost + communityNavSurface + communityRail,
+  shellProjection +
+    shellChromeProps +
+    shellHost +
+    communityNavSurface +
+    communityRail,
   /activeView/,
   "mobile shell consumers should not reconstruct destination semantics from activeView",
 );

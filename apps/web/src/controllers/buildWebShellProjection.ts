@@ -77,6 +77,7 @@ export function buildWebShellProjection(params: {
   const showDesktopCommunityRail =
     isAppRoute &&
     !isOperatorPage &&
+    !isCommunityAppDestination &&
     !showMobileAppShell &&
     !showMobilePublicFunnel;
   const shouldShowDesktopCommunityRail =
