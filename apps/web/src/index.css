@@ -1613,6 +1613,18 @@
     grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr);
   }
 
+  .app-shell.framed-shell.with-community-rail.community-layout {
+    --web-rail-width: 88px;
+  }
+
+  .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) {
+    margin: var(--community-shell-inset);
+    overflow: hidden;
+    border: 1px solid var(--community-shell-stroke);
+    border-radius: var(--community-shell-radius);
+    background: var(--surface-rail);
+  }
+
   .product-shell-surface {
     display: grid;
     min-width: 0;
@@ -1723,7 +1735,7 @@
   }
 
   .product-shell-surface--community > .community-nav .community-nav-banner {
-    aspect-ratio: 2.2 / 1;
+    aspect-ratio: 1.55 / 1;
     border-radius: 0;
   }
 
@@ -1766,7 +1778,7 @@
   }
 
   .product-shell-surface--community .community-context-memory-preview {
-    height: 152px;
+    height: 184px;
     border-radius: 12px;
   }
 

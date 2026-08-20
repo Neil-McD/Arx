@@ -162,6 +162,11 @@ assert.match(
   /\.product-shell-surface--community \.community-interaction-projection\.has-context-panel \{[\s\S]*gap: 8px;/,
   "desktop chat and context surfaces should retain a visible structural gap",
 );
+assert.match(
+  entryStyles,
+  /\.app-shell\.framed-shell\.with-community-rail\.community-layout > \.community-rail:not\(\.mobile-community-rail\) \{[\s\S]*border-radius: var\(--community-shell-radius\);/,
+  "the desktop global rail should use the same independent frame grammar as the community surfaces",
+);
 
 const boundedFeatureOwners = [
   "apps/web/src/components/WebAppCompositionRoot.tsx",
