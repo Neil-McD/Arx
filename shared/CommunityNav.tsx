@@ -12,14 +12,15 @@ import {
   X,
 } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
+import { CommunityAvatar } from "./CommunityAvatar";
+import type { CommunityVisualIdentity } from "./communityVisualIdentity";
 import { StableFramedMedia } from "./StableFramedMedia";
-import { UserAvatar } from "./UserAvatar";
 import { usePointerSortableList } from "./usePointerSortableList";
 
 type CommunityNavCommunityLike = {
+  id?: string | null;
   slug?: string | null;
   name?: string | null;
-  one_liner?: string | null;
   avatar_url?: string | null;
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;
@@ -28,6 +29,7 @@ type CommunityNavCommunityLike = {
   banner_focus_x?: number | null;
   banner_focus_y?: number | null;
   banner_zoom?: number | null;
+  visual_identity?: CommunityVisualIdentity | null;
 } | null;
 
 type CommunityNavChannel = {
@@ -398,7 +400,9 @@ export const CommunityNav = memo(function CommunityNav({
           className={`community-nav-identity${activeCommunityBannerUrl ? " has-banner" : ""}${!activeCommunityBannerUrl || isCommunityIdentityCondensed ? " is-condensed" : ""}`}
         >
           <span className="community-nav-identity-main">
-            <UserAvatar
+            <CommunityAvatar
+              communityId={activeCommunity?.id}
+              visualIdentity={activeCommunity?.visual_identity}
               className="community-nav-identity-avatar"
               readyClassName="has-image"
               name={activeCommunityName}
@@ -408,7 +412,6 @@ export const CommunityNav = memo(function CommunityNav({
               zoom={activeCommunity?.avatar_zoom}
               alt=""
               aria-hidden={true}
-              fallback={<span>{activeCommunityName.slice(0, 1).toUpperCase()}</span>}
             />
             <span className="community-nav-identity-name" title={activeCommunityName}>
               {activeCommunityName}

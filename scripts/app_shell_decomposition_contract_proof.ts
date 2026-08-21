@@ -174,19 +174,29 @@ assert.doesNotMatch(
   "the in-product community banner should stay a quiet identity surface without funnel copy",
 );
 assert.match(
-  entryStyles,
-  /\.community-nav-identity\.has-banner:not\(\.is-condensed\) \{[\s\S]*background: rgba\(2, 8, 18, 0\.22\);/,
-  "the desktop community identity should remain integrated over the canonical banner",
+  communityNav,
+  /import \{ CommunityAvatar \} from "\.\/CommunityAvatar";[\s\S]*<CommunityAvatar[\s\S]*communityId=\{activeCommunity\?\.id\}[\s\S]*visualIdentity=\{activeCommunity\?\.visual_identity\}/,
+  "community navigation should consume the canonical community identity component",
+);
+assert.doesNotMatch(
+  communityNav,
+  /UserAvatar|one_liner/,
+  "community navigation should not fork user-avatar or funnel-copy authority",
 );
 assert.match(
   entryStyles,
-  /\.community-nav \.nav-item\.active \{[\s\S]*box-shadow: inset 3px 0 0 #f54d7d;/,
-  "the desktop community selection state should retain the narrow brand accent",
+  /\.community-nav \.nav-item\.active \{[\s\S]*background: var\(--surface-selected\);[\s\S]*box-shadow: inset 3px 0 0 var\(--accent-selection\);[\s\S]*color: var\(--text-selected\);/,
+  "the desktop community selection state should consume semantic theme roles",
 );
-assert.match(
+assert.doesNotMatch(
   entryStyles,
-  /\.community-rail-button\.community-rail-community \{[\s\S]*border-radius: 50%;/,
-  "desktop community identities should retain the quieter circular rail treatment",
+  /\.app-shell\.framed-shell\.with-community-rail\.community-layout\s*\{[^}]*(?:--bg-|--surface-|--text-|--accent-|--chat-link|--composer-|background:)/,
+  "community shell layout must not become a second theme-token authority",
+);
+assert.doesNotMatch(
+  entryStyles,
+  /\.community-rail-button\.community-rail-community\s*\{[^}]*border-radius:/,
+  "desktop community identities should retain the canonical rail shape",
 );
 
 const boundedFeatureOwners = [

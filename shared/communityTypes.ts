@@ -50,7 +50,6 @@ export type CommunityShellCommunity = {
   id: string;
   slug: string | null;
   name: string;
-  one_liner?: string | null;
   avatar_url: string | null;
   avatar_focus_x?: number | null;
   avatar_focus_y?: number | null;

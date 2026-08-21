@@ -1613,78 +1613,12 @@
     grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr);
   }
 
-  .app-shell.framed-shell.with-community-rail.community-layout {
-    --web-rail-width: 76px;
-    --community-shell-radius: 14px;
-    --community-shell-stroke: rgba(126, 148, 177, 0.2);
-    --bg-app: #020812;
-    --bg-panel: #07111d;
-    --bg-workspace: #050e19;
-    --bg-card: #0b1724;
-    --bg-card-solid: #0b1724;
-    --bg-card-alt: #091522;
-    --bg-card-hover: #101e2d;
-    --bg-input: #07111c;
-    --surface-rail: #050d17;
-    --surface-nav: #07111d;
-    --surface-workspace: #050e19;
-    --surface-panel: #07111d;
-    --surface-card: #0b1724;
-    --surface-card-alt: #091522;
-    --surface-card-hover: #101e2d;
-    --surface-input: #07111c;
-    --text-primary: #f4eee8;
-    --text-secondary: #c6c3bf;
-    --text-muted: #9298a2;
-    --text-faint: #747d89;
-    --text-ink-primary: #f4eee8;
-    --text-ink-secondary: #c6c3bf;
-    --text-ink-muted: #9298a2;
-    --text-ink-faint: #747d89;
-    --border-default: rgba(126, 148, 177, 0.2);
-    --border-strong: rgba(148, 168, 194, 0.32);
-    --border-muted: rgba(105, 129, 159, 0.13);
-    --divider-accent: rgba(126, 148, 177, 0.12);
-    --stroke-panel-edge: rgba(126, 148, 177, 0.2);
-    --stroke-divider-accent: rgba(126, 148, 177, 0.12);
-    --accent-brand: #f54d7d;
-    --accent-selection: #f54d7d;
-    --accent-gold: #f54d7d;
-    --accent-attention: #ed5b87;
-    --chat-link: #f05a84;
-    --chat-link-hover: #ff789e;
-    --hover-overlay: rgba(157, 178, 205, 0.07);
-    --active-overlay: rgba(245, 77, 125, 0.12);
-    --surface-selected: rgba(112, 39, 72, 0.34);
-    --stroke-selected: rgba(245, 77, 125, 0.42);
-    --composer-surface: #08131f;
-    --composer-border: rgba(126, 148, 177, 0.22);
-    --composer-elevation: none;
-    background: #020812;
-  }
-
   .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) {
     margin: var(--community-shell-inset);
     overflow: hidden;
     border: 1px solid var(--community-shell-stroke);
     border-radius: var(--community-shell-radius);
     background: var(--surface-rail);
-  }
-
-  .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) .community-rail-button.community-rail-community {
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-  }
-
-  .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) .community-rail-button.community-rail-community::before {
-    left: -8px;
-    background: #f54d7d;
-  }
-
-  .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) .community-rail-avatar {
-    overflow: hidden;
-    border-radius: 50%;
   }
 
   .product-shell-surface {
@@ -1782,12 +1716,6 @@
     border-bottom-color: transparent;
   }
 
-  .product-shell-surface--community > .community-nav .community-nav-identity.has-banner:not(.is-condensed) {
-    background: rgba(2, 8, 18, 0.22);
-    color: #fff;
-    text-shadow: 0 1px 5px rgba(0, 0, 0, 0.92);
-  }
-
   .product-shell-surface--community > .community-nav .community-nav-header {
     margin: 0 -12px;
     padding-bottom: 16px;
@@ -1805,7 +1733,6 @@
 
   .product-shell-surface--community > .community-nav .community-nav-section-label {
     padding: 5px 12px 9px;
-    color: #7f8996;
   }
 
   .product-shell-surface--community > .community-nav .nav-item {
@@ -1817,9 +1744,9 @@
 
   .product-shell-surface--community > .community-nav .nav-item.active {
     border-color: transparent;
-    background: rgba(112, 39, 72, 0.34);
-    box-shadow: inset 3px 0 0 #f54d7d;
-    color: #f8f1ed;
+    background: var(--surface-selected);
+    box-shadow: inset 3px 0 0 var(--accent-selection);
+    color: var(--text-selected);
   }
 
   .product-shell-surface--community > .community-nav .community-nav-divider {
@@ -1828,8 +1755,6 @@
 
   .product-shell-surface--community > .community-nav .community-nav-invite {
     min-height: 38px;
-    border-color: rgba(126, 148, 177, 0.24);
-    background: rgba(10, 22, 35, 0.66);
   }
 
   .product-shell-surface--community > .community-body {
