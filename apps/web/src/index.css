@@ -1671,6 +1671,22 @@
     background: var(--surface-rail);
   }
 
+  .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) .community-rail-button.community-rail-community {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+  }
+
+  .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) .community-rail-button.community-rail-community::before {
+    left: -8px;
+    background: #f54d7d;
+  }
+
+  .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) .community-rail-avatar {
+    overflow: hidden;
+    border-radius: 50%;
+  }
+
   .product-shell-surface {
     display: grid;
     min-width: 0;
