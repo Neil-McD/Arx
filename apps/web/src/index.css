@@ -1734,13 +1734,6 @@
     border-radius: 7px;
   }
 
-  .product-shell-surface--community > .community-nav .nav-item.active {
-    border-color: transparent;
-    background: var(--surface-selected);
-    box-shadow: inset 3px 0 0 var(--accent-selection);
-    color: var(--text-selected);
-  }
-
   .product-shell-surface--community > .community-nav .community-nav-divider {
     margin: 8px 0;
   }

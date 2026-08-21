@@ -259,10 +259,15 @@ assert.doesNotMatch(
   /UserAvatar|one_liner/,
   "community navigation should not fork user-avatar or funnel-copy authority",
 );
-assert.match(
+assert.doesNotMatch(
   entryStyles,
-  /\.community-nav \.nav-item\.active \{[\s\S]*background: var\(--surface-selected\);[\s\S]*box-shadow: inset 3px 0 0 var\(--accent-selection\);[\s\S]*color: var\(--text-selected\);/,
-  "the desktop community selection state should consume semantic theme roles",
+  /\.community-nav \.nav-item\.active \{[\s\S]*?box-shadow:\s*inset 3px 0 0/,
+  "the desktop community selection state should not add a surface-local leading accent bar",
+);
+assert.match(
+  featureStyles,
+  /\.nav-item\.active \{[\s\S]*?background:\s*var\(--surface-selected\);[\s\S]*?border-color:\s*var\(--stroke-selected\);[\s\S]*?color:\s*var\(--text-selected\);/,
+  "community selection should inherit the canonical selected-row fill and outline grammar",
 );
 assert.doesNotMatch(
   entryStyles,
