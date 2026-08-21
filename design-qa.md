@@ -1,70 +1,43 @@
-# Community shell reference cleanup — design QA
+# Desktop shell completion — design QA
 
-final result: passed
+final result: blocked
 
 ## Comparison target
 
-- Source visual truth: `/Users/neilmcdevitt/Desktop/ChatGPT Image Aug 20, 2026, 04_09_20 PM.png`
-- Source pixels: `1448 x 1086`
-- Browser-rendered implementation: `/Users/neilmcdevitt/.codex/visualizations/2026/08/20/01a020dc-2c0a-70b2-bdd6-d7d3440385b9/polynet-shell-cleanup-audit/06-final-live-staging.png`
-- Implementation pixels: `1171 x 763`
-- CSS viewport: `1171 x 763`
-- Device scale factor: `2`; the browser screenshot API emitted CSS-pixel dimensions.
-- State: authenticated desktop `/c/polynet/chat`, dark theme, populated Polynet community.
-- Staging build: `909d03d477a61f81230df2b2e49c33eb0d71b4b7`
-- Density normalization: the full-view reference was scaled proportionally to the implementation height before comparison because the supplied source and live browser capture use different dimensions.
+- Source visual truth:
+  - `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_DA36jo/Screenshot 2026-08-21 at 6.04.14 PM.png`
+  - `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_e1XXTr/Screenshot 2026-08-21 at 6.04.44 PM.png`
+  - `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_9VGHQW/Screenshot 2026-08-21 at 6.04.56 PM.png`
+  - `/var/folders/lz/8qz9l_5n1fqgg0v6wp4ydmsm0000gn/T/TemporaryItems/NSIRD_screencaptureui_izVMAw/Screenshot 2026-08-21 at 6.05.06 PM.png`
+- Implementation: pending staging deployment and browser-rendered captures.
+- Target state: authenticated desktop community chat, default context, Memory, Thread, Profile, and global Settings across Dark, Light, and Cosmic themes.
+- Density normalization: pending implementation captures.
 
-## Full-view comparison evidence
+## Findings
 
-- `/Users/neilmcdevitt/.codex/visualizations/2026/08/20/01a020dc-2c0a-70b2-bdd6-d7d3440385b9/polynet-shell-cleanup-audit/07-final-full-comparison.png`
-- The global rail, community world, conversation, and context rail retain the reference's independent framed-column composition.
-- Major proportions, navy material hierarchy, magenta interaction language, border strength, and overall density are aligned closely enough that no P0, P1, or P2 mismatch remains.
-
-## Focused comparison evidence
-
-- `/Users/neilmcdevitt/.codex/visualizations/2026/08/20/01a020dc-2c0a-70b2-bdd6-d7d3440385b9/polynet-shell-cleanup-audit/08-final-hero-comparison.png`
-- The canonical community avatar, name, and settings action now sit over one edge-to-edge banner.
-- The implementation intentionally omits the source's descriptive and CTA copy at the user's direction.
-- Circular community rail identities and the narrow magenta active indicator now match the quieter reference grammar.
-
-## Comparison history
-
-### Earlier P1 findings
-
-- Community identity and banner rendered as two stacked blocks.
-- Funnel one-liner leaked into the in-product banner.
-- Neutral charcoal surfaces missed the reference's deep navy material system.
-- Selected channel used a large gray pill instead of the narrow magenta accent.
-
-### Fixes and post-fix evidence
-
-- Integrated identity over the banner and removed banner copy. Live computed evidence: banner `242 x 188`, identity surface `rgba(2, 8, 18, 0.22)`, and no `.community-nav-banner-copy` node.
-- Scoped navy, warm-white, blue-gray stroke, and magenta tokens to the desktop community shell.
-- Replaced the selected-channel treatment with `rgba(112, 39, 72, 0.34)` and a `3px` inset `#f54d7d` edge.
-- Tightened the rail, navigation controls, channel header, pinned region, memory preview, and member rows.
-- Changed desktop community identities to circular frames with the same magenta active edge.
-- Post-fix evidence is the live staging capture and normalized comparisons above.
+- [P1] Browser-rendered implementation evidence is pending.
+  - Location: staging desktop shell.
+  - Evidence: local session verification cannot authenticate the community route; the current staging URL still serves the prior commit.
+  - Impact: contracts and build prove structure, not rendered fidelity.
+  - Fix: deploy the bounded commit to staging, capture the authenticated target states, compare them against the supplied screenshots, and update this report.
 
 ## Required fidelity surfaces
 
-- Fonts and typography: the canonical IBM Plex family remains in use; hierarchy, weight, line height, wrapping, and metadata contrast are coherent with the reference. No actionable mismatch remains.
-- Spacing and layout rhythm: shell insets, panel gaps, radii, hero height, channel density, context density, and composer footprint are balanced at the tested viewport.
-- Colors and visual tokens: the shell now uses deep navy-black surfaces, cool low-contrast strokes, warm primary text, and restrained magenta active states.
-- Image quality and asset fidelity: the real community avatar and authored banner render through the canonical framed-media component with a stable crop. No placeholder or code-drawn substitute was introduced.
-- Copy and content: the in-product one-liner was removed as requested; dynamic community messages, counts, names, and roles remain truthful staging data.
-- Icons: existing canonical icon controls remain aligned and legible. Reference-only controls without corresponding Polynet behavior were not added.
+- Fonts and typography: no source changes; browser verification pending.
+- Spacing and layout rhythm: structural gap and independent panel framing changed; browser verification pending.
+- Colors and visual tokens: all changes use canonical theme tokens; browser verification pending.
+- Image quality and asset fidelity: no assets changed.
+- Copy and content: no copy changed.
 
-## Interaction and runtime checks
+## Comparison history
 
-- `Explore memory` opened the canonical Community memory surface; `Back to community` restored the chat shell.
-- `View all` opened `/c/polynet/members` and rendered the complete member-directory surface.
-- Existing channel, Resources, Events, invite, settings, composer, and member-agent controls remained present in the live DOM.
-- Browser console warnings/errors checked after the interactions: none.
-- Contract proof, community interaction projection proof, and production web build passed.
-- Repository-wide typecheck was not accepted as evidence because the isolated worktree lacked the root-only `stripe`, `resend`, and Node type packages; the web production build completed successfully.
+- Initial code pass generalized the context-only framing rule to Context, Memory, Thread, and Profile; independently framed Settings navigation/content; and assigned structural gaps the canonical app-canvas token.
+- Contract proofs and the production web build passed before staging deployment.
 
-## Intentional differences and P3 follow-up
+## Implementation checklist
 
-- Staging uses its real banner art, community list, messages, counts, roles, and online state rather than the illustrative reference data.
-- The decorative three-agent module was not added because Polynet does not currently expose three truthful active community agents in this surface.
-- The existing settings action remains in the community hero instead of adding the reference's bell, consistent with the approved canonical settings direction.
+- Deploy the exact commit to staging through the Git branch workflow.
+- Capture default context, Memory, Thread, Profile, and Settings.
+- Verify Dark, Light, and Cosmic token behavior.
+- Verify the narrow drawer overlay and browser console.
+- Record implementation screenshots and change `final result` to `passed` only if no P0/P1/P2 findings remain.

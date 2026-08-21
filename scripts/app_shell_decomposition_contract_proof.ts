@@ -158,13 +158,33 @@ assert.doesNotMatch(
 );
 assert.match(
   entryStyles,
-  /\.product-shell-surface--community \{[\s\S]*gap: 8px;[\s\S]*background: transparent;/,
-  "desktop community chrome should keep navigation and workspace surfaces structurally separate",
+  /--product-shell-gap:\s*8px;[\s\S]*--community-shell-inset:\s*var\(--product-shell-gap\);/,
+  "desktop product shells should share one canonical structural gap token",
 );
 assert.match(
   entryStyles,
-  /\.product-shell-surface--community \.community-interaction-projection\.has-context-panel \{[\s\S]*gap: 8px;/,
-  "desktop chat and context surfaces should retain a visible structural gap",
+  /\.product-shell-surface--community,\s*\.product-shell-surface--settings\s*\{[^}]*gap:\s*var\(--product-shell-gap\);[^}]*background:\s*transparent;/,
+  "desktop community and settings chrome should expose the app canvas between independent surfaces",
+);
+assert.match(
+  entryStyles,
+  /\.product-shell-surface--settings > \.sessions,\s*\.product-shell-surface--settings > \.workspace\s*\{[^}]*border:\s*1px solid var\(--community-shell-stroke\);[^}]*border-radius:\s*var\(--community-shell-radius\);/,
+  "desktop settings navigation and content should own independent panel frames",
+);
+assert.match(
+  entryStyles,
+  /\.product-shell-surface--community \.community-interaction-projection:is\(\.has-context-panel, \.has-drawer\)\s*\{[^}]*gap:\s*var\(--product-shell-gap\);[^}]*background:\s*var\(--surface-app\);/,
+  "desktop context and detail modes should share one canvas-backed structural gap",
+);
+assert.match(
+  entryStyles,
+  /\.product-shell-surface--community \.community-interaction-projection > \.community-interaction-main,\s*\.product-shell-surface--community \.community-interaction-projection > \.community-interaction-drawer\s*\{[^}]*border:\s*1px solid var\(--community-shell-stroke\);[^}]*border-radius:\s*var\(--community-shell-radius\);/,
+  "desktop chat and every canonical sidecar should own independent panel frames",
+);
+assert.match(
+  featureStyles,
+  /@container community-chat-area \(max-width: 680px\)[\s\S]*\.community-interaction-projection\.has-drawer \.community-interaction-drawer\s*\{[^}]*position:\s*absolute;[^}]*inset:\s*0;[^}]*z-index:\s*16;/,
+  "narrow detail drawers should preserve their canonical full-area overlay behavior",
 );
 assert.doesNotMatch(
   entryStyles,

@@ -27,7 +27,8 @@
   --web-rail-anchor-inset: calc((var(--web-rail-width) - var(--web-rail-control-size)) / 2);
   --web-rail-balance-shift: calc((var(--web-rail-control-size) - var(--web-rail-width)) / 4);
   --web-sessions-drawer-width: 240px;
-  --community-shell-inset: 8px;
+  --product-shell-gap: 8px;
+  --community-shell-inset: var(--product-shell-gap);
   --community-shell-radius: 16px;
   --community-shell-stroke: var(--stroke-panel-edge);
 
@@ -1655,16 +1656,39 @@
     min-height: 0;
   }
 
-  /* Reference shell experiment: every workspace is a legible, independent
-     surface. The gaps are structural, while all product controls keep their
-     existing routes and authority. */
-  .product-shell-surface--community {
-    grid-template-columns: clamp(244px, 20vw, 310px) minmax(0, 1fr);
-    gap: 8px;
+  /* Desktop product shell: every visible workspace is an independent surface
+     on the app canvas. Layout wrappers own geometry; leaf panels own paint. */
+  .product-shell-surface--community,
+  .product-shell-surface--settings {
+    gap: var(--product-shell-gap);
     overflow: visible;
     border: 0;
     border-radius: 0;
     background: transparent;
+  }
+
+  .product-shell-surface--community {
+    grid-template-columns: clamp(244px, 20vw, 310px) minmax(0, 1fr);
+  }
+
+  .product-shell-surface--settings {
+    grid-template-columns: minmax(0, 160px) minmax(0, 1fr);
+  }
+
+  .product-shell-surface--settings > .sessions,
+  .product-shell-surface--settings > .workspace {
+    overflow: hidden;
+    border: 1px solid var(--community-shell-stroke);
+    border-radius: var(--community-shell-radius);
+    box-shadow: none;
+  }
+
+  .product-shell-surface--settings > .sessions {
+    background: var(--surface-nav, var(--surface-panel));
+  }
+
+  .product-shell-surface--settings > .workspace {
+    background: var(--surface-workspace, var(--surface-app));
   }
 
   .product-shell-surface--community > .community-nav {
@@ -1735,12 +1759,15 @@
 
   .product-shell-surface--community .community-interaction-projection.has-context-panel {
     grid-template-columns: minmax(0, 1fr) clamp(292px, 23vw, 340px);
-    gap: 8px;
-    background: transparent;
   }
 
-  .product-shell-surface--community .community-interaction-main,
-  .product-shell-surface--community .community-context-panel {
+  .product-shell-surface--community .community-interaction-projection:is(.has-context-panel, .has-drawer) {
+    gap: var(--product-shell-gap);
+    background: var(--surface-app);
+  }
+
+  .product-shell-surface--community .community-interaction-projection > .community-interaction-main,
+  .product-shell-surface--community .community-interaction-projection > .community-interaction-drawer {
     overflow: hidden;
     border: 1px solid var(--community-shell-stroke);
     border-radius: var(--community-shell-radius);
