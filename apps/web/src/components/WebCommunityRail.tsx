@@ -131,6 +131,8 @@ export function WebCommunityRail({
             );
           })}
         </div>
+      </div>
+      <div className="rail-footer">
         <div className="community-rail-divider" />
         <button
           type="button"
@@ -141,8 +143,6 @@ export function WebCommunityRail({
         >
           {communityShell.communityCreateCtaLabel}
         </button>
-      </div>
-      <div className="rail-footer">
         <button
           type="button"
           className={`community-rail-button${

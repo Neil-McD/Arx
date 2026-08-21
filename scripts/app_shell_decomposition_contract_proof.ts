@@ -19,6 +19,9 @@ const communityInteractionBootstrap = read(
 const shellChromeHost = read(
   "apps/web/src/components/WebShellChromeHost.tsx",
 );
+const communityRail = read(
+  "apps/web/src/components/WebCommunityRail.tsx",
+);
 const shellChromeHostPropsBuilder = read(
   "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
 );
@@ -167,6 +170,49 @@ assert.doesNotMatch(
   entryStyles,
   /\.app-shell\.framed-shell\.with-community-rail\.community-layout\s*>\s*\.community-rail:not\(\.mobile-community-rail\)/,
   "the desktop global rail should remain unframed navigation infrastructure on the app canvas",
+);
+const railMainStart = communityRail.indexOf('<div className="rail-main">');
+const railFooterStart = communityRail.indexOf('<div className="rail-footer">');
+assert.ok(
+  railMainStart >= 0 && railFooterStart > railMainStart,
+  "the community rail must expose distinct main and fixed-footer regions",
+);
+const railMainMarkup = communityRail.slice(railMainStart, railFooterStart);
+const railFooterMarkup = communityRail.slice(railFooterStart);
+assert.match(
+  railMainMarkup,
+  /aria-label="Discover communities"[\s\S]*className="community-rail-list"/,
+  "Discover must remain fixed before the scrollable community collection",
+);
+assert.doesNotMatch(
+  railMainMarkup,
+  /community-rail-add/,
+  "Create community must not participate in community-list scrolling",
+);
+assert.match(
+  railFooterMarkup,
+  /community-rail-divider[\s\S]*community-rail-add[\s\S]*title="Settings"/,
+  "the fixed rail footer must own Create community above Settings",
+);
+assert.match(
+  featureStyles,
+  /\.community-rail-button\s*\{[^}]*flex:\s*0 0 auto;/,
+  "rail utility controls must never shrink below their canonical target size",
+);
+assert.match(
+  featureStyles,
+  /\.rail-main\s*\{[^}]*min-height:\s*0;[^}]*overflow:\s*hidden;/,
+  "the rail main region must constrain overflow without becoming the scroller",
+);
+assert.doesNotMatch(
+  featureStyles,
+  /\.rail-main\s*\{[^}]*overflow-y:\s*auto;/,
+  "Discover and fixed rail actions must not share a scroll container",
+);
+assert.match(
+  featureStyles,
+  /\.community-rail-list\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/,
+  "only the bounded community collection should own rail scrolling",
 );
 assert.doesNotMatch(
   communityNav,
