@@ -183,6 +183,11 @@ assert.match(
   /\.community-nav \.nav-item\.active \{[\s\S]*box-shadow: inset 3px 0 0 #f54d7d;/,
   "the desktop community selection state should retain the narrow brand accent",
 );
+assert.match(
+  entryStyles,
+  /\.community-rail-button\.community-rail-community \{[\s\S]*border-radius: 50%;/,
+  "desktop community identities should retain the quieter circular rail treatment",
+);
 
 const boundedFeatureOwners = [
   "apps/web/src/components/WebAppCompositionRoot.tsx",
