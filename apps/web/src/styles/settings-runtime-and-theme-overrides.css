@@ -6719,6 +6719,43 @@ button.settings-primary-action svg {
   background: #2F55FF;
 }
 
+.appearance-option-preview[data-preview-theme="cosmic"] {
+  background: #020812;
+  box-shadow: inset 0 0 0 1px rgba(126, 148, 177, 0.2);
+}
+
+.appearance-option-preview[data-preview-theme="cosmic"] .preview-header {
+  grid-column: 1 / -1;
+  border-radius: 3px;
+  background: #050D17;
+  box-shadow: inset 0 -1px 0 rgba(126, 148, 177, 0.16);
+}
+
+.appearance-option-preview[data-preview-theme="cosmic"] .preview-sidebar {
+  border-radius: 3px;
+  background: #07111D;
+}
+
+.appearance-option-preview[data-preview-theme="cosmic"] .preview-content {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px;
+  border-radius: 3px;
+  background: #050E19;
+}
+
+.appearance-option-preview[data-preview-theme="cosmic"] .preview-line {
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(148, 168, 194, 0.32);
+}
+
+.appearance-option-preview[data-preview-theme="cosmic"] .preview-line.short {
+  width: 60%;
+  background: #F54D7D;
+}
+
 .appearance-option-label {
   font-size: 14px;
   font-weight: 500;

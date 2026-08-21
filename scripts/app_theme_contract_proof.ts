@@ -59,11 +59,11 @@ function blendHex(foreground: string, background: string, alpha: number): string
     .join("")}`;
 }
 
-const expectedThemeIds: AppTheme[] = ["dark", "light"];
+const expectedThemeIds: AppTheme[] = ["dark", "light", "cosmic"];
 assert.deepEqual(
   APP_THEME_DEFINITIONS.map((definition) => definition.id),
   expectedThemeIds,
-  "the canonical theme registry should expose exactly Dark and Light",
+  "the canonical theme registry should expose exactly Dark, Light, and Cosmic",
 );
 assert.equal(APP_THEME_OPTIONS, APP_THEME_DEFINITIONS);
 assert.deepEqual(
@@ -74,6 +74,16 @@ assert.deepEqual(
     description: "Paper light with intelligence blue",
     disabled: false,
     browserColor: "#F8F8F4",
+  },
+);
+assert.deepEqual(
+  getAppThemeDefinition("cosmic"),
+  {
+    id: "cosmic",
+    label: "Cosmic",
+    description: "Deep space with signal rose",
+    disabled: false,
+    browserColor: "#020812",
   },
 );
 assert.equal(DEFAULT_APP_THEME, "dark");
@@ -223,6 +233,11 @@ assert.equal(attributes.get("data-theme"), "dark");
 assert.equal(attributes.has("data-theme-family"), false);
 assert.equal(browserThemeColor, "#1A1A1A");
 
+applyAppThemeAttributes("cosmic", root);
+assert.equal(attributes.get("data-theme"), "cosmic");
+assert.equal(attributes.has("data-theme-family"), false);
+assert.equal(browserThemeColor, "#020812");
+
 const baseThemeCss = read("apps/web/src/base.css");
 const baseCss = [
   baseThemeCss,
@@ -257,9 +272,9 @@ const manifest = read("apps/web/public/manifest.webmanifest");
 const darkRootBlock = baseThemeCss.match(/^:root\s*\{([\s\S]*?)\n\}/)?.[1];
 assert.ok(darkRootBlock, "base.css should define canonical Dark tokens at root");
 [
-  "--bg-app: #1a1a1a;",
-  "--bg-workspace: rgba(30, 30, 30, 0.95);",
-  "--bg-panel: rgba(24, 24, 24, 0.9);",
+  "--bg-app: #111113;",
+  "--bg-workspace: #1a1a1a;",
+  "--bg-panel: #222222;",
   "--bg-card: rgba(42, 42, 42, 0.9);",
   "--bg-card-hover: rgba(50, 50, 50, 0.95);",
   "--accent-gold: #f1ede5;",
@@ -376,12 +391,12 @@ assert.equal(
 );
 
 [
-  "--bg-app: #F8F8F4;",
-  "--bg-workspace: #F8F8F4;",
-  "--bg-panel: #F0F0EE;",
-  "--surface-rail: #F8F8F4;",
+  "--bg-app: #E4E4E0;",
+  "--bg-workspace: #FAFAF7;",
+  "--bg-panel: #EFEFEB;",
+  "--surface-rail: #E4E4E0;",
   "--community-rail-control-bg: var(--surface-nav);",
-  "--surface-nav: #F0F0EE;",
+  "--surface-nav: #EFEFEB;",
   "--bg-card: #FFFFFF;",
   "--bg-card-hover: #ECECEA;",
   "--surface-selected: color-mix(in srgb, var(--accent-gold) 16%, var(--surface-card) 84%);",
@@ -426,6 +441,47 @@ for (const removedLavender of ["#EBE9FB", "#DCD8F7"]) {
   );
 }
 assert.match(lightThemeBlock, /color-scheme:\s*light;/);
+
+const cosmicThemeBlock = baseThemeCss.match(
+  /:root\[data-theme="cosmic"\]\s*\{([\s\S]*?)\n\}/,
+)?.[1];
+assert.ok(cosmicThemeBlock, "base.css should define one canonical Cosmic theme block");
+assert.equal(
+  baseThemeCss.match(/:root\[data-theme="cosmic"\]/g)?.length,
+  1,
+  "Cosmic identity tokens should have exactly one theme-id-scoped owner",
+);
+[
+  "--bg-app: #020812;",
+  "--bg-workspace: #050E19;",
+  "--bg-panel: #07111D;",
+  "--surface-rail: #050D17;",
+  "--surface-nav: #07111D;",
+  "--bg-card: #0B1724;",
+  "--accent-brand: #F54D7D;",
+  "--accent-selection: #F54D7D;",
+  "--accent-attention: #5AA9E6;",
+  "--text-primary: #F4EEE8;",
+  "--text-secondary: #C6C3BF;",
+  "--text-muted: #9298A2;",
+  "--text-faint: #747D89;",
+  "--stroke-panel-edge: rgba(126, 148, 177, 0.2);",
+  "--composer-surface: #08131F;",
+  "--community-rail-control-bg: var(--surface-card);",
+].forEach((token) => {
+  assert.ok(cosmicThemeBlock.includes(token), `Cosmic should define ${token}`);
+});
+assert.match(cosmicThemeBlock, /color-scheme:\s*dark;/);
+assert.notEqual(
+  cosmicThemeBlock.match(/--accent-selection:\s*([^;]+);/)?.[1]?.trim(),
+  cosmicThemeBlock.match(/--accent-attention:\s*([^;]+);/)?.[1]?.trim(),
+  "Cosmic routine selection and activity attention must stay distinct",
+);
+assert.doesNotMatch(
+  read("apps/web/src/index.css"),
+  /--bg-app:\s*#111113|--bg-app:\s*#e4e4e0|data-theme="cosmic"/i,
+  "the web entry stylesheet should not retain a second theme-palette authority",
+);
 assert.match(
   baseCss,
   /\.community-interaction-day::before,[\s\S]*?\.community-interaction-day::after\s*\{[\s\S]*?background:\s*var\(--stroke-divider-accent\);/,
@@ -569,6 +625,7 @@ assert.match(appearance, /aria-pressed=\{appTheme === theme\.id\}/);
 assert.match(baseCss, /grid-template-columns:\s*repeat\(auto-fit,\s*minmax\(180px,\s*1fr\)\);/);
 assert.match(baseCss, /data-preview-theme="light"/);
 assert.match(baseCss, /data-preview-theme="dark"/);
+assert.match(baseCss, /data-preview-theme="cosmic"/);
 assert.doesNotMatch(baseCss, /data-preview-theme="polynet"|data-theme="polynet"/);
 assert.doesNotMatch(
   `${indexHtml}\n${read("shared/theme.ts")}\n${baseCss}\n${memberAgentCss}`,

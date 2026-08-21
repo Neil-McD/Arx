@@ -16,6 +16,13 @@ export const APP_THEME_DEFINITIONS = [
     disabled: false,
     browserColor: "#F8F8F4",
   },
+  {
+    id: "cosmic",
+    label: "Cosmic",
+    description: "Deep space with signal rose",
+    disabled: false,
+    browserColor: "#020812",
+  },
 ] as const satisfies readonly {
   id: string;
   label: string;

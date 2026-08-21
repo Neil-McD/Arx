@@ -14,11 +14,11 @@
   --web-chat-gutter: clamp(12px, 3vw, 20px);
 
   /* Canonical Dark fallback prevents a light flash before theme bootstrap. */
-  --bg-app: #1a1a1a;
+  --bg-app: #111113;
   --bg-header: rgba(18, 18, 18, 0.95);
-  --bg-panel: rgba(24, 24, 24, 0.9);
+  --bg-panel: #222222;
   --bg-modal: rgba(20, 20, 20, 0.98);
-  --bg-workspace: rgba(30, 30, 30, 0.95);
+  --bg-workspace: #1a1a1a;
   --bg-card: rgba(42, 42, 42, 0.9);
   --bg-card-solid: #2a2a2a;
   --bg-card-alt: rgba(36, 36, 36, 0.9);
@@ -112,10 +112,10 @@
   /* Semantic aliases (no-visual-delta compatibility layer) */
   --surface-app: var(--bg-app);
   --surface-header: var(--bg-header);
-  --surface-rail: var(--bg-workspace, var(--bg-app));
+  --surface-rail: #111113;
   --surface-workspace: var(--bg-workspace, var(--bg-app));
   --surface-panel: var(--bg-panel, var(--bg-app));
-  --surface-nav: var(--surface-panel);
+  --surface-nav: #222222;
   --surface-card: var(--bg-card);
   --surface-card-alt: var(--bg-card-alt);
   --surface-card-hover: var(--bg-card-hover);
@@ -164,19 +164,19 @@
    */
 
   /* === FOUNDATION: Paper canvas + neutral context === */
-  --bg-app: #F8F8F4;
+  --bg-app: #E4E4E0;
   --bg-header: rgba(248, 248, 244, 0.94);
-  --bg-panel: #F0F0EE;
+  --bg-panel: #EFEFEB;
   --bg-modal: #FFFFFF;
-  --bg-workspace: #F8F8F4;
+  --bg-workspace: #FAFAF7;
   --bg-card: #FFFFFF;
   --bg-card-solid: #FFFFFF;
   --bg-card-alt: #F8F8F4;
   --bg-card-hover: #ECECEA;
   --bg-input: #FFFFFF;
   --bg-terminal: #171719;
-  --surface-rail: #F8F8F4;
-  --surface-nav: #F0F0EE;
+  --surface-rail: #E4E4E0;
+  --surface-nav: #EFEFEB;
   --workspace-composer-bg: #FFFFFF;
   --workspace-landing-action-bg: #FFFFFF;
   --workspace-landing-action-hover-bg: #ECECEA;
@@ -258,6 +258,108 @@
   --community-rail-button-border: 1px solid rgba(23, 23, 25, 0.1);
   --scrollbar-thumb: rgba(23, 23, 25, 0.22);
   --scrollbar-thumb-hover: #6B6974;
+}
+
+/* Cosmic theme - "Deep Signal" */
+:root[data-theme="cosmic"] {
+  color-scheme: dark;
+
+  /* === FOUNDATION: blue-black depth with independently framed surfaces === */
+  --bg-app: #020812;
+  --bg-header: rgba(5, 13, 23, 0.96);
+  --bg-panel: #07111D;
+  --bg-modal: #08131F;
+  --bg-workspace: #050E19;
+  --bg-card: #0B1724;
+  --bg-card-solid: #0B1724;
+  --bg-card-alt: #091522;
+  --bg-card-hover: #101E2D;
+  --bg-input: #07111C;
+  --bg-terminal: #01050B;
+  --surface-rail: #050D17;
+  --surface-nav: #07111D;
+  --workspace-composer-bg: #08131F;
+  --workspace-landing-action-bg: #0B1724;
+  --workspace-landing-action-hover-bg: #101E2D;
+
+  /* === CONTROLS: one high-signal rose action language === */
+  --bg-button: #F54D7D;
+  --bg-button-hover: #FF6B95;
+  --bg-button-text: #180A12;
+  --conversation-primary-action-surface: #F54D7D;
+  --conversation-primary-action-hover-surface: #FF6B95;
+  --conversation-primary-action-foreground: #180A12;
+
+  /* === SEMANTIC COLOR: rose identity, blue activity, violet agency === */
+  --accent-gold: #F54D7D;
+  --accent-gold-subtle: #D93D69;
+  --accent-gold-glow: rgba(245, 77, 125, 0.2);
+  --accent-brand: #F54D7D;
+  --accent-selection: #F54D7D;
+  --accent-agent: #9B86FF;
+  --accent-agent-strong: #8068F2;
+  --accent-agent-foreground: #B9ACFF;
+  --accent-agent-surface: rgba(155, 134, 255, 0.15);
+  --accent-attention: #5AA9E6;
+  --text-on-attention: #03101B;
+  --accent-global-attention: #F05252;
+  --text-on-global-attention: #180A12;
+  --focus-ring: rgba(245, 77, 125, 0.58);
+  --text-link: #F05A84;
+  --text-link-hover: #FF789E;
+  --accent-cyan: #52A8E8;
+  --accent-cyan-subtle: #388CCB;
+  --accent-cyan-glow: rgba(82, 168, 232, 0.17);
+  --chat-link: #F05A84;
+  --chat-link-hover: #FF789E;
+  --accent-success: #45D49A;
+  --accent-error: #F05252;
+
+  /* === TYPOGRAPHY: warm human text against cool infrastructure === */
+  --text-primary: #F4EEE8;
+  --text-secondary: #C6C3BF;
+  --text-muted: #9298A2;
+  --text-faint: #747D89;
+  --text-terminal: #F4EEE8;
+
+  /* === STRUCTURE: low-contrast blue-gray seams === */
+  --border-default: rgba(126, 148, 177, 0.2);
+  --border-strong: rgba(148, 168, 194, 0.32);
+  --border-muted: rgba(105, 129, 159, 0.13);
+  --border-active: #F54D7D;
+  --divider-accent: rgba(126, 148, 177, 0.12);
+  --stroke-panel-edge: rgba(126, 148, 177, 0.2);
+  --header-border: none;
+
+  /* === ICONS + INTERACTION === */
+  --icon-default: #9298A2;
+  --icon-hover: #C6C3BF;
+  --icon-active: #F54D7D;
+  --hover-overlay: rgba(157, 178, 205, 0.07);
+  --active-overlay: rgba(245, 77, 125, 0.12);
+  --panel-shadow: none;
+
+  /* === SELECTED STATE: a narrow signal, never a neon wash === */
+  --surface-selected: color-mix(in srgb, var(--accent-selection) 18%, var(--surface-card) 82%);
+  --stroke-selected: rgba(245, 77, 125, 0.48);
+  --text-selected: #F8F1ED;
+
+  /* === COMPOSER: quiet raised instrument panel === */
+  --composer-surface: #08131F;
+  --composer-border: rgba(126, 148, 177, 0.22);
+  --composer-elevation: 0 12px 30px rgba(0, 0, 0, 0.28), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --composer-focus-ring: rgba(245, 77, 125, 0.46);
+
+  /* === STATUS: subdued operational materials === */
+  --status-default: #0B1724;
+  --status-proposed: #2A2530;
+  --status-approved: #123126;
+  --status-executed: #192440;
+
+  --community-rail-control-bg: var(--surface-card);
+  --community-rail-button-border: 1px solid rgba(126, 148, 177, 0.14);
+  --scrollbar-thumb: rgba(126, 148, 177, 0.28);
+  --scrollbar-thumb-hover: rgba(148, 168, 194, 0.46);
 }
 
 * {

@@ -107,31 +107,6 @@
   }
 }
 
-/* Universal shell palette hierarchy. The outer rail is the product chrome; the
-   inset surface is the selected destination. Layout stays identical so the
-   Appearance switcher compares palettes instead of comparing structures. */
-:root {
-  --bg-app: #111113;
-  --surface-app: #111113;
-  --surface-rail: #111113;
-  --bg-workspace: #1a1a1a;
-  --surface-workspace: #1a1a1a;
-  --bg-panel: #222222;
-  --surface-panel: #222222;
-  --surface-nav: #222222;
-}
-
-:root[data-theme="light"] {
-  --bg-app: #e4e4e0;
-  --surface-app: #e4e4e0;
-  --surface-rail: #e4e4e0;
-  --bg-workspace: #fafaf7;
-  --surface-workspace: #fafaf7;
-  --bg-panel: #efefeb;
-  --surface-panel: #efefeb;
-  --surface-nav: #efefeb;
-}
-
 /* Web: keep topbar content aligned with the left rail. */
 .app-topbar {
   /* Float the controls while keeping consistent top spacing via padding on the shell. */
