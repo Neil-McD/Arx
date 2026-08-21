@@ -214,6 +214,16 @@ assert.match(
   /\.community-rail-list\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/,
   "only the bounded community collection should own rail scrolling",
 );
+assert.match(
+  featureStyles,
+  /\.community-rail-list\s*\{[^}]*padding:\s*10px 0 12px;[^}]*scroll-padding-block:\s*10px 12px;/,
+  "rail edge fades must reserve matching endpoint and keyboard-focus space",
+);
+assert.match(
+  featureStyles,
+  /\.community-rail-list\s*\{[^}]*-webkit-mask-image:\s*linear-gradient\([\s\S]*?transparent 0,[\s\S]*?#000 10px,[\s\S]*?#000 calc\(100% - 12px\),[\s\S]*?transparent 100%[\s\S]*?\);[^}]*mask-image:\s*linear-gradient\([\s\S]*?transparent 0,[\s\S]*?#000 10px,[\s\S]*?#000 calc\(100% - 12px\),[\s\S]*?transparent 100%[\s\S]*?\);/,
+  "partial communities should dissolve against fixed rail controls in every theme",
+);
 assert.doesNotMatch(
   communityNav,
   /community-nav-banner-copy|activeCommunityOneLiner/,

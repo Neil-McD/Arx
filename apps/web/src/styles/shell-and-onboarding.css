@@ -654,7 +654,26 @@ body {
   overflow-x: hidden;
   overscroll-behavior: contain;
   gap: 4px;
+  padding: 10px 0 12px;
+  scroll-padding-block: 10px 12px;
   width: 100%;
+  /* Let partial communities dissolve at the fixed rail controls instead of
+     ending on a hard clip. Matching inset space keeps the first and last
+     communities fully opaque at their natural scroll limits. */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 12px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 12px),
+    transparent 100%
+  );
 }
 
 .context {
