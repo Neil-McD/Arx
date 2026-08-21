@@ -201,18 +201,18 @@ const railMainMarkup = communityRail.slice(railMainStart, railFooterStart);
 const railFooterMarkup = communityRail.slice(railFooterStart);
 assert.match(
   railMainMarkup,
-  /aria-label="Discover communities"[\s\S]*className="community-rail-list"/,
-  "Discover must remain fixed before the scrollable community collection",
-);
-assert.doesNotMatch(
-  railMainMarkup,
-  /community-rail-add/,
-  "Create community must not participate in community-list scrolling",
+  /aria-label="Discover communities"[\s\S]*className="community-rail-list"[\s\S]*community-rail-divider[\s\S]*community-rail-add/,
+  "Discover must remain fixed before the scrollable community collection and Create must follow it",
 );
 assert.match(
   railFooterMarkup,
-  /community-rail-divider[\s\S]*community-rail-add[\s\S]*title="Settings"/,
-  "the fixed rail footer must own Create community above Settings",
+  /title="Settings"/,
+  "the fixed rail footer must own Settings",
+);
+assert.doesNotMatch(
+  railFooterMarkup,
+  /community-rail-add/,
+  "Create community must follow the collection instead of pinning to the rail footer",
 );
 assert.match(
   featureStyles,
@@ -231,8 +231,8 @@ assert.doesNotMatch(
 );
 assert.match(
   featureStyles,
-  /\.community-rail-list\s*\{[^}]*flex:\s*1 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/,
-  "only the bounded community collection should own rail scrolling",
+  /\.community-rail-list\s*\{[^}]*flex:\s*0 1 auto;[^}]*min-height:\s*0;[^}]*overflow-y:\s*auto;[^}]*overscroll-behavior:\s*contain;/,
+  "the community collection should remain content-sized until it must shrink and own rail scrolling",
 );
 assert.match(
   featureStyles,
