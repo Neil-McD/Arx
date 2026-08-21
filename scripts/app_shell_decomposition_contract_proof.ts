@@ -22,6 +22,7 @@ const shellChromeHost = read(
 const shellChromeHostPropsBuilder = read(
   "apps/web/src/controllers/buildWebShellChromeHostProps.ts",
 );
+const communityNav = read("shared/CommunityNav.tsx");
 const entryStyles = read("apps/web/src/index.css");
 const globalStyles = read("apps/web/src/base.css");
 const featureStyles = [
@@ -166,6 +167,21 @@ assert.match(
   entryStyles,
   /\.app-shell\.framed-shell\.with-community-rail\.community-layout > \.community-rail:not\(\.mobile-community-rail\) \{[\s\S]*border-radius: var\(--community-shell-radius\);/,
   "the desktop global rail should use the same independent frame grammar as the community surfaces",
+);
+assert.doesNotMatch(
+  communityNav,
+  /community-nav-banner-copy|activeCommunityOneLiner/,
+  "the in-product community banner should stay a quiet identity surface without funnel copy",
+);
+assert.match(
+  entryStyles,
+  /\.community-nav-identity\.has-banner:not\(\.is-condensed\) \{[\s\S]*background: rgba\(2, 8, 18, 0\.22\);/,
+  "the desktop community identity should remain integrated over the canonical banner",
+);
+assert.match(
+  entryStyles,
+  /\.community-nav \.nav-item\.active \{[\s\S]*box-shadow: inset 3px 0 0 #f54d7d;/,
+  "the desktop community selection state should retain the narrow brand accent",
 );
 
 const boundedFeatureOwners = [

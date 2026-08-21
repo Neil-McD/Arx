@@ -599,31 +599,6 @@ body {
   position: relative;
 }
 
-.community-nav-banner-copy {
-  position: absolute;
-  z-index: 2;
-  right: 12px;
-  bottom: 24px;
-  left: 12px;
-  display: flex;
-  align-items: flex-end;
-  min-height: 54px;
-  padding-top: 26px;
-  color: rgba(255, 255, 255, 0.86);
-  font-size: 12px;
-  line-height: 1.4;
-  text-shadow: 0 1px 6px rgba(0, 0, 0, 0.9);
-  background: linear-gradient(180deg, transparent, rgba(1, 6, 15, 0.72));
-  pointer-events: none;
-}
-
-.community-nav-banner-copy span {
-  display: -webkit-box;
-  overflow: hidden;
-  -webkit-box-orient: vertical;
-  -webkit-line-clamp: 2;
-}
-
 .community-nav-section-label {
   padding: 5px 8px 8px;
   color: var(--text-faint);

@@ -214,7 +214,6 @@ export const CommunityNav = memo(function CommunityNav({
   const memberCountLabel = formatMemberCount(memberCount);
   const showMembersItem = Boolean(canViewMembersActiveCommunity && onOpenMembers);
   const activeCommunityName = activeCommunity?.name?.trim() || null;
-  const activeCommunityOneLiner = activeCommunity?.one_liner?.trim() || null;
   const activeCommunityBannerUrl = activeCommunity?.banner_url?.trim() || null;
   const joinUrl = resolveCommunityJoinUrl(activeCommunity?.slug);
   const canCopyJoinLink = Boolean(canViewMembersActiveCommunity && joinUrl && onCopyCommunityJoinLink);
@@ -444,11 +443,6 @@ export const CommunityNav = memo(function CommunityNav({
             fetchPriority="high"
             aria-hidden
           />
-          {activeCommunityOneLiner ? (
-            <div className="community-nav-banner-copy">
-              <span>{activeCommunityOneLiner}</span>
-            </div>
-          ) : null}
         </div>
       ) : null}
       <div className="community-nav-section-label">Channels</div>

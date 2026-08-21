@@ -1,28 +1,40 @@
-# Community shell reference experiment — design QA
+# Community shell reference cleanup — design QA
 
-final result: passed
+final result: blocked
 
-## Evidence
+## Comparison target
 
-- Source: `/Users/neilmcdevitt/Desktop/ChatGPT Image Aug 20, 2026, 04_09_20 PM.png`
-- Populated implementation: `https://polynet-staging.vercel.app/c/polynet/chat`
-- Final screenshot: `/Users/neilmcdevitt/.codex/visualizations/2026/08/20/01a020dc-2c0a-70b2-bdd6-d7d3440385b9/polynet-reference-shell-audit/04-final-staged-reference-shell.png`
-- Staging build: `3b06a5291f90d461cfe482acabebc6ddbf039bca`
+- Source visual truth: `/Users/neilmcdevitt/Desktop/ChatGPT Image Aug 20, 2026, 04_09_20 PM.png`
+- Source pixels: `1448 x 1086`
+- Pre-change staging evidence: `/Users/neilmcdevitt/.codex/visualizations/2026/08/20/01a020dc-2c0a-70b2-bdd6-d7d3440385b9/polynet-shell-cleanup-audit/01-current-staging.png`
+- Pre-change staging pixels: `2354 x 1600`
+- Intended state: authenticated desktop `/c/polynet/chat`, dark theme, populated community
+- Density normalization: compare proportions and focused regions rather than raw pixels because the supplied screenshots use different output densities and viewports.
 
-## Visible comparison
+## Current iteration
 
-- P0: none.
-- P1 resolved: global rail, community navigation, conversation, and context now read as independent framed surfaces.
-- P1 resolved: the community identity uses the real avatar, banner, name, one-liner, and canonical settings action.
-- P1 resolved: pinned content no longer lets rich media dominate the conversation viewport.
-- P1 resolved: the right rail presents real memory and a bounded five-member preview with working canonical destinations.
-- P2 resolved: banner and memory proportions were increased after the first staged comparison.
-- Intentional difference: the reference's decorative three-agent roster was not implemented because Polynet does not currently have three truthful active community agents to show.
-- Intentional difference: staging renders its real communities, messages, member count, roles, and visual identity rather than the reference image's illustrative data.
+### Earlier P1 findings
 
-## Interaction checks
+- Community identity and banner rendered as two stacked blocks.
+- Funnel one-liner leaked into the in-product banner.
+- Neutral charcoal surfaces missed the reference's deep navy material system.
+- Selected channel used a large gray pill instead of the narrow magenta accent.
 
-- `View all` opens the complete canonical members page.
-- `Explore memory` opens the full canonical community memory surface.
-- Existing channel, Resources, Events, invite, community settings, global settings, message composer, and member-agent controls remain available.
-- No Convex schema, data, or deployment changed in this UI-only experiment.
+### Fixes made
+
+- Integrated the canonical community identity over a single edge-to-edge banner.
+- Removed one-liner rendering from the in-product community navigation.
+- Scoped the reference navy, warm-white, blue-gray stroke, and magenta accent tokens to the desktop community shell.
+- Tightened the rail, navigation controls, channel header, pinned region, memory preview, and member rows.
+- Added a contract proof preventing the stacked banner copy and selection treatment from returning.
+
+## Verification completed
+
+- Contract proof: passed.
+- Community interaction projection proof: passed.
+- Production web build: passed.
+- Local browser render: shell framing and palette rendered, but authenticated content could not be verified because the local origin could not complete the existing staging session.
+
+## Blocking gate
+
+Deploy this exact web-only candidate to the staging Git/Vercel lane, capture the authenticated populated route at the same desktop state, compare it together with the source image, check primary interactions and console errors, then replace this blocker with the final browser evidence.
