@@ -316,8 +316,9 @@
 /* Web: remove the dedicated header row from the grid and offset content manually. */
 .app-root {
   grid-template-rows: 1fr;
-  /* Match the workspace surface so the reserved top spacing doesn't read as a separate bar. */
-  background: var(--surface-workspace, var(--surface-app));
+  /* The app canvas owns the space around framed product surfaces. Navigation
+     controls float directly on it instead of creating another panel. */
+  background: var(--surface-app);
 }
 
 /* Web: keep scrollable panels flush to the viewport edges so scrollbars hug the window. */
@@ -1580,20 +1581,12 @@
   .app-shell.framed-shell.sessions-compact.no-right,
   .app-shell.framed-shell.no-left.no-right {
     grid-template-columns: minmax(0, 1fr);
-    background: var(--surface-rail);
+    background: var(--surface-app);
   }
 
   .app-shell.framed-shell.with-community-rail.sessions-compact.no-right,
   .app-shell.framed-shell.with-community-rail.no-left.no-right {
     grid-template-columns: var(--web-rail-width, 72px) minmax(0, 1fr);
-  }
-
-  .app-shell.framed-shell.with-community-rail.community-layout > .community-rail:not(.mobile-community-rail) {
-    margin: var(--community-shell-inset);
-    overflow: hidden;
-    border: 1px solid var(--community-shell-stroke);
-    border-radius: var(--community-shell-radius);
-    background: var(--surface-rail);
   }
 
   .product-shell-surface {
@@ -2450,6 +2443,10 @@
     0
     calc(env(safe-area-inset-bottom, 0px) + var(--community-shell-inset));
   background: var(--surface-rail);
+}
+
+.mobile-community-rail .community-rail-dot {
+  border-color: var(--surface-rail);
 }
 
 .mobile-community-rail .community-rail-button {

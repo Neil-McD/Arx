@@ -255,7 +255,9 @@ body {
   align-items: center;
   overflow: hidden;
   padding: 12px 0;
-  background: var(--surface-rail);
+  /* The desktop rail is navigation infrastructure, not a panel. Let the
+     application canvas show through and keep containment on each control. */
+  background: transparent;
   box-shadow: none;
   border-right: 0;
   z-index: 5;
@@ -351,7 +353,7 @@ body {
   height: 9px;
   border-radius: 999px;
   background: var(--accent-global-attention);
-  border: 2px solid var(--surface-rail);
+  border: 2px solid var(--surface-app);
   pointer-events: none;
 }
 

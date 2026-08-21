@@ -426,6 +426,36 @@ assert.match(
   /\.community-rail-button\s*\{[\s\S]*?background:\s*var\(--community-rail-control-bg\);/,
   "community rail utility controls should consume the theme-specific rail control surface",
 );
+assert.match(
+  baseCss,
+  /\.app-root\s*\{[\s\S]*?background:\s*var\(--surface-app\);/,
+  "the web shell should expose the application canvas around framed product surfaces",
+);
+assert.match(
+  baseCss,
+  /\.rail\s*\{[\s\S]*?background:\s*transparent;/,
+  "the canonical desktop rail should float directly on the application canvas",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.rail\s*\{[^}]*background:\s*var\(--surface-rail\);/,
+  "the desktop rail must not regain an independent panel surface",
+);
+assert.doesNotMatch(
+  baseCss,
+  /\.app-shell\.framed-shell\.with-community-rail\.community-layout\s*>\s*\.community-rail:not\(\.mobile-community-rail\)/,
+  "the desktop rail must not regain a framed surface-local wrapper",
+);
+assert.match(
+  baseCss,
+  /\.community-rail-dot\s*\{[\s\S]*?border:\s*2px solid var\(--surface-app\);/,
+  "desktop rail attention should cut cleanly against the shared application canvas",
+);
+assert.match(
+  baseCss,
+  /\.mobile-community-rail\s*\{[\s\S]*?background:\s*var\(--surface-rail\);[\s\S]*?\.mobile-community-rail \.community-rail-dot\s*\{[\s\S]*?border-color:\s*var\(--surface-rail\);/,
+  "the mobile rail should retain its bounded surface and matching attention cutout",
+);
 const lightSelection = lightThemeBlock.match(/--accent-selection:\s*([^;]+);/)?.[1]?.trim();
 const lightAttention = lightThemeBlock.match(/--accent-attention:\s*([^;]+);/)?.[1]?.trim();
 assert.ok(lightSelection && lightAttention, "Light should expose selection and attention roles");
