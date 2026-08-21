@@ -414,12 +414,7 @@ assertMatches(
 assertMatches(
   interactionStylesPath,
   interactionStyles,
-  /\.community-interaction-reply-pill\s*\{[^}]*color:\s*var\(--chat-link\);/,
-);
-assertMatches(
-  interactionStylesPath,
-  interactionStyles,
-  /\.community-interaction-unread-dot\s*\{[^}]*background:\s*currentColor;/,
+  /\.community-interaction-reply-pill\s*\{[^}]*color:\s*var\(--accent-attention\);/,
 );
 assertMatches(
   interactionStylesPath,

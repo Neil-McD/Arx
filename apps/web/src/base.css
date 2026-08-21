@@ -290,7 +290,7 @@
   --conversation-primary-action-hover-surface: #FF6B95;
   --conversation-primary-action-foreground: #180A12;
 
-  /* === SEMANTIC COLOR: rose identity, blue activity, violet agency === */
+  /* === SEMANTIC COLOR: rose identity/activity, blue utility, violet agency === */
   --accent-gold: #F54D7D;
   --accent-gold-subtle: #D93D69;
   --accent-gold-glow: rgba(245, 77, 125, 0.2);
@@ -300,7 +300,7 @@
   --accent-agent-strong: #8068F2;
   --accent-agent-foreground: #B9ACFF;
   --accent-agent-surface: rgba(155, 134, 255, 0.15);
-  --accent-attention: #5AA9E6;
+  --accent-attention: var(--accent-brand);
   --text-on-attention: #03101B;
   --accent-global-attention: #F05252;
   --text-on-global-attention: #180A12;

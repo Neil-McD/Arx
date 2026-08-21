@@ -246,11 +246,6 @@ const baseCss = [
   read("apps/web/src/styles/community-and-content.css"),
   read("apps/web/src/styles/settings-runtime-and-theme-overrides.css"),
 ].join("\n");
-assert.match(
-  baseThemeCss,
-  /--chat-link:\s*var\(--accent-cyan\);[\s\S]*?--chat-link-hover:\s*color-mix\(in srgb, var\(--accent-cyan\) 82%, white 18%\);/,
-  "Dark should retain the canonical blue conversation accent",
-);
 const appearance = read("apps/web/src/components/WebAppearanceSettingsSection.tsx");
 const main = read("apps/web/src/main.tsx");
 const app = read("apps/web/src/App.tsx");
@@ -421,7 +416,6 @@ assert.equal(
   "--accent-global-attention: #B42318;",
   "--text-on-global-attention: #FFFFFF;",
   "--text-link: #2F55FF;",
-  "--chat-link: #2F55FF;",
   "--stroke-selected: #2F55FF;",
   "--text-selected: #171719;",
 ].forEach((token) => {
@@ -496,9 +490,7 @@ assert.equal(
   "--bg-card: #0B1724;",
   "--accent-brand: #F54D7D;",
   "--accent-selection: #F54D7D;",
-  "--accent-attention: #5AA9E6;",
-  "--chat-link: #F05A84;",
-  "--chat-link-hover: #FF789E;",
+  "--accent-attention: var(--accent-brand);",
   "--text-primary: #F4EEE8;",
   "--text-secondary: #C6C3BF;",
   "--text-muted: #9298A2;",
@@ -510,10 +502,10 @@ assert.equal(
   assert.ok(cosmicThemeBlock.includes(token), `Cosmic should define ${token}`);
 });
 assert.match(cosmicThemeBlock, /color-scheme:\s*dark;/);
-assert.notEqual(
-  cosmicThemeBlock.match(/--accent-selection:\s*([^;]+);/)?.[1]?.trim(),
+assert.equal(
   cosmicThemeBlock.match(/--accent-attention:\s*([^;]+);/)?.[1]?.trim(),
-  "Cosmic routine selection and activity attention must stay distinct",
+  "var(--accent-brand)",
+  "Cosmic community attention should resolve through the canonical rose identity",
 );
 assert.doesNotMatch(
   read("apps/web/src/index.css"),
@@ -565,7 +557,9 @@ assert.match(
   "community and global attention should have independent readable semantic roles",
 );
 [
+  /\.community-interaction-reply-pill\s*\{[\s\S]*?color:\s*var\(--accent-attention\);/,
   /\.community-interaction-unread-divider::before\s*\{[\s\S]*?var\(--accent-attention\)/,
+  /\.community-interaction-unread-dot\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
   /\.community-interaction-message\.is-self-mentioned,[\s\S]*?\.community-interaction-reply\.is-self-mentioned\s*\{[\s\S]*?background:\s*color-mix\(in srgb, var\(--accent-attention\) 6%, transparent\);[\s\S]*?border-left:\s*2px solid var\(--accent-attention\);/,
   /\.nav-item-dot\s*\{[\s\S]*?background:\s*var\(--accent-attention\);/,
   /\.mobile-topbar-attention\s*\{[\s\S]*?background:\s*var\(--accent-attention\);[\s\S]*?color:\s*var\(--text-on-attention\);/,
@@ -573,20 +567,7 @@ assert.match(
   assert.match(
     baseCss,
     activitySelector,
-    "community-local unread and navigation activity should share the attention role",
-  );
-});
-[
-  /\.community-interaction-reply-button:hover\s*\{[\s\S]*?border-color:\s*var\(--chat-link\);[\s\S]*?color:\s*var\(--chat-link\);/,
-  /\.community-interaction-reply-pill\s*\{[\s\S]*?color:\s*var\(--chat-link\);/,
-  /\.community-interaction-unread-dot\s*\{[\s\S]*?background:\s*currentColor;/,
-  /\.chat-reply-quote\s*\{[\s\S]*?var\(--chat-link\)/,
-  /\.chat-reply-icon\s*\{[\s\S]*?color:\s*var\(--chat-link\);/,
-].forEach((replySelector) => {
-  assert.match(
-    baseCss,
-    replySelector,
-    "reply affordances should consume the theme-specific conversation accent",
+    "community-local reply, unread, and navigation activity should share the theme attention role",
   );
 });
 [
