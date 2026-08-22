@@ -64,6 +64,7 @@
     "check:workspace-account-lifecycle-retirement-contract": "tsx scripts/workspace_account_lifecycle_retirement_contract_proof.ts",
     "check:workspace-surface-extinction-contract": "tsx scripts/workspace_surface_extinction_contract_proof.ts",
     "check:app-shell-decomposition-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/app_shell_decomposition_contract_proof.ts",
+    "check:community-workspace-frame-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_workspace_frame_contract_proof.ts",
     "check:web-route-access-boundary-proof": "tsx scripts/web_route_access_boundary_contract_proof.ts",
     "check:critical-audit-events-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/critical_audit_events_proof.ts",
     "check:stripe-connect-onboarding-diagnostics-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/stripe_connect_onboarding_diagnostics_proof.ts",

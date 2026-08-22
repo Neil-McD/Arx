@@ -1,0 +1,31 @@
+.community-workspace-frame {
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+  background: var(--surface-workspace, var(--surface-app));
+}
+
+.community-workspace-frame-scroll {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-root:not(.mobile-shell)
+  .product-shell-surface--community
+  .community-workspace-frame {
+  border: 1px solid var(--community-shell-stroke);
+  border-radius: var(--community-shell-radius);
+}
+
+.app-root.mobile-shell .community-workspace-frame-scroll {
+  padding: calc(var(--mobile-topbar-clearance) + 2px) 0
+    calc(env(safe-area-inset-bottom, 0px) + 14px);
+}

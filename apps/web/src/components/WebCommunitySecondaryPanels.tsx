@@ -12,6 +12,7 @@ import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
+import { WebCommunityWorkspaceFrame } from "./WebCommunityWorkspaceFrame";
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
@@ -120,14 +121,19 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "resources" ? (
         <>
-          {renderCenteredPane(<CommunityResourcesPanel {...props.resources} />)}
+          <WebCommunityWorkspaceFrame ariaLabel="Community resources">
+            <CommunityResourcesPanel {...props.resources} />
+          </WebCommunityWorkspaceFrame>
           <WebCommunityResourceModuleModal {...props.resourceModuleModal} />
           <WebDeleteResourceModuleModal {...props.resourceModuleDeleteModal} />
         </>
       ) : null}
 
-      {props.communityTab === "events" &&
-        renderCenteredPane(<WebCommunityEventsSection {...props.events} />)}
+      {props.communityTab === "events" ? (
+        <WebCommunityWorkspaceFrame ariaLabel="Community events">
+          <WebCommunityEventsSection {...props.events} />
+        </WebCommunityWorkspaceFrame>
+      ) : null}
 
     </>
   );

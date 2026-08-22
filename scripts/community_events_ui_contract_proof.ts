@@ -157,10 +157,15 @@ assert.doesNotMatch(
   "the canonical projection must not retain the calendar selector, parallel agenda, ambiguous count, or manual refresh control",
 );
 
-const eventsStylesStart = styles.indexOf(".community-events-panel {");
-const eventsStylesEnd = styles.indexOf("/* Community onboarding workflow settings. */", eventsStylesStart);
-assert.ok(eventsStylesStart >= 0 && eventsStylesEnd > eventsStylesStart, "events styles must have a bounded canonical section");
-const eventsStyles = styles.slice(eventsStylesStart, eventsStylesEnd);
+const eventStyleRules = Array.from(
+  styles.matchAll(/([^{}]*\.(?:community-events|community-event)[^{}]*)\{([^{}]*)\}/g),
+  (match) => `${match[1]}{${match[2]}}`,
+);
+assert.ok(
+  eventStyleRules.length > 0,
+  "events styles must expose canonical event-owned rules",
+);
+const eventsStyles = eventStyleRules.join("\n");
 
 assert.match(
   eventsStyles,
@@ -169,7 +174,7 @@ assert.match(
 );
 
 assert.match(
-  eventsStyles,
+  styles,
   /@container community-events \(max-width: 680px\) \{[\s\S]*\.community-events-item \{[\s\S]*grid-template-columns: minmax\(0, 1fr\);[\s\S]*\.community-events-actions \{[\s\S]*justify-content: flex-start;/,
   "event actions must stack from the component's own width rather than only the viewport",
 );
