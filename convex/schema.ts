@@ -1151,6 +1151,186 @@ export default defineSchema({
     .index("by_membership_activation", ["membershipId", "activationSequence"])
     .index("by_user_community_status_createdAt", ["userId", "communityId", "status", "createdAt"]),
 
+  communityMemberWorkflows: defineTable({
+    communityId: v.id("communities"),
+    name: v.string(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("active"),
+      v.literal("archived"),
+    ),
+    draftVersionId: v.optional(v.id("communityMemberWorkflowVersions")),
+    activeVersionId: v.optional(v.id("communityMemberWorkflowVersions")),
+    enrollmentBackfillStatus: v.optional(v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("complete"),
+      v.literal("error"),
+    )),
+    enrollmentBackfillVersionId: v.optional(v.id("communityMemberWorkflowVersions")),
+    enrollmentBackfillCursor: v.optional(v.string()),
+    enrollmentBackfillError: v.optional(v.string()),
+    enrollmentBackfillUpdatedAt: v.optional(v.number()),
+    revision: v.number(),
+    createdByUserId: v.id("users"),
+    updatedByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_community", ["communityId"])
+    .index("by_community_status", ["communityId", "status"]),
+
+  communityMemberWorkflowVersions: defineTable({
+    communityId: v.id("communities"),
+    workflowId: v.id("communityMemberWorkflows"),
+    version: v.number(),
+    status: v.union(
+      v.literal("draft"),
+      v.literal("active"),
+      v.literal("retired"),
+    ),
+    outcomeName: v.string(),
+    outcomeDefinition: v.string(),
+    stages: v.array(v.object({
+      key: v.string(),
+      name: v.string(),
+      objective: v.string(),
+      completionDefinition: v.string(),
+    })),
+    createdByUserId: v.id("users"),
+    activatedByUserId: v.optional(v.id("users")),
+    activatedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workflow_version", ["workflowId", "version"])
+    .index("by_workflow_status", ["workflowId", "status"])
+    .index("by_community_status", ["communityId", "status"]),
+
+  communityMemberWorkflowEnrollments: defineTable({
+    communityId: v.id("communities"),
+    workflowId: v.id("communityMemberWorkflows"),
+    workflowVersionId: v.id("communityMemberWorkflowVersions"),
+    membershipId: v.id("communityMemberships"),
+    userId: v.id("users"),
+    activationSequence: v.number(),
+    status: v.union(
+      v.literal("active"),
+      v.literal("paused"),
+      v.literal("completed"),
+      v.literal("exited"),
+    ),
+    currentStageKey: v.string(),
+    currentStageEnteredAt: v.number(),
+    transitionSeq: v.number(),
+    revision: v.number(),
+    completedAt: v.optional(v.number()),
+    exitedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_workflow_membership_activation", [
+      "workflowId",
+      "membershipId",
+      "activationSequence",
+    ])
+    .index("by_workflow", ["workflowId"])
+    .index("by_workflow_status_stage", ["workflowId", "status", "currentStageKey"])
+    .index("by_version_status_stage", [
+      "workflowVersionId",
+      "status",
+      "currentStageKey",
+    ])
+    .index("by_community_status_stage", ["communityId", "status", "currentStageKey"])
+    .index("by_membership", ["membershipId"])
+    .index("by_user_community", ["userId", "communityId"]),
+
+  communityMemberWorkflowEvidence: defineTable({
+    communityId: v.id("communities"),
+    workflowId: v.id("communityMemberWorkflows"),
+    workflowVersionId: v.id("communityMemberWorkflowVersions"),
+    enrollmentId: v.id("communityMemberWorkflowEnrollments"),
+    membershipId: v.id("communityMemberships"),
+    userId: v.id("users"),
+    stageKey: v.string(),
+    criterionKey: v.optional(v.string()),
+    sourceType: v.union(
+      v.literal("member"),
+      v.literal("builder"),
+      v.literal("product"),
+      v.literal("provider"),
+      v.literal("agent_assessment"),
+    ),
+    status: v.union(
+      v.literal("pending"),
+      v.literal("accepted"),
+      v.literal("rejected"),
+      v.literal("superseded"),
+    ),
+    summary: v.string(),
+    sourceRef: v.optional(v.string()),
+    idempotencyKey: v.string(),
+    idempotencyFingerprint: v.string(),
+    confidence: v.number(),
+    uncertainty: v.optional(v.string()),
+    observedAt: v.number(),
+    createdByActorType: v.union(
+      v.literal("member"),
+      v.literal("builder"),
+      v.literal("product"),
+      v.literal("provider"),
+      v.literal("agent"),
+      v.literal("system"),
+    ),
+    createdByUserId: v.optional(v.id("users")),
+    decidedByUserId: v.optional(v.id("users")),
+    decidedAt: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_enrollment_createdAt", ["enrollmentId", "createdAt"])
+    .index("by_enrollment_status_createdAt", ["enrollmentId", "status", "createdAt"])
+    .index("by_enrollment_idempotency", ["enrollmentId", "idempotencyKey"])
+    .index("by_user_community_createdAt", ["userId", "communityId", "createdAt"]),
+
+  communityMemberWorkflowTransitions: defineTable({
+    communityId: v.id("communities"),
+    workflowId: v.id("communityMemberWorkflows"),
+    workflowVersionId: v.id("communityMemberWorkflowVersions"),
+    enrollmentId: v.id("communityMemberWorkflowEnrollments"),
+    membershipId: v.id("communityMemberships"),
+    userId: v.id("users"),
+    seq: v.number(),
+    fromStageKey: v.optional(v.string()),
+    toStageKey: v.optional(v.string()),
+    kind: v.union(
+      v.literal("enrolled"),
+      v.literal("manual_move"),
+      v.literal("evidence_confirmed"),
+      v.literal("completed"),
+      v.literal("paused"),
+      v.literal("resumed"),
+      v.literal("exited"),
+    ),
+    evidenceIds: v.array(v.id("communityMemberWorkflowEvidence")),
+    actorType: v.union(
+      v.literal("member"),
+      v.literal("builder"),
+      v.literal("product"),
+      v.literal("provider"),
+      v.literal("system"),
+    ),
+    actorUserId: v.optional(v.id("users")),
+    reason: v.string(),
+    idempotencyKey: v.string(),
+    idempotencyFingerprint: v.string(),
+    occurredAt: v.number(),
+    createdAt: v.number(),
+  })
+    .index("by_enrollment_seq", ["enrollmentId", "seq"])
+    .index("by_enrollment_idempotency", ["enrollmentId", "idempotencyKey"])
+    .index("by_community_occurredAt", ["communityId", "occurredAt"]),
+
   communityPresence: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),

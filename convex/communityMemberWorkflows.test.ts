@@ -1,0 +1,471 @@
+/// <reference types="vite/client" />
+
+import { convexTest } from "convex-test";
+import { expect, test, vi } from "vitest";
+
+import { api, internal } from "./_generated/api";
+import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import schema from "./schema";
+import { DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT } from "../shared/communityMemberWorkflow";
+
+const modules = import.meta.glob([
+  "./communityCapabilityContext.ts",
+  "./communityMemberWorkflows.ts",
+  "./_generated/**/*.*s",
+]);
+
+const OWNER_SUBJECT = "workflow-owner";
+const MEMBER_SUBJECT = "workflow-member";
+const NEW_MEMBER_SUBJECT = "workflow-new-member";
+
+async function createFixture(t: ReturnType<typeof convexTest>) {
+  const nowMs = 1_787_478_400_000;
+  return await t.run(async (ctx) => {
+    const ownerId = await ctx.db.insert("users", {
+      authSubject: OWNER_SUBJECT,
+      displayName: "Ada Builder",
+      handle: "ada-builder",
+      normalizedHandle: "ada-builder",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const memberId = await ctx.db.insert("users", {
+      authSubject: MEMBER_SUBJECT,
+      displayName: "Grace Member",
+      handle: "grace-member",
+      normalizedHandle: "grace-member",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const newMemberId = await ctx.db.insert("users", {
+      authSubject: NEW_MEMBER_SUBJECT,
+      displayName: "Lin New",
+      handle: "lin-new",
+      normalizedHandle: "lin-new",
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const communityId = await ctx.db.insert("communities", {
+      ownerId,
+      slug: "workflow-foundation",
+      name: "Workflow Foundation",
+      lifecycleStatus: "active",
+      visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "approval",
+      activeMemberCount: 1,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    const membershipId = await ctx.db.insert("communityMemberships", {
+      communityId,
+      userId: memberId,
+      role: "member",
+      accessSource: "manual_grant",
+      active: true,
+      activationSequence: 1,
+      activatedAt: nowMs,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { communityId, memberId, membershipId, newMemberId, nowMs, ownerId };
+  });
+}
+
+test("builder workflow authority, version activation, and enrollment backfill fail closed", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+    const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+
+    await expect(
+      asMember.mutation(api.communityMemberWorkflows.saveBuilderWorkflowDraft, {
+        communityId: fixture.communityId,
+        expectedRevision: 0,
+        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+      }),
+    ).rejects.toThrow("community_forbidden");
+
+    await expect(
+      asOwner.mutation(api.communityMemberWorkflows.saveBuilderWorkflowDraft, {
+        communityId: fixture.communityId,
+        expectedRevision: 0,
+        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+      }),
+    ).resolves.toMatchObject({ revision: 1, version: 1 });
+
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+        { communityId: fixture.communityId, expectedRevision: 0 },
+      ),
+    ).rejects.toThrow("community_member_workflow_revision_conflict");
+
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+        { communityId: fixture.communityId, expectedRevision: 1 },
+      ),
+    ).resolves.toMatchObject({
+      version: 1,
+      revision: 2,
+      enrollment_backfill_status: "queued",
+    });
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+
+    const board = await asOwner.query(
+      api.communityMemberWorkflows.getBuilderWorkflowBoard,
+      { communityId: fixture.communityId },
+    );
+    expect(board.workflow).toMatchObject({
+      name: "Client success",
+      status: "active",
+      revision: 2,
+      enrollment_backfill_status: "complete",
+      active_version: { version: 1, status: "active" },
+      draft_version: null,
+      members: [
+        {
+          membership_id: String(fixture.membershipId),
+          display_name: "Grace Member",
+          current_stage_key: "new",
+          status: "active",
+          revision: 1,
+        },
+      ],
+    });
+
+    await expect(
+      asOwner.mutation(api.communityMemberWorkflows.saveBuilderWorkflowDraft, {
+        communityId: fixture.communityId,
+        expectedRevision: 2,
+        draft: {
+          ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+          outcomeDefinition: "A revised definition for the next cohort.",
+        },
+      }),
+    ).resolves.toMatchObject({ revision: 3, version: 2 });
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+        { communityId: fixture.communityId, expectedRevision: 3 },
+      ),
+    ).rejects.toThrow(
+      "community_member_workflow_active_enrollments_require_migration",
+    );
+
+    await expect(
+      asMember.query(api.communityMemberWorkflows.getBuilderWorkflowBoard, {
+        communityId: fixture.communityId,
+      }),
+    ).rejects.toThrow("community_forbidden");
+
+    const selfProjection = await asMember.query(
+      internal.communityCapabilityContext
+        .resolveCommunitySemanticRepositoryInternal,
+      {
+        authSubject: MEMBER_SUBJECT,
+        userId: fixture.memberId,
+        communityId: fixture.communityId,
+        operation: "read",
+        path: "/self.md",
+      },
+    );
+    expect(selfProjection).toMatchObject({
+      ok: true,
+      result: {
+        body: expect.stringContaining("## My success workflow"),
+      },
+    });
+    expect((selfProjection as any).result.body).toContain(
+      'Current stage: "New" (`new`)',
+    );
+
+    const publicMemberProjection = await asMember.query(
+      internal.communityCapabilityContext
+        .resolveCommunitySemanticRepositoryInternal,
+      {
+        authSubject: MEMBER_SUBJECT,
+        userId: fixture.memberId,
+        communityId: fixture.communityId,
+        operation: "read",
+        path: "/members/grace-member.md",
+      },
+    );
+    expect(publicMemberProjection).toMatchObject({ ok: true });
+    expect((publicMemberProjection as any).result.body).not.toContain(
+      "My success workflow",
+    );
+  } finally {
+    vi.unstubAllEnvs();
+    vi.useRealTimers();
+  }
+});
+
+test("evidence and stage movement are idempotent, revision-bound, and append-only", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+    await asOwner.mutation(
+      api.communityMemberWorkflows.saveBuilderWorkflowDraft,
+      {
+        communityId: fixture.communityId,
+        expectedRevision: 0,
+        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+      },
+    );
+    await asOwner.mutation(
+      api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+      { communityId: fixture.communityId, expectedRevision: 1 },
+    );
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    const enrollmentId = await t.run(async (ctx) => {
+      const rows = await ctx.db
+        .query("communityMemberWorkflowEnrollments")
+        .collect();
+      return rows[0]!._id;
+    });
+
+    const evidenceInput = {
+      communityId: fixture.communityId,
+      enrollmentId,
+      stageKey: "new",
+      summary: "Builder confirmed the member's baseline and intended outcome.",
+      confidence: 1,
+      idempotencyKey: "evidence:baseline:1",
+    } as const;
+    const evidence = await asOwner.mutation(
+      api.communityMemberWorkflows.recordBuilderEvidence,
+      evidenceInput,
+    );
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.recordBuilderEvidence,
+        evidenceInput,
+      ),
+    ).resolves.toMatchObject({
+      evidence_id: evidence.evidence_id,
+      replayed: true,
+    });
+    await expect(
+      asOwner.mutation(api.communityMemberWorkflows.recordBuilderEvidence, {
+        ...evidenceInput,
+        summary: "A conflicting replay.",
+      }),
+    ).rejects.toThrow("community_member_workflow_idempotency_conflict");
+
+    const moveInput = {
+      communityId: fixture.communityId,
+      enrollmentId,
+      expectedRevision: 1,
+      targetStageKey: "getting-started",
+      reason: "The baseline is explicit, so the member can begin setup.",
+      evidenceIds: [evidence.evidence_id as any],
+      idempotencyKey: "move:getting-started:1",
+    };
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.moveBuilderWorkflowEnrollment,
+        moveInput,
+      ),
+    ).resolves.toMatchObject({ enrollment_revision: 2, replayed: false });
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.moveBuilderWorkflowEnrollment,
+        moveInput,
+      ),
+    ).resolves.toMatchObject({ enrollment_revision: 2, replayed: true });
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.moveBuilderWorkflowEnrollment,
+        {
+          ...moveInput,
+          idempotencyKey: "move:stale:1",
+          targetStageKey: "activated",
+        },
+      ),
+    ).rejects.toThrow("community_member_workflow_enrollment_revision_conflict");
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.moveBuilderWorkflowEnrollment,
+        {
+          ...moveInput,
+          expectedRevision: 2,
+          targetStageKey: "activated",
+          reason: "The member completed the activation action.",
+          evidenceIds: [],
+          idempotencyKey: "move:activated:1",
+        },
+      ),
+    ).resolves.toMatchObject({ enrollment_revision: 3, replayed: false });
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.moveBuilderWorkflowEnrollment,
+        moveInput,
+      ),
+    ).resolves.toMatchObject({ enrollment_revision: 2, replayed: true });
+
+    const detail = await asOwner.query(
+      api.communityMemberWorkflows.getBuilderEnrollmentDetail,
+      { communityId: fixture.communityId, enrollmentId },
+    );
+    expect(detail.enrollment).toMatchObject({
+      current_stage_key: "activated",
+      revision: 3,
+    });
+    expect(detail.evidence).toHaveLength(1);
+    expect(detail.transitions.map((row) => row.kind)).toEqual([
+      "manual_move",
+      "manual_move",
+      "enrolled",
+    ]);
+    expect(detail.transitions.map((row) => row.seq)).toEqual([3, 2, 1]);
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("new membership activations reconcile to the active version without changing membership authority", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+    await asOwner.mutation(
+      api.communityMemberWorkflows.saveBuilderWorkflowDraft,
+      {
+        communityId: fixture.communityId,
+        expectedRevision: 0,
+        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+      },
+    );
+    await asOwner.mutation(
+      api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+      { communityId: fixture.communityId, expectedRevision: 1 },
+    );
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+
+    const activation = await t.run(async (ctx) =>
+      activateCommunityMembershipCore({
+        ctx,
+        communityId: fixture.communityId,
+        userId: fixture.newMemberId,
+        accessSource: "manual_grant",
+        activationReason: "workflow_test",
+        nowMs: fixture.nowMs + 100,
+      }),
+    );
+    expect(activation).toMatchObject({
+      accessGranted: true,
+      membership: { active: true, activationSequence: 1 },
+    });
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+
+    const rows = await t.run(async (ctx) =>
+      ctx.db.query("communityMemberWorkflowEnrollments").collect(),
+    );
+    expect(rows).toHaveLength(2);
+    expect(
+      rows.find((row) => row.userId === fixture.newMemberId),
+    ).toMatchObject({
+      membershipId: activation.membership._id,
+      activationSequence: 1,
+      currentStageKey: "new",
+      status: "active",
+    });
+
+    await t.run(async (ctx) =>
+      activateCommunityMembershipCore({
+        ctx,
+        communityId: fixture.communityId,
+        userId: fixture.newMemberId,
+        accessSource: "manual_grant",
+        activationReason: "workflow_test_replay",
+        nowMs: fixture.nowMs + 200,
+      }),
+    );
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    expect(
+      await t.run(async (ctx) =>
+        ctx.db.query("communityMemberWorkflowEnrollments").collect(),
+      ),
+    ).toHaveLength(2);
+
+    await t.run(async (ctx) => {
+      await ctx.db.patch(activation.membership._id, {
+        active: false,
+        revokedAt: fixture.nowMs + 300,
+        revokedReason: "workflow_test_exit",
+        updatedAt: fixture.nowMs + 300,
+      });
+    });
+    const staleEnrollmentId = await t.run(async (ctx) => {
+      const currentRows = await ctx.db
+        .query("communityMemberWorkflowEnrollments")
+        .collect();
+      return currentRows.find((row) => row.userId === fixture.newMemberId)!._id;
+    });
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.moveBuilderWorkflowEnrollment,
+        {
+          communityId: fixture.communityId,
+          enrollmentId: staleEnrollmentId,
+          expectedRevision: 1,
+          targetStageKey: "getting-started",
+          reason: "A stale builder command must fail closed.",
+          idempotencyKey: "move:inactive:1",
+        },
+      ),
+    ).rejects.toThrow("community_member_workflow_membership_inactive");
+    await t.mutation(
+      internal.communityMemberWorkflows.reconcileMembershipEnrollmentInternal,
+      {
+        membershipId: activation.membership._id,
+        activationSequence: 1,
+      },
+    );
+    const exitedRows = await t.run(async (ctx) =>
+      ctx.db.query("communityMemberWorkflowEnrollments").collect(),
+    );
+    expect(
+      exitedRows.find((row) => row.userId === fixture.newMemberId),
+    ).toMatchObject({ status: "exited", revision: 2, transitionSeq: 2 });
+
+    const reactivation = await t.run(async (ctx) =>
+      activateCommunityMembershipCore({
+        ctx,
+        communityId: fixture.communityId,
+        userId: fixture.newMemberId,
+        accessSource: "manual_grant",
+        activationReason: "workflow_test_reactivation",
+        nowMs: fixture.nowMs + 400,
+      }),
+    );
+    expect(reactivation.membership).toMatchObject({
+      active: true,
+      activationSequence: 2,
+    });
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    const reactivatedRows = await t.run(async (ctx) =>
+      ctx.db.query("communityMemberWorkflowEnrollments").collect(),
+    );
+    expect(reactivatedRows).toHaveLength(3);
+    expect(
+      reactivatedRows.find(
+        (row) =>
+          row.userId === fixture.newMemberId && row.activationSequence === 2,
+      ),
+    ).toMatchObject({ status: "active", currentStageKey: "new" });
+  } finally {
+    vi.useRealTimers();
+  }
+});

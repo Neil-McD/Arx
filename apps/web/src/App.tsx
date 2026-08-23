@@ -71,6 +71,7 @@ import { useWebAccountGraphLifecycle } from "./controllers/useWebAccountGraphLif
 import { useWebAuthenticatedIdentityController } from "./controllers/useWebAuthenticatedIdentityController";
 import { useWebCommunityMemberManagementController } from "./controllers/useWebCommunityMemberManagementController";
 import { useWebCommunityAgentAndFunnelController } from "./controllers/useWebCommunityAgentAndFunnelController";
+import { useWebCommunityWorkflowsController } from "./controllers/useWebCommunityWorkflowsController";
 import { useWebCommunitySettingsController } from "./controllers/useWebCommunitySettingsController";
 import { useWebShellState } from "./controllers/useWebShellState";
 import { useWebOnboardingProfileController } from "./controllers/useWebOnboardingProfileController";
@@ -1121,6 +1122,14 @@ export default function App() {
   const {
     handleSaveCommunityAgentConfig,
   } = communityAgentAndFunnel;
+  const communityWorkflows = useWebCommunityWorkflowsController({
+    activeCommunityId,
+    activePage,
+    canManageMembers: canManageMembersActiveCommunity,
+    communityTab,
+    ensureSession: ensureUsableAuthSession,
+    session,
+  });
   const communitySettingsController = useWebCommunitySettingsController({
     activeCommunity,
     activeCommunityId,
@@ -2234,6 +2243,25 @@ export default function App() {
           member_count: activeCommunitySocialMemberCount,
           member_faces_preview: funnelPreviewOnlineFaces,
         },
+      },
+      workflows: {
+        activeCommunityName: activeCommunity?.name ?? null,
+        board: communityWorkflows.board,
+        hasLoaded: communityWorkflows.hasLoaded,
+        isLoading: communityWorkflows.isLoading,
+        error: communityWorkflows.error,
+        isSaving: communityWorkflows.isSaving,
+        actionError: communityWorkflows.actionError,
+        selectedEnrollmentId: communityWorkflows.selectedEnrollmentId,
+        selectedEnrollment: communityWorkflows.selectedEnrollment,
+        isLoadingEnrollment: communityWorkflows.isLoadingEnrollment,
+        onReload: communityWorkflows.reload,
+        onSaveDraft: communityWorkflows.saveDraft,
+        onActivateDraft: communityWorkflows.activateDraft,
+        onSelectEnrollment: communityWorkflows.selectEnrollment,
+        onAddEvidence: communityWorkflows.addEvidence,
+        onMoveEnrollment: communityWorkflows.moveEnrollment,
+        onClearActionError: communityWorkflows.clearActionError,
       },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,

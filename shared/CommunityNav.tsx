@@ -5,6 +5,7 @@ import {
   ChevronUp,
   GripVertical,
   Hash,
+  ListChecks,
   Plus,
   Settings,
   UserPlus,
@@ -629,6 +630,19 @@ export const CommunityNav = memo(function CommunityNav({
       ) : showManagementSection ? (
         <>
           <div className="community-nav-divider" />
+          {canManageMembersActiveCommunity && (
+            <button
+              className={showActiveSelection && communityTab === "workflows" ? "nav-item active" : "nav-item"}
+              type="button"
+              onClick={() => onSelectTab("workflows")}
+              title="Workflows"
+            >
+              <span className="nav-icon" aria-hidden="true">
+                <ListChecks size={18} strokeWidth={1.7} />
+              </span>
+              Workflows
+            </button>
+          )}
           {canManageMembersActiveCommunity && (
             <button
               className={showActiveSelection && communityTab === "funnel" ? "nav-item active" : "nav-item"}

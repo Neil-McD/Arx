@@ -52,7 +52,10 @@ import {
 } from "./platformHomeCommunity";
 import { cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellation";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
+import {
+  activateCommunityMembershipCore,
+  scheduleCommunityMemberWorkflowEnrollmentReconciliation,
+} from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
 import { communityIsActive } from "../shared/communityLifecycle";
@@ -1661,6 +1664,10 @@ export const revokeCommunityMemberInternal = internalMutation({
             after: revokedMembership,
           });
         }
+        await scheduleCommunityMemberWorkflowEnrollmentReconciliation({
+          ctx,
+          membership: revokedMembership,
+        });
 
         const memberSettings = (await ctx.db
           .query("communityMemberSettings" as any)
@@ -2246,6 +2253,15 @@ export const leaveCommunity = mutation({
             communityId: args.communityId,
             before: membership,
             after,
+          });
+          await scheduleCommunityMemberWorkflowEnrollmentReconciliation({
+            ctx,
+            membership: after ?? {
+              ...membership,
+              active: false,
+              revokedAt: nowMs,
+              updatedAt: nowMs,
+            },
           });
         }
         const memberSettings = (await ctx.db

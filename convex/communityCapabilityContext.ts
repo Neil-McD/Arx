@@ -12,6 +12,7 @@ import type { CommunityAccess } from "../shared/communityTypes";
 import {
   type CommunityLike,
   type CommunityMembershipLike,
+  communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
   mapCommunityAccessRow,
   pickMostRelevantCommunityMembership,
@@ -589,12 +590,79 @@ function normalizeSelfProfileRole(
     : "member";
 }
 
+async function resolveSelfWorkflowSemanticState(args: {
+  ctx: any;
+  userId: any;
+  communityId: string;
+}): Promise<NonNullable<SelfProfileSemanticSource["workflowState"]> | null> {
+  const communityId = args.ctx.db.normalizeId(
+    "communities",
+    args.communityId,
+  );
+  if (!communityId) throw new Error("self_workflow_community_invalid");
+  const membership = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId,
+    userId: args.userId,
+  });
+  if (!membership || !communityMembershipRowIsActive(membership)) return null;
+  const activationSequence = Math.max(
+    1,
+    Math.floor(Number(membership.activationSequence ?? 1)),
+  );
+  const enrollments = (await args.ctx.db
+    .query("communityMemberWorkflowEnrollments")
+    .withIndex("by_membership", (q: any) =>
+      q.eq("membershipId", membership._id),
+    )
+    .collect()) as any[];
+  const current = enrollments.filter(
+    (row) =>
+      Number(row.activationSequence) === activationSequence &&
+      row.status !== "exited",
+  );
+  if (current.length > 1) {
+    throw new Error("self_workflow_enrollment_ambiguous");
+  }
+  const enrollment = current[0] ?? null;
+  if (!enrollment) return null;
+  const [workflow, version] = await Promise.all([
+    args.ctx.db.get(enrollment.workflowId),
+    args.ctx.db.get(enrollment.workflowVersionId),
+  ]);
+  if (
+    !workflow ||
+    !version ||
+    String(workflow.communityId) !== String(communityId) ||
+    String(version.workflowId) !== String(workflow._id)
+  ) {
+    throw new Error("self_workflow_projection_invalid");
+  }
+  const stage = (version.stages as any[]).find(
+    (candidate) => candidate.key === enrollment.currentStageKey,
+  );
+  if (!stage) throw new Error("self_workflow_stage_invalid");
+  return {
+    workflowName: workflow.name,
+    workflowVersion: version.version,
+    outcomeName: version.outcomeName,
+    enrollmentStatus:
+      enrollment.status === "paused" || enrollment.status === "completed"
+        ? enrollment.status
+        : "active",
+    stageKey: stage.key,
+    stageName: stage.name,
+    stageObjective: stage.objective,
+    stageCompletionDefinition: stage.completionDefinition,
+  };
+}
+
 async function buildSelfProfileSemanticSource(args: {
   ctx: any;
   userId: any;
   context: ResolvedCommunityCapabilityContext;
 }): Promise<SelfProfileSemanticSource> {
-  const [user, detail, relationship] = await Promise.all([
+  const [user, detail, relationship, workflowState] = await Promise.all([
     args.ctx.db.get(args.userId) as Promise<SelfProfileUserRow | null>,
     getUniqueUserProfileDetailByUserId<SelfProfileDetailRow>(
       args.ctx,
@@ -605,6 +673,11 @@ async function buildSelfProfileSemanticSource(args: {
       viewerUserId: args.userId,
       targetUserId: args.userId,
       preferredCommunityId: args.context.communityId,
+    }),
+    resolveSelfWorkflowSemanticState({
+      ctx: args.ctx,
+      userId: args.userId,
+      communityId: args.context.communityId,
     }),
   ]);
   if (!user) throw new Error("self_profile_user_not_found");
@@ -628,6 +701,7 @@ async function buildSelfProfileSemanticSource(args: {
     },
     ownedCommunities,
     accessibleCommunities,
+    workflowState,
   };
 }
 

@@ -48,6 +48,7 @@ export const COMMUNITY_TABS = [
   "resources",
   "events",
   "settings",
+  "workflows",
   "funnel",
   "analytics",
 ] as const;
@@ -64,6 +65,7 @@ export type CommunitySettingsPane = (typeof COMMUNITY_SETTINGS_PANES)[number];
 
 const COMMUNITY_ROUTE_MANAGED_TAB_SET: ReadonlySet<CommunityTab> = new Set([
   "settings",
+  "workflows",
   "funnel",
   "analytics",
 ]);
@@ -85,6 +87,7 @@ export function isCommunityTabAllowedForAccess(
   switch (tab) {
     case "settings":
       return access.canViewSettings;
+    case "workflows":
     case "funnel":
       return access.canManageMembers;
     case "analytics":
@@ -123,6 +126,10 @@ export function parseCommunityTab(
       return "events";
     case "settings":
       return "settings";
+    case "workflows":
+    case "workflow":
+    case "success":
+      return "workflows";
     // The retired top-level Agent route normalizes to Settings. Funnel is a
     // canonical acquisition surface beside Analytics.
     case "agent":

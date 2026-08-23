@@ -5,6 +5,7 @@ export const MEMBER_AGENT_COMMUNITY_SECTIONS = [
   "settings",
   "polynet",
   "ai_agent",
+  "workflows",
   "funnel",
   "analytics",
 ] as const;

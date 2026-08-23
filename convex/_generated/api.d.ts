@@ -80,6 +80,7 @@ import type * as communityJoinRequestCore from "../communityJoinRequestCore.js";
 import type * as communityLaunchSetup from "../communityLaunchSetup.js";
 import type * as communityLifecycle from "../communityLifecycle.js";
 import type * as communityMaintenance from "../communityMaintenance.js";
+import type * as communityMemberWorkflows from "../communityMemberWorkflows.js";
 import type * as communityMembershipLifecycle from "../communityMembershipLifecycle.js";
 import type * as communityMemoryHealth from "../communityMemoryHealth.js";
 import type * as communityMemoryMetabolizer from "../communityMemoryMetabolizer.js";
@@ -291,6 +292,7 @@ declare const fullApi: ApiFromModules<{
   communityLaunchSetup: typeof communityLaunchSetup;
   communityLifecycle: typeof communityLifecycle;
   communityMaintenance: typeof communityMaintenance;
+  communityMemberWorkflows: typeof communityMemberWorkflows;
   communityMembershipLifecycle: typeof communityMembershipLifecycle;
   communityMemoryHealth: typeof communityMemoryHealth;
   communityMemoryMetabolizer: typeof communityMemoryMetabolizer;

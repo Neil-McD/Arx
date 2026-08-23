@@ -113,12 +113,15 @@ describe("community channel routes", () => {
     });
   });
 
-  it("builds canonical Agent settings and Funnel community routes", () => {
+  it("builds canonical Agent settings, Workflows, and Funnel community routes", () => {
     expect(buildCommunityTabPath("polynet", "settings", null, "agent")).toBe(
       "/c/polynet/settings/agent",
     );
     expect(buildCommunityTabPath("polynet", "funnel")).toBe(
       "/c/polynet/funnel",
+    );
+    expect(buildCommunityTabPath("polynet", "workflows")).toBe(
+      "/c/polynet/workflows",
     );
   });
 
@@ -211,6 +214,7 @@ describe("canonical web destinations", () => {
     ["/m/c/polynet/resources/module-1", { kind: "community_resources", slug: "polynet", moduleId: "module-1" }],
     ["/m/c/polynet/events", { kind: "community_events", slug: "polynet" }],
     ["/m/c/polynet/settings/agent", { kind: "community_settings", slug: "polynet", pane: "agent" }],
+    ["/m/c/polynet/workflows", { kind: "community_workflows", slug: "polynet" }],
     ["/m/c/polynet/funnel", { kind: "community_funnel_editor", slug: "polynet" }],
     ["/m/c/polynet/analytics", { kind: "community_analytics", slug: "polynet" }],
   ] as const)("derives %s without changing desktop/mobile semantics", (path, expected) => {
@@ -233,6 +237,7 @@ describe("canonical web destinations", () => {
     ["/c/polynet/resources/module-1", "/m/c/polynet/resources/module-1"],
     ["/c/polynet/events", "/m/c/polynet/events"],
     ["/c/polynet/settings/agent", "/m/c/polynet/settings/agent"],
+    ["/c/polynet/workflows", "/m/c/polynet/workflows"],
     ["/c/polynet/funnel", "/m/c/polynet/funnel"],
     ["/c/polynet/analytics", "/m/c/polynet/analytics"],
   ] as const)("keeps %s and %s semantically identical", (desktopPath, mobilePath) => {
@@ -279,6 +284,10 @@ describe("canonical web destinations", () => {
     })).toBe(true);
     expect(webDestinationHasCommunityNavSelection({
       kind: "community_events",
+      slug: "polynet",
+    })).toBe(true);
+    expect(webDestinationHasCommunityNavSelection({
+      kind: "community_workflows",
       slug: "polynet",
     })).toBe(true);
   });

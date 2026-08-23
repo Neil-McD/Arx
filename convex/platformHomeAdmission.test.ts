@@ -1,5 +1,5 @@
 import { convexTest } from "convex-test";
-import { describe, expect, test } from "vitest";
+import { describe, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS } from "./communityJoinRequestCore";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
@@ -12,6 +12,7 @@ import schema from "./schema";
 
 const modules = import.meta.glob([
   "./communityAdmin.ts",
+  "./communityMemberWorkflows.ts",
   "./communityPublic.ts",
   "./email.ts",
   "./_generated/**/*.*s",
@@ -202,13 +203,19 @@ describe("platform-home admission authority", () => {
   test("manager-removed member cannot bypass cooldown through open entry", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, "cooldown");
-    const activated = await activate(t, f);
-    await revoke(t, f, activated.membership._id);
-    await expect(
-      t.withIdentity({ subject: f.memberSubject }).mutation(
-        api.communityPublic.joinPublicCommunity,
-        { communityId: f.communityId },
-      ),
-    ).resolves.toMatchObject({ outcome: "approval_denied" });
+    vi.useFakeTimers();
+    vi.setSystemTime(f.nowMs + 100);
+    try {
+      const activated = await activate(t, f);
+      await revoke(t, f, activated.membership._id);
+      await expect(
+        t.withIdentity({ subject: f.memberSubject }).mutation(
+          api.communityPublic.joinPublicCommunity,
+          { communityId: f.communityId },
+        ),
+      ).resolves.toMatchObject({ outcome: "approval_denied" });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

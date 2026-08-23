@@ -75,6 +75,7 @@ export type WebDestination =
   | { kind: "community_resources"; slug: string; moduleId: string | null }
   | { kind: "community_events"; slug: string }
   | { kind: "community_settings"; slug: string; pane: CommunitySettingsPane }
+  | { kind: "community_workflows"; slug: string }
   | { kind: "community_funnel_editor"; slug: string }
   | { kind: "community_analytics"; slug: string }
   | { kind: "checkout_success"; sessionId: string }
@@ -596,6 +597,8 @@ export function deriveWebDestinationFromAppRoute(
             slug,
             pane: parseCommunitySettingsPane(route.communitySettingsPane),
           };
+        case "workflows":
+          return { kind: "community_workflows", slug };
         case "funnel":
           return { kind: "community_funnel_editor", slug };
         case "analytics":
@@ -649,6 +652,7 @@ export function isWebCommunityDetailDestination(
     case "community_resources":
     case "community_events":
     case "community_settings":
+    case "community_workflows":
     case "community_funnel_editor":
     case "community_analytics":
       return true;
@@ -677,6 +681,7 @@ export function webDestinationHasCommunityNavSelection(
     case "community_resources":
     case "community_events":
     case "community_settings":
+    case "community_workflows":
     case "community_funnel_editor":
     case "community_analytics":
       return true;

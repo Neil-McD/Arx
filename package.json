@@ -121,6 +121,7 @@
     "check:community-cold-archive-restore": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_cold_archive_restore_contract_proof.ts && vitest run convex/communityColdArchiveRestore.test.ts",
     "check:community-visitor-access-contract": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_visitor_access_contract_proof.ts",
     "check:community-tab-access-normalization-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_tab_access_normalization_contract_proof.ts",
+    "check:community-member-workflows-foundation-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_member_workflows_foundation_contract_proof.ts",
     "check:community-access-state-audit-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_access_state_audit_proof.ts",
     "check:community-gateway-cleanup-contract-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_gateway_cleanup_contract_proof.ts",
     "check:community-chat-image-lightbox-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_chat_image_lightbox_proof.ts",

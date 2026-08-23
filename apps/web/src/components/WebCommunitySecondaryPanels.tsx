@@ -12,6 +12,7 @@ import { WebDeleteResourceModuleModal } from "./WebDeleteResourceModuleModal";
 import { WebCommunityResourceModuleModal } from "./WebCommunityResourceModuleModal";
 import { CommunityResourcesPanel } from "./CommunityResourcesPanel";
 import { WebCommunitySettingsSection } from "./WebCommunitySettingsSection";
+import { WebCommunityWorkflowsSection } from "./WebCommunityWorkflowsSection";
 
 export type WebCommunitySecondaryPanelsProps = {
   communityTab: CommunityTab;
@@ -46,6 +47,7 @@ export type WebCommunitySecondaryPanelsProps = {
   };
   aiAgent: ComponentProps<typeof WebCommunityAiAgentSection>;
   funnel: ComponentProps<typeof WebCommunityFunnelSection>;
+  workflows: ComponentProps<typeof WebCommunityWorkflowsSection>;
   analytics: ComponentProps<typeof WebCommunityAnalyticsSection>;
   resources: ComponentProps<typeof CommunityResourcesPanel>;
   events: ComponentProps<typeof WebCommunityEventsSection>;
@@ -114,6 +116,9 @@ export function WebCommunitySecondaryPanels(props: WebCommunitySecondaryPanelsPr
 
       {props.communityTab === "funnel" &&
         renderWorkspacePane(<WebCommunityFunnelSection {...props.funnel} />)}
+
+      {props.communityTab === "workflows" &&
+        renderWorkspacePane(<WebCommunityWorkflowsSection {...props.workflows} />)}
 
       {props.communityTab === "analytics" &&
         renderCenteredPane(<WebCommunityAnalyticsSection {...props.analytics} />)}
