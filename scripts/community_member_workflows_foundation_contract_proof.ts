@@ -170,6 +170,27 @@ assert.match(
   /aria-label="Add stage"/,
   "the stage path must expose one inline add action",
 );
+const addStageHandler = surface.slice(
+  surface.indexOf("const addStage ="),
+  surface.indexOf("const editingStageHasMembers"),
+);
+assert.doesNotMatch(
+  addStageHandler,
+  /hasIncompleteStage/,
+  "the inline add action must allow another blank stage before setup",
+);
+const addStageButton = surface.slice(
+  surface.indexOf('className="workflow-add-stage-button"'),
+  surface.indexOf(
+    "</button>",
+    surface.indexOf('className="workflow-add-stage-button"'),
+  ),
+);
+assert.doesNotMatch(
+  addStageButton,
+  /hasIncompleteStage/,
+  "the inline add control must not be disabled by another blank stage",
+);
 assert.doesNotMatch(
   surface,
   /WorkflowEmptyState|WorkflowDraftEditor|isPathEditing|workflow-stage-editor|workflow-details-disclosure/,

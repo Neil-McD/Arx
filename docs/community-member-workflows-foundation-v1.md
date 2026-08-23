@@ -34,8 +34,10 @@ The first surface has one interaction model:
 
 There is no separate setup wizard, empty-state gate, or full-page definition
 form. Rendering the one-stage blank column does not write canonical state.
-Stage-modal Save persists the draft; Start workflow remains an explicit builder
-command.
+The terminal plus action remains available while other stages are blank.
+Incomplete columns stay local to the builder's current canvas; stage-modal Save
+writes canonical draft state only once every stage is valid. Start workflow
+remains an explicit builder command.
 
 There are no Pipeline, Integrations, or Activity tabs. Integrations and
 autonomous actions are later capabilities attached to concrete criteria and

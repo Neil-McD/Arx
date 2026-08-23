@@ -386,6 +386,11 @@ export function WebCommunityWorkflowsSection(
     !stage.objective.trim() ||
     !stage.completionDefinition.trim();
   const hasIncompleteStage = draft.stages.some(isStageIncomplete);
+  const persistedStageKeys = new Set(
+    (props.board?.draft_version ?? props.board?.active_version)?.stages.map(
+      (stage) => stage.key,
+    ) ?? [],
+  );
 
   const openStage = (stageKey: string) => {
     props.onClearActionError();
@@ -412,7 +417,6 @@ export function WebCommunityWorkflowsSection(
   const addStage = () => {
     if (
       props.isSaving ||
-      hasIncompleteStage ||
       draft.stages.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
     ) {
       return;
@@ -451,10 +455,15 @@ export function WebCommunityWorkflowsSection(
     const stages = draft.stages.filter(
       (stage) => stage.key !== editingStage.key,
     );
-    if (provisionalStageKey === editingStage.key) {
+    if (
+      provisionalStageKey === editingStage.key ||
+      !persistedStageKeys.has(editingStage.key) ||
+      stages.some(isStageIncomplete)
+    ) {
       setDraft({ ...draft, stages });
       setEditingStageKey(null);
       setProvisionalStageKey(null);
+      setLocalError(null);
       return;
     }
     try {
@@ -480,6 +489,13 @@ export function WebCommunityWorkflowsSection(
         current.key === stage.key ? stage : current,
       ),
     };
+    if (next.stages.some(isStageIncomplete)) {
+      setDraft(next);
+      setEditingStageKey(null);
+      setProvisionalStageKey(null);
+      setLocalError(null);
+      return;
+    }
     try {
       const normalized = normalizeCommunityMemberWorkflowDraft(next);
       if (await props.onSaveDraft(normalized)) {
@@ -663,16 +679,11 @@ export function WebCommunityWorkflowsSection(
             type="button"
             disabled={
               props.isSaving ||
-              hasIncompleteStage ||
               draft.stages.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
             }
             onClick={addStage}
             aria-label="Add stage"
-            title={
-              hasIncompleteStage
-                ? "Set up the blank stage first"
-                : "Add stage"
-            }
+            title="Add stage"
           >
             <Plus size={19} aria-hidden="true" />
           </button>
