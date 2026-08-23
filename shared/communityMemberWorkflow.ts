@@ -1,4 +1,4 @@
-export const COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES = 2;
+export const COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES = 1;
 export const COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES = 12;
 export const COMMUNITY_MEMBER_WORKFLOW_NAME_MAX_LENGTH = 120;
 export const COMMUNITY_MEMBER_WORKFLOW_OUTCOME_MAX_LENGTH = 160;
@@ -95,34 +95,6 @@ export const DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT: CommunityMemberWorkflowDra
           "Establish the member's starting point and intended outcome.",
         completionDefinition:
           "The member's current situation and desired outcome are understood.",
-      },
-      {
-        key: "getting-started",
-        name: "Getting Started",
-        objective: "Complete the first concrete setup or orientation action.",
-        completionDefinition:
-          "The member has completed the first required action.",
-      },
-      {
-        key: "activated",
-        name: "Activated",
-        objective: "Reach the first meaningful activation point.",
-        completionDefinition:
-          "The member has produced evidence of initial value.",
-      },
-      {
-        key: "implementing",
-        name: "Implementing",
-        objective: "Apply the community's method in the member's real context.",
-        completionDefinition:
-          "The member is consistently executing the method.",
-      },
-      {
-        key: "outcome-achieved",
-        name: "Outcome Achieved",
-        objective: "Verify that the promised member outcome has been reached.",
-        completionDefinition:
-          "The member and builder have accepted evidence of the outcome.",
       },
     ],
   };

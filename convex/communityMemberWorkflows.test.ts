@@ -18,6 +18,25 @@ const OWNER_SUBJECT = "workflow-owner";
 const MEMBER_SUBJECT = "workflow-member";
 const NEW_MEMBER_SUBJECT = "workflow-new-member";
 
+const TEST_MOVEMENT_WORKFLOW_DRAFT = {
+  ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+  stages: [
+    ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT.stages,
+    {
+      key: "getting-started",
+      name: "Getting started",
+      objective: "Complete the first concrete setup action.",
+      completionDefinition: "The member has completed the required setup.",
+    },
+    {
+      key: "activated",
+      name: "Activated",
+      objective: "Use the community to produce an early result.",
+      completionDefinition: "The member has produced a concrete early result.",
+    },
+  ],
+};
+
 async function createFixture(t: ReturnType<typeof convexTest>) {
   const nowMs = 1_787_478_400_000;
   return await t.run(async (ctx) => {
@@ -400,7 +419,7 @@ test("evidence and stage movement are idempotent, revision-bound, and append-onl
       {
         communityId: fixture.communityId,
         expectedRevision: 0,
-        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+        draft: TEST_MOVEMENT_WORKFLOW_DRAFT,
       },
     );
     await asOwner.mutation(
@@ -422,7 +441,7 @@ test("evidence and stage movement are idempotent, revision-bound, and append-onl
       summary: "Builder confirmed the member's baseline and intended outcome.",
       confidence: 1,
       idempotencyKey: "evidence:baseline:1",
-    } as const;
+    };
     const evidence = await asOwner.mutation(
       api.communityMemberWorkflows.recordBuilderEvidence,
       evidenceInput,
@@ -487,6 +506,32 @@ test("evidence and stage movement are idempotent, revision-bound, and append-onl
         },
       ),
     ).resolves.toMatchObject({ enrollment_revision: 3, replayed: false });
+    const completionInput = {
+      communityId: fixture.communityId,
+      enrollmentId,
+      expectedRevision: 3,
+      reason: "The member achieved the defined workflow outcome.",
+      evidenceIds: [evidence.evidence_id as any],
+      idempotencyKey: "complete:outcome:1",
+    };
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.completeBuilderWorkflowEnrollment,
+        completionInput,
+      ),
+    ).resolves.toMatchObject({ enrollment_revision: 4, replayed: false });
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.completeBuilderWorkflowEnrollment,
+        completionInput,
+      ),
+    ).resolves.toMatchObject({ enrollment_revision: 4, replayed: true });
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.completeBuilderWorkflowEnrollment,
+        { ...completionInput, reason: "A conflicting replay." },
+      ),
+    ).rejects.toThrow("community_member_workflow_idempotency_conflict");
     await expect(
       asOwner.mutation(
         api.communityMemberWorkflows.moveBuilderWorkflowEnrollment,
@@ -500,15 +545,17 @@ test("evidence and stage movement are idempotent, revision-bound, and append-onl
     );
     expect(detail.enrollment).toMatchObject({
       current_stage_key: "activated",
-      revision: 3,
+      status: "completed",
+      revision: 4,
     });
     expect(detail.evidence).toHaveLength(1);
     expect(detail.transitions.map((row) => row.kind)).toEqual([
+      "completed",
       "manual_move",
       "manual_move",
       "enrolled",
     ]);
-    expect(detail.transitions.map((row) => row.seq)).toEqual([3, 2, 1]);
+    expect(detail.transitions.map((row) => row.seq)).toEqual([4, 3, 2, 1]);
   } finally {
     vi.useRealTimers();
   }

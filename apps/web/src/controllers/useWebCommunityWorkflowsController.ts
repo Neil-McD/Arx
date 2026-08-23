@@ -8,6 +8,7 @@ import type {
 import {
   activateCloudCommunityMemberWorkflowDraft,
   addCloudCommunityMemberWorkflowEvidence,
+  completeCloudCommunityMemberWorkflowEnrollment,
   fetchCloudCommunityMemberWorkflowBoard,
   fetchCloudCommunityMemberWorkflowEnrollment,
   moveCloudCommunityMemberWorkflowEnrollment,
@@ -252,17 +253,22 @@ export function useWebCommunityWorkflowsController(params: {
     [board?.revision, withMutation],
   );
 
-  const activateDraft = useCallback(
-    async () =>
+  const publishDraft = useCallback(
+    async (draft: CommunityMemberWorkflowDraft) =>
       await withMutation(async (usableSession, communityId) => {
-        if (!board) throw new Error("community_member_workflow_draft_missing");
+        const saved = await saveCloudCommunityMemberWorkflowDraft({
+          session: usableSession,
+          communityId,
+          expectedRevision: board?.revision ?? 0,
+          draft,
+        });
         await activateCloudCommunityMemberWorkflowDraft({
           session: usableSession,
           communityId,
-          expectedRevision: board.revision,
+          expectedRevision: saved.revision,
         });
       }),
-    [board, withMutation],
+    [board?.revision, withMutation],
   );
 
   const selectEnrollment = useCallback(
@@ -332,6 +338,28 @@ export function useWebCommunityWorkflowsController(params: {
     [loadEnrollment, selectedEnrollment?.enrollment, withMutation],
   );
 
+  const completeEnrollment = useCallback(
+    async (reason: string) => {
+      const enrollment = selectedEnrollment?.enrollment;
+      if (!enrollment) return false;
+      const succeeded = await withMutation(
+        async (usableSession, communityId) => {
+          await completeCloudCommunityMemberWorkflowEnrollment({
+            session: usableSession,
+            communityId,
+            enrollmentId: enrollment.id,
+            expectedRevision: enrollment.revision,
+            reason,
+            idempotencyKey: workflowActionKey("builder-complete"),
+          });
+        },
+      );
+      if (succeeded) await loadEnrollment(enrollment.id);
+      return succeeded;
+    },
+    [loadEnrollment, selectedEnrollment?.enrollment, withMutation],
+  );
+
   return {
     board,
     hasLoaded,
@@ -344,10 +372,11 @@ export function useWebCommunityWorkflowsController(params: {
     isLoadingEnrollment,
     reload: () => loadBoard(),
     saveDraft,
-    activateDraft,
+    publishDraft,
     selectEnrollment,
     addEvidence,
     moveEnrollment,
+    completeEnrollment,
     clearActionError: () => setActionError(null),
   };
 }

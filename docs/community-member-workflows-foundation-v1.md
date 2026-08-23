@@ -21,11 +21,19 @@ Members do not see the builder pipeline.
 
 The first surface has one interaction model:
 
-1. Scan the ordered stage board.
+1. Land directly on an ordered horizontal stage path with one editable default
+   stage when no workflow exists yet.
 2. Select a stage to understand its objective and completion definition.
 3. Select a member to inspect current state, evidence, and history.
 4. Move the member with an explicit reason and optional evidence.
-5. Edit a draft, then activate a new immutable workflow version.
+5. Complete the workflow through a separate explicit decision when the defined
+   outcome is achieved.
+6. Add stages with the inline plus action, edit in context, then publish an
+   immutable workflow version.
+
+There is no separate setup wizard, empty-state gate, or full-page definition
+form. Rendering the one-stage default does not write canonical state; Save
+draft and Start workflow remain explicit builder commands.
 
 There are no Pipeline, Integrations, or Activity tabs. Integrations and
 autonomous actions are later capabilities attached to concrete criteria and
@@ -38,8 +46,9 @@ surface hierarchy, real member identity, and one theme-owned selection accent.
 
 Content plan:
 
-- Header: workflow identity, Draft or Active status, and one Edit action.
-- Workspace: horizontally ordered stages with member rows as the primary data.
+- Header: compact workflow identity, Draft or Active status, and one Edit action.
+- Stage path: horizontally ordered stage controls plus one inline Add action.
+- Workspace: the selected stage's members and contextual stage definition.
 - Stage inspector: objective and completion definition.
 - Member inspector: current state, accepted evidence, and transition history.
 
@@ -85,7 +94,7 @@ A bounded workflow definition.
 - immutable after activation
 - monotonically increasing version number
 - one outcome name and outcome definition
-- two to twelve ordered stages
+- one to twelve ordered stages
 - stable stage keys within the workflow
 - stage name, objective, and completion definition
 
@@ -156,7 +165,11 @@ The append-only movement receipt.
 - A transition and its receipt are written in one Convex mutation.
 - The enrollment revision increments exactly once.
 - The target stage must exist in the enrollment's pinned version.
-- Completion uses the final stage and sets the enrollment to `completed`.
+- Moving stages never completes an enrollment, including movement to the final
+  stage.
+- Completion is a separate authorized command that records a reason, preserves
+  the current stage, sets the enrollment to `completed`, and appends a
+  `completed` transition.
 - Manual movement requires a bounded reason.
 - Evidence can support a transition but AI assessment alone cannot authorize
   progression in v1.
@@ -187,17 +200,22 @@ authority lenses are separately contracted.
 
 ## Acceptance
 
-1. Builder creates a valid draft with two to twelve stages.
-2. Activating it creates one immutable version and enrolls every active member
+1. The first visit renders one editable default stage without writing workflow
+   state.
+2. Builder creates a valid draft with one to twelve stages from the inline
+   stage path.
+3. Activating it creates one immutable version and enrolls every active member
    exactly once at the first stage.
-3. A newly activated membership enrolls exactly once.
-4. Manual movement updates enrollment state and creates one transition receipt.
-5. Exact retries replay; conflicting idempotency-key reuse fails.
-6. A member is present in exactly one stage for one enrollment.
-7. Active-version definitions cannot be edited.
-8. Cross-community and unauthorized operations fail closed.
-9. The builder UI renders real members and canonical avatars in the production
-   community shell across supported themes and viewport sizes.
-10. The pipeline remains usable by keyboard and without drag-and-drop.
-11. No production Git ref, deployment, Convex deployment, or production data is
+4. A newly activated membership enrolls exactly once.
+5. Manual movement updates enrollment state and creates one transition receipt
+   without implicitly completing the workflow.
+6. Explicit completion sets terminal status and creates one completion receipt.
+7. Exact retries replay; conflicting idempotency-key reuse fails.
+8. A member is present in exactly one stage for one enrollment.
+9. Active-version definitions cannot be edited.
+10. Cross-community and unauthorized operations fail closed.
+11. The builder UI renders real members and canonical avatars in the production
+    community shell across supported themes and viewport sizes.
+12. The pipeline remains usable by keyboard and without drag-and-drop.
+13. No production Git ref, deployment, Convex deployment, or production data is
     changed during staging development and acceptance.

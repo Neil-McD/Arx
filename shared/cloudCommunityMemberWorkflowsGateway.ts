@@ -225,3 +225,36 @@ export async function moveCloudCommunityMemberWorkflowEnrollment<SessionT>(
     replayed: boolean;
   };
 }
+
+export async function completeCloudCommunityMemberWorkflowEnrollment<SessionT>(
+  params: WorkflowGatewayParams<SessionT> & {
+    communityId: string;
+    enrollmentId: string;
+    expectedRevision: number;
+    reason: string;
+    idempotencyKey: string;
+  },
+): Promise<{
+  transition_id: string;
+  enrollment_revision: number;
+  replayed: boolean;
+}> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  return (await client.mutation(
+    "communityMemberWorkflows:completeBuilderWorkflowEnrollment" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+      enrollmentId: params.enrollmentId,
+      expectedRevision: params.expectedRevision,
+      reason: params.reason,
+      idempotencyKey: params.idempotencyKey,
+    },
+  )) as {
+    transition_id: string;
+    enrollment_revision: number;
+    replayed: boolean;
+  };
+}

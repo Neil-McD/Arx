@@ -1105,7 +1105,7 @@ export const moveBuilderWorkflowEnrollment = mutation({
     if (!(await enrollmentHasCurrentActiveMembership(ctx, enrollment))) {
       throw new Error("community_member_workflow_membership_inactive");
     }
-    if (enrollment.status === "paused" || enrollment.status === "exited") {
+    if (enrollment.status !== "active") {
       throw new Error("community_member_workflow_enrollment_not_movable");
     }
     const version = (await ctx.db.get(
@@ -1123,25 +1123,126 @@ export const moveBuilderWorkflowEnrollment = mutation({
     }
     await requireAcceptedEvidence({ ctx, enrollment, evidenceIds });
     const nowMs = Date.now();
-    const isCompleted = targetIndex === stages.length - 1;
     const nextRevision = enrollment.revision + 1;
     const nextSeq = enrollment.transitionSeq + 1;
     await ctx.db.patch(enrollment._id, {
-      status: isCompleted ? "completed" : "active",
+      status: "active",
       currentStageKey: targetStageKey,
       currentStageEnteredAt: nowMs,
       transitionSeq: nextSeq,
       revision: nextRevision,
-      completedAt: isCompleted ? nowMs : undefined,
+      completedAt: undefined,
       exitedAt: undefined,
       updatedAt: nowMs,
     });
     const transitionId = await insertTransition({
       ctx,
       enrollment,
-      kind: isCompleted ? "completed" : "manual_move",
+      kind: "manual_move",
       fromStageKey: enrollment.currentStageKey,
       toStageKey: targetStageKey,
+      evidenceIds,
+      actorType: "builder",
+      actorUserId: userId,
+      reason,
+      idempotencyKey,
+      idempotencyFingerprint: fingerprint,
+      occurredAt: nowMs,
+      seq: nextSeq,
+    });
+    return {
+      transition_id: String(transitionId),
+      enrollment_revision: nextRevision,
+      replayed: false,
+    };
+  },
+});
+
+export const completeBuilderWorkflowEnrollment = mutation({
+  args: {
+    ...managerIdentityArgs,
+    communityId: v.id("communities"),
+    enrollmentId: v.id("communityMemberWorkflowEnrollments"),
+    expectedRevision: v.number(),
+    reason: v.string(),
+    evidenceIds: v.optional(v.array(v.id("communityMemberWorkflowEvidence"))),
+    idempotencyKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { userId } = await requireWorkflowManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    const enrollment = (await ctx.db.get(
+      args.enrollmentId,
+    )) as EnrollmentRow | null;
+    if (
+      !enrollment ||
+      String(enrollment.communityId) !== String(args.communityId)
+    ) {
+      throw new Error("community_member_workflow_enrollment_not_found");
+    }
+    const reason = normalizeCommunityMemberWorkflowReason(args.reason);
+    const idempotencyKey = normalizeCommunityMemberWorkflowIdempotencyKey(
+      args.idempotencyKey,
+    );
+    const expectedRevision = normalizeExpectedRevision(args.expectedRevision);
+    const evidenceIds = args.evidenceIds ?? [];
+    const fingerprint = buildCommunityMemberWorkflowTransitionFingerprint({
+      enrollmentId: enrollment._id,
+      expectedRevision,
+      targetStageKey: enrollment.currentStageKey,
+      kind: "completed",
+      reason,
+      evidenceIds,
+    });
+    const existing = (await ctx.db
+      .query("communityMemberWorkflowTransitions" as any)
+      .withIndex("by_enrollment_idempotency", (q: any) =>
+        q
+          .eq("enrollmentId", enrollment._id)
+          .eq("idempotencyKey", idempotencyKey),
+      )
+      .first()) as TransitionRow | null;
+    if (existing) {
+      if (existing.idempotencyFingerprint !== fingerprint) {
+        throw new Error("community_member_workflow_idempotency_conflict");
+      }
+      return {
+        transition_id: String(existing._id),
+        enrollment_revision: existing.seq,
+        replayed: true,
+      };
+    }
+    if (enrollment.revision !== expectedRevision) {
+      throw new Error("community_member_workflow_enrollment_revision_conflict");
+    }
+    if (!(await enrollmentHasCurrentActiveMembership(ctx, enrollment))) {
+      throw new Error("community_member_workflow_membership_inactive");
+    }
+    if (enrollment.status !== "active") {
+      throw new Error("community_member_workflow_enrollment_not_completable");
+    }
+    await requireAcceptedEvidence({ ctx, enrollment, evidenceIds });
+    const nowMs = Date.now();
+    const nextRevision = enrollment.revision + 1;
+    const nextSeq = enrollment.transitionSeq + 1;
+    await ctx.db.patch(enrollment._id, {
+      status: "completed",
+      transitionSeq: nextSeq,
+      revision: nextRevision,
+      completedAt: nowMs,
+      exitedAt: undefined,
+      updatedAt: nowMs,
+    });
+    const transitionId = await insertTransition({
+      ctx,
+      enrollment,
+      kind: "completed",
+      fromStageKey: enrollment.currentStageKey,
+      toStageKey: enrollment.currentStageKey,
       evidenceIds,
       actorType: "builder",
       actorUserId: userId,

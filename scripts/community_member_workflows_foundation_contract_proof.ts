@@ -21,6 +21,7 @@ const controller = read(
   "apps/web/src/controllers/useWebCommunityWorkflowsController.ts",
 );
 const gateway = read("shared/cloudCommunityMemberWorkflowsGateway.ts");
+const workflowContract = read("shared/communityMemberWorkflow.ts");
 
 for (const exclusion of [
   "integrations and inbound webhooks",
@@ -82,6 +83,16 @@ assert.match(
   "stage changes must append transition history",
 );
 assert.match(
+  workflows,
+  /export const completeBuilderWorkflowEnrollment = mutation/,
+  "completion must be a separate authorized command",
+);
+assert.match(
+  workflows,
+  /moveBuilderWorkflowEnrollment[\s\S]*?kind: "manual_move"/,
+  "stage movement must remain movement rather than inferred completion",
+);
+assert.match(
   membershipLifecycle,
   /reconcileMembershipEnrollmentInternal/,
   "membership activation must schedule enrollment reconciliation",
@@ -137,6 +148,31 @@ assert.match(
   "member rows must reuse the canonical avatar primitive",
 );
 assert.match(
+  workflowContract,
+  /COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES = 1/,
+  "the irreducible workflow path must allow one stage",
+);
+assert.match(
+  workflowContract,
+  /stages:\s*\[\s*\{[\s\S]*?key: "new"[\s\S]*?\},?\s*\]/,
+  "the default workflow must begin with one stage",
+);
+assert.match(
+  surface,
+  /className="workflow-stage-rail"/,
+  "the primary surface must be a horizontal stage path",
+);
+assert.match(
+  surface,
+  /aria-label="Add stage"/,
+  "the stage path must expose one inline add action",
+);
+assert.doesNotMatch(
+  surface,
+  /WorkflowEmptyState|WorkflowDraftEditor/,
+  "the pipeline must not hide behind a setup or full-page editor state",
+);
+assert.match(
   surface,
   /Move member/,
   "the member inspector must expose an explicit move command",
@@ -170,6 +206,11 @@ assert.match(
   gateway,
   /communityMemberWorkflows:getBuilderWorkflowBoard/,
   "the browser gateway must call the canonical workflow query",
+);
+assert.match(
+  gateway,
+  /communityMemberWorkflows:completeBuilderWorkflowEnrollment/,
+  "the browser gateway must expose explicit workflow completion",
 );
 
 console.log(
