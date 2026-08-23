@@ -370,7 +370,13 @@ function WorkflowDraftEditor(props: {
       ) : null}
 
       <footer className="workflow-editor-footer">
-        <span>{isDirty ? "Unsaved changes" : "Draft saved"}</span>
+        <span>
+          {isDirty
+            ? "Unsaved changes"
+            : props.hasSavedDraft
+              ? "Draft saved"
+              : "Active version"}
+        </span>
         <div>
           <button
             className="workflow-secondary-button"
