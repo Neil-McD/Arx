@@ -41,6 +41,8 @@ const managerIdentityArgs = {
   authSubject: v.optional(v.string()),
 };
 
+const WORKFLOW_ACTIVATION_BLOCKER_SCAN_LIMIT = 500;
+
 type WorkflowRow = any;
 type WorkflowVersionRow = any;
 type EnrollmentRow = any;
@@ -146,6 +148,33 @@ async function enrollmentHasCurrentActiveMembership(
     normalizeActivationSequence(membership.activationSequence) ===
       normalizeActivationSequence(enrollment.activationSequence),
   );
+}
+
+async function workflowHasCurrentBlockingEnrollment(args: {
+  ctx: any;
+  workflowId: any;
+}): Promise<boolean> {
+  let inspected = 0;
+  for (const status of ["active", "paused"] as const) {
+    const rows = (await args.ctx.db
+      .query("communityMemberWorkflowEnrollments" as any)
+      .withIndex("by_workflow_status_stage", (q: any) =>
+        q.eq("workflowId", args.workflowId).eq("status", status),
+      )
+      .take(WORKFLOW_ACTIVATION_BLOCKER_SCAN_LIMIT + 1)) as EnrollmentRow[];
+    for (const enrollment of rows) {
+      inspected += 1;
+      if (inspected > WORKFLOW_ACTIVATION_BLOCKER_SCAN_LIMIT) {
+        throw new Error(
+          "community_member_workflow_activation_migration_required",
+        );
+      }
+      if (await enrollmentHasCurrentActiveMembership(args.ctx, enrollment)) {
+        return true;
+      }
+    }
+  }
+  return false;
 }
 
 async function insertTransition(args: {
@@ -420,33 +449,18 @@ export const activateBuilderWorkflowDraft = mutation({
     if (draft.status !== "draft") {
       throw new Error("community_member_workflow_draft_version_invalid");
     }
-    const normalized = normalizeCommunityMemberWorkflowDraft({
+    normalizeCommunityMemberWorkflowDraft({
       name: workflow.name,
       outcomeName: draft.outcomeName,
       outcomeDefinition: draft.outcomeDefinition,
       stages: draft.stages,
     });
-    const existingEnrollments = (await ctx.db
-      .query("communityMemberWorkflowEnrollments" as any)
-      .withIndex("by_workflow", (q: any) => q.eq("workflowId", workflow._id))
-      .take(501)) as EnrollmentRow[];
-    if (existingEnrollments.length > 500) {
-      throw new Error(
-        "community_member_workflow_activation_migration_required",
-      );
-    }
-    let hasCurrentActiveEnrollment = false;
-    if (workflow.activeVersionId) {
-      for (const enrollment of existingEnrollments) {
-        if (
-          (enrollment.status === "active" || enrollment.status === "paused") &&
-          (await enrollmentHasCurrentActiveMembership(ctx, enrollment))
-        ) {
-          hasCurrentActiveEnrollment = true;
-          break;
-        }
-      }
-    }
+    const hasCurrentActiveEnrollment = workflow.activeVersionId
+      ? await workflowHasCurrentBlockingEnrollment({
+          ctx,
+          workflowId: workflow._id,
+        })
+      : false;
     if (hasCurrentActiveEnrollment) {
       throw new Error(
         "community_member_workflow_active_enrollments_require_migration",

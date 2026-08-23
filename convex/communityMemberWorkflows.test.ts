@@ -206,6 +206,188 @@ test("builder workflow authority, version activation, and enrollment backfill fa
   }
 });
 
+test("completed and exited enrollment history does not permanently block a replacement version", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+    await asOwner.mutation(
+      api.communityMemberWorkflows.saveBuilderWorkflowDraft,
+      {
+        communityId: fixture.communityId,
+        expectedRevision: 0,
+        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+      },
+    );
+    await asOwner.mutation(
+      api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+      { communityId: fixture.communityId, expectedRevision: 1 },
+    );
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+
+    await t.run(async (ctx) => {
+      const workflow = (await ctx.db
+        .query("communityMemberWorkflows")
+        .first())!;
+      const version = (await ctx.db.get(workflow.activeVersionId!))!;
+      const enrollment = (await ctx.db
+        .query("communityMemberWorkflowEnrollments")
+        .first())!;
+      await ctx.db.patch(enrollment._id, {
+        status: "completed",
+        currentStageKey: "outcome-achieved",
+        completedAt: fixture.nowMs + 10,
+        updatedAt: fixture.nowMs + 10,
+      });
+      for (let index = 0; index < 500; index += 1) {
+        const status = index % 2 === 0 ? "completed" : "exited";
+        await ctx.db.insert("communityMemberWorkflowEnrollments", {
+          communityId: fixture.communityId,
+          workflowId: workflow._id,
+          workflowVersionId: version._id,
+          membershipId: fixture.membershipId,
+          userId: fixture.memberId,
+          activationSequence: index + 2,
+          status,
+          currentStageKey: "outcome-achieved",
+          currentStageEnteredAt: fixture.nowMs + index + 20,
+          transitionSeq: 1,
+          revision: 1,
+          ...(status === "completed"
+            ? { completedAt: fixture.nowMs + index + 20 }
+            : { exitedAt: fixture.nowMs + index + 20 }),
+          createdAt: fixture.nowMs + index + 20,
+          updatedAt: fixture.nowMs + index + 20,
+        });
+      }
+    });
+
+    await expect(
+      asOwner.mutation(api.communityMemberWorkflows.saveBuilderWorkflowDraft, {
+        communityId: fixture.communityId,
+        expectedRevision: 2,
+        draft: {
+          ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+          outcomeDefinition: "A replacement path for future activations.",
+        },
+      }),
+    ).resolves.toMatchObject({ revision: 3, version: 2 });
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+        { communityId: fixture.communityId, expectedRevision: 3 },
+      ),
+    ).resolves.toMatchObject({ revision: 4, version: 2 });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a current paused enrollment still blocks replacement activation", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+    await asOwner.mutation(
+      api.communityMemberWorkflows.saveBuilderWorkflowDraft,
+      {
+        communityId: fixture.communityId,
+        expectedRevision: 0,
+        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+      },
+    );
+    await asOwner.mutation(
+      api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+      { communityId: fixture.communityId, expectedRevision: 1 },
+    );
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    await t.run(async (ctx) => {
+      const enrollment = (await ctx.db
+        .query("communityMemberWorkflowEnrollments")
+        .first())!;
+      await ctx.db.patch(enrollment._id, {
+        status: "paused",
+        updatedAt: fixture.nowMs + 10,
+      });
+    });
+    await asOwner.mutation(
+      api.communityMemberWorkflows.saveBuilderWorkflowDraft,
+      {
+        communityId: fixture.communityId,
+        expectedRevision: 2,
+        draft: {
+          ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+          outcomeDefinition: "A replacement blocked by a paused member.",
+        },
+      },
+    );
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+        { communityId: fixture.communityId, expectedRevision: 3 },
+      ),
+    ).rejects.toThrow(
+      "community_member_workflow_active_enrollments_require_migration",
+    );
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a stale active enrollment with inactive membership does not block replacement activation", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+    await asOwner.mutation(
+      api.communityMemberWorkflows.saveBuilderWorkflowDraft,
+      {
+        communityId: fixture.communityId,
+        expectedRevision: 0,
+        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+      },
+    );
+    await asOwner.mutation(
+      api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+      { communityId: fixture.communityId, expectedRevision: 1 },
+    );
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+    await t.run(async (ctx) => {
+      await ctx.db.patch(fixture.membershipId, {
+        active: false,
+        revokedAt: fixture.nowMs + 10,
+        revokedReason: "workflow_replacement_test",
+        updatedAt: fixture.nowMs + 10,
+      });
+    });
+    await asOwner.mutation(
+      api.communityMemberWorkflows.saveBuilderWorkflowDraft,
+      {
+        communityId: fixture.communityId,
+        expectedRevision: 2,
+        draft: {
+          ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+          outcomeDefinition: "A replacement after membership deactivation.",
+        },
+      },
+    );
+    await expect(
+      asOwner.mutation(
+        api.communityMemberWorkflows.activateBuilderWorkflowDraft,
+        { communityId: fixture.communityId, expectedRevision: 3 },
+      ),
+    ).resolves.toMatchObject({ revision: 4, version: 2 });
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("evidence and stage movement are idempotent, revision-bound, and append-only", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));

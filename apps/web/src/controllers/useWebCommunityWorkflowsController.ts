@@ -16,6 +16,10 @@ import {
   type CloudCommunityMemberWorkflowEnrollmentDetail,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
 import type { CommunityMemberWorkflowDraft } from "../../../../shared/communityMemberWorkflow";
+import {
+  isCurrentWorkflowEnrollmentRequest,
+  type WorkflowEnrollmentSelection,
+} from "./workflowEnrollmentRequestGuard";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -72,6 +76,8 @@ export function useWebCommunityWorkflowsController(params: {
     useState<CloudCommunityMemberWorkflowEnrollmentDetail | null>(null);
   const [isLoadingEnrollment, setIsLoadingEnrollment] = useState(false);
   const requestGenerationRef = useRef(0);
+  const enrollmentRequestGenerationRef = useRef(0);
+  const enrollmentSelectionRef = useRef<WorkflowEnrollmentSelection>(null);
 
   const loadBoard = useCallback(
     async (
@@ -117,8 +123,22 @@ export function useWebCommunityWorkflowsController(params: {
   );
 
   const loadEnrollment = useCallback(
-    async (enrollmentId: string, knownSession = params.session) => {
-      if (!params.activeCommunityId || !params.canManageMembers) return null;
+    async (
+      enrollmentId: string,
+      knownSession = params.session,
+      communityId = params.activeCommunityId,
+    ) => {
+      if (!communityId || !params.canManageMembers) return null;
+      const requestGeneration = ++enrollmentRequestGenerationRef.current;
+      const requestIsCurrent = () =>
+        isCurrentWorkflowEnrollmentRequest({
+          requestGeneration,
+          currentGeneration: enrollmentRequestGenerationRef.current,
+          requestedCommunityId: communityId,
+          requestedEnrollmentId: enrollmentId,
+          selection: enrollmentSelectionRef.current,
+        });
+      if (!requestIsCurrent()) return null;
       setIsLoadingEnrollment(true);
       setActionError(null);
       try {
@@ -131,16 +151,19 @@ export function useWebCommunityWorkflowsController(params: {
         if (!usableSession) throw new Error("auth_session_required");
         const detail = await fetchCloudCommunityMemberWorkflowEnrollment({
           session: usableSession,
-          communityId: params.activeCommunityId,
+          communityId,
           enrollmentId,
         });
+        if (!requestIsCurrent()) return detail;
         setSelectedEnrollment(detail);
         return detail;
       } catch (loadError) {
-        setActionError(workflowErrorMessage(loadError));
+        if (requestIsCurrent()) {
+          setActionError(workflowErrorMessage(loadError));
+        }
         return null;
       } finally {
-        setIsLoadingEnrollment(false);
+        if (requestIsCurrent()) setIsLoadingEnrollment(false);
       }
     },
     [
@@ -153,12 +176,15 @@ export function useWebCommunityWorkflowsController(params: {
 
   useEffect(() => {
     requestGenerationRef.current += 1;
+    enrollmentRequestGenerationRef.current += 1;
+    enrollmentSelectionRef.current = null;
     setBoard(null);
     setHasLoaded(false);
     setError(null);
     setActionError(null);
     setSelectedEnrollmentId(null);
     setSelectedEnrollment(null);
+    setIsLoadingEnrollment(false);
   }, [params.activeCommunityId]);
 
   useEffect(() => {
@@ -241,12 +267,24 @@ export function useWebCommunityWorkflowsController(params: {
 
   const selectEnrollment = useCallback(
     (enrollmentId: string | null) => {
+      enrollmentRequestGenerationRef.current += 1;
+      enrollmentSelectionRef.current =
+        enrollmentId && params.activeCommunityId
+          ? { communityId: params.activeCommunityId, enrollmentId }
+          : null;
       setSelectedEnrollmentId(enrollmentId);
       setSelectedEnrollment(null);
+      setIsLoadingEnrollment(false);
       setActionError(null);
-      if (enrollmentId) void loadEnrollment(enrollmentId);
+      if (enrollmentId && params.activeCommunityId) {
+        void loadEnrollment(
+          enrollmentId,
+          params.session,
+          params.activeCommunityId,
+        );
+      }
     },
-    [loadEnrollment],
+    [loadEnrollment, params.activeCommunityId, params.session],
   );
 
   const addEvidence = useCallback(
