@@ -17,6 +17,9 @@ const navigation = read("shared/CommunityNav.tsx");
 const surface = read(
   "apps/web/src/components/WebCommunityWorkflowsSection.tsx",
 );
+const stageModal = read(
+  "apps/web/src/components/WebCommunityWorkflowStageModal.tsx",
+);
 const controller = read(
   "apps/web/src/controllers/useWebCommunityWorkflowsController.ts",
 );
@@ -159,8 +162,8 @@ assert.match(
 );
 assert.match(
   surface,
-  /className="workflow-stage-rail"/,
-  "the primary surface must be a horizontal stage path",
+  /className="workflow-stage-canvas"/,
+  "the primary surface must be a horizontal stage-column canvas",
 );
 assert.match(
   surface,
@@ -169,8 +172,28 @@ assert.match(
 );
 assert.doesNotMatch(
   surface,
-  /WorkflowEmptyState|WorkflowDraftEditor/,
-  "the pipeline must not hide behind a setup or full-page editor state",
+  /WorkflowEmptyState|WorkflowDraftEditor|isPathEditing|workflow-stage-editor|workflow-details-disclosure/,
+  "the pipeline must not hide behind setup, full-page, or permanent editor state",
+);
+assert.match(
+  surface,
+  /Set up stage/,
+  "the blank first stage must expose one direct setup action",
+);
+assert.match(
+  surface,
+  /WebCommunityWorkflowStageModal/,
+  "stage configuration must open in the canonical modal layer",
+);
+assert.match(
+  stageModal,
+  /Stage name[\s\S]*Objective[\s\S]*Complete when/,
+  "the stage modal must contain the irreducible stage definition",
+);
+assert.doesNotMatch(
+  stageModal,
+  /Actions|Integrations/,
+  "the UI must not manufacture action or integration controls before their domain exists",
 );
 assert.match(
   surface,

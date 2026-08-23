@@ -1,12 +1,9 @@
 import {
   ArrowRight,
   Check,
-  ChevronLeft,
-  ChevronRight,
   Pencil,
   Plus,
   RefreshCw,
-  Trash2,
   X,
 } from "lucide-react";
 import { useEffect, useMemo, useState, type FormEvent } from "react";
@@ -18,11 +15,13 @@ import {
   COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES,
   normalizeCommunityMemberWorkflowDraft,
   type CommunityMemberWorkflowDraft,
+  type CommunityMemberWorkflowStage,
 } from "../../../../shared/communityMemberWorkflow";
 import type {
   CloudCommunityMemberWorkflowBoard,
   CloudCommunityMemberWorkflowEnrollmentDetail,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
+import { WebCommunityWorkflowStageModal } from "./WebCommunityWorkflowStageModal";
 import "./WebCommunityWorkflowsSection.css";
 
 export type WebCommunityWorkflowsSectionProps = {
@@ -68,6 +67,20 @@ function draftFromBoard(
     outcomeName: version.outcome_name,
     outcomeDefinition: version.outcome_definition,
     stages: version.stages.map((stage) => ({ ...stage })),
+  };
+}
+
+function blankCanvasDraft(): CommunityMemberWorkflowDraft {
+  return {
+    ...cloneDraft(DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT),
+    stages: [
+      {
+        key: "new",
+        name: "",
+        objective: "",
+        completionDefinition: "",
+      },
+    ],
   };
 }
 
@@ -327,27 +340,21 @@ export function WebCommunityWorkflowsSection(
   props: WebCommunityWorkflowsSectionProps,
 ) {
   const [draft, setDraft] = useState<CommunityMemberWorkflowDraft>(() =>
-    cloneDraft(DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT),
+    blankCanvasDraft(),
   );
-  const [selectedStageKey, setSelectedStageKey] = useState(
-    DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT.stages[0]!.key,
+  const [editingStageKey, setEditingStageKey] = useState<string | null>(null);
+  const [provisionalStageKey, setProvisionalStageKey] = useState<string | null>(
+    null,
   );
-  const [isPathEditing, setIsPathEditing] = useState(true);
-  const [isDirty, setIsDirty] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
 
   useEffect(() => {
     const nextDraft = props.board
       ? draftFromBoard(props.board)
-      : cloneDraft(DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT);
+      : blankCanvasDraft();
     setDraft(nextDraft);
-    setSelectedStageKey((current) =>
-      nextDraft.stages.some((stage) => stage.key === current)
-        ? current
-        : nextDraft.stages[0]!.key,
-    );
-    setIsPathEditing(!props.board?.active_version);
-    setIsDirty(false);
+    setEditingStageKey(null);
+    setProvisionalStageKey(null);
     setLocalError(null);
   }, [
     props.board?.id,
@@ -356,111 +363,142 @@ export function WebCommunityWorkflowsSection(
     props.board?.draft_version?.id,
   ]);
 
-  const selectedStage =
-    draft.stages.find((stage) => stage.key === selectedStageKey) ??
-    draft.stages[0]!;
-  const selectedStageMembers = useMemo(
-    () =>
-      (props.board?.members ?? []).filter(
-        (member) => member.current_stage_key === selectedStage.key,
-      ),
-    [props.board?.members, selectedStage.key],
-  );
+  const editingStage =
+    draft.stages.find((stage) => stage.key === editingStageKey) ?? null;
+  const editingStageIndex = editingStage
+    ? draft.stages.findIndex((stage) => stage.key === editingStage.key)
+    : -1;
+  const membersByStage = useMemo(() => {
+    const grouped = new Map<
+      string,
+      NonNullable<WebCommunityWorkflowsSectionProps["board"]>["members"]
+    >();
+    for (const member of props.board?.members ?? []) {
+      const members = grouped.get(member.current_stage_key) ?? [];
+      members.push(member);
+      grouped.set(member.current_stage_key, members);
+    }
+    return grouped;
+  }, [props.board?.members]);
 
-  const updateDraft = (next: CommunityMemberWorkflowDraft) => {
-    setDraft(next);
-    setIsDirty(true);
+  const isStageIncomplete = (stage: CommunityMemberWorkflowStage) =>
+    !stage.name.trim() ||
+    !stage.objective.trim() ||
+    !stage.completionDefinition.trim();
+  const hasIncompleteStage = draft.stages.some(isStageIncomplete);
+
+  const openStage = (stageKey: string) => {
+    props.onClearActionError();
+    props.onSelectEnrollment(null);
     setLocalError(null);
+    setEditingStageKey(stageKey);
   };
 
-  const updateSelectedStage = (
-    field: "name" | "objective" | "completionDefinition",
-    value: string,
-  ) => {
-    updateDraft({
-      ...draft,
-      stages: draft.stages.map((stage) =>
-        stage.key === selectedStage.key ? { ...stage, [field]: value } : stage,
-      ),
-    });
+  const closeStage = () => {
+    if (provisionalStageKey) {
+      setDraft((current) => ({
+        ...current,
+        stages: current.stages.filter(
+          (stage) => stage.key !== provisionalStageKey,
+        ),
+      }));
+    }
+    setEditingStageKey(null);
+    setProvisionalStageKey(null);
+    setLocalError(null);
+    props.onClearActionError();
   };
 
   const addStage = () => {
+    if (
+      props.isSaving ||
+      hasIncompleteStage ||
+      draft.stages.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
+    ) {
+      return;
+    }
     const key = uniqueStageKey(draft.stages);
-    updateDraft({
+    setDraft({
       ...draft,
       stages: [
         ...draft.stages,
         {
           key,
-          name: `Stage ${draft.stages.length + 1}`,
-          objective: "Define the concrete objective for this stage.",
-          completionDefinition:
-            "Define the evidence that proves this stage is complete.",
+          name: "",
+          objective: "",
+          completionDefinition: "",
         },
       ],
     });
-    setSelectedStageKey(key);
-    setIsPathEditing(true);
     props.onSelectEnrollment(null);
+    setProvisionalStageKey(key);
+    setEditingStageKey(key);
+    setLocalError(null);
   };
 
-  const moveSelectedStage = (direction: -1 | 1) => {
-    const index = draft.stages.findIndex(
-      (stage) => stage.key === selectedStage.key,
-    );
-    const target = index + direction;
-    if (index < 0 || target < 0 || target >= draft.stages.length) return;
-    const stages = draft.stages.slice();
-    const [stage] = stages.splice(index, 1);
-    stages.splice(target, 0, stage!);
-    updateDraft({ ...draft, stages });
-  };
+  const editingStageHasMembers = editingStage
+    ? (membersByStage.get(editingStage.key)?.length ?? 0) > 0
+    : false;
 
-  const selectedStageHasMembers = (props.board?.members ?? []).some(
-    (member) => member.current_stage_key === selectedStage.key,
-  );
-
-  const deleteSelectedStage = () => {
+  const deleteEditingStage = async () => {
+    if (!editingStage) return;
     if (
       draft.stages.length <= COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES ||
-      selectedStageHasMembers
+      editingStageHasMembers
     ) {
       return;
     }
-    const index = draft.stages.findIndex(
-      (stage) => stage.key === selectedStage.key,
-    );
     const stages = draft.stages.filter(
-      (stage) => stage.key !== selectedStage.key,
+      (stage) => stage.key !== editingStage.key,
     );
-    updateDraft({ ...draft, stages });
-    setSelectedStageKey(stages[Math.max(0, index - 1)]!.key);
-  };
-
-  const normalizedDraft = () => {
+    if (provisionalStageKey === editingStage.key) {
+      setDraft({ ...draft, stages });
+      setEditingStageKey(null);
+      setProvisionalStageKey(null);
+      return;
+    }
     try {
-      return normalizeCommunityMemberWorkflowDraft(draft);
+      const normalized = normalizeCommunityMemberWorkflowDraft({
+        ...draft,
+        stages,
+      });
+      if (await props.onSaveDraft(normalized)) {
+        setDraft(normalized);
+        setEditingStageKey(null);
+      }
     } catch {
       setLocalError(
-        `Add a workflow name, outcome, and complete definition for each of the ${COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES}–${COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES} stages.`,
+        "This stage could not be deleted. Nothing was changed.",
       );
-      return null;
     }
   };
 
-  const saveDraft = async () => {
-    const normalized = normalizedDraft();
-    if (!normalized) return;
-    if (await props.onSaveDraft(normalized)) setIsDirty(false);
+  const saveStage = async (stage: CommunityMemberWorkflowStage) => {
+    const next = {
+      ...draft,
+      stages: draft.stages.map((current) =>
+        current.key === stage.key ? stage : current,
+      ),
+    };
+    try {
+      const normalized = normalizeCommunityMemberWorkflowDraft(next);
+      if (await props.onSaveDraft(normalized)) {
+        setDraft(normalized);
+        setEditingStageKey(null);
+        setProvisionalStageKey(null);
+        setLocalError(null);
+      }
+    } catch {
+      setLocalError("Name the stage and define its objective and completion.");
+    }
   };
 
   const publishDraft = async () => {
-    const normalized = normalizedDraft();
-    if (!normalized) return;
-    if (await props.onPublishDraft(normalized)) {
-      setIsDirty(false);
-      setIsPathEditing(false);
+    try {
+      const normalized = normalizeCommunityMemberWorkflowDraft(draft);
+      await props.onPublishDraft(normalized);
+    } catch {
+      setLocalError("Finish setting up every stage before starting the workflow.");
     }
   };
 
@@ -496,7 +534,14 @@ export function WebCommunityWorkflowsSection(
   const backfillPending =
     props.board?.enrollment_backfill_status === "queued" ||
     props.board?.enrollment_backfill_status === "running";
-  const status = props.board?.active_version ? "Active" : "Draft";
+  const status = props.board?.active_version
+    ? props.board.draft_version
+      ? "Draft changes"
+      : "Active"
+    : props.board?.draft_version
+      ? "Draft"
+      : null;
+  const canPublish = Boolean(props.board?.draft_version) && !hasIncompleteStage;
 
   return (
     <div className="workflow-page workflow-pipeline-page">
@@ -507,81 +552,31 @@ export function WebCommunityWorkflowsSection(
         <header className="workflow-pipeline-header">
           <div>
             <div className="workflow-board-title-line">
-              <h1 id="workflow-title">{draft.name}</h1>
-              <span
-                className={`workflow-status workflow-status-${status.toLowerCase()}`}
-              >
-                {status}
-              </span>
-              {props.board?.draft_version && props.board.active_version ? (
-                <span className="workflow-draft-note">Draft changes</span>
+              <h1 id="workflow-title">Workflows</h1>
+              {status ? (
+                <span
+                  className={`workflow-status workflow-status-${status.toLowerCase().replace(" ", "-")}`}
+                >
+                  {status}
+                </span>
               ) : null}
             </div>
-            <p>{draft.outcomeName}</p>
-            {props.activeCommunityName ? (
-              <small>{props.activeCommunityName}</small>
-            ) : null}
+            <p>Move members through the stages that lead to success.</p>
           </div>
           <div className="workflow-board-actions">
-            <button
-              className="workflow-icon-button"
-              type="button"
-              onClick={() => void props.onReload()}
-              disabled={props.isLoading}
-              aria-label="Reload workflow"
-              title="Reload"
-            >
-              <RefreshCw size={16} aria-hidden="true" />
-            </button>
-            {props.board?.active_version && !isPathEditing ? (
+            {canPublish ? (
               <button
-                className="workflow-secondary-button"
+                className="workflow-primary-button"
                 type="button"
-                onClick={() => {
-                  props.onClearActionError();
-                  setIsPathEditing(true);
-                }}
+                disabled={props.isSaving}
+                onClick={() => void publishDraft()}
               >
-                <Pencil size={15} aria-hidden="true" /> Edit path
+                <Check size={16} aria-hidden="true" />
+                {props.board?.active_version
+                  ? "Publish changes"
+                  : "Start workflow"}
               </button>
-            ) : (
-              <>
-                <button
-                  className="workflow-secondary-button"
-                  type="button"
-                  disabled={props.isSaving || !isDirty}
-                  onClick={() => void saveDraft()}
-                >
-                  {props.isSaving ? "Saving…" : "Save draft"}
-                </button>
-                <button
-                  className="workflow-primary-button"
-                  type="button"
-                  disabled={props.isSaving}
-                  onClick={() => void publishDraft()}
-                >
-                  <Check size={16} aria-hidden="true" />
-                  {props.board?.active_version
-                    ? "Publish changes"
-                    : "Start workflow"}
-                </button>
-                {props.board?.active_version ? (
-                  <button
-                    className="workflow-icon-button"
-                    type="button"
-                    onClick={() => {
-                      setDraft(draftFromBoard(props.board!));
-                      setIsPathEditing(false);
-                      setIsDirty(false);
-                      setLocalError(null);
-                    }}
-                    aria-label="Cancel path editing"
-                  >
-                    <X size={17} aria-hidden="true" />
-                  </button>
-                ) : null}
-              </>
-            )}
+            ) : null}
           </div>
         </header>
 
@@ -597,35 +592,70 @@ export function WebCommunityWorkflowsSection(
           </div>
         ) : null}
 
-        <nav className="workflow-stage-rail" aria-label="Member success stages">
+        <div className="workflow-stage-canvas" aria-label="Member success stages">
           {draft.stages.map((stage, index) => {
-            const memberCount = (props.board?.members ?? []).filter(
-              (member) => member.current_stage_key === stage.key,
-            ).length;
-            const isSelected = selectedStage.key === stage.key;
+            const members = membersByStage.get(stage.key) ?? [];
+            const incomplete = isStageIncomplete(stage);
             return (
-              <div className="workflow-stage-rail-item" key={stage.key}>
-                <button
-                  className={`workflow-stage-chip${isSelected ? " is-selected" : ""}`}
-                  type="button"
-                  aria-current={isSelected ? "step" : undefined}
-                  onClick={() => {
-                    setSelectedStageKey(stage.key);
-                    props.onSelectEnrollment(null);
-                  }}
-                >
-                  <span className="workflow-stage-number">{index + 1}</span>
-                  <span>{stage.name}</span>
-                  <span className="workflow-stage-count">{memberCount}</span>
-                </button>
-                {index < draft.stages.length - 1 ? (
-                  <ChevronRight
-                    className="workflow-stage-connector"
-                    size={17}
-                    aria-hidden="true"
-                  />
-                ) : null}
-              </div>
+              <section className="workflow-stage-column" key={stage.key}>
+                <header className="workflow-stage-column-header">
+                  <div>
+                    <span className="workflow-stage-position">{index + 1}</span>
+                    <h2>{stage.name.trim() || `Stage ${index + 1}`}</h2>
+                  </div>
+                  <div className="workflow-stage-column-actions">
+                    <span>{members.length}</span>
+                    {!incomplete ? (
+                      <button
+                        className="workflow-stage-edit-button"
+                        type="button"
+                        onClick={() => openStage(stage.key)}
+                        aria-label={`Edit ${stage.name}`}
+                      >
+                        <Pencil size={14} aria-hidden="true" />
+                      </button>
+                    ) : null}
+                  </div>
+                </header>
+                <div className="workflow-stage-column-body">
+                  {incomplete ? (
+                    <button
+                      className="workflow-stage-setup-button"
+                      type="button"
+                      onClick={() => openStage(stage.key)}
+                    >
+                      <Plus size={17} aria-hidden="true" />
+                      Set up stage
+                    </button>
+                  ) : members.length > 0 ? (
+                    members.map((member) => (
+                      <button
+                        className="workflow-member-row"
+                        type="button"
+                        key={member.enrollment_id}
+                        onClick={() =>
+                          props.onSelectEnrollment(member.enrollment_id)
+                        }
+                      >
+                        <UserAvatar
+                          name={member.display_name}
+                          imageUrl={member.avatar_url}
+                          focusX={member.avatar_focus_x}
+                          focusY={member.avatar_focus_y}
+                          zoom={member.avatar_zoom}
+                          className="workflow-member-avatar"
+                        />
+                        <span>{member.display_name}</span>
+                        {member.status !== "active" ? (
+                          <small>{member.status}</small>
+                        ) : null}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="workflow-stage-empty">No members yet</p>
+                  )}
+                </div>
+              </section>
             );
           })}
           <button
@@ -633,103 +663,69 @@ export function WebCommunityWorkflowsSection(
             type="button"
             disabled={
               props.isSaving ||
+              hasIncompleteStage ||
               draft.stages.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
             }
             onClick={addStage}
             aria-label="Add stage"
+            title={
+              hasIncompleteStage
+                ? "Set up the blank stage first"
+                : "Add stage"
+            }
           >
-            <Plus size={18} aria-hidden="true" />
+            <Plus size={19} aria-hidden="true" />
           </button>
-        </nav>
+        </div>
 
-        {isPathEditing ? (
-          <details className="workflow-details-disclosure">
-            <summary>Workflow details</summary>
-            <div className="workflow-details-fields">
-              <label>
-                <span>Workflow name</span>
-                <input
-                  value={draft.name}
-                  onChange={(event) =>
-                    updateDraft({ ...draft, name: event.target.value })
-                  }
-                />
-              </label>
-              <label>
-                <span>Outcome</span>
-                <input
-                  value={draft.outcomeName}
-                  onChange={(event) =>
-                    updateDraft({ ...draft, outcomeName: event.target.value })
-                  }
-                />
-              </label>
-              <label className="workflow-details-wide-field">
-                <span>What does success mean?</span>
-                <textarea
-                  rows={3}
-                  value={draft.outcomeDefinition}
-                  onChange={(event) =>
-                    updateDraft({
-                      ...draft,
-                      outcomeDefinition: event.target.value,
-                    })
-                  }
-                />
-              </label>
-            </div>
-          </details>
+        {props.board?.truncated_stage_keys.length ? (
+          <p className="workflow-board-footnote">
+            Some stages contain more members than this first view shows.
+          </p>
         ) : null}
+        {!editingStage && (localError || props.actionError) ? (
+          <p className="workflow-error" role="alert">
+            {localError ?? props.actionError}
+          </p>
+        ) : null}
+      </section>
 
-        <div className="workflow-pipeline-workspace">
-          <section
-            className="workflow-stage-members-panel"
-            aria-labelledby="stage-members-title"
+      <WebCommunityWorkflowStageModal
+        isOpen={Boolean(editingStage)}
+        stage={editingStage}
+        stageNumber={Math.max(1, editingStageIndex + 1)}
+        isSaving={props.isSaving}
+        canDelete={
+          Boolean(editingStage) &&
+          draft.stages.length > COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES &&
+          !editingStageHasMembers
+        }
+        deleteDisabledReason={
+          editingStageHasMembers
+            ? "Move members before deleting this stage"
+            : draft.stages.length <= COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES
+              ? "A workflow needs at least one stage"
+              : null
+        }
+        error={localError ?? props.actionError}
+        onClose={closeStage}
+        onSave={saveStage}
+        onDelete={deleteEditingStage}
+      />
+
+      {props.selectedEnrollmentId ? (
+        <div
+          className="modal-overlay workflow-member-overlay"
+          onMouseDown={() => props.onSelectEnrollment(null)}
+        >
+          <div
+            className="modal workflow-member-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Member workflow details"
+            onMouseDown={(event) => event.stopPropagation()}
           >
-            <header>
-              <div>
-                <span className="workflow-eyebrow">
-                  Stage {draft.stages.indexOf(selectedStage) + 1}
-                </span>
-                <h2 id="stage-members-title">{selectedStage.name}</h2>
-              </div>
-              <span>{selectedStageMembers.length} members</span>
-            </header>
-            <div className="workflow-stage-member-list">
-              {selectedStageMembers.length > 0 ? (
-                selectedStageMembers.map((member) => (
-                  <button
-                    className={`workflow-member-row${props.selectedEnrollmentId === member.enrollment_id ? " is-selected" : ""}`}
-                    type="button"
-                    key={member.enrollment_id}
-                    onClick={() =>
-                      props.onSelectEnrollment(member.enrollment_id)
-                    }
-                  >
-                    <UserAvatar
-                      name={member.display_name}
-                      imageUrl={member.avatar_url}
-                      focusX={member.avatar_focus_x}
-                      focusY={member.avatar_focus_y}
-                      zoom={member.avatar_zoom}
-                      className="workflow-member-avatar"
-                    />
-                    <span>{member.display_name}</span>
-                    {member.status !== "active" ? (
-                      <small>{member.status}</small>
-                    ) : null}
-                  </button>
-                ))
-              ) : (
-                <p className="workflow-stage-empty">
-                  No members in this stage.
-                </p>
-              )}
-            </div>
-          </section>
-
-          {props.selectedEnrollmentId ? (
-            props.selectedEnrollment ? (
+            {props.selectedEnrollment ? (
               <WorkflowMemberInspector
                 board={props.board!}
                 detail={props.selectedEnrollment}
@@ -749,124 +745,10 @@ export function WebCommunityWorkflowsSection(
                 <span className="workflow-loading-line is-short" />
                 <span className="workflow-loading-block" />
               </aside>
-            )
-          ) : (
-            <aside
-              className="workflow-stage-editor"
-              aria-label={`${selectedStage.name} stage settings`}
-            >
-              <header className="workflow-stage-editor-header">
-                <div>
-                  <span className="workflow-eyebrow">Stage setup</span>
-                  <h2>{selectedStage.name}</h2>
-                </div>
-                {isPathEditing ? (
-                  <div className="workflow-stage-order-actions">
-                    <button
-                      className="workflow-icon-button"
-                      type="button"
-                      disabled={draft.stages.indexOf(selectedStage) === 0}
-                      onClick={() => moveSelectedStage(-1)}
-                      aria-label={`Move ${selectedStage.name} earlier`}
-                    >
-                      <ChevronLeft size={17} aria-hidden="true" />
-                    </button>
-                    <button
-                      className="workflow-icon-button"
-                      type="button"
-                      disabled={
-                        draft.stages.indexOf(selectedStage) ===
-                        draft.stages.length - 1
-                      }
-                      onClick={() => moveSelectedStage(1)}
-                      aria-label={`Move ${selectedStage.name} later`}
-                    >
-                      <ChevronRight size={17} aria-hidden="true" />
-                    </button>
-                    <button
-                      className="workflow-icon-button workflow-destructive-icon"
-                      type="button"
-                      disabled={
-                        draft.stages.length <=
-                          COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES ||
-                        selectedStageHasMembers
-                      }
-                      onClick={deleteSelectedStage}
-                      aria-label={`Delete ${selectedStage.name}`}
-                      title={
-                        selectedStageHasMembers
-                          ? "Move members before deleting this stage"
-                          : "Delete stage"
-                      }
-                    >
-                      <Trash2 size={16} aria-hidden="true" />
-                    </button>
-                  </div>
-                ) : null}
-              </header>
-
-              {isPathEditing ? (
-                <div className="workflow-stage-editor-fields">
-                  <label>
-                    <span>Stage name</span>
-                    <input
-                      value={selectedStage.name}
-                      onChange={(event) =>
-                        updateSelectedStage("name", event.target.value)
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>Objective</span>
-                    <textarea
-                      rows={4}
-                      value={selectedStage.objective}
-                      onChange={(event) =>
-                        updateSelectedStage("objective", event.target.value)
-                      }
-                    />
-                  </label>
-                  <label>
-                    <span>Complete when</span>
-                    <textarea
-                      rows={4}
-                      value={selectedStage.completionDefinition}
-                      onChange={(event) =>
-                        updateSelectedStage(
-                          "completionDefinition",
-                          event.target.value,
-                        )
-                      }
-                    />
-                  </label>
-                </div>
-              ) : (
-                <div className="workflow-stage-definition">
-                  <section>
-                    <h3>Objective</h3>
-                    <p>{selectedStage.objective}</p>
-                  </section>
-                  <section>
-                    <h3>Complete when</h3>
-                    <p>{selectedStage.completionDefinition}</p>
-                  </section>
-                </div>
-              )}
-            </aside>
-          )}
+            )}
+          </div>
         </div>
-
-        {props.board?.truncated_stage_keys.length ? (
-          <p className="workflow-board-footnote">
-            Some stages contain more members than this first view shows.
-          </p>
-        ) : null}
-        {localError || props.actionError ? (
-          <p className="workflow-error" role="alert">
-            {localError ?? props.actionError}
-          </p>
-        ) : null}
-      </section>
+      ) : null}
     </div>
   );
 }

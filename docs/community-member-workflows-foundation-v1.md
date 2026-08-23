@@ -21,19 +21,21 @@ Members do not see the builder pipeline.
 
 The first surface has one interaction model:
 
-1. Land directly on an ordered horizontal stage path with one editable default
-   stage when no workflow exists yet.
-2. Select a stage to understand its objective and completion definition.
-3. Select a member to inspect current state, evidence, and history.
-4. Move the member with an explicit reason and optional evidence.
-5. Complete the workflow through a separate explicit decision when the defined
+1. Land directly on an ordered horizontal canvas with one blank stage column
+   when no workflow exists yet.
+2. Set up a stage in a focused modal without changing the canvas into an editor.
+3. Add another blank stage with the single plus control immediately after the
+   final stage.
+4. Select a member to inspect current state, evidence, and history in an overlay.
+5. Move the member with an explicit reason and optional evidence.
+6. Complete the workflow through a separate explicit decision when the defined
    outcome is achieved.
-6. Add stages with the inline plus action, edit in context, then publish an
-   immutable workflow version.
+7. Start or publish the complete path as an immutable workflow version.
 
 There is no separate setup wizard, empty-state gate, or full-page definition
-form. Rendering the one-stage default does not write canonical state; Save
-draft and Start workflow remain explicit builder commands.
+form. Rendering the one-stage blank column does not write canonical state.
+Stage-modal Save persists the draft; Start workflow remains an explicit builder
+command.
 
 There are no Pipeline, Integrations, or Activity tabs. Integrations and
 autonomous actions are later capabilities attached to concrete criteria and
@@ -46,18 +48,18 @@ surface hierarchy, real member identity, and one theme-owned selection accent.
 
 Content plan:
 
-- Header: compact workflow identity, Draft or Active status, and one Edit action.
-- Stage path: horizontally ordered stage controls plus one inline Add action.
-- Workspace: the selected stage's members and contextual stage definition.
-- Stage inspector: objective and completion definition.
-- Member inspector: current state, accepted evidence, and transition history.
+- Header: compact page identity, status, and only the necessary activation action.
+- Canvas: horizontally ordered stage columns plus one terminal Add action.
+- Stage column: stage identity, member count, member cards, and one edit affordance.
+- Stage modal: name, objective, completion definition, and safe deletion.
+- Member overlay: current state, accepted evidence, and transition history.
 
 Interaction thesis:
 
-- Stage selection moves the inspector context without navigating away.
-- Member selection opens an explicit inspector or mobile full-screen surface.
-- Draft edits and member movement use short, stateful transitions that preserve
-  spatial continuity and honor reduced-motion preferences.
+- Stage setup opens over the unchanged operating canvas.
+- Member selection opens an explicit overlay or mobile full-screen surface.
+- Stage edits and member movement preserve spatial continuity and honor
+  reduced-motion preferences.
 
 ## Canonical Owners
 
@@ -200,10 +202,10 @@ authority lenses are separately contracted.
 
 ## Acceptance
 
-1. The first visit renders one editable default stage without writing workflow
+1. The first visit renders one blank stage column without writing workflow
    state.
 2. Builder creates a valid draft with one to twelve stages from the inline
-   stage path.
+   stage modal and terminal plus action.
 3. Activating it creates one immutable version and enrolls every active member
    exactly once at the first stage.
 4. A newly activated membership enrolls exactly once.
@@ -219,3 +221,5 @@ authority lenses are separately contracted.
 12. The pipeline remains usable by keyboard and without drag-and-drop.
 13. No production Git ref, deployment, Convex deployment, or production data is
     changed during staging development and acceptance.
+14. The default canvas never renders a permanent stage editor, workflow-details
+    form, or page-level edit mode.
