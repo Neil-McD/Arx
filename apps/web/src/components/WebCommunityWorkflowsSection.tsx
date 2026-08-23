@@ -562,24 +562,23 @@ export function WebCommunityWorkflowsSection(
   return (
     <div className="workflow-page workflow-pipeline-page">
       <section
-        className="workflow-pipeline-shell"
+        className="community-panel community-utility-panel workflow-pipeline-shell"
         aria-labelledby="workflow-title"
       >
-        <header className="workflow-pipeline-header">
-          <div>
-            <div className="workflow-board-title-line">
-              <h1 id="workflow-title">Workflows</h1>
-              {status ? (
-                <span
-                  className={`workflow-status workflow-status-${status.toLowerCase().replace(" ", "-")}`}
-                >
-                  {status}
-                </span>
-              ) : null}
-            </div>
-            <p>Move members through the stages that lead to success.</p>
+        <header className="feed-header-row workflow-pipeline-header">
+          <div className="workflow-board-title-line">
+            <h1 className="resources-header" id="workflow-title">
+              Workflows
+            </h1>
+            {status ? (
+              <span
+                className={`workflow-status workflow-status-${status.toLowerCase().replace(" ", "-")}`}
+              >
+                {status}
+              </span>
+            ) : null}
           </div>
-          <div className="workflow-board-actions">
+          <div className="feed-header-actions workflow-board-actions">
             {canPublish ? (
               <button
                 className="workflow-primary-button"

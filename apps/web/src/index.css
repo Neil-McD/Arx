@@ -322,18 +322,18 @@
   }
 }
 
-.resources-panel {
+.community-utility-panel {
   gap: 10px;
   padding: 0 24px 24px;
 }
 
-.resources-panel > .feed-header-row {
+.community-utility-panel > .feed-header-row {
   min-height: var(--web-topbar-height);
   align-items: center;
   padding-right: var(--web-topbar-right-action-safe-inset);
 }
 
-.app-root.mobile-shell .resources-panel > .feed-header-row {
+.app-root.mobile-shell .community-utility-panel > .feed-header-row {
   min-height: auto;
   padding-right: 0;
 }

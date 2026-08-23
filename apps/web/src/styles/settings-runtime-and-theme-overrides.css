@@ -8295,9 +8295,14 @@ button.settings-primary-action svg {
 }
 
 .app-root.mobile-shell .feed-panel,
-.app-root.mobile-shell .resources-panel {
+.app-root.mobile-shell .community-utility-panel {
   padding: 0;
   gap: 12px;
+}
+
+.app-root.mobile-shell .community-utility-panel.workflow-pipeline-shell {
+  padding: var(--mobile-topbar-clearance) 14px
+    calc(env(safe-area-inset-bottom, 0px) + 14px);
 }
 
 .app-root.mobile-shell .feed-header-row {

@@ -167,6 +167,16 @@ assert.match(
 );
 assert.match(
   surface,
+  /community-utility-panel workflow-pipeline-shell[\s\S]*feed-header-row workflow-pipeline-header[\s\S]*resources-header/,
+  "Workflows must reuse the canonical compact community utility header",
+);
+assert.doesNotMatch(
+  surface,
+  /Move members through the stages that lead to success\./,
+  "the compact workflow utility row must not carry a page-level subtitle",
+);
+assert.match(
+  surface,
   /aria-label="Add stage"/,
   "the stage path must expose one inline add action",
 );

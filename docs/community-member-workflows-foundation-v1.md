@@ -50,7 +50,8 @@ surface hierarchy, real member identity, and one theme-owned selection accent.
 
 Content plan:
 
-- Header: compact page identity, status, and only the necessary activation action.
+- Header: the canonical compact community utility row, with page identity,
+  status, and only the necessary activation action; no page-level subtitle.
 - Canvas: horizontally ordered stage columns plus one terminal Add action.
 - Stage column: stage identity, member count, member cards, and one edit affordance.
 - Stage modal: name, objective, completion definition, and safe deletion.

@@ -826,7 +826,7 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
 
   return (
     <>
-      <div className="community-panel resources-panel">
+      <div className="community-panel community-utility-panel resources-panel">
         <div className="feed-header-row">
           <div className="feed-header-copy">
             {selectedModule ? (
