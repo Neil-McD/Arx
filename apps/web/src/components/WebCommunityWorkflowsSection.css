@@ -313,6 +313,10 @@
   font-size: 10px;
 }
 
+.workflow-load-more-button {
+  align-self: flex-start;
+}
+
 .workflow-pipeline-shell > .workflow-error {
   flex: 0 0 auto;
   margin-top: 10px;

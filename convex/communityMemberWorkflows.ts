@@ -1,15 +1,17 @@
 import { internalMutation, mutation, query } from "./_generated/server";
+import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
-  normalizeCommunityMemberWorkflowDefinition,
-  normalizeCommunityMemberWorkflowIdempotencyKey,
+  COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES,
+  COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES,
   normalizeCommunityMemberWorkflowSourceRef,
   normalizeCommunityMemberWorkflowStageKey,
-  type CommunityMemberWorkflowTransitionActorType,
-  type CommunityMemberWorkflowTransitionCauseType,
+  normalizeCommunityMemberWorkflowStageName,
+  type CommunityMemberWorkflowTriggerType,
 } from "../shared/communityMemberWorkflow";
 import {
   communityMembershipRowIsActive,
+  readCommunityActiveMemberCount,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
   toIsoString,
@@ -17,27 +19,10 @@ import {
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 
-const workflowStageInputValidator = v.object({
-  key: v.string(),
-  name: v.string(),
-});
-
-const workflowDefinitionInputValidator = v.object({
-  stages: v.array(workflowStageInputValidator),
-});
-
-const transitionCauseValidator = v.union(
-  v.literal("builder"),
+const workflowTriggerValidator = v.union(
   v.literal("in_app"),
   v.literal("time"),
   v.literal("external"),
-  v.literal("system"),
-);
-
-const transitionActorValidator = v.union(
-  v.literal("builder"),
-  v.literal("agent"),
-  v.literal("system"),
 );
 
 const managerIdentityArgs = {
@@ -45,11 +30,11 @@ const managerIdentityArgs = {
   authSubject: v.optional(v.string()),
 };
 
-const WORKFLOW_BOARD_MEMBER_LIMIT = 200;
-const WORKFLOW_BOARD_MEMBERSHIP_SCAN_LIMIT = 500;
+const WORKFLOW_BOARD_DEFAULT_PAGE_SIZE = 50;
+const WORKFLOW_BOARD_MAX_PAGE_SIZE = 100;
 
-type WorkflowRow = any;
-type MemberStageRow = any;
+type WorkflowRow = Doc<"communityMemberWorkflows">;
+type MemberStageRow = Doc<"communityMemberWorkflowMemberStages">;
 
 function normalizeExpectedRevision(value: unknown): number {
   const revision = Number(value);
@@ -113,12 +98,42 @@ async function getMemberStage(args: {
   return rows[0] ?? null;
 }
 
-export const saveBuilderWorkflow = mutation({
+function nextWorkflowStageKey(stages: Array<{ key: string }>): string {
+  const existing = new Set(stages.map((stage) => stage.key));
+  for (;;) {
+    const candidate = `stage-${crypto.randomUUID()}`;
+    if (!existing.has(candidate)) return candidate;
+  }
+}
+
+function requireWorkflowRevision(
+  workflow: WorkflowRow | null,
+  expectedRevision: number,
+): WorkflowRow {
+  if (!workflow) throw new Error("community_member_workflow_not_found");
+  if (Number(workflow.revision) !== expectedRevision) {
+    throw new Error("community_member_workflow_revision_conflict");
+  }
+  return workflow;
+}
+
+function requireSourceReceiptRefForTrigger(
+  triggerType: CommunityMemberWorkflowTriggerType,
+  value: unknown,
+): string {
+  const sourceReceiptRef = normalizeCommunityMemberWorkflowSourceRef(value);
+  if (!sourceReceiptRef.startsWith(`${triggerType}:`)) {
+    throw new Error("community_member_workflow_source_ref_type_mismatch");
+  }
+  return sourceReceiptRef;
+}
+
+export const createBuilderWorkflowStage = mutation({
   args: {
     ...managerIdentityArgs,
     communityId: v.id("communities"),
     expectedRevision: v.number(),
-    definition: workflowDefinitionInputValidator,
+    name: v.string(),
   },
   handler: async (ctx, args) => {
     const { userId } = await requireWorkflowManager({
@@ -127,9 +142,7 @@ export const saveBuilderWorkflow = mutation({
       userId: args.userId,
       authSubject: args.authSubject,
     });
-    const definition = normalizeCommunityMemberWorkflowDefinition(
-      args.definition,
-    );
+    const name = normalizeCommunityMemberWorkflowStageName(args.name);
     const expectedRevision = normalizeExpectedRevision(args.expectedRevision);
     const existing = await getCommunityMemberWorkflowByCommunity({
       ctx,
@@ -140,11 +153,12 @@ export const saveBuilderWorkflow = mutation({
       if (expectedRevision !== 0) {
         throw new Error("community_member_workflow_revision_conflict");
       }
+      const stage = { key: nextWorkflowStageKey([]), name };
       const workflowId = await ctx.db.insert(
         "communityMemberWorkflows" as any,
         {
           communityId: args.communityId,
-          stages: definition.stages,
+          stages: [stage],
           revision: 1,
           createdByUserId: userId,
           updatedByUserId: userId,
@@ -152,45 +166,152 @@ export const saveBuilderWorkflow = mutation({
           updatedAt: nowMs,
         },
       );
-      return { workflow_id: String(workflowId), revision: 1 };
+      return { workflow_id: String(workflowId), revision: 1, stage };
     }
-    if (Number(existing.revision) !== expectedRevision) {
-      throw new Error("community_member_workflow_revision_conflict");
+    requireWorkflowRevision(existing, expectedRevision);
+    if (existing.stages.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES) {
+      throw new Error("community_member_workflow_stage_count_invalid");
     }
-
-    const nextStageKeys = new Set(
-      definition.stages.map((stage) => stage.key),
-    );
-    const memberStages = (await ctx.db
-      .query("communityMemberWorkflowMemberStages" as any)
-      .withIndex("by_workflow", (q: any) =>
-        q.eq("workflowId", existing._id),
-      )
-      .collect()) as MemberStageRow[];
-    if (
-      memberStages.some((row) => !nextStageKeys.has(row.currentStageKey))
-    ) {
-      throw new Error("community_member_workflow_stage_has_members");
-    }
-
+    const stage = { key: nextWorkflowStageKey(existing.stages), name };
     const revision = expectedRevision + 1;
     await ctx.db.patch(existing._id, {
-      stages: definition.stages,
+      stages: [...existing.stages, stage],
       revision,
       updatedByUserId: userId,
       updatedAt: nowMs,
     });
-    return { workflow_id: String(existing._id), revision };
+    return { workflow_id: String(existing._id), revision, stage };
   },
 });
 
-export const getBuilderWorkflowBoard = query({
+export const renameBuilderWorkflowStage = mutation({
   args: {
     ...managerIdentityArgs,
     communityId: v.id("communities"),
+    expectedRevision: v.number(),
+    stageKey: v.string(),
+    name: v.string(),
   },
   handler: async (ctx, args) => {
-    await requireWorkflowManager({
+    const { userId } = await requireWorkflowManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    const expectedRevision = normalizeExpectedRevision(args.expectedRevision);
+    const workflow = requireWorkflowRevision(
+      await getCommunityMemberWorkflowByCommunity({
+        ctx,
+        communityId: args.communityId,
+      }),
+      expectedRevision,
+    );
+    const stageKey = normalizeCommunityMemberWorkflowStageKey(args.stageKey);
+    const stageIndex = workflow.stages.findIndex(
+      (stage) => stage.key === stageKey,
+    );
+    if (stageIndex < 0) {
+      throw new Error("community_member_workflow_stage_invalid");
+    }
+    const name = normalizeCommunityMemberWorkflowStageName(args.name);
+    if (workflow.stages[stageIndex].name === name) {
+      return {
+        workflow_id: String(workflow._id),
+        revision: expectedRevision,
+        stage: workflow.stages[stageIndex],
+      };
+    }
+    const stages = workflow.stages.map((stage, index) =>
+      index === stageIndex ? { ...stage, name } : stage,
+    );
+    const revision = expectedRevision + 1;
+    const nowMs = Date.now();
+    await ctx.db.patch(workflow._id, {
+      stages,
+      revision,
+      updatedByUserId: userId,
+      updatedAt: nowMs,
+    });
+    return {
+      workflow_id: String(workflow._id),
+      revision,
+      stage: stages[stageIndex],
+    };
+  },
+});
+
+export const deleteBuilderWorkflowStage = mutation({
+  args: {
+    ...managerIdentityArgs,
+    communityId: v.id("communities"),
+    expectedRevision: v.number(),
+    stageKey: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const { userId, community } = await requireWorkflowManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    const expectedRevision = normalizeExpectedRevision(args.expectedRevision);
+    const workflow = requireWorkflowRevision(
+      await getCommunityMemberWorkflowByCommunity({
+        ctx,
+        communityId: args.communityId,
+      }),
+      expectedRevision,
+    );
+    if (workflow.stages.length <= COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES) {
+      throw new Error("community_member_workflow_stage_count_invalid");
+    }
+    const stageKey = normalizeCommunityMemberWorkflowStageKey(args.stageKey);
+    const stageIndex = workflow.stages.findIndex(
+      (stage) => stage.key === stageKey,
+    );
+    if (stageIndex < 0) {
+      throw new Error("community_member_workflow_stage_invalid");
+    }
+    const occupied = await ctx.db
+      .query("communityMemberWorkflowMemberStages" as any)
+      .withIndex("by_workflow_stage", (q: any) =>
+        q.eq("workflowId", workflow._id).eq("currentStageKey", stageKey),
+      )
+      .first();
+    if (occupied) {
+      throw new Error("community_member_workflow_stage_has_members");
+    }
+    if (stageIndex === 0) {
+      const activeMemberCount = readCommunityActiveMemberCount(community);
+      if (activeMemberCount === null) {
+        throw new Error("community_member_workflow_member_count_unknown");
+      }
+      if (activeMemberCount > 1) {
+        throw new Error("community_member_workflow_stage_has_members");
+      }
+    }
+    const revision = expectedRevision + 1;
+    const nowMs = Date.now();
+    await ctx.db.patch(workflow._id, {
+      stages: workflow.stages.filter((stage) => stage.key !== stageKey),
+      revision,
+      updatedByUserId: userId,
+      updatedAt: nowMs,
+    });
+    return { workflow_id: String(workflow._id), revision };
+  },
+});
+
+export const getBuilderWorkflowBoardPage = query({
+  args: {
+    ...managerIdentityArgs,
+    communityId: v.id("communities"),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    pageSize: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireWorkflowManager({
       ctx,
       communityId: args.communityId,
       userId: args.userId,
@@ -200,66 +321,77 @@ export const getBuilderWorkflowBoard = query({
       ctx,
       communityId: args.communityId,
     });
-    if (!workflow) return { workflow: null };
+    if (!workflow) {
+      return {
+        workflow: null,
+        page: [],
+        continueCursor: null,
+        isDone: true,
+        totalCount: 0,
+      };
+    }
 
-    const scannedMemberships = (await ctx.db
+    const pageSize = Math.max(
+      1,
+      Math.min(
+        WORKFLOW_BOARD_MAX_PAGE_SIZE,
+        Math.floor(args.pageSize ?? WORKFLOW_BOARD_DEFAULT_PAGE_SIZE),
+      ),
+    );
+    const rawPage = await ctx.db
       .query("communityMemberships")
       .withIndex("by_community_createdAt", (q: any) =>
         q.eq("communityId", args.communityId),
       )
-      .take(WORKFLOW_BOARD_MEMBERSHIP_SCAN_LIMIT + 1)) as CommunityMembershipLike[];
-    const activeMemberships = scannedMemberships.filter(
-      communityMembershipRowIsActive,
+      .order("asc")
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: pageSize,
+        maximumRowsRead: pageSize * 3,
+      });
+    const visibleMemberships = (rawPage.page as CommunityMembershipLike[]).filter(
+      (membership) =>
+        communityMembershipRowIsActive(membership) &&
+        String(membership.userId) !== String(community.ownerId),
     );
-    const visibleMemberships = activeMemberships.slice(
-      0,
-      WORKFLOW_BOARD_MEMBER_LIMIT,
-    );
-    const memberStages = (await ctx.db
-      .query("communityMemberWorkflowMemberStages" as any)
-      .withIndex("by_workflow", (q: any) =>
-        q.eq("workflowId", workflow._id),
-      )
-      .take(WORKFLOW_BOARD_MEMBERSHIP_SCAN_LIMIT + 1)) as MemberStageRow[];
-    const stateByMembershipId = new Map<string, MemberStageRow>();
-    for (const row of memberStages) {
-      const key = String(row.membershipId);
-      if (stateByMembershipId.has(key)) {
-        throw new Error("community_member_workflow_member_stage_ambiguous");
-      }
-      stateByMembershipId.set(key, row);
-    }
     const firstStage = workflow.stages[0];
     if (!firstStage) {
       throw new Error("community_member_workflow_stage_count_invalid");
     }
 
-    const members = [];
-    for (const membership of visibleMemberships) {
-      const state = stateByMembershipId.get(String(membership._id));
-      const stageKey = state?.currentStageKey ?? firstStage.key;
-      if (!workflow.stages.some((stage: any) => stage.key === stageKey)) {
-        throw new Error("community_member_workflow_member_stage_invalid");
-      }
-      const profile = await resolveUserProfileDisplayProjection(
-        ctx,
-        membership.userId,
-      );
-      members.push({
-        membership_id: String(membership._id),
-        current_stage_key: stageKey,
-        current_stage_entered_at: toIsoString(
-          state?.stageEnteredAt ??
-            membership.activatedAt ??
-            membership.createdAt,
-        ),
-        display_name: profile.display_name ?? "Member",
-        avatar_url: profile.avatar_url,
-        avatar_focus_x: profile.avatar_focus_x,
-        avatar_focus_y: profile.avatar_focus_y,
-        avatar_zoom: profile.avatar_zoom,
-      });
-    }
+    const members = await Promise.all(
+      visibleMemberships.map(async (membership) => {
+        const state = await getMemberStage({
+          ctx,
+          workflowId: workflow._id,
+          membershipId: membership._id,
+        });
+        const stageKey = state?.currentStageKey ?? firstStage.key;
+        if (!workflow.stages.some((stage) => stage.key === stageKey)) {
+          throw new Error("community_member_workflow_member_stage_invalid");
+        }
+        const profile = await resolveUserProfileDisplayProjection(
+          ctx,
+          membership.userId,
+        );
+        return {
+          membership_id: String(membership._id),
+          current_stage_key: stageKey,
+          current_stage_entered_at: toIsoString(
+            state?.stageEnteredAt ??
+              membership.activatedAt ??
+              membership.createdAt,
+          ),
+          display_name: profile.display_name ?? "Member",
+          avatar_url: profile.avatar_url,
+          avatar_focus_x: profile.avatar_focus_x,
+          avatar_focus_y: profile.avatar_focus_y,
+          avatar_zoom: profile.avatar_zoom,
+        };
+      }),
+    );
+
+    const activeMemberCount = readCommunityActiveMemberCount(community);
 
     return {
       workflow: {
@@ -267,13 +399,13 @@ export const getBuilderWorkflowBoard = query({
         community_id: String(workflow.communityId),
         revision: workflow.revision,
         stages: workflow.stages,
-        members,
-        members_truncated:
-          scannedMemberships.length > WORKFLOW_BOARD_MEMBERSHIP_SCAN_LIMIT ||
-          activeMemberships.length > WORKFLOW_BOARD_MEMBER_LIMIT ||
-          memberStages.length > WORKFLOW_BOARD_MEMBERSHIP_SCAN_LIMIT,
         updated_at: toIsoString(workflow.updatedAt),
       },
+      page: members,
+      continueCursor: rawPage.isDone ? null : rawPage.continueCursor,
+      isDone: rawPage.isDone,
+      totalCount:
+        activeMemberCount === null ? null : Math.max(0, activeMemberCount - 1),
     };
   },
 });
@@ -284,11 +416,8 @@ export async function transitionCommunityMemberWorkflowStageCore(args: {
   membershipId: any;
   targetStageKey: string;
   expectedStageKey?: string | null;
-  causeType: CommunityMemberWorkflowTransitionCauseType;
-  sourceRef?: string | null;
-  actorType: CommunityMemberWorkflowTransitionActorType;
-  actorUserId?: any;
-  idempotencyKey: string;
+  triggerType: CommunityMemberWorkflowTriggerType;
+  sourceReceiptRef: string;
   nowMs: number;
 }) {
   const workflow = await getCommunityMemberWorkflowByCommunity({
@@ -310,35 +439,30 @@ export async function transitionCommunityMemberWorkflowStageCore(args: {
   const targetStageKey = normalizeCommunityMemberWorkflowStageKey(
     args.targetStageKey,
   );
-  if (!workflow.stages.some((stage: any) => stage.key === targetStageKey)) {
+  if (!workflow.stages.some((stage) => stage.key === targetStageKey)) {
     throw new Error("community_member_workflow_stage_invalid");
   }
-  const idempotencyKey = normalizeCommunityMemberWorkflowIdempotencyKey(
-    args.idempotencyKey,
+  const sourceReceiptRef = requireSourceReceiptRefForTrigger(
+    args.triggerType,
+    args.sourceReceiptRef,
   );
-  const sourceRef = normalizeCommunityMemberWorkflowSourceRef(args.sourceRef);
-  const fingerprint = JSON.stringify({
-    workflowId: String(workflow._id),
-    membershipId: String(membership._id),
-    targetStageKey,
-    causeType: args.causeType,
-    sourceRef,
-    actorType: args.actorType,
-  });
   const replays = (await args.ctx.db
     .query("communityMemberWorkflowTransitions" as any)
-    .withIndex("by_workflow_membership_idempotency", (q: any) =>
+    .withIndex("by_workflow_membership_source", (q: any) =>
       q
         .eq("workflowId", workflow._id)
         .eq("membershipId", membership._id)
-        .eq("idempotencyKey", idempotencyKey),
+        .eq("sourceReceiptRef", sourceReceiptRef),
     )
     .take(2)) as any[];
   if (replays.length > 1) {
     throw new Error("community_member_workflow_transition_ambiguous");
   }
   if (replays[0]) {
-    if (replays[0].idempotencyFingerprint !== fingerprint) {
+    if (
+      replays[0].toStageKey !== targetStageKey ||
+      replays[0].triggerType !== args.triggerType
+    ) {
       throw new Error("community_member_workflow_idempotency_conflict");
     }
     return {
@@ -371,20 +495,17 @@ export async function transitionCommunityMemberWorkflowStageCore(args: {
       currentStageKey: targetStageKey,
       stageEnteredAt: args.nowMs,
       transitionSeq: seq,
-      revision: Number(state.revision ?? 0) + 1,
       updatedAt: args.nowMs,
     });
   } else {
     await args.ctx.db.insert(
       "communityMemberWorkflowMemberStages" as any,
       {
-        communityId: args.communityId,
         workflowId: workflow._id,
         membershipId: membership._id,
         currentStageKey: targetStageKey,
         stageEnteredAt: args.nowMs,
         transitionSeq: seq,
-        revision: 1,
         createdAt: args.nowMs,
         updatedAt: args.nowMs,
       },
@@ -399,12 +520,8 @@ export async function transitionCommunityMemberWorkflowStageCore(args: {
       seq,
       fromStageKey: currentStageKey,
       toStageKey: targetStageKey,
-      causeType: args.causeType,
-      ...(sourceRef ? { sourceRef } : {}),
-      actorType: args.actorType,
-      ...(args.actorUserId ? { actorUserId: args.actorUserId } : {}),
-      idempotencyKey,
-      idempotencyFingerprint: fingerprint,
+      triggerType: args.triggerType,
+      sourceReceiptRef,
       occurredAt: args.nowMs,
       createdAt: args.nowMs,
     },
@@ -422,11 +539,8 @@ export const transitionMemberStageInternal = internalMutation({
     membershipId: v.id("communityMemberships"),
     targetStageKey: v.string(),
     expectedStageKey: v.optional(v.string()),
-    causeType: transitionCauseValidator,
-    sourceRef: v.optional(v.string()),
-    actorType: transitionActorValidator,
-    actorUserId: v.optional(v.id("users")),
-    idempotencyKey: v.string(),
+    triggerType: workflowTriggerValidator,
+    sourceReceiptRef: v.string(),
     occurredAt: v.optional(v.number()),
   },
   handler: async (ctx, args) =>
@@ -436,11 +550,8 @@ export const transitionMemberStageInternal = internalMutation({
       membershipId: args.membershipId,
       targetStageKey: args.targetStageKey,
       expectedStageKey: args.expectedStageKey,
-      causeType: args.causeType,
-      sourceRef: args.sourceRef,
-      actorType: args.actorType,
-      actorUserId: args.actorUserId,
-      idempotencyKey: args.idempotencyKey,
+      triggerType: args.triggerType,
+      sourceReceiptRef: args.sourceReceiptRef,
       nowMs: args.occurredAt ?? Date.now(),
     }),
 });

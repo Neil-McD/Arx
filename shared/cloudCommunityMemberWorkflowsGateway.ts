@@ -1,8 +1,5 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
-import type {
-  CommunityMemberWorkflowDefinition,
-  CommunityMemberWorkflowStage,
-} from "./communityMemberWorkflow";
+import type { CommunityMemberWorkflowStage } from "./communityMemberWorkflow";
 
 type WorkflowGatewayParams<SessionT> = { session: SessionT };
 
@@ -22,41 +19,122 @@ export type CloudCommunityMemberWorkflowBoard = {
   community_id: string;
   revision: number;
   stages: CommunityMemberWorkflowStage[];
-  members: CloudCommunityMemberWorkflowMember[];
-  members_truncated: boolean;
   updated_at: string;
 };
 
-export async function fetchCloudCommunityMemberWorkflowBoard<SessionT>(
-  params: WorkflowGatewayParams<SessionT> & { communityId: string },
-): Promise<CloudCommunityMemberWorkflowBoard | null> {
+export type CloudCommunityMemberWorkflowBoardPage = {
+  board: CloudCommunityMemberWorkflowBoard | null;
+  members: CloudCommunityMemberWorkflowMember[];
+  totalCount: number | null;
+  continueCursor: string | null;
+  isDone: boolean;
+};
+
+type WorkflowStageMutationResult = {
+  workflow_id: string;
+  revision: number;
+  stage?: CommunityMemberWorkflowStage;
+};
+
+export async function fetchCloudCommunityMemberWorkflowBoardPage<SessionT>(
+  params: WorkflowGatewayParams<SessionT> & {
+    communityId: string;
+    cursor?: string | null;
+    pageSize?: number;
+  },
+): Promise<CloudCommunityMemberWorkflowBoardPage> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
   const payload = (await client.query(
-    "communityMemberWorkflows:getBuilderWorkflowBoard" as any,
-    { authSubject, communityId: params.communityId },
-  )) as { workflow?: CloudCommunityMemberWorkflowBoard | null } | null;
-  return payload?.workflow ?? null;
+    "communityMemberWorkflows:getBuilderWorkflowBoardPage" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+      cursor: params.cursor ?? null,
+      pageSize: params.pageSize ?? 50,
+    },
+  )) as {
+    workflow?: CloudCommunityMemberWorkflowBoard | null;
+    page?: CloudCommunityMemberWorkflowMember[];
+    totalCount?: number | null;
+    continueCursor?: string | null;
+    isDone?: boolean;
+  } | null;
+  return {
+    board: payload?.workflow ?? null,
+    members: Array.isArray(payload?.page) ? payload.page : [],
+    totalCount:
+      typeof payload?.totalCount === "number" ? payload.totalCount : null,
+    continueCursor:
+      typeof payload?.continueCursor === "string"
+        ? payload.continueCursor
+        : null,
+    isDone: payload?.isDone === true,
+  };
 }
 
-export async function saveCloudCommunityMemberWorkflow<SessionT>(
+export async function createCloudCommunityMemberWorkflowStage<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
     communityId: string;
     expectedRevision: number;
-    definition: CommunityMemberWorkflowDefinition;
+    name: string;
   },
-): Promise<{ workflow_id: string; revision: number }> {
+): Promise<WorkflowStageMutationResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
   return (await client.mutation(
-    "communityMemberWorkflows:saveBuilderWorkflow" as any,
+    "communityMemberWorkflows:createBuilderWorkflowStage" as any,
     {
       authSubject,
       communityId: params.communityId,
       expectedRevision: params.expectedRevision,
-      definition: params.definition,
+      name: params.name,
     },
-  )) as { workflow_id: string; revision: number };
+  )) as WorkflowStageMutationResult;
+}
+
+export async function renameCloudCommunityMemberWorkflowStage<SessionT>(
+  params: WorkflowGatewayParams<SessionT> & {
+    communityId: string;
+    expectedRevision: number;
+    stageKey: string;
+    name: string;
+  },
+): Promise<WorkflowStageMutationResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  return (await client.mutation(
+    "communityMemberWorkflows:renameBuilderWorkflowStage" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+      expectedRevision: params.expectedRevision,
+      stageKey: params.stageKey,
+      name: params.name,
+    },
+  )) as WorkflowStageMutationResult;
+}
+
+export async function deleteCloudCommunityMemberWorkflowStage<SessionT>(
+  params: WorkflowGatewayParams<SessionT> & {
+    communityId: string;
+    expectedRevision: number;
+    stageKey: string;
+  },
+): Promise<WorkflowStageMutationResult> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  return (await client.mutation(
+    "communityMemberWorkflows:deleteBuilderWorkflowStage" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+      expectedRevision: params.expectedRevision,
+      stageKey: params.stageKey,
+    },
+  )) as WorkflowStageMutationResult;
 }

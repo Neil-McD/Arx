@@ -1,195 +1,99 @@
 import { Pencil, Plus, RefreshCw } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES,
-  normalizeCommunityMemberWorkflowDefinition,
-  type CommunityMemberWorkflowDefinition,
   type CommunityMemberWorkflowStage,
 } from "../../../../shared/communityMemberWorkflow";
-import type { CloudCommunityMemberWorkflowBoard } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
+import type {
+  CloudCommunityMemberWorkflowBoard,
+  CloudCommunityMemberWorkflowMember,
+} from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
 import { WebCommunityWorkflowStageModal } from "./WebCommunityWorkflowStageModal";
 import "./WebCommunityWorkflowsSection.css";
 
 export type WebCommunityWorkflowsSectionProps = {
   board: CloudCommunityMemberWorkflowBoard | null;
+  members: CloudCommunityMemberWorkflowMember[];
+  totalCount: number | null;
+  hasMore: boolean;
   hasLoaded: boolean;
   isLoading: boolean;
+  isLoadingMore: boolean;
   error: string | null;
   isSaving: boolean;
   actionError: string | null;
   onReload: () => Promise<unknown> | unknown;
-  onSaveDefinition: (
-    definition: CommunityMemberWorkflowDefinition,
-  ) => Promise<boolean>;
+  onLoadMore: () => Promise<unknown> | unknown;
+  onCreateStage: (name: string) => Promise<boolean>;
+  onRenameStage: (stageKey: string, name: string) => Promise<boolean>;
+  onDeleteStage: (stageKey: string) => Promise<boolean>;
   onClearActionError: () => void;
 };
 
-function blankCanvasDefinition(): CommunityMemberWorkflowDefinition {
-  return { stages: [{ key: "new", name: "" }] };
-}
-
-function definitionFromBoard(
-  board: CloudCommunityMemberWorkflowBoard,
-): CommunityMemberWorkflowDefinition {
-  return { stages: board.stages.map((stage) => ({ ...stage })) };
-}
-
-function uniqueStageKey(
-  stages: CommunityMemberWorkflowDefinition["stages"],
-): string {
-  const used = new Set(stages.map((stage) => stage.key));
-  let sequence = stages.length + 1;
-  let candidate = `stage-${sequence}`;
-  while (used.has(candidate)) {
-    sequence += 1;
-    candidate = `stage-${sequence}`;
-  }
-  return candidate;
-}
+const BLANK_STAGE: CommunityMemberWorkflowStage = { key: "", name: "" };
 
 export function WebCommunityWorkflowsSection(
   props: WebCommunityWorkflowsSectionProps,
 ) {
-  const [definition, setDefinition] =
-    useState<CommunityMemberWorkflowDefinition>(blankCanvasDefinition);
   const [editingStageKey, setEditingStageKey] = useState<string | null>(null);
-  const [provisionalStageKey, setProvisionalStageKey] = useState<string | null>(
-    null,
-  );
-  const [localError, setLocalError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setDefinition(
-      props.board
-        ? definitionFromBoard(props.board)
-        : blankCanvasDefinition(),
-    );
-    setEditingStageKey(null);
-    setProvisionalStageKey(null);
-    setLocalError(null);
-  }, [props.board?.id, props.board?.revision]);
-
-  const editingStage =
-    definition.stages.find((stage) => stage.key === editingStageKey) ?? null;
-  const editingStageIndex = editingStage
-    ? definition.stages.findIndex((stage) => stage.key === editingStage.key)
-    : -1;
+  const [isCreatingStage, setIsCreatingStage] = useState(false);
+  const stages = props.board?.stages ?? [BLANK_STAGE];
+  const editingStage = isCreatingStage
+    ? BLANK_STAGE
+    : stages.find((stage) => stage.key === editingStageKey) ?? null;
+  const editingStageIndex = isCreatingStage
+    ? stages.length
+    : editingStage
+      ? stages.findIndex((stage) => stage.key === editingStage.key)
+      : -1;
   const membersByStage = useMemo(() => {
-    const grouped = new Map<
-      string,
-      NonNullable<WebCommunityWorkflowsSectionProps["board"]>["members"]
-    >();
-    for (const member of props.board?.members ?? []) {
+    const grouped = new Map<string, CloudCommunityMemberWorkflowMember[]>();
+    for (const member of props.members) {
       const members = grouped.get(member.current_stage_key) ?? [];
       members.push(member);
       grouped.set(member.current_stage_key, members);
     }
     return grouped;
-  }, [props.board?.members]);
-  const editingStageHasMembers = editingStage
-    ? (membersByStage.get(editingStage.key)?.length ?? 0) > 0
-    : false;
-  const persistedStageKeys = new Set(
-    props.board?.stages.map((stage) => stage.key) ?? [],
-  );
+  }, [props.members]);
 
   const openStage = (stageKey: string) => {
     props.onClearActionError();
-    setLocalError(null);
-    setEditingStageKey(stageKey);
+    setIsCreatingStage(!stageKey);
+    setEditingStageKey(stageKey || null);
   };
 
   const closeStage = () => {
-    if (provisionalStageKey) {
-      setDefinition((current) => ({
-        stages: current.stages.filter(
-          (stage) => stage.key !== provisionalStageKey,
-        ),
-      }));
-    }
     setEditingStageKey(null);
-    setProvisionalStageKey(null);
-    setLocalError(null);
+    setIsCreatingStage(false);
     props.onClearActionError();
   };
 
   const addStage = () => {
     if (
       props.isSaving ||
-      definition.stages.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
-    ) {
-      return;
-    }
-    const key = uniqueStageKey(definition.stages);
-    setDefinition((current) => ({
-      stages: [...current.stages, { key, name: "" }],
-    }));
-    setProvisionalStageKey(key);
-    setEditingStageKey(key);
-    setLocalError(null);
+      (props.board?.stages.length ?? 0) >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
+    ) return;
+    openStage("");
   };
 
   const deleteEditingStage = async () => {
-    if (
-      !editingStage ||
-      editingStageHasMembers ||
-      definition.stages.length <= COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES
-    ) {
-      return;
-    }
-    const next = {
-      stages: definition.stages.filter(
-        (stage) => stage.key !== editingStage.key,
-      ),
-    };
-    if (
-      provisionalStageKey === editingStage.key ||
-      !persistedStageKeys.has(editingStage.key)
-    ) {
-      setDefinition(next);
-      setEditingStageKey(null);
-      setProvisionalStageKey(null);
-      return;
-    }
-    try {
-      const normalized = normalizeCommunityMemberWorkflowDefinition(next);
-      if (await props.onSaveDefinition(normalized)) {
-        setDefinition(normalized);
-        setEditingStageKey(null);
-      }
-    } catch {
-      setLocalError("This stage could not be deleted. Nothing was changed.");
-    }
+    if (!editingStage?.key || stages.length <= COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES) return;
+    if (await props.onDeleteStage(editingStage.key)) closeStage();
   };
 
   const saveStage = async (stage: CommunityMemberWorkflowStage) => {
-    const next = {
-      stages: definition.stages.map((current) =>
-        current.key === stage.key ? stage : current,
-      ),
-    };
-    try {
-      const normalized = normalizeCommunityMemberWorkflowDefinition(next);
-      if (await props.onSaveDefinition(normalized)) {
-        setDefinition(normalized);
-        setEditingStageKey(null);
-        setProvisionalStageKey(null);
-        setLocalError(null);
-      }
-    } catch {
-      setLocalError("Name the stage before saving it.");
-    }
+    const saved = !stage.key || isCreatingStage
+      ? await props.onCreateStage(stage.name)
+      : await props.onRenameStage(stage.key, stage.name);
+    if (saved) closeStage();
   };
 
   if (props.isLoading && !props.hasLoaded) {
     return (
-      <div
-        className="workflow-page workflow-page-loading"
-        aria-label="Loading workflows"
-      >
+      <div className="workflow-page workflow-page-loading" aria-label="Loading workflows">
         <span className="workflow-loading-line" />
         <span className="workflow-loading-line is-short" />
         <span className="workflow-loading-board" />
@@ -220,17 +124,15 @@ export function WebCommunityWorkflowsSection(
         aria-labelledby="workflow-title"
       >
         <header className="feed-header-row workflow-pipeline-header">
-          <h1 className="resources-header" id="workflow-title">
-            Workflows
-          </h1>
+          <h1 className="resources-header" id="workflow-title">Workflows</h1>
         </header>
 
         <div className="workflow-stage-canvas" aria-label="Member success stages">
-          {definition.stages.map((stage, index) => {
+          {stages.map((stage, index) => {
             const members = membersByStage.get(stage.key) ?? [];
             const incomplete = !stage.name.trim();
             return (
-              <section className="workflow-stage-column" key={stage.key}>
+              <section className="workflow-stage-column" key={stage.key || "blank-stage"}>
                 <header className="workflow-stage-column-header">
                   <div>
                     <span className="workflow-stage-position">{index + 1}</span>
@@ -255,17 +157,14 @@ export function WebCommunityWorkflowsSection(
                     <button
                       className="workflow-stage-setup-button"
                       type="button"
-                      onClick={() => openStage(stage.key)}
+                      onClick={() => openStage("")}
                     >
                       <Plus size={17} aria-hidden="true" />
                       Set up stage
                     </button>
                   ) : members.length > 0 ? (
                     members.map((member) => (
-                      <div
-                        className="workflow-member-row"
-                        key={member.membership_id}
-                      >
+                      <div className="workflow-member-row" key={member.membership_id}>
                         <UserAvatar
                           name={member.display_name}
                           imageUrl={member.avatar_url}
@@ -289,7 +188,8 @@ export function WebCommunityWorkflowsSection(
             type="button"
             disabled={
               props.isSaving ||
-              definition.stages.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
+              !props.board ||
+              props.board.stages.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
             }
             onClick={addStage}
             aria-label="Add stage"
@@ -299,15 +199,20 @@ export function WebCommunityWorkflowsSection(
           </button>
         </div>
 
-        {props.board?.members_truncated ? (
-          <p className="workflow-board-footnote">
-            This first view shows the earliest 200 active members.
-          </p>
+        {props.hasMore ? (
+          <button
+            className="workflow-secondary-button workflow-load-more-button"
+            type="button"
+            onClick={() => void props.onLoadMore()}
+            disabled={props.isLoadingMore}
+          >
+            {props.isLoadingMore ? "Loading…" : "Load more members"}
+          </button>
+        ) : props.totalCount !== null && props.members.length > 0 ? (
+          <p className="workflow-board-footnote">{props.totalCount} members</p>
         ) : null}
-        {!editingStage && (localError || props.actionError) ? (
-          <p className="workflow-error" role="alert">
-            {localError ?? props.actionError}
-          </p>
+        {!editingStage && props.actionError ? (
+          <p className="workflow-error" role="alert">{props.actionError}</p>
         ) : null}
       </section>
 
@@ -317,18 +222,15 @@ export function WebCommunityWorkflowsSection(
         stageNumber={Math.max(1, editingStageIndex + 1)}
         isSaving={props.isSaving}
         canDelete={
-          Boolean(editingStage) &&
-          definition.stages.length > COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES &&
-          !editingStageHasMembers
+          Boolean(editingStage?.key) &&
+          stages.length > COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES
         }
         deleteDisabledReason={
-          editingStageHasMembers
-            ? "Move members before deleting this stage"
-            : definition.stages.length <= COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES
-              ? "A workflow needs at least one stage"
-              : null
+          stages.length <= COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES
+            ? "A workflow needs at least one stage"
+            : null
         }
-        error={localError ?? props.actionError}
+        error={props.actionError}
         onClose={closeStage}
         onSave={saveStage}
         onDelete={deleteEditingStage}

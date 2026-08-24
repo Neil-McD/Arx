@@ -1165,13 +1165,11 @@ export default defineSchema({
   }).index("by_community", ["communityId"]),
 
   communityMemberWorkflowMemberStages: defineTable({
-    communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
     membershipId: v.id("communityMemberships"),
     currentStageKey: v.string(),
     stageEnteredAt: v.number(),
     transitionSeq: v.number(),
-    revision: v.number(),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
@@ -1187,30 +1185,20 @@ export default defineSchema({
     seq: v.number(),
     fromStageKey: v.string(),
     toStageKey: v.string(),
-    causeType: v.union(
-      v.literal("builder"),
+    triggerType: v.union(
       v.literal("in_app"),
       v.literal("time"),
       v.literal("external"),
-      v.literal("system"),
     ),
-    sourceRef: v.optional(v.string()),
-    actorType: v.union(
-      v.literal("builder"),
-      v.literal("agent"),
-      v.literal("system"),
-    ),
-    actorUserId: v.optional(v.id("users")),
-    idempotencyKey: v.string(),
-    idempotencyFingerprint: v.string(),
+    sourceReceiptRef: v.string(),
     occurredAt: v.number(),
     createdAt: v.number(),
   })
     .index("by_workflow_membership_seq", ["workflowId", "membershipId", "seq"])
-    .index("by_workflow_membership_idempotency", [
+    .index("by_workflow_membership_source", [
       "workflowId",
       "membershipId",
-      "idempotencyKey",
+      "sourceReceiptRef",
     ])
     .index("by_community_occurredAt", ["communityId", "occurredAt"]),
 

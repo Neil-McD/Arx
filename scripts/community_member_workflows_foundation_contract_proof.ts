@@ -40,19 +40,26 @@ for (const retiredTable of [
   assert.doesNotMatch(schema, new RegExp(`${retiredTable}: defineTable\\(`));
 }
 
-assert.match(backend, /export const saveBuilderWorkflow = mutation/);
-assert.match(backend, /export const getBuilderWorkflowBoard = query/);
+assert.match(backend, /export const createBuilderWorkflowStage = mutation/);
+assert.match(backend, /export const renameBuilderWorkflowStage = mutation/);
+assert.match(backend, /export const deleteBuilderWorkflowStage = mutation/);
+assert.match(backend, /export const getBuilderWorkflowBoardPage = query/);
 assert.match(
   backend,
   /export async function transitionCommunityMemberWorkflowStageCore/,
 );
 assert.match(backend, /export const transitionMemberStageInternal/);
 assert.match(backend, /communityMembershipRowIsActive/);
-assert.match(backend, /idempotencyFingerprint/);
+assert.match(backend, /\.paginate\(/);
+assert.match(backend, /by_workflow_membership_source/);
+assert.match(backend, /sourceReceiptRef/);
+assert.match(backend, /community_member_workflow_source_ref_type_mismatch/);
+assert.doesNotMatch(backend, /saveBuilderWorkflow/);
+assert.doesNotMatch(backend, /idempotencyFingerprint|idempotencyKey/);
 assert.match(contract, /"in_app"/);
 assert.match(contract, /"time"/);
 assert.match(contract, /"external"/);
-assert.match(contract, /"agent"/);
+assert.doesNotMatch(contract, /"builder"|"system"|TRANSITION_ACTOR/);
 
 for (const retiredSymbol of [
   "activateBuilderWorkflowDraft",
@@ -70,10 +77,17 @@ for (const source of [lifecycle, commerce, admin]) {
   );
 }
 
-assert.match(gateway, /saveCloudCommunityMemberWorkflow/);
-assert.match(controller, /saveDefinition/);
+assert.match(gateway, /createCloudCommunityMemberWorkflowStage/);
+assert.match(gateway, /renameCloudCommunityMemberWorkflowStage/);
+assert.match(gateway, /deleteCloudCommunityMemberWorkflowStage/);
+assert.match(gateway, /fetchCloudCommunityMemberWorkflowBoardPage/);
+assert.match(controller, /createStage/);
+assert.match(controller, /renameStage/);
+assert.match(controller, /deleteStage/);
+assert.match(controller, /loadMore/);
 assert.match(surface, /workflow-stage-canvas/);
 assert.match(surface, /workflow-add-stage-button/);
+assert.match(surface, /Load more members/);
 assert.match(surface, /WebCommunityWorkflowStageModal/);
 assert.match(modal, /Stage name/);
 for (const retiredUi of [

@@ -1,16 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import type { AuthSession } from "../auth";
-import type {
-  AppPage,
-  CommunityTab,
-} from "../../../../shared/appShellNavigation";
+import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import {
-  fetchCloudCommunityMemberWorkflowBoard,
-  saveCloudCommunityMemberWorkflow,
+  createCloudCommunityMemberWorkflowStage,
+  deleteCloudCommunityMemberWorkflowStage,
+  fetchCloudCommunityMemberWorkflowBoardPage,
+  renameCloudCommunityMemberWorkflowStage,
   type CloudCommunityMemberWorkflowBoard,
+  type CloudCommunityMemberWorkflowMember,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
-import type { CommunityMemberWorkflowDefinition } from "../../../../shared/communityMemberWorkflow";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -28,6 +27,9 @@ function workflowErrorMessage(error: unknown): string {
   if (message.includes("stage_has_members")) {
     return "Move members out of this stage before deleting it.";
   }
+  if (message.includes("stage_count_invalid")) {
+    return "A workflow needs at least one stage.";
+  }
   if (message.includes("community_forbidden")) {
     return "You no longer have permission to manage this workflow.";
   }
@@ -42,11 +44,14 @@ export function useWebCommunityWorkflowsController(params: {
   ensureSession: EnsureAuthSession;
   session: AuthSession | null;
 }) {
-  const [board, setBoard] = useState<CloudCommunityMemberWorkflowBoard | null>(
-    null,
-  );
+  const [board, setBoard] = useState<CloudCommunityMemberWorkflowBoard | null>(null);
+  const [members, setMembers] = useState<CloudCommunityMemberWorkflowMember[]>([]);
+  const [nextCursor, setNextCursor] = useState<string | null>(null);
+  const [hasMore, setHasMore] = useState(false);
+  const [totalCount, setTotalCount] = useState<number | null>(null);
   const [hasLoaded, setHasLoaded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingMore, setIsLoadingMore] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
@@ -64,20 +69,22 @@ export function useWebCommunityWorkflowsController(params: {
       try {
         const usableSession =
           knownSession ??
-          (await params.ensureSession(
-            knownSession,
-            "community_workflows_load",
-          ));
+          (await params.ensureSession(knownSession, "community_workflows_load"));
         if (!usableSession) throw new Error("auth_session_required");
-        const nextBoard = await fetchCloudCommunityMemberWorkflowBoard({
+        const page = await fetchCloudCommunityMemberWorkflowBoardPage({
           session: usableSession,
           communityId,
+          cursor: null,
         });
         if (generation === requestGenerationRef.current) {
-          setBoard(nextBoard);
+          setBoard(page.board);
+          setMembers(page.members);
+          setNextCursor(page.continueCursor);
+          setHasMore(Boolean(page.continueCursor && !page.isDone));
+          setTotalCount(page.totalCount);
           setHasLoaded(true);
         }
-        return nextBoard;
+        return page;
       } catch (loadError) {
         if (generation === requestGenerationRef.current) {
           setError(workflowErrorMessage(loadError));
@@ -99,6 +106,10 @@ export function useWebCommunityWorkflowsController(params: {
   useEffect(() => {
     requestGenerationRef.current += 1;
     setBoard(null);
+    setMembers([]);
+    setNextCursor(null);
+    setHasMore(false);
+    setTotalCount(null);
     setHasLoaded(false);
     setError(null);
     setActionError(null);
@@ -111,9 +122,7 @@ export function useWebCommunityWorkflowsController(params: {
       !params.activeCommunityId ||
       !params.session ||
       !params.canManageMembers
-    ) {
-      return;
-    }
+    ) return;
     void loadBoard(params.activeCommunityId, params.session);
   }, [
     loadBoard,
@@ -124,27 +133,66 @@ export function useWebCommunityWorkflowsController(params: {
     params.session,
   ]);
 
-  const saveDefinition = useCallback(
-    async (definition: CommunityMemberWorkflowDefinition) => {
+  const loadMore = useCallback(async () => {
+    if (!params.activeCommunityId || !nextCursor || !hasMore || isLoadingMore) return;
+    const generation = requestGenerationRef.current;
+    const cursor = nextCursor;
+    setIsLoadingMore(true);
+    setActionError(null);
+    try {
+      const usableSession = await params.ensureSession(
+        params.session,
+        "community_workflows_load_more",
+      );
+      if (!usableSession) throw new Error("auth_session_required");
+      const page = await fetchCloudCommunityMemberWorkflowBoardPage({
+        session: usableSession,
+        communityId: params.activeCommunityId,
+        cursor,
+      });
+      if (generation !== requestGenerationRef.current) return;
+      setMembers((current) => {
+        const seen = new Set(current.map((member) => member.membership_id));
+        return [
+          ...current,
+          ...page.members.filter((member) => !seen.has(member.membership_id)),
+        ];
+      });
+      setNextCursor(page.continueCursor);
+      setHasMore(Boolean(page.continueCursor && !page.isDone));
+      setTotalCount(page.totalCount);
+    } catch (loadError) {
+      if (generation === requestGenerationRef.current) {
+        setActionError(workflowErrorMessage(loadError));
+      }
+    } finally {
+      if (generation === requestGenerationRef.current) setIsLoadingMore(false);
+    }
+  }, [
+    hasMore,
+    isLoadingMore,
+    nextCursor,
+    params.activeCommunityId,
+    params.ensureSession,
+    params.session,
+  ]);
+
+  const mutateStage = useCallback(
+    async (
+      source: string,
+      run: (session: AuthSession, communityId: string, revision: number) => Promise<unknown>,
+    ) => {
       if (!params.activeCommunityId || isSaving) return false;
       setIsSaving(true);
       setActionError(null);
       try {
-        const usableSession = await params.ensureSession(
-          params.session,
-          "community_workflows_save",
-        );
+        const usableSession = await params.ensureSession(params.session, source);
         if (!usableSession) throw new Error("auth_session_required");
-        await saveCloudCommunityMemberWorkflow({
-          session: usableSession,
-          communityId: params.activeCommunityId,
-          expectedRevision: board?.revision ?? 0,
-          definition,
-        });
+        await run(usableSession, params.activeCommunityId, board?.revision ?? 0);
         await loadBoard(params.activeCommunityId, usableSession);
         return true;
-      } catch (saveError) {
-        setActionError(workflowErrorMessage(saveError));
+      } catch (mutationError) {
+        setActionError(workflowErrorMessage(mutationError));
         return false;
       } finally {
         setIsSaving(false);
@@ -162,13 +210,45 @@ export function useWebCommunityWorkflowsController(params: {
 
   return {
     board,
+    members,
+    hasMore,
+    totalCount,
     hasLoaded,
     isLoading,
+    isLoadingMore,
     error,
     isSaving,
     actionError,
     reload: () => loadBoard(),
-    saveDefinition,
+    loadMore,
+    createStage: (name: string) =>
+      mutateStage("community_workflows_create_stage", (session, communityId, revision) =>
+        createCloudCommunityMemberWorkflowStage({
+          session,
+          communityId,
+          expectedRevision: revision,
+          name,
+        }),
+      ),
+    renameStage: (stageKey: string, name: string) =>
+      mutateStage("community_workflows_rename_stage", (session, communityId, revision) =>
+        renameCloudCommunityMemberWorkflowStage({
+          session,
+          communityId,
+          expectedRevision: revision,
+          stageKey,
+          name,
+        }),
+      ),
+    deleteStage: (stageKey: string) =>
+      mutateStage("community_workflows_delete_stage", (session, communityId, revision) =>
+        deleteCloudCommunityMemberWorkflowStage({
+          session,
+          communityId,
+          expectedRevision: revision,
+          stageKey,
+        }),
+      ),
     clearActionError: () => setActionError(null),
   };
 }
