@@ -89,6 +89,7 @@ assert.match(surface, /workflow-stage-canvas/);
 assert.match(surface, /workflow-add-stage-button/);
 assert.match(surface, /Load more members/);
 assert.match(surface, /WebCommunityWorkflowStageModal/);
+assert.match(surface, /props\.board[\s\S]*\? stages\.length[\s\S]*: 0/);
 assert.match(modal, /Stage name/);
 for (const retiredUi of [
   "Publish changes",

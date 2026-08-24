@@ -45,7 +45,9 @@ export function WebCommunityWorkflowsSection(
     ? BLANK_STAGE
     : stages.find((stage) => stage.key === editingStageKey) ?? null;
   const editingStageIndex = isCreatingStage
-    ? stages.length
+    ? props.board
+      ? stages.length
+      : 0
     : editingStage
       ? stages.findIndex((stage) => stage.key === editingStage.key)
       : -1;
