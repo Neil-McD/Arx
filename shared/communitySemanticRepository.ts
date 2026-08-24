@@ -80,8 +80,6 @@ export type SelfProfileSemanticSource = {
   ownedCommunities: SelfProfileCommunitySummary[];
   accessibleCommunities: SelfProfileCommunitySummary[];
   workflowState?: {
-    workflowVersion: number;
-    enrollmentStatus: "active" | "paused" | "completed";
     stageKey: string;
     stageName: string;
   } | null;
@@ -804,19 +802,12 @@ export function renderSelfProfileMarkdown(
     if (!stageKey || !stageName) {
       throw new Error("self_profile_workflow_state_invalid");
     }
-    const enrollmentStatus =
-      source.workflowState.enrollmentStatus === "paused" ||
-      source.workflowState.enrollmentStatus === "completed"
-        ? source.workflowState.enrollmentStatus
-        : "active";
     lines.push(
       "",
       "## My success workflow",
       "",
       "This is read-only progress state for the current community lens.",
       "",
-      `- Workflow version: ${Math.max(1, Math.floor(Number(source.workflowState.workflowVersion) || 1))}`,
-      `- Enrollment status: \`${enrollmentStatus}\``,
       `- Current stage: ${JSON.stringify(stageName)} (\`${stageKey}\`)`,
     );
   }

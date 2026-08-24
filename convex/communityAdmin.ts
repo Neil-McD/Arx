@@ -54,7 +54,6 @@ import { cancelStripeSubscriptionIfActive } from "./stripeSubscriptionCancellati
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import {
   activateCommunityMembershipCore,
-  scheduleCommunityMemberWorkflowEnrollmentReconciliation,
 } from "./communityMembershipLifecycle";
 import { deleteCommunityReadCursorsForUserCommunity } from "./communityReadCursorCore";
 import { deleteCommunityPresenceForUser } from "./communityPresenceCore";
@@ -1664,11 +1663,6 @@ export const revokeCommunityMemberInternal = internalMutation({
             after: revokedMembership,
           });
         }
-        await scheduleCommunityMemberWorkflowEnrollmentReconciliation({
-          ctx,
-          membership: revokedMembership,
-        });
-
         const memberSettings = (await ctx.db
           .query("communityMemberSettings" as any)
           .withIndex("by_community_user", (q: any) =>
@@ -2253,15 +2247,6 @@ export const leaveCommunity = mutation({
             communityId: args.communityId,
             before: membership,
             after,
-          });
-          await scheduleCommunityMemberWorkflowEnrollmentReconciliation({
-            ctx,
-            membership: after ?? {
-              ...membership,
-              active: false,
-              revokedAt: nowMs,
-              updatedAt: nowMs,
-            },
           });
         }
         const memberSettings = (await ctx.db

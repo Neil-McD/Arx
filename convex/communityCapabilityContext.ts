@@ -606,48 +606,28 @@ async function resolveSelfWorkflowSemanticState(args: {
     userId: args.userId,
   });
   if (!membership || !communityMembershipRowIsActive(membership)) return null;
-  const activationSequence = Math.max(
-    1,
-    Math.floor(Number(membership.activationSequence ?? 1)),
-  );
-  const enrollments = (await args.ctx.db
-    .query("communityMemberWorkflowEnrollments")
-    .withIndex("by_membership", (q: any) =>
-      q.eq("membershipId", membership._id),
+  const workflows = (await args.ctx.db
+    .query("communityMemberWorkflows")
+    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
+    .take(2)) as any[];
+  if (workflows.length > 1) throw new Error("self_workflow_ambiguous");
+  const workflow = workflows[0] ?? null;
+  if (!workflow) return null;
+  const states = (await args.ctx.db
+    .query("communityMemberWorkflowMemberStages")
+    .withIndex("by_workflow_membership", (q: any) =>
+      q.eq("workflowId", workflow._id).eq("membershipId", membership._id),
     )
-    .collect()) as any[];
-  const current = enrollments.filter(
-    (row) =>
-      Number(row.activationSequence) === activationSequence &&
-      row.status !== "exited",
-  );
-  if (current.length > 1) {
-    throw new Error("self_workflow_enrollment_ambiguous");
+    .take(2)) as any[];
+  if (states.length > 1) {
+    throw new Error("self_workflow_member_stage_ambiguous");
   }
-  const enrollment = current[0] ?? null;
-  if (!enrollment) return null;
-  const [workflow, version] = await Promise.all([
-    args.ctx.db.get(enrollment.workflowId),
-    args.ctx.db.get(enrollment.workflowVersionId),
-  ]);
-  if (
-    !workflow ||
-    !version ||
-    String(workflow.communityId) !== String(communityId) ||
-    String(version.workflowId) !== String(workflow._id)
-  ) {
-    throw new Error("self_workflow_projection_invalid");
-  }
-  const stage = (version.stages as any[]).find(
-    (candidate) => candidate.key === enrollment.currentStageKey,
+  const stageKey = states[0]?.currentStageKey ?? workflow.stages?.[0]?.key;
+  const stage = (workflow.stages as any[]).find(
+    (candidate) => candidate.key === stageKey,
   );
   if (!stage) throw new Error("self_workflow_stage_invalid");
   return {
-    workflowVersion: version.version,
-    enrollmentStatus:
-      enrollment.status === "paused" || enrollment.status === "completed"
-        ? enrollment.status
-        : "active",
     stageKey: stage.key,
     stageName: stage.name,
   };

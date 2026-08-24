@@ -33,7 +33,6 @@ import {
   requireCommunityUserNotBlocked,
   resolveCommunityEntryPolicy,
 } from "./communityCore";
-import { scheduleCommunityMemberWorkflowEnrollmentReconciliation } from "./communityMembershipLifecycle";
 import { enqueueCommunityBillingIssueEmailInternal } from "./emailEvents";
 import { recordCriticalAuditEventBestEffort } from "./criticalAudit";
 import {
@@ -456,11 +455,6 @@ export const syncCommunitySubscriptionLifecycleInternal = internalMutation({
       before: membership,
       after: updatedMembership,
     });
-    await scheduleCommunityMemberWorkflowEnrollmentReconciliation({
-      ctx,
-      membership: updatedMembership,
-    });
-
     if (status === "past_due" && previousStatus !== "past_due") {
       const issueMarker = [
         String(args.providerSubscriptionId ?? "").trim() || String(current?.providerSubscriptionId ?? "").trim() || String(membership._id),

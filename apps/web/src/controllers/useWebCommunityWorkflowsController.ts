@@ -6,34 +6,17 @@ import type {
   CommunityTab,
 } from "../../../../shared/appShellNavigation";
 import {
-  activateCloudCommunityMemberWorkflowDraft,
-  addCloudCommunityMemberWorkflowEvidence,
-  completeCloudCommunityMemberWorkflowEnrollment,
   fetchCloudCommunityMemberWorkflowBoard,
-  fetchCloudCommunityMemberWorkflowEnrollment,
-  moveCloudCommunityMemberWorkflowEnrollment,
-  saveCloudCommunityMemberWorkflowDraft,
+  saveCloudCommunityMemberWorkflow,
   type CloudCommunityMemberWorkflowBoard,
-  type CloudCommunityMemberWorkflowEnrollmentDetail,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
-import type { CommunityMemberWorkflowDraft } from "../../../../shared/communityMemberWorkflow";
-import {
-  isCurrentWorkflowEnrollmentRequest,
-  type WorkflowEnrollmentSelection,
-} from "./workflowEnrollmentRequestGuard";
+import type { CommunityMemberWorkflowDefinition } from "../../../../shared/communityMemberWorkflow";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
   source?: string,
   options?: { forceRefresh?: boolean },
 ) => Promise<AuthSession | null>;
-
-function workflowActionKey(prefix: string): string {
-  const random =
-    globalThis.crypto?.randomUUID?.() ??
-    `${Date.now()}-${Math.random().toString(36).slice(2)}`;
-  return `${prefix}:${random}`;
-}
 
 function workflowErrorMessage(error: unknown): string {
   const message = String(
@@ -42,14 +25,11 @@ function workflowErrorMessage(error: unknown): string {
   if (message.includes("revision_conflict")) {
     return "This workflow changed in another session. Reload it and try again.";
   }
-  if (message.includes("active_enrollments_require_migration")) {
-    return "This version still has active members. Finish their path before activating a replacement.";
+  if (message.includes("stage_has_members")) {
+    return "Move members out of this stage before deleting it.";
   }
   if (message.includes("community_forbidden")) {
     return "You no longer have permission to manage this workflow.";
-  }
-  if (message.includes("membership_inactive")) {
-    return "This person is no longer an active member of the community.";
   }
   return "Something went wrong. Nothing was changed.";
 }
@@ -70,15 +50,7 @@ export function useWebCommunityWorkflowsController(params: {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
-  const [selectedEnrollmentId, setSelectedEnrollmentId] = useState<
-    string | null
-  >(null);
-  const [selectedEnrollment, setSelectedEnrollment] =
-    useState<CloudCommunityMemberWorkflowEnrollmentDetail | null>(null);
-  const [isLoadingEnrollment, setIsLoadingEnrollment] = useState(false);
   const requestGenerationRef = useRef(0);
-  const enrollmentRequestGenerationRef = useRef(0);
-  const enrollmentSelectionRef = useRef<WorkflowEnrollmentSelection>(null);
 
   const loadBoard = useCallback(
     async (
@@ -101,9 +73,10 @@ export function useWebCommunityWorkflowsController(params: {
           session: usableSession,
           communityId,
         });
-        if (generation !== requestGenerationRef.current) return nextBoard;
-        setBoard(nextBoard);
-        setHasLoaded(true);
+        if (generation === requestGenerationRef.current) {
+          setBoard(nextBoard);
+          setHasLoaded(true);
+        }
         return nextBoard;
       } catch (loadError) {
         if (generation === requestGenerationRef.current) {
@@ -123,69 +96,12 @@ export function useWebCommunityWorkflowsController(params: {
     ],
   );
 
-  const loadEnrollment = useCallback(
-    async (
-      enrollmentId: string,
-      knownSession = params.session,
-      communityId = params.activeCommunityId,
-    ) => {
-      if (!communityId || !params.canManageMembers) return null;
-      const requestGeneration = ++enrollmentRequestGenerationRef.current;
-      const requestIsCurrent = () =>
-        isCurrentWorkflowEnrollmentRequest({
-          requestGeneration,
-          currentGeneration: enrollmentRequestGenerationRef.current,
-          requestedCommunityId: communityId,
-          requestedEnrollmentId: enrollmentId,
-          selection: enrollmentSelectionRef.current,
-        });
-      if (!requestIsCurrent()) return null;
-      setIsLoadingEnrollment(true);
-      setActionError(null);
-      try {
-        const usableSession =
-          knownSession ??
-          (await params.ensureSession(
-            knownSession,
-            "community_workflow_member_load",
-          ));
-        if (!usableSession) throw new Error("auth_session_required");
-        const detail = await fetchCloudCommunityMemberWorkflowEnrollment({
-          session: usableSession,
-          communityId,
-          enrollmentId,
-        });
-        if (!requestIsCurrent()) return detail;
-        setSelectedEnrollment(detail);
-        return detail;
-      } catch (loadError) {
-        if (requestIsCurrent()) {
-          setActionError(workflowErrorMessage(loadError));
-        }
-        return null;
-      } finally {
-        if (requestIsCurrent()) setIsLoadingEnrollment(false);
-      }
-    },
-    [
-      params.activeCommunityId,
-      params.canManageMembers,
-      params.ensureSession,
-      params.session,
-    ],
-  );
-
   useEffect(() => {
     requestGenerationRef.current += 1;
-    enrollmentRequestGenerationRef.current += 1;
-    enrollmentSelectionRef.current = null;
     setBoard(null);
     setHasLoaded(false);
     setError(null);
     setActionError(null);
-    setSelectedEnrollmentId(null);
-    setSelectedEnrollment(null);
-    setIsLoadingEnrollment(false);
   }, [params.activeCommunityId]);
 
   useEffect(() => {
@@ -208,156 +124,40 @@ export function useWebCommunityWorkflowsController(params: {
     params.session,
   ]);
 
-  const withMutation = useCallback(
-    async (
-      operation: (session: AuthSession, communityId: string) => Promise<void>,
-    ) => {
+  const saveDefinition = useCallback(
+    async (definition: CommunityMemberWorkflowDefinition) => {
       if (!params.activeCommunityId || isSaving) return false;
       setIsSaving(true);
       setActionError(null);
       try {
         const usableSession = await params.ensureSession(
           params.session,
-          "community_workflows_mutation",
+          "community_workflows_save",
         );
         if (!usableSession) throw new Error("auth_session_required");
-        await operation(usableSession, params.activeCommunityId);
+        await saveCloudCommunityMemberWorkflow({
+          session: usableSession,
+          communityId: params.activeCommunityId,
+          expectedRevision: board?.revision ?? 0,
+          definition,
+        });
         await loadBoard(params.activeCommunityId, usableSession);
         return true;
-      } catch (mutationError) {
-        setActionError(workflowErrorMessage(mutationError));
+      } catch (saveError) {
+        setActionError(workflowErrorMessage(saveError));
         return false;
       } finally {
         setIsSaving(false);
       }
     },
     [
+      board?.revision,
       isSaving,
       loadBoard,
       params.activeCommunityId,
       params.ensureSession,
       params.session,
     ],
-  );
-
-  const saveDraft = useCallback(
-    async (draft: CommunityMemberWorkflowDraft) =>
-      await withMutation(async (usableSession, communityId) => {
-        await saveCloudCommunityMemberWorkflowDraft({
-          session: usableSession,
-          communityId,
-          expectedRevision: board?.revision ?? 0,
-          draft,
-        });
-      }),
-    [board?.revision, withMutation],
-  );
-
-  const publishDraft = useCallback(
-    async (draft: CommunityMemberWorkflowDraft) =>
-      await withMutation(async (usableSession, communityId) => {
-        const saved = await saveCloudCommunityMemberWorkflowDraft({
-          session: usableSession,
-          communityId,
-          expectedRevision: board?.revision ?? 0,
-          draft,
-        });
-        await activateCloudCommunityMemberWorkflowDraft({
-          session: usableSession,
-          communityId,
-          expectedRevision: saved.revision,
-        });
-      }),
-    [board?.revision, withMutation],
-  );
-
-  const selectEnrollment = useCallback(
-    (enrollmentId: string | null) => {
-      enrollmentRequestGenerationRef.current += 1;
-      enrollmentSelectionRef.current =
-        enrollmentId && params.activeCommunityId
-          ? { communityId: params.activeCommunityId, enrollmentId }
-          : null;
-      setSelectedEnrollmentId(enrollmentId);
-      setSelectedEnrollment(null);
-      setIsLoadingEnrollment(false);
-      setActionError(null);
-      if (enrollmentId && params.activeCommunityId) {
-        void loadEnrollment(
-          enrollmentId,
-          params.session,
-          params.activeCommunityId,
-        );
-      }
-    },
-    [loadEnrollment, params.activeCommunityId, params.session],
-  );
-
-  const addEvidence = useCallback(
-    async (summary: string) => {
-      const enrollment = selectedEnrollment?.enrollment;
-      if (!enrollment) return false;
-      const succeeded = await withMutation(
-        async (usableSession, communityId) => {
-          await addCloudCommunityMemberWorkflowEvidence({
-            session: usableSession,
-            communityId,
-            enrollmentId: enrollment.id,
-            stageKey: enrollment.current_stage_key,
-            summary,
-            idempotencyKey: workflowActionKey("builder-evidence"),
-          });
-        },
-      );
-      if (succeeded) await loadEnrollment(enrollment.id);
-      return succeeded;
-    },
-    [loadEnrollment, selectedEnrollment?.enrollment, withMutation],
-  );
-
-  const moveEnrollment = useCallback(
-    async (targetStageKey: string, reason: string) => {
-      const enrollment = selectedEnrollment?.enrollment;
-      if (!enrollment) return false;
-      const succeeded = await withMutation(
-        async (usableSession, communityId) => {
-          await moveCloudCommunityMemberWorkflowEnrollment({
-            session: usableSession,
-            communityId,
-            enrollmentId: enrollment.id,
-            expectedRevision: enrollment.revision,
-            targetStageKey,
-            reason,
-            idempotencyKey: workflowActionKey("builder-move"),
-          });
-        },
-      );
-      if (succeeded) await loadEnrollment(enrollment.id);
-      return succeeded;
-    },
-    [loadEnrollment, selectedEnrollment?.enrollment, withMutation],
-  );
-
-  const completeEnrollment = useCallback(
-    async (reason: string) => {
-      const enrollment = selectedEnrollment?.enrollment;
-      if (!enrollment) return false;
-      const succeeded = await withMutation(
-        async (usableSession, communityId) => {
-          await completeCloudCommunityMemberWorkflowEnrollment({
-            session: usableSession,
-            communityId,
-            enrollmentId: enrollment.id,
-            expectedRevision: enrollment.revision,
-            reason,
-            idempotencyKey: workflowActionKey("builder-complete"),
-          });
-        },
-      );
-      if (succeeded) await loadEnrollment(enrollment.id);
-      return succeeded;
-    },
-    [loadEnrollment, selectedEnrollment?.enrollment, withMutation],
   );
 
   return {
@@ -367,16 +167,8 @@ export function useWebCommunityWorkflowsController(params: {
     error,
     isSaving,
     actionError,
-    selectedEnrollmentId,
-    selectedEnrollment,
-    isLoadingEnrollment,
     reload: () => loadBoard(),
-    saveDraft,
-    publishDraft,
-    selectEnrollment,
-    addEvidence,
-    moveEnrollment,
-    completeEnrollment,
+    saveDefinition,
     clearActionError: () => setActionError(null),
   };
 }

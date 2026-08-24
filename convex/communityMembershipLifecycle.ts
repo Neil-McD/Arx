@@ -1,4 +1,3 @@
-import { internal } from "./_generated/api";
 import {
   type CommunityMembershipLike,
   communityMembershipRowIsActive,
@@ -9,25 +8,6 @@ import {
 import { recordCommunityActivityEventBestEffort } from "./communityActivity";
 import { ensureCommunityPresenceBaseline } from "./communityPresenceCore";
 import { deleteCommunityJoinRequestByPair } from "./communityJoinRequestCore";
-
-export async function scheduleCommunityMemberWorkflowEnrollmentReconciliation(args: {
-  ctx: any;
-  membership: CommunityMembershipLike;
-}): Promise<void> {
-  const activationSequence = Math.max(
-    1,
-    Math.floor(Number(args.membership.activationSequence ?? 1)),
-  );
-  await args.ctx.scheduler.runAfter(
-    0,
-    (internal as any).communityMemberWorkflows
-      .reconcileMembershipEnrollmentInternal,
-    {
-      membershipId: args.membership._id,
-      activationSequence,
-    },
-  );
-}
 
 export type CommunityMembershipAccessSource =
   | "free_grant"
@@ -73,12 +53,6 @@ export async function activateCommunityMembershipCore(args: {
       ctx: args.ctx,
       communityId: args.communityId,
       userId: args.userId,
-    });
-    // Replays also repair a missing workflow enrollment. The worker is
-    // membership-bound and idempotent, so this never manufactures member state.
-    await scheduleCommunityMemberWorkflowEnrollmentReconciliation({
-      ctx: args.ctx,
-      membership: refreshed,
     });
     return {
       membership: refreshed,
@@ -142,10 +116,6 @@ export async function activateCommunityMembershipCore(args: {
     ctx: args.ctx,
     communityId: args.communityId,
     userId: args.userId,
-  });
-  await scheduleCommunityMemberWorkflowEnrollmentReconciliation({
-    ctx: args.ctx,
-    membership,
   });
   return {
     membership,
