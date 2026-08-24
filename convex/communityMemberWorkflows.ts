@@ -467,6 +467,43 @@ export const getBuilderWorkflowBoardPage = query({
   },
 });
 
+export const getBuilderWorkflowBoardProjectionToken = query({
+  args: {
+    ...managerIdentityArgs,
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    const { community } = await requireWorkflowManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    const workflow = await getCommunityMemberWorkflowByCommunity({
+      ctx,
+      communityId: args.communityId,
+    });
+    const latestTransition = workflow
+      ? ((await ctx.db
+          .query("communityMemberWorkflowTransitions" as any)
+          .withIndex("by_community_occurredAt", (q: any) =>
+            q.eq("communityId", args.communityId),
+          )
+          .order("desc")
+          .first()) as TransitionRow | null)
+      : null;
+
+    return {
+      workflow_id: workflow ? String(workflow._id) : null,
+      workflow_revision: workflow?.revision ?? 0,
+      active_member_count: readCommunityActiveMemberCount(community),
+      latest_transition_id: latestTransition
+        ? String(latestTransition._id)
+        : null,
+    };
+  },
+});
+
 export async function transitionCommunityMemberWorkflowStageCore(args: {
   ctx: any;
   communityId: any;

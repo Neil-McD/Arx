@@ -102,6 +102,13 @@ The page intentionally contains only:
 - one `Move member when` selector when editing a persisted non-terminal stage
 - cursor-based member loading when the board has another page
 
+While the page is open, one manager-authorized realtime projection watches
+only the workflow revision, active-member count, and latest transition receipt.
+A token change invalidates the visible board and rebuilds every member page the
+builder has already loaded. Concurrent invalidations are coalesced into one
+refresh plus at most one follow-up refresh, and changing community scope
+discards stale results. This is event-driven; Workflows has no polling loop.
+
 There is no separate editing canvas, workflow details form, start/publish
 button, evidence form, completion form, enrollment inspector, or manual status
 machine.

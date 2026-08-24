@@ -47,6 +47,11 @@ assert.match(backend, /export const deleteBuilderWorkflowStage = mutation/);
 assert.match(backend, /export const getBuilderWorkflowBoardPage = query/);
 assert.match(
   backend,
+  /export const getBuilderWorkflowBoardProjectionToken = query/,
+);
+assert.match(backend, /by_community_occurredAt/);
+assert.match(
+  backend,
   /export async function transitionCommunityMemberWorkflowStageCore/,
 );
 assert.match(backend, /export const transitionMemberStageInternal/);
@@ -89,10 +94,15 @@ assert.match(gateway, /createCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /updateCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /deleteCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /fetchCloudCommunityMemberWorkflowBoardPage/);
+assert.match(gateway, /acquireAuthenticatedConvexRealtimeClient/);
+assert.match(gateway, /subscribeCloudCommunityMemberWorkflowBoardProjection/);
 assert.match(controller, /createStage/);
 assert.match(controller, /updateStage/);
 assert.match(controller, /deleteStage/);
 assert.match(controller, /loadMore/);
+assert.match(controller, /requestBoardReconciliationRef/);
+assert.match(controller, /createWorkflowBoardReconciliationQueue/);
+assert.doesNotMatch(controller, /setInterval|setTimeout/);
 assert.match(surface, /workflow-stage-canvas/);
 assert.match(surface, /workflow-add-stage-button/);
 assert.match(surface, /Load more members/);

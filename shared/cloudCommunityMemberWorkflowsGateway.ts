@@ -1,4 +1,13 @@
-import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
+import { api } from "../convex/_generated/api";
+import {
+  bootstrapConvexAuthenticatedClient,
+  requireConvexUrl,
+} from "./convexAuthenticatedClient";
+import {
+  acquireAuthenticatedConvexRealtimeClient,
+  type AuthenticatedConvexRealtimeLease,
+  type ConvexRealtimeEnsureSession,
+} from "./convexRealtimeAuth";
 import type {
   CommunityMemberWorkflowInAppTriggerEvent,
   CommunityMemberWorkflowStage,
@@ -33,11 +42,61 @@ export type CloudCommunityMemberWorkflowBoardPage = {
   isDone: boolean;
 };
 
+export type CloudCommunityMemberWorkflowBoardProjectionToken = {
+  workflow_id: string | null;
+  workflow_revision: number;
+  active_member_count: number | null;
+  latest_transition_id: string | null;
+};
+
+export type CloudCommunityMemberWorkflowLiveClient =
+  AuthenticatedConvexRealtimeLease;
+
 type WorkflowStageMutationResult = {
   workflow_id: string;
   revision: number;
   stage?: CommunityMemberWorkflowStage;
 };
+
+export function createCloudCommunityMemberWorkflowLiveClient<SessionT>(
+  params: WorkflowGatewayParams<SessionT> & {
+    ensureSession?: ConvexRealtimeEnsureSession<SessionT>;
+  },
+): CloudCommunityMemberWorkflowLiveClient {
+  return acquireAuthenticatedConvexRealtimeClient({
+    convexUrl: requireConvexUrl(),
+    session: params.session,
+    ensureSession: params.ensureSession,
+  });
+}
+
+export function subscribeCloudCommunityMemberWorkflowBoardProjection(params: {
+  liveClient: CloudCommunityMemberWorkflowLiveClient;
+  communityId: string;
+  onUpdate: (token: CloudCommunityMemberWorkflowBoardProjectionToken) => void;
+  onError?: (error: unknown) => void;
+}): () => void {
+  const watch = params.liveClient.client.watchQuery(
+    api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
+    {
+      authSubject: params.liveClient.authSubject,
+      communityId: params.communityId as any,
+    },
+  );
+  const publish = () => {
+    try {
+      const result = watch.localQueryResult();
+      if (typeof result === "undefined") return;
+      params.onUpdate(
+        result as CloudCommunityMemberWorkflowBoardProjectionToken,
+      );
+    } catch (error) {
+      params.onError?.(error);
+    }
+  };
+  publish();
+  return watch.onUpdate(publish);
+}
 
 export async function fetchCloudCommunityMemberWorkflowBoardPage<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {

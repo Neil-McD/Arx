@@ -115,6 +115,25 @@ test("stage operations are exact, builder-owned, and server-identified", async (
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
 
   await expect(
+    asMember.query(
+      api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
+      { communityId: fixture.communityId },
+    ),
+  ).rejects.toThrow("community_forbidden");
+
+  await expect(
+    asOwner.query(
+      api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
+      { communityId: fixture.communityId },
+    ),
+  ).resolves.toEqual({
+    workflow_id: null,
+    workflow_revision: 0,
+    active_member_count: 2,
+    latest_transition_id: null,
+  });
+
+  await expect(
     asMember.mutation(api.communityMemberWorkflows.createBuilderWorkflowStage, {
       communityId: fixture.communityId,
       expectedRevision: 0,
@@ -348,6 +367,16 @@ test("a new canonical composer root schedules and applies the configured trigger
       asOwner,
       fixture.communityId,
     );
+
+    const tokenBeforeTransition = await asOwner.query(
+      api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
+      { communityId: fixture.communityId },
+    );
+    expect(tokenBeforeTransition).toMatchObject({
+      workflow_revision: 2,
+      active_member_count: 2,
+      latest_transition_id: null,
+    });
     await asOwner.mutation(
       api.communityMemberWorkflows.updateBuilderWorkflowStage,
       {
@@ -462,6 +491,16 @@ test("stage transitions dedupe by canonical source receipt and update self seman
       toStageKey: second.stage.key,
       triggerType: "in_app",
       sourceReceiptRef: "in_app:channel-message:example",
+    });
+    await expect(
+      asOwner.query(
+        api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
+        { communityId: fixture.communityId },
+      ),
+    ).resolves.toMatchObject({
+      workflow_revision: 2,
+      active_member_count: 2,
+      latest_transition_id: String(records.transitions[0]?._id),
     });
 
     await expect(
