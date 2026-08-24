@@ -6,7 +6,7 @@ import { expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import { activateCommunityMembershipCore } from "./communityMembershipLifecycle";
 import schema from "./schema";
-import { DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT } from "../shared/communityMemberWorkflow";
+import type { CommunityMemberWorkflowDraft } from "../shared/communityMemberWorkflow";
 
 const modules = import.meta.glob([
   "./communityCapabilityContext.ts",
@@ -18,21 +18,24 @@ const OWNER_SUBJECT = "workflow-owner";
 const MEMBER_SUBJECT = "workflow-member";
 const NEW_MEMBER_SUBJECT = "workflow-new-member";
 
-const TEST_MOVEMENT_WORKFLOW_DRAFT = {
-  ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+const MINIMAL_COMMUNITY_MEMBER_WORKFLOW_DRAFT: CommunityMemberWorkflowDraft = {
+  stages: [{ key: "new", name: "New" }],
+};
+
+function revisedMinimalDraft(name: string): CommunityMemberWorkflowDraft {
+  return { stages: [{ key: "new", name }] };
+}
+
+const TEST_MOVEMENT_WORKFLOW_DRAFT: CommunityMemberWorkflowDraft = {
   stages: [
-    ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT.stages,
+    ...MINIMAL_COMMUNITY_MEMBER_WORKFLOW_DRAFT.stages,
     {
       key: "getting-started",
       name: "Getting started",
-      objective: "Complete the first concrete setup action.",
-      completionDefinition: "The member has completed the required setup.",
     },
     {
       key: "activated",
       name: "Activated",
-      objective: "Use the community to produce an early result.",
-      completionDefinition: "The member has produced a concrete early result.",
     },
   ],
 };
@@ -105,7 +108,7 @@ test("builder workflow authority, version activation, and enrollment backfill fa
       asMember.mutation(api.communityMemberWorkflows.saveBuilderWorkflowDraft, {
         communityId: fixture.communityId,
         expectedRevision: 0,
-        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+        draft: MINIMAL_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
       }),
     ).rejects.toThrow("community_forbidden");
 
@@ -113,7 +116,7 @@ test("builder workflow authority, version activation, and enrollment backfill fa
       asOwner.mutation(api.communityMemberWorkflows.saveBuilderWorkflowDraft, {
         communityId: fixture.communityId,
         expectedRevision: 0,
-        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+        draft: MINIMAL_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
       }),
     ).resolves.toMatchObject({ revision: 1, version: 1 });
 
@@ -141,7 +144,6 @@ test("builder workflow authority, version activation, and enrollment backfill fa
       { communityId: fixture.communityId },
     );
     expect(board.workflow).toMatchObject({
-      name: "Client success",
       status: "active",
       revision: 2,
       enrollment_backfill_status: "complete",
@@ -162,10 +164,7 @@ test("builder workflow authority, version activation, and enrollment backfill fa
       asOwner.mutation(api.communityMemberWorkflows.saveBuilderWorkflowDraft, {
         communityId: fixture.communityId,
         expectedRevision: 2,
-        draft: {
-          ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
-          outcomeDefinition: "A revised definition for the next cohort.",
-        },
+        draft: revisedMinimalDraft("New cohort"),
       }),
     ).resolves.toMatchObject({ revision: 3, version: 2 });
     await expect(
@@ -225,6 +224,115 @@ test("builder workflow authority, version activation, and enrollment backfill fa
   }
 });
 
+test("definition cleanup strips only obsolete prose fields and is idempotent", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const legacy = await t.run(async (ctx) => {
+    const workflowId = await ctx.db.insert("communityMemberWorkflows", {
+      communityId: fixture.communityId,
+      name: "Client success",
+      status: "draft",
+      revision: 1,
+      createdByUserId: fixture.ownerId,
+      updatedByUserId: fixture.ownerId,
+      createdAt: fixture.nowMs,
+      updatedAt: fixture.nowMs,
+    });
+    const versionId = await ctx.db.insert("communityMemberWorkflowVersions", {
+      communityId: fixture.communityId,
+      workflowId,
+      version: 1,
+      status: "draft",
+      outcomeName: "Member outcome achieved",
+      outcomeDefinition: "The member reaches the promised result.",
+      stages: [
+        {
+          key: "new",
+          name: "New",
+          objective: "Understand the member's starting point.",
+          completionDefinition: "The starting point is understood.",
+        },
+        {
+          key: "activated",
+          name: "Activated",
+          objective: "Produce an early result.",
+          completionDefinition: "An early result exists.",
+        },
+      ],
+      createdByUserId: fixture.ownerId,
+      createdAt: fixture.nowMs,
+      updatedAt: fixture.nowMs,
+    });
+    await ctx.db.patch(workflowId, { draftVersionId: versionId });
+    return { workflowId, versionId };
+  });
+
+  await expect(
+    t.mutation(
+      internal.communityMemberWorkflows
+        .stripObsoleteWorkflowDefinitionFieldsInternal,
+      { table: "workflows", limit: 1 },
+    ),
+  ).resolves.toMatchObject({ scanned: 1, changed: 1, is_done: true });
+  await expect(
+    t.mutation(
+      internal.communityMemberWorkflows
+        .stripObsoleteWorkflowDefinitionFieldsInternal,
+      { table: "versions", limit: 1 },
+    ),
+  ).resolves.toMatchObject({ scanned: 1, changed: 1, is_done: true });
+
+  const cleaned = await t.run(async (ctx) => ({
+    workflow: await ctx.db.get(legacy.workflowId),
+    version: await ctx.db.get(legacy.versionId),
+  }));
+  expect(Object.prototype.hasOwnProperty.call(cleaned.workflow!, "name")).toBe(
+    false,
+  );
+  expect(
+    Object.prototype.hasOwnProperty.call(cleaned.version!, "outcomeName"),
+  ).toBe(false);
+  expect(
+    Object.prototype.hasOwnProperty.call(
+      cleaned.version!,
+      "outcomeDefinition",
+    ),
+  ).toBe(false);
+  expect(cleaned.version?.stages).toEqual([
+    { key: "new", name: "New" },
+    { key: "activated", name: "Activated" },
+  ]);
+  expect(cleaned.workflow).toMatchObject({
+    _id: legacy.workflowId,
+    draftVersionId: legacy.versionId,
+    revision: 1,
+    createdAt: fixture.nowMs,
+    updatedAt: fixture.nowMs,
+  });
+  expect(cleaned.version).toMatchObject({
+    _id: legacy.versionId,
+    workflowId: legacy.workflowId,
+    version: 1,
+    createdAt: fixture.nowMs,
+    updatedAt: fixture.nowMs,
+  });
+
+  await expect(
+    t.mutation(
+      internal.communityMemberWorkflows
+        .stripObsoleteWorkflowDefinitionFieldsInternal,
+      { table: "workflows", limit: 1 },
+    ),
+  ).resolves.toMatchObject({ scanned: 1, changed: 0, is_done: true });
+  await expect(
+    t.mutation(
+      internal.communityMemberWorkflows
+        .stripObsoleteWorkflowDefinitionFieldsInternal,
+      { table: "versions", limit: 1 },
+    ),
+  ).resolves.toMatchObject({ scanned: 1, changed: 0, is_done: true });
+});
+
 test("completed and exited enrollment history does not permanently block a replacement version", async () => {
   vi.useFakeTimers();
   vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
@@ -237,7 +345,7 @@ test("completed and exited enrollment history does not permanently block a repla
       {
         communityId: fixture.communityId,
         expectedRevision: 0,
-        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+        draft: MINIMAL_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
       },
     );
     await asOwner.mutation(
@@ -287,10 +395,7 @@ test("completed and exited enrollment history does not permanently block a repla
       asOwner.mutation(api.communityMemberWorkflows.saveBuilderWorkflowDraft, {
         communityId: fixture.communityId,
         expectedRevision: 2,
-        draft: {
-          ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
-          outcomeDefinition: "A replacement path for future activations.",
-        },
+        draft: revisedMinimalDraft("Replacement path"),
       }),
     ).resolves.toMatchObject({ revision: 3, version: 2 });
     await expect(
@@ -316,7 +421,7 @@ test("a current paused enrollment still blocks replacement activation", async ()
       {
         communityId: fixture.communityId,
         expectedRevision: 0,
-        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+        draft: MINIMAL_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
       },
     );
     await asOwner.mutation(
@@ -338,10 +443,7 @@ test("a current paused enrollment still blocks replacement activation", async ()
       {
         communityId: fixture.communityId,
         expectedRevision: 2,
-        draft: {
-          ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
-          outcomeDefinition: "A replacement blocked by a paused member.",
-        },
+        draft: revisedMinimalDraft("Paused replacement"),
       },
     );
     await expect(
@@ -369,7 +471,7 @@ test("a stale active enrollment with inactive membership does not block replacem
       {
         communityId: fixture.communityId,
         expectedRevision: 0,
-        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+        draft: MINIMAL_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
       },
     );
     await asOwner.mutation(
@@ -390,10 +492,7 @@ test("a stale active enrollment with inactive membership does not block replacem
       {
         communityId: fixture.communityId,
         expectedRevision: 2,
-        draft: {
-          ...DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
-          outcomeDefinition: "A replacement after membership deactivation.",
-        },
+        draft: revisedMinimalDraft("Reactivated replacement"),
       },
     );
     await expect(
@@ -573,7 +672,7 @@ test("new membership activations reconcile to the active version without changin
       {
         communityId: fixture.communityId,
         expectedRevision: 0,
-        draft: DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
+        draft: MINIMAL_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
       },
     );
     await asOwner.mutation(

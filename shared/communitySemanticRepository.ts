@@ -80,14 +80,10 @@ export type SelfProfileSemanticSource = {
   ownedCommunities: SelfProfileCommunitySummary[];
   accessibleCommunities: SelfProfileCommunitySummary[];
   workflowState?: {
-    workflowName: string;
     workflowVersion: number;
-    outcomeName: string;
     enrollmentStatus: "active" | "paused" | "completed";
     stageKey: string;
     stageName: string;
-    stageObjective: string;
-    stageCompletionDefinition: string;
   } | null;
 };
 
@@ -803,32 +799,9 @@ export function renderSelfProfileMarkdown(
     );
   }
   if (source.workflowState) {
-    const workflowName = normalizeInlineText(
-      source.workflowState.workflowName,
-      120,
-    );
-    const outcomeName = normalizeInlineText(
-      source.workflowState.outcomeName,
-      160,
-    );
     const stageKey = normalizeInlineText(source.workflowState.stageKey, 64);
     const stageName = normalizeInlineText(source.workflowState.stageName, 80);
-    const stageObjective = normalizeText(
-      source.workflowState.stageObjective,
-      1_200,
-    );
-    const stageCompletionDefinition = normalizeText(
-      source.workflowState.stageCompletionDefinition,
-      1_200,
-    );
-    if (
-      !workflowName ||
-      !outcomeName ||
-      !stageKey ||
-      !stageName ||
-      !stageObjective ||
-      !stageCompletionDefinition
-    ) {
+    if (!stageKey || !stageName) {
       throw new Error("self_profile_workflow_state_invalid");
     }
     const enrollmentStatus =
@@ -842,18 +815,9 @@ export function renderSelfProfileMarkdown(
       "",
       "This is read-only progress state for the current community lens.",
       "",
-      `- Workflow: ${JSON.stringify(workflowName)} (version ${Math.max(1, Math.floor(Number(source.workflowState.workflowVersion) || 1))})`,
-      `- Intended outcome: ${JSON.stringify(outcomeName)}`,
+      `- Workflow version: ${Math.max(1, Math.floor(Number(source.workflowState.workflowVersion) || 1))}`,
       `- Enrollment status: \`${enrollmentStatus}\``,
       `- Current stage: ${JSON.stringify(stageName)} (\`${stageKey}\`)`,
-      "",
-      "### Current objective",
-      "",
-      quote(stageObjective),
-      "",
-      "### Completion definition",
-      "",
-      quote(stageCompletionDefinition),
     );
   }
   return lines.join("\n");

@@ -643,17 +643,13 @@ async function resolveSelfWorkflowSemanticState(args: {
   );
   if (!stage) throw new Error("self_workflow_stage_invalid");
   return {
-    workflowName: workflow.name,
     workflowVersion: version.version,
-    outcomeName: version.outcomeName,
     enrollmentStatus:
       enrollment.status === "paused" || enrollment.status === "completed"
         ? enrollment.status
         : "active",
     stageKey: stage.key,
     stageName: stage.name,
-    stageObjective: stage.objective,
-    stageCompletionDefinition: stage.completionDefinition,
   };
 }
 

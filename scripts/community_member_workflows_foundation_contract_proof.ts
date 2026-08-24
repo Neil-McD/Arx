@@ -156,9 +156,14 @@ assert.match(
   "the irreducible workflow path must allow one stage",
 );
 assert.match(
+  surface,
+  /function blankCanvasDraft\([\s\S]*?key: "new"[\s\S]*?name: ""/,
+  "the local blank canvas must begin with one unnamed stage",
+);
+assert.doesNotMatch(
   workflowContract,
-  /stages:\s*\[\s*\{[\s\S]*?key: "new"[\s\S]*?\},?\s*\]/,
-  "the default workflow must begin with one stage",
+  /outcomeName|outcomeDefinition|objective|completionDefinition|DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT/,
+  "the canonical workflow definition must not retain hidden outcome prose",
 );
 assert.match(
   surface,
@@ -218,8 +223,13 @@ assert.match(
 );
 assert.match(
   stageModal,
-  /Stage name[\s\S]*Objective[\s\S]*Complete when/,
-  "the stage modal must contain the irreducible stage definition",
+  /Stage name/,
+  "the stage modal must name the stage",
+);
+assert.doesNotMatch(
+  stageModal,
+  /Objective|Complete when|objective|completionDefinition/,
+  "the stage modal must not retain prose objective or completion fields",
 );
 assert.doesNotMatch(
   stageModal,

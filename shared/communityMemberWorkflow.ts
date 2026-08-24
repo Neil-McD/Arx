@@ -1,7 +1,5 @@
 export const COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES = 1;
 export const COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES = 12;
-export const COMMUNITY_MEMBER_WORKFLOW_NAME_MAX_LENGTH = 120;
-export const COMMUNITY_MEMBER_WORKFLOW_OUTCOME_MAX_LENGTH = 160;
 export const COMMUNITY_MEMBER_WORKFLOW_DESCRIPTION_MAX_LENGTH = 1_200;
 export const COMMUNITY_MEMBER_WORKFLOW_STAGE_NAME_MAX_LENGTH = 80;
 export const COMMUNITY_MEMBER_WORKFLOW_STAGE_KEY_MAX_LENGTH = 64;
@@ -70,34 +68,11 @@ export type CommunityMemberWorkflowTransitionKind =
 export type CommunityMemberWorkflowStage = {
   key: string;
   name: string;
-  objective: string;
-  completionDefinition: string;
 };
 
 export type CommunityMemberWorkflowDraft = {
-  name: string;
-  outcomeName: string;
-  outcomeDefinition: string;
   stages: CommunityMemberWorkflowStage[];
 };
-
-export const DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT: CommunityMemberWorkflowDraft =
-  {
-    name: "Client success",
-    outcomeName: "Member outcome achieved",
-    outcomeDefinition:
-      "Define the concrete result members should achieve through this community.",
-    stages: [
-      {
-        key: "new",
-        name: "New",
-        objective:
-          "Establish the member's starting point and intended outcome.",
-        completionDefinition:
-          "The member's current situation and desired outcome are understood.",
-      },
-    ],
-  };
 
 function normalizeInlineText(value: unknown, maxLength: number): string {
   return String(value ?? "")
@@ -129,35 +104,12 @@ export function normalizeCommunityMemberWorkflowStageKey(
 }
 
 export function normalizeCommunityMemberWorkflowDraft(input: {
-  name?: unknown;
-  outcomeName?: unknown;
-  outcomeDefinition?: unknown;
   stages?: Array<{
     key?: unknown;
     name?: unknown;
-    objective?: unknown;
-    completionDefinition?: unknown;
   }> | null;
 }): CommunityMemberWorkflowDraft {
-  const name = normalizeInlineText(
-    input.name,
-    COMMUNITY_MEMBER_WORKFLOW_NAME_MAX_LENGTH,
-  );
-  const outcomeName = normalizeInlineText(
-    input.outcomeName,
-    COMMUNITY_MEMBER_WORKFLOW_OUTCOME_MAX_LENGTH,
-  );
-  const outcomeDefinition = normalizeLongText(
-    input.outcomeDefinition,
-    COMMUNITY_MEMBER_WORKFLOW_DESCRIPTION_MAX_LENGTH,
-  );
   const rawStages = Array.isArray(input.stages) ? input.stages : [];
-  if (!name) throw new Error("community_member_workflow_name_required");
-  if (!outcomeName)
-    throw new Error("community_member_workflow_outcome_required");
-  if (!outcomeDefinition) {
-    throw new Error("community_member_workflow_outcome_definition_required");
-  }
   if (
     rawStages.length < COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES ||
     rawStages.length > COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES
@@ -176,27 +128,13 @@ export function normalizeCommunityMemberWorkflowDraft(input: {
         stage.name,
         COMMUNITY_MEMBER_WORKFLOW_STAGE_NAME_MAX_LENGTH,
       ),
-      objective: normalizeLongText(
-        stage.objective,
-        COMMUNITY_MEMBER_WORKFLOW_DESCRIPTION_MAX_LENGTH,
-      ),
-      completionDefinition: normalizeLongText(
-        stage.completionDefinition,
-        COMMUNITY_MEMBER_WORKFLOW_DESCRIPTION_MAX_LENGTH,
-      ),
     };
     if (!normalized.name) {
       throw new Error("community_member_workflow_stage_name_required");
     }
-    if (!normalized.objective) {
-      throw new Error("community_member_workflow_stage_objective_required");
-    }
-    if (!normalized.completionDefinition) {
-      throw new Error("community_member_workflow_stage_completion_required");
-    }
     return normalized;
   });
-  return { name, outcomeName, outcomeDefinition, stages };
+  return { stages };
 }
 
 export function normalizeCommunityMemberWorkflowReason(value: unknown): string {

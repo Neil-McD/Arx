@@ -54,7 +54,7 @@ Content plan:
   status, and only the necessary activation action; no page-level subtitle.
 - Canvas: horizontally ordered stage columns plus one terminal Add action.
 - Stage column: stage identity, member count, member cards, and one edit affordance.
-- Stage modal: name, objective, completion definition, and safe deletion.
+- Stage modal: stage name and safe deletion.
 - Member overlay: current state, accepted evidence, and transition history.
 
 Interaction thesis:
@@ -90,6 +90,7 @@ The stable community-owned workflow identity.
 - pointers to the current draft and active version
 - optimistic `revision`
 - creator/updater and timestamps
+- no hidden workflow name; the community owns one canonical path
 
 ### `communityMemberWorkflowVersions`
 
@@ -98,10 +99,14 @@ A bounded workflow definition.
 - mutable only while `draft`
 - immutable after activation
 - monotonically increasing version number
-- one outcome name and outcome definition
 - one to twelve ordered stages
 - stable stage keys within the workflow
-- stage name, objective, and completion definition
+- stage name only in this foundation slice
+
+The foundation deliberately does not store prose objectives or prose
+completion definitions. A later slice may add typed completion criteria and
+bounded agent instructions when their authority and execution contracts exist.
+Those are not compatibility aliases for the retired prose fields.
 
 ### `communityMemberWorkflowEnrollments`
 

@@ -20,14 +20,10 @@ export function WebCommunityWorkflowStageModal(
   props: WebCommunityWorkflowStageModalProps,
 ) {
   const [name, setName] = useState("");
-  const [objective, setObjective] = useState("");
-  const [completionDefinition, setCompletionDefinition] = useState("");
 
   useEffect(() => {
     if (!props.isOpen || !props.stage) return;
     setName(props.stage.name);
-    setObjective(props.stage.objective);
-    setCompletionDefinition(props.stage.completionDefinition);
   }, [props.isOpen, props.stage]);
 
   useEffect(() => {
@@ -41,10 +37,7 @@ export function WebCommunityWorkflowStageModal(
 
   if (!props.isOpen || !props.stage) return null;
 
-  const canSave =
-    name.trim().length > 0 &&
-    objective.trim().length > 0 &&
-    completionDefinition.trim().length > 0;
+  const canSave = name.trim().length > 0;
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -52,8 +45,6 @@ export function WebCommunityWorkflowStageModal(
     void props.onSave({
       ...props.stage!,
       name,
-      objective,
-      completionDefinition,
     });
   };
 
@@ -77,9 +68,6 @@ export function WebCommunityWorkflowStageModal(
                 ? props.stage.name
                 : `Set up stage ${props.stageNumber}`}
             </div>
-            <div className="resource-modal-subtitle">
-              Define what this stage means and what proves it is complete.
-            </div>
           </div>
           <button
             className="modal-close"
@@ -101,28 +89,6 @@ export function WebCommunityWorkflowStageModal(
                 value={name}
                 onChange={(event) => setName(event.target.value)}
                 placeholder="Getting started"
-                disabled={props.isSaving}
-              />
-            </label>
-            <label>
-              <span>Objective</span>
-              <textarea
-                rows={4}
-                value={objective}
-                onChange={(event) => setObjective(event.target.value)}
-                placeholder="What should the member accomplish here?"
-                disabled={props.isSaving}
-              />
-            </label>
-            <label>
-              <span>Complete when</span>
-              <textarea
-                rows={4}
-                value={completionDefinition}
-                onChange={(event) =>
-                  setCompletionDefinition(event.target.value)
-                }
-                placeholder="What evidence proves they are ready to move forward?"
                 disabled={props.isSaving}
               />
             </label>

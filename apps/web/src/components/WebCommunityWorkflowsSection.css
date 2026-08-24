@@ -426,7 +426,7 @@
 }
 
 .workflow-stage-modal {
-  width: min(620px, calc(100vw - 32px));
+  width: min(480px, calc(100vw - 32px));
 }
 
 .workflow-stage-modal .modal-body {
@@ -435,7 +435,6 @@
 
 .workflow-stage-form {
   display: grid;
-  gap: 18px;
 }
 
 .workflow-stage-form label,

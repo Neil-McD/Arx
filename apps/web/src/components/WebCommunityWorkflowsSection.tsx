@@ -10,7 +10,6 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
-  DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT,
   COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES,
   normalizeCommunityMemberWorkflowDraft,
@@ -48,37 +47,22 @@ export type WebCommunityWorkflowsSectionProps = {
   onClearActionError: () => void;
 };
 
-function cloneDraft(
-  draft: CommunityMemberWorkflowDraft,
-): CommunityMemberWorkflowDraft {
-  return {
-    ...draft,
-    stages: draft.stages.map((stage) => ({ ...stage })),
-  };
-}
-
 function draftFromBoard(
   board: CloudCommunityMemberWorkflowBoard,
 ): CommunityMemberWorkflowDraft {
   const version = board.draft_version ?? board.active_version;
-  if (!version) return cloneDraft(DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT);
+  if (!version) return blankCanvasDraft();
   return {
-    name: board.name,
-    outcomeName: version.outcome_name,
-    outcomeDefinition: version.outcome_definition,
     stages: version.stages.map((stage) => ({ ...stage })),
   };
 }
 
 function blankCanvasDraft(): CommunityMemberWorkflowDraft {
   return {
-    ...cloneDraft(DEFAULT_COMMUNITY_MEMBER_WORKFLOW_DRAFT),
     stages: [
       {
         key: "new",
         name: "",
-        objective: "",
-        completionDefinition: "",
       },
     ],
   };
@@ -382,9 +366,7 @@ export function WebCommunityWorkflowsSection(
   }, [props.board?.members]);
 
   const isStageIncomplete = (stage: CommunityMemberWorkflowStage) =>
-    !stage.name.trim() ||
-    !stage.objective.trim() ||
-    !stage.completionDefinition.trim();
+    !stage.name.trim();
   const hasIncompleteStage = draft.stages.some(isStageIncomplete);
   const persistedStageKeys = new Set(
     (props.board?.draft_version ?? props.board?.active_version)?.stages.map(
@@ -429,8 +411,6 @@ export function WebCommunityWorkflowsSection(
         {
           key,
           name: "",
-          objective: "",
-          completionDefinition: "",
         },
       ],
     });
@@ -505,7 +485,7 @@ export function WebCommunityWorkflowsSection(
         setLocalError(null);
       }
     } catch {
-      setLocalError("Name the stage and define its objective and completion.");
+      setLocalError("Name the stage before saving it.");
     }
   };
 

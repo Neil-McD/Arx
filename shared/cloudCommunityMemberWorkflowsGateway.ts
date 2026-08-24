@@ -12,8 +12,6 @@ export type CloudCommunityMemberWorkflowVersion = {
   id: string;
   version: number;
   status: "draft" | "active" | "retired";
-  outcome_name: string;
-  outcome_definition: string;
   stages: CommunityMemberWorkflowStage[];
   activated_at: string | null;
   created_at: string;
@@ -41,7 +39,6 @@ export type CloudCommunityMemberWorkflowMember = {
 export type CloudCommunityMemberWorkflowBoard = {
   id: string;
   community_id: string;
-  name: string;
   status: "draft" | "active" | "archived";
   revision: number;
   active_version: CloudCommunityMemberWorkflowVersion | null;
