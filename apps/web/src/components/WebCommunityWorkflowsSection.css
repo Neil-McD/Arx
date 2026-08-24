@@ -272,31 +272,61 @@
   color: var(--text-muted);
 }
 
-.workflow-member-row {
+.workflow-member-stub {
   display: flex;
   flex: 0 0 auto;
   align-items: center;
   width: 100%;
   min-width: 0;
-  gap: 10px;
-  padding: 9px 10px;
-  border-radius: 8px;
+  min-height: 64px;
+  box-sizing: border-box;
+  gap: 11px;
+  padding: 10px 11px;
+  border: 1px solid color-mix(in srgb, var(--border-default) 82%, transparent);
+  border-radius: 9px;
   color: var(--text-primary);
+  background: color-mix(
+    in srgb,
+    var(--surface-workspace) 82%,
+    var(--surface-raised)
+  );
 }
 
-.workflow-member-row > span {
+.workflow-member-stub + .workflow-member-stub {
+  margin-top: 6px;
+}
+
+.workflow-member-stub-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.workflow-member-stub-copy strong,
+.workflow-member-stub-copy span {
   min-width: 0;
   overflow: hidden;
-  font-size: 13px;
-  font-weight: 600;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.workflow-member-avatar {
+.workflow-member-stub-copy strong {
+  font-size: 13px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.workflow-member-stub-copy span {
+  color: var(--text-faint);
+  font-size: 10px;
+  font-weight: 520;
+  line-height: 1.3;
+}
+
+.workflow-member-stub-avatar {
   flex: 0 0 auto;
-  width: 30px;
-  height: 30px;
+  width: 36px;
+  height: 36px;
 }
 
 .workflow-stage-empty {

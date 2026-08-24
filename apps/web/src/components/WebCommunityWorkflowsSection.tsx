@@ -1,7 +1,6 @@
 import { Pencil, Plus, RefreshCw } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES,
@@ -12,6 +11,7 @@ import type {
   CloudCommunityMemberWorkflowBoard,
   CloudCommunityMemberWorkflowMember,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
+import { WebCommunityWorkflowMemberStub } from "./WebCommunityWorkflowMemberStub";
 import { WebCommunityWorkflowStageModal } from "./WebCommunityWorkflowStageModal";
 import "./WebCommunityWorkflowsSection.css";
 
@@ -175,17 +175,10 @@ export function WebCommunityWorkflowsSection(
                     </button>
                   ) : members.length > 0 ? (
                     members.map((member) => (
-                      <div className="workflow-member-row" key={member.membership_id}>
-                        <UserAvatar
-                          name={member.display_name}
-                          imageUrl={member.avatar_url}
-                          focusX={member.avatar_focus_x}
-                          focusY={member.avatar_focus_y}
-                          zoom={member.avatar_zoom}
-                          className="workflow-member-avatar"
-                        />
-                        <span>{member.display_name}</span>
-                      </div>
+                      <WebCommunityWorkflowMemberStub
+                        key={member.membership_id}
+                        member={member}
+                      />
                     ))
                   ) : (
                     <p className="workflow-stage-empty">No members yet</p>

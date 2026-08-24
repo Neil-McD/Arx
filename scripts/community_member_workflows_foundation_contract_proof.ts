@@ -22,6 +22,9 @@ const controller = read(
 const surface = read(
   "apps/web/src/components/WebCommunityWorkflowsSection.tsx",
 );
+const memberStub = read(
+  "apps/web/src/components/WebCommunityWorkflowMemberStub.tsx",
+);
 const modal = read(
   "apps/web/src/components/WebCommunityWorkflowStageModal.tsx",
 );
@@ -107,6 +110,11 @@ assert.match(surface, /workflow-stage-canvas/);
 assert.match(surface, /workflow-add-stage-button/);
 assert.match(surface, /Load more members/);
 assert.match(surface, /WebCommunityWorkflowStageModal/);
+assert.match(surface, /WebCommunityWorkflowMemberStub/);
+assert.doesNotMatch(surface, /workflow-member-row/);
+assert.match(memberStub, /UserAvatar/);
+assert.match(memberStub, /current_stage_entered_at/);
+assert.match(memberStub, /In this stage/);
 assert.match(surface, /props\.board[\s\S]*\? stages\.length[\s\S]*: 0/);
 assert.match(modal, /Stage name/);
 assert.match(modal, /Move member when/);

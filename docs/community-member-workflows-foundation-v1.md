@@ -94,7 +94,8 @@ The page intentionally contains only:
 
 - `Workflows` header
 - horizontal stage columns
-- canonical member avatars in their current stage
+- compact member stubs with canonical avatar, name, and time in the current
+  stage
 - edit button on a configured stage
 - setup button on an unnamed first stage
 - terminal plus button for another stage
