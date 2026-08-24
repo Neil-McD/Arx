@@ -25,6 +25,14 @@ const controller = read(
 );
 const gateway = read("shared/cloudCommunityMemberWorkflowsGateway.ts");
 const workflowContract = read("shared/communityMemberWorkflow.ts");
+const workflowSchema = schema.slice(
+  schema.indexOf("communityMemberWorkflows: defineTable("),
+  schema.indexOf("communityMemberWorkflowVersions: defineTable("),
+);
+const workflowVersionSchema = schema.slice(
+  schema.indexOf("communityMemberWorkflowVersions: defineTable("),
+  schema.indexOf("communityMemberWorkflowEnrollments: defineTable("),
+);
 
 for (const exclusion of [
   "integrations and inbound webhooks",
@@ -54,6 +62,22 @@ for (const table of [
     `${table} must be canonical schema`,
   );
 }
+
+assert.doesNotMatch(
+  workflowSchema,
+  /\bname:/,
+  "workflow identity must not retain a hidden name field",
+);
+assert.doesNotMatch(
+  workflowVersionSchema,
+  /outcomeName|outcomeDefinition|objective|completionDefinition/,
+  "workflow versions must contain only ordered stage identity in this slice",
+);
+assert.doesNotMatch(
+  workflows,
+  /stripObsoleteWorkflowDefinitionFieldsInternal/,
+  "the terminal schema must not retain the staging cleanup operator",
+);
 
 assert.match(
   workflows,

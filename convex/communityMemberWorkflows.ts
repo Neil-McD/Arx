@@ -37,21 +37,12 @@ const managerIdentityArgs = {
 };
 
 const WORKFLOW_ACTIVATION_BLOCKER_SCAN_LIMIT = 500;
-const WORKFLOW_DEFINITION_CLEANUP_MAX_PAGE = 100;
 
 type WorkflowRow = any;
 type WorkflowVersionRow = any;
 type EnrollmentRow = any;
 type EvidenceRow = any;
 type TransitionRow = any;
-
-function hasOwn(row: unknown, key: string): boolean {
-  return Boolean(
-    row &&
-      typeof row === "object" &&
-      Object.prototype.hasOwnProperty.call(row, key),
-  );
-}
 
 function normalizeExpectedRevision(value: unknown): number {
   const revision = Number(value);
@@ -408,75 +399,6 @@ export const saveBuilderWorkflowDraft = mutation({
       workflow_id: String(existing._id),
       revision,
       version: Number(draftVersion?.version ?? 1),
-    };
-  },
-});
-
-/**
- * Release-A staging cleanup for the retired prose definition fields.
- *
- * The caller selects one table and advances the returned cursor. The mutation
- * is bounded, idempotent, and deliberately preserves ids, versions, stage
- * keys/order, enrollments, transitions, evidence, and timestamps.
- */
-export const stripObsoleteWorkflowDefinitionFieldsInternal = internalMutation({
-  args: {
-    table: v.union(v.literal("workflows"), v.literal("versions")),
-    cursor: v.optional(v.union(v.string(), v.null())),
-    limit: v.optional(v.number()),
-  },
-  handler: async (ctx, args) => {
-    const limit = Math.max(
-      1,
-      Math.min(
-        WORKFLOW_DEFINITION_CLEANUP_MAX_PAGE,
-        Math.floor(Number(args.limit ?? 50)),
-      ),
-    );
-    const tableName =
-      args.table === "workflows"
-        ? "communityMemberWorkflows"
-        : "communityMemberWorkflowVersions";
-    const page = await ctx.db.query(tableName as any).paginate({
-      cursor: args.cursor ?? null,
-      numItems: limit,
-    });
-    let changed = 0;
-    for (const row of page.page as any[]) {
-      if (args.table === "workflows") {
-        if (!hasOwn(row, "name")) continue;
-        await ctx.db.patch(row._id, { name: undefined });
-        changed += 1;
-        continue;
-      }
-      const stages = normalizeCommunityMemberWorkflowDraft({
-        stages: row.stages,
-      }).stages;
-      const stageHadObsoleteFields = (row.stages as any[]).some(
-        (stage) =>
-          hasOwn(stage, "objective") ||
-          hasOwn(stage, "completionDefinition"),
-      );
-      if (
-        !hasOwn(row, "outcomeName") &&
-        !hasOwn(row, "outcomeDefinition") &&
-        !stageHadObsoleteFields
-      ) {
-        continue;
-      }
-      await ctx.db.patch(row._id, {
-        outcomeName: undefined,
-        outcomeDefinition: undefined,
-        stages,
-      });
-      changed += 1;
-    }
-    return {
-      table: args.table,
-      scanned: page.page.length,
-      changed,
-      cursor: page.continueCursor,
-      is_done: page.isDone,
     };
   },
 });

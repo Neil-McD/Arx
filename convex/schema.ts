@@ -1153,9 +1153,6 @@ export default defineSchema({
 
   communityMemberWorkflows: defineTable({
     communityId: v.id("communities"),
-    // Release-A compatibility only. Current workflow definitions are the
-    // community's single ordered stage path and do not carry a hidden name.
-    name: v.optional(v.string()),
     status: v.union(
       v.literal("draft"),
       v.literal("active"),
@@ -1191,15 +1188,9 @@ export default defineSchema({
       v.literal("active"),
       v.literal("retired"),
     ),
-    // Release-A compatibility only. These prose fields are ignored by current
-    // code and removed by the bounded definition cleanup before hardening.
-    outcomeName: v.optional(v.string()),
-    outcomeDefinition: v.optional(v.string()),
     stages: v.array(v.object({
       key: v.string(),
       name: v.string(),
-      objective: v.optional(v.string()),
-      completionDefinition: v.optional(v.string()),
     })),
     createdByUserId: v.id("users"),
     activatedByUserId: v.optional(v.id("users")),
