@@ -1,7 +1,7 @@
 /// <reference types="vite/client" />
 
 import { convexTest } from "convex-test";
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
@@ -19,11 +19,13 @@ const modules = import.meta.glob([
   "./communityIntelligenceDirectory.ts",
   "./communityEvidenceAudit.ts",
   "./communityMemberWorkflows.ts",
+  "./communityMemberWorkflowEvaluator.ts",
   "./_generated/**/*.*s",
 ]);
 
 const OWNER_SUBJECT = "workflow-owner";
 const MEMBER_SUBJECT = "workflow-member";
+const internalApi = internal as any;
 
 async function createFixture(t: ReturnType<typeof convexTest>) {
   const nowMs = 1_787_478_400_000;
@@ -89,11 +91,23 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
-    return { communityId, memberId, membershipId, nowMs, ownerId };
+    const channelId = await ctx.db.insert("communityChannels", {
+      communityId,
+      systemRole: "general",
+      slug: "general",
+      name: "General",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    });
+    return { channelId, communityId, memberId, membershipId, nowMs, ownerId };
   });
 }
 
-async function createTwoStageWorkflow(
+async function createWorkflow(
   asOwner: ReturnType<ReturnType<typeof convexTest>["withIdentity"]>,
   communityId: any,
 ) {
@@ -105,33 +119,58 @@ async function createTwoStageWorkflow(
     api.communityMemberWorkflows.createBuilderWorkflowStage,
     { communityId, expectedRevision: 1, name: "Activated" },
   );
-  return { first, second };
+  const updated = await asOwner.mutation(
+    api.communityMemberWorkflows.updateBuilderWorkflowStage,
+    {
+      communityId,
+      expectedRevision: 2,
+      stageKey: first.stage.key,
+      name: first.stage.name,
+      milestone: "The member has shared a concrete implementation and its result.",
+    },
+  );
+  return { first: updated.stage, second, revision: updated.revision };
 }
 
-test("stage operations are exact, builder-owned, and server-identified", async () => {
+async function insertRoot(
+  t: ReturnType<typeof convexTest>,
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  idempotencyKey: string,
+  text: string,
+  offsetMs = 10,
+) {
+  return await t.run(async (ctx) =>
+    await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.communityId,
+      channelId: fixture.channelId,
+      actorType: "human",
+      actorUserId: fixture.memberId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: text,
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey,
+      createdAt: fixture.nowMs + offsetMs,
+      updatedAt: fixture.nowMs + offsetMs,
+    }),
+  );
+}
+
+async function enqueueRoot(t: ReturnType<typeof convexTest>, rootId: any) {
+  return await t.mutation(
+    internalApi.communityMemberWorkflows
+      .enqueueChannelContributionRootEvaluationInternal,
+    { rootId },
+  );
+}
+
+test("stage definitions are builder-owned names plus natural-language milestones", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
-
-  await expect(
-    asMember.query(
-      api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
-      { communityId: fixture.communityId },
-    ),
-  ).rejects.toThrow("community_forbidden");
-
-  await expect(
-    asOwner.query(
-      api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
-      { communityId: fixture.communityId },
-    ),
-  ).resolves.toEqual({
-    workflow_id: null,
-    workflow_revision: 0,
-    active_member_count: 2,
-    latest_transition_id: null,
-  });
 
   await expect(
     asMember.mutation(api.communityMemberWorkflows.createBuilderWorkflowStage, {
@@ -141,506 +180,242 @@ test("stage operations are exact, builder-owned, and server-identified", async (
     }),
   ).rejects.toThrow("community_forbidden");
 
-  const { first, second } = await createTwoStageWorkflow(
-    asOwner,
-    fixture.communityId,
-  );
-  expect(first.stage.key).toMatch(/^stage-[0-9a-f-]{36}$/);
-  expect(second.stage.key).toMatch(/^stage-[0-9a-f-]{36}$/);
-  expect(second.stage.key).not.toBe(first.stage.key);
+  const { first, second } = await createWorkflow(asOwner, fixture.communityId);
+  expect(first).toMatchObject({
+    name: "New",
+    milestone: "The member has shared a concrete implementation and its result.",
+  });
+  expect(second.stage).toMatchObject({ name: "Activated" });
 
   await expect(
     asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
       communityId: fixture.communityId,
-      expectedRevision: 1,
-      stageKey: first.stage.key,
-      name: "Joined",
-      completionTriggerEvent: null,
+      expectedRevision: 3,
+      stageKey: second.stage.key,
+      name: second.stage.name,
+      milestone: "This terminal milestone cannot execute.",
     }),
-  ).rejects.toThrow("community_member_workflow_revision_conflict");
-
-  await expect(
-    asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
-      communityId: fixture.communityId,
-      expectedRevision: 2,
-      stageKey: first.stage.key,
-      name: "Joined",
-      completionTriggerEvent: null,
-    }),
-  ).resolves.toMatchObject({ revision: 3, stage: { name: "Joined" } });
+  ).rejects.toThrow("community_member_workflow_terminal_stage_milestone_invalid");
 
   const board = await asOwner.query(
     api.communityMemberWorkflows.getBuilderWorkflowBoardPage,
     { communityId: fixture.communityId, cursor: null, pageSize: 50 },
   );
   expect(board).toMatchObject({
-    workflow: {
-      revision: 3,
-      stages: [
-        { key: first.stage.key, name: "Joined" },
-        { key: second.stage.key, name: "Activated" },
-      ],
-    },
+    workflow: { revision: 3, stages: [first, second.stage] },
     page: [
       {
         membership_id: String(fixture.membershipId),
-        current_stage_key: first.stage.key,
+        current_stage_key: first.key,
         display_name: "Grace Member",
       },
     ],
-    isDone: true,
     totalCount: 1,
   });
-
-  await expect(
-    asOwner.mutation(api.communityMemberWorkflows.deleteBuilderWorkflowStage, {
-      communityId: fixture.communityId,
-      expectedRevision: 3,
-      stageKey: first.stage.key,
-    }),
-  ).rejects.toThrow("community_member_workflow_stage_has_members");
-
-  await expect(
-    asOwner.mutation(api.communityMemberWorkflows.deleteBuilderWorkflowStage, {
-      communityId: fixture.communityId,
-      expectedRevision: 3,
-      stageKey: second.stage.key,
-    }),
-  ).resolves.toMatchObject({ revision: 4 });
 });
 
-test("canonical human channel receipts advance only the configured current stage", async () => {
+test("a canonical contribution queues evaluation but cannot directly move a member", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const { first, second } = await createTwoStageWorkflow(
-    asOwner,
-    fixture.communityId,
+  const { first } = await createWorkflow(asOwner, fixture.communityId);
+  const rootId = await insertRoot(
+    t,
+    fixture,
+    "evidence-root",
+    "I shipped the implementation and measured a 12 percent improvement.",
   );
 
-  await expect(
-    asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
-      communityId: fixture.communityId,
-      expectedRevision: 2,
-      stageKey: second.stage.key,
-      name: second.stage.name,
-      completionTriggerEvent: "channel_contribution",
-    }),
-  ).rejects.toThrow("community_member_workflow_terminal_stage_trigger_invalid");
-
-  await asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
-    communityId: fixture.communityId,
-    expectedRevision: 2,
-    stageKey: first.stage.key,
-    name: first.stage.name,
-    completionTriggerEvent: "channel_contribution",
-  });
-  const third = await asOwner.mutation(
-    api.communityMemberWorkflows.createBuilderWorkflowStage,
-    {
-      communityId: fixture.communityId,
-      expectedRevision: 3,
-      name: "Implementing",
-    },
-  );
-  await asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
-    communityId: fixture.communityId,
-    expectedRevision: 4,
-    stageKey: second.stage.key,
-    name: second.stage.name,
-    completionTriggerEvent: "channel_contribution",
-  });
-
-  const receipts = await t.run(async (ctx) => {
-    const channelId = await ctx.db.insert("communityChannels", {
-      communityId: fixture.communityId,
-      systemRole: "general",
-      slug: "general",
-      name: "General",
-      accessMode: "all_members",
-      postingPolicy: "members",
-      status: "active",
-      position: 0,
-      createdAt: fixture.nowMs,
-      updatedAt: fixture.nowMs,
-    });
-    const rootId = await ctx.db.insert("communityInteractionRoots", {
-      communityId: fixture.communityId,
-      channelId,
-      actorType: "human",
-      actorUserId: fixture.memberId,
-      kind: "discussion",
-      status: "live",
-      visibilityScope: "community",
-      contentSummary: "My first contribution",
-      replyCount: 1,
-      reactionSummary: [],
-      idempotencyKey: "workflow-trigger-root",
-      createdAt: fixture.nowMs + 10,
-      updatedAt: fixture.nowMs + 10,
-    });
-    const replyId = await ctx.db.insert("communityInteractionReplies", {
-      communityId: fixture.communityId,
-      channelId,
-      rootId,
-      seq: 1,
-      actorType: "human",
-      actorUserId: fixture.memberId,
-      status: "live",
-      visibilityScope: "community",
-      contentSummary: "My next contribution",
-      reactionSummary: [],
-      idempotencyKey: "workflow-trigger-reply",
-      createdAt: fixture.nowMs + 20,
-      updatedAt: fixture.nowMs + 20,
-    });
-    const personalAgentRootId = await ctx.db.insert("communityInteractionRoots", {
-      communityId: fixture.communityId,
-      channelId,
-      actorType: "personal_agent",
-      actorUserId: fixture.memberId,
-      actorAgentKey: `personal_agent:${String(fixture.memberId)}`,
-      kind: "discussion",
-      status: "live",
-      visibilityScope: "community",
-      contentSummary: "Agent contribution",
-      replyCount: 0,
-      reactionSummary: [],
-      idempotencyKey: "workflow-trigger-agent-root",
-      createdAt: fixture.nowMs + 30,
-      updatedAt: fixture.nowMs + 30,
-    });
-    return { personalAgentRootId, replyId, rootId };
-  });
-
-  await expect(
-    t.mutation(
-      internal.communityMemberWorkflows
-        .applyChannelContributionRootTriggerInternal,
-      { rootId: receipts.rootId },
-    ),
-  ).resolves.toMatchObject({ status: "applied", changed: true });
-  await expect(
-    t.mutation(
-      internal.communityMemberWorkflows
-        .applyChannelContributionRootTriggerInternal,
-      { rootId: receipts.rootId },
-    ),
-  ).resolves.toMatchObject({ status: "already_applied" });
-  await expect(
-    t.mutation(
-      internal.communityMemberWorkflows
-        .applyChannelContributionReplyTriggerInternal,
-      { replyId: receipts.replyId },
-    ),
-  ).resolves.toMatchObject({ status: "applied", changed: true });
-  await expect(
-    t.mutation(
-      internal.communityMemberWorkflows
-        .applyChannelContributionRootTriggerInternal,
-      { rootId: receipts.personalAgentRootId },
-    ),
-  ).resolves.toMatchObject({ status: "receipt_ineligible" });
+  await expect(enqueueRoot(t, rootId)).resolves.toMatchObject({ status: "queued" });
+  await expect(enqueueRoot(t, rootId)).resolves.toMatchObject({ status: "already_queued" });
 
   const records = await t.run(async (ctx) => ({
+    evaluations: await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
     states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
     transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
   }));
-  expect(records.states).toHaveLength(1);
-  expect(records.states[0]?.currentStageKey).toBe(third.stage.key);
-  expect(records.transitions).toHaveLength(2);
-  expect(records.transitions.map((row) => row.sourceReceiptRef)).toEqual([
-    `in_app:community_interaction_root:${String(receipts.rootId)}`,
-    `in_app:community_interaction_reply:${String(receipts.replyId)}`,
-  ]);
+  expect(records.evaluations).toHaveLength(1);
+  expect(records.evaluations[0]).toMatchObject({
+    stageKey: first.key,
+    status: "queued",
+    wakeReceiptRef: `interaction:root:${String(rootId)}`,
+  });
+  expect(records.states).toHaveLength(0);
+  expect(records.transitions).toHaveLength(0);
 });
 
-test("a new canonical composer root schedules and applies the configured trigger", async () => {
-  vi.useFakeTimers();
-  vi.setSystemTime(new Date("2026-08-23T22:00:00.000Z"));
-  try {
-    const t = convexTest(schema, modules);
-    const fixture = await createFixture(t);
-    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-    const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
-    const { first, second } = await createTwoStageWorkflow(
-      asOwner,
-      fixture.communityId,
-    );
-
-    const tokenBeforeTransition = await asOwner.query(
-      api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
-      { communityId: fixture.communityId },
-    );
-    expect(tokenBeforeTransition).toMatchObject({
-      workflow_revision: 2,
-      active_member_count: 2,
-      latest_transition_id: null,
-    });
-    await asOwner.mutation(
-      api.communityMemberWorkflows.updateBuilderWorkflowStage,
-      {
-        communityId: fixture.communityId,
-        expectedRevision: 2,
-        stageKey: first.stage.key,
-        name: first.stage.name,
-        completionTriggerEvent: "channel_contribution",
-      },
-    );
-    const channelId = await t.run(async (ctx) =>
-      await ctx.db.insert("communityChannels", {
-        communityId: fixture.communityId,
-        systemRole: "general",
-        slug: "general",
-        name: "General",
-        accessMode: "all_members",
-        postingPolicy: "members",
-        status: "active",
-        position: 0,
-        createdAt: fixture.nowMs,
-        updatedAt: fixture.nowMs,
-      }),
-    );
-
-    const write = await asMember.mutation(
-      api.communityInteractions.createCommunityInteractionComposerMessage,
-      {
-        communityId: fixture.communityId,
-        channelId,
-        idempotencyKey: "workflow-trigger-live-root",
-        text: "Shipping my first real contribution",
-      },
-    );
-    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
-
-    const records = await t.run(async (ctx) => ({
-      states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
-      transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
-    }));
-    expect(write.interaction).toMatchObject({ kind: "root", deduped: false });
-    expect(records.states).toHaveLength(1);
-    expect(records.states[0]?.currentStageKey).toBe(second.stage.key);
-    expect(records.transitions).toHaveLength(1);
-    expect(records.transitions[0]?.sourceReceiptRef).toBe(
-      `in_app:community_interaction_root:${write.interaction.root_id}`,
-    );
-  } finally {
-    vi.useRealTimers();
-  }
-});
-
-test("stage transitions dedupe by canonical source receipt and update self semantics", async () => {
-  vi.useFakeTimers();
-  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet.test");
-  vi.setSystemTime(new Date("2026-08-23T12:00:00.000Z"));
-  try {
-    const t = convexTest(schema, modules);
-    const fixture = await createFixture(t);
-    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-    const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
-    const { first, second } = await createTwoStageWorkflow(
-      asOwner,
-      fixture.communityId,
-    );
-
-    const transitionArgs = {
-      communityId: fixture.communityId,
-      membershipId: fixture.membershipId,
-      targetStageKey: second.stage.key,
-      expectedStageKey: first.stage.key,
-      triggerType: "in_app" as const,
-      sourceReceiptRef: "in_app:channel-message:example",
-      occurredAt: Date.now(),
-    };
-    await expect(
-      t.mutation(
-        internal.communityMemberWorkflows.transitionMemberStageInternal,
-        transitionArgs,
-      ),
-    ).resolves.toMatchObject({ changed: true, replayed: false });
-    await expect(
-      t.mutation(
-        internal.communityMemberWorkflows.transitionMemberStageInternal,
-        transitionArgs,
-      ),
-    ).resolves.toMatchObject({ changed: true, replayed: true });
-    await expect(
-      t.mutation(
-        internal.communityMemberWorkflows.transitionMemberStageInternal,
-        { ...transitionArgs, targetStageKey: first.stage.key },
-      ),
-    ).rejects.toThrow("community_member_workflow_idempotency_conflict");
-    await expect(
-      t.mutation(
-        internal.communityMemberWorkflows.transitionMemberStageInternal,
-        {
-          ...transitionArgs,
-          sourceReceiptRef: "time:schedule-run:wrong-family",
-        },
-      ),
-    ).rejects.toThrow("community_member_workflow_source_ref_type_mismatch");
-
-    const records = await t.run(async (ctx) => ({
-      states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
-      transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
-    }));
-    expect(records.states).toHaveLength(1);
-    expect(records.transitions).toHaveLength(1);
-    expect(records.transitions[0]).toMatchObject({
-      fromStageKey: first.stage.key,
-      toStageKey: second.stage.key,
-      triggerType: "in_app",
-      sourceReceiptRef: "in_app:channel-message:example",
-    });
-    await expect(
-      asOwner.query(
-        api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
-        { communityId: fixture.communityId },
-      ),
-    ).resolves.toMatchObject({
-      workflow_revision: 2,
-      active_member_count: 2,
-      latest_transition_id: String(records.transitions[0]?._id),
-    });
-
-    await expect(
-      asOwner.mutation(api.communityMemberWorkflows.deleteBuilderWorkflowStage, {
-        communityId: fixture.communityId,
-        expectedRevision: 2,
-        stageKey: second.stage.key,
-      }),
-    ).rejects.toThrow("community_member_workflow_stage_has_members");
-
-    const selfProfile = await asMember.action(
-      internal.communityCapabilityContext.readCommunitySemanticRepositoryInternal,
-      {
-        authSubject: MEMBER_SUBJECT,
-        userId: fixture.memberId,
-        communityId: fixture.communityId,
-        path: "/self.md",
-        surface: "member_agent_dock",
-      },
-    );
-    expect(selfProfile).toMatchObject({ ok: true });
-    expect(selfProfile.result.body).toContain('Current stage: "Activated"');
-  } finally {
-    vi.useRealTimers();
-    vi.unstubAllEnvs();
-  }
-});
-
-test("transitions fail closed when membership access is inactive", async () => {
+test("only a completed current assessment advances exactly one stage", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const { second } = await createTwoStageWorkflow(asOwner, fixture.communityId);
-  await t.run(async (ctx) => {
-    await ctx.db.patch(fixture.membershipId, {
-      active: false,
-      revokedAt: fixture.nowMs + 1,
-      updatedAt: fixture.nowMs + 1,
-    });
+  const { first, second } = await createWorkflow(asOwner, fixture.communityId);
+  const rootId = await insertRoot(
+    t,
+    fixture,
+    "complete-root",
+    "I shipped the implementation and measured a 12 percent improvement.",
+  );
+  const queued = await enqueueRoot(t, rootId);
+  const evaluationId = queued.evaluation_id as any;
+  const claim = await t.mutation(
+    internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
+    { evaluationId },
+  );
+  const context = await t.query(
+    internalApi.communityMemberWorkflows.buildMilestoneEvaluationContextInternal,
+    { evaluationId, claimToken: claim.claim_token },
+  );
+  expect(context.evidence).toHaveLength(1);
+
+  const finalized = await t.mutation(
+    internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
+    {
+      evaluationId,
+      claimToken: claim.claim_token,
+      decision: "complete",
+      evaluatorKind: "model",
+      evidenceRefs: [context.evidence[0].ref],
+      explanation: "The supplied evidence directly establishes implementation and result.",
+      missingEvidence: [],
+      nowMs: fixture.nowMs + 100,
+    },
+  );
+  expect(finalized).toMatchObject({ status: "complete", replayed: false });
+
+  const records = await t.run(async (ctx) => ({
+    evaluation: await ctx.db.get(evaluationId),
+    states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+  }));
+  expect(records.evaluation).toMatchObject({
+    status: "finished",
+    decision: "complete",
+    evidenceRefs: [context.evidence[0].ref],
   });
+  expect(records.states).toHaveLength(1);
+  expect(records.states[0]).toMatchObject({
+    currentStageKey: second.stage.key,
+    transitionSeq: 1,
+  });
+  expect(records.transitions).toHaveLength(1);
+  expect(records.transitions[0]).toMatchObject({
+    fromStageKey: first.key,
+    toStageKey: second.stage.key,
+    milestoneEvaluationId: evaluationId,
+    workflowRevision: 3,
+  });
+  await expect(enqueueRoot(t, rootId)).resolves.toMatchObject({ status: "already_queued" });
+  expect(
+    await t.run(async (ctx) => await ctx.db.query("communityMemberWorkflowTransitions").collect()),
+  ).toHaveLength(1);
+});
+
+test("transition authority rejects evidence the evaluator was not allowed to read", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  await createWorkflow(asOwner, fixture.communityId);
+  const rootId = await insertRoot(t, fixture, "bounded-root", "Eligible evidence.");
+  const queued = await enqueueRoot(t, rootId);
+  const evaluationId = queued.evaluation_id as any;
+  const claim = await t.mutation(
+    internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
+    { evaluationId },
+  );
+
   await expect(
     t.mutation(
-      internal.communityMemberWorkflows.transitionMemberStageInternal,
+      internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
       {
-        communityId: fixture.communityId,
-        membershipId: fixture.membershipId,
-        targetStageKey: second.stage.key,
-        triggerType: "time",
-        sourceReceiptRef: "time:schedule-run:inactive-member",
+        evaluationId,
+        claimToken: claim.claim_token,
+        decision: "complete",
+        evaluatorKind: "model",
+        evidenceRefs: ["interaction:root:invented"],
+        explanation: "This citation was not supplied to the evaluator.",
+        missingEvidence: [],
+        nowMs: fixture.nowMs + 100,
       },
     ),
-  ).rejects.toThrow("community_member_workflow_membership_inactive");
+  ).rejects.toThrow("community_member_workflow_evaluation_evidence_invalid");
+  expect(
+    await t.run(async (ctx) =>
+      await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+    ),
+  ).toHaveLength(0);
 });
 
-test("board pagination reaches active members and resolves their exact state beyond 500 rows", async () => {
+test.each(["not_complete", "uncertain"] as const)(
+  "%s assessment never changes stage",
+  async (decision) => {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+    await createWorkflow(asOwner, fixture.communityId);
+    const rootId = await insertRoot(t, fixture, `root-${decision}`, "I started working on it.");
+    const queued = await enqueueRoot(t, rootId);
+    const evaluationId = queued.evaluation_id as any;
+    const claim = await t.mutation(
+      internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
+      { evaluationId },
+    );
+    await t.mutation(
+      internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
+      {
+        evaluationId,
+        claimToken: claim.claim_token,
+        decision,
+        evaluatorKind: "model",
+        evidenceRefs: [`interaction:root:${String(rootId)}`],
+        explanation: "The evidence does not establish the full milestone.",
+        missingEvidence: ["The implementation result."],
+        nowMs: fixture.nowMs + 100,
+      },
+    );
+    const records = await t.run(async (ctx) => ({
+      states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
+      transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+    }));
+    expect(records.states).toHaveLength(0);
+    expect(records.transitions).toHaveLength(0);
+  },
+);
+
+test("editing a milestone makes an in-flight assessment stale", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const { first, second } = await createTwoStageWorkflow(asOwner, fixture.communityId);
-  await t.run(async (ctx) => {
-    const workflowId = ctx.db.normalizeId(
-      "communityMemberWorkflows",
-      first.workflow_id,
-    )!;
-    await ctx.db.patch(fixture.membershipId, {
-      active: false,
-      revokedAt: fixture.nowMs + 1,
-      updatedAt: fixture.nowMs + 1,
-    });
-    await ctx.db.insert("communityMemberWorkflowMemberStages", {
-      workflowId,
-      membershipId: fixture.membershipId,
-      currentStageKey: first.stage.key,
-      stageEnteredAt: fixture.nowMs,
-      transitionSeq: 0,
-      createdAt: fixture.nowMs,
-      updatedAt: fixture.nowMs,
-    });
-    for (let index = 0; index < 510; index += 1) {
-      const membershipId = await ctx.db.insert("communityMemberships", {
-        communityId: fixture.communityId,
-        userId: fixture.memberId,
-        role: "member",
-        accessSource: "manual_grant",
-        active: false,
-        activationSequence: index + 2,
-        activatedAt: fixture.nowMs + index + 2,
-        revokedAt: fixture.nowMs + index + 3,
-        createdAt: fixture.nowMs + index + 2,
-        updatedAt: fixture.nowMs + index + 3,
-      });
-      await ctx.db.insert("communityMemberWorkflowMemberStages", {
-        workflowId,
-        membershipId,
-        currentStageKey: first.stage.key,
-        stageEnteredAt: fixture.nowMs + index + 2,
-        transitionSeq: 0,
-        createdAt: fixture.nowMs + index + 2,
-        updatedAt: fixture.nowMs + index + 2,
-      });
-    }
-    const activeMembershipId = await ctx.db.insert("communityMemberships", {
-      communityId: fixture.communityId,
-      userId: fixture.memberId,
-      role: "member",
-      accessSource: "manual_grant",
-      active: true,
-      activationSequence: 513,
-      activatedAt: fixture.nowMs + 513,
-      createdAt: fixture.nowMs + 513,
-      updatedAt: fixture.nowMs + 513,
-    });
-    await ctx.db.insert("communityMemberWorkflowMemberStages", {
-      workflowId,
-      membershipId: activeMembershipId,
-      currentStageKey: second.stage.key,
-      stageEnteredAt: fixture.nowMs + 513,
-      transitionSeq: 1,
-      createdAt: fixture.nowMs + 513,
-      updatedAt: fixture.nowMs + 513,
-    });
-    await ctx.db.patch(fixture.communityId, { activeMemberCount: 2 });
-  });
+  const { first } = await createWorkflow(asOwner, fixture.communityId);
+  const rootId = await insertRoot(t, fixture, "stale-root", "Initial evidence.");
+  const queued = await enqueueRoot(t, rootId);
+  const evaluationId = queued.evaluation_id as any;
+  const claim = await t.mutation(
+    internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
+    { evaluationId },
+  );
 
-  let cursor: string | null = null;
-  let isDone = false;
-  const visible: Array<{ membership_id: string; current_stage_key: string }> = [];
-  while (!isDone) {
-    const result = (await asOwner.query(
-      api.communityMemberWorkflows.getBuilderWorkflowBoardPage,
-      { communityId: fixture.communityId, cursor, pageSize: 100 },
-    )) as {
-      page: Array<{ membership_id: string; current_stage_key: string }>;
-      continueCursor: string | null;
-      isDone: boolean;
-    };
-    visible.push(...result.page);
-    cursor = result.continueCursor;
-    isDone = result.isDone;
-  }
-  expect(visible).toHaveLength(1);
-  expect(visible[0]?.current_stage_key).toBe(second.stage.key);
+  await asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
+    communityId: fixture.communityId,
+    expectedRevision: 3,
+    stageKey: first.key,
+    name: first.name,
+    milestone: "A newly revised milestone.",
+  });
+  const result = await t.mutation(
+    internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
+    {
+      evaluationId,
+      claimToken: claim.claim_token,
+      decision: "complete",
+      evaluatorKind: "model",
+      evidenceRefs: [`interaction:root:${String(rootId)}`],
+      explanation: "Old definition result.",
+      missingEvidence: [],
+      nowMs: fixture.nowMs + 100,
+    },
+  );
+  expect(result).toEqual({ status: "stale", transition_id: null });
+  expect(
+    await t.run(async (ctx) => await ctx.db.query("communityMemberWorkflowTransitions").collect()),
+  ).toHaveLength(0);
 });

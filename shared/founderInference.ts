@@ -12,6 +12,7 @@ export const COMMUNITY_INFERENCE_SURFACES = [
   "community_funnel_builder",
   "community_agent_mention",
   "community_autonomous_cognition",
+  "community_workflow_milestone_evaluation",
   "community_setup_generation",
 ] as const;
 

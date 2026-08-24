@@ -4,7 +4,6 @@ import { useMemo, useState } from "react";
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES,
-  type CommunityMemberWorkflowInAppTriggerEvent,
   type CommunityMemberWorkflowStage,
 } from "../../../../shared/communityMemberWorkflow";
 import type {
@@ -32,7 +31,7 @@ export type WebCommunityWorkflowsSectionProps = {
   onUpdateStage: (
     stageKey: string,
     name: string,
-    completionTriggerEvent: CommunityMemberWorkflowInAppTriggerEvent | null,
+    milestone: string | null,
   ) => Promise<boolean>;
   onDeleteStage: (stageKey: string) => Promise<boolean>;
   onClearActionError: () => void;
@@ -97,7 +96,7 @@ export function WebCommunityWorkflowsSection(
       : await props.onUpdateStage(
           stage.key,
           stage.name,
-          stage.completionTrigger?.event ?? null,
+          stage.milestone ?? null,
         );
     if (saved) closeStage();
   };
@@ -229,7 +228,7 @@ export function WebCommunityWorkflowsSection(
           Boolean(editingStage?.key) &&
           stages.length > COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES
         }
-        canConfigureTrigger={
+        canConfigureMilestone={
           Boolean(editingStage?.key) && editingStageIndex < stages.length - 1
         }
         deleteDisabledReason={

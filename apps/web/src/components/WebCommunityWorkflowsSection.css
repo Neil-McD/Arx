@@ -374,7 +374,7 @@
 }
 
 .workflow-page input,
-.workflow-page select {
+.workflow-page textarea {
   box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--border-default);
@@ -385,8 +385,15 @@
 }
 
 .workflow-page input:focus,
-.workflow-page select:focus {
+.workflow-page textarea:focus {
   border-color: var(--border-strong);
+}
+
+.workflow-page textarea {
+  min-height: 112px;
+  resize: vertical;
+  font: inherit;
+  line-height: 1.45;
 }
 
 .workflow-stage-modal-actions {

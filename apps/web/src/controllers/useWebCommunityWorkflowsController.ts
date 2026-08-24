@@ -13,7 +13,6 @@ import {
   type CloudCommunityMemberWorkflowBoardPage,
   type CloudCommunityMemberWorkflowMember,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
-import type { CommunityMemberWorkflowInAppTriggerEvent } from "../../../../shared/communityMemberWorkflow";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -344,7 +343,7 @@ export function useWebCommunityWorkflowsController(params: {
     updateStage: (
       stageKey: string,
       name: string,
-      completionTriggerEvent: CommunityMemberWorkflowInAppTriggerEvent | null,
+      milestone: string | null,
     ) =>
       mutateStage("community_workflows_update_stage", (session, communityId, revision) =>
         updateCloudCommunityMemberWorkflowStage({
@@ -353,7 +352,7 @@ export function useWebCommunityWorkflowsController(params: {
           expectedRevision: revision,
           stageKey,
           name,
-          completionTriggerEvent,
+          milestone,
         }),
       ),
     deleteStage: (stageKey: string) =>

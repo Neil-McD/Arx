@@ -82,6 +82,7 @@ export type SelfProfileSemanticSource = {
   workflowState?: {
     stageKey: string;
     stageName: string;
+    milestone?: string | null;
   } | null;
 };
 
@@ -810,6 +811,10 @@ export function renderSelfProfileMarkdown(
       "",
       `- Current stage: ${JSON.stringify(stageName)} (\`${stageKey}\`)`,
     );
+    const milestone = normalizeInlineText(source.workflowState.milestone, 2_000);
+    if (milestone) {
+      lines.push(`- Milestone: ${JSON.stringify(milestone)}`);
+    }
   }
   return lines.join("\n");
 }

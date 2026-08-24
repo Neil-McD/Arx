@@ -8,10 +8,7 @@ import {
   type AuthenticatedConvexRealtimeLease,
   type ConvexRealtimeEnsureSession,
 } from "./convexRealtimeAuth";
-import type {
-  CommunityMemberWorkflowInAppTriggerEvent,
-  CommunityMemberWorkflowStage,
-} from "./communityMemberWorkflow";
+import type { CommunityMemberWorkflowStage } from "./communityMemberWorkflow";
 
 type WorkflowGatewayParams<SessionT> = { session: SessionT };
 
@@ -163,7 +160,7 @@ export async function updateCloudCommunityMemberWorkflowStage<SessionT>(
     expectedRevision: number;
     stageKey: string;
     name: string;
-    completionTriggerEvent: CommunityMemberWorkflowInAppTriggerEvent | null;
+    milestone: string | null;
   },
 ): Promise<WorkflowStageMutationResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
@@ -177,7 +174,7 @@ export async function updateCloudCommunityMemberWorkflowStage<SessionT>(
       expectedRevision: params.expectedRevision,
       stageKey: params.stageKey,
       name: params.name,
-      completionTriggerEvent: params.completionTriggerEvent,
+      milestone: params.milestone,
     },
   )) as WorkflowStageMutationResult;
 }

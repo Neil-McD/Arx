@@ -1,34 +1,24 @@
 export const COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES = 1;
 export const COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES = 12;
 export const COMMUNITY_MEMBER_WORKFLOW_STAGE_NAME_MAX_LENGTH = 80;
+export const COMMUNITY_MEMBER_WORKFLOW_MILESTONE_MAX_LENGTH = 2_000;
 export const COMMUNITY_MEMBER_WORKFLOW_STAGE_KEY_MAX_LENGTH = 64;
 export const COMMUNITY_MEMBER_WORKFLOW_SOURCE_REF_MAX_LENGTH = 1_024;
+export const COMMUNITY_MEMBER_WORKFLOW_EVIDENCE_REF_MAX_COUNT = 64;
 
-export const COMMUNITY_MEMBER_WORKFLOW_TRIGGER_TYPES = [
-  "in_app",
-  "time",
-  "external",
+export const COMMUNITY_MEMBER_WORKFLOW_EVALUATION_DECISIONS = [
+  "complete",
+  "not_complete",
+  "uncertain",
 ] as const;
 
-export type CommunityMemberWorkflowTriggerType =
-  (typeof COMMUNITY_MEMBER_WORKFLOW_TRIGGER_TYPES)[number];
-
-export const COMMUNITY_MEMBER_WORKFLOW_IN_APP_TRIGGER_EVENTS = [
-  "channel_contribution",
-] as const;
-
-export type CommunityMemberWorkflowInAppTriggerEvent =
-  (typeof COMMUNITY_MEMBER_WORKFLOW_IN_APP_TRIGGER_EVENTS)[number];
-
-export type CommunityMemberWorkflowCompletionTrigger = {
-  type: "in_app";
-  event: CommunityMemberWorkflowInAppTriggerEvent;
-};
+export type CommunityMemberWorkflowEvaluationDecision =
+  (typeof COMMUNITY_MEMBER_WORKFLOW_EVALUATION_DECISIONS)[number];
 
 export type CommunityMemberWorkflowStage = {
   key: string;
   name: string;
-  completionTrigger?: CommunityMemberWorkflowCompletionTrigger;
+  milestone?: string;
 };
 
 function normalizeInlineText(value: unknown, maxLength: number): string {
@@ -64,6 +54,20 @@ export function normalizeCommunityMemberWorkflowStageName(
     throw new Error("community_member_workflow_stage_name_required");
   }
   return name;
+}
+
+export function normalizeCommunityMemberWorkflowMilestone(
+  value: unknown,
+): string | null {
+  const milestone = String(value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim()
+    .slice(0, COMMUNITY_MEMBER_WORKFLOW_MILESTONE_MAX_LENGTH);
+  return milestone || null;
 }
 
 export function normalizeCommunityMemberWorkflowSourceRef(

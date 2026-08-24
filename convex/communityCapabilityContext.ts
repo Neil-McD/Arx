@@ -630,6 +630,7 @@ async function resolveSelfWorkflowSemanticState(args: {
   return {
     stageKey: stage.key,
     stageName: stage.name,
+    milestone: String(stage.milestone ?? "").trim() || null,
   };
 }
 

@@ -263,6 +263,7 @@ export default defineSchema({
       v.literal("community_funnel_builder"),
       v.literal("community_agent_mention"),
       v.literal("community_autonomous_cognition"),
+      v.literal("community_workflow_milestone_evaluation"),
       v.literal("community_setup_generation"),
     ),
     provider: v.literal("openai"),
@@ -1156,10 +1157,7 @@ export default defineSchema({
     stages: v.array(v.object({
       key: v.string(),
       name: v.string(),
-      completionTrigger: v.optional(v.object({
-        type: v.literal("in_app"),
-        event: v.literal("channel_contribution"),
-      })),
+      milestone: v.optional(v.string()),
     })),
     revision: v.number(),
     createdByUserId: v.id("users"),
@@ -1182,6 +1180,57 @@ export default defineSchema({
     .index("by_workflow_stage", ["workflowId", "currentStageKey"])
     .index("by_membership", ["membershipId"]),
 
+  communityMemberWorkflowMilestoneEvaluations: defineTable({
+    communityId: v.id("communities"),
+    workflowId: v.id("communityMemberWorkflows"),
+    membershipId: v.id("communityMemberships"),
+    stageKey: v.string(),
+    workflowRevision: v.number(),
+    stageEnteredAt: v.number(),
+    milestoneText: v.string(),
+    milestoneHash: v.string(),
+    wakeKind: v.union(
+      v.literal("in_app"),
+      v.literal("time"),
+      v.literal("external"),
+    ),
+    wakeReceiptRef: v.string(),
+    evidenceWindowStartAt: v.number(),
+    evidenceThroughAt: v.number(),
+    evidenceRefs: v.array(v.string()),
+    status: v.union(
+      v.literal("queued"),
+      v.literal("running"),
+      v.literal("finished"),
+      v.literal("failed"),
+      v.literal("stale"),
+    ),
+    decision: v.optional(v.union(
+      v.literal("complete"),
+      v.literal("not_complete"),
+      v.literal("uncertain"),
+    )),
+    evaluatorKind: v.optional(v.union(
+      v.literal("deterministic"),
+      v.literal("model"),
+    )),
+    explanation: v.optional(v.string()),
+    missingEvidence: v.optional(v.array(v.string())),
+    claimToken: v.optional(v.string()),
+    leaseExpiresAt: v.optional(v.number()),
+    availableAt: v.number(),
+    attempt: v.number(),
+    errorCode: v.optional(v.string()),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+  })
+    .index("by_workflow_membership_wakeReceipt", [
+      "workflowId",
+      "membershipId",
+      "wakeReceiptRef",
+    ]),
+
   communityMemberWorkflowTransitions: defineTable({
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
@@ -1189,21 +1238,14 @@ export default defineSchema({
     seq: v.number(),
     fromStageKey: v.string(),
     toStageKey: v.string(),
-    triggerType: v.union(
-      v.literal("in_app"),
-      v.literal("time"),
-      v.literal("external"),
-    ),
-    sourceReceiptRef: v.string(),
+    milestoneEvaluationId: v.id("communityMemberWorkflowMilestoneEvaluations"),
+    workflowRevision: v.number(),
+    milestoneHash: v.string(),
     occurredAt: v.number(),
     createdAt: v.number(),
   })
     .index("by_workflow_membership_seq", ["workflowId", "membershipId", "seq"])
-    .index("by_workflow_membership_source", [
-      "workflowId",
-      "membershipId",
-      "sourceReceiptRef",
-    ])
+    .index("by_milestoneEvaluation", ["milestoneEvaluationId"])
     .index("by_community_occurredAt", ["communityId", "occurredAt"]),
 
   communityPresence: defineTable({
@@ -1554,6 +1596,7 @@ export default defineSchema({
       "createdAt",
     ])
     .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"])
+    .index("by_community_actorUser_createdAt", ["communityId", "actorUserId", "createdAt"])
     .index("by_actorUser", ["actorUserId"])
     .index("by_actorAgent", ["actorAgentKey"]),
 
@@ -1605,6 +1648,7 @@ export default defineSchema({
       "createdAt",
     ])
     .index("by_community_idempotencyKey", ["communityId", "idempotencyKey"])
+    .index("by_community_actorUser_createdAt", ["communityId", "actorUserId", "createdAt"])
     .index("by_targetReply", ["targetReplyId"])
     .index("by_actorUser", ["actorUserId"])
     .index("by_actorAgent", ["actorAgentKey"]),

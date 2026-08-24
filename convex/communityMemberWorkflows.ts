@@ -1,13 +1,15 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
+import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES,
+  COMMUNITY_MEMBER_WORKFLOW_EVIDENCE_REF_MAX_COUNT,
+  normalizeCommunityMemberWorkflowMilestone,
   normalizeCommunityMemberWorkflowSourceRef,
   normalizeCommunityMemberWorkflowStageKey,
   normalizeCommunityMemberWorkflowStageName,
-  type CommunityMemberWorkflowTriggerType,
 } from "../shared/communityMemberWorkflow";
 import {
   communityMembershipRowIsActive,
@@ -19,12 +21,11 @@ import {
   type CommunityMembershipLike,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-
-const workflowTriggerValidator = v.union(
-  v.literal("in_app"),
-  v.literal("time"),
-  v.literal("external"),
-);
+import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
+import {
+  communityInteractionEvidenceSourceIsReadable,
+  resolveCommunityInteractionEvidenceSource,
+} from "./communityInteractionEvidenceCore";
 
 const managerIdentityArgs = {
   userId: v.optional(v.id("users")),
@@ -36,10 +37,23 @@ const WORKFLOW_BOARD_MAX_PAGE_SIZE = 100;
 
 type WorkflowRow = Doc<"communityMemberWorkflows">;
 type MemberStageRow = Doc<"communityMemberWorkflowMemberStages">;
+type EvaluationRow = Doc<"communityMemberWorkflowMilestoneEvaluations">;
 type TransitionRow = Doc<"communityMemberWorkflowTransitions">;
 type ChannelContributionRow =
   | Doc<"communityInteractionRoots">
   | Doc<"communityInteractionReplies">;
+
+const EVALUATION_LEASE_MS = 10 * 60_000;
+const EVALUATION_MAX_ATTEMPTS = 3;
+const EVALUATION_EVIDENCE_LIMIT_PER_KIND = 100;
+
+async function sha256HexText(value: string): Promise<string> {
+  const bytes = new TextEncoder().encode(value);
+  const digest = await crypto.subtle.digest("SHA-256", bytes);
+  return Array.from(new Uint8Array(digest))
+    .map((byte) => byte.toString(16).padStart(2, "0"))
+    .join("");
+}
 
 function normalizeExpectedRevision(value: unknown): number {
   const revision = Number(value);
@@ -122,30 +136,14 @@ function requireWorkflowRevision(
   return workflow;
 }
 
-function requireSourceReceiptRefForTrigger(
-  triggerType: CommunityMemberWorkflowTriggerType,
-  value: unknown,
-): string {
-  const sourceReceiptRef = normalizeCommunityMemberWorkflowSourceRef(value);
-  if (!sourceReceiptRef.startsWith(`${triggerType}:`)) {
-    throw new Error("community_member_workflow_source_ref_type_mismatch");
-  }
-  return sourceReceiptRef;
-}
-
-async function getTransitionBySourceReceipt(args: {
+async function getTransitionByMilestoneEvaluation(args: {
   ctx: any;
-  workflowId: any;
-  membershipId: any;
-  sourceReceiptRef: string;
+  milestoneEvaluationId: any;
 }): Promise<TransitionRow | null> {
   const rows = (await args.ctx.db
     .query("communityMemberWorkflowTransitions" as any)
-    .withIndex("by_workflow_membership_source", (q: any) =>
-      q
-        .eq("workflowId", args.workflowId)
-        .eq("membershipId", args.membershipId)
-        .eq("sourceReceiptRef", args.sourceReceiptRef),
+    .withIndex("by_milestoneEvaluation", (q: any) =>
+      q.eq("milestoneEvaluationId", args.milestoneEvaluationId),
     )
     .take(2)) as TransitionRow[];
   if (rows.length > 1) {
@@ -217,10 +215,7 @@ export const updateBuilderWorkflowStage = mutation({
     expectedRevision: v.number(),
     stageKey: v.string(),
     name: v.string(),
-    completionTriggerEvent: v.union(
-      v.literal("channel_contribution"),
-      v.null(),
-    ),
+    milestone: v.union(v.string(), v.null()),
   },
   handler: async (ctx, args) => {
     const { userId } = await requireWorkflowManager({
@@ -245,19 +240,14 @@ export const updateBuilderWorkflowStage = mutation({
       throw new Error("community_member_workflow_stage_invalid");
     }
     const name = normalizeCommunityMemberWorkflowStageName(args.name);
-    if (
-      args.completionTriggerEvent &&
-      stageIndex === workflow.stages.length - 1
-    ) {
-      throw new Error("community_member_workflow_terminal_stage_trigger_invalid");
+    const milestone = normalizeCommunityMemberWorkflowMilestone(args.milestone);
+    if (milestone && stageIndex === workflow.stages.length - 1) {
+      throw new Error("community_member_workflow_terminal_stage_milestone_invalid");
     }
-    const completionTrigger = args.completionTriggerEvent
-      ? { type: "in_app" as const, event: args.completionTriggerEvent }
-      : undefined;
     const existingStage = workflow.stages[stageIndex];
     if (
       existingStage.name === name &&
-      existingStage.completionTrigger?.event === completionTrigger?.event
+      (existingStage.milestone ?? null) === milestone
     ) {
       return {
         workflow_id: String(workflow._id),
@@ -270,7 +260,7 @@ export const updateBuilderWorkflowStage = mutation({
         ? {
             key: stage.key,
             name,
-            ...(completionTrigger ? { completionTrigger } : {}),
+            ...(milestone ? { milestone } : {}),
           }
         : stage,
     );
@@ -504,124 +494,121 @@ export const getBuilderWorkflowBoardProjectionToken = query({
   },
 });
 
-export async function transitionCommunityMemberWorkflowStageCore(args: {
+async function getEvaluationByWakeReceipt(args: {
   ctx: any;
-  communityId: any;
+  workflowId: any;
   membershipId: any;
-  targetStageKey: string;
-  expectedStageKey?: string | null;
-  triggerType: CommunityMemberWorkflowTriggerType;
-  sourceReceiptRef: string;
-  nowMs: number;
+  wakeReceiptRef: string;
+}): Promise<EvaluationRow | null> {
+  const rows = (await args.ctx.db
+    .query("communityMemberWorkflowMilestoneEvaluations" as any)
+    .withIndex("by_workflow_membership_wakeReceipt", (q: any) =>
+      q
+        .eq("workflowId", args.workflowId)
+        .eq("membershipId", args.membershipId)
+        .eq("wakeReceiptRef", args.wakeReceiptRef),
+    )
+    .take(2)) as EvaluationRow[];
+  if (rows.length > 1) {
+    throw new Error("community_member_workflow_evaluation_ambiguous");
+  }
+  return rows[0] ?? null;
+}
+
+function resolveCurrentStage(args: {
+  workflow: WorkflowRow;
+  membership: CommunityMembershipLike;
+  state: MemberStageRow | null;
 }) {
-  const workflow = await getCommunityMemberWorkflowByCommunity({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
-  if (!workflow) throw new Error("community_member_workflow_not_found");
-  const membership = (await args.ctx.db.get(
-    args.membershipId,
-  )) as CommunityMembershipLike | null;
-  if (
-    !membership ||
-    String(membership.communityId) !== String(args.communityId) ||
-    !communityMembershipRowIsActive(membership)
-  ) {
-    throw new Error("community_member_workflow_membership_inactive");
-  }
-
-  const targetStageKey = normalizeCommunityMemberWorkflowStageKey(
-    args.targetStageKey,
+  const currentStageKey = args.state?.currentStageKey ?? args.workflow.stages[0]?.key;
+  const stageIndex = args.workflow.stages.findIndex(
+    (stage) => stage.key === currentStageKey,
   );
-  if (!workflow.stages.some((stage) => stage.key === targetStageKey)) {
-    throw new Error("community_member_workflow_stage_invalid");
+  if (stageIndex < 0) {
+    throw new Error("community_member_workflow_member_stage_invalid");
   }
-  const sourceReceiptRef = requireSourceReceiptRefForTrigger(
-    args.triggerType,
-    args.sourceReceiptRef,
-  );
-  const replay = await getTransitionBySourceReceipt({
-    ctx: args.ctx,
-    workflowId: workflow._id,
-    membershipId: membership._id,
-    sourceReceiptRef,
-  });
-  if (replay) {
-    if (
-      replay.toStageKey !== targetStageKey ||
-      replay.triggerType !== args.triggerType
-    ) {
-      throw new Error("community_member_workflow_idempotency_conflict");
-    }
-    return {
-      transition_id: String(replay._id),
-      changed: true,
-      replayed: true,
-    };
-  }
-
-  const state = await getMemberStage({
-    ctx: args.ctx,
-    workflowId: workflow._id,
-    membershipId: membership._id,
-  });
-  const currentStageKey = state?.currentStageKey ?? workflow.stages[0].key;
-  if (
-    args.expectedStageKey &&
-    normalizeCommunityMemberWorkflowStageKey(args.expectedStageKey) !==
-      currentStageKey
-  ) {
-    throw new Error("community_member_workflow_stage_conflict");
-  }
-  if (currentStageKey === targetStageKey) {
-    return { transition_id: null, changed: false, replayed: false };
-  }
-
-  const seq = Number(state?.transitionSeq ?? 0) + 1;
-  if (state) {
-    await args.ctx.db.patch(state._id, {
-      currentStageKey: targetStageKey,
-      stageEnteredAt: args.nowMs,
-      transitionSeq: seq,
-      updatedAt: args.nowMs,
-    });
-  } else {
-    await args.ctx.db.insert(
-      "communityMemberWorkflowMemberStages" as any,
-      {
-        workflowId: workflow._id,
-        membershipId: membership._id,
-        currentStageKey: targetStageKey,
-        stageEnteredAt: args.nowMs,
-        transitionSeq: seq,
-        createdAt: args.nowMs,
-        updatedAt: args.nowMs,
-      },
-    );
-  }
-  const transitionId = await args.ctx.db.insert(
-    "communityMemberWorkflowTransitions" as any,
-    {
-      communityId: args.communityId,
-      workflowId: workflow._id,
-      membershipId: membership._id,
-      seq,
-      fromStageKey: currentStageKey,
-      toStageKey: targetStageKey,
-      triggerType: args.triggerType,
-      sourceReceiptRef,
-      occurredAt: args.nowMs,
-      createdAt: args.nowMs,
-    },
-  );
   return {
-    transition_id: String(transitionId),
-    changed: true,
-    replayed: false,
+    stage: args.workflow.stages[stageIndex],
+    stageIndex,
+    stageEnteredAt:
+      args.state?.stageEnteredAt ??
+      args.membership.activatedAt ??
+      args.membership.createdAt,
   };
 }
 
-async function applyChannelContributionTriggerCore(args: {
+async function listEligibleMilestoneEvidence(args: {
+  ctx: any;
+  evaluation: EvaluationRow;
+  membership: CommunityMembershipLike;
+}) {
+  const [roots, replies] = await Promise.all([
+    args.ctx.db
+      .query("communityInteractionRoots")
+      .withIndex("by_community_actorUser_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.evaluation.communityId)
+          .eq("actorUserId", args.membership.userId)
+          .gte("createdAt", args.evaluation.evidenceWindowStartAt),
+      )
+      .order("desc")
+      .take(EVALUATION_EVIDENCE_LIMIT_PER_KIND),
+    args.ctx.db
+      .query("communityInteractionReplies")
+      .withIndex("by_community_actorUser_createdAt", (q: any) =>
+        q
+          .eq("communityId", args.evaluation.communityId)
+          .eq("actorUserId", args.membership.userId)
+          .gte("createdAt", args.evaluation.evidenceWindowStartAt),
+      )
+      .order("desc")
+      .take(EVALUATION_EVIDENCE_LIMIT_PER_KIND),
+  ]);
+  const candidates = [
+    ...roots.map((row: any) => ({ objectType: "root" as const, row })),
+    ...replies.map((row: any) => ({ objectType: "reply" as const, row })),
+  ]
+    .filter(({ row }) => row.createdAt <= args.evaluation.evidenceThroughAt)
+    .sort((left, right) => right.row.createdAt - left.row.createdAt)
+    .slice(0, COMMUNITY_MEMBER_WORKFLOW_EVIDENCE_REF_MAX_COUNT);
+  const resolved = await Promise.all(
+    candidates.map(async ({ objectType, row }) => ({
+      objectType,
+      row,
+      source: await resolveCommunityInteractionEvidenceSource({
+        ctx: args.ctx,
+        communityId: args.evaluation.communityId,
+        objectType,
+        objectId: row._id,
+      }),
+    })),
+  );
+  return resolved
+    .filter(({ row, source }) =>
+      Boolean(
+        source &&
+          communityInteractionEvidenceSourceIsReadable(source) &&
+          source.row.actorType === "human" &&
+          String(source.row.actorUserId ?? "") === String(args.membership.userId) &&
+          source.row.channelId &&
+          row.createdAt >= args.evaluation.evidenceWindowStartAt &&
+          row.createdAt <= args.evaluation.evidenceThroughAt,
+      ),
+    )
+    .sort((left, right) => left.row.createdAt - right.row.createdAt)
+    .map(({ objectType, row }) => ({
+      ref: buildCommunityInteractionEvidenceRef({
+        objectType,
+        objectId: String(row._id),
+      }),
+      occurred_at: toIsoString(row.createdAt),
+      kind: objectType === "root" ? "channel_root" as const : "channel_reply" as const,
+      text: String(row.contentSummary ?? "").trim().slice(0, 4_000),
+    }))
+    .filter((row) => row.text);
+}
+
+async function enqueueChannelContributionEvaluationCore(args: {
   ctx: any;
   objectType: "root" | "reply";
   row: ChannelContributionRow | null;
@@ -654,17 +641,22 @@ async function applyChannelContributionTriggerCore(args: {
     return { status: "membership_ineligible" as const };
   }
 
-  const sourceReceiptRef = `in_app:community_interaction_${args.objectType}:${String(row._id)}`;
-  const replay = await getTransitionBySourceReceipt({
+  const wakeReceiptRef = normalizeCommunityMemberWorkflowSourceRef(
+    buildCommunityInteractionEvidenceRef({
+      objectType: args.objectType,
+      objectId: String(row._id),
+    }),
+  );
+  const replay = await getEvaluationByWakeReceipt({
     ctx: args.ctx,
     workflowId: workflow._id,
     membershipId: membership!._id,
-    sourceReceiptRef,
+    wakeReceiptRef,
   });
   if (replay) {
     return {
-      status: "already_applied" as const,
-      transition_id: String(replay._id),
+      status: "already_queued" as const,
+      evaluation_id: String(replay._id),
     };
   }
 
@@ -673,75 +665,423 @@ async function applyChannelContributionTriggerCore(args: {
     workflowId: workflow._id,
     membershipId: membership!._id,
   });
-  const currentStageKey = state?.currentStageKey ?? workflow.stages[0].key;
-  const currentStageIndex = workflow.stages.findIndex(
-    (stage) => stage.key === currentStageKey,
+  const current = resolveCurrentStage({ workflow, membership: membership!, state });
+  const milestone = normalizeCommunityMemberWorkflowMilestone(
+    current.stage.milestone,
   );
-  if (currentStageIndex < 0) {
-    throw new Error("community_member_workflow_member_stage_invalid");
+  if (!workflow.stages[current.stageIndex + 1] || !milestone) {
+    return { status: "milestone_not_configured" as const };
   }
-  const currentStage = workflow.stages[currentStageIndex];
-  const targetStage = workflow.stages[currentStageIndex + 1];
-  if (
-    !targetStage ||
-    currentStage.completionTrigger?.type !== "in_app" ||
-    currentStage.completionTrigger.event !== "channel_contribution"
-  ) {
-    return { status: "trigger_not_configured" as const };
-  }
-
-  const result = await transitionCommunityMemberWorkflowStageCore({
-    ctx: args.ctx,
-    communityId: row.communityId,
-    membershipId: membership!._id,
-    targetStageKey: targetStage.key,
-    expectedStageKey: currentStage.key,
-    triggerType: "in_app",
-    sourceReceiptRef,
-    nowMs: row.createdAt,
-  });
-  return { status: "applied" as const, ...result };
+  const milestoneHash = await sha256HexText(milestone);
+  const nowMs = Date.now();
+  const evaluationId = await args.ctx.db.insert(
+    "communityMemberWorkflowMilestoneEvaluations" as any,
+    {
+      communityId: row.communityId,
+      workflowId: workflow._id,
+      membershipId: membership!._id,
+      stageKey: current.stage.key,
+      workflowRevision: workflow.revision,
+      stageEnteredAt: current.stageEnteredAt,
+      milestoneText: milestone,
+      milestoneHash,
+      wakeKind: "in_app",
+      wakeReceiptRef,
+      evidenceWindowStartAt: current.stageEnteredAt,
+      evidenceThroughAt: row.createdAt,
+      evidenceRefs: [],
+      status: "queued",
+      availableAt: nowMs,
+      attempt: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    },
+  );
+  await args.ctx.scheduler.runAfter(
+    0,
+    (internal as any).communityMemberWorkflowEvaluator
+      .runMilestoneEvaluationInternal,
+    { evaluationId },
+  );
+  return {
+    status: "queued" as const,
+    evaluation_id: String(evaluationId),
+  };
 }
 
-export const applyChannelContributionRootTriggerInternal = internalMutation({
+export const enqueueChannelContributionRootEvaluationInternal = internalMutation({
   args: { rootId: v.id("communityInteractionRoots") },
   handler: async (ctx, args) =>
-    await applyChannelContributionTriggerCore({
+    await enqueueChannelContributionEvaluationCore({
       ctx,
       objectType: "root",
       row: await ctx.db.get(args.rootId),
     }),
 });
 
-export const applyChannelContributionReplyTriggerInternal = internalMutation({
+export const enqueueChannelContributionReplyEvaluationInternal = internalMutation({
   args: { replyId: v.id("communityInteractionReplies") },
   handler: async (ctx, args) =>
-    await applyChannelContributionTriggerCore({
+    await enqueueChannelContributionEvaluationCore({
       ctx,
       objectType: "reply",
       row: await ctx.db.get(args.replyId),
     }),
 });
 
-export const transitionMemberStageInternal = internalMutation({
-  args: {
-    communityId: v.id("communities"),
-    membershipId: v.id("communityMemberships"),
-    targetStageKey: v.string(),
-    expectedStageKey: v.optional(v.string()),
-    triggerType: workflowTriggerValidator,
-    sourceReceiptRef: v.string(),
-    occurredAt: v.optional(v.number()),
-  },
-  handler: async (ctx, args) =>
-    await transitionCommunityMemberWorkflowStageCore({
+export const claimMilestoneEvaluationInternal = internalMutation({
+  args: { evaluationId: v.id("communityMemberWorkflowMilestoneEvaluations") },
+  handler: async (ctx, args) => {
+    const evaluation = (await ctx.db.get(args.evaluationId)) as EvaluationRow | null;
+    if (!evaluation) return { ok: false, code: "evaluation_missing" as const };
+    const nowMs = Date.now();
+    if (
+      evaluation.status === "finished" ||
+      evaluation.status === "failed" ||
+      evaluation.status === "stale"
+    ) {
+      return { ok: false, code: "evaluation_terminal" as const };
+    }
+    if (
+      evaluation.status === "running" &&
+      Number(evaluation.leaseExpiresAt ?? 0) > nowMs
+    ) {
+      return { ok: false, code: "evaluation_leased" as const };
+    }
+    if (
+      evaluation.status === "queued" &&
+      Number(evaluation.availableAt) > nowMs
+    ) {
+      return { ok: false, code: "evaluation_not_available" as const };
+    }
+    if (evaluation.attempt >= EVALUATION_MAX_ATTEMPTS) {
+      await ctx.db.patch(evaluation._id, {
+        status: "failed",
+        errorCode: "evaluation_attempts_exhausted",
+        finishedAt: nowMs,
+        updatedAt: nowMs,
+        claimToken: undefined,
+        leaseExpiresAt: undefined,
+      });
+      return { ok: false, code: "evaluation_attempts_exhausted" as const };
+    }
+    const workflow = (await ctx.db.get(evaluation.workflowId)) as WorkflowRow | null;
+    const membership = (await ctx.db.get(
+      evaluation.membershipId,
+    )) as CommunityMembershipLike | null;
+    if (
+      !workflow ||
+      !membership ||
+      !communityMembershipRowIsActive(membership)
+    ) {
+      await ctx.db.patch(evaluation._id, {
+        status: "stale",
+        errorCode: "evaluation_authority_changed",
+        finishedAt: nowMs,
+        updatedAt: nowMs,
+      });
+      return { ok: false, code: "evaluation_stale" as const };
+    }
+    const state = await getMemberStage({
       ctx,
-      communityId: args.communityId,
-      membershipId: args.membershipId,
-      targetStageKey: args.targetStageKey,
-      expectedStageKey: args.expectedStageKey,
-      triggerType: args.triggerType,
-      sourceReceiptRef: args.sourceReceiptRef,
-      nowMs: args.occurredAt ?? Date.now(),
-    }),
+      workflowId: workflow._id,
+      membershipId: membership._id,
+    });
+    const current = resolveCurrentStage({ workflow, membership, state });
+    const milestone = normalizeCommunityMemberWorkflowMilestone(
+      current.stage.milestone,
+    );
+    const milestoneHash = milestone ? await sha256HexText(milestone) : null;
+    if (
+      workflow.revision !== evaluation.workflowRevision ||
+      current.stage.key !== evaluation.stageKey ||
+      current.stageEnteredAt !== evaluation.stageEnteredAt ||
+      milestoneHash !== evaluation.milestoneHash ||
+      !workflow.stages[current.stageIndex + 1]
+    ) {
+      await ctx.db.patch(evaluation._id, {
+        status: "stale",
+        errorCode: "evaluation_definition_changed",
+        finishedAt: nowMs,
+        updatedAt: nowMs,
+      });
+      return { ok: false, code: "evaluation_stale" as const };
+    }
+    const claimToken = crypto.randomUUID();
+    const leaseExpiresAt = nowMs + EVALUATION_LEASE_MS;
+    await ctx.db.patch(evaluation._id, {
+      status: "running",
+      claimToken,
+      leaseExpiresAt,
+      attempt: evaluation.attempt + 1,
+      errorCode: undefined,
+      updatedAt: nowMs,
+    });
+    await ctx.scheduler.runAfter(
+      EVALUATION_LEASE_MS,
+      (internal as any).communityMemberWorkflowEvaluator
+        .runMilestoneEvaluationInternal,
+      { evaluationId: evaluation._id },
+    );
+    return {
+      ok: true,
+      evaluation_id: String(evaluation._id),
+      claim_token: claimToken,
+    };
+  },
+});
+
+export const buildMilestoneEvaluationContextInternal = internalQuery({
+  args: {
+    evaluationId: v.id("communityMemberWorkflowMilestoneEvaluations"),
+    claimToken: v.string(),
+  },
+  handler: async (ctx, args) => {
+    const evaluation = (await ctx.db.get(args.evaluationId)) as EvaluationRow | null;
+    if (
+      !evaluation ||
+      evaluation.status !== "running" ||
+      evaluation.claimToken !== args.claimToken
+    ) {
+      throw new Error("community_member_workflow_evaluation_claim_invalid");
+    }
+    const membership = (await ctx.db.get(
+      evaluation.membershipId,
+    )) as CommunityMembershipLike | null;
+    const workflow = (await ctx.db.get(evaluation.workflowId)) as WorkflowRow | null;
+    const community = await ctx.db.get(evaluation.communityId);
+    if (!membership || !workflow || !community) {
+      throw new Error("community_member_workflow_evaluation_context_missing");
+    }
+    const evidence = await listEligibleMilestoneEvidence({
+      ctx,
+      evaluation,
+      membership,
+    });
+    return {
+      evaluation_id: String(evaluation._id),
+      community_id: String(evaluation.communityId),
+      sponsor_user_id: String((community as any).ownerId),
+      stage_key: evaluation.stageKey,
+      stage_name:
+        workflow.stages.find((stage) => stage.key === evaluation.stageKey)?.name ??
+        "Stage",
+      stage_entered_at: toIsoString(evaluation.stageEnteredAt),
+      evidence_through_at: toIsoString(evaluation.evidenceThroughAt),
+      milestone: evaluation.milestoneText,
+      milestone_hash: evaluation.milestoneHash,
+      evidence,
+    };
+  },
+});
+
+export const finalizeMilestoneEvaluationInternal = internalMutation({
+  args: {
+    evaluationId: v.id("communityMemberWorkflowMilestoneEvaluations"),
+    claimToken: v.string(),
+    decision: v.union(
+      v.literal("complete"),
+      v.literal("not_complete"),
+      v.literal("uncertain"),
+    ),
+    evaluatorKind: v.union(
+      v.literal("deterministic"),
+      v.literal("model"),
+    ),
+    evidenceRefs: v.array(v.string()),
+    explanation: v.string(),
+    missingEvidence: v.array(v.string()),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const evaluation = (await ctx.db.get(args.evaluationId)) as EvaluationRow | null;
+    if (
+      !evaluation ||
+      evaluation.status !== "running" ||
+      evaluation.claimToken !== args.claimToken
+    ) {
+      throw new Error("community_member_workflow_evaluation_claim_invalid");
+    }
+    const workflow = (await ctx.db.get(evaluation.workflowId)) as WorkflowRow | null;
+    const membership = (await ctx.db.get(
+      evaluation.membershipId,
+    )) as CommunityMembershipLike | null;
+    if (!workflow || !membership || !communityMembershipRowIsActive(membership)) {
+      await ctx.db.patch(evaluation._id, {
+        status: "stale",
+        errorCode: "evaluation_authority_changed",
+        finishedAt: args.nowMs,
+        updatedAt: args.nowMs,
+        claimToken: undefined,
+        leaseExpiresAt: undefined,
+      });
+      return { status: "stale" as const, transition_id: null };
+    }
+    const state = await getMemberStage({
+      ctx,
+      workflowId: workflow._id,
+      membershipId: membership._id,
+    });
+    const current = resolveCurrentStage({ workflow, membership, state });
+    const milestone = normalizeCommunityMemberWorkflowMilestone(
+      current.stage.milestone,
+    );
+    const milestoneHash = milestone ? await sha256HexText(milestone) : null;
+    if (
+      workflow.revision !== evaluation.workflowRevision ||
+      current.stage.key !== evaluation.stageKey ||
+      current.stageEnteredAt !== evaluation.stageEnteredAt ||
+      milestoneHash !== evaluation.milestoneHash ||
+      !workflow.stages[current.stageIndex + 1]
+    ) {
+      await ctx.db.patch(evaluation._id, {
+        status: "stale",
+        errorCode: "evaluation_definition_changed",
+        finishedAt: args.nowMs,
+        updatedAt: args.nowMs,
+        claimToken: undefined,
+        leaseExpiresAt: undefined,
+      });
+      return { status: "stale" as const, transition_id: null };
+    }
+    const evidenceRefs = Array.from(
+      new Set(
+        args.evidenceRefs
+          .map((value) => normalizeCommunityMemberWorkflowSourceRef(value))
+          .slice(0, COMMUNITY_MEMBER_WORKFLOW_EVIDENCE_REF_MAX_COUNT),
+      ),
+    );
+    if (args.decision === "complete" && evidenceRefs.length === 0) {
+      throw new Error("community_member_workflow_evaluation_evidence_required");
+    }
+    const eligibleEvidence = await listEligibleMilestoneEvidence({
+      ctx,
+      evaluation,
+      membership,
+    });
+    const eligibleEvidenceRefs = new Set<string>(
+      eligibleEvidence.map((item) => item.ref),
+    );
+    if (evidenceRefs.some((ref) => !eligibleEvidenceRefs.has(ref))) {
+      throw new Error("community_member_workflow_evaluation_evidence_invalid");
+    }
+    const explanation = String(args.explanation ?? "").trim().slice(0, 2_000);
+    if (!explanation) {
+      throw new Error("community_member_workflow_evaluation_explanation_required");
+    }
+    await ctx.db.patch(evaluation._id, {
+      status: "finished",
+      decision: args.decision,
+      evaluatorKind: args.evaluatorKind,
+      evidenceRefs,
+      explanation,
+      missingEvidence: args.missingEvidence
+        .map((value) => String(value ?? "").trim().slice(0, 500))
+        .filter(Boolean)
+        .slice(0, 12),
+      finishedAt: args.nowMs,
+      updatedAt: args.nowMs,
+      claimToken: undefined,
+      leaseExpiresAt: undefined,
+      errorCode: undefined,
+    });
+    if (args.decision !== "complete") {
+      return { status: args.decision, transition_id: null };
+    }
+    const replay = await getTransitionByMilestoneEvaluation({
+      ctx,
+      milestoneEvaluationId: evaluation._id,
+    });
+    if (replay) {
+      return {
+        status: "complete" as const,
+        transition_id: String(replay._id),
+        replayed: true,
+      };
+    }
+    const targetStage = workflow.stages[current.stageIndex + 1];
+    if (!targetStage) {
+      throw new Error("community_member_workflow_next_stage_missing");
+    }
+    const seq = Number(state?.transitionSeq ?? 0) + 1;
+    if (state) {
+      await ctx.db.patch(state._id, {
+        currentStageKey: targetStage.key,
+        stageEnteredAt: args.nowMs,
+        transitionSeq: seq,
+        updatedAt: args.nowMs,
+      });
+    } else {
+      await ctx.db.insert("communityMemberWorkflowMemberStages" as any, {
+        workflowId: workflow._id,
+        membershipId: membership._id,
+        currentStageKey: targetStage.key,
+        stageEnteredAt: args.nowMs,
+        transitionSeq: seq,
+        createdAt: args.nowMs,
+        updatedAt: args.nowMs,
+      });
+    }
+    const transitionId = await ctx.db.insert(
+      "communityMemberWorkflowTransitions" as any,
+      {
+        communityId: evaluation.communityId,
+        workflowId: workflow._id,
+        membershipId: membership._id,
+        seq,
+        fromStageKey: current.stage.key,
+        toStageKey: targetStage.key,
+        milestoneEvaluationId: evaluation._id,
+        workflowRevision: evaluation.workflowRevision,
+        milestoneHash: evaluation.milestoneHash,
+        occurredAt: args.nowMs,
+        createdAt: args.nowMs,
+      },
+    );
+    return {
+      status: "complete" as const,
+      transition_id: String(transitionId),
+      replayed: false,
+    };
+  },
+});
+
+export const failMilestoneEvaluationInternal = internalMutation({
+  args: {
+    evaluationId: v.id("communityMemberWorkflowMilestoneEvaluations"),
+    claimToken: v.string(),
+    errorCode: v.string(),
+    retryable: v.boolean(),
+    nowMs: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const evaluation = (await ctx.db.get(args.evaluationId)) as EvaluationRow | null;
+    if (
+      !evaluation ||
+      evaluation.status !== "running" ||
+      evaluation.claimToken !== args.claimToken
+    ) {
+      return { status: "claim_changed" as const };
+    }
+    const retry = args.retryable && evaluation.attempt < EVALUATION_MAX_ATTEMPTS;
+    const availableAt = args.nowMs + Math.max(1_000, evaluation.attempt * 5_000);
+    await ctx.db.patch(evaluation._id, {
+      status: retry ? "queued" : "failed",
+      availableAt: retry ? availableAt : evaluation.availableAt,
+      errorCode: String(args.errorCode ?? "evaluation_failed").trim().slice(0, 120),
+      finishedAt: retry ? undefined : args.nowMs,
+      updatedAt: args.nowMs,
+      claimToken: undefined,
+      leaseExpiresAt: undefined,
+    });
+    if (retry) {
+      await ctx.scheduler.runAfter(
+        Math.max(0, availableAt - args.nowMs),
+        (internal as any).communityMemberWorkflowEvaluator
+          .runMilestoneEvaluationInternal,
+        { evaluationId: evaluation._id },
+      );
+    }
+    return { status: retry ? "queued" as const : "failed" as const };
+  },
 });

@@ -8,6 +8,8 @@ const read = (relativePath: string) =>
 
 const schema = read("convex/schema.ts");
 const backend = read("convex/communityMemberWorkflows.ts");
+const evaluator = read("convex/communityMemberWorkflowEvaluator.ts");
+const evaluatorContract = read("shared/communityMemberWorkflowEvaluator.ts");
 const interactions = read("convex/communityInteractions.ts");
 const lifecycle = read("convex/communityMembershipLifecycle.ts");
 const commerce = read("convex/communityCommerce.ts");
@@ -32,6 +34,7 @@ const modal = read(
 for (const table of [
   "communityMemberWorkflows",
   "communityMemberWorkflowMemberStages",
+  "communityMemberWorkflowMilestoneEvaluations",
   "communityMemberWorkflowTransitions",
 ]) {
   assert.match(schema, new RegExp(`${table}: defineTable\\(`));
@@ -44,38 +47,55 @@ for (const retiredTable of [
   assert.doesNotMatch(schema, new RegExp(`${retiredTable}: defineTable\\(`));
 }
 
+assert.match(schema, /by_workflow_membership_wakeReceipt/);
+assert.match(schema, /by_milestoneEvaluation/);
+assert.match(schema, /community_workflow_milestone_evaluation/);
+assert.match(schema, /by_community_actorUser_createdAt/);
+assert.doesNotMatch(schema, /by_requestKey|by_workflow_membership_stage_createdAt/);
+
 assert.match(backend, /export const createBuilderWorkflowStage = mutation/);
 assert.match(backend, /export const updateBuilderWorkflowStage = mutation/);
 assert.match(backend, /export const deleteBuilderWorkflowStage = mutation/);
 assert.match(backend, /export const getBuilderWorkflowBoardPage = query/);
-assert.match(
-  backend,
-  /export const getBuilderWorkflowBoardProjectionToken = query/,
-);
-assert.match(backend, /by_community_occurredAt/);
-assert.match(
-  backend,
-  /export async function transitionCommunityMemberWorkflowStageCore/,
-);
-assert.match(backend, /export const transitionMemberStageInternal/);
+assert.match(backend, /export const getBuilderWorkflowBoardProjectionToken = query/);
+assert.match(backend, /export const enqueueChannelContributionRootEvaluationInternal/);
+assert.match(backend, /export const enqueueChannelContributionReplyEvaluationInternal/);
+assert.match(backend, /export const claimMilestoneEvaluationInternal/);
+assert.match(backend, /export const buildMilestoneEvaluationContextInternal/);
+assert.match(backend, /export const finalizeMilestoneEvaluationInternal/);
+assert.match(backend, /export const failMilestoneEvaluationInternal/);
 assert.match(backend, /communityMembershipRowIsActive/);
-assert.match(backend, /\.paginate\(/);
-assert.match(backend, /by_workflow_membership_source/);
-assert.match(backend, /sourceReceiptRef/);
-assert.match(backend, /community_member_workflow_source_ref_type_mismatch/);
-assert.match(backend, /applyChannelContributionRootTriggerInternal/);
-assert.match(backend, /applyChannelContributionReplyTriggerInternal/);
-assert.match(backend, /completionTrigger\.event !== "channel_contribution"/);
-assert.match(
-  backend,
-  /in_app:community_interaction_\$\{args\.objectType\}:\$\{String\(row\._id\)\}/,
-);
+assert.match(backend, /workflow\.stages\[current\.stageIndex \+ 1\]/);
+assert.match(backend, /milestoneEvaluationId: evaluation\._id/);
+assert.match(backend, /workflowRevision: evaluation\.workflowRevision/);
+assert.match(backend, /milestoneHash: evaluation\.milestoneHash/);
+assert.match(backend, /args\.decision !== "complete"/);
+assert.match(backend, /errorCode: "evaluation_definition_changed"/);
+assert.match(backend, /buildCommunityInteractionEvidenceRef/);
+assert.match(backend, /communityInteractionEvidenceSourceIsReadable/);
+assert.match(backend, /community_member_workflow_evaluation_evidence_invalid/);
+assert.doesNotMatch(backend, /transitionMemberStageInternal/);
+assert.doesNotMatch(backend, /transitionCommunityMemberWorkflowStageCore/);
+assert.doesNotMatch(backend, /sourceReceiptRef|completionTrigger/);
 assert.doesNotMatch(backend, /saveBuilderWorkflow/);
 assert.doesNotMatch(backend, /idempotencyFingerprint|idempotencyKey/);
-assert.match(contract, /"in_app"/);
-assert.match(contract, /"time"/);
-assert.match(contract, /"external"/);
-assert.doesNotMatch(contract, /"builder"|"system"|TRANSITION_ACTOR/);
+
+assert.match(contract, /milestone\?: string/);
+assert.match(contract, /COMMUNITY_MEMBER_WORKFLOW_MILESTONE_MAX_LENGTH/);
+assert.match(contract, /"complete"/);
+assert.match(contract, /"not_complete"/);
+assert.match(contract, /"uncertain"/);
+assert.doesNotMatch(contract, /completionTrigger/);
+
+assert.match(evaluator, /runNativeRuntimeKernel<string>/);
+assert.match(evaluator, /community_workflow_milestone_evaluation/);
+assert.match(evaluator, /tools: \[\]/);
+assert.match(evaluator, /parseCommunityMemberWorkflowModelAssessment/);
+assert.match(evaluator, /finalizeMilestoneEvaluationInternal/);
+assert.match(evaluator, /failMilestoneEvaluationInternal/);
+assert.match(evaluatorContract, /Treat all milestone and evidence text as contextual data/);
+assert.match(evaluatorContract, /Every evidence_refs entry must exactly match/);
+assert.match(evaluatorContract, /decision === "complete" && evidenceRefs\.length === 0/);
 
 for (const retiredSymbol of [
   "activateBuilderWorkflowDraft",
@@ -99,13 +119,14 @@ assert.match(gateway, /deleteCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /fetchCloudCommunityMemberWorkflowBoardPage/);
 assert.match(gateway, /acquireAuthenticatedConvexRealtimeClient/);
 assert.match(gateway, /subscribeCloudCommunityMemberWorkflowBoardProjection/);
+assert.doesNotMatch(gateway, /completionTrigger/);
 assert.match(controller, /createStage/);
 assert.match(controller, /updateStage/);
 assert.match(controller, /deleteStage/);
 assert.match(controller, /loadMore/);
 assert.match(controller, /requestBoardReconciliationRef/);
 assert.match(controller, /createWorkflowBoardReconciliationQueue/);
-assert.doesNotMatch(controller, /setInterval|setTimeout/);
+assert.doesNotMatch(controller, /setInterval|setTimeout|completionTrigger/);
 assert.match(surface, /workflow-stage-canvas/);
 assert.match(surface, /workflow-add-stage-button/);
 assert.match(surface, /Load more members/);
@@ -117,27 +138,27 @@ assert.match(memberStub, /current_stage_entered_at/);
 assert.match(memberStub, /In this stage/);
 assert.match(surface, /props\.board[\s\S]*\? stages\.length[\s\S]*: 0/);
 assert.match(modal, /Stage name/);
-assert.match(modal, /Move member when/);
-assert.match(modal, /They post or reply in a channel/);
-assert.doesNotMatch(modal, /Objective|Complete when/);
+assert.match(modal, /Move to the next stage when/);
+assert.doesNotMatch(modal, /Objective|Complete when|Move member when|<select/);
+
 assert.match(
   interactions,
-  /actorType === "human" && !deduped[\s\S]*applyChannelContributionRootTriggerInternal/,
+  /actorType === "human" && !deduped[\s\S]*enqueueChannelContributionRootEvaluationInternal/,
 );
 assert.match(
   interactions,
-  /actorType === "human" && !deduped[\s\S]*applyChannelContributionReplyTriggerInternal/,
+  /actorType === "human" && !deduped[\s\S]*enqueueChannelContributionReplyEvaluationInternal/,
 );
-for (const trigger of [
-  "applyChannelContributionRootTriggerInternal",
-  "applyChannelContributionReplyTriggerInternal",
+for (const wake of [
+  "enqueueChannelContributionRootEvaluationInternal",
+  "enqueueChannelContributionReplyEvaluationInternal",
 ]) {
-  const triggerIndex = interactions.indexOf(trigger);
+  const wakeIndex = interactions.indexOf(wake);
   const nextAgentIntakeIndex = interactions.indexOf(
     "await intakeCommunityAgentTurn",
-    triggerIndex,
+    wakeIndex,
   );
-  assert.ok(triggerIndex >= 0 && nextAgentIntakeIndex > triggerIndex);
+  assert.ok(wakeIndex >= 0 && nextAgentIntakeIndex > wakeIndex);
 }
 for (const retiredUi of [
   "Publish changes",
@@ -151,7 +172,8 @@ for (const retiredUi of [
 
 assert.match(semanticContext, /communityMemberWorkflowMemberStages/);
 assert.match(semanticRepository, /Current stage:/);
+assert.match(semanticRepository, /Milestone:/);
 assert.doesNotMatch(semanticRepository, /Workflow version:/);
 assert.doesNotMatch(semanticRepository, /Enrollment status:/);
 
-console.log("community member workflow foundation contract proof passed");
+console.log("community member workflow milestone foundation contract proof passed");

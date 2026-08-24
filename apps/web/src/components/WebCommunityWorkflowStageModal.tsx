@@ -1,17 +1,14 @@
 import { Trash2, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 
-import type {
-  CommunityMemberWorkflowInAppTriggerEvent,
-  CommunityMemberWorkflowStage,
-} from "../../../../shared/communityMemberWorkflow";
+import type { CommunityMemberWorkflowStage } from "../../../../shared/communityMemberWorkflow";
 
 type WebCommunityWorkflowStageModalProps = {
   isOpen: boolean;
   stage: CommunityMemberWorkflowStage | null;
   stageNumber: number;
   isSaving: boolean;
-  canConfigureTrigger: boolean;
+  canConfigureMilestone: boolean;
   canDelete: boolean;
   deleteDisabledReason: string | null;
   error: string | null;
@@ -24,14 +21,12 @@ export function WebCommunityWorkflowStageModal(
   props: WebCommunityWorkflowStageModalProps,
 ) {
   const [name, setName] = useState("");
-  const [completionTriggerEvent, setCompletionTriggerEvent] = useState<
-    CommunityMemberWorkflowInAppTriggerEvent | ""
-  >("");
+  const [milestone, setMilestone] = useState("");
 
   useEffect(() => {
     if (!props.isOpen || !props.stage) return;
     setName(props.stage.name);
-    setCompletionTriggerEvent(props.stage.completionTrigger?.event ?? "");
+    setMilestone(props.stage.milestone ?? "");
   }, [props.isOpen, props.stage]);
 
   useEffect(() => {
@@ -53,14 +48,7 @@ export function WebCommunityWorkflowStageModal(
     void props.onSave({
       key: props.stage!.key,
       name,
-      ...(completionTriggerEvent
-        ? {
-            completionTrigger: {
-              type: "in_app" as const,
-              event: completionTriggerEvent,
-            },
-          }
-        : {}),
+      ...(milestone.trim() ? { milestone } : {}),
     });
   };
 
@@ -108,25 +96,17 @@ export function WebCommunityWorkflowStageModal(
                 disabled={props.isSaving}
               />
             </label>
-            {props.stage.key && props.canConfigureTrigger ? (
+            {props.stage.key && props.canConfigureMilestone ? (
               <label>
-                <span>Move member when</span>
-                <select
-                  value={completionTriggerEvent}
-                  onChange={(event) =>
-                    setCompletionTriggerEvent(
-                      event.target.value as
-                        | CommunityMemberWorkflowInAppTriggerEvent
-                        | "",
-                    )
-                  }
+                <span>Move to the next stage when…</span>
+                <textarea
+                  value={milestone}
+                  onChange={(event) => setMilestone(event.target.value)}
+                  placeholder="The member has achieved the concrete outcome required to continue."
                   disabled={props.isSaving}
-                >
-                  <option value="">No automatic trigger</option>
-                  <option value="channel_contribution">
-                    They post or reply in a channel
-                  </option>
-                </select>
+                  rows={5}
+                  maxLength={2_000}
+                />
               </label>
             ) : null}
             {props.error ? (
