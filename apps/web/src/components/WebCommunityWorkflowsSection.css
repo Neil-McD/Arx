@@ -332,6 +332,7 @@
 
 .workflow-stage-form {
   display: grid;
+  gap: 16px;
 }
 
 .workflow-stage-form label {
@@ -342,7 +343,8 @@
   font-weight: 650;
 }
 
-.workflow-page input {
+.workflow-page input,
+.workflow-page select {
   box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--border-default);
@@ -352,7 +354,8 @@
   background: var(--surface-workspace);
 }
 
-.workflow-page input:focus {
+.workflow-page input:focus,
+.workflow-page select:focus {
   border-color: var(--border-strong);
 }
 

@@ -5,9 +5,19 @@ import { expect, test, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
+import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 
 const modules = import.meta.glob([
   "./communityCapabilityContext.ts",
+  "./communityInteractions.ts",
+  "./communityInteractionEvidence.ts",
+  "./communityRecentContext.ts",
+  "./communityMentionBroadcasts.ts",
+  "./communityMentionLifecycle.ts",
+  "./communityOnboarding.ts",
+  "./communityAgentServeWorker.ts",
+  "./communityIntelligenceDirectory.ts",
+  "./communityEvidenceAudit.ts",
   "./communityMemberWorkflows.ts",
   "./_generated/**/*.*s",
 ]);
@@ -34,6 +44,28 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
       createdAt: nowMs,
       updatedAt: nowMs,
     });
+    for (const [userId, displayName, slug] of [
+      [ownerId, "Ada Builder", "ada-builder"],
+      [memberId, "Grace Member", "grace-member"],
+    ] as const) {
+      await ctx.db.insert("userProfileDetails", {
+        userId,
+        displayName,
+        avatarUrl: `https://example.com/${slug}.png`,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+      });
+      for (const document of PLATFORM_LEGAL_DOCUMENTS) {
+        await ctx.db.insert("legalAcceptances", {
+          userId,
+          documentKey: document.key,
+          documentVersion: document.version,
+          acceptedAt: nowMs,
+          source: "test",
+          createdAt: nowMs,
+        });
+      }
+    }
     const communityId = await ctx.db.insert("communities", {
       ownerId,
       slug: "workflow-kernel",
@@ -76,7 +108,7 @@ async function createTwoStageWorkflow(
   return { first, second };
 }
 
-test("stage operations are exact, builder-owned, and server-identitied", async () => {
+test("stage operations are exact, builder-owned, and server-identified", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
@@ -99,20 +131,22 @@ test("stage operations are exact, builder-owned, and server-identitied", async (
   expect(second.stage.key).not.toBe(first.stage.key);
 
   await expect(
-    asOwner.mutation(api.communityMemberWorkflows.renameBuilderWorkflowStage, {
+    asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
       communityId: fixture.communityId,
       expectedRevision: 1,
       stageKey: first.stage.key,
       name: "Joined",
+      completionTriggerEvent: null,
     }),
   ).rejects.toThrow("community_member_workflow_revision_conflict");
 
   await expect(
-    asOwner.mutation(api.communityMemberWorkflows.renameBuilderWorkflowStage, {
+    asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
       communityId: fixture.communityId,
       expectedRevision: 2,
       stageKey: first.stage.key,
       name: "Joined",
+      completionTriggerEvent: null,
     }),
   ).resolves.toMatchObject({ revision: 3, stage: { name: "Joined" } });
 
@@ -154,6 +188,216 @@ test("stage operations are exact, builder-owned, and server-identitied", async (
       stageKey: second.stage.key,
     }),
   ).resolves.toMatchObject({ revision: 4 });
+});
+
+test("canonical human channel receipts advance only the configured current stage", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const { first, second } = await createTwoStageWorkflow(
+    asOwner,
+    fixture.communityId,
+  );
+
+  await expect(
+    asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
+      communityId: fixture.communityId,
+      expectedRevision: 2,
+      stageKey: second.stage.key,
+      name: second.stage.name,
+      completionTriggerEvent: "channel_contribution",
+    }),
+  ).rejects.toThrow("community_member_workflow_terminal_stage_trigger_invalid");
+
+  await asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
+    communityId: fixture.communityId,
+    expectedRevision: 2,
+    stageKey: first.stage.key,
+    name: first.stage.name,
+    completionTriggerEvent: "channel_contribution",
+  });
+  const third = await asOwner.mutation(
+    api.communityMemberWorkflows.createBuilderWorkflowStage,
+    {
+      communityId: fixture.communityId,
+      expectedRevision: 3,
+      name: "Implementing",
+    },
+  );
+  await asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
+    communityId: fixture.communityId,
+    expectedRevision: 4,
+    stageKey: second.stage.key,
+    name: second.stage.name,
+    completionTriggerEvent: "channel_contribution",
+  });
+
+  const receipts = await t.run(async (ctx) => {
+    const channelId = await ctx.db.insert("communityChannels", {
+      communityId: fixture.communityId,
+      systemRole: "general",
+      slug: "general",
+      name: "General",
+      accessMode: "all_members",
+      postingPolicy: "members",
+      status: "active",
+      position: 0,
+      createdAt: fixture.nowMs,
+      updatedAt: fixture.nowMs,
+    });
+    const rootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.communityId,
+      channelId,
+      actorType: "human",
+      actorUserId: fixture.memberId,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "My first contribution",
+      replyCount: 1,
+      reactionSummary: [],
+      idempotencyKey: "workflow-trigger-root",
+      createdAt: fixture.nowMs + 10,
+      updatedAt: fixture.nowMs + 10,
+    });
+    const replyId = await ctx.db.insert("communityInteractionReplies", {
+      communityId: fixture.communityId,
+      channelId,
+      rootId,
+      seq: 1,
+      actorType: "human",
+      actorUserId: fixture.memberId,
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "My next contribution",
+      reactionSummary: [],
+      idempotencyKey: "workflow-trigger-reply",
+      createdAt: fixture.nowMs + 20,
+      updatedAt: fixture.nowMs + 20,
+    });
+    const personalAgentRootId = await ctx.db.insert("communityInteractionRoots", {
+      communityId: fixture.communityId,
+      channelId,
+      actorType: "personal_agent",
+      actorUserId: fixture.memberId,
+      actorAgentKey: `personal_agent:${String(fixture.memberId)}`,
+      kind: "discussion",
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "Agent contribution",
+      replyCount: 0,
+      reactionSummary: [],
+      idempotencyKey: "workflow-trigger-agent-root",
+      createdAt: fixture.nowMs + 30,
+      updatedAt: fixture.nowMs + 30,
+    });
+    return { personalAgentRootId, replyId, rootId };
+  });
+
+  await expect(
+    t.mutation(
+      internal.communityMemberWorkflows
+        .applyChannelContributionRootTriggerInternal,
+      { rootId: receipts.rootId },
+    ),
+  ).resolves.toMatchObject({ status: "applied", changed: true });
+  await expect(
+    t.mutation(
+      internal.communityMemberWorkflows
+        .applyChannelContributionRootTriggerInternal,
+      { rootId: receipts.rootId },
+    ),
+  ).resolves.toMatchObject({ status: "already_applied" });
+  await expect(
+    t.mutation(
+      internal.communityMemberWorkflows
+        .applyChannelContributionReplyTriggerInternal,
+      { replyId: receipts.replyId },
+    ),
+  ).resolves.toMatchObject({ status: "applied", changed: true });
+  await expect(
+    t.mutation(
+      internal.communityMemberWorkflows
+        .applyChannelContributionRootTriggerInternal,
+      { rootId: receipts.personalAgentRootId },
+    ),
+  ).resolves.toMatchObject({ status: "receipt_ineligible" });
+
+  const records = await t.run(async (ctx) => ({
+    states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+  }));
+  expect(records.states).toHaveLength(1);
+  expect(records.states[0]?.currentStageKey).toBe(third.stage.key);
+  expect(records.transitions).toHaveLength(2);
+  expect(records.transitions.map((row) => row.sourceReceiptRef)).toEqual([
+    `in_app:community_interaction_root:${String(receipts.rootId)}`,
+    `in_app:community_interaction_reply:${String(receipts.replyId)}`,
+  ]);
+});
+
+test("a new canonical composer root schedules and applies the configured trigger", async () => {
+  vi.useFakeTimers();
+  vi.setSystemTime(new Date("2026-08-23T22:00:00.000Z"));
+  try {
+    const t = convexTest(schema, modules);
+    const fixture = await createFixture(t);
+    const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+    const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+    const { first, second } = await createTwoStageWorkflow(
+      asOwner,
+      fixture.communityId,
+    );
+    await asOwner.mutation(
+      api.communityMemberWorkflows.updateBuilderWorkflowStage,
+      {
+        communityId: fixture.communityId,
+        expectedRevision: 2,
+        stageKey: first.stage.key,
+        name: first.stage.name,
+        completionTriggerEvent: "channel_contribution",
+      },
+    );
+    const channelId = await t.run(async (ctx) =>
+      await ctx.db.insert("communityChannels", {
+        communityId: fixture.communityId,
+        systemRole: "general",
+        slug: "general",
+        name: "General",
+        accessMode: "all_members",
+        postingPolicy: "members",
+        status: "active",
+        position: 0,
+        createdAt: fixture.nowMs,
+        updatedAt: fixture.nowMs,
+      }),
+    );
+
+    const write = await asMember.mutation(
+      api.communityInteractions.createCommunityInteractionComposerMessage,
+      {
+        communityId: fixture.communityId,
+        channelId,
+        idempotencyKey: "workflow-trigger-live-root",
+        text: "Shipping my first real contribution",
+      },
+    );
+    await t.finishAllScheduledFunctions(() => vi.runAllTimers());
+
+    const records = await t.run(async (ctx) => ({
+      states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
+      transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+    }));
+    expect(write.interaction).toMatchObject({ kind: "root", deduped: false });
+    expect(records.states).toHaveLength(1);
+    expect(records.states[0]?.currentStageKey).toBe(second.stage.key);
+    expect(records.transitions).toHaveLength(1);
+    expect(records.transitions[0]?.sourceReceiptRef).toBe(
+      `in_app:community_interaction_root:${write.interaction.root_id}`,
+    );
+  } finally {
+    vi.useRealTimers();
+  }
 });
 
 test("stage transitions dedupe by canonical source receipt and update self semantics", async () => {

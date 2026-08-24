@@ -13,9 +13,22 @@ export const COMMUNITY_MEMBER_WORKFLOW_TRIGGER_TYPES = [
 export type CommunityMemberWorkflowTriggerType =
   (typeof COMMUNITY_MEMBER_WORKFLOW_TRIGGER_TYPES)[number];
 
+export const COMMUNITY_MEMBER_WORKFLOW_IN_APP_TRIGGER_EVENTS = [
+  "channel_contribution",
+] as const;
+
+export type CommunityMemberWorkflowInAppTriggerEvent =
+  (typeof COMMUNITY_MEMBER_WORKFLOW_IN_APP_TRIGGER_EVENTS)[number];
+
+export type CommunityMemberWorkflowCompletionTrigger = {
+  type: "in_app";
+  event: CommunityMemberWorkflowInAppTriggerEvent;
+};
+
 export type CommunityMemberWorkflowStage = {
   key: string;
   name: string;
+  completionTrigger?: CommunityMemberWorkflowCompletionTrigger;
 };
 
 function normalizeInlineText(value: unknown, maxLength: number): string {

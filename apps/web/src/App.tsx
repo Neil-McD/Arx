@@ -2258,7 +2258,7 @@ export default function App() {
         onReload: communityWorkflows.reload,
         onLoadMore: communityWorkflows.loadMore,
         onCreateStage: communityWorkflows.createStage,
-        onRenameStage: communityWorkflows.renameStage,
+        onUpdateStage: communityWorkflows.updateStage,
         onDeleteStage: communityWorkflows.deleteStage,
         onClearActionError: communityWorkflows.clearActionError,
       },

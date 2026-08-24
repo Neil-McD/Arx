@@ -8,6 +8,7 @@ const read = (relativePath: string) =>
 
 const schema = read("convex/schema.ts");
 const backend = read("convex/communityMemberWorkflows.ts");
+const interactions = read("convex/communityInteractions.ts");
 const lifecycle = read("convex/communityMembershipLifecycle.ts");
 const commerce = read("convex/communityCommerce.ts");
 const admin = read("convex/communityAdmin.ts");
@@ -41,7 +42,7 @@ for (const retiredTable of [
 }
 
 assert.match(backend, /export const createBuilderWorkflowStage = mutation/);
-assert.match(backend, /export const renameBuilderWorkflowStage = mutation/);
+assert.match(backend, /export const updateBuilderWorkflowStage = mutation/);
 assert.match(backend, /export const deleteBuilderWorkflowStage = mutation/);
 assert.match(backend, /export const getBuilderWorkflowBoardPage = query/);
 assert.match(
@@ -54,6 +55,13 @@ assert.match(backend, /\.paginate\(/);
 assert.match(backend, /by_workflow_membership_source/);
 assert.match(backend, /sourceReceiptRef/);
 assert.match(backend, /community_member_workflow_source_ref_type_mismatch/);
+assert.match(backend, /applyChannelContributionRootTriggerInternal/);
+assert.match(backend, /applyChannelContributionReplyTriggerInternal/);
+assert.match(backend, /completionTrigger\.event !== "channel_contribution"/);
+assert.match(
+  backend,
+  /in_app:community_interaction_\$\{args\.objectType\}:\$\{String\(row\._id\)\}/,
+);
 assert.doesNotMatch(backend, /saveBuilderWorkflow/);
 assert.doesNotMatch(backend, /idempotencyFingerprint|idempotencyKey/);
 assert.match(contract, /"in_app"/);
@@ -78,11 +86,11 @@ for (const source of [lifecycle, commerce, admin]) {
 }
 
 assert.match(gateway, /createCloudCommunityMemberWorkflowStage/);
-assert.match(gateway, /renameCloudCommunityMemberWorkflowStage/);
+assert.match(gateway, /updateCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /deleteCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /fetchCloudCommunityMemberWorkflowBoardPage/);
 assert.match(controller, /createStage/);
-assert.match(controller, /renameStage/);
+assert.match(controller, /updateStage/);
 assert.match(controller, /deleteStage/);
 assert.match(controller, /loadMore/);
 assert.match(surface, /workflow-stage-canvas/);
@@ -91,6 +99,28 @@ assert.match(surface, /Load more members/);
 assert.match(surface, /WebCommunityWorkflowStageModal/);
 assert.match(surface, /props\.board[\s\S]*\? stages\.length[\s\S]*: 0/);
 assert.match(modal, /Stage name/);
+assert.match(modal, /Move member when/);
+assert.match(modal, /They post or reply in a channel/);
+assert.doesNotMatch(modal, /Objective|Complete when/);
+assert.match(
+  interactions,
+  /actorType === "human" && !deduped[\s\S]*applyChannelContributionRootTriggerInternal/,
+);
+assert.match(
+  interactions,
+  /actorType === "human" && !deduped[\s\S]*applyChannelContributionReplyTriggerInternal/,
+);
+for (const trigger of [
+  "applyChannelContributionRootTriggerInternal",
+  "applyChannelContributionReplyTriggerInternal",
+]) {
+  const triggerIndex = interactions.indexOf(trigger);
+  const nextAgentIntakeIndex = interactions.indexOf(
+    "await intakeCommunityAgentTurn",
+    triggerIndex,
+  );
+  assert.ok(triggerIndex >= 0 && nextAgentIntakeIndex > triggerIndex);
+}
 for (const retiredUi of [
   "Publish changes",
   "Start workflow",

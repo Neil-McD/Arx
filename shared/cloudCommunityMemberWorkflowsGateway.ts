@@ -1,5 +1,8 @@
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
-import type { CommunityMemberWorkflowStage } from "./communityMemberWorkflow";
+import type {
+  CommunityMemberWorkflowInAppTriggerEvent,
+  CommunityMemberWorkflowStage,
+} from "./communityMemberWorkflow";
 
 type WorkflowGatewayParams<SessionT> = { session: SessionT };
 
@@ -95,25 +98,27 @@ export async function createCloudCommunityMemberWorkflowStage<SessionT>(
   )) as WorkflowStageMutationResult;
 }
 
-export async function renameCloudCommunityMemberWorkflowStage<SessionT>(
+export async function updateCloudCommunityMemberWorkflowStage<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
     communityId: string;
     expectedRevision: number;
     stageKey: string;
     name: string;
+    completionTriggerEvent: CommunityMemberWorkflowInAppTriggerEvent | null;
   },
 ): Promise<WorkflowStageMutationResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
   return (await client.mutation(
-    "communityMemberWorkflows:renameBuilderWorkflowStage" as any,
+    "communityMemberWorkflows:updateBuilderWorkflowStage" as any,
     {
       authSubject,
       communityId: params.communityId,
       expectedRevision: params.expectedRevision,
       stageKey: params.stageKey,
       name: params.name,
+      completionTriggerEvent: params.completionTriggerEvent,
     },
   )) as WorkflowStageMutationResult;
 }

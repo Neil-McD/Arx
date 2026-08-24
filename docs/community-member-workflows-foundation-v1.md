@@ -19,11 +19,12 @@ default, and append-only transition receipts.
 There is at most one workflow definition per community.
 
 - `communityId`
-- ordered `stages: [{ key, name }]`, where keys are opaque server identities
+- ordered stages with opaque server identities, names, and at most one optional
+  completion trigger
 - optimistic `revision`
 - creator/updater and timestamps
 
-The builder API exposes only append, rename, and delete operations. Callers
+The builder API exposes only append, exact stage update, and delete operations. Callers
 cannot submit stage identities or replace the whole definition. Existing stage
 keys remain stable; every new key is generated once by the server. There is no
 draft, publish, activation, version migration, reorder, or enrollment backfill
@@ -59,6 +60,23 @@ The transition kernel is internal and fail-closed. Product triggers must call
 it from trusted server code. A source receipt may cause at most one transition
 for a workflow membership; exact retries replay and conflicting reuse fails.
 
+### First in-app trigger
+
+The only implemented completion trigger is `channel_contribution`. A builder
+may attach it to any non-terminal stage. A new canonical human root or reply in
+a community channel schedules an internal evaluator using the interaction row
+itself as the receipt. Personal-agent, community-agent, system, private,
+hidden, deleted, owner-without-membership, inactive-membership, unconfigured,
+and terminal-stage cases do not advance.
+
+The evaluator moves the member only from their configured current stage to its
+immediate next stage. Root receipts use
+`in_app:community_interaction_root:{id}` and reply receipts use
+`in_app:community_interaction_reply:{id}`. Replaying either receipt cannot move
+the member again. The trigger runs after the interaction commits so workflow
+evaluation cannot make channel posting unavailable. It is scheduled before
+community-agent intake so downstream agent work observes the newest stage.
+
 ## Authority and privacy
 
 - Only a community owner/admin/moderator may read or edit the builder board.
@@ -80,22 +98,23 @@ The page intentionally contains only:
 - edit button on a configured stage
 - setup button on an unnamed first stage
 - terminal plus button for another stage
-- name-only stage modal
+- name-only creation modal
+- one `Move member when` selector when editing a persisted non-terminal stage
 - cursor-based member loading when the board has another page
 
 There is no separate editing canvas, workflow details form, start/publish
 button, evidence form, completion form, enrollment inspector, or manual status
 machine.
 
-## Deferred next slice
+## Deferred
 
-Stage configuration for triggers and agent actions is not represented yet.
-The next slice may add only the three agreed trigger families:
+The remaining trigger families are:
 
-1. in-app events
+1. additional in-app events
 2. time
 3. external events
 
 Those triggers must create or reference canonical product/provider/runtime
 receipts and invoke the transition kernel. They must not recreate the retired
-evidence, workflow-version, or enrollment-reconciliation systems.
+evidence, workflow-version, or enrollment-reconciliation systems. Agent
+prompts, loops, and actions remain a separate later slice.

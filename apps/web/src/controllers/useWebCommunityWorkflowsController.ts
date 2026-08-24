@@ -6,10 +6,11 @@ import {
   createCloudCommunityMemberWorkflowStage,
   deleteCloudCommunityMemberWorkflowStage,
   fetchCloudCommunityMemberWorkflowBoardPage,
-  renameCloudCommunityMemberWorkflowStage,
+  updateCloudCommunityMemberWorkflowStage,
   type CloudCommunityMemberWorkflowBoard,
   type CloudCommunityMemberWorkflowMember,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
+import type { CommunityMemberWorkflowInAppTriggerEvent } from "../../../../shared/communityMemberWorkflow";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -230,14 +231,19 @@ export function useWebCommunityWorkflowsController(params: {
           name,
         }),
       ),
-    renameStage: (stageKey: string, name: string) =>
-      mutateStage("community_workflows_rename_stage", (session, communityId, revision) =>
-        renameCloudCommunityMemberWorkflowStage({
+    updateStage: (
+      stageKey: string,
+      name: string,
+      completionTriggerEvent: CommunityMemberWorkflowInAppTriggerEvent | null,
+    ) =>
+      mutateStage("community_workflows_update_stage", (session, communityId, revision) =>
+        updateCloudCommunityMemberWorkflowStage({
           session,
           communityId,
           expectedRevision: revision,
           stageKey,
           name,
+          completionTriggerEvent,
         }),
       ),
     deleteStage: (stageKey: string) =>

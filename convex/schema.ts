@@ -1156,6 +1156,10 @@ export default defineSchema({
     stages: v.array(v.object({
       key: v.string(),
       name: v.string(),
+      completionTrigger: v.optional(v.object({
+        type: v.literal("in_app"),
+        event: v.literal("channel_contribution"),
+      })),
     })),
     revision: v.number(),
     createdByUserId: v.id("users"),

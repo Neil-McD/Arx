@@ -5,6 +5,7 @@ import { UserAvatar } from "../../../../shared/UserAvatar";
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_STAGES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES,
+  type CommunityMemberWorkflowInAppTriggerEvent,
   type CommunityMemberWorkflowStage,
 } from "../../../../shared/communityMemberWorkflow";
 import type {
@@ -28,7 +29,11 @@ export type WebCommunityWorkflowsSectionProps = {
   onReload: () => Promise<unknown> | unknown;
   onLoadMore: () => Promise<unknown> | unknown;
   onCreateStage: (name: string) => Promise<boolean>;
-  onRenameStage: (stageKey: string, name: string) => Promise<boolean>;
+  onUpdateStage: (
+    stageKey: string,
+    name: string,
+    completionTriggerEvent: CommunityMemberWorkflowInAppTriggerEvent | null,
+  ) => Promise<boolean>;
   onDeleteStage: (stageKey: string) => Promise<boolean>;
   onClearActionError: () => void;
 };
@@ -89,7 +94,11 @@ export function WebCommunityWorkflowsSection(
   const saveStage = async (stage: CommunityMemberWorkflowStage) => {
     const saved = !stage.key || isCreatingStage
       ? await props.onCreateStage(stage.name)
-      : await props.onRenameStage(stage.key, stage.name);
+      : await props.onUpdateStage(
+          stage.key,
+          stage.name,
+          stage.completionTrigger?.event ?? null,
+        );
     if (saved) closeStage();
   };
 
@@ -226,6 +235,9 @@ export function WebCommunityWorkflowsSection(
         canDelete={
           Boolean(editingStage?.key) &&
           stages.length > COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES
+        }
+        canConfigureTrigger={
+          Boolean(editingStage?.key) && editingStageIndex < stages.length - 1
         }
         deleteDisabledReason={
           stages.length <= COMMUNITY_MEMBER_WORKFLOW_MIN_STAGES

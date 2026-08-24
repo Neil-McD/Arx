@@ -1803,6 +1803,15 @@ export const createCommunityInteractionComposerMessage = mutation({
         throw new Error("interaction_channel_mismatch");
       }
 
+      if (actorType === "human" && !deduped) {
+        await ctx.scheduler.runAfter(
+          0,
+          internal.communityMemberWorkflows
+            .applyChannelContributionRootTriggerInternal,
+          { rootId: root._id },
+        );
+      }
+
       if (actorType === "human") {
         await intakeCommunityAgentTurn({
           ctx,
@@ -1934,6 +1943,15 @@ export const createCommunityInteractionComposerMessage = mutation({
     }
 
     await ensureReplyChannelMatchesRoot({ ctx, root, reply });
+
+    if (actorType === "human" && !deduped) {
+      await ctx.scheduler.runAfter(
+        0,
+        internal.communityMemberWorkflows
+          .applyChannelContributionReplyTriggerInternal,
+        { replyId: reply._id },
+      );
+    }
 
     if (actorType === "human") {
       await intakeCommunityAgentTurn({

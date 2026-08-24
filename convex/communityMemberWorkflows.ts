@@ -11,6 +11,7 @@ import {
 } from "../shared/communityMemberWorkflow";
 import {
   communityMembershipRowIsActive,
+  getUniqueCommunityMembershipByPair,
   readCommunityActiveMemberCount,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
@@ -35,6 +36,10 @@ const WORKFLOW_BOARD_MAX_PAGE_SIZE = 100;
 
 type WorkflowRow = Doc<"communityMemberWorkflows">;
 type MemberStageRow = Doc<"communityMemberWorkflowMemberStages">;
+type TransitionRow = Doc<"communityMemberWorkflowTransitions">;
+type ChannelContributionRow =
+  | Doc<"communityInteractionRoots">
+  | Doc<"communityInteractionReplies">;
 
 function normalizeExpectedRevision(value: unknown): number {
   const revision = Number(value);
@@ -128,6 +133,27 @@ function requireSourceReceiptRefForTrigger(
   return sourceReceiptRef;
 }
 
+async function getTransitionBySourceReceipt(args: {
+  ctx: any;
+  workflowId: any;
+  membershipId: any;
+  sourceReceiptRef: string;
+}): Promise<TransitionRow | null> {
+  const rows = (await args.ctx.db
+    .query("communityMemberWorkflowTransitions" as any)
+    .withIndex("by_workflow_membership_source", (q: any) =>
+      q
+        .eq("workflowId", args.workflowId)
+        .eq("membershipId", args.membershipId)
+        .eq("sourceReceiptRef", args.sourceReceiptRef),
+    )
+    .take(2)) as TransitionRow[];
+  if (rows.length > 1) {
+    throw new Error("community_member_workflow_transition_ambiguous");
+  }
+  return rows[0] ?? null;
+}
+
 export const createBuilderWorkflowStage = mutation({
   args: {
     ...managerIdentityArgs,
@@ -184,13 +210,17 @@ export const createBuilderWorkflowStage = mutation({
   },
 });
 
-export const renameBuilderWorkflowStage = mutation({
+export const updateBuilderWorkflowStage = mutation({
   args: {
     ...managerIdentityArgs,
     communityId: v.id("communities"),
     expectedRevision: v.number(),
     stageKey: v.string(),
     name: v.string(),
+    completionTriggerEvent: v.union(
+      v.literal("channel_contribution"),
+      v.null(),
+    ),
   },
   handler: async (ctx, args) => {
     const { userId } = await requireWorkflowManager({
@@ -215,15 +245,34 @@ export const renameBuilderWorkflowStage = mutation({
       throw new Error("community_member_workflow_stage_invalid");
     }
     const name = normalizeCommunityMemberWorkflowStageName(args.name);
-    if (workflow.stages[stageIndex].name === name) {
+    if (
+      args.completionTriggerEvent &&
+      stageIndex === workflow.stages.length - 1
+    ) {
+      throw new Error("community_member_workflow_terminal_stage_trigger_invalid");
+    }
+    const completionTrigger = args.completionTriggerEvent
+      ? { type: "in_app" as const, event: args.completionTriggerEvent }
+      : undefined;
+    const existingStage = workflow.stages[stageIndex];
+    if (
+      existingStage.name === name &&
+      existingStage.completionTrigger?.event === completionTrigger?.event
+    ) {
       return {
         workflow_id: String(workflow._id),
         revision: expectedRevision,
-        stage: workflow.stages[stageIndex],
+        stage: existingStage,
       };
     }
     const stages = workflow.stages.map((stage, index) =>
-      index === stageIndex ? { ...stage, name } : stage,
+      index === stageIndex
+        ? {
+            key: stage.key,
+            name,
+            ...(completionTrigger ? { completionTrigger } : {}),
+          }
+        : stage,
     );
     const revision = expectedRevision + 1;
     const nowMs = Date.now();
@@ -293,8 +342,16 @@ export const deleteBuilderWorkflowStage = mutation({
     }
     const revision = expectedRevision + 1;
     const nowMs = Date.now();
+    const remainingStages = workflow.stages.filter(
+      (stage) => stage.key !== stageKey,
+    );
+    const stages = remainingStages.map((stage, index) =>
+      index === remainingStages.length - 1
+        ? { key: stage.key, name: stage.name }
+        : stage,
+    );
     await ctx.db.patch(workflow._id, {
-      stages: workflow.stages.filter((stage) => stage.key !== stageKey),
+      stages,
       revision,
       updatedByUserId: userId,
       updatedAt: nowMs,
@@ -446,27 +503,21 @@ export async function transitionCommunityMemberWorkflowStageCore(args: {
     args.triggerType,
     args.sourceReceiptRef,
   );
-  const replays = (await args.ctx.db
-    .query("communityMemberWorkflowTransitions" as any)
-    .withIndex("by_workflow_membership_source", (q: any) =>
-      q
-        .eq("workflowId", workflow._id)
-        .eq("membershipId", membership._id)
-        .eq("sourceReceiptRef", sourceReceiptRef),
-    )
-    .take(2)) as any[];
-  if (replays.length > 1) {
-    throw new Error("community_member_workflow_transition_ambiguous");
-  }
-  if (replays[0]) {
+  const replay = await getTransitionBySourceReceipt({
+    ctx: args.ctx,
+    workflowId: workflow._id,
+    membershipId: membership._id,
+    sourceReceiptRef,
+  });
+  if (replay) {
     if (
-      replays[0].toStageKey !== targetStageKey ||
-      replays[0].triggerType !== args.triggerType
+      replay.toStageKey !== targetStageKey ||
+      replay.triggerType !== args.triggerType
     ) {
       throw new Error("community_member_workflow_idempotency_conflict");
     }
     return {
-      transition_id: String(replays[0]._id),
+      transition_id: String(replay._id),
       changed: true,
       replayed: true,
     };
@@ -532,6 +583,108 @@ export async function transitionCommunityMemberWorkflowStageCore(args: {
     replayed: false,
   };
 }
+
+async function applyChannelContributionTriggerCore(args: {
+  ctx: any;
+  objectType: "root" | "reply";
+  row: ChannelContributionRow | null;
+}) {
+  const row = args.row;
+  if (!row) return { status: "receipt_missing" as const };
+  if (
+    row.actorType !== "human" ||
+    !row.actorUserId ||
+    !row.channelId ||
+    row.status !== "live" ||
+    (row.visibilityScope !== "community" && row.visibilityScope !== "public")
+  ) {
+    return { status: "receipt_ineligible" as const };
+  }
+
+  const workflow = await getCommunityMemberWorkflowByCommunity({
+    ctx: args.ctx,
+    communityId: row.communityId,
+  });
+  if (!workflow || workflow.stages.length < 2) {
+    return { status: "workflow_ineligible" as const };
+  }
+  const membership = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: row.communityId,
+    userId: row.actorUserId,
+  });
+  if (!communityMembershipRowIsActive(membership)) {
+    return { status: "membership_ineligible" as const };
+  }
+
+  const sourceReceiptRef = `in_app:community_interaction_${args.objectType}:${String(row._id)}`;
+  const replay = await getTransitionBySourceReceipt({
+    ctx: args.ctx,
+    workflowId: workflow._id,
+    membershipId: membership!._id,
+    sourceReceiptRef,
+  });
+  if (replay) {
+    return {
+      status: "already_applied" as const,
+      transition_id: String(replay._id),
+    };
+  }
+
+  const state = await getMemberStage({
+    ctx: args.ctx,
+    workflowId: workflow._id,
+    membershipId: membership!._id,
+  });
+  const currentStageKey = state?.currentStageKey ?? workflow.stages[0].key;
+  const currentStageIndex = workflow.stages.findIndex(
+    (stage) => stage.key === currentStageKey,
+  );
+  if (currentStageIndex < 0) {
+    throw new Error("community_member_workflow_member_stage_invalid");
+  }
+  const currentStage = workflow.stages[currentStageIndex];
+  const targetStage = workflow.stages[currentStageIndex + 1];
+  if (
+    !targetStage ||
+    currentStage.completionTrigger?.type !== "in_app" ||
+    currentStage.completionTrigger.event !== "channel_contribution"
+  ) {
+    return { status: "trigger_not_configured" as const };
+  }
+
+  const result = await transitionCommunityMemberWorkflowStageCore({
+    ctx: args.ctx,
+    communityId: row.communityId,
+    membershipId: membership!._id,
+    targetStageKey: targetStage.key,
+    expectedStageKey: currentStage.key,
+    triggerType: "in_app",
+    sourceReceiptRef,
+    nowMs: row.createdAt,
+  });
+  return { status: "applied" as const, ...result };
+}
+
+export const applyChannelContributionRootTriggerInternal = internalMutation({
+  args: { rootId: v.id("communityInteractionRoots") },
+  handler: async (ctx, args) =>
+    await applyChannelContributionTriggerCore({
+      ctx,
+      objectType: "root",
+      row: await ctx.db.get(args.rootId),
+    }),
+});
+
+export const applyChannelContributionReplyTriggerInternal = internalMutation({
+  args: { replyId: v.id("communityInteractionReplies") },
+  handler: async (ctx, args) =>
+    await applyChannelContributionTriggerCore({
+      ctx,
+      objectType: "reply",
+      row: await ctx.db.get(args.replyId),
+    }),
+});
 
 export const transitionMemberStageInternal = internalMutation({
   args: {

@@ -1,13 +1,17 @@
 import { Trash2, X } from "lucide-react";
 import { useEffect, useState, type FormEvent } from "react";
 
-import type { CommunityMemberWorkflowStage } from "../../../../shared/communityMemberWorkflow";
+import type {
+  CommunityMemberWorkflowInAppTriggerEvent,
+  CommunityMemberWorkflowStage,
+} from "../../../../shared/communityMemberWorkflow";
 
 type WebCommunityWorkflowStageModalProps = {
   isOpen: boolean;
   stage: CommunityMemberWorkflowStage | null;
   stageNumber: number;
   isSaving: boolean;
+  canConfigureTrigger: boolean;
   canDelete: boolean;
   deleteDisabledReason: string | null;
   error: string | null;
@@ -20,10 +24,14 @@ export function WebCommunityWorkflowStageModal(
   props: WebCommunityWorkflowStageModalProps,
 ) {
   const [name, setName] = useState("");
+  const [completionTriggerEvent, setCompletionTriggerEvent] = useState<
+    CommunityMemberWorkflowInAppTriggerEvent | ""
+  >("");
 
   useEffect(() => {
     if (!props.isOpen || !props.stage) return;
     setName(props.stage.name);
+    setCompletionTriggerEvent(props.stage.completionTrigger?.event ?? "");
   }, [props.isOpen, props.stage]);
 
   useEffect(() => {
@@ -43,8 +51,16 @@ export function WebCommunityWorkflowStageModal(
     event.preventDefault();
     if (!canSave || props.isSaving) return;
     void props.onSave({
-      ...props.stage!,
+      key: props.stage!.key,
       name,
+      ...(completionTriggerEvent
+        ? {
+            completionTrigger: {
+              type: "in_app" as const,
+              event: completionTriggerEvent,
+            },
+          }
+        : {}),
     });
   };
 
@@ -92,6 +108,27 @@ export function WebCommunityWorkflowStageModal(
                 disabled={props.isSaving}
               />
             </label>
+            {props.stage.key && props.canConfigureTrigger ? (
+              <label>
+                <span>Move member when</span>
+                <select
+                  value={completionTriggerEvent}
+                  onChange={(event) =>
+                    setCompletionTriggerEvent(
+                      event.target.value as
+                        | CommunityMemberWorkflowInAppTriggerEvent
+                        | "",
+                    )
+                  }
+                  disabled={props.isSaving}
+                >
+                  <option value="">No automatic trigger</option>
+                  <option value="channel_contribution">
+                    They post or reply in a channel
+                  </option>
+                </select>
+              </label>
+            ) : null}
             {props.error ? (
               <p className="workflow-error" role="alert">
                 {props.error}
