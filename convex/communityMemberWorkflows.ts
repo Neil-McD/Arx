@@ -7,6 +7,7 @@ import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_CHECKS_PER_MILESTONE,
   COMMUNITY_MEMBER_WORKFLOW_MAX_MILESTONES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_MILESTONES,
+  communityMemberWorkflowAutomationDefinition,
   communityMemberWorkflowCheckDefinition,
   normalizeCommunityMemberWorkflowAutomaticSignal,
   normalizeCommunityMemberWorkflowCheckKey,
@@ -15,6 +16,7 @@ import {
   normalizeCommunityMemberWorkflowMilestoneName,
   normalizeCommunityMemberWorkflowSourceRef,
   type CommunityMemberWorkflowCheck,
+  type CommunityMemberWorkflowAutomation,
   type CommunityMemberWorkflowMilestone,
 } from "../shared/communityMemberWorkflow";
 import {
@@ -54,6 +56,8 @@ type WorkflowRow = Doc<"communityMemberWorkflows">;
 type MemberMilestoneRow = Doc<"communityMemberWorkflowMemberMilestones">;
 type EvaluationRow = Doc<"communityMemberWorkflowMilestoneEvaluations">;
 type PassRow = Doc<"communityMemberWorkflowMilestonePasses">;
+type WorkflowRunRow = Doc<"communityMemberWorkflowRuns">;
+type WorkflowTransitionRow = Doc<"communityMemberWorkflowTransitions">;
 type ChannelContributionRow =
   | Doc<"communityInteractionRoots">
   | Doc<"communityInteractionReplies">;
@@ -163,11 +167,28 @@ async function getMemberMilestone(args: {
   return rows[0] ?? null;
 }
 
-function nextOpaqueKey(prefix: "milestone" | "check", existing: Set<string>): string {
+function nextOpaqueKey(
+  prefix: "milestone" | "check" | "automation" | "action",
+  existing: Set<string>,
+): string {
   for (;;) {
     const candidate = `${prefix}-${crypto.randomUUID()}`;
     if (!existing.has(candidate)) return candidate;
   }
+}
+
+function createDefaultGoalCompletedAutomation(): CommunityMemberWorkflowAutomation {
+  return {
+    key: nextOpaqueKey("automation", new Set()),
+    trigger: { type: "goal_completed" },
+    actions: [
+      {
+        key: nextOpaqueKey("action", new Set()),
+        type: "move_member",
+        destination: "next_or_complete",
+      },
+    ],
+  };
 }
 
 function requireWorkflowRevision(
@@ -268,6 +289,7 @@ export const createBuilderWorkflowMilestone = mutation({
         key: nextOpaqueKey("milestone", new Set()),
         name,
         checks: [],
+        automations: [createDefaultGoalCompletedAutomation()],
       };
       const workflowId = await ctx.db.insert("communityMemberWorkflows", {
         communityId: args.communityId,
@@ -291,6 +313,7 @@ export const createBuilderWorkflowMilestone = mutation({
       ),
       name,
       checks: [],
+      automations: [createDefaultGoalCompletedAutomation()],
     };
     const revision = expectedRevision + 1;
     await ctx.db.patch(existing._id, {
@@ -336,6 +359,7 @@ export const updateBuilderWorkflowMilestone = mutation({
       key: current.key,
       name: normalizeCommunityMemberWorkflowMilestoneName(args.name),
       checks: normalizeChecks(args.checks, current.checks),
+      automations: current.automations,
     };
     if (JSON.stringify(current) === JSON.stringify(milestone)) {
       return {
@@ -418,6 +442,147 @@ export const deleteBuilderWorkflowMilestone = mutation({
       updatedAt: Date.now(),
     });
     return { workflow_id: String(workflow._id), revision };
+  },
+});
+
+export const backfillGoalCompletedAutomationsInternal = internalMutation({
+  args: {
+    communityId: v.optional(v.id("communities")),
+    limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
+    const dryRun = args.dryRun !== false;
+    const workflows = args.communityId
+      ? await ctx.db
+          .query("communityMemberWorkflows")
+          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+          .take(2)
+      : await ctx.db.query("communityMemberWorkflows").take(limit);
+    let workflowsUpdated = 0;
+    let milestonesUpdated = 0;
+    for (const workflow of workflows) {
+      const milestones = workflow.milestones.map((milestone) => {
+        if (Array.isArray(milestone.automations)) return milestone;
+        milestonesUpdated += 1;
+        return {
+          ...milestone,
+          automations: [createDefaultGoalCompletedAutomation()],
+        };
+      });
+      if (milestones.every((milestone, index) => milestone === workflow.milestones[index])) {
+        continue;
+      }
+      workflowsUpdated += 1;
+      if (!dryRun) {
+        await ctx.db.patch(workflow._id, {
+          milestones,
+          revision: workflow.revision + 1,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+    return {
+      ok: true,
+      kind: "community_member_workflow_goal_completed_automation_backfill",
+      dry_run: dryRun,
+      workflows_checked: workflows.length,
+      workflows_updated: workflowsUpdated,
+      milestones_updated: milestonesUpdated,
+    };
+  },
+});
+
+export const backfillMilestonePassTransitionsInternal = internalMutation({
+  args: {
+    communityId: v.optional(v.id("communities")),
+    limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
+    const dryRun = args.dryRun !== false;
+    const passes = (args.communityId
+      ? await ctx.db
+          .query("communityMemberWorkflowMilestonePasses")
+          .withIndex("by_community_occurredAt", (q: any) =>
+            q.eq("communityId", args.communityId),
+          )
+          .order("asc")
+          .take(limit)
+      : await ctx.db.query("communityMemberWorkflowMilestonePasses").take(limit)) as PassRow[];
+    let transitionsCreated = 0;
+    let alreadyMigrated = 0;
+    for (const pass of passes) {
+      const triggerReceiptRef = normalizeCommunityMemberWorkflowSourceRef(
+        `legacy-milestone-pass:${String(pass._id)}`,
+      );
+      const automationKey = "legacy-pass-migration";
+      const actionKey = "legacy-move-member";
+      const existingRun = await getWorkflowRunByTrigger({
+        ctx,
+        workflowId: pass.workflowId,
+        membershipId: pass.membershipId,
+        triggerReceiptRef,
+        automationKey,
+      });
+      if (existingRun) {
+        alreadyMigrated += 1;
+        continue;
+      }
+      transitionsCreated += 1;
+      if (dryRun) continue;
+      const workflowRunId = await ctx.db.insert("communityMemberWorkflowRuns", {
+        communityId: pass.communityId,
+        workflowId: pass.workflowId,
+        membershipId: pass.membershipId,
+        milestoneKey: pass.milestoneKey,
+        milestoneEnteredAt: pass.occurredAt,
+        workflowRevision: pass.workflowRevision,
+        automationKey,
+        automationHash: "legacy-pass-migration:v1",
+        triggerType: "goal_completed",
+        triggerReceiptRef,
+        actionsSnapshot: [
+          { key: actionKey, type: "move_member", destination: "next_or_complete" },
+        ],
+        status: "running",
+        actionResults: [],
+        createdAt: pass.createdAt,
+        updatedAt: pass.createdAt,
+      });
+      const transitionId = await ctx.db.insert("communityMemberWorkflowTransitions", {
+        communityId: pass.communityId,
+        workflowId: pass.workflowId,
+        membershipId: pass.membershipId,
+        seq: pass.seq,
+        fromMilestoneKey: pass.milestoneKey,
+        toMilestoneKey: pass.nextMilestoneKey,
+        completedWorkflow: pass.completedWorkflow,
+        workflowRevision: pass.workflowRevision,
+        milestoneEnteredAt: pass.occurredAt,
+        workflowRunId,
+        actionKey,
+        goalEvaluationId: pass.milestoneEvaluationId,
+        occurredAt: pass.occurredAt,
+        createdAt: pass.createdAt,
+      });
+      await ctx.db.patch(workflowRunId, {
+        status: "finished",
+        actionResults: [{ actionKey, status: "complete", transitionId }],
+        finishedAt: pass.occurredAt,
+        updatedAt: pass.occurredAt,
+      });
+    }
+    return {
+      ok: true,
+      kind: "community_member_workflow_milestone_pass_transition_backfill",
+      dry_run: dryRun,
+      passes_checked: passes.length,
+      transitions_created: transitionsCreated,
+      already_migrated: alreadyMigrated,
+    };
   },
 });
 
@@ -538,15 +703,15 @@ export const getBuilderWorkflowBoardProjectionToken = query({
       ctx,
       communityId: args.communityId,
     });
-    const [latestPass, latestEvaluation] = workflow
+    const [latestTransition, latestEvaluation] = workflow
       ? await Promise.all([
           ctx.db
-            .query("communityMemberWorkflowMilestonePasses")
+            .query("communityMemberWorkflowTransitions")
             .withIndex("by_community_occurredAt", (q: any) =>
               q.eq("communityId", args.communityId),
             )
             .order("desc")
-            .first() as Promise<PassRow | null>,
+            .first() as Promise<WorkflowTransitionRow | null>,
           ctx.db
             .query("communityMemberWorkflowMilestoneEvaluations")
             .withIndex("by_workflow_updatedAt", (q: any) =>
@@ -560,7 +725,7 @@ export const getBuilderWorkflowBoardProjectionToken = query({
       workflow_id: workflow ? String(workflow._id) : null,
       workflow_revision: workflow?.revision ?? 0,
       active_member_count: readCommunityActiveMemberCount(community),
-      latest_pass_id: latestPass ? String(latestPass._id) : null,
+      latest_transition_id: latestTransition ? String(latestTransition._id) : null,
       latest_evaluation_id: latestEvaluation ? String(latestEvaluation._id) : null,
       latest_evaluation_updated_at: latestEvaluation?.updatedAt ?? null,
     };
@@ -593,7 +758,7 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
   });
   const current = resolveCurrentMilestone({ workflow, membership: membership!, state });
   const currentChecksHash = await milestoneChecksHash(current.milestone);
-  const [profile, approvedFacts, recentEvaluations, passRows, eligibleEvidence] = await Promise.all([
+  const [profile, approvedFacts, recentEvaluations, transitionRows, eligibleEvidence] = await Promise.all([
     resolveUserProfileDisplayProjection(args.ctx, membership!.userId),
     readMemberFactsForLens(args.ctx, {
       subjectUserId: membership!.userId,
@@ -611,12 +776,12 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
       .order("desc")
       .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT) as Promise<EvaluationRow[]>,
     args.ctx.db
-      .query("communityMemberWorkflowMilestonePasses")
+      .query("communityMemberWorkflowTransitions")
       .withIndex("by_workflow_membership_seq", (q: any) =>
         q.eq("workflowId", workflow._id).eq("membershipId", membership!._id),
       )
       .order("desc")
-      .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT) as Promise<PassRow[]>,
+      .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT) as Promise<WorkflowTransitionRow[]>,
     listEligibleMilestoneEvidence({
       ctx: args.ctx,
       communityId: args.communityId,
@@ -631,14 +796,6 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
       evaluation.milestoneEnteredAt === current.milestoneEnteredAt &&
       evaluation.checksHash === currentChecksHash,
   ) ?? null;
-  const currentPass = passRows.find(
-    (pass) =>
-      pass.milestoneKey === current.milestone.key &&
-      pass.checksHash === currentChecksHash,
-  ) ?? null;
-  const passResultByCheck = new Map(
-    (currentPass?.checkResults ?? []).map((result) => [result.checkKey, result]),
-  );
   const automaticResultByCheck = new Map(
     resolveAutomaticChecks(current.milestone, eligibleEvidence).map((result) => [
       result.checkKey,
@@ -649,15 +806,6 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
     (latestEvaluation?.checkResults ?? []).map((result) => [result.checkKey, result]),
   );
   const checkStatuses = current.milestone.checks.map((check) => {
-    const passed = passResultByCheck.get(check.key);
-    if (passed) {
-      return {
-        check_key: check.key,
-        type: check.type,
-        status: "complete" as const,
-        evidence_refs: passed.evidenceRefs,
-      };
-    }
     if (check.type === "automatic") {
       const result = automaticResultByCheck.get(check.key);
       return {
@@ -732,21 +880,21 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
             : null,
         }
       : null,
-    milestone_history: passRows
+    milestone_history: transitionRows
       .slice()
       .reverse()
-      .map((pass) => ({
-        id: String(pass._id),
-        sequence: pass.seq,
-        milestone_key: pass.milestoneKey,
-        milestone_name: milestoneName(pass.milestoneKey) ?? "Milestone",
-        next_milestone_key: pass.nextMilestoneKey ?? null,
-        next_milestone_name: milestoneName(pass.nextMilestoneKey),
-        completed_workflow: pass.completedWorkflow,
-        milestone_evaluation_id: pass.milestoneEvaluationId
-          ? String(pass.milestoneEvaluationId)
+      .map((transition) => ({
+        id: String(transition._id),
+        sequence: transition.seq,
+        milestone_key: transition.fromMilestoneKey,
+        milestone_name: milestoneName(transition.fromMilestoneKey) ?? "Milestone",
+        next_milestone_key: transition.toMilestoneKey ?? null,
+        next_milestone_name: milestoneName(transition.toMilestoneKey),
+        completed_workflow: transition.completedWorkflow,
+        milestone_evaluation_id: transition.goalEvaluationId
+          ? String(transition.goalEvaluationId)
           : null,
-        occurred_at: toIsoString(pass.occurredAt),
+        occurred_at: toIsoString(transition.occurredAt),
       })),
   };
 }
@@ -912,102 +1060,254 @@ async function getActiveEvaluation(args: {
   ) ?? null;
 }
 
-async function getPassByEvaluation(args: {
+async function getWorkflowRunByTrigger(args: {
   ctx: any;
-  evaluationId: any;
-}): Promise<PassRow | null> {
+  workflowId: any;
+  membershipId: any;
+  triggerReceiptRef: string;
+  automationKey: string;
+}): Promise<WorkflowRunRow | null> {
   const rows = (await args.ctx.db
-    .query("communityMemberWorkflowMilestonePasses")
-    .withIndex("by_milestoneEvaluation", (q: any) =>
-      q.eq("milestoneEvaluationId", args.evaluationId),
+    .query("communityMemberWorkflowRuns")
+    .withIndex("by_workflow_membership_trigger_automation", (q: any) =>
+      q
+        .eq("workflowId", args.workflowId)
+        .eq("membershipId", args.membershipId)
+        .eq("triggerReceiptRef", args.triggerReceiptRef)
+        .eq("automationKey", args.automationKey),
     )
-    .take(2)) as PassRow[];
+    .take(2)) as WorkflowRunRow[];
   if (rows.length > 1) {
-    throw new Error("community_member_workflow_milestone_pass_ambiguous");
+    throw new Error("community_member_workflow_run_ambiguous");
   }
   return rows[0] ?? null;
 }
 
-async function recordMilestonePass(args: {
+async function getTransitionByRunAction(args: {
   ctx: any;
-  workflow: WorkflowRow;
-  membership: CommunityMembershipLike;
-  state: MemberMilestoneRow | null;
-  current: ReturnType<typeof resolveCurrentMilestone>;
-  checksHash: string;
-  evaluationId?: any;
-  actionReceiptRef: string;
-  completionKind: "automatic" | "judgment" | "composite";
-  checkResults: Array<{
-    checkKey: string;
-    type: "automatic" | "judgment";
-    evidenceRefs: string[];
-  }>;
+  workflowRunId: any;
+  actionKey: string;
+}): Promise<WorkflowTransitionRow | null> {
+  const rows = (await args.ctx.db
+    .query("communityMemberWorkflowTransitions")
+    .withIndex("by_workflowRun_action", (q: any) =>
+      q.eq("workflowRunId", args.workflowRunId).eq("actionKey", args.actionKey),
+    )
+    .take(2)) as WorkflowTransitionRow[];
+  if (rows.length > 1) {
+    throw new Error("community_member_workflow_transition_ambiguous");
+  }
+  return rows[0] ?? null;
+}
+
+async function transitionMemberForWorkflowAction(args: {
+  ctx: any;
+  workflowRunId: any;
+  actionKey: string;
+  evaluationId: any;
+  expectedWorkflowRevision: number;
+  expectedMilestoneKey: string;
+  expectedMilestoneEnteredAt: number;
   nowMs: number;
 }) {
-  if (args.current.completedAt) {
-    return { status: "already_completed" as const, pass_id: null };
+  const replay = await getTransitionByRunAction({
+    ctx: args.ctx,
+    workflowRunId: args.workflowRunId,
+    actionKey: args.actionKey,
+  });
+  if (replay) {
+    return {
+      status: "complete" as const,
+      transitionId: replay._id,
+      completedWorkflow: replay.completedWorkflow,
+      replayed: true,
+    };
   }
-  if (args.evaluationId) {
-    const replay = await getPassByEvaluation({
-      ctx: args.ctx,
-      evaluationId: args.evaluationId,
-    });
-    if (replay) {
-      return {
-        status: "complete" as const,
-        pass_id: String(replay._id),
-        replayed: true,
-      };
-    }
+  const run = (await args.ctx.db.get(args.workflowRunId)) as WorkflowRunRow | null;
+  if (!run || run.status !== "running") {
+    throw new Error("community_member_workflow_run_authority_invalid");
   }
-  const nextMilestone = args.workflow.milestones[args.current.milestoneIndex + 1];
+  const workflow = (await args.ctx.db.get(run.workflowId)) as WorkflowRow | null;
+  const membership = (await args.ctx.db.get(
+    run.membershipId,
+  )) as CommunityMembershipLike | null;
+  if (
+    !workflow ||
+    !communityMembershipRowIsActive(membership) ||
+    String(membership!.communityId) !== String(workflow.communityId) ||
+    workflow.revision !== args.expectedWorkflowRevision
+  ) {
+    throw new Error("community_member_workflow_transition_authority_changed");
+  }
+  const state = await getMemberMilestone({
+    ctx: args.ctx,
+    workflowId: workflow._id,
+    membershipId: membership!._id,
+  });
+  const current = resolveCurrentMilestone({ workflow, membership: membership!, state });
+  if (
+    current.completedAt ||
+    current.milestone.key !== args.expectedMilestoneKey ||
+    current.milestoneEnteredAt !== args.expectedMilestoneEnteredAt
+  ) {
+    throw new Error("community_member_workflow_transition_authority_changed");
+  }
+  const nextMilestone = workflow.milestones[current.milestoneIndex + 1];
   const completedWorkflow = !nextMilestone;
-  const seq = Number(args.state?.transitionSeq ?? 0) + 1;
-  if (args.state) {
-    await args.ctx.db.patch(args.state._id, {
-      currentMilestoneKey: nextMilestone?.key ?? args.current.milestone.key,
-      milestoneEnteredAt: nextMilestone ? args.nowMs : args.current.milestoneEnteredAt,
+  const seq = Number(state?.transitionSeq ?? 0) + 1;
+  if (state) {
+    await args.ctx.db.patch(state._id, {
+      currentMilestoneKey: nextMilestone?.key ?? current.milestone.key,
+      milestoneEnteredAt: nextMilestone ? args.nowMs : current.milestoneEnteredAt,
       transitionSeq: seq,
       completedAt: completedWorkflow ? args.nowMs : undefined,
       updatedAt: args.nowMs,
     });
   } else {
     await args.ctx.db.insert("communityMemberWorkflowMemberMilestones", {
-      workflowId: args.workflow._id,
-      membershipId: args.membership._id,
-      currentMilestoneKey: nextMilestone?.key ?? args.current.milestone.key,
-      milestoneEnteredAt: nextMilestone ? args.nowMs : args.current.milestoneEnteredAt,
+      workflowId: workflow._id,
+      membershipId: membership!._id,
+      currentMilestoneKey: nextMilestone?.key ?? current.milestone.key,
+      milestoneEnteredAt: nextMilestone ? args.nowMs : current.milestoneEnteredAt,
       transitionSeq: seq,
       completedAt: completedWorkflow ? args.nowMs : undefined,
       createdAt: args.nowMs,
       updatedAt: args.nowMs,
     });
   }
-  const passId = await args.ctx.db.insert(
-    "communityMemberWorkflowMilestonePasses",
-    {
-      communityId: args.workflow.communityId,
-      workflowId: args.workflow._id,
-      membershipId: args.membership._id,
-      seq,
-      milestoneKey: args.current.milestone.key,
-      nextMilestoneKey: nextMilestone?.key,
-      completedWorkflow,
-      milestoneEvaluationId: args.evaluationId,
-      workflowRevision: args.workflow.revision,
-      checksHash: args.checksHash,
-      completionKind: args.completionKind,
-      checkResults: args.checkResults,
-      actionReceiptRef: args.actionReceiptRef,
-      occurredAt: args.nowMs,
-      createdAt: args.nowMs,
-    },
-  );
+  const transitionId = await args.ctx.db.insert("communityMemberWorkflowTransitions", {
+    communityId: workflow.communityId,
+    workflowId: workflow._id,
+    membershipId: membership!._id,
+    seq,
+    fromMilestoneKey: current.milestone.key,
+    toMilestoneKey: nextMilestone?.key,
+    completedWorkflow,
+    workflowRevision: workflow.revision,
+    milestoneEnteredAt: current.milestoneEnteredAt,
+    workflowRunId: args.workflowRunId,
+    actionKey: args.actionKey,
+    goalEvaluationId: args.evaluationId,
+    occurredAt: args.nowMs,
+    createdAt: args.nowMs,
+  });
   return {
     status: "complete" as const,
-    pass_id: String(passId),
-    workflow_completed: completedWorkflow,
+    transitionId,
+    completedWorkflow,
+    replayed: false,
+  };
+}
+
+async function executeGoalCompletedAutomations(args: {
+  ctx: any;
+  workflow: WorkflowRow;
+  membership: CommunityMembershipLike;
+  current: ReturnType<typeof resolveCurrentMilestone>;
+  evaluationId: any;
+  nowMs: number;
+}) {
+  const automations = (args.current.milestone.automations ?? []).filter(
+    (automation) => automation.trigger.type === "goal_completed",
+  );
+  if (automations.length === 0) {
+    return {
+      status: "complete" as const,
+      evaluation_id: String(args.evaluationId),
+      workflow_run_id: null,
+      transition_id: null,
+      workflow_completed: false,
+      member_moved: false,
+      replayed: false,
+    };
+  }
+  if (automations.length !== 1) {
+    throw new Error("community_member_workflow_goal_completed_automation_invalid");
+  }
+  const automation = automations[0];
+  if (
+    automation.actions.length !== 1 ||
+    automation.actions[0].type !== "move_member" ||
+    automation.actions[0].destination !== "next_or_complete"
+  ) {
+    throw new Error("community_member_workflow_goal_completed_automation_invalid");
+  }
+  const triggerReceiptRef = normalizeCommunityMemberWorkflowSourceRef(
+    `workflow-goal-evaluation:${String(args.evaluationId)}`,
+  );
+  const existingRun = await getWorkflowRunByTrigger({
+    ctx: args.ctx,
+    workflowId: args.workflow._id,
+    membershipId: args.membership._id,
+    triggerReceiptRef,
+    automationKey: automation.key,
+  });
+  if (existingRun) {
+    const transition = await getTransitionByRunAction({
+      ctx: args.ctx,
+      workflowRunId: existingRun._id,
+      actionKey: automation.actions[0].key,
+    });
+    return {
+      status: "complete" as const,
+      evaluation_id: String(args.evaluationId),
+      workflow_run_id: String(existingRun._id),
+      transition_id: transition ? String(transition._id) : null,
+      workflow_completed: transition?.completedWorkflow ?? false,
+      member_moved: Boolean(transition),
+      replayed: true,
+    };
+  }
+  const automationHash = await sha256HexText(
+    JSON.stringify(communityMemberWorkflowAutomationDefinition(automation)),
+  );
+  const workflowRunId = await args.ctx.db.insert("communityMemberWorkflowRuns", {
+    communityId: args.workflow.communityId,
+    workflowId: args.workflow._id,
+    membershipId: args.membership._id,
+    milestoneKey: args.current.milestone.key,
+    milestoneEnteredAt: args.current.milestoneEnteredAt,
+    workflowRevision: args.workflow.revision,
+    automationKey: automation.key,
+    automationHash,
+    triggerType: "goal_completed",
+    triggerReceiptRef,
+    actionsSnapshot: automation.actions,
+    status: "running",
+    actionResults: [],
+    createdAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  const action = automation.actions[0];
+  const transition = await transitionMemberForWorkflowAction({
+    ctx: args.ctx,
+    workflowRunId,
+    actionKey: action.key,
+    evaluationId: args.evaluationId,
+    expectedWorkflowRevision: args.workflow.revision,
+    expectedMilestoneKey: args.current.milestone.key,
+    expectedMilestoneEnteredAt: args.current.milestoneEnteredAt,
+    nowMs: args.nowMs,
+  });
+  await args.ctx.db.patch(workflowRunId, {
+    status: "finished",
+    actionResults: [
+      {
+        actionKey: action.key,
+        status: "complete",
+        transitionId: transition.transitionId,
+      },
+    ],
+    finishedAt: args.nowMs,
+    updatedAt: args.nowMs,
+  });
+  return {
+    status: "complete" as const,
+    evaluation_id: String(args.evaluationId),
+    workflow_run_id: String(workflowRunId),
+    transition_id: String(transition.transitionId),
+    workflow_completed: transition.completedWorkflow,
+    member_moved: true,
     replayed: false,
   };
 }
@@ -1083,24 +1383,6 @@ async function handleChannelContributionCore(args: {
   const judgmentChecks = current.milestone.checks.filter(
     (check) => check.type === "judgment",
   );
-  if (judgmentChecks.length === 0) {
-    return await recordMilestonePass({
-      ctx: args.ctx,
-      workflow,
-      membership: membership!,
-      state,
-      current,
-      checksHash,
-      actionReceiptRef,
-      completionKind: "automatic",
-      checkResults: automaticResults.map((result) => ({
-        checkKey: result.checkKey,
-        type: result.type,
-        evidenceRefs: result.evidenceRefs,
-      })),
-      nowMs: Date.now(),
-    });
-  }
   const replay = await getEvaluationByActionReceipt({
     ctx: args.ctx,
     workflowId: workflow._id,
@@ -1108,7 +1390,67 @@ async function handleChannelContributionCore(args: {
     actionReceiptRef,
   });
   if (replay) {
+    if (replay.status === "finished" && replay.decision === "complete") {
+      return await executeGoalCompletedAutomations({
+        ctx: args.ctx,
+        workflow,
+        membership: membership!,
+        current,
+        evaluationId: replay._id,
+        nowMs: Date.now(),
+      });
+    }
     return { status: "already_queued" as const, evaluation_id: String(replay._id) };
+  }
+  if (judgmentChecks.length === 0) {
+    const nowMs = Date.now();
+    const evidenceRefs = Array.from(
+      new Set(automaticResults.flatMap((result) => result.evidenceRefs)),
+    );
+    const evaluationId = await args.ctx.db.insert(
+      "communityMemberWorkflowMilestoneEvaluations",
+      {
+        communityId: row.communityId,
+        workflowId: workflow._id,
+        membershipId: membership!._id,
+        milestoneKey: current.milestone.key,
+        workflowRevision: workflow.revision,
+        milestoneEnteredAt: current.milestoneEnteredAt,
+        milestoneName: current.milestone.name,
+        checksSnapshot: current.milestone.checks,
+        checksHash,
+        actionKind,
+        actionReceiptRef,
+        evidenceWindowStartAt: current.milestoneEnteredAt,
+        evidenceThroughAt: row.createdAt,
+        evidenceRefs,
+        status: "finished",
+        decision: "complete",
+        evaluatorKind: "deterministic",
+        checkResults: automaticResults.map((result) => ({
+          checkKey: result.checkKey,
+          decision: "complete" as const,
+          evidenceRefs: result.evidenceRefs,
+          explanation: "Canonical product evidence satisfies this automatic check.",
+          missingEvidence: [],
+        })),
+        explanation: "All automatic goal checks are complete.",
+        missingEvidence: [],
+        availableAt: nowMs,
+        attempt: 0,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+        finishedAt: nowMs,
+      },
+    );
+    return await executeGoalCompletedAutomations({
+      ctx: args.ctx,
+      workflow,
+      membership: membership!,
+      current,
+      evaluationId,
+      nowMs,
+    });
   }
   const active = await getActiveEvaluation({
     ctx: args.ctx,
@@ -1413,7 +1755,7 @@ export const finalizeMilestoneEvaluationInternal = internalMutation({
         internal.communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
         { evaluationId: evaluation._id },
       );
-      return { status: "queued" as const, pass_id: null };
+      return { status: "queued" as const, transition_id: null };
     }
     const workflow = (await ctx.db.get(evaluation.workflowId)) as WorkflowRow | null;
     const membership = (await ctx.db.get(
@@ -1426,7 +1768,7 @@ export const finalizeMilestoneEvaluationInternal = internalMutation({
         errorCode: "evaluation_authority_changed",
         nowMs: args.nowMs,
       });
-      return { status: "stale" as const, pass_id: null };
+      return { status: "stale" as const, transition_id: null };
     }
     const state = await getMemberMilestone({
       ctx,
@@ -1446,7 +1788,7 @@ export const finalizeMilestoneEvaluationInternal = internalMutation({
         errorCode: "evaluation_definition_changed",
         nowMs: args.nowMs,
       });
-      return { status: "stale" as const, pass_id: null };
+      return { status: "stale" as const, transition_id: null };
     }
     const judgmentChecks = authority.current.milestone.checks.filter(
       (check) => check.type === "judgment",
@@ -1535,33 +1877,14 @@ export const finalizeMilestoneEvaluationInternal = internalMutation({
       errorCode: undefined,
     });
     if (decision !== "complete") {
-      return { status: decision, pass_id: null };
+      return { status: decision, transition_id: null };
     }
-    const completionKind = automaticResults.length > 0
-      ? "composite" as const
-      : "judgment" as const;
-    return await recordMilestonePass({
+    return await executeGoalCompletedAutomations({
       ctx,
       workflow,
       membership,
-      state,
       current: authority.current,
-      checksHash: authority.checksHash,
       evaluationId: evaluation._id,
-      actionReceiptRef: evaluation.actionReceiptRef,
-      completionKind,
-      checkResults: [
-        ...automaticResults.map((result) => ({
-          checkKey: result.checkKey,
-          type: result.type,
-          evidenceRefs: result.evidenceRefs,
-        })),
-        ...normalizedResults.map((result) => ({
-          checkKey: result.checkKey,
-          type: "judgment" as const,
-          evidenceRefs: result.evidenceRefs,
-        })),
-      ],
       nowMs: args.nowMs,
     });
   },

@@ -49,7 +49,7 @@ export type CloudCommunityMemberWorkflowBoardProjectionToken = {
   workflow_id: string | null;
   workflow_revision: number;
   active_member_count: number | null;
-  latest_pass_id: string | null;
+  latest_transition_id: string | null;
   latest_evaluation_id: string | null;
   latest_evaluation_updated_at: number | null;
 };

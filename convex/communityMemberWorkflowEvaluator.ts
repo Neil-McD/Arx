@@ -41,8 +41,10 @@ type EvaluationContext = {
 
 type EvaluationActionResult = {
   status: string;
-  pass_id?: string | null;
+  workflow_run_id?: string | null;
+  transition_id?: string | null;
   workflow_completed?: boolean;
+  member_moved?: boolean;
   replayed?: boolean;
 };
 

@@ -26,13 +26,14 @@ for (const table of [
   "communityMemberWorkflows",
   "communityMemberWorkflowMemberMilestones",
   "communityMemberWorkflowMilestoneEvaluations",
+  "communityMemberWorkflowRuns",
+  "communityMemberWorkflowTransitions",
   "communityMemberWorkflowMilestonePasses",
 ]) {
   assert.match(schema, new RegExp(`${table}: defineTable\\(`));
 }
 for (const retiredTable of [
   "communityMemberWorkflowMemberStages",
-  "communityMemberWorkflowTransitions",
   "communityMemberWorkflowVersions",
   "communityMemberWorkflowEnrollments",
   "communityMemberWorkflowEvidence",
@@ -43,9 +44,13 @@ for (const retiredTable of [
 assert.match(schema, /milestones: v\.array/);
 assert.match(schema, /type: v\.literal\("automatic"\)/);
 assert.match(schema, /type: v\.literal\("judgment"\)/);
+assert.match(schema, /type: v\.literal\("goal_completed"\)/);
+assert.match(schema, /type: v\.literal\("move_member"\)/);
 assert.match(schema, /completedAt: v\.optional/);
 assert.match(schema, /by_workflow_membership_actionReceipt/);
 assert.match(schema, /by_milestoneEvaluation/);
+assert.match(schema, /by_workflow_membership_trigger_automation/);
+assert.match(schema, /by_workflowRun_action/);
 
 for (const symbol of [
   "createBuilderWorkflowMilestone",
@@ -56,6 +61,8 @@ for (const symbol of [
   "getBuilderWorkflowMemberSuccessDossier",
   "handleChannelContributionRootInternal",
   "handleChannelContributionReplyInternal",
+  "backfillGoalCompletedAutomationsInternal",
+  "backfillMilestonePassTransitionsInternal",
   "claimMilestoneEvaluationInternal",
   "buildMilestoneEvaluationContextInternal",
   "finalizeMilestoneEvaluationInternal",
@@ -65,8 +72,10 @@ for (const symbol of [
 }
 
 assert.match(backend, /resolveAutomaticChecks/);
-assert.match(backend, /recordMilestonePass/);
-assert.match(backend, /completedWorkflow = !nextMilestone/);
+assert.match(backend, /executeGoalCompletedAutomations/);
+assert.match(backend, /transitionMemberForWorkflowAction/);
+assert.match(backend, /communityMemberWorkflowTransitions/);
+assert.doesNotMatch(backend, /recordMilestonePass/);
 assert.match(backend, /status: "requirements_pending"/);
 assert.match(backend, /status: "coalesced"/);
 assert.match(backend, /rerunRequested/);
@@ -80,6 +89,9 @@ assert.doesNotMatch(backend, /workflow\.stages/);
 
 assert.match(contract, /CommunityMemberWorkflowMilestone/);
 assert.match(contract, /CommunityMemberWorkflowCheck/);
+assert.match(contract, /CommunityMemberWorkflowAutomation/);
+assert.match(contract, /CommunityMemberWorkflowGoalCompletedTrigger/);
+assert.match(contract, /CommunityMemberWorkflowMoveMemberAction/);
 assert.match(contract, /"channel_posted"/);
 assert.match(contract, /"channel_replied"/);
 assert.doesNotMatch(contract, /CommunityMemberWorkflowStage/);
@@ -95,6 +107,8 @@ assert.match(gateway, /createCloudCommunityMemberWorkflowMilestone/);
 assert.match(gateway, /updateCloudCommunityMemberWorkflowMilestone/);
 assert.match(gateway, /deleteCloudCommunityMemberWorkflowMilestone/);
 assert.match(gateway, /subscribeCloudCommunityMemberWorkflowBoardProjection/);
+assert.match(gateway, /latest_transition_id/);
+assert.doesNotMatch(gateway, /latest_pass_id/);
 assert.doesNotMatch(gateway, /WorkflowStage/);
 
 assert.match(controller, /createMilestone/);
@@ -118,6 +132,7 @@ assert.match(modal, /Complete when/);
 assert.match(modal, /Automatic/);
 assert.match(modal, /AI judgment/);
 assert.doesNotMatch(modal, /Move to the next stage when/);
+assert.doesNotMatch(modal, /goal_completed|move_member/);
 
 assert.match(
   interactions,
@@ -141,4 +156,4 @@ assert.match(semanticRepository, /Current milestone:/);
 assert.match(semanticRepository, /Status:/);
 assert.doesNotMatch(semanticRepository, /Current stage:/);
 
-console.log("community member workflow milestone completion kernel proof passed");
+console.log("community member workflow explicit progression seam proof passed");

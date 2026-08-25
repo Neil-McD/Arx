@@ -195,7 +195,7 @@ async function createMilestones(
   return { first: configured.milestone, revision: configured.revision };
 }
 
-test("milestones are builder-owned names with all-of automatic or judgment checks", async () => {
+test("milestones persist an explicit goal-completed movement automation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
@@ -225,6 +225,12 @@ test("milestones are builder-owned names with all-of automatic or judgment check
         criterion: "The member has demonstrated a concrete implementation result.",
       },
     ],
+    automations: [
+      {
+        trigger: { type: "goal_completed" },
+        actions: [{ type: "move_member", destination: "next_or_complete" }],
+      },
+    ],
   });
   const board = await asOwner.query(
     api.communityMemberWorkflows.getBuilderWorkflowBoardPage,
@@ -242,7 +248,7 @@ test("milestones are builder-owned names with all-of automatic or judgment check
   });
 });
 
-test("automatic checks accumulate from canonical member actions and advance without an evaluation", async () => {
+test("automatic goal evaluation fires an explicit movement automation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
@@ -272,19 +278,162 @@ test("automatic checks accumulate from canonical member actions and advance with
   });
   const after = await t.run(async (ctx) => ({
     state: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
-    passes: await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
+    evaluations: await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
   }));
   expect(after.state).toMatchObject({
     currentMilestoneKey: second.milestone.key,
     transitionSeq: 1,
   });
-  expect(after.passes).toHaveLength(1);
-  expect(after.passes[0]).toMatchObject({
+  expect(after.evaluations).toHaveLength(1);
+  expect(after.evaluations[0]).toMatchObject({
     milestoneKey: first.key,
-    nextMilestoneKey: second.milestone.key,
-    completionKind: "automatic",
+    evaluatorKind: "deterministic",
+    decision: "complete",
+  });
+  expect(after.runs).toHaveLength(1);
+  expect(after.runs[0]).toMatchObject({
+    triggerType: "goal_completed",
+    status: "finished",
+  });
+  expect(after.transitions).toHaveLength(1);
+  expect(after.transitions[0]).toMatchObject({
+    fromMilestoneKey: first.key,
+    toMilestoneKey: second.milestone.key,
     completedWorkflow: false,
   });
+});
+
+test("goal completion does not move a member without a stored movement automation", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    { type: "automatic", signal: "channel_posted" },
+  ]);
+  await t.run(async (ctx) => {
+    const workflow = await ctx.db.query("communityMemberWorkflows").first();
+    if (!workflow) throw new Error("workflow_missing");
+    await ctx.db.patch(workflow._id, {
+      milestones: workflow.milestones.map((milestone) =>
+        milestone.key === first.key ? { ...milestone, automations: [] } : milestone,
+      ),
+      revision: workflow.revision + 1,
+      updatedAt: fixture.nowMs + 1,
+    });
+  });
+  const rootId = await insertRoot(t, fixture, "no-automation", "Goal complete.");
+  await expect(handleRoot(t, rootId)).resolves.toMatchObject({
+    status: "complete",
+    member_moved: false,
+    workflow_run_id: null,
+  });
+  const records = await t.run(async (ctx) => ({
+    states: await ctx.db.query("communityMemberWorkflowMemberMilestones").collect(),
+    evaluations: await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+  }));
+  expect(records.states).toHaveLength(0);
+  expect(records.evaluations).toHaveLength(1);
+  expect(records.evaluations[0]).toMatchObject({ decision: "complete" });
+  expect(records.runs).toHaveLength(0);
+  expect(records.transitions).toHaveLength(0);
+  await expect(handleRoot(t, rootId)).resolves.toMatchObject({
+    status: "complete",
+    member_moved: false,
+  });
+  expect(
+    await t.run(async (ctx) =>
+      await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
+    ),
+  ).toHaveLength(1);
+});
+
+test("staging migration materializes automations and legacy transition history idempotently", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    { type: "automatic", signal: "channel_posted" },
+  ]);
+  const { workflowId, passId } = await t.run(async (ctx) => {
+    const workflow = await ctx.db.query("communityMemberWorkflows").first();
+    if (!workflow) throw new Error("workflow_missing");
+    await ctx.db.patch(workflow._id, {
+      milestones: workflow.milestones.map(({ automations: _automations, ...milestone }) =>
+        milestone,
+      ),
+      revision: workflow.revision + 1,
+      updatedAt: fixture.nowMs + 1,
+    });
+    const passId = await ctx.db.insert("communityMemberWorkflowMilestonePasses", {
+      communityId: fixture.communityId,
+      workflowId: workflow._id,
+      membershipId: fixture.membershipId,
+      seq: 1,
+      milestoneKey: first.key,
+      completedWorkflow: true,
+      workflowRevision: workflow.revision,
+      checksHash: "legacy-checks-hash",
+      completionKind: "automatic",
+      checkResults: [],
+      actionReceiptRef: "interaction:root:legacy",
+      occurredAt: fixture.nowMs + 20,
+      createdAt: fixture.nowMs + 20,
+    });
+    return { workflowId: workflow._id, passId };
+  });
+  await expect(
+    t.mutation(
+      internalApi.communityMemberWorkflows.backfillGoalCompletedAutomationsInternal,
+      { communityId: fixture.communityId, dryRun: true },
+    ),
+  ).resolves.toMatchObject({ workflows_updated: 1, milestones_updated: 1 });
+  expect(
+    await t.run(async (ctx) => (await ctx.db.get(workflowId))?.milestones[0].automations),
+  ).toBeNull();
+  await t.mutation(
+    internalApi.communityMemberWorkflows.backfillGoalCompletedAutomationsInternal,
+    { communityId: fixture.communityId, dryRun: false },
+  );
+  expect(
+    await t.run(async (ctx) => (await ctx.db.get(workflowId))?.milestones[0].automations),
+  ).toMatchObject([
+    {
+      trigger: { type: "goal_completed" },
+      actions: [{ type: "move_member", destination: "next_or_complete" }],
+    },
+  ]);
+  await expect(
+    t.mutation(
+      internalApi.communityMemberWorkflows.backfillMilestonePassTransitionsInternal,
+      { communityId: fixture.communityId, dryRun: true },
+    ),
+  ).resolves.toMatchObject({ passes_checked: 1, transitions_created: 1 });
+  await t.mutation(
+    internalApi.communityMemberWorkflows.backfillMilestonePassTransitionsInternal,
+    { communityId: fixture.communityId, dryRun: false },
+  );
+  const records = await t.run(async (ctx) => ({
+    run: await ctx.db.query("communityMemberWorkflowRuns").first(),
+    transition: await ctx.db.query("communityMemberWorkflowTransitions").first(),
+  }));
+  expect(records.run).toMatchObject({
+    triggerReceiptRef: `legacy-milestone-pass:${String(passId)}`,
+    status: "finished",
+  });
+  expect(records.transition).toMatchObject({
+    fromMilestoneKey: first.key,
+    completedWorkflow: true,
+  });
+  await expect(
+    t.mutation(
+      internalApi.communityMemberWorkflows.backfillMilestonePassTransitionsInternal,
+      { communityId: fixture.communityId, dryRun: false },
+    ),
+  ).resolves.toMatchObject({ transitions_created: 0, already_migrated: 1 });
 });
 
 test("judgment checks use bounded evidence and a successful assessment advances exactly once", async () => {
@@ -342,15 +491,16 @@ test("judgment checks use bounded evidence and a successful assessment advances 
   const records = await t.run(async (ctx) => ({
     evaluation: await ctx.db.get(evaluationId),
     state: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
-    passes: await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
   }));
   expect(records.evaluation).toMatchObject({ status: "finished", decision: "complete" });
   expect(records.state).toMatchObject({ currentMilestoneKey: second.milestone.key });
-  expect(records.passes).toHaveLength(1);
-  expect(records.passes[0]).toMatchObject({
-    milestoneKey: first.key,
-    milestoneEvaluationId: evaluationId,
-    completionKind: "judgment",
+  expect(records.runs).toHaveLength(1);
+  expect(records.transitions).toHaveLength(1);
+  expect(records.transitions[0]).toMatchObject({
+    fromMilestoneKey: first.key,
+    goalEvaluationId: evaluationId,
   });
 });
 
@@ -368,15 +518,17 @@ test("passing the final milestone completes the workflow without a dummy termina
   });
   const records = await t.run(async (ctx) => ({
     state: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
-    pass: await ctx.db.query("communityMemberWorkflowMilestonePasses").first(),
+    run: await ctx.db.query("communityMemberWorkflowRuns").first(),
+    transition: await ctx.db.query("communityMemberWorkflowTransitions").first(),
   }));
   expect(records.state).toMatchObject({
     currentMilestoneKey: first.key,
     transitionSeq: 1,
   });
   expect(records.state?.completedAt).toBeTypeOf("number");
-  expect(records.pass).toMatchObject({
-    milestoneKey: first.key,
+  expect(records.run).toMatchObject({ status: "finished" });
+  expect(records.transition).toMatchObject({
+    fromMilestoneKey: first.key,
     completedWorkflow: true,
   });
   await expect(handleRoot(t, rootId)).resolves.toMatchObject({
@@ -384,7 +536,7 @@ test("passing the final milestone completes the workflow without a dummy termina
   });
   expect(
     await t.run(async (ctx) =>
-      await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
+      await ctx.db.query("communityMemberWorkflowTransitions").collect(),
     ),
   ).toHaveLength(1);
 });
@@ -452,10 +604,12 @@ test.each(["not_complete", "uncertain"] as const)(
     );
     const records = await t.run(async (ctx) => ({
       states: await ctx.db.query("communityMemberWorkflowMemberMilestones").collect(),
-      passes: await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
+      runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+      transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
     }));
     expect(records.states).toHaveLength(0);
-    expect(records.passes).toHaveLength(0);
+    expect(records.runs).toHaveLength(0);
+    expect(records.transitions).toHaveLength(0);
   },
 );
 
@@ -505,7 +659,7 @@ test("editing a check makes an in-flight judgment stale", async () => {
       nowMs: fixture.nowMs + 100,
     },
   );
-  expect(result).toEqual({ status: "stale", pass_id: null });
+  expect(result).toEqual({ status: "stale", transition_id: null });
 });
 
 test("the manager-only dossier reuses approved community facts and milestone receipts", async () => {

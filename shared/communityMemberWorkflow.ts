@@ -5,6 +5,8 @@ export const COMMUNITY_MEMBER_WORKFLOW_JUDGMENT_CRITERION_MAX_LENGTH = 2_000;
 export const COMMUNITY_MEMBER_WORKFLOW_MILESTONE_KEY_MAX_LENGTH = 64;
 export const COMMUNITY_MEMBER_WORKFLOW_CHECK_KEY_MAX_LENGTH = 64;
 export const COMMUNITY_MEMBER_WORKFLOW_MAX_CHECKS_PER_MILESTONE = 12;
+export const COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE = 12;
+export const COMMUNITY_MEMBER_WORKFLOW_MAX_ACTIONS_PER_AUTOMATION = 12;
 export const COMMUNITY_MEMBER_WORKFLOW_SOURCE_REF_MAX_LENGTH = 1_024;
 export const COMMUNITY_MEMBER_WORKFLOW_EVIDENCE_REF_MAX_COUNT = 64;
 
@@ -32,10 +34,29 @@ export type CommunityMemberWorkflowCheck =
   | CommunityMemberWorkflowAutomaticCheck
   | CommunityMemberWorkflowJudgmentCheck;
 
+export type CommunityMemberWorkflowGoalCompletedTrigger = {
+  type: "goal_completed";
+};
+
+export type CommunityMemberWorkflowMoveMemberAction = {
+  key: string;
+  type: "move_member";
+  destination: "next_or_complete";
+};
+
+export type CommunityMemberWorkflowAutomation = {
+  key: string;
+  trigger: CommunityMemberWorkflowGoalCompletedTrigger;
+  actions: CommunityMemberWorkflowMoveMemberAction[];
+};
+
 export type CommunityMemberWorkflowMilestone = {
   key: string;
   name: string;
   checks: CommunityMemberWorkflowCheck[];
+  // Optional only during the additive staging migration. New milestones always
+  // persist this explicitly; absence never implies a hidden runtime default.
+  automations?: CommunityMemberWorkflowAutomation[];
 };
 
 export const COMMUNITY_MEMBER_WORKFLOW_EVALUATION_DECISIONS = [
@@ -150,4 +171,18 @@ export function communityMemberWorkflowCheckDefinition(
   return check.type === "automatic"
     ? { key: check.key, type: check.type, signal: check.signal }
     : { key: check.key, type: check.type, criterion: check.criterion };
+}
+
+export function communityMemberWorkflowAutomationDefinition(
+  automation: CommunityMemberWorkflowAutomation,
+): Record<string, unknown> {
+  return {
+    key: automation.key,
+    trigger: { type: automation.trigger.type },
+    actions: automation.actions.map((action) => ({
+      key: action.key,
+      type: action.type,
+      destination: action.destination,
+    })),
+  };
 }
