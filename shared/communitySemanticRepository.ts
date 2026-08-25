@@ -80,9 +80,9 @@ export type SelfProfileSemanticSource = {
   ownedCommunities: SelfProfileCommunitySummary[];
   accessibleCommunities: SelfProfileCommunitySummary[];
   workflowState?: {
-    stageKey: string;
-    stageName: string;
-    milestone?: string | null;
+    milestoneKey: string;
+    milestoneName: string;
+    completedAt?: string | null;
   } | null;
 };
 
@@ -798,23 +798,20 @@ export function renderSelfProfileMarkdown(
     );
   }
   if (source.workflowState) {
-    const stageKey = normalizeInlineText(source.workflowState.stageKey, 64);
-    const stageName = normalizeInlineText(source.workflowState.stageName, 80);
-    if (!stageKey || !stageName) {
+    const milestoneKey = normalizeInlineText(source.workflowState.milestoneKey, 64);
+    const milestoneName = normalizeInlineText(source.workflowState.milestoneName, 80);
+    if (!milestoneKey || !milestoneName) {
       throw new Error("self_profile_workflow_state_invalid");
     }
     lines.push(
       "",
-      "## My success workflow",
+      "## My success path",
       "",
       "This is read-only progress state for the current community lens.",
       "",
-      `- Current stage: ${JSON.stringify(stageName)} (\`${stageKey}\`)`,
+      `- Current milestone: ${JSON.stringify(milestoneName)} (\`${milestoneKey}\`)`,
+      `- Status: ${source.workflowState.completedAt ? "Complete" : "Active"}`,
     );
-    const milestone = normalizeInlineText(source.workflowState.milestone, 2_000);
-    if (milestone) {
-      lines.push(`- Milestone: ${JSON.stringify(milestone)}`);
-    }
   }
   return lines.join("\n");
 }

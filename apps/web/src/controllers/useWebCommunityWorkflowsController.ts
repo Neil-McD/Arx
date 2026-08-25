@@ -4,17 +4,18 @@ import type { AuthSession } from "../auth";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import {
   createCloudCommunityMemberWorkflowLiveClient,
-  createCloudCommunityMemberWorkflowStage,
-  deleteCloudCommunityMemberWorkflowStage,
+  createCloudCommunityMemberWorkflowMilestone,
+  deleteCloudCommunityMemberWorkflowMilestone,
   fetchCloudCommunityMemberWorkflowBoardPage,
   fetchCloudCommunityMemberSuccessDossier,
   subscribeCloudCommunityMemberWorkflowBoardProjection,
-  updateCloudCommunityMemberWorkflowStage,
+  updateCloudCommunityMemberWorkflowMilestone,
   type CloudCommunityMemberWorkflowBoard,
   type CloudCommunityMemberWorkflowBoardPage,
   type CloudCommunityMemberWorkflowMember,
   type CloudCommunityMemberSuccessDossier,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
+import type { CommunityMemberWorkflowCheck } from "../../../../shared/communityMemberWorkflow";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -29,11 +30,11 @@ function workflowErrorMessage(error: unknown): string {
   if (message.includes("revision_conflict")) {
     return "This workflow changed in another session. Reload it and try again.";
   }
-  if (message.includes("stage_has_members")) {
-    return "Move members out of this stage before deleting it.";
+  if (message.includes("milestone_has_members")) {
+    return "Move members out of this milestone before deleting it.";
   }
-  if (message.includes("stage_count_invalid")) {
-    return "A workflow needs at least one stage.";
+  if (message.includes("milestone_count_invalid")) {
+    return "A workflow needs at least one milestone.";
   }
   if (message.includes("community_forbidden")) {
     return "You no longer have permission to manage this workflow.";
@@ -133,6 +134,7 @@ export function useWebCommunityWorkflowsController(params: {
     useState<CloudCommunityMemberSuccessDossier | null>(null);
   const [isMemberDossierLoading, setIsMemberDossierLoading] = useState(false);
   const [memberDossierError, setMemberDossierError] = useState<string | null>(null);
+  const [dossierRefreshNonce, setDossierRefreshNonce] = useState(0);
   const requestGenerationRef = useRef(0);
   const dossierRequestGenerationRef = useRef(0);
   const loadedPageDepthRef = useRef(1);
@@ -247,6 +249,7 @@ export function useWebCommunityWorkflowsController(params: {
           const tokenKey = JSON.stringify(token);
           if (tokenKey === lastTokenKey) return;
           lastTokenKey = tokenKey;
+          setDossierRefreshNonce((value) => value + 1);
           void requestReconciliation().catch(reportFailure);
         },
         onError: reportFailure,
@@ -304,9 +307,10 @@ export function useWebCommunityWorkflowsController(params: {
   const selectedMember = selectedMembershipId
     ? members.find((member) => member.membership_id === selectedMembershipId)
     : null;
-  const selectedMemberStageKey = selectedMember?.current_stage_key ?? null;
-  const selectedMemberStageEnteredAt =
-    selectedMember?.current_stage_entered_at ?? null;
+  const selectedMemberMilestoneKey = selectedMember?.current_milestone_key ?? null;
+  const selectedMemberMilestoneEnteredAt =
+    selectedMember?.current_milestone_entered_at ?? null;
+  const selectedMemberCompletedAt = selectedMember?.workflow_completed_at ?? null;
 
   useEffect(() => {
     if (
@@ -368,12 +372,14 @@ export function useWebCommunityWorkflowsController(params: {
     params.communityTab,
     params.ensureSession,
     params.session,
-    selectedMemberStageEnteredAt,
-    selectedMemberStageKey,
+    dossierRefreshNonce,
+    selectedMemberCompletedAt,
+    selectedMemberMilestoneEnteredAt,
+    selectedMemberMilestoneKey,
     selectedMembershipId,
   ]);
 
-  const mutateStage = useCallback(
+  const mutateMilestone = useCallback(
     async (
       source: string,
       run: (session: AuthSession, communityId: string, revision: number) => Promise<unknown>,
@@ -432,37 +438,37 @@ export function useWebCommunityWorkflowsController(params: {
       setMemberDossierError(null);
       setIsMemberDossierLoading(false);
     },
-    createStage: (name: string) =>
-      mutateStage("community_workflows_create_stage", (session, communityId, revision) =>
-        createCloudCommunityMemberWorkflowStage({
+    createMilestone: (name: string) =>
+      mutateMilestone("community_workflows_create_milestone", (session, communityId, revision) =>
+        createCloudCommunityMemberWorkflowMilestone({
           session,
           communityId,
           expectedRevision: revision,
           name,
         }),
       ),
-    updateStage: (
-      stageKey: string,
+    updateMilestone: (
+      milestoneKey: string,
       name: string,
-      milestone: string | null,
+      checks: CommunityMemberWorkflowCheck[],
     ) =>
-      mutateStage("community_workflows_update_stage", (session, communityId, revision) =>
-        updateCloudCommunityMemberWorkflowStage({
+      mutateMilestone("community_workflows_update_milestone", (session, communityId, revision) =>
+        updateCloudCommunityMemberWorkflowMilestone({
           session,
           communityId,
           expectedRevision: revision,
-          stageKey,
+          milestoneKey,
           name,
-          milestone,
+          checks,
         }),
       ),
-    deleteStage: (stageKey: string) =>
-      mutateStage("community_workflows_delete_stage", (session, communityId, revision) =>
-        deleteCloudCommunityMemberWorkflowStage({
+    deleteMilestone: (milestoneKey: string) =>
+      mutateMilestone("community_workflows_delete_milestone", (session, communityId, revision) =>
+        deleteCloudCommunityMemberWorkflowMilestone({
           session,
           communityId,
           expectedRevision: revision,
-          stageKey,
+          milestoneKey,
         }),
       ),
     clearActionError: () => setActionError(null),

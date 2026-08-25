@@ -1154,10 +1154,24 @@ export default defineSchema({
 
   communityMemberWorkflows: defineTable({
     communityId: v.id("communities"),
-    stages: v.array(v.object({
+    milestones: v.array(v.object({
       key: v.string(),
       name: v.string(),
-      milestone: v.optional(v.string()),
+      checks: v.array(v.union(
+        v.object({
+          key: v.string(),
+          type: v.literal("automatic"),
+          signal: v.union(
+            v.literal("channel_posted"),
+            v.literal("channel_replied"),
+          ),
+        }),
+        v.object({
+          key: v.string(),
+          type: v.literal("judgment"),
+          criterion: v.string(),
+        }),
+      )),
     })),
     revision: v.number(),
     createdByUserId: v.id("users"),
@@ -1166,35 +1180,50 @@ export default defineSchema({
     updatedAt: v.number(),
   }).index("by_community", ["communityId"]),
 
-  communityMemberWorkflowMemberStages: defineTable({
+  communityMemberWorkflowMemberMilestones: defineTable({
     workflowId: v.id("communityMemberWorkflows"),
     membershipId: v.id("communityMemberships"),
-    currentStageKey: v.string(),
-    stageEnteredAt: v.number(),
+    currentMilestoneKey: v.string(),
+    milestoneEnteredAt: v.number(),
     transitionSeq: v.number(),
+    completedAt: v.optional(v.number()),
     createdAt: v.number(),
     updatedAt: v.number(),
   })
     .index("by_workflow", ["workflowId"])
     .index("by_workflow_membership", ["workflowId", "membershipId"])
-    .index("by_workflow_stage", ["workflowId", "currentStageKey"])
+    .index("by_workflow_milestone", ["workflowId", "currentMilestoneKey"])
     .index("by_membership", ["membershipId"]),
 
   communityMemberWorkflowMilestoneEvaluations: defineTable({
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
     membershipId: v.id("communityMemberships"),
-    stageKey: v.string(),
+    milestoneKey: v.string(),
     workflowRevision: v.number(),
-    stageEnteredAt: v.number(),
-    milestoneText: v.string(),
-    milestoneHash: v.string(),
-    wakeKind: v.union(
-      v.literal("in_app"),
-      v.literal("time"),
-      v.literal("external"),
+    milestoneEnteredAt: v.number(),
+    milestoneName: v.string(),
+    checksSnapshot: v.array(v.union(
+      v.object({
+        key: v.string(),
+        type: v.literal("automatic"),
+        signal: v.union(
+          v.literal("channel_posted"),
+          v.literal("channel_replied"),
+        ),
+      }),
+      v.object({
+        key: v.string(),
+        type: v.literal("judgment"),
+        criterion: v.string(),
+      }),
+    )),
+    checksHash: v.string(),
+    actionKind: v.union(
+      v.literal("channel_posted"),
+      v.literal("channel_replied"),
     ),
-    wakeReceiptRef: v.string(),
+    actionReceiptRef: v.string(),
     evidenceWindowStartAt: v.number(),
     evidenceThroughAt: v.number(),
     evidenceRefs: v.array(v.string()),
@@ -1214,10 +1243,23 @@ export default defineSchema({
       v.literal("deterministic"),
       v.literal("model"),
     )),
+    checkResults: v.optional(v.array(v.object({
+      checkKey: v.string(),
+      decision: v.union(
+        v.literal("complete"),
+        v.literal("not_complete"),
+        v.literal("uncertain"),
+      ),
+      evidenceRefs: v.array(v.string()),
+      explanation: v.string(),
+      missingEvidence: v.array(v.string()),
+    }))),
     explanation: v.optional(v.string()),
     missingEvidence: v.optional(v.array(v.string())),
     claimToken: v.optional(v.string()),
     leaseExpiresAt: v.optional(v.number()),
+    claimedEvidenceThroughAt: v.optional(v.number()),
+    rerunRequested: v.optional(v.boolean()),
     availableAt: v.number(),
     attempt: v.number(),
     errorCode: v.optional(v.string()),
@@ -1225,27 +1267,40 @@ export default defineSchema({
     updatedAt: v.number(),
     finishedAt: v.optional(v.number()),
   })
-    .index("by_workflow_membership_wakeReceipt", [
+    .index("by_workflow_membership_actionReceipt", [
       "workflowId",
       "membershipId",
-      "wakeReceiptRef",
+      "actionReceiptRef",
     ])
     .index("by_workflow_membership_createdAt", [
       "workflowId",
       "membershipId",
       "createdAt",
-    ]),
+    ])
+    .index("by_workflow_updatedAt", ["workflowId", "updatedAt"]),
 
-  communityMemberWorkflowTransitions: defineTable({
+  communityMemberWorkflowMilestonePasses: defineTable({
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
     membershipId: v.id("communityMemberships"),
     seq: v.number(),
-    fromStageKey: v.string(),
-    toStageKey: v.string(),
-    milestoneEvaluationId: v.id("communityMemberWorkflowMilestoneEvaluations"),
+    milestoneKey: v.string(),
+    nextMilestoneKey: v.optional(v.string()),
+    completedWorkflow: v.boolean(),
+    milestoneEvaluationId: v.optional(v.id("communityMemberWorkflowMilestoneEvaluations")),
     workflowRevision: v.number(),
-    milestoneHash: v.string(),
+    checksHash: v.string(),
+    completionKind: v.union(
+      v.literal("automatic"),
+      v.literal("judgment"),
+      v.literal("composite"),
+    ),
+    checkResults: v.array(v.object({
+      checkKey: v.string(),
+      type: v.union(v.literal("automatic"), v.literal("judgment")),
+      evidenceRefs: v.array(v.string()),
+    })),
+    actionReceiptRef: v.string(),
     occurredAt: v.number(),
     createdAt: v.number(),
   })

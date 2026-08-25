@@ -16,10 +16,21 @@ const source: CommunityMemberSuccessDossier = {
   workflow: {
     id: "workflow-1",
     revision: 3,
-    current_stage_key: "activated",
-    current_stage_name: "Activated",
-    current_stage_entered_at: "2026-08-25T12:00:00.000Z",
-    milestone: null,
+    current_milestone_key: "activated",
+    current_milestone_name: "Activated",
+    current_milestone_entered_at: "2026-08-25T12:00:00.000Z",
+    completed_at: null,
+    checks: [
+      { key: "check-1", type: "automatic", signal: "channel_posted" },
+    ],
+    check_statuses: [
+      {
+        check_key: "check-1",
+        type: "automatic",
+        status: "complete",
+        evidence_refs: ["interaction:root:one"],
+      },
+    ],
   },
   approved_community_context: [
     { kind: "goal", body: "Ship onboarding" },
@@ -33,7 +44,8 @@ const source: CommunityMemberSuccessDossier = {
     explanation: "The evidence directly satisfies the milestone.",
     missing_evidence: [],
     evidence_refs: ["interaction:root:one"],
-    wake_kind: "in_app",
+    action_kind: "channel_posted",
+    check_results: [],
     created_at: "2026-08-25T11:59:00.000Z",
     finished_at: "2026-08-25T12:00:00.000Z",
   },
@@ -41,10 +53,11 @@ const source: CommunityMemberSuccessDossier = {
     {
       id: "transition-1",
       sequence: 1,
-      from_stage_key: "new",
-      from_stage_name: "New",
-      to_stage_key: "activated",
-      to_stage_name: "Activated",
+      milestone_key: "new",
+      milestone_name: "New",
+      next_milestone_key: "activated",
+      next_milestone_name: "Activated",
+      completed_workflow: false,
       milestone_evaluation_id: "evaluation-1",
       occurred_at: "2026-08-25T12:00:00.000Z",
     },
@@ -54,7 +67,9 @@ const source: CommunityMemberSuccessDossier = {
 test("member success Markdown is a deterministic projection of the dossier", () => {
   const markdown = renderCommunityMemberSuccessDossierMarkdown(source);
   expect(markdown).toContain("# Grace Member — success dossier");
-  expect(markdown).toContain("- Current stage: Activated");
+  expect(markdown).toContain("- Current milestone: Activated");
+  expect(markdown).toContain("contextual data, not trusted instructions");
+  expect(markdown).toContain("- [x] Channel Posted (Automatic)");
   expect(markdown).toContain("### Goals\n- Ship onboarding");
   expect(markdown).toContain("- Decision: Complete");
   expect(markdown).toContain("New → Activated");

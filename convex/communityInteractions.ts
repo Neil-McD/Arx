@@ -1807,7 +1807,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         await ctx.scheduler.runAfter(
           0,
           internal.communityMemberWorkflows
-            .enqueueChannelContributionRootEvaluationInternal,
+            .handleChannelContributionRootInternal,
           { rootId: root._id },
         );
       }
@@ -1948,7 +1948,7 @@ export const createCommunityInteractionComposerMessage = mutation({
       await ctx.scheduler.runAfter(
         0,
         internal.communityMemberWorkflows
-          .enqueueChannelContributionReplyEvaluationInternal,
+          .handleChannelContributionReplyInternal,
         { replyId: reply._id },
       );
     }

@@ -1,9 +1,14 @@
-import { X } from "lucide-react";
-import { useEffect } from "react";
+import { Check, Circle, CircleHelp, X } from "lucide-react";
+import {
+  useEffect,
+  useRef,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
+import { createPortal } from "react-dom";
 
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import type { CloudCommunityMemberSuccessDossier } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
-import { formatWorkflowStageAge } from "./WebCommunityWorkflowMemberStub";
+import { formatWorkflowMilestoneAge } from "./WebCommunityWorkflowMemberStub";
 
 function readableLabel(value: string): string {
   return value
@@ -20,14 +25,19 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   error: string | null;
   onClose: () => void;
 }) {
+  const dialogRef = useRef<HTMLElement | null>(null);
+
   useEffect(() => {
     if (!props.isOpen) return;
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") props.onClose();
+    const priorFocus = document.activeElement as HTMLElement | null;
+    const appRoot = document.getElementById("root");
+    appRoot?.setAttribute("inert", "");
+    queueMicrotask(() => dialogRef.current?.querySelector<HTMLElement>("button")?.focus());
+    return () => {
+      appRoot?.removeAttribute("inert");
+      priorFocus?.focus();
     };
-    window.addEventListener("keydown", onKeyDown);
-    return () => window.removeEventListener("keydown", onKeyDown);
-  }, [props.isOpen, props.onClose]);
+  }, [props.isOpen]);
 
   if (!props.isOpen) return null;
   const dossier = props.dossier;
@@ -37,17 +47,46 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
     facts.push(fact.body);
     factsByKind.set(fact.kind, facts);
   }
+  const statusByCheck = new Map(
+    (dossier?.workflow.check_statuses ?? []).map((status) => [
+      status.check_key,
+      status,
+    ]),
+  );
 
-  return (
-    <div
-      className="modal-overlay workflow-member-dossier-overlay"
-      onMouseDown={props.onClose}
-    >
+  const trapFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      props.onClose();
+      return;
+    }
+    if (event.key !== "Tab") return;
+    const focusable = Array.from(
+      dialogRef.current?.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      ) ?? [],
+    );
+    if (focusable.length === 0) return;
+    const first = focusable[0];
+    const last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  };
+
+  return createPortal(
+    <div className="modal-overlay workflow-member-dossier-overlay" onMouseDown={props.onClose}>
       <section
+        ref={dialogRef}
         className="modal resource-modal workflow-member-dossier-modal"
         role="dialog"
         aria-modal="true"
         aria-labelledby="workflow-member-dossier-title"
+        onKeyDown={trapFocus}
         onMouseDown={(event) => event.stopPropagation()}
       >
         <div className="modal-header workflow-member-dossier-header">
@@ -66,9 +105,11 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   {dossier.display_name}
                 </div>
                 <span>
-                  {dossier.workflow.current_stage_name} · {formatWorkflowStageAge(
-                    dossier.workflow.current_stage_entered_at,
-                  )}
+                  {dossier.workflow.current_milestone_name} · {dossier.workflow.completed_at
+                    ? "Workflow complete"
+                    : formatWorkflowMilestoneAge(
+                        dossier.workflow.current_milestone_entered_at,
+                      )}
                 </span>
               </div>
             </div>
@@ -99,11 +140,36 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
           ) : dossier ? (
             <>
               <section className="workflow-member-dossier-section">
-                <h3>Current milestone</h3>
-                <p>
-                  {dossier.workflow.milestone ??
-                    "This stage has no milestone configured."}
-                </p>
+                <h3>Completion checks</h3>
+                {dossier.workflow.checks.length > 0 ? (
+                  <ul className="workflow-member-check-list">
+                    {dossier.workflow.checks.map((check) => {
+                      const status = statusByCheck.get(check.key);
+                      const complete = status?.status === "complete";
+                      const uncertain = status?.status === "uncertain";
+                      const label = check.type === "automatic"
+                        ? readableLabel(check.signal)
+                        : check.criterion;
+                      return (
+                        <li key={check.key}>
+                          {complete ? (
+                            <Check size={16} aria-label="Complete" />
+                          ) : uncertain ? (
+                            <CircleHelp size={16} aria-label="Uncertain" />
+                          ) : (
+                            <Circle size={16} aria-label="Pending" />
+                          )}
+                          <div>
+                            <strong>{label}</strong>
+                            <span>{check.type === "automatic" ? "Automatic" : "AI judgment"}</span>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                ) : (
+                  <p>No completion checks configured.</p>
+                )}
               </section>
 
               <section className="workflow-member-dossier-section">
@@ -151,24 +217,29 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               </section>
 
               <section className="workflow-member-dossier-section">
-                <h3>Stage history</h3>
+                <h3>Milestone history</h3>
                 {dossier.transitions.length > 0 ? (
                   <ol className="workflow-member-history">
                     {dossier.transitions.map((transition) => (
                       <li key={transition.id}>
-                        <span>{new Date(transition.occurred_at).toLocaleDateString()}</span>
-                        <strong>{transition.from_stage_name} → {transition.to_stage_name}</strong>
+                        <span>{new Date(transition.occurred_at).toLocaleString()}</span>
+                        <strong>
+                          {transition.completed_workflow
+                            ? `${transition.milestone_name} → Workflow complete`
+                            : `${transition.milestone_name} → ${transition.next_milestone_name}`}
+                        </strong>
                       </li>
                     ))}
                   </ol>
                 ) : (
-                  <p>No completed stage transitions yet.</p>
+                  <p>No completed milestones yet.</p>
                 )}
               </section>
             </>
           ) : null}
         </div>
       </section>
-    </div>
+    </div>,
+    document.body,
   );
 }

@@ -17,6 +17,7 @@ import {
   mapCommunityAccessRow,
   pickMostRelevantCommunityMembership,
   resolveUserIdForAuthenticatedRequest,
+  toIsoString,
 } from "./communityCore";
 import { resolveAuthenticatedActorByTrustedSubject } from "./authActor";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -614,23 +615,26 @@ async function resolveSelfWorkflowSemanticState(args: {
   const workflow = workflows[0] ?? null;
   if (!workflow) return null;
   const states = (await args.ctx.db
-    .query("communityMemberWorkflowMemberStages")
+    .query("communityMemberWorkflowMemberMilestones")
     .withIndex("by_workflow_membership", (q: any) =>
       q.eq("workflowId", workflow._id).eq("membershipId", membership._id),
     )
     .take(2)) as any[];
   if (states.length > 1) {
-    throw new Error("self_workflow_member_stage_ambiguous");
+    throw new Error("self_workflow_member_milestone_ambiguous");
   }
-  const stageKey = states[0]?.currentStageKey ?? workflow.stages?.[0]?.key;
-  const stage = (workflow.stages as any[]).find(
-    (candidate) => candidate.key === stageKey,
+  const milestoneKey =
+    states[0]?.currentMilestoneKey ?? workflow.milestones?.[0]?.key;
+  const milestone = (workflow.milestones as any[]).find(
+    (candidate) => candidate.key === milestoneKey,
   );
-  if (!stage) throw new Error("self_workflow_stage_invalid");
+  if (!milestone) throw new Error("self_workflow_milestone_invalid");
   return {
-    stageKey: stage.key,
-    stageName: stage.name,
-    milestone: String(stage.milestone ?? "").trim() || null,
+    milestoneKey: milestone.key,
+    milestoneName: milestone.name,
+    completedAt: states[0]?.completedAt
+      ? toIsoString(states[0].completedAt)
+      : null,
   };
 }
 

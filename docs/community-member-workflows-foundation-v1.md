@@ -1,185 +1,158 @@
-# Community Member Workflows Foundation v1
+# Community Member Milestone Workflows v1
 
-Status: staging foundation
+Status: staging completion kernel
 
 ## Outcome
 
 Workflows is the builder-only operating surface for a community's member
-success path. A builder sees an ordered horizontal set of stages, edits each
-stage in place, and adds another stage from the terminal plus button.
+success path. The path is one ordered set of milestones. Every active member is
+pursuing exactly one milestone until its completion checks pass.
 
-The builder defines only two things: a stage name and, for every non-terminal
-stage, a plain-language milestone. The system observes canonical product
-evidence and evaluates whether that milestone is actually complete. This is a
-success path, not a generic automation builder.
+A milestone contains only:
 
-## Irreducible model
+- an opaque server-owned key
+- a builder-authored name
+- zero or more all-of completion checks
 
-The runtime has five canonical parts:
+Checks are either automatic product-state checks or bounded AI judgments. A
+milestone with no checks is visible but cannot complete. Passing the final
+milestone completes the workflow; there is no dummy terminal position.
 
-1. ordered stage definitions
-2. one current stage per active member, with the first stage implicit
-3. canonical evidence already owned by Polynet or an authorized integration
-4. durable milestone evaluations
-5. append-only transition receipts
+## Irreducible runtime
 
-There is no separate builder-facing trigger, event, rule, condition, objective,
-or completion-definition model. A new piece of evidence is only a wake-up cue.
-It never advances a member directly.
+The runtime has four canonical persistence lanes:
 
-## Workflow definition
+1. `communityMemberWorkflows`: ordered milestone definitions and revision
+2. `communityMemberWorkflowMemberMilestones`: one explicit member projection
+   after the first advancement or final completion
+3. `communityMemberWorkflowMilestoneEvaluations`: leased judgment work and
+   durable results
+4. `communityMemberWorkflowMilestonePasses`: append-only successful completion,
+   advancement, and final-completion receipts
 
-There is at most one workflow definition per community.
+There is no separate builder-facing stage, trigger, event, action, condition,
+objective, pass policy, enrollment, evidence mirror, or transition table.
 
-- `communityId`
-- ordered stages with opaque server identities and names
-- an optional natural-language `milestone` on each non-terminal stage
-- optimistic `revision`
-- creator/updater and timestamps
+## Completion checks
 
-The builder API exposes only append, exact stage update, and delete operations.
-Callers cannot submit stage identities or replace the whole definition. Existing
-stage keys remain stable; every new key is generated once by the server. There
-is no draft, publish, activation, version migration, reorder, or enrollment
-backfill state.
+V1 supports exactly two automatic checks backed by canonical product evidence:
 
-The terminal stage cannot have a milestone because there is no next stage to
-enter.
+- `channel_posted`: the member created an eligible human channel root after
+  entering the milestone
+- `channel_replied`: the member created an eligible human channel reply after
+  entering the milestone
 
-## Member stage
+V1 also supports judgment checks containing a bounded plain-language criterion.
+All configured checks must pass. There is no OR, threshold, nesting, or generic
+predicate language.
 
-Every active community membership is conceptually in the workflow's first
-stage unless a `communityMemberWorkflowMemberStages` row records a different
-stage. Membership remains authoritative for identity and access.
+Automatic checks read existing canonical interaction records. They do not
+create an event mirror. Judgment checks use the same eligible member evidence
+window and the canonical Polynet inference funding/runtime path.
 
-Stored state contains only:
+## Member-action routing
 
-- workflow and membership references
-- current stage key and stage-entry time
-- transition sequence
+After an eligible human channel contribution commits, Polynet routes the
+canonical receipt through the member's current milestone:
 
-It does not copy user identity, membership status, activation sequence, or a
-workflow version.
+1. reject inactive membership, wrong scope, private/system/agent content,
+   pre-milestone activity, completed workflows, and unconfigured milestones
+2. resolve every automatic check from canonical evidence
+3. stop without provider work if an automatic prerequisite is missing
+4. record a milestone pass immediately when a purely automatic milestone is
+   satisfied
+5. otherwise admit or coalesce one judgment evaluation
 
-## Evidence wake
+The scheduled post-commit resolver protects chat availability. It is not an
+agent wake, autonomous loop, or progression authority of its own.
 
-An eligible canonical event may enqueue an evaluation of the member's current
-milestone. The wake receipt is deduplicated per workflow and membership. It
-captures the current workflow revision, stage, stage-entry time, milestone
-text/hash, and evidence window before scheduling work.
+## Judgment evaluation
 
-The first implemented wake is a new canonical human root or reply in a
-community channel. Personal-agent, community-agent, system, private, hidden,
-deleted, owner-without-membership, inactive-membership, unconfigured, and
-terminal-stage cases do not enqueue work.
+One evaluation snapshots:
 
-Root wakes use the canonical `interaction:root:{id}` evidence reference and
-reply wakes use `interaction:reply:{id}`. The wake runs after the interaction
-commits, so evaluation failure cannot make posting unavailable. It is scheduled
-before community-agent intake so downstream agent work can observe a completed
-transition when timing permits, without making agent intake depend on it.
+- workflow revision
+- milestone identity, name, and entry time
+- every completion-check definition and the combined definition hash
+- the triggering member-action receipt
+- a bounded evidence window
+- one result per judgment check
 
-Future time and external wakes must enter through this same evaluation
-boundary. They must reference canonical, authorized receipts rather than invent
-a second workflow event store.
+The evaluator receives no tools. Builder criteria and member evidence are
+explicitly untrusted contextual data. Output is strict JSON; every result must
+match one supplied check key and every citation must match supplied evidence.
+`complete` requires at least one cited evidence reference.
 
-## Milestone evaluation
+Concurrent contributions coalesce into one active evaluation. A contribution
+arriving during provider work requests one serialized rerun over the widened
+evidence boundary rather than starting a parallel model call.
 
-`communityMemberWorkflowMilestoneEvaluations` is the durable work and decision
-receipt. It records:
+## Completion authority
 
-- workflow, membership, stage, revision, and milestone snapshot/hash
-- wake kind and canonical wake receipt
-- bounded evidence window and cited evidence references
-- queued/running/finished/failed/stale lifecycle with lease and attempt count
-- `complete`, `not_complete`, or `uncertain` decision
-- deterministic or model evaluator kind
-- explanation, missing evidence, and timestamps
+Only the canonical completion reducer may progress a member. Before writing a
+pass it rechecks:
 
-The first evaluator reads only eligible canonical human channel contributions
-from the member inside the current stage window. It sends a bounded evidence
-set to the canonical Polynet runtime harness with no tools. The output contract
-is strict JSON. Cited references must be a subset of the supplied evidence, and
-`complete` requires at least one cited evidence item.
-
-No evidence yields a deterministic `uncertain` result without provider spend.
-Provider work uses the community-owner inference funding path and a unique
-receipt for each claimed attempt. Failed work retries at most three times.
-
-## Transition authority
-
-Only a finished `complete` evaluation may move a member. Finalization rechecks:
-
-- active membership
+- active membership in the same community
 - workflow identity and revision
-- current stage and stage-entry time
-- milestone hash
-- existence of the immediate next stage
+- current milestone and entry time
+- current completion-check hash
+- eligible cited evidence
+- every automatic and judgment result
 
-Any changed authority makes the evaluation stale. `not_complete` and
-`uncertain` are durable decisions and do not move the member. A successful
-evaluation advances exactly one stage in the same transaction and writes one
-append-only `communityMemberWorkflowTransitions` receipt referencing the
-evaluation, workflow revision, and milestone hash.
+A successful pass atomically updates member progress and writes one immutable
+`communityMemberWorkflowMilestonePasses` receipt. The receipt contains the
+completion method, check results, evidence references, source action, current
+revision, next milestone when present, and whether the workflow completed.
 
-There is no public or generic transition mutation, no direct event-to-stage
-move, and no arbitrary target stage.
-
-## Authority and privacy
-
-- Only a community owner/admin/moderator may read or edit the builder board.
-- Evaluation and transition require an active membership in the same community.
-- A stage containing stored member state cannot be deleted.
-- The implicit first stage cannot be deleted while active members exist.
-- Revision, claim, definition, and receipt conflicts fail closed.
-- `/self.md` may expose only the authenticated member's current stage and
-  milestone under the selected authorized community lens.
-- Workflow state is never exposed through another member's semantic profile.
+Retries and replays are idempotent. Changed authority makes model work stale.
+No public mutation may select an arbitrary member position.
 
 ## Builder surface
 
 The page intentionally contains only:
 
 - `Workflows` header
-- horizontal stage columns
-- compact member stubs with canonical avatar, name, and time in the current
-  stage
-- edit button on a configured stage
-- setup button on an unnamed first stage
-- terminal plus button for another stage
-- name-only creation modal
-- a natural-language `Move to the next stage when` field on persisted
-  non-terminal stages
-- cursor-based member loading when the board has another page
+- horizontal milestone columns
+- canonical member profile stubs and time in the milestone
+- one edit button per configured milestone
+- one setup button for the initial blank milestone
+- one terminal plus button to append a milestone
+- a name-only creation modal
+- a compact `Complete when` check editor
+- a manager-only read-only member success dossier
 
-While the page is open, one manager-authorized realtime projection watches
-only the workflow revision, active-member count, and latest transition receipt.
-A token change invalidates the visible board and rebuilds every member page the
-builder has already loaded. Concurrent invalidations are coalesced into one
-refresh plus at most one follow-up refresh, and changing community scope
-discards stale results. This is event-driven; Workflows has no polling loop.
+The board subscribes to workflow revision, active-member count, latest pass,
+and latest evaluation state. It reconciles without polling and refreshes an
+open dossier when evaluation state changes.
 
-There is no separate editing canvas, trigger selector, workflow details form,
-start/publish button, evidence form, completion form, enrollment inspector, or
-manual status machine.
+The dossier projects canonical membership, approved community-scoped member
+facts, current milestone checks, the latest judgment, and bounded immutable
+milestone history. Its deterministic Markdown rendering labels member and
+workflow content as contextual data, not trusted instructions. It is not yet
+mounted as an agent-readable semantic document.
 
-Selecting a member card opens one read-only success dossier. The dossier is a
-manager-authorized projection over canonical membership, approved
-community-scoped member facts, current workflow state, the latest milestone
-evaluation, and bounded immutable transition history. The same projection has
-one deterministic Markdown rendering for downstream agent context. It does not copy personal
-memory, create a second ontology store, or expose pending, agent-internal,
-platform-wide, or other-community facts to the builder.
+## Authority and privacy
+
+- Only owner/admin/moderator roles may read or edit Workflows.
+- Membership remains identity and access authority.
+- Builders see only approved facts scoped to their community.
+- Personal memory and private agent conversations are not workflow evidence.
+- `/self.md` exposes only the authenticated member's current milestone and
+  completion status under the selected authorized community lens.
+- Definition, revision, claim, scope, and receipt conflicts fail closed.
 
 ## Deferred
 
-The foundation does not yet implement:
+This kernel does not implement:
 
-1. scheduled/time evaluation wakes
-2. external integration evidence and wakes
-3. proactive agent actions or autonomous loops inside a stage
-4. manual review/override controls
+1. durable agent goals, tasks, or intervention loops
+2. scheduled follow-up or inactivity wakes
+3. coach assignment or manual review
+4. external evidence adapters
+5. call attendance, resource uploads, or generic webhooks
+6. configurable completion policies
+7. population-level success analytics
 
-Those slices must reuse the same evidence, evaluation, transition, runtime,
-funding, membership, and receipt authorities. They must not recreate retired
-workflow versions, enrollments, evidence mirrors, or a generic automation DSL.
+Those slices must reuse the milestone, evidence, evaluation, funding,
+membership, pass-receipt, and runtime authorities defined here. They must not
+reintroduce stages, a generic automation DSL, or direct event-to-position
+mutations outside the completion reducer.

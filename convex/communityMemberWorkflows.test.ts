@@ -107,35 +107,10 @@ async function createFixture(t: ReturnType<typeof convexTest>) {
   });
 }
 
-async function createWorkflow(
-  asOwner: ReturnType<ReturnType<typeof convexTest>["withIdentity"]>,
-  communityId: any,
-) {
-  const first = await asOwner.mutation(
-    api.communityMemberWorkflows.createBuilderWorkflowStage,
-    { communityId, expectedRevision: 0, name: "New" },
-  );
-  const second = await asOwner.mutation(
-    api.communityMemberWorkflows.createBuilderWorkflowStage,
-    { communityId, expectedRevision: 1, name: "Activated" },
-  );
-  const updated = await asOwner.mutation(
-    api.communityMemberWorkflows.updateBuilderWorkflowStage,
-    {
-      communityId,
-      expectedRevision: 2,
-      stageKey: first.stage.key,
-      name: first.stage.name,
-      milestone: "The member has shared a concrete implementation and its result.",
-    },
-  );
-  return { first: updated.stage, second, revision: updated.revision };
-}
-
 async function insertRoot(
   t: ReturnType<typeof convexTest>,
   fixture: Awaited<ReturnType<typeof createFixture>>,
-  idempotencyKey: string,
+  suffix: string,
   text: string,
   offsetMs = 10,
 ) {
@@ -151,111 +126,189 @@ async function insertRoot(
       contentSummary: text,
       replyCount: 0,
       reactionSummary: [],
-      idempotencyKey,
+      idempotencyKey: `workflow-root-${suffix}`,
       createdAt: fixture.nowMs + offsetMs,
       updatedAt: fixture.nowMs + offsetMs,
     }),
   );
 }
 
-async function enqueueRoot(t: ReturnType<typeof convexTest>, rootId: any) {
+async function insertReply(
+  t: ReturnType<typeof convexTest>,
+  fixture: Awaited<ReturnType<typeof createFixture>>,
+  rootId: any,
+  suffix: string,
+  offsetMs = 20,
+) {
+  return await t.run(async (ctx) =>
+    await ctx.db.insert("communityInteractionReplies", {
+      communityId: fixture.communityId,
+      channelId: fixture.channelId,
+      rootId,
+      seq: 1,
+      actorType: "human",
+      actorUserId: fixture.memberId,
+      status: "live",
+      visibilityScope: "community",
+      contentSummary: "I followed up with the measured result.",
+      reactionSummary: [],
+      idempotencyKey: `workflow-reply-${suffix}`,
+      createdAt: fixture.nowMs + offsetMs,
+      updatedAt: fixture.nowMs + offsetMs,
+    }),
+  );
+}
+
+async function handleRoot(t: ReturnType<typeof convexTest>, rootId: any) {
   return await t.mutation(
-    internalApi.communityMemberWorkflows
-      .enqueueChannelContributionRootEvaluationInternal,
+    internalApi.communityMemberWorkflows.handleChannelContributionRootInternal,
     { rootId },
   );
 }
 
-test("stage definitions are builder-owned names plus natural-language milestones", async () => {
+async function handleReply(t: ReturnType<typeof convexTest>, replyId: any) {
+  return await t.mutation(
+    internalApi.communityMemberWorkflows.handleChannelContributionReplyInternal,
+    { replyId },
+  );
+}
+
+async function createMilestones(
+  asOwner: ReturnType<ReturnType<typeof convexTest>["withIdentity"]>,
+  communityId: any,
+  firstChecks: Array<any>,
+) {
+  const first = await asOwner.mutation(
+    api.communityMemberWorkflows.createBuilderWorkflowMilestone,
+    { communityId, expectedRevision: 0, name: "Activated" },
+  );
+  const configured = await asOwner.mutation(
+    api.communityMemberWorkflows.updateBuilderWorkflowMilestone,
+    {
+      communityId,
+      expectedRevision: 1,
+      milestoneKey: first.milestone.key,
+      name: first.milestone.name,
+      checks: firstChecks,
+    },
+  );
+  return { first: configured.milestone, revision: configured.revision };
+}
+
+test("milestones are builder-owned names with all-of automatic or judgment checks", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
   const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
 
   await expect(
-    asMember.mutation(api.communityMemberWorkflows.createBuilderWorkflowStage, {
+    asMember.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone, {
       communityId: fixture.communityId,
       expectedRevision: 0,
-      name: "New",
+      name: "Activated",
     }),
   ).rejects.toThrow("community_forbidden");
 
-  const { first, second } = await createWorkflow(asOwner, fixture.communityId);
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    { type: "automatic", signal: "channel_posted" },
+    {
+      type: "judgment",
+      criterion: "The member has demonstrated a concrete implementation result.",
+    },
+  ]);
   expect(first).toMatchObject({
-    name: "New",
-    milestone: "The member has shared a concrete implementation and its result.",
+    name: "Activated",
+    checks: [
+      { type: "automatic", signal: "channel_posted" },
+      {
+        type: "judgment",
+        criterion: "The member has demonstrated a concrete implementation result.",
+      },
+    ],
   });
-  expect(second.stage).toMatchObject({ name: "Activated" });
-
-  await expect(
-    asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
-      communityId: fixture.communityId,
-      expectedRevision: 3,
-      stageKey: second.stage.key,
-      name: second.stage.name,
-      milestone: "This terminal milestone cannot execute.",
-    }),
-  ).rejects.toThrow("community_member_workflow_terminal_stage_milestone_invalid");
-
   const board = await asOwner.query(
     api.communityMemberWorkflows.getBuilderWorkflowBoardPage,
     { communityId: fixture.communityId, cursor: null, pageSize: 50 },
   );
   expect(board).toMatchObject({
-    workflow: { revision: 3, stages: [first, second.stage] },
+    workflow: { revision: 2, milestones: [first] },
     page: [
       {
         membership_id: String(fixture.membershipId),
-        current_stage_key: first.key,
-        display_name: "Grace Member",
+        current_milestone_key: first.key,
+        workflow_completed_at: null,
       },
     ],
-    totalCount: 1,
   });
 });
 
-test("a canonical contribution queues evaluation but cannot directly move a member", async () => {
+test("automatic checks accumulate from canonical member actions and advance without an evaluation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const { first } = await createWorkflow(asOwner, fixture.communityId);
-  const rootId = await insertRoot(
-    t,
-    fixture,
-    "evidence-root",
-    "I shipped the implementation and measured a 12 percent improvement.",
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    { type: "automatic", signal: "channel_posted" },
+    { type: "automatic", signal: "channel_replied" },
+  ]);
+  const second = await asOwner.mutation(
+    api.communityMemberWorkflows.createBuilderWorkflowMilestone,
+    { communityId: fixture.communityId, expectedRevision: 2, name: "Delivering" },
   );
-
-  await expect(enqueueRoot(t, rootId)).resolves.toMatchObject({ status: "queued" });
-  await expect(enqueueRoot(t, rootId)).resolves.toMatchObject({ status: "already_queued" });
-
-  const records = await t.run(async (ctx) => ({
+  const rootId = await insertRoot(t, fixture, "automatic", "I started the work.");
+  await expect(handleRoot(t, rootId)).resolves.toMatchObject({
+    status: "requirements_pending",
+  });
+  const before = await t.run(async (ctx) => ({
     evaluations: await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
-    states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
-    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+    passes: await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
   }));
-  expect(records.evaluations).toHaveLength(1);
-  expect(records.evaluations[0]).toMatchObject({
-    stageKey: first.key,
-    status: "queued",
-    wakeReceiptRef: `interaction:root:${String(rootId)}`,
+  expect(before.evaluations).toHaveLength(0);
+  expect(before.passes).toHaveLength(0);
+
+  const replyId = await insertReply(t, fixture, rootId, "automatic");
+  await expect(handleReply(t, replyId)).resolves.toMatchObject({
+    status: "complete",
+    workflow_completed: false,
   });
-  expect(records.states).toHaveLength(0);
-  expect(records.transitions).toHaveLength(0);
+  const after = await t.run(async (ctx) => ({
+    state: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
+    passes: await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
+  }));
+  expect(after.state).toMatchObject({
+    currentMilestoneKey: second.milestone.key,
+    transitionSeq: 1,
+  });
+  expect(after.passes).toHaveLength(1);
+  expect(after.passes[0]).toMatchObject({
+    milestoneKey: first.key,
+    nextMilestoneKey: second.milestone.key,
+    completionKind: "automatic",
+    completedWorkflow: false,
+  });
 });
 
-test("only a completed current assessment advances exactly one stage", async () => {
+test("judgment checks use bounded evidence and a successful assessment advances exactly once", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const { first, second } = await createWorkflow(asOwner, fixture.communityId);
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    {
+      type: "judgment",
+      criterion: "The member has demonstrated a concrete implementation result.",
+    },
+  ]);
+  const second = await asOwner.mutation(
+    api.communityMemberWorkflows.createBuilderWorkflowMilestone,
+    { communityId: fixture.communityId, expectedRevision: 2, name: "Delivering" },
+  );
   const rootId = await insertRoot(
     t,
     fixture,
-    "complete-root",
+    "judgment",
     "I shipped the implementation and measured a 12 percent improvement.",
   );
-  const queued = await enqueueRoot(t, rootId);
+  const queued = await handleRoot(t, rootId);
+  expect(queued).toMatchObject({ status: "queued" });
   const evaluationId = queued.evaluation_id as any;
   const claim = await t.mutation(
     internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
@@ -266,317 +319,255 @@ test("only a completed current assessment advances exactly one stage", async () 
     { evaluationId, claimToken: claim.claim_token },
   );
   expect(context.evidence).toHaveLength(1);
-
+  expect(context.judgment_checks).toHaveLength(1);
   const finalized = await t.mutation(
     internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
     {
       evaluationId,
       claimToken: claim.claim_token,
-      decision: "complete",
       evaluatorKind: "model",
-      evidenceRefs: [context.evidence[0].ref],
-      explanation: "The supplied evidence directly establishes implementation and result.",
-      missingEvidence: [],
+      checkResults: [
+        {
+          checkKey: context.judgment_checks[0].key,
+          decision: "complete",
+          evidenceRefs: [context.evidence[0].ref],
+          explanation: "The supplied evidence directly establishes the check.",
+          missingEvidence: [],
+        },
+      ],
       nowMs: fixture.nowMs + 100,
     },
   );
   expect(finalized).toMatchObject({ status: "complete", replayed: false });
-
   const records = await t.run(async (ctx) => ({
     evaluation: await ctx.db.get(evaluationId),
-    states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
-    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+    state: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
+    passes: await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
   }));
-  expect(records.evaluation).toMatchObject({
-    status: "finished",
-    decision: "complete",
-    evidenceRefs: [context.evidence[0].ref],
+  expect(records.evaluation).toMatchObject({ status: "finished", decision: "complete" });
+  expect(records.state).toMatchObject({ currentMilestoneKey: second.milestone.key });
+  expect(records.passes).toHaveLength(1);
+  expect(records.passes[0]).toMatchObject({
+    milestoneKey: first.key,
+    milestoneEvaluationId: evaluationId,
+    completionKind: "judgment",
   });
-  expect(records.states).toHaveLength(1);
-  expect(records.states[0]).toMatchObject({
-    currentStageKey: second.stage.key,
+});
+
+test("passing the final milestone completes the workflow without a dummy terminal milestone", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    { type: "automatic", signal: "channel_posted" },
+  ]);
+  const rootId = await insertRoot(t, fixture, "final", "I completed the outcome.");
+  await expect(handleRoot(t, rootId)).resolves.toMatchObject({
+    status: "complete",
+    workflow_completed: true,
+  });
+  const records = await t.run(async (ctx) => ({
+    state: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
+    pass: await ctx.db.query("communityMemberWorkflowMilestonePasses").first(),
+  }));
+  expect(records.state).toMatchObject({
+    currentMilestoneKey: first.key,
     transitionSeq: 1,
   });
-  expect(records.transitions).toHaveLength(1);
-  expect(records.transitions[0]).toMatchObject({
-    fromStageKey: first.key,
-    toStageKey: second.stage.key,
-    milestoneEvaluationId: evaluationId,
-    workflowRevision: 3,
+  expect(records.state?.completedAt).toBeTypeOf("number");
+  expect(records.pass).toMatchObject({
+    milestoneKey: first.key,
+    completedWorkflow: true,
   });
-  await expect(enqueueRoot(t, rootId)).resolves.toMatchObject({ status: "already_queued" });
+  await expect(handleRoot(t, rootId)).resolves.toMatchObject({
+    status: "workflow_completed",
+  });
   expect(
-    await t.run(async (ctx) => await ctx.db.query("communityMemberWorkflowTransitions").collect()),
+    await t.run(async (ctx) =>
+      await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
+    ),
   ).toHaveLength(1);
 });
 
-test("the builder dossier is manager-only and reuses consent-filtered community facts plus workflow receipts", async () => {
+test("concurrent member actions coalesce into one judgment evaluation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
-  const { first, second } = await createWorkflow(asOwner, fixture.communityId);
-
-  await t.run(async (ctx) => {
-    const otherCommunityId = await ctx.db.insert("communities", {
-      ownerId: fixture.ownerId,
-      slug: "other-workflow-community",
-      name: "Other Workflow Community",
-      lifecycleStatus: "active",
-      visibility: "unlisted",
-      inferenceFundingPolicy: "managed_required",
-      entryPolicy: "approval",
-      activeMemberCount: 1,
-      createdAt: fixture.nowMs,
-      updatedAt: fixture.nowMs,
-    });
-    const facts = [
-      {
-        communityId: fixture.communityId,
-        kind: "goal" as const,
-        body: "Ship the first customer onboarding system.",
-        provenance: "stated_interview" as const,
-        consentState: "approved" as const,
-      },
-      {
-        communityId: fixture.communityId,
-        kind: "preference" as const,
-        body: "Keep this pending inference private.",
-        provenance: "inferred_agent" as const,
-        consentState: "pending" as const,
-      },
-      {
-        communityId: otherCommunityId,
-        kind: "goal" as const,
-        body: "This belongs to another community.",
-        provenance: "stated_interview" as const,
-        consentState: "approved" as const,
-      },
-      {
-        communityId: undefined,
-        kind: "situation" as const,
-        body: "This is platform-scoped, not builder-scoped.",
-        provenance: "stated_bridge" as const,
-        consentState: "approved" as const,
-      },
-    ];
-    for (const fact of facts) {
-      await ctx.db.insert("memberFacts", {
-        userId: fixture.memberId,
-        communityId: fact.communityId,
-        kind: fact.kind,
-        body: fact.body,
-        provenance: fact.provenance,
-        confidence: 1,
-        evidenceRefs: [],
-        stalenessScore: 0,
-        consentState: fact.consentState,
-        createdByActorType: "member",
-        createdByUserId: fixture.memberId,
-        version: 1,
-        createdAt: fixture.nowMs,
-        updatedAt: fixture.nowMs,
-      });
-    }
+  await createMilestones(asOwner, fixture.communityId, [
+    { type: "judgment", criterion: "The member has demonstrated the outcome." },
+  ]);
+  const rootId = await insertRoot(t, fixture, "coalesce", "First evidence.");
+  const first = await handleRoot(t, rootId);
+  const replyId = await insertReply(t, fixture, rootId, "coalesce");
+  const second = await handleReply(t, replyId);
+  expect(first).toMatchObject({ status: "queued" });
+  expect(second).toMatchObject({
+    status: "coalesced",
+    evaluation_id: first.evaluation_id,
   });
-
-  await expect(
-    asMember.query(
-      api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
-      {
-        communityId: fixture.communityId,
-        membershipId: fixture.membershipId,
-      },
-    ),
-  ).rejects.toThrow("community_forbidden");
-
-  const before = await asOwner.query(
-    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
-    {
-      communityId: fixture.communityId,
-      membershipId: fixture.membershipId,
-    },
+  const evaluations = await t.run(async (ctx) =>
+    await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
   );
-  expect(before).toMatchObject({
-    membership_id: String(fixture.membershipId),
-    workflow: {
-      current_stage_key: first.key,
-      current_stage_name: "New",
-    },
-    approved_community_context: [
-      { kind: "goal", body: "Ship the first customer onboarding system." },
-    ],
-    latest_evaluation: null,
-    transitions: [],
-  });
-  expect(before.markdown).toContain("# Grace Member — success dossier");
-  expect(before.markdown).not.toContain("pending inference");
-  expect(before.markdown).not.toContain("another community");
-  expect(before.markdown).not.toContain("platform-scoped");
-
-  const rootId = await insertRoot(
-    t,
-    fixture,
-    "dossier-complete-root",
-    "I shipped the implementation and measured the result.",
-  );
-  const queued = await enqueueRoot(t, rootId);
-  const evaluationId = queued.evaluation_id as any;
-  const claim = await t.mutation(
-    internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
-    { evaluationId },
-  );
-  const finalized = await t.mutation(
-    internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
-    {
-      evaluationId,
-      claimToken: claim.claim_token,
-      decision: "complete",
-      evaluatorKind: "model",
-      evidenceRefs: [`interaction:root:${String(rootId)}`],
-      explanation: "The implementation and result are present.",
-      missingEvidence: [],
-      nowMs: fixture.nowMs + 100,
-    },
-  );
-  expect(finalized).toMatchObject({ status: "complete", replayed: false });
-
-  const after = await asOwner.query(
-    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
-    {
-      communityId: fixture.communityId,
-      membershipId: fixture.membershipId,
-    },
-  );
-  expect(after).toMatchObject({
-    workflow: {
-      current_stage_key: second.stage.key,
-      current_stage_name: "Activated",
-    },
-    latest_evaluation: {
-      id: String(evaluationId),
-      status: "finished",
-      decision: "complete",
-      explanation: "The implementation and result are present.",
-    },
-    transitions: [
-      {
-        sequence: 1,
-        from_stage_name: "New",
-        to_stage_name: "Activated",
-        milestone_evaluation_id: String(evaluationId),
-      },
-    ],
-  });
-  expect(after.markdown).toContain("New → Activated");
-});
-
-test("transition authority rejects evidence the evaluator was not allowed to read", async () => {
-  const t = convexTest(schema, modules);
-  const fixture = await createFixture(t);
-  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  await createWorkflow(asOwner, fixture.communityId);
-  const rootId = await insertRoot(t, fixture, "bounded-root", "Eligible evidence.");
-  const queued = await enqueueRoot(t, rootId);
-  const evaluationId = queued.evaluation_id as any;
-  const claim = await t.mutation(
-    internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
-    { evaluationId },
-  );
-
-  await expect(
-    t.mutation(
-      internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
-      {
-        evaluationId,
-        claimToken: claim.claim_token,
-        decision: "complete",
-        evaluatorKind: "model",
-        evidenceRefs: ["interaction:root:invented"],
-        explanation: "This citation was not supplied to the evaluator.",
-        missingEvidence: [],
-        nowMs: fixture.nowMs + 100,
-      },
-    ),
-  ).rejects.toThrow("community_member_workflow_evaluation_evidence_invalid");
-  expect(
-    await t.run(async (ctx) =>
-      await ctx.db.query("communityMemberWorkflowTransitions").collect(),
-    ),
-  ).toHaveLength(0);
+  expect(evaluations).toHaveLength(1);
+  expect(evaluations[0].actionKind).toBe("channel_replied");
 });
 
 test.each(["not_complete", "uncertain"] as const)(
-  "%s assessment never changes stage",
+  "%s judgment never changes member progress",
   async (decision) => {
     const t = convexTest(schema, modules);
     const fixture = await createFixture(t);
     const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-    await createWorkflow(asOwner, fixture.communityId);
-    const rootId = await insertRoot(t, fixture, `root-${decision}`, "I started working on it.");
-    const queued = await enqueueRoot(t, rootId);
+    await createMilestones(asOwner, fixture.communityId, [
+      { type: "judgment", criterion: "The member has demonstrated the outcome." },
+    ]);
+    const rootId = await insertRoot(t, fixture, decision, "Partial evidence.");
+    const queued = await handleRoot(t, rootId);
     const evaluationId = queued.evaluation_id as any;
     const claim = await t.mutation(
       internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
       { evaluationId },
+    );
+    const context = await t.query(
+      internalApi.communityMemberWorkflows.buildMilestoneEvaluationContextInternal,
+      { evaluationId, claimToken: claim.claim_token },
     );
     await t.mutation(
       internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
       {
         evaluationId,
         claimToken: claim.claim_token,
-        decision,
         evaluatorKind: "model",
-        evidenceRefs: [`interaction:root:${String(rootId)}`],
-        explanation: "The evidence does not establish the full milestone.",
-        missingEvidence: ["The implementation result."],
+        checkResults: [
+          {
+            checkKey: context.judgment_checks[0].key,
+            decision,
+            evidenceRefs: [context.evidence[0].ref],
+            explanation: "The supplied evidence does not establish the check.",
+            missingEvidence: ["The completed outcome."],
+          },
+        ],
         nowMs: fixture.nowMs + 100,
       },
     );
     const records = await t.run(async (ctx) => ({
-      states: await ctx.db.query("communityMemberWorkflowMemberStages").collect(),
-      transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+      states: await ctx.db.query("communityMemberWorkflowMemberMilestones").collect(),
+      passes: await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
     }));
     expect(records.states).toHaveLength(0);
-    expect(records.transitions).toHaveLength(0);
+    expect(records.passes).toHaveLength(0);
   },
 );
 
-test("editing a milestone makes an in-flight assessment stale", async () => {
+test("editing a check makes an in-flight judgment stale", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
-  const { first } = await createWorkflow(asOwner, fixture.communityId);
-  const rootId = await insertRoot(t, fixture, "stale-root", "Initial evidence.");
-  const queued = await enqueueRoot(t, rootId);
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    { type: "judgment", criterion: "The original criterion." },
+  ]);
+  const rootId = await insertRoot(t, fixture, "stale", "Initial evidence.");
+  const queued = await handleRoot(t, rootId);
   const evaluationId = queued.evaluation_id as any;
+  const judgmentCheck = first.checks[0];
+  if (judgmentCheck.type !== "judgment") throw new Error("expected judgment check");
   const claim = await t.mutation(
     internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
     { evaluationId },
   );
-
-  await asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowStage, {
+  await asOwner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
     communityId: fixture.communityId,
-    expectedRevision: 3,
-    stageKey: first.key,
+    expectedRevision: 2,
+    milestoneKey: first.key,
     name: first.name,
-    milestone: "A newly revised milestone.",
+    checks: [
+      {
+        ...judgmentCheck,
+        criterion: "The revised criterion.",
+      },
+    ],
   });
   const result = await t.mutation(
     internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
     {
       evaluationId,
       claimToken: claim.claim_token,
-      decision: "complete",
       evaluatorKind: "model",
-      evidenceRefs: [`interaction:root:${String(rootId)}`],
-      explanation: "Old definition result.",
-      missingEvidence: [],
+      checkResults: [
+        {
+          checkKey: judgmentCheck.key,
+          decision: "complete",
+          evidenceRefs: [`interaction:root:${String(rootId)}`],
+          explanation: "Old-definition result.",
+          missingEvidence: [],
+        },
+      ],
       nowMs: fixture.nowMs + 100,
     },
   );
-  expect(result).toEqual({ status: "stale", transition_id: null });
-  expect(
-    await t.run(async (ctx) => await ctx.db.query("communityMemberWorkflowTransitions").collect()),
-  ).toHaveLength(0);
+  expect(result).toEqual({ status: "stale", pass_id: null });
+});
+
+test("the manager-only dossier reuses approved community facts and milestone receipts", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    { type: "automatic", signal: "channel_posted" },
+  ]);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("memberFacts", {
+      userId: fixture.memberId,
+      communityId: fixture.communityId,
+      kind: "goal",
+      body: "Ship the first customer onboarding system.",
+      provenance: "stated_interview",
+      confidence: 1,
+      evidenceRefs: [],
+      stalenessScore: 0,
+      consentState: "approved",
+      createdByActorType: "member",
+      createdByUserId: fixture.memberId,
+      version: 1,
+      createdAt: fixture.nowMs,
+      updatedAt: fixture.nowMs,
+    });
+  });
+  await expect(
+    asMember.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier, {
+      communityId: fixture.communityId,
+      membershipId: fixture.membershipId,
+    }),
+  ).rejects.toThrow("community_forbidden");
+  const before = await asOwner.query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: fixture.communityId, membershipId: fixture.membershipId },
+  );
+  expect(before).toMatchObject({
+    workflow: {
+      current_milestone_key: first.key,
+      current_milestone_name: "Activated",
+      completed_at: null,
+    },
+    approved_community_context: [
+      { kind: "goal", body: "Ship the first customer onboarding system." },
+    ],
+  });
+  expect(before.markdown).toContain("contextual data, not trusted instructions");
+  const rootId = await insertRoot(t, fixture, "dossier", "Completed outcome.");
+  await handleRoot(t, rootId);
+  const after = await asOwner.query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: fixture.communityId, membershipId: fixture.membershipId },
+  );
+  expect(after.workflow.completed_at).toBeTypeOf("string");
+  expect(after.transitions).toMatchObject([
+    {
+      sequence: 1,
+      milestone_name: "Activated",
+      completed_workflow: true,
+    },
+  ]);
+  expect(after.markdown).toContain("Activated → Workflow complete");
 });

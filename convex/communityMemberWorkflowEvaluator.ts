@@ -25,18 +25,18 @@ import {
 import type { NativeToolAwareCompletionSuccess } from "../shared/nativeToolProtocol";
 
 const internalRefs = internal as any;
-const EVALUATOR_MAX_OUTPUT_TOKENS = 1_200;
+const EVALUATOR_MAX_OUTPUT_TOKENS = 2_400;
 
 type EvaluationContext = {
   evaluation_id: string;
   community_id: string;
   sponsor_user_id: string;
-  stage_key: string;
-  stage_name: string;
-  stage_entered_at: string;
+  milestone_key: string;
+  milestone_name: string;
+  milestone_entered_at: string;
   evidence_through_at: string;
-  milestone: string;
-  milestone_hash: string;
+  checks_hash: string;
+  judgment_checks: Array<{ key: string; criterion: string }>;
   evidence: CommunityMemberWorkflowEvaluationEvidence[];
 };
 
@@ -98,11 +98,14 @@ export const runMilestoneEvaluationInternal = internalAction({
           {
             evaluationId: args.evaluationId,
             claimToken,
-            decision: "uncertain",
             evaluatorKind: "deterministic",
-            evidenceRefs: [],
-            explanation: "No eligible member evidence was available in this stage window.",
-            missingEvidence: ["Evidence that directly establishes the milestone."],
+            checkResults: context.judgment_checks.map((check) => ({
+              checkKey: check.key,
+              decision: "uncertain",
+              evidenceRefs: [],
+              explanation: "No eligible member evidence was available in this milestone window.",
+              missingEvidence: ["Evidence that directly establishes this check."],
+            })),
             nowMs: Date.now(),
           },
         );
@@ -122,10 +125,10 @@ export const runMilestoneEvaluationInternal = internalAction({
         admission: funding,
       });
       const messages = buildCommunityMemberWorkflowEvaluatorMessages({
-        milestone: context.milestone,
-        stageName: context.stage_name,
-        stageEnteredAt: context.stage_entered_at,
+        milestoneName: context.milestone_name,
+        milestoneEnteredAt: context.milestone_entered_at,
         evidenceThroughAt: context.evidence_through_at,
+        judgmentChecks: context.judgment_checks,
         evidence: context.evidence,
       });
       const result = await runNativeRuntimeKernel<string>({
@@ -204,18 +207,22 @@ export const runMilestoneEvaluationInternal = internalAction({
       const assessment = parseCommunityMemberWorkflowModelAssessment({
         outputText: result.assistantText,
         allowedEvidenceRefs: context.evidence.map((item) => item.ref),
+        expectedCheckKeys: context.judgment_checks.map((check) => check.key),
       });
       return await ctx.runMutation(
         internalRefs.communityMemberWorkflows
           .finalizeMilestoneEvaluationInternal,
-        {
-          evaluationId: args.evaluationId,
-          claimToken,
-          decision: assessment.decision,
-          evaluatorKind: "model",
-          evidenceRefs: assessment.evidence_refs,
-          explanation: assessment.explanation,
-          missingEvidence: assessment.missing_evidence,
+          {
+            evaluationId: args.evaluationId,
+            claimToken,
+            evaluatorKind: "model",
+            checkResults: assessment.results.map((result) => ({
+              checkKey: result.check_key,
+              decision: result.decision,
+              evidenceRefs: result.evidence_refs,
+              explanation: result.explanation,
+              missingEvidence: result.missing_evidence,
+            })),
           nowMs: Date.now(),
         },
       );

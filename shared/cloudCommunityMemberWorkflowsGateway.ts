@@ -8,15 +8,19 @@ import {
   type AuthenticatedConvexRealtimeLease,
   type ConvexRealtimeEnsureSession,
 } from "./convexRealtimeAuth";
-import type { CommunityMemberWorkflowStage } from "./communityMemberWorkflow";
+import type {
+  CommunityMemberWorkflowCheck,
+  CommunityMemberWorkflowMilestone,
+} from "./communityMemberWorkflow";
 import type { CommunityMemberSuccessDossier } from "./communityMemberSuccessDossier";
 
 type WorkflowGatewayParams<SessionT> = { session: SessionT };
 
 export type CloudCommunityMemberWorkflowMember = {
   membership_id: string;
-  current_stage_key: string;
-  current_stage_entered_at: string;
+  current_milestone_key: string;
+  current_milestone_entered_at: string;
+  workflow_completed_at: string | null;
   display_name: string;
   avatar_url: string | null;
   avatar_focus_x: number | null;
@@ -28,7 +32,7 @@ export type CloudCommunityMemberWorkflowBoard = {
   id: string;
   community_id: string;
   revision: number;
-  stages: CommunityMemberWorkflowStage[];
+  milestones: CommunityMemberWorkflowMilestone[];
   updated_at: string;
 };
 
@@ -44,7 +48,9 @@ export type CloudCommunityMemberWorkflowBoardProjectionToken = {
   workflow_id: string | null;
   workflow_revision: number;
   active_member_count: number | null;
-  latest_transition_id: string | null;
+  latest_pass_id: string | null;
+  latest_evaluation_id: string | null;
+  latest_evaluation_updated_at: number | null;
 };
 
 export type CloudCommunityMemberSuccessDossier =
@@ -53,10 +59,10 @@ export type CloudCommunityMemberSuccessDossier =
 export type CloudCommunityMemberWorkflowLiveClient =
   AuthenticatedConvexRealtimeLease;
 
-type WorkflowStageMutationResult = {
+type WorkflowMilestoneMutationResult = {
   workflow_id: string;
   revision: number;
-  stage?: CommunityMemberWorkflowStage;
+  milestone?: CommunityMemberWorkflowMilestone;
 };
 
 export function createCloudCommunityMemberWorkflowLiveClient<SessionT>(
@@ -88,9 +94,7 @@ export function subscribeCloudCommunityMemberWorkflowBoardProjection(params: {
     try {
       const result = watch.localQueryResult();
       if (typeof result === "undefined") return;
-      params.onUpdate(
-        result as CloudCommunityMemberWorkflowBoardProjectionToken,
-      );
+      params.onUpdate(result as CloudCommunityMemberWorkflowBoardProjectionToken);
     } catch (error) {
       params.onError?.(error);
     }
@@ -127,12 +131,9 @@ export async function fetchCloudCommunityMemberWorkflowBoardPage<SessionT>(
   return {
     board: payload?.workflow ?? null,
     members: Array.isArray(payload?.page) ? payload.page : [],
-    totalCount:
-      typeof payload?.totalCount === "number" ? payload.totalCount : null,
+    totalCount: typeof payload?.totalCount === "number" ? payload.totalCount : null,
     continueCursor:
-      typeof payload?.continueCursor === "string"
-        ? payload.continueCursor
-        : null,
+      typeof payload?.continueCursor === "string" ? payload.continueCursor : null,
     isDone: payload?.isDone === true,
   };
 }
@@ -156,69 +157,69 @@ export async function fetchCloudCommunityMemberSuccessDossier<SessionT>(
   )) as CloudCommunityMemberSuccessDossier;
 }
 
-export async function createCloudCommunityMemberWorkflowStage<SessionT>(
+export async function createCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
     communityId: string;
     expectedRevision: number;
     name: string;
   },
-): Promise<WorkflowStageMutationResult> {
+): Promise<WorkflowMilestoneMutationResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
   return (await client.mutation(
-    "communityMemberWorkflows:createBuilderWorkflowStage" as any,
+    "communityMemberWorkflows:createBuilderWorkflowMilestone" as any,
     {
       authSubject,
       communityId: params.communityId,
       expectedRevision: params.expectedRevision,
       name: params.name,
     },
-  )) as WorkflowStageMutationResult;
+  )) as WorkflowMilestoneMutationResult;
 }
 
-export async function updateCloudCommunityMemberWorkflowStage<SessionT>(
+export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
     communityId: string;
     expectedRevision: number;
-    stageKey: string;
+    milestoneKey: string;
     name: string;
-    milestone: string | null;
+    checks: CommunityMemberWorkflowCheck[];
   },
-): Promise<WorkflowStageMutationResult> {
+): Promise<WorkflowMilestoneMutationResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
   return (await client.mutation(
-    "communityMemberWorkflows:updateBuilderWorkflowStage" as any,
+    "communityMemberWorkflows:updateBuilderWorkflowMilestone" as any,
     {
       authSubject,
       communityId: params.communityId,
       expectedRevision: params.expectedRevision,
-      stageKey: params.stageKey,
+      milestoneKey: params.milestoneKey,
       name: params.name,
-      milestone: params.milestone,
+      checks: params.checks,
     },
-  )) as WorkflowStageMutationResult;
+  )) as WorkflowMilestoneMutationResult;
 }
 
-export async function deleteCloudCommunityMemberWorkflowStage<SessionT>(
+export async function deleteCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
     communityId: string;
     expectedRevision: number;
-    stageKey: string;
+    milestoneKey: string;
   },
-): Promise<WorkflowStageMutationResult> {
+): Promise<WorkflowMilestoneMutationResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
     params.session,
   );
   return (await client.mutation(
-    "communityMemberWorkflows:deleteBuilderWorkflowStage" as any,
+    "communityMemberWorkflows:deleteBuilderWorkflowMilestone" as any,
     {
       authSubject,
       communityId: params.communityId,
       expectedRevision: params.expectedRevision,
-      stageKey: params.stageKey,
+      milestoneKey: params.milestoneKey,
     },
-  )) as WorkflowStageMutationResult;
+  )) as WorkflowMilestoneMutationResult;
 }
