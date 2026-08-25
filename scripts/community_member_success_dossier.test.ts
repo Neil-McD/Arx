@@ -49,7 +49,7 @@ const source: CommunityMemberSuccessDossier = {
     created_at: "2026-08-25T11:59:00.000Z",
     finished_at: "2026-08-25T12:00:00.000Z",
   },
-  transitions: [
+  milestone_history: [
     {
       id: "transition-1",
       sequence: 1,

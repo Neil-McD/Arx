@@ -562,7 +562,7 @@ test("the manager-only dossier reuses approved community facts and milestone rec
     { communityId: fixture.communityId, membershipId: fixture.membershipId },
   );
   expect(after.workflow.completed_at).toBeTypeOf("string");
-  expect(after.transitions).toMatchObject([
+  expect(after.milestone_history).toMatchObject([
     {
       sequence: 1,
       milestone_name: "Activated",

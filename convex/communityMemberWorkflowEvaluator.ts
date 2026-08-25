@@ -24,7 +24,6 @@ import {
 } from "../shared/runtimeKernelTypes";
 import type { NativeToolAwareCompletionSuccess } from "../shared/nativeToolProtocol";
 
-const internalRefs = internal as any;
 const EVALUATOR_MAX_OUTPUT_TOKENS = 2_400;
 
 type EvaluationContext = {
@@ -38,6 +37,13 @@ type EvaluationContext = {
   checks_hash: string;
   judgment_checks: Array<{ key: string; criterion: string }>;
   evidence: CommunityMemberWorkflowEvaluationEvidence[];
+};
+
+type EvaluationActionResult = {
+  status: string;
+  pass_id?: string | null;
+  workflow_completed?: boolean;
+  replayed?: boolean;
 };
 
 function coerceToollessCompletion(
@@ -66,9 +72,9 @@ export const runMilestoneEvaluationInternal = internalAction({
   args: {
     evaluationId: v.id("communityMemberWorkflowMilestoneEvaluations"),
   },
-  handler: async (ctx, args) => {
+  handler: async (ctx, args): Promise<EvaluationActionResult> => {
     const claim = await ctx.runMutation(
-      internalRefs.communityMemberWorkflows.claimMilestoneEvaluationInternal,
+      internal.communityMemberWorkflows.claimMilestoneEvaluationInternal,
       { evaluationId: args.evaluationId },
     );
     if (!claim?.ok || !claim.claim_token) {
@@ -82,26 +88,24 @@ export const runMilestoneEvaluationInternal = internalAction({
     let completionTokens = 0;
     let usageComplete = true;
     try {
-      const context = (await ctx.runQuery(
-        internalRefs.communityMemberWorkflows
-          .buildMilestoneEvaluationContextInternal,
+      const context = await ctx.runQuery(
+        internal.communityMemberWorkflows.buildMilestoneEvaluationContextInternal,
         {
           evaluationId: args.evaluationId,
           claimToken,
         },
-      )) as EvaluationContext;
+      );
 
       if (context.evidence.length === 0) {
         return await ctx.runMutation(
-          internalRefs.communityMemberWorkflows
-            .finalizeMilestoneEvaluationInternal,
+          internal.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
           {
             evaluationId: args.evaluationId,
             claimToken,
             evaluatorKind: "deterministic",
             checkResults: context.judgment_checks.map((check) => ({
               checkKey: check.key,
-              decision: "uncertain",
+              decision: "uncertain" as const,
               evidenceRefs: [],
               explanation: "No eligible member evidence was available in this milestone window.",
               missingEvidence: ["Evidence that directly establishes this check."],
@@ -210,25 +214,28 @@ export const runMilestoneEvaluationInternal = internalAction({
         expectedCheckKeys: context.judgment_checks.map((check) => check.key),
       });
       return await ctx.runMutation(
-        internalRefs.communityMemberWorkflows
-          .finalizeMilestoneEvaluationInternal,
-          {
-            evaluationId: args.evaluationId,
-            claimToken,
-            evaluatorKind: "model",
-            checkResults: assessment.results.map((result) => ({
-              checkKey: result.check_key,
-              decision: result.decision,
-              evidenceRefs: result.evidence_refs,
-              explanation: result.explanation,
-              missingEvidence: result.missing_evidence,
-            })),
+        internal.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
+        {
+          evaluationId: args.evaluationId,
+          claimToken,
+          evaluatorKind: "model",
+          checkResults: assessment.results.map((result) => ({
+            checkKey: result.check_key,
+            decision: result.decision,
+            evidenceRefs: result.evidence_refs,
+            explanation: result.explanation,
+            missingEvidence: result.missing_evidence,
+          })),
           nowMs: Date.now(),
         },
       );
     } catch (error) {
+      const failure =
+        error && typeof error === "object"
+          ? (error as { code?: unknown; message?: unknown; retryable?: unknown })
+          : null;
       const errorCode = String(
-        (error as any)?.code ?? (error as Error)?.message ?? "evaluation_failed",
+        failure?.code ?? failure?.message ?? "evaluation_failed",
       )
         .trim()
         .slice(0, 120);
@@ -251,12 +258,12 @@ export const runMilestoneEvaluationInternal = internalAction({
         }
       }
       return await ctx.runMutation(
-        internalRefs.communityMemberWorkflows.failMilestoneEvaluationInternal,
+        internal.communityMemberWorkflows.failMilestoneEvaluationInternal,
         {
           evaluationId: args.evaluationId,
           claimToken,
           errorCode,
-          retryable: (error as any)?.retryable === true,
+          retryable: failure?.retryable === true,
           nowMs: Date.now(),
         },
       );

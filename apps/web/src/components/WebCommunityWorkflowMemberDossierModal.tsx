@@ -218,15 +218,15 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
 
               <section className="workflow-member-dossier-section">
                 <h3>Milestone history</h3>
-                {dossier.transitions.length > 0 ? (
+                {dossier.milestone_history.length > 0 ? (
                   <ol className="workflow-member-history">
-                    {dossier.transitions.map((transition) => (
-                      <li key={transition.id}>
-                        <span>{new Date(transition.occurred_at).toLocaleString()}</span>
+                    {dossier.milestone_history.map((entry) => (
+                      <li key={entry.id}>
+                        <span>{new Date(entry.occurred_at).toLocaleString()}</span>
                         <strong>
-                          {transition.completed_workflow
-                            ? `${transition.milestone_name} → Workflow complete`
-                            : `${transition.milestone_name} → ${transition.next_milestone_name}`}
+                          {entry.completed_workflow
+                            ? `${entry.milestone_name} → Workflow complete`
+                            : `${entry.milestone_name} → ${entry.next_milestone_name}`}
                         </strong>
                       </li>
                     ))}

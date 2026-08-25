@@ -1,7 +1,7 @@
 import type { MemberFactKind } from "./memberOntology";
 import type { CommunityMemberWorkflowCheck } from "./communityMemberWorkflow";
 
-export const COMMUNITY_MEMBER_SUCCESS_TRANSITION_LIMIT = 12;
+export const COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT = 12;
 
 export type CommunityMemberSuccessFact = {
   kind: MemberFactKind;
@@ -37,7 +37,7 @@ export type CommunityMemberSuccessEvaluation = {
   finished_at: string | null;
 };
 
-export type CommunityMemberSuccessTransition = {
+export type CommunityMemberSuccessMilestoneHistoryEntry = {
   id: string;
   sequence: number;
   milestone_key: string;
@@ -69,7 +69,7 @@ export type CommunityMemberSuccessDossier = {
   };
   approved_community_context: CommunityMemberSuccessFact[];
   latest_evaluation: CommunityMemberSuccessEvaluation | null;
-  transitions: CommunityMemberSuccessTransition[];
+  milestone_history: CommunityMemberSuccessMilestoneHistoryEntry[];
 };
 
 function markdownInline(value: unknown): string {
@@ -167,14 +167,14 @@ export function renderCommunityMemberSuccessDossierMarkdown(
   }
 
   lines.push("", "## Milestone history");
-  if (source.transitions.length === 0) {
+  if (source.milestone_history.length === 0) {
     lines.push("", "_No completed milestones yet._");
   } else {
-    for (const transition of source.transitions) {
+    for (const entry of source.milestone_history) {
       lines.push(
-        transition.completed_workflow
-          ? `- ${transition.occurred_at}: ${markdownInline(transition.milestone_name)} → Workflow complete`
-          : `- ${transition.occurred_at}: ${markdownInline(transition.milestone_name)} → ${markdownInline(transition.next_milestone_name)}`,
+        entry.completed_workflow
+          ? `- ${entry.occurred_at}: ${markdownInline(entry.milestone_name)} → Workflow complete`
+          : `- ${entry.occurred_at}: ${markdownInline(entry.milestone_name)} → ${markdownInline(entry.next_milestone_name)}`,
       );
     }
   }

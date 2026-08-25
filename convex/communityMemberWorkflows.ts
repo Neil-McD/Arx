@@ -34,7 +34,7 @@ import {
 } from "./communityInteractionEvidenceCore";
 import { readMemberFactsForLens } from "./memberOntologyCore";
 import {
-  COMMUNITY_MEMBER_SUCCESS_TRANSITION_LIMIT,
+  COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT,
   renderCommunityMemberSuccessDossierMarkdown,
   type CommunityMemberSuccessDossier,
 } from "../shared/communityMemberSuccessDossier";
@@ -139,7 +139,7 @@ export async function getCommunityMemberWorkflowByCommunity(args: {
   communityId: any;
 }): Promise<WorkflowRow | null> {
   const rows = (await args.ctx.db
-    .query("communityMemberWorkflows" as any)
+    .query("communityMemberWorkflows")
     .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
     .take(2)) as WorkflowRow[];
   if (rows.length > 1) throw new Error("community_member_workflow_ambiguous");
@@ -152,7 +152,7 @@ async function getMemberMilestone(args: {
   membershipId: any;
 }): Promise<MemberMilestoneRow | null> {
   const rows = (await args.ctx.db
-    .query("communityMemberWorkflowMemberMilestones" as any)
+    .query("communityMemberWorkflowMemberMilestones")
     .withIndex("by_workflow_membership", (q: any) =>
       q.eq("workflowId", args.workflowId).eq("membershipId", args.membershipId),
     )
@@ -269,7 +269,7 @@ export const createBuilderWorkflowMilestone = mutation({
         name,
         checks: [],
       };
-      const workflowId = await ctx.db.insert("communityMemberWorkflows" as any, {
+      const workflowId = await ctx.db.insert("communityMemberWorkflows", {
         communityId: args.communityId,
         milestones: [milestone],
         revision: 1,
@@ -393,7 +393,7 @@ export const deleteBuilderWorkflowMilestone = mutation({
       throw new Error("community_member_workflow_milestone_invalid");
     }
     const occupied = await ctx.db
-      .query("communityMemberWorkflowMemberMilestones" as any)
+      .query("communityMemberWorkflowMemberMilestones")
       .withIndex("by_workflow_milestone", (q: any) =>
         q.eq("workflowId", workflow._id).eq("currentMilestoneKey", milestoneKey),
       )
@@ -541,14 +541,14 @@ export const getBuilderWorkflowBoardProjectionToken = query({
     const [latestPass, latestEvaluation] = workflow
       ? await Promise.all([
           ctx.db
-            .query("communityMemberWorkflowMilestonePasses" as any)
+            .query("communityMemberWorkflowMilestonePasses")
             .withIndex("by_community_occurredAt", (q: any) =>
               q.eq("communityId", args.communityId),
             )
             .order("desc")
             .first() as Promise<PassRow | null>,
           ctx.db
-            .query("communityMemberWorkflowMilestoneEvaluations" as any)
+            .query("communityMemberWorkflowMilestoneEvaluations")
             .withIndex("by_workflow_updatedAt", (q: any) =>
               q.eq("workflowId", workflow._id),
             )
@@ -604,19 +604,19 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
       scope: { communityId: args.communityId },
     }),
     args.ctx.db
-      .query("communityMemberWorkflowMilestoneEvaluations" as any)
+      .query("communityMemberWorkflowMilestoneEvaluations")
       .withIndex("by_workflow_membership_createdAt", (q: any) =>
         q.eq("workflowId", workflow._id).eq("membershipId", membership!._id),
       )
       .order("desc")
-      .take(COMMUNITY_MEMBER_SUCCESS_TRANSITION_LIMIT) as Promise<EvaluationRow[]>,
+      .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT) as Promise<EvaluationRow[]>,
     args.ctx.db
-      .query("communityMemberWorkflowMilestonePasses" as any)
+      .query("communityMemberWorkflowMilestonePasses")
       .withIndex("by_workflow_membership_seq", (q: any) =>
         q.eq("workflowId", workflow._id).eq("membershipId", membership!._id),
       )
       .order("desc")
-      .take(COMMUNITY_MEMBER_SUCCESS_TRANSITION_LIMIT) as Promise<PassRow[]>,
+      .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT) as Promise<PassRow[]>,
     listEligibleMilestoneEvidence({
       ctx: args.ctx,
       communityId: args.communityId,
@@ -732,7 +732,7 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
             : null,
         }
       : null,
-    transitions: passRows
+    milestone_history: passRows
       .slice()
       .reverse()
       .map((pass) => ({
@@ -874,7 +874,7 @@ async function getEvaluationByActionReceipt(args: {
   actionReceiptRef: string;
 }): Promise<EvaluationRow | null> {
   const rows = (await args.ctx.db
-    .query("communityMemberWorkflowMilestoneEvaluations" as any)
+    .query("communityMemberWorkflowMilestoneEvaluations")
     .withIndex("by_workflow_membership_actionReceipt", (q: any) =>
       q
         .eq("workflowId", args.workflowId)
@@ -897,7 +897,7 @@ async function getActiveEvaluation(args: {
   checksHash: string;
 }): Promise<EvaluationRow | null> {
   const recent = (await args.ctx.db
-    .query("communityMemberWorkflowMilestoneEvaluations" as any)
+    .query("communityMemberWorkflowMilestoneEvaluations")
     .withIndex("by_workflow_membership_createdAt", (q: any) =>
       q.eq("workflowId", args.workflowId).eq("membershipId", args.membershipId),
     )
@@ -917,7 +917,7 @@ async function getPassByEvaluation(args: {
   evaluationId: any;
 }): Promise<PassRow | null> {
   const rows = (await args.ctx.db
-    .query("communityMemberWorkflowMilestonePasses" as any)
+    .query("communityMemberWorkflowMilestonePasses")
     .withIndex("by_milestoneEvaluation", (q: any) =>
       q.eq("milestoneEvaluationId", args.evaluationId),
     )
@@ -973,7 +973,7 @@ async function recordMilestonePass(args: {
       updatedAt: args.nowMs,
     });
   } else {
-    await args.ctx.db.insert("communityMemberWorkflowMemberMilestones" as any, {
+    await args.ctx.db.insert("communityMemberWorkflowMemberMilestones", {
       workflowId: args.workflow._id,
       membershipId: args.membership._id,
       currentMilestoneKey: nextMilestone?.key ?? args.current.milestone.key,
@@ -985,7 +985,7 @@ async function recordMilestonePass(args: {
     });
   }
   const passId = await args.ctx.db.insert(
-    "communityMemberWorkflowMilestonePasses" as any,
+    "communityMemberWorkflowMilestonePasses",
     {
       communityId: args.workflow.communityId,
       workflowId: args.workflow._id,
@@ -1133,7 +1133,7 @@ async function handleChannelContributionCore(args: {
   }
   const nowMs = Date.now();
   const evaluationId = await args.ctx.db.insert(
-    "communityMemberWorkflowMilestoneEvaluations" as any,
+    "communityMemberWorkflowMilestoneEvaluations",
     {
       communityId: row.communityId,
       workflowId: workflow._id,
@@ -1158,7 +1158,7 @@ async function handleChannelContributionCore(args: {
   );
   await args.ctx.scheduler.runAfter(
     0,
-    (internal as any).communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
+    internal.communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
     { evaluationId },
   );
   return { status: "queued" as const, evaluation_id: String(evaluationId) };
@@ -1306,7 +1306,7 @@ export const claimMilestoneEvaluationInternal = internalMutation({
     });
     await ctx.scheduler.runAfter(
       EVALUATION_LEASE_MS,
-      (internal as any).communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
+      internal.communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
       { evaluationId: evaluation._id },
     );
     return {
@@ -1350,7 +1350,7 @@ export const buildMilestoneEvaluationContextInternal = internalQuery({
     return {
       evaluation_id: String(evaluation._id),
       community_id: String(evaluation.communityId),
-      sponsor_user_id: String((community as any).ownerId),
+      sponsor_user_id: String(community.ownerId),
       milestone_key: evaluation.milestoneKey,
       milestone_name: evaluation.milestoneName,
       milestone_entered_at: toIsoString(evaluation.milestoneEnteredAt),
@@ -1410,7 +1410,7 @@ export const finalizeMilestoneEvaluationInternal = internalMutation({
       });
       await ctx.scheduler.runAfter(
         0,
-        (internal as any).communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
+        internal.communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
         { evaluationId: evaluation._id },
       );
       return { status: "queued" as const, pass_id: null };
@@ -1600,7 +1600,7 @@ export const failMilestoneEvaluationInternal = internalMutation({
     if (retry) {
       await ctx.scheduler.runAfter(
         Math.max(0, availableAt - args.nowMs),
-        (internal as any).communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
+        internal.communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
         { evaluationId: evaluation._id },
       );
     }

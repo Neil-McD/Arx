@@ -1,4 +1,5 @@
 import { api } from "../convex/_generated/api";
+import type { Id } from "../convex/_generated/dataModel";
 import {
   bootstrapConvexAuthenticatedClient,
   requireConvexUrl,
@@ -87,7 +88,7 @@ export function subscribeCloudCommunityMemberWorkflowBoardProjection(params: {
     api.communityMemberWorkflows.getBuilderWorkflowBoardProjectionToken,
     {
       authSubject: params.liveClient.authSubject,
-      communityId: params.communityId as any,
+      communityId: params.communityId as Id<"communities">,
     },
   );
   const publish = () => {
@@ -114,10 +115,10 @@ export async function fetchCloudCommunityMemberWorkflowBoardPage<SessionT>(
     params.session,
   );
   const payload = (await client.query(
-    "communityMemberWorkflows:getBuilderWorkflowBoardPage" as any,
+    api.communityMemberWorkflows.getBuilderWorkflowBoardPage,
     {
       authSubject,
-      communityId: params.communityId,
+      communityId: params.communityId as Id<"communities">,
       cursor: params.cursor ?? null,
       pageSize: params.pageSize ?? 50,
     },
@@ -148,11 +149,11 @@ export async function fetchCloudCommunityMemberSuccessDossier<SessionT>(
     params.session,
   );
   return (await client.query(
-    "communityMemberWorkflows:getBuilderWorkflowMemberSuccessDossier" as any,
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
     {
       authSubject,
-      communityId: params.communityId,
-      membershipId: params.membershipId,
+      communityId: params.communityId as Id<"communities">,
+      membershipId: params.membershipId as Id<"communityMemberships">,
     },
   )) as CloudCommunityMemberSuccessDossier;
 }
@@ -168,10 +169,10 @@ export async function createCloudCommunityMemberWorkflowMilestone<SessionT>(
     params.session,
   );
   return (await client.mutation(
-    "communityMemberWorkflows:createBuilderWorkflowMilestone" as any,
+    api.communityMemberWorkflows.createBuilderWorkflowMilestone,
     {
       authSubject,
-      communityId: params.communityId,
+      communityId: params.communityId as Id<"communities">,
       expectedRevision: params.expectedRevision,
       name: params.name,
     },
@@ -191,10 +192,10 @@ export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
     params.session,
   );
   return (await client.mutation(
-    "communityMemberWorkflows:updateBuilderWorkflowMilestone" as any,
+    api.communityMemberWorkflows.updateBuilderWorkflowMilestone,
     {
       authSubject,
-      communityId: params.communityId,
+      communityId: params.communityId as Id<"communities">,
       expectedRevision: params.expectedRevision,
       milestoneKey: params.milestoneKey,
       name: params.name,
@@ -214,10 +215,10 @@ export async function deleteCloudCommunityMemberWorkflowMilestone<SessionT>(
     params.session,
   );
   return (await client.mutation(
-    "communityMemberWorkflows:deleteBuilderWorkflowMilestone" as any,
+    api.communityMemberWorkflows.deleteBuilderWorkflowMilestone,
     {
       authSubject,
-      communityId: params.communityId,
+      communityId: params.communityId as Id<"communities">,
       expectedRevision: params.expectedRevision,
       milestoneKey: params.milestoneKey,
     },
