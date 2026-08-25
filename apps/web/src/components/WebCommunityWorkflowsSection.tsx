@@ -9,7 +9,9 @@ import {
 import type {
   CloudCommunityMemberWorkflowBoard,
   CloudCommunityMemberWorkflowMember,
+  CloudCommunityMemberSuccessDossier,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
+import { WebCommunityWorkflowMemberDossierModal } from "./WebCommunityWorkflowMemberDossierModal";
 import { WebCommunityWorkflowMemberStub } from "./WebCommunityWorkflowMemberStub";
 import { WebCommunityWorkflowStageModal } from "./WebCommunityWorkflowStageModal";
 import "./WebCommunityWorkflowsSection.css";
@@ -25,6 +27,10 @@ export type WebCommunityWorkflowsSectionProps = {
   error: string | null;
   isSaving: boolean;
   actionError: string | null;
+  selectedMembershipId: string | null;
+  memberDossier: CloudCommunityMemberSuccessDossier | null;
+  isMemberDossierLoading: boolean;
+  memberDossierError: string | null;
   onReload: () => Promise<unknown> | unknown;
   onLoadMore: () => Promise<unknown> | unknown;
   onCreateStage: (name: string) => Promise<boolean>;
@@ -35,6 +41,8 @@ export type WebCommunityWorkflowsSectionProps = {
   ) => Promise<boolean>;
   onDeleteStage: (stageKey: string) => Promise<boolean>;
   onClearActionError: () => void;
+  onOpenMemberDossier: (membershipId: string) => void;
+  onCloseMemberDossier: () => void;
 };
 
 const BLANK_STAGE: CommunityMemberWorkflowStage = { key: "", name: "" };
@@ -177,6 +185,7 @@ export function WebCommunityWorkflowsSection(
                       <WebCommunityWorkflowMemberStub
                         key={member.membership_id}
                         member={member}
+                        onOpen={() => props.onOpenMemberDossier(member.membership_id)}
                       />
                     ))
                   ) : (
@@ -240,6 +249,13 @@ export function WebCommunityWorkflowsSection(
         onClose={closeStage}
         onSave={saveStage}
         onDelete={deleteEditingStage}
+      />
+      <WebCommunityWorkflowMemberDossierModal
+        isOpen={Boolean(props.selectedMembershipId)}
+        dossier={props.memberDossier}
+        isLoading={props.isMemberDossierLoading}
+        error={props.memberDossierError}
+        onClose={props.onCloseMemberDossier}
       />
     </div>
   );

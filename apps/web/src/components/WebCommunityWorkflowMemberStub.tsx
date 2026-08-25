@@ -28,6 +28,7 @@ export function formatWorkflowStageAge(
 
 export function WebCommunityWorkflowMemberStub(props: {
   member: CloudCommunityMemberWorkflowMember;
+  onOpen: () => void;
 }) {
   const stageAge = formatWorkflowStageAge(
     props.member.current_stage_entered_at,
@@ -38,9 +39,11 @@ export function WebCommunityWorkflowMemberStub(props: {
     : undefined;
 
   return (
-    <article
+    <button
+      type="button"
       className="workflow-member-stub"
       aria-label={`${props.member.display_name}. ${stageAge}.`}
+      onClick={props.onOpen}
     >
       <UserAvatar
         name={props.member.display_name}
@@ -54,6 +57,6 @@ export function WebCommunityWorkflowMemberStub(props: {
         <strong>{props.member.display_name}</strong>
         <span title={enteredAtTitle}>{stageAge}</span>
       </div>
-    </article>
+    </button>
   );
 }

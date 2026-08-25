@@ -9,6 +9,7 @@ import {
   type ConvexRealtimeEnsureSession,
 } from "./convexRealtimeAuth";
 import type { CommunityMemberWorkflowStage } from "./communityMemberWorkflow";
+import type { CommunityMemberSuccessDossier } from "./communityMemberSuccessDossier";
 
 type WorkflowGatewayParams<SessionT> = { session: SessionT };
 
@@ -45,6 +46,9 @@ export type CloudCommunityMemberWorkflowBoardProjectionToken = {
   active_member_count: number | null;
   latest_transition_id: string | null;
 };
+
+export type CloudCommunityMemberSuccessDossier =
+  CommunityMemberSuccessDossier & { markdown: string };
 
 export type CloudCommunityMemberWorkflowLiveClient =
   AuthenticatedConvexRealtimeLease;
@@ -131,6 +135,25 @@ export async function fetchCloudCommunityMemberWorkflowBoardPage<SessionT>(
         : null,
     isDone: payload?.isDone === true,
   };
+}
+
+export async function fetchCloudCommunityMemberSuccessDossier<SessionT>(
+  params: WorkflowGatewayParams<SessionT> & {
+    communityId: string;
+    membershipId: string;
+  },
+): Promise<CloudCommunityMemberSuccessDossier> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
+    params.session,
+  );
+  return (await client.query(
+    "communityMemberWorkflows:getBuilderWorkflowMemberSuccessDossier" as any,
+    {
+      authSubject,
+      communityId: params.communityId,
+      membershipId: params.membershipId,
+    },
+  )) as CloudCommunityMemberSuccessDossier;
 }
 
 export async function createCloudCommunityMemberWorkflowStage<SessionT>(

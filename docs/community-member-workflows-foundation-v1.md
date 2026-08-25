@@ -163,6 +163,14 @@ There is no separate editing canvas, trigger selector, workflow details form,
 start/publish button, evidence form, completion form, enrollment inspector, or
 manual status machine.
 
+Selecting a member card opens one read-only success dossier. The dossier is a
+manager-authorized projection over canonical membership, approved
+community-scoped member facts, current workflow state, the latest milestone
+evaluation, and bounded immutable transition history. The same projection has
+one deterministic Markdown rendering for downstream agent context. It does not copy personal
+memory, create a second ontology store, or expose pending, agent-internal,
+platform-wide, or other-community facts to the builder.
+
 ## Deferred
 
 The foundation does not yet implement:
@@ -170,8 +178,7 @@ The foundation does not yet implement:
 1. scheduled/time evaluation wakes
 2. external integration evidence and wakes
 3. proactive agent actions or autonomous loops inside a stage
-4. builder-visible evaluation history or explanations
-5. manual review/override controls
+4. manual review/override controls
 
 Those slices must reuse the same evidence, evaluation, transition, runtime,
 funding, membership, and receipt authorities. They must not recreate retired

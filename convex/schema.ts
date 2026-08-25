@@ -1229,6 +1229,11 @@ export default defineSchema({
       "workflowId",
       "membershipId",
       "wakeReceiptRef",
+    ])
+    .index("by_workflow_membership_createdAt", [
+      "workflowId",
+      "membershipId",
+      "createdAt",
     ]),
 
   communityMemberWorkflowTransitions: defineTable({

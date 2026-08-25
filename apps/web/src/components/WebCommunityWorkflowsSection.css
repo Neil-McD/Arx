@@ -290,6 +290,17 @@
     var(--surface-workspace) 82%,
     var(--surface-raised)
   );
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 140ms ease,
+    background-color 140ms ease;
+}
+
+.workflow-member-stub:hover {
+  border-color: var(--border-strong);
+  background: var(--hover-overlay);
 }
 
 .workflow-member-stub + .workflow-member-stub {
@@ -354,6 +365,158 @@
 
 .workflow-stage-modal {
   width: min(480px, calc(100vw - 32px));
+}
+
+.workflow-member-dossier-modal {
+  width: min(620px, calc(100vw - 32px));
+  max-height: min(760px, calc(100vh - 48px));
+}
+
+.workflow-member-dossier-header {
+  align-items: center;
+}
+
+.workflow-member-dossier-identity {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 12px;
+}
+
+.workflow-member-dossier-identity > div {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.workflow-member-dossier-identity .modal-title,
+.workflow-member-dossier-identity span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.workflow-member-dossier-identity span {
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.workflow-member-dossier-avatar {
+  flex: 0 0 auto;
+  width: 42px;
+  height: 42px;
+}
+
+.workflow-member-dossier-body {
+  display: grid;
+  gap: 0;
+  overflow-y: auto;
+  padding: 0 22px 24px;
+}
+
+.workflow-member-dossier-section {
+  padding: 20px 0;
+  border-bottom: 1px solid var(--border-default);
+}
+
+.workflow-member-dossier-section:last-child {
+  border-bottom: 0;
+}
+
+.workflow-member-dossier-section h3 {
+  margin: 0 0 9px;
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 720;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.workflow-member-dossier-section p {
+  margin: 0;
+  color: var(--text-primary);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.workflow-member-context-list {
+  display: grid;
+  gap: 16px;
+}
+
+.workflow-member-context-list > div,
+.workflow-member-assessment {
+  display: grid;
+  gap: 6px;
+}
+
+.workflow-member-context-list strong,
+.workflow-member-assessment > strong {
+  font-size: 13px;
+}
+
+.workflow-member-assessment > div {
+  display: grid;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 11px 12px;
+  border-radius: 8px;
+  background: var(--hover-overlay);
+}
+
+.workflow-member-assessment span {
+  color: var(--text-muted);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.workflow-member-assessment ul {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--text-primary);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.workflow-member-history {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.workflow-member-history li {
+  display: grid;
+  grid-template-columns: 82px minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+}
+
+.workflow-member-history span {
+  color: var(--text-faint);
+  font-size: 10px;
+}
+
+.workflow-member-history strong {
+  font-size: 12px;
+  font-weight: 620;
+}
+
+.workflow-member-dossier-loading {
+  display: grid;
+  gap: 12px;
+  padding: 28px 0;
+}
+
+.workflow-member-dossier-loading span {
+  display: block;
+  width: 100%;
+  height: 58px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--text-faint) 10%, transparent);
 }
 
 .workflow-stage-modal .modal-body {
@@ -442,13 +605,19 @@
   .workflow-stage-modal-actions button {
     width: 100%;
   }
+
+  .workflow-member-history li {
+    grid-template-columns: 1fr;
+    gap: 3px;
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .workflow-secondary-button,
   .workflow-add-stage-button,
   .workflow-stage-edit-button,
-  .workflow-stage-setup-button {
+  .workflow-stage-setup-button,
+  .workflow-member-stub {
     transition: none;
   }
 }

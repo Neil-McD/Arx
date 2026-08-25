@@ -310,6 +310,167 @@ test("only a completed current assessment advances exactly one stage", async () 
   ).toHaveLength(1);
 });
 
+test("the builder dossier is manager-only and reuses consent-filtered community facts plus workflow receipts", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const asMember = t.withIdentity({ subject: MEMBER_SUBJECT });
+  const { first, second } = await createWorkflow(asOwner, fixture.communityId);
+
+  await t.run(async (ctx) => {
+    const otherCommunityId = await ctx.db.insert("communities", {
+      ownerId: fixture.ownerId,
+      slug: "other-workflow-community",
+      name: "Other Workflow Community",
+      lifecycleStatus: "active",
+      visibility: "unlisted",
+      inferenceFundingPolicy: "managed_required",
+      entryPolicy: "approval",
+      activeMemberCount: 1,
+      createdAt: fixture.nowMs,
+      updatedAt: fixture.nowMs,
+    });
+    const facts = [
+      {
+        communityId: fixture.communityId,
+        kind: "goal" as const,
+        body: "Ship the first customer onboarding system.",
+        provenance: "stated_interview" as const,
+        consentState: "approved" as const,
+      },
+      {
+        communityId: fixture.communityId,
+        kind: "preference" as const,
+        body: "Keep this pending inference private.",
+        provenance: "inferred_agent" as const,
+        consentState: "pending" as const,
+      },
+      {
+        communityId: otherCommunityId,
+        kind: "goal" as const,
+        body: "This belongs to another community.",
+        provenance: "stated_interview" as const,
+        consentState: "approved" as const,
+      },
+      {
+        communityId: undefined,
+        kind: "situation" as const,
+        body: "This is platform-scoped, not builder-scoped.",
+        provenance: "stated_bridge" as const,
+        consentState: "approved" as const,
+      },
+    ];
+    for (const fact of facts) {
+      await ctx.db.insert("memberFacts", {
+        userId: fixture.memberId,
+        communityId: fact.communityId,
+        kind: fact.kind,
+        body: fact.body,
+        provenance: fact.provenance,
+        confidence: 1,
+        evidenceRefs: [],
+        stalenessScore: 0,
+        consentState: fact.consentState,
+        createdByActorType: "member",
+        createdByUserId: fixture.memberId,
+        version: 1,
+        createdAt: fixture.nowMs,
+        updatedAt: fixture.nowMs,
+      });
+    }
+  });
+
+  await expect(
+    asMember.query(
+      api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+      {
+        communityId: fixture.communityId,
+        membershipId: fixture.membershipId,
+      },
+    ),
+  ).rejects.toThrow("community_forbidden");
+
+  const before = await asOwner.query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    {
+      communityId: fixture.communityId,
+      membershipId: fixture.membershipId,
+    },
+  );
+  expect(before).toMatchObject({
+    membership_id: String(fixture.membershipId),
+    workflow: {
+      current_stage_key: first.key,
+      current_stage_name: "New",
+    },
+    approved_community_context: [
+      { kind: "goal", body: "Ship the first customer onboarding system." },
+    ],
+    latest_evaluation: null,
+    transitions: [],
+  });
+  expect(before.markdown).toContain("# Grace Member — success dossier");
+  expect(before.markdown).not.toContain("pending inference");
+  expect(before.markdown).not.toContain("another community");
+  expect(before.markdown).not.toContain("platform-scoped");
+
+  const rootId = await insertRoot(
+    t,
+    fixture,
+    "dossier-complete-root",
+    "I shipped the implementation and measured the result.",
+  );
+  const queued = await enqueueRoot(t, rootId);
+  const evaluationId = queued.evaluation_id as any;
+  const claim = await t.mutation(
+    internalApi.communityMemberWorkflows.claimMilestoneEvaluationInternal,
+    { evaluationId },
+  );
+  const finalized = await t.mutation(
+    internalApi.communityMemberWorkflows.finalizeMilestoneEvaluationInternal,
+    {
+      evaluationId,
+      claimToken: claim.claim_token,
+      decision: "complete",
+      evaluatorKind: "model",
+      evidenceRefs: [`interaction:root:${String(rootId)}`],
+      explanation: "The implementation and result are present.",
+      missingEvidence: [],
+      nowMs: fixture.nowMs + 100,
+    },
+  );
+  expect(finalized).toMatchObject({ status: "complete", replayed: false });
+
+  const after = await asOwner.query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    {
+      communityId: fixture.communityId,
+      membershipId: fixture.membershipId,
+    },
+  );
+  expect(after).toMatchObject({
+    workflow: {
+      current_stage_key: second.stage.key,
+      current_stage_name: "Activated",
+    },
+    latest_evaluation: {
+      id: String(evaluationId),
+      status: "finished",
+      decision: "complete",
+      explanation: "The implementation and result are present.",
+    },
+    transitions: [
+      {
+        sequence: 1,
+        from_stage_name: "New",
+        to_stage_name: "Activated",
+        milestone_evaluation_id: String(evaluationId),
+      },
+    ],
+  });
+  expect(after.markdown).toContain("New → Activated");
+});
+
 test("transition authority rejects evidence the evaluator was not allowed to read", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);

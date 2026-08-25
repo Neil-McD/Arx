@@ -27,6 +27,10 @@ const surface = read(
 const memberStub = read(
   "apps/web/src/components/WebCommunityWorkflowMemberStub.tsx",
 );
+const memberDossier = read(
+  "apps/web/src/components/WebCommunityWorkflowMemberDossierModal.tsx",
+);
+const successDossier = read("shared/communityMemberSuccessDossier.ts");
 const modal = read(
   "apps/web/src/components/WebCommunityWorkflowStageModal.tsx",
 );
@@ -48,6 +52,7 @@ for (const retiredTable of [
 }
 
 assert.match(schema, /by_workflow_membership_wakeReceipt/);
+assert.match(schema, /by_workflow_membership_createdAt/);
 assert.match(schema, /by_milestoneEvaluation/);
 assert.match(schema, /community_workflow_milestone_evaluation/);
 assert.match(schema, /by_community_actorUser_createdAt/);
@@ -58,6 +63,9 @@ assert.match(backend, /export const updateBuilderWorkflowStage = mutation/);
 assert.match(backend, /export const deleteBuilderWorkflowStage = mutation/);
 assert.match(backend, /export const getBuilderWorkflowBoardPage = query/);
 assert.match(backend, /export const getBuilderWorkflowBoardProjectionToken = query/);
+assert.match(backend, /export const getBuilderWorkflowMemberSuccessDossier = query/);
+assert.match(backend, /readMemberFactsForLens/);
+assert.match(backend, /kind: "founder_admin"/);
 assert.match(backend, /export const enqueueChannelContributionRootEvaluationInternal/);
 assert.match(backend, /export const enqueueChannelContributionReplyEvaluationInternal/);
 assert.match(backend, /export const claimMilestoneEvaluationInternal/);
@@ -117,6 +125,7 @@ assert.match(gateway, /createCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /updateCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /deleteCloudCommunityMemberWorkflowStage/);
 assert.match(gateway, /fetchCloudCommunityMemberWorkflowBoardPage/);
+assert.match(gateway, /fetchCloudCommunityMemberSuccessDossier/);
 assert.match(gateway, /acquireAuthenticatedConvexRealtimeClient/);
 assert.match(gateway, /subscribeCloudCommunityMemberWorkflowBoardProjection/);
 assert.doesNotMatch(gateway, /completionTrigger/);
@@ -126,6 +135,8 @@ assert.match(controller, /deleteStage/);
 assert.match(controller, /loadMore/);
 assert.match(controller, /requestBoardReconciliationRef/);
 assert.match(controller, /createWorkflowBoardReconciliationQueue/);
+assert.match(controller, /openMemberDossier/);
+assert.match(controller, /community_workflow_member_success_dossier/);
 assert.doesNotMatch(controller, /setInterval|setTimeout|completionTrigger/);
 assert.match(surface, /workflow-stage-canvas/);
 assert.match(surface, /workflow-add-stage-button/);
@@ -136,6 +147,12 @@ assert.doesNotMatch(surface, /workflow-member-row/);
 assert.match(memberStub, /UserAvatar/);
 assert.match(memberStub, /current_stage_entered_at/);
 assert.match(memberStub, /In this stage/);
+assert.match(memberStub, /onOpen/);
+assert.match(memberDossier, /Approved context/);
+assert.match(memberDossier, /Latest assessment/);
+assert.match(memberDossier, /Stage history/);
+assert.match(successDossier, /renderCommunityMemberSuccessDossierMarkdown/);
+assert.match(successDossier, /approved_community_context/);
 assert.match(surface, /props\.board[\s\S]*\? stages\.length[\s\S]*: 0/);
 assert.match(modal, /Stage name/);
 assert.match(modal, /Move to the next stage when/);

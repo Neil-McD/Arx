@@ -26,6 +26,12 @@ import {
   communityInteractionEvidenceSourceIsReadable,
   resolveCommunityInteractionEvidenceSource,
 } from "./communityInteractionEvidenceCore";
+import { readMemberFactsForLens } from "./memberOntologyCore";
+import {
+  COMMUNITY_MEMBER_SUCCESS_TRANSITION_LIMIT,
+  renderCommunityMemberSuccessDossierMarkdown,
+  type CommunityMemberSuccessDossier,
+} from "../shared/communityMemberSuccessDossier";
 
 const managerIdentityArgs = {
   userId: v.optional(v.id("users")),
@@ -490,6 +496,148 @@ export const getBuilderWorkflowBoardProjectionToken = query({
       latest_transition_id: latestTransition
         ? String(latestTransition._id)
         : null,
+    };
+  },
+});
+
+async function resolveBuilderWorkflowMemberSuccessDossier(args: {
+  ctx: any;
+  communityId: any;
+  membershipId: any;
+}): Promise<CommunityMemberSuccessDossier> {
+  const membership = (await args.ctx.db.get(
+    args.membershipId,
+  )) as CommunityMembershipLike | null;
+  if (
+    !communityMembershipRowIsActive(membership) ||
+    String(membership!.communityId) !== String(args.communityId)
+  ) {
+    throw new Error("community_member_workflow_member_not_found");
+  }
+  const workflow = await getCommunityMemberWorkflowByCommunity({
+    ctx: args.ctx,
+    communityId: args.communityId,
+  });
+  if (!workflow) throw new Error("community_member_workflow_not_found");
+
+  const state = await getMemberStage({
+    ctx: args.ctx,
+    workflowId: workflow._id,
+    membershipId: membership!._id,
+  });
+  const current = resolveCurrentStage({
+    workflow,
+    membership: membership!,
+    state,
+  });
+  const [profile, approvedFacts, latestEvaluation, transitionRows] =
+    await Promise.all([
+      resolveUserProfileDisplayProjection(args.ctx, membership!.userId),
+      readMemberFactsForLens(args.ctx, {
+        subjectUserId: membership!.userId,
+        lens: {
+          kind: "founder_admin",
+          communityId: String(args.communityId),
+        },
+        scope: { communityId: args.communityId },
+      }),
+      args.ctx.db
+        .query("communityMemberWorkflowMilestoneEvaluations" as any)
+        .withIndex("by_workflow_membership_createdAt", (q: any) =>
+          q
+            .eq("workflowId", workflow._id)
+            .eq("membershipId", membership!._id),
+        )
+        .order("desc")
+        .first() as Promise<EvaluationRow | null>,
+      args.ctx.db
+        .query("communityMemberWorkflowTransitions" as any)
+        .withIndex("by_workflow_membership_seq", (q: any) =>
+          q
+            .eq("workflowId", workflow._id)
+            .eq("membershipId", membership!._id),
+        )
+        .order("desc")
+        .take(COMMUNITY_MEMBER_SUCCESS_TRANSITION_LIMIT) as Promise<
+        TransitionRow[]
+      >,
+    ]);
+
+  const stageName = (stageKey: string) =>
+    workflow.stages.find((stage) => stage.key === stageKey)?.name ?? "Stage";
+  return {
+    membership_id: String(membership!._id),
+    display_name: profile.display_name ?? "Member",
+    avatar_url: profile.avatar_url,
+    avatar_focus_x: profile.avatar_focus_x,
+    avatar_focus_y: profile.avatar_focus_y,
+    avatar_zoom: profile.avatar_zoom,
+    joined_at: toIsoString(membership!.activatedAt ?? membership!.createdAt),
+    workflow: {
+      id: String(workflow._id),
+      revision: workflow.revision,
+      current_stage_key: current.stage.key,
+      current_stage_name: current.stage.name,
+      current_stage_entered_at: toIsoString(current.stageEnteredAt),
+      milestone: current.stage.milestone ?? null,
+    },
+    approved_community_context: approvedFacts
+      .map((fact) => ({ kind: fact.kind, body: fact.body }))
+      .sort((left, right) =>
+        left.kind === right.kind
+          ? left.body.localeCompare(right.body)
+          : left.kind.localeCompare(right.kind),
+      ),
+    latest_evaluation: latestEvaluation
+      ? {
+          id: String(latestEvaluation._id),
+          status: latestEvaluation.status,
+          decision: latestEvaluation.decision ?? null,
+          evaluator_kind: latestEvaluation.evaluatorKind ?? null,
+          explanation: latestEvaluation.explanation ?? null,
+          missing_evidence: latestEvaluation.missingEvidence ?? [],
+          evidence_refs: latestEvaluation.evidenceRefs ?? [],
+          wake_kind: latestEvaluation.wakeKind,
+          created_at: toIsoString(latestEvaluation.createdAt),
+          finished_at: latestEvaluation.finishedAt
+            ? toIsoString(latestEvaluation.finishedAt)
+            : null,
+        }
+      : null,
+    transitions: transitionRows.map((transition) => ({
+      id: String(transition._id),
+      sequence: transition.seq,
+      from_stage_key: transition.fromStageKey,
+      from_stage_name: stageName(transition.fromStageKey),
+      to_stage_key: transition.toStageKey,
+      to_stage_name: stageName(transition.toStageKey),
+      milestone_evaluation_id: String(transition.milestoneEvaluationId),
+      occurred_at: toIsoString(transition.occurredAt),
+    })),
+  };
+}
+
+export const getBuilderWorkflowMemberSuccessDossier = query({
+  args: {
+    ...managerIdentityArgs,
+    communityId: v.id("communities"),
+    membershipId: v.id("communityMemberships"),
+  },
+  handler: async (ctx, args) => {
+    await requireWorkflowManager({
+      ctx,
+      communityId: args.communityId,
+      userId: args.userId,
+      authSubject: args.authSubject,
+    });
+    const source = await resolveBuilderWorkflowMemberSuccessDossier({
+      ctx,
+      communityId: args.communityId,
+      membershipId: args.membershipId,
+    });
+    return {
+      ...source,
+      markdown: renderCommunityMemberSuccessDossierMarkdown(source),
     };
   },
 });

@@ -7,11 +7,13 @@ import {
   createCloudCommunityMemberWorkflowStage,
   deleteCloudCommunityMemberWorkflowStage,
   fetchCloudCommunityMemberWorkflowBoardPage,
+  fetchCloudCommunityMemberSuccessDossier,
   subscribeCloudCommunityMemberWorkflowBoardProjection,
   updateCloudCommunityMemberWorkflowStage,
   type CloudCommunityMemberWorkflowBoard,
   type CloudCommunityMemberWorkflowBoardPage,
   type CloudCommunityMemberWorkflowMember,
+  type CloudCommunityMemberSuccessDossier,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
 
 type EnsureAuthSession = (
@@ -126,7 +128,13 @@ export function useWebCommunityWorkflowsController(params: {
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [selectedMembershipId, setSelectedMembershipId] = useState<string | null>(null);
+  const [memberDossier, setMemberDossier] =
+    useState<CloudCommunityMemberSuccessDossier | null>(null);
+  const [isMemberDossierLoading, setIsMemberDossierLoading] = useState(false);
+  const [memberDossierError, setMemberDossierError] = useState<string | null>(null);
   const requestGenerationRef = useRef(0);
+  const dossierRequestGenerationRef = useRef(0);
   const loadedPageDepthRef = useRef(1);
   const requestBoardReconciliationRef = useRef<(() => Promise<void>) | null>(
     null,
@@ -144,6 +152,11 @@ export function useWebCommunityWorkflowsController(params: {
     setHasLoaded(false);
     setError(null);
     setActionError(null);
+    dossierRequestGenerationRef.current += 1;
+    setSelectedMembershipId(null);
+    setMemberDossier(null);
+    setIsMemberDossierLoading(false);
+    setMemberDossierError(null);
   }, [params.activeCommunityId]);
 
   useEffect(() => {
@@ -288,6 +301,78 @@ export function useWebCommunityWorkflowsController(params: {
     }
   }, [hasMore, isLoadingMore, nextCursor, params.activeCommunityId]);
 
+  const selectedMember = selectedMembershipId
+    ? members.find((member) => member.membership_id === selectedMembershipId)
+    : null;
+  const selectedMemberStageKey = selectedMember?.current_stage_key ?? null;
+  const selectedMemberStageEnteredAt =
+    selectedMember?.current_stage_entered_at ?? null;
+
+  useEffect(() => {
+    if (
+      !selectedMembershipId ||
+      !params.activeCommunityId ||
+      !params.session ||
+      !params.canManageMembers ||
+      params.activePage !== "community" ||
+      params.communityTab !== "workflows"
+    ) {
+      return;
+    }
+    const generation = ++dossierRequestGenerationRef.current;
+    let cancelled = false;
+    setIsMemberDossierLoading(true);
+    setMemberDossierError(null);
+
+    void (async () => {
+      try {
+        const usableSession = await params.ensureSession(
+          params.session,
+          "community_workflow_member_success_dossier",
+        );
+        if (!usableSession) throw new Error("auth_session_required");
+        const dossier = await fetchCloudCommunityMemberSuccessDossier({
+          session: usableSession,
+          communityId: params.activeCommunityId!,
+          membershipId: selectedMembershipId,
+        });
+        if (
+          cancelled ||
+          generation !== dossierRequestGenerationRef.current
+        ) return;
+        setMemberDossier(dossier);
+      } catch (dossierError) {
+        if (
+          cancelled ||
+          generation !== dossierRequestGenerationRef.current
+        ) return;
+        setMemberDossier(null);
+        setMemberDossierError(workflowErrorMessage(dossierError));
+      } finally {
+        if (
+          !cancelled &&
+          generation === dossierRequestGenerationRef.current
+        ) {
+          setIsMemberDossierLoading(false);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    params.activeCommunityId,
+    params.activePage,
+    params.canManageMembers,
+    params.communityTab,
+    params.ensureSession,
+    params.session,
+    selectedMemberStageEnteredAt,
+    selectedMemberStageKey,
+    selectedMembershipId,
+  ]);
+
   const mutateStage = useCallback(
     async (
       source: string,
@@ -329,8 +414,24 @@ export function useWebCommunityWorkflowsController(params: {
     error,
     isSaving,
     actionError,
+    selectedMembershipId,
+    memberDossier,
+    isMemberDossierLoading,
+    memberDossierError,
     reload: () => requestBoardReconciliationRef.current?.(),
     loadMore,
+    openMemberDossier: (membershipId: string) => {
+      setMemberDossier(null);
+      setMemberDossierError(null);
+      setSelectedMembershipId(membershipId);
+    },
+    closeMemberDossier: () => {
+      dossierRequestGenerationRef.current += 1;
+      setSelectedMembershipId(null);
+      setMemberDossier(null);
+      setMemberDossierError(null);
+      setIsMemberDossierLoading(false);
+    },
     createStage: (name: string) =>
       mutateStage("community_workflows_create_stage", (session, communityId, revision) =>
         createCloudCommunityMemberWorkflowStage({
