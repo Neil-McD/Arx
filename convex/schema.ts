@@ -1176,14 +1176,21 @@ export default defineSchema({
       // kernel. New definitions persist automations explicitly.
       automations: v.optional(v.array(v.object({
         key: v.string(),
-        trigger: v.object({
-          type: v.literal("goal_completed"),
-        }),
-        actions: v.array(v.object({
-          key: v.string(),
-          type: v.literal("move_member"),
-          destination: v.literal("next_or_complete"),
-        })),
+        trigger: v.union(
+          v.object({ type: v.literal("member_contributed") }),
+          v.object({ type: v.literal("goal_completed") }),
+        ),
+        actions: v.array(v.union(
+          v.object({
+            key: v.string(),
+            type: v.literal("evaluate_goal"),
+          }),
+          v.object({
+            key: v.string(),
+            type: v.literal("move_member"),
+            destination: v.literal("next_or_complete"),
+          }),
+        )),
       }))),
     })),
     revision: v.number(),
@@ -1237,6 +1244,8 @@ export default defineSchema({
       v.literal("channel_replied"),
     ),
     actionReceiptRef: v.string(),
+    requestedByWorkflowRunId: v.optional(v.id("communityMemberWorkflowRuns")),
+    requestedByActionKey: v.optional(v.string()),
     evidenceWindowStartAt: v.number(),
     evidenceThroughAt: v.number(),
     evidenceRefs: v.array(v.string()),
@@ -1301,13 +1310,22 @@ export default defineSchema({
     workflowRevision: v.number(),
     automationKey: v.string(),
     automationHash: v.string(),
-    triggerType: v.literal("goal_completed"),
+    triggerType: v.union(
+      v.literal("member_contributed"),
+      v.literal("goal_completed"),
+    ),
     triggerReceiptRef: v.string(),
-    actionsSnapshot: v.array(v.object({
-      key: v.string(),
-      type: v.literal("move_member"),
-      destination: v.literal("next_or_complete"),
-    })),
+    actionsSnapshot: v.array(v.union(
+      v.object({
+        key: v.string(),
+        type: v.literal("evaluate_goal"),
+      }),
+      v.object({
+        key: v.string(),
+        type: v.literal("move_member"),
+        destination: v.literal("next_or_complete"),
+      }),
+    )),
     status: v.union(
       v.literal("running"),
       v.literal("finished"),
@@ -1317,6 +1335,8 @@ export default defineSchema({
     actionResults: v.array(v.object({
       actionKey: v.string(),
       status: v.union(v.literal("complete"), v.literal("stale")),
+      resultCode: v.optional(v.string()),
+      evaluationId: v.optional(v.id("communityMemberWorkflowMilestoneEvaluations")),
       transitionId: v.optional(v.id("communityMemberWorkflowTransitions")),
       errorCode: v.optional(v.string()),
     })),

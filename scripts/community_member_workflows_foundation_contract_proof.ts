@@ -44,7 +44,9 @@ for (const retiredTable of [
 assert.match(schema, /milestones: v\.array/);
 assert.match(schema, /type: v\.literal\("automatic"\)/);
 assert.match(schema, /type: v\.literal\("judgment"\)/);
+assert.match(schema, /type: v\.literal\("member_contributed"\)/);
 assert.match(schema, /type: v\.literal\("goal_completed"\)/);
+assert.match(schema, /type: v\.literal\("evaluate_goal"\)/);
 assert.match(schema, /type: v\.literal\("move_member"\)/);
 assert.match(schema, /completedAt: v\.optional/);
 assert.match(schema, /by_workflow_membership_actionReceipt/);
@@ -62,6 +64,7 @@ for (const symbol of [
   "handleChannelContributionRootInternal",
   "handleChannelContributionReplyInternal",
   "backfillGoalCompletedAutomationsInternal",
+  "backfillMemberContributedAutomationsInternal",
   "backfillMilestonePassTransitionsInternal",
   "claimMilestoneEvaluationInternal",
   "buildMilestoneEvaluationContextInternal",
@@ -72,6 +75,8 @@ for (const symbol of [
 }
 
 assert.match(backend, /resolveAutomaticChecks/);
+assert.match(backend, /executeMemberContributedAutomation/);
+assert.match(backend, /evaluateGoalForContributionAction/);
 assert.match(backend, /executeGoalCompletedAutomations/);
 assert.match(backend, /transitionMemberForWorkflowAction/);
 assert.match(backend, /communityMemberWorkflowTransitions/);
@@ -90,7 +95,9 @@ assert.doesNotMatch(backend, /workflow\.stages/);
 assert.match(contract, /CommunityMemberWorkflowMilestone/);
 assert.match(contract, /CommunityMemberWorkflowCheck/);
 assert.match(contract, /CommunityMemberWorkflowAutomation/);
+assert.match(contract, /CommunityMemberWorkflowMemberContributedTrigger/);
 assert.match(contract, /CommunityMemberWorkflowGoalCompletedTrigger/);
+assert.match(contract, /CommunityMemberWorkflowEvaluateGoalAction/);
 assert.match(contract, /CommunityMemberWorkflowMoveMemberAction/);
 assert.match(contract, /"channel_posted"/);
 assert.match(contract, /"channel_replied"/);
@@ -139,6 +146,10 @@ assert.match(
   /actorType === "human" && !deduped[\s\S]*handleChannelContributionRootInternal/,
 );
 assert.match(
+  backend,
+  /handleChannelContributionCore[\s\S]*executeMemberContributedAutomation/,
+);
+assert.match(
   interactions,
   /actorType === "human" && !deduped[\s\S]*handleChannelContributionReplyInternal/,
 );
@@ -156,4 +167,4 @@ assert.match(semanticRepository, /Current milestone:/);
 assert.match(semanticRepository, /Status:/);
 assert.doesNotMatch(semanticRepository, /Current stage:/);
 
-console.log("community member workflow explicit progression seam proof passed");
+console.log("community member workflow explicit trigger/action seam proof passed");

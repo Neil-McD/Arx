@@ -191,6 +191,26 @@ function createDefaultGoalCompletedAutomation(): CommunityMemberWorkflowAutomati
   };
 }
 
+function createDefaultMemberContributedAutomation(): CommunityMemberWorkflowAutomation {
+  return {
+    key: nextOpaqueKey("automation", new Set()),
+    trigger: { type: "member_contributed" },
+    actions: [
+      {
+        key: nextOpaqueKey("action", new Set()),
+        type: "evaluate_goal",
+      },
+    ],
+  };
+}
+
+function createDefaultMilestoneAutomations(): CommunityMemberWorkflowAutomation[] {
+  return [
+    createDefaultMemberContributedAutomation(),
+    createDefaultGoalCompletedAutomation(),
+  ];
+}
+
 function requireWorkflowRevision(
   workflow: WorkflowRow | null,
   expectedRevision: number,
@@ -289,7 +309,7 @@ export const createBuilderWorkflowMilestone = mutation({
         key: nextOpaqueKey("milestone", new Set()),
         name,
         checks: [],
-        automations: [createDefaultGoalCompletedAutomation()],
+        automations: createDefaultMilestoneAutomations(),
       };
       const workflowId = await ctx.db.insert("communityMemberWorkflows", {
         communityId: args.communityId,
@@ -313,7 +333,7 @@ export const createBuilderWorkflowMilestone = mutation({
       ),
       name,
       checks: [],
-      automations: [createDefaultGoalCompletedAutomation()],
+      automations: createDefaultMilestoneAutomations(),
     };
     const revision = expectedRevision + 1;
     await ctx.db.patch(existing._id, {
@@ -490,6 +510,76 @@ export const backfillGoalCompletedAutomationsInternal = internalMutation({
       workflows_checked: workflows.length,
       workflows_updated: workflowsUpdated,
       milestones_updated: milestonesUpdated,
+    };
+  },
+});
+
+export const backfillMemberContributedAutomationsInternal = internalMutation({
+  args: {
+    communityId: v.optional(v.id("communities")),
+    limit: v.optional(v.number()),
+    dryRun: v.optional(v.boolean()),
+  },
+  handler: async (ctx, args) => {
+    const limit = Math.max(1, Math.min(500, Math.floor(args.limit ?? 100)));
+    const dryRun = args.dryRun !== false;
+    const workflows = args.communityId
+      ? await ctx.db
+          .query("communityMemberWorkflows")
+          .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
+          .take(2)
+      : await ctx.db.query("communityMemberWorkflows").take(limit);
+    let workflowsUpdated = 0;
+    let milestonesUpdated = 0;
+    let milestonesSkippedWithoutGoalAutomation = 0;
+    for (const workflow of workflows) {
+      const milestones = workflow.milestones.map((milestone) => {
+        if (!Array.isArray(milestone.automations)) return milestone;
+        if (
+          milestone.automations.some(
+            (automation) => automation.trigger.type === "member_contributed",
+          )
+        ) {
+          return milestone;
+        }
+        if (
+          !milestone.automations.some(
+            (automation) => automation.trigger.type === "goal_completed",
+          )
+        ) {
+          milestonesSkippedWithoutGoalAutomation += 1;
+          return milestone;
+        }
+        milestonesUpdated += 1;
+        return {
+          ...milestone,
+          automations: [
+            createDefaultMemberContributedAutomation(),
+            ...milestone.automations,
+          ],
+        };
+      });
+      if (milestones.every((milestone, index) => milestone === workflow.milestones[index])) {
+        continue;
+      }
+      workflowsUpdated += 1;
+      if (!dryRun) {
+        await ctx.db.patch(workflow._id, {
+          milestones,
+          revision: workflow.revision + 1,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+    return {
+      ok: true,
+      kind: "community_member_workflow_member_contributed_automation_backfill",
+      dry_run: dryRun,
+      workflows_checked: workflows.length,
+      workflows_updated: workflowsUpdated,
+      milestones_updated: milestonesUpdated,
+      milestones_skipped_without_goal_automation:
+        milestonesSkippedWithoutGoalAutomation,
     };
   },
 });
@@ -1312,6 +1402,281 @@ async function executeGoalCompletedAutomations(args: {
   };
 }
 
+async function evaluateGoalForContributionAction(args: {
+  ctx: any;
+  objectType: "root" | "reply";
+  row: ChannelContributionRow;
+  workflow: WorkflowRow;
+  membership: CommunityMembershipLike;
+  current: ReturnType<typeof resolveCurrentMilestone>;
+  actionReceiptRef: string;
+  workflowRunId: any;
+  actionKey: string;
+}) {
+  const row = args.row;
+  const actionKind = args.objectType === "root"
+    ? "channel_posted" as const
+    : "channel_replied" as const;
+  const evidence = await listEligibleMilestoneEvidence({
+    ctx: args.ctx,
+    communityId: row.communityId,
+    memberUserId: args.membership.userId,
+    milestoneEnteredAt: args.current.milestoneEnteredAt,
+    evidenceThroughAt: row.createdAt,
+  });
+  const automaticResults = resolveAutomaticChecks(args.current.milestone, evidence);
+  if (automaticResults.some((result) => !result.passed)) {
+    return {
+      status: "requirements_pending" as const,
+      automatic_results: automaticResults,
+    };
+  }
+  const checksHash = await milestoneChecksHash(args.current.milestone);
+  const judgmentChecks = args.current.milestone.checks.filter(
+    (check) => check.type === "judgment",
+  );
+  const replay = await getEvaluationByActionReceipt({
+    ctx: args.ctx,
+    workflowId: args.workflow._id,
+    membershipId: args.membership._id,
+    actionReceiptRef: args.actionReceiptRef,
+  });
+  if (replay) {
+    return {
+      status: "already_evaluated" as const,
+      evaluation_id: String(replay._id),
+      goal_completed_evaluation_id:
+        replay.status === "finished" && replay.decision === "complete"
+          ? replay._id
+          : null,
+    };
+  }
+  if (judgmentChecks.length === 0) {
+    const nowMs = Date.now();
+    const evidenceRefs = Array.from(
+      new Set(automaticResults.flatMap((result) => result.evidenceRefs)),
+    );
+    const evaluationId = await args.ctx.db.insert(
+      "communityMemberWorkflowMilestoneEvaluations",
+      {
+        communityId: row.communityId,
+        workflowId: args.workflow._id,
+        membershipId: args.membership._id,
+        milestoneKey: args.current.milestone.key,
+        workflowRevision: args.workflow.revision,
+        milestoneEnteredAt: args.current.milestoneEnteredAt,
+        milestoneName: args.current.milestone.name,
+        checksSnapshot: args.current.milestone.checks,
+        checksHash,
+        actionKind,
+        actionReceiptRef: args.actionReceiptRef,
+        requestedByWorkflowRunId: args.workflowRunId,
+        requestedByActionKey: args.actionKey,
+        evidenceWindowStartAt: args.current.milestoneEnteredAt,
+        evidenceThroughAt: row.createdAt,
+        evidenceRefs,
+        status: "finished",
+        decision: "complete",
+        evaluatorKind: "deterministic",
+        checkResults: automaticResults.map((result) => ({
+          checkKey: result.checkKey,
+          decision: "complete" as const,
+          evidenceRefs: result.evidenceRefs,
+          explanation: "Canonical product evidence satisfies this automatic check.",
+          missingEvidence: [],
+        })),
+        explanation: "All automatic goal checks are complete.",
+        missingEvidence: [],
+        availableAt: nowMs,
+        attempt: 0,
+        createdAt: nowMs,
+        updatedAt: nowMs,
+        finishedAt: nowMs,
+      },
+    );
+    return {
+      status: "complete" as const,
+      evaluation_id: String(evaluationId),
+      goal_completed_evaluation_id: evaluationId,
+    };
+  }
+  const active = await getActiveEvaluation({
+    ctx: args.ctx,
+    workflowId: args.workflow._id,
+    membershipId: args.membership._id,
+    milestoneKey: args.current.milestone.key,
+    milestoneEnteredAt: args.current.milestoneEnteredAt,
+    checksHash,
+  });
+  if (active) {
+    const evidenceThroughAt = Math.max(active.evidenceThroughAt, row.createdAt);
+    await args.ctx.db.patch(active._id, {
+      evidenceThroughAt,
+      actionReceiptRef: args.actionReceiptRef,
+      actionKind,
+      rerunRequested:
+        active.status === "running" &&
+        evidenceThroughAt > Number(active.claimedEvidenceThroughAt ?? active.evidenceThroughAt),
+      updatedAt: Date.now(),
+    });
+    return { status: "coalesced" as const, evaluation_id: String(active._id) };
+  }
+  const nowMs = Date.now();
+  const evaluationId = await args.ctx.db.insert(
+    "communityMemberWorkflowMilestoneEvaluations",
+    {
+      communityId: row.communityId,
+      workflowId: args.workflow._id,
+      membershipId: args.membership._id,
+      milestoneKey: args.current.milestone.key,
+      workflowRevision: args.workflow.revision,
+      milestoneEnteredAt: args.current.milestoneEnteredAt,
+      milestoneName: args.current.milestone.name,
+      checksSnapshot: args.current.milestone.checks,
+      checksHash,
+      actionKind,
+      actionReceiptRef: args.actionReceiptRef,
+      requestedByWorkflowRunId: args.workflowRunId,
+      requestedByActionKey: args.actionKey,
+      evidenceWindowStartAt: args.current.milestoneEnteredAt,
+      evidenceThroughAt: row.createdAt,
+      evidenceRefs: [],
+      status: "queued",
+      availableAt: nowMs,
+      attempt: 0,
+      createdAt: nowMs,
+      updatedAt: nowMs,
+    },
+  );
+  await args.ctx.scheduler.runAfter(
+    0,
+    internal.communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
+    { evaluationId },
+  );
+  return { status: "queued" as const, evaluation_id: String(evaluationId) };
+}
+
+async function executeMemberContributedAutomation(args: {
+  ctx: any;
+  objectType: "root" | "reply";
+  row: ChannelContributionRow;
+  workflow: WorkflowRow;
+  membership: CommunityMembershipLike;
+  current: ReturnType<typeof resolveCurrentMilestone>;
+}) {
+  const automations = (args.current.milestone.automations ?? []).filter(
+    (automation) => automation.trigger.type === "member_contributed",
+  );
+  if (automations.length === 0) {
+    return { status: "trigger_unconfigured" as const };
+  }
+  if (automations.length !== 1) {
+    throw new Error("community_member_workflow_member_contributed_automation_invalid");
+  }
+  const automation = automations[0];
+  if (
+    automation.actions.length !== 1 ||
+    automation.actions[0].type !== "evaluate_goal"
+  ) {
+    throw new Error("community_member_workflow_member_contributed_automation_invalid");
+  }
+  const action = automation.actions[0];
+  const triggerReceiptRef = normalizeCommunityMemberWorkflowSourceRef(
+    buildCommunityInteractionEvidenceRef({
+      objectType: args.objectType,
+      objectId: String(args.row._id),
+    }),
+  );
+  const existingRun = await getWorkflowRunByTrigger({
+    ctx: args.ctx,
+    workflowId: args.workflow._id,
+    membershipId: args.membership._id,
+    triggerReceiptRef,
+    automationKey: automation.key,
+  });
+  if (existingRun) {
+    const actionResult = existingRun.actionResults.find(
+      (result) => result.actionKey === action.key,
+    );
+    return {
+      status: "already_executed" as const,
+      workflow_run_id: String(existingRun._id),
+      evaluation_id: actionResult?.evaluationId
+        ? String(actionResult.evaluationId)
+        : null,
+      replayed: true,
+    };
+  }
+  const nowMs = Date.now();
+  const automationHash = await sha256HexText(
+    JSON.stringify(communityMemberWorkflowAutomationDefinition(automation)),
+  );
+  const workflowRunId = await args.ctx.db.insert("communityMemberWorkflowRuns", {
+    communityId: args.workflow.communityId,
+    workflowId: args.workflow._id,
+    membershipId: args.membership._id,
+    milestoneKey: args.current.milestone.key,
+    milestoneEnteredAt: args.current.milestoneEnteredAt,
+    workflowRevision: args.workflow.revision,
+    automationKey: automation.key,
+    automationHash,
+    triggerType: "member_contributed",
+    triggerReceiptRef,
+    actionsSnapshot: automation.actions,
+    status: "running",
+    actionResults: [],
+    createdAt: nowMs,
+    updatedAt: nowMs,
+  });
+  const result = await evaluateGoalForContributionAction({
+    ctx: args.ctx,
+    objectType: args.objectType,
+    row: args.row,
+    workflow: args.workflow,
+    membership: args.membership,
+    current: args.current,
+    actionReceiptRef: triggerReceiptRef,
+    workflowRunId,
+    actionKey: action.key,
+  });
+  const evaluationId = result.evaluation_id
+    ? result.evaluation_id as any
+    : undefined;
+  await args.ctx.db.patch(workflowRunId, {
+    status: "finished",
+    actionResults: [
+      {
+        actionKey: action.key,
+        status: "complete",
+        resultCode: result.status,
+        evaluationId,
+      },
+    ],
+    finishedAt: nowMs,
+    updatedAt: nowMs,
+  });
+  if (result.goal_completed_evaluation_id) {
+    const progression = await executeGoalCompletedAutomations({
+      ctx: args.ctx,
+      workflow: args.workflow,
+      membership: args.membership,
+      current: args.current,
+      evaluationId: result.goal_completed_evaluation_id,
+      nowMs,
+    });
+    return {
+      ...progression,
+      trigger_workflow_run_id: String(workflowRunId),
+      evaluation_action_status: result.status,
+    };
+  }
+  return {
+    ...result,
+    workflow_run_id: String(workflowRunId),
+    replayed: false,
+  };
+}
+
 async function handleChannelContributionCore(args: {
   ctx: any;
   objectType: "root" | "reply";
@@ -1356,154 +1721,14 @@ async function handleChannelContributionCore(args: {
   if (current.milestone.checks.length === 0) {
     return { status: "milestone_not_configured" as const };
   }
-  const actionReceiptRef = normalizeCommunityMemberWorkflowSourceRef(
-    buildCommunityInteractionEvidenceRef({
-      objectType: args.objectType,
-      objectId: String(row._id),
-    }),
-  );
-  const actionKind = args.objectType === "root"
-    ? "channel_posted" as const
-    : "channel_replied" as const;
-  const evidence = await listEligibleMilestoneEvidence({
+  return await executeMemberContributedAutomation({
     ctx: args.ctx,
-    communityId: row.communityId,
-    memberUserId: membership!.userId,
-    milestoneEnteredAt: current.milestoneEnteredAt,
-    evidenceThroughAt: row.createdAt,
+    objectType: args.objectType,
+    row,
+    workflow,
+    membership: membership!,
+    current,
   });
-  const automaticResults = resolveAutomaticChecks(current.milestone, evidence);
-  if (automaticResults.some((result) => !result.passed)) {
-    return {
-      status: "requirements_pending" as const,
-      automatic_results: automaticResults,
-    };
-  }
-  const checksHash = await milestoneChecksHash(current.milestone);
-  const judgmentChecks = current.milestone.checks.filter(
-    (check) => check.type === "judgment",
-  );
-  const replay = await getEvaluationByActionReceipt({
-    ctx: args.ctx,
-    workflowId: workflow._id,
-    membershipId: membership!._id,
-    actionReceiptRef,
-  });
-  if (replay) {
-    if (replay.status === "finished" && replay.decision === "complete") {
-      return await executeGoalCompletedAutomations({
-        ctx: args.ctx,
-        workflow,
-        membership: membership!,
-        current,
-        evaluationId: replay._id,
-        nowMs: Date.now(),
-      });
-    }
-    return { status: "already_queued" as const, evaluation_id: String(replay._id) };
-  }
-  if (judgmentChecks.length === 0) {
-    const nowMs = Date.now();
-    const evidenceRefs = Array.from(
-      new Set(automaticResults.flatMap((result) => result.evidenceRefs)),
-    );
-    const evaluationId = await args.ctx.db.insert(
-      "communityMemberWorkflowMilestoneEvaluations",
-      {
-        communityId: row.communityId,
-        workflowId: workflow._id,
-        membershipId: membership!._id,
-        milestoneKey: current.milestone.key,
-        workflowRevision: workflow.revision,
-        milestoneEnteredAt: current.milestoneEnteredAt,
-        milestoneName: current.milestone.name,
-        checksSnapshot: current.milestone.checks,
-        checksHash,
-        actionKind,
-        actionReceiptRef,
-        evidenceWindowStartAt: current.milestoneEnteredAt,
-        evidenceThroughAt: row.createdAt,
-        evidenceRefs,
-        status: "finished",
-        decision: "complete",
-        evaluatorKind: "deterministic",
-        checkResults: automaticResults.map((result) => ({
-          checkKey: result.checkKey,
-          decision: "complete" as const,
-          evidenceRefs: result.evidenceRefs,
-          explanation: "Canonical product evidence satisfies this automatic check.",
-          missingEvidence: [],
-        })),
-        explanation: "All automatic goal checks are complete.",
-        missingEvidence: [],
-        availableAt: nowMs,
-        attempt: 0,
-        createdAt: nowMs,
-        updatedAt: nowMs,
-        finishedAt: nowMs,
-      },
-    );
-    return await executeGoalCompletedAutomations({
-      ctx: args.ctx,
-      workflow,
-      membership: membership!,
-      current,
-      evaluationId,
-      nowMs,
-    });
-  }
-  const active = await getActiveEvaluation({
-    ctx: args.ctx,
-    workflowId: workflow._id,
-    membershipId: membership!._id,
-    milestoneKey: current.milestone.key,
-    milestoneEnteredAt: current.milestoneEnteredAt,
-    checksHash,
-  });
-  if (active) {
-    const evidenceThroughAt = Math.max(active.evidenceThroughAt, row.createdAt);
-    await args.ctx.db.patch(active._id, {
-      evidenceThroughAt,
-      actionReceiptRef,
-      actionKind,
-      rerunRequested:
-        active.status === "running" &&
-        evidenceThroughAt > Number(active.claimedEvidenceThroughAt ?? active.evidenceThroughAt),
-      updatedAt: Date.now(),
-    });
-    return { status: "coalesced" as const, evaluation_id: String(active._id) };
-  }
-  const nowMs = Date.now();
-  const evaluationId = await args.ctx.db.insert(
-    "communityMemberWorkflowMilestoneEvaluations",
-    {
-      communityId: row.communityId,
-      workflowId: workflow._id,
-      membershipId: membership!._id,
-      milestoneKey: current.milestone.key,
-      workflowRevision: workflow.revision,
-      milestoneEnteredAt: current.milestoneEnteredAt,
-      milestoneName: current.milestone.name,
-      checksSnapshot: current.milestone.checks,
-      checksHash,
-      actionKind,
-      actionReceiptRef,
-      evidenceWindowStartAt: current.milestoneEnteredAt,
-      evidenceThroughAt: row.createdAt,
-      evidenceRefs: [],
-      status: "queued",
-      availableAt: nowMs,
-      attempt: 0,
-      createdAt: nowMs,
-      updatedAt: nowMs,
-    },
-  );
-  await args.ctx.scheduler.runAfter(
-    0,
-    internal.communityMemberWorkflowEvaluator.runMilestoneEvaluationInternal,
-    { evaluationId },
-  );
-  return { status: "queued" as const, evaluation_id: String(evaluationId) };
 }
 
 export const handleChannelContributionRootInternal = internalMutation({

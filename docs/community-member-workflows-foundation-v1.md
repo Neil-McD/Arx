@@ -1,6 +1,6 @@
 # Community Member Milestone Workflows v1
 
-Status: staging explicit-progression seam
+Status: staging explicit trigger/action seam
 
 ## Outcome
 
@@ -19,13 +19,15 @@ A milestone currently contains:
 The first automation grammar is intentionally narrow:
 
 ```text
+member_contributed -> evaluate_goal
 goal_completed -> move_member(next_or_complete)
 ```
 
-New milestones persist that default explicitly. During the additive staging
+New milestones persist both automations explicitly. During the additive staging
 migration, an absent `automations` field means no automation; the runtime never
-manufactures a hidden default. A complete goal therefore does not move a member
-unless a stored automation contains the movement action.
+manufactures a hidden default. A contribution therefore does not evaluate a
+goal without a stored `evaluate_goal` action, and a complete goal does not move
+a member without a stored movement action.
 
 ## Irreducible runtime
 
@@ -37,7 +39,7 @@ The runtime has five canonical persistence lanes:
 3. `communityMemberWorkflowMilestoneEvaluations`: deterministic or model goal
    evaluation work and durable results
 4. `communityMemberWorkflowRuns`: one idempotent automation execution per
-   trigger receipt and automation
+   canonical member-contribution or goal-evaluation trigger receipt and automation
 5. `communityMemberWorkflowTransitions`: append-only sole authority receipts
    for member movement or workflow completion
 
@@ -61,17 +63,20 @@ but cannot emit `goal_completed`.
 
 ## Evidence wake and goal completion
 
-Eligible human channel contributions remain the only evidence wakes in this
-slice. They are not builder-configurable triggers yet. After a contribution
-commits, Polynet:
+Eligible human channel contributions remain the only external wakes in this
+slice. The stored trigger/action pair is not exposed in the builder UI yet.
+After a contribution commits, Polynet:
 
 1. rejects inactive membership, wrong scope, private/system/agent content,
    pre-milestone activity, completed workflows, and unconfigured milestones
-2. resolves automatic requirements from canonical evidence
-3. stops without provider work if an automatic prerequisite is missing
-4. persists a deterministic evaluation when a pure automatic goal completes
-5. otherwise admits or coalesces one leased judgment evaluation
-6. emits `goal_completed` from a finished complete evaluation receipt
+2. resolves the canonical contribution ID as the `member_contributed` receipt
+3. admits one idempotent workflow run for the stored automation
+4. executes `evaluate_goal` and records its result on that run
+5. resolves automatic requirements from canonical evidence
+6. stops without provider work if an automatic prerequisite is missing
+7. persists a deterministic evaluation when a pure automatic goal completes
+8. otherwise admits or coalesces one leased judgment evaluation
+9. emits `goal_completed` only from a finished complete evaluation receipt
 
 The evaluator receives no tools. Builder criteria and member evidence are
 untrusted contextual data. Output is strict JSON and every complete judgment
@@ -79,16 +84,17 @@ must cite supplied canonical evidence.
 
 ## Explicit automation execution
 
-`goal_completed` is identified by its evaluation receipt. The runtime admits at
-most one workflow run for the tuple:
+Each trigger is identified by its canonical source receipt. The runtime admits
+at most one workflow run for the tuple:
 
 ```text
 workflow + membership + evaluation receipt + automation key
 ```
 
 The run snapshots workflow revision, milestone identity and entry time,
-automation definition/hash, trigger receipt, and actions. The first deterministic
-action is `move_member(next_or_complete)`.
+automation definition/hash, trigger receipt, and actions. `member_contributed`
+runs record the evaluation they admitted or coalesced. `goal_completed` runs
+execute `move_member(next_or_complete)`.
 
 Only the transition reducer may change member position. In the same transaction
 it rechecks:
@@ -113,8 +119,8 @@ The visible staging surface intentionally remains unchanged in this slice:
 - manager-only member success dossier
 
 Automation editing is deferred until the execution authority is proven. New
-milestones still store the explicit default automation even though the modal does
-not expose it yet. The board subscribes to latest transition and evaluation state.
+milestones still store both explicit automations even though the modal does not
+expose them yet. The board subscribes to latest transition and evaluation state.
 The dossier renders transition history rather than legacy pass rows.
 
 ## Migration
@@ -123,6 +129,9 @@ Two dry-run-first internal migrations are provided:
 
 - `backfillGoalCompletedAutomationsInternal` materializes the explicit default
   only where the field is absent; an explicit empty array remains empty
+- `backfillMemberContributedAutomationsInternal` prepends the explicit
+  `member_contributed -> evaluate_goal` automation only to milestones that
+  already have stored goal-completion progression; explicit empty arrays remain empty
 - `backfillMilestonePassTransitionsInternal` converts legacy pass history into
   synthetic finished runs and transition receipts without changing member state
 
@@ -143,7 +152,7 @@ readers and writers and the migrated dossier/history is verified.
 This slice does not implement:
 
 1. builder automation editing
-2. generic in-app triggers or event routing
+2. additional in-app trigger types
 3. agent actions or autonomous intervention loops
 4. time triggers, durable timers, or inactivity wakes
 5. external evidence or integration triggers
@@ -151,6 +160,6 @@ This slice does not implement:
 7. explicit member-state initialization on workflow creation or membership activation
 8. population-level success analytics
 
-The next slice must be chosen only after a real staging canary proves that a goal
-evaluation can complete without movement and that the explicit stored automation
-causes exactly one transition.
+The real-member staging canary and migration retirement remain required before
+legacy pass storage is deleted. They were explicitly deferred while this
+additive trigger/action seam was built.

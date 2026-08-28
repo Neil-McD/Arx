@@ -195,7 +195,7 @@ async function createMilestones(
   return { first: configured.milestone, revision: configured.revision };
 }
 
-test("milestones persist an explicit goal-completed movement automation", async () => {
+test("milestones persist explicit contribution evaluation and goal movement automations", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createFixture(t);
   const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
@@ -226,6 +226,10 @@ test("milestones persist an explicit goal-completed movement automation", async 
       },
     ],
     automations: [
+      {
+        trigger: { type: "member_contributed" },
+        actions: [{ type: "evaluate_goal" }],
+      },
       {
         trigger: { type: "goal_completed" },
         actions: [{ type: "move_member", destination: "next_or_complete" }],
@@ -261,15 +265,29 @@ test("automatic goal evaluation fires an explicit movement automation", async ()
     { communityId: fixture.communityId, expectedRevision: 2, name: "Delivering" },
   );
   const rootId = await insertRoot(t, fixture, "automatic", "I started the work.");
-  await expect(handleRoot(t, rootId)).resolves.toMatchObject({
+  const firstRun = await handleRoot(t, rootId);
+  expect(firstRun).toMatchObject({
     status: "requirements_pending",
+    replayed: false,
   });
   const before = await t.run(async (ctx) => ({
     evaluations: await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
     passes: await ctx.db.query("communityMemberWorkflowMilestonePasses").collect(),
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
   }));
   expect(before.evaluations).toHaveLength(0);
   expect(before.passes).toHaveLength(0);
+  expect(before.runs).toHaveLength(1);
+  expect(before.runs[0]).toMatchObject({
+    triggerType: "member_contributed",
+    status: "finished",
+    actionResults: [{ status: "complete", resultCode: "requirements_pending" }],
+  });
+  await expect(handleRoot(t, rootId)).resolves.toMatchObject({
+    status: "already_executed",
+    workflow_run_id: firstRun.workflow_run_id,
+    replayed: true,
+  });
 
   const replyId = await insertReply(t, fixture, rootId, "automatic");
   await expect(handleReply(t, replyId)).resolves.toMatchObject({
@@ -292,10 +310,20 @@ test("automatic goal evaluation fires an explicit movement automation", async ()
     evaluatorKind: "deterministic",
     decision: "complete",
   });
-  expect(after.runs).toHaveLength(1);
-  expect(after.runs[0]).toMatchObject({
-    triggerType: "goal_completed",
+  expect(after.runs).toHaveLength(3);
+  expect(after.runs.filter((run) => run.triggerType === "member_contributed")).toHaveLength(2);
+  expect(after.runs.filter((run) => run.triggerType === "goal_completed")).toHaveLength(1);
+  const evaluationRun = after.runs.find(
+    (run) => run.actionResults[0]?.evaluationId === after.evaluations[0]._id,
+  );
+  expect(evaluationRun).toMatchObject({
+    triggerType: "member_contributed",
     status: "finished",
+    actionResults: [{ status: "complete", resultCode: "complete" }],
+  });
+  expect(after.evaluations[0]).toMatchObject({
+    requestedByWorkflowRunId: evaluationRun?._id,
+    requestedByActionKey: evaluationRun?.actionsSnapshot[0]?.key,
   });
   expect(after.transitions).toHaveLength(1);
   expect(after.transitions[0]).toMatchObject({
@@ -317,7 +345,14 @@ test("goal completion does not move a member without a stored movement automatio
     if (!workflow) throw new Error("workflow_missing");
     await ctx.db.patch(workflow._id, {
       milestones: workflow.milestones.map((milestone) =>
-        milestone.key === first.key ? { ...milestone, automations: [] } : milestone,
+        milestone.key === first.key
+          ? {
+              ...milestone,
+              automations: (milestone.automations ?? []).filter(
+                (automation) => automation.trigger.type === "member_contributed",
+              ),
+            }
+          : milestone,
       ),
       revision: workflow.revision + 1,
       updatedAt: fixture.nowMs + 1,
@@ -328,6 +363,7 @@ test("goal completion does not move a member without a stored movement automatio
     status: "complete",
     member_moved: false,
     workflow_run_id: null,
+    trigger_workflow_run_id: expect.any(String),
   });
   const records = await t.run(async (ctx) => ({
     states: await ctx.db.query("communityMemberWorkflowMemberMilestones").collect(),
@@ -338,17 +374,63 @@ test("goal completion does not move a member without a stored movement automatio
   expect(records.states).toHaveLength(0);
   expect(records.evaluations).toHaveLength(1);
   expect(records.evaluations[0]).toMatchObject({ decision: "complete" });
-  expect(records.runs).toHaveLength(0);
+  expect(records.runs).toHaveLength(1);
+  expect(records.runs[0]).toMatchObject({
+    triggerType: "member_contributed",
+    status: "finished",
+  });
   expect(records.transitions).toHaveLength(0);
   await expect(handleRoot(t, rootId)).resolves.toMatchObject({
-    status: "complete",
-    member_moved: false,
+    status: "already_executed",
+    replayed: true,
   });
   expect(
     await t.run(async (ctx) =>
       await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
     ),
   ).toHaveLength(1);
+});
+
+test("a contribution does nothing without a stored contribution automation", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createFixture(t);
+  const asOwner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const { first } = await createMilestones(asOwner, fixture.communityId, [
+    { type: "automatic", signal: "channel_posted" },
+  ]);
+  await t.run(async (ctx) => {
+    const workflow = await ctx.db
+      .query("communityMemberWorkflows")
+      .withIndex("by_community", (q) => q.eq("communityId", fixture.communityId))
+      .unique();
+    if (!workflow) throw new Error("workflow_missing");
+    await ctx.db.patch(workflow._id, {
+      milestones: workflow.milestones.map((milestone) =>
+        milestone.key === first.key
+          ? {
+              ...milestone,
+              automations: (milestone.automations ?? []).filter(
+                (automation) => automation.trigger.type === "goal_completed",
+              ),
+            }
+          : milestone,
+      ),
+      revision: workflow.revision + 1,
+      updatedAt: fixture.nowMs + 1,
+    });
+  });
+  const rootId = await insertRoot(t, fixture, "trigger-unconfigured", "I did the work.");
+  await expect(handleRoot(t, rootId)).resolves.toMatchObject({
+    status: "trigger_unconfigured",
+  });
+  const records = await t.run(async (ctx) => ({
+    evaluations: await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+  }));
+  expect(records.evaluations).toHaveLength(0);
+  expect(records.runs).toHaveLength(0);
+  expect(records.transitions).toHaveLength(0);
 });
 
 test("staging migration materializes automations and legacy transition history idempotently", async () => {
@@ -401,6 +483,28 @@ test("staging migration materializes automations and legacy transition history i
   expect(
     await t.run(async (ctx) => (await ctx.db.get(workflowId))?.milestones[0].automations),
   ).toMatchObject([
+    {
+      trigger: { type: "goal_completed" },
+      actions: [{ type: "move_member", destination: "next_or_complete" }],
+    },
+  ]);
+  await expect(
+    t.mutation(
+      internalApi.communityMemberWorkflows.backfillMemberContributedAutomationsInternal,
+      { communityId: fixture.communityId, dryRun: true },
+    ),
+  ).resolves.toMatchObject({ workflows_updated: 1, milestones_updated: 1 });
+  await t.mutation(
+    internalApi.communityMemberWorkflows.backfillMemberContributedAutomationsInternal,
+    { communityId: fixture.communityId, dryRun: false },
+  );
+  expect(
+    await t.run(async (ctx) => (await ctx.db.get(workflowId))?.milestones[0].automations),
+  ).toMatchObject([
+    {
+      trigger: { type: "member_contributed" },
+      actions: [{ type: "evaluate_goal" }],
+    },
     {
       trigger: { type: "goal_completed" },
       actions: [{ type: "move_member", destination: "next_or_complete" }],
@@ -496,7 +600,9 @@ test("judgment checks use bounded evidence and a successful assessment advances 
   }));
   expect(records.evaluation).toMatchObject({ status: "finished", decision: "complete" });
   expect(records.state).toMatchObject({ currentMilestoneKey: second.milestone.key });
-  expect(records.runs).toHaveLength(1);
+  expect(records.runs).toHaveLength(2);
+  expect(records.runs.filter((run) => run.triggerType === "member_contributed")).toHaveLength(1);
+  expect(records.runs.filter((run) => run.triggerType === "goal_completed")).toHaveLength(1);
   expect(records.transitions).toHaveLength(1);
   expect(records.transitions[0]).toMatchObject({
     fromMilestoneKey: first.key,
@@ -557,11 +663,26 @@ test("concurrent member actions coalesce into one judgment evaluation", async ()
     status: "coalesced",
     evaluation_id: first.evaluation_id,
   });
-  const evaluations = await t.run(async (ctx) =>
-    await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
-  );
+  const { evaluations, runs } = await t.run(async (ctx) => ({
+    evaluations: await ctx.db.query("communityMemberWorkflowMilestoneEvaluations").collect(),
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+  }));
   expect(evaluations).toHaveLength(1);
   expect(evaluations[0].actionKind).toBe("channel_replied");
+  expect(runs).toHaveLength(2);
+  expect(runs).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        triggerType: "member_contributed",
+        actionResults: [expect.objectContaining({ evaluationId: evaluations[0]._id })],
+      }),
+      expect.objectContaining({
+        triggerType: "member_contributed",
+        actionResults: [expect.objectContaining({ evaluationId: evaluations[0]._id })],
+      }),
+    ]),
+  );
+  expect(evaluations[0].requestedByWorkflowRunId).toBe(runs[0]._id);
 });
 
 test.each(["not_complete", "uncertain"] as const)(
@@ -608,7 +729,11 @@ test.each(["not_complete", "uncertain"] as const)(
       transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
     }));
     expect(records.states).toHaveLength(0);
-    expect(records.runs).toHaveLength(0);
+    expect(records.runs).toHaveLength(1);
+    expect(records.runs[0]).toMatchObject({
+      triggerType: "member_contributed",
+      status: "finished",
+    });
     expect(records.transitions).toHaveLength(0);
   },
 );

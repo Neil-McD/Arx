@@ -38,16 +38,33 @@ export type CommunityMemberWorkflowGoalCompletedTrigger = {
   type: "goal_completed";
 };
 
+export type CommunityMemberWorkflowMemberContributedTrigger = {
+  type: "member_contributed";
+};
+
+export type CommunityMemberWorkflowTrigger =
+  | CommunityMemberWorkflowMemberContributedTrigger
+  | CommunityMemberWorkflowGoalCompletedTrigger;
+
+export type CommunityMemberWorkflowEvaluateGoalAction = {
+  key: string;
+  type: "evaluate_goal";
+};
+
 export type CommunityMemberWorkflowMoveMemberAction = {
   key: string;
   type: "move_member";
   destination: "next_or_complete";
 };
 
+export type CommunityMemberWorkflowAction =
+  | CommunityMemberWorkflowEvaluateGoalAction
+  | CommunityMemberWorkflowMoveMemberAction;
+
 export type CommunityMemberWorkflowAutomation = {
   key: string;
-  trigger: CommunityMemberWorkflowGoalCompletedTrigger;
-  actions: CommunityMemberWorkflowMoveMemberAction[];
+  trigger: CommunityMemberWorkflowTrigger;
+  actions: CommunityMemberWorkflowAction[];
 };
 
 export type CommunityMemberWorkflowMilestone = {
@@ -179,10 +196,17 @@ export function communityMemberWorkflowAutomationDefinition(
   return {
     key: automation.key,
     trigger: { type: automation.trigger.type },
-    actions: automation.actions.map((action) => ({
-      key: action.key,
-      type: action.type,
-      destination: action.destination,
-    })),
+    actions: automation.actions.map((action) =>
+      action.type === "move_member"
+        ? {
+            key: action.key,
+            type: action.type,
+            destination: action.destination,
+          }
+        : {
+            key: action.key,
+            type: action.type,
+          },
+    ),
   };
 }
