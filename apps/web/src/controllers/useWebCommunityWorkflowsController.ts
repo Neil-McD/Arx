@@ -36,6 +36,9 @@ function workflowErrorMessage(error: unknown): string {
   if (message.includes("milestone_count_invalid")) {
     return "A workflow needs at least one milestone.";
   }
+  if (message.includes("move_action_count_invalid")) {
+    return "A milestone can move a member only once. Keep one move action.";
+  }
   if (message.includes("community_forbidden")) {
     return "You no longer have permission to manage this workflow.";
   }

@@ -5,7 +5,6 @@ import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE,
   COMMUNITY_MEMBER_WORKFLOW_MAX_MILESTONES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_MILESTONES,
-  communityMemberWorkflowAutomationDefinition,
   normalizeCommunityMemberWorkflowActionKey,
   normalizeCommunityMemberWorkflowAutomationKey,
   normalizeCommunityMemberWorkflowMilestoneKey,
@@ -67,16 +66,6 @@ const automationInputValidator = v.object({
     }),
   ),
 });
-
-async function sha256HexText(value: string): Promise<string> {
-  const digest = await crypto.subtle.digest(
-    "SHA-256",
-    new TextEncoder().encode(value),
-  );
-  return Array.from(new Uint8Array(digest))
-    .map((byte) => byte.toString(16).padStart(2, "0"))
-    .join("");
-}
 
 function normalizeExpectedRevision(value: unknown): number {
   const revision = Number(value);
@@ -167,7 +156,7 @@ function normalizeAutomations(
   );
   const usedAutomationKeys = new Set<string>();
   const usedActionKeys = new Set<string>();
-  return inputs.map((input) => {
+  const automations: CommunityMemberWorkflowAutomation[] = inputs.map((input) => {
     const suppliedAutomationKey = input.key
       ? normalizeCommunityMemberWorkflowAutomationKey(input.key)
       : null;
@@ -223,6 +212,13 @@ function normalizeAutomations(
       action,
     };
   });
+  if (
+    automations.filter((automation) => automation.action.type === "move_member")
+      .length > 1
+  ) {
+    throw new Error("community_member_workflow_move_action_count_invalid");
+  }
+  return automations;
 }
 
 function resolveCurrentMilestone(args: {
@@ -612,10 +608,6 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
       .order("desc")
       .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT) as Promise<WorkflowTransitionRow[]>,
   ]);
-  const milestoneName = (milestoneKey: string | undefined) =>
-    milestoneKey
-      ? workflow.milestones.find((item) => item.key === milestoneKey)?.name ?? "Milestone"
-      : null;
   return {
     membership_id: String(membership!._id),
     display_name: profile.display_name ?? "Member",
@@ -646,9 +638,9 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
         id: String(transition._id),
         sequence: transition.seq,
         milestone_key: transition.fromMilestoneKey,
-        milestone_name: milestoneName(transition.fromMilestoneKey) ?? "Milestone",
+        milestone_name: transition.fromMilestoneName,
         next_milestone_key: transition.toMilestoneKey ?? null,
-        next_milestone_name: milestoneName(transition.toMilestoneKey),
+        next_milestone_name: transition.toMilestoneName ?? null,
         completed_workflow: transition.completedWorkflow,
         occurred_at: toIsoString(transition.occurredAt),
       })),
@@ -799,7 +791,9 @@ async function transitionMemberForWorkflowAction(args: {
     membershipId: membership!._id,
     seq,
     fromMilestoneKey: current.milestone.key,
+    fromMilestoneName: current.milestone.name,
     toMilestoneKey: nextMilestone?.key,
+    toMilestoneName: nextMilestone?.name,
     completedWorkflow,
     workflowRevision: workflow.revision,
     milestoneEnteredAt: current.milestoneEnteredAt,
@@ -841,9 +835,6 @@ async function executeMemberContributedAutomation(args: {
     };
   }
   const nowMs = Date.now();
-  const automationHash = await sha256HexText(
-    JSON.stringify(communityMemberWorkflowAutomationDefinition(args.automation)),
-  );
   const workflowRunId = await args.ctx.db.insert("communityMemberWorkflowRuns", {
     communityId: args.workflow.communityId,
     workflowId: args.workflow._id,
@@ -852,7 +843,6 @@ async function executeMemberContributedAutomation(args: {
     milestoneEnteredAt: args.current.milestoneEnteredAt,
     workflowRevision: args.workflow.revision,
     automationKey: args.automation.key,
-    automationHash,
     triggerType: "member_contributed",
     triggerReceiptRef,
     actionSnapshot: args.automation.action,
@@ -996,8 +986,14 @@ async function handleChannelContributionCore(args: {
   if (automations.length === 0) {
     return { status: "trigger_unconfigured" as const };
   }
+  const promptAutomations = automations.filter(
+    (automation) => automation.action.type === "prompt_agent",
+  );
+  const moveAutomation = automations.find(
+    (automation) => automation.action.type === "move_member",
+  );
   const results = [];
-  for (const automation of automations) {
+  for (const automation of promptAutomations) {
     results.push(await executeMemberContributedAutomation({
       ctx: args.ctx,
       objectType: args.objectType,
@@ -1006,6 +1002,17 @@ async function handleChannelContributionCore(args: {
       membership: membership!,
       current,
       automation,
+    }));
+  }
+  if (moveAutomation) {
+    results.push(await executeMemberContributedAutomation({
+      ctx: args.ctx,
+      objectType: args.objectType,
+      row,
+      workflow,
+      membership: membership!,
+      current,
+      automation: moveAutomation,
     }));
   }
   return { status: "handled" as const, results };

@@ -146,24 +146,3 @@ export function normalizeCommunityMemberWorkflowSourceRef(
   }
   return sourceRef;
 }
-
-export function communityMemberWorkflowAutomationDefinition(
-  automation: CommunityMemberWorkflowAutomation,
-): Record<string, unknown> {
-  return {
-    key: automation.key,
-    trigger: { type: automation.trigger.type },
-    action:
-      automation.action.type === "prompt_agent"
-        ? {
-            key: automation.action.key,
-            type: automation.action.type,
-            prompt: automation.action.prompt,
-          }
-        : {
-            key: automation.action.key,
-            type: automation.action.type,
-            destination: automation.action.destination,
-          },
-  };
-}

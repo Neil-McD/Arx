@@ -68,9 +68,14 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   }, [props.isOpen]);
 
   if (!props.isOpen || !props.milestone) return null;
-  const canSave = name.trim().length > 0 && automations.every(
-    (automation) => automation.action.type !== "prompt_agent" || automation.action.prompt.trim().length > 0,
-  );
+  const moveAutomationCount = automations.filter(
+    (automation) => automation.action.type === "move_member",
+  ).length;
+  const canSave = name.trim().length > 0
+    && moveAutomationCount <= 1
+    && automations.every(
+      (automation) => automation.action.type !== "prompt_agent" || automation.action.prompt.trim().length > 0,
+    );
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -149,7 +154,14 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                             <span>Then</span>
                             <select value={automation.action.type} disabled={props.isSaving} onChange={(event) => setAutomations((current) => current.map((item, itemIndex) => itemIndex === index ? replaceAction(item, event.target.value as CommunityMemberWorkflowAction["type"]) : item))}>
                               <option value="prompt_agent">Prompt community agent</option>
-                              <option value="move_member">Move to next milestone</option>
+                              <option
+                                value="move_member"
+                                disabled={automations.some(
+                                  (item, itemIndex) => itemIndex !== index && item.action.type === "move_member",
+                                )}
+                              >
+                                Move to next milestone
+                              </option>
                             </select>
                           </label>
                           {automation.action.type === "prompt_agent" ? (

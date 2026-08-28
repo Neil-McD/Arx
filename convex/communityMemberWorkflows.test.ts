@@ -104,26 +104,43 @@ async function addRoot(t: ReturnType<typeof convexTest>, f: Awaited<ReturnType<t
   }));
 }
 
-async function configure(t: ReturnType<typeof convexTest>, communityId: any, action: any) {
+async function configureAutomations(
+  t: ReturnType<typeof convexTest>,
+  communityId: any,
+  actions: any[],
+) {
   const owner = t.withIdentity({ subject: OWNER_SUBJECT });
   const first = await owner.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone, {
     communityId,
     expectedRevision: 0,
     name: "New",
   });
-  await owner.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone, {
+  const second = await owner.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone, {
     communityId,
     expectedRevision: 1,
     name: "Activated",
   });
-  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+  const updated = await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
     communityId,
     expectedRevision: 2,
     milestoneKey: first.milestone.key,
     name: "New",
-    automations: [{ key: "", trigger: { type: "member_contributed" }, action }],
+    automations: actions.map((action) => ({
+      key: "",
+      trigger: { type: "member_contributed" as const },
+      action,
+    })),
   });
-  return first.milestone.key;
+  return {
+    firstKey: first.milestone.key,
+    secondKey: second.milestone.key,
+    firstMilestone: updated.milestone,
+  };
+}
+
+async function configure(t: ReturnType<typeof convexTest>, communityId: any, action: any) {
+  const configured = await configureAutomations(t, communityId, [action]);
+  return configured.firstKey;
 }
 
 test("a blank milestone has no hidden behavior", async () => {
@@ -184,4 +201,131 @@ test("prompt_agent admits one linked serve request and never moves the member", 
   expect(state.transitions).toHaveLength(0);
   expect(state.member).toBeNull();
   expect(firstKey).toEqual(expect.any(String));
+});
+
+test("a milestone rejects more than one terminal move without changing revision", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const first = await owner.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone, {
+    communityId: f.communityId,
+    expectedRevision: 0,
+    name: "New",
+  });
+  await owner.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone, {
+    communityId: f.communityId,
+    expectedRevision: 1,
+    name: "Activated",
+  });
+
+  await expect(owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId,
+    expectedRevision: 2,
+    milestoneKey: first.milestone.key,
+    name: "New",
+    automations: [
+      { key: "", trigger: { type: "member_contributed" }, action: { key: "", type: "move_member", destination: "next_or_complete" } },
+      { key: "", trigger: { type: "member_contributed" }, action: { key: "", type: "move_member", destination: "next_or_complete" } },
+    ],
+  })).rejects.toThrow("community_member_workflow_move_action_count_invalid");
+
+  const page = await owner.query(api.communityMemberWorkflows.getBuilderWorkflowBoardPage, {
+    communityId: f.communityId,
+    pageSize: 10,
+  });
+  expect(page.workflow?.revision).toBe(2);
+  expect(page.workflow?.milestones[0].automations).toEqual([]);
+});
+
+test("prompt actions are admitted before the single terminal move regardless of editor order", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const configured = await configureAutomations(t, f.communityId, [
+    { key: "", type: "move_member", destination: "next_or_complete" },
+    { key: "", type: "prompt_agent", prompt: "Offer one concise next step." },
+    { key: "", type: "prompt_agent", prompt: "Reflect the member's progress." },
+  ]);
+  const rootId = await addRoot(t, f, "prompt-then-move");
+
+  const first = await t.mutation(
+    internalApi.communityMemberWorkflows.handleChannelContributionRootInternal,
+    { rootId },
+  );
+  expect(first.results.map((result: any) => result.status)).toEqual([
+    "agent_queued",
+    "agent_queued",
+    "member_moved",
+  ]);
+
+  const beforeReplay = await t.run(async (ctx) => ({
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+    requests: await ctx.db.query("communityAgentServeRequests").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+    member: await ctx.db.query("communityMemberWorkflowMemberMilestones").first(),
+  }));
+  expect(beforeReplay.runs).toHaveLength(3);
+  expect(beforeReplay.requests).toHaveLength(2);
+  expect(beforeReplay.transitions).toHaveLength(1);
+  expect(beforeReplay.transitions[0]).toMatchObject({
+    fromMilestoneKey: configured.firstKey,
+    fromMilestoneName: "New",
+    toMilestoneKey: configured.secondKey,
+    toMilestoneName: "Activated",
+  });
+  expect(beforeReplay.member?.currentMilestoneKey).toBe(configured.secondKey);
+
+  await expect(t.mutation(
+    internalApi.communityMemberWorkflows.handleChannelContributionRootInternal,
+    { rootId },
+  )).resolves.toMatchObject({ status: "action_before_milestone" });
+  const afterReplay = await t.run(async (ctx) => ({
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+    requests: await ctx.db.query("communityAgentServeRequests").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+  }));
+  expect(afterReplay.runs).toHaveLength(3);
+  expect(afterReplay.requests).toHaveLength(2);
+  expect(afterReplay.transitions).toHaveLength(1);
+});
+
+test("milestone history keeps occurrence-time names after the workflow is renamed", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const configured = await configureAutomations(t, f.communityId, [
+    { key: "", type: "move_member", destination: "next_or_complete" },
+  ]);
+  const rootId = await addRoot(t, f, "rename-history");
+  await t.mutation(
+    internalApi.communityMemberWorkflows.handleChannelContributionRootInternal,
+    { rootId },
+  );
+
+  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId,
+    expectedRevision: 3,
+    milestoneKey: configured.firstKey,
+    name: "Renamed start",
+    automations: configured.firstMilestone.automations,
+  });
+  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId,
+    expectedRevision: 4,
+    milestoneKey: configured.secondKey,
+    name: "Renamed destination",
+    automations: [],
+  });
+
+  const dossier = await owner.query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId },
+  );
+  expect(dossier.workflow.current_milestone_name).toBe("Renamed destination");
+  expect(dossier.milestone_history).toEqual([
+    expect.objectContaining({
+      milestone_name: "New",
+      next_milestone_name: "Activated",
+    }),
+  ]);
+  expect(dossier.markdown).toContain("New → Activated");
 });

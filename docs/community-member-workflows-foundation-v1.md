@@ -27,8 +27,10 @@ causes work. A member contribution is the only V1 trigger.
   marks the workflow complete at the final milestone. It never invokes a model.
 - Each automation produces one idempotent run keyed by workflow, membership,
   contribution receipt, and automation key.
-- Multiple automations on a milestone are independent reactions to the same
-  contribution. V1 does not promise action chaining or ordering dependencies.
+- A milestone may have any number of prompt actions and at most one move action.
+- Prompt actions are admitted first. The single move action is terminal and runs
+  after prompt admission regardless of its visual order in the editor. Prompt
+  success is not a condition for movement; V1 has no action chaining or goals.
 - Rules are revalidated against the member's current milestone and workflow
   revision before authoritative writes.
 
@@ -37,7 +39,8 @@ causes work. A member contribution is the only V1 trigger.
 - `communityMemberWorkflows`: ordered builder definition and revision.
 - `communityMemberWorkflowMemberMilestones`: current member projection.
 - `communityMemberWorkflowRuns`: immutable trigger/action snapshot and result.
-- `communityMemberWorkflowTransitions`: exactly-once movement receipts.
+- `communityMemberWorkflowTransitions`: exactly-once movement receipts with
+  immutable source and destination milestone-name snapshots.
 - `communityAgentServeRequests`: durable admission for `prompt_agent` work.
 
 The old goal evaluator, checks, judgment passes, milestone-pass table, and
