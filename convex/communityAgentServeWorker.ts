@@ -112,6 +112,7 @@ const SERVE_PROMPT_SECTION_IDS = [
   "concierge_operating_policy",
   "community_system_prompt",
 ] as const;
+const SERVE_WORKFLOW_PROMPT_SECTION_ID = "community_workflow_action";
 
 function parseServeContextSnapshot(
   snapshotJson: string,
@@ -146,7 +147,8 @@ function parseServeContextSnapshot(
     const promptSections = parsed.prompt_sections;
     if (
       !Array.isArray(promptSections) ||
-      promptSections.length !== SERVE_PROMPT_SECTION_IDS.length ||
+      (promptSections.length !== SERVE_PROMPT_SECTION_IDS.length &&
+        promptSections.length !== SERVE_PROMPT_SECTION_IDS.length + 1) ||
       JSON.stringify(promptSections).length >
         SERVE_CONTEXT_SNAPSHOT_PROMPT_SECTIONS_MAX_CHARS
     ) {
@@ -162,7 +164,10 @@ function parseServeContextSnapshot(
       if (
         Object.keys(record).sort().join("|") !==
           [...SERVE_PROMPT_SECTION_KEYS].sort().join("|") ||
-        record.id !== SERVE_PROMPT_SECTION_IDS[index] ||
+        record.id !==
+          (index < SERVE_PROMPT_SECTION_IDS.length
+            ? SERVE_PROMPT_SECTION_IDS[index]
+            : SERVE_WORKFLOW_PROMPT_SECTION_ID) ||
         !["stable", "scoped", "volatile"].includes(
           String(record.layer ?? ""),
         ) ||
@@ -210,6 +215,10 @@ function communityAgentMentionReceiptKey(requestId: unknown): string {
   return `community_agent_mention:${normalizeIdValue(requestId)}`;
 }
 
+function communityWorkflowActionReceiptKey(requestId: unknown): string {
+  return `community_workflow_action:${normalizeIdValue(requestId)}`;
+}
+
 async function sha256HexText(value: string): Promise<string> {
   const digest = await crypto.subtle.digest(
     "SHA-256",
@@ -228,7 +237,10 @@ type ServeRequestRow = {
   agentKey: string;
   sourceMentionId?: any;
   invocationKey?: string;
-  triggerKind?: "mention" | "direct_reply";
+  triggerKind?: "mention" | "direct_reply" | "workflow";
+  workflowRunId?: any;
+  workflowActionKey?: string;
+  workflowPromptSnapshot?: string;
   sourceRootId?: any;
   sourceReplyId?: any;
   requesterUserId?: any;
@@ -1039,6 +1051,46 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       };
     }
 
+    if (request.triggerKind === "workflow") {
+      if (
+        !request.workflowRunId ||
+        !request.workflowActionKey ||
+        !request.workflowPromptSnapshot
+      ) {
+        return {
+          ok: false as const,
+          errorCode: "workflow_action_link_missing",
+          errorMessage: "The workflow action link is incomplete.",
+        };
+      }
+      const workflowRun = (await ctx.db.get(request.workflowRunId as any)) as
+        | {
+            communityId?: any;
+            status?: string;
+            actionSnapshot?: {
+              key?: string;
+              type?: string;
+              prompt?: string;
+            };
+          }
+        | null;
+      if (
+        !workflowRun ||
+        normalizeIdValue(workflowRun.communityId) !==
+          normalizeIdValue(request.communityId) ||
+        workflowRun.status !== "finished" ||
+        workflowRun.actionSnapshot?.type !== "prompt_agent" ||
+        workflowRun.actionSnapshot.key !== request.workflowActionKey ||
+        workflowRun.actionSnapshot.prompt !== request.workflowPromptSnapshot
+      ) {
+        return {
+          ok: false as const,
+          errorCode: "workflow_action_link_invalid",
+          errorMessage: "The workflow action no longer matches its durable run.",
+        };
+      }
+    }
+
     const canonicalContext = await readCanonicalCommunityAgentContext(
       ctx,
       request.communityId,
@@ -1198,6 +1250,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       request: {
         id: request._id,
         communityId: request.communityId,
+        triggerKind: request.triggerKind ?? "mention",
         requesterUserId: request.requesterUserId,
         sponsorUserId: request.sponsorUserId,
         authSubject: sponsorAuthSubject,
@@ -1222,6 +1275,10 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
           4_000,
         ),
       },
+      workflowPrompt:
+        request.triggerKind === "workflow"
+          ? request.workflowPromptSnapshot ?? null
+          : null,
       threadContext,
       funding,
     };
@@ -1739,7 +1796,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
       const conciergeProviderTools =
         buildCommunityAgentConciergeFunctionTools();
 
-      const receiptKey = communityAgentMentionReceiptKey(requestId);
+      const isWorkflowAction = context.request.triggerKind === "workflow";
+      const receiptKey = isWorkflowAction
+        ? communityWorkflowActionReceiptKey(requestId)
+        : communityAgentMentionReceiptKey(requestId);
       let aggregatePromptTokens = 0;
       let aggregateCompletionTokens = 0;
       let aggregateUsageComplete = true;
@@ -1793,7 +1853,9 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
                   sourceRunId: `community-agent-serve:${normalizeIdValue(requestId)}`,
                   communityId: context.request.communityId,
                   actorUserId: context.request.requesterUserId,
-                  surface: "community_agent_mention",
+                  surface: isWorkflowAction
+                    ? "community_workflow_action"
+                    : "community_agent_mention",
                   admission: context.funding,
                 });
               }

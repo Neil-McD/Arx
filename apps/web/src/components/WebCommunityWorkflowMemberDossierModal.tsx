@@ -1,4 +1,4 @@
-import { Check, Circle, CircleHelp, X } from "lucide-react";
+import { X } from "lucide-react";
 import {
   useEffect,
   useRef,
@@ -47,12 +47,6 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
     facts.push(fact.body);
     factsByKind.set(fact.kind, facts);
   }
-  const statusByCheck = new Map(
-    (dossier?.workflow.check_statuses ?? []).map((status) => [
-      status.check_key,
-      status,
-    ]),
-  );
 
   const trapFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
     if (event.key === "Escape") {
@@ -140,39 +134,6 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
           ) : dossier ? (
             <>
               <section className="workflow-member-dossier-section">
-                <h3>Completion checks</h3>
-                {dossier.workflow.checks.length > 0 ? (
-                  <ul className="workflow-member-check-list">
-                    {dossier.workflow.checks.map((check) => {
-                      const status = statusByCheck.get(check.key);
-                      const complete = status?.status === "complete";
-                      const uncertain = status?.status === "uncertain";
-                      const label = check.type === "automatic"
-                        ? readableLabel(check.signal)
-                        : check.criterion;
-                      return (
-                        <li key={check.key}>
-                          {complete ? (
-                            <Check size={16} aria-label="Complete" />
-                          ) : uncertain ? (
-                            <CircleHelp size={16} aria-label="Uncertain" />
-                          ) : (
-                            <Circle size={16} aria-label="Pending" />
-                          )}
-                          <div>
-                            <strong>{label}</strong>
-                            <span>{check.type === "automatic" ? "Automatic" : "AI judgment"}</span>
-                          </div>
-                        </li>
-                      );
-                    })}
-                  </ul>
-                ) : (
-                  <p>No completion checks configured.</p>
-                )}
-              </section>
-
-              <section className="workflow-member-dossier-section">
                 <h3>Approved context</h3>
                 {factsByKind.size > 0 ? (
                   <div className="workflow-member-context-list">
@@ -185,34 +146,6 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   </div>
                 ) : (
                   <p>No member-approved context has been shared with this community.</p>
-                )}
-              </section>
-
-              <section className="workflow-member-dossier-section">
-                <h3>Latest assessment</h3>
-                {dossier.latest_evaluation ? (
-                  <div className="workflow-member-assessment">
-                    <strong>
-                      {dossier.latest_evaluation.decision
-                        ? readableLabel(dossier.latest_evaluation.decision)
-                        : readableLabel(dossier.latest_evaluation.status)}
-                    </strong>
-                    {dossier.latest_evaluation.explanation ? (
-                      <p>{dossier.latest_evaluation.explanation}</p>
-                    ) : null}
-                    {dossier.latest_evaluation.missing_evidence.length > 0 ? (
-                      <div>
-                        <span>Still needed</span>
-                        <ul>
-                          {dossier.latest_evaluation.missing_evidence.map((item) => (
-                            <li key={item}>{item}</li>
-                          ))}
-                        </ul>
-                      </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <p>No milestone assessment yet.</p>
                 )}
               </section>
 

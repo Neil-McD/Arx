@@ -566,3 +566,35 @@ test("context snapshots are mandatory, exact, idempotent, and attempt-fenced", a
   expect(events.every((event) => event.kind === "context_snapshot")).toBe(true);
   expect(events.map((event) => event.content)).toEqual([snapshotJson, snapshotV2Json]);
 });
+
+test("workflow prompts are accepted only as an explicit fourth policy section", async () => {
+  const t = convexTest(schema, modules);
+  const fixture = await createServeFixture(t, "workflow-prompt-snapshot");
+  const requestId = await insertServeRequest(t, fixture);
+  const claim = await t.mutation(
+    internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
+    { requestId, nowMs: 10_000 },
+  );
+  const promptBundle = buildCommunityAgentServePromptBundle({
+    community: { name: "Workflow", slug: "workflow" },
+    agent: { displayName: "Workflow agent" },
+    threadContext: { rendered: "thread" },
+    workflowPrompt: "Help the member choose one concrete next step.",
+  });
+  expect(promptBundle.systemPromptBundle.sections.map((section) => section.id)).toEqual([
+    "community_agent_identity",
+    "concierge_operating_policy",
+    "community_system_prompt",
+    "community_workflow_action",
+  ]);
+  const snapshotJson = JSON.stringify({
+    version: 2,
+    sha256: "b".repeat(64),
+    messages: promptBundle.messages,
+    prompt_sections: promptBundle.systemPromptBundle.sections,
+  });
+  await expect(t.mutation(
+    internalRefs.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal,
+    { requestId, expectedAttempt: claim.attempt, snapshotJson, nowMs: 10_001 },
+  )).resolves.toMatchObject({ ok: true, duplicate: false });
+});

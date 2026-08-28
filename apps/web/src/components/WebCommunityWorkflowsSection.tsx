@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_MILESTONES,
   COMMUNITY_MEMBER_WORKFLOW_MIN_MILESTONES,
-  type CommunityMemberWorkflowCheck,
+  type CommunityMemberWorkflowAutomation,
   type CommunityMemberWorkflowMilestone,
 } from "../../../../shared/communityMemberWorkflow";
 import type {
@@ -38,7 +38,7 @@ export type WebCommunityWorkflowsSectionProps = {
   onUpdateMilestone: (
     milestoneKey: string,
     name: string,
-    checks: CommunityMemberWorkflowCheck[],
+    automations: CommunityMemberWorkflowAutomation[],
   ) => Promise<boolean>;
   onDeleteMilestone: (milestoneKey: string) => Promise<boolean>;
   onClearActionError: () => void;
@@ -49,7 +49,7 @@ export type WebCommunityWorkflowsSectionProps = {
 const BLANK_MILESTONE: CommunityMemberWorkflowMilestone = {
   key: "",
   name: "",
-  checks: [],
+  automations: [],
 };
 
 export function WebCommunityWorkflowsSection(
@@ -109,7 +109,7 @@ export function WebCommunityWorkflowsSection(
       : await props.onUpdateMilestone(
           milestone.key,
           milestone.name,
-          milestone.checks,
+          milestone.automations,
         );
     if (saved) closeMilestone();
   };

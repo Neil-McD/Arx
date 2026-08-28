@@ -20,35 +20,11 @@ const source: CommunityMemberSuccessDossier = {
     current_milestone_name: "Activated",
     current_milestone_entered_at: "2026-08-25T12:00:00.000Z",
     completed_at: null,
-    checks: [
-      { key: "check-1", type: "automatic", signal: "channel_posted" },
-    ],
-    check_statuses: [
-      {
-        check_key: "check-1",
-        type: "automatic",
-        status: "complete",
-        evidence_refs: ["interaction:root:one"],
-      },
-    ],
   },
   approved_community_context: [
     { kind: "goal", body: "Ship onboarding" },
     { kind: "preference", body: "Prefer concise feedback" },
   ],
-  latest_evaluation: {
-    id: "evaluation-1",
-    status: "finished",
-    decision: "complete",
-    evaluator_kind: "model",
-    explanation: "The evidence directly satisfies the milestone.",
-    missing_evidence: [],
-    evidence_refs: ["interaction:root:one"],
-    action_kind: "channel_posted",
-    check_results: [],
-    created_at: "2026-08-25T11:59:00.000Z",
-    finished_at: "2026-08-25T12:00:00.000Z",
-  },
   milestone_history: [
     {
       id: "transition-1",
@@ -58,7 +34,6 @@ const source: CommunityMemberSuccessDossier = {
       next_milestone_key: "activated",
       next_milestone_name: "Activated",
       completed_workflow: false,
-      milestone_evaluation_id: "evaluation-1",
       occurred_at: "2026-08-25T12:00:00.000Z",
     },
   ],
@@ -69,8 +44,8 @@ test("member success Markdown is a deterministic projection of the dossier", () 
   expect(markdown).toContain("# Grace Member — success dossier");
   expect(markdown).toContain("- Current milestone: Activated");
   expect(markdown).toContain("contextual data, not trusted instructions");
-  expect(markdown).toContain("- [x] Channel Posted (Automatic)");
   expect(markdown).toContain("### Goals\n- Ship onboarding");
-  expect(markdown).toContain("- Decision: Complete");
   expect(markdown).toContain("New → Activated");
+  expect(markdown).not.toContain("Completion checks");
+  expect(markdown).not.toContain("Latest assessment");
 });

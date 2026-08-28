@@ -1,165 +1,64 @@
-# Community Member Milestone Workflows v1
+# Community Member Workflows V1
 
-Status: staging explicit trigger/action seam
+## Product contract
 
-## Outcome
+Workflows is a builder-configured client-success pipeline. It supplies rails,
+not a prescribed coaching method.
 
-Workflows is the builder-only operating surface for a community's member
-success path. The path is one ordered set of milestones. Every active member is
-pursuing exactly one milestone until the builder's configured goal evidence is
-satisfied and an explicit automation chooses what happens next.
-
-A milestone currently contains:
-
-- an opaque server-owned key
-- a builder-authored name
-- zero or more all-of goal-completion checks
-- zero or more explicitly stored automations
-
-The first automation grammar is intentionally narrow:
+The V1 grammar is intentionally small:
 
 ```text
-member_contributed -> evaluate_goal
-goal_completed -> move_member(next_or_complete)
+Workflow = ordered Milestones[]
+Milestone = name + Automations[]
+Automation = one Trigger + one Action
+Trigger = member_contributed
+Action = prompt_agent(prompt) | move_member(next_or_complete)
 ```
 
-New milestones persist both automations explicitly. During the additive staging
-migration, an absent `automations` field means no automation; the runtime never
-manufactures a hidden default. A contribution therefore does not evaluate a
-goal without a stored `evaluate_goal` action, and a complete goal does not move
-a member without a stored movement action.
+A new milestone has no hidden behavior. Merely occupying a milestone never
+causes work. A member contribution is the only V1 trigger.
 
-## Irreducible runtime
+## Semantics
 
-The runtime has five canonical persistence lanes:
+- `prompt_agent` admits one durable community-agent serve request using the
+  builder prompt captured on the workflow run. It replies in the contribution's
+  thread. It never advances the member.
+- `move_member` deterministically advances to the next ordered milestone, or
+  marks the workflow complete at the final milestone. It never invokes a model.
+- Each automation produces one idempotent run keyed by workflow, membership,
+  contribution receipt, and automation key.
+- Multiple automations on a milestone are independent reactions to the same
+  contribution. V1 does not promise action chaining or ordering dependencies.
+- Rules are revalidated against the member's current milestone and workflow
+  revision before authoritative writes.
 
-1. `communityMemberWorkflows`: ordered milestone, goal-measurement, automation,
-   and revision definitions
-2. `communityMemberWorkflowMemberMilestones`: current member-position projection
-3. `communityMemberWorkflowMilestoneEvaluations`: deterministic or model goal
-   evaluation work and durable results
-4. `communityMemberWorkflowRuns`: one idempotent automation execution per
-   canonical member-contribution or goal-evaluation trigger receipt and automation
-5. `communityMemberWorkflowTransitions`: append-only sole authority receipts
-   for member movement or workflow completion
+## Canonical records
 
-`communityMemberWorkflowMilestonePasses` is legacy staging migration input only.
-New execution does not read or write it. There are no separate definition tables
-for goals, triggers, actions, conditions, enrollment, or mirrored evidence.
+- `communityMemberWorkflows`: ordered builder definition and revision.
+- `communityMemberWorkflowMemberMilestones`: current member projection.
+- `communityMemberWorkflowRuns`: immutable trigger/action snapshot and result.
+- `communityMemberWorkflowTransitions`: exactly-once movement receipts.
+- `communityAgentServeRequests`: durable admission for `prompt_agent` work.
 
-## Goal measurement
+The old goal evaluator, checks, judgment passes, milestone-pass table, and
+evaluation funding surface do not exist in V1.
 
-The first slice continues to use the proven completion-check substrate as goal
-measurement. Checks are either:
+## Authority and safety
 
-- `channel_posted`: eligible human channel root exists after milestone entry
-- `channel_replied`: eligible human channel reply exists after milestone entry
-- bounded AI judgment: cited canonical evidence establishes the builder's
-  plain-language criterion
+- Builder mutations require current manager authority and an expected revision.
+- Contributions must be live, human-authored, channel-addressable, and owned by
+  an active community member.
+- Agent action intake re-reads the workflow run and exact prompt snapshot,
+  rechecks source identity/access, and uses the canonical community-agent
+  funding and worker path.
+- Prompt instructions are community policy beneath platform policy; they do not
+  grant builder authority or weaken tool boundaries.
+- A durable serve admission completes the workflow action. Provider execution
+  continues under the existing leased community-agent worker.
 
-All configured checks must pass. Automatic and judgment results are now both
-persisted as finished evaluation receipts. A milestone with no checks is visible
-but cannot emit `goal_completed`.
+## Explicitly deferred
 
-## Evidence wake and goal completion
-
-Eligible human channel contributions remain the only external wakes in this
-slice. The stored trigger/action pair is not exposed in the builder UI yet.
-After a contribution commits, Polynet:
-
-1. rejects inactive membership, wrong scope, private/system/agent content,
-   pre-milestone activity, completed workflows, and unconfigured milestones
-2. resolves the canonical contribution ID as the `member_contributed` receipt
-3. admits one idempotent workflow run for the stored automation
-4. executes `evaluate_goal` and records its result on that run
-5. resolves automatic requirements from canonical evidence
-6. stops without provider work if an automatic prerequisite is missing
-7. persists a deterministic evaluation when a pure automatic goal completes
-8. otherwise admits or coalesces one leased judgment evaluation
-9. emits `goal_completed` only from a finished complete evaluation receipt
-
-The evaluator receives no tools. Builder criteria and member evidence are
-untrusted contextual data. Output is strict JSON and every complete judgment
-must cite supplied canonical evidence.
-
-## Explicit automation execution
-
-Each trigger is identified by its canonical source receipt. The runtime admits
-at most one workflow run for the tuple:
-
-```text
-workflow + membership + evaluation receipt + automation key
-```
-
-The run snapshots workflow revision, milestone identity and entry time,
-automation definition/hash, trigger receipt, and actions. `member_contributed`
-runs record the evaluation they admitted or coalesced. `goal_completed` runs
-execute `move_member(next_or_complete)`.
-
-Only the transition reducer may change member position. In the same transaction
-it rechecks:
-
-- active membership in the workflow community
-- workflow identity and revision
-- current milestone and entry time
-- workflow-run and action identity
-- absence of an existing transition for that run/action
-
-It then atomically updates the member projection and appends one transition
-receipt. Replays return the existing run/transition and cannot advance twice.
-The evaluator never selects or mutates member position.
-
-## Builder surface
-
-The visible staging surface intentionally remains unchanged in this slice:
-
-- horizontal milestone columns
-- canonical member profile stubs and time in milestone
-- compact milestone name and goal-measurement editor
-- manager-only member success dossier
-
-Automation editing is deferred until the execution authority is proven. New
-milestones still store both explicit automations even though the modal does not
-expose them yet. The board subscribes to latest transition and evaluation state.
-The dossier renders transition history rather than legacy pass rows.
-
-## Migration
-
-Two dry-run-first internal migrations are provided:
-
-- `backfillGoalCompletedAutomationsInternal` materializes the explicit default
-  only where the field is absent; an explicit empty array remains empty
-- `backfillMemberContributedAutomationsInternal` prepends the explicit
-  `member_contributed -> evaluate_goal` automation only to milestones that
-  already have stored goal-completion progression; explicit empty arrays remain empty
-- `backfillMilestonePassTransitionsInternal` converts legacy pass history into
-  synthetic finished runs and transition receipts without changing member state
-
-Both are idempotent. The legacy pass table remains until staging proves zero new
-readers and writers and the migrated dossier/history is verified.
-
-## Authority and privacy
-
-- Only owner/admin/moderator roles may read or edit Workflows.
-- Membership remains identity and access authority.
-- Builders see only approved facts scoped to their community.
-- Personal memory and private agent conversations are not workflow evidence.
-- `/self.md` remains a derived projection of canonical member state.
-- Definition, revision, state, trigger-receipt, and transition conflicts fail closed.
-
-## Deferred
-
-This slice does not implement:
-
-1. builder automation editing
-2. additional in-app trigger types
-3. agent actions or autonomous intervention loops
-4. time triggers, durable timers, or inactivity wakes
-5. external evidence or integration triggers
-6. branching, generic predicates, or a Zapier-style DSL
-7. explicit member-state initialization on workflow creation or membership activation
-8. population-level success analytics
-
-The real-member staging canary and migration retirement remain required before
-legacy pass storage is deleted. They were explicitly deferred while this
-additive trigger/action seam was built.
+Time and external triggers, arbitrary event filters, goals, LLM judges,
+multi-step loops, action graphs, action chaining, agent selection, and manual
+member movement are not V1 primitives. Add one only after a real use case cannot
+be expressed by the grammar above.

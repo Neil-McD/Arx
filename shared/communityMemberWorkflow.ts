@@ -1,54 +1,24 @@
 export const COMMUNITY_MEMBER_WORKFLOW_MIN_MILESTONES = 1;
 export const COMMUNITY_MEMBER_WORKFLOW_MAX_MILESTONES = 12;
 export const COMMUNITY_MEMBER_WORKFLOW_MILESTONE_NAME_MAX_LENGTH = 80;
-export const COMMUNITY_MEMBER_WORKFLOW_JUDGMENT_CRITERION_MAX_LENGTH = 2_000;
+export const COMMUNITY_MEMBER_WORKFLOW_PROMPT_MAX_LENGTH = 4_000;
 export const COMMUNITY_MEMBER_WORKFLOW_MILESTONE_KEY_MAX_LENGTH = 64;
-export const COMMUNITY_MEMBER_WORKFLOW_CHECK_KEY_MAX_LENGTH = 64;
-export const COMMUNITY_MEMBER_WORKFLOW_MAX_CHECKS_PER_MILESTONE = 12;
+export const COMMUNITY_MEMBER_WORKFLOW_AUTOMATION_KEY_MAX_LENGTH = 64;
+export const COMMUNITY_MEMBER_WORKFLOW_ACTION_KEY_MAX_LENGTH = 64;
 export const COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE = 12;
-export const COMMUNITY_MEMBER_WORKFLOW_MAX_ACTIONS_PER_AUTOMATION = 12;
 export const COMMUNITY_MEMBER_WORKFLOW_SOURCE_REF_MAX_LENGTH = 1_024;
-export const COMMUNITY_MEMBER_WORKFLOW_EVIDENCE_REF_MAX_COUNT = 64;
-
-export const COMMUNITY_MEMBER_WORKFLOW_AUTOMATIC_SIGNALS = [
-  "channel_posted",
-  "channel_replied",
-] as const;
-
-export type CommunityMemberWorkflowAutomaticSignal =
-  (typeof COMMUNITY_MEMBER_WORKFLOW_AUTOMATIC_SIGNALS)[number];
-
-export type CommunityMemberWorkflowAutomaticCheck = {
-  key: string;
-  type: "automatic";
-  signal: CommunityMemberWorkflowAutomaticSignal;
-};
-
-export type CommunityMemberWorkflowJudgmentCheck = {
-  key: string;
-  type: "judgment";
-  criterion: string;
-};
-
-export type CommunityMemberWorkflowCheck =
-  | CommunityMemberWorkflowAutomaticCheck
-  | CommunityMemberWorkflowJudgmentCheck;
-
-export type CommunityMemberWorkflowGoalCompletedTrigger = {
-  type: "goal_completed";
-};
 
 export type CommunityMemberWorkflowMemberContributedTrigger = {
   type: "member_contributed";
 };
 
 export type CommunityMemberWorkflowTrigger =
-  | CommunityMemberWorkflowMemberContributedTrigger
-  | CommunityMemberWorkflowGoalCompletedTrigger;
+  CommunityMemberWorkflowMemberContributedTrigger;
 
-export type CommunityMemberWorkflowEvaluateGoalAction = {
+export type CommunityMemberWorkflowPromptAgentAction = {
   key: string;
-  type: "evaluate_goal";
+  type: "prompt_agent";
+  prompt: string;
 };
 
 export type CommunityMemberWorkflowMoveMemberAction = {
@@ -58,36 +28,35 @@ export type CommunityMemberWorkflowMoveMemberAction = {
 };
 
 export type CommunityMemberWorkflowAction =
-  | CommunityMemberWorkflowEvaluateGoalAction
+  | CommunityMemberWorkflowPromptAgentAction
   | CommunityMemberWorkflowMoveMemberAction;
 
 export type CommunityMemberWorkflowAutomation = {
   key: string;
   trigger: CommunityMemberWorkflowTrigger;
-  actions: CommunityMemberWorkflowAction[];
+  action: CommunityMemberWorkflowAction;
 };
 
 export type CommunityMemberWorkflowMilestone = {
   key: string;
   name: string;
-  checks: CommunityMemberWorkflowCheck[];
-  // Optional only during the additive staging migration. New milestones always
-  // persist this explicitly; absence never implies a hidden runtime default.
-  automations?: CommunityMemberWorkflowAutomation[];
+  automations: CommunityMemberWorkflowAutomation[];
 };
-
-export const COMMUNITY_MEMBER_WORKFLOW_EVALUATION_DECISIONS = [
-  "complete",
-  "not_complete",
-  "uncertain",
-] as const;
-
-export type CommunityMemberWorkflowEvaluationDecision =
-  (typeof COMMUNITY_MEMBER_WORKFLOW_EVALUATION_DECISIONS)[number];
 
 function normalizeInlineText(value: unknown, maxLength: number): string {
   return String(value ?? "")
     .replace(/\s+/g, " ")
+    .trim()
+    .slice(0, maxLength);
+}
+
+function normalizeMultilineText(value: unknown, maxLength: number): string {
+  return String(value ?? "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((line) => line.replace(/[ \t]+/g, " ").trim())
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
     .trim()
     .slice(0, maxLength);
 }
@@ -119,13 +88,23 @@ export function normalizeCommunityMemberWorkflowMilestoneKey(
   );
 }
 
-export function normalizeCommunityMemberWorkflowCheckKey(
+export function normalizeCommunityMemberWorkflowAutomationKey(
   value: unknown,
 ): string {
   return normalizeOpaqueKey(
     value,
-    COMMUNITY_MEMBER_WORKFLOW_CHECK_KEY_MAX_LENGTH,
-    "community_member_workflow_check_key_invalid",
+    COMMUNITY_MEMBER_WORKFLOW_AUTOMATION_KEY_MAX_LENGTH,
+    "community_member_workflow_automation_key_invalid",
+  );
+}
+
+export function normalizeCommunityMemberWorkflowActionKey(
+  value: unknown,
+): string {
+  return normalizeOpaqueKey(
+    value,
+    COMMUNITY_MEMBER_WORKFLOW_ACTION_KEY_MAX_LENGTH,
+    "community_member_workflow_action_key_invalid",
   );
 }
 
@@ -142,31 +121,17 @@ export function normalizeCommunityMemberWorkflowMilestoneName(
   return name;
 }
 
-export function normalizeCommunityMemberWorkflowJudgmentCriterion(
+export function normalizeCommunityMemberWorkflowPrompt(
   value: unknown,
 ): string {
-  const criterion = String(value ?? "")
-    .replace(/\r\n?/g, "\n")
-    .split("\n")
-    .map((line) => line.replace(/[ \t]+/g, " ").trim())
-    .join("\n")
-    .replace(/\n{3,}/g, "\n\n")
-    .trim()
-    .slice(0, COMMUNITY_MEMBER_WORKFLOW_JUDGMENT_CRITERION_MAX_LENGTH);
-  if (!criterion) {
-    throw new Error("community_member_workflow_judgment_criterion_required");
+  const prompt = normalizeMultilineText(
+    value,
+    COMMUNITY_MEMBER_WORKFLOW_PROMPT_MAX_LENGTH,
+  );
+  if (!prompt) {
+    throw new Error("community_member_workflow_prompt_required");
   }
-  return criterion;
-}
-
-export function normalizeCommunityMemberWorkflowAutomaticSignal(
-  value: unknown,
-): CommunityMemberWorkflowAutomaticSignal {
-  const signal = String(value ?? "").trim();
-  if (!COMMUNITY_MEMBER_WORKFLOW_AUTOMATIC_SIGNALS.includes(signal as any)) {
-    throw new Error("community_member_workflow_automatic_signal_invalid");
-  }
-  return signal as CommunityMemberWorkflowAutomaticSignal;
+  return prompt;
 }
 
 export function normalizeCommunityMemberWorkflowSourceRef(
@@ -182,31 +147,23 @@ export function normalizeCommunityMemberWorkflowSourceRef(
   return sourceRef;
 }
 
-export function communityMemberWorkflowCheckDefinition(
-  check: CommunityMemberWorkflowCheck,
-): Record<string, string> {
-  return check.type === "automatic"
-    ? { key: check.key, type: check.type, signal: check.signal }
-    : { key: check.key, type: check.type, criterion: check.criterion };
-}
-
 export function communityMemberWorkflowAutomationDefinition(
   automation: CommunityMemberWorkflowAutomation,
 ): Record<string, unknown> {
   return {
     key: automation.key,
     trigger: { type: automation.trigger.type },
-    actions: automation.actions.map((action) =>
-      action.type === "move_member"
+    action:
+      automation.action.type === "prompt_agent"
         ? {
-            key: action.key,
-            type: action.type,
-            destination: action.destination,
+            key: automation.action.key,
+            type: automation.action.type,
+            prompt: automation.action.prompt,
           }
         : {
-            key: action.key,
-            type: action.type,
+            key: automation.action.key,
+            type: automation.action.type,
+            destination: automation.action.destination,
           },
-    ),
   };
 }

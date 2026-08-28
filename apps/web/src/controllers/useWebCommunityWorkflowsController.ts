@@ -15,7 +15,7 @@ import {
   type CloudCommunityMemberWorkflowMember,
   type CloudCommunityMemberSuccessDossier,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
-import type { CommunityMemberWorkflowCheck } from "../../../../shared/communityMemberWorkflow";
+import type { CommunityMemberWorkflowAutomation } from "../../../../shared/communityMemberWorkflow";
 
 type EnsureAuthSession = (
   session?: AuthSession | null,
@@ -450,7 +450,7 @@ export function useWebCommunityWorkflowsController(params: {
     updateMilestone: (
       milestoneKey: string,
       name: string,
-      checks: CommunityMemberWorkflowCheck[],
+      automations: CommunityMemberWorkflowAutomation[],
     ) =>
       mutateMilestone("community_workflows_update_milestone", (session, communityId, revision) =>
         updateCloudCommunityMemberWorkflowMilestone({
@@ -459,7 +459,7 @@ export function useWebCommunityWorkflowsController(params: {
           expectedRevision: revision,
           milestoneKey,
           name,
-          checks,
+          automations,
         }),
       ),
     deleteMilestone: (milestoneKey: string) =>

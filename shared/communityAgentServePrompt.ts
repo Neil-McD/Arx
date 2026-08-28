@@ -19,6 +19,7 @@ export type CommunityAgentServePromptContext = {
   threadContext: {
     rendered: string;
   };
+  workflowPrompt?: string | null;
 };
 
 export type CommunityAgentServePromptBundle = {
@@ -58,6 +59,7 @@ export function buildCommunityAgentServePromptBundle(
   const communityInstructions = context.agent.systemPrompt
     ? `\n\nCommunity-wide instructions from the AI Agent settings:\n${context.agent.systemPrompt}`
     : "";
+  const workflowInstructions = String(context.workflowPrompt ?? "").trim();
   const systemPromptBundle = compileRuntimePromptSections([
     {
       id: "community_agent_identity",
@@ -96,6 +98,18 @@ export function buildCommunityAgentServePromptBundle(
       reason: "community owner/admin instructions under platform policy",
       text: communityInstructions,
     },
+    ...(workflowInstructions
+      ? [{
+          id: "community_workflow_action",
+          layer: "scoped" as const,
+          slot: "instruction" as const,
+          owner: "community" as const,
+          authority: "community_policy" as const,
+          source: "communityMemberWorkflows.automation.action.prompt",
+          reason: "builder-authored instruction captured for this exact workflow action",
+          text: `\n\nWorkflow instruction from the community builder:\n${workflowInstructions}`,
+        }]
+      : []),
   ]);
 
   return {
@@ -107,7 +121,7 @@ export function buildCommunityAgentServePromptBundle(
       },
       {
         role: "user",
-        content: `${communityDetails}\n\n${context.threadContext.rendered}\n\nReply to the identified requester's addressed turn in this same thread now.`,
+        content: `${communityDetails}\n\n${context.threadContext.rendered}\n\n${workflowInstructions ? "Carry out the workflow instruction for the identified member and reply in this same thread now." : "Reply to the identified requester's addressed turn in this same thread now."}`,
       },
     ],
   };

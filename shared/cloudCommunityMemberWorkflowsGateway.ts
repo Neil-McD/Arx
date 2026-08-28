@@ -10,7 +10,7 @@ import {
   type ConvexRealtimeEnsureSession,
 } from "./convexRealtimeAuth";
 import type {
-  CommunityMemberWorkflowCheck,
+  CommunityMemberWorkflowAutomation,
   CommunityMemberWorkflowMilestone,
 } from "./communityMemberWorkflow";
 import type { CommunityMemberSuccessDossier } from "./communityMemberSuccessDossier";
@@ -50,8 +50,8 @@ export type CloudCommunityMemberWorkflowBoardProjectionToken = {
   workflow_revision: number;
   active_member_count: number | null;
   latest_transition_id: string | null;
-  latest_evaluation_id: string | null;
-  latest_evaluation_updated_at: number | null;
+  latest_run_id: string | null;
+  latest_run_updated_at: number | null;
 };
 
 export type CloudCommunityMemberSuccessDossier =
@@ -185,7 +185,7 @@ export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
     expectedRevision: number;
     milestoneKey: string;
     name: string;
-    checks: CommunityMemberWorkflowCheck[];
+    automations: CommunityMemberWorkflowAutomation[];
   },
 ): Promise<WorkflowMilestoneMutationResult> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(
@@ -199,7 +199,7 @@ export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
       expectedRevision: params.expectedRevision,
       milestoneKey: params.milestoneKey,
       name: params.name,
-      checks: params.checks,
+      automations: params.automations,
     },
   )) as WorkflowMilestoneMutationResult;
 }
