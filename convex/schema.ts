@@ -1203,6 +1203,7 @@ export default defineSchema({
     workflowId: v.id("communityMemberWorkflows"),
     membershipId: v.id("communityMemberships"),
     milestoneKey: v.string(),
+    milestoneName: v.string(),
     milestoneEnteredAt: v.number(),
     workflowRevision: v.number(),
     automationKey: v.string(),
@@ -1239,6 +1240,11 @@ export default defineSchema({
       "membershipId",
       "triggerReceiptRef",
       "automationKey",
+    ])
+    .index("by_workflow_membership_createdAt", [
+      "workflowId",
+      "membershipId",
+      "createdAt",
     ])
     .index("by_workflow_updatedAt", ["workflowId", "updatedAt"]),
 

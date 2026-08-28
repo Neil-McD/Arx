@@ -18,6 +18,8 @@ assert.match(contract, /action: CommunityMemberWorkflowAction/);
 assert.doesNotMatch(contract, /goal_completed|evaluate_goal|judgment|checks:/);
 
 assert.match(schema, /communityMemberWorkflowRuns: defineTable/);
+assert.match(schema, /milestoneName: v\.string\(\)/);
+assert.match(schema, /by_workflow_membership_createdAt/);
 assert.match(schema, /triggerType: v\.literal\("member_contributed"\)/);
 assert.match(schema, /workflowPromptSnapshot: v\.optional\(v\.string\(\)\)/);
 assert.match(schema, /fromMilestoneName: v\.string\(\)/);
@@ -33,6 +35,9 @@ assert.match(backend, /community_member_workflow_move_action_count_invalid/);
 assert.match(backend, /const promptAutomations = automations\.filter/);
 assert.match(backend, /const moveAutomation = automations\.find/);
 assert.match(backend, /fromMilestoneName: current\.milestone\.name/);
+assert.match(backend, /recent_workflow_activity: recentWorkflowActivity/);
+assert.match(backend, /serveRequest\?\.status === "responded"/);
+assert.match(backend, /milestoneName: args\.current\.milestone\.name/);
 assert.doesNotMatch(backend, /automationHash|sha256HexText/);
 assert.doesNotMatch(backend, /contractStagingWorkflowToV1Internal|goal_completed|evaluate_goal|MilestoneEvaluation/);
 
@@ -47,5 +52,6 @@ assert.match(modal, /Move to next milestone/);
 assert.match(modal, /itemIndex !== index && item\.action\.type === "move_member"/);
 assert.doesNotMatch(modal, /AI judgment|Complete when|Completion checks/);
 assert.doesNotMatch(dossier, /latest_evaluation|check_statuses|checks:/);
+assert.match(dossier, /recent_workflow_activity/);
 
 console.log("community member workflows V1 contract proof passed");

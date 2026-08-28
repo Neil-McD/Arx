@@ -176,6 +176,19 @@ test("move_member advances exactly once for one contribution receipt", async () 
   expect(state.runs).toHaveLength(1);
   expect(state.transitions).toHaveLength(1);
   expect(state.member?.currentMilestoneKey).not.toBe(firstKey);
+  const dossier = await t.withIdentity({ subject: OWNER_SUBJECT }).query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId },
+  );
+  expect(dossier.recent_workflow_activity).toEqual([
+    expect.objectContaining({
+      action_type: "move_member",
+      status: "moved",
+      milestone_name: "New",
+      next_milestone_name: "Activated",
+      prompt: null,
+    }),
+  ]);
 });
 
 test("prompt_agent admits one linked serve request and never moves the member", async () => {
@@ -201,6 +214,33 @@ test("prompt_agent admits one linked serve request and never moves the member", 
   expect(state.transitions).toHaveLength(0);
   expect(state.member).toBeNull();
   expect(firstKey).toEqual(expect.any(String));
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const queuedDossier = await owner.query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId },
+  );
+  expect(queuedDossier.recent_workflow_activity).toEqual([
+    expect.objectContaining({
+      action_type: "prompt_agent",
+      status: "queued",
+      milestone_name: "New",
+      prompt: "Help the member choose one concrete next step.",
+    }),
+  ]);
+
+  await t.run(async (ctx) => await ctx.db.patch(state.requests[0]._id, {
+    status: "responded",
+    respondedAt: f.nowMs + 20,
+    updatedAt: f.nowMs + 20,
+  }));
+  const respondedDossier = await owner.query(
+    api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier,
+    { communityId: f.communityId, membershipId: f.membershipId },
+  );
+  expect(respondedDossier.recent_workflow_activity[0].status).toBe("responded");
+  expect(respondedDossier.markdown).toContain(
+    "Agent prompt responded in New — Help the member choose one concrete next step.",
+  );
 });
 
 test("a milestone rejects more than one terminal move without changing revision", async () => {
@@ -323,6 +363,13 @@ test("milestone history keeps occurrence-time names after the workflow is rename
   expect(dossier.workflow.current_milestone_name).toBe("Renamed destination");
   expect(dossier.milestone_history).toEqual([
     expect.objectContaining({
+      milestone_name: "New",
+      next_milestone_name: "Activated",
+    }),
+  ]);
+  expect(dossier.recent_workflow_activity).toEqual([
+    expect.objectContaining({
+      action_type: "move_member",
       milestone_name: "New",
       next_milestone_name: "Activated",
     }),

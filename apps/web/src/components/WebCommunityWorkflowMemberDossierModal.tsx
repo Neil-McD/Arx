@@ -18,6 +18,21 @@ function readableLabel(value: string): string {
     .join(" ");
 }
 
+function workflowActivityLabel(
+  activity: CloudCommunityMemberSuccessDossier["recent_workflow_activity"][number],
+): string {
+  if (activity.action_type === "prompt_agent") {
+    return `Community agent · ${readableLabel(activity.status)}`;
+  }
+  if (activity.status === "workflow_completed") {
+    return `${activity.milestone_name} → Workflow complete`;
+  }
+  if (activity.status === "moved") {
+    return `${activity.milestone_name} → ${activity.next_milestone_name}`;
+  }
+  return `Move ${readableLabel(activity.status).toLowerCase()} in ${activity.milestone_name}`;
+}
+
 export function WebCommunityWorkflowMemberDossierModal(props: {
   isOpen: boolean;
   dossier: CloudCommunityMemberSuccessDossier | null;
@@ -146,6 +161,25 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   </div>
                 ) : (
                   <p>No member-approved context has been shared with this community.</p>
+                )}
+              </section>
+
+              <section className="workflow-member-dossier-section">
+                <h3>Recent activity</h3>
+                {dossier.recent_workflow_activity.length > 0 ? (
+                  <ol className="workflow-member-history workflow-member-activity">
+                    {dossier.recent_workflow_activity.map((activity) => (
+                      <li key={activity.id}>
+                        <span>{new Date(activity.occurred_at).toLocaleString()}</span>
+                        <div>
+                          <strong>{workflowActivityLabel(activity)}</strong>
+                          {activity.prompt ? <p>{activity.prompt}</p> : null}
+                        </div>
+                      </li>
+                    ))}
+                  </ol>
+                ) : (
+                  <p>No workflow actions yet.</p>
                 )}
               </section>
 

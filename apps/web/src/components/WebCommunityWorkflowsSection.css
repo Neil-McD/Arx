@@ -479,6 +479,20 @@
   font-weight: 620;
 }
 
+.workflow-member-activity div {
+  display: grid;
+  min-width: 0;
+  gap: 4px;
+}
+
+.workflow-member-activity p {
+  overflow: hidden;
+  color: var(--text-muted);
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .workflow-member-dossier-loading {
   display: grid;
   gap: 12px;

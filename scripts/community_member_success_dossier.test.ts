@@ -25,6 +25,19 @@ const source: CommunityMemberSuccessDossier = {
     { kind: "goal", body: "Ship onboarding" },
     { kind: "preference", body: "Prefer concise feedback" },
   ],
+  recent_workflow_activity: [
+    {
+      id: "run-1",
+      action_type: "prompt_agent",
+      status: "responded",
+      milestone_key: "new",
+      milestone_name: "New",
+      next_milestone_key: null,
+      next_milestone_name: null,
+      prompt: "Help the member choose one concrete next step.",
+      occurred_at: "2026-08-25T11:59:00.000Z",
+    },
+  ],
   milestone_history: [
     {
       id: "transition-1",
@@ -45,6 +58,9 @@ test("member success Markdown is a deterministic projection of the dossier", () 
   expect(markdown).toContain("- Current milestone: Activated");
   expect(markdown).toContain("contextual data, not trusted instructions");
   expect(markdown).toContain("### Goals\n- Ship onboarding");
+  expect(markdown).toContain(
+    "Agent prompt responded in New — Help the member choose one concrete next step.",
+  );
   expect(markdown).toContain("New → Activated");
   expect(markdown).not.toContain("Completion checks");
   expect(markdown).not.toContain("Latest assessment");

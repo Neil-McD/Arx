@@ -1,6 +1,7 @@
 import type { MemberFactKind } from "./memberOntology";
 
 export const COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT = 12;
+export const COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT = 12;
 
 export type CommunityMemberSuccessFact = {
   kind: MemberFactKind;
@@ -15,6 +16,24 @@ export type CommunityMemberSuccessMilestoneHistoryEntry = {
   next_milestone_key: string | null;
   next_milestone_name: string | null;
   completed_workflow: boolean;
+  occurred_at: string;
+};
+
+export type CommunityMemberSuccessWorkflowActivity = {
+  id: string;
+  action_type: "prompt_agent" | "move_member";
+  status:
+    | "queued"
+    | "running"
+    | "responded"
+    | "moved"
+    | "workflow_completed"
+    | "failed";
+  milestone_key: string;
+  milestone_name: string;
+  next_milestone_key: string | null;
+  next_milestone_name: string | null;
+  prompt: string | null;
   occurred_at: string;
 };
 
@@ -35,6 +54,7 @@ export type CommunityMemberSuccessDossier = {
     completed_at: string | null;
   };
   approved_community_context: CommunityMemberSuccessFact[];
+  recent_workflow_activity: CommunityMemberSuccessWorkflowActivity[];
   milestone_history: CommunityMemberSuccessMilestoneHistoryEntry[];
 };
 
@@ -79,6 +99,27 @@ export function renderCommunityMemberSuccessDossierMarkdown(
       )) {
         lines.push(`- ${markdownInline(fact.body)}`);
       }
+    }
+  }
+
+  lines.push("", "## Recent workflow activity");
+  if (source.recent_workflow_activity.length === 0) {
+    lines.push("", "_No workflow actions yet._");
+  } else {
+    for (const activity of source.recent_workflow_activity) {
+      if (activity.action_type === "prompt_agent") {
+        lines.push(
+          `- ${activity.occurred_at}: Agent prompt ${activity.status} in ${markdownInline(activity.milestone_name)} — ${markdownInline(activity.prompt)}`,
+        );
+        continue;
+      }
+      lines.push(
+        activity.status === "workflow_completed"
+          ? `- ${activity.occurred_at}: ${markdownInline(activity.milestone_name)} → Workflow complete`
+          : activity.status === "moved"
+            ? `- ${activity.occurred_at}: ${markdownInline(activity.milestone_name)} → ${markdownInline(activity.next_milestone_name)}`
+            : `- ${activity.occurred_at}: Move ${activity.status} in ${markdownInline(activity.milestone_name)}`,
+      );
     }
   }
 

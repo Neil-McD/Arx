@@ -28,6 +28,7 @@ import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
 import { readMemberFactsForLens } from "./memberOntologyCore";
 import {
+  COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT,
   COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT,
   renderCommunityMemberSuccessDossierMarkdown,
   type CommunityMemberSuccessDossier,
@@ -590,7 +591,7 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
     membershipId: membership!._id,
   });
   const current = resolveCurrentMilestone({ workflow, membership: membership!, state });
-  const [profile, approvedFacts, transitionRows] = await Promise.all([
+  const [profile, approvedFacts, transitionRows, workflowRunRows] = await Promise.all([
     resolveUserProfileDisplayProjection(args.ctx, membership!.userId),
     readMemberFactsForLens(args.ctx, {
       subjectUserId: membership!.userId,
@@ -607,7 +608,68 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
       )
       .order("desc")
       .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT) as Promise<WorkflowTransitionRow[]>,
+    args.ctx.db
+      .query("communityMemberWorkflowRuns")
+      .withIndex("by_workflow_membership_createdAt", (q: any) =>
+        q.eq("workflowId", workflow._id).eq("membershipId", membership!._id),
+      )
+      .order("desc")
+      .take(COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT) as Promise<WorkflowRunRow[]>,
   ]);
+  const transitionById = new Map(
+    transitionRows.map((transition) => [String(transition._id), transition]),
+  );
+  const recentWorkflowActivity = await Promise.all(
+    workflowRunRows.map(async (run) => {
+      if (run.actionSnapshot.type === "prompt_agent") {
+        const serveRequest = run.actionResult?.serveRequestId
+          ? await args.ctx.db.get(run.actionResult.serveRequestId)
+          : null;
+        const status =
+          run.status === "failed" ||
+          serveRequest?.status === "error" ||
+          serveRequest?.status === "skipped"
+            ? "failed" as const
+            : serveRequest?.status === "responded"
+              ? "responded" as const
+              : serveRequest?.status === "running"
+                ? "running" as const
+                : "queued" as const;
+        return {
+          id: String(run._id),
+          action_type: "prompt_agent" as const,
+          status,
+          milestone_key: run.milestoneKey,
+          milestone_name: run.milestoneName,
+          next_milestone_key: null,
+          next_milestone_name: null,
+          prompt: run.actionSnapshot.prompt,
+          occurred_at: toIsoString(run.createdAt),
+        };
+      }
+      const transition = run.actionResult?.transitionId
+        ? transitionById.get(String(run.actionResult.transitionId)) ?? null
+        : null;
+      const status = run.status === "failed"
+        ? "failed" as const
+        : transition?.completedWorkflow
+          ? "workflow_completed" as const
+          : transition
+            ? "moved" as const
+            : "running" as const;
+      return {
+        id: String(run._id),
+        action_type: "move_member" as const,
+        status,
+        milestone_key: run.milestoneKey,
+        milestone_name: run.milestoneName,
+        next_milestone_key: transition?.toMilestoneKey ?? null,
+        next_milestone_name: transition?.toMilestoneName ?? null,
+        prompt: null,
+        occurred_at: toIsoString(run.createdAt),
+      };
+    }),
+  );
   return {
     membership_id: String(membership!._id),
     display_name: profile.display_name ?? "Member",
@@ -631,6 +693,7 @@ async function resolveBuilderWorkflowMemberSuccessDossier(args: {
           ? left.body.localeCompare(right.body)
           : left.kind.localeCompare(right.kind),
       ),
+    recent_workflow_activity: recentWorkflowActivity,
     milestone_history: transitionRows
       .slice()
       .reverse()
@@ -840,6 +903,7 @@ async function executeMemberContributedAutomation(args: {
     workflowId: args.workflow._id,
     membershipId: args.membership._id,
     milestoneKey: args.current.milestone.key,
+    milestoneName: args.current.milestone.name,
     milestoneEnteredAt: args.current.milestoneEnteredAt,
     workflowRevision: args.workflow.revision,
     automationKey: args.automation.key,

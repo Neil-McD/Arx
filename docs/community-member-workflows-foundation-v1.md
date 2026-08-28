@@ -43,6 +43,12 @@ causes work. A member contribution is the only V1 trigger.
   immutable source and destination milestone-name snapshots.
 - `communityAgentServeRequests`: durable admission for `prompt_agent` work.
 
+The builder member dossier reads those records into a bounded recent-activity
+timeline. Agent status comes from the linked serve request, movement comes from
+the linked transition, and the action prompt and milestone name come from the
+occurrence-time workflow-run snapshot. The timeline does not infer success from
+the current workflow definition.
+
 The old goal evaluator, checks, judgment passes, milestone-pass table, and
 evaluation funding surface do not exist in V1.
 
