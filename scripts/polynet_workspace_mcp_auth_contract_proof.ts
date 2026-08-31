@@ -34,9 +34,127 @@ const sharedMcp = read("shared/polynetMcp.ts");
 const packageJson = read("package.json");
 const vercelConfig = read("vercel.json");
 const mcpProxy = read("api/mcp/_proxy.js");
+const proxyTransportTest = read("scripts/mcp_proxy_transport.test.ts");
 const externalSmoke = read("scripts/polynet_workspace_mcp_external_smoke.ts");
 const releasePreflight = read(
   "scripts/polynet_workspace_mcp_release_preflight.ts",
+);
+
+const forwardedRequestHeaders = blockBetween(
+  mcpProxy,
+  "const FORWARDED_REQUEST_HEADERS",
+  "const CORS_PREFLIGHT_REQUEST_HEADERS",
+  "MCP proxy request-header allowlist",
+);
+const corsPreflightRequestHeaders = blockBetween(
+  mcpProxy,
+  "const CORS_PREFLIGHT_REQUEST_HEADERS",
+  "function shouldSkipResponseHeader",
+  "MCP proxy CORS preflight request-header allowlist",
+);
+for (const header of [
+  "accept",
+  "authorization",
+  "content-type",
+  "mcp-protocol-version",
+  "origin",
+]) {
+  includes(
+    forwardedRequestHeaders,
+    `"${header}"`,
+    `${header} MCP proxy request-header allowlist`,
+  );
+}
+for (const framingHeader of [
+  "connection",
+  "content-length",
+  "expect",
+  "te",
+  "trailer",
+  "transfer-encoding",
+  "upgrade",
+]) {
+  excludes(
+    forwardedRequestHeaders,
+    `"${framingHeader}"`,
+    `${framingHeader} MCP proxy request-header allowlist`,
+  );
+  excludes(
+    corsPreflightRequestHeaders,
+    `"${framingHeader}"`,
+    `${framingHeader} MCP proxy CORS request-header allowlist`,
+  );
+}
+for (const header of [
+  "access-control-request-headers",
+  "access-control-request-method",
+]) {
+  includes(
+    corsPreflightRequestHeaders,
+    `"${header}"`,
+    `${header} MCP proxy CORS request-header allowlist`,
+  );
+}
+includes(
+  mcpProxy,
+  'String(req.method ?? "").toUpperCase() === "OPTIONS"',
+  "method-scoped MCP proxy CORS forwarding",
+);
+includes(
+  mcpProxy,
+  "connectionHeaderTokens",
+  "Connection-nominated request-header removal",
+);
+includes(mcpProxy, 'headers.set("x-arx-request-id"', "proxy correlation ID");
+includes(
+  proxyTransportTest,
+  '"transfer-encoding": "chunked"',
+  "proxy chunked transport behavior test",
+);
+includes(
+  proxyTransportTest,
+  'expect: "100-continue"',
+  "proxy Expect transport behavior test",
+);
+includes(
+  proxyTransportTest,
+  "private channel message",
+  "proxy diagnostic content-redaction behavior test",
+);
+includes(
+  proxyTransportTest,
+  "forwards CORS negotiation only for OPTIONS",
+  "proxy method-scoped CORS behavior test",
+);
+includes(
+  proxyTransportTest,
+  "preserves an upstream CORS preflight response",
+  "proxy CORS response behavior test",
+);
+includes(
+  releasePreflight,
+  '"Transfer-Encoding": "chunked"',
+  "raw chunked public transport preflight",
+);
+includes(
+  releasePreflight,
+  'Expect: "100-continue"',
+  "raw Expect public transport preflight",
+);
+includes(
+  releasePreflight,
+  'return "public_transport_incompatible"',
+  "public transport incompatibility classification",
+);
+includes(
+  contract,
+  "The public MCP proxy terminates inbound HTTP framing.",
+  "public proxy framing contract",
+);
+includes(
+  contract,
+  "reuse the same `idempotency_key`",
+  "transport retry idempotency contract",
 );
 
 assert.deepEqual(
