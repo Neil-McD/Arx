@@ -205,6 +205,33 @@ SPA fallback:
 /.well-known/oauth-authorization-server
 ```
 
+### Public proxy transport boundary
+
+The public MCP proxy terminates inbound HTTP framing. Once it has consumed a
+request body, it constructs a new upstream request using an explicit allowlist
+of MCP application headers. Connection-specific headers such as
+`Transfer-Encoding`, `Expect`, `Content-Length`, `Connection`, `TE`, `Trailer`,
+and `Upgrade` never cross into the new request. Headers named by `Connection`
+are also removed. The upstream HTTP client owns the new body framing.
+Only `OPTIONS` requests may additionally forward
+`Access-Control-Request-Method` and `Access-Control-Request-Headers`. This
+preserves browser negotiation without authorizing the origin or weakening the
+trusted runtime's `ARX_ALLOWED_MCP_ORIGINS` validation.
+
+Transport compatibility is part of release acceptance. Normal, HTTP/1.1
+chunked, and `Expect: 100-continue` initialize requests must all reach the
+trusted runtime and produce the same OAuth challenge when unauthenticated. A
+proxy `502` is never an acceptable substitute for an authorization response.
+
+Every proxy failure returns a server-generated correlation ID and records only
+sanitized failure classification. Authorization credentials, cookies, API
+keys, and MCP request content must never appear in proxy diagnostics.
+
+A transport failure does not prove whether a mutation committed. Clients must
+reuse the same `idempotency_key` when retrying a mutating tool call, then use
+the canonical receipt and readback to distinguish a replayed success from a
+new effect.
+
 ## OAuth continuity
 
 The intended experience is:
@@ -239,6 +266,11 @@ npx vitest run convex/polynetCanonicalExecutor.test.ts
 Live staging:
 
 ```bash
+npm run preflight:polynet-workspace-mcp-release -- \
+  --dev \
+  --url=https://polynet-staging.vercel.app/runtime/mcp \
+  --require-live-ready
+
 POLYNET_MCP_URL=https://polynet-staging.vercel.app/runtime/mcp \
 POLYNET_MCP_BEARER_TOKEN=<staging-token> \
 POLYNET_MCP_CONTROL_BEARER_TOKEN=<different-staging-control-token> \
