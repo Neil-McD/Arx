@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 function readEnv(name) {
   return String(process.env?.[name] ?? "").trim();
 }
@@ -47,28 +49,20 @@ function firstHeader(value) {
   return String(value ?? "");
 }
 
-function shouldSkipRequestHeader(name) {
-  return new Set([
-    "accept-encoding",
-    "connection",
-    "content-length",
-    "cookie",
-    "host",
-    "x-forwarded-for",
-    "x-forwarded-host",
-    "x-forwarded-proto",
-    "x-vercel-deployment-url",
-    "x-vercel-forwarded-for",
-    "x-vercel-id",
-    "x-vercel-ip-city",
-    "x-vercel-ip-continent",
-    "x-vercel-ip-country",
-    "x-vercel-ip-country-region",
-    "x-vercel-ip-latitude",
-    "x-vercel-ip-longitude",
-    "x-vercel-ip-timezone",
-  ]).has(name.toLowerCase());
-}
+const FORWARDED_REQUEST_HEADERS = new Set([
+  "accept",
+  "authorization",
+  "content-type",
+  "last-event-id",
+  "mcp-protocol-version",
+  "mcp-session-id",
+  "origin",
+]);
+
+const CORS_PREFLIGHT_REQUEST_HEADERS = new Set([
+  "access-control-request-headers",
+  "access-control-request-method",
+]);
 
 function shouldSkipResponseHeader(name) {
   return new Set([
@@ -80,21 +74,52 @@ function shouldSkipResponseHeader(name) {
   ]).has(name.toLowerCase());
 }
 
-function buildProxyHeaders(req) {
+function shouldForwardRequestHeader(req, name) {
+  if (FORWARDED_REQUEST_HEADERS.has(name)) return true;
+  return (
+    String(req.method ?? "").toUpperCase() === "OPTIONS" &&
+    CORS_PREFLIGHT_REQUEST_HEADERS.has(name)
+  );
+}
+
+function connectionHeaderTokens(req) {
+  return new Set(
+    firstHeader(req.headers?.connection)
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+}
+
+export function buildProxyHeaders(req, requestId = randomUUID()) {
   const headers = new Headers();
+  const connectionTokens = connectionHeaderTokens(req);
   for (const [rawName, rawValue] of Object.entries(req.headers ?? {})) {
     const name = String(rawName).toLowerCase();
-    if (shouldSkipRequestHeader(name)) continue;
+    if (!shouldForwardRequestHeader(req, name) || connectionTokens.has(name)) continue;
     const value = firstHeader(rawValue);
     if (!value) continue;
-    headers.set(rawName, value);
+    headers.set(name, value);
   }
   const apiKey = readConvexPublicKey();
   if (apiKey && !headers.has("apikey")) headers.set("apikey", apiKey);
   const forwardedHost = firstHeader(req.headers?.host);
   if (forwardedHost) headers.set("x-forwarded-host", forwardedHost);
   headers.set("x-forwarded-proto", firstHeader(req.headers?.["x-forwarded-proto"]) || "https");
+  headers.set("x-arx-request-id", requestId);
   return headers;
+}
+
+function hasHeader(req, name) {
+  return Object.keys(req.headers ?? {}).some(
+    (candidate) => candidate.toLowerCase() === name.toLowerCase(),
+  );
+}
+
+function errorCauseCode(error) {
+  const cause = error && typeof error === "object" ? error.cause : null;
+  if (!cause || typeof cause !== "object") return null;
+  return typeof cause.code === "string" ? cause.code : null;
 }
 
 async function readRequestBody(req) {
@@ -118,11 +143,15 @@ function readTimeoutMs() {
 }
 
 export async function proxyConvexRuntimeRequest(req, res, targetPath) {
+  const requestId = randomUUID();
+  const startedAt = Date.now();
+  res.setHeader("x-arx-request-id", requestId);
   const base = readConvexRuntimeUrl();
   if (!base) {
     sendJson(res, 503, {
       error: "convex_runtime_url_missing",
       error_description: "VITE_CONVEX_SITE_URL or VITE_CONVEX_URL is required to proxy MCP routes.",
+      request_id: requestId,
     });
     return;
   }
@@ -135,7 +164,7 @@ export async function proxyConvexRuntimeRequest(req, res, targetPath) {
   try {
     const upstream = await fetch(targetUrl, {
       method: req.method,
-      headers: buildProxyHeaders(req),
+      headers: buildProxyHeaders(req, requestId),
       body: await readRequestBody(req),
       redirect: "manual",
       signal: controller.signal,
@@ -144,6 +173,7 @@ export async function proxyConvexRuntimeRequest(req, res, targetPath) {
     for (const [name, value] of upstream.headers.entries()) {
       if (!shouldSkipResponseHeader(name)) res.setHeader(name, value);
     }
+    res.setHeader("x-arx-request-id", requestId);
     const buffer = Buffer.from(await upstream.arrayBuffer());
     if (buffer.byteLength === 0) {
       res.end();
@@ -151,15 +181,29 @@ export async function proxyConvexRuntimeRequest(req, res, targetPath) {
       res.end(buffer);
     }
   } catch (error) {
-    const message =
-      error?.name === "AbortError"
-        ? `MCP runtime proxy timed out after ${timeoutMs}ms.`
-        : error instanceof Error
-          ? error.message
-          : "MCP runtime proxy failed.";
+    const timedOut = error?.name === "AbortError";
+    console.error(
+      JSON.stringify({
+        event: "mcp_runtime_proxy_failed",
+        requestId,
+        method: String(req.method ?? ""),
+        targetPath: path,
+        elapsedMs: Date.now() - startedAt,
+        errorName: error instanceof Error ? error.name : "Error",
+        causeCode: errorCauseCode(error),
+        timedOut,
+        inboundTransport: {
+          transferEncoding: hasHeader(req, "transfer-encoding"),
+          expect: hasHeader(req, "expect"),
+        },
+      }),
+    );
     sendJson(res, 502, {
       error: "mcp_runtime_proxy_failed",
-      error_description: message,
+      error_description: timedOut
+        ? `MCP runtime proxy timed out after ${timeoutMs}ms.`
+        : "MCP runtime proxy request failed.",
+      request_id: requestId,
     });
   } finally {
     clearTimeout(timeout);

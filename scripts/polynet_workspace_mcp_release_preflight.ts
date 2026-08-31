@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
+import { request as httpsRequest } from "node:https";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
 
@@ -11,6 +13,7 @@ type LiveClassification =
   | "ready_for_smoke"
   | "oauth_challenge_ready"
   | "not_released_yet"
+  | "public_transport_incompatible"
   | "web_proxy_ready_but_convex_stale"
   | "live_origin_unreachable"
   | "live_origin_unexpected";
@@ -317,6 +320,100 @@ async function postJsonRpc(mcpUrl: string, method: string, params: Record<string
   });
 }
 
+async function rawInitializeProbe(
+  mcpUrl: string,
+  framing: "chunked" | "expect_continue",
+): Promise<HttpProbe> {
+  const url = new URL(mcpUrl);
+  const payload = Buffer.from(JSON.stringify({
+    jsonrpc: "2.0",
+    id: 1,
+    method: "initialize",
+    params: {
+      protocolVersion: POLYNET_MCP_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: {
+        name: `polynet-mcp-${framing}-preflight`,
+        version: "0.1.0",
+      },
+    },
+  }));
+
+  return await new Promise<HttpProbe>((resolve) => {
+    let settled = false;
+    const settle = (probe: HttpProbe) => {
+      if (settled) return;
+      settled = true;
+      resolve(probe);
+    };
+    const headers: Record<string, string> = {
+      Accept: "application/json, text/event-stream",
+      "Content-Type": "application/json",
+      "MCP-Protocol-Version": POLYNET_MCP_PROTOCOL_VERSION,
+      ...(framing === "chunked"
+        ? { "Transfer-Encoding": "chunked" }
+        : { Expect: "100-continue" }),
+    };
+    const request = (url.protocol === "https:" ? httpsRequest : httpRequest)(
+      url,
+      { method: "POST", headers },
+      (response) => {
+        const chunks: Buffer[] = [];
+        response.on("data", (chunk) => {
+          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+        });
+        response.on("end", () => {
+          const text = Buffer.concat(chunks).toString("utf8");
+          const authenticate = response.headers["www-authenticate"];
+          settle({
+            ok: true,
+            url: mcpUrl,
+            status: response.statusCode ?? null,
+            text: text.slice(0, 4000),
+            body: parseJson(text),
+            headers: {
+              wwwAuthenticate: Array.isArray(authenticate)
+                ? authenticate[0] ?? null
+                : authenticate ?? null,
+            },
+            error: null,
+          });
+        });
+      },
+    );
+
+    request.setTimeout(readTimeoutMs(), () => {
+      request.destroy(new Error(`${framing} MCP probe timed out.`));
+    });
+    request.on("error", (error) => {
+      settle({
+        ok: false,
+        url: mcpUrl,
+        status: null,
+        text: "",
+        body: null,
+        headers: { wwwAuthenticate: null },
+        error: error instanceof Error ? error.message : String(error),
+      });
+    });
+
+    if (framing === "expect_continue") {
+      let bodySent = false;
+      request.on("continue", () => {
+        if (bodySent) return;
+        bodySent = true;
+        request.end(payload);
+      });
+      request.flushHeaders();
+      return;
+    }
+
+    const splitAt = Math.max(1, Math.floor(payload.byteLength / 2));
+    request.write(payload.subarray(0, splitAt));
+    request.end(payload.subarray(splitAt));
+  });
+}
+
 async function getJson(url: string): Promise<HttpProbe> {
   return fetchWithTimeout(url, {
     method: "GET",
@@ -347,6 +444,8 @@ function liveClassificationIsReady(classification: LiveClassification): boolean 
 
 function classifyLive(args: {
   initialize: HttpProbe;
+  chunkedInitialize: HttpProbe;
+  expectContinueInitialize: HttpProbe;
   toolsList: HttpProbe | null;
   protectedResource: HttpProbe;
   authorizationServer: HttpProbe;
@@ -370,6 +469,12 @@ function classifyLive(args: {
   if (!resource || normalizeComparableUrl(resource) !== normalizeComparableUrl(args.mcpUrl)) {
     return "web_proxy_ready_but_convex_stale";
   }
+  if (
+    !hasOAuthResourceChallenge(args.chunkedInitialize) ||
+    !hasOAuthResourceChallenge(args.expectContinueInitialize)
+  ) {
+    return "public_transport_incompatible";
+  }
   if (hasOAuthResourceChallenge(args.initialize)) {
     return "oauth_challenge_ready";
   }
@@ -384,14 +489,18 @@ function classifyLive(args: {
 }
 
 async function buildLiveProbe(mcpUrl: string) {
-  const initialize = await postJsonRpc(mcpUrl, "initialize", {
-    protocolVersion: POLYNET_MCP_PROTOCOL_VERSION,
-    capabilities: {},
-    clientInfo: {
-      name: "polynet-workspace-mcp-release-preflight",
-      version: "0.1.0",
-    },
-  });
+  const [initialize, chunkedInitialize, expectContinueInitialize] = await Promise.all([
+    postJsonRpc(mcpUrl, "initialize", {
+      protocolVersion: POLYNET_MCP_PROTOCOL_VERSION,
+      capabilities: {},
+      clientInfo: {
+        name: "polynet-workspace-mcp-release-preflight",
+        version: "0.1.0",
+      },
+    }),
+    rawInitializeProbe(mcpUrl, "chunked"),
+    rawInitializeProbe(mcpUrl, "expect_continue"),
+  ]);
   const toolsList = initialize.status === 200
     ? await postJsonRpc(mcpUrl, "tools/list")
     : null;
@@ -399,6 +508,8 @@ async function buildLiveProbe(mcpUrl: string) {
   const authorizationServer = await getJson(wellKnownUrl(mcpUrl, "/.well-known/oauth-authorization-server"));
   const classification = classifyLive({
     initialize,
+    chunkedInitialize,
+    expectContinueInitialize,
     toolsList,
     protectedResource,
     authorizationServer,
@@ -413,6 +524,18 @@ async function buildLiveProbe(mcpUrl: string) {
         status: initialize.status,
         oauthChallengePresent: hasOAuthResourceChallenge(initialize),
         error: initialize.error,
+      },
+      chunkedInitialize: {
+        ok: chunkedInitialize.ok,
+        status: chunkedInitialize.status,
+        oauthChallengePresent: hasOAuthResourceChallenge(chunkedInitialize),
+        error: chunkedInitialize.error,
+      },
+      expectContinueInitialize: {
+        ok: expectContinueInitialize.ok,
+        status: expectContinueInitialize.status,
+        oauthChallengePresent: hasOAuthResourceChallenge(expectContinueInitialize),
+        error: expectContinueInitialize.error,
       },
       toolsList: toolsList
         ? {
