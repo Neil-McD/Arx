@@ -203,17 +203,26 @@ describe("platform-home admission authority", () => {
   test("manager-removed member cannot bypass cooldown through open entry", async () => {
     const t = convexTest(schema, modules);
     const f = await fixture(t, "cooldown");
-    vi.useFakeTimers();
-    vi.setSystemTime(f.nowMs + 100);
+    const activated = await activate(t, f);
+    await revoke(t, f, activated.membership._id);
+    const member = t.withIdentity({ subject: f.memberSubject });
+    vi.useFakeTimers({ toFake: ["Date"] });
     try {
-      const activated = await activate(t, f);
-      await revoke(t, f, activated.membership._id);
+      vi.setSystemTime(f.nowMs + 3);
       await expect(
-        t.withIdentity({ subject: f.memberSubject }).mutation(
+        member.mutation(
           api.communityPublic.joinPublicCommunity,
           { communityId: f.communityId },
         ),
       ).resolves.toMatchObject({ outcome: "approval_denied" });
+
+      vi.setSystemTime(f.nowMs + 2 + COMMUNITY_REMOVAL_REAPPLY_COOLDOWN_MS);
+      await expect(
+        member.mutation(
+          api.communityPublic.joinPublicCommunity,
+          { communityId: f.communityId },
+        ),
+      ).resolves.toMatchObject({ outcome: "approval_pending" });
     } finally {
       vi.useRealTimers();
     }
