@@ -10,7 +10,9 @@ import {
   Trash2,
 } from "lucide-react";
 import { EmojiPickerButton, QUICK_REACTIONS, ReactionSummary } from "./communityInteractionRowParts";
-import { DeferredYouTubeEmbed } from "./DeferredYouTubeEmbed";
+import { MessageLinkMedia } from "./MessageLinkMedia";
+import { PdfDocumentCard } from "./PdfDocumentCard";
+import { isPdfDocument, safeDocumentUrl } from "../../../../shared/messagePdf";
 import { groupInteractionFeed } from "./groupInteractionFeed";
 import { MemberAvatarStack, type MemberAvatarStackFace } from "./MemberAvatarStack";
 import type { WebCommunityInteractionProjectionProps } from "./WebCommunityInteractionProjection";
@@ -23,7 +25,6 @@ import {
   splitBodyIntoMentionSegments,
   type ResolvedMentionForRendering,
 } from "../../../../shared/communityMentionRendering";
-import { firstYouTubeEmbedInText } from "../../../../shared/linkEmbedUi";
 import { ChatBlockMarkdown } from "../../../../shared/chatBlockMarkdownUi";
 import { tokenizeChatContactText } from "../../../../shared/chatContactText";
 import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
@@ -750,7 +751,6 @@ export function InteractionContent(
     afterBody?: ReactNode;
   },
 ) {
-  const youtube = firstYouTubeEmbedInText(props.text);
   return (
     <>
       <InteractionBody
@@ -758,11 +758,7 @@ export function InteractionContent(
         renderTextWithLinks={props.renderTextWithLinks}
         mentionContext={props.mentionContext}
       />
-      {youtube ? (
-        <div className="community-interaction-youtube-wrap">
-          <DeferredYouTubeEmbed key={youtube.embed.id} embed={youtube.embed} />
-        </div>
-      ) : null}
+      <MessageLinkMedia text={props.text} />
       {props.afterBody}
     </>
   );
@@ -810,6 +806,9 @@ export function InteractionAttachments(props: {
         <div className="attachments-preview chat-attachments-preview">
           {fileAttachments.map((attachment) => {
             const href = typeof attachment.url === "string" && attachment.url.trim() ? attachment.url.trim() : null;
+            if (href && safeDocumentUrl(href) && isPdfDocument(attachment.name, attachment.mime)) {
+              return <PdfDocumentCard key={attachment.id} url={href} name={attachment.name} />;
+            }
             return (
               <button
                 key={attachment.id}

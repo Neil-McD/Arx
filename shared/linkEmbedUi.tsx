@@ -250,6 +250,17 @@ export function firstYouTubeEmbedInText(text: string): {
   return embed ? { href, embed } : null;
 }
 
+/** One preview per video, in authored order; code samples remain plain text. */
+export function youTubeEmbedsInText(text: string) {
+  const seen = new Set<string>();
+  return extractCommunityInteractionLinkSources(text, (url) => {
+    const embed = parseYouTubeEmbedUrl(url);
+    if (!embed || seen.has(embed.id)) return null;
+    seen.add(embed.id);
+    return url;
+  }, 12).map((href) => ({ href, embed: parseYouTubeEmbedUrl(href)! }));
+}
+
 export const StableMediaEmbedFrame = memo(function StableMediaEmbedFrame(props: {
   src: string;
   title: string;

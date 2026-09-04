@@ -278,8 +278,8 @@ assert.match(
 );
 assert.match(
   feed,
-  /export function InteractionContent[\s\S]*firstYouTubeEmbedInText\(props\.text\)[\s\S]*<InteractionBody[\s\S]*<DeferredYouTubeEmbed[\s\S]*props\.afterBody/,
-  "interaction content should preserve authored text, add one deterministic YouTube enhancement, and preserve attachments",
+  /export function InteractionContent[\s\S]*<InteractionBody[\s\S]*<MessageLinkMedia text=\{props\.text\}[\s\S]*props\.afterBody/,
+  "interaction content should preserve authored text, share media previews with DMs, and preserve attachments",
 );
 assert.doesNotMatch(
   feed,

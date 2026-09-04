@@ -1,0 +1,43 @@
+.message-link-media { width: 100%; max-width: 640px; margin-top: 10px; display: grid; gap: 10px; }
+.message-media-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 220px), 1fr)); gap: 8px; width: 100%; min-width: 0; }
+.message-video-card { min-width: 0; overflow: hidden; border: 1px solid var(--border-default); border-radius: 12px; background: var(--bg-card); }
+.message-video-card .deferred-youtube { border-radius: 0; }
+.message-video-caption { display: grid; gap: 4px; padding: 10px 12px; color: var(--text-primary); text-decoration: none; }
+.message-video-caption strong { font-size: 13px; line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; min-height: 2.8em; }
+.message-video-caption span { font-size: 11px; color: var(--text-muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.message-video-caption:hover strong { text-decoration: underline; }
+.community-interaction-attachments .chat-media-grid,
+.community-interaction-attachments .chat-media-players { max-width: 640px; }
+.community-interaction-attachments .chat-media-grid:not(.chat-media-grid-composer):not(.count-1),
+.chat-media-grid.community-dm-media-grid:not(.chat-media-grid-composer):not(.count-1) { grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: auto; }
+.chat-media-players .chat-media-player-video video { aspect-ratio: 16 / 9; object-fit: contain; }
+.message-media-grid > .chat-media-player { min-width: 0; }
+.community-dm-panel-message-stack .message-link-media,
+.community-dm-panel-message-bubble .message-link-media { width: min(100%, 560px); min-width: min(300px, 100%); }
+.message-pdf-card { display: flex; align-items: center; gap: 12px; text-align: left; width: 100%; min-width: 0; max-width: 640px; padding: 14px; border: 1px solid var(--border-default); border-radius: 12px; background: var(--bg-card); color: var(--text-primary); cursor: pointer; }
+.message-pdf-card > svg { flex-shrink: 0; color: var(--text-muted); }
+.message-pdf-card > span { min-width: 0; display: grid; gap: 4px; }
+.message-pdf-card strong { overflow-wrap: anywhere; font-size: 13px; }
+.message-pdf-card small { font-size: 12px; color: var(--text-muted); }
+.message-pdf-card:hover { border-color: var(--text-muted); }
+.message-pdf-card:focus-visible, .message-video-caption:focus-visible { outline: 2px solid var(--chat-link); outline-offset: 2px; }
+.message-pdf-dialog { width: min(1100px, calc(100vw - 32px)); max-width: none; height: min(920px, calc(100dvh - 32px)); max-height: none; padding: 0; border: 1px solid var(--border-default); border-radius: 14px; background: var(--bg-panel); color: var(--text-primary); overflow: hidden; }
+.message-pdf-dialog[open] { display: flex; flex-direction: column; }
+.message-pdf-dialog::backdrop { background: rgb(0 0 0 / 65%); }
+.message-pdf-dialog > header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border-default); }
+.message-pdf-dialog > header strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.message-pdf-dialog a { color: var(--text-primary); font-size: 13px; text-decoration: underline; }
+.message-pdf-dialog button { font: inherit; color: inherit; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 7px; padding: 7px 10px; cursor: pointer; }
+.message-pdf-dialog button:disabled { opacity: 0.4; cursor: default; }
+.message-pdf-reader { display: flex; flex: 1; flex-direction: column; min-height: 0; }
+.message-pdf-toolbar { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; padding: 10px; font-size: 12px; }
+.message-pdf-status { margin: 0; padding: 8px 16px; font-size: 13px; }
+.message-pdf-scroll { overflow: auto; flex: 1; min-height: 0; padding: 16px; background: color-mix(in srgb, var(--bg-workspace) 85%, #000); }
+.message-pdf-page { position: relative; margin: 0 auto; background: white; color: black; }
+.message-pdf-page canvas { display: block; }
+@media (max-width: 520px) {
+  .message-media-grid { grid-template-columns: 1fr; }
+  .message-pdf-dialog { width: calc(100vw - 12px); height: calc(100dvh - 12px); border-radius: 10px; }
+  .message-pdf-dialog > header { padding: 10px; gap: 8px; }
+  .message-pdf-toolbar { gap: 5px; }
+}
