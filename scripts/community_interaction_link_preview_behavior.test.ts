@@ -10,6 +10,7 @@ import {
   parseEmbedUrl,
   parseYouTubeEmbedUrl,
   renderTextWithLinks,
+  youTubeEmbedsInText,
 } from "../shared/linkEmbedUi";
 
 const requireFromWeb = createRequire(new URL("../apps/web/package.json", import.meta.url));
@@ -50,13 +51,19 @@ describe("community interaction link presentation", () => {
     expect(markup).not.toContain("<iframe");
   });
 
-  it("embeds only the first YouTube video while preserving every authored link", () => {
+  it("embeds each YouTube video while preserving every authored link", () => {
     const first = "https://www.youtube.com/watch?v=M7lc1UVf-VE";
     const second = "https://youtu.be/dQw4w9WgXcQ";
     const markup = renderInteraction(`${first}\n${second}`);
     expect(markup.match(/class="chat-link"/g)).toHaveLength(2);
-    expect(markup.match(/data-community-youtube-embed=/g)).toHaveLength(1);
+    expect(markup.match(/data-community-youtube-embed=/g)).toHaveLength(2);
     expect(markup).toContain('data-community-youtube-embed="M7lc1UVf-VE"');
+  });
+
+  it("deduplicates video aliases and keeps the first timestamp", () => {
+    const videos = youTubeEmbedsInText("https://youtu.be/M7lc1UVf-VE?t=42 https://www.youtube.com/watch?v=M7lc1UVf-VE https://youtu.be/dQw4w9WgXcQ");
+    expect(videos).toHaveLength(2);
+    expect(videos[0]?.embed.src).toContain("start=42");
   });
 
   it("ignores YouTube URLs inside inline and fenced code", () => {

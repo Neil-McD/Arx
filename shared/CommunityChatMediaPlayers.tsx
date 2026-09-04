@@ -21,6 +21,7 @@ export function CommunityChatMediaPlayers({
 
   return (
     <div className={rootClassName}>
+      {videos.length > 0 ? <div className="message-media-grid">
       {videos.map((video, index) => (
         <div className="chat-media-player chat-media-player-video" key={video.id || `video-${index}-${video.url}`}>
           <video controls preload="metadata" src={video.url} aria-label={video.name} />
@@ -29,6 +30,7 @@ export function CommunityChatMediaPlayers({
           </span>
         </div>
       ))}
+      </div> : null}
       {audios.map((audio, index) => (
         <div className="chat-media-player chat-media-player-audio" key={audio.id || `audio-${index}-${audio.url}`}>
           <span className="chat-media-player-name" title={audio.name}>

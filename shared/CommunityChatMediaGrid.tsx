@@ -17,13 +17,13 @@ export function CommunityChatMediaGrid({
   images,
   onOpenImage,
   className = "",
-  maxVisible = 4,
+  maxVisible = Number.POSITIVE_INFINITY,
 }: CommunityChatMediaGridProps) {
   if (!images || images.length === 0) return null;
 
   const clampedMaxVisible = Math.max(1, maxVisible);
   const visibleCount = Math.min(images.length, clampedMaxVisible);
-  const rootClassName = `chat-media-grid count-${visibleCount}${className ? ` ${className}` : ""}`;
+  const rootClassName = `chat-media-grid count-${Math.min(visibleCount, 4)}${className ? ` ${className}` : ""}`;
   const visibleImages = images.slice(0, clampedMaxVisible);
 
   return (

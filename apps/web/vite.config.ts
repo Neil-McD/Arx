@@ -4,6 +4,7 @@ import react from "@vitejs/plugin-react";
 import { sentryVitePlugin } from "@sentry/vite-plugin";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { pdfAssetsPlugin } from "./pdfAssetsPlugin";
 
 const webRoot = fileURLToPath(new URL(".", import.meta.url));
 const repoRoot = resolve(webRoot, "../..");
@@ -91,6 +92,7 @@ export default defineConfig(({ mode }) => {
   return {
     plugins: [
       react(),
+      pdfAssetsPlugin(),
       polynetBuildVersionPlugin({
         buildId: appBuildId,
         sentryRelease: sentryRelease || null,
