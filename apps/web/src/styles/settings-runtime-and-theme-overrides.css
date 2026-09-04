@@ -4293,6 +4293,8 @@
 
 .profile-block {
   display: flex;
+  /* Reserve the photo actions before identity hydration; fields must not jump. */
+  min-height: 118px;
   align-items: center;
   gap: 16px;
   flex-wrap: wrap;

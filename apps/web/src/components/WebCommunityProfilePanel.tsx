@@ -98,7 +98,7 @@ export function WebCommunityProfilePanel(props: WebCommunityProfilePanelProps) {
           className="community-profile-panel-avatar"
           readyClassName="has-image"
           name={displayName}
-          imageUrl={profile?.avatar_url ?? null}
+          imageUrl={profile?.avatar_url}
           focusX={profile?.avatar_focus_x ?? 0.5}
           focusY={profile?.avatar_focus_y ?? 0.5}
           zoom={profile?.avatar_zoom ?? 1}

@@ -27,8 +27,8 @@ assert.match(
 
 assert.match(
   webContentController,
-  /buildEventsCacheKey\(activeCommunityId, eventsVisibleRange\)/,
-  "events cache key must include the active community and the active visible range",
+  /buildEventsCacheKey\(`\$\{activeCommunityId\}:\$\{resolveAuthSubject\(session\)\}`, eventsVisibleRange\)/,
+  "events cache key must include account, active community, and visible range",
 );
 
 assert.match(
@@ -158,7 +158,7 @@ assert.doesNotMatch(
 );
 
 const eventsStylesStart = styles.indexOf(".community-events-panel {");
-const eventsStylesEnd = styles.indexOf("/* Community onboarding workflow settings. */", eventsStylesStart);
+const eventsStylesEnd = styles.indexOf("/*\n * Light component adapters.", eventsStylesStart);
 assert.ok(eventsStylesStart >= 0 && eventsStylesEnd > eventsStylesStart, "events styles must have a bounded canonical section");
 const eventsStyles = styles.slice(eventsStylesStart, eventsStylesEnd);
 

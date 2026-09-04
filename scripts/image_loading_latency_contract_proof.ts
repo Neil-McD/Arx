@@ -64,12 +64,12 @@ assert.match(
 );
 assert.match(
   communityNav,
-  /className=\{`community-nav-banner[\s\S]{0,500}loading="eager"[\s\S]{0,80}fetchPriority="high"/,
+  /className="community-nav-banner has-image"[\s\S]{0,500}loading="eager"[\s\S]{0,80}fetchPriority="high"/,
   "the active community banner must remain eager and high priority",
 );
 assert.match(
-  facepile,
-  /loading="eager"[\s\S]{0,100}fetchPriority=\{index === 0 \? "high" : "auto"\}/,
+  read("apps/web/src/components/MemberAvatarStack.tsx"),
+  /loading=\{props\.imageLoading \?\? "eager"\}[\s\S]{0,120}fetchPriority=\{index === 0 && props\.imageLoading !== "lazy" \? "high" : "auto"\}/,
   "visible presence faces must load eagerly with one highest-priority identity",
 );
 assert.match(

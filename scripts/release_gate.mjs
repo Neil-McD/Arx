@@ -402,6 +402,13 @@ async function main() {
     );
 
     await runStep(
+      "loading_correctness",
+      "Account-scoped loading, profile drafts, and avatar transitions",
+      "npm run check:loading-correctness",
+      () => runCommand("npm", ["run", "check:loading-correctness"]),
+    );
+
+    await runStep(
       "convex_cut_guard",
       "Convex cut guard",
       "npm run check:convex-cut-runtime-guard",
