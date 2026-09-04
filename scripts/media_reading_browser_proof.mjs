@@ -164,6 +164,12 @@ try {
   await page.getByRole("button", { name: "Next", exact: true }).click();
   assert.equal(await page.locator(".community-dm-panel").count(), 1, "Reader controls must not close the real DM host");
   await page.locator(".textLayer").getByText("Your first useful contribution", { exact: true }).waitFor();
+  // Next is now disabled on the final page. Browsers can move focus to body;
+  // Escape must still belong to the open modal, regardless of its event target.
+  await page.keyboard.press("Escape");
+  assert.equal(await page.locator(".community-dm-panel").count(), 1, "Escape after last-page Next must not close the DM host");
+  await dmCard.click();
+  await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
   const dmDownload = page.waitForEvent("download");
   await page.getByRole("button", { name: "Download", exact: true }).click();
   await dmDownload;

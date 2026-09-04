@@ -43,6 +43,8 @@ unchanged. This is a web presentation slice based on production `7dcba7693`.
   the browser's top layer prevents clipping. Reader interactions do not dismiss
   the conversation. Escape closes only the reader and returns focus to its card;
   subsequent Escape/outside clicks retain normal DM dismissal behavior.
+  The host also checks for an owned open modal before handling Escape, because
+  disabling the focused last-page Next button can move focus to the page body.
 
 ## Verification
 
