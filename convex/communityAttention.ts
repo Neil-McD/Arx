@@ -17,7 +17,7 @@ import {
 import {
   type CommunityChannelLike,
   listChannelReadableRows,
-  listReadableCommunityChannels,
+  listSharedCommunityChannels,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "../shared/communityAttentionContract";
@@ -286,7 +286,7 @@ async function getCommunityAttentionRow(
   userId: any,
 ): Promise<CommunityAttentionRow> {
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
-  const channels = await listReadableCommunityChannels({ ctx, communityId });
+  const channels = await listSharedCommunityChannels({ ctx, communityId });
   const [
     channelAttentionInputs,
     latestMentionsByChannel,

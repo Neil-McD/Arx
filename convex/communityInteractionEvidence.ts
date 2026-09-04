@@ -13,6 +13,7 @@ import { recordTrustedCommunitySourceTraceCore } from "./communityIntelligenceDi
 import {
   communityInteractionEvidenceSourceIsReadable,
   resolveCommunityInteractionEvidenceSource,
+  requireSharedInteractionEvidenceChannel,
   type CommunityInteractionEvidenceRow,
   type ResolvedCommunityInteractionEvidence,
 } from "./communityInteractionEvidenceCore";
@@ -32,10 +33,10 @@ import {
 import {
   type CommunityChannelLike,
   interactionBelongsToChannel,
-  listAllActiveChannelReadableRows,
+  listSharedChannelReadableRows,
   listChannelReadableRows,
-  listReadableCommunityChannels,
-  requireReadableChannelForAddressableRow,
+  listSharedCommunityChannels,
+  requireSharedChannelForAddressableRow,
 } from "./communityChannelCore";
 
 type InteractionRow = CommunityInteractionEvidenceRow;
@@ -134,26 +135,6 @@ function scoreEvidenceText(raw: unknown, tokens: string[]): number {
   return matches === 0 ? 0 : Number((matches / tokens.length).toFixed(4));
 }
 
-async function requireReadableEvidenceSourceChannel(args: {
-  ctx: any;
-  communityId: any;
-  source: ResolvedCommunityInteractionEvidence;
-}): Promise<CommunityChannelLike> {
-  const channels = await listReadableCommunityChannels({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
-  const channel = requireReadableChannelForAddressableRow({
-    row: args.source.root,
-    communityId: args.communityId,
-    channels,
-  });
-  if (!interactionBelongsToChannel(args.source.row, channel)) {
-    throw new Error("community_interaction_evidence_channel_not_readable");
-  }
-  return channel;
-}
-
 async function loadReadableInteraction(args: {
   ctx: any;
   communityId: any;
@@ -173,7 +154,7 @@ async function loadReadableInteraction(args: {
   }
   let channel: CommunityChannelLike;
   try {
-    channel = await requireReadableEvidenceSourceChannel({
+    channel = await requireSharedInteractionEvidenceChannel({
       ctx: args.ctx,
       communityId: args.communityId,
       source,
@@ -271,7 +252,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
   });
   const community = (await args.ctx.db.get(args.communityId)) as CommunityRow | null;
   if (!community) throw new Error("community_not_found");
-  const channels = await listReadableCommunityChannels({
+  const channels = await listSharedCommunityChannels({
     ctx: args.ctx,
     communityId: args.communityId,
   });
@@ -299,7 +280,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
           limit: RECENT_ROOT_SCAN_LIMIT,
           beforeCreatedAt: args.beforeCreatedAt,
         })
-      : listAllActiveChannelReadableRows<InteractionRow>({
+      : listSharedChannelReadableRows<InteractionRow>({
           ctx: args.ctx,
           tableName: "communityInteractionRoots",
           communityId: args.communityId,
@@ -315,7 +296,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
           limit: RECENT_REPLY_SCAN_LIMIT,
           beforeCreatedAt: args.beforeCreatedAt,
         })
-      : listAllActiveChannelReadableRows<InteractionRow>({
+      : listSharedChannelReadableRows<InteractionRow>({
           ctx: args.ctx,
           tableName: "communityInteractionReplies",
           communityId: args.communityId,
@@ -330,7 +311,7 @@ async function searchRecentCommunityInteractionEvidence(args: {
       return;
     }
     try {
-      const channel = requireReadableChannelForAddressableRow({
+      const channel = requireSharedChannelForAddressableRow({
         row: root,
         communityId: args.communityId,
         channels: channelsForRead,
@@ -882,7 +863,7 @@ export const syncCommunityInteractionEvidenceInternal = internalMutation({
     let channel: CommunityChannelLike | null = null;
     if (source && communityInteractionEvidenceSourceIsReadable(source)) {
       try {
-        channel = await requireReadableEvidenceSourceChannel({
+        channel = await requireSharedInteractionEvidenceChannel({
           ctx,
           communityId: args.communityId,
           source,

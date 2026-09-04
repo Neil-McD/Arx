@@ -167,7 +167,7 @@ test("storage support does not enable private rooms through public or repository
   })).rejects.toThrow("community_channel_unavailable");
   await expect(t.query(internal.communityChannels.resolveCommunityChannelBySlugInternal, {
     communityId: f.communityId, userId: f.users.owner, actorKind: "community_agent", slug: "client",
-  })).rejects.toThrow("community_channel_invalid");
+  })).resolves.toBeNull();
   await expect(owner.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
     communityId: f.communityId, channelId: f.channelId, text: "Must not write", idempotencyKey: "private-closed",
   })).rejects.toThrow("community_channel_unavailable");

@@ -1090,7 +1090,8 @@ export default defineSchema({
   })
     .index("by_community_slug", ["communityId", "slug"])
     .index("by_community_systemRole", ["communityId", "systemRole"])
-    .index("by_community_status_position", ["communityId", "status", "position"]),
+    .index("by_community_status_position", ["communityId", "status", "position"])
+    .index("by_community_access_status_position", ["communityId", "accessMode", "status", "position"]),
 
   // No public grant mutation in the authority-foundation slice. Writers must
   // preserve one row per channel/principal; revoked grants confer no access.

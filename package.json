@@ -131,7 +131,7 @@
     "check:community-interactions-read-model-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interactions_read_model_contract_proof.ts",
     "check:community-lineage-ontology-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_lineage_ontology_contract_proof.ts",
     "check:community-evidence-integrity-proof": "tsx scripts/community_evidence_integrity_contract_proof.ts",
-    "check:community-interaction-evidence-spine-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_interaction_evidence_spine_contract_proof.ts",
+    "check:community-interaction-evidence-spine-proof": "tsx scripts/community_interaction_evidence_spine_contract_proof.ts",
     "check:community-resource-evidence-spine-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_evidence_spine_contract_proof.ts",
     "check:community-resource-memory-node-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_resource_memory_node_contract_proof.ts",
     "check:community-archive-runtime-severance-proof": "node --experimental-strip-types --experimental-specifier-resolution=node scripts/community_archive_runtime_severance_contract_proof.ts",

@@ -13,8 +13,8 @@ export type CommunityChannelLike = {
   systemRole?: "general";
   slug: string;
   name: string;
-  accessMode: "all_members";
-  postingPolicy: "members";
+  accessMode: "all_members" | "restricted";
+  postingPolicy: "members" | "managers";
   replyPolicy?: "members" | "managers" | "disabled";
   status: "active" | "archived";
   position: number;
@@ -35,6 +35,7 @@ type GeneralChannelReadableRow = {
   _id: any;
   communityId: any;
   channelId?: any;
+  rootId?: any;
   visibilityScope: "private" | "admin" | "community" | "public";
   status: "live" | "hidden" | "deleted";
   kind?: string;
@@ -62,14 +63,6 @@ function channelSlugBase(name: string): string {
   return slug || "channel";
 }
 
-function channelHasFixedMemberPolicy(channel: CommunityChannelLike): boolean {
-  return (
-    channel.accessMode === "all_members" &&
-    channel.postingPolicy === "members" &&
-    (channel.replyPolicy ?? "members") === "members"
-  );
-}
-
 function channelHasCanonicalCustomContract(
   channel: CommunityChannelLike,
 ): boolean {
@@ -95,7 +88,9 @@ function assertChannelForCommunity(
 ): void {
   if (
     normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId) ||
-    !channelHasFixedMemberPolicy(channel)
+    !["all_members", "restricted"].includes(channel.accessMode) ||
+    !["members", "managers"].includes(channel.postingPolicy) ||
+    !["members", "managers", "disabled"].includes(channel.replyPolicy ?? "members")
   ) {
     throw new Error("community_channel_invalid");
   }
@@ -223,6 +218,8 @@ export async function requireActiveCommunityChannel(args: {
   channelId: any;
 }): Promise<CommunityChannelLike> {
   const channel = await requireCommunityChannelLineage(args);
+  // Private-room entry is not enabled by the shared-output privacy slice.
+  if (channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   if (channel.status !== "active") {
     throw new Error("community_channel_inactive");
   }
@@ -318,6 +315,7 @@ export async function listActiveCommunityChannels(args: {
   }
   for (const channel of channels) {
     assertChannelForCommunity(channel, args.communityId);
+    if (channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   }
   return channels.sort((left, right) => {
     if (left.position !== right.position) return left.position - right.position;
@@ -325,14 +323,24 @@ export async function listActiveCommunityChannels(args: {
   });
 }
 
-export async function listReadableCommunityChannels(args: {
+export async function listSharedCommunityChannels(args: {
   ctx: { db: any };
   communityId: any;
 }): Promise<CommunityChannelLike[]> {
   // getGeneralChannel detects duplicate system rows even if both happen to be
   // otherwise canonical.
   const generalChannel = await getGeneralChannel(args.ctx, args.communityId);
-  const activeChannels = await listActiveCommunityChannels(args);
+  // Audience filtering happens in the index BEFORE the bounded read. Private
+  // room volume must neither occupy this window nor break shared projections.
+  const activeChannels = await args.ctx.db.query("communityChannels")
+    .withIndex("by_community_access_status_position", (q: any) =>
+      q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
+    .take(MAX_ACTIVE_COMMUNITY_CHANNELS + 1) as CommunityChannelLike[];
+  if (activeChannels.length > MAX_ACTIVE_COMMUNITY_CHANNELS) throw new Error("community_channel_limit_invalid");
+  for (const channel of activeChannels) assertChannelForCommunity(channel, args.communityId);
+  activeChannels.sort((left, right) =>
+    left.position - right.position || normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id)),
+  );
   if (generalChannel) return activeChannels;
   if (activeChannels.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) {
     // A missing General row still consumes the required system-channel slot.
@@ -342,7 +350,7 @@ export async function listReadableCommunityChannels(args: {
   return [legacyGeneralChannelSelection(args.communityId), ...activeChannels];
 }
 
-export function requireReadableChannelForAddressableRow(args: {
+export function requireSharedChannelForAddressableRow(args: {
   row: ChannelAddressableInteractionLike;
   communityId: any;
   channels: CommunityChannelLike[];
@@ -363,10 +371,26 @@ export function requireReadableChannelForAddressableRow(args: {
       );
   if (!channel) throw new Error("interaction_channel_invalid");
   assertChannelForCommunity(channel, args.communityId);
+  if (channel.accessMode !== "all_members") throw new Error("interaction_channel_invalid");
   if (channel.status !== "active") {
     throw new Error("interaction_channel_inactive");
   }
   return channel;
+}
+
+// Direct evidence lookup checks only the source room, not the full directory.
+// The missing-channel lane is strictly the existing General migration adapter.
+export async function requireSharedChannelForInteraction(args: {
+  ctx: { db: any };
+  communityId: any;
+  row: ChannelAddressableInteractionLike;
+}): Promise<CommunityChannelLike> {
+  const channel = args.row.channelId
+    ? await args.ctx.db.get(args.row.channelId)
+    : (await getGeneralChannel(args.ctx, args.communityId)) ?? legacyGeneralChannelSelection(args.communityId);
+  return requireSharedChannelForAddressableRow({
+    row: args.row, communityId: args.communityId, channels: channel ? [channel] : [],
+  });
 }
 
 async function resolveAvailableChannelSlug(args: {
@@ -474,6 +498,7 @@ async function requireCustomCommunityChannelLineage(args: {
   if (channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) {
     throw new Error("community_general_channel_immutable");
   }
+  if (channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   return channel;
 }
 
@@ -761,13 +786,14 @@ export async function requireChannelForAddressableRoot(args: {
       normalizeIdValue(channel.communityId) !==
         normalizeIdValue(args.root.communityId) ||
       channel.status !== "active" ||
-      !channelHasFixedMemberPolicy(channel)
+      channel.accessMode !== "all_members"
     ) {
       throw new Error("interaction_channel_invalid");
     }
     if (channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) {
       assertGeneralChannelForCommunity(channel, args.root.communityId);
     }
+    assertChannelForCommunity(channel, args.root.communityId);
     return channel;
   }
 
@@ -846,6 +872,7 @@ export async function listChannelProjectionRows(args: {
   streamKind?: "chat";
 }): Promise<any[]> {
   assertChannelForCommunity(args.channel, args.communityId);
+  if (args.channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   if (args.channel.status !== "active") {
     throw new Error("community_channel_inactive");
   }
@@ -1011,6 +1038,7 @@ export async function listChannelReadableRows<
   kind?: string | null;
 }): Promise<T[]> {
   assertChannelForCommunity(args.channel, args.communityId);
+  if (args.channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   if (args.channel.status !== "active") {
     throw new Error("community_channel_inactive");
   }
@@ -1030,7 +1058,7 @@ export async function listChannelReadableRows<
 // Community-intelligence projections deliberately aggregate every active,
 // all-member channel. The ten-channel product cap bounds this fanout while the
 // selected-channel path above remains exact and independently pageable.
-export async function listAllActiveChannelReadableRows<
+export async function listSharedChannelReadableRows<
   T extends GeneralChannelReadableRow,
 >(args: {
   ctx: { db: any };
@@ -1045,7 +1073,7 @@ export async function listAllActiveChannelReadableRows<
     Number.isFinite(requestedLimit) && requestedLimit > 0
       ? Math.min(200, Math.floor(requestedLimit))
       : 1;
-  const channels = await listReadableCommunityChannels({
+  const channels = await listSharedCommunityChannels({
     ctx: args.ctx,
     communityId: args.communityId,
   });
@@ -1062,7 +1090,7 @@ export async function listAllActiveChannelReadableRows<
       }),
     ),
   );
-  return Array.from(
+  const rows = Array.from(
     new Map(
       batches
         .flat()
@@ -1071,6 +1099,21 @@ export async function listAllActiveChannelReadableRows<
   )
     .sort((left, right) => right.createdAt - left.createdAt)
     .slice(0, limit);
+  if (args.tableName === "communityInteractionRoots") return rows;
+  const roots = new Map<string, GeneralChannelReadableRow | null>(await Promise.all(
+    Array.from(new Set(rows.map((row) => normalizeIdValue(row.rootId)))).map(async (rootId) =>
+      [rootId, rootId ? await args.ctx.db.get(rootId) : null] as const),
+  ));
+  return rows.filter((row) => {
+    const root = roots.get(normalizeIdValue(row.rootId));
+    if (!root || root.status !== "live") return false;
+    try {
+      const channel = requireSharedChannelForAddressableRow({ row: root, communityId: args.communityId, channels });
+      return interactionBelongsToChannel(row, channel);
+    } catch {
+      return false;
+    }
+  });
 }
 
 // Rolling-deployment adapter for existing General-only call paths. New

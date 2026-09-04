@@ -1,7 +1,9 @@
 import {
   communityInteractionVisibilityIsEvidenceReadable,
+  parseCommunityInteractionEvidenceRef,
   type CommunityInteractionEvidenceObjectType,
 } from "../shared/communityEvidenceContract.ts";
+import { interactionBelongsToChannel, requireSharedChannelForInteraction } from "./communityChannelCore";
 
 function normalizeIdValue(raw: unknown): string {
   return String(raw ?? "").trim();
@@ -113,4 +115,52 @@ export function communityInteractionEvidenceSourceIsReadable(
     communityInteractionVisibilityIsEvidenceReadable(source.row.visibilityScope) &&
     communityInteractionVisibilityIsEvidenceReadable(source.root.visibilityScope)
   );
+}
+
+export async function requireSharedInteractionEvidenceChannel(args: {
+  ctx: { db: any };
+  communityId: any;
+  source: ResolvedCommunityInteractionEvidence;
+}) {
+  if (!communityInteractionEvidenceSourceIsReadable(args.source)) {
+    throw new Error("community_interaction_evidence_not_readable");
+  }
+  const channel = await requireSharedChannelForInteraction({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    row: args.source.root,
+  });
+  if (
+    !interactionBelongsToChannel(args.source.row, channel) ||
+    (args.source.targetReply && !interactionBelongsToChannel(args.source.targetReply, channel))
+  ) {
+    throw new Error("community_interaction_evidence_channel_not_readable");
+  }
+  return channel;
+}
+
+// Read source truth again at consumption time: a captured trace's visibility
+// is not proof of its room's current audience. Non-interaction trace handling
+// remains owned by its existing domain policy.
+export async function interactionTraceHasSharedSource(args: {
+  ctx: { db: any };
+  communityId: any;
+  trace: { sourceType: string; sourceId?: string; channelId?: any };
+}): Promise<boolean> {
+  if (args.trace.sourceType !== "interaction") return true;
+  const parsed = parseCommunityInteractionEvidenceRef(args.trace.sourceId);
+  if (!parsed) return false;
+  const source = await resolveCommunityInteractionEvidenceSource({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    objectType: parsed.objectType,
+    objectId: parsed.objectId,
+  });
+  if (!source) return false;
+  try {
+    const channel = await requireSharedInteractionEvidenceChannel({ ...args, source });
+    return !args.trace.channelId || normalizeIdValue(args.trace.channelId) === normalizeIdValue(channel._id);
+  } catch {
+    return false;
+  }
 }

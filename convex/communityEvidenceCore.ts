@@ -12,6 +12,8 @@ import { communityInteractionVisibilityIsEvidenceReadable } from "../shared/comm
 import { resolveCommunityAiFeedEvidenceSource } from "./communityAiFeedEvidenceCore";
 import {
   resolveCommunityInteractionEvidenceSource,
+  requireSharedInteractionEvidenceChannel,
+  interactionTraceHasSharedSource,
   type ResolvedCommunityInteractionEvidence,
 } from "./communityInteractionEvidenceCore";
 import { hydrateCommunityResourceBody } from "./communityResourceContent";
@@ -47,6 +49,7 @@ export type CommunityEvidenceResolution =
 type SourceTraceRow = {
   _id: any;
   communityId: any;
+  channelId?: any;
   sourceType: string;
   sourceId?: string;
   title?: string;
@@ -153,15 +156,11 @@ async function resolveInteractionEvidence(args: {
     objectId: args.objectId,
   });
   if (!source) return { status: "not_readable", sourceRef: args.sourceRef };
-  if (
-    source.row.status !== "live" ||
-    source.root.status !== "live" ||
-    !communityInteractionVisibilityIsEvidenceReadable(source.row.visibilityScope) ||
-    !communityInteractionVisibilityIsEvidenceReadable(source.root.visibilityScope)
-  ) {
+  try {
+    await requireSharedInteractionEvidenceChannel({ ...args, source });
+  } catch {
     return { status: "revoked", sourceRef: args.sourceRef };
   }
-
   const parentIndex = args.objectType === "root" ? "by_root" : "by_reply";
   const blockIndex = args.objectType === "root" ? "by_root_order" : "by_reply_order";
   const parentField = args.objectType === "root" ? "rootId" : "replyId";
@@ -386,6 +385,9 @@ async function resolveSourceTraceEvidence(args: {
     return { status: "not_readable", sourceRef: args.sourceRef };
   }
   if (trace.sourceVisibility === "redacted") {
+    return { status: "revoked", sourceRef: args.sourceRef };
+  }
+  if (!(await interactionTraceHasSharedSource({ ...args, trace }))) {
     return { status: "revoked", sourceRef: args.sourceRef };
   }
   const contentPayload = {

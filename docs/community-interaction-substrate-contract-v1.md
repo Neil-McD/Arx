@@ -125,12 +125,28 @@ revalidates the channel and permission before materializing a reply; a channel
 that becomes unavailable terminates through the existing error receipt path.
 
 Public creation still accepts only a name and creates an all-member channel.
-Existing channel entry points and unscoped background helpers deliberately
-reject non-shared policies. The policy/grant model is exercised with isolated
+Existing channel entry points still reject restricted rooms. Unscoped background
+reads are explicitly shared-community reads: `listSharedCommunityChannels`
+selects active `all_members` channels by index before the ten-channel limit;
+`listSharedChannelReadableRows` reads those exact lanes before the message limit.
+Restricted-room volume cannot crowd out shared messages. Shared announcement
+rooms remain readable independently of who may post or reply. Reply aggregates
+also validate the current root and matching room.
+
+Recent context, public interaction counts, attention, evidence search and fresh
+weekly digest snapshots use this shared scope. Canonical interaction evidence
+resolves the live source room, not just a captured visibility flag. Compiler
+measurement and settlement recheck that source; the existing pending-trace drain
+now excludes both self-authored and no-longer-shared traces. A revoked digest
+item is excluded without rolling back other valid decisions. No second queue,
+memory store, or scheduler is introduced.
+
+The policy/grant model is exercised with isolated
 test fixtures only: schema support is NOT authorization to create restricted
 rooms in staging or production. Do not relax this deployment boundary until
 search, attachments, notifications, presence, digests, public projections,
-agent context and shared memory have complete audience enforcement. In
+agent context and shared memory have complete audience enforcement. Recipient
+notifications and already-captured email snapshots remain a separate gate. In
 particular, directly inserting a restricted row is not a supported rollout.
 
 The current ten-channel cap, ordering, General backfill compatibility, and UI

@@ -143,7 +143,7 @@ assertNotMatches(
 const channelApiPath = "convex/communityChannels.ts";
 const channelApi = read(channelApiPath);
 [
-  "listReadableCommunityChannels",
+  "listSharedCommunityChannels",
   "renameCommunityChannel",
   "deleteCommunityChannel",
   "requireCommunityManager",

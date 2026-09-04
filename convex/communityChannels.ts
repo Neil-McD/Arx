@@ -13,7 +13,7 @@ import {
   archiveActiveCommunityChannel,
   createActiveCommunityChannel,
   getGeneralChannel,
-  listReadableCommunityChannels,
+  listSharedCommunityChannels,
   reorderActiveCommunityChannels,
   renameActiveCommunityChannel,
   resolveAuthorizedCommunityChannel,
@@ -54,7 +54,7 @@ export const listCommunityChannels = query({
       communityId: args.communityId,
       userId,
     });
-    const channels = await listReadableCommunityChannels({
+    const channels = await listSharedCommunityChannels({
       ctx,
       communityId: args.communityId,
     });
@@ -260,7 +260,7 @@ export const listCommunityChannelsInternal = internalQuery({
       kind: args.actorKind,
     });
     return {
-      channels: await Promise.all((await listReadableCommunityChannels({
+      channels: await Promise.all((await listSharedCommunityChannels({
         ctx,
         communityId: args.communityId,
       })).map(async (channel) => ({
@@ -286,7 +286,7 @@ export const resolveCommunityChannelBySlugInternal = internalQuery({
       userId: args.userId,
       kind: args.actorKind,
     });
-    const channel = (await listReadableCommunityChannels({
+    const channel = (await listSharedCommunityChannels({
       ctx,
       communityId: args.communityId,
     })).find((candidate) => candidate.slug === args.slug);

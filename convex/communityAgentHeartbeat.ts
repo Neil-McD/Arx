@@ -314,7 +314,7 @@ export const runCommunityAgentHeartbeatInternal = internalAction({
     const heartbeatId = boundedText(args.heartbeatId, 200) || buildHeartbeatId(args.communityId, Date.now());
     const modelId = boundedText(args.modelId, 128) || undefined;
     await ctx.runMutation(
-      internalRefs.communityCompilerEvidence.drainSelfAuthoredPendingSourceTracesInternal,
+      internalRefs.communityCompilerEvidence.drainIneligiblePendingSourceTracesInternal,
       {
         communityId: args.communityId,
       },
