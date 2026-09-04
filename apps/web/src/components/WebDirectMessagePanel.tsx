@@ -11,6 +11,9 @@ import type {
 import { formatRelativeTimeFromIso } from "../../../../shared/contentFormatting";
 import { renderChatInlineMarkdown } from "../../../../shared/chatInlineMarkdownUi";
 import { AttachmentChipButton } from "../../../../shared/AttachmentChipButton";
+import { PdfDocumentCard } from "./PdfDocumentCard";
+import { MessageLinkMedia } from "./MessageLinkMedia";
+import { isPdfDocument, safeDocumentUrl } from "../../../../shared/messagePdf";
 import { CommunityChatMediaGrid } from "../../../../shared/CommunityChatMediaGrid";
 import { CommunityChatMediaPlayers } from "../../../../shared/CommunityChatMediaPlayers";
 import { partitionCommunityAttachments } from "../../../../shared/communityAttachmentUi";
@@ -297,6 +300,9 @@ function DirectMessageAttachmentViews(props: {
                   </button>
                 </div>
               );
+            }
+            if (safeDocumentUrl(attachment.url) && isPdfDocument(attachment.name, attachment.mime)) {
+              return <PdfDocumentCard key={attachment.id} url={attachment.url!} name={attachment.name} />;
             }
             return (
               <AttachmentChipButton
@@ -770,6 +776,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                       <div className="community-dm-panel-message-text">
                         {renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks })}
                       </div>
+                      <MessageLinkMedia text={text} />
                     </div>
                     <div className="community-dm-panel-media-only">
                       <DirectMessageAttachmentViews attachments={attachments} />
@@ -782,6 +789,7 @@ export function WebDirectMessagePanel(props: WebDirectMessagePanelProps) {
                         {renderChatInlineMarkdown(text, { renderTextRun: props.renderTextWithLinks })}
                       </div>
                     ) : null}
+                    <MessageLinkMedia text={text} />
                     <DirectMessageAttachmentViews attachments={attachments} />
                   </div>
                 )}

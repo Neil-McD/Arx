@@ -3,6 +3,7 @@
 @import "./styles/shell-and-onboarding.css";
 @import "./styles/community-and-content.css";
 @import "./styles/settings-runtime-and-theme-overrides.css";
+@import "./styles/message-media.css";
 
 :root {
   --web-chat-max-width: 800px;
