@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
+import { requireCommunityChannelCapability, resolveCommunityChannelActor } from "./communityChannelAccess";
 import {
   type CommunityChatMessageLike,
   type CommunityChatThreadLike,
@@ -58,7 +59,7 @@ import {
   interactionIsChannelAddressable,
   listChannelReadableRows,
   requireChannelForAddressableRoot,
-  resolveRequestedCommunityChannel,
+  resolveAuthorizedCommunityChannel,
   type CommunityChannelLike,
 } from "./communityChannelCore";
 
@@ -1676,7 +1677,10 @@ export const createCommunityInteractionComposerMessage = mutation({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
+    const channelActor = await resolveCommunityChannelActor({
+      ctx, communityId: args.communityId, userId,
+      kind: args.asPersonalAgent ? "personal_agent" : "human",
+    });
     await requireProfileSetupCompleteForUser(ctx, userId);
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
@@ -1707,8 +1711,10 @@ export const createCommunityInteractionComposerMessage = mutation({
     const nowMs = Date.now();
 
     if (!args.rootId) {
-      const requestedChannel = await resolveRequestedCommunityChannel({
+      const requestedChannel = await resolveAuthorizedCommunityChannel({
         ctx,
+        actor: channelActor,
+        capability: "canPost",
         communityId: args.communityId,
         channelId: args.channelId,
         ensureGeneralForWrite: true,
@@ -1849,6 +1855,7 @@ export const createCommunityInteractionComposerMessage = mutation({
       throw new Error("interaction_root_closed");
     }
     const rootChannel = await requireChannelForAddressableRoot({ ctx, root });
+    await requireCommunityChannelCapability({ ctx, channel: rootChannel, actor: channelActor, capability: "canReply" });
     if (
       args.channelId &&
       normalizeIdValue(rootChannel._id) !== normalizeIdValue(args.channelId)
@@ -2038,10 +2045,11 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         authSubject: args.authSubject ?? null,
       });
     }
-    await requireCommunityChatAccess({
+    const channelActor = await resolveCommunityChannelActor({
       ctx,
       communityId: args.communityId,
       userId: sponsorUserId,
+      kind: "community_agent",
     });
 
     const text = normalizeBoundedText(canonicalText, MAX_INTERACTION_TEXT_CHARS);
@@ -2074,8 +2082,10 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         mentions: args.mentions ?? [],
       });
     const nowMs = Date.now();
-    const requestedChannel = await resolveRequestedCommunityChannel({
+    const requestedChannel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: args.rootId ? "canReply" : "canPost",
       communityId: args.communityId,
       channelId: args.channelId,
       ensureGeneralForWrite: true,
@@ -2327,9 +2337,11 @@ export const listCommunityInteractionRoots = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const channel = await resolveRequestedCommunityChannel({
+    const channelActor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: "canRead",
       communityId: args.communityId,
       channelId: args.channelId,
     });
@@ -2374,9 +2386,11 @@ export const getCommunityChannelPinnedRoot = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const channel = await resolveRequestedCommunityChannel({
+    const channelActor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: "canRead",
       communityId: args.communityId,
       channelId: args.channelId,
     });
@@ -2412,9 +2426,11 @@ export const getCommunityChannelInteractionRoot = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: args.communityId, userId });
-    const channel = await resolveRequestedCommunityChannel({
+    const channelActor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: "canRead",
       communityId: args.communityId,
       channelId: args.channelId,
     });
@@ -2452,9 +2468,11 @@ export const listCommunityInteractionReplies = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({ ctx, communityId: root.communityId, userId });
-    const rootChannel = await resolveRequestedCommunityChannel({
+    const channelActor = await resolveCommunityChannelActor({ ctx, communityId: root.communityId, userId });
+    const rootChannel = await resolveAuthorizedCommunityChannel({
       ctx,
+      actor: channelActor,
+      capability: "canRead",
       communityId: root.communityId,
       channelId: root.channelId,
     });
@@ -2548,6 +2566,25 @@ function applyReactionSummaryDelta(
   return Array.from(counts.entries()).map(([emojiValue, count]) => ({ emoji: emojiValue, count }));
 }
 
+async function requireTargetChannelAccess(args: {
+  ctx: any; target: InteractionRootRow | InteractionReplyRow; userId: any;
+}) {
+  // Non-channel dock interactions retain their existing separate authority.
+  if (!interactionIsChannelAddressable(args.target)) return;
+  const root = "rootId" in args.target
+    ? await args.ctx.db.get(args.target.rootId)
+    : args.target;
+  if (!root || normalizeIdValue(root.communityId) !== normalizeIdValue(args.target.communityId)) {
+    throw new Error("community_channel_unavailable");
+  }
+  const actor = await resolveCommunityChannelActor({ ctx: args.ctx, communityId: root.communityId, userId: args.userId });
+  const channel = await resolveAuthorizedCommunityChannel({
+    ctx: args.ctx, communityId: root.communityId, channelId: root.channelId,
+    actor, capability: "canRead",
+  });
+  if (!interactionBelongsToChannel(args.target, channel)) throw new Error("community_channel_unavailable");
+}
+
 export const toggleCommunityInteractionReaction = mutation({
   args: {
     userId: v.optional(v.id("users")),
@@ -2571,7 +2608,7 @@ export const toggleCommunityInteractionReaction = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId, userId });
-
+    await requireTargetChannelAccess({ ctx, target, userId });
     const actorKey = normalizeIdValue(userId);
     const nowMs = Date.now();
     const existing = await ctx.db
@@ -2886,6 +2923,7 @@ export const editCommunityInteractionMessage = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId, userId });
+    await requireTargetChannelAccess({ ctx, target, userId });
     if (normalizeIdValue(target.actorUserId) !== normalizeIdValue(userId)) {
       throw new Error("interaction_edit_forbidden");
     }
@@ -2924,6 +2962,7 @@ export const deleteCommunityInteractionMessage = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityChatAccess({ ctx, communityId, userId });
+    await requireTargetChannelAccess({ ctx, target, userId });
     const isOwner = normalizeIdValue(target.actorUserId) === normalizeIdValue(userId);
     if (!isOwner) {
       let isModerator = false;

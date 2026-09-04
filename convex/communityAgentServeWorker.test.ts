@@ -348,6 +348,25 @@ test("only the current attempt can materialize the one canonical reply", async (
   expect(respondedRequest).not.toHaveProperty("leaseExpiresAt");
 });
 
+test.each(["archived", "restricted", "replies_disabled"])("final posting rechecks channel authority after claim: %s", async (change) => {
+  const t = convexTest(schema, modules);
+  const f = await createServeFixture(t, `channel-recheck-${change}`);
+  const requestId = await insertServeRequest(t, f);
+  const claimed = await t.mutation(
+    internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
+    { requestId, nowMs: 10_000 },
+  );
+  await t.run(async (ctx) => {
+    await ctx.db.patch(f.channelId, change === "archived" ? { status: "archived" }
+      : change === "restricted" ? { accessMode: "restricted" } : { replyPolicy: "disabled" });
+  });
+  await expect(t.mutation(internalRefs.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal, {
+    requestId, expectedAttempt: claimed.attempt, content: "Must not post", nowMs: 10_001,
+  })).resolves.toMatchObject({ ok: false, errorCode: "channel_access_missing" });
+  expect(await t.run(ctx => ctx.db.query("communityInteractionReplies").collect())).toHaveLength(0);
+  expect(await t.run(ctx => ctx.db.get(requestId))).toMatchObject({ status: "error", errorCode: "channel_access_missing" });
+});
+
 test("ordinary owner mentions need no membership row or workflow", async () => {
   const t = convexTest(schema, modules);
   const f = await createServeFixture(t, "owner-no-membership");

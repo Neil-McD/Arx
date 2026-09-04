@@ -1,4 +1,5 @@
 import { normalizeIdValue } from "./communityCore";
+import { requireCommunityChannelCapability, type ChannelActor, type ChannelCapabilities } from "./communityChannelAccess";
 
 export const GENERAL_CHANNEL_SYSTEM_ROLE = "general" as const;
 export const GENERAL_CHANNEL_SLUG = "general" as const;
@@ -14,6 +15,7 @@ export type CommunityChannelLike = {
   name: string;
   accessMode: "all_members";
   postingPolicy: "members";
+  replyPolicy?: "members" | "managers" | "disabled";
   status: "active" | "archived";
   position: number;
   pinnedRootId?: any;
@@ -63,7 +65,8 @@ function channelSlugBase(name: string): string {
 function channelHasFixedMemberPolicy(channel: CommunityChannelLike): boolean {
   return (
     channel.accessMode === "all_members" &&
-    channel.postingPolicy === "members"
+    channel.postingPolicy === "members" &&
+    (channel.replyPolicy ?? "members") === "members"
   );
 }
 
@@ -119,6 +122,7 @@ export function channelHasCanonicalGeneralSystemContract(
     channel.slug === GENERAL_CHANNEL_SLUG &&
     channel.accessMode === "all_members" &&
     channel.postingPolicy === "members" &&
+    (channel.replyPolicy ?? "members") === "members" &&
     channel.status === "active" &&
     channel.position === 0
   );
@@ -281,6 +285,22 @@ export async function resolveRequestedCommunityChannel(args: {
     (await getGeneralChannel(args.ctx, args.communityId)) ??
     legacyGeneralChannelSelection(args.communityId)
   );
+}
+
+// Interactive entry points must use an authenticated actor. Unscoped helpers
+// remain shared-only for background consumers until the privacy slice lands.
+export async function resolveAuthorizedCommunityChannel(args: {
+  ctx: any;
+  communityId: any;
+  channelId?: any | null;
+  ensureGeneralForWrite?: boolean;
+  nowMs?: number;
+  actor: ChannelActor;
+  capability: keyof ChannelCapabilities;
+}): Promise<CommunityChannelLike> {
+  const channel = await resolveRequestedCommunityChannel(args);
+  await requireCommunityChannelCapability({ ...args, channel });
+  return channel;
 }
 
 export async function listActiveCommunityChannels(args: {
@@ -741,8 +761,7 @@ export async function requireChannelForAddressableRoot(args: {
       normalizeIdValue(channel.communityId) !==
         normalizeIdValue(args.root.communityId) ||
       channel.status !== "active" ||
-      channel.accessMode !== "all_members" ||
-      channel.postingPolicy !== "members"
+      !channelHasFixedMemberPolicy(channel)
     ) {
       throw new Error("interaction_channel_invalid");
     }

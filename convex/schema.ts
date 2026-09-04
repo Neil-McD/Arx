@@ -2,6 +2,7 @@ import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
 import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestValidators";
+import { channelAccessModeValidator, channelPostingPolicyValidator, channelReplyPolicyValidator } from "./communityChannelValidators";
 
 export default defineSchema({
   users: defineTable({
@@ -1070,15 +1071,16 @@ export default defineSchema({
     ])
     .index("by_visibility_updatedAt", ["visibility", "updatedAt"]),
 
-  // Canonical public conversation containers. Every active channel has the
-  // same all-member read/post policy in the first multi-channel slice.
+  // Policy storage foundation. Public creation remains all-member only until
+  // restricted-channel privacy coverage is complete across every consumer.
   communityChannels: defineTable({
     communityId: v.id("communities"),
     systemRole: v.optional(v.literal("general")),
     slug: v.string(),
     name: v.string(),
-    accessMode: v.literal("all_members"),
-    postingPolicy: v.literal("members"),
+    accessMode: channelAccessModeValidator,
+    postingPolicy: channelPostingPolicyValidator,
+    replyPolicy: v.optional(channelReplyPolicyValidator),
     status: v.union(v.literal("active"), v.literal("archived")),
     position: v.number(),
     pinnedRootId: v.optional(v.id("communityInteractionRoots")),
@@ -1089,6 +1091,20 @@ export default defineSchema({
     .index("by_community_slug", ["communityId", "slug"])
     .index("by_community_systemRole", ["communityId", "systemRole"])
     .index("by_community_status_position", ["communityId", "status", "position"]),
+
+  // No public grant mutation in the authority-foundation slice. Writers must
+  // preserve one row per channel/principal; revoked grants confer no access.
+  communityChannelParticipants: defineTable({
+    communityId: v.id("communities"),
+    channelId: v.id("communityChannels"),
+    principalKey: v.string(),
+    status: v.union(v.literal("active"), v.literal("revoked")),
+    createdByUserId: v.id("users"),
+    createdAt: v.number(),
+    updatedAt: v.number(),
+  })
+    .index("by_channel_principal", ["channelId", "principalKey"])
+    .index("by_community_principal_status", ["communityId", "principalKey", "status"]),
 
   communityMemberships: defineTable({
     communityId: v.id("communities"),

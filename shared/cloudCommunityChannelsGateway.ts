@@ -14,6 +14,7 @@ export type CloudCommunityChannel = {
   slug: string;
   name: string;
   position: number;
+  capabilities?: { canRead: boolean; canPost: boolean; canReply: boolean; canManage: boolean };
 };
 
 export type CloudCommunityChannelsResult = {

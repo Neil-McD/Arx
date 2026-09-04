@@ -1,6 +1,12 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
 import {
+  getCommunityChannelCapabilities,
+  requireCommunityChannelCapability,
+  resolveCommunityChannelActor,
+} from "./communityChannelAccess";
+import { channelActorKindValidator } from "./communityChannelValidators";
+import {
   type CommunityChannelLike,
   GENERAL_CHANNEL_SYSTEM_ROLE,
   MAX_ACTIVE_COMMUNITY_CHANNELS,
@@ -10,11 +16,11 @@ import {
   listReadableCommunityChannels,
   reorderActiveCommunityChannels,
   renameActiveCommunityChannel,
+  resolveAuthorizedCommunityChannel,
   setActiveCommunityChannelPinnedRoot,
 } from "./communityChannelCore";
 import {
   normalizeIdValue,
-  requireCommunityChatAccess,
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
@@ -43,7 +49,7 @@ export const listCommunityChannels = query({
       userId: args.userId,
       authSubject: args.authSubject ?? null,
     });
-    await requireCommunityChatAccess({
+    const actor = await resolveCommunityChannelActor({
       ctx,
       communityId: args.communityId,
       userId,
@@ -53,7 +59,10 @@ export const listCommunityChannels = query({
       communityId: args.communityId,
     });
     return {
-      channels: channels.map(mapCommunityChannel),
+      channels: await Promise.all(channels.map(async (channel) => ({
+        ...mapCommunityChannel(channel),
+        capabilities: await requireCommunityChannelCapability({ ctx, channel, actor, capability: "canRead" }),
+      }))),
       max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS,
     };
   },
@@ -105,6 +114,8 @@ export const renameCommunityChannel = mutation({
       communityId: args.communityId,
       userId,
     });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: args.channelId, actor, capability: "canManage" });
     return mapCommunityChannel(await renameActiveCommunityChannel({
       ctx,
       communityId: args.communityId,
@@ -152,6 +163,8 @@ export const setCommunityChannelPinnedRoot = mutation({
       authSubject: args.authSubject ?? null,
     });
     await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: args.channelId, actor, capability: "canManage", ensureGeneralForWrite: true });
     const channel = await setActiveCommunityChannelPinnedRoot({
       ctx,
       communityId: args.communityId,
@@ -237,18 +250,23 @@ export const listCommunityChannelsInternal = internalQuery({
   args: {
     userId: v.id("users"),
     communityId: v.id("communities"),
+    actorKind: v.optional(channelActorKindValidator),
   },
   handler: async (ctx, args) => {
-    await requireCommunityChatAccess({
+    const actor = await resolveCommunityChannelActor({
       ctx,
       communityId: args.communityId,
       userId: args.userId,
+      kind: args.actorKind,
     });
     return {
-      channels: (await listReadableCommunityChannels({
+      channels: await Promise.all((await listReadableCommunityChannels({
         ctx,
         communityId: args.communityId,
-      })).map(mapCommunityChannelForRepository),
+      })).map(async (channel) => ({
+        ...mapCommunityChannelForRepository(channel),
+        capabilities: await requireCommunityChannelCapability({ ctx, channel, actor, capability: "canRead" }),
+      }))),
       max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS,
     };
   },
@@ -259,17 +277,21 @@ export const resolveCommunityChannelBySlugInternal = internalQuery({
     userId: v.id("users"),
     communityId: v.id("communities"),
     slug: v.string(),
+    actorKind: v.optional(channelActorKindValidator),
   },
   handler: async (ctx, args) => {
-    await requireCommunityChatAccess({
+    const actor = await resolveCommunityChannelActor({
       ctx,
       communityId: args.communityId,
       userId: args.userId,
+      kind: args.actorKind,
     });
     const channel = (await listReadableCommunityChannels({
       ctx,
       communityId: args.communityId,
     })).find((candidate) => candidate.slug === args.slug);
-    return channel ? mapCommunityChannelForRepository(channel) : null;
+    if (!channel) return null;
+    const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
+    return capabilities.canRead ? { ...mapCommunityChannelForRepository(channel), capabilities } : null;
   },
 });

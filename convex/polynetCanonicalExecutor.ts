@@ -468,6 +468,7 @@ async function resolveCommunityTarget(args: {
 async function resolveRepositoryChannel(args: {
   ctx: any;
   userId: string;
+  principalKind: PolynetPrincipalKind;
   target: ResolvedCommunityTarget;
   slug: string;
 }): Promise<ResolvedRepositoryChannel | null> {
@@ -477,6 +478,7 @@ async function resolveRepositoryChannel(args: {
       userId: args.userId,
       communityId: args.target.communityId,
       slug: args.slug,
+      actorKind: args.principalKind,
     },
   )) as Record<string, unknown> | null;
   const id = requiredString(value?.id, 180);
@@ -683,7 +685,7 @@ async function executeCanonicalList(args: {
   if (target.localPath === POLYNET_CHANNELS_DIRECTORY_PATH) {
     const value = (await args.ctx.runQuery(
       (internal as any).communityChannels.listCommunityChannelsInternal,
-      { userId: args.userId, communityId: target.communityId },
+      { userId: args.userId, communityId: target.communityId, actorKind: args.principalKind },
     )) as Record<string, unknown>;
     const channels = Array.isArray(value.channels)
       ? (value.channels as Array<Record<string, unknown>>)
@@ -717,6 +719,7 @@ async function executeCanonicalList(args: {
       const channel = await resolveRepositoryChannel({
         ctx: args.ctx,
         userId: args.userId,
+        principalKind: args.principalKind,
         target,
         slug: channelPath.slug,
       });
@@ -1074,6 +1077,7 @@ async function executeCanonicalRead(args: {
       const channel = await resolveRepositoryChannel({
         ctx: args.ctx,
         userId: args.userId,
+        principalKind: args.principalKind,
         target,
         slug: interactionPath.slug,
       });
@@ -1354,6 +1358,7 @@ async function executeCanonicalSearch(args: {
         ? await resolveRepositoryChannel({
             ctx: args.ctx,
             userId: args.userId,
+            principalKind: args.principalKind,
             target,
             slug: channelPath.slug,
           })
@@ -1527,6 +1532,7 @@ async function executeCanonicalWrite(args: {
     const channel = await resolveRepositoryChannel({
       ctx: args.ctx,
       userId: args.userId,
+      principalKind: args.principalKind,
       target,
       slug: writableChannelPath.slug,
     });

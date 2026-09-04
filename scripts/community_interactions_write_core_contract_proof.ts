@@ -4,6 +4,9 @@ import { join } from "node:path";
 
 const root = process.cwd();
 const interactions = readFileSync(join(root, "convex/communityInteractions.ts"), "utf8");
+const channelAccess = readFileSync(join(root, "convex/communityChannelAccess.ts"), "utf8");
+assert.match(channelAccess, /resolveCommunityChannelActor[\s\S]*await requireCommunityChatAccess\(args\)/,
+  "channel actors must retain the canonical community access gate");
 const crons = readFileSync(join(root, "convex/crons.ts"), "utf8");
 const sourceUrlPolicy = readFileSync(join(root, "convex/communitySourceUrlPolicy.ts"), "utf8");
 const contract = readFileSync(join(root, "docs/community-interaction-substrate-contract-v1.md"), "utf8");
@@ -148,7 +151,7 @@ const canonicalReplyTargetResolver = functionBlock(
 );
 assert.match(
   createComposerMessage,
-  /resolveUserIdForAuthenticatedRequest[\s\S]*requireCommunityChatAccess[\s\S]*requireProfileSetupCompleteForUser/,
+  /resolveUserIdForAuthenticatedRequest[\s\S]*resolveCommunityChannelActor[\s\S]*requireProfileSetupCompleteForUser/,
   "composer bridge should reuse authenticated community chat/profile gates",
 );
 assert.match(
@@ -178,7 +181,7 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /const actorType = args\.asPersonalAgent \? "personal_agent" : "human"[\s\S]*resolveRequestedCommunityChannel\(\{[\s\S]*channelId: args\.channelId[\s\S]*ensureGeneralForWrite: true[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: requestedChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
+  /const actorType = args\.asPersonalAgent \? "personal_agent" : "human"[\s\S]*resolveAuthorizedCommunityChannel\(\{[\s\S]*actor: channelActor[\s\S]*capability: "canPost"[\s\S]*channelId: args\.channelId[\s\S]*ensureGeneralForWrite: true[\s\S]*communityInteractionRoots" as any[\s\S]*channelId: requestedChannel\._id[\s\S]*actorType,[\s\S]*actorUserId: userId[\s\S]*kind: "discussion"[\s\S]*status: "live"[\s\S]*visibilityScope: "community"/,
   "composer root writes should bind the authorized requested channel and retain explicit human or personal-agent attribution",
 );
 assert.match(

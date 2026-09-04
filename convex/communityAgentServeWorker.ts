@@ -45,7 +45,9 @@ import {
   ensureReplyChannelMatchesRoot,
   interactionIsChannelAddressable,
   requireChannelForAddressableRoot,
+  type CommunityChannelLike,
 } from "./communityChannelCore";
+import { requireCommunityChannelCapability, resolveCommunityChannelActor } from "./communityChannelAccess";
 import {
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
@@ -1597,9 +1599,19 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
       );
       return { ok: false, errorCode: "source_not_live" };
     }
-    const rootChannel = interactionIsChannelAddressable(root)
-      ? await requireChannelForAddressableRoot({ ctx, root, nowMs })
-      : null;
+    let rootChannel: CommunityChannelLike | null = null;
+    if (interactionIsChannelAddressable(root)) {
+      try {
+        rootChannel = await requireChannelForAddressableRoot({ ctx, root, nowMs });
+        const actor = await resolveCommunityChannelActor({
+          ctx, communityId: request.communityId, userId: request.requesterUserId, kind: "community_agent",
+        });
+        await requireCommunityChannelCapability({ ctx, channel: rootChannel, actor, capability: "canReply" });
+      } catch {
+        await failServeRequest(ctx, request, "channel_access_missing", "The agent can no longer reply in this channel.", nowMs);
+        return { ok: false, errorCode: "channel_access_missing" };
+      }
+    }
     let sourceVisibilityScope = root.visibilityScope;
     let sourceActorUserId = root.actorUserId;
     if (request.sourceReplyId) {

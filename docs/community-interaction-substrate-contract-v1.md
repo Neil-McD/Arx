@@ -100,6 +100,45 @@ Post mode changes the feed projection, density, ranking, and root card rendering
 
 ### `communityChannels`
 
+#### Channel authority foundation (staging, not private-room availability)
+
+The storage schema now reserves `restricted` access, `managers` posting, and
+`members | managers | disabled` reply policies. An omitted reply policy retains
+the existing member-reply behavior. `communityChannelParticipants` stores one
+active/revoked grant per channel/principal, indexed by that pair and by
+community/principal/status. No public policy or participant mutation is exposed.
+
+`communityChannelAccess.ts` owns effective read/post/reply/manage capabilities.
+Interactive handlers authenticate the caller before resolving a channel actor;
+actor resolution reuses the canonical community entitlement, blocking, and
+builder-access checks. A channel grant cannot replace those checks. Owner/admin
+oversight is explicit; moderator status alone grants no restricted-room access.
+Personal agents and official MCP use their authenticated user's participation
+identity, without channel-management authority. The community agent uses its
+own `community_agent` principal: its sponsor grants neither room membership nor
+manager authority. Duplicate grant rows fail closed rather than selecting one.
+
+Channel lists expose effective capabilities. Canonical channel message reads,
+posts, replies, direct-ID edits/deletes/reactions, and repository channel
+resolution use the shared authority foundation. Community-agent finalization
+revalidates the channel and permission before materializing a reply; a channel
+that becomes unavailable terminates through the existing error receipt path.
+
+Public creation still accepts only a name and creates an all-member channel.
+Existing channel entry points and unscoped background helpers deliberately
+reject non-shared policies. The policy/grant model is exercised with isolated
+test fixtures only: schema support is NOT authorization to create restricted
+rooms in staging or production. Do not relax this deployment boundary until
+search, attachments, notifications, presence, digests, public projections,
+agent context and shared memory have complete audience enforcement. In
+particular, directly inserting a restricted row is not a supported rollout.
+
+The current ten-channel cap, ordering, General backfill compatibility, and UI
+remain unchanged. This slice does not implement private-room discovery,
+participant management, room instructions, or workflow destination routing.
+
+#### Currently available shared-channel behavior
+
 A channel is an addressable community interaction stream, not a second message
 model. Public Channels V1 permits at most ten active channels per community,
 including exactly one system-identified General channel:
