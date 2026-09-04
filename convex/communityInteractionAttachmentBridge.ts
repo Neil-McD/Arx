@@ -1,5 +1,6 @@
 import type { CommunityChatMessageLike } from "./communityCore";
 import { normalizeIdValue } from "./communityCore";
+import { requireAttachmentUploadScope } from "./communityAttachmentUploads";
 
 type CanonicalAttachmentKind = "image" | "video" | "file";
 
@@ -14,6 +15,7 @@ type CommunityInteractionAttachmentRow = {
 };
 
 export type NormalizedInteractionAttachmentInput = {
+  attachmentId?: string;
   id: string;
   name: string;
   attachmentKind: CanonicalAttachmentKind;
@@ -98,7 +100,7 @@ export function normalizeInteractionAttachmentInputs(rawAttachments: unknown[]):
   return out;
 }
 
-async function hasCanonicalInteractionAttachmentsForTarget(args: {
+export async function hasCanonicalInteractionAttachmentsForTarget(args: {
   ctx: any;
   rootId?: any;
   replyId?: any;
@@ -118,7 +120,7 @@ async function hasCanonicalInteractionAttachmentsForTarget(args: {
   return Boolean(row);
 }
 
-export async function insertCanonicalInteractionAttachmentsForTarget(args: {
+async function insertLegacyInteractionAttachmentsForTarget(args: {
   ctx: any;
   communityId: any;
   rootId?: any;
@@ -173,7 +175,7 @@ export async function insertCanonicalInteractionAttachmentsFromLegacyMessage(arg
   const attachments = normalizeInteractionAttachmentInputs(readLegacyInteractionAttachmentPayloads(args.message));
   if (attachments.length === 0) return [];
   const createdAt = Math.max(0, Math.floor(Number(args.message.createdAt) || args.nowMs));
-  return await insertCanonicalInteractionAttachmentsForTarget({
+  return await insertLegacyInteractionAttachmentsForTarget({
     ctx: args.ctx,
     communityId: args.communityId,
     rootId: args.rootId,
@@ -184,6 +186,61 @@ export async function insertCanonicalInteractionAttachmentsFromLegacyMessage(arg
     contentHashPrefix: `legacy-chat:${normalizeIdValue(args.message._id)}`,
     skipIfExisting: true,
   });
+}
+
+// New writes accept only canonical claims. Metadata and storage handles are read
+// from the server-owned row; legacy hydration above is not a public write path.
+export async function resolveInteractionAttachmentClaims(args: {
+  ctx: any; communityId: any; actorUserId: any; messageKey: string;
+  rootId?: any; attachments: Array<{ attachmentId: any }>;
+}): Promise<NormalizedInteractionAttachmentInput[]> {
+  if (args.attachments.length > MAX_LEGACY_INTERACTION_ATTACHMENTS) throw new Error("message_attachment_limit_exceeded");
+  const seen = new Set<string>();
+  const out: NormalizedInteractionAttachmentInput[] = [];
+  for (const input of args.attachments) {
+    const row = await args.ctx.db.get(input.attachmentId);
+    if (seen.has(String(input.attachmentId))) throw new Error("community_attachment_duplicate");
+    seen.add(String(input.attachmentId));
+    if (!row || !row.storageId || row.createdByUserId !== args.actorUserId || row.communityId !== args.communityId ||
+      !row.uploadMessageKey || row.uploadMessageKey !== args.messageKey.trim() ||
+      String(row.uploadRootId ?? "") !== String(args.rootId ?? "") ||
+      !["pending", "uploaded"].includes(row.status) ||
+      (row.status === "pending" && (!row.uploadExpiresAt || row.uploadExpiresAt <= Date.now()))) {
+      throw new Error("community_attachment_claim_invalid");
+    }
+    out.push({ attachmentId: String(row._id), id: String(row._id), name: row.name,
+      attachmentKind: row.attachmentKind, mimeType: row.mimeType, sizeBytes: row.sizeBytes });
+  }
+  return out;
+}
+
+export async function claimInteractionAttachmentsForTarget(args: {
+  ctx: any; communityId: any; rootId?: any; replyId?: any;
+  attachments: NormalizedInteractionAttachmentInput[]; actorUserId: any; nowMs: number; messageKey: string;
+}) {
+  if (Boolean(args.rootId) === Boolean(args.replyId)) throw new Error("interaction_attachment_target_required");
+  if (!args.attachments.length) return;
+  const reply = args.replyId ? await args.ctx.db.get(args.replyId) : null;
+  const root = await args.ctx.db.get(args.rootId ?? reply?.rootId);
+  if (!root || root.communityId !== args.communityId || (reply && reply.communityId !== args.communityId)) {
+    throw new Error("community_attachment_scope_mismatch");
+  }
+  const channel = await requireAttachmentUploadScope(args.ctx, {
+    ownerId: args.actorUserId, communityId: args.communityId, channelId: root.channelId,
+    uploadRootId: reply ? root._id : undefined,
+  });
+  for (const input of args.attachments) {
+    const row = input.attachmentId ? await args.ctx.db.get(input.attachmentId) : null;
+    if (!row || row.createdByUserId !== args.actorUserId || row.communityId !== args.communityId ||
+      row.channelId !== channel._id || row.uploadMessageKey !== args.messageKey.trim() || !row.storageId ||
+      String(row.uploadRootId ?? "") !== String(reply ? root._id : "")) throw new Error("community_attachment_scope_mismatch");
+    if (row.status === "uploaded" && row.rootId === args.rootId && row.replyId === args.replyId) continue;
+    if (row.status !== "pending" || row.rootId || row.replyId || (row.uploadExpiresAt ?? 0) <= args.nowMs) {
+      throw new Error("community_attachment_already_claimed");
+    }
+    await args.ctx.db.patch(row._id, { rootId: args.rootId, replyId: args.replyId,
+      status: "uploaded", updatedAt: args.nowMs });
+  }
 }
 
 async function mapCanonicalInteractionAttachment(ctx: any, row: CommunityInteractionAttachmentRow) {

@@ -184,6 +184,57 @@ The current ten-channel cap, ordering, General backfill compatibility, and UI
 remain unchanged. This slice does not implement private-room discovery,
 participant management, room instructions, or workflow destination routing.
 
+#### Attachment ownership (staging foundation)
+
+New composer writes accept only `{ attachmentId }` references. Neither a raw
+storage ID nor an inline data URL grants write authority. Uploads use the
+authenticated `/runtime/community_attachment_upload` route; its storage upload
+URL stays server-side. The route streams bounded bytes to storage, classifies
+media from a bounded byte prefix, and finalizes against provider metadata.
+Generic unknown files are opaque downloads, not trusted inline content. This
+is format classification, not malware scanning or a full media decoder.
+
+`communityInteractionAttachments` is the single attachment ledger. A pending
+row binds uploader, community, channel, optional reply parent, and composer
+message key. Current profile, community access, and channel posting/reply policy
+are checked before upload, after upload, and when the composer atomically claims
+the row for a root/reply. Idempotent sends reuse the canonical message and claim;
+cross-member, cross-community, cross-channel, parent, or message-key reuse fails
+closed. Uploaded bytes supply size, storage hash, and canonical media metadata.
+
+Existing limits remain 8 files per message, 25 MiB per image, 50 MiB per media
+file, and 5 MiB per generic file. An indexed cap allows at most 16 pending files
+per uploader and 8 per composer key. Pending rows expire after 30 minutes using
+one-shot scheduled cleanup, not a new cron. Cleanup removes only unclaimed
+uploads; it cannot delete a claimed or historically shared blob. A process loss
+between provider upload completion and recording its returned storage ID can
+still leave an untracked orphan; this slice does not claim transactional storage
+and database writes or run a historical storage sweep.
+
+Legacy message creation rejects attachments. Legacy edits may retain or remove
+persisted attachments, not introduce or relabel uploaded bytes. Historical
+hydration is isolated from new writes and uses the persisted pre-edit message.
+Deleted canonical rows remain tombstones: their existence prevents fallback to
+legacy attachment payloads. No historical files are deleted by this migration.
+
+Deployment must coordinate backend and web changes; stale raw-ID upload clients
+must refresh rather than use an insecure compatibility shim. Local streaming
+and fixture tests do not prove deployed-provider upload behavior. Verify a small
+file, a large media upload, reply upload, and revoked access on the exact staging
+deployment before accepting the live flow. The provider's general HTTP upload
+guide and its limits reference differ about request size; the streaming route
+avoids full-body buffering, but the large-upload staging gate remains explicit.
+References: [HTTP upload guide](https://docs.convex.dev/file-storage/upload-files),
+[runtime limits](https://docs.convex.dev/production/state/limits).
+
+Read projections still resolve storage URLs. This slice protects attachment
+ownership, not per-request download access or revocation of previously issued
+URLs. Protected byte delivery remains a prerequisite for private-room rollout.
+See [Convex storage security](https://docs.convex.dev/file-storage/overview).
+Member-agent attachments, DMs, resources, and profile/branding storage are not
+migrated here. Private-room creation and production releases remain disabled
+for this work.
+
 #### Currently available shared-channel behavior
 
 A channel is an addressable community interaction stream, not a second message
@@ -505,7 +556,7 @@ Rules:
 - mention rows create canonical `communityInteractionMentions` bound to the
   source interaction channel; `@everybody` broadcast and recipient rows inherit
   that exact channel
-- prepared attachments create canonical `communityInteractionAttachments`
+- prepared upload claims bind canonical `communityInteractionAttachments`
 - write paths do not fetch URLs, scrape pages, process media, or resolve workspace previews synchronously
 
 ## Current Read-Model Slice
@@ -586,8 +637,8 @@ Rules:
 - composer writes create canonical roots/replies only
 - composer writes must not create legacy `communityChatMessages`
 - composer writes must not create `communityInteractionLegacyChatLinks`
-- composer writes may include bounded, already-prepared attachment metadata
-- composer attachment rows are written to `communityInteractionAttachments`
+- composer writes may include bounded, server-issued attachment claim IDs; metadata is loaded server-side
+- composer attachment rows are claimed in `communityInteractionAttachments` in the same transaction as the message
 - composer user mentions are limited to existing users who can access the target community chat
 - composer community-agent mentions remain structural (`community_agent`) and
   fail closed unless the visible current-community-name token is present

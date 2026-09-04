@@ -23,7 +23,9 @@ import {
   legacyChatIdempotencyKey,
 } from "./communityInteractionLegacyBridge";
 import {
-  insertCanonicalInteractionAttachmentsForTarget,
+  claimInteractionAttachmentsForTarget,
+  resolveInteractionAttachmentClaims,
+  hasCanonicalInteractionAttachmentsForTarget,
   insertCanonicalInteractionAttachmentsFromLegacyMessage,
   listCanonicalInteractionAttachmentsForTarget,
   normalizeInteractionAttachmentInputs,
@@ -228,15 +230,7 @@ const rootKindValidator = v.union(
 );
 
 const interactionAttachmentInputValidator = v.object({
-  id: v.optional(v.string()),
-  name: v.string(),
-  type: v.string(),
-  mime: v.optional(v.union(v.string(), v.null())),
-  size: v.number(),
-  storageId: v.optional(v.id("_storage")),
-  data_url: v.optional(v.string()),
-  text: v.optional(v.string()),
-  truncated: v.optional(v.boolean()),
+  attachmentId: v.id("communityInteractionAttachments"),
 });
 
 function normalizeBoundedText(raw: unknown, maxLength: number): string {
@@ -792,7 +786,7 @@ async function mapRootBundle(
   const mentions = await listMentionsForRoot(ctx, root._id);
   const legacyLink = await getLegacyChatLinkByRoot(ctx, root._id);
   const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id });
-  const attachments = canonicalAttachments.length > 0
+  const attachments = await hasCanonicalInteractionAttachmentsForTarget({ ctx, rootId: root._id })
     ? canonicalAttachments
     : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
   const publicActorUserId = root.actorUserId
@@ -858,7 +852,7 @@ async function mapReplyBundle(
   const mentions = await listMentionsForReply(ctx, reply._id);
   const legacyLink = await getLegacyChatLinkByReply(ctx, reply._id);
   const canonicalAttachments = await listCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id });
-  const attachments = canonicalAttachments.length > 0
+  const attachments = await hasCanonicalInteractionAttachmentsForTarget({ ctx, replyId: reply._id })
     ? canonicalAttachments
     : await resolveLegacyMessageAttachments(ctx, legacyLink?.messageId);
   const publicActorUserId = reply.actorUserId
@@ -1681,7 +1675,9 @@ export const createCommunityInteractionComposerMessage = mutation({
     await requireProfileSetupCompleteForUser(ctx, userId);
 
     const text = normalizeBoundedText(args.text, MAX_INTERACTION_TEXT_CHARS);
-    const attachments = normalizeInteractionAttachmentInputs(args.attachments ?? []);
+    const attachments = await resolveInteractionAttachmentClaims({ ctx, communityId: args.communityId,
+      actorUserId: userId, messageKey: args.idempotencyKey, rootId: args.rootId,
+      attachments: args.attachments ?? [] });
     if (!text && attachments.length === 0) throw new Error("interaction_content_required");
     if (args.rootId && textContainsEverybodyMentionToken(text)) {
       throw new Error("interaction_mention_everybody_reply_not_allowed");
@@ -1786,14 +1782,14 @@ export const createCommunityInteractionComposerMessage = mutation({
         communityAgentMention = mentionRows.communityAgentMention;
         root = (await ctx.db.get(rootId as any)) as InteractionRootRow | null;
         if (!root) throw new Error("interaction_root_create_failed");
-        await insertCanonicalInteractionAttachmentsForTarget({
+        await claimInteractionAttachmentsForTarget({
           ctx,
+          messageKey: args.idempotencyKey,
           communityId: args.communityId,
           rootId: root._id,
           attachments,
           actorUserId: userId,
           nowMs,
-          contentHashPrefix: `community-composer:${idempotencyKey}`,
         });
         deduped = false;
       }
@@ -1934,14 +1930,14 @@ export const createCommunityInteractionComposerMessage = mutation({
       });
       reply = (await ctx.db.get(replyId as any)) as InteractionReplyRow | null;
       if (!reply) throw new Error("interaction_reply_create_failed");
-      await insertCanonicalInteractionAttachmentsForTarget({
+      await claimInteractionAttachmentsForTarget({
         ctx,
+        messageKey: args.idempotencyKey,
         communityId: root.communityId,
         replyId: reply._id,
         attachments,
         actorUserId: userId,
         nowMs,
-        contentHashPrefix: `community-composer:${idempotencyKey}`,
       });
       deduped = false;
     }
@@ -2050,9 +2046,9 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
     });
 
     const text = normalizeBoundedText(canonicalText, MAX_INTERACTION_TEXT_CHARS);
-    const attachments = normalizeInteractionAttachmentInputs(
-      args.attachments ?? [],
-    );
+    const attachments = await resolveInteractionAttachmentClaims({ ctx, communityId: args.communityId,
+      actorUserId: sponsorUserId, messageKey: args.idempotencyKey, rootId: args.rootId,
+      attachments: args.attachments ?? [] });
     if (!text && attachments.length === 0) {
       throw new Error("interaction_content_required");
     }
@@ -2159,14 +2155,14 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         });
         root = (await ctx.db.get(rootId)) as InteractionRootRow | null;
         if (!root) throw new Error("interaction_root_create_failed");
-        await insertCanonicalInteractionAttachmentsForTarget({
+        await claimInteractionAttachmentsForTarget({
           ctx,
+          messageKey: args.idempotencyKey,
           communityId: args.communityId,
           rootId: root._id,
           attachments,
           actorUserId: sponsorUserId,
           nowMs,
-          contentHashPrefix: `community-canonical-agent:${idempotencyKey}`,
         });
         deduped = false;
       }
@@ -2287,14 +2283,14 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       });
       reply = (await ctx.db.get(replyId)) as InteractionReplyRow | null;
       if (!reply) throw new Error("interaction_reply_create_failed");
-      await insertCanonicalInteractionAttachmentsForTarget({
+      await claimInteractionAttachmentsForTarget({
         ctx,
+        messageKey: args.idempotencyKey,
         communityId: args.communityId,
         replyId: reply._id,
         attachments,
         actorUserId: sponsorUserId,
         nowMs,
-        contentHashPrefix: `community-canonical-agent:${idempotencyKey}`,
       });
       deduped = false;
     }
@@ -2702,19 +2698,17 @@ async function editCommunityInteractionTargetCore(args: {
     if (existingAttachments.length > 32) {
       throw new Error("interaction_attachment_replace_limit_exceeded");
     }
-    for (const attachment of existingAttachments) {
-      await args.ctx.db.delete(attachment._id as any);
-    }
     const normalizedAttachments = normalizeInteractionAttachmentInputs(args.legacyAttachments);
-    await insertCanonicalInteractionAttachmentsForTarget({
-      ctx: args.ctx,
-      communityId: args.communityId,
-      ...(args.targetType === "root" ? { rootId: args.target._id } : { replyId: args.target._id }),
-      attachments: normalizedAttachments,
-      actorUserId: args.actorUserId,
-      nowMs: args.nowMs,
-      contentHashPrefix: `legacy-chat-edit:${normalizeIdValue(args.legacyMessageId) || normalizeIdValue(args.target._id)}`,
-    });
+    const matches = (row: any, input: NormalizedInteractionAttachmentInput) =>
+      row.status === "uploaded" && (input.storageId ? String(row.storageId) === input.storageId : row.externalUrl === input.dataUrl);
+    if (normalizedAttachments.some(input => !existingAttachments.some((row: any) => matches(row, input)))) {
+      throw new Error("community_attachment_legacy_edit_cannot_add");
+    }
+    for (const attachment of existingAttachments) {
+      if (attachment.status === "uploaded" && !normalizedAttachments.some(input => matches(attachment, input))) {
+        await args.ctx.db.patch(attachment._id, { status: "deleted", updatedAt: args.nowMs });
+      }
+    }
   }
   await suppressPendingMentionsMissingFromInteractionText({
     ctx: args.ctx,
@@ -2780,6 +2774,13 @@ export async function syncLegacyChatMessageEditToInteractionCore(args: {
   if (normalizeIdValue(communityId) !== normalizeIdValue(args.communityId)) {
     throw new Error("legacy_chat_interaction_link_target_invalid");
   }
+  // Hydrate only the persisted pre-edit message, never the submitted attachments.
+  const originalMessage = await args.ctx.db.get(args.messageId);
+  if (originalMessage) await insertCanonicalInteractionAttachmentsFromLegacyMessage({
+    ctx: args.ctx, communityId,
+    ...(targetType === "root" ? { rootId: target._id } : { replyId: target._id }),
+    message: originalMessage, nowMs: args.nowMs,
+  });
   await editCommunityInteractionTargetCore({
     ctx: args.ctx,
     targetType,

@@ -1091,7 +1091,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical chat writer[\s\S]*must not create legacy `communityChatMessages`[\s\S]*bounded, already-prepared attachment metadata[\s\S]*communityInteractionAttachments/,
+  /Current Canonical Composer Bridge Slice[\s\S]*createCommunityInteractionComposerMessage[\s\S]*canonical chat writer[\s\S]*must not create legacy `communityChatMessages`[\s\S]*bounded, server-issued attachment claim IDs[\s\S]*communityInteractionAttachments/,
   "interaction contract should document the active canonical composer bridge slice",
 );
 assert.match(

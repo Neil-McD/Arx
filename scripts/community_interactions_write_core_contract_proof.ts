@@ -166,7 +166,7 @@ assert.doesNotMatch(
 );
 assert.match(
   createComposerMessage,
-  /normalizeInteractionAttachmentInputs\(args\.attachments \?\? \[\]\)[\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
+  /resolveInteractionAttachmentClaims\([\s\S]*attachments: args\.attachments \?\? \[\][\s\S]*!text && attachments\.length === 0[\s\S]*interaction_content_required/,
   "composer bridge should allow attachment-only sends while rejecting empty payloads",
 );
 assert.match(
@@ -236,8 +236,8 @@ assert.match(
 );
 assert.match(
   createComposerMessage,
-  /insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*rootId: root\._id[\s\S]*attachments[\s\S]*insertCanonicalInteractionAttachmentsForTarget\(\{[\s\S]*replyId: reply\._id[\s\S]*attachments/,
-  "composer bridge should write canonical attachment rows for roots and replies",
+  /claimInteractionAttachmentsForTarget\(\{[\s\S]*rootId: root\._id[\s\S]*attachments[\s\S]*claimInteractionAttachmentsForTarget\(\{[\s\S]*replyId: reply\._id[\s\S]*attachments/,
+  "composer bridge should claim canonical attachment rows for roots and replies",
 );
 assert.match(
   createComposerMessage,
@@ -278,8 +278,13 @@ assert.match(
 );
 assert.match(
   mentionResolver,
-  /normalizeId\("users" as any, rawUserId\)[\s\S]*withIndex\("by_authSubject"[\s\S]*interaction_mention_user_not_found[\s\S]*requireCommunityChatAccess\(\{[\s\S]*communityId: args\.communityId[\s\S]*userId: user\._id[\s\S]*interaction_mention_user_not_allowed/,
-  "mention resolver should resolve existing users by canonical id or auth subject and require community chat access",
+  /normalizeId\("users" as any, rawUserId\)[\s\S]*withIndex\("by_authSubject"[\s\S]*interaction_mention_user_not_found/,
+  "mention resolver should resolve existing users by canonical id or auth subject",
+);
+assert.match(
+  functionBlock(interactions, "insertCommunityInteractionMentionRows"),
+  /resolveNotificationRecipientSource\([\s\S]*interaction_mention_user_not_allowed/,
+  "mention insertion must authorize recipients against the persisted source room in the write transaction",
 );
 assert.match(
   mentionResolver,

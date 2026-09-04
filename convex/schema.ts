@@ -1695,10 +1695,15 @@ export default defineSchema({
 
   communityInteractionAttachments: defineTable({
     communityId: v.id("communities"),
+    channelId: v.optional(v.id("communityChannels")),
+    uploadRootId: v.optional(v.id("communityInteractionRoots")),
+    uploadMessageKey: v.optional(v.string()),
+    uploadExpiresAt: v.optional(v.number()),
     rootId: v.optional(v.id("communityInteractionRoots")),
     replyId: v.optional(v.id("communityInteractionReplies")),
     attachmentKind: v.union(v.literal("image"), v.literal("video"), v.literal("file")),
     status: v.union(
+      v.literal("pending"),
       v.literal("uploaded"),
       v.literal("processing"),
       v.literal("failed"),
@@ -1725,6 +1730,7 @@ export default defineSchema({
     .index("by_reply", ["replyId"])
     .index("by_community_createdAt", ["communityId", "createdAt"])
     .index("by_community_status_createdAt", ["communityId", "status", "createdAt"])
+    .index("by_uploader_status", ["createdByUserId", "status"])
     .index("by_storage", ["storageId"])
     .index("by_contentHash", ["contentHash"]),
 

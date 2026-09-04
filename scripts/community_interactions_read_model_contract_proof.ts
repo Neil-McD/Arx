@@ -153,8 +153,8 @@ assert.match(
 );
 assert.match(
   mapRootBundle,
-  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*canonicalAttachments\.length > 0[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
-  "root bundle mapper should prefer canonical attachments before legacy fallback",
+  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*hasCanonicalInteractionAttachmentsForTarget\(\{ ctx, rootId: root\._id \}\)[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
+  "root bundle mapper must let canonical tombstones prevent legacy fallback",
 );
 assert.doesNotMatch(
   mapRootBundle,
@@ -175,8 +175,8 @@ assert.match(
 );
 assert.match(
   mapReplyBundle,
-  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*canonicalAttachments\.length > 0[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
-  "reply bundle mapper should prefer canonical attachments before legacy fallback",
+  /listCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*hasCanonicalInteractionAttachmentsForTarget\(\{ ctx, replyId: reply\._id \}\)[\s\S]*resolveLegacyMessageAttachments\(ctx, legacyLink\?\.messageId\)/,
+  "reply bundle mapper must let canonical tombstones prevent legacy fallback",
 );
 
 const viewerReactionMap = functionBlock(interactions, "loadViewerReactionMapForTargets");
