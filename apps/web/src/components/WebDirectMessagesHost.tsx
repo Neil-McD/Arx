@@ -199,6 +199,7 @@ function shouldPreserveDirectMessageComposerFocus(activeElement: Element | null,
       [
         ".modal",
         ".modal-overlay",
+        "dialog[open]",
         "[role='dialog']:not(.community-dm-panel)",
         ".community-dm-recipient-search",
       ].join(","),

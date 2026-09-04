@@ -26,7 +26,7 @@
 .message-pdf-dialog::backdrop { background: rgb(0 0 0 / 65%); }
 .message-pdf-dialog > header { display: flex; align-items: center; gap: 12px; padding: 12px 16px; border-bottom: 1px solid var(--border-default); }
 .message-pdf-dialog > header strong { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.message-pdf-dialog a { color: var(--chat-link); font-size: 13px; }
+.message-pdf-dialog a { color: var(--text-primary); font-size: 13px; text-decoration: underline; }
 .message-pdf-dialog button { font: inherit; color: inherit; background: var(--bg-card); border: 1px solid var(--border-default); border-radius: 7px; padding: 7px 10px; cursor: pointer; }
 .message-pdf-dialog button:disabled { opacity: 0.4; cursor: default; }
 .message-pdf-reader { display: flex; flex: 1; flex-direction: column; min-height: 0; }
