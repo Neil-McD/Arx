@@ -1,4 +1,5 @@
 import { internal } from "./_generated/api";
+import type { Doc } from "./_generated/dataModel";
 import {
   internalAction,
   internalMutation,
@@ -66,9 +67,16 @@ import {
   type CommunityAgentThreadActorType,
   type CommunityAgentThreadParticipantInput,
   type CommunityAgentThreadTurnInput,
+  type CommunityAgentWorkflowOrientation,
 } from "../shared/communityAgentThreadContext";
 import { readMemberFactsForLens, readMemberSpine } from "./memberOntologyCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
+import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
+import {
+  getCommunityMemberWorkflowByCommunity,
+  getMemberMilestone,
+  resolveCurrentMilestone,
+} from "./communityMemberWorkflowReadCore";
 
 const SERVE_WORKER_DEFAULT_LIMIT = 3;
 const SERVE_WORKER_MAX_LIMIT = 5;
@@ -711,6 +719,7 @@ async function loadCommunityAgentThreadContext(args: {
   sourceReply: InteractionReplyRow | null;
   communityOwnerId: any;
   agentDisplayName: string;
+  workflowOrientation?: CommunityAgentWorkflowOrientation;
 }) {
   const sourceSeq = args.sourceReply
     ? Math.max(0, Math.floor(Number(args.sourceReply.seq ?? 0)))
@@ -878,6 +887,15 @@ async function loadCommunityAgentThreadContext(args: {
   const requesterIdentity =
     identities.get(normalizeIdValue(args.request.requesterUserId)) ??
     (await loadThreadActorIdentity(args.ctx, args.request.requesterUserId));
+  if (args.workflowOrientation) {
+    const requester = participants.find(
+      (participant) => participant.userId === normalizeIdValue(args.request.requesterUserId),
+    );
+    if (!requester?.activeInCommunity) {
+      throw new Error("community_agent_workflow_requester_context_required");
+    }
+    requester.workflow = args.workflowOrientation;
+  }
   return compileCommunityAgentThreadContext({
     capturedAt: Date.now(),
     selfAgentKey: args.request.agentKey,
@@ -1051,6 +1069,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       };
     }
 
+    let workflowOrientation: CommunityAgentWorkflowOrientation | undefined;
     if (request.triggerKind === "workflow") {
       if (
         !request.workflowRunId ||
@@ -1064,16 +1083,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         };
       }
       const workflowRun = (await ctx.db.get(request.workflowRunId as any)) as
-        | {
-            communityId?: any;
-            status?: string;
-            actionSnapshot?: {
-              key?: string;
-              type?: string;
-              prompt?: string;
-            };
-          }
-        | null;
+        Doc<"communityMemberWorkflowRuns"> | null;
       if (
         !workflowRun ||
         normalizeIdValue(workflowRun.communityId) !==
@@ -1081,7 +1091,11 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         workflowRun.status !== "finished" ||
         workflowRun.actionSnapshot?.type !== "prompt_agent" ||
         workflowRun.actionSnapshot.key !== request.workflowActionKey ||
-        workflowRun.actionSnapshot.prompt !== request.workflowPromptSnapshot
+        workflowRun.actionSnapshot.prompt !== request.workflowPromptSnapshot ||
+        workflowRun.triggerReceiptRef !== buildCommunityInteractionEvidenceRef({
+          objectType: request.sourceReplyId ? "reply" : "root",
+          objectId: normalizeIdValue(request.sourceReplyId ?? request.sourceRootId),
+        })
       ) {
         return {
           ok: false as const,
@@ -1089,6 +1103,47 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
           errorMessage: "The workflow action no longer matches its durable run.",
         };
       }
+      // Bind the historical action to the exact canonical membership, not the
+      // sponsor, a model-selected user, or a replacement membership row.
+      const membership = await getUniqueCommunityMembershipByPair({
+        ctx, communityId: request.communityId, userId: request.requesterUserId,
+      });
+      if (!communityMembershipRowIsActive(membership) || !membership ||
+        normalizeIdValue(membership._id) !== normalizeIdValue(workflowRun.membershipId)) {
+        return {
+          ok: false as const,
+          errorCode: "workflow_member_link_invalid",
+          errorMessage: "The workflow action no longer matches an active requester membership.",
+        };
+      }
+      const workflow = await getCommunityMemberWorkflowByCommunity({
+        ctx, communityId: request.communityId,
+      });
+      const current = workflow ? resolveCurrentMilestone({
+        workflow, membership,
+        state: await getMemberMilestone({ ctx, workflowId: workflow._id, membershipId: membership._id }),
+      }) : null;
+      workflowOrientation = {
+        communityId: normalizeIdValue(request.communityId),
+        membershipId: normalizeIdValue(membership._id),
+        origin: {
+          runId: normalizeIdValue(workflowRun._id),
+          workflowId: normalizeIdValue(workflowRun.workflowId),
+          workflowRevision: workflowRun.workflowRevision,
+          milestoneKey: workflowRun.milestoneKey,
+          milestoneName: workflowRun.milestoneName,
+          milestoneEnteredAt: workflowRun.milestoneEnteredAt,
+          triggerReceiptRef: workflowRun.triggerReceiptRef,
+        },
+        current: workflow && current ? {
+          workflowId: normalizeIdValue(workflow._id),
+          workflowRevision: workflow.revision,
+          milestoneKey: current.milestone.key,
+          milestoneName: current.milestone.name,
+          milestoneEnteredAt: current.milestoneEnteredAt,
+          completedAt: current.completedAt,
+        } : null,
+      };
     }
 
     const canonicalContext = await readCanonicalCommunityAgentContext(
@@ -1244,6 +1299,7 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       sourceReply: reply,
       communityOwnerId: community.ownerId,
       agentDisplayName: canonicalContext.agentDisplayName,
+      workflowOrientation,
     });
     return {
       ok: true as const,
@@ -1722,7 +1778,25 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         internalRefs.communityAgentServeWorker
           .readCommunityAgentServeRequestContextInternal,
         { requestId, expectedAttempt },
-      );
+      ).catch((error: unknown) => {
+        const message = error instanceof Error ? error.message : String(error);
+        const invariant = [
+          "community_membership_pair_not_unique",
+          "community_member_workflow_ambiguous",
+          "community_member_workflow_member_milestone_ambiguous",
+          "community_member_workflow_member_milestone_invalid",
+          "community_agent_workflow_requester_context_required",
+          "community_agent_thread_context_required_content_too_large",
+        ].find((code) => message.includes(code));
+        // Only deterministic corruption/budget failures are terminal here.
+        // Unknown infrastructure failures retain the existing lease recovery.
+        if (!invariant) throw error;
+        return {
+          ok: false as const,
+          errorCode: invariant,
+          errorMessage: "Serve request context failed canonical read invariants.",
+        };
+      });
       if (!context?.ok) {
         await ctx.runMutation(
           internalRefs.communityAgentServeWorker

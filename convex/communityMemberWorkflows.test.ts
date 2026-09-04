@@ -5,6 +5,7 @@ import { afterEach, expect, test, vi } from "vitest";
 
 import { api, internal } from "./_generated/api";
 import schema from "./schema";
+import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 
 const modules = import.meta.glob([
   "./communityCapabilityContext.ts",
@@ -25,7 +26,7 @@ const OWNER_SUBJECT = "workflow-owner-v1";
 const MEMBER_SUBJECT = "workflow-member-v1";
 const internalApi = internal as any;
 const dossierQuery = api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier;
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 test("membership context exists without a workflow and reading creates no state", async () => {
   const t = convexTest(schema, modules);
@@ -304,6 +305,296 @@ async function configure(t: ReturnType<typeof convexTest>, communityId: any, act
   const configured = await configureAutomations(t, communityId, [action]);
   return configured.firstKey;
 }
+
+async function workflowServeFixture(t: ReturnType<typeof convexTest>, move = true) {
+  // Drive admission/claims explicitly; do not race the scheduled live worker.
+  vi.useFakeTimers();
+  const f = await fixture(t);
+  const configured = await configureAutomations(t, f.communityId, [
+    { key: "", type: "prompt_agent", prompt: "Help with the original New milestone task." },
+    ...(move ? [{ key: "", type: "move_member", destination: "next_or_complete" }] : []),
+  ]);
+  const rootId = await addRoot(t, f, "context");
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  const request = (await t.run((ctx) => ctx.db.query("communityAgentServeRequests").first()))!;
+  const claim = await t.mutation(internalApi.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, {
+    requestId: request._id, nowMs: f.nowMs + 100,
+  });
+  const read = (attempt = claim.attempt) => t.query(
+    internalApi.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal,
+    { requestId: request._id, expectedAttempt: attempt },
+  );
+  return { ...f, ...configured, rootId, request, claim, read };
+}
+
+function workflowOrientation(context: any) {
+  expect(context.ok).toBe(true);
+  const line = context.threadContext.rendered.split("\n").find((value: string) => value.startsWith("Workflow orientation"));
+  expect(line).toBeDefined();
+  return JSON.parse(line.slice(line.indexOf(": ") + 2));
+}
+
+function contextSnapshot(context: any) {
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  return JSON.stringify({
+    version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+    prompt_sections: bundle.systemPromptBundle.sections,
+  });
+}
+
+test("queued workflow context separates immutable origin from moved and renamed current position", async () => {
+  const t = convexTest(schema, modules);
+  const f = await workflowServeFixture(t);
+  await t.withIdentity({ subject: OWNER_SUBJECT }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 3, milestoneKey: f.secondKey,
+    name: "Renamed destination", automations: [],
+  });
+  const context = await f.read();
+  expect(context.workflowPrompt).toBe("Help with the original New milestone task.");
+  expect(workflowOrientation(context)).toMatchObject({
+    community_id: f.communityId, membership_id: f.membershipId,
+    action_origin: { run_id: f.request.workflowRunId, revision: 3, milestone_key: f.firstKey, milestone_name: "New" },
+    current_at_context_read: { revision: 4, milestone_key: f.secondKey, milestone_name: "Renamed destination", completed_at: null },
+  });
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  expect(bundle.messages.find((message) => message.role === "user")?.content).toContain("action_origin");
+  expect(bundle.systemPromptBundle.sections.map((section) => section.id)).toEqual([
+    "community_agent_identity", "concierge_operating_policy", "community_system_prompt", "community_workflow_action",
+  ]);
+  const snapshotJson = contextSnapshot(context);
+  const snapshotArgs = { requestId: f.request._id, expectedAttempt: f.claim.attempt, snapshotJson };
+  await expect(t.mutation(internalApi.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, snapshotArgs))
+    .resolves.toMatchObject({ ok: true });
+  await expect(t.mutation(internalApi.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, snapshotArgs))
+    .resolves.toMatchObject({ ok: true, duplicate: true });
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId: f.rootId });
+  await t.run(async (ctx) => {
+    expect(await ctx.db.query("communityAgentRunEvents").collect()).toHaveLength(1);
+    expect((await ctx.db.query("communityAgentRunEvents").first())?.content).toBe(snapshotJson);
+    expect(await ctx.db.query("communityMemberWorkflowRuns").collect()).toHaveLength(2);
+    expect(await ctx.db.query("communityMemberWorkflowTransitions").collect()).toHaveLength(1);
+    expect(await ctx.db.query("communityAgentServeRequests").collect()).toHaveLength(1);
+  });
+});
+
+test("workflow context uses read-only defaults, preserves completion, and allows absent current workflow", async () => {
+  const t = convexTest(schema, modules);
+  const f = await workflowServeFixture(t, false);
+  expect(workflowOrientation(await f.read()).current_at_context_read).toMatchObject({
+    milestone_key: f.firstKey, entered_at: f.nowMs, completed_at: null,
+  });
+  expect(await t.run((ctx) => ctx.db.query("communityMemberWorkflowMemberMilestones").collect())).toEqual([]);
+  const workflow = (await t.run((ctx) => ctx.db.query("communityMemberWorkflows").first()))!;
+  await t.run(async (ctx) => ctx.db.insert("communityMemberWorkflowMemberMilestones", {
+    workflowId: workflow._id, membershipId: f.membershipId,
+    currentMilestoneKey: f.secondKey, milestoneEnteredAt: f.nowMs + 20,
+    completedAt: f.nowMs + 30, transitionSeq: 2, createdAt: f.nowMs, updatedAt: f.nowMs + 30,
+  }));
+  expect(workflowOrientation(await f.read()).current_at_context_read.completed_at).toBe(f.nowMs + 30);
+  await t.run((ctx) => ctx.db.delete(workflow._id));
+  const withoutWorkflow = workflowOrientation(await f.read());
+  expect(withoutWorkflow.current_at_context_read).toBeNull();
+  expect(withoutWorkflow.action_origin.milestone_name).toBe("New");
+});
+
+test.each(["wrong_user", "wrong_community", "replacement_membership", "revoked", "wrong_receipt"] as const)(
+  "workflow context rejects %s rather than enriching the wrong member",
+  async (corruption) => {
+    const t = convexTest(schema, modules);
+    const f = await workflowServeFixture(t);
+    await t.run(async (ctx) => {
+      const membership = (await ctx.db.get(f.membershipId))!;
+      const { _id, _creationTime, ...fields } = membership;
+      if (corruption === "wrong_receipt") {
+        await ctx.db.patch(f.request.workflowRunId!, { triggerReceiptRef: "different-source" });
+      } else if (corruption === "revoked") {
+        await ctx.db.patch(f.membershipId, { active: false });
+      } else {
+        const other = await ctx.db.insert("communities", {
+          ownerId: f.ownerId, slug: "other-context", name: "Other",
+          inferenceFundingPolicy: "managed_required",
+          visibility: "unlisted", entryPolicy: "open", createdAt: f.nowMs, updatedAt: f.nowMs,
+        });
+        const memberId = await ctx.db.insert("communityMemberships", {
+          ...fields,
+          userId: corruption === "wrong_user" ? f.ownerId : f.memberId,
+          communityId: corruption === "wrong_community" ? other : f.communityId,
+        });
+        if (corruption === "replacement_membership") await ctx.db.delete(f.membershipId);
+        else await ctx.db.patch(f.request.workflowRunId!, { membershipId: memberId });
+      }
+    });
+    await expect(f.read()).resolves.toMatchObject({ ok: false, errorCode:
+      corruption === "wrong_receipt" ? "workflow_action_link_invalid" : "workflow_member_link_invalid",
+    });
+  },
+);
+
+test.each(["duplicate_membership", "duplicate_workflow", "duplicate_state", "unknown_milestone"] as const)(
+  "workflow context fails closed on %s using canonical readers",
+  async (corruption) => {
+    const t = convexTest(schema, modules);
+    const f = await workflowServeFixture(t);
+    await t.run(async (ctx) => {
+      if (corruption === "duplicate_membership") {
+        const { _id, _creationTime, ...fields } = (await ctx.db.get(f.membershipId))!;
+        await ctx.db.insert("communityMemberships", fields);
+      } else if (corruption === "duplicate_workflow") {
+        const { _id, _creationTime, ...fields } = (await ctx.db.query("communityMemberWorkflows").first())!;
+        await ctx.db.insert("communityMemberWorkflows", fields);
+      } else {
+        const { _id, _creationTime, ...fields } = (await ctx.db.query("communityMemberWorkflowMemberMilestones").first())!;
+        if (corruption === "duplicate_state") await ctx.db.insert("communityMemberWorkflowMemberMilestones", fields);
+        else await ctx.db.patch(_id, { currentMilestoneKey: "missing" });
+      }
+    });
+    await expect(f.read()).rejects.toThrow();
+  },
+);
+
+test("workflow retry refreshes consented facts but cannot rewrite an earlier attempt snapshot", async () => {
+  const t = convexTest(schema, modules);
+  const f = await workflowServeFixture(t);
+  const factId = await t.run(async (ctx) => {
+    const fact = {
+      userId: f.memberId, communityId: f.communityId, kind: "goal" as const,
+      body: "Consented community goal", provenance: "form_answer" as const,
+      confidence: 1, evidenceRefs: [], stalenessScore: 0, consentState: "approved" as const,
+      createdByActorType: "member" as const, version: 1, createdAt: f.nowMs, updatedAt: f.nowMs,
+    };
+    const id = await ctx.db.insert("memberFacts", fact);
+    await ctx.db.insert("memberFacts", { ...fact, communityId: undefined, body: "PRIVATE PLATFORM FACT" });
+    await ctx.db.insert("memberFacts", { ...fact, consentState: "pending", body: "PENDING FACT" });
+    await ctx.db.insert("memberFacts", { ...fact, provenance: "observed_behavior", body: "INTERNAL BEHAVIOR" });
+    return id;
+  });
+  const first = await f.read();
+  expect(first.threadContext.rendered).toContain("Consented community goal");
+  for (const secret of ["PRIVATE PLATFORM FACT", "PENDING FACT", "INTERNAL BEHAVIOR"]) {
+    expect(first.threadContext.rendered).not.toContain(secret);
+  }
+  const firstSnapshot = contextSnapshot(first);
+  await t.mutation(internalApi.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, {
+    requestId: f.request._id, expectedAttempt: f.claim.attempt, snapshotJson: firstSnapshot,
+  });
+  await t.run((ctx) => ctx.db.patch(factId, { consentState: "retracted" }));
+  const next = await t.mutation(internalApi.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, {
+    requestId: f.request._id, nowMs: f.claim.leaseExpiresAt,
+  });
+  expect(next.attempt).toBe(f.claim.attempt + 1);
+  await expect(f.read()).resolves.toMatchObject({ ok: false, errorCode: "serve_request_not_running" });
+  const second = await f.read(next.attempt);
+  expect(second.threadContext.rendered).not.toContain("Consented community goal");
+  expect(workflowOrientation(second).action_origin).toEqual(workflowOrientation(first).action_origin);
+  await expect(t.mutation(internalApi.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, {
+    requestId: f.request._id, expectedAttempt: f.claim.attempt, snapshotJson: contextSnapshot(second),
+  })).resolves.toMatchObject({ ok: false, errorCode: "serve_request_attempt_stale" });
+  await t.mutation(internalApi.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, {
+    requestId: f.request._id, expectedAttempt: next.attempt, snapshotJson: contextSnapshot(second),
+  });
+  const snapshots = await t.run((ctx) => ctx.db.query("communityAgentRunEvents").collect());
+  expect(snapshots).toHaveLength(2);
+  expect(snapshots[0].content).toBe(firstSnapshot);
+});
+
+test("membership revoked after workflow context read blocks snapshot and reply persistence", async () => {
+  const t = convexTest(schema, modules);
+  const f = await workflowServeFixture(t);
+  const context = await f.read();
+  await t.run((ctx) => ctx.db.patch(f.membershipId, { active: false }));
+  await expect(t.mutation(internalApi.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, {
+    requestId: f.request._id, expectedAttempt: f.claim.attempt, snapshotJson: contextSnapshot(context),
+  })).resolves.toMatchObject({ ok: false, errorCode: "requester_access_missing" });
+  await expect(t.mutation(internalApi.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal, {
+    requestId: f.request._id, expectedAttempt: f.claim.attempt, content: "Must not post.",
+  })).resolves.toMatchObject({ ok: false });
+  expect(await t.run((ctx) => ctx.db.query("communityInteractionReplies").collect())).toEqual([]);
+});
+
+test("a canonical context read failure fails the claimed worker without provider execution", async () => {
+  const t = convexTest(schema, modules);
+  const f = await workflowServeFixture(t);
+  await t.run(async (ctx) => {
+    const state = (await ctx.db.query("communityMemberWorkflowMemberMilestones").first())!;
+    await ctx.db.patch(state._id, { currentMilestoneKey: "missing" });
+  });
+  vi.setSystemTime(f.claim.leaseExpiresAt);
+  const result = await t.action(internalApi.communityAgentServeWorker.processQueuedCommunityAgentServeRequestsInternal, {
+    requestId: f.request._id,
+  });
+  expect(JSON.stringify(result)).toContain("community_member_workflow_member_milestone_invalid");
+  expect(await t.run((ctx) => ctx.db.get(f.request._id))).toMatchObject({ status: "error" });
+  expect(await t.run((ctx) => ctx.db.query("communityAgentRunEvents").collect())).toEqual([]);
+  expect(await t.run((ctx) => ctx.db.query("communityInteractionReplies").collect())).toEqual([]);
+});
+
+test("unexpected context infrastructure errors retain the existing leased recovery path", async () => {
+  const t = convexTest(schema, modules);
+  const f = await workflowServeFixture(t);
+  vi.setSystemTime(f.claim.leaseExpiresAt);
+  const contextModule = await import("./communityAgentContext");
+  vi.spyOn(contextModule, "readCanonicalCommunityAgentContext")
+    .mockRejectedValueOnce(new Error("temporary context transport failure"));
+  await expect(t.action(internalApi.communityAgentServeWorker.processQueuedCommunityAgentServeRequestsInternal, {
+    requestId: f.request._id,
+  })).rejects.toThrow("temporary context transport failure");
+  expect(await t.run((ctx) => ctx.db.get(f.request._id))).toMatchObject({
+    status: "running", attempt: f.claim.attempt + 1,
+  });
+  expect(await t.run((ctx) => ctx.db.query("communityAgentRunEvents").collect())).toEqual([]);
+});
+
+test("concurrent duplicate deliveries and contributions do not duplicate a transition or prompt admission", async () => {
+  vi.useFakeTimers();
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configureAutomations(t, f.communityId, [
+    { key: "", type: "prompt_agent", prompt: "Help with the next step." },
+    { key: "", type: "move_member", destination: "next_or_complete" },
+  ]);
+  const a = await addRoot(t, f, "concurrent-a");
+  const b = await addRoot(t, f, "concurrent-b");
+  await Promise.all([a, a, b].map((rootId) => t.mutation(
+    internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId },
+  )));
+  await t.run(async (ctx) => {
+    expect(await ctx.db.query("communityMemberWorkflowRuns").collect()).toHaveLength(2);
+    expect(await ctx.db.query("communityMemberWorkflowTransitions").collect()).toHaveLength(1);
+    expect(await ctx.db.query("communityAgentServeRequests").collect()).toHaveLength(1);
+  });
+});
+
+test("reply-triggered orientation belongs to the replying member, not the thread author", async () => {
+  vi.useFakeTimers();
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configure(t, f.communityId, { key: "", type: "prompt_agent", prompt: "Help the replying member." });
+  const rootId = await addRoot(t, f, "owner-root");
+  const replyId = await t.run(async (ctx) => {
+    await ctx.db.patch(rootId, { actorUserId: f.ownerId, replyCount: 1 });
+    return await ctx.db.insert("communityInteractionReplies", {
+      communityId: f.communityId, channelId: f.channelId, rootId, seq: 1,
+      actorType: "human", actorUserId: f.memberId, status: "live",
+      visibilityScope: "community", contentSummary: "Help with my next step.",
+      reactionSummary: [], idempotencyKey: "workflow-context-reply",
+      createdAt: f.nowMs + 20, updatedAt: f.nowMs + 20,
+    });
+  });
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionReplyInternal, { replyId });
+  const request = (await t.run((ctx) => ctx.db.query("communityAgentServeRequests").first()))!;
+  const claim = await t.mutation(internalApi.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, {
+    requestId: request._id, nowMs: f.nowMs + 100,
+  });
+  const context = await t.query(internalApi.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, {
+    requestId: request._id, expectedAttempt: claim.attempt,
+  });
+  expect(context.request.requesterUserId).toBe(f.memberId);
+  expect(workflowOrientation(context)).toMatchObject({
+    membership_id: f.membershipId,
+    action_origin: { trigger_receipt: `interaction:reply:${replyId}` },
+  });
+  expect(context.threadContext.rendered.match(/Workflow orientation/g)).toHaveLength(1);
+});
 
 test("a blank milestone has no hidden behavior", async () => {
   const t = convexTest(schema, modules);

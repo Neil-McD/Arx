@@ -348,6 +348,25 @@ test("only the current attempt can materialize the one canonical reply", async (
   expect(respondedRequest).not.toHaveProperty("leaseExpiresAt");
 });
 
+test("ordinary owner mentions need no membership row or workflow", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createServeFixture(t, "owner-no-membership");
+  await t.run(async (ctx) => {
+    const membership = (await ctx.db.query("communityMemberships").first())!;
+    await ctx.db.delete(membership._id);
+  });
+  const requestId = await insertServeRequest(t, f);
+  const claim = await t.mutation(internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, {
+    requestId, nowMs: 10_000,
+  });
+  const context = await t.query(internalRefs.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, {
+    requestId, expectedAttempt: claim.attempt,
+  });
+  expect(context).toMatchObject({ ok: true, workflowPrompt: null });
+  expect(context.threadContext.rendered).toContain("role=owner");
+  expect(context.threadContext.rendered).not.toContain("Workflow orientation");
+});
+
 test("thread context is chronological, cutoff-bound, and scoped through member orientation", async () => {
   const t = convexTest(schema, modules);
   const fixture = await createServeFixture(t, "thread-context");

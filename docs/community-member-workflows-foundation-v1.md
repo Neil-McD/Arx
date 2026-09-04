@@ -84,6 +84,48 @@ introduced. Native and external agent consumption of the full context remains
 a separate, explicitly authorized slice; this builder reader must not be
 reused as an agent-access shortcut.
 
+### Workflow agent orientation
+
+The existing community-agent participant loader remains the agent fact reader:
+approved community facts use `member_orientation`, not the builder dossier.
+For workflow actions only, the requester also receives a compact read-only
+workflow projection in that participant context. Other thread participants do
+not receive workflow enrichment. Ordinary mentions remain unchanged, including
+community owners without a membership row.
+
+The worker validates the durable run's community, action/prompt, contribution
+receipt, and exact active requester membership before composing context.
+Recreated membership rows cannot inherit old queued actions. Canonical duplicate
+membership/workflow/state checks and invalid-milestone checks fail closed.
+Known context invariant failures fail the claimed attempt through the existing
+failure path rather than leaving it running until lease recovery. Unexpected
+infrastructure exceptions retain the existing leased recovery behavior.
+
+Two positions are deliberately distinct:
+
+- `action_origin`: immutable run ID, workflow/revision, milestone, and receipt
+  captured when the trigger admitted the action.
+- `current_at_context_read`: current workflow/revision, milestone and completion
+  state from canonical readers within the context query. Null means no current
+  workflow, not success. Reading a default milestone never creates state.
+
+Prompt admission may be followed immediately by deterministic movement. Later
+movement or edits do not retarget the queued prompt; the agent sees the captured
+instruction alongside the current position. Neither context nor an agent reply
+authorizes movement. This is not action chaining or a goal loop.
+
+Orientation is bounded, JSON-escaped data in the existing untrusted participant
+section. It must not be silently dropped under transcript pressure. The existing
+attempt-specific context snapshot records the exact provider input; no additional
+table, stored Markdown directory, cache, scheduler, or synchronization writer is
+introduced. A retry reads fresh authorized facts/state but retains the original
+action snapshot. Earlier attempt snapshots are not rewritten.
+
+Membership/source access is rechecked at snapshot and reply persistence. Fact
+consent is evaluated at context-read time, not continuously during inference;
+fact revocation cannot undo context already sent to a provider. This slice does
+not add a per-fact finalization/revocation protocol or cross-community access.
+
 ## Authority and safety
 
 - Builder mutations require current manager authority and an expected revision.
