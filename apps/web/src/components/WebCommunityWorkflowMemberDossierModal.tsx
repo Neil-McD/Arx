@@ -47,7 +47,9 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
     const priorFocus = document.activeElement as HTMLElement | null;
     const appRoot = document.getElementById("root");
     appRoot?.setAttribute("inert", "");
-    queueMicrotask(() => dialogRef.current?.querySelector<HTMLElement>("button")?.focus());
+    queueMicrotask(() =>
+      dialogRef.current?.querySelector<HTMLElement>("button")?.focus(),
+    );
     return () => {
       appRoot?.removeAttribute("inert");
       priorFocus?.focus();
@@ -88,7 +90,10 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   };
 
   return createPortal(
-    <div className="modal-overlay workflow-member-dossier-overlay" onMouseDown={props.onClose}>
+    <div
+      className="modal-overlay workflow-member-dossier-overlay"
+      onMouseDown={props.onClose}
+    >
       <section
         ref={dialogRef}
         className="modal resource-modal workflow-member-dossier-modal"
@@ -114,11 +119,18 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   {dossier.display_name}
                 </div>
                 <span>
-                  {dossier.workflow.current_milestone_name} · {dossier.workflow.completed_at
-                    ? "Workflow complete"
-                    : formatWorkflowMilestoneAge(
-                        dossier.workflow.current_milestone_entered_at,
-                      )}
+                  {dossier.workflow ? (
+                    <>
+                      {dossier.workflow.current_milestone_name} ·{" "}
+                      {dossier.workflow.completed_at
+                        ? "Workflow complete"
+                        : formatWorkflowMilestoneAge(
+                            dossier.workflow.current_milestone_entered_at,
+                          )}
+                    </>
+                  ) : (
+                    "No workflow configured"
+                  )}
                 </span>
               </div>
             </div>
@@ -139,13 +151,18 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
 
         <div className="modal-body workflow-member-dossier-body">
           {props.isLoading ? (
-            <div className="workflow-member-dossier-loading" aria-label="Loading member success">
+            <div
+              className="workflow-member-dossier-loading"
+              aria-label="Loading member success"
+            >
               <span />
               <span />
               <span />
             </div>
           ) : props.error ? (
-            <p className="workflow-error" role="alert">{props.error}</p>
+            <p className="workflow-error" role="alert">
+              {props.error}
+            </p>
           ) : dossier ? (
             <>
               <section className="workflow-member-dossier-section">
@@ -155,12 +172,17 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                     {Array.from(factsByKind.entries()).map(([kind, facts]) => (
                       <div key={kind}>
                         <strong>{readableLabel(kind)}</strong>
-                        {facts.map((fact) => <p key={fact}>{fact}</p>)}
+                        {facts.map((fact) => (
+                          <p key={fact}>{fact}</p>
+                        ))}
                       </div>
                     ))}
                   </div>
                 ) : (
-                  <p>No member-approved context has been shared with this community.</p>
+                  <p>
+                    No member-approved context has been shared with this
+                    community.
+                  </p>
                 )}
               </section>
 
@@ -170,7 +192,9 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   <ol className="workflow-member-history workflow-member-activity">
                     {dossier.recent_workflow_activity.map((activity) => (
                       <li key={activity.id}>
-                        <span>{new Date(activity.occurred_at).toLocaleString()}</span>
+                        <span>
+                          {new Date(activity.occurred_at).toLocaleString()}
+                        </span>
                         <div>
                           <strong>{workflowActivityLabel(activity)}</strong>
                           {activity.prompt ? <p>{activity.prompt}</p> : null}
@@ -189,7 +213,9 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                   <ol className="workflow-member-history">
                     {dossier.milestone_history.map((entry) => (
                       <li key={entry.id}>
-                        <span>{new Date(entry.occurred_at).toLocaleString()}</span>
+                        <span>
+                          {new Date(entry.occurred_at).toLocaleString()}
+                        </span>
                         <strong>
                           {entry.completed_workflow
                             ? `${entry.milestone_name} → Workflow complete`

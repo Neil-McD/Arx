@@ -52,6 +52,38 @@ the current workflow definition.
 The old goal evaluator, checks, judgment passes, milestone-pass table, and
 evaluation funding surface do not exist in V1.
 
+## Membership context
+
+The member-in-community is the context boundary, not the workflow. The shared
+`CommunityMembershipContext` contract contains explicit community, user, and
+membership IDs; canonical profile identity; member-approved community facts with
+record ID, provenance, and timestamps; optional workflow position; and bounded
+recent execution/movement history.
+
+`resolveBuilderCommunityMembershipContext` is the builder-only reader. It
+requires current manager authority, an active target membership in that exact
+community, and the existing founder/admin fact-consent predicate. Personal and
+other-community facts, unapproved facts, and internal behavioral observations
+are excluded. Callers resolve the actor from authentication; they cannot select
+a more permissive lens.
+
+The existing dossier query is its first adapter. A community with no workflow
+returns `workflow: null`, not an error or an automatically created workflow.
+Markdown and the dossier modal both support that state. No new navigation is
+introduced in this slice.
+
+Workflow lookup, unique member progress, and first-milestone defaulting are
+shared read rules used by the board, execution, dossier, and self-profile
+projection. Reads never initialize state. Duplicate records and unknown
+milestones fail closed; recorded completion and historical names are preserved.
+Self-profile corruption now reports the canonical workflow error codes rather
+than its former surface-specific aliases.
+
+No new tables, stored directories, Markdown copies, or memory permissions are
+introduced. Native and external agent consumption of the full context remains
+a separate, explicitly authorized slice; this builder reader must not be
+reused as an agent-access shortcut.
+
 ## Authority and safety
 
 - Builder mutations require current manager authority and an expected revision.

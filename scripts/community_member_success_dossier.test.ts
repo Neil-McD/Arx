@@ -1,4 +1,21 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
+import { createRequire } from "node:module";
+import * as React from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+
+// This test renders web and shared components with the root renderer.
+// Keep React unification local: existing web tests use their own web renderer.
+const requireFromWeb = createRequire(new URL("../apps/web/package.json", import.meta.url));
+const requireFromRoot = createRequire(import.meta.url);
+if (requireFromWeb.resolve("react") !== requireFromRoot.resolve("react")) {
+  vi.doMock(requireFromWeb.resolve("react"), () => React);
+}
+vi.doMock(requireFromWeb.resolve("react-dom"), () => ({
+  createPortal: (children: React.ReactNode) => children,
+}));
+const { WebCommunityWorkflowMemberDossierModal } = await import(
+  "../apps/web/src/components/WebCommunityWorkflowMemberDossierModal"
+);
 
 import {
   renderCommunityMemberSuccessDossierMarkdown,
@@ -6,6 +23,8 @@ import {
 } from "../shared/communityMemberSuccessDossier";
 
 const source: CommunityMemberSuccessDossier = {
+  community_id: "community-1",
+  user_id: "user-1",
   membership_id: "member-1",
   display_name: "Grace Member",
   avatar_url: null,
@@ -22,8 +41,22 @@ const source: CommunityMemberSuccessDossier = {
     completed_at: null,
   },
   approved_community_context: [
-    { kind: "goal", body: "Ship onboarding" },
-    { kind: "preference", body: "Prefer concise feedback" },
+    {
+      id: "fact-1",
+      kind: "goal",
+      body: "Ship onboarding",
+      provenance: "form_answer",
+      created_at: "2026-08-20T12:00:00.000Z",
+      updated_at: "2026-08-20T12:00:00.000Z",
+    },
+    {
+      id: "fact-2",
+      kind: "preference",
+      body: "Prefer concise feedback",
+      provenance: "stated_interview",
+      created_at: "2026-08-20T12:00:00.000Z",
+      updated_at: "2026-08-20T12:00:00.000Z",
+    },
   ],
   recent_workflow_activity: [
     {
@@ -65,3 +98,42 @@ test("member success Markdown is a deterministic projection of the dossier", () 
   expect(markdown).not.toContain("Completion checks");
   expect(markdown).not.toContain("Latest assessment");
 });
+
+test("member context Markdown renders without a workflow", () => {
+  const markdown = renderCommunityMemberSuccessDossierMarkdown({
+    ...source,
+    workflow: null,
+    recent_workflow_activity: [],
+    milestone_history: [],
+  });
+  expect(markdown).toContain("- Workflow: Not configured");
+  expect(markdown).toContain("Ship onboarding");
+  expect(markdown).not.toContain("Current milestone:");
+  expect(markdown).not.toContain("Workflow status: Active");
+});
+
+test.each([null, source.workflow])(
+  "dossier component renders optional workflow %j",
+  (workflow) => {
+    vi.stubGlobal("document", { body: {} });
+    vi.stubGlobal("React", React);
+    try {
+      const dossier = { ...source, workflow, markdown: "" };
+      const html = renderToStaticMarkup(
+        React.createElement(WebCommunityWorkflowMemberDossierModal, {
+          isOpen: true,
+          dossier,
+          isLoading: false,
+          error: null,
+          onClose: () => {},
+        }),
+      );
+      expect(html).toContain('role="dialog"');
+      expect(html).toContain("Grace Member");
+      expect(html).toContain("Ship onboarding");
+      expect(html).toContain(workflow ? "Activated" : "No workflow configured");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  },
+);

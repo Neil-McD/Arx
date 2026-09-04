@@ -5,6 +5,7 @@ const read = (path: string) => readFileSync(new URL(`../${path}`, import.meta.ur
 
 const schema = read("convex/schema.ts");
 const backend = read("convex/communityMemberWorkflows.ts");
+const context = read("convex/communityMembershipContextCore.ts");
 const worker = read("convex/communityAgentServeWorker.ts");
 const prompt = read("shared/communityAgentServePrompt.ts");
 const contract = read("shared/communityMemberWorkflow.ts");
@@ -35,8 +36,8 @@ assert.match(backend, /community_member_workflow_move_action_count_invalid/);
 assert.match(backend, /const promptAutomations = automations\.filter/);
 assert.match(backend, /const moveAutomation = automations\.find/);
 assert.match(backend, /fromMilestoneName: current\.milestone\.name/);
-assert.match(backend, /recent_workflow_activity: recentWorkflowActivity/);
-assert.match(backend, /serveRequest\?\.status === "responded"/);
+assert.match(context, /recent_workflow_activity: recentWorkflowActivity/);
+assert.match(context, /serveRequest\?\.status === "responded"/);
 assert.match(backend, /milestoneName: args\.current\.milestone\.name/);
 assert.doesNotMatch(backend, /automationHash|sha256HexText/);
 assert.doesNotMatch(backend, /contractStagingWorkflowToV1Internal|goal_completed|evaluate_goal|MilestoneEvaluation/);

@@ -1,4 +1,9 @@
 import { v } from "convex/values";
+import {
+  getCommunityMemberWorkflowByCommunity,
+  getMemberMilestone,
+  resolveCurrentMilestone,
+} from "./communityMemberWorkflowReadCore";
 import { api, internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import {
@@ -607,34 +612,18 @@ async function resolveSelfWorkflowSemanticState(args: {
     userId: args.userId,
   });
   if (!membership || !communityMembershipRowIsActive(membership)) return null;
-  const workflows = (await args.ctx.db
-    .query("communityMemberWorkflows")
-    .withIndex("by_community", (q: any) => q.eq("communityId", communityId))
-    .take(2)) as any[];
-  if (workflows.length > 1) throw new Error("self_workflow_ambiguous");
-  const workflow = workflows[0] ?? null;
+  const workflow = await getCommunityMemberWorkflowByCommunity({
+    ctx: args.ctx, communityId,
+  });
   if (!workflow) return null;
-  const states = (await args.ctx.db
-    .query("communityMemberWorkflowMemberMilestones")
-    .withIndex("by_workflow_membership", (q: any) =>
-      q.eq("workflowId", workflow._id).eq("membershipId", membership._id),
-    )
-    .take(2)) as any[];
-  if (states.length > 1) {
-    throw new Error("self_workflow_member_milestone_ambiguous");
-  }
-  const milestoneKey =
-    states[0]?.currentMilestoneKey ?? workflow.milestones?.[0]?.key;
-  const milestone = (workflow.milestones as any[]).find(
-    (candidate) => candidate.key === milestoneKey,
-  );
-  if (!milestone) throw new Error("self_workflow_milestone_invalid");
+  const state = await getMemberMilestone({
+    ctx: args.ctx, workflowId: workflow._id, membershipId: membership._id,
+  });
+  const current = resolveCurrentMilestone({ workflow, membership, state });
   return {
-    milestoneKey: milestone.key,
-    milestoneName: milestone.name,
-    completedAt: states[0]?.completedAt
-      ? toIsoString(states[0].completedAt)
-      : null,
+    milestoneKey: current.milestone.key,
+    milestoneName: current.milestone.name,
+    completedAt: current.completedAt ? toIsoString(current.completedAt) : null,
   };
 }
 

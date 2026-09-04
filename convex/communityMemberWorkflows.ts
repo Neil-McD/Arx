@@ -26,13 +26,13 @@ import {
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
-import { readMemberFactsForLens } from "./memberOntologyCore";
+import { renderCommunityMemberSuccessDossierMarkdown } from "../shared/communityMemberSuccessDossier";
 import {
-  COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT,
-  COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT,
-  renderCommunityMemberSuccessDossierMarkdown,
-  type CommunityMemberSuccessDossier,
-} from "../shared/communityMemberSuccessDossier";
+  getCommunityMemberWorkflowByCommunity,
+  getMemberMilestone,
+  resolveCurrentMilestone,
+} from "./communityMemberWorkflowReadCore";
+import { resolveBuilderCommunityMembershipContext } from "./communityMembershipContextCore";
 import { intakeCommunityAgentWorkflowAction } from "./communityAgentConciergeCore";
 
 const managerIdentityArgs = {
@@ -44,7 +44,6 @@ const WORKFLOW_BOARD_DEFAULT_PAGE_SIZE = 50;
 const WORKFLOW_BOARD_MAX_PAGE_SIZE = 100;
 
 type WorkflowRow = Doc<"communityMemberWorkflows">;
-type MemberMilestoneRow = Doc<"communityMemberWorkflowMemberMilestones">;
 type WorkflowRunRow = Doc<"communityMemberWorkflowRuns">;
 type WorkflowTransitionRow = Doc<"communityMemberWorkflowTransitions">;
 type ChannelContributionRow =
@@ -93,35 +92,6 @@ async function requireWorkflowManager(args: {
     userId,
   });
   return { userId, community };
-}
-
-export async function getCommunityMemberWorkflowByCommunity(args: {
-  ctx: any;
-  communityId: any;
-}): Promise<WorkflowRow | null> {
-  const rows = (await args.ctx.db
-    .query("communityMemberWorkflows")
-    .withIndex("by_community", (q: any) => q.eq("communityId", args.communityId))
-    .take(2)) as WorkflowRow[];
-  if (rows.length > 1) throw new Error("community_member_workflow_ambiguous");
-  return rows[0] ?? null;
-}
-
-async function getMemberMilestone(args: {
-  ctx: any;
-  workflowId: any;
-  membershipId: any;
-}): Promise<MemberMilestoneRow | null> {
-  const rows = (await args.ctx.db
-    .query("communityMemberWorkflowMemberMilestones")
-    .withIndex("by_workflow_membership", (q: any) =>
-      q.eq("workflowId", args.workflowId).eq("membershipId", args.membershipId),
-    )
-    .take(2)) as MemberMilestoneRow[];
-  if (rows.length > 1) {
-    throw new Error("community_member_workflow_member_milestone_ambiguous");
-  }
-  return rows[0] ?? null;
 }
 
 function nextOpaqueKey(
@@ -220,30 +190,6 @@ function normalizeAutomations(
     throw new Error("community_member_workflow_move_action_count_invalid");
   }
   return automations;
-}
-
-function resolveCurrentMilestone(args: {
-  workflow: WorkflowRow;
-  membership: CommunityMembershipLike;
-  state: MemberMilestoneRow | null;
-}) {
-  const currentMilestoneKey =
-    args.state?.currentMilestoneKey ?? args.workflow.milestones[0]?.key;
-  const milestoneIndex = args.workflow.milestones.findIndex(
-    (milestone) => milestone.key === currentMilestoneKey,
-  );
-  if (milestoneIndex < 0) {
-    throw new Error("community_member_workflow_member_milestone_invalid");
-  }
-  return {
-    milestone: args.workflow.milestones[milestoneIndex],
-    milestoneIndex,
-    milestoneEnteredAt:
-      args.state?.milestoneEnteredAt ??
-      args.membership.activatedAt ??
-      args.membership.createdAt,
-    completedAt: args.state?.completedAt ?? null,
-  };
 }
 
 export const createBuilderWorkflowMilestone = mutation({
@@ -565,151 +511,6 @@ export const getBuilderWorkflowBoardProjectionToken = query({
     };
   },
 });
-
-async function resolveBuilderWorkflowMemberSuccessDossier(args: {
-  ctx: any;
-  communityId: any;
-  membershipId: any;
-}): Promise<CommunityMemberSuccessDossier> {
-  const membership = (await args.ctx.db.get(
-    args.membershipId,
-  )) as CommunityMembershipLike | null;
-  if (
-    !communityMembershipRowIsActive(membership) ||
-    String(membership!.communityId) !== String(args.communityId)
-  ) {
-    throw new Error("community_member_workflow_member_not_found");
-  }
-  const workflow = await getCommunityMemberWorkflowByCommunity({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
-  if (!workflow) throw new Error("community_member_workflow_not_found");
-  const state = await getMemberMilestone({
-    ctx: args.ctx,
-    workflowId: workflow._id,
-    membershipId: membership!._id,
-  });
-  const current = resolveCurrentMilestone({ workflow, membership: membership!, state });
-  const [profile, approvedFacts, transitionRows, workflowRunRows] = await Promise.all([
-    resolveUserProfileDisplayProjection(args.ctx, membership!.userId),
-    readMemberFactsForLens(args.ctx, {
-      subjectUserId: membership!.userId,
-      lens: {
-        kind: "founder_admin",
-        communityId: String(args.communityId),
-      },
-      scope: { communityId: args.communityId },
-    }),
-    args.ctx.db
-      .query("communityMemberWorkflowTransitions")
-      .withIndex("by_workflow_membership_seq", (q: any) =>
-        q.eq("workflowId", workflow._id).eq("membershipId", membership!._id),
-      )
-      .order("desc")
-      .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT) as Promise<WorkflowTransitionRow[]>,
-    args.ctx.db
-      .query("communityMemberWorkflowRuns")
-      .withIndex("by_workflow_membership_createdAt", (q: any) =>
-        q.eq("workflowId", workflow._id).eq("membershipId", membership!._id),
-      )
-      .order("desc")
-      .take(COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT) as Promise<WorkflowRunRow[]>,
-  ]);
-  const transitionById = new Map(
-    transitionRows.map((transition) => [String(transition._id), transition]),
-  );
-  const recentWorkflowActivity = await Promise.all(
-    workflowRunRows.map(async (run) => {
-      if (run.actionSnapshot.type === "prompt_agent") {
-        const serveRequest = run.actionResult?.serveRequestId
-          ? await args.ctx.db.get(run.actionResult.serveRequestId)
-          : null;
-        const status =
-          run.status === "failed" ||
-          serveRequest?.status === "error" ||
-          serveRequest?.status === "skipped"
-            ? "failed" as const
-            : serveRequest?.status === "responded"
-              ? "responded" as const
-              : serveRequest?.status === "running"
-                ? "running" as const
-                : "queued" as const;
-        return {
-          id: String(run._id),
-          action_type: "prompt_agent" as const,
-          status,
-          milestone_key: run.milestoneKey,
-          milestone_name: run.milestoneName,
-          next_milestone_key: null,
-          next_milestone_name: null,
-          prompt: run.actionSnapshot.prompt,
-          occurred_at: toIsoString(run.createdAt),
-        };
-      }
-      const transition = run.actionResult?.transitionId
-        ? transitionById.get(String(run.actionResult.transitionId)) ?? null
-        : null;
-      const status = run.status === "failed"
-        ? "failed" as const
-        : transition?.completedWorkflow
-          ? "workflow_completed" as const
-          : transition
-            ? "moved" as const
-            : "running" as const;
-      return {
-        id: String(run._id),
-        action_type: "move_member" as const,
-        status,
-        milestone_key: run.milestoneKey,
-        milestone_name: run.milestoneName,
-        next_milestone_key: transition?.toMilestoneKey ?? null,
-        next_milestone_name: transition?.toMilestoneName ?? null,
-        prompt: null,
-        occurred_at: toIsoString(run.createdAt),
-      };
-    }),
-  );
-  return {
-    membership_id: String(membership!._id),
-    display_name: profile.display_name ?? "Member",
-    avatar_url: profile.avatar_url,
-    avatar_focus_x: profile.avatar_focus_x,
-    avatar_focus_y: profile.avatar_focus_y,
-    avatar_zoom: profile.avatar_zoom,
-    joined_at: toIsoString(membership!.activatedAt ?? membership!.createdAt),
-    workflow: {
-      id: String(workflow._id),
-      revision: workflow.revision,
-      current_milestone_key: current.milestone.key,
-      current_milestone_name: current.milestone.name,
-      current_milestone_entered_at: toIsoString(current.milestoneEnteredAt),
-      completed_at: current.completedAt ? toIsoString(current.completedAt) : null,
-    },
-    approved_community_context: approvedFacts
-      .map((fact) => ({ kind: fact.kind, body: fact.body }))
-      .sort((left, right) =>
-        left.kind === right.kind
-          ? left.body.localeCompare(right.body)
-          : left.kind.localeCompare(right.kind),
-      ),
-    recent_workflow_activity: recentWorkflowActivity,
-    milestone_history: transitionRows
-      .slice()
-      .reverse()
-      .map((transition) => ({
-        id: String(transition._id),
-        sequence: transition.seq,
-        milestone_key: transition.fromMilestoneKey,
-        milestone_name: transition.fromMilestoneName,
-        next_milestone_key: transition.toMilestoneKey ?? null,
-        next_milestone_name: transition.toMilestoneName ?? null,
-        completed_workflow: transition.completedWorkflow,
-        occurred_at: toIsoString(transition.occurredAt),
-      })),
-  };
-}
-
 export const getBuilderWorkflowMemberSuccessDossier = query({
   args: {
     ...managerIdentityArgs,
@@ -717,14 +518,14 @@ export const getBuilderWorkflowMemberSuccessDossier = query({
     membershipId: v.id("communityMemberships"),
   },
   handler: async (ctx, args) => {
-    await requireWorkflowManager({
+    const actorUserId = await resolveUserIdForAuthenticatedRequest({
       ctx,
-      communityId: args.communityId,
       userId: args.userId,
       authSubject: args.authSubject,
     });
-    const source = await resolveBuilderWorkflowMemberSuccessDossier({
+    const source = await resolveBuilderCommunityMembershipContext({
       ctx,
+      actorUserId,
       communityId: args.communityId,
       membershipId: args.membershipId,
     });
