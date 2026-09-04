@@ -288,13 +288,13 @@ assert.doesNotMatch(
 );
 assert.match(
   youtubeEmbed,
-  /data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"[\s\S]*setIsActive\(true\)/,
-  "YouTube should use one click-activated, sandboxed deterministic media component",
+  /IntersectionObserver[\s\S]*data-community-youtube-embed[\s\S]*<iframe[\s\S]*sandbox="allow-popups allow-presentation allow-same-origin allow-scripts"/,
+  "YouTube should share one viewport-loaded native player with its sandbox intact",
 );
 assert.match(
   projection,
-  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*firstYouTubeEmbedInText\(bundleText\(bundle\.content_blocks, bundle\.root\.content_summary\)\)/,
-  "rich-content detection should reflect attachments or renderable YouTube media only",
+  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*youTubeEmbedsInText\(text\)\.length > 0[\s\S]*pdfLinksInText\(text\)\.length > 0/,
+  "rich-content detection should match attachments, YouTube and pasted PDF cards",
 );
 assert.doesNotMatch(
   projection,
@@ -962,8 +962,8 @@ assert.match(
 );
 assert.match(
   projection,
-  /communityInteractionRootHasRichContent[\s\S]*attachments\.length > 0[\s\S]*firstYouTubeEmbedInText\(bundleText\(bundle\.content_blocks, bundle\.root\.content_summary\)\)[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
-  "rich pinned roots should preserve real attachments and YouTube media without treating generic links as rich cards",
+  /communityInteractionRootHasRichContent[\s\S]*pdfLinksInText\(text\)[\s\S]*hasRichContent=\{communityInteractionRootHasRichContent/,
+  "pinned roots should classify the same PDF cards and YouTube media as the feed",
 );
 assert.doesNotMatch(
   `${app}\n${projection}\n${feed}`,
@@ -1054,9 +1054,9 @@ assert.match(
   "Dark should inherit one accessible semantic treatment for chat links",
 );
 assert.match(
-  baseCss,
-  /\.community-interaction-youtube-wrap\s*\{[\s\S]*width:\s*min\(100%,\s*480px\);[\s\S]*\.deferred-youtube[\s\S]*aspect-ratio:\s*16\s*\/\s*9;[\s\S]*\.deferred-youtube-play:focus-visible[\s\S]*outline:\s*2px solid var\(--chat-link\);/,
-  "YouTube media should use one bounded 16:9 surface with the semantic chat-link focus treatment",
+  read("apps/web/src/styles/message-media.css"),
+  /\.deferred-youtube \{[^}]*min-height: 200px;[^}]*aspect-ratio: 16 \/ 9;[\s\S]*iframe:focus-visible[^}]*outline: 2px solid var\(--chat-link\)/,
+  "native YouTube should reserve space, meet minimum height and retain keyboard focus",
 );
 assert.doesNotMatch(
   baseCss,
@@ -1096,8 +1096,8 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*generic websites, meeting links, documents, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards[\s\S]*YouTube is the only URL-derived rich media exception/,
-  "interaction contract should require simple authored links and one deterministic YouTube exception",
+  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*generic websites, meeting links, extensionless document links, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards[\s\S]*YouTube videos and explicit HTTPS PDF links/,
+  "interaction contract should require simple authored links and bounded YouTube/PDF media",
 );
 
 console.log("community interaction projection UI contract proof passed");

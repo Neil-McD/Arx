@@ -527,14 +527,15 @@ Rules:
 
 - ordinary links render as authored blue links through the shared semantic chat-link token
 - links remain visible, copyable, keyboard-focusable, and stable in optimistic and persisted messages
-- generic websites, meeting links, documents, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards
+- generic websites, meeting links, extensionless document links, Descript, Loom, Vimeo, Wistia, and social posts do not create interaction preview cards
 - typed `link` content blocks retain bounded canonical URL semantics without creating `communityInteractionEmbeds` rows
-- YouTube is the only URL-derived rich media exception in community chat
-- the first valid HTTPS YouTube video URL adds one deterministic thumbnail/player beneath the still-visible authored link; additional YouTube URLs remain links
+- YouTube videos and explicit HTTPS PDF links are the bounded URL-derived rich media exceptions in community chat
+- up to 12 distinct YouTube videos and 12 distinct PDF URLs render in authored order beneath still-visible links; additional URLs remain links
 - YouTube URL parsing accepts exact approved hosts and known video paths, rejects credentials and custom ports, and preserves validated start times
 - URLs inside inline or fenced code never create media
-- YouTube players are click-to-activate, sandboxed, lazy, and never depend on OpenGraph, oEmbed, a remote preview fetch, or persisted preview state
-- thumbnail failure degrades to a neutral player surface while the authored link remains authoritative
+- native YouTube iframes mount near the viewport without autoplay; YouTube owns titles, branding, and playback controls. Mounted players survive scrolling and ordinary rerenders
+- players retain sandbox, referrer, fullscreen, and inline playback permissions, need at least 200 by 200 pixels, and do not depend on custom thumbnails, OpenGraph, oEmbed, or persisted preview state
+- authored links remain available when a provider refuses playback; PDF cards share the lazy reader described in `message-media-reading-v1.md`
 - uploaded images, video, audio, and files remain canonical attachments and do not share the URL-derived media path
 - historical link embed rows are ignored by interaction and evidence read models pending a separate bounded data cleanup
 - workspace-reference embed compatibility remains unchanged until its protected migration substrate receives an explicit census and decision

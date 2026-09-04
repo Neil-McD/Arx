@@ -1,6 +1,6 @@
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { mkdtemp } from "node:fs/promises";
+import { mkdtemp, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import assert from "node:assert/strict";
@@ -9,7 +9,9 @@ import { chromium } from "playwright";
 const root = fileURLToPath(new URL("../", import.meta.url));
 const webRequire = createRequire(new URL("../apps/web/package.json", import.meta.url));
 const { createServer } = await import(webRequire.resolve("vite"));
-const out = await mkdtemp(join(tmpdir(), "polynet-media-reading-"));
+const outputArg = process.argv.find((arg) => arg.startsWith("--output="));
+const out = outputArg ? fileURLToPath(new URL(outputArg.slice(9) + "/", `file://${root}`)) : await mkdtemp(join(tmpdir(), "polynet-media-reading-"));
+await mkdir(out, { recursive: true });
 // Mock only the data boundary. The real host, focus policy, subscriptions' consumers,
 // panel, reader and document event handlers all execute in the browser.
 const gatewayFixture = `
@@ -34,15 +36,24 @@ export const setCloudDirectConversationMuted = forbidden;
 export const uploadCloudDirectMessageAttachmentFile = forbidden;
 export const uploadCloudDirectMessageAttachmentFileForUser = forbidden;
 `;
-const server = await createServer({ configFile: join(root, "apps/web/vite.config.ts"), root: join(root, "apps/web"), server: { port: 5186, host: "127.0.0.1", strictPort: true }, plugins: [{ name: "media-review-fixture", enforce: "pre", load(id) {
+const server = await createServer({ configFile: join(root, "apps/web/vite.config.ts"), root: join(root, "apps/web"), server: { port: process.argv.includes("--serve") ? 5186 : 0, host: "127.0.0.1", strictPort: true }, plugins: [{ name: "media-review-fixture", enforce: "pre", load(id) {
   if (id === join(root, "shared/cloudDirectMessagesGateway.ts")) return gatewayFixture;
 }, configureServer(server) { server.middlewares.use(async (req, res, next) => {
   if (!req.url?.startsWith("/__media-review")) return next();
   res.setHeader("Content-Type", "text/html");
-  res.end(await server.transformIndexHtml(req.url, `<html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module" src="/@fs/${root}scripts/fixtures/mediaReading.tsx"></script></body></html>`));
+  res.end(await server.transformIndexHtml(req.url, `<!doctype html><html><head><meta name="viewport" content="width=device-width, initial-scale=1"></head><body><div id="root"></div><script type="module" src="/@fs/${root}scripts/fixtures/mediaReading.tsx"></script></body></html>`));
 }); } }] });
 await server.listen();
-const browser = await chromium.launch({ headless: true });
+const baseUrl = server.resolvedUrls.local[0].replace(/\/$/, "") + "/__media-review";
+if (process.argv.includes("--serve")) {
+  console.log("Media review fixture: http://127.0.0.1:5186/__media-review");
+  await new Promise((resolve) => { process.once("SIGINT", resolve); process.once("SIGTERM", resolve); });
+  await server.close();
+  process.exit(0);
+}
+let browser;
+try { browser = await chromium.launch({ headless: true }); }
+catch (error) { await server.close(); throw error; }
 const page = await browser.newPage({ viewport: { width: 1200, height: 1000 } });
 page.setDefaultTimeout(15000);
 const errors = [];
@@ -78,22 +89,22 @@ await page.route("https://media.example.test/**", async (route) => {
   if (url.endsWith(".pdf")) return route.fulfill({ contentType: "application/pdf", body: pdfFixture() });
   return route.fulfill({ contentType: "image/svg+xml", body: `<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#445c61"/><text x="40" y="180" fill="white" font-size="40">Workshop ${url.match(/image-(\d)/)?.[1] || "0"}</text></svg>` });
 });
-if (!process.argv.includes("--live-metadata")) await page.route("https://www.youtube.com/oembed?*", (route) => route.fulfill({ json: { title: route.request().url().includes("jNQX") ? "Me at the zoo" : "Getting started with the community", author_name: "Community builder" } }));
-await page.route("https://i.ytimg.com/**", (route) => route.fulfill({ contentType: "image/svg+xml", body: '<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360"><rect width="640" height="360" fill="#425253"/><circle cx="320" cy="180" r="90" fill="#708376"/></svg>' }));
+
+
 await page.route("https://www.youtube.com/embed/**", (route) => route.fulfill({ contentType: "text/html", body: "Video player fixture" }));
 
 try {
-  await page.goto("http://127.0.0.1:5186/__media-review");
-  await page.getByText("Me at the zoo", { exact: true }).waitFor();
-  assert.equal(await page.locator(".message-video-card").count(), 2);
+  await page.goto(baseUrl);
+  await page.locator(".deferred-youtube iframe").first().waitFor();
+  assert.equal(await page.locator(".deferred-youtube").count(), 2);
   assert.equal(await page.locator(".chat-media-item").count(), 5);
-  assert.equal(await page.locator("iframe").count(), 0);
+  assert.equal(await page.locator("iframe").count(), 2);
+  assert(!requested.some((url) => url.includes("/oembed")), "No custom title-fetching path");
+  for (const src of await page.locator("iframe").evaluateAll((els) => els.map((el) => el.src))) assert(!src.includes("autoplay=1"));
   assert(!requested.some((url) => /PdfReader|pdfjs|pdf\.worker/.test(url)), "PDF implementation must not load before opening a document");
-  const boxes = await page.locator(".message-video-card").evaluateAll((elements) => elements.map((e) => ({ x: e.getBoundingClientRect().x, y: e.getBoundingClientRect().y })));
+  const boxes = await page.locator(".deferred-youtube").evaluateAll((elements) => elements.map((e) => ({ x: e.getBoundingClientRect().x, y: e.getBoundingClientRect().y })));
   assert.equal(boxes[0].y, boxes[1].y); assert(boxes[1].x > boxes[0].x);
   await page.screenshot({ path: join(out, "community-desktop.png"), fullPage: true });
-  await page.getByRole("button", { name: "Play Me at the zoo" }).click();
-  assert.equal(await page.locator("iframe").count(), 1);
   await page.getByRole("button", { name: "Community welcome guide.pdf PDF document · Read" }).click();
   await page.getByText("Page 1 of 2", { exact: true }).waitFor();
   await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
@@ -140,15 +151,15 @@ try {
   assert.equal(stalledRequests, 2, "Reopening after cancellation starts a new request");
   await page.getByRole("button", { name: "Close document" }).click();
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("http://127.0.0.1:5186/__media-review");
-  await page.getByText("Me at the zoo", { exact: true }).waitFor();
+  await page.goto(baseUrl);
+  await page.locator(".deferred-youtube iframe").first().waitFor();
   assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
   await page.screenshot({ path: join(out, "community-mobile.png"), fullPage: true });
   await page.getByRole("button", { name: "Community welcome guide.pdf PDF document · Read" }).click();
   await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
   await page.screenshot({ path: join(out, "pdf-mobile.png") });
   await page.keyboard.press("Escape");
-  await page.goto("http://127.0.0.1:5186/__media-review?mode=dm-mobile");
+  await page.goto(`${baseUrl}?mode=dm-mobile`);
   await page.locator(".message-pdf-card").first().waitFor();
   assert.equal(await page.locator(".message-pdf-card").count(), 2);
   await page.getByRole("button", { name: "guide.pdf PDF document · Read", exact: true }).click();
@@ -157,7 +168,7 @@ try {
   await page.keyboard.press("Escape");
   await page.screenshot({ path: join(out, "dm-mobile.png"), fullPage: true });
   await page.setViewportSize({ width: 1200, height: 1000 });
-  await page.goto("http://127.0.0.1:5186/__media-review?mode=dm");
+  await page.goto(`${baseUrl}?mode=dm`);
   const dmCard = page.getByRole("button", { name: "guide.pdf PDF document · Read", exact: true });
   await dmCard.click();
   await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
@@ -183,11 +194,75 @@ try {
   await page.keyboard.press("Escape");
   assert.equal(await page.locator(".web-direct-messages-host").count(), 0, "Next Escape closes the DM host normally");
   await page.getByRole("button", { name: "Open conversation", exact: true }).click();
-  await page.locator(".web-direct-messages-host").waitFor();
+  await page.locator(".web-direct-messages-host").waitFor({ state: "attached" });
   await page.getByRole("button", { name: "Outside conversation", exact: true }).click();
   assert.equal(await page.locator(".web-direct-messages-host").count(), 0, "Outside click still dismisses the DM host");
+
+  for (const width of [320, 390, 768, 1200]) {
+    for (const theme of ["light", "dark"]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.goto(`${baseUrl}?theme=${theme}`);
+      await page.locator(".deferred-youtube iframe").first().waitFor();
+      assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), `No overflow at ${width}/${theme}`);
+      const frames = await page.locator(".deferred-youtube").evaluateAll((els) => els.map((el) => { const r = el.getBoundingClientRect(); return { width: r.width, height: r.height, y: r.y }; }));
+      assert(frames.every((r) => r.width >= 200 && r.height >= 200), "YouTube minimum player dimensions");
+      const groupWidth = (await page.locator(".message-youtube-grid").boundingBox()).width;
+      assert.equal(frames[0].y === frames[1].y, groupWidth >= 728, "Stack according to container width");
+      await page.screenshot({ path: join(out, `community-${width}-${theme}.png`) });
+    }
+  }
+  await page.setViewportSize({ width: 320, height: 900 });
+  await page.goto(`${baseUrl}?mode=dm-mobile`);
+  await page.locator(".community-dm-panel-message.is-own .chat-media-grid").waitFor();
+  const imageGrid = page.locator(".community-dm-panel-message.is-own .chat-media-grid");
+  assert.equal(await imageGrid.locator(".chat-media-item").count(), 5);
+  assert((await imageGrid.boundingBox()).width > 168, "Sent image group uses message width");
+  assert(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth), "DM does not overflow at 320");
+  const dmFrames = await page.locator(".deferred-youtube:not(.is-too-narrow)").evaluateAll((els) => els.map((el) => ({ width: el.clientWidth, height: el.clientHeight })));
+  assert(dmFrames.every((r) => r.width >= 200 && r.height >= 200), "Narrow DM preserves YouTube minimum size");
+  assert(await page.locator(".deferred-youtube.is-too-narrow a").count() > 0, "Too-narrow DM offers native YouTube link");
+  const panelBox = await page.locator(".community-dm-panel").boundingBox();
+  assert(panelBox.x >= 0 && panelBox.x + panelBox.width <= 320, "Real mobile DM host fits screen");
+  const gridBox = await imageGrid.boundingBox();
+  assert(gridBox.x >= panelBox.x && gridBox.x + gridBox.width <= panelBox.x + panelBox.width, "Image grid is not clipped by host");
+  await page.screenshot({ path: join(out, "dm-320.png") });
+  await page.getByRole("button", { name: "guide.pdf PDF document · Read", exact: true }).click();
+  await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
+  for (let i = 0; i < 5; i++) await page.getByRole("button", { name: "Zoom in", exact: true }).click();
+  assert.equal(await page.locator(".message-pdf-zoom-level").innerText(), "4×");
+  assert(await page.getByRole("button", { name: "Zoom in", exact: true }).isDisabled());
+  await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
+  assert(await page.locator(".message-pdf-page canvas").evaluate((el) => el.width * el.height <= 16_000_000));
+  await page.screenshot({ path: join(out, "pdf-mobile-4x.png") });
+  await page.getByRole("button", { name: "Fit width", exact: true }).click();
+  assert.equal(await page.locator(".message-pdf-zoom-level").innerText(), "1×");
+  await page.keyboard.press("Escape");
+  await page.setViewportSize({ width: 1200, height: 900 });
+  await page.goto(`${baseUrl}?mode=performance`);
+  await page.locator("iframe").first().waitFor();
+  const initiallyMounted = await page.locator("iframe").count();
+  assert(initiallyMounted < 6, "Long history must not eagerly create 20 players");
+  await page.locator("iframe").first().evaluate((el) => { window.__firstPlayer = el; });
+  await page.getByRole("button", { name: "Rerender 0", exact: true }).click();
+  assert(await page.locator("iframe").first().evaluate((el) => window.__firstPlayer === el), "Rerender retains player");
+  await page.locator("article").last().scrollIntoViewIfNeeded();
+  await page.locator("article").last().locator("iframe").waitFor();
+  assert(await page.locator("iframe").first().evaluate((el) => window.__firstPlayer === el), "Scrolling retains player");
+  assert.equal(new URL(await page.locator("iframe").first().getAttribute("src")).searchParams.get("start"), "12");
+  await page.screenshot({ path: join(out, "long-history.png") });
+  await page.goto(`${baseUrl}?mode=surfaces`);
+  await page.locator(".community-channel-pinned-root.has-rich-content").waitFor();
+  await page.getByRole("button", { name: "Open pinned post", exact: true }).click();
+  await page.getByRole("article", { name: "Opened pinned post" }).getByRole("button", { name: "guide.pdf PDF document · Read", exact: true }).click();
+  await page.locator(".textLayer").getByText("Welcome to the community", { exact: true }).waitFor();
+  await page.keyboard.press("Escape");
+  const resource = page.getByRole("article", { name: "Resource" });
+  await resource.scrollIntoViewIfNeeded();
+  await resource.locator("iframe").waitFor();
+  assert.equal(new URL(await resource.locator("iframe").getAttribute("src")).searchParams.get("start"), "12");
+  await page.screenshot({ path: join(out, "shared-surfaces.png"), fullPage: true });
   assert.deepEqual(errors, []);
-  console.log(JSON.stringify({ success: true, screenshots: out, checks: "desktop/mobile media grid, five images, YouTube titles and click playback, lazy PDF loading, pages and scroll, zoom, selectable text, download, error/timeout retry, close cancellation and reopen, real DM host reader ownership, Escape, focus restoration and outside dismissal" }));
+  console.log(JSON.stringify({ success: true, screenshots: out, checks: "desktop/mobile media grid, five images, native YouTube layout and deferred stable playback, lazy PDF loading, pages and scroll, zoom, selectable text, download, error/timeout retry, close cancellation and reopen, real DM host reader ownership, Escape, focus restoration and outside dismissal" }));
 } catch (error) {
   console.error({ errors, body: (await page.locator("body").innerText()).slice(0, 3000), screenshots: out });
   await page.screenshot({ path: join(out, "failure.png"), fullPage: true });

@@ -5,6 +5,7 @@ import "../styles/pdf-text-layer.css";
 
 GlobalWorkerOptions.workerSrc = workerUrl;
 const LOAD_TIMEOUT_MS = 30_000;
+const ZOOM_STEPS = [0.75, 1, 1.25, 1.5, 2, 3, 4];
 
 export default function PdfReader({ url, name }: { url: string; name: string }) {
   const [pdf, setPdf] = useState<PDFDocumentProxy | null>(null);
@@ -122,12 +123,17 @@ export default function PdfReader({ url, name }: { url: string; name: string }) 
 
   return <div className="message-pdf-reader">
     <div className="message-pdf-toolbar" aria-label="Document controls">
+      <div className="message-pdf-control-group" role="group" aria-label="Page navigation">
       <button type="button" disabled={!pdf || pageNumber <= 1} onClick={() => setPageNumber((page) => page - 1)}>Previous</button>
       <span aria-live="polite">{pdf ? `Page ${pageNumber} of ${pdf.numPages}` : error ? "Preview unavailable" : "Loading…"}</span>
       <button type="button" disabled={!pdf || pageNumber >= pdf.numPages} onClick={() => setPageNumber((page) => page + 1)}>Next</button>
-      <button type="button" aria-label="Zoom out" disabled={!pdf || zoom <= 0.75} onClick={() => setZoom((value) => Math.max(0.75, value - 0.25))}>−</button>
+      </div>
+      <div className="message-pdf-control-group" role="group" aria-label="Page zoom">
+      <button type="button" aria-label="Zoom out" disabled={!pdf || zoom <= ZOOM_STEPS[0]!} onClick={() => setZoom((value) => ZOOM_STEPS[ZOOM_STEPS.indexOf(value) - 1] ?? value)}>−</button>
+      <span className="message-pdf-zoom-level" aria-label="Zoom relative to fit width" aria-live="polite">{zoom}×</span>
+      <button type="button" aria-label="Zoom in" disabled={!pdf || zoom >= ZOOM_STEPS[ZOOM_STEPS.length - 1]!} onClick={() => setZoom((value) => ZOOM_STEPS[ZOOM_STEPS.indexOf(value) + 1] ?? value)}>+</button>
       <button type="button" disabled={!pdf} onClick={() => setZoom(1)}>Fit width</button>
-      <button type="button" aria-label="Zoom in" disabled={!pdf || zoom >= 2} onClick={() => setZoom((value) => Math.min(2, value + 0.25))}>+</button>
+      </div>
       <button type="button" disabled={!pdf} onClick={() => void download()}>Download</button>
     </div>
     {error ? <div role="alert" className="message-pdf-status">{error} <button type="button" onClick={() => setAttempt((value) => value + 1)}>Retry</button></div> : null}

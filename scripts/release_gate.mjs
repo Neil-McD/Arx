@@ -388,6 +388,13 @@ async function main() {
     );
 
     await runStep(
+      "media_reading_browser",
+      "Media reading browser proof",
+      "npm run check:media-reading-browser-proof",
+      () => runCommand("npm", ["run", "check:media-reading-browser-proof"]),
+    );
+
+    await runStep(
       "app_theme_contract",
       "App theme contract",
       "npm run check:app-theme-contract-proof",
