@@ -389,7 +389,7 @@ The labels mean:
 | Stable resource references and permissioned resource reads | `IMPLEMENTED` | exact stable-reference reads hydrate the sole canonical resource-content owner |
 | Domain/runtime events and receipts | `IMPLEMENTED` | a generalized cross-surface receipt projection is not implemented |
 | One permission-filtered semantic namespace | `IMPLEMENTED` | platform and community mounts reuse canonical domain owners |
-| Deterministic `community.md` and `self.md` resources | `IMPLEMENTED` | current actor and community authority are revalidated on every read |
+| Deterministic `community.md` and community-scoped `members/me/context.md` resources | `IMPLEMENTED` | current actor and community authority are revalidated on every read; hidden local `self.md` is retired |
 | Bounded `polynet_list` and `polynet_read` | `IMPLEMENTED` | native and official MCP adapters share semantic owners and fail closed |
 | One generalized capability definition/projection seam | `IMPLEMENTED` | private domain-specific tool callers remain cleanup debt |
 | Bounded `polynet_search` | `IMPLEMENTED` | staging composes canonical domain owners and returns exact follow-up paths |

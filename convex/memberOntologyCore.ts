@@ -283,6 +283,23 @@ export async function readMemberFactsForLens(ctx: any, args: {
   return rows.filter((row) => memberFactVisibleToLens(toFactLike(row), args.lens)) as MemberFactRow[];
 }
 
+// Bounded semantic projection, not an exhaustive fact export. Filtering remains
+// owned by the same visibility predicate as all other fact readers.
+export async function readBoundedMemberOrientationFacts(ctx: any, args: {
+  subjectUserId: any;
+  communityId: any;
+}) {
+  const scanLimit = 120;
+  const rows = await ctx.db.query("memberFacts")
+    .withIndex("by_user_community", (q: any) =>
+      q.eq("userId", args.subjectUserId).eq("communityId", args.communityId))
+    .order("desc").take(scanLimit + 1) as MemberFactRow[];
+  const visible = rows.slice(0, scanLimit).filter((row) => memberFactVisibleToLens(toFactLike(row), {
+    kind: "member_orientation", communityId: String(args.communityId),
+  })).sort((a, b) => b.updatedAt - a.updatedAt || String(a._id).localeCompare(String(b._id)));
+  return { facts: visible.slice(0, 12), truncated: rows.length > scanLimit || visible.length > 12 };
+}
+
 /* The deterministic account block for member.md — assembled from data the
    platform already holds; nothing here is asked of the member. */
 export async function loadMemberAccountContext(

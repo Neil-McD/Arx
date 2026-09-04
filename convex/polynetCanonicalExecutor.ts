@@ -8,9 +8,15 @@ import {
   POLYNET_CHANNELS_DIRECTORY_PATH,
   POLYNET_EVENTS_DIRECTORY_PATH,
   POLYNET_MEMORY_DIRECTORY_PATH,
+  POLYNET_MEMBERS_DIRECTORY_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
   parseCommunityChannelSemanticPath,
 } from "../shared/communitySemanticRepository.ts";
+import {
+  COMMUNITY_MEMBER_SELF_DIRECTORY,
+  COMMUNITY_MEMBER_SELF_CONTEXT_PATH,
+  renderCommunityMemberSelfContext,
+} from "../shared/communityMemberSelfContext.ts";
 import {
   derivePolynetCommunityAgentAuthority,
   derivePolynetHumanAuthority,
@@ -660,6 +666,20 @@ async function executeCanonicalList(args: {
   }
   const absolutePath = mountedPath(target.communitySlug, target.localPath);
 
+  if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
+    if (args.principalKind === "community_agent" || target.localPath !== COMMUNITY_MEMBER_SELF_DIRECTORY) {
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    }
+    return {
+      ok: true,
+      value: virtualDirectory({
+        path: absolutePath,
+        entries: [{ path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_CONTEXT_PATH), kind: "document", type: "member_self_context" }],
+        searchable: false, writable: false,
+      }),
+    };
+  }
+
   if (target.localPath === POLYNET_CHANNELS_DIRECTORY_PATH) {
     const value = (await args.ctx.runQuery(
       (internal as any).communityChannels.listCommunityChannelsInternal,
@@ -948,6 +968,12 @@ async function executeCanonicalList(args: {
   });
   if (!execution.ok) return execution;
   const value = execution.value as Record<string, unknown>;
+  if (target.localPath === POLYNET_MEMBERS_DIRECTORY_PATH && args.principalKind !== "community_agent" && !args.input.cursor) {
+    return { ok: true, value: { ...value, entries: [
+      { path: mountedPath(target.communitySlug, COMMUNITY_MEMBER_SELF_DIRECTORY), kind: "directory", type: "member_self_context" },
+      ...(Array.isArray(value.entries) ? value.entries : []),
+    ] } };
+  }
   if (target.localPath !== "/") return { ok: true, value };
   const rawEntries = Array.isArray(value.entries) ? value.entries : [];
   const builderEntry = target.authority.canUseBuilderProjection
@@ -1019,6 +1045,24 @@ async function executeCanonicalRead(args: {
       "semantic_not_found",
       "Repository path not found or not accessible.",
     );
+  }
+
+  if (target.localPath.startsWith(COMMUNITY_MEMBER_SELF_DIRECTORY)) {
+    // A community agent's sponsor is not a self identity. Never fall through
+    // into the legacy reader for any path in this private subtree.
+    if (args.principalKind === "community_agent" || target.localPath !== COMMUNITY_MEMBER_SELF_CONTEXT_PATH) {
+      return canonicalError("semantic_not_found", "Repository path not found or not accessible.");
+    }
+    const resolvedSelf = await args.ctx.runQuery(
+      (internal as any).communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
+      { authSubject: args.authSubject, userId: args.userId, communityId: target.communityId },
+    );
+    if (!resolvedSelf.ok) return canonicalError(resolvedSelf.code, resolvedSelf.message);
+    return { ok: true, value: {
+      path: mountedPath(target.communitySlug, target.localPath),
+      ...renderCommunityMemberSelfContext(resolvedSelf.context),
+      writable: false,
+    } };
   }
 
   const interactionPath = parseCommunityChannelSemanticPath(target.localPath);

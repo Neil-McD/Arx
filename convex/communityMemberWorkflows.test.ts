@@ -123,11 +123,10 @@ test("membership context distinguishes default, recorded, and completed workflow
   const configured = await configureAutomations(t, f.communityId, []);
   const owner = t.withIdentity({ subject: OWNER_SUBJECT });
   const args = { communityId: f.communityId, membershipId: f.membershipId };
-  const selfProfile = () => t.withIdentity({ subject: MEMBER_SUBJECT }).action(
-    internal.communityCapabilityContext.readCommunitySemanticRepositoryInternal,
+  const selfProfile = () => t.withIdentity({ subject: MEMBER_SUBJECT }).query(
+    internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
     {
       authSubject: MEMBER_SUBJECT, userId: f.memberId, communityId: f.communityId,
-      path: "/self.md", surface: "member_agent_dock",
     },
   );
   const initial = await owner.query(dossierQuery, args);
@@ -136,7 +135,7 @@ test("membership context distinguishes default, recorded, and completed workflow
     current_milestone_entered_at: new Date(f.nowMs).toISOString(), completed_at: null,
   });
   expect(await t.run(async (ctx) => ctx.db.query("communityMemberWorkflowMemberMilestones").collect())).toEqual([]);
-  expect((await selfProfile()).result.body).toContain('Current milestone: "New"');
+  expect((await selfProfile()).context?.workflow?.current_milestone_name).toBe("New");
   const stateId = await t.run(async (ctx) => {
     const workflow = (await ctx.db.query("communityMemberWorkflows").first())!;
     return await ctx.db.insert("communityMemberWorkflowMemberMilestones", {
@@ -152,8 +151,8 @@ test("membership context distinguishes default, recorded, and completed workflow
   await t.run(async (ctx) => ctx.db.patch(stateId, { completedAt: f.nowMs + 20 }));
   expect((await owner.query(dossierQuery, args)).workflow?.completed_at).toBe(new Date(f.nowMs + 20).toISOString());
   const completedSelf = await selfProfile();
-  expect(completedSelf.result.body).toContain('Current milestone: "Activated"');
-  expect(completedSelf.result.body).toContain("- Status: Complete");
+  expect(completedSelf.context?.workflow?.current_milestone_name).toBe("Activated");
+  expect(completedSelf.context?.workflow?.completed_at).toBe(new Date(f.nowMs + 20).toISOString());
 });
 
 test.each(["unknown_milestone", "duplicate_state", "duplicate_workflow"] as const)(

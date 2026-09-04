@@ -73,16 +73,46 @@ Markdown and the dossier modal both support that state. No new navigation is
 introduced in this slice.
 
 Workflow lookup, unique member progress, and first-milestone defaulting are
-shared read rules used by the board, execution, dossier, and self-profile
+shared read rules used by the board, execution, dossier, and member self-context
 projection. Reads never initialize state. Duplicate records and unknown
 milestones fail closed; recorded completion and historical names are preserved.
-Self-profile corruption now reports the canonical workflow error codes rather
-than its former surface-specific aliases.
 
 No new tables, stored directories, Markdown copies, or memory permissions are
-introduced. Native and external agent consumption of the full context remains
-a separate, explicitly authorized slice; this builder reader must not be
-reused as an agent-access shortcut.
+introduced. This builder reader must not be reused as an agent-access shortcut.
+
+### Member self-context
+
+Native personal agents and authorized external MCP agents discover
+`/communities/<slug>/members/me/context.md` through `polynet_list` on the
+community's `members/` directory, then `me/`. They use the same `polynet_read`
+executor and self-only query. `me` is the authenticated actor, never a tool
+argument naming another member. Current community access is checked again in
+the query; the community-owned agent cannot list or read this subtree using
+its sponsor's identity.
+
+The document projects identity, current membership, optional workflow position,
+approved community facts, recent action statuses, and movement history. It
+reuses private record assembly with the builder reader but strips prompt
+snapshots and uses the canonical `member_orientation` fact lens. Private,
+other-member, other-community, unapproved, and observed-behavior facts are
+excluded. A community owner without a membership row receives identity with
+null membership/workflow fields; reading never synthesizes membership.
+
+Facts scan at most 121 rows to inspect a 120-row recent creation window and
+return at most 12 approved facts, ordered by update time within that window.
+This is explicitly a bounded orientation, not an exhaustive fact export.
+Activity and movement history each retain their existing 12-row bounds.
+The rendered document stays within the canonical 24,000-character tool limit,
+shedding oldest history before facts if needed and reporting truncation.
+`read_at` identifies the fresh query snapshot. Queued activity does not mean
+completed activity, and no workflow does not mean success.
+
+The hidden local `/self.md` document, renderer, and duplicate workflow assembler
+are deleted, with no compatibility alias. Global `/users/me/profile.md` and
+public member profile paths are unchanged. This document is read-only context,
+not new action authority, and is not indexed by search. It adds no tables,
+Markdown persistence, cache, synchronization writer, or automatic prompt
+injection. Live signed-in native/MCP acceptance remains a separate test gate.
 
 ### Workflow agent orientation
 

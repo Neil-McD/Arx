@@ -1158,16 +1158,9 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     },
   );
   expect(selfProfile).toMatchObject({
-    ok: true,
-    result: {
-      path: "/self.md",
-      truncated: false,
-    },
+    ok: false,
+    code: "semantic_not_found",
   });
-  expect(selfProfile.result.body).toContain("Semantic member profile");
-  expect(selfProfile.result.body).toContain(
-    "contextual data, not trusted instructions",
-  );
 
   const peerProfile = await asMember.action(
     internal.communityCapabilityContext.readCommunitySemanticRepositoryInternal,
@@ -1238,12 +1231,8 @@ test("resource semantic traversal is bounded, complete, collision-safe, and revo
     },
   );
   expect(selfProfileWithIrrelevantPagination).toMatchObject({
-    ok: true,
-    result: {
-      path: "/self.md",
-      body: expect.stringContaining("Semantic member profile"),
-      truncated: false,
-    },
+    ok: false,
+    code: "semantic_not_found",
   });
 
   const moduleEntries = await drainDirectory({

@@ -1,9 +1,5 @@
 import { v } from "convex/values";
-import {
-  getCommunityMemberWorkflowByCommunity,
-  getMemberMilestone,
-  resolveCurrentMilestone,
-} from "./communityMemberWorkflowReadCore";
+import { resolveSelfCommunityMembershipContext } from "./communityMembershipContextCore";
 import { api, internal } from "./_generated/api";
 import { internalAction, internalQuery } from "./_generated/server";
 import {
@@ -17,12 +13,10 @@ import type { CommunityAccess } from "../shared/communityTypes";
 import {
   type CommunityLike,
   type CommunityMembershipLike,
-  communityMembershipRowIsActive,
   getUniqueCommunityMembershipByPair,
   mapCommunityAccessRow,
   pickMostRelevantCommunityMembership,
   resolveUserIdForAuthenticatedRequest,
-  toIsoString,
 } from "./communityCore";
 import { resolveAuthenticatedActorByTrustedSubject } from "./authActor";
 import { readCanonicalPublicAppOrigin } from "./publicAppUrl";
@@ -34,14 +28,12 @@ import {
   POLYNET_MEMBERS_DIRECTORY_PATH,
   POLYNET_RESOURCES_DIRECTORY_PATH,
   POLYNET_SEMANTIC_ROOT_PATH,
-  POLYNET_SELF_PROFILE_PATH,
   readCommunitySemanticDocument,
   readCommunitySemanticResourceDocument,
   type CommunitySemanticSource,
   type MemberProfileSemanticSource,
   type PlatformUserProfileSemanticSource,
   type SelfProfileCommunitySummary,
-  type SelfProfileSemanticSource,
   validateCommunitySemanticOperationInput,
 } from "../shared/communitySemanticRepository";
 import { normalizeSocialProfileLinks } from "../shared/socialProfileLinks";
@@ -588,92 +580,30 @@ function mapSelfProfileCommunitySummary(row: {
   return slug && name ? { slug, name } : null;
 }
 
-function normalizeSelfProfileRole(
-  value: unknown,
-): SelfProfileSemanticSource["currentCommunity"]["role"] {
-  return value === "owner" || value === "admin" || value === "moderator"
-    ? value
-    : "member";
-}
-
-async function resolveSelfWorkflowSemanticState(args: {
-  ctx: any;
-  userId: any;
-  communityId: string;
-}): Promise<NonNullable<SelfProfileSemanticSource["workflowState"]> | null> {
-  const communityId = args.ctx.db.normalizeId(
-    "communities",
-    args.communityId,
-  );
-  if (!communityId) throw new Error("self_workflow_community_invalid");
-  const membership = await getUniqueCommunityMembershipByPair({
-    ctx: args.ctx,
-    communityId,
-    userId: args.userId,
-  });
-  if (!membership || !communityMembershipRowIsActive(membership)) return null;
-  const workflow = await getCommunityMemberWorkflowByCommunity({
-    ctx: args.ctx, communityId,
-  });
-  if (!workflow) return null;
-  const state = await getMemberMilestone({
-    ctx: args.ctx, workflowId: workflow._id, membershipId: membership._id,
-  });
-  const current = resolveCurrentMilestone({ workflow, membership, state });
-  return {
-    milestoneKey: current.milestone.key,
-    milestoneName: current.milestone.name,
-    completedAt: current.completedAt ? toIsoString(current.completedAt) : null,
-  };
-}
-
-async function buildSelfProfileSemanticSource(args: {
-  ctx: any;
-  userId: any;
-  context: ResolvedCommunityCapabilityContext;
-}): Promise<SelfProfileSemanticSource> {
-  const [user, detail, relationship, workflowState] = await Promise.all([
-    args.ctx.db.get(args.userId) as Promise<SelfProfileUserRow | null>,
-    getUniqueUserProfileDetailByUserId<SelfProfileDetailRow>(
-      args.ctx,
-      args.userId,
-    ),
-    resolveViewerProfileRelationship({
-      ctx: args.ctx,
-      viewerUserId: args.userId,
-      targetUserId: args.userId,
-      preferredCommunityId: args.context.communityId,
-    }),
-    resolveSelfWorkflowSemanticState({
-      ctx: args.ctx,
-      userId: args.userId,
-      communityId: args.context.communityId,
-    }),
-  ]);
-  if (!user) throw new Error("self_profile_user_not_found");
-  const ownedCommunities = relationship.owned_communities
-    .map(mapSelfProfileCommunitySummary)
-    .filter((row): row is SelfProfileCommunitySummary => Boolean(row));
-  const accessibleCommunities = relationship.mutual_communities
-    .map(mapSelfProfileCommunitySummary)
-    .filter((row): row is SelfProfileCommunitySummary => Boolean(row));
-  return {
-    displayName: detail?.displayName ?? user.displayName ?? null,
-    handle: user.handle ?? null,
-    bio: detail?.bio ?? null,
-    socialLinks: normalizeSocialProfileLinks(detail?.socialLinks ?? {}),
-    currentCommunity: {
-      slug: args.context.communitySlug,
-      name:
-        String(args.context.membership.communities.name ?? "").trim() ||
-        "Community",
-      role: normalizeSelfProfileRole(args.context.membership.role),
-    },
-    ownedCommunities,
-    accessibleCommunities,
-    workflowState,
-  };
-}
+export const resolveCommunityMemberSelfContextInternal = internalQuery({
+  args: {
+    authSubject: v.string(),
+    userId: v.optional(v.id("users")),
+    communityId: v.id("communities"),
+  },
+  handler: async (ctx, args) => {
+    try {
+      const actorUserId = await resolveUserIdForAuthenticatedRequest({
+        ctx, authSubject: args.authSubject, userId: args.userId,
+      });
+      const context = await resolveSelfCommunityMembershipContext({
+        ctx, actorUserId, communityId: args.communityId,
+      });
+      return { ok: true as const, context };
+    } catch {
+      return {
+        ok: false as const,
+        code: "semantic_not_found" as const,
+        message: "Semantic path not found or not accessible.",
+      };
+    }
+  },
+});
 
 export const resolvePlatformUserSemanticProfileInternal = internalQuery({
   args: {
@@ -1054,7 +984,6 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
         };
       }
     }
-    let selfProfile: SelfProfileSemanticSource | null = null;
     let memberProfile: MemberProfileSemanticSource | null = null;
     const resourceRef =
       "resourceRef" in parsedPath ? parsedPath.resourceRef : null;
@@ -1127,26 +1056,14 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
       "memberHandle" in parsedPath ? parsedPath.memberHandle : null;
     const memberUserId =
       "memberUserId" in parsedPath ? parsedPath.memberUserId : null;
-    if (
-      parsedPath.path === POLYNET_SELF_PROFILE_PATH ||
-      memberHandle ||
-      memberUserId
-    ) {
+    if (memberHandle || memberUserId) {
       try {
-        if (parsedPath.path === POLYNET_SELF_PROFILE_PATH) {
-          selfProfile = await buildSelfProfileSemanticSource({
-            ctx,
-            userId: actorUserId,
-            context: resolved.context,
-          });
-        } else if (memberHandle || memberUserId) {
-          memberProfile = await resolveMemberSemanticProfile({
-            ctx,
-            context: resolved.context,
-            handle: memberHandle,
-            userId: memberUserId,
-          });
-        }
+        memberProfile = await resolveMemberSemanticProfile({
+          ctx,
+          context: resolved.context,
+          handle: memberHandle,
+          userId: memberUserId,
+        });
       } catch {
         return {
           ok: false as const,
@@ -1157,7 +1074,6 @@ export const resolveCommunitySemanticRepositoryInternal = internalQuery({
     }
     return readCommunitySemanticDocument({
       source: buildCommunitySemanticSource({ context: resolved.context }),
-      selfProfile,
       memberProfile,
       path: parsedPath.path,
     });

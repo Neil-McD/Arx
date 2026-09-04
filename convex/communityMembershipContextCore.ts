@@ -1,12 +1,18 @@
-import type { Id } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import type { QueryCtx } from "./_generated/server";
 import {
   communityMembershipRowIsActive,
+  getUniqueCommunityMembershipByPair,
+  requireCommunityChatAccess,
   requireCommunityManager,
   toIsoString,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
-import { readMemberFactsForLens } from "./memberOntologyCore";
+import {
+  readBoundedMemberOrientationFacts,
+  readMemberFactsForLens,
+} from "./memberOntologyCore";
+import type { CommunityMemberSelfContext } from "../shared/communityMemberSelfContext";
 import {
   getCommunityMemberWorkflowByCommunity,
   getMemberMilestone,
@@ -39,32 +45,112 @@ export async function resolveBuilderCommunityMembershipContext(args: {
   ) {
     throw new Error("community_member_workflow_member_not_found");
   }
-  const workflow = await getCommunityMemberWorkflowByCommunity({
+  const { facts_truncated: _factsTruncated, ...context } =
+    await readMembershipContextRecords({
+      ctx: args.ctx,
+      communityId: args.communityId,
+      subjectUserId: membership.userId,
+      membership,
+      view: "builder",
+    });
+  return {
+    ...context,
+    membership_id: String(membership._id),
+    joined_at: toIsoString(membership.activatedAt ?? membership.createdAt),
+  };
+}
+
+export async function resolveSelfCommunityMembershipContext(args: {
+  ctx: QueryCtx;
+  actorUserId: Id<"users">;
+  communityId: Id<"communities">;
+}): Promise<CommunityMemberSelfContext> {
+  const { community } = await requireCommunityChatAccess({
     ctx: args.ctx,
     communityId: args.communityId,
+    userId: args.actorUserId,
   });
-  const state = workflow
-    ? await getMemberMilestone({
+  const membership = await getUniqueCommunityMembershipByPair({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    userId: args.actorUserId,
+  });
+  const isOwner = String(community.ownerId) === String(args.actorUserId);
+  if (!isOwner && !communityMembershipRowIsActive(membership)) {
+    throw new Error("community_member_workflow_member_not_found");
+  }
+  const context = await readMembershipContextRecords({
+    ctx: args.ctx,
+    communityId: args.communityId,
+    subjectUserId: args.actorUserId,
+    membership: communityMembershipRowIsActive(membership)
+      ? (membership as Doc<"communityMemberships">)
+      : null,
+    view: "self",
+  });
+  return {
+    read_at: toIsoString(Date.now()),
+    user_id: context.user_id,
+    community_id: context.community_id,
+    membership_id: context.membership_id,
+    display_name: context.display_name,
+    role: isOwner ? "owner" : membership!.role,
+    joined_at: context.joined_at,
+    workflow: context.workflow,
+    approved_community_context: context.approved_community_context,
+    facts_truncated: context.facts_truncated,
+    recent_workflow_activity: context.recent_workflow_activity.map(
+      ({ prompt: _prompt, ...activity }) => activity,
+    ),
+    milestone_history: context.milestone_history,
+  };
+}
+
+// Private record assembly, not an authorization entry point. Both wrappers
+// above establish their own actor/subject boundary before using it.
+async function readMembershipContextRecords(args: {
+  ctx: QueryCtx;
+  communityId: Id<"communities">;
+  subjectUserId: Id<"users">;
+  membership: Doc<"communityMemberships"> | null;
+  view: "builder" | "self";
+}) {
+  const membership = args.membership;
+  const workflow = membership
+    ? await getCommunityMemberWorkflowByCommunity({
         ctx: args.ctx,
-        workflowId: workflow._id,
-        membershipId: membership._id,
+        communityId: args.communityId,
       })
     : null;
-  const current = workflow
-    ? resolveCurrentMilestone({ workflow, membership, state })
-    : null;
-  const [profile, approvedFacts, transitionRows, workflowRunRows] =
+  const state =
+    workflow && membership
+      ? await getMemberMilestone({
+          ctx: args.ctx,
+          workflowId: workflow._id,
+          membershipId: membership._id,
+        })
+      : null;
+  const current =
+    workflow && membership
+      ? resolveCurrentMilestone({ workflow, membership, state })
+      : null;
+  const [profile, factPage, transitionRows, workflowRunRows] =
     await Promise.all([
-      resolveUserProfileDisplayProjection(args.ctx, membership.userId),
-      readMemberFactsForLens(args.ctx, {
-        subjectUserId: membership.userId,
-        lens: {
-          kind: "founder_admin",
-          communityId: String(args.communityId),
-        },
-        scope: { communityId: args.communityId },
-      }),
-      workflow
+      resolveUserProfileDisplayProjection(args.ctx, args.subjectUserId),
+      args.view === "self"
+        ? readBoundedMemberOrientationFacts(args.ctx, {
+            subjectUserId: args.subjectUserId,
+            communityId: args.communityId,
+          })
+        : readMemberFactsForLens(args.ctx, {
+            subjectUserId: args.subjectUserId,
+            lens: {
+              kind: "founder_admin",
+              communityId: String(args.communityId),
+            },
+            scope: { communityId: args.communityId },
+          }).then((facts) => ({ facts, truncated: false })),
+      workflow && membership
         ? args.ctx.db
             .query("communityMemberWorkflowTransitions")
             .withIndex("by_workflow_membership_seq", (q) =>
@@ -75,7 +161,7 @@ export async function resolveBuilderCommunityMembershipContext(args: {
             .order("desc")
             .take(COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT)
         : Promise.resolve([]),
-      workflow
+      workflow && membership
         ? args.ctx.db
             .query("communityMemberWorkflowRuns")
             .withIndex("by_workflow_membership_createdAt", (q) =>
@@ -143,15 +229,17 @@ export async function resolveBuilderCommunityMembershipContext(args: {
     }),
   );
   return {
-    user_id: String(membership.userId),
+    user_id: String(args.subjectUserId),
     community_id: String(args.communityId),
-    membership_id: String(membership._id),
+    membership_id: membership ? String(membership._id) : null,
     display_name: profile.display_name ?? "Member",
     avatar_url: profile.avatar_url,
     avatar_focus_x: profile.avatar_focus_x,
     avatar_focus_y: profile.avatar_focus_y,
     avatar_zoom: profile.avatar_zoom,
-    joined_at: toIsoString(membership.activatedAt ?? membership.createdAt),
+    joined_at: membership
+      ? toIsoString(membership.activatedAt ?? membership.createdAt)
+      : null,
     workflow:
       workflow && current
         ? {
@@ -167,7 +255,8 @@ export async function resolveBuilderCommunityMembershipContext(args: {
               : null,
           }
         : null,
-    approved_community_context: approvedFacts
+    facts_truncated: factPage.truncated,
+    approved_community_context: factPage.facts
       .map((fact) => ({
         id: String(fact._id),
         kind: fact.kind,

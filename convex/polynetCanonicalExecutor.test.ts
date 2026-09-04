@@ -9,6 +9,194 @@ import schema from "./schema";
 import { formatCommunityEventZonedDateTime } from "../shared/communityEventTime";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
 import { buildCommunityFunnelContentTestFixture } from "../scripts/community_funnel_test_fixture";
+import { renderCommunityMemberSelfContext } from "../shared/communityMemberSelfContext";
+
+const selfContextPath = "/communities/canonical-community/members/me/context.md";
+
+test.each(["personal_agent", "external_mcp"] as const)("%s discovers and reads its own community context without writing state", async (principalKind) => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const ctx = executionContext(t.withIdentity({ subject: f.memberSubject }));
+  const execute = (toolName: "polynet_list" | "polynet_read", path: string) => executePolynetCanonicalTool({
+    ctx, authSubject: f.memberSubject, userId: f.memberId, principalKind,
+    evidenceSurface: principalKind === "personal_agent" ? "member_agent_dock" : "external_mcp", toolName, input: { path },
+  });
+  const snapshot = () => t.run(async (ctx) => ({
+    memberships: await ctx.db.query("communityMemberships").collect(),
+    workflows: await ctx.db.query("communityMemberWorkflows").collect(),
+    states: await ctx.db.query("communityMemberWorkflowMemberMilestones").collect(),
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+    facts: await ctx.db.query("memberFacts").collect(),
+  }));
+  const before = await snapshot();
+  const directory = await execute("polynet_list", "/communities/canonical-community/members/");
+  expect(directory, JSON.stringify(directory)).toMatchObject({ ok: true, value: { entries: expect.arrayContaining([
+    expect.objectContaining({ path: "/communities/canonical-community/members/me/", kind: "directory" }),
+  ]) } });
+  expect(await execute("polynet_list", "/communities/canonical-community/members/me/")).toMatchObject({
+    ok: true, value: { writable: false, entries: [expect.objectContaining({ path: selfContextPath })] },
+  });
+  const read = await execute("polynet_read", selfContextPath);
+  expect(read.ok).toBe(true);
+  if (!read.ok) throw new Error(read.code);
+  const context = JSON.parse(String(read.value.body).split("\n").slice(-1)[0]);
+  expect(context).toMatchObject({ user_id: f.memberId, community_id: f.communityId,
+    role: "member", display_name: "canonical-member", workflow: null,
+    approved_community_context: [], recent_workflow_activity: [], milestone_history: [],
+  });
+  expect(context.membership_id).toBeTruthy();
+  expect(Number.isFinite(Date.parse(context.read_at))).toBe(true);
+  expect(read.value.body).not.toContain("other-community");
+  expect(await snapshot()).toEqual(before);
+});
+
+test("self context excludes private, other-member, other-community, and unapproved facts", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  await t.run(async (ctx) => {
+    const base = { userId: f.memberId, communityId: f.communityId, kind: "goal" as const,
+      body: "Shared goal A", provenance: "form_answer" as const, consentState: "approved" as const,
+      confidence: 1, evidenceRefs: [], stalenessScore: 0, createdByActorType: "member" as const,
+      version: 1, createdAt: 100, updatedAt: 100 };
+    await ctx.db.insert("memberFacts", base);
+    await ctx.db.insert("memberFacts", { ...base, communityId: f.otherCommunityId, body: "Shared goal B" });
+    await ctx.db.insert("memberFacts", { ...base, communityId: undefined, body: "PRIVATE_PLATFORM" });
+    await ctx.db.insert("memberFacts", { ...base, userId: f.ownerId, body: "OTHER_MEMBER" });
+    await ctx.db.insert("memberFacts", { ...base, provenance: "observed_behavior", body: "INTERNAL_OBSERVATION" });
+    for (const consentState of ["pending", "rejected", "retracted", "superseded", "agent_internal"] as const) {
+      await ctx.db.insert("memberFacts", { ...base, consentState, body: `SECRET_${consentState}` });
+    }
+    await ctx.db.insert("communityMemberships", { communityId: f.otherCommunityId, userId: f.memberId,
+      role: "member", active: true, accessSource: "free_grant", createdAt: 100, updatedAt: 100 });
+  });
+  const actor = t.withIdentity({ subject: f.memberSubject });
+  for (const [communityId, body] of [[f.communityId, "Shared goal A"], [f.otherCommunityId, "Shared goal B"]] as const) {
+    const result = await actor.query(internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
+      { authSubject: f.memberSubject, userId: f.memberId, communityId });
+    expect(result).toMatchObject({ ok: true, context: { community_id: communityId,
+      approved_community_context: [expect.objectContaining({ body, provenance: "form_answer" })] } });
+  }
+});
+
+test.each(["spoof_user", "spoof_subject", "revoked", "duplicate_membership", "other_community"])("self context fails closed for %s", async (failure) => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  await t.run(async (ctx) => {
+    const membership = (await ctx.db.query("communityMemberships").first())!;
+    if (failure === "revoked") await ctx.db.patch(membership._id, { active: false });
+    if (failure === "duplicate_membership") {
+      const { _id, _creationTime, ...row } = membership;
+      await ctx.db.insert("communityMemberships", row);
+    }
+  });
+  const result = await t.withIdentity({ subject: f.memberSubject }).query(
+    internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
+    { authSubject: failure === "spoof_subject" ? f.ownerSubject : f.memberSubject,
+      userId: failure === "spoof_user" ? f.ownerId : f.memberId,
+      communityId: failure === "other_community" ? f.otherCommunityId : f.communityId });
+  expect(result).toEqual({ ok: false, code: "semantic_not_found", message: "Semantic path not found or not accessible." });
+});
+
+test("community agent cannot discover or read sponsor self context; owner self has no synthetic membership", async () => {
+  vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const actor = t.withIdentity({ subject: f.ownerSubject });
+  const owner = await actor.query(internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
+    { authSubject: f.ownerSubject, userId: f.ownerId, communityId: f.communityId });
+  expect(owner).toMatchObject({ ok: true, context: { role: "owner", membership_id: null, joined_at: null, workflow: null } });
+  for (const [toolName, path] of [
+    ["polynet_list", "/communities/canonical-community/members/"],
+    ["polynet_list", "/communities/canonical-community/members/me/"],
+    ["polynet_read", selfContextPath],
+  ] as const) {
+    const result = await executePolynetCanonicalTool({ ctx: executionContext(actor), authSubject: f.ownerSubject,
+      userId: f.ownerId, principalKind: "community_agent", mountedCommunityId: f.communityId,
+      evidenceSurface: "external_mcp", toolName, input: { path } });
+    if (path.endsWith("/members/")) {
+      expect(result.ok, JSON.stringify(result)).toBe(true);
+      expect(JSON.stringify(result)).not.toContain("/members/me/");
+    } else expect(result).toMatchObject({ ok: false });
+  }
+});
+
+test("self context bounds facts and omits builder prompt snapshots from activity", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  await t.run(async (ctx) => {
+    const membership = (await ctx.db.query("communityMemberships").first())!;
+    const workflowId = await ctx.db.insert("communityMemberWorkflows", { communityId: f.communityId,
+      milestones: [{ key: "new", name: "New", automations: [] }], revision: 1,
+      createdByUserId: f.ownerId, updatedByUserId: f.ownerId, createdAt: 100, updatedAt: 100 });
+    for (let i = 0; i < 121; i++) await ctx.db.insert("memberFacts", { userId: f.memberId, communityId: f.communityId,
+      kind: "goal", body: "X".repeat(2000), provenance: "form_answer", consentState: "approved",
+      confidence: 1, evidenceRefs: [], stalenessScore: 0, createdByActorType: "member", version: 1, createdAt: i, updatedAt: i });
+    for (let i = 0; i < 13; i++) await ctx.db.insert("communityMemberWorkflowRuns", {
+      communityId: f.communityId, workflowId, membershipId: membership._id,
+      milestoneKey: "new", milestoneName: "New", milestoneEnteredAt: 100, workflowRevision: 1,
+      automationKey: `automation-${i}`, triggerType: "member_contributed", triggerReceiptRef: `receipt-${i}`,
+      actionSnapshot: { key: "action", type: "prompt_agent", prompt: "SECRET_BUILDER_INSTRUCTION" },
+      status: "finished", createdAt: i, updatedAt: i,
+    });
+  });
+  const result = await t.withIdentity({ subject: f.memberSubject }).query(
+    internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
+    { authSubject: f.memberSubject, userId: f.memberId, communityId: f.communityId });
+  expect(result.ok).toBe(true);
+  if (!result.ok) throw new Error(result.code);
+  expect(result.context.facts_truncated).toBe(true);
+  expect(result.context.approved_community_context).toHaveLength(12);
+  expect(result.context.recent_workflow_activity).toHaveLength(12);
+  expect(result.context.recent_workflow_activity.every((activity) => activity.status === "queued")).toBe(true);
+  expect(JSON.stringify(result)).not.toContain("SECRET_BUILDER_INSTRUCTION");
+  expect(result.context.recent_workflow_activity.every((activity) => !("prompt" in activity))).toBe(true);
+  const { body } = renderCommunityMemberSelfContext(result.context);
+  expect(body.length).toBeLessThan(24_000);
+  expect(body).not.toContain("X".repeat(401));
+  const oversized = renderCommunityMemberSelfContext({ ...result.context,
+    facts_truncated: false,
+    approved_community_context: result.context.approved_community_context.map((fact) => ({ ...fact, body: "\u0001".repeat(400) })),
+  });
+  expect(oversized.body.length).toBeLessThanOrEqual(24_000);
+  expect(oversized.truncated).toBe(true);
+  expect(JSON.parse(oversized.body.split("\n").slice(-1)[0]).workflow).toEqual(result.context.workflow);
+});
+
+test.each(["/self.md", "/communities/canonical-community/self.md", "/communities/canonical-community/members/canonical-owner/context.md"])("retired and other-member self-context paths are denied: %s", async (path) => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const result = await executePolynetCanonicalTool({ ctx: executionContext(t.withIdentity({ subject: f.memberSubject })),
+    authSubject: f.memberSubject, userId: f.memberId, principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock", toolName: "polynet_read", input: { path } });
+  expect(result.ok).toBe(false);
+});
+
+test("self-context query rechecks access after path resolution and refuses direct unauthenticated reads", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const query = internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal;
+  const args = { authSubject: f.memberSubject, userId: f.memberId, communityId: f.communityId };
+  expect(await t.query(query, args)).toMatchObject({ ok: false });
+  const actor = t.withIdentity({ subject: f.memberSubject });
+  const base = executionContext(actor);
+  let queryCount = 0;
+  const result = await executePolynetCanonicalTool({
+    ctx: { ...base, runQuery: async (reference: any, args: any) => {
+      const result = await base.runQuery(reference, args);
+      if (++queryCount === 1) await t.run(async (ctx) => {
+        const membership = (await ctx.db.query("communityMemberships").first())!;
+        await ctx.db.patch(membership._id, { active: false });
+      });
+      return result;
+    } },
+    authSubject: f.memberSubject, userId: f.memberId, principalKind: "personal_agent",
+    evidenceSurface: "member_agent_dock", toolName: "polynet_read", input: { path: selfContextPath },
+  });
+  expect(result).toMatchObject({ ok: false });
+  expect(queryCount).toBe(2);
+});
 
 const modules = import.meta.glob([
   "./authActor.ts",
