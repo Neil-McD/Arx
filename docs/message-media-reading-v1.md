@@ -23,6 +23,7 @@ unchanged. This is a web presentation contract; it does not change server persis
 - YouTube has its own grid: at most two columns, a 360px column threshold, and
   200px minimum player height. Narrow messages stack players. This does not
   change the uploaded-video grid or widen the conversation shell.
+  A subtle 8px clipped outer corner radius leaves native player UI intact.
   If the actual container is narrower than YouTube's 200px minimum, show a
   timestamp-preserving YouTube link instead. Resizing below that threshold
   unmounts the player to prevent hidden audio; normal scrolling does not.
