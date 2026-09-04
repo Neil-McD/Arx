@@ -3,7 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { isPdfDocument, pdfLinksInText, safeDocumentUrl } from "../shared/messagePdf";
 import { loadYouTubeMetadata } from "../shared/youtubeMetadata";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 describe("message documents", () => {
   it("recognizes PDF uploads by MIME or extension", () => {
     expect(isPdfDocument("uploaded-file", "application/pdf; charset=binary")).toBe(true);
@@ -30,5 +30,20 @@ describe("YouTube metadata", () => {
   it("fails to a playable fallback on unavailable metadata", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
     expect(await loadYouTubeMetadata("metadata002")).toBeNull();
+  });
+  it("expires failures without polling, then coalesces a successful retry", async () => {
+    vi.useFakeTimers();
+    const fetcher = vi.fn().mockRejectedValueOnce(new Error("offline"))
+      .mockResolvedValue(new Response(JSON.stringify({ title: "Recovered", author_name: "Builder" })));
+    vi.stubGlobal("fetch", fetcher);
+    expect(await loadYouTubeMetadata("metadata003")).toBeNull();
+    await vi.advanceTimersByTimeAsync(29_999);
+    expect(await loadYouTubeMetadata("metadata003")).toBeNull();
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1);
+    expect(fetcher).toHaveBeenCalledTimes(1);
+    expect(await Promise.all([loadYouTubeMetadata("metadata003"), loadYouTubeMetadata("metadata003")]))
+      .toEqual([{ title: "Recovered", author: "Builder" }, { title: "Recovered", author: "Builder" }]);
+    expect(fetcher).toHaveBeenCalledTimes(2);
   });
 });
