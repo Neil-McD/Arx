@@ -11,6 +11,7 @@ import {
   communityLifecycleGenerationMatches,
 } from "../shared/communityLifecycle";
 import { communityMembershipRowIsActive } from "./communityCore";
+import { resolveMentionEmailDelivery } from "./communityMentionEmailDelivery";
 
 const EMAIL_TEMPLATE_VALIDATOR = v.union(
   ...EMAIL_TEMPLATE_KEYS.map((value) => v.literal(value)),
@@ -167,6 +168,7 @@ async function weeklyDigestRecipientHasCommunityAccess(
 export const enqueueEmailJobInternal = internalMutation({
   args: {
     kind: v.string(),
+    sourceMentionId: v.optional(v.id("communityInteractionMentions")),
     communityId: v.optional(v.id("communities")),
     communityLifecycleGeneration: v.optional(v.number()),
     recipientUserId: v.optional(v.id("users")),
@@ -226,6 +228,7 @@ export const enqueueEmailJobInternal = internalMutation({
     }
 
     const templateKey = args.templateKey as EmailTemplateKey;
+    if (args.sourceMentionId && templateKey !== "mention_notification") throw new Error("email_mention_template_invalid");
     let recipientEmail: string;
     let suppressionReason: string | null = null;
     if (recipientUserId) {
@@ -264,17 +267,22 @@ export const enqueueEmailJobInternal = internalMutation({
     if (!suppressionReason && preferences && !preferenceAllowsTemplate(preferences, templateKey)) {
       suppressionReason = "email_preference_disabled";
     }
+    if (!suppressionReason && templateKey === "mention_notification" &&
+      !(await resolveMentionEmailDelivery({ ctx, ...args }))) {
+      suppressionReason = "mention_source_unavailable";
+    }
     const suppressed = Boolean(suppressionReason);
     const status: EmailOutboxStatus = suppressed ? "suppressed" : "pending";
 
     const outboxId = await ctx.db.insert("emailOutbox", {
       kind: readString(args.kind) || templateKey,
+      sourceMentionId: args.sourceMentionId,
       communityId: args.communityId,
       communityLifecycleGeneration: args.communityLifecycleGeneration,
       recipientUserId: recipientUserId ?? undefined,
       recipientEmail,
       templateKey,
-      payload: args.payload ?? {},
+      payload: templateKey === "mention_notification" ? {} : args.payload ?? {},
       dedupeKey: dedupeKey ?? undefined,
       provider: "resend",
       status,
@@ -287,6 +295,29 @@ export const enqueueEmailJobInternal = internalMutation({
     return { ok: true, deduped: false, outboxId, status };
   },
 });
+
+async function prepareMentionJob(ctx: any, row: any, nowMs: number, sealContent = false) {
+  const payload = await resolveMentionEmailDelivery({ ctx, ...row });
+  const preferences = row.recipientUserId ? await getEmailPreferencesByUserId(ctx, row.recipientUserId) : null;
+  const email = row.recipientUserId ? await getUserEmailDeliveryState(ctx, row.recipientUserId) : null;
+  if (!payload || preferences?.mentionEmailsEnabled === false || !email?.verifiedEmail || email.verifiedEmail !== row.recipientEmail) {
+    await ctx.db.patch(row._id, {
+      status: "suppressed", payload: {}, failureReason: "mention_source_or_recipient_unavailable", updatedAt: nowMs,
+    });
+    return null;
+  }
+  // A provider retry must never reuse the original idempotency key with a
+  // different body. Retain only its fingerprint, not a private message copy.
+  const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(payload)));
+  const contentHash = Array.from(new Uint8Array(digest)).map(byte => byte.toString(16).padStart(2, "0")).join("");
+  const previousHash = readString(asRecord(row.payload).mentionContentHash);
+  if (previousHash && previousHash !== contentHash) {
+    await ctx.db.patch(row._id, { status: "suppressed", payload: {}, failureReason: "mention_content_changed", updatedAt: nowMs });
+    return null;
+  }
+  if (sealContent && !previousHash) await ctx.db.patch(row._id, { payload: { mentionContentHash: contentHash } });
+  return payload;
+}
 
 export const claimDueEmailOutboxBatchInternal = internalMutation({
   args: {
@@ -311,6 +342,12 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
     }
     const claimedRows = [];
     for (const row of rows) {
+      if (row.templateKey === "mention_notification") {
+        const payload = await prepareMentionJob(ctx, row, nowMs);
+        if (!payload) continue;
+        // Only the claimed response contains the freshly authorized preview.
+        row.payload = payload;
+      }
       if (row.communityId) {
         const community = await ctx.db.get(row.communityId);
         if (
@@ -373,6 +410,18 @@ export const claimDueEmailOutboxBatchInternal = internalMutation({
       dedupeKey: row.dedupeKey ?? null,
       attemptCount: Number(row.attemptCount ?? 0) + 1,
     }));
+  },
+});
+
+// Recheck each mention immediately before the provider call, not merely when a
+// batch was claimed. The attempt check fences workers superseded by a retry.
+export const prepareMentionEmailDispatchInternal = internalMutation({
+  args: { outboxId: v.id("emailOutbox"), attemptCount: v.number() },
+  handler: async (ctx, args) => {
+    const row = await ctx.db.get(args.outboxId);
+    if (!row || row.templateKey !== "mention_notification" || row.status !== "sending" || row.attemptCount !== args.attemptCount) return null;
+    const payload = await prepareMentionJob(ctx, row, Date.now(), true);
+    return payload ? { recipientEmail: row.recipientEmail, payload } : null;
   },
 });
 
@@ -474,12 +523,22 @@ export const processPendingEmailOutboxInternal = internalAction({
       templateKey: EmailTemplateKey;
       payload: unknown;
       dedupeKey?: string | null;
+      attemptCount: number;
     }>;
 
     let sent = 0;
     let failed = 0;
+    let suppressed = 0;
     for (const job of claimed) {
       try {
+        if (job.templateKey === "mention_notification") {
+          const prepared = await ctx.runMutation((internal as any).email.prepareMentionEmailDispatchInternal, {
+            outboxId: job._id, attemptCount: job.attemptCount,
+          });
+          if (!prepared) { suppressed += 1; continue; }
+          job.recipientEmail = prepared.recipientEmail;
+          job.payload = prepared.payload;
+        }
         const response = await sendRenderedEmail({
           to: job.recipientEmail,
           templateKey: job.templateKey,
@@ -508,6 +567,7 @@ export const processPendingEmailOutboxInternal = internalAction({
       claimed: claimed.length,
       sent,
       failed,
+      suppressed,
     };
   },
 });

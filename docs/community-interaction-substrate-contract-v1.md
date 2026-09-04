@@ -145,9 +145,40 @@ The policy/grant model is exercised with isolated
 test fixtures only: schema support is NOT authorization to create restricted
 rooms in staging or production. Do not relax this deployment boundary until
 search, attachments, notifications, presence, digests, public projections,
-agent context and shared memory have complete audience enforcement. Recipient
-notifications and already-captured email snapshots remain a separate gate. In
-particular, directly inserting a restricted row is not a supported rollout.
+agent context and shared memory have complete audience enforcement. Previously
+captured digest email snapshots remain a separate gate. In particular,
+directly inserting a restricted row is not a supported rollout.
+
+#### Notification audience (staging foundation)
+
+`communityNotificationAccess.ts` resolves the canonical live message/root,
+source room, and current recipient together. It reuses community entitlement,
+blocking, and channel capability authority. Mention/channel IDs are provenance,
+not grants. Direct mention insertion validates recipients in the same mutation
+as the message write; invalid targets roll back that write. Delayed `@everybody`
+fanout checks each recipient, including existing overlapping direct mentions.
+Inaccessible existing recipients are suppressed without stopping other work.
+Attention ignores inaccessible sources using bounded recent mention windows.
+
+Mention emails retain `sourceMentionId` plus existing community lifecycle and
+recipient fields in `emailOutbox`. Queued jobs contain no copied message preview.
+Source access, preferences, verified delivery address, read state, and community
+lifecycle are checked at admission, claim, and immediately before provider
+dispatch as applicable. Untraceable legacy mention jobs fail closed; unrelated
+outbox templates retain their existing behavior. Delivery links use the source
+channel route. Retries retain the same dedupe key; the first prepared body is
+fingerprinted so changed content cannot reuse that key with a different body.
+The fingerprint is not an authorization grant and contains no message text.
+
+The existing mention ledger, outbox, broadcast pagination, cooldowns, preferences,
+and provider receipts remain canonical. Mention `sent` still means notification
+processing has settled, not proof of provider delivery; the outbox owns that
+receipt. Suppression does not remove the member's underlying message.
+
+Database authorization and an external provider send are not one transaction.
+Revocation before the final dispatch check prevents delivery; a provider request
+already dispatched cannot be recalled. No real email sends, scheduling activation,
+private-room creation, or deployment are part of this foundation slice.
 
 The current ten-channel cap, ordering, General backfill compatibility, and UI
 remain unchanged. This slice does not implement private-room discovery,

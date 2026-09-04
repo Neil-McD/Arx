@@ -1,5 +1,6 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
 import { v } from "convex/values";
 import { requireCommunityChannelCapability, resolveCommunityChannelActor } from "./communityChannelAccess";
 import {
@@ -1567,15 +1568,8 @@ export async function resolveMentionedUserIdsForInteractionWrite(args: {
       throw new Error("interaction_mentions_limit_exceeded");
     }
     directMentionCount += 1;
-    try {
-      await requireCommunityChatAccess({
-        ctx: args.ctx,
-        communityId: args.communityId,
-        userId: user._id,
-      });
-    } catch {
-      throw new Error("interaction_mention_user_not_allowed");
-    }
+    // Recipient authority is checked against the persisted source and channel
+    // by insertCommunityInteractionMentionRows in the same transaction.
     const spec: UserInteractionMentionSpec = { kind: "user", userId: user._id };
     userSpecsById.set(normalized, spec);
     out.push(spec);
@@ -1607,6 +1601,9 @@ async function insertCommunityInteractionMentionRows(args: {
     throw new Error("interaction_mention_broadcast_source_required");
   }
   for (const spec of orderedMentionSpecs) {
+    if (spec.kind === "user" && !(await resolveNotificationRecipientSource({
+      ...args, userId: spec.userId,
+    }))) throw new Error("interaction_mention_user_not_allowed");
     const mentionId = await args.ctx.db.insert("communityInteractionMentions" as any, {
       communityId: args.communityId,
       channelId: args.channelId,

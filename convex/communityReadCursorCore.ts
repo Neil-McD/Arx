@@ -102,6 +102,14 @@ export async function readCommunityChatReadState(
     communityId,
     channelId,
   });
+  return readCommunityChannelReadState(ctx, communityId, userId, channel);
+}
+
+// Internal projection only; callers supply a channel whose audience they have
+// already authorized. This does not enable restricted-room entry APIs.
+export async function readCommunityChannelReadState(
+  ctx: any, communityId: any, userId: any, channel: CommunityChannelLike,
+): Promise<CommunityChatReadState> {
   const cursor = await getCommunityReadCursor(
     ctx,
     communityId,

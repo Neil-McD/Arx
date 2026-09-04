@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { resolveMentionRecipientSource } from "./communityNotificationAccess";
 import { mutation, query } from "./_generated/server";
 import {
   type CommunityMemberSettingsLike,
@@ -205,6 +206,15 @@ async function getLatestCommunityEventsUpdatedAt(
     : null;
 }
 
+const MENTION_SOURCE_SCAN_LIMIT = 5;
+
+async function latestReadableMentionAt(ctx: any, userId: any, mentions: Array<Record<string, any>>): Promise<number> {
+  for (const mention of mentions) {
+    if (await resolveMentionRecipientSource({ ctx, mention, userId })) return mention.createdAt;
+  }
+  return 0;
+}
+
 async function getLatestCommunityMentionOfUserCreatedAt(
   ctx: any,
   communityId: any,
@@ -218,8 +228,8 @@ async function getLatestCommunityMentionOfUserCreatedAt(
         q.eq("mentionedUserId", userId).eq("communityId", communityId).eq("notifyState", notifyState),
       )
       .order("desc")
-      .take(1)) as Array<{ createdAt?: number }>;
-    const createdAt = latest[0]?.createdAt;
+      .take(MENTION_SOURCE_SCAN_LIMIT)) as Array<Record<string, any>>;
+    const createdAt = await latestReadableMentionAt(ctx, userId, latest);
     if (typeof createdAt === "number" && Number.isFinite(createdAt) && createdAt > 0) {
       latestCreatedAt = Math.max(latestCreatedAt ?? 0, Math.floor(createdAt));
     }
@@ -262,13 +272,13 @@ async function getLatestCommunityMentionsByChannel(args: {
                     .eq("notifyState", notifyState),
               )
               .order("desc")
-              .take(1)) as Array<{ createdAt: number }>,
+              .take(MENTION_SOURCE_SCAN_LIMIT)) as Array<Record<string, any>>,
         ),
       ),
     );
     const latestCreatedAt = Math.max(
       0,
-      ...batches.flat().map((mention) => mention.createdAt),
+      ...await Promise.all(batches.map(mentions => latestReadableMentionAt(args.ctx, args.userId, mentions))),
     );
     if (latestCreatedAt > 0) {
       latestByChannel.set(

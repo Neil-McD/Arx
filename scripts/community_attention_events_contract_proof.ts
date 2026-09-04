@@ -16,6 +16,7 @@ const webAttentionController = read(
 );
 const nav = read("shared/CommunityNav.tsx");
 const mentionEmails = read("convex/communityMentionEmails.ts");
+const notificationAccess = read("convex/communityNotificationAccess.ts");
 const emailCore = read("convex/emailCore.ts");
 const emailModule = read("convex/email.ts");
 const cronsFile = read("convex/crons.ts");
@@ -212,7 +213,7 @@ assert.match(
 );
 assert.match(
   mentionEmails,
-  /readCommunityChatReadState\([\s\S]*mention\.communityId[\s\S]*mention\.mentionedUserId[\s\S]*mention\.channelId[\s\S]*readOnlyJob\(mention\)[\s\S]*notifyState: "read"/,
+  /readCommunityChannelReadState\([\s\S]*mention\.communityId[\s\S]*mention\.mentionedUserId[\s\S]*authorized\.channel[\s\S]*readOnlyJob\(mention\)[\s\S]*notifyState: "read"/,
   "the async mention worker must use the exact mention channel and settle rows already covered by its cursor",
 );
 assert.match(
@@ -236,9 +237,13 @@ assert.match(
 // mentions must not become a burst of emails.
 assert.match(
   mentionEmails,
-  /withIndex\("by_community_user"[\s\S]*?communityMembershipRowIsActive\(/,
-  "mention emails must re-check active membership at email time (ex-members get no snippet)",
+  /resolveMentionRecipientSource\(\{ ctx, mention, userId: mention\.mentionedUserId \}\)[\s\S]*if \(!authorized\)[\s\S]*suppressOnlyJob\(mention\)/,
+  "mention email admission must resolve current recipient and source authority",
 );
+assert.match(notificationAccess, /resolveCommunityChannelActor\(args\)[\s\S]*resolveCommunityInteractionEvidenceSource[\s\S]*communityInteractionEvidenceSourceIsReadable[\s\S]*requireCommunityChannelCapability/, "notification authority must reuse community and channel access and live-source checks");
+assert.match(emailModule, /sourceMentionId: v.optional\(v.id\("communityInteractionMentions"\)\)/, "outbox must retain typed mention lineage");
+assert.match(emailModule, /prepareMentionEmailDispatchInternal[\s\S]*row.attemptCount !== args.attemptCount/, "dispatch must fence superseded attempts");
+assert.match(emailModule, /job.templateKey === "mention_notification"[\s\S]*prepareMentionEmailDispatchInternal[\s\S]*if \(!prepared\)[\s\S]*continue[\s\S]*sendRenderedEmail/, "mention delivery must reauthorize immediately before provider dispatch");
 assert.match(
   mentionEmails,
   /MENTION_EMAIL_RECIPIENT_COOLDOWN_MS = 60 \* 60 \* 1000/,
@@ -283,8 +288,8 @@ assert.match(
 );
 assert.match(
   interactions,
-  /requireCommunityChatAccess\(\{[\s\S]*?userId: user\._id,[\s\S]*?\}\);[\s\S]*?catch \{[\s\S]*?interaction_mention_user_not_allowed/,
-  "every mention target must pass the community access gate",
+  /for \(const spec of orderedMentionSpecs\)[\s\S]*spec.kind === "user"[\s\S]*resolveNotificationRecipientSource\(\{[\s\S]*userId: spec.userId[\s\S]*interaction_mention_user_not_allowed[\s\S]*db.insert\("communityInteractionMentions"/,
+  "every user mention must pass source and recipient authority before insertion",
 );
 assert.match(
   interactions,

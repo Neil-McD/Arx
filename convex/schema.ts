@@ -887,6 +887,8 @@ export default defineSchema({
 
   emailOutbox: defineTable({
     kind: v.string(),
+    // Mention mail keeps source identity, never a copied preview as authority.
+    sourceMentionId: v.optional(v.id("communityInteractionMentions")),
     communityId: v.optional(v.id("communities")),
     communityLifecycleGeneration: v.optional(v.number()),
     recipientUserId: v.optional(v.id("users")),
