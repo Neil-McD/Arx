@@ -21,6 +21,9 @@ function readableLabel(value: string): string {
 function workflowActivityLabel(
   activity: CloudCommunityMemberSuccessDossier["recent_workflow_activity"][number],
 ): string {
+  if (activity.status === "unavailable") {
+    return `${activity.action_type === "prompt_agent" ? "Community agent" : "Milestone move"} · Status unavailable`;
+  }
   if (activity.action_type === "prompt_agent") {
     return `Community agent · ${readableLabel(activity.status)}`;
   }

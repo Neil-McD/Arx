@@ -26,6 +26,162 @@ const OWNER_SUBJECT = "workflow-owner-v1";
 const MEMBER_SUBJECT = "workflow-member-v1";
 const internalApi = internal as any;
 const dossierQuery = api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier;
+
+async function readActivityViews(t: ReturnType<typeof convexTest>, f: Awaited<ReturnType<typeof fixture>>) {
+  const builder = await t.withIdentity({ subject: OWNER_SUBJECT }).query(dossierQuery,
+    { communityId: f.communityId, membershipId: f.membershipId });
+  const self = await t.withIdentity({ subject: MEMBER_SUBJECT }).query(
+    internal.communityCapabilityContext.resolveCommunityMemberSelfContextInternal,
+    { authSubject: MEMBER_SUBJECT, userId: f.memberId, communityId: f.communityId });
+  if (!self.ok) throw new Error(self.code);
+  expect(self.context.recent_workflow_activity).toEqual(
+    builder.recent_workflow_activity.map(({ prompt: _prompt, ...activity }) => activity));
+  expect(self.context.recent_workflow_activity.every((activity) => !("prompt" in activity))).toBe(true);
+  return { builder, self: self.context };
+}
+
+test.each(["queued", "running", "responded", "error", "skipped"] as const)("activity is backed by exact agent request status: %s", async (status) => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configure(t, f.communityId, { key: "", type: "prompt_agent", prompt: "PRIVATE_BUILDER_PROMPT" });
+  const rootId = await addRoot(t, f, "status");
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  await t.run(async (ctx) => {
+    const request = (await ctx.db.query("communityAgentServeRequests").first())!;
+    await ctx.db.patch(request._id, { status });
+  });
+  const views = await readActivityViews(t, f);
+  expect(views.self.recent_workflow_activity[0].status).toBe(status === "error" || status === "skipped" ? "failed" : status);
+  expect(JSON.stringify(views.self)).not.toContain("PRIVATE_BUILDER_PROMPT");
+});
+
+test.each(["missing", "wrong_community", "wrong_requester", "wrong_run", "wrong_action", "wrong_prompt", "wrong_source", "wrong_kind", "wrong_result", "failed_run"] as const)("unverifiable agent activity does not masquerade as queued: %s", async (failure) => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configure(t, f.communityId, { key: "", type: "prompt_agent", prompt: "PRIVATE_BUILDER_PROMPT" });
+  const rootId = await addRoot(t, f, "bad-link");
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  await t.run(async (ctx) => {
+    const request = (await ctx.db.query("communityAgentServeRequests").first())!;
+    const run = (await ctx.db.query("communityMemberWorkflowRuns").first())!;
+    if (failure === "missing") await ctx.db.delete(request._id);
+    if (failure === "wrong_requester") await ctx.db.patch(request._id, { requesterUserId: f.ownerId });
+    if (failure === "wrong_action") await ctx.db.patch(request._id, { workflowActionKey: "foreign-action" });
+    if (failure === "wrong_prompt") await ctx.db.patch(request._id, { workflowPromptSnapshot: "FOREIGN_PROMPT" });
+    if (failure === "wrong_source") await ctx.db.patch(request._id, { sourceRootId: undefined });
+    if (failure === "wrong_kind") await ctx.db.patch(request._id, { triggerKind: "mention" });
+    if (failure === "wrong_result") await ctx.db.patch(run._id, { actionResult: { ...run.actionResult!, actionKey: "foreign-action" } });
+    if (failure === "failed_run") { await ctx.db.delete(request._id); await ctx.db.patch(run._id, { status: "failed" }); }
+    if (failure === "wrong_run") {
+      const { _id, _creationTime, ...fields } = run;
+      const otherId = await ctx.db.insert("communityMemberWorkflowRuns", { ...fields, createdAt: run.createdAt - 1 });
+      await ctx.db.patch(request._id, { workflowRunId: otherId });
+    }
+    if (failure === "wrong_community") {
+      const { _id, _creationTime, ...fields } = (await ctx.db.get(f.communityId))!;
+      const otherId = await ctx.db.insert("communities", { ...fields, slug: "foreign-community" });
+      await ctx.db.patch(request._id, { communityId: otherId });
+    }
+  });
+  const views = await readActivityViews(t, f);
+  expect(views.self.recent_workflow_activity[0].status).toBe(failure === "failed_run" ? "failed" : "unavailable");
+  expect(JSON.stringify(views.self)).not.toContain("FOREIGN_PROMPT");
+});
+
+test.each(["missing", "wrong_community", "wrong_membership", "wrong_workflow", "wrong_run", "wrong_action", "wrong_revision", "wrong_milestone", "wrong_entry", "failed_run"] as const)("move activity rejects unverifiable receipts: %s", async (failure) => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configure(t, f.communityId, { key: "", type: "move_member", destination: "next_or_complete" });
+  const rootId = await addRoot(t, f, "bad-move");
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  await t.run(async (ctx) => {
+    const receipt = (await ctx.db.query("communityMemberWorkflowTransitions").first())!;
+    const run = (await ctx.db.query("communityMemberWorkflowRuns").first())!;
+    if (failure === "missing") await ctx.db.delete(receipt._id);
+    if (failure === "failed_run") { await ctx.db.delete(receipt._id); await ctx.db.patch(run._id, { status: "failed" }); }
+    if (failure === "wrong_action") await ctx.db.patch(receipt._id, { actionKey: "foreign-action" });
+    if (failure === "wrong_revision") await ctx.db.patch(receipt._id, { workflowRevision: receipt.workflowRevision + 1 });
+    if (failure === "wrong_milestone") await ctx.db.patch(receipt._id, { fromMilestoneKey: "foreign-milestone" });
+    if (failure === "wrong_entry") await ctx.db.patch(receipt._id, { milestoneEnteredAt: receipt.milestoneEnteredAt + 1 });
+    if (failure === "wrong_run") {
+      const { _id, _creationTime, ...fields } = run;
+      const otherId = await ctx.db.insert("communityMemberWorkflowRuns", { ...fields, createdAt: run.createdAt - 1 });
+      await ctx.db.patch(receipt._id, { workflowRunId: otherId });
+    }
+    if (failure === "wrong_membership") {
+      const { _id, _creationTime, ...fields } = (await ctx.db.get(f.membershipId))!;
+      const otherId = await ctx.db.insert("communityMemberships", { ...fields, userId: f.ownerId });
+      await ctx.db.patch(receipt._id, { membershipId: otherId });
+    }
+    if (failure === "wrong_workflow") {
+      const { _id, _creationTime, ...fields } = (await ctx.db.get(f.communityId))!;
+      const otherCommunityId = await ctx.db.insert("communities", { ...fields, slug: "foreign-workflow-community" });
+      const { _id: wid, _creationTime: wtime, ...workflow } = (await ctx.db.get(run.workflowId))!;
+      const otherId = await ctx.db.insert("communityMemberWorkflows", { ...workflow, communityId: otherCommunityId });
+      await ctx.db.patch(receipt._id, { workflowId: otherId, toMilestoneName: "FOREIGN_DESTINATION" });
+    }
+    if (failure === "wrong_community") {
+      const { _id, _creationTime, ...fields } = (await ctx.db.get(f.communityId))!;
+      const otherId = await ctx.db.insert("communities", { ...fields, slug: "foreign-move-community" });
+      await ctx.db.patch(receipt._id, { communityId: otherId, toMilestoneName: "FOREIGN_DESTINATION" });
+    }
+  });
+  const views = await readActivityViews(t, f);
+  expect(views.self.recent_workflow_activity[0]).toMatchObject({
+    status: failure === "failed_run" ? "failed" : "unavailable", next_milestone_key: null, next_milestone_name: null,
+  });
+  expect(JSON.stringify(views.self)).not.toContain("FOREIGN_DESTINATION");
+});
+
+test("the final milestone's exact receipt projects completion in both authorized views", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const first = await owner.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone,
+    { communityId: f.communityId, expectedRevision: 0, name: "Only milestone" });
+  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 1, milestoneKey: first.milestone.key, name: "Only milestone",
+    automations: [{ key: "", trigger: { type: "member_contributed" }, action: { key: "", type: "move_member", destination: "next_or_complete" } }],
+  });
+  const rootId = await addRoot(t, f, "completion");
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  const views = await readActivityViews(t, f);
+  expect(views.self.recent_workflow_activity[0]).toMatchObject({ status: "workflow_completed", next_milestone_key: null, next_milestone_name: null });
+  expect(views.self.workflow?.completed_at).toBeTruthy();
+});
+
+test("exact movement receipt remains authoritative outside the displayed history window; reads do not write", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configure(t, f.communityId, { key: "", type: "move_member", destination: "next_or_complete" });
+  const rootId = await addRoot(t, f, "history-window");
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  const receiptId = await t.run(async (ctx) => {
+    const receipt = (await ctx.db.query("communityMemberWorkflowTransitions").first())!;
+    const run = (await ctx.db.query("communityMemberWorkflowRuns").first())!;
+    // Independent history/run windows: import-like chronology, not a new runtime write path.
+    for (let i = 1; i <= 13; i++) {
+      const { _id: rid, _creationTime: rtime, ...r } = run;
+      const olderRunId = await ctx.db.insert("communityMemberWorkflowRuns", { ...r, createdAt: run.createdAt - i });
+      const { _id, _creationTime, ...fields } = receipt;
+      await ctx.db.insert("communityMemberWorkflowTransitions", { ...fields, workflowRunId: olderRunId, seq: receipt.seq + i });
+    }
+    return receipt._id;
+  });
+  const snapshot = () => t.run(async (ctx) => ({
+    runs: await ctx.db.query("communityMemberWorkflowRuns").collect(),
+    transitions: await ctx.db.query("communityMemberWorkflowTransitions").collect(),
+    states: await ctx.db.query("communityMemberWorkflowMemberMilestones").collect(),
+    requests: await ctx.db.query("communityAgentServeRequests").collect(),
+  }));
+  const before = await snapshot();
+  const views = await readActivityViews(t, f);
+  expect(views.self.milestone_history).toHaveLength(12);
+  expect(views.self.milestone_history.map((row) => row.id)).not.toContain(receiptId);
+  expect(views.self.recent_workflow_activity[0]).toMatchObject({ status: "moved", next_milestone_name: "Activated" });
+  await readActivityViews(t, f);
+  expect(await snapshot()).toEqual(before);
+});
 afterEach(() => { vi.unstubAllEnvs(); vi.useRealTimers(); vi.restoreAllMocks(); });
 
 test("membership context exists without a workflow and reading creates no state", async () => {

@@ -13,6 +13,7 @@ import {
   readMemberFactsForLens,
 } from "./memberOntologyCore";
 import type { CommunityMemberSelfContext } from "../shared/communityMemberSelfContext";
+import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
 import {
   getCommunityMemberWorkflowByCommunity,
   getMemberMilestone,
@@ -173,25 +174,47 @@ async function readMembershipContextRecords(args: {
             .take(COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT)
         : Promise.resolve([]),
     ]);
-  const transitionById = new Map(
-    transitionRows.map((transition) => [String(transition._id), transition]),
-  );
   const recentWorkflowActivity = await Promise.all(
     workflowRunRows.map(async (run) => {
+      // History pagination is presentation only, never outcome authority.
+      // A missing or mismatched linked record does not establish live work.
+      const validActionResult =
+        run.communityId === args.communityId &&
+        run.workflowId === workflow?._id &&
+        run.membershipId === membership?._id &&
+        run.actionResult?.actionKey === run.actionSnapshot.key &&
+        run.actionResult?.status === "complete" &&
+        run.status === "finished";
       if (run.actionSnapshot.type === "prompt_agent") {
         const serveRequest = run.actionResult?.serveRequestId
           ? await args.ctx.db.get(run.actionResult.serveRequestId)
           : null;
+        const validRequest =
+          validActionResult &&
+          serveRequest &&
+          serveRequest.communityId === args.communityId &&
+          serveRequest.triggerKind === "workflow" &&
+          serveRequest.requesterUserId === args.subjectUserId &&
+          serveRequest.workflowRunId === run._id &&
+          serveRequest.workflowActionKey === run.actionSnapshot.key &&
+          serveRequest.workflowPromptSnapshot === run.actionSnapshot.prompt &&
+          Boolean(serveRequest.sourceReplyId ?? serveRequest.sourceRootId) &&
+          run.triggerReceiptRef ===
+            buildCommunityInteractionEvidenceRef({
+              objectType: serveRequest.sourceReplyId ? "reply" : "root",
+              objectId: String(
+                serveRequest.sourceReplyId ?? serveRequest.sourceRootId ?? "",
+              ),
+            });
         const status =
-          run.status === "failed" ||
-          serveRequest?.status === "error" ||
-          serveRequest?.status === "skipped"
+          run.status === "failed"
             ? ("failed" as const)
-            : serveRequest?.status === "responded"
-              ? ("responded" as const)
-              : serveRequest?.status === "running"
-                ? ("running" as const)
-                : ("queued" as const);
+            : !validRequest
+              ? ("unavailable" as const)
+              : serveRequest.status === "error" ||
+                  serveRequest.status === "skipped"
+                ? ("failed" as const)
+                : serveRequest.status;
         return {
           id: String(run._id),
           action_type: "prompt_agent" as const,
@@ -204,9 +227,22 @@ async function readMembershipContextRecords(args: {
           occurred_at: toIsoString(run.createdAt),
         };
       }
-      const transition = run.actionResult?.transitionId
-        ? (transitionById.get(String(run.actionResult.transitionId)) ?? null)
+      const linkedTransition = run.actionResult?.transitionId
+        ? await args.ctx.db.get(run.actionResult.transitionId)
         : null;
+      const transition =
+        validActionResult &&
+        linkedTransition &&
+        linkedTransition.communityId === args.communityId &&
+        linkedTransition.workflowId === run.workflowId &&
+        linkedTransition.membershipId === run.membershipId &&
+        linkedTransition.workflowRunId === run._id &&
+        linkedTransition.actionKey === run.actionSnapshot.key &&
+        linkedTransition.workflowRevision === run.workflowRevision &&
+        linkedTransition.fromMilestoneKey === run.milestoneKey &&
+        linkedTransition.milestoneEnteredAt === run.milestoneEnteredAt
+          ? linkedTransition
+          : null;
       const status =
         run.status === "failed"
           ? ("failed" as const)
@@ -214,7 +250,7 @@ async function readMembershipContextRecords(args: {
             ? ("workflow_completed" as const)
             : transition
               ? ("moved" as const)
-              : ("running" as const);
+              : ("unavailable" as const);
       return {
         id: String(run._id),
         action_type: "move_member" as const,
@@ -272,7 +308,12 @@ async function readMembershipContextRecords(args: {
       ),
     recent_workflow_activity: recentWorkflowActivity,
     milestone_history: transitionRows
-      .slice()
+      .filter(
+        (transition) =>
+          transition.communityId === args.communityId &&
+          transition.workflowId === workflow?._id &&
+          transition.membershipId === membership?._id,
+      )
       .reverse()
       .map((transition) => ({
         id: String(transition._id),

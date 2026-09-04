@@ -32,7 +32,8 @@ export type CommunityMemberSuccessWorkflowActivity = {
     | "responded"
     | "moved"
     | "workflow_completed"
-    | "failed";
+    | "failed"
+    | "unavailable";
   milestone_key: string;
   milestone_name: string;
   next_milestone_key: string | null;

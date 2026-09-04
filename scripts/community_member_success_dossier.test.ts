@@ -112,6 +112,26 @@ test("member context Markdown renders without a workflow", () => {
   expect(markdown).not.toContain("Workflow status: Active");
 });
 
+test.each(["prompt_agent", "move_member"] as const)("%s unavailable is explicit in Markdown and the existing dossier", (action_type) => {
+  vi.stubGlobal("document", { body: {} });
+  vi.stubGlobal("React", React);
+  try {
+    const unavailable: CommunityMemberSuccessDossier = { ...source,
+      recent_workflow_activity: [{ ...source.recent_workflow_activity[0], action_type, status: "unavailable" }],
+    };
+    const markdown = renderCommunityMemberSuccessDossierMarkdown(unavailable);
+    expect(markdown).toContain("status unavailable");
+    expect(markdown).toContain("linked outcome could not be verified");
+    expect(markdown).not.toContain("Agent prompt responded");
+    const html = renderToStaticMarkup(React.createElement(WebCommunityWorkflowMemberDossierModal, {
+      isOpen: true, dossier: { ...unavailable, markdown }, isLoading: false, error: null, onClose: () => {},
+    }));
+    expect(html).toContain("Status unavailable");
+    expect(html).not.toContain("Queued");
+    expect(html).not.toContain("Running");
+  } finally { vi.unstubAllGlobals(); }
+});
+
 test.each([null, source.workflow])(
   "dossier component renders optional workflow %j",
   (workflow) => {

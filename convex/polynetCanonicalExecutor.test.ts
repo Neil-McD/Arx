@@ -149,7 +149,7 @@ test("self context bounds facts and omits builder prompt snapshots from activity
   expect(result.context.facts_truncated).toBe(true);
   expect(result.context.approved_community_context).toHaveLength(12);
   expect(result.context.recent_workflow_activity).toHaveLength(12);
-  expect(result.context.recent_workflow_activity.every((activity) => activity.status === "queued")).toBe(true);
+  expect(result.context.recent_workflow_activity.every((activity) => activity.status === "unavailable")).toBe(true);
   expect(JSON.stringify(result)).not.toContain("SECRET_BUILDER_INSTRUCTION");
   expect(result.context.recent_workflow_activity.every((activity) => !("prompt" in activity))).toBe(true);
   const { body } = renderCommunityMemberSelfContext(result.context);

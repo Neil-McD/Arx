@@ -49,6 +49,16 @@ the linked transition, and the action prompt and milestone name come from the
 occurrence-time workflow-run snapshot. The timeline does not infer success from
 the current workflow definition.
 
+Each displayed action resolves its exact linked record independently of the
+12-item history window. Agent requests must match the community, requester,
+workflow run, action, prompt snapshot, and source receipt. Movement receipts
+must match the community, workflow, membership, run/action, revision, source
+milestone, and entry time. A missing or mismatched link projects `unavailable`,
+not queued/running/success. An explicit failed workflow run remains evidence
+of failure even without a downstream receipt. These are read-model statuses;
+no persisted status or execution/retry policy changes. Builder Markdown, the
+existing dossier, and member self-context share these outcomes.
+
 The old goal evaluator, checks, judgment passes, milestone-pass table, and
 evaluation funding surface do not exist in V1.
 
@@ -113,6 +123,14 @@ public member profile paths are unchanged. This document is read-only context,
 not new action authority, and is not indexed by search. It adds no tables,
 Markdown persistence, cache, synchronization writer, or automatic prompt
 injection. Live signed-in native/MCP acceptance remains a separate test gate.
+
+Personal-agent guidance routes questions about the member's progress or next
+steps through the active community's returned `members/` then `me/` directory
+and `context.md` document. Global profile reads remain identity context, not
+progress authority. Retrieval is on demand, not every turn; a new progress
+question calls for fresh context. No active community means no scoped progress
+guidance. Suggestions are not configured requirements, unavailable outcomes
+are not ongoing work, and neither context nor a reply authorizes advancement.
 
 ### Workflow agent orientation
 
