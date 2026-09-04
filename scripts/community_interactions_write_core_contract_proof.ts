@@ -83,7 +83,7 @@ assert.match(
 );
 assert.match(
   contract,
-  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*YouTube is the only URL-derived rich media exception[\s\S]*community chat does not invoke an interaction-preview mode/,
+  /Current Link Presentation Slice[\s\S]*ordinary links render as authored blue links[\s\S]*YouTube videos and explicit HTTPS PDF links[\s\S]*community chat does not invoke an interaction-preview mode/,
   "contract should document the deterministic simple-link boundary",
 );
 

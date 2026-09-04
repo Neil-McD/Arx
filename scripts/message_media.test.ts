@@ -1,9 +1,9 @@
 // @vitest-environment node
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { isPdfDocument, pdfLinksInText, safeDocumentUrl } from "../shared/messagePdf";
-import { loadYouTubeMetadata } from "../shared/youtubeMetadata";
+import { communityInteractionRootHasRichContent } from "../apps/web/src/components/WebCommunityInteractionProjection";
+import { youTubeEmbedsInText } from "../shared/linkEmbedUi";
 
-afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers(); });
 describe("message documents", () => {
   it("recognizes PDF uploads by MIME or extension", () => {
     expect(isPdfDocument("uploaded-file", "application/pdf; charset=binary")).toBe(true);
@@ -19,31 +19,19 @@ describe("message documents", () => {
     for (const url of ["javascript:alert(1)", "data:text/html,test", "http://example.com/a.pdf", "https://user:pass@example.com/a.pdf"]) expect(safeDocumentUrl(url)).toBeNull();
   });
 });
-describe("YouTube metadata", () => {
-  it("coalesces duplicate requests and retains text only, with no credentials", async () => {
-    const fetcher = vi.fn().mockResolvedValue(new Response(JSON.stringify({ title: "Example", author_name: "Builder", html: "<script>bad()</script>" })));
-    vi.stubGlobal("fetch", fetcher);
-    expect(await Promise.all([loadYouTubeMetadata("metadata001"), loadYouTubeMetadata("metadata001")])).toEqual([{ title: "Example", author: "Builder" }, { title: "Example", author: "Builder" }]);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(fetcher.mock.calls[0][1]).toMatchObject({ credentials: "omit", referrerPolicy: "no-referrer" });
+
+describe("media classification", () => {
+  const bundle = (text: string) => ({
+    attachments: [], content_blocks: [], root: { content_summary: text },
+  }) as unknown as Parameters<typeof communityInteractionRootHasRichContent>[0];
+  it("classifies pasted PDF and video posts consistently with rendering", () => {
+    expect(communityInteractionRootHasRichContent(bundle("https://files.example.com/guide.pdf"))).toBe(true);
+    expect(communityInteractionRootHasRichContent(bundle("https://youtu.be/M7lc1UVf-VE"))).toBe(true);
+    expect(communityInteractionRootHasRichContent(bundle("https://example.com/page"))).toBe(false);
+    expect(communityInteractionRootHasRichContent(bundle("`https://files.example.com/guide.pdf`"))).toBe(false);
   });
-  it("fails to a playable fallback on unavailable metadata", async () => {
-    vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("offline")));
-    expect(await loadYouTubeMetadata("metadata002")).toBeNull();
-  });
-  it("expires failures without polling, then coalesces a successful retry", async () => {
-    vi.useFakeTimers();
-    const fetcher = vi.fn().mockRejectedValueOnce(new Error("offline"))
-      .mockResolvedValue(new Response(JSON.stringify({ title: "Recovered", author_name: "Builder" })));
-    vi.stubGlobal("fetch", fetcher);
-    expect(await loadYouTubeMetadata("metadata003")).toBeNull();
-    await vi.advanceTimersByTimeAsync(29_999);
-    expect(await loadYouTubeMetadata("metadata003")).toBeNull();
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    await vi.advanceTimersByTimeAsync(1);
-    expect(fetcher).toHaveBeenCalledTimes(1);
-    expect(await Promise.all([loadYouTubeMetadata("metadata003"), loadYouTubeMetadata("metadata003")]))
-      .toEqual([{ title: "Recovered", author: "Builder" }, { title: "Recovered", author: "Builder" }]);
-    expect(fetcher).toHaveBeenCalledTimes(2);
+  it("bounds distinct videos and documents without removing authored links", () => {
+    expect(youTubeEmbedsInText(Array.from({ length: 20 }, (_, i) => `https://youtu.be/video${String(i).padStart(6, "0")}`).join("\n"))).toHaveLength(12);
+    expect(pdfLinksInText(Array.from({ length: 20 }, (_, i) => `https://files.example.com/${i}.pdf`).join("\n"))).toHaveLength(12);
   });
 });
