@@ -1331,7 +1331,11 @@ export function WebDirectMessagesHost<SessionT>(props: WebDirectMessagesHostProp
       onClose();
     };
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape") onClose();
+      if (event.key !== "Escape") return;
+      // A control disabling itself (for example Next on the last PDF page) can
+      // move focus to body. The native modal still owns this Escape's default action.
+      if (document.querySelector(".web-direct-messages-host dialog[open]")) return;
+      onClose();
     };
 
     document.addEventListener("pointerdown", handlePointerDown, true);
