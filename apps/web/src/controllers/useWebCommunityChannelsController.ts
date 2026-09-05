@@ -342,7 +342,7 @@ export function useWebCommunityChannelsController(params: {
     channelsError: presentedChannelsError,
   });
 
-  const createChannel = useCallback(async (nameRaw: string): Promise<CloudCommunityChannel | null> => {
+  const createChannel = useCallback(async (nameRaw: string, accessMode: "all_members" | "restricted" = "all_members"): Promise<CloudCommunityChannel | null> => {
     const current = paramsRef.current;
     const communityId = String(current.activeCommunityId ?? "").trim();
     const name = String(nameRaw ?? "").trim().replace(/\s+/g, " ");
@@ -354,6 +354,7 @@ export function useWebCommunityChannelsController(params: {
       const usableSession = await current.ensureSession(current.session ?? undefined);
       if (!usableSession) throw new Error("auth_session_required");
       const created = await createCloudCommunityChannel({
+        accessMode,
         session: usableSession,
         communityId,
         name,

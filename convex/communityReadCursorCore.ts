@@ -1,7 +1,8 @@
 import {
   type CommunityChannelLike,
-  resolveRequestedCommunityChannel,
+  resolveAuthorizedCommunityChannel,
 } from "./communityChannelCore";
+import { resolveCommunityChannelActor } from "./communityChannelAccess";
 
 type CommunityReadCursorLike = {
   _id: any;
@@ -97,8 +98,10 @@ export async function readCommunityChatReadState(
   userId: any,
   channelId?: any | null,
 ): Promise<CommunityChatReadState> {
-  const channel = await resolveRequestedCommunityChannel({
+  const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
+  const channel = await resolveAuthorizedCommunityChannel({
     ctx,
+    actor, capability: "canRead",
     communityId,
     channelId,
   });
@@ -155,8 +158,10 @@ export async function advanceCommunityChatReadCursor(args: {
     userId,
   } = args;
   const latestReadableAt = normalizeCommunityReadPosition(args.latestReadableAt);
-  const channel = await resolveRequestedCommunityChannel({
+  const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
+  const channel = await resolveAuthorizedCommunityChannel({
     ctx,
+    actor, capability: "canRead",
     communityId,
     channelId: args.channelId,
     ensureGeneralForWrite: true,

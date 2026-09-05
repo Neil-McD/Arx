@@ -107,6 +107,11 @@ function formatProjectionError(error: unknown): string {
   return message.trim() || "Failed to load community threads.";
 }
 
+export function communityProjectionAccessLost(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error ?? "");
+  return /community_channel_(unavailable|inactive|not_found)|community_(forbidden|archived|entitlement_required)|auth_session|convex_auth/i.test(message);
+}
+
 function formatPinnedRootError(error: unknown): string {
   const message = error instanceof Error ? error.message : String(error ?? "");
   const normalized = message.trim().toLowerCase();
@@ -431,6 +436,7 @@ export function useWebCommunityInteractionProjection<
       setRepliesByRootId((current) => ({ ...current, [rootId]: replies }));
     } catch (loadError) {
       if (repliesRequestIdRef.current[rootId] !== requestId) return;
+      if (communityProjectionAccessLost(loadError)) setRepliesByRootId(current => ({ ...current, [rootId]: [] }));
       setRepliesErrorByRootId((current) => ({
         ...current,
         [rootId]: formatProjectionError(loadError),
@@ -484,6 +490,9 @@ export function useWebCommunityInteractionProjection<
         return;
       }
       setError(formatProjectionError(loadError));
+      if (communityProjectionAccessLost(loadError)) {
+        setRoots([]); setSelectedRoot(null); setRepliesByRootId({}); setPinnedRoot(null); setSidecar({ kind: "context" });
+      }
     } finally {
       if (
         rootsRequestIdRef.current === requestId
@@ -597,6 +606,10 @@ export function useWebCommunityInteractionProjection<
               activeChannelIdRef.current !== activeChannelId
             ) return;
             setError(formatProjectionError(subscriptionError));
+            if (communityProjectionAccessLost(subscriptionError)) {
+              ++rootsRequestIdRef.current;
+              setRoots([]); setSelectedRoot(null); setRepliesByRootId({}); setPinnedRoot(null); setSidecar({ kind: "context" });
+            }
             setIsLoadingRoots(false);
           },
         });
@@ -852,6 +865,10 @@ export function useWebCommunityInteractionProjection<
           },
           onError: (subscriptionError) => {
             if (cancelled) return;
+            if (communityProjectionAccessLost(subscriptionError)) {
+              repliesRequestIdRef.current[rootId] = (repliesRequestIdRef.current[rootId] ?? 0) + 1;
+              setRepliesByRootId(current => ({ ...current, [rootId]: [] }));
+            }
             setRepliesErrorByRootId((current) => ({
               ...current,
               [rootId]: formatProjectionError(subscriptionError),

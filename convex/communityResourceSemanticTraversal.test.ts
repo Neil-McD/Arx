@@ -17,6 +17,7 @@ const modules = import.meta.glob([
   "./communityCapabilityContext.ts",
   "./communityResourceEvidence.ts",
   "./communityEvidenceAudit.ts",
+  "./communityAgentChannelAccess.ts",
   "./_generated/**/*.*s",
 ]);
 
@@ -282,6 +283,16 @@ test("canonical executor keeps bound and explicit community selectors behavioral
   const fixture = await createFixture(t);
   const asMember = t.withIdentity({ subject: fixture.memberSubject });
   const ctx = createPlatformOperationTestContext(asMember);
+  const requestId = await t.run(async ctx => {
+    const rootId = await ctx.db.insert("communityInteractionRoots", { communityId: fixture.communityId,
+      actorType: "human", actorUserId: fixture.memberId, kind: "discussion", status: "live", visibilityScope: "community",
+      contentSummary: "Semantic tool test", replyCount: 0, reactionSummary: [], idempotencyKey: "semantic-tools",
+      createdAt: 1, updatedAt: 1 });
+    return ctx.db.insert("communityAgentServeRequests", { communityId: fixture.communityId, agentKey: "community_agent",
+      sourceRootId: rootId, requesterUserId: fixture.memberId, sponsorUserId: fixture.memberId, status: "running",
+      attempt: 1, intakeReason: "accepted", sourceVisibilityScope: "community", responseVisibilityScope: "community",
+      createdAt: 1, updatedAt: 1 });
+  });
 
   const executeList = async (
     selector:
@@ -323,7 +334,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
         attempt: 1,
       },
     },
-    requestId: "semantic-concierge-test",
+    requestId,
     toolName: "polynet_list",
     rawArguments: { path: "/communities/resource-semantic/" },
   });
@@ -342,7 +353,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
           attempt: 1,
         },
       },
-      requestId: "semantic-concierge-auth-test",
+      requestId,
       toolName: "polynet_list",
       rawArguments: { path: "/communities/resource-semantic/" },
     }),
@@ -361,7 +372,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
           attempt: 1,
         },
       },
-      requestId: "semantic-concierge-escape-test",
+      requestId,
       toolName: "polynet_list",
       rawArguments: { path: "/communities/resource-semantic-other/" },
     }),
@@ -419,7 +430,7 @@ test("canonical executor keeps bound and explicit community selectors behavioral
         attempt: 1,
       },
     },
-    requestId: "semantic-concierge-read-test",
+    requestId,
     toolName: "polynet_read",
     rawArguments: {
       path: `/communities/resource-semantic/resources/start-here~${fixture.firstModuleId}/operating-model~${fixture.firstPageId}.md`,

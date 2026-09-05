@@ -20,7 +20,7 @@ export async function requireAttachmentUploadScope(ctx: any, args: {
     if (!root || String(root.communityId) !== String(args.communityId) || root.status !== "live" || root.lockedAt) {
       throw new Error("community_attachment_target_unavailable");
     }
-    const channel = await requireChannelForAddressableRoot({ ctx, root });
+    const channel = await requireChannelForAddressableRoot({ ctx, root, actor });
     if (args.channelId && String(channel._id) !== String(args.channelId)) throw new Error("community_attachment_scope_mismatch");
     await requireCommunityChannelCapability({ ctx, channel, actor, capability: "canReply" });
     return channel;

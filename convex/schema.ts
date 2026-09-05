@@ -1073,8 +1073,7 @@ export default defineSchema({
     ])
     .index("by_visibility_updatedAt", ["visibility", "updatedAt"]),
 
-  // Policy storage foundation. Public creation remains all-member only until
-  // restricted-channel privacy coverage is complete across every consumer.
+  // One channel model for shared and invite-only rooms; General stays shared.
   communityChannels: defineTable({
     communityId: v.id("communities"),
     systemRole: v.optional(v.literal("general")),
@@ -1095,12 +1094,14 @@ export default defineSchema({
     .index("by_community_status_position", ["communityId", "status", "position"])
     .index("by_community_access_status_position", ["communityId", "accessMode", "status", "position"]),
 
-  // No public grant mutation in the authority-foundation slice. Writers must
-  // preserve one row per channel/principal; revoked grants confer no access.
+  // Manager-owned grants, unique per channel/principal. Human grants bind to
+  // the current community-membership activation; rejoining requires reinviting.
   communityChannelParticipants: defineTable({
     communityId: v.id("communities"),
     channelId: v.id("communityChannels"),
     principalKey: v.string(),
+    membershipId: v.optional(v.id("communityMemberships")),
+    membershipActivationSequence: v.optional(v.number()),
     status: v.union(v.literal("active"), v.literal("revoked")),
     createdByUserId: v.id("users"),
     createdAt: v.number(),

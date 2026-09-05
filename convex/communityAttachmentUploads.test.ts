@@ -322,7 +322,7 @@ test("HTTP upload streams bytes and returns a claim, not a storage capability", 
   const req = new Request("https://example.com/runtime/community_attachment_upload", { method: "POST", body: PNG,
     headers: { "content-type": "image/png", "x-polynet-community-id": f.communityId,
       "x-polynet-channel-id": f.channelId, "x-polynet-message-key": "send-one", "x-polynet-file-name": "image.png" } });
-  const response = await routes.find(route => route.method === "POST").handler({ runMutation: t.mutation }, req);
+  const response = await routes.find(route => route.method === "POST" && route.path.endsWith("community_attachment_upload")).handler({ runMutation: t.mutation }, req);
   expect(response.status).toBe(200);
   const result = await response.json();
   expect(result.attachment).toMatchObject({ mime: "image/png", size: PNG.length });
@@ -347,7 +347,7 @@ test("HTTP failure cleanup reconciles a blob returned after its reservation expi
     storedId = await store();
     return Response.json({ storageId: storedId });
   });
-  const response = await routes.find(route => route.method === "POST").handler({ runMutation: t.mutation },
+  const response = await routes.find(route => route.method === "POST" && route.path.endsWith("community_attachment_upload")).handler({ runMutation: t.mutation },
     new Request("https://example.com/runtime/community_attachment_upload", { method: "POST", body: PNG,
       headers: { "content-type": "image/png", "x-polynet-community-id": f.communityId,
         "x-polynet-channel-id": f.channelId, "x-polynet-message-key": "late-send", "x-polynet-file-name": "image.png" } }));
@@ -441,7 +441,7 @@ test("an unauthorized HTTP upload never reaches storage and removes its reservat
   const request = () => new Request("https://example.com/runtime/community_attachment_upload", { method: "POST", body: PNG,
     headers: { "content-type": "image/png", "x-polynet-community-id": f.communityId,
       "x-polynet-channel-id": f.channelId, "x-polynet-message-key": "send-one" } });
-  const handler = routes.find(route => route.method === "POST").handler;
+  const handler = routes.find(route => route.method === "POST" && route.path.endsWith("community_attachment_upload")).handler;
   expect((await handler({ runMutation: t.mutation }, request())).status).toBe(401);
   expect(provider).not.toHaveBeenCalled();
   authorized = true;

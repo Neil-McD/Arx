@@ -178,7 +178,11 @@ not add a per-fact finalization/revocation protocol or cross-community access.
 
 - Builder mutations require current manager authority and an expected revision.
 - Contributions must be live, human-authored, channel-addressable, and owned by
-  an active community member.
+  an active community member with current access to the source channel.
+- Invite-only contributions can drive deterministic movement without an agent
+  grant. Prompt actions additionally require the community agent to be invited
+  and able to reply. Private runs answer in the originating thread; they cannot
+  publish elsewhere or write shared memory. See `community-private-channels-v1.md`.
 - Agent action intake re-reads the workflow run and exact prompt snapshot,
   rechecks source identity/access, and uses the canonical community-agent
   funding and worker path.

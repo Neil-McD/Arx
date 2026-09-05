@@ -14,6 +14,7 @@ import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentSe
 
 const modules = import.meta.glob([
   "./communityAgentServeWorker.ts",
+  "./communityAgentChannelAccess.ts",
   "./communityInteractionEvidence.ts",
   "./_generated/**/*.*s",
 ]);
@@ -365,6 +366,31 @@ test.each(["archived", "restricted", "replies_disabled"])("final posting recheck
   })).resolves.toMatchObject({ ok: false, errorCode: "channel_access_missing" });
   expect(await t.run(ctx => ctx.db.query("communityInteractionReplies").collect())).toHaveLength(0);
   expect(await t.run(ctx => ctx.db.get(requestId))).toMatchObject({ status: "error", errorCode: "channel_access_missing" });
+});
+
+test.each([false, true])("private-room agent execution is scoped and revocation blocks final output: revoked=%s", async (revoked) => {
+  const t = convexTest(schema, modules);
+  const f = await createServeFixture(t, `private-agent-${revoked}`);
+  const grantId = await t.run(async ctx => {
+    await ctx.db.patch(f.channelId, { systemRole: undefined, slug: "private-client", name: "Private client", position: 1, accessMode: "restricted" });
+    return ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: f.channelId,
+      principalKey: "community_agent", status: "active", createdByUserId: f.userId, createdAt: 1, updatedAt: 1 });
+  });
+  const requestId = await insertServeRequest(t, f);
+  const claim = await t.mutation(internalRefs.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal,
+    { requestId, nowMs: 10_000 });
+  const args = { requestId, expectedAttempt: claim.attempt };
+  expect(await t.query(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, args)).toEqual({ restricted: true });
+  expect(await t.query(internalRefs.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args)).toMatchObject({ ok: true });
+  if (revoked) {
+    await t.run(ctx => ctx.db.patch(grantId, { status: "revoked" }));
+    await expect(t.query(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, args)).rejects.toThrow();
+  }
+  expect(await t.mutation(internalRefs.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...args, content: "Private room answer", nowMs: 10_001 })).toMatchObject({ ok: !revoked });
+  const replies = await t.run(ctx => ctx.db.query("communityInteractionReplies").collect());
+  expect(replies).toHaveLength(revoked ? 0 : 1);
+  if (!revoked) expect(replies[0]).toMatchObject({ rootId: f.rootId, channelId: f.channelId });
 });
 
 test("ordinary owner mentions need no membership row or workflow", async () => {

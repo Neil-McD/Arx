@@ -272,6 +272,23 @@ test("membership context rejects unauthenticated, non-manager, spoofed, and inac
     .rejects.toThrow("community_member_workflow_member_not_found");
 });
 
+test.each([false, true])("private contribution requires a current grant and deterministic movement needs no agent: granted=%s", async (granted) => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configure(t, f.communityId, { key: "", type: "move_member", destination: "next_or_complete" });
+  await t.run(async ctx => {
+    await ctx.db.patch(f.channelId, { systemRole: undefined, slug: "private-client", name: "Private client", position: 1, accessMode: "restricted" });
+    if (granted) await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: f.channelId,
+      principalKey: `user:${f.memberId}`, membershipId: f.membershipId, membershipActivationSequence: 1,
+      status: "active", createdByUserId: f.ownerId, createdAt: f.nowMs, updatedAt: f.nowMs });
+  });
+  const rootId = await addRoot(t, f, `private-${granted}`);
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  expect(await t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(granted ? 1 : 0);
+  expect(await t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
+});
+
 test("membership context distinguishes default, recorded, and completed workflow state", async () => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
   const t = convexTest(schema, modules);

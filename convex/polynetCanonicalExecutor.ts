@@ -733,6 +733,7 @@ async function executeCanonicalList(args: {
         (internal as any).communityInteractionEvidence
           .listRecentCommunityInteractionEvidenceInternal,
         {
+          actorKind: args.principalKind,
           userId: args.userId,
           communityId: target.communityId,
           channelSlug: channel.slug,
@@ -1091,6 +1092,7 @@ async function executeCanonicalRead(args: {
         (internal as any).communityInteractionEvidence
           .readCommunityInteractionEvidenceForToolInternal,
         {
+          actorKind: args.principalKind,
           userId: args.userId,
           authSubject: args.authSubject,
           communityId: target.communityId,
@@ -1373,6 +1375,7 @@ async function executeCanonicalSearch(args: {
         (internal as any).communityInteractionEvidence
           .searchCommunityInteractionEvidenceInternal,
         {
+          actorKind: args.principalKind,
           ...common,
           ...(channel
             ? {

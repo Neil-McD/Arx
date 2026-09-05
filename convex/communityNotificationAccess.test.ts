@@ -168,6 +168,7 @@ async function fixture(ctx: MutationCtx) {
     communityId,
     channelId,
     principalKey: `user:${memberId}`,
+    membershipId, membershipActivationSequence: 0,
     status: "active",
     createdByUserId: ownerId,
     createdAt: 1,

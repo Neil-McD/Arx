@@ -5,6 +5,7 @@ import {
   ChevronUp,
   GripVertical,
   Hash,
+  LockKeyhole,
   ListChecks,
   Plus,
   Settings,
@@ -31,6 +32,7 @@ type CommunityNavChannel = {
   name: string;
   is_general: boolean;
   position: number;
+  access_mode?: "all_members" | "restricted";
 };
 
 type CommunityNavProps = {
@@ -56,7 +58,7 @@ type CommunityNavProps = {
   selectedChannelSlug?: string | null;
   channelIndicators?: Record<string, { chat: boolean; mentions: boolean }>;
   onSelectChannel?: (channel: CommunityNavChannel) => void;
-  onCreateChannel?: (name: string) => Promise<unknown>;
+  onCreateChannel?: (name: string, accessMode?: "all_members" | "restricted") => Promise<unknown>;
   isCreatingChannel?: boolean;
   createChannelError?: string | null;
   clearCreateChannelError?: () => void;
@@ -192,6 +194,7 @@ export const CommunityNav = memo(function CommunityNav({
   const [isAddChannelOpen, setIsAddChannelOpen] = useState(false);
   const [reorderControlsChannelId, setReorderControlsChannelId] = useState<string | null>(null);
   const [channelName, setChannelName] = useState("");
+  const [channelAccessMode, setChannelAccessMode] = useState<"all_members" | "restricted">("all_members");
   const copyResetTimeoutRef = useRef<number | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
   const communityIdentityFrameRef = useRef<number | null>(null);
@@ -282,6 +285,7 @@ export const CommunityNav = memo(function CommunityNav({
   useEffect(() => {
     setIsAddChannelOpen(false);
     setChannelName("");
+    setChannelAccessMode("all_members");
     setReorderControlsChannelId(null);
     clearCreateChannelError?.();
     clearReorderChannelsError?.();
@@ -366,6 +370,7 @@ export const CommunityNav = memo(function CommunityNav({
     if (isCreatingChannel) return;
     setIsAddChannelOpen(false);
     setChannelName("");
+    setChannelAccessMode("all_members");
     clearCreateChannelError?.();
     restoreModalTriggerFocus(addChannelTriggerRef.current);
   };
@@ -375,8 +380,9 @@ export const CommunityNav = memo(function CommunityNav({
     const normalizedName = channelName.trim().replace(/\s+/g, " ");
     if (!normalizedName || !onCreateChannel || isCreatingChannel) return;
     clearCreateChannelError?.();
-    const created = await onCreateChannel(normalizedName);
+    const created = await onCreateChannel(normalizedName, channelAccessMode);
     if (!created) return;
+    setChannelAccessMode("all_members");
     setIsAddChannelOpen(false);
     setChannelName("");
     restoreModalTriggerFocus(addChannelTriggerRef.current);
@@ -464,7 +470,7 @@ export const CommunityNav = memo(function CommunityNav({
                 title={channel.name}
               >
                 <span className="nav-icon community-channel-icon" aria-hidden="true">
-                  <Hash size={17} strokeWidth={1.8} />
+                  {channel.access_mode === "restricted" ? <LockKeyhole size={17} strokeWidth={1.8} /> : <Hash size={17} strokeWidth={1.8} />}
                 </span>
                 <span className="nav-item-label">{channel.name}</span>
                 {lockedTabs.chat ? <NavLockGlyph /> : !isSelected && (indicator?.chat || indicator?.mentions) ? (
@@ -725,7 +731,7 @@ export const CommunityNav = memo(function CommunityNav({
             <div className="community-channel-modal-header">
               <div>
                 <h2 id="community-channel-modal-title">Add channel</h2>
-                <p>Channels are visible to every community member.</p>
+                <p>Choose who can access this channel.</p>
               </div>
               <button
                 type="button"
@@ -751,6 +757,15 @@ export const CommunityNav = memo(function CommunityNav({
                 disabled={isCreatingChannel}
               />
             </label>
+            <label className="community-channel-modal-field">
+              <span>Access</span>
+              <select value={channelAccessMode} disabled={isCreatingChannel}
+                onChange={event => setChannelAccessMode(event.target.value as "all_members" | "restricted")}>
+                <option value="all_members">All community members</option>
+                <option value="restricted">Invite-only</option>
+              </select>
+            </label>
+            {channelAccessMode === "restricted" ? <p>Only owners/admins and people you add in channel settings can enter.</p> : null}
             {createChannelError ? (
               <div className="community-channel-modal-error" role="alert">
                 {createChannelError}

@@ -1,5 +1,5 @@
 import { normalizeIdValue } from "./communityCore";
-import { requireCommunityChannelCapability, type ChannelActor, type ChannelCapabilities } from "./communityChannelAccess";
+import { getCommunityChannelCapabilities, requireCommunityChannelCapability, type ChannelActor, type ChannelCapabilities } from "./communityChannelAccess";
 
 export const GENERAL_CHANNEL_SYSTEM_ROLE = "general" as const;
 export const GENERAL_CHANNEL_SLUG = "general" as const;
@@ -218,8 +218,6 @@ export async function requireActiveCommunityChannel(args: {
   channelId: any;
 }): Promise<CommunityChannelLike> {
   const channel = await requireCommunityChannelLineage(args);
-  // Private-room entry is not enabled by the shared-output privacy slice.
-  if (channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   if (channel.status !== "active") {
     throw new Error("community_channel_inactive");
   }
@@ -259,11 +257,14 @@ export async function resolveRequestedCommunityChannel(args: {
 }): Promise<CommunityChannelLike> {
   if (normalizeIdValue(args.channelId)) {
     try {
-      return await requireActiveCommunityChannel({
+      const channel = await requireActiveCommunityChannel({
         ctx: args.ctx,
         communityId: args.communityId,
         channelId: args.channelId,
       });
+      // Unscoped background callers never gain private-room access.
+      if (channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
+      return channel;
     } catch {
       // Public callers receive one unavailable outcome for absent, archived,
       // malformed, and cross-community ids so channel resolution is not an
@@ -285,7 +286,7 @@ export async function resolveRequestedCommunityChannel(args: {
 }
 
 // Interactive entry points must use an authenticated actor. Unscoped helpers
-// remain shared-only for background consumers until the privacy slice lands.
+// remain shared-only for community-wide background consumers.
 export async function resolveAuthorizedCommunityChannel(args: {
   ctx: any;
   communityId: any;
@@ -295,7 +296,13 @@ export async function resolveAuthorizedCommunityChannel(args: {
   actor: ChannelActor;
   capability: keyof ChannelCapabilities;
 }): Promise<CommunityChannelLike> {
-  const channel = await resolveRequestedCommunityChannel(args);
+  let channel: CommunityChannelLike;
+  try {
+    channel = args.channelId ? await requireCommunityChannelLineage({ ...args, channelId: args.channelId })
+      : await resolveRequestedCommunityChannel(args);
+  } catch {
+    throw new Error("community_channel_unavailable");
+  }
   await requireCommunityChannelCapability({ ...args, channel });
   return channel;
 }
@@ -315,12 +322,25 @@ export async function listActiveCommunityChannels(args: {
   }
   for (const channel of channels) {
     assertChannelForCommunity(channel, args.communityId);
-    if (channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   }
   return channels.sort((left, right) => {
     if (left.position !== right.position) return left.position - right.position;
     return normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id));
   });
+}
+
+export async function listAuthorizedCommunityChannels(args: {
+  ctx: any; communityId: any; actor: ChannelActor;
+}): Promise<CommunityChannelLike[]> {
+  const general = await getGeneralChannel(args.ctx, args.communityId);
+  const rows = await listActiveCommunityChannels(args);
+  if (!general) {
+    if (rows.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) throw new Error("community_channel_limit_invalid");
+    rows.unshift(legacyGeneralChannelSelection(args.communityId));
+  }
+  const visible = await Promise.all(rows.map(async channel =>
+    (await getCommunityChannelCapabilities({ ...args, channel })).canRead ? channel : null));
+  return visible.filter((row): row is CommunityChannelLike => row !== null);
 }
 
 export async function listSharedCommunityChannels(args: {
@@ -355,6 +375,16 @@ export function requireSharedChannelForAddressableRow(args: {
   communityId: any;
   channels: CommunityChannelLike[];
 }): CommunityChannelLike {
+  const channel = requireChannelFromAuthorizedSet(args);
+  if (channel.accessMode !== "all_members") throw new Error("interaction_channel_invalid");
+  return channel;
+}
+
+// This set must come from listAuthorizedCommunityChannels or an authorized
+// exact-room lookup. Community-wide consumers use the shared wrapper above.
+export function requireChannelFromAuthorizedSet(args: {
+  row: ChannelAddressableInteractionLike; communityId: any; channels: CommunityChannelLike[];
+}): CommunityChannelLike {
   if (
     !interactionIsChannelAddressable(args.row) ||
     normalizeIdValue(args.row.communityId) !== normalizeIdValue(args.communityId)
@@ -371,7 +401,6 @@ export function requireSharedChannelForAddressableRow(args: {
       );
   if (!channel) throw new Error("interaction_channel_invalid");
   assertChannelForCommunity(channel, args.communityId);
-  if (channel.accessMode !== "all_members") throw new Error("interaction_channel_invalid");
   if (channel.status !== "active") {
     throw new Error("interaction_channel_inactive");
   }
@@ -429,6 +458,7 @@ export async function createActiveCommunityChannel(args: {
   communityId: any;
   createdByUserId: any;
   name: unknown;
+  accessMode?: "all_members" | "restricted";
   nowMs?: number;
 }): Promise<CommunityChannelLike> {
   const name = normalizeCommunityChannelName(args.name);
@@ -469,7 +499,7 @@ export async function createActiveCommunityChannel(args: {
     communityId: args.communityId,
     slug,
     name,
-    accessMode: "all_members",
+    accessMode: args.accessMode ?? "all_members",
     postingPolicy: "members",
     status: "active",
     position,
@@ -498,7 +528,6 @@ async function requireCustomCommunityChannelLineage(args: {
   if (channel.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) {
     throw new Error("community_general_channel_immutable");
   }
-  if (channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   return channel;
 }
 
@@ -643,16 +672,19 @@ export async function setActiveCommunityChannelPinnedRoot(args: {
   channelId?: any;
   rootId: any | null;
   actorUserId: any;
+  actor?: ChannelActor;
   nowMs?: number;
 }): Promise<CommunityChannelLike> {
   const nowMs = args.nowMs ?? Date.now();
-  const channel = await resolveRequestedCommunityChannel({
+  const selection = {
     ctx: args.ctx,
     communityId: args.communityId,
     channelId: args.channelId,
     ensureGeneralForWrite: true,
     nowMs,
-  });
+  };
+  const channel = args.actor ? await resolveAuthorizedCommunityChannel({ ...selection, actor: args.actor, capability: "canManage" })
+    : await resolveRequestedCommunityChannel(selection);
   const nextRootId = args.rootId ? normalizeIdValue(args.rootId) : "";
   const previousRootId = normalizeIdValue(channel.pinnedRootId);
   if (nextRootId === previousRootId) return channel;
@@ -772,6 +804,8 @@ export async function requireChannelForAddressableRoot(args: {
   ctx: { db: any };
   root: ChannelAddressableInteractionLike;
   nowMs?: number;
+  actor?: ChannelActor;
+  capability?: keyof ChannelCapabilities;
 }): Promise<CommunityChannelLike> {
   if (!interactionIsChannelAddressable(args.root)) {
     throw new Error("interaction_not_channel_addressable");
@@ -785,8 +819,7 @@ export async function requireChannelForAddressableRoot(args: {
       !channel ||
       normalizeIdValue(channel.communityId) !==
         normalizeIdValue(args.root.communityId) ||
-      channel.status !== "active" ||
-      channel.accessMode !== "all_members"
+      channel.status !== "active"
     ) {
       throw new Error("interaction_channel_invalid");
     }
@@ -794,6 +827,10 @@ export async function requireChannelForAddressableRoot(args: {
       assertGeneralChannelForCommunity(channel, args.root.communityId);
     }
     assertChannelForCommunity(channel, args.root.communityId);
+    if (channel.accessMode === "restricted") {
+      if (!args.actor) throw new Error("community_channel_unavailable");
+      await requireCommunityChannelCapability({ ctx: args.ctx, channel, actor: args.actor, capability: args.capability ?? "canRead" });
+    }
     return channel;
   }
 
@@ -812,6 +849,7 @@ export async function ensureReplyChannelMatchesRoot(args: {
   root: ChannelAddressableInteractionLike;
   reply: { _id: any; communityId: any; rootId: any; channelId?: any };
   nowMs?: number;
+  actor?: ChannelActor;
 }): Promise<CommunityChannelLike> {
   if (
     normalizeIdValue(args.reply.communityId) !==
@@ -824,6 +862,7 @@ export async function ensureReplyChannelMatchesRoot(args: {
     ctx: args.ctx,
     root: args.root,
     nowMs: args.nowMs,
+    actor: args.actor,
   });
   if (
     args.reply.channelId &&
@@ -1036,9 +1075,13 @@ export async function listChannelReadableRows<
   limit: number;
   beforeCreatedAt?: number | null;
   kind?: string | null;
+  actor?: ChannelActor;
 }): Promise<T[]> {
   assertChannelForCommunity(args.channel, args.communityId);
-  if (args.channel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
+  if (args.channel.accessMode === "restricted") {
+    if (!args.actor) throw new Error("community_channel_unavailable");
+    await requireCommunityChannelCapability({ ctx: args.ctx, channel: args.channel, actor: args.actor, capability: "canRead" });
+  }
   if (args.channel.status !== "active") {
     throw new Error("community_channel_inactive");
   }

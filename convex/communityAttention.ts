@@ -18,10 +18,12 @@ import {
 import {
   type CommunityChannelLike,
   listChannelReadableRows,
-  listSharedCommunityChannels,
+  listAuthorizedCommunityChannels,
+  resolveAuthorizedCommunityChannel,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
 import { MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY } from "../shared/communityAttentionContract";
+import { resolveCommunityChannelActor, type ChannelActor } from "./communityChannelAccess";
 
 type CommunityAttentionSurface = "chat" | "ai_feed" | "resources" | "events" | "mentions";
 
@@ -110,11 +112,13 @@ async function getLatestCommunityChannelChatActivityAt(
   ctx: any,
   communityId: any,
   channel: CommunityChannelLike,
+  actor?: ChannelActor,
 ): Promise<number | null> {
   const [roots, replies] =
     await Promise.all([
       listChannelReadableRows<CommunityInteractionRootLike>({
         ctx,
+        actor,
         tableName: "communityInteractionRoots",
         communityId,
         channel,
@@ -122,6 +126,7 @@ async function getLatestCommunityChannelChatActivityAt(
       }),
       listChannelReadableRows<CommunityInteractionReplyLike>({
         ctx,
+        actor,
         tableName: "communityInteractionReplies",
         communityId,
         channel,
@@ -296,7 +301,8 @@ async function getCommunityAttentionRow(
   userId: any,
 ): Promise<CommunityAttentionRow> {
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
-  const channels = await listSharedCommunityChannels({ ctx, communityId });
+  const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
+  const channels = await listAuthorizedCommunityChannels({ ctx, communityId, actor });
   const [
     channelAttentionInputs,
     latestMentionsByChannel,
@@ -316,6 +322,7 @@ async function getCommunityAttentionRow(
           ctx,
           communityId,
           channel,
+          actor,
         ),
       })),
     ),
@@ -481,8 +488,10 @@ async function acknowledgeCommunityChatReadForUser(args: {
   userId: any;
   requestedThroughAt?: number | null;
 }): Promise<{ ok: true; advanced: boolean; seenThroughAt: number }> {
-  const channel = await resolveRequestedCommunityChannel({
+  const actor = await resolveCommunityChannelActor(args);
+  const channel = await resolveAuthorizedCommunityChannel({
     ctx: args.ctx,
+    actor, capability: "canRead",
     communityId: args.communityId,
     channelId: args.channelId,
     ensureGeneralForWrite: true,
@@ -491,6 +500,7 @@ async function acknowledgeCommunityChatReadForUser(args: {
     args.ctx,
     args.communityId,
     channel,
+    actor,
   );
   const result = await advanceCommunityChatReadCursor({
     ctx: args.ctx,

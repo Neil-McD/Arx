@@ -5,7 +5,7 @@ import {
   requireCommunityChannelCapability,
   resolveCommunityChannelActor,
 } from "./communityChannelAccess";
-import { channelActorKindValidator } from "./communityChannelValidators";
+import { channelActorKindValidator, channelAccessModeValidator } from "./communityChannelValidators";
 import {
   type CommunityChannelLike,
   GENERAL_CHANNEL_SYSTEM_ROLE,
@@ -13,6 +13,7 @@ import {
   archiveActiveCommunityChannel,
   createActiveCommunityChannel,
   getGeneralChannel,
+  listAuthorizedCommunityChannels,
   listSharedCommunityChannels,
   reorderActiveCommunityChannels,
   renameActiveCommunityChannel,
@@ -34,6 +35,7 @@ function mapCommunityChannel(channel: CommunityChannelLike) {
     slug: channel.slug,
     name: channel.name,
     position: channel.position,
+    access_mode: channel.accessMode,
   };
 }
 
@@ -54,9 +56,10 @@ export const listCommunityChannels = query({
       communityId: args.communityId,
       userId,
     });
-    const channels = await listSharedCommunityChannels({
+    const channels = await listAuthorizedCommunityChannels({
       ctx,
       communityId: args.communityId,
+      actor,
     });
     return {
       channels: await Promise.all(channels.map(async (channel) => ({
@@ -74,6 +77,7 @@ export const createCommunityChannel = mutation({
     authSubject: v.optional(v.string()),
     communityId: v.id("communities"),
     name: v.string(),
+    accessMode: v.optional(channelAccessModeValidator),
   },
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({
@@ -91,7 +95,27 @@ export const createCommunityChannel = mutation({
       communityId: args.communityId,
       createdByUserId: userId,
       name: args.name,
+      accessMode: args.accessMode,
     }));
+  },
+});
+
+export const setChannelAccess = mutation({
+  args: { userId: v.optional(v.id("users")), authSubject: v.optional(v.string()),
+    communityId: v.id("communities"), channelId: v.id("communityChannels"),
+    accessMode: channelAccessModeValidator, expectedAccessMode: channelAccessModeValidator,
+    acknowledgeHistoryExposure: v.boolean() },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject ?? null });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    const channel = await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId, channelId: args.channelId, actor, capability: "canManage" });
+    if (channel.systemRole === "general") throw new Error("community_general_channel_immutable");
+    if (channel.accessMode !== args.expectedAccessMode) throw new Error("community_channel_access_changed");
+    if (channel.accessMode === args.accessMode) return mapCommunityChannel(channel);
+    if (!args.acknowledgeHistoryExposure) throw new Error("community_channel_history_acknowledgement_required");
+    await ctx.db.patch(args.channelId, { accessMode: args.accessMode, updatedAt: Date.now() });
+    return mapCommunityChannel({ ...channel, accessMode: args.accessMode });
   },
 });
 
@@ -171,6 +195,7 @@ export const setCommunityChannelPinnedRoot = mutation({
       channelId: args.channelId,
       rootId: args.rootId,
       actorUserId: userId,
+      actor,
     });
     return {
       channel: mapCommunityChannel(channel),
@@ -260,9 +285,10 @@ export const listCommunityChannelsInternal = internalQuery({
       kind: args.actorKind,
     });
     return {
-      channels: await Promise.all((await listSharedCommunityChannels({
+      channels: await Promise.all((await (args.actorKind === "community_agent" ? listSharedCommunityChannels : listAuthorizedCommunityChannels)({
         ctx,
         communityId: args.communityId,
+        actor,
       })).map(async (channel) => ({
         ...mapCommunityChannelForRepository(channel),
         capabilities: await requireCommunityChannelCapability({ ctx, channel, actor, capability: "canRead" }),
@@ -286,9 +312,10 @@ export const resolveCommunityChannelBySlugInternal = internalQuery({
       userId: args.userId,
       kind: args.actorKind,
     });
-    const channel = (await listSharedCommunityChannels({
+    const channel = (await (args.actorKind === "community_agent" ? listSharedCommunityChannels : listAuthorizedCommunityChannels)({
       ctx,
       communityId: args.communityId,
+      actor,
     })).find((candidate) => candidate.slug === args.slug);
     if (!channel) return null;
     const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });

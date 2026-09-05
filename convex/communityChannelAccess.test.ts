@@ -4,6 +4,7 @@ import { expect, test } from "vitest";
 import schema from "./schema";
 import { api, internal } from "./_generated/api";
 import { PLATFORM_LEGAL_DOCUMENTS } from "../shared/legalDocuments";
+import { buildCommunityInteractionEvidenceRef } from "../shared/communityEvidenceContract";
 import {
   evaluateCommunityChannelCapabilities,
   getCommunityChannelCapabilities,
@@ -98,6 +99,7 @@ test("restricted-room grants are exact, revocable, and distinct from sponsor aut
       .rejects.toThrow("community_channel_unavailable");
     const grantId = await ctx.db.insert("communityChannelParticipants", {
       communityId: f.communityId, channelId: f.channelId, principalKey: member.principalKey,
+      membershipId: f.memberships.member, membershipActivationSequence: 0,
       status: "active", createdByUserId: f.users.owner, createdAt: 1, updatedAt: 1,
     });
     expect((await getCommunityChannelCapabilities({ ctx, channel, actor: member })).canRead).toBe(true);
@@ -155,23 +157,83 @@ test("duplicate and foreign-community grants never grant access", async () => {
   });
 });
 
-test("storage support does not enable private rooms through public or repository APIs", async () => {
+test("managers can create private rooms but uninvited callers cannot read or write them", async () => {
   const t = convexTest(schema, modules);
   const f = await fixture(t);
   const owner = t.withIdentity({ subject: "owner" });
+  const member = t.withIdentity({ subject: "member" });
   await expect(owner.mutation(api.communityChannels.createCommunityChannel, {
     communityId: f.communityId, name: "Secret", accessMode: "restricted",
-  } as any)).rejects.toThrow();
-  await expect(owner.query(api.communityInteractions.listCommunityInteractionRoots, {
+  })).resolves.toMatchObject({ name: "Secret", access_mode: "restricted" });
+  await expect(member.query(api.communityInteractions.listCommunityInteractionRoots, {
     communityId: f.communityId, channelId: f.channelId,
   })).rejects.toThrow("community_channel_unavailable");
   await expect(t.query(internal.communityChannels.resolveCommunityChannelBySlugInternal, {
     communityId: f.communityId, userId: f.users.owner, actorKind: "community_agent", slug: "client",
   })).resolves.toBeNull();
-  await expect(owner.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
+  await expect(member.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
     communityId: f.communityId, channelId: f.channelId, text: "Must not write", idempotencyKey: "private-closed",
   })).rejects.toThrow("community_channel_unavailable");
   expect(await t.run(ctx => ctx.db.query("communityInteractionRoots").collect())).toHaveLength(0);
+});
+
+test("an invited member uses canonical roots and replies; removal denies exact IDs and discovery", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const grantId = await t.run(ctx => ctx.db.insert("communityChannelParticipants", {
+    communityId: f.communityId, channelId: f.channelId, principalKey: `user:${f.users.member}`,
+    membershipId: f.memberships.member, membershipActivationSequence: 0,
+    status: "active", createdByUserId: f.users.owner, createdAt: 1, updatedAt: 1,
+  }));
+  const member = t.withIdentity({ subject: "member" });
+  const created = await member.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
+    communityId: f.communityId, channelId: f.channelId, text: "My private message", idempotencyKey: "private-message",
+  });
+  const rootId = created.interaction.root_id as any;
+  await member.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, {
+    communityId: f.communityId, channelId: f.channelId, rootId, text: "Private reply", idempotencyKey: "private-reply",
+  });
+  expect((await member.query(api.communityInteractions.listCommunityInteractionRoots, {
+    communityId: f.communityId, channelId: f.channelId,
+  })).roots).toHaveLength(1);
+  expect((await member.query(api.communityInteractions.listCommunityInteractionReplies, { rootId })).replies).toHaveLength(1);
+  for (const actorKind of ["personal_agent", "external_mcp"] as const) {
+    const evidence = await t.query(internal.communityInteractionEvidence.readCommunityInteractionEvidenceInternal, {
+      userId: f.users.member, communityId: f.communityId, actorKind, expectedChannelId: f.channelId,
+      ref: buildCommunityInteractionEvidenceRef({ objectType: "root", objectId: rootId }),
+    });
+    expect(JSON.stringify(evidence)).toContain("My private message");
+    const recent = await t.query(internal.communityInteractionEvidence.listRecentCommunityInteractionEvidenceInternal, {
+      userId: f.users.member, communityId: f.communityId, actorKind, channelId: f.channelId, limit: 10,
+    });
+    expect(recent.results).toHaveLength(2);
+  }
+  expect((await member.query(api.communityChannels.listCommunityChannels, { communityId: f.communityId })).channels.some(c => c.id === f.channelId)).toBe(true);
+  await t.run(ctx => ctx.db.patch(grantId, { status: "revoked" }));
+  expect((await member.query(api.communityChannels.listCommunityChannels, { communityId: f.communityId })).channels.some(c => c.id === f.channelId)).toBe(false);
+  await expect(member.query(api.communityInteractions.listCommunityInteractionReplies, { rootId })).rejects.toThrow("community_channel_unavailable");
+});
+
+test("access changes require explicit history acknowledgement, reject stale edits, and preserve General", async () => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const owner = t.withIdentity({ subject: "owner" });
+  const args = { communityId: f.communityId, channelId: f.channelId, expectedAccessMode: "restricted" as const,
+    accessMode: "all_members" as const, acknowledgeHistoryExposure: false };
+  await expect(owner.mutation(api.communityChannels.setChannelAccess, args)).rejects.toThrow("history_acknowledgement_required");
+  await owner.mutation(api.communityChannels.setChannelAccess, { ...args, acknowledgeHistoryExposure: true });
+  await expect(owner.mutation(api.communityChannels.setChannelAccess, { ...args, acknowledgeHistoryExposure: true })).rejects.toThrow("access_changed");
+  const generalId = await t.run(ctx => ctx.db.insert("communityChannels", { communityId: f.communityId,
+    systemRole: "general", slug: "general", name: "General", position: 0, accessMode: "all_members",
+    postingPolicy: "members", status: "active", createdAt: 1, updatedAt: 1 }));
+  await expect(owner.mutation(api.communityChannels.setChannelAccess, { ...args, channelId: generalId,
+    expectedAccessMode: "all_members", accessMode: "restricted", acknowledgeHistoryExposure: true })).rejects.toThrow("general_channel_immutable");
+  const renamed = await owner.mutation(api.communityChannels.renameCommunityChannel, {
+    communityId: f.communityId, channelId: f.channelId, name: "Client renamed",
+  });
+  expect(renamed.name).toBe("Client renamed");
+  await owner.mutation(api.communityChannels.deleteCommunityChannel, { communityId: f.communityId, channelId: f.channelId });
+  expect((await t.run(ctx => ctx.db.get(f.channelId)))?.status).toBe("archived");
 });
 
 test("direct root and reply IDs cannot bypass the closed restricted-channel boundary", async () => {

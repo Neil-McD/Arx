@@ -1743,6 +1743,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           ctx,
           root,
           nowMs,
+          actor: channelActor,
         });
         if (
           normalizeIdValue(existingChannel._id) !==
@@ -1802,7 +1803,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         deduped = false;
       }
 
-      const rootChannel = await requireChannelForAddressableRoot({ ctx, root });
+      const rootChannel = await requireChannelForAddressableRoot({ ctx, root, actor: channelActor });
       if (
         normalizeIdValue(rootChannel._id) !==
         normalizeIdValue(requestedChannel._id)
@@ -1855,7 +1856,7 @@ export const createCommunityInteractionComposerMessage = mutation({
     if (root.status !== "live" || root.lockedAt) {
       throw new Error("interaction_root_closed");
     }
-    const rootChannel = await requireChannelForAddressableRoot({ ctx, root });
+    const rootChannel = await requireChannelForAddressableRoot({ ctx, root, actor: channelActor });
     await requireCommunityChannelCapability({ ctx, channel: rootChannel, actor: channelActor, capability: "canReply" });
     if (
       args.channelId &&
@@ -1956,7 +1957,7 @@ export const createCommunityInteractionComposerMessage = mutation({
       deduped = false;
     }
 
-    await ensureReplyChannelMatchesRoot({ ctx, root, reply });
+    await ensureReplyChannelMatchesRoot({ ctx, root, reply, actor: channelActor });
 
     if (actorType === "human" && !deduped) {
       await ctx.scheduler.runAfter(
@@ -2129,6 +2130,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
           ctx,
           root,
           nowMs,
+          actor: channelActor,
         });
         if (
           normalizeIdValue(existingChannel._id) !==
@@ -2185,7 +2187,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         });
         deduped = false;
       }
-      await requireChannelForAddressableRoot({ ctx, root, nowMs });
+      await requireChannelForAddressableRoot({ ctx, root, nowMs, actor: channelActor });
       await scheduleCommunityInteractionEvidenceSync({
         ctx,
         communityId: args.communityId,
@@ -2219,6 +2221,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       ctx,
       root,
       nowMs,
+      actor: channelActor,
     });
     if (
       normalizeIdValue(rootChannel._id) !==
@@ -2319,7 +2322,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       });
       deduped = false;
     }
-    await ensureReplyChannelMatchesRoot({ ctx, root, reply, nowMs });
+    await ensureReplyChannelMatchesRoot({ ctx, root, reply, nowMs, actor: channelActor });
     await scheduleCommunityInteractionEvidenceSync({
       ctx,
       communityId: args.communityId,
@@ -2369,6 +2372,7 @@ export const listCommunityInteractionRoots = query({
     const kind = args.kind ?? null;
     const visibleRows = await listChannelReadableRows<InteractionRootRow>({
       ctx,
+      actor: channelActor,
       tableName: "communityInteractionRoots",
       communityId: args.communityId,
       channel,

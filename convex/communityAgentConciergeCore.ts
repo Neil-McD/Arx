@@ -4,6 +4,7 @@ import { settleMentionRowInternal } from "./communityMentionLifecycle";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
 import { COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS } from "../shared/communityAgentServeContract";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
+import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
 
 const internalRefs = internal as any;
 
@@ -536,6 +537,7 @@ export async function intakeCommunityAgentTurn(args: {
       communityId: args.communityId,
       userId: source.requesterUserId,
     });
+    await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: source.requesterUserId });
   } catch {
     const skipped = await skipInvocation({
       ctx: args.ctx,
@@ -750,6 +752,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       communityId: args.communityId,
       userId: args.requesterUserId,
     });
+    await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
   } catch {
     return await skip(
       "requester_access_missing",

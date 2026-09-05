@@ -30,7 +30,9 @@ const nav = read(navPath);
 [
   '"Add Channel"',
   "canManageMembersActiveCommunity && onCreateChannel",
-  "Channels are visible to every community member.",
+  "Choose who can access this channel.",
+  "Invite-only",
+  "channelAccessMode",
   'className="community-channel-loading-row web-skeleton-row"',
   'className="community-channel-loading-row is-short web-skeleton-row"',
   "MODAL_FOCUSABLE_SELECTOR",

@@ -14,6 +14,7 @@ export type CloudCommunityChannel = {
   slug: string;
   name: string;
   position: number;
+  access_mode?: "all_members" | "restricted";
   capabilities?: { canRead: boolean; canPost: boolean; canReply: boolean; canManage: boolean };
 };
 
@@ -40,6 +41,7 @@ export async function createCloudCommunityChannel<SessionT>(
   params: CloudCommunityChannelsGatewayParams<SessionT> & {
     communityId: string;
     name: string;
+    accessMode?: "all_members" | "restricted";
   },
 ): Promise<CloudCommunityChannel> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
@@ -47,6 +49,7 @@ export async function createCloudCommunityChannel<SessionT>(
     authSubject,
     communityId: params.communityId,
     name: params.name,
+    ...(params.accessMode ? { accessMode: params.accessMode } : {}),
   }) as CloudCommunityChannel;
 }
 

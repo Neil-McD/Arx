@@ -48,6 +48,7 @@ import {
   type CommunityChannelLike,
 } from "./communityChannelCore";
 import { requireCommunityChannelCapability, resolveCommunityChannelActor } from "./communityChannelAccess";
+import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
 import {
   resolveCommunityInferenceFundingAdmission,
   settleAuthorizedFounderInferenceReceipt,
@@ -461,6 +462,17 @@ export async function executeConciergeTool(args: {
       errorCode: "unsupported_concierge_tool",
       errorMessage: "Community concierge tool is not allowed.",
     };
+  }
+  try {
+    const scope = await args.ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
+      requestId: args.requestId, expectedAttempt: args.context.request.attempt,
+    });
+    if (scope.restricted && (args.toolName === "polynet_write" || args.toolName === "polynet_call")) {
+      return { status: "error", exitCode: null, outputText: "", errorCode: "private_channel_output_scoped",
+        errorMessage: "This private-room turn can read shared knowledge and answer in its originating thread; it cannot publish elsewhere or modify shared memory." };
+    }
+  } catch {
+    return { status: "error", exitCode: null, outputText: "", errorCode: "channel_access_missing", errorMessage: "The run no longer has access to its source." };
   }
   return await executeRetrievalHarnessTool({
     ctx: args.ctx,
@@ -1235,6 +1247,11 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       };
     }
 
+    try {
+      await requireAgentSourceChannelAccess({ ctx, root, userId: request.requesterUserId });
+    } catch {
+      return { ok: false as const, errorCode: "channel_access_missing", errorMessage: "The member or agent no longer has access to this channel." };
+    }
     let reply: InteractionReplyRow | null = null;
     if (request.sourceReplyId) {
       reply = (await ctx.db.get(
@@ -1425,6 +1442,11 @@ export const recordCommunityAgentServeContextSnapshotInternal =
     ) {
       return { ok: false, errorCode: "source_not_live" };
     }
+    try {
+      await requireAgentSourceChannelAccess({ ctx, root, userId: request.requesterUserId });
+    } catch {
+      return { ok: false, errorCode: "channel_access_missing" };
+    }
     let sourceVisibilityScope = root.visibilityScope;
     let sourceActorUserId = root.actorUserId;
     if (request.sourceReplyId) {
@@ -1602,10 +1624,11 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
     let rootChannel: CommunityChannelLike | null = null;
     if (interactionIsChannelAddressable(root)) {
       try {
-        rootChannel = await requireChannelForAddressableRoot({ ctx, root, nowMs });
+        await requireAgentSourceChannelAccess({ ctx, root, userId: request.requesterUserId });
         const actor = await resolveCommunityChannelActor({
           ctx, communityId: request.communityId, userId: request.requesterUserId, kind: "community_agent",
         });
+        rootChannel = await requireChannelForAddressableRoot({ ctx, root, nowMs, actor });
         await requireCommunityChannelCapability({ ctx, channel: rootChannel, actor, capability: "canReply" });
       } catch {
         await failServeRequest(ctx, request, "channel_access_missing", "The agent can no longer reply in this channel.", nowMs);
@@ -1932,6 +1955,10 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
           runCompletion: async (kernelMessages) => {
             let toolCompletion;
             try {
+              // A previous tool/provider wait may outlive a participant grant.
+              await ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
+                requestId, expectedAttempt,
+              });
               if (!fundingSession) {
                 fundingSession = await claimCommunityInferenceFundingSession({
                   ctx,

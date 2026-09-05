@@ -34,6 +34,7 @@ import {
 } from "./communityMemberWorkflowReadCore";
 import { resolveBuilderCommunityMembershipContext } from "./communityMembershipContextCore";
 import { intakeCommunityAgentWorkflowAction } from "./communityAgentConciergeCore";
+import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
 
 const managerIdentityArgs = {
   userId: v.optional(v.id("users")),
@@ -819,6 +820,11 @@ async function handleChannelContributionCore(args: {
   ) {
     return { status: "receipt_ineligible" as const };
   }
+  const authorizedSource = await resolveNotificationRecipientSource({ ctx: args.ctx, communityId: row.communityId,
+    userId: row.actorUserId, channelId: row.channelId,
+    ...(args.objectType === "root" ? { rootId: row._id } : { replyId: row._id }),
+  });
+  if (!authorizedSource) return { status: "receipt_ineligible" as const };
   const workflow = await getCommunityMemberWorkflowByCommunity({
     ctx: args.ctx,
     communityId: row.communityId,

@@ -22,6 +22,8 @@ export type ChannelActor = {
   kind: ChannelActorKind;
   principalKey: string;
   isManager: boolean;
+  membershipId?: string;
+  membershipActivationSequence?: number;
 };
 
 export async function resolveCommunityChannelActor(args: {
@@ -45,6 +47,10 @@ export async function resolveCommunityChannelActor(args: {
     kind,
     principalKey: `user:${normalizeIdValue(args.userId)}`,
     isManager: normalizeIdValue(community.ownerId) === normalizeIdValue(args.userId) || membership?.role === "admin",
+    ...(membership ? {
+      membershipId: normalizeIdValue(membership._id),
+      membershipActivationSequence: Math.max(0, Math.floor(Number(membership.activationSequence ?? 0))),
+    } : {}),
   };
 }
 
@@ -90,7 +96,12 @@ export async function getCommunityChannelCapabilities(args: {
       if (rows.length > 1) throw new Error("community_channel_participant_duplicate");
       const grant = rows[0];
       hasGrant = grant?.status === "active" &&
-        normalizeIdValue(grant.communityId) === normalizeIdValue(args.channel.communityId);
+        normalizeIdValue(grant.communityId) === normalizeIdValue(args.channel.communityId) &&
+        (args.actor.kind === "community_agent" || (
+          Boolean(args.actor.membershipId) &&
+          normalizeIdValue(grant.membershipId) === args.actor.membershipId &&
+          grant.membershipActivationSequence === args.actor.membershipActivationSequence
+        ));
     }
   }
   return evaluateCommunityChannelCapabilities({ ...args, hasGrant });

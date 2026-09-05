@@ -1,4 +1,5 @@
 export const COMMUNITY_ATTACHMENT_UPLOAD_PATH = "/runtime/community_attachment_upload";
+export const COMMUNITY_ATTACHMENT_DOWNLOAD_PATH = "/runtime/community_attachment_download";
 export const COMMUNITY_ATTACHMENT_MAX_COUNT = 8;
 export const COMMUNITY_ATTACHMENT_IMAGE_BYTES = 25 * 1024 * 1024;
 export const COMMUNITY_ATTACHMENT_MEDIA_BYTES = 50 * 1024 * 1024;

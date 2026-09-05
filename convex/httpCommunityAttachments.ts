@@ -1,6 +1,6 @@
 import { internal } from "./_generated/api";
 import type { registerMemberAgentAttachmentRoutes } from "./httpMemberAgentAttachments";
-import { COMMUNITY_ATTACHMENT_UPLOAD_PATH, communityAttachmentByteLimit, detectCommunityAttachmentMime } from "../shared/communityAttachmentPolicy";
+import { COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, COMMUNITY_ATTACHMENT_UPLOAD_PATH, communityAttachmentByteLimit, detectCommunityAttachmentMime } from "../shared/communityAttachmentPolicy";
 
 type RouteDependencies = Parameters<typeof registerMemberAgentAttachmentRoutes>[0];
 
@@ -59,6 +59,34 @@ export async function prepareCommunityAttachmentStream(req: Request) {
 
 export function registerCommunityAttachmentRoutes(args: RouteDependencies) {
   const { http, httpAction, jsonResponse, optionsResponse, requireAuthenticatedActor } = args;
+  http.route({ path: COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, method: "OPTIONS",
+    handler: httpAction(async (_ctx, req) => optionsResponse(req)) });
+  http.route({ path: COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, method: "POST", handler: httpAction(async (ctx, req) => {
+    const auth = await requireAuthenticatedActor(ctx, req);
+    if (!auth.ok) return auth.response;
+    let upstream: Response | undefined;
+    try {
+      const attachmentId = req.headers.get("x-polynet-attachment-id");
+      const queryArgs = { userId: auth.actor.dbUserId, attachmentId };
+      const source = await ctx.runQuery((internal as any).communityAttachmentDownloads.resolveInternal, queryArgs);
+      if (!source) return jsonResponse(req, 404, { code: "community_attachment_unavailable" });
+      upstream = await fetch(source.url, { redirect: "error", signal: req.signal });
+      if (!upstream.ok || !upstream.body) throw new Error("community_attachment_unavailable");
+      // Permission can change while waiting for storage. Never start delivery
+      // on the strength of an earlier query alone.
+      const current = await ctx.runQuery((internal as any).communityAttachmentDownloads.resolveInternal, queryArgs);
+      if (!current || current.url !== source.url) throw new Error("community_attachment_unavailable");
+      const headers = new Headers(jsonResponse(req, 200, {}).headers);
+      headers.set("Content-Type", "application/octet-stream");
+      headers.set("Content-Disposition", `attachment; filename*=UTF-8''${encodeURIComponent(source.name).replace(/'/g, "%27")}`);
+      headers.set("X-Content-Type-Options", "nosniff");
+      headers.set("Cache-Control", "private, no-store");
+      return new Response(upstream.body, { status: 200, headers });
+    } catch {
+      await upstream?.body?.cancel().catch(() => undefined);
+      return jsonResponse(req, 404, { code: "community_attachment_unavailable" });
+    }
+  }) });
   http.route({ path: COMMUNITY_ATTACHMENT_UPLOAD_PATH, method: "OPTIONS",
     handler: httpAction(async (_ctx, req) => optionsResponse(req)) });
   http.route({ path: COMMUNITY_ATTACHMENT_UPLOAD_PATH, method: "POST", handler: httpAction(async (ctx, req) => {

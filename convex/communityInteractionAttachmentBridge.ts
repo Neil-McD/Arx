@@ -6,6 +6,9 @@ type CanonicalAttachmentKind = "image" | "video" | "file";
 
 type CommunityInteractionAttachmentRow = {
   _id: any;
+  channelId?: any;
+  rootId?: any;
+  replyId?: any;
   attachmentKind: CanonicalAttachmentKind;
   name: string;
   mimeType?: string;
@@ -244,6 +247,21 @@ export async function claimInteractionAttachmentsForTarget(args: {
 }
 
 async function mapCanonicalInteractionAttachment(ctx: any, row: CommunityInteractionAttachmentRow) {
+  const reply = row.replyId ? await ctx.db.get(row.replyId) : null;
+  const root = row.rootId || reply?.rootId ? await ctx.db.get(row.rootId ?? reply.rootId) : null;
+  const channelId = root?.channelId ?? row.channelId;
+  const channel = channelId ? await ctx.db.get(channelId) : null;
+  if (!root || (channelId && (!channel || channel.communityId !== root.communityId)) ||
+    (root.channelId && row.channelId && root.channelId !== row.channelId)) {
+    throw new Error("community_attachment_scope_mismatch");
+  }
+  if (channel?.accessMode === "restricted") {
+    // The caller authorizes the message. The download endpoint independently
+    // authorizes the current reader; this projection contains no bearer URL.
+    return { id: normalizeIdValue(row._id), name: row.name, type: row.attachmentKind,
+      mime: row.mimeType ?? null, size: Math.max(0, Math.floor(Number(row.sizeBytes) || 0)),
+      protected_download: Boolean(row.storageId) };
+  }
   const storageId = row.storageId ? normalizeIdValue(row.storageId) : null;
   const resolvedStorageUrl = row.storageId ? await ctx.storage.getUrl(row.storageId as any) : null;
   const externalUrl = typeof row.externalUrl === "string" && row.externalUrl.trim()

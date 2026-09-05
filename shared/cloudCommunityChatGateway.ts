@@ -8,7 +8,7 @@ import {
 import type { CommunityActivityEventType } from "./communityTypes";
 import { resolveConvexRuntimeToken, type AuthSessionLike } from "./authSession";
 import { readConvexRuntimeUrl } from "./convexRuntime";
-import { COMMUNITY_ATTACHMENT_UPLOAD_PATH } from "./communityAttachmentPolicy";
+import { COMMUNITY_ATTACHMENT_DOWNLOAD_PATH, COMMUNITY_ATTACHMENT_UPLOAD_PATH } from "./communityAttachmentPolicy";
 
 type CloudCommunityChatGatewayParams<SessionT> = {
   session: SessionT;
@@ -208,6 +208,21 @@ export async function uploadCloudCommunityChatAttachmentFile<SessionT>(
     throw new Error("Failed to upload attachment.");
   }
   return payload.attachment;
+}
+
+export async function downloadCloudCommunityChatAttachment<SessionT>(params: {
+  session: SessionT; attachmentId: string; signal?: AbortSignal;
+}): Promise<Blob> {
+  await bootstrapConvexAuthenticatedClient(params.session);
+  const token = resolveConvexRuntimeToken(params.session as AuthSessionLike);
+  const baseUrl = String(readConvexRuntimeUrl() ?? "").replace(/\/+$/, "");
+  if (!token || !baseUrl) throw new Error("Sign in to open this attachment.");
+  const response = await fetch(`${baseUrl}${COMMUNITY_ATTACHMENT_DOWNLOAD_PATH}`, {
+    method: "POST", headers: { Authorization: `Bearer ${token}`, "X-Polynet-Attachment-Id": params.attachmentId },
+    signal: params.signal,
+  });
+  if (!response.ok) throw new Error("This attachment is unavailable or you no longer have access.");
+  return response.blob();
 }
 
 export async function listCloudThreadMessages<SessionT, TRow = unknown>(
