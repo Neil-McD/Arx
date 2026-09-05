@@ -1,6 +1,7 @@
 import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
+import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
 
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE,
@@ -11,6 +12,8 @@ import {
 } from "../../../../shared/communityMemberWorkflow";
 
 type Props = {
+  channels: CloudCommunityChannel[];
+  channelsUnavailable: boolean;
   isOpen: boolean;
   milestone: CommunityMemberWorkflowMilestone | null;
   milestoneNumber: number;
@@ -72,6 +75,8 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     (automation) => automation.action.type === "move_member",
   ).length;
   const canSave = name.trim().length > 0
+    && automations.every((automation) => automation.trigger.channelId === undefined
+      || (!props.channelsUnavailable && props.channels.some((channel) => channel.id === automation.trigger.channelId)))
     && moveAutomationCount <= 1
     && automations.every(
       (automation) => automation.action.type !== "prompt_agent" || automation.action.prompt.trim().length > 0,
@@ -136,7 +141,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             {props.milestone.key ? (
               <section className="workflow-milestone-automations" aria-labelledby="milestone-automations-title">
                 <div className="workflow-milestone-automations-header">
-                  <div><span id="milestone-automations-title">Automations</span><small>When a member contributes, do one thing.</small></div>
+                  <div><span id="milestone-automations-title">Automations</span><small>When a member posts or replies, do one thing.</small></div>
                   <button type="button" className="secondary" onClick={() => setAutomations((current) => [...current, newAutomation()])} disabled={props.isSaving || automations.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE}>
                     <Plus size={14} aria-hidden="true" /> Add automation
                   </button>
@@ -149,7 +154,23 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                     {automations.map((automation, index) => (
                       <div className="workflow-milestone-automation-row" key={automation.key}>
                         <div className="workflow-milestone-automation-fields">
-                          <label><span>When</span><select value="member_contributed" disabled><option value="member_contributed">Member contributes</option></select></label>
+                          <label>
+                            <span>When a member posts or replies in</span>
+                            <select aria-label={`Channel for automation ${index + 1}`} value={automation.trigger.channelId ?? ""} disabled={props.isSaving || props.channelsUnavailable} onChange={(event) => {
+                              const channelId = event.target.value;
+                              setAutomations((current) => current.map((item, itemIndex) => itemIndex === index
+                                ? { ...item, trigger: { type: "member_contributed", ...(channelId ? { channelId } : {}) } } : item));
+                            }}>
+                              <option value="">Any channel</option>
+                              {automation.trigger.channelId && !props.channels.some((channel) => channel.id === automation.trigger.channelId) ? (
+                                <option value={automation.trigger.channelId} disabled>{props.channelsUnavailable ? "Loading selected channel…" : "Unavailable channel — choose another"}</option>
+                              ) : null}
+                              {props.channels.map((channel) => <option key={channel.id} value={channel.id}>#{channel.name}{channel.access_mode === "restricted" ? " (private)" : ""}</option>)}
+                            </select>
+                          </label>
+                          {automation.action.type === "prompt_agent" && props.channels.some((channel) => channel.id === automation.trigger.channelId && channel.access_mode === "restricted") ? (
+                            <small>The community agent must be invited to this private channel. Replies stay in the triggering thread.</small>
+                          ) : null}
                           <label>
                             <span>Then</span>
                             <select value={automation.action.type} disabled={props.isSaving} onChange={(event) => setAutomations((current) => current.map((item, itemIndex) => itemIndex === index ? replaceAction(item, event.target.value as CommunityMemberWorkflowAction["type"]) : item))}>
@@ -179,6 +200,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
               </section>
             ) : null}
 
+            {props.channelsUnavailable ? <p role="status">Channel choices are unavailable while loading or reconnecting.</p> : null}
             {props.error ? <p className="workflow-error" role="alert">{props.error}</p> : null}
           </div>
         </div>

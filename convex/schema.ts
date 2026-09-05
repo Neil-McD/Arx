@@ -1180,7 +1180,7 @@ export default defineSchema({
         name: v.string(),
         automations: v.array(v.object({
           key: v.string(),
-          trigger: v.object({ type: v.literal("member_contributed") }),
+          trigger: v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
           action: v.union(
             v.object({
               key: v.string(),
@@ -1228,6 +1228,8 @@ export default defineSchema({
     workflowRevision: v.number(),
     automationKey: v.string(),
     triggerType: v.literal("member_contributed"),
+    // Optional for historical runs. New runs capture the condition that matched.
+    triggerSnapshot: v.optional(v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) })),
     triggerReceiptRef: v.string(),
     actionSnapshot: v.union(
       v.object({ key: v.string(), type: v.literal("prompt_agent"), prompt: v.string() }),

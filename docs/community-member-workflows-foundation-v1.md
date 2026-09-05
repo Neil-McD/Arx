@@ -11,12 +11,27 @@ The V1 grammar is intentionally small:
 Workflow = ordered Milestones[]
 Milestone = name + Automations[]
 Automation = one Trigger + one Action
-Trigger = member_contributed
+Trigger = member_contributed(channelId?)
 Action = prompt_agent(prompt) | move_member(next_or_complete)
 ```
 
 A new milestone has no hidden behavior. Merely occupying a milestone never
 causes work. A member contribution is the only V1 trigger.
+
+Each rule listens to any authorized channel by default, or one selected channel
+ID. The existing milestone popup exposes this as "When a member posts or replies
+in [Any channel / channel]". Selection filters the source; it does not assign
+members a service room, grant access, or change the reply destination.
+
+Saving a selected channel requires that it belongs to the workflow community and
+is active. Renames preserve the selection. Archived/deleted channels never fall
+back to Any channel; the editor requires replacing the selection or removing the
+rule. Event authorization still checks current member access; agent actions also
+require the community agent's access. Deterministic moves need no agent grant.
+New runs capture `triggerSnapshot` as well as the source receipt and action.
+Historical runs without a snapshot remain valid and are not backfilled from
+today's configuration. Filtering happens before run admission and retains the
+existing replay key and one-terminal-move rule.
 
 ## Semantics
 

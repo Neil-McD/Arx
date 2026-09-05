@@ -13,11 +13,14 @@ import type {
   CloudCommunityMemberSuccessDossier,
 } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
 import { WebCommunityWorkflowMemberDossierModal } from "./WebCommunityWorkflowMemberDossierModal";
+import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
 import { WebCommunityWorkflowMemberStub } from "./WebCommunityWorkflowMemberStub";
 import { WebCommunityWorkflowMilestoneModal } from "./WebCommunityWorkflowMilestoneModal";
 import "./WebCommunityWorkflowsSection.css";
 
 export type WebCommunityWorkflowsSectionProps = {
+  channels: CloudCommunityChannel[];
+  channelsUnavailable: boolean;
   board: CloudCommunityMemberWorkflowBoard | null;
   members: CloudCommunityMemberWorkflowMember[];
   totalCount: number | null;
@@ -234,6 +237,8 @@ export function WebCommunityWorkflowsSection(
       </section>
 
       <WebCommunityWorkflowMilestoneModal
+        channels={props.channels}
+        channelsUnavailable={props.channelsUnavailable}
         isOpen={Boolean(editingMilestone)}
         milestone={editingMilestone}
         milestoneNumber={Math.max(1, editingMilestoneIndex + 1)}

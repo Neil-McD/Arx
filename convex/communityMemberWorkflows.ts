@@ -53,7 +53,7 @@ type ChannelContributionRow =
 
 const automationInputValidator = v.object({
   key: v.optional(v.string()),
-  trigger: v.object({ type: v.literal("member_contributed") }),
+  trigger: v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
   action: v.union(
     v.object({
       key: v.optional(v.string()),
@@ -180,7 +180,7 @@ function normalizeAutomations(
           };
     return {
       key: automationKey,
-      trigger: { type: "member_contributed" },
+      trigger: { type: "member_contributed", ...(input.trigger.channelId !== undefined ? { channelId: input.trigger.channelId } : {}) },
       action,
     };
   });
@@ -291,6 +291,14 @@ export const updateBuilderWorkflowMilestone = mutation({
       name: normalizeCommunityMemberWorkflowMilestoneName(args.name),
       automations: normalizeAutomations(args.automations, current.automations ?? []),
     };
+    for (const rawChannelId of new Set(milestone.automations.flatMap((automation) =>
+      automation.trigger.channelId !== undefined ? [automation.trigger.channelId] : []))) {
+      const channelId = ctx.db.normalizeId("communityChannels", rawChannelId);
+      const channel = channelId ? await ctx.db.get(channelId) : null;
+      if (!channel || channel.communityId !== args.communityId || channel.status !== "active") {
+        throw new Error("community_member_workflow_channel_unavailable");
+      }
+    }
     if (JSON.stringify(current) === JSON.stringify(milestone)) {
       return {
         workflow_id: String(workflow._id),
@@ -710,6 +718,7 @@ async function executeMemberContributedAutomation(args: {
     workflowRevision: args.workflow.revision,
     automationKey: args.automation.key,
     triggerType: "member_contributed",
+    triggerSnapshot: args.automation.trigger,
     triggerReceiptRef,
     actionSnapshot: args.automation.action,
     status: "running",
@@ -852,7 +861,8 @@ async function handleChannelContributionCore(args: {
   }
   const automations = (current.milestone as CommunityMemberWorkflowMilestone)
     .automations.filter(
-      (automation) => automation.trigger.type === "member_contributed",
+      (automation) => automation.trigger.type === "member_contributed"
+        && (automation.trigger.channelId === undefined || automation.trigger.channelId === String(row.channelId)),
     );
   if (automations.length === 0) {
     return { status: "trigger_unconfigured" as const };

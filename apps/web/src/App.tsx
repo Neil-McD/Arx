@@ -2245,6 +2245,8 @@ export default function App() {
         },
       },
       workflows: {
+        channels: activeCommunityChannels.filter((channel) => channel.id && channel.community_id === activeCommunityId),
+        channelsUnavailable: isLoadingActiveCommunityChannels || Boolean(activeCommunityChannelsError),
         board: communityWorkflows.board,
         members: communityWorkflows.members,
         totalCount: communityWorkflows.totalCount,

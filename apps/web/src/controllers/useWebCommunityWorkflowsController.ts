@@ -30,6 +30,9 @@ function workflowErrorMessage(error: unknown): string {
   if (message.includes("revision_conflict")) {
     return "This workflow changed in another session. Reload it and try again.";
   }
+  if (message.includes("workflow_channel_unavailable")) {
+    return "A selected channel is unavailable. Choose another channel or remove that automation.";
+  }
   if (message.includes("milestone_has_members")) {
     return "Move members out of this milestone before deleting it.";
   }

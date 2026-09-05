@@ -10,6 +10,8 @@ export const COMMUNITY_MEMBER_WORKFLOW_SOURCE_REF_MAX_LENGTH = 1_024;
 
 export type CommunityMemberWorkflowMemberContributedTrigger = {
   type: "member_contributed";
+  /** Absent means any authorized channel; a selected ID never falls back. */
+  channelId?: string;
 };
 
 export type CommunityMemberWorkflowTrigger =

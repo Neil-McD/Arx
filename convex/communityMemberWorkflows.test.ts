@@ -443,6 +443,7 @@ async function configureAutomations(
   t: ReturnType<typeof convexTest>,
   communityId: any,
   actions: any[],
+  channelId?: any,
 ) {
   const owner = t.withIdentity({ subject: OWNER_SUBJECT });
   const first = await owner.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone, {
@@ -462,7 +463,7 @@ async function configureAutomations(
     name: "New",
     automations: actions.map((action) => ({
       key: "",
-      trigger: { type: "member_contributed" as const },
+      trigger: { type: "member_contributed" as const, ...(channelId ? { channelId } : {}) },
       action,
     })),
   });
@@ -477,6 +478,93 @@ async function configure(t: ReturnType<typeof convexTest>, communityId: any, act
   const configured = await configureAutomations(t, communityId, [action]);
   return configured.firstKey;
 }
+
+test.each(["root", "reply"] as const)("channel filter selects only its source, snapshots the rule, and replays once: %s", async (kind) => {
+  vi.useFakeTimers();
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const selectedId = await t.run(async ctx => ctx.db.insert("communityChannels", {
+    communityId: f.communityId, slug: "client", name: "Client", status: "active",
+    accessMode: "all_members", postingPolicy: "members", position: 1, createdAt: f.nowMs, updatedAt: f.nowMs,
+  }));
+  const configured = await configureAutomations(t, f.communityId, [
+    { key: "", type: "prompt_agent", prompt: "Help in this thread." },
+  ], selectedId);
+  expect(configured.firstMilestone.automations[0].trigger.channelId).toBe(selectedId);
+  const contribute = async (channelId: typeof selectedId, suffix: string) => {
+    const rootId = await addRoot(t, { ...f, channelId }, suffix);
+    if (kind === "root") return () => t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+    const replyId = await t.run(async ctx => ctx.db.insert("communityInteractionReplies", {
+      communityId: f.communityId, channelId, rootId, actorType: "human", actorUserId: f.memberId,
+      status: "live", visibilityScope: "community", contentSummary: "A member reply", reactionSummary: [],
+      seq: 1, idempotencyKey: `filter-reply-${suffix}`,
+      createdAt: f.nowMs + 11, updatedAt: f.nowMs + 11,
+    }));
+    return () => t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionReplyInternal, { replyId });
+  };
+  expect(await (await contribute(f.channelId, "other"))()).toMatchObject({ status: "trigger_unconfigured" });
+  expect(await t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect())).toHaveLength(0);
+  await t.run(ctx => ctx.db.patch(selectedId, { name: "Renamed client", slug: "renamed-client" }));
+  const run = await contribute(selectedId, "selected");
+  expect((await run()).results[0].status).toBe("agent_queued");
+  expect((await run()).results[0].status).toBe("already_executed");
+  const runs = await t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect());
+  expect(runs).toHaveLength(1);
+  expect(runs[0].triggerSnapshot).toEqual({ type: "member_contributed", channelId: selectedId });
+  const requests = await t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
+  expect(requests).toHaveLength(1);
+  expect((await t.run(ctx => ctx.db.get(requests[0].sourceRootId!)))?.channelId).toBe(selectedId);
+  // Edits do not rewrite the occurrence-time condition, nor replay an old action.
+  await t.withIdentity({ subject: OWNER_SUBJECT }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 3, milestoneKey: configured.firstKey, name: "New",
+    automations: configured.firstMilestone.automations.map(a => ({ ...a, trigger: { type: "member_contributed" as const } })),
+  });
+  expect((await run()).results[0].status).toBe("already_executed");
+  expect((await t.run(ctx => ctx.db.get(runs[0]._id)))?.triggerSnapshot?.channelId).toBe(selectedId);
+});
+
+test.each(["archived", "deleted", "foreign", "malformed", "empty"] as const)("channel selection rejects %s targets without a partial save", async (kind) => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const configured = await configureAutomations(t, f.communityId, []);
+  await t.run(async ctx => {
+    if (kind === "archived") await ctx.db.patch(f.channelId, { status: "archived" });
+    if (kind === "deleted") await ctx.db.delete(f.channelId);
+    if (kind === "foreign") {
+      const { _id, _creationTime, ...community } = (await ctx.db.get(f.communityId))!;
+      const otherId = await ctx.db.insert("communities", { ...community, slug: "other" });
+      await ctx.db.patch(f.channelId, { communityId: otherId });
+    }
+  });
+  await expect(t.withIdentity({ subject: OWNER_SUBJECT }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 3, milestoneKey: configured.firstKey, name: "Changed",
+    automations: [{ key: "", trigger: { type: "member_contributed", channelId: kind === "empty" ? "" : kind === "malformed" ? "not-a-channel-id" : f.channelId },
+      action: { key: "", type: "move_member", destination: "next_or_complete" } }],
+  })).rejects.toThrow("community_member_workflow_channel_unavailable");
+  const workflow = await t.run(ctx => ctx.db.query("communityMemberWorkflows").first());
+  expect(workflow?.revision).toBe(3);
+  expect(workflow?.milestones[0].automations).toEqual([]);
+});
+
+test.each(["active", "archived", "deleted", "revoked"] as const)("selected private room is fail-closed at contribution time: %s", async (state) => {
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  await configureAutomations(t, f.communityId, [{ key: "", type: "move_member", destination: "next_or_complete" }], f.channelId);
+  await t.run(async ctx => {
+    await ctx.db.patch(f.channelId, { systemRole: undefined, slug: "private-client", name: "Private client", position: 1, accessMode: "restricted" });
+    const grantId = await ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: f.channelId,
+      principalKey: `user:${f.memberId}`, membershipId: f.membershipId, membershipActivationSequence: 1,
+      status: "active", createdByUserId: f.ownerId, createdAt: f.nowMs, updatedAt: f.nowMs });
+    if (state === "archived") await ctx.db.patch(f.channelId, { status: "archived" });
+    if (state === "deleted") await ctx.db.delete(f.channelId);
+    if (state === "revoked") await ctx.db.patch(grantId, { status: "revoked" });
+  });
+  const rootId = await addRoot(t, f, state);
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  expect(await t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(state === "active" ? 1 : 0);
+  expect(await t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
+});
 
 async function workflowServeFixture(t: ReturnType<typeof convexTest>, move = true) {
   // Drive admission/claims explicitly; do not race the scheduled live worker.

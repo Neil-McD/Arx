@@ -37,7 +37,8 @@ assert.match(backend, /const promptAutomations = automations\.filter/);
 assert.match(backend, /const moveAutomation = automations\.find/);
 assert.match(backend, /fromMilestoneName: current\.milestone\.name/);
 assert.match(context, /recent_workflow_activity: recentWorkflowActivity/);
-assert.match(context, /serveRequest\?\.status === "responded"/);
+assert.match(context, /serveRequest\.workflowRunId === run\._id/);
+assert.match(context, /: serveRequest\.status;/);
 assert.match(backend, /milestoneName: args\.current\.milestone\.name/);
 assert.doesNotMatch(backend, /automationHash|sha256HexText/);
 assert.doesNotMatch(backend, /contractStagingWorkflowToV1Internal|goal_completed|evaluate_goal|MilestoneEvaluation/);
@@ -47,7 +48,10 @@ assert.match(worker, /surface: isWorkflowAction[\s\S]*"community_workflow_action
 assert.match(prompt, /community_workflow_action/);
 assert.match(prompt, /authority: "community_policy"/);
 
-assert.match(modal, /Member contributes/);
+assert.match(modal, /When a member posts or replies in/);
+assert.match(modal, /Any channel/);
+assert.doesNotMatch(modal, /select value="member_contributed" disabled/);
+assert.match(backend, /triggerSnapshot: args\.automation\.trigger/);
 assert.match(modal, /Prompt community agent/);
 assert.match(modal, /Move to next milestone/);
 assert.match(modal, /itemIndex !== index && item\.action\.type === "move_member"/);
