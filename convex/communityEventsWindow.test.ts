@@ -76,3 +76,17 @@ test("weekly occurrence clocks survive DST and cancelled series stay excluded", 
   const rows = await f.read({ startIso: "2026-11-01T14:30:00Z", endIso: "2026-11-09T00:00:00Z" });
   expect(rows.map((row) => row.starts_at)).toEqual(["2026-11-01T14:00:00.000Z", "2026-11-08T14:00:00.000Z"]);
 });
+
+test("overlap rejects candidate overflow and unbounded display windows", async () => {
+  const f = await fixture();
+  await expect(f.read({ endIso: new Date(start).toISOString() })).rejects.toThrow("display range");
+  await expect(f.read({ endIso: new Date(start + 63 * 86400000).toISOString() })).rejects.toThrow("display range");
+  await f.t.run(async ({ db }) => {
+    for (let i = 0; i < 1001; i++) await db.insert("communityEvents", {
+      communityId: f.ids.communityId, createdByUserId: f.ids.ownerId, title: `Event ${i}`,
+      startsAt: start + i, endsAt: start + i + 1000, timezone: "UTC",
+      locationType: "online", visibility: "members", status: "live", createdAt: start, updatedAt: start,
+    });
+  });
+  await expect(f.read({ limit: 1000 })).rejects.toThrow("Too many events");
+});

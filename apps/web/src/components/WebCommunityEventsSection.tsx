@@ -380,7 +380,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [localError, setLocalError] = useState<string | null>(null);
   const [showPast, setShowPast] = useState(false);
   const [hasFocusedEvent, setHasFocusedEvent] = useState(false);
-  const [followCurrentMonth, setFollowCurrentMonth] = useState(() => isSameLocalMonth(new Date(state.visibleMonthIso), new Date()));
+  const [followCurrentMonth, setFollowCurrentMonth] = useState(() => isSameLocalMonth(new Date(state.visibleMonthIso), new Date(Date.now())));
   // Do not move/remove the focused row or interrupt an open event editor.
   const now = useCommunityEventClock(state.events, Boolean(draft) || hasFocusedEvent);
 
@@ -568,7 +568,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           {!followCurrentMonth ? <button type="button" className="community-events-month-btn" onClick={() => {
             setFollowCurrentMonth(true);
             setShowPast(false);
-            actions.setVisibleMonthIso(toMonthIso(new Date()));
+            actions.setVisibleMonthIso(toMonthIso(new Date(Date.now())));
           }}>Today</button> : null}
         </div>
         <button

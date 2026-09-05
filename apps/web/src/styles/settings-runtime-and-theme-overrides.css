@@ -9137,12 +9137,13 @@ button.settings-primary-action svg {
 }
 
 .community-events-day-group[hidden] { display: none; }
-.community-events-day-group.is-past { color: var(--text-secondary); }
+.community-events-day-group.is-past .community-events-date,
+.community-events-day-group.is-past .community-events-item h3 { color: var(--text-secondary); }
 .community-events-phase { font-size: 12px; font-weight: 600; }
 .community-events-past-toggle {
   align-self: flex-start;
   padding: 8px 12px;
-  border: 1px solid var(--border-color);
+  border: 1px solid var(--border-muted);
   border-radius: 8px;
   background: transparent;
   color: inherit;

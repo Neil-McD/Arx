@@ -5,7 +5,7 @@ Scope: desktop loading behavior and async correctness. No production write, sche
 ## Ownership and invariants
 
 - **Billing overview:** the request captures account and generation before session resolution. Only the current request may commit data, errors, or loading completion. An overview is never presented under another account. Provider-return refresh checks cancellation again after awaiting.
-- **Events:** generation starts at intent time. Account, community and visible range form the request scope; account is also part of the existing range-cache key. Unresolved empty ranges display loading, not an empty result. Event rollover and expired actions are the next slice, not implemented here.
+- **Events:** generation starts at intent time. Account, community and visible range form the request scope; account is also part of the existing range-cache key. Unresolved empty ranges display loading, not an empty result. Subsequent rollover and expired-action behavior is specified in [Events and Resources behavior](events-resources-behavior-v1.md).
 - **Profile reads/saves:** the existing admin controller owns requests and coalesces active-Profile/account-graph self reads. Reads, session preparation and save completion are scoped to the original account epoch. A save snapshots fields before the first await and rejects duplicate submission while in flight. A changed account prevents any subsequent profile write from being issued; a write already issued cannot be undone by client cancellation.
 - **Profile draft:** `profileDraftState` is the pure model behind the existing Profile UI controller, not a new store/cache. Per-field edit versions and touched flags distinguish intentional empty edits from untouched fields. Only unchanged submitted fields accept a save acknowledgement. Later edits stay dirty; failed saves preserve the draft. Clean fields may accept subsequent server hydration.
 - **Persistence:** the Profile UI controller is the single hydration/persistence owner. Existing account-scoped text keys remain, with versioned touched-field metadata so cleared drafts survive reopening and saved text does not indefinitely mask fresh server data. No avatar URLs or image bytes are persisted in the draft. Older text-only drafts are preserved on first read; their metadata is recorded by the normal writer. Account changes synchronously select that account's draft and reject stale field-setter callbacks.
@@ -43,7 +43,6 @@ The browser fixture now mounts the real web content controller and renders Event
 
 ## Deliberately left for later
 
-- Events ongoing/upcoming/past lifecycle and missing-end-time policy.
-- Resources parallel reads, duplicate module refresh removal, error/retry behavior.
+- Events lifecycle and Resources read/refresh work are now implemented as separate local slices in [Events and Resources behavior](events-resources-behavior-v1.md); production release and acceptance remain separate gates.
 - Broad cold-route timing, layout-shift and interaction-latency profiling; viewport-prioritized hydration; bundle/subscription optimization based on measurements.
 - Full signed-in end-to-end account switching, uploads, billing return and all other surface transitions. This slice verifies the named contracts with isolated fixtures; it does not certify the whole frontend.

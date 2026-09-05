@@ -125,12 +125,22 @@ export function useWebCommunityContentController(
     getSession,
     session,
   } = params;
-  const [resources, setResources] = useState<WebCommunityResource[]>([]);
+  const resourceIdentity = JSON.stringify([resolveAuthSubject(session), activeCommunityId]);
+  const resourceOwner = useRef({ identity: resourceIdentity, epoch: 0 });
+  if (resourceOwner.current.identity !== resourceIdentity) resourceOwner.current = { identity: resourceIdentity, epoch: resourceOwner.current.epoch + 1 };
+  const resourceScope = `${resourceIdentity}:${resourceOwner.current.epoch}`;
+  const [resourceData, setResourceData] = useState<{ scope: string; resources: WebCommunityResource[]; modules: WebCommunityResourceModule[] }>(() => ({ scope: resourceScope, resources: [], modules: [] }));
+  const ownedResourceData = resourceData.scope === resourceScope ? resourceData : { scope: resourceScope, resources: [], modules: [] };
+  if (ownedResourceData !== resourceData) setResourceData(ownedResourceData);
+  const { resources, modules } = ownedResourceData;
+  const setResources = useCallback<Dispatch<SetStateAction<WebCommunityResource[]>>>((next) => {
+    setResourceData((current) => current.scope !== resourceScope ? current : { ...current, resources: typeof next === "function" ? next(current.resources) : next });
+  }, [resourceScope]);
+  const setModules = useCallback<Dispatch<SetStateAction<WebCommunityResourceModule[]>>>((next) => {
+    setResourceData((current) => current.scope !== resourceScope ? current : { ...current, modules: typeof next === "function" ? next(current.modules) : next });
+  }, [resourceScope]);
   const getSessionRef = useRef(getSession);
   getSessionRef.current = getSession;
-  const [modules, setModules] = useState<WebCommunityResourceModule[]>([]);
-  const [isLoadingResources, setIsLoadingResources] = useState(false);
-  const [isLoadingModules, setIsLoadingModules] = useState(false);
   const [eventsByCacheKey, setEventsByCacheKey] =
     useState<Record<string, CloudCommunityEvent[]>>({});
   const [isLoadingEvents, setIsLoadingEvents] = useState(false);
@@ -203,8 +213,6 @@ export function useWebCommunityContentController(
     communityResourceModules: modules,
     setCommunityResources: setResources,
     setCommunityResourceModules: setModules,
-    setIsLoadingResources,
-    setIsLoadingResourceModules: setIsLoadingModules,
   });
 
   const {
@@ -246,10 +254,7 @@ export function useWebCommunityContentController(
       if (!detail || detail.communityId !== activeCommunityId) return;
       const activeSession = getSessionRef.current();
       if (!activeSession) return;
-      void Promise.all([
-        resourceUi.loadCommunityResourceModules(detail.communityId, activeSession),
-        resourceUi.loadCommunityResources(detail.communityId, activeSession),
-      ]).catch((loadError) => {
+      void resourceUi.loadCommunityResources(detail.communityId, activeSession).catch((loadError) => {
         console.warn(
           "[community-resources] failed to refresh after resource mutation:",
           loadError,
@@ -262,15 +267,12 @@ export function useWebCommunityContentController(
     };
   }, [
     activeCommunityId,
-    resourceUi.loadCommunityResourceModules,
     resourceUi.loadCommunityResources,
   ]);
 
   const resetContentState = useCallback(() => {
     setResources([]);
     setModules([]);
-    setIsLoadingResources(false);
-    setIsLoadingModules(false);
     resetEventsCache();
     setIsLoadingEvents(false);
     setEventsError(null);
@@ -284,8 +286,6 @@ export function useWebCommunityContentController(
   }, [resetEventsCache, resourceUi]);
 
   useEffect(() => {
-    setResources([]);
-    setModules([]);
     setIsLoadingEvents(false);
     setEventsError(null);
   }, [activeCommunityId]);
@@ -305,8 +305,12 @@ export function useWebCommunityContentController(
   return {
     resources,
     modules,
-    isLoadingResources,
-    isLoadingModules,
+    isLoadingResources: resourceUi.resourceRead.status === "pending",
+    isLoadingModules: resourceUi.moduleRead.status === "pending",
+    retryResourceRead: (collection: "resources" | "modules") => {
+      if (!activeCommunityId || !session) return Promise.resolve();
+      return resourceUi.refreshCommunityResources(activeCommunityId, session, [collection]);
+    },
     events,
     hasLoadedVisibleEventsRange,
     isLoadingEvents,
