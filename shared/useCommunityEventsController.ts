@@ -72,6 +72,7 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
         startIso: range.startIso,
         endIso: range.endIso,
         limit: 500,
+        overlap: true,
       });
       if (!isCurrentEventsLoad()) return;
       current.setCommunityEvents(rows);

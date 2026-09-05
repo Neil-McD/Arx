@@ -328,6 +328,44 @@ function useProfileHarness(props: any) {
     );
   });
   if (baseline) return results;
+  await test("Events rolls forward on resume, retains history and respects manual month browsing", async () => {
+    const realNow = Date.now;
+    let now = realNow();
+    Date.now = () => now;
+    try {
+      const upcoming = {
+        id: "rollover", parent_event_id: "rollover", title: "Rollover call", status: "live",
+        starts_at: new Date(now + 60000).toISOString(), ends_at: new Date(now + 120000).toISOString(),
+        timezone: "UTC", recurrence_frequency: "none", url: "https://example.test/call", location_type: "online",
+      };
+      const hook = await mountHook(() => {
+        const [month, setMonth] = useState(new Date(now).toISOString());
+        return { month, setMonth };
+      }, {}, (value) => <WebCommunityEventsSection capabilities={{hasActiveCommunity:true,activeCommunityName:"Test",canManageEvents:false}}
+        state={{events:[upcoming] as any,visibleMonthIso:value.month,isLoadingEvents:false,hasLoadedVisibleRange:true,eventsError:null}}
+        actions={{setVisibleMonthIso:value.setMonth,getVisibleRange:()=>eventRange,reloadEvents:async()=>{},saveEvent:async()=>false,cancelEvent:async()=>false}} />);
+      now += 60000;
+      window.dispatchEvent(new Event("focus"));
+      await tick();
+      assert(document.body.textContent?.includes("Happening now"), "resume did not transition to ongoing");
+      now += 60000;
+      window.dispatchEvent(new Event("focus"));
+      await tick();
+      assert(document.querySelector(".community-events-day-group[hidden]"), "past event stayed prominent");
+      assert(!document.querySelector('a[href="https://example.test/call"]'), "past event kept Join action");
+      (document.querySelector(".community-events-past-toggle") as HTMLButtonElement).click();
+      await tick();
+      assert(!document.querySelector(".community-events-day-group[hidden]"), "history inaccessible");
+      (document.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click();
+      await tick();
+      const manualMonth = hook.value.month;
+      const future = new Date(now);
+      now = new Date(future.getFullYear(), future.getMonth() + 1, 1).getTime();
+      document.dispatchEvent(new Event("visibilitychange"));
+      await tick();
+      assert(hook.value.month === manualMonth, "clock overrode manual month selection");
+    } finally { Date.now = realNow; }
+  });
   for (const failure of ["missing", "mismatched", "rejected"]) {
     await test(`production Events Retry owns ${failure} session failure and recovery`, async () => {
       let mode = failure;

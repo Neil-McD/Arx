@@ -1,4 +1,6 @@
-import { useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
+import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
 import {
   communityEventDateTimeInputToIso,
   getCommunityEventViewerTimeZone,
@@ -35,6 +37,7 @@ type EventDayGroup = {
   key: string;
   date: Date;
   events: CommunityEvent[];
+  past: boolean;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -194,7 +197,7 @@ function buildGoogleCalendarUrl(event: CommunityEvent): string {
   const start = new Date(event.starts_at);
   const end = event.ends_at
     ? new Date(event.ends_at)
-    : new Date(start.getTime() + 60 * 60 * 1000);
+    : new Date(start.getTime() + DEFAULT_COMMUNITY_EVENT_DURATION_MS);
   const formatGoogleDate = (date: Date) =>
     date.toISOString().replace(/[-:]/g, "").replace(/\.\d{3}Z$/, "Z");
   const details = [event.description_md, event.url].filter(Boolean).join("\n\n");
@@ -375,6 +378,17 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
+  const [showPast, setShowPast] = useState(false);
+  const [hasFocusedEvent, setHasFocusedEvent] = useState(false);
+  const [followCurrentMonth, setFollowCurrentMonth] = useState(() => isSameLocalMonth(new Date(state.visibleMonthIso), new Date()));
+  // Do not move/remove the focused row or interrupt an open event editor.
+  const now = useCommunityEventClock(state.events, Boolean(draft) || hasFocusedEvent);
+
+  useEffect(() => {
+    if (followCurrentMonth && !draft && !hasFocusedEvent && !isSameLocalMonth(new Date(state.visibleMonthIso), new Date(now))) {
+      actions.setVisibleMonthIso(toMonthIso(new Date(now)));
+    }
+  }, [followCurrentMonth, now, state.visibleMonthIso, draft, hasFocusedEvent, actions.setVisibleMonthIso]);
 
   const monthDate = useMemo(() => startOfLocalMonth(new Date(state.visibleMonthIso)), [state.visibleMonthIso]);
   const visibleMonthEvents = useMemo(
@@ -382,26 +396,38 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       state.events
         .filter((event) => {
           const startsAt = new Date(event.starts_at);
-          return Number.isFinite(startsAt.getTime()) && isSameLocalMonth(startsAt, monthDate);
+          const phase = communityEventPhase(event, now);
+          const currentMonth = isSameLocalMonth(monthDate, new Date(now));
+          return event.status !== "cancelled" && phase !== "invalid" &&
+            (isSameLocalMonth(startsAt, monthDate) || (currentMonth && (phase === "ongoing" || phase === "started")));
         })
         .slice()
-        .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at)),
-    [monthDate, state.events],
+        .sort((a, b) => {
+          const rank = (event: CommunityEvent) => {
+            const phase = communityEventPhase(event, now);
+            return phase === "past" ? 2 : phase === "upcoming" ? 1 : 0;
+          };
+          return rank(a) - rank(b) || Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id);
+        }),
+    [monthDate, state.events, now],
   );
   const eventDayGroups = useMemo(() => {
     const grouped = new Map<string, EventDayGroup>();
     for (const event of visibleMonthEvents) {
       const date = new Date(event.starts_at);
-      const key = toLocalDateKey(date);
+      const phase = communityEventPhase(event, now);
+      const past = phase === "past";
+      const key = `${phase}:${toLocalDateKey(date)}`;
       const existing = grouped.get(key);
       if (existing) {
         existing.events.push(event);
       } else {
-        grouped.set(key, { key, date, events: [event] });
+        grouped.set(key, { key, date, events: [event], past });
       }
     }
     return Array.from(grouped.values());
-  }, [visibleMonthEvents]);
+  }, [visibleMonthEvents, now]);
+  const pastCount = visibleMonthEvents.filter((event) => communityEventPhase(event, now) === "past").length;
   const editingSourceEvent = useMemo(
     () =>
       editingEventId
@@ -443,6 +469,8 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   };
 
   const showMonth = (date: Date) => {
+    setFollowCurrentMonth(false);
+    setShowPast(date.getTime() < startOfLocalMonth(new Date(now)).getTime());
     const nextMonth = startOfLocalMonth(date);
     actions.setVisibleMonthIso(toMonthIso(nextMonth));
   };
@@ -537,6 +565,11 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </button>
         <div className="community-events-month-copy">
           <h2>{formatMonthLabel(monthDate)}</h2>
+          {!followCurrentMonth ? <button type="button" className="community-events-month-btn" onClick={() => {
+            setFollowCurrentMonth(true);
+            setShowPast(false);
+            actions.setVisibleMonthIso(toMonthIso(new Date()));
+          }}>Today</button> : null}
         </div>
         <button
           className="community-events-month-btn"
@@ -555,7 +588,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </div>
       ) : null}
 
-      <div className="community-events-content" aria-busy={state.isLoadingEvents}>
+      <div className="community-events-content" aria-busy={state.isLoadingEvents}
+        onFocusCapture={(event) => { if ((event.target as HTMLElement).closest(".community-events-item")) setHasFocusedEvent(true); }}
+        onBlurCapture={(event) => { if (!(event.relatedTarget as HTMLElement | null)?.closest?.(".community-events-item")) setHasFocusedEvent(false); }}>
         {showInitialEventsLoading ? (
           <div className="community-events-state" role="status">Loading events…</div>
         ) : eventDayGroups.length === 0 && state.eventsError ? null : eventDayGroups.length === 0 ? (
@@ -572,11 +607,12 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           </div>
         ) : (
           <div className="community-events-list">
+            {pastCount === visibleMonthEvents.length ? <div className="community-events-state">No upcoming events in {formatMonthLabel(monthDate)}.</div> : null}
             {eventDayGroups.map((group) => {
               const dayLabel = formatEventDay(group.date);
               return (
-                <section key={group.key} className="community-events-day-group" aria-label={dayLabel.full}>
-                  <time className="community-events-date" dateTime={group.key}>
+                <section key={group.key} hidden={group.past && !showPast} className={`community-events-day-group${group.past ? " is-past" : ""}`} aria-label={dayLabel.full}>
+                  <time className="community-events-date" dateTime={toLocalDateKey(group.date)}>
                     <span>{dayLabel.weekday}</span>
                     <strong>{dayLabel.day}</strong>
                   </time>
@@ -592,6 +628,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                         <article key={event.id} id={`community-event-${event.id}`} className="community-events-item">
                           <div className="community-events-item-copy">
                             <h3>{event.title}</h3>
+                            {communityEventPhase(event, now) === "ongoing" ? <span className="community-events-phase">Happening now</span> : communityEventPhase(event, now) === "started" ? <span className="community-events-phase" title="No end time supplied; shown here for one hour after the start.">Started · end time not set</span> : null}
                             <div className="community-events-time">
                               <span>{eventTimeLabel.primary}</span>
                               {eventTimeLabel.secondary ? <span>{eventTimeLabel.secondary}</span> : null}
@@ -607,7 +644,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                             ) : null}
                           </div>
                           <div className="community-events-actions">
-                            {event.url ? (
+                            {event.url && !group.past ? (
                               <a
                                 className="community-events-primary-link"
                                 href={event.url}
@@ -617,7 +654,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                                 {eventLinkLabel}
                               </a>
                             ) : null}
-                            <a
+                            {!group.past ? <a
                               className="community-events-calendar-link"
                               href={buildGoogleCalendarUrl(event)}
                               target="_blank"
@@ -630,7 +667,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                                 aria-hidden="true"
                               />
                               <span>Add to calendar</span>
-                            </a>
+                            </a> : null}
                             {capabilities.canManageEvents ? (
                               <>
                                 <button
@@ -660,6 +697,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                 </section>
               );
             })}
+            {pastCount > 0 ? <button type="button" className="community-events-past-toggle" aria-expanded={showPast} onClick={() => setShowPast((value) => !value)}>{showPast ? "Hide" : "Show"} past events ({pastCount})</button> : null}
           </div>
         )}
       </div>
