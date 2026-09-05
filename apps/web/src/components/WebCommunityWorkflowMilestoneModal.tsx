@@ -51,9 +51,16 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const [name, setName] = useState("");
   const [automations, setAutomations] = useState<CommunityMemberWorkflowAutomation[]>([]);
   const dialogRef = useRef<HTMLFormElement | null>(null);
+  const editingSnapshot = useRef<CommunityMemberWorkflowMilestone | null>(null);
 
   useEffect(() => {
-    if (!props.isOpen || !props.milestone) return;
+    if (!props.isOpen || !props.milestone) {
+      editingSnapshot.current = null;
+      return;
+    }
+    // Live member activity replaces board objects; it must not erase a draft.
+    if (editingSnapshot.current?.key === props.milestone.key) return;
+    editingSnapshot.current = props.milestone;
     setName(props.milestone.name);
     setAutomations(props.milestone.automations);
   }, [props.isOpen, props.milestone]);
@@ -71,10 +78,13 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   }, [props.isOpen]);
 
   if (!props.isOpen || !props.milestone) return null;
+  const hasConflict = editingSnapshot.current !== null
+    && JSON.stringify(editingSnapshot.current) !== JSON.stringify(props.milestone);
   const moveAutomationCount = automations.filter(
     (automation) => automation.action.type === "move_member",
   ).length;
   const canSave = name.trim().length > 0
+    && !hasConflict
     && automations.every((automation) => automation.trigger.channelId === undefined
       || (!props.channelsUnavailable && props.channels.some((channel) => channel.id === automation.trigger.channelId)))
     && moveAutomationCount <= 1
@@ -200,6 +210,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
               </section>
             ) : null}
 
+            {hasConflict ? <p className="workflow-error" role="alert">This milestone changed while you were editing. Your draft has not been saved. Close and reopen it to load the latest version.</p> : null}
             {props.channelsUnavailable ? <p role="status">Channel choices are unavailable while loading or reconnecting.</p> : null}
             {props.error ? <p className="workflow-error" role="alert">{props.error}</p> : null}
           </div>

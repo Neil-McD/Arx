@@ -33,6 +33,10 @@ Historical runs without a snapshot remain valid and are not backfilled from
 today's configuration. Filtering happens before run admission and retains the
 existing replay key and one-terminal-move rule.
 
+The editor keeps its opening milestone snapshot across live board refreshes.
+Unchanged refreshes preserve the draft; a changed milestone blocks saving and
+requires closing/reopening, rather than silently erasing or overwriting edits.
+
 ## Semantics
 
 - `prompt_agent` admits one durable community-agent serve request using the
