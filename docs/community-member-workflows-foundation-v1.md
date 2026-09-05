@@ -37,6 +37,33 @@ The editor keeps its opening milestone snapshot across live board refreshes.
 Unchanged refreshes preserve the draft; a changed milestone blocks saving and
 requires closing/reopening, rather than silently erasing or overwriting edits.
 
+### Channel-scoped rules staging acceptance — 2026-09-05
+
+- Code candidate: `a94ffe79a94dfb6516d06a5507b32637323757e3` on Git
+  `staging`; the staging `/version.json` returned that exact build ID and
+  `environment: staging`. Backend changes deployed explicitly to
+  `dev:quick-porcupine-949`; the final follow-up changes were frontend/docs only.
+- All 945 tests across 130 files passed (11 new channel-selection cases), both
+  typechecks passed, and the full release gate passed on the clean candidate.
+  Two inherited gate failures were repaired without weakening authorization:
+  bounded channel-settings operation names and the typing-presence proof's
+  reference to the canonical channel capability check.
+- Signed-in Chrome owner QA in `concierge-welcome-canary-2026-08-20-b` verified
+  the unchanged board, Any/General/private choices, private-agent invitation
+  guidance, and saving/reloading the selected channel ID. The temporary prompt
+  automation was then removed and the original empty rule list reloaded.
+- A second Chrome tab temporarily renamed `New` to exercise a concurrent edit.
+  The first tab retained its draft, displayed a conflict, and disabled Save.
+  The name was restored to `New`; original member positions remained 2 in New
+  and 1 in Activated. No member messages or agent actions were sent in this QA.
+  No browser console errors were captured; the extra QA tab was closed.
+- Still pending: a signed-in ordinary-member private-channel contribution,
+  actual same-thread agent reply, exact movement/receipt readback and replay,
+  plus the outstanding member-browser revocation acceptance. Local tests cover
+  matching, root/reply routing, replay, snapshot stability, archived/deleted/
+  foreign/malformed targets, and private-member grant revocation; they are not
+  a substitute for that live member canary. Production was not changed.
+
 ## Semantics
 
 - `prompt_agent` admits one durable community-agent serve request using the
