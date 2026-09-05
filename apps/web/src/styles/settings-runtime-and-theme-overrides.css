@@ -9034,6 +9034,7 @@ button.settings-primary-action svg {
 .community-events-state button:focus-visible,
 .community-event-error button:focus-visible,
 .community-events-month-btn:focus-visible,
+.community-events-today-btn:focus-visible,
 .community-events-actions a:focus-visible,
 .community-events-actions button:focus-visible {
   outline: 2px solid var(--focus-ring);
@@ -9041,6 +9042,10 @@ button.settings-primary-action svg {
 }
 
 .community-events-month-nav {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--bg-panel);
   display: grid;
   grid-template-columns: 40px minmax(0, 1fr) 40px;
   align-items: center;
@@ -9069,8 +9074,24 @@ button.settings-primary-action svg {
 
 .community-events-month-copy {
   min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
   text-align: center;
 }
+
+.community-events-today-btn {
+  min-height: 30px;
+  padding: 0 9px;
+  border: 1px solid var(--border-muted);
+  border-radius: 7px;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 12px;
+}
+
+.community-events-today-btn:hover { background: var(--hover-overlay); }
 
 .community-events-month-copy h2 {
   margin: 0;
@@ -9136,17 +9157,15 @@ button.settings-primary-action svg {
   border-bottom: 1px solid var(--border-muted);
 }
 
-.community-events-day-group[hidden] { display: none; }
 .community-events-day-group.is-past .community-events-date,
-.community-events-day-group.is-past .community-events-item h3 { color: var(--text-secondary); }
+.community-events-item.is-past h3,
+.community-events-item.is-past .community-events-phase { color: var(--text-secondary); }
 .community-events-phase { font-size: 12px; font-weight: 600; }
-.community-events-past-toggle {
-  align-self: flex-start;
-  padding: 8px 12px;
-  border: 1px solid var(--border-muted);
-  border-radius: 8px;
-  background: transparent;
-  color: inherit;
+.community-events-month-note {
+  margin: 0;
+  padding: 14px 0;
+  color: var(--text-secondary);
+  font-size: 13px;
 }
 
 .community-events-day-group:last-child {
@@ -9154,6 +9173,9 @@ button.settings-primary-action svg {
 }
 
 .community-events-date {
+  position: sticky;
+  top: 74px;
+  align-self: start;
   display: flex;
   flex-direction: column;
   align-items: flex-start;
@@ -9180,6 +9202,7 @@ button.settings-primary-action svg {
 }
 
 .community-events-item {
+  scroll-margin-top: 74px;
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   gap: 24px;
