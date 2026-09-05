@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, type Dispatch, type MutableRefObject, type SetStateAction } from "react";
+import { useCallback, useEffect, useRef, type Dispatch, type SetStateAction } from "react";
 import type { ProfileDraftSnapshot } from "./profileDraftState";
 import { resolveUsableSession, type EnsureSessionFn } from "./ensureUsableSession";
 import { resolveAuthSubject } from "./authSession";
@@ -47,7 +47,6 @@ type UseCommunityAdminControllerArgs<
   reloadCommunityAccess: (communityId: string, session: SessionT) => Promise<void>;
 
   getProfileSaveSession: () => SessionT | null;
-  profileSaveTimeoutRef: MutableRefObject<number | null>;
   profileSaveFailureMessage: string;
   profileSaveUnauthenticatedErrorMessage: string | null;
   onProfileSaveUnauthenticated?: () => void;
@@ -61,7 +60,6 @@ type UseCommunityAdminControllerArgs<
   setCloudProfile: Dispatch<SetStateAction<UserProfileDetailT | null>>;
   setIsSavingProfile: Dispatch<SetStateAction<boolean>>;
   setProfileSaveError: Dispatch<SetStateAction<string | null>>;
-  setProfileSaveSuccess: Dispatch<SetStateAction<boolean>>;
 
   setIsLoadingCommunityAnalytics: Dispatch<SetStateAction<boolean>>;
   setCommunityAnalyticsError: Dispatch<SetStateAction<string | null>>;
@@ -191,14 +189,8 @@ export function useCommunityAdminController<
       fields.bio,
     );
 
-    if (current.profileSaveTimeoutRef.current) {
-      window.clearTimeout(current.profileSaveTimeoutRef.current);
-      current.profileSaveTimeoutRef.current = null;
-    }
-
     current.setIsSavingProfile(true);
     current.setProfileSaveError(null);
-    current.setProfileSaveSuccess(false);
     try {
       const session = await resolveUsableSession(candidate, current.ensureSession);
       if (!isCurrent()) return false;
@@ -253,8 +245,6 @@ export function useCommunityAdminController<
         } as UserProfileT),
       }));
       current.applySavedProfileToLocal(saved, submitted);
-      current.setProfileSaveSuccess(true);
-      current.profileSaveTimeoutRef.current = window.setTimeout(() => { if (isCurrent()) current.setProfileSaveSuccess(false); }, 2000);
       return true;
     } catch (error) {
       if (isCurrent()) current.setProfileSaveError(formatProfileMutationError(error, current.profileSaveFailureMessage));

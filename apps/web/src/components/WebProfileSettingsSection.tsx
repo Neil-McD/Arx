@@ -33,7 +33,6 @@ type WebProfileSettingsSectionProps = {
   isSavingProfile: boolean;
   isProfileDirty: boolean;
   profileSaveError: string | null;
-  profileSaveSuccess: boolean;
   isProfileAvatarFocusModalOpen: boolean;
   setIsProfileAvatarDragOver: (value: boolean) => void;
   setProfileAvatarFocusX: (value: number) => void;
@@ -68,7 +67,6 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
     isSavingProfile,
     isProfileDirty,
     profileSaveError,
-    profileSaveSuccess,
     isProfileAvatarFocusModalOpen,
     setIsProfileAvatarDragOver,
     setProfileAvatarFocusX,
@@ -218,7 +216,6 @@ export function WebProfileSettingsSection(props: WebProfileSettingsSectionProps)
       />
       {props.profileLoadStatus === "error" && <div className="auth-error" role="alert">Your profile could not be loaded. Your edits are preserved. <button type="button" onClick={props.reloadProfile}>Retry</button></div>}
       {profileSaveError && <div className="auth-error" role="alert">{profileSaveError}</div>}
-      {profileSaveSuccess && !isProfileDirty && <div className="auth-success" role="status">Saved.</div>}
       <WebUserAvatarEditorModal
         isOpen={isProfileAvatarFocusModalOpen}
         avatarUrl={profileAvatarUrl}

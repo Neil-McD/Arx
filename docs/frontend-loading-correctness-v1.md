@@ -32,6 +32,15 @@ Related static proofs now follow the actual canonical owners: onboarding avatar 
 
 The loading correctness check is part of the deterministic release gate. Release still requires an explicit decision and the canonical GitHub/main workflow. No direct Vercel deployment.
 
+## Events Retry and Profile feedback closure
+
+The follow-up based on production `d37d8db65fc028669045d52f393d949fa811d15f` removes two duplicate owners:
+
+- The web Events Retry wrapper passes the rendered session directly into the existing Events controller. Only that controller resolves the session, captures intent order, reports failure and completes loading. No authorization checks are removed. A signed-out or community-less wrapper is inert; obsolete account, community and range requests remain unable to commit.
+- Profile uses its existing derived Sync status as the sole saving/saved/unsaved announcement. The separate two-second success timer, success flag and forwarding props are removed. Error feedback, per-field edit versions, account guards and draft persistence are unchanged.
+
+The browser fixture now mounts the real web content controller and renders Events with its actual Retry action, mocking only cloud gateways. Seven additional checks cover missing/mismatched/rejected sessions, recovery with one session resolution and one query, account/community/range changes, and superseded retries in the same range. Profile save-recovery checks also assert one accessible Saved status, Saving during the request, and immediate Unsaved changes after another edit. The new wrapper and duplicate-status assertions reproduced failures against the unchanged production source before implementation. This is local fixture evidence, not a production deployment or live account test.
+
 ## Deliberately left for later
 
 - Events ongoing/upcoming/past lifecycle and missing-end-time policy.

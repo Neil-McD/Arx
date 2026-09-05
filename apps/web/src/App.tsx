@@ -1022,7 +1022,6 @@ export default function App() {
     reloadCommunities: loadCommunities,
     reloadCommunityAccess: reloadActiveCommunityAccess,
     getProfileSaveSession: () => sessionRef.current ?? session,
-    profileSaveTimeoutRef: profileUi.profileSaveTimeoutRef,
     profileSaveFailureMessage: "Failed to save profile.",
     profileSaveUnauthenticatedErrorMessage: null,
     onProfileSaveUnauthenticated: () => {
@@ -1037,7 +1036,6 @@ export default function App() {
     setCloudProfile,
     setIsSavingProfile: profileUi.setIsSavingProfile,
     setProfileSaveError: profileUi.setProfileSaveError,
-    setProfileSaveSuccess: profileUi.setProfileSaveSuccess,
     setIsLoadingCommunityAnalytics,
     setCommunityAnalyticsError,
     setCommunityAnalyticsSummary,
@@ -1573,7 +1571,6 @@ export default function App() {
       setPendingPurchasesError(null);
       setPendingPurchasesSuccess(null);
       profileUi.setProfileSaveError(null);
-      profileUi.setProfileSaveSuccess(false);
     },
   };
 

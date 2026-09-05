@@ -65,7 +65,6 @@ export function WebSettingsPanels(props: WebSettingsPanelsProps) {
     isSavingProfile: props.profile.profileUi.isSavingProfile,
     isProfileDirty: props.profile.profileUi.isProfileDirty,
     profileSaveError: props.profile.profileUi.profileSaveError,
-    profileSaveSuccess: props.profile.profileUi.profileSaveSuccess,
     isProfileAvatarFocusModalOpen:
       props.profile.profileUi.isProfileAvatarFocusModalOpen,
     setIsProfileAvatarDragOver:
