@@ -40,7 +40,7 @@ export function ChannelAccessSettings({ channelId }: { channelId: string }) {
     return () => { ++generation.current; };
   }, [scope?.session, scope?.communityId, channelId, refresh]);
 
-  const mutate = async (method: string, args: Record<string, unknown>) => {
+  const mutate = async (method: "communityChannels:setChannelAccess" | "communityChannelParticipants:setParticipant", args: Record<string, unknown>) => {
     if (!scope?.session || busy) return;
     const epoch = generation.current;
     setBusy(true); setError(null);
