@@ -363,9 +363,38 @@
   margin-top: 10px;
 }
 
-.workflow-milestone-modal {
-  width: min(580px, calc(100vw - 32px));
-  max-height: min(820px, calc(100vh - 48px));
+.modal-overlay.workflow-milestone-modal-overlay {
+  --workflow-editor-inset: clamp(16px, 8vh, 64px);
+  box-sizing: border-box;
+  align-items: flex-start;
+  padding: var(--workflow-editor-inset) 16px;
+}
+
+.resource-modal.workflow-milestone-modal {
+  width: min(580px, 100%);
+  max-height: calc(100dvh - 2 * var(--workflow-editor-inset));
+}
+
+.workflow-milestone-modal.resource-modal .modal-header {
+  flex-shrink: 0;
+  align-items: center;
+  padding: 20px 24px 12px;
+}
+
+.workflow-milestone-modal.resource-modal .modal-title {
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: -0.025em;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+
+.workflow-milestone-modal.resource-modal .modal-close {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  display: grid;
+  place-items: center;
 }
 
 .workflow-member-dossier-modal {
@@ -507,21 +536,48 @@
   background: color-mix(in srgb, var(--text-faint) 10%, transparent);
 }
 
-.workflow-milestone-modal .modal-body {
-  padding: 20px;
+.workflow-milestone-modal.resource-modal .modal-body {
+  min-height: 0;
+  padding: 12px 24px 24px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  overscroll-behavior: contain;
+}
+
+.workflow-milestone-modal.resource-modal .modal-body::-webkit-scrollbar {
+  display: block;
+  width: 6px;
+}
+
+.workflow-milestone-modal.resource-modal .modal-footer {
+  flex-shrink: 0;
+  padding: 16px 24px 20px;
+  border-top: 1px solid var(--border-default);
+}
+
+.workflow-milestone-modal button {
+  font-family: inherit;
+}
+
+.workflow-milestone-modal button:focus-visible,
+.workflow-milestone-modal input:focus-visible,
+.workflow-milestone-modal textarea:focus-visible,
+.workflow-milestone-modal select:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .workflow-milestone-form {
   display: grid;
-  gap: 16px;
+  gap: 24px;
 }
 
 .workflow-milestone-form label {
   display: grid;
   gap: 7px;
   color: var(--text-muted);
-  font-size: 11px;
-  font-weight: 650;
+  font-size: 13px;
+  font-weight: 550;
 }
 
 .workflow-milestone-modal input,
@@ -530,8 +586,12 @@
   box-sizing: border-box;
   width: 100%;
   border: 1px solid var(--border-default);
-  border-radius: 8px;
-  padding: 9px 10px;
+  border-radius: 12px;
+  padding: 11px 13px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.5;
   color: var(--text-primary);
   background: var(--surface-workspace);
 }
@@ -545,8 +605,7 @@
 .workflow-milestone-modal textarea {
   min-height: 112px;
   resize: vertical;
-  font: inherit;
-  line-height: 1.45;
+  line-height: 1.5;
 }
 
 .workflow-milestone-automations {
@@ -556,7 +615,7 @@
 
 .workflow-milestone-automations-header {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
 }
@@ -568,21 +627,24 @@
 
 .workflow-milestone-automations-header span {
   color: var(--text-muted);
-  font-size: 11px;
+  font-size: 14px;
   font-weight: 650;
 }
 
 .workflow-milestone-automations-header small,
-.workflow-milestone-automations-empty {
+.workflow-milestone-automations-empty,
+.workflow-milestone-form .workflow-field-hint,
+.workflow-milestone-automation-fields > small {
   margin: 0;
-  color: var(--text-faint);
-  font-size: 10px;
-  line-height: 1.4;
+  color: var(--text-muted);
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
 }
 
 .workflow-milestone-automation-list {
   display: grid;
-  gap: 9px;
+  gap: 16px;
 }
 
 .workflow-milestone-automation-row {
@@ -590,23 +652,19 @@
   grid-template-columns: minmax(0, 1fr) 36px;
   align-items: start;
   gap: 8px;
-  padding: 10px;
+  padding: 16px;
   border: 1px solid var(--border-default);
-  border-radius: 9px;
-  background: var(--surface-raised);
+  border-radius: 12px;
+  background: transparent;
 }
 
 .workflow-milestone-automation-fields {
   display: grid;
-  gap: 10px;
+  gap: 16px;
 }
 
 .workflow-milestone-automation-row select {
   min-height: 38px;
-}
-
-.workflow-milestone-automation-row textarea {
-  min-height: 76px;
 }
 
 .workflow-milestone-remove-automation {
@@ -641,16 +699,46 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-left: auto;
 }
 
-.workflow-milestone-modal-actions .secondary {
+.workflow-milestone-modal .resource-modal-actions .secondary {
   display: inline-flex;
   align-items: center;
+  justify-content: center;
   gap: 6px;
+  min-height: 42px;
+  font-size: 14px;
+  font-weight: 550;
+  cursor: pointer;
 }
 
-.workflow-milestone-delete-button:disabled {
-  visibility: hidden;
+.workflow-milestone-modal .resource-modal-actions .secondary:disabled {
+  cursor: not-allowed;
+}
+
+.workflow-milestone-modal .platform-save-button {
+  min-height: 42px;
+  border-radius: 12px;
+}
+
+.workflow-milestone-discard {
+  width: 100%;
+}
+
+.workflow-milestone-discard p {
+  margin: 0 0 12px;
+  color: var(--text-primary);
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.workflow-milestone-discard .workflow-milestone-modal-actions {
+  justify-content: flex-end;
+}
+
+.workflow-milestone-discard .secondary.danger {
+  margin-right: 0;
 }
 
 @media (max-width: 720px) {
@@ -669,6 +757,17 @@
   .workflow-milestone-modal-actions {
     align-items: stretch;
     flex-direction: column-reverse;
+  }
+
+  .workflow-milestone-automations-header {
+    flex-wrap: wrap;
+  }
+
+  .workflow-milestone-modal.resource-modal .modal-header,
+  .workflow-milestone-modal.resource-modal .modal-body,
+  .workflow-milestone-modal.resource-modal .modal-footer {
+    padding-left: 16px;
+    padding-right: 16px;
   }
 
   .workflow-milestone-modal-actions > div,

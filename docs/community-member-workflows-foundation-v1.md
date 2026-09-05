@@ -37,6 +37,30 @@ The editor keeps its opening milestone snapshot across live board refreshes.
 Unchanged refreshes preserve the draft; a changed milestone blocks saving and
 requires closing/reopening, rather than silently erasing or overwriting edits.
 
+### Editor foundation
+
+- The board and V1 grammar are unchanged. The editor reuses Resources footer
+  controls and platform Save styling, with readable form typography. It is
+  top-anchored; only the body scrolls while the header/footer remain reachable.
+- Save requires a valid changed draft. Empty names/prompts have associated
+  inline guidance; failed saves retain the draft. Existing conflict, channel
+  authorization, and single-move validation continue to apply.
+- Cancel, close, backdrop dismissal, and editor Escape ask before discarding
+  changed drafts. Keep editing retains the draft and restores focus. Native
+  selects own Escape, so that key never closes the editor while a select has
+  focus. Saving disables dismissal. Browser navigation/reload recovery is not
+  added by this slice.
+- Switching an automation between prompt and move preserves its latest prompt
+  for the current editor session. The cache is UI-only, keyed by the existing
+  rule, and stripped before saving; it adds no fields to the workflow contract.
+  Reopening a milestone starts from canonical data, not a retained old draft.
+- The next UI slice covers compact rule summaries, selector presentation, and
+  explicit action consequences. It must not imply sequential execution or
+  expand the trigger/action grammar. Delete semantics and permissions are not
+  changed by the editor-foundation slice.
+
+Focused regression tests: `npx vitest run scripts/workflow_milestone_draft.test.ts`.
+
 ### Channel-scoped rules staging acceptance — 2026-09-05
 
 - Code candidate: `a94ffe79a94dfb6516d06a5507b32637323757e3` on Git

@@ -2,6 +2,13 @@ import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
+import {
+  isWorkflowMilestoneDraftDirty,
+  replaceWorkflowDraftAction,
+  toWorkflowAutomationDraft,
+  workflowDraftAutomations,
+  type WorkflowAutomationDraft,
+} from "./workflowMilestoneDraft";
 
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE,
@@ -30,27 +37,22 @@ function draftKey(prefix: string): string {
   return `draft-${prefix}-${crypto.randomUUID()}`;
 }
 
-function newAutomation(): CommunityMemberWorkflowAutomation {
-  return {
+function newAutomation(): WorkflowAutomationDraft {
+  return toWorkflowAutomationDraft({
     key: draftKey("rule"),
     trigger: { type: "member_contributed" },
     action: { key: draftKey("action"), type: "prompt_agent", prompt: "" },
-  };
-}
-
-function replaceAction(automation: CommunityMemberWorkflowAutomation, type: CommunityMemberWorkflowAction["type"]): CommunityMemberWorkflowAutomation {
-  return {
-    ...automation,
-    action: type === "prompt_agent"
-      ? { key: automation.action.key, type, prompt: "" }
-      : { key: automation.action.key, type, destination: "next_or_complete" },
-  };
+  });
 }
 
 export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const [name, setName] = useState("");
-  const [automations, setAutomations] = useState<CommunityMemberWorkflowAutomation[]>([]);
+  const [automations, setAutomations] = useState<WorkflowAutomationDraft[]>([]);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
   const dialogRef = useRef<HTMLFormElement | null>(null);
+  const keepEditingRef = useRef<HTMLButtonElement | null>(null);
+  const closeOriginRef = useRef<HTMLElement | null>(null);
+  const focusNewRuleRef = useRef<string | null>(null);
   const editingSnapshot = useRef<CommunityMemberWorkflowMilestone | null>(null);
 
   useEffect(() => {
@@ -61,8 +63,10 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     // Live member activity replaces board objects; it must not erase a draft.
     if (editingSnapshot.current?.key === props.milestone.key) return;
     editingSnapshot.current = props.milestone;
+    focusNewRuleRef.current = null;
+    setConfirmDiscard(false);
     setName(props.milestone.name);
-    setAutomations(props.milestone.automations);
+    setAutomations(props.milestone.automations.map(toWorkflowAutomationDraft));
   }, [props.isOpen, props.milestone]);
 
   useEffect(() => {
@@ -77,13 +81,30 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     };
   }, [props.isOpen]);
 
+  useEffect(() => {
+    if (confirmDiscard) keepEditingRef.current?.focus();
+  }, [confirmDiscard]);
+
+  useEffect(() => {
+    const key = focusNewRuleRef.current;
+    if (!key) return;
+    const row = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>("[data-automation-key]") ?? [])
+      .find((element) => element.dataset.automationKey === key);
+    if (!row) return;
+    focusNewRuleRef.current = null;
+    row.scrollIntoView({ block: "nearest" });
+    row.querySelector<HTMLSelectElement>("select")?.focus({ preventScroll: true });
+  }, [automations]);
+
   if (!props.isOpen || !props.milestone) return null;
   const hasConflict = editingSnapshot.current !== null
     && JSON.stringify(editingSnapshot.current) !== JSON.stringify(props.milestone);
+  const isDirty = isWorkflowMilestoneDraftDirty(editingSnapshot.current, name, automations);
   const moveAutomationCount = automations.filter(
     (automation) => automation.action.type === "move_member",
   ).length;
   const canSave = name.trim().length > 0
+    && isDirty
     && !hasConflict
     && automations.every((automation) => automation.trigger.channelId === undefined
       || (!props.channelsUnavailable && props.channels.some((channel) => channel.id === automation.trigger.channelId)))
@@ -94,11 +115,11 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
-    if (!canSave || props.isSaving) return;
+    if (!canSave || props.isSaving || confirmDiscard) return;
     void props.onSave({
       key: props.milestone!.key,
       name,
-      automations: automations.map((automation) => ({
+      automations: workflowDraftAutomations(automations).map((automation) => ({
         ...automation,
         key: automation.key.startsWith("draft-") ? "" : automation.key,
         action: {
@@ -109,10 +130,38 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     });
   };
 
-  const trapFocus = (event: ReactKeyboardEvent<HTMLFormElement>) => {
-    if (event.key === "Escape" && !props.isSaving) {
-      event.preventDefault();
+  const keepEditing = () => {
+    setConfirmDiscard(false);
+    queueMicrotask(() => {
+      const origin = closeOriginRef.current;
+      if (origin?.isConnected) origin.focus();
+      else dialogRef.current?.querySelector<HTMLInputElement>("input")?.focus();
+    });
+  };
+
+  const requestClose = () => {
+    if (props.isSaving) return;
+    if (!isDirty) {
       props.onClose();
+      return;
+    }
+    if (confirmDiscard) return;
+    closeOriginRef.current = document.activeElement as HTMLElement | null;
+    setConfirmDiscard(true);
+  };
+
+  const trapFocus = (event: ReactKeyboardEvent<HTMLFormElement>) => {
+    if (event.defaultPrevented || event.nativeEvent.isComposing) return;
+    if (event.key === "Escape" && !props.isSaving) {
+      // Native selects own Escape, including when their popup is not exposed
+      // in the DOM. Never let that key discard the surrounding editor.
+      if (event.target instanceof HTMLSelectElement) {
+        event.stopPropagation();
+        return;
+      }
+      event.preventDefault();
+      if (confirmDiscard) keepEditing();
+      else requestClose();
       return;
     }
     if (event.key !== "Tab") return;
@@ -132,29 +181,36 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   };
 
   return createPortal(
-    <div className="modal-overlay workflow-milestone-modal-overlay" onMouseDown={props.isSaving ? undefined : props.onClose}>
+    <div className="modal-overlay workflow-milestone-modal-overlay" onMouseDown={requestClose}>
       <form ref={dialogRef} className="modal resource-modal workflow-milestone-modal" role="dialog" aria-modal="true" aria-labelledby="workflow-milestone-modal-title" onSubmit={submit} onKeyDown={trapFocus} onMouseDown={(event) => event.stopPropagation()}>
         <div className="modal-header">
           <div className="modal-title" id="workflow-milestone-modal-title">
             {props.milestone.name.trim() ? props.milestone.name : `Set up milestone ${props.milestoneNumber}`}
           </div>
-          <button className="modal-close" type="button" onClick={props.onClose} disabled={props.isSaving} aria-label="Close milestone editor"><X size={18} aria-hidden="true" /></button>
+          <button className="modal-close" type="button" onClick={requestClose} disabled={props.isSaving} aria-label="Close milestone editor"><X size={18} aria-hidden="true" /></button>
         </div>
 
         <div className="modal-body">
           <div className="workflow-milestone-form">
             <label>
-              <span>Milestone name</span>
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Activated" disabled={props.isSaving} />
+              <span id="workflow-name-label">Milestone name</span>
+              <input value={name} onChange={(event) => setName(event.target.value)} placeholder="Milestone name" disabled={props.isSaving} aria-labelledby="workflow-name-label" aria-describedby={!name.trim() ? "workflow-name-hint" : undefined} />
+              {!name.trim() ? <small id="workflow-name-hint" className="workflow-field-hint">Give this milestone a name to save it.</small> : null}
             </label>
 
             {props.milestone.key ? (
               <section className="workflow-milestone-automations" aria-labelledby="milestone-automations-title">
                 <div className="workflow-milestone-automations-header">
                   <div><span id="milestone-automations-title">Automations</span><small>When a member posts or replies, do one thing.</small></div>
-                  <button type="button" className="secondary" onClick={() => setAutomations((current) => [...current, newAutomation()])} disabled={props.isSaving || automations.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE}>
-                    <Plus size={14} aria-hidden="true" /> Add automation
-                  </button>
+                  <div className="resource-modal-actions">
+                    <button type="button" className="secondary" onClick={() => {
+                      const automation = newAutomation();
+                      focusNewRuleRef.current = automation.key;
+                      setAutomations((current) => [...current, automation]);
+                    }} disabled={props.isSaving || automations.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE}>
+                      <Plus size={16} aria-hidden="true" /> Add automation
+                    </button>
+                  </div>
                 </div>
 
                 {automations.length === 0 ? (
@@ -162,7 +218,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                 ) : (
                   <div className="workflow-milestone-automation-list">
                     {automations.map((automation, index) => (
-                      <div className="workflow-milestone-automation-row" key={automation.key}>
+                      <div className="workflow-milestone-automation-row" key={automation.key} data-automation-key={automation.key}>
                         <div className="workflow-milestone-automation-fields">
                           <label>
                             <span>When a member posts or replies in</span>
@@ -183,7 +239,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                           ) : null}
                           <label>
                             <span>Then</span>
-                            <select value={automation.action.type} disabled={props.isSaving} onChange={(event) => setAutomations((current) => current.map((item, itemIndex) => itemIndex === index ? replaceAction(item, event.target.value as CommunityMemberWorkflowAction["type"]) : item))}>
+                            <select value={automation.action.type} disabled={props.isSaving} onChange={(event) => setAutomations((current) => current.map((item, itemIndex) => itemIndex === index ? replaceWorkflowDraftAction(item, event.target.value as CommunityMemberWorkflowAction["type"]) : item))}>
                               <option value="prompt_agent">Prompt community agent</option>
                               <option
                                 value="move_member"
@@ -197,8 +253,9 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                           </label>
                           {automation.action.type === "prompt_agent" ? (
                             <label>
-                              <span>Prompt</span>
-                              <textarea rows={4} maxLength={COMMUNITY_MEMBER_WORKFLOW_PROMPT_MAX_LENGTH} value={automation.action.prompt} disabled={props.isSaving} placeholder="Help this member take the next useful step." onChange={(event) => setAutomations((current) => current.map((item, itemIndex) => itemIndex === index && item.action.type === "prompt_agent" ? { ...item, action: { ...item.action, prompt: event.target.value } } : item))} />
+                              <span id={`workflow-prompt-label-${index}`}>Prompt</span>
+                              <textarea rows={4} maxLength={COMMUNITY_MEMBER_WORKFLOW_PROMPT_MAX_LENGTH} value={automation.action.prompt} disabled={props.isSaving} aria-labelledby={`workflow-prompt-label-${index}`} aria-describedby={!automation.action.prompt.trim() ? `workflow-prompt-hint-${index}` : undefined} placeholder="Help this member take the next useful step." onChange={(event) => setAutomations((current) => current.map((item, itemIndex) => itemIndex === index && item.action.type === "prompt_agent" ? { ...item, action: { ...item.action, prompt: event.target.value } } : item))} />
+                              {!automation.action.prompt.trim() ? <small id={`workflow-prompt-hint-${index}`} className="workflow-field-hint">Add instructions for the agent to save this automation.</small> : null}
                             </label>
                           ) : null}
                         </div>
@@ -217,13 +274,23 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
         </div>
 
         <div className="modal-footer">
-          <div className="workflow-milestone-modal-actions">
-            <button className="secondary danger workflow-milestone-delete-button" type="button" onClick={() => void props.onDelete()} disabled={!props.canDelete || props.isSaving} title={props.deleteDisabledReason ?? "Delete milestone"}><Trash2 size={15} aria-hidden="true" /> Delete</button>
-            <div>
-              <button className="secondary" type="button" onClick={props.onClose} disabled={props.isSaving}>Cancel</button>
-              <button className="platform-save-button" type="submit" disabled={!canSave || props.isSaving}>{props.isSaving ? "Saving…" : "Save milestone"}</button>
+          {confirmDiscard ? (
+            <div className="workflow-milestone-discard">
+              <p role="alert">Discard unsaved changes?</p>
+              <div className="resource-modal-actions workflow-milestone-modal-actions">
+                <button ref={keepEditingRef} className="secondary" type="button" onClick={keepEditing}>Keep editing</button>
+                <button className="secondary danger" type="button" onClick={props.onClose}>Discard changes</button>
+              </div>
             </div>
-          </div>
+          ) : (
+            <div className="resource-modal-actions workflow-milestone-modal-actions">
+              {props.canDelete ? <button className="secondary danger workflow-milestone-delete-button" type="button" onClick={() => void props.onDelete()} disabled={props.isSaving} title={props.deleteDisabledReason ?? "Delete milestone"}><Trash2 size={15} aria-hidden="true" /> Delete</button> : null}
+              <div>
+                <button className="secondary" type="button" onClick={requestClose} disabled={props.isSaving}>Cancel</button>
+                <button className="platform-save-button" type="submit" disabled={!canSave || props.isSaving}>{props.isSaving ? "Saving…" : "Save milestone"}</button>
+              </div>
+            </div>
+          )}
         </div>
       </form>
     </div>,
