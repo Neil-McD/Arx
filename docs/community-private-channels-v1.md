@@ -65,3 +65,34 @@ Passing local tests or deploying does not by itself complete that last gate.
 
 Not included: arbitrary agent registries, per-channel task stores, new workflow
 triggers, per-channel knowledge ingestion, or public access without membership.
+
+## Staging evidence — 2026-09-04
+
+- Candidate `7c478db398620dea8d2543cbd8a7fdf830387fa0`; staging web
+  `/version.json` returned that SHA and `environment: staging`.
+- Convex deployed explicitly to `dev:quick-porcupine-949`; Vercel Git deployment
+  `dpl_4kxo3tVgq53p2Jo55HDdF6X9NQ7W` reached READY for `polynet-staging`.
+- All 934 Vitest tests (130 files), web/backend typechecks, UI contract proof,
+  and web build passed. No production push or production backend deployment.
+- Chrome, authenticated as Neil: created invite-only room, added `test` and the
+  community agent, reopened persisted settings, then renamed the room to
+  `Private channel QA` without changing its slug or losing thread content.
+- Synthetic root `j97mspmbq965wdrf0jwrns1bv98dv6fj` and attachment
+  `h57s3q086yp1rvb34dxxsypqs98dtqp7` were posted through the real composer.
+  The authenticated Chrome download matched the 155-byte fixture exactly.
+  An unauthenticated HTTP download returned 401.
+- Agent request `kx7vvasfxr70qjds3131ra416n8dv4x0` reached `responded` with
+  reply `j57nnksep8gz3y0w5wfmjz9s518dvcd4`; Chrome showed
+  `Private room reply confirmed.` in the same private thread.
+- Removing `test` in Chrome changed deployed download authorization and channel
+  lookup from allowed to denied. Restoring its invitation restored access.
+  These are live backend authorization checks, not an authenticated member UI
+  session. Unscoped recent evidence did not include the private root or marker.
+- No captured Chrome console errors during this acceptance pass.
+- **Outstanding acceptance gate:** a real ordinary-member Chrome session must
+  prove invited chat/replies/files and immediate UI clearing on revocation.
+  The available session was Neil (owner). Do not label this gate passed.
+- Canary retained at
+  `https://polynet-staging.vercel.app/c/concierge-welcome-canary-2026-08-20-b/chat/private-channel-canary`.
+  It contains only synthetic test messages/files. `test` and the community agent
+  remain invited for the remaining acceptance run.
