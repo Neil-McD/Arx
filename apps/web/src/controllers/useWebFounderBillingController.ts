@@ -8,6 +8,7 @@ import {
 } from "../../../../shared/cloudFounderBillingGateway";
 import type { AuthSession } from "../auth";
 import { scrubCurrentRouteSearchParams } from "../webAppRuntime";
+import { resolveAuthSubject } from "../../../../shared/authSession";
 import {
   archiveCloudCommunity,
   restoreCloudCommunityWithoutPayment,
@@ -64,6 +65,7 @@ export function useWebFounderBillingController(params: {
     EMPTY_FOUNDER_BILLING_OVERVIEW,
   );
   const [isLoading, setIsLoading] = useState(false);
+  const [overviewAccount, setOverviewAccount] = useState(() => resolveAuthSubject(params.session));
   const [actionCommunityId, setActionCommunityId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const overviewRef = useRef(overview);
@@ -72,36 +74,52 @@ export function useWebFounderBillingController(params: {
   ensureSessionRef.current = params.ensureSession;
   const onCommunityReadyRef = useRef(params.onCommunityReady);
   onCommunityReadyRef.current = params.onCommunityReady;
+  const refreshGenerationRef = useRef(0);
+  const accountId = resolveAuthSubject(params.session);
+  const accountRef = useRef(accountId);
+  if (accountRef.current !== accountId) {
+    accountRef.current = accountId;
+    refreshGenerationRef.current += 1;
+  }
 
   const refresh = useCallback(async (
     session?: AuthSession | null,
   ): Promise<CloudFounderBillingOverview | null> => {
-    const usableSession = await ensureSessionRef.current(session ?? undefined);
-    if (!usableSession) return null;
+    const requestedAccount = accountRef.current;
+    if (!requestedAccount || (session && resolveAuthSubject(session) !== requestedAccount)) return null;
+    const generation = ++refreshGenerationRef.current;
+    const isCurrent = () => accountRef.current === requestedAccount && refreshGenerationRef.current === generation;
     setIsLoading(true);
     try {
+      const usableSession = await ensureSessionRef.current(session ?? undefined);
+      if (!isCurrent() || resolveAuthSubject(usableSession) !== requestedAccount) return null;
       const next = await loadCloudFounderBillingOverview({ session: usableSession });
+      if (!isCurrent()) return null;
       setOverview(next);
+      setOverviewAccount(requestedAccount);
       setError(null);
       return next;
     } catch (loadError) {
-      setError(messageForError(loadError));
+      if (isCurrent()) setError(messageForError(loadError));
       return null;
     } finally {
-      setIsLoading(false);
+      if (isCurrent()) setIsLoading(false);
     }
   }, []);
 
   useEffect(() => {
+    setOverview(EMPTY_FOUNDER_BILLING_OVERVIEW);
+    setOverviewAccount(accountId);
+    setError(null);
     if (!params.session) {
-      setOverview(EMPTY_FOUNDER_BILLING_OVERVIEW);
       setIsLoading(false);
       setActionCommunityId(null);
-      setError(null);
       return;
     }
     void refresh(params.session);
   }, [params.session?.user.id, refresh]);
+
+  useEffect(() => () => { refreshGenerationRef.current += 1; }, []);
 
   useEffect(() => {
     const activeSession = params.session;
@@ -115,6 +133,7 @@ export function useWebFounderBillingController(params: {
       if (canceled) return;
       attempt += 1;
       const next = await refresh(activeSession);
+      if (canceled || accountRef.current !== resolveAuthSubject(activeSession)) return;
       if (!next) {
         if (attempt >= 12) {
           scrubCurrentRouteSearchParams(["founder_community", "session_id"]);
@@ -258,12 +277,13 @@ export function useWebFounderBillingController(params: {
     }
   }, [params.session, refresh]);
 
+  const visibleOverview = overviewAccount === accountId ? overview : EMPTY_FOUNDER_BILLING_OVERVIEW;
   return {
-    overview,
+    overview: visibleOverview,
     isLoading,
     actionCommunityId,
     error,
-    fundingAttentionCommunities: overview.communities.filter(
+    fundingAttentionCommunities: visibleOverview.communities.filter(
       (community) =>
         community.lifecycle_status === "active" &&
         community.funding_mode === "managed" &&

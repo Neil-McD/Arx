@@ -9,6 +9,7 @@ import {
 } from "react";
 
 import type { AuthSession } from "../auth";
+import { resolveAuthSubject } from "../../../../shared/authSession";
 import type { AppPage, CommunityTab } from "../../../../shared/appShellNavigation";
 import { parseEmbedUrl } from "../../../../shared/linkEmbedUi";
 import {
@@ -143,10 +144,10 @@ export function useWebCommunityContentController(
   );
   const eventsCacheKey = useMemo(
     () =>
-      activeCommunityId
-        ? buildEventsCacheKey(activeCommunityId, eventsVisibleRange)
+      activeCommunityId && resolveAuthSubject(session)
+        ? buildEventsCacheKey(`${activeCommunityId}:${resolveAuthSubject(session)}`, eventsVisibleRange)
         : null,
-    [activeCommunityId, eventsVisibleRange],
+    [activeCommunityId, eventsVisibleRange, session?.user.id],
   );
   const events = useMemo(
     () => (eventsCacheKey ? eventsByCacheKey[eventsCacheKey] ?? [] : []),
@@ -212,6 +213,7 @@ export function useWebCommunityContentController(
     handleCancelCommunityEvent,
   } = useCommunityEventsController<AuthSession>({
     activeCommunityId,
+    visibleRange: eventsVisibleRange,
     session,
     ensureSession,
     setCommunityEvents: setEvents,

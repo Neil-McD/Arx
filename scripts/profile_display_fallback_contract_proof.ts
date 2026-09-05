@@ -42,9 +42,10 @@ assert.match(
 );
 assert.match(
   communityChat,
-  /resolveTypingProfileFields[\s\S]*resolveUserProfileDisplayProjection/,
-  "community typing identities must use display fallback projection",
+  /resolveCommunityTypingPresence/,
+  "community typing must use its canonical presence owner",
 );
+assert.match(read("convex/communityTypingPresenceCore.ts"), /resolveUserProfileDisplayProjection\(args\.ctx, row\.userId\)/, "typing identities must use display fallback projection");
 assert.match(
   communityPublic,
   /resolvePublicProfileFaceFields[\s\S]*resolveUserProfileDisplayProjection/,

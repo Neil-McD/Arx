@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import {
   communityEventDateTimeInputToIso,
   getCommunityEventViewerTimeZone,
@@ -375,8 +375,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const wasLoadingEventsRef = useRef(false);
-  const hasCompletedEventsLoadRef = useRef(false);
 
   const monthDate = useMemo(() => startOfLocalMonth(new Date(state.visibleMonthIso)), [state.visibleMonthIso]);
   const visibleMonthEvents = useMemo(
@@ -417,14 +415,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       : "Edit event"
     : "New event";
   const currentRange = actions.getVisibleRange(state.visibleMonthIso);
-  useEffect(() => {
-    if (!state.isLoadingEvents && wasLoadingEventsRef.current) {
-      hasCompletedEventsLoadRef.current = true;
-    }
-    wasLoadingEventsRef.current = state.isLoadingEvents;
-  }, [state.isLoadingEvents]);
   const showInitialEventsLoading =
-    state.isLoadingEvents && state.events.length === 0 && !hasCompletedEventsLoadRef.current;
+    !state.eventsError && state.events.length === 0 &&
+    (state.isLoadingEvents || state.hasLoadedVisibleRange === false);
 
   const openNewEvent = (dayKey: string | null) => {
     setLocalError(null);
@@ -565,7 +558,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       <div className="community-events-content" aria-busy={state.isLoadingEvents}>
         {showInitialEventsLoading ? (
           <div className="community-events-state" role="status">Loading events…</div>
-        ) : eventDayGroups.length === 0 ? (
+        ) : eventDayGroups.length === 0 && state.eventsError ? null : eventDayGroups.length === 0 ? (
           <div className="community-events-state">
             <div>No events in {formatMonthLabel(monthDate)}.</div>
             {capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
