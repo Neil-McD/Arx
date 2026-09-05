@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { useMemo, useState, type FormEvent } from "react";
 import { communityEventDisplayEnd, communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
 import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
 import {
@@ -377,21 +377,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const panelRef = useRef<HTMLDivElement>(null);
-  const entryInterrupted = useRef(false);
-  const [entryRequest, setEntryRequest] = useState<{ monthIso: string; target: "now" | "start" } | null>(
-    () => ({ monthIso: state.visibleMonthIso, target: "now" }),
-  );
   const [hasFocusedEvent, setHasFocusedEvent] = useState(false);
-  const [followCurrentMonth, setFollowCurrentMonth] = useState(() => isSameLocalMonth(new Date(state.visibleMonthIso), new Date(Date.now())));
   // Do not move/remove the focused row or interrupt an open event editor.
   const now = useCommunityEventClock(state.events, Boolean(draft) || hasFocusedEvent);
-
-  useEffect(() => {
-    if (followCurrentMonth && !draft && !hasFocusedEvent && !isSameLocalMonth(new Date(state.visibleMonthIso), new Date(now))) {
-      actions.setVisibleMonthIso(toMonthIso(new Date(now)));
-    }
-  }, [followCurrentMonth, now, state.visibleMonthIso, draft, hasFocusedEvent, actions.setVisibleMonthIso]);
 
   const monthDate = useMemo(() => startOfLocalMonth(new Date(state.visibleMonthIso)), [state.visibleMonthIso]);
   const visibleMonthEvents = useMemo(
@@ -422,7 +410,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
     }
     return Array.from(grouped.values());
   }, [visibleMonthEvents]);
-  const nextEvent = visibleMonthEvents.find((event) => communityEventPhase(event, now) !== "past");
   const editingSourceEvent = useMemo(
     () =>
       editingEventId
@@ -439,38 +426,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const showInitialEventsLoading =
     !state.eventsError && state.events.length === 0 &&
     (state.isLoadingEvents || state.hasLoadedVisibleRange === false);
-
-  // The existing tab owns scrolling. User interaction cancels a pending entry
-  // jump (including during a slow first load); refreshes and clock ticks never jump.
-  useEffect(() => {
-    const scroller = panelRef.current?.closest(".community-tab-scroll");
-    if (!scroller) return;
-    // Record immediately: a continuous wheel event can be lower priority than
-    // the render that finishes loading, so React state alone can lose this race.
-    const cancelEntry = () => { entryInterrupted.current = true; };
-    const events = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
-    for (const event of events) scroller.addEventListener(event, cancelEntry, { passive: true });
-    return () => { for (const event of events) scroller.removeEventListener(event, cancelEntry); };
-  }, []);
-
-  useLayoutEffect(() => {
-    if (!entryRequest || state.isLoadingEvents || state.hasLoadedVisibleRange === false || state.eventsError) return;
-    if (!isSameLocalMonth(new Date(entryRequest.monthIso), monthDate)) return;
-    setEntryRequest(null);
-    if (entryInterrupted.current || draft || hasFocusedEvent) return;
-    const panel = panelRef.current;
-    const scroller = panel?.closest<HTMLElement>(".community-tab-scroll");
-    if (!panel || !scroller) return;
-    const target = entryRequest.target === "now" && isSameLocalMonth(monthDate, new Date(now)) && nextEvent
-      ? document.getElementById(`community-event-${nextEvent.id}`) : null;
-    if (!target) { scroller.scrollTop = 0; return; }
-    const nav = panel.querySelector(".community-events-month-nav")!;
-    const viewport = scroller.getBoundingClientRect();
-    const row = target.getBoundingClientRect();
-    const top = viewport.top + nav.getBoundingClientRect().height + 16;
-    // Short months keep their context; only skip history that obscures the next event.
-    if (row.top < top || row.bottom > viewport.bottom) scroller.scrollTop += row.top - top;
-  }, [entryRequest, state.isLoadingEvents, state.hasLoadedVisibleRange, state.eventsError, monthDate, now, nextEvent, draft, hasFocusedEvent]);
 
   const openNewEvent = (dayKey: string | null) => {
     setLocalError(null);
@@ -496,10 +451,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   };
 
   const showMonth = (date: Date) => {
-    setFollowCurrentMonth(false);
     const nextMonth = startOfLocalMonth(date);
-    entryInterrupted.current = false;
-    setEntryRequest({ monthIso: toMonthIso(nextMonth), target: "start" });
     actions.setVisibleMonthIso(toMonthIso(nextMonth));
   };
 
@@ -563,7 +515,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   };
 
   return (
-    <div ref={panelRef} className="community-panel community-events-panel">
+    <div className="community-panel community-events-panel">
       <div className="feed-header-row">
         <div className="feed-header-copy">
           <div className="resources-header">Events</div>
@@ -593,13 +545,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </button>
         <div className="community-events-month-copy">
           <h2>{formatMonthLabel(monthDate)}</h2>
-          <button type="button" className="community-events-today-btn" onClick={() => {
-            const monthIso = toMonthIso(new Date(Date.now()));
-            entryInterrupted.current = false;
-            setFollowCurrentMonth(true);
-            setEntryRequest({ monthIso, target: "now" });
-            actions.setVisibleMonthIso(monthIso);
-          }}>Today</button>
         </div>
         <button
           className="community-events-month-btn"
@@ -637,7 +582,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           </div>
         ) : (
           <div className="community-events-list">
-            {!nextEvent && isSameLocalMonth(monthDate, new Date(now)) ? <p className="community-events-month-note">No more events this month.</p> : null}
             {eventDayGroups.map((group) => {
               const dayLabel = formatEventDay(group.date);
               return (
@@ -657,10 +601,10 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                       const recurrenceLabel = formatRecurrenceLabel(event);
                       const eventLinkLabel = event.location_type === "online" ? "Join" : "Open event";
                       return (
-                        <article key={event.id} id={`community-event-${event.id}`} className={`community-events-item${isPast ? " is-past" : ""}`}>
+                        <article key={event.id} id={`community-event-${event.id}`} className={`community-events-item${isPast ? " is-past" : ""}`} aria-label={isPast ? `${event.title}, past event` : undefined}>
                           <div className="community-events-item-copy">
                             <h3>{event.title}</h3>
-                            {phase === "ongoing" ? <span className="community-events-phase">Happening now</span> : phase === "started" ? <span className="community-events-phase" title="No end time supplied; shown here for one hour after the start.">Started · end time not set</span> : isPast ? <span className="community-events-phase">Ended</span> : null}
+                            {phase === "ongoing" ? <span className="community-events-phase">Happening now</span> : phase === "started" ? <span className="community-events-phase" title="No end time supplied; shown here for one hour after the start.">Started · end time not set</span> : null}
                             <div className="community-events-time">
                               <span>{eventTimeLabel.primary}</span>
                               {eventTimeLabel.secondary ? <span>{eventTimeLabel.secondary}</span> : null}

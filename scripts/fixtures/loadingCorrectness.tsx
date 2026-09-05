@@ -81,12 +81,12 @@ const agendaEvent = (id: string, day: number, hour = 14): CommunityEvent => {
   const start = new Date(2026, 8, day, hour).toISOString();
   const end = new Date(2026, 8, day, hour + 1).toISOString();
   return {
-    id, parent_event_id: id, community_id: "preview", title: id, status: "live", description_md: null,
+    id, parent_event_id: id, community_id: "preview", title: id, status: "live", description_md: "Building and monetizing agents",
     starts_at: start, ends_at: end, starts_at_zoned: start, ends_at_zoned: end,
     series_starts_at: start, series_ends_at: end, created_at: start, updated_at: start,
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone, visibility: "members",
     recurrence_frequency: "none", recurrence_interval: 1, recurrence_until: null, is_recurring_instance: false,
-    url: "https://example.test/call", location_type: "online", location_label: null,
+    url: "https://example.test/call", location_type: "online", location_label: "Online community call",
   };
 };
 const agendaRows = [
@@ -502,31 +502,34 @@ function useProfileHarness(props: any) {
       assert(ids().join() === agendaRows.map(row => `community-event-${row.id}`).join(), "agenda is not chronological");
       assert(document.querySelectorAll('[aria-label="Sunday, September 20, 2026"]').length === 1, "mixed-phase day split into duplicate date groups");
       assert(!document.querySelector("[hidden], .community-events-past-toggle"), "history hidden");
-      assert(scroller.scrollTop > 0 && document.scrollingElement!.scrollTop === 0, "entry did not use the existing tab scroll owner");
-      const target = document.getElementById("community-event-Builder Q&A")!;
+      assert(scroller.scrollTop === 0 && document.scrollingElement!.scrollTop === 0, "entry moved the reader");
       const nav = document.querySelector(".community-events-month-nav")!;
-      assert(target.getBoundingClientRect().top >= nav.getBoundingClientRect().bottom, "entry is obscured by month navigation");
-      await (window as any).captureLoadingProofState("events-agenda-now");
-      scroller.scrollTop = 0;
+      assert(getComputedStyle(nav).position === "static" && getComputedStyle(nav).backgroundColor === "rgba(0, 0, 0, 0)", "month navigation restored a sticky shelf or background");
+      assert(!document.querySelector(".community-events-today-btn, .community-events-month-note") && !document.body.textContent?.includes("Ended"), "retired calendar chrome returned");
+      const pastRow = document.querySelector(".community-events-item.is-past")!;
+      const muted = getComputedStyle(pastRow.querySelector("h3")!).color;
+      for (const selector of [".community-events-time", ".community-events-meta", ".community-events-description", ".community-events-actions button"]) assert(getComputedStyle(pastRow.querySelector(selector)!).color === muted, `past ${selector} stayed prominent`);
+      assert(muted !== getComputedStyle(document.querySelector(".community-events-item:not(.is-past) h3")!).color, "past and upcoming look identical");
+      assert(pastRow.getAttribute("aria-label")?.endsWith("past event"), "past state missing from accessible name");
+      await (window as any).captureLoadingProofState("events-agenda");
+      scroller.scrollTop = 300;
       const originalRow = document.querySelector(".community-events-item");
       await hook.update({ rows: [...agendaRows] });
       window.dispatchEvent(new Event("focus")); await tick();
-      assert(scroller.scrollTop === 0 && document.querySelector(".community-events-item") === originalRow, "refresh/resume moved or remounted history");
+      assert(scroller.scrollTop === 300 && document.querySelector(".community-events-item") === originalRow, "refresh/resume moved or remounted history");
+      assert(nav.getBoundingClientRect().bottom < scroller.getBoundingClientRect().top, "month heading does not scroll away normally");
       await (window as any).captureLoadingProofState("events-agenda-history");
-      (document.querySelector(".community-events-today-btn") as HTMLButtonElement).click(); await tick();
-      assert(scroller.scrollTop > 0, "Today failed to return to upcoming events in the same month");
       (document.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click(); await tick();
       assert(scroller.scrollTop === 0 && !document.querySelector(".community-events-month-note"), "previous month retained stale scroll or current-month message");
     } finally { Date.now = realNow; }
   });
-  for (const interaction of ["none", "wheel", "touchstart", "pointerdown", "keydown"]) await test(`Events delayed entry respects ${interaction} interaction`, async () => {
+  await test("Events delayed initial data never repositions the reader", async () => {
     const realNow = Date.now; Date.now = () => agendaNow;
     try {
       const hook = await mountHook((props) => props, { rows: [], loading: true }, (props) => <AgendaFixture {...props} />);
       const scroller = document.querySelector<HTMLElement>(".community-tab-scroll")!;
-      if (interaction !== "none") scroller.dispatchEvent(new Event(interaction));
       await hook.update({ rows: agendaRows, loading: false });
-      assert(interaction === "none" ? scroller.scrollTop > 0 : scroller.scrollTop === 0, "late data overrode user intent or never positioned initial entry");
+      assert(scroller.scrollTop === 0, "late data moved the reader");
     } finally { Date.now = realNow; }
   });
   await test("Events ended carryovers remain visible, with direct past-month history and honest empty states", async () => {
@@ -537,7 +540,7 @@ function useProfileHarness(props: any) {
       const hook = await mountHook((props) => props, { rows }, (props) => <AgendaFixture {...props} />);
       assert(document.querySelectorAll(".community-events-item.is-past").length === 2, "ended carryover disappeared");
       assert(!document.querySelector(".community-events-actions a") && document.querySelector('[aria-label="Edit event"]'), "past attendance or manager permissions changed");
-      assert(document.querySelector(".community-events-month-note")?.textContent === "No more events this month.", "all-past current month lacks compact context");
+      assert(!document.querySelector(".community-events-month-note"), "redundant month notice returned");
       (document.querySelector('[aria-label="Edit event"]') as HTMLButtonElement).click(); await tick();
       assert(document.querySelector('[role="dialog"] input')?.getAttribute("value") === "Carryover", "past event editor did not preserve the event");
       (document.querySelector('[aria-label="Close event editor"]') as HTMLButtonElement).click(); await tick();
@@ -590,12 +593,9 @@ function useProfileHarness(props: any) {
       document.dispatchEvent(new Event("visibilitychange"));
       await tick();
       assert(hook.value.month === manualMonth, "clock overrode manual month selection");
-      ([...document.querySelectorAll('button')].find(button => button.textContent === "Today") as HTMLButtonElement).click();
-      await tick();
-      assert(new Date(hook.value.month).getMonth() === new Date(now).getMonth(), "Today did not resume current month");
       now = new Date(future.getFullYear(), future.getMonth() + 2, 1).getTime();
       window.dispatchEvent(new Event("pageshow"));await tick();
-      assert(new Date(hook.value.month).getMonth() === new Date(now).getMonth(), "current month did not roll forward");
+      assert(hook.value.month === manualMonth, "resume navigated away from the selected month");
     } finally { Date.now = realNow; }
   });
   for (const failure of ["missing", "mismatched", "rejected"]) {
