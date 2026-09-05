@@ -14,6 +14,14 @@ Scope: desktop loading behavior and async correctness. No production write, sche
 
 ## Validation
 
+### Session-failure closure
+
+The follow-up on `caf6f8f41` fixes two current-request failure paths without changing authentication authority. After session resolution, request ownership is checked first: obsolete Events reads and Profile saves remain silent. A missing or mismatched session for a still-current request produces actionable feedback and issues no Events query, avatar preparation or profile write. Profile uses its existing unauthenticated callback and error panel, with a nonempty fallback message when the caller supplies null; the draft and retry capability are preserved. No automatic logout, resubmission or retry loop is added.
+
+Events uses its existing error/Retry panel. A failed empty range does not show either perpetual loading or a false “No events” success; previously loaded events remain available. Once an explicit retry succeeds, the error clears and a genuinely empty result may render as empty.
+
+The browser suite adds missing/mismatched/rejected session cases, explicit recovery, superseded request and account-switch checks. The missing/mismatched cases failed against the pre-fix candidate before the implementation. Rendered Events and Profile error states are captured as `events-session-error.png` and `profile-session-error.png`; assertions check the recovery UI, enabled Save, preserved draft, no unauthorized gateway calls and successful retry. This remains fixture verification, not a signed-in production canary.
+
 `npm run check:loading-correctness` runs pure draft/image/registry tests and a real React browser harness with deferred gateway boundaries. All external browser requests are blocked except a locally fulfilled image fixture. No customer data or credentials are used.
 
 The initial five browser regressions were run against the unchanged production source and all failed as expected: billing after logout, Events intent ordering, cleared Profile draft hydration, direct account switch, and unresolved-avatar initials. Reproduce with `node scripts/loading_correctness_browser_proof.mjs --baseline=b0169ba49f04d38a4e4ac52379f9f066cdfdf108` (expected nonzero exit). The candidate must pass those plus save-during-edit, account change during photo preparation, failed versus missing profile reads, stale billing errors and StrictMode effect replay.

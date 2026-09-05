@@ -61,7 +61,11 @@ export function useCommunityEventsController<SessionT extends SessionLike>(
     current.setCommunityEventsError(null);
     try {
       const usableSession = await resolveUsableSession(session, current.ensureSession);
-      if (!isCurrentEventsLoad() || resolveAuthSubject(usableSession as AuthSessionLike) !== account) return;
+      if (!isCurrentEventsLoad()) return;
+      if (resolveAuthSubject(usableSession as AuthSessionLike) !== account) {
+        current.setCommunityEventsError("Your session could not be verified. Try again, or sign in again.");
+        return;
+      }
       const rows = await listCloudCommunityEvents({
         session: usableSession,
         communityId: requestedCommunityId,

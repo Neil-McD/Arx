@@ -129,13 +129,17 @@ try {
   await page.waitForFunction(
     () => typeof window.runLoadingProof === "function",
   );
+  const output = join(root, "artifacts/loading-correctness");
+  await mkdir(output, { recursive: true });
+  await page.exposeFunction("captureLoadingProofState", async (name) => {
+    assert(["events-session-error", "profile-session-error"].includes(name));
+    await page.screenshot({ path: join(output, `${name}.png`) });
+  });
   const results = await page.evaluate(
     (baseline) => window.runLoadingProof(baseline),
     baseline,
   );
   console.log(JSON.stringify({ results, errors }, null, 2));
-  const output = join(root, "artifacts/loading-correctness");
-  await mkdir(output, { recursive: true });
   await writeFile(
     join(output, baseline ? "baseline.json" : "results.json"),
     JSON.stringify({ results, errors }, null, 2),

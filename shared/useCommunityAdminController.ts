@@ -171,8 +171,10 @@ export function useCommunityAdminController<
     const current = argsRef.current;
     const candidate = current.getProfileSaveSession();
     const accountId = resolveCanonicalProfileUserId(candidate);
+    const unauthenticatedMessage = current.profileSaveUnauthenticatedErrorMessage
+      ?? "Your session could not be verified. Your edits are preserved. Try saving again, or sign in again.";
     if (!accountId || accountId !== profileAccountRef.current) {
-      current.setProfileSaveError(current.profileSaveUnauthenticatedErrorMessage);
+      current.setProfileSaveError(unauthenticatedMessage);
       current.onProfileSaveUnauthenticated?.();
       return false;
     }
@@ -199,7 +201,12 @@ export function useCommunityAdminController<
     current.setProfileSaveSuccess(false);
     try {
       const session = await resolveUsableSession(candidate, current.ensureSession);
-      if (!isCurrent() || !session || resolveCanonicalProfileUserId(session) !== accountId) return false;
+      if (!isCurrent()) return false;
+      if (!session || resolveCanonicalProfileUserId(session) !== accountId) {
+        current.setProfileSaveError(unauthenticatedMessage);
+        current.onProfileSaveUnauthenticated?.();
+        return false;
+      }
       const profileUserId = resolveCanonicalProfileUserId(session);
       if (!profileUserId) throw new Error("profile_user_id_required");
       const avatarField = await prepareCloudProfileAvatarField({

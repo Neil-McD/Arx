@@ -558,7 +558,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       <div className="community-events-content" aria-busy={state.isLoadingEvents}>
         {showInitialEventsLoading ? (
           <div className="community-events-state" role="status">Loading events…</div>
-        ) : eventDayGroups.length === 0 ? (
+        ) : eventDayGroups.length === 0 && state.eventsError ? null : eventDayGroups.length === 0 ? (
           <div className="community-events-state">
             <div>No events in {formatMonthLabel(monthDate)}.</div>
             {capabilities.hasActiveCommunity && capabilities.canManageEvents ? (
