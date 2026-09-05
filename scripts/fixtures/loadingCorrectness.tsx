@@ -9,6 +9,9 @@ import { UserAvatar } from "../../shared/UserAvatar";
 import { useCommunityAdminController } from "../../shared/useCommunityAdminController";
 import { WebProfileSettingsSection } from "../../apps/web/src/components/WebProfileSettingsSection";
 import { WebCommunityEventsSection } from "../../apps/web/src/components/WebCommunityEventsSection";
+import { CommunityResourcesPanel } from "../../apps/web/src/components/CommunityResourcesPanel";
+import { dispatchCommunityResourcesMutated } from "../../shared/communityResourceMutationEvents";
+import { useCommunityEventClock } from "../../shared/useCommunityEventClock";
 import "../../apps/web/src/index.css";
 
 const root = createRoot(document.getElementById("root")!);
@@ -135,6 +138,20 @@ function useWebEventsHarness(props: any) {
     loading: content.isLoadingEvents,
     error: content.eventsError,
   };
+}
+
+const courseFixture = { id: "course", name: "Test course", module_status: "draft", description_md: "Course description", banner_url: null, banner_focus_x: 0.5, banner_focus_y: 0.5, banner_zoom: 1, sort_order: 0 };
+const lessonFixture = { id: "lesson", module_id: "course", type: "post", resource_role: "page", resource_status: "published", title: "Test lesson", body_md: "Original lesson", body_chars: 15, url: null, pinned: false, sort_order: 0, created_at: new Date().toISOString() };
+function useResourcesHarness(props: any) {
+  const content = useWebCommunityContentController({ ...props, activePage: "community", communityTab: "resources", getSession: () => props.session });
+  const [selected, setSelected] = useState<string | null>(null);
+  return { ...content, selected, setSelected };
+}
+function renderResources(value: any) {
+  return <CommunityResourcesPanel capabilities={{hasActiveCommunity:true,activeCommunityId:"c",activeCommunityName:"Test",canOperateResources:true}}
+    state={{resources:value.resources,modules:value.modules,isLoadingResources:value.isLoadingResources,isLoadingResourceModules:value.isLoadingModules,
+      resourceRead:value.resourceRead,moduleRead:value.moduleRead,selectedModuleId:value.selected}}
+    actions={{...value,handleSelectModule:value.setSelected,retryRead:value.retryResourceRead}} />;
 }
 
 function renderProfile(value: any) {
@@ -328,6 +345,164 @@ function useProfileHarness(props: any) {
     );
   });
   if (baseline) return results;
+  await test("Resources reads run in parallel and partial failure has a targeted Retry, not zero lessons", async () => {
+    let ensures = 0;
+    const hook = await mountHook(useResourcesHarness, {activeCommunityId:"c",session:session("a"),ensureSession:async (s:any)=>{ensures++;return s;}}, renderResources);
+    assert(ensures === 1 && pending.length === 2, "initial read was duplicated or serial");
+    pending.find((r)=>r.kind === "listCloudCommunityResourceModuleRows")!.resolve([courseFixture]);
+    await tick();
+    assert(document.body.textContent?.includes("Lessons not loaded") && !document.body.textContent?.includes("0 lessons"), "pending lessons reported as zero");
+    flushSync(()=>hook.value.setSelected("course"));
+    pending.find((r)=>r.kind === "listCloudCommunityResourceRows")!.reject(new Error("Read unavailable"));
+    await tick();
+    assert(hook.value.selected === "course" && document.querySelector('[role="alert"]'), "failed read cleared selection or hid error");
+    assert(!document.body.textContent?.includes("No lessons yet"), "failed read reported empty course");
+    assert(document.querySelector('[aria-label="Lesson count not loaded"]'), "outline reported an unknown count as zero");
+    await (window as any).captureLoadingProofState("resources-partial-error");
+    (document.querySelector('[role="alert"] button') as HTMLButtonElement).click();
+    await tick();
+    assert(ensures === 2 && pending.length === 3 && pending[2].kind === "listCloudCommunityResourceRows", "Retry refetched healthy collection");
+    pending[2].resolve([]);
+    await tick();
+    assert(document.body.textContent?.includes("No lessons yet") && !document.querySelector('[role="alert"]'), "confirmed empty retry did not settle");
+  });
+  await test("Resources scope starts before session resolution and old accounts cannot repopulate", async () => {
+    const ensures: Array<ReturnType<typeof deferred>> = [];
+    const props = {activeCommunityId:"c",session:session("a"),ensureSession:()=>{const d=deferred();ensures.push(d);return d.promise;}};
+    const hook = await mountHook(useResourcesHarness,props);
+    await hook.update({...props,session:session("b")});
+    ensures[0].resolve(session("a"));
+    await tick();
+    assert(pending.length === 0 && hook.value.resourceRead.status === "pending", "stale auth issued reads or stopped current loading");
+    ensures[1].resolve(session("b"));
+    await tick();
+    assert(pending.length === 2,"current account did not issue parallel reads");
+    await hook.update({...props,session:session("a")});
+    pending[0].resolve([courseFixture]); pending[1].resolve([lessonFixture]);
+    await tick();
+    assert(hook.value.resources.length === 0 && hook.value.modules.length === 0,"old account data leaked into the new scope");
+    ensures[2].resolve(session("a")); await tick();
+    pending[2].resolve([]);pending[3].resolve([]);await tick();
+    assert(hook.value.resourceRead.status === "ready" && hook.value.moduleRead.status === "ready","current scope stranded");
+  });
+  await test("Resources mutation notification refreshes each collection once and preserves a draft on failure", async () => {
+    let ensures=0;
+    const hook=await mountHook(useResourcesHarness,{activeCommunityId:"c",session:session("a"),ensureSession:async(s:any)=>{ensures++;return s;}});
+    pending[0].resolve([courseFixture]);pending[1].resolve([lessonFixture]);await tick();
+    flushSync(()=>hook.value.resourceEditor.beginInlineEditResource(lessonFixture));
+    flushSync(()=>hook.value.resourceEditor.onChangeBody("Unsaved lesson edit"));
+    dispatchCommunityResourcesMutated({communityId:"c"});await tick();
+    assert(ensures===2 && pending.length===4,"mutation event duplicated reads");
+    pending[2].reject(new Error("Courses unavailable"));pending[3].reject(new Error("Lessons unavailable"));await tick();
+    assert(hook.value.resources[0]?.id==="lesson" && hook.value.resourceEditor.bodyInput==="Unsaved lesson edit","refresh error erased data or draft");
+  });
+  await test("Resources successful publish is not rolled back when refresh fails", async () => {
+    const hook=await mountHook(useResourcesHarness,{activeCommunityId:"c",session:session("a"),ensureSession:async(s:any)=>s});
+    pending[0].resolve([courseFixture]);pending[1].resolve([lessonFixture]);await tick();
+    const saved=hook.value.handleSetModuleStatus(courseFixture,"live");await tick();
+    assert(pending[2].kind==="saveCloudCommunityResourceModule","wrong write");pending[2].resolve(null);await tick();
+    assert(pending.length===5,"publish duplicated module refresh");
+    pending[3].reject(new Error("refresh failed"));pending[4].reject(new Error("refresh failed"));
+    assert(await saved,"saved publish reported as failure");await tick();
+    assert(hook.value.modules[0].module_status==="live" && hook.value.moduleRead.status==="error","successful publish rolled back or refresh failure hidden");
+  });
+  await test("Resources failed publish rolls back without refreshing", async () => {
+    const hook=await mountHook(useResourcesHarness,{activeCommunityId:"c",session:session("a"),ensureSession:async(s:any)=>s});
+    pending[0].resolve([courseFixture]);pending[1].resolve([lessonFixture]);await tick();
+    const saved=hook.value.handleSetModuleStatus(courseFixture,"live");await tick();
+    pending[2].reject(new Error("Write refused"));
+    assert(!(await saved),"failed write reported success");await tick();
+    assert(pending.length===3 && hook.value.modules[0].module_status==="draft","failed write refreshed or did not roll back");
+  });
+  await test("Resources read intent wins over late session resolution within the same scope", async () => {
+    const ensures: Array<ReturnType<typeof deferred>>=[];
+    const hook=await mountHook(useResourcesHarness,{activeCommunityId:"c",session:session("a"),ensureSession:()=>{const d=deferred();ensures.push(d);return d.promise;}});
+    const retry=hook.value.refreshCommunityResources("c",session("a"));await tick();
+    ensures[1].resolve(session("a"));await tick();
+    pending[0].resolve([courseFixture]);pending[1].resolve([lessonFixture]);await retry;await tick();
+    ensures[0].resolve(session("a"));await tick();
+    assert(pending.length===2 && hook.value.resources[0]?.id==="lesson" && hook.value.resourceRead.status==="ready","late session superseded newer read");
+  });
+  await test("Resources reorder refreshes lessons only", async () => {
+    const hook=await mountHook(useResourcesHarness,{activeCommunityId:"c",session:session("a"),ensureSession:async(s:any)=>s});
+    pending[0].resolve([courseFixture]);pending[1].resolve([lessonFixture]);await tick();
+    const saved=hook.value.handleReorderResources("course",["lesson"]);await tick();
+    assert(pending[2].kind==="reorderCloudCommunityResources","wrong reorder write");pending[2].resolve(null);await tick();
+    assert(pending.length===4 && pending[3].kind==="listCloudCommunityResourceRows","reorder reread unchanged courses");
+    pending[3].resolve([lessonFixture]);assert(await saved,"reorder failed");
+  });
+  for (const invalid of [null,session("b"),"rejected"]) await test(`Resources ${invalid === null ? "missing" : invalid === "rejected" ? "rejected" : "mismatched"} session settles without unauthorized reads`,async()=>{
+    const hook=await mountHook(useResourcesHarness,{activeCommunityId:"c",session:session("a"),ensureSession:async()=>{if(invalid==="rejected")throw new Error("Session failure");return invalid;}});
+    assert(pending.length===0 && hook.value.resourceRead.status==="error" && hook.value.moduleRead.status==="error","session failure stranded loading or queried resources");
+  });
+  await test("Resources overflow is explicit rather than a truncated lesson count", async()=>{
+    const hook=await mountHook(useResourcesHarness,{activeCommunityId:"c",session:session("a"),ensureSession:async(s:any)=>s});
+    assert(pending.every(r=>r.args.limit===201),"missing overflow sentinel");
+    pending[0].resolve([courseFixture]);pending[1].resolve(Array.from({length:201},(_,i)=>({...lessonFixture,id:String(i)})));await tick();
+    assert(hook.value.resourceRead.status==="error" && !hook.value.resourceRead.hasData && hook.value.resources.length===0,"truncated rows presented as complete");
+  });
+  await test("Events clock wakes at a boundary without focus or polling", async () => {
+    const starts=Date.now()+150;
+    const events=[{starts_at:new Date(starts).toISOString(),ends_at:new Date(starts+150).toISOString()}];
+    const hook=await mountHook((props)=>({now:useCommunityEventClock(props.events,props.paused)}),{events,paused:false});
+    await new Promise(resolve=>setTimeout(resolve,350));await tick();
+    assert(hook.value.now>=starts+150,"boundary timer did not advance");
+    await hook.update({events,paused:true});
+    const frozen=hook.value.now;window.dispatchEvent(new Event("focus"));await tick();
+    assert(hook.value.now===frozen,"paused clock advanced");
+    await hook.update({events,paused:false});assert(hook.value.now>frozen,"unpaused clock did not catch up");
+  });
+  await test("Events rolls forward on resume, retains history and respects manual month browsing", async () => {
+    const realNow = Date.now;
+    let now = realNow();
+    Date.now = () => now;
+    try {
+      const upcoming = {
+        id: "rollover", parent_event_id: "rollover", title: "Rollover call", status: "live",
+        starts_at: new Date(now + 60000).toISOString(), ends_at: new Date(now + 120000).toISOString(),
+        timezone: "UTC", recurrence_frequency: "none", url: "https://example.test/call", location_type: "online",
+      };
+      const hook = await mountHook(() => {
+        const [month, setMonth] = useState(new Date(now).toISOString());
+        return { month, setMonth };
+      }, {}, (value) => <WebCommunityEventsSection capabilities={{hasActiveCommunity:true,activeCommunityName:"Test",canManageEvents:false}}
+        state={{events:[upcoming] as any,visibleMonthIso:value.month,isLoadingEvents:false,hasLoadedVisibleRange:true,eventsError:null}}
+        actions={{setVisibleMonthIso:value.setMonth,getVisibleRange:()=>eventRange,reloadEvents:async()=>{},saveEvent:async()=>false,cancelEvent:async()=>false}} />);
+      now += 60000;
+      window.dispatchEvent(new Event("focus"));
+      await tick();
+      assert(document.body.textContent?.includes("Happening now"), "resume did not transition to ongoing");
+      await (window as any).captureLoadingProofState("events-ongoing");
+      (document.querySelector('a[href="https://example.test/call"]') as HTMLAnchorElement).focus();
+      await tick();
+      now += 60000;
+      window.dispatchEvent(new Event("focus"));
+      await tick();
+      assert(!document.querySelector(".community-events-day-group[hidden]") && document.activeElement?.getAttribute("href") === "https://example.test/call", "rollover removed focused action");
+      (document.activeElement as HTMLElement).blur();
+      await tick();
+      assert(document.querySelector(".community-events-day-group[hidden]"), "past event stayed prominent");
+      assert(!document.querySelector('a[href="https://example.test/call"]'), "past event kept Join action");
+      (document.querySelector(".community-events-past-toggle") as HTMLButtonElement).click();
+      await tick();
+      assert(!document.querySelector(".community-events-day-group[hidden]"), "history inaccessible");
+      await (window as any).captureLoadingProofState("events-history");
+      (document.querySelector('[aria-label="Previous month"]') as HTMLButtonElement).click();
+      await tick();
+      const manualMonth = hook.value.month;
+      const future = new Date(now);
+      now = new Date(future.getFullYear(), future.getMonth() + 1, 1).getTime();
+      document.dispatchEvent(new Event("visibilitychange"));
+      await tick();
+      assert(hook.value.month === manualMonth, "clock overrode manual month selection");
+      ([...document.querySelectorAll('button')].find(button => button.textContent === "Today") as HTMLButtonElement).click();
+      await tick();
+      assert(new Date(hook.value.month).getMonth() === new Date(now).getMonth(), "Today did not resume current month");
+      now = new Date(future.getFullYear(), future.getMonth() + 2, 1).getTime();
+      window.dispatchEvent(new Event("pageshow"));await tick();
+      assert(new Date(hook.value.month).getMonth() === new Date(now).getMonth(), "current month did not roll forward");
+    } finally { Date.now = realNow; }
+  });
   for (const failure of ["missing", "mismatched", "rejected"]) {
     await test(`production Events Retry owns ${failure} session failure and recovery`, async () => {
       let mode = failure;

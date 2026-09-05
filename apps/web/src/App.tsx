@@ -2225,6 +2225,8 @@ export default function App() {
         openPlatformAnalytics: () => openOperatorConsole("platform"),
       },
       resourcesState: {
+        resourceRead: communityContent.resourceRead,
+        moduleRead: communityContent.moduleRead,
         isLoadingResources,
         isLoadingResourceModules,
         modules: communityResourceModules,
@@ -2232,6 +2234,7 @@ export default function App() {
         selectedModuleId: communityResourceModuleId,
       },
       resourcesActions: {
+        retryRead: communityContent.retryResourceRead,
         handleSelectModule: setCommunityResourceModuleId,
         openNewModuleModal,
         handleEditModule,

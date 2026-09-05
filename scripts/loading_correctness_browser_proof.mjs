@@ -144,7 +144,7 @@ try {
   const output = join(root, "artifacts/loading-correctness");
   await mkdir(output, { recursive: true });
   await page.exposeFunction("captureLoadingProofState", async (name) => {
-    assert(["events-session-error", "profile-session-error"].includes(name));
+    assert(["events-session-error", "profile-session-error", "events-ongoing", "events-history", "resources-partial-error"].includes(name));
     await page.screenshot({ path: join(output, `${name}.png`) });
   });
   const results = await page.evaluate(

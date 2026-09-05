@@ -8249,6 +8249,28 @@ button.chat-reply-quote:hover {
   color: var(--text-muted);
 }
 
+.resource-read-error {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px 12px;
+  padding: 12px 0;
+  color: var(--accent-error);
+  font-size: 13px;
+}
+
+.resource-read-error button {
+  flex: 0 0 auto;
+  padding: 6px 10px;
+  border: 1px solid currentColor;
+  border-radius: 8px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  white-space: nowrap;
+  cursor: pointer;
+}
+
 .resources-back-btn {
   appearance: none;
   border: 0;

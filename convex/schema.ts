@@ -2704,6 +2704,7 @@ export default defineSchema({
     .index("by_community", ["communityId"])
     .index("by_community_startsAt", ["communityId", "startsAt"])
     .index("by_community_status_startsAt", ["communityId", "status", "startsAt"])
+    .index("by_community_status_endsAt", ["communityId", "status", "endsAt"])
     .index("by_community_status_recurrenceFrequency_startsAt", ["communityId", "status", "recurrenceFrequency", "startsAt"])
     .index("by_community_status_updatedAt", ["communityId", "status", "updatedAt"])
     .index("by_status_startsAt", ["status", "startsAt"])
