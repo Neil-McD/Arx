@@ -859,6 +859,13 @@ assert.match(
   /current\.interaction\.insertOptimistic\(\{[\s\S]*idempotencyKey,[\s\S]*attachments: preparedAttachments,[\s\S]*serializedAttachments/,
   "canonical optimistic projection rows should use the write idempotency key and prepared attachments",
 );
+assert.match(chatController, /serializedMentions: mentionsToSend/,
+  "pending attempts must retain the original committed mentions");
+assert.match(interactionController, /attachments: interaction\.serializedAttachments,[\s\S]*mentions: interaction\.serializedMentions/,
+  "retries must submit original attachment claims and mentions");
+assert.match(chatController,
+  /if \(insertedOptimistic\) \{[\s\S]*settleOptimistic\([\s\S]*\} else \{\s*restoreDraft\(\);\s*\}\s*setError\(mapCommunityComposerErrorMessage\(sendError\)\);\s*\} finally/,
+  "a failed pending attempt and a restored draft must be mutually exclusive recovery paths");
 assert.match(
   interactionController,
   /function appendPendingRoots[\s\S]*new Set\(roots\.map\(\(bundle\) => bundle\.root\.idempotency_key\)\)[\s\S]*storedIdempotencyKey\(item\.idempotencyKey, "root"\)/,

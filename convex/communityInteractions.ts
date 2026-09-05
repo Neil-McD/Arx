@@ -1,6 +1,7 @@
 import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
+import { fingerprintCommunityComposerPayload } from "./communityComposerReplay";
 import { v } from "convex/values";
 import { requireCommunityChannelCapability, resolveCommunityChannelActor } from "./communityChannelAccess";
 import {
@@ -88,6 +89,7 @@ type InteractionRootRow = {
   replyCount: number;
   reactionSummary: Array<{ emoji: string; count: number }>;
   idempotencyKey: string;
+  composerPayloadHash?: string;
   lastReplyAt?: number;
   lockedAt?: number;
   hiddenAt?: number;
@@ -112,6 +114,7 @@ type InteractionReplyRow = {
   contentSummary: string;
   reactionSummary: Array<{ emoji: string; count: number }>;
   idempotencyKey: string;
+  composerPayloadHash?: string;
   hiddenAt?: number;
   deletedAt?: number;
   editedAt?: number;
@@ -1718,6 +1721,10 @@ export const createCommunityInteractionComposerMessage = mutation({
         "root",
         actorType,
       );
+      const composerPayloadHash = await fingerprintCommunityComposerPayload({
+        channelId: String(requestedChannel._id), text,
+        attachmentIds: attachments.map(attachment => attachment.attachmentId!), mentions: mentionedUserIds,
+      });
       let root = await getExistingRootByIdempotencyKey(ctx, args.communityId, idempotencyKey);
       let communityAgentMention: ConciergeMentionRow | null = null;
       let deduped = true;
@@ -1727,7 +1734,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           normalizeIdValue(root.actorUserId) !== normalizeIdValue(userId) ||
           normalizeIdValue(root.actorAgentKey) !==
             normalizeIdValue(actorAgentKey) ||
-          root.contentSummary !== summary)
+          root.composerPayloadHash !== composerPayloadHash)
       ) {
         throw new Error("interaction_idempotency_key_conflict");
       }
@@ -1758,6 +1765,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           replyCount: 0,
           reactionSummary: [],
           idempotencyKey,
+          composerPayloadHash,
           createdAt: nowMs,
           updatedAt: nowMs,
         });
@@ -1867,6 +1875,11 @@ export const createCommunityInteractionComposerMessage = mutation({
       rootChannel,
       replyToMessageId: args.replyToMessageId ?? null,
     });
+    const composerPayloadHash = await fingerprintCommunityComposerPayload({
+      channelId: String(rootChannel._id), rootId: String(root._id),
+      targetReplyId: replyTarget.targetReplyId ? String(replyTarget.targetReplyId) : undefined,
+      text, attachmentIds: attachments.map(attachment => attachment.attachmentId!), mentions: mentionedUserIds,
+    });
     let reply = await getExistingReplyByIdempotencyKey(ctx, root.communityId, idempotencyKey);
     let communityAgentMention: ConciergeMentionRow | null = null;
     let deduped = true;
@@ -1879,7 +1892,7 @@ export const createCommunityInteractionComposerMessage = mutation({
           normalizeIdValue(actorAgentKey) ||
         normalizeIdValue(reply.targetReplyId) !==
           normalizeIdValue(replyTarget.targetReplyId) ||
-        reply.contentSummary !== summary)
+        reply.composerPayloadHash !== composerPayloadHash)
     ) {
       throw new Error("interaction_idempotency_key_conflict");
     }
@@ -1901,6 +1914,7 @@ export const createCommunityInteractionComposerMessage = mutation({
         contentSummary: summary,
         reactionSummary: [],
         idempotencyKey,
+        composerPayloadHash,
         createdAt: nowMs,
         updatedAt: nowMs,
       });
@@ -2091,6 +2105,10 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
     );
 
     if (!args.rootId) {
+      const composerPayloadHash = await fingerprintCommunityComposerPayload({
+        channelId: String(requestedChannel._id), text,
+        attachmentIds: attachments.map(attachment => attachment.attachmentId!), mentions: mentionedUserIds,
+      });
       let root = await getExistingRootByIdempotencyKey(
         ctx,
         args.communityId,
@@ -2102,7 +2120,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         (root.actorType !== "community_agent" ||
           Boolean(root.actorUserId) ||
           root.actorAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY ||
-          (!founderBootstrap && root.contentSummary !== summary))
+          (!founderBootstrap && root.composerPayloadHash !== composerPayloadHash))
       ) {
         throw new Error("interaction_idempotency_key_conflict");
       }
@@ -2132,6 +2150,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
           replyCount: 0,
           reactionSummary: [],
           idempotencyKey,
+          composerPayloadHash,
           createdAt: nowMs,
           updatedAt: nowMs,
         });
@@ -2213,6 +2232,11 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
       rootChannel,
       replyToMessageId: args.replyToMessageId ?? null,
     });
+    const composerPayloadHash = await fingerprintCommunityComposerPayload({
+      channelId: String(rootChannel._id), rootId: String(root._id),
+      targetReplyId: replyTarget.targetReplyId ? String(replyTarget.targetReplyId) : undefined,
+      text, attachmentIds: attachments.map(attachment => attachment.attachmentId!), mentions: mentionedUserIds,
+    });
     let reply = await getExistingReplyByIdempotencyKey(
       ctx,
       args.communityId,
@@ -2227,7 +2251,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
         reply.actorAgentKey !== CANONICAL_COMMUNITY_AGENT_KEY ||
         normalizeIdValue(reply.targetReplyId) !==
           normalizeIdValue(replyTarget.targetReplyId) ||
-        reply.contentSummary !== summary)
+        reply.composerPayloadHash !== composerPayloadHash)
     ) {
       throw new Error("interaction_idempotency_key_conflict");
     }
@@ -2254,6 +2278,7 @@ export const createCommunityAgentCanonicalInteractionInternal = internalMutation
           contentSummary: summary,
           reactionSummary: [],
           idempotencyKey,
+          composerPayloadHash,
           createdAt: nowMs,
           updatedAt: nowMs,
         },

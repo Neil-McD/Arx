@@ -122,6 +122,63 @@ test("concurrent retries produce one message and one claimed attachment", async 
   expect(rows[0].status).toBe("uploaded");
 });
 
+test.each(["human", "personal_agent", "community_agent"] as const)("%s roots and replies bind the original full payload to the retry key", async actor => {
+  for (const reply of [false, true]) {
+    const { t, f, upload } = await setup();
+    const a = await upload(reply ? { uploadRootId: f.rootId } : {});
+    const b = await upload(reply ? { uploadRootId: f.rootId } : {});
+    const args = { communityId: f.communityId, channelId: f.channelId,
+      ...(reply ? { rootId: f.rootId } : {}), idempotencyKey: "send-one",
+      text: "same text", attachments: [{ attachmentId: a.attachmentId }] };
+    const send = (overrides: Record<string, unknown> = {}) => actor === "community_agent"
+      ? t.withIdentity({ subject: "member" }).mutation(internal.communityInteractions.createCommunityAgentCanonicalInteractionInternal,
+          { userId: f.memberId, authSubject: "member", ...args, ...overrides })
+      : t.withIdentity({ subject: "member" }).mutation(api.communityInteractions.createCommunityInteractionComposerMessage,
+          { ...args, asPersonalAgent: actor === "personal_agent", ...overrides });
+    await send();
+    await send(); // Same attempt, including a response-lost retry, is accepted.
+    for (const attachments of [[], [{ attachmentId: b.attachmentId }], args.attachments.concat({ attachmentId: b.attachmentId })]) {
+      await expect(send({ attachments })).rejects.toThrow("idempotency_key_conflict");
+    }
+    const original = await t.run(ctx => ctx.db.get(a.attachmentId));
+    expect(original?.status).toBe("uploaded");
+    expect((await t.run(ctx => ctx.db.get(b.attachmentId)))?.status).toBe("pending");
+    const targetId = original!.replyId ?? original!.rootId!;
+    await t.run(ctx => ctx.db.patch(targetId, { contentSummary: "Edited after sending" }));
+    await send(); // Editable summaries are not replay authority.
+    const rows = await t.run(ctx => ctx.db.query(reply ? "communityInteractionReplies" : "communityInteractionRoots").collect());
+    expect(rows.filter(row => row.composerPayloadHash)).toHaveLength(1);
+  }
+});
+
+test("retry identity includes full text and canonical mentions, not a truncated summary", async () => {
+  const { t, f } = await setup();
+  const client = t.withIdentity({ subject: "member" });
+  const args = { communityId: f.communityId, channelId: f.channelId, idempotencyKey: "full-payload",
+    text: `@other @owner ${"a".repeat(2000)} original`, mentions: [{ userId: f.otherId }, { userId: f.ownerId }] };
+  const send = (overrides = {}) => client.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, { ...args, ...overrides });
+  await send();
+  await send({ mentions: [{ userId: "owner" }, { userId: "other" }] }); // Aliases and order canonicalize.
+  await expect(send({ text: args.text.replace("original", "different") })).rejects.toThrow("idempotency_key_conflict");
+  await expect(send({ mentions: [{ userId: f.otherId }] })).rejects.toThrow("idempotency_key_conflict");
+  await expect(send({ mentions: [] })).rejects.toThrow("idempotency_key_conflict");
+});
+
+test("attachment order is part of the send and old messages without replay evidence fail closed", async () => {
+  const { t, f, upload } = await setup();
+  const a = await upload();
+  const b = await upload();
+  const client = t.withIdentity({ subject: "member" });
+  const args = { communityId: f.communityId, channelId: f.channelId, idempotencyKey: "send-one", text: "ordered",
+    attachments: [{ attachmentId: a.attachmentId }, { attachmentId: b.attachmentId }] };
+  await client.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, args);
+  await expect(client.mutation(api.communityInteractions.createCommunityInteractionComposerMessage,
+    { ...args, attachments: [...args.attachments].reverse() })).rejects.toThrow("idempotency_key_conflict");
+  const row = await t.run(ctx => ctx.db.get(a.attachmentId));
+  await t.run(ctx => ctx.db.patch(row!.rootId!, { composerPayloadHash: undefined }));
+  await expect(client.mutation(api.communityInteractions.createCommunityInteractionComposerMessage, args)).rejects.toThrow("idempotency_key_conflict");
+});
+
 test("reply uploads bind to their parent and respect current reply policy", async () => {
   const { t, f, upload, prepare } = await setup();
   const a = await upload({ uploadRootId: f.rootId });
@@ -176,6 +233,45 @@ test("pending upload count is bounded and expiry releases rows and bytes", async
   await t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId });
   expect(await t.run(ctx => ctx.db.get(a.attachmentId))).toBeNull();
   expect(await t.run(ctx => ctx.storage.get(a.storageId))).toBeNull();
+});
+
+test("expiry preserves ownership long enough to reclaim a late provider completion", async () => {
+  const { t, f, prepare, store } = await setup();
+  const a = await prepare();
+  await t.run(ctx => ctx.db.patch(a.attachmentId, { uploadExpiresAt: Date.now() - 1 }));
+  await t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId });
+  expect(await t.run(ctx => ctx.db.get(a.attachmentId))).toMatchObject({ status: "failed" });
+  const storageId = await store(); // Provider completes AFTER the expiry job.
+  await expect(t.mutation(refs.finishInternal, { ownerId: f.memberId, attachmentId: a.attachmentId, storageId })).rejects.toThrow("upload_expired");
+  await t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId, cancelOwnerId: f.otherId, storageId });
+  expect(await t.run(async ctx => Boolean(await ctx.storage.get(storageId)))).toBe(true);
+  await expect(t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId, storageId })).rejects.toThrow("cleanup_scope_mismatch");
+  await t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId, cancelOwnerId: f.memberId, storageId });
+  expect(await t.run(ctx => ctx.storage.get(storageId))).toBeNull();
+  expect(await t.run(ctx => ctx.db.get(a.attachmentId))).toBeNull();
+});
+
+test("empty cancellations retain bounded tombstones without scheduling a cleanup loop", async () => {
+  const { t, f, prepare } = await setup();
+  const a = await prepare();
+  const cancel = () => t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId, cancelOwnerId: f.memberId });
+  await cancel();
+  await cancel();
+  expect(await t.run(ctx => ctx.db.get(a.attachmentId))).toMatchObject({ status: "failed" });
+  expect(await t.run(ctx => ctx.db.system.query("_scheduled_functions").collect())).toHaveLength(2);
+  await t.run(ctx => ctx.db.patch(a.attachmentId, { uploadExpiresAt: Date.now() - 31 * 60 * 1000 }));
+  await t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId });
+  expect(await t.run(ctx => ctx.db.get(a.attachmentId))).toBeNull();
+});
+
+test("cleanup rejects a different blob for an already stored reservation and missing claims never grant deletion", async () => {
+  const { t, f, upload, store } = await setup();
+  const a = await upload();
+  const storageId = await store();
+  await expect(t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId, cancelOwnerId: f.memberId, storageId })).rejects.toThrow("cleanup_scope_mismatch");
+  await t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId, cancelOwnerId: f.memberId });
+  await t.mutation(refs.cleanupInternal, { attachmentId: a.attachmentId, cancelOwnerId: f.memberId, storageId });
+  expect(await t.run(async ctx => Boolean(await ctx.storage.get(storageId)))).toBe(true);
 });
 
 test("duplicate references, raw storage IDs and inline persistence fail closed", async () => {
@@ -233,6 +329,32 @@ test("HTTP upload streams bytes and returns a claim, not a storage capability", 
   expect(result.attachment.attachmentId).toBeTruthy();
   expect(JSON.stringify(result)).not.toMatch(/storageId|uploadUrl/);
   expect(provider).toHaveBeenCalledTimes(1);
+});
+
+test("HTTP failure cleanup reconciles a blob returned after its reservation expires", async () => {
+  const { t, f, store } = await setup();
+  const routes: any[] = [];
+  registerCommunityAttachmentRoutes({ http: { route: config => routes.push(config) }, httpAction: ((fn: any) => fn) as any,
+    jsonResponse: (_req, status, payload) => Response.json(payload, { status }), optionsResponse: () => new Response(),
+    requireAuthenticatedActor: async () => ({ ok: true, actor: { dbUserId: f.memberId, authSubject: "member" } }),
+  });
+  let storedId: Id<"_storage"> | undefined;
+  vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+    await new Response(init?.body).arrayBuffer();
+    const row = (await t.run(ctx => ctx.db.query("communityInteractionAttachments").collect()))[0];
+    await t.run(ctx => ctx.db.patch(row._id, { uploadExpiresAt: Date.now() - 1 }));
+    await t.mutation(refs.cleanupInternal, { attachmentId: row._id });
+    storedId = await store();
+    return Response.json({ storageId: storedId });
+  });
+  const response = await routes.find(route => route.method === "POST").handler({ runMutation: t.mutation },
+    new Request("https://example.com/runtime/community_attachment_upload", { method: "POST", body: PNG,
+      headers: { "content-type": "image/png", "x-polynet-community-id": f.communityId,
+        "x-polynet-channel-id": f.channelId, "x-polynet-message-key": "late-send", "x-polynet-file-name": "image.png" } }));
+  expect(response.status).toBeGreaterThanOrEqual(400);
+  expect(storedId).toBeTruthy();
+  expect(await t.run(ctx => ctx.storage.get(storedId!))).toBeNull();
+  expect(await t.run(ctx => ctx.db.query("communityInteractionAttachments").collect())).toHaveLength(0);
 });
 
 test("stream caps unknown files despite missing Content-Length", async () => {

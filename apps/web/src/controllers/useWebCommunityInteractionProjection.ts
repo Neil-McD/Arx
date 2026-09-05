@@ -67,6 +67,7 @@ export type CommunityInteractionOptimisticInsert<AttachmentT> = {
   text: string;
   attachments: AttachmentT[];
   serializedAttachments: unknown[];
+  serializedMentions: { userId?: string; agentKey?: string; roleKey?: string }[];
   createdAt: string;
   senderId: string;
 };
@@ -912,6 +913,7 @@ export function useWebCommunityInteractionProjection<
           rootId: interaction.rootId,
           replyToMessageId: interaction.replyToMessageId,
           attachments: interaction.serializedAttachments,
+          mentions: interaction.serializedMentions,
         });
       } catch {
         markFailed();
@@ -1101,7 +1103,10 @@ export function useWebCommunityInteractionProjection<
   ) => {
     setPending((current) => [
       ...current.filter((item) => item.idempotencyKey !== interaction.idempotencyKey),
-      { ...interaction, status: "sending" },
+      { ...interaction,
+        serializedAttachments: structuredClone(interaction.serializedAttachments),
+        serializedMentions: structuredClone(interaction.serializedMentions),
+        status: "sending" },
     ]);
   }, []);
 

@@ -189,6 +189,12 @@ assert.match(
   /existingChannel[\s\S]*normalizeIdValue\(existingChannel\._id\)[\s\S]*normalizeIdValue\(requestedChannel\._id\)[\s\S]*interaction_idempotency_key_conflict/,
   "composer root idempotency must bind the original channel",
 );
+assert.match(createComposerMessage, /root\.composerPayloadHash !== composerPayloadHash/,
+  "root retries must compare the original full payload fingerprint");
+assert.match(createComposerMessage, /reply\.composerPayloadHash !== composerPayloadHash/,
+  "reply retries must compare the original full payload fingerprint");
+assert.doesNotMatch(createComposerMessage, /contentSummary !== summary/,
+  "editable and truncated summaries must not determine retry identity");
 assert.match(
   createComposerMessage,
   /const idempotencyKey = composerIdempotencyKey\([\s\S]*normalizeIdempotencyKey\(args\.idempotencyKey\),[\s\S]*"root",[\s\S]*actorType,[\s\S]*\)[\s\S]*getExistingRootByIdempotencyKey/,

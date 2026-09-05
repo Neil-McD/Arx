@@ -64,6 +64,7 @@ type CommunityInteractionComposerBoundary = {
     text: string;
     attachments: WebCommunityMessageAttachment[];
     serializedAttachments: unknown[];
+    serializedMentions: { userId?: string; agentKey?: string; roleKey?: string }[];
     createdAt: string;
     senderId: string;
   }) => void;
@@ -465,6 +466,7 @@ export function useWebCommunityChatController(
         return;
       }
       setMessageInput(rawText);
+      setMessageMentions(mentionDraft);
       setAttachments(attachmentsToSend);
       setReplyingToMessage(replySnapshot);
     };
@@ -509,6 +511,7 @@ export function useWebCommunityChatController(
         text: rawText,
         attachments: preparedAttachments,
         serializedAttachments,
+        serializedMentions: mentionsToSend,
         createdAt,
         senderId: sessionUserId,
       });
@@ -536,9 +539,10 @@ export function useWebCommunityChatController(
           idempotencyKey,
           status: "failed",
         });
+      } else {
+        restoreDraft();
       }
       setError(mapCommunityComposerErrorMessage(sendError));
-      restoreDraft();
     } finally {
       setIsSendingMessage(false);
     }

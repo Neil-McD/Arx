@@ -205,8 +205,14 @@ closed. Uploaded bytes supply size, storage hash, and canonical media metadata.
 Existing limits remain 8 files per message, 25 MiB per image, 50 MiB per media
 file, and 5 MiB per generic file. An indexed cap allows at most 16 pending files
 per uploader and 8 per composer key. Pending rows expire after 30 minutes using
-one-shot scheduled cleanup, not a new cron. Cleanup removes only unclaimed
-uploads; it cannot delete a claimed or historically shared blob. A process loss
+one-shot scheduled cleanup, not a new cron. If storage has not returned when a
+reservation expires or is cancelled, its row becomes unclaimable (`failed`) and
+retains ownership until 30 minutes after its original expiry. One additional
+scheduled cleanup bounds this retention; repeated cleanup does not reschedule.
+The authenticated HTTP handler can reconcile its late storage response against
+that retained reservation and remove the unclaimed blob. Cleanup removes only
+unclaimed uploads; it cannot delete a claimed or historically shared blob, or
+delete a caller-supplied blob without a matching reservation owner. A process loss
 between provider upload completion and recording its returned storage ID can
 still leave an untracked orphan; this slice does not claim transactional storage
 and database writes or run a historical storage sweep.
@@ -234,6 +240,27 @@ See [Convex storage security](https://docs.convex.dev/file-storage/overview).
 Member-agent attachments, DMs, resources, and profile/branding storage are not
 migrated here. Private-room creation and production releases remain disabled
 for this work.
+
+#### Composer recovery identity
+
+Each new composer root/reply stores `composerPayloadHash`: a versioned SHA-256
+fingerprint of normalized full text, canonical channel/root/reply destination,
+ordered attachment claim IDs, and canonical committed mentions. The existing
+idempotency key and actor identity locate the attempt; the fingerprint rejects
+different payloads under that key. Editable/truncated summaries are not replay
+authority. Current access checks still apply on every request.
+
+Human, personal-agent, and community-agent sends share this contract. Historical
+ordinary composer rows without a fingerprint fail closed on replay; no hash is
+guessed from potentially edited history. The existing server-generated founder
+welcome bootstrap retains its explicit once-per-community contract.
+
+Before an optimistic attempt exists, failure restores the composer draft. After
+it exists, failure marks that same attempt for retry, without also restoring a
+competing draft. Retry retains the original key, destination, text, attachment
+claims, and committed mentions. This is in-memory recovery, not a new durable
+client queue; reloading the browser does not preserve unsent attempts. Local
+regression tests are not a substitute for a response-loss staging browser canary.
 
 #### Currently available shared-channel behavior
 

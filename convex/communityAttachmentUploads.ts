@@ -7,6 +7,7 @@ import { requireProfileSetupCompleteForUser } from "./accountSetupCore";
 import { communityAttachmentByteLimit, COMMUNITY_ATTACHMENT_MAX_COUNT } from "../shared/communityAttachmentPolicy";
 
 const PENDING_TTL_MS = 30 * 60 * 1000;
+const LATE_UPLOAD_GRACE_MS = 30 * 60 * 1000;
 const MAX_PENDING_PER_MEMBER = 16;
 
 export async function requireAttachmentUploadScope(ctx: any, args: {
@@ -84,13 +85,27 @@ export const cleanupInternal = internalMutation({
     cancelOwnerId: v.optional(v.id("users")), storageId: v.optional(v.id("_storage")) },
   handler: async (ctx, args) => {
     const row = await ctx.db.get(args.attachmentId);
-    if (!row || row.status !== "pending" || row.rootId || row.replyId) return;
-    if (args.cancelOwnerId ? row.createdByUserId !== args.cancelOwnerId : (row.uploadExpiresAt ?? Infinity) > Date.now()) return;
+    if (!row || (row.status !== "pending" && row.status !== "failed") || row.rootId || row.replyId ||
+      !row.uploadMessageKey || !row.uploadExpiresAt || !row.createdByUserId) return;
+    const now = Date.now();
+    if (args.cancelOwnerId ? row.createdByUserId !== args.cancelOwnerId : row.uploadExpiresAt > now) return;
+    if (args.storageId && (!args.cancelOwnerId || (row.storageId && row.storageId !== args.storageId))) {
+      throw new Error("community_attachment_cleanup_scope_mismatch");
+    }
     const storageId = row.storageId ?? args.storageId;
     if (storageId) {
       const claims = await ctx.db.query("communityInteractionAttachments").withIndex("by_storage", q => q.eq("storageId", storageId)).take(2);
       if (claims.some(claim => claim._id !== row._id)) throw new Error("community_attachment_storage_reused");
       await ctx.storage.delete(storageId);
+    } else if (now < row.uploadExpiresAt + LATE_UPLOAD_GRACE_MS) {
+      // The provider may still finish after expiry/cancellation. Preserve this
+      // unclaimable ownership record so the HTTP handler can reconcile its blob.
+      if (row.status === "pending") {
+        await ctx.db.patch(row._id, { status: "failed", updatedAt: now });
+        await ctx.scheduler.runAfter(row.uploadExpiresAt + LATE_UPLOAD_GRACE_MS - now,
+          (internal as any).communityAttachmentUploads.cleanupInternal, { attachmentId: row._id });
+      }
+      return;
     }
     await ctx.db.delete(row._id);
   },
