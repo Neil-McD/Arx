@@ -871,9 +871,9 @@ export function CommunityResourcesPanel(props: CommunityResourcesPanelProps) {
           </div>
         </div>
 
-        {readErrors.map(({ collection, message }) => <div className="auth-error" role="alert" key={collection}>
+        {readErrors.map(({ collection, message }) => <div className="resource-read-error" role="alert" key={collection}>
           <span>{collection === "modules" ? "Courses" : "Lessons"} could not be refreshed. {message}</span>{" "}
-          <button className="resources-add-btn" type="button" onClick={() => void actions.retryRead(collection)}>Retry {collection === "modules" ? "courses" : "lessons"}</button>
+          <button type="button" onClick={() => void actions.retryRead(collection)}>Retry {collection === "modules" ? "courses" : "lessons"}</button>
         </div>)}
         {isRefreshingResources && hasResourceContent ? <div role="status">Refreshing resources…</div> : null}
         {showInitialResourceLoading ? (
