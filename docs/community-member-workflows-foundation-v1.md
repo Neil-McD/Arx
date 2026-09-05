@@ -46,18 +46,25 @@ requires closing/reopening, rather than silently erasing or overwriting edits.
   inline guidance; failed saves retain the draft. Existing conflict, channel
   authorization, and single-move validation continue to apply.
 - Cancel, close, backdrop dismissal, and editor Escape ask before discarding
-  changed drafts. Keep editing retains the draft and restores focus. Native
-  selects own Escape, so that key never closes the editor while a select has
+  changed drafts. Keep editing retains the draft and restores focus. The channel
+  picker owns Escape while open: it closes only the list and restores trigger
   focus. Saving disables dismissal. Browser navigation/reload recovery is not
   added by this slice.
 - Switching an automation between prompt and move preserves its latest prompt
   for the current editor session. The cache is UI-only, keyed by the existing
   rule, and stripped before saving; it adds no fields to the workflow contract.
   Reopening a milestone starts from canonical data, not a retained old draft.
-- The next UI slice covers compact rule summaries, selector presentation, and
-  explicit action consequences. It must not imply sequential execution or
-  expand the trigger/action grammar. Delete semantics and permissions are not
-  changed by the editor-foundation slice.
+- Existing rules open as compact action/channel summaries; one rule expands at
+  a time. Adding a rule expands and focuses it. Incomplete collapsed rules show
+  their missing instructions or unavailable channel rather than hiding the issue.
+- Channel selection reuses platform menu styling with private-channel icons,
+  keyboard arrows, Home/End, typeahead, Enter, Escape, and Tab. Missing selected
+  channels remain explicit; selection never silently broadens to Any channel.
+- Ask agent and Move member are direct radio choices. Agent help identifies the
+  triggering thread and private-channel invitation requirement. Move help names
+  the next milestone (or final completion) and explicitly states that it does
+  not wait for other agent actions. The existing single-move limit remains.
+- Delete semantics, permissions, saved grammar, and execution are unchanged.
 
 Focused regression tests: `npx vitest run scripts/workflow_milestone_draft.test.ts`.
 

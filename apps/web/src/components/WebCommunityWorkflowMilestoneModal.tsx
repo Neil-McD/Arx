@@ -2,9 +2,9 @@ import { Plus, Trash2, X } from "lucide-react";
 import { useEffect, useRef, useState, type FormEvent, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { createPortal } from "react-dom";
 import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
+import { WebCommunityWorkflowAutomationEditor } from "./WebCommunityWorkflowAutomationEditor";
 import {
   isWorkflowMilestoneDraftDirty,
-  replaceWorkflowDraftAction,
   toWorkflowAutomationDraft,
   workflowDraftAutomations,
   type WorkflowAutomationDraft,
@@ -12,8 +12,6 @@ import {
 
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE,
-  COMMUNITY_MEMBER_WORKFLOW_PROMPT_MAX_LENGTH,
-  type CommunityMemberWorkflowAction,
   type CommunityMemberWorkflowAutomation,
   type CommunityMemberWorkflowMilestone,
 } from "../../../../shared/communityMemberWorkflow";
@@ -24,6 +22,7 @@ type Props = {
   isOpen: boolean;
   milestone: CommunityMemberWorkflowMilestone | null;
   milestoneNumber: number;
+  nextMilestoneName: string | null;
   isSaving: boolean;
   canDelete: boolean;
   deleteDisabledReason: string | null;
@@ -49,7 +48,9 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const [name, setName] = useState("");
   const [automations, setAutomations] = useState<WorkflowAutomationDraft[]>([]);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const [expandedAutomationKey, setExpandedAutomationKey] = useState<string | null>(null);
   const dialogRef = useRef<HTMLFormElement | null>(null);
+  const addAutomationRef = useRef<HTMLButtonElement | null>(null);
   const keepEditingRef = useRef<HTMLButtonElement | null>(null);
   const closeOriginRef = useRef<HTMLElement | null>(null);
   const focusNewRuleRef = useRef<string | null>(null);
@@ -65,6 +66,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     editingSnapshot.current = props.milestone;
     focusNewRuleRef.current = null;
     setConfirmDiscard(false);
+    setExpandedAutomationKey(null);
     setName(props.milestone.name);
     setAutomations(props.milestone.automations.map(toWorkflowAutomationDraft));
   }, [props.isOpen, props.milestone]);
@@ -93,8 +95,8 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     if (!row) return;
     focusNewRuleRef.current = null;
     row.scrollIntoView({ block: "nearest" });
-    row.querySelector<HTMLSelectElement>("select")?.focus({ preventScroll: true });
-  }, [automations]);
+    row.querySelector<HTMLButtonElement>("[data-workflow-rule-start]")?.focus({ preventScroll: true });
+  }, [automations, expandedAutomationKey]);
 
   if (!props.isOpen || !props.milestone) return null;
   const hasConflict = editingSnapshot.current !== null
@@ -153,12 +155,6 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const trapFocus = (event: ReactKeyboardEvent<HTMLFormElement>) => {
     if (event.defaultPrevented || event.nativeEvent.isComposing) return;
     if (event.key === "Escape" && !props.isSaving) {
-      // Native selects own Escape, including when their popup is not exposed
-      // in the DOM. Never let that key discard the surrounding editor.
-      if (event.target instanceof HTMLSelectElement) {
-        event.stopPropagation();
-        return;
-      }
       event.preventDefault();
       if (confirmDiscard) keepEditing();
       else requestClose();
@@ -166,7 +162,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     }
     if (event.key !== "Tab") return;
     const focusable = Array.from(dialogRef.current?.querySelectorAll<HTMLElement>(
-      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      'button:not([disabled]), input:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
     ) ?? []);
     if (focusable.length === 0) return;
     const first = focusable[0];
@@ -201,11 +197,12 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             {props.milestone.key ? (
               <section className="workflow-milestone-automations" aria-labelledby="milestone-automations-title">
                 <div className="workflow-milestone-automations-header">
-                  <div><span id="milestone-automations-title">Automations</span><small>When a member posts or replies, do one thing.</small></div>
+                  <div><span id="milestone-automations-title">Automations</span><small>Each rule responds independently to member activity.</small></div>
                   <div className="resource-modal-actions">
-                    <button type="button" className="secondary" onClick={() => {
+                    <button ref={addAutomationRef} type="button" className="secondary" onClick={() => {
                       const automation = newAutomation();
                       focusNewRuleRef.current = automation.key;
+                      setExpandedAutomationKey(automation.key);
                       setAutomations((current) => [...current, automation]);
                     }} disabled={props.isSaving || automations.length >= COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE}>
                       <Plus size={16} aria-hidden="true" /> Add automation
@@ -218,49 +215,17 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                 ) : (
                   <div className="workflow-milestone-automation-list">
                     {automations.map((automation, index) => (
-                      <div className="workflow-milestone-automation-row" key={automation.key} data-automation-key={automation.key}>
-                        <div className="workflow-milestone-automation-fields">
-                          <label>
-                            <span>When a member posts or replies in</span>
-                            <select aria-label={`Channel for automation ${index + 1}`} value={automation.trigger.channelId ?? ""} disabled={props.isSaving || props.channelsUnavailable} onChange={(event) => {
-                              const channelId = event.target.value;
-                              setAutomations((current) => current.map((item, itemIndex) => itemIndex === index
-                                ? { ...item, trigger: { type: "member_contributed", ...(channelId ? { channelId } : {}) } } : item));
-                            }}>
-                              <option value="">Any channel</option>
-                              {automation.trigger.channelId && !props.channels.some((channel) => channel.id === automation.trigger.channelId) ? (
-                                <option value={automation.trigger.channelId} disabled>{props.channelsUnavailable ? "Loading selected channel…" : "Unavailable channel — choose another"}</option>
-                              ) : null}
-                              {props.channels.map((channel) => <option key={channel.id} value={channel.id}>#{channel.name}{channel.access_mode === "restricted" ? " (private)" : ""}</option>)}
-                            </select>
-                          </label>
-                          {automation.action.type === "prompt_agent" && props.channels.some((channel) => channel.id === automation.trigger.channelId && channel.access_mode === "restricted") ? (
-                            <small>The community agent must be invited to this private channel. Replies stay in the triggering thread.</small>
-                          ) : null}
-                          <label>
-                            <span>Then</span>
-                            <select value={automation.action.type} disabled={props.isSaving} onChange={(event) => setAutomations((current) => current.map((item, itemIndex) => itemIndex === index ? replaceWorkflowDraftAction(item, event.target.value as CommunityMemberWorkflowAction["type"]) : item))}>
-                              <option value="prompt_agent">Prompt community agent</option>
-                              <option
-                                value="move_member"
-                                disabled={automations.some(
-                                  (item, itemIndex) => itemIndex !== index && item.action.type === "move_member",
-                                )}
-                              >
-                                Move to next milestone
-                              </option>
-                            </select>
-                          </label>
-                          {automation.action.type === "prompt_agent" ? (
-                            <label>
-                              <span id={`workflow-prompt-label-${index}`}>Prompt</span>
-                              <textarea rows={4} maxLength={COMMUNITY_MEMBER_WORKFLOW_PROMPT_MAX_LENGTH} value={automation.action.prompt} disabled={props.isSaving} aria-labelledby={`workflow-prompt-label-${index}`} aria-describedby={!automation.action.prompt.trim() ? `workflow-prompt-hint-${index}` : undefined} placeholder="Help this member take the next useful step." onChange={(event) => setAutomations((current) => current.map((item, itemIndex) => itemIndex === index && item.action.type === "prompt_agent" ? { ...item, action: { ...item.action, prompt: event.target.value } } : item))} />
-                              {!automation.action.prompt.trim() ? <small id={`workflow-prompt-hint-${index}`} className="workflow-field-hint">Add instructions for the agent to save this automation.</small> : null}
-                            </label>
-                          ) : null}
-                        </div>
-                        <button type="button" className="workflow-milestone-remove-automation" aria-label={`Remove automation ${index + 1}`} disabled={props.isSaving} onClick={() => setAutomations((current) => current.filter((_item, itemIndex) => itemIndex !== index))}><X size={15} aria-hidden="true" /></button>
-                      </div>
+                      <WebCommunityWorkflowAutomationEditor key={automation.key} automation={automation} index={index}
+                        expanded={expandedAutomationKey === automation.key} channels={props.channels} channelsUnavailable={props.channelsUnavailable}
+                        nextMilestoneName={props.nextMilestoneName} disabled={props.isSaving}
+                        hasOtherMove={automations.some((item) => item.key !== automation.key && item.action.type === "move_member")}
+                        onToggle={() => setExpandedAutomationKey((key) => key === automation.key ? null : automation.key)}
+                        onChange={(updated) => setAutomations((current) => current.map((item) => item.key === automation.key ? updated : item))}
+                        onRemove={() => {
+                          setAutomations((current) => current.filter((item) => item.key !== automation.key));
+                          if (expandedAutomationKey === automation.key) setExpandedAutomationKey(null);
+                          queueMicrotask(() => addAutomationRef.current?.focus());
+                        }} />
                     ))}
                   </div>
                 )}

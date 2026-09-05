@@ -242,6 +242,7 @@ export function WebCommunityWorkflowsSection(
         isOpen={Boolean(editingMilestone)}
         milestone={editingMilestone}
         milestoneNumber={Math.max(1, editingMilestoneIndex + 1)}
+        nextMilestoneName={milestones[editingMilestoneIndex + 1]?.name ?? null}
         isSaving={props.isSaving}
         canDelete={
           Boolean(editingMilestone?.key) &&

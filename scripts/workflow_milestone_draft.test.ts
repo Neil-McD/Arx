@@ -5,6 +5,9 @@ import {
   replaceWorkflowDraftAction,
   toWorkflowAutomationDraft,
   workflowDraftAutomations,
+  workflowChannelLabel,
+  workflowMoveLabel,
+  workflowAutomationIssue,
 } from "../apps/web/src/components/workflowMilestoneDraft";
 
 const automation: CommunityMemberWorkflowAutomation = {
@@ -15,6 +18,27 @@ const automation: CommunityMemberWorkflowAutomation = {
 const snapshot: CommunityMemberWorkflowMilestone = { key: "milestone-1", name: "New", automations: [automation] };
 
 describe("workflow milestone editor drafts", () => {
+  it("never describes a missing scoped channel as Any channel", () => {
+    expect(workflowChannelLabel(undefined, [], false)).toBe("Any channel");
+    expect(workflowChannelLabel("missing", [], false)).toBe("Unavailable channel");
+    expect(workflowChannelLabel("missing", [], true)).toBe("Channels unavailable");
+  });
+
+  it("distinguishes next milestone movement from final completion", () => {
+    expect(workflowMoveLabel("Activated")).toBe("Move to Activated");
+    expect(workflowMoveLabel(null)).toBe("Complete workflow");
+  });
+
+  it("surfaces incomplete collapsed rules without changing their scope", () => {
+    expect(workflowAutomationIssue(automation, [], true)).toBe("Waiting for channels");
+    expect(workflowAutomationIssue(automation, [], false)).toBe("Choose an available channel");
+    const anyChannel = { ...automation, trigger: { type: "member_contributed" as const } };
+    expect(workflowAutomationIssue(anyChannel, [], false)).toBeNull();
+    expect(workflowAutomationIssue({ ...anyChannel, action: { key: "a", type: "prompt_agent", prompt: "  " } }, [], false)).toBe("Add agent instructions");
+    expect(workflowAutomationIssue(replaceWorkflowDraftAction(toWorkflowAutomationDraft(anyChannel), "move_member"), [], false)).toBeNull();
+    expect(automation.trigger.channelId).toBe("private-channel");
+  });
+
   it("round-trips canonical automations without persisting editor-only state", () => {
     const drafts = [toWorkflowAutomationDraft(automation)];
     expect(workflowDraftAutomations(drafts)).toEqual([automation]);

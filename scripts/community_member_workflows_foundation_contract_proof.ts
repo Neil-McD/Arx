@@ -10,6 +10,8 @@ const worker = read("convex/communityAgentServeWorker.ts");
 const prompt = read("shared/communityAgentServePrompt.ts");
 const contract = read("shared/communityMemberWorkflow.ts");
 const modal = read("apps/web/src/components/WebCommunityWorkflowMilestoneModal.tsx");
+const editor = read("apps/web/src/components/WebCommunityWorkflowAutomationEditor.tsx");
+const picker = read("apps/web/src/components/WorkflowChannelPicker.tsx");
 const dossier = read("shared/communityMemberSuccessDossier.ts");
 
 assert.match(contract, /type: "member_contributed"/);
@@ -48,14 +50,17 @@ assert.match(worker, /surface: isWorkflowAction[\s\S]*"community_workflow_action
 assert.match(prompt, /community_workflow_action/);
 assert.match(prompt, /authority: "community_policy"/);
 
-assert.match(modal, /When a member posts or replies in/);
-assert.match(modal, /Any channel/);
-assert.doesNotMatch(modal, /select value="member_contributed" disabled/);
+assert.match(editor, /When a member posts or replies in/);
+assert.match(picker, /Any channel/);
+assert.doesNotMatch(modal + editor + picker, /<select/);
 assert.match(backend, /triggerSnapshot: args\.automation\.trigger/);
-assert.match(modal, /Prompt community agent/);
-assert.match(modal, /Move to next milestone/);
-assert.match(modal, /itemIndex !== index && item\.action\.type === "move_member"/);
-assert.doesNotMatch(modal, /AI judgment|Complete when|Completion checks/);
+assert.match(editor, /Ask agent/);
+assert.match(editor, /Move member/);
+assert.match(editor, /does not wait for other agent actions/);
+assert.match(modal, /item\.key !== automation\.key && item\.action\.type === "move_member"/);
+assert.match(editor, /disabled=\{props\.hasOtherMove\}/);
+assert.match(picker, /event\.stopPropagation\(\)/);
+assert.doesNotMatch(modal + editor, /AI judgment|Complete when|Completion checks/);
 assert.doesNotMatch(dossier, /latest_evaluation|check_statuses|checks:/);
 assert.match(dossier, /recent_workflow_activity/);
 

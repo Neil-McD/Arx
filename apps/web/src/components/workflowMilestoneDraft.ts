@@ -3,6 +3,26 @@ import type {
   CommunityMemberWorkflowAutomation,
   CommunityMemberWorkflowMilestone,
 } from "../../../../shared/communityMemberWorkflow";
+import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
+
+export function workflowChannelLabel(channelId: string | undefined, channels: CloudCommunityChannel[], unavailable: boolean): string {
+  if (channelId === undefined) return "Any channel";
+  const channel = channels.find((item) => item.id === channelId);
+  if (channel) return `#${channel.name}`;
+  return unavailable ? "Channels unavailable" : "Unavailable channel";
+}
+
+export function workflowMoveLabel(nextMilestoneName: string | null): string {
+  return nextMilestoneName === null ? "Complete workflow" : `Move to ${nextMilestoneName}`;
+}
+
+export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
+  if (automation.trigger.channelId !== undefined) {
+    if (unavailable) return "Waiting for channels";
+    if (!channels.some((channel) => channel.id === automation.trigger.channelId)) return "Choose an available channel";
+  }
+  return automation.action.type === "prompt_agent" && !automation.action.prompt.trim() ? "Add agent instructions" : null;
+}
 
 // Editor-only state. Hidden prompt drafts must never enter the saved contract.
 export type WorkflowAutomationDraft = CommunityMemberWorkflowAutomation & { promptDraft: string };
