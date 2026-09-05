@@ -6,11 +6,11 @@ import {
   GripVertical,
   Hash,
   LockKeyhole,
-  ListChecks,
   Plus,
   Settings,
   UserPlus,
   Users,
+  Workflow,
   X,
 } from "lucide-react";
 import type { CommunityTab } from "./appShellNavigation";
@@ -644,7 +644,7 @@ export const CommunityNav = memo(function CommunityNav({
               title="Workflows"
             >
               <span className="nav-icon" aria-hidden="true">
-                <ListChecks size={18} strokeWidth={1.7} />
+                <Workflow size={18} strokeWidth={1.7} />
               </span>
               Workflows
             </button>
