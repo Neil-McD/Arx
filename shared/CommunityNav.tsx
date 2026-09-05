@@ -3,11 +3,11 @@ import {
   Check,
   ChevronDown,
   ChevronUp,
+  GitFork,
   GripVertical,
   Hash,
   LockKeyhole,
   Plus,
-  Repeat2,
   Settings,
   UserPlus,
   Users,
@@ -644,7 +644,7 @@ export const CommunityNav = memo(function CommunityNav({
               title="Workflows"
             >
               <span className="nav-icon" aria-hidden="true">
-                <Repeat2 size={18} strokeWidth={1.7} />
+                <GitFork size={18} strokeWidth={1.7} />
               </span>
               Workflows
             </button>
