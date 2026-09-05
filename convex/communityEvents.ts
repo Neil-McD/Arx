@@ -1,5 +1,6 @@
 import { internalQuery, mutation, query } from "./_generated/server";
 import { v } from "convex/values";
+import { DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../shared/communityEventLifecycle";
 import {
   normalizeIdValue,
   normalizeName,
@@ -126,6 +127,7 @@ function expandCommunityEventRows(params: {
   endMs: number;
   includeCancelled: boolean;
   limit: number;
+  overlap?: boolean;
 }) {
   const expanded: ReturnType<typeof mapCommunityEventRow>[] = [];
   for (const row of params.rows) {
@@ -135,17 +137,22 @@ function expandCommunityEventRows(params: {
     const recurrenceUntil = typeof row.recurrenceUntil === "number" ? row.recurrenceUntil : null;
     const occurrenceStarts = getCommunityEventOccurrenceStartsInRange({
       startsAt: row.startsAt,
-      rangeStart: params.startMs,
-      rangeEnd: params.endMs,
+      rangeStart: params.overlap
+        ? params.startMs - (typeof row.endsAt === "number" ? Math.max(0, row.endsAt - row.startsAt) : DEFAULT_COMMUNITY_EVENT_DURATION_MS) + 1
+        : params.startMs,
+      rangeEnd: params.overlap ? params.endMs - 1 : params.endMs,
       frequency,
       interval,
       recurrenceUntil,
       timeZone: row.timezone,
-      limit: Math.max(1, params.limit - expanded.length),
+      limit: Math.max(1, params.limit - expanded.length + (params.overlap ? 1 : 0)),
     });
     for (const occurrenceStartsAt of occurrenceStarts) {
       expanded.push(mapCommunityEventRow(row, occurrenceStartsAt));
-      if (expanded.length >= params.limit) break;
+      if (params.overlap && expanded.length > params.limit) {
+        throw new Error("Too many events in this range. Select a narrower range.");
+      }
+      if (!params.overlap && expanded.length >= params.limit) break;
     }
   }
   return expanded
@@ -171,6 +178,7 @@ async function listCommunityEventExpansionCandidates(params: {
   startMs: number;
   endMs: number;
   includeCancelled: boolean;
+  overlap?: boolean;
 }): Promise<CommunityEventLike[]> {
   if (params.startMs > params.endMs) return [];
 
@@ -182,11 +190,25 @@ async function listCommunityEventExpansionCandidates(params: {
         q
           .eq("communityId", params.communityId)
           .eq("status", status)
-          .gte("startsAt", params.startMs)
+          .gte("startsAt", params.startMs - (params.overlap ? DEFAULT_COMMUNITY_EVENT_DURATION_MS : 0))
           .lte("startsAt", params.endMs),
       )
-      .take(MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS)) as CommunityEventLike[];
+      .take(MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS + (params.overlap ? 1 : 0))) as CommunityEventLike[];
+    if (params.overlap && windowRows.length > MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS) {
+      throw new Error("Too many events in this range. Select a narrower range.");
+    }
     rows.push(...windowRows);
+
+    if (params.overlap) {
+      const carryOver = await params.ctx.db.query("communityEvents")
+        .withIndex("by_community_status_endsAt", (q: any) => q
+          .eq("communityId", params.communityId).eq("status", status).gt("endsAt", params.startMs))
+        .take(MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS + 1) as CommunityEventLike[];
+      if (carryOver.length > MAX_EVENT_WINDOW_CANDIDATES_PER_STATUS) {
+        throw new Error("Event coverage exceeds the display limit. Contact the community team.");
+      }
+      rows.push(...carryOver.filter((row) => row.startsAt < params.startMs));
+    }
 
     for (const frequency of COMMUNITY_EVENT_RECURRING_FREQUENCIES) {
       const recurringRows = (await params.ctx.db
@@ -199,7 +221,10 @@ async function listCommunityEventExpansionCandidates(params: {
             .lte("startsAt", params.endMs),
         )
         .order("desc")
-        .take(MAX_RECURRING_EVENT_CANDIDATES_PER_STATUS_FREQUENCY)) as CommunityEventLike[];
+        .take(MAX_RECURRING_EVENT_CANDIDATES_PER_STATUS_FREQUENCY + (params.overlap ? 1 : 0))) as CommunityEventLike[];
+      if (params.overlap && recurringRows.length > MAX_RECURRING_EVENT_CANDIDATES_PER_STATUS_FREQUENCY) {
+        throw new Error("Recurring event coverage exceeds the display limit. Contact the community team.");
+      }
       rows.push(...recurringRows);
     }
   }
@@ -311,6 +336,7 @@ export const listCommunityEvents = query({
     startIso: v.optional(v.union(v.string(), v.null())),
     endIso: v.optional(v.union(v.string(), v.null())),
     includeCancelled: v.optional(v.boolean()),
+    overlap: v.optional(v.boolean()),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
@@ -329,6 +355,10 @@ export const listCommunityEvents = query({
     const endMs = parseIsoMs(args.endIso) ?? Number.MAX_SAFE_INTEGER;
     const limit = Math.max(1, Math.min(1000, Math.floor(args.limit ?? 200)));
     const includeCancelled = Boolean(args.includeCancelled);
+    const overlap = args.overlap === true;
+    if (overlap && (!Number.isFinite(startMs) || !Number.isFinite(endMs) || endMs <= startMs || endMs - startMs > 62 * 86400000)) {
+      throw new Error("Event display range must be between one instant and 62 days.");
+    }
 
     const rows = await listCommunityEventExpansionCandidates({
       ctx,
@@ -336,9 +366,10 @@ export const listCommunityEvents = query({
       startMs,
       endMs,
       includeCancelled,
+      overlap,
     });
 
-    return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit });
+    return expandCommunityEventRows({ rows, startMs, endMs, includeCancelled, limit, overlap });
   },
 });
 
