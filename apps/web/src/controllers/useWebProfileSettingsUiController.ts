@@ -57,19 +57,12 @@ export function useWebProfileSettingsUiController(params: {
     useState(false);
   const [isSavingProfile, setIsSavingProfile] = useState(false);
   const [profileSaveError, setProfileSaveError] = useState<string | null>(null);
-  const [profileSaveSuccess, setProfileSaveSuccess] = useState(false);
   const [isProfileAvatarDragOver, setIsProfileAvatarDragOver] = useState(false);
-  const profileSaveTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
     setProfileSaveError(null);
-    setProfileSaveSuccess(false);
     setIsSavingProfile(false);
     setIsProfileAvatarFocusModalOpen(false);
-    return () => {
-      if (profileSaveTimeoutRef.current)
-        window.clearTimeout(profileSaveTimeoutRef.current);
-    };
   }, [accountId]);
 
   useEffect(() => {
@@ -177,11 +170,8 @@ export function useWebProfileSettingsUiController(params: {
     setIsSavingProfile,
     profileSaveError,
     setProfileSaveError,
-    profileSaveSuccess,
-    setProfileSaveSuccess,
     isProfileAvatarDragOver,
     setIsProfileAvatarDragOver,
-    profileSaveTimeoutRef,
     isProfileDirty,
     profileNeedsSave,
     profileLoadStatus,

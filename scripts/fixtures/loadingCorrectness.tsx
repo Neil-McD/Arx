@@ -4,6 +4,7 @@ import { flushSync } from "react-dom";
 import { useWebProfileSettingsUiController } from "../../apps/web/src/controllers/useWebProfileSettingsUiController";
 import { useWebFounderBillingController } from "../../apps/web/src/controllers/useWebFounderBillingController";
 import { useCommunityEventsController } from "../../shared/useCommunityEventsController";
+import { useWebCommunityContentController } from "../../apps/web/src/controllers/useWebCommunityContentController";
 import { UserAvatar } from "../../shared/UserAvatar";
 import { useCommunityAdminController } from "../../shared/useCommunityAdminController";
 import { WebProfileSettingsSection } from "../../apps/web/src/components/WebProfileSettingsSection";
@@ -104,18 +105,36 @@ function renderEvents(value: any) {
         hasLoadedVisibleRange: value.loaded,
         isLoadingEvents: value.loading,
         eventsError: value.error,
-        visibleMonthIso: eventRange.startIso,
+        visibleMonthIso: value.eventsVisibleMonthIso ?? eventRange.startIso,
       }}
       actions={{
         setVisibleMonthIso: () => {},
-        getVisibleRange: () => eventRange,
-        reloadEvents: (range) =>
-          value.loadCommunityEvents("c", session("a"), range),
+        getVisibleRange: () => value.eventsVisibleRange ?? eventRange,
+        reloadEvents: value.reloadActiveEvents ?? ((range) =>
+          value.loadCommunityEvents("c", session("a"), range)),
         saveEvent: async () => false,
         cancelEvent: async () => false,
       }}
     />
   );
+}
+
+function useWebEventsHarness(props: any) {
+  const content = useWebCommunityContentController({
+    ...props,
+    // Isolate explicit Retry from automatic tab-entry reads, retaining the real
+    // production content controller, cache and rendered Events section.
+    activePage: "community",
+    communityTab: "chat",
+    getSession: () => props.session,
+  });
+  return {
+    ...content,
+    rows: content.events,
+    loaded: content.hasLoadedVisibleEventsRange,
+    loading: content.isLoadingEvents,
+    error: content.eventsError,
+  };
 }
 
 function renderProfile(value: any) {
@@ -309,6 +328,101 @@ function useProfileHarness(props: any) {
     );
   });
   if (baseline) return results;
+  for (const failure of ["missing", "mismatched", "rejected"]) {
+    await test(`production Events Retry owns ${failure} session failure and recovery`, async () => {
+      let mode = failure;
+      let ensures = 0;
+      const hook = await mountHook(useWebEventsHarness, {
+        activeCommunityId: "c",
+        session: session("a"),
+        ensureSession: async () => {
+          ensures += 1;
+          if (mode === "rejected") throw new Error("Session unavailable. Try again.");
+          return mode === "missing" ? null : session(mode === "mismatched" ? "b" : "a");
+        },
+      }, renderEvents);
+      await hook.value.reloadActiveEvents(hook.value.eventsVisibleRange);
+      await tick();
+      assert(ensures === 1, "Retry resolved the session more than once");
+      assert(!hook.value.loading && hook.value.error, "wrapper bypassed recoverable error state");
+      assert(pending.length === 0, "unauthorized Events query issued");
+      const retry = document.querySelector('[role="alert"] button') as HTMLButtonElement;
+      assert(retry && !document.body.textContent?.includes("No events in"), "missing honest Retry UI");
+      mode = "ready";
+      retry.click();
+      await tick();
+      assert(ensures === 2 && pending.length === 1, "recovery did not use one session resolution and one query");
+      assert(hook.value.loading && !hook.value.error, "recovery retained stale error");
+      pending[0].resolve([]);
+      await tick();
+      assert(hook.value.loaded && !hook.value.loading && !hook.value.error, "recovery did not settle");
+      assert(document.body.textContent?.includes("No events in"), "confirmed empty range missing");
+    });
+  }
+  for (const changedScope of ["account", "community", "range"]) {
+    await test(`production Events Retry ignores a late session after ${changedScope} change`, async () => {
+      const ensures: Array<ReturnType<typeof deferred>> = [];
+      const props = {
+        activeCommunityId: "c",
+        session: session("a"),
+        ensureSession: () => {
+          const d = deferred();
+          ensures.push(d);
+          return d.promise;
+        },
+      };
+      const hook = await mountHook(useWebEventsHarness, props);
+      const old = hook.value.reloadActiveEvents(hook.value.eventsVisibleRange);
+      if (changedScope === "range") {
+        const nextMonth = new Date(hook.value.eventsVisibleMonthIso);
+        nextMonth.setMonth(nextMonth.getMonth() + 1);
+        flushSync(() => hook.value.setEventsVisibleMonthIso(nextMonth.toISOString()));
+        await tick();
+      } else {
+        await hook.update({ ...props, ...(changedScope === "account"
+          ? { session: session("b") } : { activeCommunityId: "d" }) });
+      }
+      const next = hook.value.reloadActiveEvents(hook.value.eventsVisibleRange);
+      ensures[0].resolve(session("a"));
+      await tick();
+      assert(pending.length === 0 && ensures.length === 2, "obsolete Retry re-resolved auth or queried Events");
+      await old;
+      assert(hook.value.loading && !hook.value.error, "obsolete Retry interrupted current loading");
+      ensures[1].resolve(session(changedScope === "account" ? "b" : "a"));
+      await tick();
+      assert(pending.length === 1, "current Retry did not query exactly once");
+      assert(pending[0].args.communityId === (changedScope === "community" ? "d" : "c"), "wrong community queried");
+      assert(pending[0].args.startIso === hook.value.eventsVisibleRange.startIso, "wrong range queried");
+      pending[0].resolve([{ id: "current" }]);
+      await next;
+      await tick();
+      assert(hook.value.rows[0]?.id === "current" && !hook.value.loading, "current result not committed");
+    });
+  }
+  await test("production Events Retry preserves intent order within the same range", async () => {
+    const ensures: Array<ReturnType<typeof deferred>> = [];
+    const hook = await mountHook(useWebEventsHarness, {
+      activeCommunityId: "c",
+      session: session("a"),
+      ensureSession: () => {
+        const d = deferred();
+        ensures.push(d);
+        return d.promise;
+      },
+    });
+    const old = hook.value.reloadActiveEvents(hook.value.eventsVisibleRange);
+    const next = hook.value.reloadActiveEvents(hook.value.eventsVisibleRange);
+    ensures[1].resolve(session("a"));
+    await tick();
+    assert(ensures.length === 2 && pending.length === 1, "newer Retry did not query with a single session resolution");
+    pending[0].resolve([{ id: "newer" }]);
+    await next;
+    ensures[0].reject(new Error("Obsolete session failure"));
+    await old;
+    await tick();
+    assert(hook.value.rows[0]?.id === "newer" && !hook.value.loading && !hook.value.error, "older failure overwrote newer success");
+    assert(pending.length === 1, "obsolete Retry issued another query");
+  });
   for (const invalidSession of [null, session("b"), "rejected"]) {
     const failure =
       invalidSession === "rejected"
@@ -434,6 +548,7 @@ function useProfileHarness(props: any) {
       const retry = hook.value.admin.saveProfileToCloud();
       await tick();
       assert(!hook.value.ui.profileSaveError, "retry kept stale save error");
+      assert(document.querySelector('[role="status"]')?.textContent === "Saving…", "canonical status did not announce saving");
       pending[0].resolve({ url: null, storageId: null });
       await tick();
       pending[1].resolve({ ...profile, user_id: "a", bio: "Keep my edit" });
@@ -443,6 +558,10 @@ function useProfileHarness(props: any) {
         !hook.value.ui.isSavingProfile && !hook.value.ui.isProfileDirty,
         "retry did not acknowledge saved draft",
       );
+      const statuses = document.querySelectorAll('[role="status"]');
+      assert(statuses.length === 1 && statuses[0].textContent === "Saved", "Profile has duplicate or missing saved feedback");
+      flushSync(() => hook.value.ui.setProfileBio("A newer edit"));
+      assert(document.querySelector('[role="status"]')?.textContent === "Unsaved changes", "new edit retained stale saved feedback");
     });
   }
   await test("obsolete Events session failures cannot interrupt a newer request", async () => {

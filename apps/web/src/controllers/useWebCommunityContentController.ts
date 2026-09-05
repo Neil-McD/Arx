@@ -292,16 +292,14 @@ export function useWebCommunityContentController(
 
   const reloadActiveEvents = useCallback(
     async (range: CommunityEventsRange): Promise<void> => {
-      if (!activeCommunityId) return;
-      const activeSession = await ensureSession();
-      if (!activeSession) return;
+      if (!activeCommunityId || !session) return;
       await loadCommunityEvents(
         activeCommunityId,
-        activeSession,
+        session,
         range,
       );
     },
-    [activeCommunityId, ensureSession, loadCommunityEvents],
+    [activeCommunityId, session, loadCommunityEvents],
   );
 
   return {
