@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import { communityEventDisplayEnd, communityEventPhase, DEFAULT_COMMUNITY_EVENT_DURATION_MS } from "../../../../shared/communityEventLifecycle";
 import { useCommunityEventClock } from "../../../../shared/useCommunityEventClock";
 import {
   communityEventDateTimeInputToIso,
@@ -37,7 +37,6 @@ type EventDayGroup = {
   key: string;
   date: Date;
   events: CommunityEvent[];
-  past: boolean;
 };
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -378,7 +377,11 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const [editingEventId, setEditingEventId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
   const [localError, setLocalError] = useState<string | null>(null);
-  const [showPast, setShowPast] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const entryInterrupted = useRef(false);
+  const [entryRequest, setEntryRequest] = useState<{ monthIso: string; target: "now" | "start" } | null>(
+    () => ({ monthIso: state.visibleMonthIso, target: "now" }),
+  );
   const [hasFocusedEvent, setHasFocusedEvent] = useState(false);
   const [followCurrentMonth, setFollowCurrentMonth] = useState(() => isSameLocalMonth(new Date(state.visibleMonthIso), new Date(Date.now())));
   // Do not move/remove the focused row or interrupt an open event editor.
@@ -396,38 +399,30 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
       state.events
         .filter((event) => {
           const startsAt = new Date(event.starts_at);
-          const phase = communityEventPhase(event, now);
-          const currentMonth = isSameLocalMonth(monthDate, new Date(now));
-          return event.status !== "cancelled" && phase !== "invalid" &&
-            (isSameLocalMonth(startsAt, monthDate) || (currentMonth && (phase === "ongoing" || phase === "started")));
+          const endsAt = communityEventDisplayEnd(event);
+          return event.status !== "cancelled" && Number.isFinite(endsAt) &&
+            (isSameLocalMonth(startsAt, monthDate) ||
+              (startsAt < monthDate && endsAt > monthDate.getTime()));
         })
         .slice()
-        .sort((a, b) => {
-          const rank = (event: CommunityEvent) => {
-            const phase = communityEventPhase(event, now);
-            return phase === "past" ? 2 : phase === "upcoming" ? 1 : 0;
-          };
-          return rank(a) - rank(b) || Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id);
-        }),
-    [monthDate, state.events, now],
+        .sort((a, b) => Date.parse(a.starts_at) - Date.parse(b.starts_at) || a.id.localeCompare(b.id)),
+    [monthDate, state.events],
   );
   const eventDayGroups = useMemo(() => {
     const grouped = new Map<string, EventDayGroup>();
     for (const event of visibleMonthEvents) {
       const date = new Date(event.starts_at);
-      const phase = communityEventPhase(event, now);
-      const past = phase === "past";
-      const key = `${phase}:${toLocalDateKey(date)}`;
+      const key = toLocalDateKey(date);
       const existing = grouped.get(key);
       if (existing) {
         existing.events.push(event);
       } else {
-        grouped.set(key, { key, date, events: [event], past });
+        grouped.set(key, { key, date, events: [event] });
       }
     }
     return Array.from(grouped.values());
-  }, [visibleMonthEvents, now]);
-  const pastCount = visibleMonthEvents.filter((event) => communityEventPhase(event, now) === "past").length;
+  }, [visibleMonthEvents]);
+  const nextEvent = visibleMonthEvents.find((event) => communityEventPhase(event, now) !== "past");
   const editingSourceEvent = useMemo(
     () =>
       editingEventId
@@ -444,6 +439,38 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   const showInitialEventsLoading =
     !state.eventsError && state.events.length === 0 &&
     (state.isLoadingEvents || state.hasLoadedVisibleRange === false);
+
+  // The existing tab owns scrolling. User interaction cancels a pending entry
+  // jump (including during a slow first load); refreshes and clock ticks never jump.
+  useEffect(() => {
+    const scroller = panelRef.current?.closest(".community-tab-scroll");
+    if (!scroller) return;
+    // Record immediately: a continuous wheel event can be lower priority than
+    // the render that finishes loading, so React state alone can lose this race.
+    const cancelEntry = () => { entryInterrupted.current = true; };
+    const events = ["wheel", "touchstart", "pointerdown", "keydown"] as const;
+    for (const event of events) scroller.addEventListener(event, cancelEntry, { passive: true });
+    return () => { for (const event of events) scroller.removeEventListener(event, cancelEntry); };
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!entryRequest || state.isLoadingEvents || state.hasLoadedVisibleRange === false || state.eventsError) return;
+    if (!isSameLocalMonth(new Date(entryRequest.monthIso), monthDate)) return;
+    setEntryRequest(null);
+    if (entryInterrupted.current || draft || hasFocusedEvent) return;
+    const panel = panelRef.current;
+    const scroller = panel?.closest<HTMLElement>(".community-tab-scroll");
+    if (!panel || !scroller) return;
+    const target = entryRequest.target === "now" && isSameLocalMonth(monthDate, new Date(now)) && nextEvent
+      ? document.getElementById(`community-event-${nextEvent.id}`) : null;
+    if (!target) { scroller.scrollTop = 0; return; }
+    const nav = panel.querySelector(".community-events-month-nav")!;
+    const viewport = scroller.getBoundingClientRect();
+    const row = target.getBoundingClientRect();
+    const top = viewport.top + nav.getBoundingClientRect().height + 16;
+    // Short months keep their context; only skip history that obscures the next event.
+    if (row.top < top || row.bottom > viewport.bottom) scroller.scrollTop += row.top - top;
+  }, [entryRequest, state.isLoadingEvents, state.hasLoadedVisibleRange, state.eventsError, monthDate, now, nextEvent, draft, hasFocusedEvent]);
 
   const openNewEvent = (dayKey: string | null) => {
     setLocalError(null);
@@ -470,8 +497,9 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
 
   const showMonth = (date: Date) => {
     setFollowCurrentMonth(false);
-    setShowPast(date.getTime() < startOfLocalMonth(new Date(now)).getTime());
     const nextMonth = startOfLocalMonth(date);
+    entryInterrupted.current = false;
+    setEntryRequest({ monthIso: toMonthIso(nextMonth), target: "start" });
     actions.setVisibleMonthIso(toMonthIso(nextMonth));
   };
 
@@ -535,7 +563,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
   };
 
   return (
-    <div className="community-panel community-events-panel">
+    <div ref={panelRef} className="community-panel community-events-panel">
       <div className="feed-header-row">
         <div className="feed-header-copy">
           <div className="resources-header">Events</div>
@@ -565,11 +593,13 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
         </button>
         <div className="community-events-month-copy">
           <h2>{formatMonthLabel(monthDate)}</h2>
-          {!followCurrentMonth ? <button type="button" className="community-events-month-btn" onClick={() => {
+          <button type="button" className="community-events-today-btn" onClick={() => {
+            const monthIso = toMonthIso(new Date(Date.now()));
+            entryInterrupted.current = false;
             setFollowCurrentMonth(true);
-            setShowPast(false);
-            actions.setVisibleMonthIso(toMonthIso(new Date(Date.now())));
-          }}>Today</button> : null}
+            setEntryRequest({ monthIso, target: "now" });
+            actions.setVisibleMonthIso(monthIso);
+          }}>Today</button>
         </div>
         <button
           className="community-events-month-btn"
@@ -607,17 +637,19 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
           </div>
         ) : (
           <div className="community-events-list">
-            {pastCount === visibleMonthEvents.length ? <div className="community-events-state">No upcoming events in {formatMonthLabel(monthDate)}.</div> : null}
+            {!nextEvent && isSameLocalMonth(monthDate, new Date(now)) ? <p className="community-events-month-note">No more events this month.</p> : null}
             {eventDayGroups.map((group) => {
               const dayLabel = formatEventDay(group.date);
               return (
-                <section key={group.key} hidden={group.past && !showPast} className={`community-events-day-group${group.past ? " is-past" : ""}`} aria-label={dayLabel.full}>
+                <section key={group.key} className={`community-events-day-group${group.events.every((event) => communityEventPhase(event, now) === "past") ? " is-past" : ""}`} aria-label={dayLabel.full}>
                   <time className="community-events-date" dateTime={toLocalDateKey(group.date)}>
                     <span>{dayLabel.weekday}</span>
                     <strong>{dayLabel.day}</strong>
                   </time>
                   <div className="community-events-day-list">
                     {group.events.map((event) => {
+                      const phase = communityEventPhase(event, now);
+                      const isPast = phase === "past";
                       const isRecurring = isRecurringCommunityEvent(event);
                       const editLabel = isRecurring ? "Edit series" : "Edit event";
                       const cancelLabel = isRecurring ? "Cancel series" : "Cancel event";
@@ -625,10 +657,10 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                       const recurrenceLabel = formatRecurrenceLabel(event);
                       const eventLinkLabel = event.location_type === "online" ? "Join" : "Open event";
                       return (
-                        <article key={event.id} id={`community-event-${event.id}`} className="community-events-item">
+                        <article key={event.id} id={`community-event-${event.id}`} className={`community-events-item${isPast ? " is-past" : ""}`}>
                           <div className="community-events-item-copy">
                             <h3>{event.title}</h3>
-                            {communityEventPhase(event, now) === "ongoing" ? <span className="community-events-phase">Happening now</span> : communityEventPhase(event, now) === "started" ? <span className="community-events-phase" title="No end time supplied; shown here for one hour after the start.">Started · end time not set</span> : null}
+                            {phase === "ongoing" ? <span className="community-events-phase">Happening now</span> : phase === "started" ? <span className="community-events-phase" title="No end time supplied; shown here for one hour after the start.">Started · end time not set</span> : isPast ? <span className="community-events-phase">Ended</span> : null}
                             <div className="community-events-time">
                               <span>{eventTimeLabel.primary}</span>
                               {eventTimeLabel.secondary ? <span>{eventTimeLabel.secondary}</span> : null}
@@ -644,7 +676,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                             ) : null}
                           </div>
                           <div className="community-events-actions">
-                            {event.url && !group.past ? (
+                            {event.url && !isPast ? (
                               <a
                                 className="community-events-primary-link"
                                 href={event.url}
@@ -654,7 +686,7 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                                 {eventLinkLabel}
                               </a>
                             ) : null}
-                            {!group.past ? <a
+                            {!isPast ? <a
                               className="community-events-calendar-link"
                               href={buildGoogleCalendarUrl(event)}
                               target="_blank"
@@ -697,7 +729,6 @@ export function WebCommunityEventsSection(props: WebCommunityEventsSectionProps)
                 </section>
               );
             })}
-            {pastCount > 0 ? <button type="button" className="community-events-past-toggle" aria-expanded={showPast} onClick={() => setShowPast((value) => !value)}>{showPast ? "Hide" : "Show"} past events ({pastCount})</button> : null}
           </div>
         )}
       </div>

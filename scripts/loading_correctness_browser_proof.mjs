@@ -112,6 +112,10 @@ const server = await createServer({
   ],
 });
 await server.listen();
+if (process.argv.includes("--preview-events")) {
+  console.log(`Local Events preview: ${server.resolvedUrls.local[0]}__loading-proof?events-preview`);
+  await new Promise(() => {});
+}
 let browser;
 try {
   browser = await chromium.launch({ headless: true });
@@ -144,7 +148,7 @@ try {
   const output = join(root, "artifacts/loading-correctness");
   await mkdir(output, { recursive: true });
   await page.exposeFunction("captureLoadingProofState", async (name) => {
-    assert(["events-session-error", "profile-session-error", "events-ongoing", "events-history", "resources-partial-error"].includes(name));
+    assert(["events-session-error", "profile-session-error", "events-ongoing", "events-history", "events-agenda-now", "events-agenda-history", "resources-partial-error"].includes(name));
     await page.screenshot({ path: join(output, `${name}.png`) });
   });
   const results = await page.evaluate(
