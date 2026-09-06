@@ -1,6 +1,6 @@
 # Frontend loading correctness, slice 1
 
-Scope: desktop loading behavior and async correctness. No production write, schema migration, auth/entitlement change, layout redesign, or deployment. Base: `b0169ba49f04d38a4e4ac52379f9f066cdfdf108`. The separate responsive-layout commit is excluded.
+Original slice scope: desktop loading behavior and async correctness, based on `b0169ba49f04d38a4e4ac52379f9f066cdfdf108`. No schema migration, auth/entitlement change or layout redesign was included. The separate responsive-layout commit was excluded. These changes subsequently shipped; see [desktop closure status](desktop-frontend-closure.md) for current release evidence and remaining verification, rather than treating the historical fixture notes below as deployment status.
 
 ## Ownership and invariants
 
@@ -43,6 +43,6 @@ The browser fixture now mounts the real web content controller and renders Event
 
 ## Deliberately left for later
 
-- Events lifecycle and Resources read/refresh work are now implemented as separate local slices in [Events and Resources behavior](events-resources-behavior-v1.md); production release and acceptance remain separate gates.
+- Events lifecycle and Resources read/refresh work shipped as separate slices; their current contract is [Events and Resources behavior](events-resources-behavior-v1.md). Release and acceptance references are in [desktop closure status](desktop-frontend-closure.md).
 - Broad cold-route timing, layout-shift and interaction-latency profiling; viewport-prioritized hydration; bundle/subscription optimization based on measurements.
 - Full signed-in end-to-end account switching, uploads, billing return and all other surface transitions. This slice verifies the named contracts with isolated fixtures; it does not certify the whole frontend.

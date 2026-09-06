@@ -36,7 +36,7 @@ export const setCloudDirectConversationMuted = forbidden;
 export const uploadCloudDirectMessageAttachmentFile = forbidden;
 export const uploadCloudDirectMessageAttachmentFileForUser = forbidden;
 `;
-const server = await createServer({ configFile: join(root, "apps/web/vite.config.ts"), root: join(root, "apps/web"), server: { port: process.argv.includes("--serve") ? 5186 : 0, host: "127.0.0.1", strictPort: true }, plugins: [{ name: "media-review-fixture", enforce: "pre", load(id) {
+const server = await createServer({ configFile: join(root, "apps/web/vite.config.ts"), root: join(root, "apps/web"), server: { port: process.argv.includes("--serve") ? 5186 : 0, host: "127.0.0.1", strictPort: process.argv.includes("--serve") }, plugins: [{ name: "media-review-fixture", enforce: "pre", load(id) {
   if (id === join(root, "shared/cloudDirectMessagesGateway.ts")) return gatewayFixture;
 }, configureServer(server) { server.middlewares.use(async (req, res, next) => {
   if (!req.url?.startsWith("/__media-review")) return next();
