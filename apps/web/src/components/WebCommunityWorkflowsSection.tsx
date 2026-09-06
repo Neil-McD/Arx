@@ -47,6 +47,7 @@ export type WebCommunityWorkflowsSectionProps = {
   onClearActionError: () => void;
   onOpenMemberDossier: (membershipId: string) => void;
   onCloseMemberDossier: () => void;
+  onRetryMemberDossier: () => void;
 };
 
 const BLANK_MILESTONE: CommunityMemberWorkflowMilestone = {
@@ -264,6 +265,7 @@ export function WebCommunityWorkflowsSection(
         isLoading={props.isMemberDossierLoading}
         error={props.memberDossierError}
         onClose={props.onCloseMemberDossier}
+        onRetry={props.onRetryMemberDossier}
       />
     </div>
   );

@@ -36,12 +36,20 @@ function workflowActivityLabel(
   return `Move ${readableLabel(activity.status).toLowerCase()} in ${activity.milestone_name}`;
 }
 
+function ActivityTime({ value }: { value: string }) {
+  const date = new Date(value);
+  return <time dateTime={value} title={date.toLocaleString()} aria-label={date.toLocaleString()}>
+    {date.toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}
+  </time>;
+}
+
 export function WebCommunityWorkflowMemberDossierModal(props: {
   isOpen: boolean;
   dossier: CloudCommunityMemberSuccessDossier | null;
   isLoading: boolean;
   error: string | null;
   onClose: () => void;
+  onRetry: () => void;
 }) {
   const dialogRef = useRef<HTMLElement | null>(null);
 
@@ -77,9 +85,9 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
     if (event.key !== "Tab") return;
     const focusable = Array.from(
       dialogRef.current?.querySelectorAll<HTMLElement>(
-        'button:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        'button:not([disabled]), summary, [tabindex]:not([tabindex="-1"])',
       ) ?? [],
-    );
+    ).filter((element) => element.getClientRects().length > 0);
     if (focusable.length === 0) return;
     const first = focusable[0];
     const last = focusable[focusable.length - 1];
@@ -156,6 +164,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
           {props.isLoading ? (
             <div
               className="workflow-member-dossier-loading"
+              role="status"
               aria-label="Loading member success"
             >
               <span />
@@ -163,13 +172,19 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               <span />
             </div>
           ) : props.error ? (
-            <p className="workflow-error" role="alert">
-              {props.error}
-            </p>
+            <div className="workflow-member-dossier-error">
+              <p className="workflow-error" role="alert">{props.error}</p>
+              <div className="resource-modal-actions">
+                <button type="button" className="secondary" onClick={() => {
+                  dialogRef.current?.querySelector<HTMLElement>("button")?.focus();
+                  props.onRetry();
+                }}>Retry</button>
+              </div>
+            </div>
           ) : dossier ? (
             <>
               <section className="workflow-member-dossier-section">
-                <h3>Approved context</h3>
+                <h3>Shared context</h3>
                 {factsByKind.size > 0 ? (
                   <div className="workflow-member-context-list">
                     {Array.from(factsByKind.entries()).map(([kind, facts]) => (
@@ -190,35 +205,36 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
               </section>
 
               <section className="workflow-member-dossier-section">
-                <h3>Recent activity</h3>
+                <h3>Recent workflow activity</h3>
                 {dossier.recent_workflow_activity.length > 0 ? (
                   <ol className="workflow-member-history workflow-member-activity">
                     {dossier.recent_workflow_activity.map((activity) => (
                       <li key={activity.id}>
-                        <span>
-                          {new Date(activity.occurred_at).toLocaleString()}
-                        </span>
+                        <ActivityTime value={activity.occurred_at} />
                         <div>
                           <strong>{workflowActivityLabel(activity)}</strong>
-                          {activity.prompt ? <p>{activity.prompt}</p> : null}
+                          {activity.prompt ? (
+                            <details className="workflow-member-instructions">
+                              <summary>Agent instructions</summary>
+                              <p>{activity.prompt}</p>
+                            </details>
+                          ) : null}
                         </div>
                       </li>
                     ))}
                   </ol>
                 ) : (
-                  <p>No workflow actions yet.</p>
+                  <p>No recorded workflow activity.</p>
                 )}
               </section>
 
-              <section className="workflow-member-dossier-section">
-                <h3>Milestone history</h3>
+              <details className="workflow-member-dossier-section workflow-member-milestone-history">
+                <summary>Recent milestone history</summary>
                 {dossier.milestone_history.length > 0 ? (
                   <ol className="workflow-member-history">
                     {dossier.milestone_history.map((entry) => (
                       <li key={entry.id}>
-                        <span>
-                          {new Date(entry.occurred_at).toLocaleString()}
-                        </span>
+                        <ActivityTime value={entry.occurred_at} />
                         <strong>
                           {entry.completed_workflow
                             ? `${entry.milestone_name} → Workflow complete`
@@ -228,9 +244,9 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                     ))}
                   </ol>
                 ) : (
-                  <p>No completed milestones yet.</p>
+                  <p>No recorded milestone changes.</p>
                 )}
-              </section>
+              </details>
             </>
           ) : null}
         </div>

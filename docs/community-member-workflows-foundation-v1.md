@@ -39,6 +39,16 @@ requires closing/reopening, rather than silently erasing or overwriting edits.
 
 ### Editor foundation
 
+The member-detail surface remains read-only and uses the same canonical dossier
+query. Identity/current milestone, Shared context, and Recent workflow activity
+are primary; recent milestone history is a collapsed disclosure. Instructions
+expand in place without truncating stored text. Dates are semantic, readable
+times. Empty states describe missing recorded activity rather than infer that
+the member never progressed. Retry repeats the existing scoped request through
+the controller nonce, retaining cancellation/generation checks. There is no new
+poller, manual movement action, schema, or history store. The existing bounded
+activity/history projections and their distinct outcome statuses are unchanged.
+
 - The board and V1 grammar are unchanged. The editor reuses Resources footer
   controls and platform Save styling, with readable form typography. It is
   top-anchored; only the body scrolls while the header/footer remain reachable.

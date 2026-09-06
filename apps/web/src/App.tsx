@@ -2269,6 +2269,7 @@ export default function App() {
         onClearActionError: communityWorkflows.clearActionError,
         onOpenMemberDossier: communityWorkflows.openMemberDossier,
         onCloseMemberDossier: communityWorkflows.closeMemberDossier,
+        onRetryMemberDossier: communityWorkflows.retryMemberDossier,
       },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,

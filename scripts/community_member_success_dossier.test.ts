@@ -124,7 +124,7 @@ test.each(["prompt_agent", "move_member"] as const)("%s unavailable is explicit 
     expect(markdown).toContain("linked outcome could not be verified");
     expect(markdown).not.toContain("Agent prompt responded");
     const html = renderToStaticMarkup(React.createElement(WebCommunityWorkflowMemberDossierModal, {
-      isOpen: true, dossier: { ...unavailable, markdown }, isLoading: false, error: null, onClose: () => {},
+      isOpen: true, dossier: { ...unavailable, markdown }, isLoading: false, error: null, onClose: () => {}, onRetry: () => {},
     }));
     expect(html).toContain("Status unavailable");
     expect(html).not.toContain("Queued");
@@ -146,6 +146,7 @@ test.each([null, source.workflow])(
           isLoading: false,
           error: null,
           onClose: () => {},
+          onRetry: () => {},
         }),
       );
       expect(html).toContain('role="dialog"');
@@ -157,3 +158,66 @@ test.each([null, source.workflow])(
     }
   },
 );
+
+function renderDossier(overrides: Partial<React.ComponentProps<typeof WebCommunityWorkflowMemberDossierModal>> = {}) {
+  vi.stubGlobal("document", { body: {} });
+  vi.stubGlobal("React", React);
+  try {
+    return renderToStaticMarkup(React.createElement(WebCommunityWorkflowMemberDossierModal, {
+      isOpen: true, dossier: { ...source, markdown: "" }, isLoading: false, error: null,
+      onClose: () => {}, onRetry: () => {}, ...overrides,
+    }));
+  } finally { vi.unstubAllGlobals(); }
+}
+
+test("member details use collapsed disclosures without dropping instructions or history", () => {
+  const html = renderDossier();
+  expect(html).toContain("Shared context");
+  expect(html).toContain("Recent workflow activity");
+  expect(html).toContain('<summary>Agent instructions</summary>');
+  expect(html).toContain(source.recent_workflow_activity[0].prompt);
+  expect(html).toContain('<summary>Recent milestone history</summary>');
+  expect(html).not.toContain("<details open");
+  expect(html).toContain('<time dateTime="2026-08-25T11:59:00.000Z"');
+});
+
+test("missing records do not imply the member never progressed", () => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", approved_community_context: [], recent_workflow_activity: [], milestone_history: [] } });
+  expect(html).toContain("Activated");
+  expect(html).toContain("No recorded workflow activity.");
+  expect(html).toContain("No recorded milestone changes.");
+  expect(html).not.toContain("No completed milestones yet");
+});
+
+test.each(["queued", "running", "responded", "failed", "unavailable"] as const)("agent status %s retains its meaning", (status) => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", milestone_history: [], recent_workflow_activity: [{ ...source.recent_workflow_activity[0], status }] } });
+  expect(html).toContain(status === "unavailable" ? "Status unavailable" : status[0].toUpperCase() + status.slice(1));
+  expect(html).not.toContain("Workflow complete");
+});
+
+test("all bounded rows and full long instructions remain present", () => {
+  const prompt = "Help the member.\n".repeat(150) + "Final instruction.";
+  const html = renderDossier({ dossier: { ...source, markdown: "",
+    recent_workflow_activity: Array.from({ length: 12 }, (_, i) => ({ ...source.recent_workflow_activity[0], id: `run-${i}`, prompt })),
+    milestone_history: Array.from({ length: 12 }, (_, i) => ({ ...source.milestone_history[0], id: `move-${i}` })),
+  } });
+  expect(html.match(/<li>/g)).toHaveLength(24);
+  expect(html.match(/Final instruction\./g)).toHaveLength(12);
+});
+
+test("error offers retry, loading announces state without showing stale activity", () => {
+  const error = renderDossier({ dossier: null, error: "Connection unavailable" });
+  expect(error).toContain('role="alert"');
+  expect(error).toContain('>Retry</button>');
+  const loading = renderDossier({ isLoading: true });
+  expect(loading).toContain('role="status"');
+  expect(loading).not.toContain("Recent workflow activity");
+});
+
+test("completion is shown only from supplied workflow state and transition evidence", () => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", workflow: { ...source.workflow!, completed_at: "2026-09-06T12:00:00Z" },
+    recent_workflow_activity: [{ ...source.recent_workflow_activity[0], action_type: "move_member", status: "workflow_completed", prompt: null }],
+  } });
+  expect(html).toContain("Workflow complete");
+  expect(html).not.toContain("Agent instructions");
+});

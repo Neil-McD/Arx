@@ -444,6 +444,12 @@ export function useWebCommunityWorkflowsController(params: {
       setMemberDossierError(null);
       setIsMemberDossierLoading(false);
     },
+    retryMemberDossier: () => {
+      if (!selectedMembershipId || isMemberDossierLoading) return;
+      setIsMemberDossierLoading(true);
+      setMemberDossierError(null);
+      setDossierRefreshNonce((value) => value + 1);
+    },
     createMilestone: (name: string) =>
       mutateMilestone("community_workflows_create_milestone", (session, communityId, revision) =>
         createCloudCommunityMemberWorkflowMilestone({
