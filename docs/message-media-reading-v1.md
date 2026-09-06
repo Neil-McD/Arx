@@ -33,7 +33,8 @@ unchanged. This is a web presentation contract; it does not change server persis
   `.pdf` share a document card. Signed query strings are preserved. Extensionless
   pasted URLs remain ordinary links because their file type is unknown.
 - Opening a card loads PDF.js and its same-origin worker on demand. The modal
-  provides grouped previous/next controls, fit width, visible stepped zoom from\n  0.75× to 4× fit width (with the existing 16-million-pixel canvas cap), selectable text, download, and an
+  provides grouped previous/next controls, fit width, visible stepped zoom from
+  0.75× to 4× fit width (with the existing 16-million-pixel canvas cap), selectable text, download, and an
   original-file link. It renders one page at a time and cancels work on changes
   or close. Document scripts/forms are not executed. PDF requests omit cookies.
   Document loading and individual page rendering each have a 30-second deadline.

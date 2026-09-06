@@ -1,6 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { flushSync } from "react-dom";
+import { WebCommunityRail } from "../../apps/web/src/components/WebCommunityRail";
+import { useWebCommunityNavigationActions } from "../../apps/web/src/controllers/useWebCommunityNavigationActions";
+import { useWebCommunityRouteController } from "../../apps/web/src/controllers/useWebCommunityRouteController";
 import { useWebProfileSettingsUiController } from "../../apps/web/src/controllers/useWebProfileSettingsUiController";
 import { useWebFounderBillingController } from "../../apps/web/src/controllers/useWebFounderBillingController";
 import { useCommunityEventsController } from "../../shared/useCommunityEventsController";
@@ -251,6 +254,73 @@ function useProfileHarness(props: any) {
       await tick();
     }
   }
+  for (const kind of ["global_settings", "discover", "community_events"] as const) {
+    for (const target of ["alpha", "beta"]) {
+      await test(`desktop rail ${kind} to ${target} preserves canonical navigation`, async () => {
+        const communities = ["alpha", "beta"].map(id => ({ id, slug: id, name: id, avatar_url: null }));
+        const snapshots: any[] = [];
+        const hook = await mountHook(() => {
+          const [state, setState] = useState<any>({ activePage: kind === "global_settings" ? "settings" : kind === "discover" ? "discover" : "community", activeView: "home", communityTab: "events", activeCommunityId: "alpha", activeCommunitySlug: "alpha" });
+          const route = useWebCommunityRouteController({
+            ...state, communities, navigateTo: () => { throw new Error("unexpected public route"); },
+            pushNavSnapshot: () => snapshots.push({ ...state }),
+            setActivePage: (activePage: any) => setState((s: any) => ({ ...s, activePage })),
+            setActiveView: (activeView: any) => setState((s: any) => ({ ...s, activeView })),
+            applyCommunityShellState: (patch: any) => setState((s: any) => ({ ...s,
+              ...(patch.communitySlug ? { activeCommunitySlug: patch.communitySlug, activeCommunityId: patch.communitySlug } : {}),
+              ...(patch.communityTab ? { communityTab: patch.communityTab } : {}),
+            })),
+          });
+          const actions = useWebCommunityNavigationActions({
+            communities, selectedActiveCommunityId: state.activeCommunityId,
+            communitySettingsDirtyRef: { current: false }, communityAgentConfigDirtyRef: { current: false },
+            syncCommunitySelection: route.syncCommunitySelection,
+          } as any);
+          return { state, setState, shell: {
+            showDesktopCommunityRail: true, destination: { kind }, railCommunities: communities,
+            selectedActiveCommunitySlug: state.activeCommunitySlug, getCommunityRailItemBindings: () => ({}),
+            communityRailAttentionById: {}, onSelectActiveCommunity: actions.handleSelectActiveCommunity,
+            onOpenCommunityChat: route.openCommunityChat,
+          } };
+        }, {}, value => <WebCommunityRail presentation="desktop" communityShell={value.shell as any} />);
+        (document.querySelector(`button[title="${target}"]`) as HTMLButtonElement).click();
+        await tick();
+        assert(hook.value.state.activeCommunityId === target, "selected requested community");
+        if (kind === "community_events") {
+          assert(hook.value.state.communityTab === "events" && snapshots.length === 0, "existing community tab remains unchanged");
+        } else {
+          assert(hook.value.state.activePage === "community" && hook.value.state.communityTab === "chat", "rail leaves global surface for chat");
+          assert(snapshots.length === 1, "exactly one navigation snapshot");
+          assert(snapshots[0].activeCommunityId === "alpha", "snapshot retains pre-click selection");
+          flushSync(() => hook.value.setState(snapshots.pop()));
+          await tick();
+          assert(hook.value.state.activePage === (kind === "global_settings" ? "settings" : "discover"), "snapshot restores source page");
+        }
+      });
+    }
+  }
+  await test("desktop rail rejected discard changes neither selection nor route", async () => {
+    const originalConfirm = window.confirm;
+    let selections = 0;
+    let opens = 0;
+    window.confirm = () => false;
+    try {
+      await mountHook(() => {
+        const actions = useWebCommunityNavigationActions({
+          selectedActiveCommunityId: "alpha", communitySettingsDirtyRef: { current: true },
+          communityAgentConfigDirtyRef: { current: false }, syncCommunitySelection: () => selections++,
+        } as any);
+        return { showDesktopCommunityRail: true, destination: { kind: "global_settings" },
+          railCommunities: [{ id: "beta", slug: "beta", name: "beta", avatar_url: null }],
+          getCommunityRailItemBindings: () => ({}), communityRailAttentionById: {},
+          onSelectActiveCommunity: actions.handleSelectActiveCommunity, onOpenCommunityChat: () => opens++,
+        };
+      }, {}, shell => <WebCommunityRail presentation="desktop" communityShell={shell as any} />);
+      (document.querySelector('button[title="beta"]') as HTMLButtonElement).click();
+      await tick();
+      assert(selections === 0 && opens === 0, "discard rejection is inert");
+    } finally { window.confirm = originalConfirm; }
+  });
   await test("late billing result cannot repopulate a signed-out account", async () => {
     const props = {
       session: session("a"),

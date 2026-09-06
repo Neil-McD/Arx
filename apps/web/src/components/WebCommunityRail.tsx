@@ -98,7 +98,10 @@ export function WebCommunityRail({
                     return;
                   }
                   if (!changed) return;
-                  if (communityShell.destination.kind === "discover") {
+                  if (
+                    communityShell.destination.kind === "discover" ||
+                    communityShell.destination.kind === "global_settings"
+                  ) {
                     if (communitySlug) {
                       communityShell.onOpenCommunityChat(communitySlug);
                     }

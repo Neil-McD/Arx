@@ -1,6 +1,6 @@
 # Events and Resources desktop behavior
 
-Base: production/main `47c2726f860d879cafa79aee191391cafe4d08a8`. These are bounded implementation slices, not a production release receipt.
+Original implementation base: production/main `47c2726f860d879cafa79aee191391cafe4d08a8`. These slices have shipped, including the subsequent Events presentation correction in PR #142. This document specifies behavior, not a release receipt; see [desktop closure status](desktop-frontend-closure.md) for deployment evidence and verification limits.
 
 ## E1: event window authority
 
