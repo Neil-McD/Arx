@@ -44,11 +44,13 @@ export type WebCommunityWorkflowsSectionProps = {
   memberDossierError: string | null;
   onReload: () => Promise<unknown> | unknown;
   onLoadMore: () => Promise<unknown> | unknown;
-  onCreateMilestone: (name: string) => Promise<boolean>;
+  onCreateMilestone: (name: string, instructions?: string, goal?: string) => Promise<boolean>;
   onUpdateMilestone: (
     milestoneKey: string,
     name: string,
     automations: CommunityMemberWorkflowAutomation[],
+    instructions?: string,
+    goal?: string,
   ) => Promise<boolean>;
   onDeleteMilestone: (milestoneKey: string) => Promise<boolean>;
   onClearActionError: () => void;
@@ -181,11 +183,13 @@ function WorkflowBoard(props: WebCommunityWorkflowsSectionProps) {
 
   const saveMilestone = async (milestone: CommunityMemberWorkflowMilestone) => {
     const saved = !milestone.key || isCreatingMilestone
-      ? await props.onCreateMilestone(milestone.name)
+      ? await props.onCreateMilestone(milestone.name, milestone.instructions, milestone.goal)
       : await props.onUpdateMilestone(
           milestone.key,
           milestone.name,
           milestone.automations,
+          milestone.instructions,
+          milestone.goal,
         );
     if (saved) closeMilestone();
   };

@@ -160,6 +160,8 @@ export async function fetchCloudCommunityMemberSuccessDossier<SessionT>(
 
 export async function createCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
+    instructions?: string;
+    goal?: string;
     communityId: string;
     expectedRevision: number;
     name: string;
@@ -171,6 +173,8 @@ export async function createCloudCommunityMemberWorkflowMilestone<SessionT>(
   return (await client.mutation(
     api.communityMemberWorkflows.createBuilderWorkflowMilestone,
     {
+      instructions: params.instructions,
+      goal: params.goal,
       authSubject,
       communityId: params.communityId as Id<"communities">,
       expectedRevision: params.expectedRevision,
@@ -181,6 +185,8 @@ export async function createCloudCommunityMemberWorkflowMilestone<SessionT>(
 
 export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
+    instructions?: string;
+    goal?: string;
     communityId: string;
     expectedRevision: number;
     milestoneKey: string;
@@ -194,6 +200,8 @@ export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
   return (await client.mutation(
     api.communityMemberWorkflows.updateBuilderWorkflowMilestone,
     {
+      instructions: params.instructions,
+      goal: params.goal,
       authSubject,
       communityId: params.communityId as Id<"communities">,
       expectedRevision: params.expectedRevision,

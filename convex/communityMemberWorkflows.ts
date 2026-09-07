@@ -14,6 +14,7 @@ import {
   normalizeCommunityMemberWorkflowMilestoneKey,
   normalizeCommunityMemberWorkflowMilestoneName,
   normalizeCommunityMemberWorkflowPrompt,
+  normalizeWorkflowMilestoneContext,
   normalizeCommunityMemberWorkflowSourceRef,
   normalizeWorkflowDelayMinutes,
   workflowRequirementGeneration,
@@ -257,6 +258,8 @@ function normalizeAutomations(
 
 export const createBuilderWorkflowMilestone = mutation({
   args: {
+    instructions: v.optional(v.string()),
+    goal: v.optional(v.string()),
     ...managerIdentityArgs,
     communityId: v.id("communities"),
     expectedRevision: v.number(),
@@ -270,6 +273,7 @@ export const createBuilderWorkflowMilestone = mutation({
       authSubject: args.authSubject,
     });
     const name = normalizeCommunityMemberWorkflowMilestoneName(args.name);
+    const context = { instructions: normalizeWorkflowMilestoneContext(args.instructions), goal: normalizeWorkflowMilestoneContext(args.goal) };
     const expectedRevision = normalizeExpectedRevision(args.expectedRevision);
     const existing = await getCommunityMemberWorkflowByCommunity({
       ctx,
@@ -283,6 +287,7 @@ export const createBuilderWorkflowMilestone = mutation({
       const milestone: CommunityMemberWorkflowMilestone = {
         key: nextOpaqueKey("milestone", new Set()),
         name,
+        ...context,
         automations: [],
       };
       const workflowId = await ctx.db.insert("communityMemberWorkflows", {
@@ -306,6 +311,7 @@ export const createBuilderWorkflowMilestone = mutation({
         new Set(existing.milestones.map((item) => item.key)),
       ),
       name,
+      ...context,
       automations: [],
     };
     const revision = expectedRevision + 1;
@@ -321,6 +327,8 @@ export const createBuilderWorkflowMilestone = mutation({
 
 export const updateBuilderWorkflowMilestone = mutation({
   args: {
+    instructions: v.optional(v.string()),
+    goal: v.optional(v.string()),
     ...managerIdentityArgs,
     communityId: v.id("communities"),
     expectedRevision: v.number(),
@@ -351,6 +359,8 @@ export const updateBuilderWorkflowMilestone = mutation({
     const milestone: CommunityMemberWorkflowMilestone = {
       key: current.key,
       name: normalizeCommunityMemberWorkflowMilestoneName(args.name),
+      instructions: normalizeWorkflowMilestoneContext(args.instructions ?? current.instructions),
+      goal: normalizeWorkflowMilestoneContext(args.goal ?? current.goal),
       automations: normalizeAutomations(args.automations, current.automations ?? []),
     };
     const joinRules = milestone.automations.filter(a => a.trigger.type === "member_joined");
@@ -822,6 +832,7 @@ async function executeWorkflowAutomation(args: {
     membershipId: args.membership._id,
     milestoneKey: args.current.milestone.key,
     milestoneName: args.current.milestone.name,
+    milestoneContextSnapshot: { instructions: args.current.milestone.instructions ?? "", goal: args.current.milestone.goal ?? "" },
     milestoneEnteredAt: args.current.milestoneEnteredAt,
     workflowRevision: args.workflow.revision,
     automationKey: args.automation.key,

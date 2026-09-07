@@ -52,6 +52,8 @@ function newAutomation(requirement = false): WorkflowAutomationDraft {
 
 export function WebCommunityWorkflowMilestoneModal(props: Props) {
   const [name, setName] = useState("");
+  const [instructions, setInstructions] = useState("");
+  const [goal, setGoal] = useState("");
   const [automations, setAutomations] = useState<WorkflowAutomationDraft[]>([]);
   const [confirmDiscard, setConfirmDiscard] = useState(false);
   const [expandedAutomationKey, setExpandedAutomationKey] = useState<string | null>(null);
@@ -74,6 +76,8 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     setConfirmDiscard(false);
     setExpandedAutomationKey(null);
     setName(props.milestone.name);
+    setInstructions(props.milestone.instructions ?? "");
+    setGoal(props.milestone.goal ?? "");
     setAutomations(props.milestone.automations.map(toWorkflowAutomationDraft));
   }, [props.isOpen, props.milestone]);
 
@@ -107,7 +111,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
   if (!props.isOpen || !props.milestone) return null;
   const hasConflict = editingSnapshot.current !== null
     && JSON.stringify(editingSnapshot.current) !== JSON.stringify(props.milestone);
-  const isDirty = isWorkflowMilestoneDraftDirty(editingSnapshot.current, name, automations);
+  const isDirty = isWorkflowMilestoneDraftDirty(editingSnapshot.current, name, automations, instructions, goal);
   const requirements = automations.filter(automation => automation.action.type === "move_member");
   const duplicateRequirement = new Set(requirements.map(a => workflowTriggerIdentity(a.trigger))).size !== requirements.length;
   const joinLanes = automations.filter(a => a.trigger.type === "member_joined").map(a => a.action.type === "request_form" ? `form:${a.action.formKey}` : a.action.type);
@@ -129,6 +133,8 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     void props.onSave({
       key: props.milestone!.key,
       name,
+      instructions,
+      goal,
       automations: workflowDraftAutomations(automations).map((automation) => ({
         ...automation,
         key: automation.key.startsWith("draft-") ? "" : automation.key,
@@ -203,6 +209,13 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             </label>
 
             {props.formsStatus === "loading" ? <p role="status">Loading published forms…</p> : props.formsStatus === "error" ? <p role="alert">Could not load published forms. <button type="button" className="workflow-secondary-button" onClick={props.onRetryForms}>Retry forms</button></p> : null}
+            <label>Instructions
+              <textarea rows={3} maxLength={4000} value={instructions} disabled={props.isSaving} onChange={event => setInstructions(event.target.value)} placeholder="How should the agent help members in this milestone?" />
+            </label>
+            <label>Goal
+              <textarea rows={3} maxLength={4000} value={goal} disabled={props.isSaving} onChange={event => setGoal(event.target.value)} placeholder="What does success look like for the member?" />
+              <small className="workflow-field-hint">Guides the agent. Automatic movement still uses the conditions below.</small>
+            </label>
             {props.milestone.key ? [false, true].map(requirement => (
               <section key={String(requirement)} className="workflow-milestone-automations" aria-labelledby={requirement ? "milestone-requirements-title" : "milestone-automations-title"}>
                 <div className="workflow-milestone-automations-header">

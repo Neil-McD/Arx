@@ -69,9 +69,13 @@ export function isWorkflowMilestoneDraftDirty(
   snapshot: CommunityMemberWorkflowMilestone | null,
   name: string,
   automations: WorkflowAutomationDraft[],
+  instructions = snapshot?.instructions ?? "",
+  goal = snapshot?.goal ?? "",
 ): boolean {
   return snapshot !== null && (
     name !== snapshot.name
+    || instructions !== (snapshot.instructions ?? "")
+    || goal !== (snapshot.goal ?? "")
     || JSON.stringify(workflowDraftAutomations(automations)) !== JSON.stringify(snapshot.automations)
   );
 }

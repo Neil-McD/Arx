@@ -968,6 +968,41 @@ async function workflowServeFixture(t: ReturnType<typeof convexTest>, move = tru
   return { ...f, ...configured, rootId, request, claim, read };
 }
 
+test("milestone context saves, snapshots at admission, and never changes advancement", async () => {
+  vi.useFakeTimers();
+  const t = convexTest(schema, modules);
+  const f = await fixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const created = await owner.mutation(api.communityMemberWorkflows.createBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 0, name: "New",
+    instructions: "  Coach gently.  ", goal: "A clear offer.",
+  });
+  expect(created.milestone.instructions).toBe("Coach gently.");
+  const configured = await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 1, milestoneKey: created.milestone.key, name: "New",
+    automations: [{ key: "", trigger: { type: "member_contributed" }, action: { key: "", type: "prompt_agent", prompt: "Offer one next step." } }],
+  });
+  expect(configured.milestone.goal).toBe("A clear offer."); // Older clients preserve context.
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId: await addRoot(t, f, "context-snapshot") });
+  const run = (await t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").first()))!;
+  expect(run.milestoneContextSnapshot).toEqual({ instructions: "Coach gently.", goal: "A clear offer." });
+  const request = (await t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
+  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: configured.revision, milestoneKey: created.milestone.key,
+    name: "New", instructions: "", goal: "Replacement goal", automations: configured.milestone.automations,
+  });
+  const claim = await t.mutation(internalApi.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: request._id, nowMs: f.nowMs + 100 });
+  const context = await t.query(internalApi.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, { requestId: request._id, expectedAttempt: claim.attempt });
+  expect(context.ok).toBe(true);
+  expect(context.workflowPrompt).toContain("Coach gently.");
+  expect(context.workflowPrompt).toContain("A clear offer.");
+  expect(context.workflowPrompt).not.toContain("Replacement goal");
+  expect(await t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toEqual([]);
+  await expect(t.withIdentity({ subject: MEMBER_SUBJECT }).mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, expectedRevision: 3, milestoneKey: created.milestone.key, name: "New", instructions: "Escalate", goal: "Pass", automations: [],
+  })).rejects.toThrow();
+});
+
 test("contribution execution context is bound to the live requester and source", async () => {
   const t = convexTest(schema, modules);
   const f = await workflowServeFixture(t, false);
@@ -1275,7 +1310,7 @@ test("a blank milestone has no hidden behavior", async () => {
     expectedRevision: 0,
     name: "New",
   });
-  expect(created.milestone).toEqual({ key: expect.any(String), name: "New", automations: [] });
+  expect(created.milestone).toEqual({ key: expect.any(String), name: "New", instructions: "", goal: "", automations: [] });
   const rootId = await addRoot(t, f, "blank");
   await expect(t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId }))
     .resolves.toMatchObject({ status: "trigger_unconfigured" });

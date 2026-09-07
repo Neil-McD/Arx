@@ -528,9 +528,10 @@ export function useWebCommunityWorkflowsController(params: {
       setServiceChannelError(null);
       setDossierRefreshNonce((value) => value + 1);
     },
-    createMilestone: (name: string) =>
+    createMilestone: (name: string, instructions?: string, goal?: string) =>
       mutateMilestone("community_workflows_create_milestone", (session, communityId, revision) =>
         createCloudCommunityMemberWorkflowMilestone({
+          instructions, goal,
           session,
           communityId,
           expectedRevision: revision,
@@ -541,9 +542,12 @@ export function useWebCommunityWorkflowsController(params: {
       milestoneKey: string,
       name: string,
       automations: CommunityMemberWorkflowAutomation[],
+      instructions?: string,
+      goal?: string,
     ) =>
       mutateMilestone("community_workflows_update_milestone", (session, communityId, revision) =>
         updateCloudCommunityMemberWorkflowMilestone({
+          instructions, goal,
           session,
           communityId,
           expectedRevision: revision,

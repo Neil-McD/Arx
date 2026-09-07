@@ -486,6 +486,21 @@ not add a per-fact finalization/revocation protocol or cross-community access.
 - A durable serve admission completes the workflow action. Provider execution
   continues under the existing leased community-agent worker.
 
+## Milestone policy context
+
+Milestones optionally store `instructions` (how to help) and `goal` (desired
+success), each bounded to 4,000 characters. Manager-only create/update and the
+existing revision guard govern changes; omitted fields preserve saved values,
+while explicit empty strings clear them. Old milestones remain valid.
+
+Each new execution snapshots both fields on its existing run. Authorized agent
+delivery composes that snapshot with the action prompt beneath platform and
+community policy. Later edits never rewrite admitted context. This adds no
+private-context access, tools, wakes, or completion authority. Goals are policy,
+not evidence. Existing deterministic requirements still govern advancement.
+The editor uses the existing modal and discard/conflict protection; the board
+remains unchanged. Goal evaluation and replacement of requirements are later work.
+
 ## Explicitly deferred
 
 Recurring time and external triggers, arbitrary event filters, goals, LLM judges,

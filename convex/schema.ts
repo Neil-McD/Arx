@@ -1209,6 +1209,8 @@ export default defineSchema({
       v.object({
         key: v.string(),
         name: v.string(),
+        instructions: v.optional(v.string()),
+        goal: v.optional(v.string()),
         automations: v.array(v.object({
           key: v.string(),
           timerGeneration: v.optional(v.string()),
@@ -1279,6 +1281,7 @@ export default defineSchema({
     .index("by_member_entry", ["workflowId", "membershipId", "activationSequence", "transitionSeq"]),
 
   communityMemberWorkflowRuns: defineTable({
+    milestoneContextSnapshot: v.optional(v.object({ instructions: v.string(), goal: v.string() })),
     communityId: v.id("communities"),
     workflowId: v.id("communityMemberWorkflows"),
     membershipId: v.id("communityMemberships"),
