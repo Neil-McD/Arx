@@ -18,6 +18,13 @@ const automation: CommunityMemberWorkflowAutomation = {
 const snapshot: CommunityMemberWorkflowMilestone = { key: "milestone-1", name: "New", automations: [automation] };
 
 describe("workflow milestone editor drafts", () => {
+  it("join provisions a room without requiring prompt, form or channel inputs", () => {
+    const draft = { ...replaceWorkflowDraftAction(toWorkflowAutomationDraft(automation), "create_service_channel"), trigger: { type: "member_joined" as const } };
+    expect(workflowAutomationIssue(draft, [], true)).toBeNull();
+    expect(workflowDraftAutomations([draft])[0].action).toEqual({ key: "action-1", type: "create_service_channel" });
+    expect(workflowAutomationIssue({ ...draft, trigger: { type: "member_contributed" } }, [], false)).toContain("Member joins");
+    expect(replaceWorkflowDraftAction(draft, "prompt_agent").action).toEqual(automation.action);
+  });
   it("never describes a missing scoped channel as Any channel", () => {
     expect(workflowChannelLabel(undefined, [], false)).toBe("Any channel");
     expect(workflowChannelLabel("missing", [], false)).toBe("Unavailable channel");

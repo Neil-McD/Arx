@@ -15,6 +15,7 @@ export type CommunityMemberWorkflowMemberContributedTrigger = {
 };
 
 export type CommunityMemberWorkflowTrigger =
+  | { type: "member_joined" }
   | CommunityMemberWorkflowMemberContributedTrigger
   | { type: "form_submitted"; formKey: string }
   | { type: "milestone_elapsed"; delayMinutes: number };
@@ -39,6 +40,7 @@ export type CommunityMemberWorkflowMoveMemberAction = {
 };
 
 export type CommunityMemberWorkflowAction =
+  | { key: string; type: "create_service_channel" }
   | { key: string; type: "request_form"; formKey: string }
   | CommunityMemberWorkflowPromptAgentAction
   | CommunityMemberWorkflowMoveMemberAction;
@@ -73,7 +75,8 @@ export function workflowRequirementGeneration(rule: CommunityMemberWorkflowAutom
 
 export function workflowTriggerIdentity(trigger: CommunityMemberWorkflowTrigger): string {
   return JSON.stringify(trigger.type === "member_contributed" ? [trigger.type, trigger.channelId ?? null]
-    : trigger.type === "form_submitted" ? [trigger.type, trigger.formKey] : [trigger.type, trigger.delayMinutes]);
+    : trigger.type === "form_submitted" ? [trigger.type, trigger.formKey]
+    : trigger.type === "member_joined" ? [trigger.type] : [trigger.type, trigger.delayMinutes]);
 }
 
 export function currentWorkflowRequirementEvidence(

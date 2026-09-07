@@ -1214,11 +1214,13 @@ export default defineSchema({
           timerGeneration: v.optional(v.string()),
           completionGeneration: v.optional(v.string()),
           trigger: v.union(
+            v.object({ type: v.literal("member_joined") }),
             v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
             v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
             v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
           ),
           action: v.union(
+            v.object({ key: v.string(), type: v.literal("create_service_channel") }),
             v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
             v.object({
               key: v.string(),
@@ -1285,15 +1287,17 @@ export default defineSchema({
     milestoneEnteredAt: v.number(),
     workflowRevision: v.number(),
     automationKey: v.string(),
-    triggerType: v.union(v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted")),
+    triggerType: v.union(v.literal("member_joined"), v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted")),
     // Optional for historical runs. New runs capture the condition that matched.
     triggerSnapshot: v.optional(v.union(
+      v.object({ type: v.literal("member_joined") }),
       v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
       v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
       v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
     )),
     triggerReceiptRef: v.string(),
     actionSnapshot: v.union(
+      v.object({ key: v.string(), type: v.literal("create_service_channel") }),
       v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
       v.object({ key: v.string(), type: v.literal("prompt_agent"), prompt: v.string() }),
       v.object({
@@ -1313,6 +1317,7 @@ export default defineSchema({
       resultCode: v.optional(v.string()),
       serveRequestId: v.optional(v.id("communityAgentServeRequests")),
       formRequestId: v.optional(v.id("communityFormRequests")),
+      serviceChannelId: v.optional(v.id("communityChannels")),
       transitionId: v.optional(v.id("communityMemberWorkflowTransitions")),
       errorCode: v.optional(v.string()),
     })),

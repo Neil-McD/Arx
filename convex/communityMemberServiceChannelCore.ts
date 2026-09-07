@@ -1,8 +1,26 @@
 import type { Doc } from "./_generated/dataModel";
-import type { QueryCtx } from "./_generated/server";
+import type { QueryCtx, MutationCtx } from "./_generated/server";
 import { communityMembershipRowIsActive } from "./communityCore";
 import { getCommunityChannelCapabilities, resolveCommunityChannelActor } from "./communityChannelAccess";
 import type { CommunityMemberServiceChannel } from "../shared/communityMembershipContext";
+
+/** Caller establishes builder/workflow authority. Never repairs grants. */
+export async function bindMemberServiceChannel(args: {
+  ctx: MutationCtx; membership: Doc<"communityMemberships">;
+  channelId: Doc<"communityChannels">["_id"] | null; expectedRevision: number;
+}) {
+  const { ctx, membership, channelId, expectedRevision } = args;
+  const revision = membership.serviceChannelRevision ?? 0;
+  if (!communityMembershipRowIsActive(membership)) throw new Error("community_member_workflow_member_not_found");
+  if (!Number.isSafeInteger(expectedRevision) || expectedRevision !== revision) throw new Error("community_member_service_channel_revision_conflict");
+  if (channelId !== null && (await resolveMemberServiceChannel({ ctx, membership, channelId })).status !== "available") {
+    throw new Error("community_member_service_channel_unavailable");
+  }
+  if ((membership.serviceChannelId ?? null) === channelId) return { revision };
+  await ctx.db.patch(membership._id, { serviceChannelId: channelId ?? undefined,
+    serviceChannelRevision: revision + 1, updatedAt: Date.now() });
+  return { revision: revision + 1 };
+}
 
 /** Resolves a destination, never grants access or reads channel content. */
 export async function resolveMemberServiceChannel(args: {

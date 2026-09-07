@@ -18,6 +18,7 @@ export function workflowMoveLabel(nextMilestoneName: string | null): string {
 }
 
 export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
+  if ((automation.trigger.type === "member_joined") !== (automation.action.type === "create_service_channel")) return "Member joins requires Create private channel";
   if ((automation.action.type === "request_form" && !automation.action.formKey) || (automation.trigger.type === "form_submitted" && !automation.trigger.formKey)) return "Choose a published form";
   if (automation.trigger.type === "form_submitted" && automation.action.type === "request_form") return "Choose Ask agent or Move member";
   if (automation.trigger.type === "milestone_elapsed") {
@@ -54,6 +55,7 @@ export function replaceWorkflowDraftAction(
     action: type === "prompt_agent"
       ? { key: automation.action.key, type, prompt: promptDraft }
       : type === "request_form" ? { key: automation.action.key, type, formKey: "" }
+      : type === "create_service_channel" ? { key: automation.action.key, type }
       : { key: automation.action.key, type, destination: "next_or_complete" },
   };
 }

@@ -25,6 +25,7 @@ function workflowActivityLabel(
   activity: CloudCommunityMemberSuccessDossier["recent_workflow_activity"][number],
 ): string {
   if (activity.action_type === "request_form") return `Form · ${readableLabel(activity.status)}`;
+  if (activity.action_type === "create_service_channel") return `Private channel setup · ${readableLabel(activity.status)}`;
   if (activity.status === "requirement_satisfied") return `Requirement satisfied in ${activity.milestone_name}`;
   if (activity.status === "unavailable") {
     return `${activity.action_type === "prompt_agent" ? "Community agent" : "Milestone move"} · Status unavailable`;

@@ -244,6 +244,16 @@ async function readMembershipContextRecords(args: {
         return { id: String(run._id), action_type: "request_form" as const, status: valid ? "requested" as const : "unavailable" as const,
           milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null, next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
       }
+      if (run.actionSnapshot.type === "create_service_channel") {
+        const channel = run.actionResult?.serviceChannelId ? await args.ctx.db.get(run.actionResult.serviceChannelId) : null;
+        const valid = validActionResult && channel?.communityId === run.communityId
+          && membership?.serviceChannelId === channel._id
+          && (await resolveMemberServiceChannel({ ctx: args.ctx, membership })).status === "available";
+        return { id: String(run._id), action_type: "create_service_channel" as const,
+          status: run.status === "failed" ? "failed" as const : valid ? "channel_ready" as const : "unavailable" as const,
+          milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null,
+          next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
+      }
       if (run.actionSnapshot.type === "prompt_agent") {
         const serveRequest = run.actionResult?.serveRequestId
           ? await args.ctx.db.get(run.actionResult.serveRequestId)
@@ -379,6 +389,7 @@ async function readMembershipContextRecords(args: {
               return { key: rule.key,
                 label: rule.trigger.type === "form_submitted" ? `Submit ${form?.name ?? "the selected form"}`
                   : rule.trigger.type === "milestone_elapsed" ? `${rule.trigger.delayMinutes} minutes in milestone`
+                  : rule.trigger.type === "member_joined" ? "Member joins"
                   : rule.trigger.channelId ? channel?.communityId === args.communityId ? `Post or reply in #${channel.name}` : "Post or reply in the selected channel" : "Post or reply in any channel",
                 satisfied: Boolean(evidence), satisfied_at: evidence ? toIsoString(evidence.satisfiedAt) : null };
             })),

@@ -223,6 +223,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                   <div className="workflow-milestone-automation-list">
                     {automations.filter(a => (a.action.type === "move_member") === requirement).map((automation, index) => (
                       <WebCommunityWorkflowAutomationEditor key={automation.key} automation={automation} index={index}
+                        canAddJoin={props.milestoneNumber === 1 && !automations.some(a => a.key !== automation.key && a.trigger.type === "member_joined")}
                         forms={props.forms}
                         expanded={expandedAutomationKey === automation.key} channels={props.channels} channelsUnavailable={props.channelsUnavailable}
                         nextMilestoneName={props.nextMilestoneName} disabled={props.isSaving}

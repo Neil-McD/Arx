@@ -41,10 +41,11 @@ export type CommunityMemberSuccessMilestoneHistoryEntry = {
 
 export type CommunityMemberSuccessWorkflowActivity = {
   id: string;
-  action_type: "prompt_agent" | "move_member" | "request_form";
+  action_type: "prompt_agent" | "move_member" | "request_form" | "create_service_channel";
   status:
     | "queued"
     | "requested"
+    | "channel_ready"
     | "requirement_satisfied"
     | "running"
     | "responded"

@@ -26,9 +26,18 @@ export const setParticipant = mutation({
   args: { ...scope, target, active: v.boolean() },
   handler: async (ctx, args) => {
     const manager = await requireManager(ctx, args);
+    return setChannelParticipantCore(ctx, { ...args, createdByUserId: manager.userId });
+  },
+});
+
+/** Caller must establish manager authority; grants retain activation lineage. */
+export async function setChannelParticipantCore(ctx: any, args: {
+  communityId: any; channelId: any; createdByUserId: any; active: boolean;
+  target: { kind: "member"; userId: any } | { kind: "community_agent" };
+}) {
     const principalKey = args.target.kind === "member" ? `user:${args.target.userId}` : "community_agent";
     const existing = await ctx.db.query("communityChannelParticipants")
-      .withIndex("by_channel_principal", q => q.eq("channelId", args.channelId).eq("principalKey", principalKey)).take(2);
+      .withIndex("by_channel_principal", (q: any) => q.eq("channelId", args.channelId).eq("principalKey", principalKey)).take(2);
     if (existing.length > 1) throw new Error("community_channel_participant_duplicate");
     if (existing[0] && existing[0].communityId !== args.communityId) throw new Error("community_channel_unavailable");
     let membership: Awaited<ReturnType<typeof getUniqueCommunityMembershipByPair>> = null;
@@ -48,10 +57,9 @@ export const setParticipant = mutation({
     const now = Date.now();
     if (previous) await ctx.db.patch(previous._id, { status, ...binding, updatedAt: now });
     else await ctx.db.insert("communityChannelParticipants", { communityId: args.communityId, channelId: args.channelId,
-      principalKey, status, ...binding, createdByUserId: manager.userId, createdAt: now, updatedAt: now });
+      principalKey, status, ...binding, createdByUserId: args.createdByUserId, createdAt: now, updatedAt: now });
     return { changed: true };
-  },
-});
+}
 
 // A channel-specific view of canonical community memberships, not another
 // directory or copied profile store. Pages remain bounded for large communities.

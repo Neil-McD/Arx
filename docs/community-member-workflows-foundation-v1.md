@@ -11,9 +11,36 @@ The V1 grammar is intentionally small:
 Workflow = ordered Milestones[]
 Milestone = name + Automations[]
 Automation = one Trigger + one Action
-Trigger = member_contributed(channelId?) | milestone_elapsed(delayMinutes) | form_submitted(formKey)
-Action = prompt_agent(prompt) | move_member(next_or_complete) | request_form(formKey)
+Trigger = member_contributed(channelId?) | milestone_elapsed(delayMinutes) | form_submitted(formKey) | member_joined
+Action = prompt_agent(prompt) | move_member(next_or_complete) | request_form(formKey) | create_service_channel
 ```
+
+### First join → private service channel
+
+- Builders may configure one `member_joined → create_service_channel` action in
+  the first milestone. This pair is intentionally bounded: no join prompts,
+  forms, movement, backfill or automatic welcome in this slice.
+- First membership creation schedules one durable job in the activation
+  transaction, independent of the best-effort activity feed. Signing in, renewed
+  access, rejoining and manager memberships do not enroll it.
+- The queued job captures workflow revision, membership activation, community
+  lifecycle generation and service assignment revision. Configuration/lifecycle/
+  membership/position drift cancels it; saving never processes existing members.
+- Existing workflow run identity makes replay inert. Provisioning uses a nested
+  mutation so channel creation, activation-bound member/agent grants and binding
+  roll back together on failure; the enclosing transaction retains a failed run.
+  Membership activation remains committed even at the private-channel limit.
+- A valid existing single-client service room is reused, never repaired. Cleared,
+  changed, archived, revoked, foreign or multi-client assignments are not replaced
+  or reopened. Owners/admins retain implicit access; unrelated members cannot
+  discover/read the room. The canonical member/service audience rules still apply.
+- Room names use the member display name plus membership identifier within the
+  existing name limit; builders can rename them normally. No new data table,
+  background queue, agent invocation or milestone writer is introduced.
+- Failed setup is terminal for that occurrence. Builders can resolve it through
+  existing channel creation/grants/assignment; replay does not repair permissions.
+
+Tests: `convex/communityMemberWorkflowJoin.test.ts`.
 
 ### Accumulated completion requirements
 
@@ -103,7 +130,7 @@ member's authorized service channel; either trigger can also move the member.
   outage catch-up from cascading through the pipeline. Due time is not an exact
   delivery SLA; normal dispatch is at or after due time.
 - Deferred: recurrence, inactivity, external events, goals,
-  automatic private-channel selection and existing-member backfill.
+  generic automatic private-channel selection and existing-member backfill.
 
 Tests: `convex/communityMemberWorkflowTimers.test.ts` and existing workflow tests.
 
@@ -158,7 +185,8 @@ activity/history projections and their distinct outcome statuses are unchanged.
 
 - One optional `serviceChannelId` on the community membership, with
   `serviceChannelRevision` for compare-and-set edits. No routing table, permission
-  grants, automatic room creation or workflow execution is introduced.
+  grants or workflow execution is introduced by manual assignment. Configured
+  first-join provisioning above uses the same binding helper.
 - Owner/admin assignment requires an active membership and an active private
   channel in the same community. Canonical channel actors/capabilities verify
   member read access and community-agent posting access; a builder's own room

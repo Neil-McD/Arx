@@ -2,6 +2,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { workflowJoinArgs, resolveFirstMemberWorkflowJoin, provisionJoinedMemberServiceChannel } from "./communityMemberWorkflowJoinCore";
 import { assignWorkflowForm, cancelMilestoneFormRequests, requestIsCurrent } from "./communityFormRequestCore";
 import { enrollWorkflowMilestoneTimers, resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
 import {
@@ -42,7 +43,7 @@ import {
 import { resolveBuilderCommunityMembershipContext, resolveWorkflowExecutionMembershipContext } from "./communityMembershipContextCore";
 import { intakeCommunityAgentWorkflowAction } from "./communityAgentConciergeCore";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
-import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
+import { bindMemberServiceChannel } from "./communityMemberServiceChannelCore";
 
 const managerIdentityArgs = {
   userId: v.optional(v.id("users")),
@@ -67,18 +68,7 @@ export const setBuilderMemberServiceChannel = mutation({
     if (!membership || membership.communityId !== args.communityId || !communityMembershipRowIsActive(membership)) {
       throw new Error("community_member_workflow_member_not_found");
     }
-    const revision = membership.serviceChannelRevision ?? 0;
-    if (!Number.isSafeInteger(args.expectedRevision) || args.expectedRevision !== revision) {
-      throw new Error("community_member_service_channel_revision_conflict");
-    }
-    if (args.channelId !== null) {
-      const resolved = await resolveMemberServiceChannel({ ctx, membership, channelId: args.channelId });
-      if (resolved.status !== "available") throw new Error("community_member_service_channel_unavailable");
-    }
-    if ((membership.serviceChannelId ?? null) === args.channelId) return { revision };
-    await ctx.db.patch(membership._id, { serviceChannelId: args.channelId ?? undefined,
-      serviceChannelRevision: revision + 1, updatedAt: Date.now() });
-    return { revision: revision + 1 };
+    return bindMemberServiceChannel({ ctx, membership, channelId: args.channelId, expectedRevision: args.expectedRevision });
   },
 });
 
@@ -97,11 +87,13 @@ const automationInputValidator = v.object({
   // Accepted from cached clients, but never trusted or persisted from input.
   completionGeneration: v.optional(v.string()),
   trigger: v.union(
+    v.object({ type: v.literal("member_joined") }),
     v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
     v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
     v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
   ),
   action: v.union(
+    v.object({ key: v.optional(v.string()), type: v.literal("create_service_channel") }),
     v.object({ key: v.optional(v.string()), type: v.literal("request_form"), formKey: v.string() }),
     v.object({
       key: v.optional(v.string()),
@@ -223,12 +215,14 @@ function normalizeAutomations(
             prompt: normalizeCommunityMemberWorkflowPrompt(input.action.prompt),
           }
         : input.action.type === "request_form" ? { key: actionKey, type: "request_form", formKey: input.action.formKey }
+        : input.action.type === "create_service_channel" ? { key: actionKey, type: "create_service_channel" }
         : {
             key: actionKey,
             type: "move_member",
             destination: "next_or_complete",
           };
     if ((action.type === "request_form" && !action.formKey.trim()) || (input.trigger.type === "form_submitted" && !input.trigger.formKey.trim())) throw new Error("form_required");
+    if ((input.trigger.type === "member_joined") !== (action.type === "create_service_channel")) throw new Error("workflow_join_action_invalid");
     if (input.trigger.type === "form_submitted") {
       if (action.type === "request_form") throw new Error("form_submission_action_invalid");
       const submissionLane = `${action.type}:${input.trigger.formKey}`;
@@ -245,7 +239,8 @@ function normalizeAutomations(
         timerGeneration: existing?.trigger.type === "milestone_elapsed"
           ? existing.timerGeneration ?? crypto.randomUUID() : crypto.randomUUID(),
       } : {}),
-      trigger: input.trigger.type === "form_submitted" ? { type: "form_submitted", formKey: input.trigger.formKey }
+      trigger: input.trigger.type === "member_joined" ? { type: "member_joined" }
+        : input.trigger.type === "form_submitted" ? { type: "form_submitted", formKey: input.trigger.formKey }
         : input.trigger.type === "milestone_elapsed"
         ? { type: "milestone_elapsed", delayMinutes: normalizeWorkflowDelayMinutes(input.trigger.delayMinutes) }
         : { type: "member_contributed", ...(input.trigger.channelId !== undefined ? { channelId: input.trigger.channelId } : {}) },
@@ -357,6 +352,8 @@ export const updateBuilderWorkflowMilestone = mutation({
       name: normalizeCommunityMemberWorkflowMilestoneName(args.name),
       automations: normalizeAutomations(args.automations, current.automations ?? []),
     };
+    const joinRules = milestone.automations.filter(a => a.trigger.type === "member_joined");
+    if (joinRules.length > 1 || (joinRules.length > 0 && milestoneIndex !== 0)) throw new Error("workflow_join_requires_first_milestone");
     for (const rawChannelId of new Set(milestone.automations.flatMap((automation) =>
       automation.trigger.type === "member_contributed" && automation.trigger.channelId !== undefined ? [automation.trigger.channelId] : []))) {
       const channelId = ctx.db.normalizeId("communityChannels", rawChannelId);
@@ -789,6 +786,7 @@ async function executeWorkflowAutomation(args: {
   timerReceiptRef?: string;
   workflowTimerId?: any;
   workflowFormRequestId?: any;
+  workflowJoin?: any;
   workflow: WorkflowRow;
   membership: CommunityMembershipLike;
   current: ReturnType<typeof resolveCurrentMilestone>;
@@ -833,6 +831,24 @@ async function executeWorkflowAutomation(args: {
     updatedAt: nowMs,
   });
   try {
+    if (args.automation.action.type === "create_service_channel") {
+      if (!args.workflowJoin || args.automation.trigger.type !== "member_joined") throw new Error("workflow_join_action_invalid");
+      // Isolate provisioning writes so a failure can retain a receipt without a partial room.
+      let result;
+      try {
+        result = await args.ctx.runMutation((internal as any).communityMemberWorkflows.provisionJoinedMemberServiceChannelInternal, args.workflowJoin);
+      } catch (error) {
+        const errorCode = String(error instanceof Error ? error.message : error).slice(0, 120);
+        await args.ctx.db.patch(workflowRunId, { status: "failed", actionResult: {
+          actionKey: args.automation.action.key, status: "failed", errorCode,
+        }, errorCode, finishedAt: nowMs, updatedAt: nowMs });
+        return { status: "action_failed" as const, workflow_run_id: String(workflowRunId), replayed: false };
+      }
+      await args.ctx.db.patch(workflowRunId, { status: "finished", actionResult: {
+        actionKey: args.automation.action.key, status: "complete", resultCode: result.resultCode, serviceChannelId: result.channelId,
+      }, finishedAt: nowMs, updatedAt: nowMs });
+      return { status: "service_channel_ready" as const, workflow_run_id: String(workflowRunId), replayed: false };
+    }
     if (args.automation.action.type === "request_form") {
       const formRequestId = await assignWorkflowForm({ ...args, workflowRunId });
       await args.ctx.db.patch(workflowRunId, { status: "finished", actionResult: {
@@ -1069,6 +1085,21 @@ async function handleChannelContributionCore(args: {
   }
   return { status: "handled" as const, results };
 }
+
+export const handleFirstMemberJoinInternal = internalMutation({
+  args: workflowJoinArgs,
+  handler: async (ctx, args) => {
+    const resolved = await resolveFirstMemberWorkflowJoin(ctx, args);
+    if (!resolved) return { status: "stale" };
+    return executeWorkflowAutomation({ ctx, ...resolved, workflowJoin: args,
+      timerReceiptRef: `member_joined:${args.membershipId}:1` });
+  },
+});
+
+export const provisionJoinedMemberServiceChannelInternal = internalMutation({
+  args: workflowJoinArgs,
+  handler: provisionJoinedMemberServiceChannel,
+});
 
 export const handleChannelContributionRootInternal = internalMutation({
   args: { rootId: v.id("communityInteractionRoots") },
