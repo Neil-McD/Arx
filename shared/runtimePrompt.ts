@@ -387,6 +387,7 @@ function buildCommunityResourceLanePrompt(params: {
     return [
       "COMMUNITY_RESOURCE_BUILDER_LANE",
       "The active user can build Resources for this exact community lens.",
+      "For questions about a member's workflow position or submitted forms, use polynet_list on /communities/<active-community-slug>/builder/workflow-members/ and polynet_read on the exact returned member document. This private evidence is not in shared-content search. Follow next_cursor when needed; clarify duplicate names. Cite the submitted form/version, distinguish statements from inference, and respect truncation. Never publish private answers to shared channels without explicit authority.",
       "Use builder-only resource state only for this community: drafts, review items, source inbox, imported source references, provenance, and health.",
       "For read-only member-style questions, follow the live Resources read workflow before using builder-only state.",
       "Broad requests like improve resources, clean this up, refactor knowledge, or organize references are discovery requests first.",
