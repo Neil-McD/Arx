@@ -533,3 +533,16 @@ Recurring time and external triggers, arbitrary event filters, goal-driven advan
 multi-step loops, action graphs, action chaining, agent selection, and manual
 member movement are not V1 primitives. Add one only after a real use case cannot
 be expressed by the grammar above.
+# Developer-only live assessment smoke
+
+`node scripts/workflow_assessment_smoke.mjs` runs the fixed three-case synthetic
+assessment campaign on `dev:quick-porcupine-949` only. It uses the canonical
+assessment prompt builder, runtime kernel, provider adapter, parser, and inference
+receipts. It requires the fixed canary community's operator-owner funding grant.
+Only accounting receipts change; no members, forms, channels, or progress change.
+The campaign has fixed receipt identities, no provider retries, no tools, bounded
+text input, and 1024 maximum output tokens per case. Preflight rejects costs above
+$1 using configured canonical pricing and a conservative input token bound. The
+local JSON report preserves exact prompts, budget events, verdicts and usage.
+Unknown usage/failure stops the campaign without automatic reruns. This smoke
+tests three real model judgments, not auth, delivery, or statistical judge quality.
