@@ -4,6 +4,7 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
 
 const modules = import.meta.glob([
@@ -225,7 +226,7 @@ test("indexed names and neighbor moves work beyond the retained creation cap", a
   let cursor: string | null = null;
   let updated = 0;
   do {
-    const result = await t.mutation(internal.communityChannels.backfillChannelNamesInternal, {
+    const result: { updated: number; isDone: boolean; continueCursor: string } = await t.mutation(internal.communityChannels.backfillChannelNamesInternal, {
       paginationOpts: { cursor, numItems: 40 },
     });
     updated += result.updated;
@@ -269,7 +270,7 @@ test("move rejects exhausted gaps and cross-community neighbors without rewritin
     return await ctx.db.insert("communityChannels", { communityId: other, name: "Foreign", normalizedName: "foreign", slug: "foreign", status: "active", accessMode: "restricted", postingPolicy: "members", position: 1, createdAt: 1, updatedAt: 1 });
   });
   await expect(owner.mutation(api.communityChannels.moveCommunityChannel, { ...args, afterChannelId: foreign })).rejects.toThrow("community_channel_unavailable");
-  expect((await t.run(ctx => ctx.db.get(c.id as any)))!.position).toBe(3);
+  expect((await t.run(ctx => ctx.db.get(c.id as Id<"communityChannels">)))!.position).toBe(3);
 });
 
 test("concurrent names and appends remain unique; competing moves cannot overwrite a changed target", async () => {
