@@ -844,7 +844,7 @@ async function executeWorkflowAutomation(args: {
   } catch (error) {
     // Timer admission, transition and consumption are one transaction. Never
     // commit a partial timer action as a terminal failure.
-    if (args.automation.action.type === "move_member") throw error;
+    if (args.workflowTimerId || args.automation.action.type === "move_member") throw error;
     const errorCode = String(
       error instanceof Error ? error.message : error ?? "workflow_action_failed",
     ).slice(0, 120);

@@ -8,6 +8,7 @@ import { activateCommunityMembershipCore } from "./communityMembershipLifecycle"
 import { enrollWorkflowMilestoneTimers } from "./communityMemberWorkflowTimerCore";
 import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 import { executeConciergeTool } from "./communityAgentServeWorker";
+import * as serviceChannelCore from "./communityMemberServiceChannelCore";
 
 const modules = import.meta.glob(["./communityMemberWorkflows.ts", "./communityAgentServeWorker.ts", "./communityAgentChannelAccess.ts", "./_generated/**/*.*s"]);
 const epoch = 1_800_000_000_000;
@@ -69,6 +70,19 @@ test("missing destination is recorded, with no fallback or later replay", async 
   await s.owner.mutation(api.communityMemberWorkflows.setBuilderMemberServiceChannel, { communityId: s.f.communityId, membershipId: s.f.membershipId, channelId: s.f.channelId, expectedRevision: 0 });
   await s.process(); expect(await s.requests()).toHaveLength(1);
   expect((await s.requests())[0].status).toBe("skipped");
+});
+
+test("unexpected admission failure rolls back timer consumption and request/run writes", async () => {
+  const s = await setup(); vi.setSystemTime(epoch + 60000);
+  const failure = vi.spyOn(serviceChannelCore, "resolveMemberServiceChannel").mockRejectedValueOnce(new Error("transient storage outage"));
+  try { await expect(s.process()).rejects.toThrow("transient storage outage"); }
+  finally { failure.mockRestore(); }
+  expect(await s.requests()).toHaveLength(0);
+  await s.t.run(async ctx => {
+    expect(await ctx.db.query("communityMemberWorkflowRuns").collect()).toHaveLength(0);
+    expect((await ctx.db.query("communityMemberWorkflowTimers").first())?.status).toBe("pending");
+  });
+  await s.process(); expect((await s.requests())[0].status).toBe("queued");
 });
 
 test("claim, scoped context, publication and replay use existing serve lifecycle", async () => {
