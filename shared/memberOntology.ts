@@ -88,6 +88,8 @@ export function canTransitionMemberFactConsent(args: {
 }
 
 export type MemberFactLike = {
+  // Absent on historical records: preserve their existing profile semantics.
+  contextKind?: "profile" | "workflow";
   communityId: string | null;
   kind: MemberFactKind;
   body: string;
@@ -99,11 +101,17 @@ export type MemberOntologyLens =
   | { kind: "self" }
   | { kind: "external_profile" }
   | { kind: "founder_admin"; communityId: string }
+  | { kind: "workflow_execution"; communityId: string }
   | { kind: "member_orientation"; communityId: string };
 
 /* THE visibility predicate. Every reader goes through this — no exceptions,
    no hand-rolled consent checks at query sites. */
 export function memberFactVisibleToLens(fact: MemberFactLike, lens: MemberOntologyLens): boolean {
+  if (fact.contextKind === "workflow") {
+    return (lens.kind === "founder_admin" || lens.kind === "workflow_execution") && fact.communityId !== null &&
+      fact.communityId === lens.communityId && fact.consentState === "approved" &&
+      fact.provenance !== "observed_behavior";
+  }
   if (lens.kind === "self") return true;
   if (lens.kind === "external_profile") {
     return (
@@ -141,6 +149,7 @@ const MAX_SPINE_ITEMS = 8;
 export function buildMemberSpine(facts: MemberFactLike[]): MemberSpine {
   const eligible = facts.filter(
     (fact) =>
+      fact.contextKind !== "workflow" &&
       fact.communityId === null &&
       fact.consentState === "approved" &&
       fact.provenance !== "observed_behavior",

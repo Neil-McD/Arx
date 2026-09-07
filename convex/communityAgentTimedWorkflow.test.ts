@@ -10,7 +10,7 @@ import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentSe
 import { executeConciergeTool } from "./communityAgentServeWorker";
 import * as serviceChannelCore from "./communityMemberServiceChannelCore";
 
-const modules = import.meta.glob(["./communityMemberWorkflows.ts", "./communityAgentServeWorker.ts", "./communityAgentChannelAccess.ts", "./_generated/**/*.*s"]);
+const modules = import.meta.glob(["./communityMemberWorkflows.ts", "./communityAgentServeWorker.ts", "./communityAgentChannelAccess.ts", "./memberOntology.ts", "./_generated/**/*.*s"]);
 const epoch = 1_800_000_000_000;
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(epoch); });
 afterEach(() => vi.useRealTimers());
@@ -47,6 +47,43 @@ async function setup(count = 1, assigned = true) {
   };
   return { t, f: { ...f, ...grants, membershipId }, owner, process, requests, claim };
 }
+
+test("confidential workflow facts require manager or live execution, never self/profile/channel authority", async () => {
+  const s = await setup();
+  const member = s.t.withIdentity({ subject: "timed-member" });
+  const factId = await s.t.run(ctx => ctx.db.insert("memberFacts", {
+    userId: s.f.userId, communityId: s.f.communityId, contextKind: "workflow", kind: "situation",
+    body: "CONFIDENTIAL_SERVICE_RECORD", provenance: "form_answer", confidence: 1, evidenceRefs: [],
+    stalenessScore: 0, consentState: "approved", createdByActorType: "member", version: 1, createdAt: epoch, updatedAt: epoch,
+  }));
+  const dossierArgs = { communityId: s.f.communityId, membershipId: s.f.membershipId };
+  expect(JSON.stringify(await s.owner.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier, dossierArgs))).toContain("CONFIDENTIAL_SERVICE_RECORD");
+  await expect(member.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier, dossierArgs)).rejects.toThrow();
+  expect(JSON.stringify(await member.query(api.memberOntology.getMyMemberFacts, {}))).not.toContain("CONFIDENTIAL_SERVICE_RECORD");
+  expect(JSON.stringify(await member.query(api.memberOntology.getMyMemberContextMarkdown, { communityId: s.f.communityId }))).not.toContain("CONFIDENTIAL_SERVICE_RECORD");
+  await expect(member.mutation(api.memberOntology.retractMemberFact, { factId })).rejects.toThrow("member_fact_consent_forbidden");
+  // A profile submission must not supersede a same-text confidential record.
+  await member.mutation(api.memberOntology.confirmMemberInterviewFacts, { communityId: s.f.communityId,
+    facts: [{ kind: "situation", body: "CONFIDENTIAL_SERVICE_RECORD", provenance: "form_answer" }] });
+  expect((await s.t.run(ctx => ctx.db.get(factId)))?.consentState).toBe("approved");
+  // Remove the deliberately duplicated profile fixture, preserving the workflow record.
+  await s.t.run(async ctx => { for (const fact of await ctx.db.query("memberFacts").collect()) {
+    if (fact._id !== factId) await ctx.db.delete(fact._id);
+  } });
+  vi.setSystemTime(epoch + 60000); await s.process();
+  const queued = (await s.requests())[0];
+  await expect(s.t.query(internal.communityMemberWorkflows.getWorkflowExecutionContextInternal,
+    { requestId: queued._id, expectedAttempt: 0 })).rejects.toThrow("workflow_context_forbidden");
+  const claim = await s.claim();
+  const args = { requestId: claim.requestId!, expectedAttempt: claim.attempt! };
+  expect(JSON.stringify(await s.t.query(internal.communityMemberWorkflows.getWorkflowExecutionContextInternal, args))).toContain("CONFIDENTIAL_SERVICE_RECORD");
+  await expect(s.t.query(internal.communityMemberWorkflows.getWorkflowExecutionContextInternal,
+    { ...args, expectedAttempt: args.expectedAttempt + 1 })).rejects.toThrow("workflow_context_forbidden");
+  const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  expect(JSON.stringify(context)).not.toContain("CONFIDENTIAL_SERVICE_RECORD");
+  await s.t.run(ctx => ctx.db.patch(s.f.agentGrant, { status: "revoked" }));
+  await expect(s.t.query(internal.communityMemberWorkflows.getWorkflowExecutionContextInternal, args)).rejects.toThrow();
+});
 
 test.each(["retracted", "edited"])("approved context is bounded, scoped and %s facts fence delivery", async change => {
   const s = await setup();
@@ -191,6 +228,7 @@ test.each(["member_revoked", "agent_revoked", "archived", "shared", "reassigned"
       else await ctx.db.patch(w._id, { milestones: [{ ...w.milestones[0], automations: [] }] });
     }
   });
+  await expect(s.t.query(internal.communityMemberWorkflows.getWorkflowExecutionContextInternal, args)).rejects.toThrow();
   expect((await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args)).ok).toBe(false);
   expect((await s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal, { ...args, content: "Do not send" })).ok).toBe(false);
   expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").collect())).toHaveLength(0);

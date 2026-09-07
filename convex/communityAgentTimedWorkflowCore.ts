@@ -6,7 +6,7 @@ import { readBoundedMemberOrientationFacts } from "./memberOntologyCore";
 import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 
-/** Community-approved orientation only; never the account spine or builder dossier. */
+/** Approved profile orientation only; never workflow-only facts, account spine or dossier. */
 export async function readTimedMemberContext(ctx: any, request: any) {
   const { facts, truncated } = await readBoundedMemberOrientationFacts(ctx, {
     subjectUserId: request.requesterUserId, communityId: request.communityId,

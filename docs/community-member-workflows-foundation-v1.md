@@ -83,6 +83,22 @@ the controller nonce, retaining cancellation/generation checks. There is no new
 poller, manual movement action, schema, or history store. The existing bounded
 activity/history projections and their distinct outcome statuses are unchanged.
 
+### Context authority boundary
+
+- Profile facts preserve existing visibility and consent semantics. Workflow-only
+  facts use the same canonical ledger with explicit `contextKind: workflow`;
+  absence means profile, with no migration or inferred reclassification.
+- Builder dossiers require current owner/admin authority. Workflow execution
+  dossier reads require a canonical running request, exact attempt/lease and
+  run/member/action linkage, current membership and agent/channel authorization.
+  This internal read is not a general member/MCP tool and grants no write access.
+- Workflow-only facts are excluded from self-profile, member orientation and
+  timed/contribution channel prompts, and cannot be modified via profile consent
+  or superseded by a same-text profile submission. The dossier labels them
+  Workflow-only. Existing member-visible progress projections remain unchanged.
+- Forms, workflow-context writers and confidential context-to-channel disclosure
+  are separate slices. No new memory store or profile editing surface is added.
+
 ### Explicit member service channel
 
 - One optional `serviceChannelId` on the community membership, with

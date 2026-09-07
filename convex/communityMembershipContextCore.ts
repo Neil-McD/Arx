@@ -9,6 +9,8 @@ import {
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
+import { requireTimedWorkflowDestination } from "./communityAgentTimedWorkflowCore";
+import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import {
   readBoundedMemberOrientationFacts,
@@ -110,14 +112,59 @@ export async function resolveSelfCommunityMembershipContext(args: {
   };
 }
 
-// Private record assembly, not an authorization entry point. Both wrappers
+// Internal execution authority, never an owner-supplied user/community selector.
+// Reading this dossier does not authorize putting it in a channel prompt.
+export async function resolveWorkflowExecutionMembershipContext(args: {
+  ctx: QueryCtx; requestId: Id<"communityAgentServeRequests">; expectedAttempt: number;
+}): Promise<CommunityMembershipContext> {
+  const { ctx } = args;
+  const request = await ctx.db.get(args.requestId);
+  if (!request || request.triggerKind !== "workflow" || request.status !== "running" ||
+    request.attempt !== args.expectedAttempt || (request.leaseExpiresAt ?? 0) <= Date.now() ||
+    !request.workflowRunId || !request.requesterUserId) throw new Error("workflow_context_forbidden");
+  await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: request.requesterUserId });
+  const run = await ctx.db.get(request.workflowRunId);
+  const membership = await getUniqueCommunityMembershipByPair({ ctx,
+    communityId: request.communityId, userId: request.requesterUserId });
+  if (!run || !membership || !communityMembershipRowIsActive(membership) ||
+    run.communityId !== request.communityId || run.membershipId !== membership._id ||
+    run.status !== "finished" || run.actionSnapshot.type !== "prompt_agent" ||
+    run.actionSnapshot.key !== request.workflowActionKey || run.actionSnapshot.prompt !== request.workflowPromptSnapshot ||
+    run.actionResult?.status !== "complete" || run.actionResult.serveRequestId !== request._id) {
+    throw new Error("workflow_context_forbidden");
+  }
+  const configs = await ctx.db.query("communityAgentConfigs")
+    .withIndex("by_community", q => q.eq("communityId", request.communityId)).take(5);
+  if (configs.sort((a, b) => b.updatedAt - a.updatedAt)[0]?.agentEnabled === false) throw new Error("workflow_context_forbidden");
+  if (request.workflowTimerId) {
+    await requireTimedWorkflowDestination(ctx, request);
+  } else {
+    const root = request.sourceRootId ? await ctx.db.get(request.sourceRootId) : null;
+    const source = request.sourceReplyId ? await ctx.db.get(request.sourceReplyId) : root;
+    if (!root || !source || root.communityId !== request.communityId || source.communityId !== request.communityId ||
+      source.status !== "live" || source.actorUserId !== request.requesterUserId ||
+      source.channelId !== root.channelId ||
+      ("rootId" in source && source.rootId !== root._id) ||
+      run.triggerReceiptRef !== buildCommunityInteractionEvidenceRef({ objectType: request.sourceReplyId ? "reply" : "root", objectId: String(source._id) })) {
+      throw new Error("workflow_context_forbidden");
+    }
+    await requireAgentSourceChannelAccess({ ctx, root, userId: request.requesterUserId });
+  }
+  const { facts_truncated: _truncated, ...context } = await readMembershipContextRecords({
+    ctx, communityId: request.communityId, subjectUserId: request.requesterUserId,
+    membership: membership as Doc<"communityMemberships">, view: "workflow",
+  });
+  return { ...context, membership_id: String(membership._id), joined_at: toIsoString(membership.activatedAt ?? membership.createdAt) };
+}
+
+// Private record assembly, not an authorization entry point. The wrappers
 // above establish their own actor/subject boundary before using it.
 async function readMembershipContextRecords(args: {
   ctx: QueryCtx;
   communityId: Id<"communities">;
   subjectUserId: Id<"users">;
   membership: Doc<"communityMemberships"> | null;
-  view: "builder" | "self";
+  view: "builder" | "self" | "workflow";
 }) {
   const membership = args.membership;
   const workflow = membership
@@ -149,7 +196,7 @@ async function readMembershipContextRecords(args: {
         : readMemberFactsForLens(args.ctx, {
             subjectUserId: args.subjectUserId,
             lens: {
-              kind: "founder_admin",
+              kind: args.view === "workflow" ? "workflow_execution" : "founder_admin",
               communityId: String(args.communityId),
             },
             scope: { communityId: args.communityId },
@@ -317,6 +364,7 @@ async function readMembershipContextRecords(args: {
     approved_community_context: factPage.facts
       .map((fact) => ({
         id: String(fact._id),
+        ...(fact.contextKind === "workflow" ? { context_kind: "workflow" as const } : {}),
         kind: fact.kind,
         body: fact.body,
         provenance: fact.provenance,

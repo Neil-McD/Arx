@@ -947,6 +947,7 @@ export default defineSchema({
      column IS the cross-community isolation mechanism). consentState is
      derived from provenance at birth; transitions are member-driven only. */
   memberFacts: defineTable({
+    contextKind: v.optional(v.union(v.literal("profile"), v.literal("workflow"))),
     userId: v.id("users"),
     communityId: v.optional(v.id("communities")),
     kind: v.union(

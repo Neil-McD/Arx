@@ -54,7 +54,7 @@ export function renderCommunityMemberSuccessDossierMarkdown(
       for (const fact of source.approved_community_context.filter(
         (candidate) => candidate.kind === kind,
       )) {
-        lines.push(`- ${markdownInline(fact.body)}`);
+        lines.push(`- ${fact.context_kind === "workflow" ? "[Workflow-only] " : ""}${markdownInline(fact.body)}`);
       }
     }
   }

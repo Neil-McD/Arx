@@ -1247,8 +1247,8 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
     }
 
     if (request.workflowTimerId) {
-      // The canonical community-approved lens is safe for the room audience;
-      // personal memory, the account spine and builder dossier remain excluded.
+      // Profile orientation only. Approval is not a disclosure grant for
+      // workflow-only records; the canonical lens excludes them and the dossier.
       const timedMemberContext = await readTimedMemberContext(ctx, request);
       return {
         ok: true as const,

@@ -1,4 +1,4 @@
-import { internalMutation, mutation, query } from "./_generated/server";
+import { internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
@@ -35,7 +35,7 @@ import {
   getMemberMilestone,
   resolveCurrentMilestone,
 } from "./communityMemberWorkflowReadCore";
-import { resolveBuilderCommunityMembershipContext } from "./communityMembershipContextCore";
+import { resolveBuilderCommunityMembershipContext, resolveWorkflowExecutionMembershipContext } from "./communityMembershipContextCore";
 import { intakeCommunityAgentWorkflowAction } from "./communityAgentConciergeCore";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
 import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
@@ -44,6 +44,12 @@ const managerIdentityArgs = {
   userId: v.optional(v.id("users")),
   authSubject: v.optional(v.string()),
 };
+
+// Internal runtime read; not registered as a member/MCP tool or channel context.
+export const getWorkflowExecutionContextInternal = internalQuery({
+  args: { requestId: v.id("communityAgentServeRequests"), expectedAttempt: v.number() },
+  handler: (ctx, args) => resolveWorkflowExecutionMembershipContext({ ctx, ...args }),
+});
 
 export const setBuilderMemberServiceChannel = mutation({
   args: {

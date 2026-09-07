@@ -155,10 +155,28 @@ through one shared predicate function; no reader hand-rolls visibility.
 | External profile | authenticated member through Polynet MCP | current `approved` platform facts only; no community facts or audit-history states |
 | Member-to-member (orientation card) | shared community | spine + `approved` facts scoped to the community both share; nothing pending, nothing observed, nothing from other communities |
 
-There is no community-agent-internal member lens in v1. If one is introduced,
-it must be a distinct read model with explicit actor and provenance rules. It
-must not widen `founder_admin`, and rejected, retracted, or superseded facts
-must never become actionable context merely because an agent is reading.
+### Confidential workflow context
+
+`memberFacts.contextKind` separates `profile` from `workflow` context. Missing
+values retain historical profile semantics; no existing rows are reclassified.
+Workflow records require a community scope. They never enter the account spine,
+self-profile, member-to-member orientation, external profile, or channel prompt.
+The existing profile consent APIs cannot transition or supersede workflow records.
+Existing profile consent behavior is unchanged. This field is an access boundary,
+not a new form-authoring or workflow-record-writing API.
+
+Owner/admin dossier reads use their existing manager authorization. The distinct
+`workflow_execution` lens is available only behind the internal execution-context
+reader: canonical running serve request, current attempt and lease, exact linked
+run/member/action, active community membership and agent/source/destination access.
+Clients cannot choose an arbitrary subject or inherit a sponsor's manager role.
+The reader is not registered as a member-agent or MCP tool.
+
+Both lenses continue to exclude observed behavior and unapproved/withdrawn evidence.
+Authorization to read the confidential dossier is not authorization to publish it.
+Channel-facing agents continue to receive profile orientation only; confidential
+model consumption/disclosure is not enabled by this slice. A future form writer
+must set its audience explicitly rather than reinterpret historical profile facts.
 
 ## Write Paths
 

@@ -196,7 +196,7 @@ test("unavailable service channel can be cleared but cannot be opened", () => {
 
 test("member details use collapsed disclosures without dropping instructions or history", () => {
   const html = renderDossier();
-  expect(html).toContain("Shared context");
+  expect(html).toContain("Member context");
   expect(html).toContain("Recent workflow activity");
   expect(html).toContain('<summary>Agent instructions</summary>');
   expect(html).toContain(source.recent_workflow_activity[0].prompt);

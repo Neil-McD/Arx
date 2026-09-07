@@ -80,7 +80,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   const factsByKind = new Map<string, string[]>();
   for (const fact of dossier?.approved_community_context ?? []) {
     const facts = factsByKind.get(fact.kind) ?? [];
-    facts.push(fact.body);
+    facts.push(fact.context_kind === "workflow" ? `Workflow-only · ${fact.body}` : fact.body);
     factsByKind.set(fact.kind, facts);
   }
 
@@ -197,7 +197,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                 saving={props.isServiceChannelSaving} error={props.serviceChannelError}
                 onChange={props.onSetServiceChannel} onOpen={props.onOpenServiceChannel} onRefresh={props.onRetry} />
               <section className="workflow-member-dossier-section">
-                <h3>Shared context</h3>
+                <h3>Member context</h3>
                 {factsByKind.size > 0 ? (
                   <div className="workflow-member-context-list">
                     {Array.from(factsByKind.entries()).map(([kind, facts]) => (

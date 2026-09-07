@@ -587,6 +587,21 @@ async function workflowServeFixture(t: ReturnType<typeof convexTest>, move = tru
   return { ...f, ...configured, rootId, request, claim, read };
 }
 
+test("contribution execution context is bound to the live requester and source", async () => {
+  const t = convexTest(schema, modules);
+  const f = await workflowServeFixture(t, false);
+  vi.setSystemTime(f.nowMs + 100);
+  const args = { requestId: f.request._id, expectedAttempt: f.claim.attempt };
+  const context = await t.query(internalApi.communityMemberWorkflows.getWorkflowExecutionContextInternal, args);
+  expect(context.user_id).toBe(String(f.memberId));
+  expect(context.community_id).toBe(String(f.communityId));
+  vi.setSystemTime(f.nowMs + 24 * 60 * 60 * 1000);
+  await expect(t.query(internalApi.communityMemberWorkflows.getWorkflowExecutionContextInternal, args)).rejects.toThrow("workflow_context_forbidden");
+  vi.setSystemTime(f.nowMs + 100);
+  await t.run(ctx => ctx.db.patch(f.rootId, { status: "hidden" }));
+  await expect(t.query(internalApi.communityMemberWorkflows.getWorkflowExecutionContextInternal, args)).rejects.toThrow();
+});
+
 function workflowOrientation(context: any) {
   expect(context.ok).toBe(true);
   const line = context.threadContext.rendered.split("\n").find((value: string) => value.startsWith("Workflow orientation"));

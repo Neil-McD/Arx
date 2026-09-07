@@ -52,6 +52,7 @@ export type MissingBridgeSocialLinkFactInsertResult = {
 
 function toFactLike(row: any): MemberFactLike {
   return {
+    contextKind: row.contextKind,
     communityId: row.communityId ? String(row.communityId) : null,
     kind: row.kind,
     body: row.body,
@@ -106,6 +107,7 @@ export async function insertMemberFacts(ctx: any, args: {
     /* Same-kind same-body duplicates supersede the older row instead of
        accumulating — idempotent writes for replayed bridges/interviews. */
     for (const existing of existingRows) {
+      if (existing.contextKind === "workflow") continue;
       if (existing.kind !== normalized.kind || existing.body !== normalized.body) continue;
       if (supersededIds.has(String(existing._id))) continue;
       if (
@@ -219,6 +221,7 @@ export async function transitionMemberFactConsent(ctx: any, args: {
 }): Promise<void> {
   const fact = await ctx.db.get(args.factId);
   if (!fact) throw new Error("member_fact_not_found");
+  if (fact.contextKind === "workflow") throw new Error("member_fact_consent_forbidden");
   /* Only the subject member consents about themselves. */
   if (args.actorType === "member" && String(fact.userId) !== String(args.actorUserId)) {
     throw new Error("member_fact_consent_forbidden");

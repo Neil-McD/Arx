@@ -4,6 +4,7 @@ export const COMMUNITY_MEMBER_SUCCESS_HISTORY_LIMIT = 12;
 export const COMMUNITY_MEMBER_SUCCESS_ACTIVITY_LIMIT = 12;
 
 export type CommunityMemberSuccessFact = {
+  context_kind?: "profile" | "workflow";
   id: string;
   provenance: MemberFactProvenance;
   created_at: string;
