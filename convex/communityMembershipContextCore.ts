@@ -9,6 +9,7 @@ import {
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
+import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import {
   readBoundedMemberOrientationFacts,
   readMemberFactsForLens,
@@ -200,14 +201,14 @@ async function readMembershipContextRecords(args: {
           serveRequest.workflowRunId === run._id &&
           serveRequest.workflowActionKey === run.actionSnapshot.key &&
           serveRequest.workflowPromptSnapshot === run.actionSnapshot.prompt &&
-          Boolean(serveRequest.sourceReplyId ?? serveRequest.sourceRootId) &&
+          Boolean(serveRequest.workflowTimerId ?? serveRequest.sourceReplyId ?? serveRequest.sourceRootId) &&
           run.triggerReceiptRef ===
-            buildCommunityInteractionEvidenceRef({
+            (serveRequest.workflowTimerId ? `workflow-timer:${serveRequest.workflowTimerId}` : buildCommunityInteractionEvidenceRef({
               objectType: serveRequest.sourceReplyId ? "reply" : "root",
               objectId: String(
                 serveRequest.sourceReplyId ?? serveRequest.sourceRootId ?? "",
               ),
-            });
+            }));
         const status =
           run.status === "failed"
             ? ("failed" as const)
@@ -217,10 +218,28 @@ async function readMembershipContextRecords(args: {
                   serveRequest.status === "skipped"
                 ? ("failed" as const)
                 : serveRequest.status;
+        let deliveryChannelUrl: string | null = null;
+        if (validRequest && status === "responded" && serveRequest.workflowTimerId && serveRequest.responseRootId) {
+          const root = await args.ctx.db.get(serveRequest.responseRootId);
+          if (root?.status === "live" && root.communityId === args.communityId
+            && root.channelId === serveRequest.serviceChannelId
+            && root.idempotencyKey === `community_agent_serve:${serveRequest._id}`) {
+            const destination = await resolveMemberServiceChannel({ ctx: args.ctx, membership, channelId: root.channelId });
+            if (destination.status === "available" && root.channelId) {
+              const channel = await args.ctx.db.get(root.channelId);
+              const community = await args.ctx.db.get(args.communityId);
+              deliveryChannelUrl = buildCommunityTabPath(community?.slug, "chat", null, null, channel?.slug);
+            }
+          }
+        }
         return {
           id: String(run._id),
           action_type: "prompt_agent" as const,
           status,
+          ...(run.triggerType === "milestone_elapsed" ? {
+            delivery_channel_url: deliveryChannelUrl,
+            failure_reason: status === "failed" ? "Not delivered. The destination, workflow, access, or agent execution was unavailable. Check the service channel and rule before a future entry." : null,
+          } : {}),
           milestone_key: run.milestoneKey,
           milestone_name: run.milestoneName,
           next_milestone_key: null,

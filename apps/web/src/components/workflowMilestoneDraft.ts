@@ -19,7 +19,6 @@ export function workflowMoveLabel(nextMilestoneName: string | null): string {
 
 export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
   if (automation.trigger.type === "milestone_elapsed") {
-    if (automation.action.type !== "move_member") return "Time triggers can only move members";
     try { normalizeWorkflowDelayMinutes(automation.trigger.delayMinutes); }
     catch { return "Choose a duration from 1 minute to 365 days"; }
   }

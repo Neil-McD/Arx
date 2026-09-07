@@ -22,11 +22,10 @@ export async function enrollWorkflowMilestoneTimers(args: {
   const existing = await ctx.db.query("communityMemberWorkflowTimers")
     .withIndex("by_member_entry", (q: any) => q.eq("workflowId", workflow._id)
       .eq("membershipId", membership._id).eq("activationSequence", activationSequence).eq("transitionSeq", transitionSeq))
-    .take(2);
-  // There is at most one move rule, hence one timer per entry.
-  if (existing.length) return;
-  const rule = current.milestone.automations.find((a: any) => a.trigger.type === "milestone_elapsed");
-  if (!rule || rule.trigger.type !== "milestone_elapsed" || rule.action.type !== "move_member" || !rule.timerGeneration) return;
+    .take(13);
+  for (const rule of current.milestone.automations) {
+  if (rule.trigger.type !== "milestone_elapsed" || !rule.timerGeneration
+    || existing.some((timer: any) => timer.automationKey === rule.key)) continue;
   await ctx.db.insert("communityMemberWorkflowTimers", {
     workflowId: workflow._id, membershipId: membership._id,
     communityLifecycleGeneration: normalizeCommunityLifecycle(community).generation,
@@ -35,6 +34,7 @@ export async function enrollWorkflowMilestoneTimers(args: {
     dueAt: current.milestoneEnteredAt + normalizeWorkflowDelayMinutes(rule.trigger.delayMinutes) * 60_000,
     status: "pending", createdAt: nowMs,
   });
+  }
 }
 
 /** Latest authority wins, even if an edit's background refresh has not run yet. */
@@ -55,7 +55,7 @@ export async function resolveWorkflowTimer(ctx: any, timer: any) {
     || current.milestoneEnteredAt !== timer.milestoneEnteredAt) return null;
   const automation = current.milestone.automations.find((a: any) => a.key === timer.automationKey);
   if (!automation || automation.timerGeneration !== timer.timerGeneration
-    || automation.trigger.type !== "milestone_elapsed" || automation.action.type !== "move_member") return null;
+    || automation.trigger.type !== "milestone_elapsed") return null;
   return { workflow, membership, current, automation,
     dueAt: current.milestoneEnteredAt + normalizeWorkflowDelayMinutes(automation.trigger.delayMinutes) * 60_000 };
 }

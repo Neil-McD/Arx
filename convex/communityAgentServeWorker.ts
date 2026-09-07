@@ -41,6 +41,7 @@ import {
 import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 import { readCanonicalCommunityAgentContext } from "./communityAgentContext";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
+import { requireTimedWorkflowDestination, publishTimedWorkflowPost } from "./communityAgentTimedWorkflowCore";
 import {
   ensureReplyChannelMatchesRoot,
   interactionIsChannelAddressable,
@@ -252,6 +253,9 @@ type ServeRequestRow = {
   workflowRunId?: any;
   workflowActionKey?: string;
   workflowPromptSnapshot?: string;
+  workflowTimerId?: any;
+  serviceChannelId?: any;
+  serviceChannelRevision?: number;
   sourceRootId?: any;
   sourceReplyId?: any;
   requesterUserId?: any;
@@ -467,6 +471,10 @@ export async function executeConciergeTool(args: {
     const scope = await args.ctx.runQuery(internalRefs.communityAgentChannelAccess.authorizeServeToolsInternal, {
       requestId: args.requestId, expectedAttempt: args.context.request.attempt,
     });
+    if (scope.timed) {
+      return { status: "error", exitCode: null, outputText: "", errorCode: "timed_check_in_prompt_only",
+        errorMessage: "This timed check-in can produce one message using its supplied context. It cannot retrieve member-private context or perform additional tool actions." };
+    }
     if (scope.restricted && (args.toolName === "polynet_write" || args.toolName === "polynet_call")) {
       return { status: "error", exitCode: null, outputText: "", errorCode: "private_channel_output_scoped",
         errorMessage: "This private-room turn can read shared knowledge and answer in its originating thread; it cannot publish elsewhere or modify shared memory." };
@@ -522,7 +530,7 @@ function serveRequestIsClaimable(request: ServeRequestRow): boolean {
   return (
     request.agentKey === CANONICAL_COMMUNITY_AGENT_KEY &&
     request.intakeReason === "accepted" &&
-    Boolean(request.sourceRootId) &&
+    Boolean(request.sourceRootId || (request.triggerKind === "workflow" && request.workflowTimerId && request.serviceChannelId)) &&
     Boolean(request.requesterUserId) &&
     Boolean(request.sponsorUserId) &&
     normalizeIdValue(request.requesterUserId) ===
@@ -1084,6 +1092,13 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
     }
 
     let workflowOrientation: CommunityAgentWorkflowOrientation | undefined;
+    if (request.workflowTimerId) {
+      try { await requireTimedWorkflowDestination(ctx, request); }
+      catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith("workflow_")) throw error;
+        return { ok: false as const, errorCode: "workflow_timer_unavailable", errorMessage: error.message };
+      }
+    }
     if (request.triggerKind === "workflow") {
       if (
         !request.workflowRunId ||
@@ -1106,10 +1121,10 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
         workflowRun.actionSnapshot?.type !== "prompt_agent" ||
         workflowRun.actionSnapshot.key !== request.workflowActionKey ||
         workflowRun.actionSnapshot.prompt !== request.workflowPromptSnapshot ||
-        workflowRun.triggerReceiptRef !== buildCommunityInteractionEvidenceRef({
+        workflowRun.triggerReceiptRef !== (request.workflowTimerId ? `workflow-timer:${request.workflowTimerId}` : buildCommunityInteractionEvidenceRef({
           objectType: request.sourceReplyId ? "reply" : "root",
           objectId: normalizeIdValue(request.sourceReplyId ?? request.sourceRootId),
-        })
+        }))
       ) {
         return {
           ok: false as const,
@@ -1231,6 +1246,28 @@ export const readCommunityAgentServeRequestContextInternal = internalQuery({
       };
     }
 
+    if (request.workflowTimerId) {
+      // No dossier, other-channel history, or member-private tool context enters
+      // a proactive message to a room with potentially multiple participants.
+      const member = await ctx.db.get(request.requesterUserId as any) as any;
+      return {
+        ok: true as const,
+        delivery: "service_channel" as const,
+        request: { id: request._id, communityId: request.communityId, triggerKind: "workflow" as const,
+          workflowTimerId: request.workflowTimerId, serviceChannelId: request.serviceChannelId,
+          requesterUserId: request.requesterUserId, sponsorUserId: request.sponsorUserId,
+          authSubject: sponsorAuthSubject, attempt: normalizeCommunityAgentServeAttempt(request.attempt),
+          sourceRootId: null, sourceReplyId: null, responseVisibilityScope: "community" as const },
+        community: { name: canonicalContext.communityName ?? "", slug: canonicalContext.communitySlug ?? "",
+          oneLiner: canonicalContext.communityOneLiner ?? "", about: boundedText(canonicalContext.communityAbout, 2000) },
+        agent: { displayName: canonicalContext.agentDisplayName, systemPrompt: boundedText(canonicalContext.communitySystemPrompt, 4000) },
+        workflowPrompt: request.workflowPromptSnapshot ?? null,
+        threadContext: { version: 2 as const, capturedAt: Date.now(), includedRootId: "", includedReplyIds: [],
+          participantUserIds: [], omittedTurnCount: 0, omittedUnreadableTurnCount: 0, truncated: false,
+          rendered: `Scheduled workflow check-in, not a reply. Write one message for ${boundedText(member?.displayName, 120) || "the member"} in their assigned service channel. Other invited people may read it. Do not claim the member posted or infer progress. No private dossier or conversation history is provided. Tools are unavailable for this check-in.\nWorkflow origin: ${JSON.stringify(workflowOrientation?.origin)}` },
+        funding,
+      };
+    }
     const root = (await ctx.db.get(
       request.sourceRootId as any,
     )) as InteractionRootRow | null;
@@ -1431,6 +1468,13 @@ export const recordCommunityAgentServeContextSnapshotInternal =
     } catch {
       return { ok: false, errorCode: "requester_access_missing" };
     }
+    if (request.workflowTimerId) {
+      try { await requireTimedWorkflowDestination(ctx, request); }
+      catch (error) {
+        if (!(error instanceof Error) || !error.message.startsWith("workflow_")) throw error;
+        return { ok: false, errorCode: "workflow_timer_unavailable" };
+      }
+    } else {
       const root = (await ctx.db.get(
         request.sourceRootId as any,
       )) as InteractionRootRow | null;
@@ -1492,6 +1536,7 @@ export const recordCommunityAgentServeContextSnapshotInternal =
       return { ok: false, errorCode: "source_not_readable" };
     }
 
+    }
     const runId = buildCommunityAgentServeRunId(
       normalizeIdValue(request._id),
       args.expectedAttempt,
@@ -1603,6 +1648,16 @@ export const finalizeCommunityAgentServeReplyInternal = internalMutation({
       return { ok: false, errorCode: "requester_access_missing" };
     }
 
+    if (request.workflowTimerId) {
+      try {
+        return await publishTimedWorkflowPost(ctx, request, boundedText(args.content, REPLY_TEXT_MAX_CHARS), nowMs);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        if (!message.startsWith("workflow_")) throw error;
+        await failServeRequest(ctx, request, "workflow_timer_unavailable", message, nowMs);
+        return { ok: false, errorCode: "workflow_timer_unavailable" };
+      }
+    }
     const root = (await ctx.db.get(
       request.sourceRootId as any,
     )) as InteractionRootRow | null;
@@ -1903,7 +1958,7 @@ export const processQueuedCommunityAgentServeRequestsInternal = internalAction({
         attempt: context.request.attempt,
       });
       const conciergeProviderTools =
-        buildCommunityAgentConciergeFunctionTools();
+        context.request.workflowTimerId ? [] : buildCommunityAgentConciergeFunctionTools();
 
       const isWorkflowAction = context.request.triggerKind === "workflow";
       const receiptKey = isWorkflowAction

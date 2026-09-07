@@ -1996,6 +1996,9 @@ export default defineSchema({
     workflowRunId: v.optional(v.id("communityMemberWorkflowRuns")),
     workflowActionKey: v.optional(v.string()),
     workflowPromptSnapshot: v.optional(v.string()),
+    workflowTimerId: v.optional(v.id("communityMemberWorkflowTimers")),
+    serviceChannelId: v.optional(v.id("communityChannels")),
+    serviceChannelRevision: v.optional(v.number()),
     status: v.union(
       v.literal("queued"),
       v.literal("skipped"),

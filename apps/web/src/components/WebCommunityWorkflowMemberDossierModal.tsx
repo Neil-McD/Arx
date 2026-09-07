@@ -226,6 +226,8 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
                         <ActivityTime value={activity.occurred_at} />
                         <div>
                           <strong>{workflowActivityLabel(activity)}</strong>
+                          {activity.failure_reason ? <p>{activity.failure_reason}</p> : null}
+                          {activity.delivery_channel_url ? <a href={activity.delivery_channel_url}>Open delivery channel</a> : null}
                           {activity.prompt ? (
                             <details className="workflow-member-instructions">
                               <summary>Agent instructions</summary>

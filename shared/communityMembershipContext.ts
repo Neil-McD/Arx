@@ -39,6 +39,8 @@ export type CommunityMemberSuccessWorkflowActivity = {
   next_milestone_key: string | null;
   next_milestone_name: string | null;
   prompt: string | null;
+  delivery_channel_url?: string | null;
+  failure_reason?: string | null;
   occurred_at: string;
 };
 

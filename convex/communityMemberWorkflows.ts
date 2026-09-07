@@ -212,9 +212,6 @@ function normalizeAutomations(
             type: "move_member",
             destination: "next_or_complete",
           };
-    if (input.trigger.type === "milestone_elapsed" && action.type !== "move_member") {
-      throw new Error("community_member_workflow_timer_action_invalid");
-    }
     return {
       key: automationKey,
       ...(input.trigger.type === "milestone_elapsed" ? {
@@ -732,6 +729,7 @@ async function executeWorkflowAutomation(args: {
   objectType?: "root" | "reply";
   row?: ChannelContributionRow;
   timerReceiptRef?: string;
+  workflowTimerId?: any;
   workflow: WorkflowRow;
   membership: CommunityMembershipLike;
   current: ReturnType<typeof resolveCurrentMilestone>;
@@ -777,14 +775,15 @@ async function executeWorkflowAutomation(args: {
   });
   try {
     if (args.automation.action.type === "prompt_agent") {
-      if (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed") {
+      if (!args.workflowTimerId && (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed")) {
         throw new Error("community_member_workflow_timer_action_invalid");
       }
       const intake = await intakeCommunityAgentWorkflowAction({
         ctx: args.ctx,
         communityId: args.workflow.communityId,
-        rootId: args.objectType === "root" ? args.row._id : (args.row as any).rootId,
-        replyId: args.objectType === "reply" ? args.row._id : undefined,
+        workflowTimerId: args.workflowTimerId,
+        rootId: args.row ? (args.objectType === "root" ? args.row._id : (args.row as any).rootId) : undefined,
+        replyId: args.objectType === "reply" ? args.row?._id : undefined,
         requesterUserId: args.membership.userId,
         workflowRunId,
         workflowActionKey: args.automation.action.key,
@@ -1009,7 +1008,7 @@ export const processDueMilestoneTimersInternal = internalMutation({
         await ctx.db.patch(timer._id, { dueAt: resolved.dueAt });
         continue;
       }
-      await executeWorkflowAutomation({ ctx, ...resolved, timerReceiptRef: `workflow-timer:${timer._id}` });
+      await executeWorkflowAutomation({ ctx, ...resolved, workflowTimerId: timer._id, timerReceiptRef: `workflow-timer:${timer._id}` });
       await ctx.db.patch(timer._id, { status: "consumed", finishedAt: nowMs });
     }
     if (timers.length === 25) await ctx.scheduler.runAfter(0,

@@ -26,12 +26,14 @@ causes work without a configured trigger. Elapsed-time rules only support
   members. Activation writers (manual/free and commerce) and actual transitions
   enroll timers; board/dossier reads remain side-effect free.
 - `communityMemberWorkflowTimers` is indexed due-work, not a second member-state
-  or history authority. One move rule means at most one timer per member entry.
+  or history authority. One timer per automation per member entry, bounded by the
+  existing twelve-automation limit. There is still at most one move rule.
   Entry identity includes membership activation sequence and transition sequence.
 - A minute cron drains 25 due occurrences per transaction with continuation.
-  No agent is woken. The existing executor records the timer reference and trigger
-  snapshot in a run and produces the existing transition receipt. Consumption and
-  movement commit together; unexpected failures roll back the transaction.
+  The existing executor records the timer reference and trigger snapshot in a run.
+  Move actions produce the existing transition receipt; prompt actions queue the
+  existing agent worker. Consumption and action admission commit together;
+  unexpected failures roll back the transaction.
 - Rule duration edits retain the server-owned timer generation and recompute
   pending due times from original entry time, in batches of 50. Switching away
   from time invalidates that generation. Switching back is a new rule generation
@@ -44,7 +46,7 @@ causes work without a configured trigger. Elapsed-time rules only support
 - Late execution starts the next milestone at actual transition time, preventing
   outage catch-up from cascading through the pipeline. Due time is not an exact
   delivery SLA; normal dispatch is at or after due time.
-- Deferred: recurrence, inactivity, external events, goals, timed agent prompts,
+- Deferred: recurrence, inactivity, external events, goals,
   automatic private-channel selection and existing-member backfill.
 
 Tests: `convex/communityMemberWorkflowTimers.test.ts` and existing workflow tests.
@@ -106,8 +108,34 @@ activity/history projections and their distinct outcome statuses are unchanged.
   governed by channel settings. Future agent delivery must respect the complete
   audience; a service-channel binding does not authorize sharing private dossier
   content with every room participant.
-- Timed agent delivery is still deferred. Existing contribution replies and
-  deterministic timers are unchanged.
+- A timed prompt captures this binding and its revision at admission. It sends
+  one new community-agent post, not a reply or synthetic human contribution.
+  Missing destinations yield a recorded non-delivery; assignment later never
+  replays the occurrence. Existing contribution replies remain source-thread bound.
+
+### One-shot timed agent check-in
+
+- `workflowTimerId` supplies explicit origin on the existing serve request;
+  `serviceChannelId` and `serviceChannelRevision` capture destination authority.
+  No new executor, synthetic source post, routing table or per-member cron.
+- Admission, context capture, provider authorization and publication revalidate
+  entry/activation/lifecycle, rule and prompt, membership, agent enabled state,
+  and the exact service-channel binding. Moving, completing, editing the queued
+  rule, revoking access or reassigning cancels stale work without fallback.
+- Pending occurrences use current rule policy; already queued prompts require
+  the original action and trigger to remain unchanged. Different timer actions
+  are independent, not a sequence: a move can cancel an undelivered check-in.
+- First slice is prompt-only: community instructions, supplied workflow prompt,
+  member display name and origin orientation. No dossier, channel-history reads,
+  member-private retrieval or extra tool actions. Tools are withheld and rejected
+  server-side. A private room is not assumed to be exclusively one-to-one.
+- The canonical serve lifecycle and founder funding remain authoritative.
+  Queued is not delivered; the member activity projection reads serve status.
+  Publication atomically inserts one canonical root/content block and stores its
+  responseRootId, keyed by serve request. Stale attempt/replay cannot duplicate it.
+- Provider/network failures may consume inference without delivering a message;
+  delivery authorization is checked again after inference. No goal loop, automatic
+  milestone move, recurrence or implicit permission grants are added.
 
 - The board and V1 grammar are unchanged. The editor reuses Resources footer
   controls and platform Save styling, with readable form typography. It is

@@ -137,11 +137,11 @@ test.each([0, -1, 0.5, 525601])("invalid duration %s rejected", async delay => {
   await expect(setup(delay)).rejects.toThrow("community_member_workflow_delay_invalid");
 });
 
-test("timer prompts are rejected server-side", async () => {
+test("timer prompts can be configured without provisioning member destinations", async () => {
   const s = await setup();
   await expect(s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, { communityId: s.f.communityId, expectedRevision: 3,
     milestoneKey: s.first.milestone.key, name: "New", automations: [{ trigger: { type: "milestone_elapsed", delayMinutes: 1 }, action: { type: "prompt_agent", prompt: "No destination" } }] }))
-    .rejects.toThrow("community_member_workflow_timer_action_invalid");
+    .resolves.toBeDefined();
 });
 
 test("adding a timer after entry does not backfill an existing member", async () => {

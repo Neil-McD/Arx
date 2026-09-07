@@ -55,8 +55,8 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
             <div className="workflow-action-choice-row">
               <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={!isTimed}
                 onChange={() => props.onChange({ ...automation, trigger: { type: "member_contributed" } })} /><span>Member activity</span></label>
-              <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isTimed} disabled={props.hasOtherMove}
-                onChange={() => { setTimeUnit(1440); props.onChange({ ...replaceWorkflowDraftAction(automation, "move_member"), trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }); }} /><span>Time in milestone</span></label>
+              <label className="workflow-action-choice"><input type="radio" name={`${id}-trigger`} checked={isTimed}
+                onChange={() => { setTimeUnit(1440); props.onChange({ ...automation, trigger: { type: "milestone_elapsed", delayMinutes: 1440 } }); }} /><span>Time in milestone</span></label>
             </div>
           </fieldset>
           {isTimed ? <div className="workflow-automation-field">
@@ -86,7 +86,7 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
             <legend>Then</legend>
             <div className="workflow-action-choice-row">
               <label className="workflow-action-choice">
-                <input type="radio" name={`${id}-action`} value="prompt_agent" checked={isPrompt} disabled={isTimed}
+                <input type="radio" name={`${id}-action`} value="prompt_agent" checked={isPrompt}
                   onChange={() => props.onChange(replaceWorkflowDraftAction(automation, "prompt_agent"))} />
                 <span>Ask agent</span>
               </label>
@@ -110,8 +110,9 @@ export function WebCommunityWorkflowAutomationEditor(props: Props) {
               </label>
               <p className="workflow-field-hint" id={`${id}-prompt-help`}>
                 {automation.action.prompt.trim() ? "" : "Add instructions to save. "}
-                The community agent uses this member’s community context and replies in the triggering thread.
-                {isPrivate || channelId === undefined ? " In private channels, the agent must be invited." : ""}
+                {isTimed ? "Delivered once to the member’s assigned service channel. Uses these instructions and community context, without private dossier data or additional tool actions. No delivery if the channel is unavailable."
+                  : "The community agent uses this member’s community context and replies in the triggering thread."}
+                {!isTimed && (isPrivate || channelId === undefined) ? " In private channels, the agent must be invited." : ""}
               </p>
             </>
           ) : (

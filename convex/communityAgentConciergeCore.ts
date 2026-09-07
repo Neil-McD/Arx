@@ -5,6 +5,7 @@ import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProto
 import { COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS } from "../shared/communityAgentServeContract";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
+import { requireTimedWorkflowDestination } from "./communityAgentTimedWorkflowCore";
 
 const internalRefs = internal as any;
 
@@ -175,6 +176,9 @@ async function insertServeRequest(args: {
   workflowRunId?: any;
   workflowActionKey?: string;
   workflowPromptSnapshot?: string;
+  workflowTimerId?: any;
+  serviceChannelId?: any;
+  serviceChannelRevision?: number;
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   skipReason?: string;
@@ -199,6 +203,8 @@ async function insertServeRequest(args: {
     ...(args.sourceReplyId ? { sourceReplyId: args.sourceReplyId } : {}),
     ...(args.requesterUserId ? { requesterUserId: args.requesterUserId, sponsorUserId } : {}),
     ...(args.workflowRunId ? { workflowRunId: args.workflowRunId } : {}),
+    ...(args.workflowTimerId ? { workflowTimerId: args.workflowTimerId,
+      serviceChannelId: args.serviceChannelId, serviceChannelRevision: args.serviceChannelRevision } : {}),
     ...(args.workflowActionKey ? { workflowActionKey: args.workflowActionKey } : {}),
     ...(args.workflowPromptSnapshot
       ? { workflowPromptSnapshot: args.workflowPromptSnapshot }
@@ -659,7 +665,8 @@ export async function intakeCommunityAgentTurn(args: {
 export async function intakeCommunityAgentWorkflowAction(args: {
   ctx: any;
   communityId: any;
-  rootId: any;
+  rootId?: any;
+  workflowTimerId?: any;
   replyId?: any;
   requesterUserId: any;
   workflowRunId: any;
@@ -702,6 +709,12 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       request_id: normalizeIdValue(existing._id),
     };
   }
+  const timedMembership = args.workflowTimerId ? await args.ctx.db.get(workflowRun.membershipId) : null;
+  const timedDestination = args.workflowTimerId ? {
+    workflowTimerId: args.workflowTimerId,
+    serviceChannelId: timedMembership?.serviceChannelId,
+    serviceChannelRevision: timedMembership?.serviceChannelRevision ?? 0,
+  } : {};
   const source = await resolveInvocationSource({
     ctx: args.ctx,
     communityId: args.communityId,
@@ -733,6 +746,16 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       nowMs: args.nowMs,
     })),
   });
+  if (args.workflowTimerId) {
+    try {
+      await requireTimedWorkflowDestination(args.ctx, {
+        ...args, ...timedDestination, triggerKind: "workflow", sponsorUserId: args.requesterUserId,
+      });
+    } catch (error) {
+      if (!(error instanceof Error) || !error.message.startsWith("workflow_")) throw error;
+      return await skip("requester_access_missing", error instanceof Error ? error.message : "workflow_timer_unavailable");
+    }
+  } else {
   if (!source.root && !source.reply) {
     return await skip("source_missing", "The triggering contribution no longer exists.");
   }
@@ -746,13 +769,14 @@ export async function intakeCommunityAgentWorkflowAction(args: {
   ) {
     return await skip("source_not_human", "The workflow trigger is not an eligible member contribution.");
   }
+  }
   try {
     await requireCommunityChatAccess({
       ctx: args.ctx,
       communityId: args.communityId,
       userId: args.requesterUserId,
     });
-    await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
+    if (!args.workflowTimerId) await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
   } catch {
     return await skip(
       "requester_access_missing",
@@ -793,8 +817,9 @@ export async function intakeCommunityAgentWorkflowAction(args: {
     workflowRunId: args.workflowRunId,
     workflowActionKey,
     workflowPromptSnapshot,
-    sourceVisibilityScope: source.visibilityScope,
-    responseVisibilityScope: source.visibilityScope,
+    ...timedDestination,
+    sourceVisibilityScope: args.workflowTimerId ? "community" : source.visibilityScope,
+    responseVisibilityScope: args.workflowTimerId ? "community" : source.visibilityScope,
     nowMs: args.nowMs,
   });
   await scheduleImmediateServeWorker({ ctx: args.ctx, requestId });
