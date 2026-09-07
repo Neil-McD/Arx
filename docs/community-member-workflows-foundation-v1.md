@@ -126,10 +126,17 @@ activity/history projections and their distinct outcome statuses are unchanged.
 - Pending occurrences use current rule policy; already queued prompts require
   the original action and trigger to remain unchanged. Different timer actions
   are independent, not a sequence: a move can cancel an undelivered check-in.
-- First slice is prompt-only: community instructions, supplied workflow prompt,
-  member display name and origin orientation. No dossier, channel-history reads,
+- Check-ins are prompt-only: community instructions, supplied workflow prompt,
+  canonical profile identity, origin orientation and bounded member-approved
+  facts from this exact community through the existing member-orientation lens.
+  At most 12 facts (600 characters each) are included, with truncation explicit.
+  No account spine, pending/inferred-private facts, observed behavior, other-community
+  facts, dossier, channel-history reads,
   member-private retrieval or extra tool actions. Tools are withheld and rejected
   server-side. A private room is not assumed to be exclusively one-to-one.
+- The existing execution snapshot captures this orientation. Context is compared
+  at snapshot admission and again before provider authorization and publication;
+  withdrawal or edits cancel stale delivery. No new memory or history store exists.
 - The canonical serve lifecycle and founder funding remain authoritative.
   Queued is not delivered; the member activity projection reads serve status.
   Publication atomically inserts one canonical root/content block and stores its
@@ -369,7 +376,7 @@ not add a per-fact finalization/revocation protocol or cross-community access.
 
 ## Explicitly deferred
 
-Time and external triggers, arbitrary event filters, goals, LLM judges,
+Recurring time and external triggers, arbitrary event filters, goals, LLM judges,
 multi-step loops, action graphs, action chaining, agent selection, and manual
 member movement are not V1 primitives. Add one only after a real use case cannot
 be expressed by the grammar above.

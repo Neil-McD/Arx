@@ -2,6 +2,24 @@ import { resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
 import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
+import { readBoundedMemberOrientationFacts } from "./memberOntologyCore";
+import { readCanonicalUserIdentityProjection } from "./profileCore";
+import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
+
+/** Community-approved orientation only; never the account spine or builder dossier. */
+export async function readTimedMemberContext(ctx: any, request: any) {
+  const { facts, truncated } = await readBoundedMemberOrientationFacts(ctx, {
+    subjectUserId: request.requesterUserId, communityId: request.communityId,
+  });
+  const identity = await readCanonicalUserIdentityProjection(ctx, request.requesterUserId);
+  return JSON.stringify({
+    display_name: String(identity?.displayName || "the member").slice(0, 120),
+    approved_community_facts: facts.map(fact => ({
+      id: String(fact._id), version: fact.version, kind: fact.kind, body: fact.body.slice(0, 600),
+    })),
+    truncated: truncated || facts.some(fact => fact.body.length > 600),
+  });
+}
 
 /** A durable timer is the source; a captured membership binding is the destination.
  * Reads and publication share this authority check. No synthetic interaction.
@@ -40,6 +58,17 @@ export async function requireTimedWorkflowDestination(ctx: any, request: any) {
   if (destination.status !== "available" || destination.channel_id !== String(request.serviceChannelId)
     || destination.revision !== request.serviceChannelRevision) {
     throw new Error("workflow_service_channel_unavailable");
+  }
+  if (request._id) {
+    const snapshot = await ctx.db.query("communityAgentRunEvents")
+      .withIndex("by_run_seq", (q: any) => q.eq("runId", buildCommunityAgentServeRunId(request._id, request.attempt)).eq("seq", 0)).first();
+    if (snapshot?.kind === "context_snapshot") {
+      const captured = JSON.parse(snapshot.content).timed_member_context;
+      // Older prompt-only snapshots contain no member facts and need no new fence.
+      if (captured !== undefined && captured !== await readTimedMemberContext(ctx, request)) {
+        throw new Error("workflow_member_context_changed");
+      }
+    }
   }
   return { ...resolved, run, channelId: request.serviceChannelId };
 }

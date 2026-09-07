@@ -48,6 +48,45 @@ async function setup(count = 1, assigned = true) {
   return { t, f: { ...f, ...grants, membershipId }, owner, process, requests, claim };
 }
 
+test.each(["retracted", "edited"])("approved context is bounded, scoped and %s facts fence delivery", async change => {
+  const s = await setup();
+  const factId = await s.t.run(async ctx => {
+    const base = { userId: s.f.userId, communityId: s.f.communityId, kind: "goal" as const,
+      body: "Launch my first course", provenance: "form_answer" as const, confidence: 1,
+      evidenceRefs: [], stalenessScore: 0, consentState: "approved" as const,
+      createdByActorType: "member" as const, version: 1, createdAt: epoch, updatedAt: epoch };
+    const id = await ctx.db.insert("memberFacts", base);
+    const otherCommunity = await ctx.db.insert("communities", { ownerId: s.f.ownerId, name: "Other", slug: "other", visibility: "unlisted", inferenceFundingPolicy: "managed_required", entryPolicy: "approval", createdAt: epoch, updatedAt: epoch });
+    await ctx.db.insert("memberFacts", { ...base, body: "OTHER_COMMUNITY", communityId: otherCommunity });
+    await ctx.db.insert("memberFacts", { ...base, body: "PRIVATE_ACCOUNT", communityId: undefined });
+    await ctx.db.insert("memberFacts", { ...base, body: "PENDING_SECRET", consentState: "pending" });
+    await ctx.db.insert("memberFacts", { ...base, body: "OBSERVED_SECRET", provenance: "observed_behavior" });
+    await ctx.db.insert("memberFacts", { ...base, body: "OTHER_MEMBER", userId: s.f.ownerId });
+    await ctx.db.insert("memberFacts", { ...base, body: "x".repeat(1000) });
+    return id;
+  });
+  vi.setSystemTime(epoch + 60000); await s.process();
+  const claim = await s.claim();
+  const args = { requestId: claim.requestId!, expectedAttempt: claim.attempt! };
+  const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  expect(context.ok).toBe(true); if (!context.ok) return;
+  const orientation = JSON.parse(context.timedMemberContext!);
+  expect(orientation.approved_community_facts).toHaveLength(2);
+  expect(orientation.truncated).toBe(true);
+  expect(context.threadContext.rendered).toContain("Launch my first course");
+  expect(context.threadContext.rendered).not.toMatch(/PRIVATE_ACCOUNT|PENDING_SECRET|OBSERVED_SECRET|OTHER_MEMBER|OTHER_COMMUNITY/);
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+    prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+  expect((await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson })).ok).toBe(true);
+  await s.t.run(ctx => ctx.db.patch(factId, change === "retracted" ? { consentState: "retracted" } : { body: "A different goal", version: 2 }));
+  expect((await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson })).ok).toBe(false);
+  await expect(s.t.query(internal.communityAgentChannelAccess.authorizeServeToolsInternal, args)).rejects.toThrow("workflow_member_context_changed");
+  expect((await s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...args, content: "Stale goal advice" })).ok).toBe(false);
+  expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").collect())).toHaveLength(0);
+});
+
 test("each automation enrolls once; timer queues without fake posts and never moves the member", async () => {
   const s = await setup(2);
   await s.t.run(async ctx => enrollWorkflowMilestoneTimers({ ctx, membership: (await ctx.db.get(s.f.membershipId))!, nowMs: epoch }));
@@ -100,7 +139,7 @@ test("claim, scoped context, publication and replay use existing serve lifecycle
   const bundle = buildCommunityAgentServePromptBundle(context);
   expect(bundle.systemPromptBundle.text).toContain("This is not a reply");
   expect(bundle.systemPromptBundle.text).not.toContain("Use polynet_write");
-  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages, prompt_sections: bundle.systemPromptBundle.sections });
+  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages, prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
   expect((await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson })).ok).toBe(true);
   const tool = await executeConciergeTool({ ctx: { runQuery: (ref: any, input: any) => s.t.query(ref, input) }, context,
     requestId: args.requestId, toolName: "polynet_read", rawArguments: { path: "/members/me/context.md" } });
