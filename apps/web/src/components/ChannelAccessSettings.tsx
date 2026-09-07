@@ -2,6 +2,7 @@ import { useContext, useEffect, useRef, useState } from "react";
 import { bootstrapConvexAuthenticatedClient } from "../../../../shared/convexAuthenticatedClient";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import { CommunityChannelSessionContext } from "./CommunityChannelSessionContext";
+import { communityChannelCapacityError } from "../../../../shared/communityChannelCapacity";
 
 type AccessMode = "all_members" | "restricted";
 type Member = { user_id: string; role: string; active: boolean; profile: {
@@ -50,8 +51,8 @@ export function ChannelAccessSettings({ channelId }: { channelId: string }) {
       await client.mutation(method as any, { authSubject, communityId: scope.communityId, channelId, ...args });
       await load(null, epoch);
       if (generation.current === epoch) setPendingMode(null);
-    } catch {
-      if (generation.current === epoch) setError("Could not save. Access may have changed; reload settings and try again.");
+    } catch (error) {
+      if (generation.current === epoch) setError(communityChannelCapacityError(error) ?? "Could not save. Access may have changed; reload settings and try again.");
     } finally { if (generation.current === epoch) setBusy(false); }
   };
 

@@ -6,6 +6,7 @@ import { expect, test } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import schema from "./schema";
+import { listSharedCommunityChannels, listSharedChannelReadableRows } from "./communityChannelCore";
 
 const modules = import.meta.glob([
   "./communityChannels.ts",
@@ -296,8 +297,8 @@ test("indexed names and neighbor moves work beyond the retained creation cap", a
     communityId: f.communityId, channelId: ids[119]!, afterChannelId: ids[49]!, beforeChannelId: ids[50]!, expectedPosition: 121,
   })).rejects.toThrow("community_channel_order_stale");
   await expect(owner.mutation(api.communityChannels.createCommunityChannel, {
-    communityId: f.communityId, name: "Still capped",
-  })).rejects.toThrow("community_channel_limit_reached");
+    communityId: f.communityId, name: "Still capped", accessMode: "restricted",
+  })).rejects.toThrow("community_private_channel_limit_reached");
 });
 
 test("move rejects exhausted gaps and cross-community neighbors without rewriting rows", async () => {
@@ -688,13 +689,63 @@ test("channel creation enforces the ten-channel cap and normalized-name uniquene
       communityId: fixture.communityId,
       name: "Channel 10",
     }),
-  ).rejects.toThrow("community_channel_limit_reached");
+  ).rejects.toThrow("community_shared_channel_limit_reached");
 
   const catalog = await asOwner.query(
     api.communityChannels.listCommunityChannels,
     { communityId: fixture.communityId },
   );
   expect(catalog.channels).toHaveLength(10);
+});
+
+test("100 private rooms coexist with 10 shared rooms; creation and conversion share transactional limits", async () => {
+  const t = convexTest(schema, modules), f = await createFixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const shared: Array<{ id: string }> = [];
+  for (let i = 0; i < 9; i++) shared.push(await owner.mutation(api.communityChannels.createCommunityChannel, {
+    communityId: f.communityId, name: `Shared ${i}`,
+  }));
+  const privateRooms: Array<{ id: string }> = [];
+  for (let i = 0; i < 99; i++) privateRooms.push(await owner.mutation(api.communityChannels.createCommunityChannel, {
+    communityId: f.communityId, name: `Client ${i}`, accessMode: "restricted",
+  }));
+  const competing = await Promise.allSettled(["Last A", "Last B"].map(name => owner.mutation(api.communityChannels.createCommunityChannel, {
+    communityId: f.communityId, name, accessMode: "restricted",
+  })));
+  expect(competing.filter(result => result.status === "fulfilled")).toHaveLength(1);
+  expect(competing.filter(result => result.status === "rejected")).toHaveLength(1);
+  const rows = await t.run(ctx => ctx.db.query("communityChannels").collect());
+  expect(rows.filter(row => row.accessMode === "restricted")).toHaveLength(100);
+  expect(rows.filter(row => row.accessMode === "all_members")).toHaveLength(10);
+  expect(new Set(rows.map(row => row.position)).size).toBe(110);
+  await expect(owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name: "Shared overflow" }))
+    .rejects.toThrow("community_shared_channel_limit_reached");
+  const convert = (channelId: string, expectedAccessMode: "restricted" | "all_members", accessMode: "restricted" | "all_members") =>
+    owner.mutation(api.communityChannels.setChannelAccess, { communityId: f.communityId, channelId: channelId as any,
+      expectedAccessMode, accessMode, acknowledgeHistoryExposure: true });
+  await expect(convert(privateRooms[0]!.id, "restricted", "all_members")).rejects.toThrow("community_shared_channel_limit_reached");
+  await expect(convert(shared[0]!.id, "all_members", "restricted")).rejects.toThrow("community_private_channel_limit_reached");
+  // No-op at capacity still succeeds; archive frees only that audience's slot.
+  await convert(privateRooms[0]!.id, "restricted", "restricted");
+  await owner.mutation(api.communityChannels.deleteCommunityChannel, { communityId: f.communityId, channelId: privateRooms[1]!.id as any });
+  await convert(shared[0]!.id, "all_members", "restricted");
+  await convert(shared[0]!.id, "restricted", "all_members");
+  await owner.mutation(api.communityChannels.createCommunityChannel, { communityId: f.communityId, name: "Replacement", accessMode: "restricted" });
+  await expect(owner.query(api.communityChannels.listCommunityChannels, { communityId: f.communityId })).rejects.toThrow("community_channel_refresh_required");
+  await expect(owner.query(api.communityAttention.listMyCommunityAttention, { communityIds: [f.communityId] })).rejects.toThrow("community_channel_refresh_required");
+  const sharedRows = await t.run(ctx => listSharedCommunityChannels({ ctx, communityId: f.communityId }));
+  expect(sharedRows).toHaveLength(10);
+  expect(sharedRows.every(row => row.accessMode === "all_members")).toBe(true);
+  await t.run(async ctx => {
+    for (const channelId of [shared[0]!.id, privateRooms[0]!.id]) await ctx.db.insert("communityInteractionRoots", {
+      communityId: f.communityId, channelId: channelId as any, actorType: "human", actorUserId: f.ownerId,
+      kind: "discussion", status: "live", visibilityScope: "community", contentSummary: channelId,
+      replyCount: 0, reactionSummary: [], idempotencyKey: channelId, createdAt: 10000, updatedAt: 10000,
+    });
+  });
+  const contextRows = await t.run(ctx => listSharedChannelReadableRows({ ctx, communityId: f.communityId,
+    tableName: "communityInteractionRoots", limit: 24 }));
+  expect(contextRows.map(row => String(row.channelId))).toEqual([shared[0]!.id]);
 });
 
 test("channel names are required and bounded before any custom row is written", async () => {

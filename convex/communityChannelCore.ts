@@ -4,7 +4,9 @@ import { getCommunityChannelCapabilities, requireCommunityChannelCapability, typ
 export const GENERAL_CHANNEL_SYSTEM_ROLE = "general" as const;
 export const GENERAL_CHANNEL_SLUG = "general" as const;
 export const GENERAL_CHANNEL_NAME = "General" as const;
-export const MAX_ACTIVE_COMMUNITY_CHANNELS = 10;
+import { MAX_SHARED_COMMUNITY_CHANNELS, MAX_PRIVATE_COMMUNITY_CHANNELS } from "../shared/communityChannelCapacity";
+export const LEGACY_CHANNEL_LIST_LIMIT = 10;
+const CHANNEL_SLUG_COLLISION_ATTEMPTS = 12;
 export const MAX_COMMUNITY_CHANNEL_NAME_CHARS = 48;
 
 export type CommunityChannelLike = {
@@ -177,6 +179,8 @@ export async function ensureGeneralChannel(args: {
     throw new Error("community_general_channel_slug_conflict");
   }
 
+  await requireCommunityChannelCapacity({ ...args, accessMode: "all_members", forGeneral: true });
+
   const nowMs = args.nowMs ?? Date.now();
   const channelId = await args.ctx.db.insert("communityChannels" as any, {
     communityId: args.communityId,
@@ -327,9 +331,9 @@ export async function listActiveCommunityChannels(args: {
     .withIndex("by_community_status_position", (q: any) =>
       q.eq("communityId", args.communityId).eq("status", "active"),
     )
-    .take(MAX_ACTIVE_COMMUNITY_CHANNELS + 1)) as CommunityChannelLike[];
-  if (channels.length > MAX_ACTIVE_COMMUNITY_CHANNELS) {
-    throw new Error("community_channel_limit_invalid");
+    .take(LEGACY_CHANNEL_LIST_LIMIT + 1)) as CommunityChannelLike[];
+  if (channels.length > LEGACY_CHANNEL_LIST_LIMIT) {
+    throw new Error("community_channel_refresh_required");
   }
   for (const channel of channels) {
     assertChannelForCommunity(channel, args.communityId);
@@ -381,7 +385,7 @@ export async function listAuthorizedCommunityChannels(args: {
   const general = await getGeneralChannel(args.ctx, args.communityId);
   const rows = await listActiveCommunityChannels(args);
   if (!general) {
-    if (rows.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) throw new Error("community_channel_limit_invalid");
+    if (rows.length >= LEGACY_CHANNEL_LIST_LIMIT) throw new Error("community_channel_refresh_required");
     rows.unshift(legacyGeneralChannelSelection(args.communityId));
   }
   const visible = await Promise.all(rows.map(async channel =>
@@ -401,14 +405,14 @@ export async function listSharedCommunityChannels(args: {
   const activeChannels = await args.ctx.db.query("communityChannels")
     .withIndex("by_community_access_status_position", (q: any) =>
       q.eq("communityId", args.communityId).eq("accessMode", "all_members").eq("status", "active"))
-    .take(MAX_ACTIVE_COMMUNITY_CHANNELS + 1) as CommunityChannelLike[];
-  if (activeChannels.length > MAX_ACTIVE_COMMUNITY_CHANNELS) throw new Error("community_channel_limit_invalid");
+    .take(MAX_SHARED_COMMUNITY_CHANNELS + 1) as CommunityChannelLike[];
+  if (activeChannels.length > MAX_SHARED_COMMUNITY_CHANNELS) throw new Error("community_channel_limit_invalid");
   for (const channel of activeChannels) assertChannelForCommunity(channel, args.communityId);
   activeChannels.sort((left, right) =>
     left.position - right.position || normalizeIdValue(left._id).localeCompare(normalizeIdValue(right._id)),
   );
   if (generalChannel) return activeChannels;
-  if (activeChannels.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) {
+  if (activeChannels.length >= MAX_SHARED_COMMUNITY_CHANNELS) {
     // A missing General row still consumes the required system-channel slot.
     // Refuse to project an eleventh readable channel from drifted storage.
     throw new Error("community_channel_limit_invalid");
@@ -478,11 +482,11 @@ async function resolveAvailableChannelSlug(args: {
   const timestampToken = Math.max(0, Math.floor(args.nowMs)).toString(36);
   const suffixes = [
     ...Array.from(
-      { length: MAX_ACTIVE_COMMUNITY_CHANNELS + 1 },
+      { length: CHANNEL_SLUG_COLLISION_ATTEMPTS },
       (_, index) => index === 0 ? "" : `-${index + 1}`,
     ),
     ...Array.from(
-      { length: MAX_ACTIVE_COMMUNITY_CHANNELS + 1 },
+      { length: CHANNEL_SLUG_COLLISION_ATTEMPTS },
       (_, index) => `-${timestampToken}${index === 0 ? "" : `-${index + 1}`}`,
     ),
   ];
@@ -519,6 +523,21 @@ async function requireAvailableChannelName(args: {
   return normalizedName;
 }
 
+export async function requireCommunityChannelCapacity(args: {
+  ctx: { db: any }; communityId: any; accessMode: "all_members" | "restricted";
+  forGeneral?: boolean;
+}): Promise<void> {
+  const limit = args.accessMode === "all_members" ? MAX_SHARED_COMMUNITY_CHANNELS : MAX_PRIVATE_COMMUNITY_CHANNELS;
+  const rows = await args.ctx.db.query("communityChannels").withIndex(
+    "by_community_access_status_position",
+    (q: any) => q.eq("communityId", args.communityId).eq("accessMode", args.accessMode).eq("status", "active"),
+  ).take(limit);
+  const reservedGeneral = args.accessMode === "all_members" && !args.forGeneral
+    && !rows.some((row: CommunityChannelLike) => row.systemRole === GENERAL_CHANNEL_SYSTEM_ROLE) ? 1 : 0;
+  if (rows.length + reservedGeneral >= limit) throw new Error(args.accessMode === "all_members"
+    ? "community_shared_channel_limit_reached" : "community_private_channel_limit_reached");
+}
+
 export async function createActiveCommunityChannel(args: {
   ctx: { db: any };
   communityId: any;
@@ -533,14 +552,7 @@ export async function createActiveCommunityChannel(args: {
     communityId: args.communityId,
     nowMs: args.nowMs,
   });
-  // Capacity is still deliberately capped until all directory consumers are paged.
-  const activeChannels = await args.ctx.db.query("communityChannels").withIndex(
-    "by_community_status_position",
-    (q: any) => q.eq("communityId", args.communityId).eq("status", "active"),
-  ).take(MAX_ACTIVE_COMMUNITY_CHANNELS);
-  if (activeChannels.length >= MAX_ACTIVE_COMMUNITY_CHANNELS) {
-    throw new Error("community_channel_limit_reached");
-  }
+  await requireCommunityChannelCapacity({ ...args, accessMode: args.accessMode ?? "all_members" });
   const normalizedName = await requireAvailableChannelName({ ...args, name });
   const nowMs = args.nowMs ?? Date.now();
   const slug = await resolveAvailableChannelSlug({
@@ -1122,7 +1134,7 @@ export async function listChannelReadableRows<
 }
 
 // Community-intelligence projections deliberately aggregate every active,
-// all-member channel. The ten-channel product cap bounds this fanout while the
+// all-member channel. The ten-shared-channel cap bounds this fanout while the
 // selected-channel path above remains exact and independently pageable.
 export async function listSharedChannelReadableRows<
   T extends GeneralChannelReadableRow,

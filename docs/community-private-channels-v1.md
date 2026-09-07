@@ -5,7 +5,8 @@
 One channel model, one chat surface. Owners/admins create a channel with
 `All community members` or `Invite-only`, then use the existing header's
 Channel settings to rename it, change access, and add/remove existing members.
-General is always shared. The existing ten-active-channel limit is unchanged.
+General is always shared and occupies one of ten shared-channel slots. V1 also
+allows 100 active invite-only channels per community. Archived rooms use no slot.
 
 ## Directory capacity foundation
 
@@ -23,10 +24,10 @@ Selection and reorder wait for a complete directory, avoiding false not-found
 decisions while later pages are loading. This is bounded per query, not a claim
 that rendering every authorized room is constant-cost.
 
-The creation limit intentionally remains while shared-context readers and
-cached-client capacity behavior are reviewed before a separate capacity change.
-This read foundation is not automatic service-channel provisioning and does not
-yet authorize increasing the number of live channels.
+Capacity checks use the audience/status index, not a total-directory cap. Creation
+and access-mode conversion share the same transactional check. General's slot is
+reserved even before its legacy fallback is materialized. Concurrent requests
+cannot overfill either audience. This is not automatic service-channel provisioning.
 
 Exact room resolution by ID/slug and channel-scoped evidence search no longer
 enumerate the community directory. Both use canonical room lineage and current
@@ -34,7 +35,7 @@ capabilities; supplying conflicting ID and slug fails closed. The broad communit
 agent repository remains shared-only even for an explicitly granted private room.
 Automated fixtures verify these exact paths with 120 unrelated private rooms.
 Creation and rename use an indexed normalized name; creation appends after the
-indexed last position. The retained cap uses a bounded ten-row capacity check.
+indexed last position. Capacity scans stop at the selected audience's limit.
 Mutations remain transactional, so concurrent names and append positions conflict
 and retry rather than creating duplicates.
 
@@ -69,12 +70,18 @@ The canonical agent `/channels/` directory returns `next_cursor` and `truncated`
 Continue until the cursor is null, including when a filtered page is empty.
 Cursor envelopes bind community, principal, actor kind, and membership activation.
 Community-agent directory discovery stays shared-only. The old internal full-list
-endpoint is deleted. Capped public list/attention endpoints remain solely for
-cached clients; current web code does not call them.
+endpoint is deleted. Old public list/attention endpoints remain solely for
+cached clients; above ten total active rooms they return an explicit refresh
+error, never a truncated list or a false all-read result. Current web code does
+not call them. Their legacy read bound is independent of product capacity.
 
-Remaining capacity work: shared-context readers still assume at most ten shared
-rooms; cached-client adapters must have an explicit capacity policy before raising
-limits. Automatic member-join service rooms remain a later slice.
+Shared-context readers retain a deliberate ten-shared-room fanout. Private-room
+growth does not consume that window. Slug collision attempts have their own bound.
+The Add Channel dialog disables full audiences and defaults to invite-only when
+shared capacity is full; settings report audience-specific conversion errors.
+
+Next: automatic member-join service rooms, using these existing channel and
+permission primitives. Increasing shared-room capacity is not part of this V1.
 
 Invite-only rooms are visible to invited active members and community
 owners/admins. Personal agents and external MCP inherit the authenticated

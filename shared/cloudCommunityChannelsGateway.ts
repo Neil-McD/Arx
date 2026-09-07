@@ -1,5 +1,6 @@
 import { api } from "../convex/_generated/api";
 import { subscribeCommunityPages } from "./subscribeCommunityPages";
+import { MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type { CloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
 
@@ -27,7 +28,7 @@ export type CloudCommunityChannelsResult = {
 
 function coerceCommunityChannelsResult(payload: unknown): CloudCommunityChannelsResult {
   if (!payload || typeof payload !== "object") {
-    return { channels: [], max_active_channels: 10 };
+    return { channels: [], max_active_channels: MAX_TOTAL_COMMUNITY_CHANNELS };
   }
   const result = payload as Partial<CloudCommunityChannelsResult>;
   return {
@@ -35,7 +36,7 @@ function coerceCommunityChannelsResult(payload: unknown): CloudCommunityChannels
     max_active_channels:
       typeof result.max_active_channels === "number" && Number.isFinite(result.max_active_channels)
         ? Math.max(1, Math.floor(result.max_active_channels))
-        : 10,
+        : MAX_TOTAL_COMMUNITY_CHANNELS,
   };
 }
 
@@ -152,7 +153,7 @@ export function subscribeChannelDirectoryPages(params: {
     onUpdate: (pages, isComplete) => {
       const unique = new Map<string, CloudCommunityChannel>(pages.flatMap(page => page.page).map(channel => [channel.id || channel.slug, channel]));
       params.onUpdate({ ...coerceCommunityChannelsResult({ channels: [...unique.values()].sort((a, b) =>
-        a.position - b.position || a.id.localeCompare(b.id)), max_active_channels: pages.at(-1)?.max_active_channels ?? 10 }), isComplete });
+        a.position - b.position || a.id.localeCompare(b.id)), max_active_channels: pages.at(-1)?.max_active_channels ?? MAX_TOTAL_COMMUNITY_CHANNELS }), isComplete });
     },
     onError: params.onError,
   });

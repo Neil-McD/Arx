@@ -16,6 +16,7 @@ import {
 import type { CommunityTab } from "./appShellNavigation";
 import { StableFramedMedia } from "./StableFramedMedia";
 import { usePointerSortableList } from "./usePointerSortableList";
+import { communityChannelCapacity, MAX_TOTAL_COMMUNITY_CHANNELS } from "./communityChannelCapacity";
 
 type CommunityNavCommunityLike = {
   slug?: string | null;
@@ -186,7 +187,7 @@ export const CommunityNav = memo(function CommunityNav({
   createChannelError = null,
   clearCreateChannelError,
   isAtChannelLimit = false,
-  maxActiveChannels = 10,
+  maxActiveChannels = MAX_TOTAL_COMMUNITY_CHANNELS,
   onReorderChannels,
   isReorderingChannels = false,
   reorderChannelsError = null,
@@ -197,6 +198,8 @@ export const CommunityNav = memo(function CommunityNav({
   const [reorderControlsChannelId, setReorderControlsChannelId] = useState<string | null>(null);
   const [channelName, setChannelName] = useState("");
   const [channelAccessMode, setChannelAccessMode] = useState<"all_members" | "restricted">("all_members");
+  const { sharedFull, privateFull } = communityChannelCapacity(channels);
+  const selectedCapacityFull = channelAccessMode === "all_members" ? sharedFull : privateFull;
   const copyResetTimeoutRef = useRef<number | null>(null);
   const focusRestoreFrameRef = useRef<number | null>(null);
   const communityIdentityFrameRef = useRef<number | null>(null);
@@ -547,6 +550,7 @@ export const CommunityNav = memo(function CommunityNav({
             disabled={isAtChannelLimit}
             onClick={() => {
               clearCreateChannelError?.();
+              setChannelAccessMode(sharedFull ? "restricted" : "all_members");
               setIsAddChannelOpen(true);
             }}
             title={
@@ -763,9 +767,9 @@ export const CommunityNav = memo(function CommunityNav({
             <label className="community-channel-modal-field">
               <span>Access</span>
               <select value={channelAccessMode} disabled={isCreatingChannel}
-                onChange={event => setChannelAccessMode(event.target.value as "all_members" | "restricted")}>
-                <option value="all_members">All community members</option>
-                <option value="restricted">Invite-only</option>
+                onChange={event => { setChannelAccessMode(event.target.value as "all_members" | "restricted"); clearCreateChannelError?.(); }}>
+                <option value="all_members" disabled={sharedFull}>All community members{sharedFull ? " (10-channel limit reached)" : ""}</option>
+                <option value="restricted" disabled={privateFull}>Invite-only{privateFull ? " (100-channel limit reached)" : ""}</option>
               </select>
             </label>
             {channelAccessMode === "restricted" ? <p>Only owners/admins and people you add in channel settings can enter.</p> : null}
@@ -781,7 +785,7 @@ export const CommunityNav = memo(function CommunityNav({
               <button
                 type="submit"
                 className="is-primary"
-                disabled={isCreatingChannel || !channelName.trim()}
+                disabled={isCreatingChannel || !channelName.trim() || selectedCapacityFull}
               >
                 {isCreatingChannel ? "Adding…" : "Add channel"}
               </button>

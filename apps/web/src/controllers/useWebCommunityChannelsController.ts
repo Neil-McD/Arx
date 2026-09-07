@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AuthSession } from "../auth";
+import { communityChannelCapacityError, MAX_TOTAL_COMMUNITY_CHANNELS } from "../../../../shared/communityChannelCapacity";
 import {
   createCloudCommunityChannel,
   deleteCloudCommunityChannel,
@@ -56,10 +57,9 @@ const GENERAL_FALLBACK_CHANNEL: CloudCommunityChannel = {
 };
 
 function formatChannelError(error: unknown): string {
+  const capacityError = communityChannelCapacityError(error);
+  if (capacityError) return capacityError;
   const message = error instanceof Error ? error.message : String(error ?? "");
-  if (message.includes("community_channel_limit_reached")) {
-    return "This community already has the maximum number of channels.";
-  }
   if (message.includes("community_channel_name_required")) {
     return "Enter a channel name.";
   }
@@ -219,7 +219,7 @@ export function useWebCommunityChannelsController(params: {
   const [channels, setChannels] = useState<CloudCommunityChannel[]>([
     GENERAL_FALLBACK_CHANNEL,
   ]);
-  const [maxActiveChannels, setMaxActiveChannels] = useState(10);
+  const [maxActiveChannels, setMaxActiveChannels] = useState(MAX_TOTAL_COMMUNITY_CHANNELS);
   const [hasResolvedChannels, setHasResolvedChannels] = useState(false);
   const [isLoadingChannels, setIsLoadingChannels] = useState(false);
   const [channelsError, setChannelsError] = useState<string | null>(null);
@@ -250,7 +250,7 @@ export function useWebCommunityChannelsController(params: {
       setChannels([
         { ...GENERAL_FALLBACK_CHANNEL, community_id: communityId },
       ]);
-      setMaxActiveChannels(10);
+      setMaxActiveChannels(MAX_TOTAL_COMMUNITY_CHANNELS);
       setHasResolvedChannels(false);
       createInFlightCommunityIdRef.current = null;
       manageInFlightChannelIdRef.current = null;

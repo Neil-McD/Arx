@@ -10,7 +10,8 @@ import { channelActorKindValidator, channelAccessModeValidator } from "./communi
 import {
   type CommunityChannelLike,
   GENERAL_CHANNEL_SYSTEM_ROLE,
-  MAX_ACTIVE_COMMUNITY_CHANNELS,
+  LEGACY_CHANNEL_LIST_LIMIT,
+  requireCommunityChannelCapacity,
   archiveActiveCommunityChannel,
   createActiveCommunityChannel,
   getGeneralChannel,
@@ -27,6 +28,7 @@ import {
   requireCommunityManager,
   resolveUserIdForAuthenticatedRequest,
 } from "./communityCore";
+import { MAX_TOTAL_COMMUNITY_CHANNELS } from "../shared/communityChannelCapacity";
 
 function mapCommunityChannel(channel: CommunityChannelLike) {
   return {
@@ -68,7 +70,7 @@ export const listCommunityChannels = query({
         ...mapCommunityChannel(channel),
         capabilities: await requireCommunityChannelCapability({ ctx, channel, actor, capability: "canRead" }),
       }))),
-      max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS,
+      max_active_channels: LEGACY_CHANNEL_LIST_LIMIT,
     };
   },
 });
@@ -85,7 +87,7 @@ export const listCommunityChannelPage = query({
       section: args.section, paginationOpts: args.paginationOpts });
     const channels = await Promise.all(result.page.map(async channel => ({ ...mapCommunityChannel(channel),
       capabilities: await getCommunityChannelCapabilities({ ctx, channel, actor }) })));
-    return { ...result, page: channels, max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS };
+    return { ...result, page: channels, max_active_channels: MAX_TOTAL_COMMUNITY_CHANNELS };
   },
 });
 
@@ -132,6 +134,7 @@ export const setChannelAccess = mutation({
     if (channel.accessMode !== args.expectedAccessMode) throw new Error("community_channel_access_changed");
     if (channel.accessMode === args.accessMode) return mapCommunityChannel(channel);
     if (!args.acknowledgeHistoryExposure) throw new Error("community_channel_history_acknowledgement_required");
+    await requireCommunityChannelCapacity({ ctx, communityId: args.communityId, accessMode: args.accessMode });
     await ctx.db.patch(args.channelId, { accessMode: args.accessMode, updatedAt: Date.now() });
     return mapCommunityChannel({ ...channel, accessMode: args.accessMode });
   },
