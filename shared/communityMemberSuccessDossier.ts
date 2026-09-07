@@ -37,6 +37,8 @@ export function renderCommunityMemberSuccessDossierMarkdown(
       : ["- Workflow: Not configured"]),
   ];
 
+  const service = source.service_channel;
+  lines.push("", `Service channel: ${service.status === "available" ? `${markdownInline(service.name)} (${service.channel_id})` : service.status}. A destination reference does not grant access or authorize posting.`);
   lines.push("", "## Approved community context");
   if (source.approved_community_context.length === 0) {
     lines.push(

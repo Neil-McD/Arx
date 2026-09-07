@@ -38,11 +38,39 @@ import {
 import { resolveBuilderCommunityMembershipContext } from "./communityMembershipContextCore";
 import { intakeCommunityAgentWorkflowAction } from "./communityAgentConciergeCore";
 import { resolveNotificationRecipientSource } from "./communityNotificationAccess";
+import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
 
 const managerIdentityArgs = {
   userId: v.optional(v.id("users")),
   authSubject: v.optional(v.string()),
 };
+
+export const setBuilderMemberServiceChannel = mutation({
+  args: {
+    ...managerIdentityArgs,
+    communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
+    channelId: v.union(v.id("communityChannels"), v.null()), expectedRevision: v.number(),
+  },
+  handler: async (ctx, args) => {
+    await requireWorkflowManager({ ctx, ...args });
+    const membership = await ctx.db.get(args.membershipId);
+    if (!membership || membership.communityId !== args.communityId || !communityMembershipRowIsActive(membership)) {
+      throw new Error("community_member_workflow_member_not_found");
+    }
+    const revision = membership.serviceChannelRevision ?? 0;
+    if (!Number.isSafeInteger(args.expectedRevision) || args.expectedRevision !== revision) {
+      throw new Error("community_member_service_channel_revision_conflict");
+    }
+    if (args.channelId !== null) {
+      const resolved = await resolveMemberServiceChannel({ ctx, membership, channelId: args.channelId });
+      if (resolved.status !== "available") throw new Error("community_member_service_channel_unavailable");
+    }
+    if ((membership.serviceChannelId ?? null) === args.channelId) return { revision };
+    await ctx.db.patch(membership._id, { serviceChannelId: args.channelId ?? undefined,
+      serviceChannelRevision: revision + 1, updatedAt: Date.now() });
+    return { revision: revision + 1 };
+  },
+});
 
 const WORKFLOW_BOARD_DEFAULT_PAGE_SIZE = 50;
 const WORKFLOW_BOARD_MAX_PAGE_SIZE = 100;

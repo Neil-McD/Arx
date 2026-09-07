@@ -9,6 +9,7 @@ type Props = {
   unavailable: boolean;
   disabled: boolean;
   label: string;
+  emptyLabel?: string;
   onChange: (channelId: string | undefined) => void;
 };
 
@@ -24,11 +25,13 @@ export function WorkflowChannelPicker(props: Props) {
   const [placement, setPlacement] = useState<CSSProperties>({ top: "calc(100% + 6px)", maxHeight: 224 });
   const disabled = props.disabled || props.unavailable;
   const options = [
-    { value: undefined, label: "Any channel", private: false },
+    { value: undefined, label: props.emptyLabel ?? "Any channel", private: false },
     ...props.channels.map((channel) => ({ value: channel.id, label: `#${channel.name}`, private: channel.access_mode === "restricted" })),
   ];
   const selectedIndex = options.findIndex((option) => option.value === props.channelId);
   const selectedChannel = props.channels.find((channel) => channel.id === props.channelId);
+  const selectedLabel = props.channelId === undefined && props.emptyLabel
+    ? props.emptyLabel : workflowChannelLabel(props.channelId, props.channels, props.unavailable);
   const active = Math.min(activeIndex, options.length - 1);
 
   const close = (restoreFocus = true) => {
@@ -121,13 +124,13 @@ export function WorkflowChannelPicker(props: Props) {
       if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false);
     }}>
       <button ref={triggerRef} type="button" className="workflow-channel-trigger" data-workflow-rule-start
-        disabled={disabled} aria-label={`${props.label}: ${workflowChannelLabel(props.channelId, props.channels, props.unavailable)}`}
+        disabled={disabled} aria-label={`${props.label}: ${selectedLabel}`}
         aria-haspopup="listbox" aria-expanded={open} aria-controls={open ? id : undefined}
         onClick={() => open ? close() : show()} onKeyDown={(event) => {
           if (event.key === "ArrowDown" || event.key === "ArrowUp") { event.preventDefault(); show(); }
         }}>
         {selectedChannel?.access_mode === "restricted" ? <LockKeyhole size={16} aria-hidden="true" /> : <Hash size={16} aria-hidden="true" />}
-        <span>{workflowChannelLabel(props.channelId, props.channels, props.unavailable)}</span>
+        <span>{selectedLabel}</span>
         <ChevronDown size={16} aria-hidden="true" />
       </button>
       {open && !disabled ? (

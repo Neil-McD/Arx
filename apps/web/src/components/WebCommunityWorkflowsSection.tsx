@@ -48,6 +48,10 @@ export type WebCommunityWorkflowsSectionProps = {
   onOpenMemberDossier: (membershipId: string) => void;
   onCloseMemberDossier: () => void;
   onRetryMemberDossier: () => void;
+  isServiceChannelSaving: boolean;
+  serviceChannelError: string | null;
+  onSetServiceChannel: (channelId: string | null, expectedRevision: number) => Promise<boolean>;
+  onOpenServiceChannel: (channelId: string) => void;
 };
 
 const BLANK_MILESTONE: CommunityMemberWorkflowMilestone = {
@@ -266,6 +270,12 @@ export function WebCommunityWorkflowsSection(
         error={props.memberDossierError}
         onClose={props.onCloseMemberDossier}
         onRetry={props.onRetryMemberDossier}
+        channels={props.channels}
+        channelsUnavailable={props.channelsUnavailable}
+        isServiceChannelSaving={props.isServiceChannelSaving}
+        serviceChannelError={props.serviceChannelError}
+        onSetServiceChannel={props.onSetServiceChannel}
+        onOpenServiceChannel={props.onOpenServiceChannel}
       />
     </div>
   );

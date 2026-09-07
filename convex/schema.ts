@@ -1113,6 +1113,8 @@ export default defineSchema({
   communityMemberships: defineTable({
     communityId: v.id("communities"),
     userId: v.id("users"),
+    serviceChannelId: v.optional(v.id("communityChannels")),
+    serviceChannelRevision: v.optional(v.number()),
     role: v.union(v.literal("admin"), v.literal("moderator"), v.literal("member")),
     accessSource: v.optional(
       v.union(

@@ -70,7 +70,7 @@ requires closing/reopening, rather than silently erasing or overwriting edits.
 
 ### Editor foundation
 
-The member-detail surface remains read-only and uses the same canonical dossier
+The member-detail context and history remain read-only and use the same canonical dossier
 query. Identity/current milestone, Shared context, and Recent workflow activity
 are primary; recent milestone history is a collapsed disclosure. Instructions
 expand in place without truncating stored text. Dates are semantic, readable
@@ -79,6 +79,35 @@ the member never progressed. Retry repeats the existing scoped request through
 the controller nonce, retaining cancellation/generation checks. There is no new
 poller, manual movement action, schema, or history store. The existing bounded
 activity/history projections and their distinct outcome statuses are unchanged.
+
+### Explicit member service channel
+
+- One optional `serviceChannelId` on the community membership, with
+  `serviceChannelRevision` for compare-and-set edits. No routing table, permission
+  grants, automatic room creation or workflow execution is introduced.
+- Owner/admin assignment requires an active membership and an active private
+  channel in the same community. Canonical channel actors/capabilities verify
+  member read access and community-agent posting access; a builder's own room
+  privileges never stand in for either principal.
+- The existing member panel provides Choose/Change, Clear, Open and Refresh.
+  The existing channel picker uses "Not assigned" instead of "Any channel" in
+  this context. Selection saves immediately; the server remains authoritative
+  when membership or channel access changes after the channel list was loaded.
+- Builder dossier and authorized self-context readers resolve the reference
+  freshly. Unavailable bindings expose neither channel ID nor name. Reading a
+  reference does not authorize channel content access or posting. Open performs
+  a fresh scoped dossier read before using the canonical channel route.
+- Clear works for unavailable bindings; revision checks prevent stale editors
+  from overwriting newer assignments, including assign/clear/reassign cycles.
+  UI mutation results are fenced by member/community scope and request token.
+- Revoked grants, membership activation changes, archived/deleted/shared rooms
+  invalidate availability. There is no fallback to General, DMs or another room.
+  This is not an exclusive-room guarantee: additional invited participants remain
+  governed by channel settings. Future agent delivery must respect the complete
+  audience; a service-channel binding does not authorize sharing private dossier
+  content with every room participant.
+- Timed agent delivery is still deferred. Existing contribution replies and
+  deterministic timers are unchanged.
 
 - The board and V1 grammar are unchanged. The editor reuses Resources footer
   controls and platform Save styling, with readable form typography. It is

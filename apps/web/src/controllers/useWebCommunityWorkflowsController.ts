@@ -10,6 +10,7 @@ import {
   fetchCloudCommunityMemberSuccessDossier,
   subscribeCloudCommunityMemberWorkflowBoardProjection,
   updateCloudCommunityMemberWorkflowMilestone,
+  setCloudCommunityMemberServiceChannel,
   type CloudCommunityMemberWorkflowBoard,
   type CloudCommunityMemberWorkflowBoardPage,
   type CloudCommunityMemberWorkflowMember,
@@ -27,6 +28,8 @@ function workflowErrorMessage(error: unknown): string {
   const message = String(
     error instanceof Error ? error.message : (error ?? ""),
   ).toLowerCase();
+  if (message.includes("service_channel_revision_conflict")) return "This member’s service channel changed. Refresh the member panel before trying again.";
+  if (message.includes("service_channel_unavailable")) return "Choose an active private channel that this member can access and the community agent can post in. Assignment does not invite them.";
   if (message.includes("revision_conflict")) {
     return "This workflow changed in another session. Reload it and try again.";
   }
@@ -143,6 +146,12 @@ export function useWebCommunityWorkflowsController(params: {
   const [isMemberDossierLoading, setIsMemberDossierLoading] = useState(false);
   const [memberDossierError, setMemberDossierError] = useState<string | null>(null);
   const [dossierRefreshNonce, setDossierRefreshNonce] = useState(0);
+  const [isServiceChannelSaving, setIsServiceChannelSaving] = useState(false);
+  const [serviceChannelError, setServiceChannelError] = useState<string | null>(null);
+  const serviceChannelRequestRef = useRef(0);
+  const serviceChannelPendingRef = useRef(false);
+  const serviceChannelScopeRef = useRef("");
+  serviceChannelScopeRef.current = `${params.activeCommunityId}:${selectedMembershipId}:${params.communityTab}:${params.activePage}:${params.canManageMembers}`;
   const requestGenerationRef = useRef(0);
   const dossierRequestGenerationRef = useRef(0);
   const loadedPageDepthRef = useRef(1);
@@ -167,6 +176,10 @@ export function useWebCommunityWorkflowsController(params: {
     setMemberDossier(null);
     setIsMemberDossierLoading(false);
     setMemberDossierError(null);
+    serviceChannelRequestRef.current += 1;
+    serviceChannelPendingRef.current = false;
+    setIsServiceChannelSaving(false);
+    setServiceChannelError(null);
   }, [params.activeCommunityId]);
 
   useEffect(() => {
@@ -432,14 +445,72 @@ export function useWebCommunityWorkflowsController(params: {
     memberDossier,
     isMemberDossierLoading,
     memberDossierError,
+    isServiceChannelSaving,
+    serviceChannelError,
+    setServiceChannel: async (channelId: string | null, expectedRevision: number) => {
+      if (!selectedMembershipId || !params.activeCommunityId || !params.canManageMembers || serviceChannelPendingRef.current) return false;
+      const token = ++serviceChannelRequestRef.current;
+      const scope = serviceChannelScopeRef.current;
+      serviceChannelPendingRef.current = true;
+      setIsServiceChannelSaving(true);
+      setServiceChannelError(null);
+      try {
+        const session = await params.ensureSession(params.session, "community_member_service_channel");
+        if (!session) throw new Error("auth_session_required");
+        if (token !== serviceChannelRequestRef.current || scope !== serviceChannelScopeRef.current) return false;
+        await setCloudCommunityMemberServiceChannel({ session, communityId: params.activeCommunityId,
+          membershipId: selectedMembershipId, channelId, expectedRevision });
+        if (token !== serviceChannelRequestRef.current || scope !== serviceChannelScopeRef.current) return false;
+        setIsMemberDossierLoading(true);
+        setDossierRefreshNonce(value => value + 1);
+        return true;
+      } catch (error) {
+        if (token === serviceChannelRequestRef.current && scope === serviceChannelScopeRef.current) setServiceChannelError(workflowErrorMessage(error));
+        return false;
+      } finally {
+        if (token === serviceChannelRequestRef.current) {
+          serviceChannelPendingRef.current = false;
+          setIsServiceChannelSaving(false);
+        }
+      }
+    },
+    resolveServiceChannelForOpen: async (expectedChannelId: string): Promise<string | null> => {
+      if (!selectedMembershipId || !params.activeCommunityId || serviceChannelPendingRef.current) return null;
+      const scope = serviceChannelScopeRef.current;
+      const token = serviceChannelRequestRef.current;
+      const generation = ++dossierRequestGenerationRef.current;
+      setIsMemberDossierLoading(true);
+      try {
+        const session = await params.ensureSession(params.session, "community_member_service_channel_open");
+        if (!session || scope !== serviceChannelScopeRef.current || token !== serviceChannelRequestRef.current) return null;
+        const dossier = await fetchCloudCommunityMemberSuccessDossier({ session, communityId: params.activeCommunityId, membershipId: selectedMembershipId });
+        if (scope !== serviceChannelScopeRef.current || token !== serviceChannelRequestRef.current || generation !== dossierRequestGenerationRef.current) return null;
+        setMemberDossier(dossier);
+        if (dossier.service_channel.status === "available" && dossier.service_channel.channel_id === expectedChannelId) return dossier.service_channel.channel_id;
+        setServiceChannelError("The service channel changed or is unavailable. Review the refreshed assignment; no fallback was opened.");
+      } catch (error) {
+        if (scope === serviceChannelScopeRef.current && token === serviceChannelRequestRef.current) setServiceChannelError(workflowErrorMessage(error));
+      } finally {
+        if (scope === serviceChannelScopeRef.current && generation === dossierRequestGenerationRef.current) setIsMemberDossierLoading(false);
+      }
+      return null;
+    },
     reload: () => requestBoardReconciliationRef.current?.(),
     loadMore,
     openMemberDossier: (membershipId: string) => {
+      serviceChannelRequestRef.current += 1;
+      serviceChannelPendingRef.current = false;
+      setIsServiceChannelSaving(false);
+      setServiceChannelError(null);
       setMemberDossier(null);
       setMemberDossierError(null);
       setSelectedMembershipId(membershipId);
     },
     closeMemberDossier: () => {
+      serviceChannelRequestRef.current += 1;
+      serviceChannelPendingRef.current = false;
+      setIsServiceChannelSaving(false);
+      setServiceChannelError(null);
       dossierRequestGenerationRef.current += 1;
       setSelectedMembershipId(null);
       setMemberDossier(null);
@@ -450,6 +521,7 @@ export function useWebCommunityWorkflowsController(params: {
       if (!selectedMembershipId || isMemberDossierLoading) return;
       setIsMemberDossierLoading(true);
       setMemberDossierError(null);
+      setServiceChannelError(null);
       setDossierRefreshNonce((value) => value + 1);
     },
     createMilestone: (name: string) =>

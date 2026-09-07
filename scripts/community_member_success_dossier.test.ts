@@ -23,6 +23,7 @@ import {
 } from "../shared/communityMemberSuccessDossier";
 
 const source: CommunityMemberSuccessDossier = {
+  service_channel: { status: "unassigned", revision: 0, channel_id: null, name: null },
   community_id: "community-1",
   user_id: "user-1",
   membership_id: "member-1",
@@ -124,7 +125,7 @@ test.each(["prompt_agent", "move_member"] as const)("%s unavailable is explicit 
     expect(markdown).toContain("linked outcome could not be verified");
     expect(markdown).not.toContain("Agent prompt responded");
     const html = renderToStaticMarkup(React.createElement(WebCommunityWorkflowMemberDossierModal, {
-      isOpen: true, dossier: { ...unavailable, markdown }, isLoading: false, error: null, onClose: () => {}, onRetry: () => {},
+      ...serviceProps, isOpen: true, dossier: { ...unavailable, markdown }, isLoading: false, error: null, onClose: () => {}, onRetry: () => {},
     }));
     expect(html).toContain("Status unavailable");
     expect(html).not.toContain("Queued");
@@ -141,6 +142,7 @@ test.each([null, source.workflow])(
       const dossier = { ...source, workflow, markdown: "" };
       const html = renderToStaticMarkup(
         React.createElement(WebCommunityWorkflowMemberDossierModal, {
+          ...serviceProps,
           isOpen: true,
           dossier,
           isLoading: false,
@@ -164,11 +166,33 @@ function renderDossier(overrides: Partial<React.ComponentProps<typeof WebCommuni
   vi.stubGlobal("React", React);
   try {
     return renderToStaticMarkup(React.createElement(WebCommunityWorkflowMemberDossierModal, {
+      ...serviceProps,
       isOpen: true, dossier: { ...source, markdown: "" }, isLoading: false, error: null,
       onClose: () => {}, onRetry: () => {}, ...overrides,
     }));
   } finally { vi.unstubAllGlobals(); }
 }
+
+const serviceProps = {
+  channels: [], channelsUnavailable: false, isServiceChannelSaving: false, serviceChannelError: null,
+  onSetServiceChannel: async () => true, onOpenServiceChannel: () => {},
+};
+
+test("service channel starts unassigned without an Open action", () => {
+  const html = renderDossier();
+  expect(html).toContain("Not assigned");
+  expect(html).toContain("Choose channel");
+  expect(html).not.toContain("Open channel");
+});
+
+test("unavailable service channel can be cleared but cannot be opened", () => {
+  const html = renderDossier({ dossier: { ...source, markdown: "", service_channel: {
+    status: "unavailable", revision: 2, channel_id: null, name: null,
+  } } });
+  expect(html).toContain("Unavailable");
+  expect(html).toContain("Clear");
+  expect(html).not.toContain("Open channel");
+});
 
 test("member details use collapsed disclosures without dropping instructions or history", () => {
   const html = renderDossier();

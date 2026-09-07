@@ -9,6 +9,8 @@ import { createPortal } from "react-dom";
 import { UserAvatar } from "../../../../shared/UserAvatar";
 import type { CloudCommunityMemberSuccessDossier } from "../../../../shared/cloudCommunityMemberWorkflowsGateway";
 import { formatWorkflowMilestoneAge } from "./WebCommunityWorkflowMemberStub";
+import { WorkflowMemberServiceChannel } from "./WorkflowMemberServiceChannel";
+import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityChannelsGateway";
 
 function readableLabel(value: string): string {
   return value
@@ -50,6 +52,12 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   error: string | null;
   onClose: () => void;
   onRetry: () => void;
+  channels: CloudCommunityChannel[];
+  channelsUnavailable: boolean;
+  isServiceChannelSaving: boolean;
+  serviceChannelError: string | null;
+  onSetServiceChannel: (channelId: string | null, expectedRevision: number) => Promise<boolean>;
+  onOpenServiceChannel: (channelId: string) => void;
 }) {
   const dialogRef = useRef<HTMLElement | null>(null);
 
@@ -77,6 +85,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
   }
 
   const trapFocus = (event: ReactKeyboardEvent<HTMLElement>) => {
+    if (event.defaultPrevented || event.nativeEvent.isComposing) return;
     if (event.key === "Escape") {
       event.preventDefault();
       props.onClose();
@@ -183,6 +192,10 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
             </div>
           ) : dossier ? (
             <>
+              <WorkflowMemberServiceChannel key={dossier.membership_id} value={dossier.service_channel}
+                channels={props.channels} channelsUnavailable={props.channelsUnavailable}
+                saving={props.isServiceChannelSaving} error={props.serviceChannelError}
+                onChange={props.onSetServiceChannel} onOpen={props.onOpenServiceChannel} onRefresh={props.onRetry} />
               <section className="workflow-member-dossier-section">
                 <h3>Shared context</h3>
                 {factsByKind.size > 0 ? (

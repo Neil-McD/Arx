@@ -204,6 +204,17 @@ export async function updateCloudCommunityMemberWorkflowMilestone<SessionT>(
   )) as WorkflowMilestoneMutationResult;
 }
 
+export async function setCloudCommunityMemberServiceChannel<SessionT>(params: WorkflowGatewayParams<SessionT> & {
+  communityId: string; membershipId: string; channelId: string | null; expectedRevision: number;
+}): Promise<{ revision: number }> {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(params.session);
+  return await client.mutation(api.communityMemberWorkflows.setBuilderMemberServiceChannel, {
+    authSubject, communityId: params.communityId as Id<"communities">,
+    membershipId: params.membershipId as Id<"communityMemberships">,
+    channelId: params.channelId as Id<"communityChannels"> | null, expectedRevision: params.expectedRevision,
+  });
+}
+
 export async function deleteCloudCommunityMemberWorkflowMilestone<SessionT>(
   params: WorkflowGatewayParams<SessionT> & {
     communityId: string;

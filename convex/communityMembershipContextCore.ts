@@ -8,6 +8,7 @@ import {
   toIsoString,
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
+import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
 import {
   readBoundedMemberOrientationFacts,
   readMemberFactsForLens,
@@ -98,6 +99,7 @@ export async function resolveSelfCommunityMembershipContext(args: {
     role: isOwner ? "owner" : membership!.role,
     joined_at: context.joined_at,
     workflow: context.workflow,
+    service_channel: context.service_channel,
     approved_community_context: context.approved_community_context,
     facts_truncated: context.facts_truncated,
     recent_workflow_activity: context.recent_workflow_activity.map(
@@ -267,6 +269,7 @@ async function readMembershipContextRecords(args: {
   return {
     user_id: String(args.subjectUserId),
     community_id: String(args.communityId),
+    service_channel: await resolveMemberServiceChannel({ ctx: args.ctx, membership }),
     membership_id: membership ? String(membership._id) : null,
     display_name: profile.display_name ?? "Member",
     avatar_url: profile.avatar_url,

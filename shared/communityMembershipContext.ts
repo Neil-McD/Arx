@@ -43,6 +43,13 @@ export type CommunityMemberSuccessWorkflowActivity = {
 };
 
 /** Authorized, read-only context for one member in one community. */
+export type CommunityMemberServiceChannel = {
+  status: "unassigned" | "available" | "unavailable";
+  revision: number;
+  channel_id: string | null;
+  name: string | null;
+};
+
 export type CommunityMembershipContext = {
   community_id: string;
   user_id: string;
@@ -53,6 +60,7 @@ export type CommunityMembershipContext = {
   avatar_focus_y: number | null;
   avatar_zoom: number | null;
   joined_at: string;
+  service_channel: CommunityMemberServiceChannel;
   workflow: {
     id: string;
     revision: number;
