@@ -48,6 +48,13 @@ Publishing alone never runs an agent or moves a member.
   transactional. Agent actions bind the exact submitted
   request to the existing queue and assigned private service channel. No synthetic
   channel source or timer is invented; delivery failure does not discard answers.
+- Admission requires the current milestone visit. Once admitted, a form response
+  can publish after milestone movement or completion; the exact run, submitted
+  request, original action and membership activation remain authoritative. The
+  current action must remain unchanged, the agent enabled, and the private service
+  audience and context snapshot valid at publication. Movement grants no new
+  actions or tools. The agent action is matched by its run key, not by counting
+  all form-triggered rules. Timer semantics are unchanged.
 - Milestone movement cancels unfinished requests. Stale/revoked visits fail closed
   on reads and writes. Historical submitted answers remain available to managers.
 - Owners/admins read submitted responses in the member dossier. Answers are not

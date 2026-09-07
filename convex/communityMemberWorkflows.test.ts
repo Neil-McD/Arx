@@ -614,7 +614,7 @@ async function formAgentFixture(assigned = true) {
   });
   if (assigned) {
     await s.t.run(async ctx => {
-      await ctx.db.patch(s.f.channelId, { systemRole: undefined, slug: "service", accessMode: "restricted" });
+      await ctx.db.patch(s.f.channelId, { systemRole: undefined, slug: "service", position: 1, accessMode: "restricted" });
       for (const principalKey of [`user:${s.f.memberId}`, "community_agent"]) await ctx.db.insert("communityChannelParticipants", {
         communityId: s.f.communityId, channelId: s.f.channelId, principalKey,
         ...(principalKey !== "community_agent" ? { membershipId: s.f.membershipId, membershipActivationSequence: 1 } : {}),
@@ -653,6 +653,42 @@ test("form submission queues one exact-source agent action and publishes once wi
   expect((await send()).ok).toBe(true); await send();
   expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect())).toHaveLength(1);
   expect(await s.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test.each([false, true])("form response survives completion before or after context capture: %s", async completeAfterContext => {
+  const s = await formAgentFixture();
+  const workflow = (await s.t.run(ctx => ctx.db.get(s.request.workflowId)))!;
+  const actions = workflow.milestones.find(m => m.key === s.configured.firstKey)!.automations;
+  await s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: workflow.revision, name: "New",
+    automations: [...actions, { trigger: completeAfterContext
+      ? { type: "member_contributed" as const } : { type: "form_submitted" as const, formKey: "intake" },
+      action: { type: "move_member", destination: "next_or_complete" } }],
+  });
+  await s.submit();
+  const request = (await s.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
+  expect(request.status).toBe("queued");
+  const claim = await s.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: request._id });
+  const args = { requestId: request._id, expectedAttempt: claim.attempt! };
+  const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  expect(context.ok).toBe(true); if (!context.ok) return;
+  expect(JSON.stringify(context)).toContain("EXACT_SUBMITTED_GOAL");
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+    prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+  expect((await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson })).ok).toBe(true);
+  if (completeAfterContext) {
+    const rootId = await addRoot(s.t, s.f, "complete after capture");
+    await s.t.mutation(internal.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  }
+  const send = () => s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...args, content: "Response to your original submitted goal." });
+  expect((await send()).ok).toBe(true); await send(); await s.submit();
+  await s.t.run(async ctx => {
+    expect(await ctx.db.query("communityMemberWorkflowTransitions").collect()).toHaveLength(1);
+    expect(await ctx.db.query("communityAgentServeRequests").collect()).toHaveLength(1);
+    expect(await ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect()).toHaveLength(1);
+  });
 });
 
 test("missing service destination records failure without losing form submission", async () => {
@@ -698,6 +734,35 @@ test.each(["move", "reactivate", "source", "mixed", "shared", "rule"])("form age
   });
   expect((await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal,
     { requestId: request._id, expectedAttempt: claim.attempt! })).ok).toBe(false);
+});
+
+test.each(["reactivate", "shared", "rule", "binding", "answers"])("moved form response rechecks publication authority: %s", async change => {
+  const s = await formAgentFixture(); await s.submit();
+  const request = (await s.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
+  const claim = await s.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: request._id });
+  const args = { requestId: request._id, expectedAttempt: claim.attempt! };
+  const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  expect(context.ok).toBe(true); if (!context.ok) return;
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+    prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+  await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson });
+  await s.t.run(async ctx => {
+    await ctx.db.insert("communityMemberWorkflowMemberMilestones", { workflowId: s.request.workflowId,
+      membershipId: s.f.membershipId, currentMilestoneKey: s.configured.secondKey, milestoneEnteredAt: s.f.nowMs + 10,
+      transitionSeq: 1, createdAt: s.f.nowMs, updatedAt: s.f.nowMs });
+    if (change === "reactivate") await ctx.db.patch(s.f.membershipId, { activationSequence: 2 });
+    if (change === "shared") await ctx.db.patch(s.f.channelId, { accessMode: "all_members" });
+    if (change === "binding") await ctx.db.patch(s.f.membershipId, { serviceChannelRevision: 2 });
+    if (change === "answers") await ctx.db.patch(s.request._id, { answers: { q: "Changed evidence" }, revision: 2 });
+    if (change === "rule") {
+      const workflow = (await ctx.db.get(s.request.workflowId))!;
+      await ctx.db.patch(workflow._id, { milestones: workflow.milestones.map(m => ({ ...m, automations: [] })) });
+    }
+  });
+  expect((await s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal,
+    { ...args, content: "Must not publish" })).ok).toBe(false);
+  expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect())).toHaveLength(0);
 });
 
 test("form submission rejects two competing rules for one form", async () => {

@@ -1,6 +1,6 @@
 import { resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
 import { resolveMemberServiceChannel, requireMemberFormServiceAudience } from "./communityMemberServiceChannelCore";
-import { getUniqueCommunityMembershipByPair } from "./communityCore";
+import { getUniqueCommunityMembershipByPair, communityMembershipRowIsActive, requireCommunityChatAccess } from "./communityCore";
 import { readSubmittedFormRecords, projectSubmittedFormEvidence } from "./communityFormEvidenceCore";
 import { scheduleCommunityInteractionEvidenceSync } from "./communityInteractionEvidence";
 import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProtocol";
@@ -55,10 +55,19 @@ export async function requireServiceWorkflowDestination(ctx: any, request: any) 
   }
   if (request.workflowFormRequestId) {
     const formRequest = await ctx.db.get(request.workflowFormRequestId);
-    if (!formRequest || formRequest.status !== "submitted" || !await requestIsCurrent(ctx, formRequest)) throw new Error("workflow_form_source_stale");
+    if (!formRequest || formRequest.status !== "submitted") throw new Error("workflow_form_source_stale");
     const membership = await ctx.db.get(formRequest.membershipId);
     const workflow = await ctx.db.get(formRequest.workflowId);
-    const matches = workflow.milestones.find((m: any) => m.key === formRequest.milestoneKey)?.automations.filter((a: any) => a.trigger.type === "form_submitted" && a.trigger.formKey === formRequest.formKey) ?? [];
+    // Intake requires the current visit. An admitted response is bound to its
+    // durable source/run, not the member's subsequent pipeline position.
+    if (!communityMembershipRowIsActive(membership) || !membership || !workflow
+      || membership.communityId !== request.communityId || workflow.communityId !== request.communityId
+      || (membership.activationSequence ?? 0) !== formRequest.activationSequence
+      || (!request._id && !await requestIsCurrent(ctx, formRequest))) throw new Error("workflow_form_source_stale");
+    await requireCommunityChatAccess({ ctx, communityId: request.communityId, userId: membership.userId });
+    const matches = workflow.milestones.find((m: any) => m.key === formRequest.milestoneKey)?.automations.filter((a: any) =>
+      a.key === run?.automationKey && a.action.type === "prompt_agent"
+      && a.trigger.type === "form_submitted" && a.trigger.formKey === formRequest.formKey) ?? [];
     const automation = matches.length === 1 ? matches[0] : null;
     if (!run || !automation || formRequest.communityId !== request.communityId
       || membership.userId !== request.requesterUserId || request.sponsorUserId !== request.requesterUserId

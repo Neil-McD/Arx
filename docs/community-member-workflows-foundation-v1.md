@@ -55,7 +55,9 @@ member's authorized service channel; either trigger can also move the member.
 
 - One agent action and one completion requirement per form per milestone.
   Submission cannot request another form. Agent admission runs before completion;
-  completion does not wait for delivery, which can become stale after movement.
+  completion does not wait for delivery. An admitted form response can finish
+  after movement under its original action/source authority and current private
+  audience checks; timer delivery retains its current-visit fence.
 - The saved submitted request is the event authority. Answers are pinned to the
   assigned published version; exact submission retries do not create another run.
 - Ask agent binds the existing serve queue to `workflowFormRequestId`, never a
