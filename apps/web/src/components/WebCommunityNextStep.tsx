@@ -52,6 +52,9 @@ function MemberFormRunner(props: Props & { requestId: string; onClose: () => voi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState(false);
+  const [validation, setValidation] = useState<string | null>(null);
+  const questionSection = useRef<HTMLElement>(null);
+  useEffect(() => { if (!busy) questionSection.current?.querySelector<HTMLElement>("input,textarea")?.focus(); }, [index, request?.id]);
   const alive = useRef(true), saving = useRef(false);
   const latest = useRef(answers); latest.current = answers;
   const saved = useRef("{}");
@@ -69,7 +72,8 @@ function MemberFormRunner(props: Props & { requestId: string; onClose: () => voi
     if (saving.current || !current.current) return false;
     const snapshot = latest.current;
     if (!submit && JSON.stringify(snapshot) === saved.current) return true;
-    const issue = formAnswersIssue(current.current.questions, snapshot, submit); if (issue) { setError(issue); return false; }
+    const issue = formAnswersIssue(current.current.questions, snapshot, submit); if (issue) { setValidation(issue); return false; }
+    setValidation(null);
     saving.current = true; setBusy(true);
     try { const ready = await props.ensureSession(session.current, "member_form"); if (!ready || !alive.current) return false;
       const result = await saveMemberForm(ready, props.communityId, current.current, snapshot, submit);
@@ -84,7 +88,7 @@ function MemberFormRunner(props: Props & { requestId: string; onClose: () => voi
   const q = request?.questions[index];
   return <div onKeyDown={e => { if (e.key === "Escape") { e.stopPropagation(); void close(); } }}>
     <header><h2>{request?.name ?? "Your next step"}</h2><button disabled={busy} onClick={() => void close()} aria-label="Save and close form"><X size={20} /></button></header>
-    {done ? <section><h2>Submitted</h2><p>You’re all set.</p><button onClick={props.onClose}>Done</button></section> : q ? <section>
+    {done ? <section><h2>Submitted</h2><p>You’re all set.</p><button onClick={props.onClose}>Done</button></section> : q ? <section ref={questionSection}>
       <small>{index + 1} of {request!.questions.length}{q.required ? " · Required" : " · Optional"}</small><h2>{q.title}</h2>{q.description ? <p>{q.description}</p> : null}
       {q.type.endsWith("choice") ? <div className="member-form-choices">{q.options.map((option, i) => <label key={i}><input disabled={busy} name={q.key} type={q.type === "single_choice" ? "radio" : "checkbox"}
         checked={q.type === "single_choice" ? answers[q.key] === String(i) : ((answers[q.key] as string[]) ?? []).includes(String(i))}
@@ -92,9 +96,10 @@ function MemberFormRunner(props: Props & { requestId: string; onClose: () => voi
         : q.type === "long_text" ? <textarea aria-label={q.title} rows={5} maxLength={10000} disabled={busy} value={(answers[q.key] as string) ?? ""} onChange={e => setAnswers({ ...answers, [q.key]: e.target.value })} />
         : <input aria-label={q.title} maxLength={10000} disabled={busy} value={(answers[q.key] as string) ?? ""} onChange={e => setAnswers({ ...answers, [q.key]: e.target.value })} />}
       <footer><button disabled={busy || index === 0} onClick={() => { setIndex(index - 1); setError(null); }}>Back</button><button disabled={busy} onClick={async () => {
-        if (q.required && !formQuestionAnswered(q, answers)) { setError("Please answer this question."); return; }
+        if (q.required && !formQuestionAnswered(q, answers)) { setValidation("Please answer this question."); return; }
         if (index === request!.questions.length - 1) await save(true); else if (await save()) { setIndex(index + 1); setError(null); }
       }}>{index === request!.questions.length - 1 ? "Submit" : "Continue"}</button><small role="status">{busy ? "Saving…" : JSON.stringify(answers) !== saved.current ? "Unsaved answers" : "Saved"}</small></footer>
+      {validation ? <p role="alert">{validation}</p> : null}
     </section> : !error ? <p role="status">Loading form…</p> : null}
     {error ? <div role="alert"><p>{error}</p><button disabled={busy} onClick={() => request ? void save() : void load()}>Retry</button><button disabled={busy} onClick={() => void load()}>Discard edits and reload</button><button disabled={busy} onClick={props.onClose}>Discard unsaved answers and close</button></div> : null}
   </div>;
