@@ -65,7 +65,7 @@ type CommunityNavProps = {
   clearCreateChannelError?: () => void;
   isAtChannelLimit?: boolean;
   maxActiveChannels?: number;
-  onReorderChannels?: (orderedChannelIds: string[]) => Promise<boolean> | boolean;
+  onReorderChannels?: (orderedChannelIds: string[], movedChannelId: string) => Promise<boolean> | boolean;
   isReorderingChannels?: boolean;
   reorderChannelsError?: string | null;
   clearReorderChannelsError?: () => void;
@@ -226,10 +226,10 @@ export const CommunityNav = memo(function CommunityNav({
   const canReorderChannels = Boolean(
     canManageMembersActiveCommunity && onReorderChannels && reorderableChannelIds.length > 1,
   );
-  const commitChannelOrder = (orderedIds: string[] | null) => {
+  const commitChannelOrder = (orderedIds: string[] | null, movedChannelId: string) => {
     if (!orderedIds || !onReorderChannels || isReorderingChannels) return;
     clearReorderChannelsError?.();
-    void onReorderChannels(orderedIds);
+    void onReorderChannels(orderedIds, movedChannelId);
   };
   const {
     setContainerElement: setChannelListElement,
@@ -243,7 +243,7 @@ export const CommunityNav = memo(function CommunityNav({
         reorderableChannelIds,
         draggedChannelId,
         targetIndex,
-      ));
+      ), draggedChannelId);
     },
   });
   const restoreModalTriggerFocus = (
@@ -502,7 +502,7 @@ export const CommunityNav = memo(function CommunityNav({
                         reorderableChannelIds,
                         channel.id,
                         event.key === "ArrowUp" ? -1 : 1,
-                      ));
+                      ), channel.id);
                     }}
                   >
                     <GripVertical size={15} aria-hidden="true" />
@@ -512,7 +512,7 @@ export const CommunityNav = memo(function CommunityNav({
                       <button
                         type="button"
                         disabled={reorderableChannelIds[0] === channel.id || isReorderingChannels}
-                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, -1))}
+                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, -1), channel.id)}
                         aria-label={`Move ${channel.name} up`}
                         title="Move up"
                       >
@@ -521,7 +521,7 @@ export const CommunityNav = memo(function CommunityNav({
                       <button
                         type="button"
                         disabled={reorderableChannelIds.at(-1) === channel.id || isReorderingChannels}
-                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, 1))}
+                        onClick={() => commitChannelOrder(moveChannelId(reorderableChannelIds, channel.id, 1), channel.id)}
                         aria-label={`Move ${channel.name} down`}
                         title="Move down"
                       >

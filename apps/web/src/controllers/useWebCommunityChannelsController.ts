@@ -476,7 +476,7 @@ export function useWebCommunityChannelsController(params: {
     }
   }, []);
 
-  const reorderChannels = useCallback(async (orderedChannelIdsRaw: string[]): Promise<boolean> => {
+  const reorderChannels = useCallback(async (orderedChannelIdsRaw: string[], movedChannelId: string): Promise<boolean> => {
     const current = paramsRef.current;
     const communityId = String(current.activeCommunityId ?? "").trim();
     const orderedChannelIds = orderedChannelIdsRaw
@@ -503,12 +503,9 @@ export function useWebCommunityChannelsController(params: {
 
     const previousIds = channels.filter((channel) => !channel.is_general).map((channel) => channel.id);
     if (previousIds.every((id, index) => id === orderedChannelIds[index])) return true;
-    const movedId = orderedChannelIds.find((id) =>
-      previousIds.filter((candidate) => candidate !== id).join("|") ===
-      orderedChannelIds.filter((candidate) => candidate !== id).join("|"),
-    );
-    const moved = channels.find((channel) => channel.id === movedId);
-    if (!moved) {
+    const moved = channels.find((channel) => channel.id === movedChannelId && !channel.is_general);
+    if (!moved || previousIds.filter(id => id !== moved.id).join("|") !==
+      orderedChannelIds.filter(id => id !== moved.id).join("|")) {
       setReorderChannelsError("Move one channel at a time.");
       return false;
     }

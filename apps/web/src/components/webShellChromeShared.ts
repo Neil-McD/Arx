@@ -81,7 +81,7 @@ export type WebCommunityShellProps = {
   clearCommunityChannelCreateError: () => void;
   isAtCommunityChannelLimit: boolean;
   maxActiveCommunityChannels: number;
-  onReorderCommunityChannels: (orderedChannelIds: string[]) => Promise<boolean> | boolean;
+  onReorderCommunityChannels: (orderedChannelIds: string[], movedChannelId: string) => Promise<boolean> | boolean;
   isReorderingCommunityChannels: boolean;
   communityChannelReorderError: string | null;
   clearCommunityChannelReorderError: () => void;

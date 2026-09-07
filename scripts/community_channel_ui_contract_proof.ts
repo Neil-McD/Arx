@@ -38,6 +38,7 @@ const nav = read(navPath);
   "MODAL_FOCUSABLE_SELECTOR",
   "trapModalFocus",
   "onReorderChannels",
+  "onReorderChannels(orderedIds, movedChannelId)",
   "usePointerSortableList",
   "getChannelItemBindings",
   "community-channel-reorder-trigger",
@@ -128,6 +129,8 @@ const channelController = read(channelControllerPath);
   "onChannelDeleted",
   "resolveWebCommunityChannelDeleteCompletion(paramsRef, communityId)",
   "moveCloudCommunityChannel",
+  "channel.id === movedChannelId && !channel.is_general",
+  "channelId: moved.id",
   "lastSubscribedChannelsRef",
   "reorderInFlightCommunityIdRef",
 ].forEach((required) => assertIncludes(channelControllerPath, channelController, required));
