@@ -2273,13 +2273,12 @@ export default function App() {
         isServiceChannelSaving: communityWorkflows.isServiceChannelSaving,
         serviceChannelError: communityWorkflows.serviceChannelError,
         onSetServiceChannel: communityWorkflows.setServiceChannel,
-        onOpenServiceChannel: async (expectedChannelId: string) => {
-          const channelId = await communityWorkflows.resolveServiceChannelForOpen(expectedChannelId);
+        onOpenServiceChannel: (expectedChannelId: string) => communityWorkflows.openServiceChannel(expectedChannelId, (channelId) => {
           const channel = activeCommunityChannels.find(item => item.id === channelId && item.community_id === activeCommunityId);
           if (!channel) return;
           const path = buildCommunityTabPath(selectedActiveCommunitySlug, "chat", null, null, channel.slug);
           if (path) { communityWorkflows.closeMemberDossier(); navigateTo(path); }
-        },
+        }),
       },
       canViewActiveCommunityAnalytics,
       canViewPlatformAnalytics: hasOperatorAccess,

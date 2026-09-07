@@ -474,26 +474,28 @@ export function useWebCommunityWorkflowsController(params: {
         }
       }
     },
-    resolveServiceChannelForOpen: async (expectedChannelId: string): Promise<string | null> => {
-      if (!selectedMembershipId || !params.activeCommunityId || serviceChannelPendingRef.current) return null;
+    openServiceChannel: async (expectedChannelId: string, onOpen: (channelId: string) => void): Promise<void> => {
+      if (!selectedMembershipId || !params.activeCommunityId || serviceChannelPendingRef.current) return;
       const scope = serviceChannelScopeRef.current;
       const token = serviceChannelRequestRef.current;
       const generation = ++dossierRequestGenerationRef.current;
       setIsMemberDossierLoading(true);
       try {
         const session = await params.ensureSession(params.session, "community_member_service_channel_open");
-        if (!session || scope !== serviceChannelScopeRef.current || token !== serviceChannelRequestRef.current) return null;
+        if (!session || scope !== serviceChannelScopeRef.current || token !== serviceChannelRequestRef.current) return;
         const dossier = await fetchCloudCommunityMemberSuccessDossier({ session, communityId: params.activeCommunityId, membershipId: selectedMembershipId });
-        if (scope !== serviceChannelScopeRef.current || token !== serviceChannelRequestRef.current || generation !== dossierRequestGenerationRef.current) return null;
+        if (scope !== serviceChannelScopeRef.current || token !== serviceChannelRequestRef.current || generation !== dossierRequestGenerationRef.current) return;
         setMemberDossier(dossier);
-        if (dossier.service_channel.status === "available" && dossier.service_channel.channel_id === expectedChannelId) return dossier.service_channel.channel_id;
+        if (dossier.service_channel.status === "available" && dossier.service_channel.channel_id === expectedChannelId) {
+          onOpen(expectedChannelId);
+          return;
+        }
         setServiceChannelError("The service channel changed or is unavailable. Review the refreshed assignment; no fallback was opened.");
       } catch (error) {
         if (scope === serviceChannelScopeRef.current && token === serviceChannelRequestRef.current) setServiceChannelError(workflowErrorMessage(error));
       } finally {
         if (scope === serviceChannelScopeRef.current && generation === dossierRequestGenerationRef.current) setIsMemberDossierLoading(false);
       }
-      return null;
     },
     reload: () => requestBoardReconciliationRef.current?.(),
     loadMore,
