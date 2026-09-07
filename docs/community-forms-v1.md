@@ -28,6 +28,11 @@ Publishing alone never runs an agent or moves a member.
 - One private sidebar entry, below community identity/banner and above channels,
   opens the oldest pending request. Other pending requests remain selectable.
 - Cloud answers autosave with revision checks. A submit validates and freezes them.
+- Background saves do not disable answer fields. A single in-flight save retains
+  its snapshot; newer edits remain dirty and save afterward. Navigation/submit
+  briefly lock editing. Failures pause saving until explicit retry or reload.
+- Retry preserves the exact failed payload and operation (including Submit),
+  using existing server idempotency. No second save queue or persistence is added.
 - `form_submitted` currently supports `move_member` only. Submission and movement
   share one transaction; no synthetic channel source or agent destination is invented.
 - Milestone movement cancels unfinished requests. Stale/revoked visits fail closed
@@ -46,3 +51,9 @@ member and request, not the global profile or shared community memory.
 
 Verification: `npx vitest run convex/communityForms.test.ts`, web and Convex
 typechecks, release gate, then browser authoring/preview/publish on staging.
+
+Member runner regressions: `npx vitest run scripts/member_form_save.test.ts`
+and `node scripts/member_form_browser_qa.mjs`. The browser proof renders the
+actual component at 390px with canonical themes and synthetic transport to test
+slow saves, newer edits, resume, validation, exact submit retry, and focus.
+It is not a live-cloud canary or a physical-phone keyboard test.
