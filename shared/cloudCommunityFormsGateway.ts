@@ -2,6 +2,10 @@ import { api } from "../convex/_generated/api";
 import type { Id } from "../convex/_generated/dataModel";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type { CommunityFormDraft } from "./communityForms";
+export async function listCloudCommunityFormResponses(session: unknown, communityId: string, membershipId: string) {
+  const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);
+  return client.query(api.communityFormRequests.listBuilderResponses, { authSubject, communityId: communityId as Id<"communities">, membershipId: membershipId as Id<"communityMemberships"> });
+}
 
 export async function listCloudCommunityForms(session: unknown, communityId: string): Promise<CommunityFormDraft[]> {
   const { client, authSubject } = await bootstrapConvexAuthenticatedClient(session);

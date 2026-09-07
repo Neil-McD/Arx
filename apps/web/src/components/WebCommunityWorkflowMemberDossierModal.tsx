@@ -3,6 +3,7 @@ import {
   useEffect,
   useRef,
   type KeyboardEvent as ReactKeyboardEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -23,6 +24,7 @@ function readableLabel(value: string): string {
 function workflowActivityLabel(
   activity: CloudCommunityMemberSuccessDossier["recent_workflow_activity"][number],
 ): string {
+  if (activity.action_type === "request_form") return `Form · ${readableLabel(activity.status)}`;
   if (activity.status === "unavailable") {
     return `${activity.action_type === "prompt_agent" ? "Community agent" : "Milestone move"} · Status unavailable`;
   }
@@ -46,6 +48,7 @@ function ActivityTime({ value }: { value: string }) {
 }
 
 export function WebCommunityWorkflowMemberDossierModal(props: {
+  formResponses?: ReactNode;
   isOpen: boolean;
   dossier: CloudCommunityMemberSuccessDossier | null;
   isLoading: boolean;
@@ -192,6 +195,7 @@ export function WebCommunityWorkflowMemberDossierModal(props: {
             </div>
           ) : dossier ? (
             <>
+              {props.formResponses}
               <WorkflowMemberServiceChannel key={dossier.membership_id} value={dossier.service_channel}
                 channels={props.channels} channelsUnavailable={props.channelsUnavailable}
                 saving={props.isServiceChannelSaving} error={props.serviceChannelError}

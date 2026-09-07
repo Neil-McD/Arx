@@ -8,6 +8,8 @@ import schema from "./schema";
 import { buildCommunityAgentServePromptBundle } from "../shared/communityAgentServePrompt";
 
 const modules = import.meta.glob([
+  "./communityForms.ts",
+  "./communityFormRequests.ts",
   "./communityCapabilityContext.ts",
   "./communityInteractions.ts",
   "./communityInteractionEvidence.ts",
@@ -478,6 +480,56 @@ async function configure(t: ReturnType<typeof convexTest>, communityId: any, act
   const configured = await configureAutomations(t, communityId, [action]);
   return configured.firstKey;
 }
+
+async function formFlowFixture() {
+  const t = convexTest(schema, modules), f = await fixture(t);
+  const owner = t.withIdentity({ subject: OWNER_SUBJECT });
+  const member = t.withIdentity({ subject: MEMBER_SUBJECT });
+  const question = { key: "q", title: "Goal?", description: "", required: true, type: "short_text" as const, options: [] };
+  await owner.mutation(api.communityForms.saveBuilderForm, { communityId: f.communityId, key: "intake", expectedRevision: 0, name: "Intake", questions: [question] });
+  await owner.mutation(api.communityForms.publishBuilderForm, { communityId: f.communityId, key: "intake", expectedRevision: 1 });
+  const configured = await configureAutomations(t, f.communityId, [{ key: "", type: "request_form", formKey: "intake" }]);
+  await owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: f.communityId, milestoneKey: configured.firstKey, expectedRevision: 3, name: "New",
+    automations: [...configured.firstMilestone.automations, { key: "", trigger: { type: "form_submitted", formKey: "intake" }, action: { key: "", type: "move_member", destination: "next_or_complete" } }],
+  });
+  const rootId = await addRoot(t, f, "form");
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  const request = (await t.run(ctx => ctx.db.query("communityFormRequests").first()))!;
+  return { t, f, owner, member, question, request, rootId, configured };
+}
+
+test("forms: repeated contributions reuse a request; submission moves exactly once without an agent", async () => {
+  const { t, f, member, request, rootId } = await formFlowFixture();
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId });
+  await t.mutation(internalApi.communityMemberWorkflows.handleChannelContributionRootInternal, { rootId: await addRoot(t, f, "form-again") });
+  expect(await t.run(ctx => ctx.db.query("communityFormRequests").collect())).toHaveLength(1);
+  const args = { communityId: f.communityId, requestId: request._id, expectedRevision: 0, answers: { q: "Improve onboarding" }, submit: false };
+  await member.mutation(api.communityFormRequests.saveMyAnswers, args);
+  expect((await member.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId }))[0].answered).toBe(1);
+  expect((await member.query(api.communityFormRequests.getMyRequest, { communityId: f.communityId, requestId: request._id })).answers).toEqual(args.answers);
+  await expect(member.mutation(api.communityFormRequests.saveMyAnswers, { ...args, answers: { q: "conflicting edit" } })).rejects.toThrow("conflict");
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { ...args, expectedRevision: 1, submit: true });
+  await member.mutation(api.communityFormRequests.saveMyAnswers, { ...args, expectedRevision: 1, submit: true });
+  expect(await t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(1);
+  expect(await t.run(ctx => ctx.db.query("communityAgentServeRequests").collect())).toHaveLength(0);
+  expect(await member.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId })).toEqual([]);
+});
+
+test("forms: pinned questions, required validation, privacy and expired visits", async () => {
+  const { t, f, member, owner, question, request } = await formFlowFixture();
+  await owner.mutation(api.communityForms.saveBuilderForm, { communityId: f.communityId, key: "intake", expectedRevision: 1, name: "New intake", questions: [{ ...question, title: "Changed" }] });
+  await owner.mutation(api.communityForms.publishBuilderForm, { communityId: f.communityId, key: "intake", expectedRevision: 2 });
+  expect((await member.query(api.communityFormRequests.getMyRequest, { communityId: f.communityId, requestId: request._id })).questions[0].title).toBe("Goal?");
+  await expect(owner.query(api.communityFormRequests.getMyRequest, { communityId: f.communityId, requestId: request._id })).rejects.toThrow("not_found");
+  await expect(member.query(api.communityFormRequests.listBuilderResponses, { communityId: f.communityId, membershipId: f.membershipId })).rejects.toThrow();
+  const args = { communityId: f.communityId, requestId: request._id, expectedRevision: 0, answers: {}, submit: true };
+  await expect(member.mutation(api.communityFormRequests.saveMyAnswers, args)).rejects.toThrow("required");
+  expect((await t.run(ctx => ctx.db.get(request._id)))?.status).toBe("pending");
+  await t.run(ctx => ctx.db.patch(f.membershipId, { activationSequence: 2 }));
+  expect(await member.query(api.communityFormRequests.listMyRequests, { communityId: f.communityId })).toEqual([]);
+  await expect(member.mutation(api.communityFormRequests.saveMyAnswers, { ...args, answers: { q: "late" } })).rejects.toThrow("expired");
+});
 
 test.each(["root", "reply"] as const)("channel filter selects only its source, snapshots the rule, and replays once: %s", async (kind) => {
   vi.useFakeTimers();

@@ -64,6 +64,7 @@ export function renderCommunityMemberSuccessDossierMarkdown(
     lines.push("", "_No workflow actions yet._");
   } else {
     for (const activity of source.recent_workflow_activity) {
+      if (activity.action_type === "request_form") { lines.push(`- ${activity.occurred_at}: Form request ${activity.status}.`); continue; }
       if (activity.status === "unavailable") {
         lines.push(`- ${activity.occurred_at}: ${activity.action_type === "prompt_agent" ? "Agent prompt" : "Milestone move"} status unavailable in ${markdownInline(activity.milestone_name)} — linked outcome could not be verified.`);
         continue;

@@ -26,9 +26,10 @@ export type CommunityMemberSuccessMilestoneHistoryEntry = {
 
 export type CommunityMemberSuccessWorkflowActivity = {
   id: string;
-  action_type: "prompt_agent" | "move_member";
+  action_type: "prompt_agent" | "move_member" | "request_form";
   status:
     | "queued"
+    | "requested"
     | "running"
     | "responded"
     | "moved"

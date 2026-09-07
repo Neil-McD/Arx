@@ -6,6 +6,7 @@ import {
   type ChangeEvent,
 } from "react";
 import "highlight.js/styles/github-dark.css";
+import { WebCommunityNextStep } from "./components/WebCommunityNextStep";
 import {
   beginBrowserSignedOutState,
   getAuthPublicKey,
@@ -2947,6 +2948,8 @@ export default function App() {
     communityTab,
     communityTabIndicators,
     communityChannels: activeCommunityChannels,
+    memberNextStep: session && activeCommunityId && canViewMembersActiveCommunity && !isPublicCommunityFunnel
+      ? <WebCommunityNextStep key={`${activeCommunityId}:${session.user.id}`} communityId={activeCommunityId} session={session} ensureSession={ensureUsableAuthSession} /> : null,
     isLoadingCommunityChannels: isLoadingActiveCommunityChannels,
     selectedCommunityChannelSlug: activeCommunityChannelSlug,
     communityChannelIndicators,

@@ -1,5 +1,5 @@
 import { Pencil, Plus, RefreshCw } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_MILESTONES,
@@ -18,6 +18,7 @@ import { WebCommunityWorkflowMemberStub } from "./WebCommunityWorkflowMemberStub
 import { WebCommunityWorkflowMilestoneModal } from "./WebCommunityWorkflowMilestoneModal";
 import "./WebCommunityWorkflowsSection.css";
 import { WebCommunityForms } from "./WebCommunityForms";
+import { WebCommunityFormResponses } from "./WebCommunityFormResponses";
 import type { CommunityFormsGateway } from "../controllers/useWebCommunityFormsGateway";
 
 export type WebCommunityWorkflowsSectionProps = {
@@ -67,6 +68,12 @@ export function WebCommunityWorkflowsSection(
   props: WebCommunityWorkflowsSectionProps,
 ) {
   const [showForms, setShowForms] = useState(false);
+  const [publishedForms, setPublishedForms] = useState<Array<{ key: string; name: string }>>([]);
+  useEffect(() => {
+    let alive = true; setPublishedForms([]);
+    props.forms?.load().then(rows => { if (alive) setPublishedForms(rows.filter(r => r.publishedRevision !== null)); }).catch(() => {});
+    return () => { alive = false; };
+  }, [props.forms, showForms]);
   const [editingMilestoneKey, setEditingMilestoneKey] = useState<string | null>(null);
   const [isCreatingMilestone, setIsCreatingMilestone] = useState(false);
   const milestones = props.board?.milestones ?? [BLANK_MILESTONE];
@@ -249,6 +256,7 @@ export function WebCommunityWorkflowsSection(
       </section>
 
       <WebCommunityWorkflowMilestoneModal
+        forms={publishedForms}
         channels={props.channels}
         channelsUnavailable={props.channelsUnavailable}
         isOpen={Boolean(editingMilestone)}
@@ -271,6 +279,7 @@ export function WebCommunityWorkflowsSection(
         onDelete={deleteEditingMilestone}
       />
       <WebCommunityWorkflowMemberDossierModal
+        formResponses={props.forms?.responses && props.memberDossier ? <WebCommunityFormResponses key={`${props.forms.scopeKey}:${props.memberDossier.membership_id}`} gateway={props.forms} membershipId={props.memberDossier.membership_id} /> : null}
         isOpen={Boolean(props.selectedMembershipId)}
         dossier={props.memberDossier}
         isLoading={props.isMemberDossierLoading}

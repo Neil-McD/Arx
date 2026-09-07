@@ -1,4 +1,4 @@
-import { memo, useEffect, useRef, useState, type FormEvent } from "react";
+import { memo, useEffect, useRef, useState, type FormEvent, type ReactNode } from "react";
 import {
   Check,
   ChevronDown,
@@ -36,6 +36,7 @@ type CommunityNavChannel = {
 };
 
 type CommunityNavProps = {
+  memberNextStep?: ReactNode;
   activeCommunity: CommunityNavCommunityLike;
   hideIdentity?: boolean;
   hideIdentitySettings?: boolean;
@@ -172,6 +173,7 @@ export const CommunityNav = memo(function CommunityNav({
   onOpenMembers,
   isLoadingAccess = false,
   onSelectTab,
+  memberNextStep,
   onCopyCommunityJoinLink,
   lockedTabs = {},
   channels = [],
@@ -432,6 +434,7 @@ export const CommunityNav = memo(function CommunityNav({
           />
         </div>
       ) : null}
+      {memberNextStep}
       <div
         className="community-channel-list"
         aria-label="Channels"

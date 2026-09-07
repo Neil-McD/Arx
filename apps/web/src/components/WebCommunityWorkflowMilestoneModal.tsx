@@ -18,6 +18,7 @@ import {
 } from "../../../../shared/communityMemberWorkflow";
 
 type Props = {
+  forms?: Array<{ key: string; name: string }>;
   channels: CloudCommunityChannel[];
   channelsUnavailable: boolean;
   isOpen: boolean;
@@ -216,6 +217,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
                   <div className="workflow-milestone-automation-list">
                     {automations.map((automation, index) => (
                       <WebCommunityWorkflowAutomationEditor key={automation.key} automation={automation} index={index}
+                        forms={props.forms}
                         expanded={expandedAutomationKey === automation.key} channels={props.channels} channelsUnavailable={props.channelsUnavailable}
                         nextMilestoneName={props.nextMilestoneName} disabled={props.isSaving}
                         hasOtherMove={automations.some((item) => item.key !== automation.key && item.action.type === "move_member")}

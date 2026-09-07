@@ -6,6 +6,16 @@ import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestV
 import { channelAccessModeValidator, channelPostingPolicyValidator, channelReplyPolicyValidator } from "./communityChannelValidators";
 
 export default defineSchema({
+  communityFormRequests: defineTable({
+    communityId: v.id("communities"), membershipId: v.id("communityMemberships"),
+    workflowId: v.id("communityMemberWorkflows"), workflowRunId: v.id("communityMemberWorkflowRuns"),
+    automationKey: v.string(), milestoneKey: v.string(), milestoneEnteredAt: v.number(),
+    activationSequence: v.number(), formKey: v.string(), versionId: v.id("communityFormVersions"),
+    status: v.union(v.literal("pending"), v.literal("submitted"), v.literal("cancelled")),
+    answers: v.record(v.string(), v.union(v.string(), v.array(v.string()))),
+    revision: v.number(), createdAt: v.number(), updatedAt: v.number(), submittedAt: v.optional(v.number()),
+  }).index("by_member_status", ["membershipId", "status"])
+    .index("by_assignment", ["workflowId", "membershipId", "activationSequence", "milestoneKey", "milestoneEnteredAt", "automationKey"]),
   communityForms: defineTable({
     communityId: v.id("communities"), key: v.string(), name: v.string(),
     questions: v.array(communityFormQuestionValidator), revision: v.number(),
@@ -1196,10 +1206,12 @@ export default defineSchema({
           key: v.string(),
           timerGeneration: v.optional(v.string()),
           trigger: v.union(
+            v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
             v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
             v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
           ),
           action: v.union(
+            v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
             v.object({
               key: v.string(),
               type: v.literal("prompt_agent"),
@@ -1264,14 +1276,16 @@ export default defineSchema({
     milestoneEnteredAt: v.number(),
     workflowRevision: v.number(),
     automationKey: v.string(),
-    triggerType: v.union(v.literal("member_contributed"), v.literal("milestone_elapsed")),
+    triggerType: v.union(v.literal("member_contributed"), v.literal("milestone_elapsed"), v.literal("form_submitted")),
     // Optional for historical runs. New runs capture the condition that matched.
     triggerSnapshot: v.optional(v.union(
+      v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
       v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
       v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
     )),
     triggerReceiptRef: v.string(),
     actionSnapshot: v.union(
+      v.object({ key: v.string(), type: v.literal("request_form"), formKey: v.string() }),
       v.object({ key: v.string(), type: v.literal("prompt_agent"), prompt: v.string() }),
       v.object({
         key: v.string(),
@@ -1289,6 +1303,7 @@ export default defineSchema({
       status: v.union(v.literal("complete"), v.literal("failed")),
       resultCode: v.optional(v.string()),
       serveRequestId: v.optional(v.id("communityAgentServeRequests")),
+      formRequestId: v.optional(v.id("communityFormRequests")),
       transitionId: v.optional(v.id("communityMemberWorkflowTransitions")),
       errorCode: v.optional(v.string()),
     })),

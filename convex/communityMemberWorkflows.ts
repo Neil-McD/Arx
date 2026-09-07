@@ -2,6 +2,7 @@ import { internalMutation, internalQuery, mutation, query } from "./_generated/s
 import type { Doc } from "./_generated/dataModel";
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
+import { assignWorkflowForm, cancelMilestoneFormRequests, requestIsCurrent } from "./communityFormRequestCore";
 import { enrollWorkflowMilestoneTimers, resolveWorkflowTimer } from "./communityMemberWorkflowTimerCore";
 import {
   COMMUNITY_MEMBER_WORKFLOW_MAX_AUTOMATIONS_PER_MILESTONE,
@@ -91,10 +92,12 @@ type ChannelContributionRow =
 const automationInputValidator = v.object({
   key: v.optional(v.string()),
   trigger: v.union(
+    v.object({ type: v.literal("form_submitted"), formKey: v.string() }),
     v.object({ type: v.literal("member_contributed"), channelId: v.optional(v.string()) }),
     v.object({ type: v.literal("milestone_elapsed"), delayMinutes: v.number() }),
   ),
   action: v.union(
+    v.object({ key: v.optional(v.string()), type: v.literal("request_form"), formKey: v.string() }),
     v.object({
       key: v.optional(v.string()),
       type: v.literal("prompt_agent"),
@@ -213,18 +216,22 @@ function normalizeAutomations(
             type: "prompt_agent",
             prompt: normalizeCommunityMemberWorkflowPrompt(input.action.prompt),
           }
+        : input.action.type === "request_form" ? { key: actionKey, type: "request_form", formKey: input.action.formKey }
         : {
             key: actionKey,
             type: "move_member",
             destination: "next_or_complete",
           };
+    if ((action.type === "request_form" && !action.formKey.trim()) || (input.trigger.type === "form_submitted" && !input.trigger.formKey.trim())) throw new Error("form_required");
+    if (input.trigger.type === "form_submitted" && action.type !== "move_member") throw new Error("form_submission_requires_move_action");
     return {
       key: automationKey,
       ...(input.trigger.type === "milestone_elapsed" ? {
         timerGeneration: existing?.trigger.type === "milestone_elapsed"
           ? existing.timerGeneration ?? crypto.randomUUID() : crypto.randomUUID(),
       } : {}),
-      trigger: input.trigger.type === "milestone_elapsed"
+      trigger: input.trigger.type === "form_submitted" ? { type: "form_submitted", formKey: input.trigger.formKey }
+        : input.trigger.type === "milestone_elapsed"
         ? { type: "milestone_elapsed", delayMinutes: normalizeWorkflowDelayMinutes(input.trigger.delayMinutes) }
         : { type: "member_contributed", ...(input.trigger.channelId !== undefined ? { channelId: input.trigger.channelId } : {}) },
       action,
@@ -344,6 +351,13 @@ export const updateBuilderWorkflowMilestone = mutation({
       if (!channel || channel.communityId !== args.communityId || channel.status !== "active") {
         throw new Error("community_member_workflow_channel_unavailable");
       }
+    }
+    for (const formKey of new Set(milestone.automations.flatMap(a => [
+      ...(a.action.type === "request_form" ? [a.action.formKey] : []),
+      ...(a.trigger.type === "form_submitted" ? [a.trigger.formKey] : []),
+    ]))) {
+      const form = await ctx.db.query("communityForms").withIndex("by_community_key", q => q.eq("communityId", args.communityId).eq("key", formKey)).unique();
+      if (!form?.publishedRevision) throw new Error("form_not_published");
     }
     if (JSON.stringify(current) === JSON.stringify(milestone)) {
       return {
@@ -726,6 +740,7 @@ async function transitionMemberForWorkflowAction(args: {
     occurredAt: args.nowMs,
     createdAt: args.nowMs,
   });
+  await cancelMilestoneFormRequests(args.ctx, membership!._id);
   if (nextMilestone) await enrollWorkflowMilestoneTimers({ ctx: args.ctx, membership: membership!, nowMs: args.nowMs });
   return { transitionId, completedWorkflow, replayed: false };
 }
@@ -780,6 +795,13 @@ async function executeWorkflowAutomation(args: {
     updatedAt: nowMs,
   });
   try {
+    if (args.automation.action.type === "request_form") {
+      const formRequestId = await assignWorkflowForm({ ...args, workflowRunId });
+      await args.ctx.db.patch(workflowRunId, { status: "finished", actionResult: {
+        actionKey: args.automation.action.key, status: "complete", resultCode: "form_requested", formRequestId,
+      }, finishedAt: nowMs, updatedAt: nowMs });
+      return { status: "form_requested" as const, workflow_run_id: String(workflowRunId), replayed: false };
+    }
     if (args.automation.action.type === "prompt_agent") {
       if (!args.workflowTimerId && (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed")) {
         throw new Error("community_member_workflow_timer_action_invalid");
@@ -818,6 +840,7 @@ async function executeWorkflowAutomation(args: {
         replayed: false,
       };
     }
+    if (args.automation.action.type !== "move_member") throw new Error("workflow_action_unsupported");
     const transition = await transitionMemberForWorkflowAction({
       ctx: args.ctx,
       workflowRunId,
@@ -850,7 +873,7 @@ async function executeWorkflowAutomation(args: {
   } catch (error) {
     // Timer admission, transition and consumption are one transaction. Never
     // commit a partial timer action as a terminal failure.
-    if (args.workflowTimerId || args.automation.action.type === "move_member") throw error;
+    if (args.workflowTimerId || args.automation.action.type !== "prompt_agent") throw error;
     const errorCode = String(
       error instanceof Error ? error.message : error ?? "workflow_action_failed",
     ).slice(0, 120);
@@ -872,6 +895,20 @@ async function executeWorkflowAutomation(args: {
       replayed: false,
     };
   }
+}
+
+// Submission and deterministic movement commit together; no new scheduler or
+// user-writable event authority. The exact request is the replay receipt.
+export async function processSubmittedWorkflowForm(ctx: any, request: any) {
+  if (!await requestIsCurrent(ctx, request)) throw new Error("form_request_expired");
+  const workflow = await ctx.db.get(request.workflowId);
+  const membership = await ctx.db.get(request.membershipId);
+  const state = await getMemberMilestone({ ctx, workflowId: workflow._id, membershipId: membership._id });
+  const current = resolveCurrentMilestone({ workflow, membership, state });
+  const automation = current.milestone.automations.find((a: CommunityMemberWorkflowAutomation) =>
+    a.trigger.type === "form_submitted" && a.trigger.formKey === request.formKey && a.action.type === "move_member");
+  if (automation) await executeWorkflowAutomation({ ctx, workflow, membership, current, automation,
+    timerReceiptRef: `form_submission:${request._id}` });
 }
 
 async function handleChannelContributionCore(args: {
@@ -929,7 +966,7 @@ async function handleChannelContributionCore(args: {
     return { status: "trigger_unconfigured" as const };
   }
   const promptAutomations = automations.filter(
-    (automation) => automation.action.type === "prompt_agent",
+    (automation) => automation.action.type !== "move_member",
   );
   const moveAutomation = automations.find(
     (automation) => automation.action.type === "move_member",

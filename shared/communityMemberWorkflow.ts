@@ -16,6 +16,7 @@ export type CommunityMemberWorkflowMemberContributedTrigger = {
 
 export type CommunityMemberWorkflowTrigger =
   | CommunityMemberWorkflowMemberContributedTrigger
+  | { type: "form_submitted"; formKey: string }
   | { type: "milestone_elapsed"; delayMinutes: number };
 
 export function normalizeWorkflowDelayMinutes(value: unknown): number {
@@ -38,6 +39,7 @@ export type CommunityMemberWorkflowMoveMemberAction = {
 };
 
 export type CommunityMemberWorkflowAction =
+  | { key: string; type: "request_form"; formKey: string }
   | CommunityMemberWorkflowPromptAgentAction
   | CommunityMemberWorkflowMoveMemberAction;
 

@@ -235,6 +235,13 @@ async function readMembershipContextRecords(args: {
         run.actionResult?.actionKey === run.actionSnapshot.key &&
         run.actionResult?.status === "complete" &&
         run.status === "finished";
+      if (run.actionSnapshot.type === "request_form") {
+        const request = run.actionResult?.formRequestId ? await args.ctx.db.get(run.actionResult.formRequestId) : null;
+        const valid = validActionResult && request?.communityId === run.communityId && request?.membershipId === run.membershipId
+          && request?.workflowId === run.workflowId && request?.automationKey === run.automationKey && request?.milestoneEnteredAt === run.milestoneEnteredAt;
+        return { id: String(run._id), action_type: "request_form" as const, status: valid ? "requested" as const : "unavailable" as const,
+          milestone_key: run.milestoneKey, milestone_name: run.milestoneName, next_milestone_key: null, next_milestone_name: null, prompt: null, occurred_at: toIsoString(run.createdAt) };
+      }
       if (run.actionSnapshot.type === "prompt_agent") {
         const serveRequest = run.actionResult?.serveRequestId
           ? await args.ctx.db.get(run.actionResult.serveRequestId)
