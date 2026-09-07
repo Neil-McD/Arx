@@ -3,7 +3,7 @@ import { convexTest } from "convex-test";
 import { expect, test } from "vitest";
 import schema from "./schema";
 import { api } from "./_generated/api";
-import { communityFormIssue, type CommunityFormQuestion } from "../shared/communityForms";
+import { communityFormIssue, communityFormValidationIssue, type CommunityFormQuestion } from "../shared/communityForms";
 const modules = import.meta.glob(["./communityForms.ts", "./_generated/**/*.*s"]);
 const question: CommunityFormQuestion = { key: "q1", title: "What are you working on?", description: "", type: "short_text", required: true, options: [] };
 async function fixture() {
@@ -32,6 +32,11 @@ test("draft retries and publication are idempotent; edits preserve published sna
   expect(versions).toHaveLength(1);
   expect(versions[0].name).toBe("Intake");
   expect((await owner.query(api.communityForms.listBuilderForms, { communityId }))[0]).toMatchObject({ revision: 2, publishedRevision: 1 });
+  await owner.mutation(api.communityForms.publishBuilderForm, { ...publish, expectedRevision: 2 });
+  const republished = await t.run(ctx => ctx.db.query("communityFormVersions").collect());
+  expect(republished).toHaveLength(2);
+  expect(republished.find(v => v.revision === 1)?.name).toBe("Intake");
+  expect(republished.find(v => v.revision === 2)?.name).toBe("Changed");
 });
 test("blank drafts save but cannot publish", async () => {
   const { owner, communityId } = await fixture();
@@ -51,4 +56,13 @@ test("published choices need distinct answers and question keys are unique", () 
   expect(communityFormIssue(form)).toBeNull();
   expect(communityFormIssue(form, true)).toContain("distinct");
   expect(communityFormIssue({ ...form, questions: [question, question] })).toContain("unique");
+});
+
+test("editor validation targets the same first failure as the publishing contract", () => {
+  const form = { name: "Intake", questions: [question, { ...question, key: "q2", title: "" }] };
+  expect(communityFormValidationIssue(form, true)).toEqual({ message: communityFormIssue(form, true), questionIndex: 1, field: "title" });
+  expect(communityFormValidationIssue(form)).toBeNull();
+  form.questions[1] = { ...question, key: "q2", type: "single_choice", options: ["Yes", "yes"] };
+  expect(communityFormValidationIssue(form, true)).toMatchObject({ questionIndex: 1, field: "options" });
+  expect(communityFormValidationIssue({ ...form, name: "" }, true)).toEqual({ message: "Give the form a name.", field: "name" });
 });

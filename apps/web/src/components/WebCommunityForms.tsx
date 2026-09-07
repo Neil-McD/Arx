@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState, type MutableRefObject } from "react";
 import { ArrowLeft, ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
-import { blankCommunityFormQuestion, communityFormIssue, COMMUNITY_FORM_MAX_FORMS, COMMUNITY_FORM_MAX_QUESTIONS, type CommunityFormDraft, type CommunityFormQuestion } from "../../../../shared/communityForms";
+import { blankCommunityFormQuestion, communityFormIssue, communityFormValidationIssue, COMMUNITY_FORM_MAX_FORMS, COMMUNITY_FORM_MAX_QUESTIONS, type CommunityFormDraft, type CommunityFormQuestion, type CommunityFormValidationIssue } from "../../../../shared/communityForms";
 import type { CommunityFormsGateway } from "../controllers/useWebCommunityFormsGateway";
 import "./WebCommunityForms.css";
 
 const contentKey = (form: CommunityFormDraft) => JSON.stringify({ name: form.name, questions: form.questions });
-const errorText = (error: unknown) => String(error).includes("form_revision_conflict")
+const errorText = (error: unknown, operation: "save" | "publish") => String(error).includes("form_revision_conflict")
   ? "This form changed in another session. Your edits are still here. Reload the saved form to continue."
+  : operation === "publish" ? "Could not confirm publication. Your draft is saved. Retry publishing to confirm it safely."
   : "Could not save. Your edits are still here. Try again.";
 
 type LeaveGuard = MutableRefObject<(() => Promise<boolean>) | null>;
@@ -42,7 +43,15 @@ export function CommunityFormEditor({ initial, gateway, onBack, leaveGuard }: { 
   const [finished, setFinished] = useState(false);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [validation, setValidation] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<{ message: string; operation: "save" | "publish" } | null>(null);
+  const [validationTarget, setValidationTarget] = useState<CommunityFormValidationIssue | null>(null);
+  const editor = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!validationTarget) return;
+    const label = validationTarget.field === "name" ? "Form name" : validationTarget.field === "options" ? "Option 1" : validationTarget.field === "description" ? "Question description" : "Question";
+    editor.current?.querySelector<HTMLElement>(`[aria-label="${label}"]`)?.focus();
+    setValidationTarget(null);
+  }, [validationTarget]);
   const [saving, setSaving] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [published, setPublished] = useState(initial.publishedRevision);
@@ -59,12 +68,12 @@ export function CommunityFormEditor({ initial, gateway, onBack, leaveGuard }: { 
     while (inFlight.current) await inFlight.current;
     if (!alive.current || saved.current === contentKey(desired.current)) return;
     const snapshot = { ...desired.current, revision: persisted.current.revision };
-    const issue = communityFormIssue(snapshot); if (issue) { setError(issue); throw new Error(issue); }
+    const issue = communityFormIssue(snapshot); if (issue) { setError({ message: issue, operation: "save" }); throw new Error(issue); }
     setSaving(true);
     const pending = gateway.save(snapshot).then(result => {
       persisted.current = result; saved.current = contentKey(snapshot);
       if (alive.current) { setRevision(result.revision); setPublished(result.publishedRevision); setError(null); }
-    }).catch(e => { if (alive.current) setError(errorText(e)); throw e; });
+    }).catch(e => { if (alive.current) setError({ message: errorText(e, "save"), operation: "save" }); throw e; });
     inFlight.current = pending;
     try { await pending; } finally { inFlight.current = null; if (alive.current) setSaving(false); }
   };
@@ -90,7 +99,7 @@ export function CommunityFormEditor({ initial, gateway, onBack, leaveGuard }: { 
     window.addEventListener("beforeunload", warn); return () => window.removeEventListener("beforeunload", warn);
   }, []);
   const q = draft.questions[index] ?? draft.questions[0];
-  const patch = (change: Partial<CommunityFormQuestion>) => setDraft(d => ({ ...d, questions: d.questions.map(item => item.key === q.key ? { ...item, ...change } : item) }));
+  const patch = (change: Partial<CommunityFormQuestion>) => { setValidation(null); setDraft(d => ({ ...d, questions: d.questions.map(item => item.key === q.key ? { ...item, ...change } : item) })); };
   const move = (from: number, to: number) => {
     if (publishing || to < 0 || to >= draft.questions.length || from === to) return;
     const items = [...draft.questions]; const [item] = items.splice(from, 1); items.splice(to, 0, item);
@@ -98,27 +107,32 @@ export function CommunityFormEditor({ initial, gateway, onBack, leaveGuard }: { 
   };
   const close = async () => { if (await prepareLeave()) onBack(); };
   const publish = async () => {
-    const issue = communityFormIssue(draft, true); if (issue) { setValidation(issue); return; }
+    const issue = communityFormValidationIssue(desired.current, true);
+    if (issue) { if (issue.questionIndex !== undefined) setIndex(issue.questionIndex); setValidation(issue.message); setValidationTarget(issue); return; }
     setPublishing(true); setValidation(null);
-    try { await flush(); const result = await gateway.publish(persisted.current);
-      if (alive.current) { persisted.current = result; setPublished(result.publishedRevision); setError(null); }
-    } catch (e) { if (alive.current) setError(errorText(e)); } finally { if (alive.current) setPublishing(false); }
+    try {
+      try { await flush(); } catch { return; } // Save failure remains a save retry.
+      if (!alive.current) return;
+      try { const result = await gateway.publish(persisted.current);
+        if (alive.current) { persisted.current = result; setPublished(result.publishedRevision); setError(null); }
+      } catch (e) { if (alive.current) setError({ message: errorText(e, "publish"), operation: "publish" }); }
+    } finally { if (alive.current) setPublishing(false); }
   };
   const next = () => {
     const value = answers[q.key];
     if (q.required && (!value || (typeof value === "string" ? !value.trim() : !value.length))) { setValidation("Please answer this question."); return; }
     setValidation(null); if (index === draft.questions.length - 1) setFinished(true); else setIndex(index + 1);
   };
-  return <div className="workflow-page community-forms-page">
+  return <div ref={editor} className="workflow-page community-forms-page">
     <header className="community-forms-header">
       <button className="workflow-secondary-button" disabled={publishing} onClick={() => void close()}><ArrowLeft size={16} /> Forms</button>
-      <input className="community-form-name" aria-label="Form name" maxLength={120} disabled={preview || publishing} value={draft.name} onChange={e => setDraft({ ...draft, name: e.target.value })} />
+      <input className="community-form-name" aria-label="Form name" maxLength={120} disabled={preview || publishing} value={draft.name} onChange={e => { setValidation(null); setDraft({ ...draft, name: e.target.value }); }} />
       <span className="community-form-hint" role="status">{saving ? "Saving…" : dirty ? "Unsaved edits" : published === revision ? "Published" : published ? "Unpublished edits · Saved" : "Draft saved"}</span>
       <button className="workflow-secondary-button" onClick={() => { setPreview(!preview); setFinished(false); setIndex(0); setValidation(null); setAnswers({}); }}>{preview ? "Edit" : "Preview"}</button>
       {!preview ? <button className="workflow-secondary-button" disabled={publishing || saving || (!dirty && published === revision)} onClick={() => void publish()}>{publishing ? "Publishing…" : "Publish"}</button> : null}
     </header>
-    {error ? <div role="alert" className="workflow-error">{error} <button className="workflow-secondary-button" onClick={() => { setError(null); void flush().catch(() => {}); }}>Retry save</button>
-      <button className="workflow-secondary-button" onClick={async () => { try { const rows = await gateway.load(); const row = rows.find(f => f.key === draft.key); if (alive.current && row) { persisted.current = row; saved.current = contentKey(row); setDraft(row); setRevision(row.revision); setPublished(row.publishedRevision); setIndex(0); setError(null); } } catch { setError("Could not reload the saved form."); } }}>Discard edits and reload</button></div> : null}
+    {error ? <div role="alert" className="workflow-error">{error.message} <button className="workflow-secondary-button" disabled={publishing || saving} onClick={() => { if (error.operation === "publish") void publish(); else { setError(null); void flush().catch(() => {}); } }}>{error.operation === "publish" ? "Retry publish" : "Retry save"}</button>
+      <button className="workflow-secondary-button" disabled={publishing || saving} onClick={async () => { try { const rows = await gateway.load(); const row = rows.find(f => f.key === draft.key); if (alive.current && row) { persisted.current = row; saved.current = contentKey(row); setDraft(row); setRevision(row.revision); setPublished(row.publishedRevision); setIndex(0); setError(null); } else if (alive.current) setError({ ...error, message: "Saved form not found. Your edits are still here." }); } catch { if (alive.current) setError({ ...error, message: "Could not reload the saved form." }); } }}>Discard edits and reload</button></div> : null}
     <div className={`community-form-workspace ${preview ? "is-preview" : ""}`}>
       {!preview ? <aside aria-label="Questions" className="community-form-questions">
         {draft.questions.map((item, i) => <div className={i === index ? "is-selected" : ""} key={item.key} draggable={!publishing}

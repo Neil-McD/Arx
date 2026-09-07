@@ -20,6 +20,10 @@ in Forms on failure. Published-form loading failures are visible and retryable.
 - Every endpoint uses authenticated community-manager authorization.
 - Saves use expected revisions; conflicts never silently overwrite another draft.
 - Exact content retries and repeated publication are idempotent.
+- Save and publish failures retain separate retry operations. An uncertain publish
+  response is retried against the saved revision, never represented as a failed save.
+- Publish validation selects the first invalid question and focuses its field,
+  using the same validation rules as the server. Form-name failures focus the name.
 - Client identity/community changes invalidate pending access; backend rechecks it.
 
 Preview answers exist only in component memory and are never submitted.
@@ -61,6 +65,10 @@ member and request, not the global profile or shared community memory.
 
 Verification: `npx vitest run convex/communityForms.test.ts`, web and Convex
 typechecks, release gate, then browser authoring/preview/publish on staging.
+`node scripts/form_builder_browser_qa.mjs` exercises the actual builder with
+synthetic transport: question targeting/focus, uncertain publication retries,
+slow saves/newer edits, leave/reopen, save failures, conflicts, and preview isolation.
+It does not replace the live staging authoring check.
 
 Member runner regressions: `npx vitest run scripts/member_form_save.test.ts`
 and `node scripts/member_form_browser_qa.mjs`. The browser proof renders the
@@ -90,7 +98,7 @@ This is contextual data, never trusted instructions or deterministic completion
 proof. Reading it does not authorize disclosure to a channel. No member-facing
 profile, self-context, external MCP, or ordinary channel-agent payload gains these
 answers. No facts or Markdown copies are persisted; form-submission actions remain
-deterministic milestone movement.
+either deterministic milestone movement or a bounded private agent response.
 
 ## Form-aware scheduled actions
 
