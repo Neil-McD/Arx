@@ -499,6 +499,108 @@ async function formFlowFixture() {
   return { t, f, owner, member, question, request, rootId, configured };
 }
 
+async function formAgentFixture(assigned = true) {
+  const s = await formFlowFixture();
+  await s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: 4, name: "New",
+    automations: [{ trigger: { type: "form_submitted", formKey: "intake" }, action: { type: "prompt_agent", prompt: "Help with the submitted goal." } }],
+  });
+  if (assigned) {
+    await s.t.run(async ctx => {
+      await ctx.db.patch(s.f.channelId, { systemRole: undefined, slug: "service", accessMode: "restricted" });
+      for (const principalKey of [`user:${s.f.memberId}`, "community_agent"]) await ctx.db.insert("communityChannelParticipants", {
+        communityId: s.f.communityId, channelId: s.f.channelId, principalKey,
+        ...(principalKey !== "community_agent" ? { membershipId: s.f.membershipId, membershipActivationSequence: 1 } : {}),
+        status: "active", createdByUserId: s.f.ownerId, createdAt: s.f.nowMs, updatedAt: s.f.nowMs,
+      });
+    });
+    await s.owner.mutation(api.communityMemberWorkflows.setBuilderMemberServiceChannel, {
+      communityId: s.f.communityId, membershipId: s.f.membershipId, channelId: s.f.channelId, expectedRevision: 0,
+    });
+  }
+  const submit = () => s.member.mutation(api.communityFormRequests.saveMyAnswers, {
+    communityId: s.f.communityId, requestId: s.request._id, expectedRevision: 0, answers: { q: "EXACT_SUBMITTED_GOAL" }, submit: true,
+  });
+  return { ...s, submit };
+}
+
+test("form submission queues one exact-source agent action and publishes once without moving", async () => {
+  const s = await formAgentFixture();
+  await s.submit(); await s.submit();
+  const requests = await s.t.run(ctx => ctx.db.query("communityAgentServeRequests").collect());
+  expect(requests).toHaveLength(1);
+  expect(requests[0]).toMatchObject({ status: "queued", workflowFormRequestId: s.request._id, serviceChannelId: s.f.channelId });
+  expect(requests[0].workflowTimerId).toBeUndefined();
+  expect(requests[0].sourceRootId).toBeUndefined();
+  const claim = await s.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: requests[0]._id });
+  const args = { requestId: requests[0]._id, expectedAttempt: claim.attempt! };
+  const context = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal, args);
+  expect(context.ok).toBe(true); if (!context.ok) return;
+  expect(context.delivery).toBe("service_channel");
+  expect(JSON.stringify(context)).toContain("EXACT_SUBMITTED_GOAL");
+  const bundle = buildCommunityAgentServePromptBundle(context);
+  const snapshotJson = JSON.stringify({ version: 2, sha256: "a".repeat(64), messages: bundle.messages,
+    prompt_sections: bundle.systemPromptBundle.sections, timed_member_context: context.timedMemberContext });
+  expect((await s.t.mutation(internal.communityAgentServeWorker.recordCommunityAgentServeContextSnapshotInternal, { ...args, snapshotJson })).ok).toBe(true);
+  const send = () => s.t.mutation(internal.communityAgentServeWorker.finalizeCommunityAgentServeReplyInternal, { ...args, content: "One next step for your goal." });
+  expect((await send()).ok).toBe(true); await send();
+  expect(await s.t.run(ctx => ctx.db.query("communityInteractionRoots").filter(q => q.eq(q.field("actorType"), "community_agent")).collect())).toHaveLength(1);
+  expect(await s.t.run(ctx => ctx.db.query("communityMemberWorkflowTransitions").collect())).toHaveLength(0);
+});
+
+test("missing service destination records failure without losing form submission", async () => {
+  const s = await formAgentFixture(false); await s.submit(); await s.submit();
+  expect((await s.t.run(ctx => ctx.db.get(s.request._id)))?.status).toBe("submitted");
+  const runs = await s.t.run(ctx => ctx.db.query("communityMemberWorkflowRuns").collect());
+  expect(runs.filter(r => r.triggerType === "form_submitted")).toHaveLength(1);
+  expect(runs.find(r => r.triggerType === "form_submitted")?.status).toBe("failed");
+});
+
+test("exact submitted form remains first even outside the recent evidence scan", async () => {
+  const s = await formAgentFixture(); await s.submit();
+  await s.t.run(async ctx => {
+    const original = (await ctx.db.get(s.request._id))!;
+    const { _id, _creationTime, ...fields } = original;
+    for (let i = 0; i < 55; i++) await ctx.db.insert("communityFormRequests", { ...fields, answers: { q: `OTHER_${i}` } });
+  });
+  const request = (await s.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
+  const claim = await s.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: request._id });
+  const result = await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal,
+    { requestId: request._id, expectedAttempt: claim.attempt! });
+  expect(result.ok).toBe(true); if (!result.ok) return;
+  const evidence = JSON.parse(result.timedMemberContext!).submitted_form_evidence;
+  expect(evidence.submissions[0].request_id).toBe(s.request._id);
+  expect(evidence.submissions[0].questions[0].answer).toBe("EXACT_SUBMITTED_GOAL");
+  expect(evidence.truncated).toBe(true);
+});
+
+test.each(["move", "reactivate", "source", "mixed", "shared", "rule"])("form agent rejects stale or unsafe authority: %s", async change => {
+  const s = await formAgentFixture(); await s.submit();
+  const request = (await s.t.run(ctx => ctx.db.query("communityAgentServeRequests").first()))!;
+  const claim = await s.t.mutation(internal.communityAgentServeWorker.claimNextCommunityAgentServeRequestInternal, { requestId: request._id });
+  await s.t.run(async ctx => {
+    if (change === "move") await ctx.db.patch(s.request._id, { milestoneEnteredAt: 1 });
+    if (change === "reactivate") await ctx.db.patch(s.f.membershipId, { activationSequence: 2 });
+    if (change === "source") await ctx.db.patch(s.request._id, { status: "pending" });
+    if (change === "mixed") await ctx.db.patch(request._id, { sourceRootId: s.rootId });
+    if (change === "shared") await ctx.db.patch(s.f.channelId, { accessMode: "all_members" });
+    if (change === "rule") {
+      const workflow = (await ctx.db.get(s.request.workflowId))!;
+      await ctx.db.patch(workflow._id, { milestones: workflow.milestones.map(m => ({ ...m, automations: [] })) });
+    }
+  });
+  expect((await s.t.query(internal.communityAgentServeWorker.readCommunityAgentServeRequestContextInternal,
+    { requestId: request._id, expectedAttempt: claim.attempt! })).ok).toBe(false);
+});
+
+test("form submission rejects two competing rules for one form", async () => {
+  const s = await formAgentFixture();
+  await expect(s.owner.mutation(api.communityMemberWorkflows.updateBuilderWorkflowMilestone, {
+    communityId: s.f.communityId, milestoneKey: s.configured.firstKey, expectedRevision: 5, name: "New",
+    automations: ["First", "Second"].map(prompt => ({ trigger: { type: "form_submitted" as const, formKey: "intake" }, action: { type: "prompt_agent" as const, prompt } })),
+  })).rejects.toThrow("form_submission_trigger_duplicate");
+});
+
 test("form evidence: submitted historical answers keep pinned labels, remain private, and exclude prior activations", async () => {
   const { t, f, owner, member, question, request } = await formFlowFixture();
   const scope = { communityId: f.communityId, membershipId: f.membershipId };

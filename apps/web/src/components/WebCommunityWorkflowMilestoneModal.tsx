@@ -114,6 +114,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
     && !hasConflict
     && automations.every((automation) => !workflowAutomationIssue(automation, props.channels, props.channelsUnavailable))
     && moveAutomationCount <= 1
+    && new Set(automations.flatMap(a => a.trigger.type === "form_submitted" ? [a.trigger.formKey] : [])).size === automations.filter(a => a.trigger.type === "form_submitted").length
     && automations.every(
       (automation) => automation.action.type !== "prompt_agent" || automation.action.prompt.trim().length > 0,
     );
@@ -238,6 +239,7 @@ export function WebCommunityWorkflowMilestoneModal(props: Props) {
             ) : null}
 
             {hasConflict ? <p className="workflow-error" role="alert">This milestone changed while you were editing. Your draft has not been saved. Close and reopen it to load the latest version.</p> : null}
+            {new Set(automations.flatMap(a => a.trigger.type === "form_submitted" ? [a.trigger.formKey] : [])).size < automations.filter(a => a.trigger.type === "form_submitted").length ? <p className="workflow-error" role="alert">Use one submission action per form in this milestone: Ask agent or Move member.</p> : null}
             {props.channelsUnavailable ? <p role="status">Channel choices are unavailable while loading or reconnecting.</p> : null}
             {props.error ? <p className="workflow-error" role="alert">{props.error}</p> : null}
           </div>

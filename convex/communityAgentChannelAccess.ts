@@ -2,7 +2,7 @@ import { internalQuery } from "./_generated/server";
 import { v } from "convex/values";
 import { interactionIsChannelAddressable, resolveAuthorizedCommunityChannel } from "./communityChannelCore";
 import { resolveCommunityChannelActor } from "./communityChannelAccess";
-import { requireTimedWorkflowDestination } from "./communityAgentTimedWorkflowCore";
+import { requireServiceWorkflowDestination } from "./communityAgentServiceWorkflowCore";
 
 export async function requireAgentSourceChannelAccess(args: { ctx: any; root: any; userId: any }) {
   if (!args.root || args.root.status !== "live") throw new Error("community_agent_serve_source_unavailable");
@@ -21,8 +21,8 @@ export const authorizeServeToolsInternal = internalQuery({
     if (!request || request.status !== "running" || request.attempt !== args.expectedAttempt || !request.requesterUserId) {
       throw new Error("community_agent_serve_request_unavailable");
     }
-    if (request.workflowTimerId) {
-      await requireTimedWorkflowDestination(ctx, request);
+    if (request.workflowTimerId || request.workflowFormRequestId) {
+      await requireServiceWorkflowDestination(ctx, request);
       return { restricted: true, timed: true };
     }
     if (!request.sourceRootId) throw new Error("community_agent_serve_source_unavailable");

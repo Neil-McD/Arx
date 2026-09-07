@@ -1,19 +1,22 @@
 import type { QueryCtx } from "./_generated/server";
-import type { Doc } from "./_generated/dataModel";
+import type { Doc, Id } from "./_generated/dataModel";
 import { communityMembershipRowIsActive } from "./communityCore";
 import { formAnswersIssue } from "../shared/communityFormAnswers";
 import type { CommunitySubmittedFormEvidence } from "../shared/communityMembershipContext";
 
 // Private assembly only: callers must establish builder or execution authority.
 // Scan is bounded even when old activations or invalid records occupy the window.
-export async function readSubmittedFormRecords(ctx: QueryCtx, membership: Doc<"communityMemberships">) {
+export async function readSubmittedFormRecords(ctx: QueryCtx, membership: Doc<"communityMemberships">, requiredRequestId?: Id<"communityFormRequests">) {
   if (!communityMembershipRowIsActive(membership)) throw new Error("form_context_forbidden");
   const candidates = await ctx.db.query("communityFormRequests")
     .withIndex("by_member_status", q => q.eq("membershipId", membership._id).eq("status", "submitted"))
     .order("desc").take(51);
   const records: { request: Doc<"communityFormRequests">; version: Doc<"communityFormVersions"> }[] = [];
   let unavailable = 0;
-  for (const request of candidates.slice(0, 50)) {
+  const required = requiredRequestId ? await ctx.db.get(requiredRequestId) : null;
+  const selected = required ? [required, ...candidates.slice(0, 50).filter(r => r._id !== required._id)] : candidates.slice(0, 50);
+  for (const request of selected) {
+    if (request.membershipId !== membership._id || request.status !== "submitted") continue;
     if (request.activationSequence !== (membership.activationSequence ?? 0)) continue;
     const version = await ctx.db.get(request.versionId);
     const form = version ? await ctx.db.get(version.formId) : null;
@@ -28,6 +31,7 @@ export async function readSubmittedFormRecords(ctx: QueryCtx, membership: Doc<"c
     }
     records.push({ request, version });
   }
+  if (requiredRequestId && records[0]?.request._id !== requiredRequestId) throw new Error("workflow_form_evidence_unavailable");
   return { records, scan_truncated: candidates.length > 50, unavailable };
 }
 

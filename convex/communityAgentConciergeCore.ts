@@ -5,7 +5,7 @@ import { CANONICAL_COMMUNITY_AGENT_KEY } from "../shared/communityAgentToolProto
 import { COMMUNITY_AGENT_SERVE_RECOVERY_DELAYS_MS } from "../shared/communityAgentServeContract";
 import { resolveCommunityInferenceFundingAdmission } from "./founderInferenceCore";
 import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
-import { requireTimedWorkflowDestination } from "./communityAgentTimedWorkflowCore";
+import { requireServiceWorkflowDestination } from "./communityAgentServiceWorkflowCore";
 
 const internalRefs = internal as any;
 
@@ -177,6 +177,7 @@ async function insertServeRequest(args: {
   workflowActionKey?: string;
   workflowPromptSnapshot?: string;
   workflowTimerId?: any;
+  workflowFormRequestId?: any;
   serviceChannelId?: any;
   serviceChannelRevision?: number;
   sourceVisibilityScope?: VisibilityScope;
@@ -203,7 +204,7 @@ async function insertServeRequest(args: {
     ...(args.sourceReplyId ? { sourceReplyId: args.sourceReplyId } : {}),
     ...(args.requesterUserId ? { requesterUserId: args.requesterUserId, sponsorUserId } : {}),
     ...(args.workflowRunId ? { workflowRunId: args.workflowRunId } : {}),
-    ...(args.workflowTimerId ? { workflowTimerId: args.workflowTimerId,
+    ...((args.workflowTimerId || args.workflowFormRequestId) ? { workflowTimerId: args.workflowTimerId, workflowFormRequestId: args.workflowFormRequestId,
       serviceChannelId: args.serviceChannelId, serviceChannelRevision: args.serviceChannelRevision } : {}),
     ...(args.workflowActionKey ? { workflowActionKey: args.workflowActionKey } : {}),
     ...(args.workflowPromptSnapshot
@@ -232,6 +233,10 @@ async function skipInvocation(args: {
   workflowRunId?: any;
   workflowActionKey?: string;
   workflowPromptSnapshot?: string;
+  workflowTimerId?: any;
+  workflowFormRequestId?: any;
+  serviceChannelId?: any;
+  serviceChannelRevision?: number;
   sourceVisibilityScope?: VisibilityScope;
   responseVisibilityScope?: VisibilityScope;
   skipReason?: string;
@@ -251,6 +256,10 @@ async function skipInvocation(args: {
     workflowRunId: args.workflowRunId,
     workflowActionKey: args.workflowActionKey,
     workflowPromptSnapshot: args.workflowPromptSnapshot,
+    workflowTimerId: args.workflowTimerId,
+    workflowFormRequestId: args.workflowFormRequestId,
+    serviceChannelId: args.serviceChannelId,
+    serviceChannelRevision: args.serviceChannelRevision,
     sourceVisibilityScope: args.sourceVisibilityScope,
     responseVisibilityScope: args.responseVisibilityScope,
     skipReason: args.skipReason,
@@ -667,6 +676,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
   communityId: any;
   rootId?: any;
   workflowTimerId?: any;
+  workflowFormRequestId?: any;
   replyId?: any;
   requesterUserId: any;
   workflowRunId: any;
@@ -709,9 +719,10 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       request_id: normalizeIdValue(existing._id),
     };
   }
-  const timedMembership = args.workflowTimerId ? await args.ctx.db.get(workflowRun.membershipId) : null;
-  const timedDestination = args.workflowTimerId ? {
+  const timedMembership = (args.workflowTimerId || args.workflowFormRequestId) ? await args.ctx.db.get(workflowRun.membershipId) : null;
+  const timedDestination = (args.workflowTimerId || args.workflowFormRequestId) ? {
     workflowTimerId: args.workflowTimerId,
+    workflowFormRequestId: args.workflowFormRequestId,
     serviceChannelId: timedMembership?.serviceChannelId,
     serviceChannelRevision: timedMembership?.serviceChannelRevision ?? 0,
   } : {};
@@ -740,15 +751,16 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       workflowRunId: args.workflowRunId,
       workflowActionKey,
       workflowPromptSnapshot,
+      ...timedDestination,
       sourceVisibilityScope: source.visibilityScope,
       responseVisibilityScope: source.visibilityScope,
       skipReason,
       nowMs: args.nowMs,
     })),
   });
-  if (args.workflowTimerId) {
+  if (args.workflowTimerId || args.workflowFormRequestId) {
     try {
-      await requireTimedWorkflowDestination(args.ctx, {
+      await requireServiceWorkflowDestination(args.ctx, {
         ...args, ...timedDestination, triggerKind: "workflow", sponsorUserId: args.requesterUserId,
       });
     } catch (error) {
@@ -776,7 +788,7 @@ export async function intakeCommunityAgentWorkflowAction(args: {
       communityId: args.communityId,
       userId: args.requesterUserId,
     });
-    if (!args.workflowTimerId) await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
+    if (!args.workflowTimerId && !args.workflowFormRequestId) await requireAgentSourceChannelAccess({ ctx: args.ctx, root: source.root, userId: args.requesterUserId });
   } catch {
     return await skip(
       "requester_access_missing",
@@ -818,8 +830,8 @@ export async function intakeCommunityAgentWorkflowAction(args: {
     workflowActionKey,
     workflowPromptSnapshot,
     ...timedDestination,
-    sourceVisibilityScope: args.workflowTimerId ? "community" : source.visibilityScope,
-    responseVisibilityScope: args.workflowTimerId ? "community" : source.visibilityScope,
+    sourceVisibilityScope: (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
+    responseVisibilityScope: (args.workflowTimerId || args.workflowFormRequestId) ? "community" : source.visibilityScope,
     nowMs: args.nowMs,
   });
   await scheduleImmediateServeWorker({ ctx: args.ctx, requestId });

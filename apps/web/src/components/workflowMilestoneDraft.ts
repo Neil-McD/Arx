@@ -19,7 +19,7 @@ export function workflowMoveLabel(nextMilestoneName: string | null): string {
 
 export function workflowAutomationIssue(automation: CommunityMemberWorkflowAutomation, channels: CloudCommunityChannel[], unavailable: boolean): string | null {
   if ((automation.action.type === "request_form" && !automation.action.formKey) || (automation.trigger.type === "form_submitted" && !automation.trigger.formKey)) return "Choose a published form";
-  if (automation.trigger.type === "form_submitted" && automation.action.type !== "move_member") return "Form submission supports Move member";
+  if (automation.trigger.type === "form_submitted" && automation.action.type === "request_form") return "Choose Ask agent or Move member";
   if (automation.trigger.type === "milestone_elapsed") {
     try { normalizeWorkflowDelayMinutes(automation.trigger.delayMinutes); }
     catch { return "Choose a duration from 1 minute to 365 days"; }

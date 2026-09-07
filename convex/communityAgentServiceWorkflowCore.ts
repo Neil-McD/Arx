@@ -9,15 +9,16 @@ import { readCanonicalUserIdentityProjection } from "./profileCore";
 import { buildCommunityAgentServeRunId } from "../shared/communityAgentServeContract";
 import type { QueryCtx } from "./_generated/server";
 import type { Id } from "./_generated/dataModel";
+import { requestIsCurrent } from "./communityFormRequestCore";
 
-/** Member-facing projection only. Caller establishes live timer/run authority.
+/** Member-facing projection only. Caller establishes live source/run authority.
  * Never workflow-only facts, account spine or the builder dossier.
  */
-export async function readTimedMemberContext(ctx: QueryCtx, request: any) {
+export async function readServiceMemberContext(ctx: QueryCtx, request: any) {
   const member = await getUniqueCommunityMembershipByPair({ ctx, communityId: request.communityId, userId: request.requesterUserId });
   const membership = member ? await ctx.db.get(member._id as Id<"communityMemberships">) : null;
   if (!membership) throw new Error("workflow_member_context_unavailable");
-  const evidence = projectSubmittedFormEvidence(await readSubmittedFormRecords(ctx, membership));
+  const evidence = projectSubmittedFormEvidence(await readSubmittedFormRecords(ctx, membership, request.workflowFormRequestId));
   const audience = evidence.submissions.length
     ? await requireMemberFormServiceAudience({ ctx, membership }) : null;
   const { facts, truncated } = await readBoundedMemberOrientationFacts(ctx, {
@@ -34,25 +35,47 @@ export async function readTimedMemberContext(ctx: QueryCtx, request: any) {
   });
 }
 
-/** A durable timer is the source; a captured membership binding is the destination.
+/** A durable timer or submitted form is the source; the membership binding is the destination.
  * Reads and publication share this authority check. No synthetic interaction.
  */
-export async function requireTimedWorkflowDestination(ctx: any, request: any) {
-  if (request.triggerKind !== "workflow" || !request.workflowTimerId || request.sourceRootId || request.sourceReplyId) {
+export async function requireServiceWorkflowDestination(ctx: any, request: any) {
+  if (request.triggerKind !== "workflow" || Boolean(request.workflowTimerId) === Boolean(request.workflowFormRequestId) || request.sourceRootId || request.sourceReplyId) {
     throw new Error("workflow_timer_source_invalid");
   }
   if (request._id && (request.status !== "running" || (request.leaseExpiresAt ?? 0) <= Date.now())) {
     throw new Error("workflow_execution_lease_expired");
   }
-  const timer = await ctx.db.get(request.workflowTimerId);
+  const timer = request.workflowTimerId ? await ctx.db.get(request.workflowTimerId) : null;
   const run = request.workflowRunId ? await ctx.db.get(request.workflowRunId) : null;
-  const resolved = timer ? await resolveWorkflowTimer(ctx, timer) : null;
+  let resolved: any = timer ? await resolveWorkflowTimer(ctx, timer) : null;
   const configs = await ctx.db.query("communityAgentConfigs")
     .withIndex("by_community", (q: any) => q.eq("communityId", request.communityId)).take(5);
   if (configs.sort((a: any, b: any) => b.updatedAt - a.updatedAt)[0]?.agentEnabled === false) {
     throw new Error("workflow_agent_disabled");
   }
-  if (!resolved || !run || timer.status === "obsolete"
+  if (request.workflowFormRequestId) {
+    const formRequest = await ctx.db.get(request.workflowFormRequestId);
+    if (!formRequest || formRequest.status !== "submitted" || !await requestIsCurrent(ctx, formRequest)) throw new Error("workflow_form_source_stale");
+    const membership = await ctx.db.get(formRequest.membershipId);
+    const workflow = await ctx.db.get(formRequest.workflowId);
+    const matches = workflow.milestones.find((m: any) => m.key === formRequest.milestoneKey)?.automations.filter((a: any) => a.trigger.type === "form_submitted" && a.trigger.formKey === formRequest.formKey) ?? [];
+    const automation = matches.length === 1 ? matches[0] : null;
+    if (!run || !automation || formRequest.communityId !== request.communityId
+      || membership.userId !== request.requesterUserId || request.sponsorUserId !== request.requesterUserId
+      || run.communityId !== request.communityId || run.workflowId !== formRequest.workflowId
+      || run.membershipId !== formRequest.membershipId || run.milestoneKey !== formRequest.milestoneKey
+      || run.milestoneEnteredAt !== formRequest.milestoneEnteredAt || run.automationKey !== automation.key
+      || run.triggerReceiptRef !== `form_submission:${formRequest._id}`
+      || !["running", "finished"].includes(run.status)
+      || (request._id && (run.status !== "finished" || run.actionResult?.serveRequestId !== request._id || run.actionResult?.status !== "complete"))
+      || run.actionSnapshot.type !== "prompt_agent" || run.actionSnapshot.key !== request.workflowActionKey
+      || run.actionSnapshot.prompt !== request.workflowPromptSnapshot
+      || JSON.stringify(automation.action) !== JSON.stringify(run.actionSnapshot)
+      || JSON.stringify(automation.trigger) !== JSON.stringify(run.triggerSnapshot)) throw new Error("workflow_form_authority_stale");
+    // Exact submitted evidence and private audience are required even at intake.
+    await readServiceMemberContext(ctx, request);
+    resolved = { membership, workflow, automation };
+  } else if (!resolved || !run || timer.status === "obsolete"
     || resolved.dueAt > Date.now()
     || run.communityId !== request.communityId || run.workflowId !== timer.workflowId
     || run.membershipId !== timer.membershipId || run.automationKey !== timer.automationKey
@@ -81,7 +104,7 @@ export async function requireTimedWorkflowDestination(ctx: any, request: any) {
     if (snapshot?.kind === "context_snapshot") {
       const captured = JSON.parse(snapshot.content).timed_member_context;
       // Older prompt-only snapshots contain no member facts and need no new fence.
-      if (captured !== undefined && captured !== await readTimedMemberContext(ctx, request)) {
+      if (captured !== undefined && captured !== await readServiceMemberContext(ctx, request)) {
         throw new Error("workflow_member_context_changed");
       }
     }
@@ -89,10 +112,10 @@ export async function requireTimedWorkflowDestination(ctx: any, request: any) {
   return { ...resolved, run, channelId: request.serviceChannelId };
 }
 
-export async function publishTimedWorkflowPost(ctx: any, request: any, content: string, nowMs: number) {
-  const { channelId } = await requireTimedWorkflowDestination(ctx, request);
+export async function publishServiceWorkflowPost(ctx: any, request: any, content: string, nowMs: number) {
+  const { channelId } = await requireServiceWorkflowDestination(ctx, request);
   // Even a missing/deleted snapshot must not bypass the form disclosure fence.
-  const currentContext = await readTimedMemberContext(ctx, request);
+  const currentContext = await readServiceMemberContext(ctx, request);
   if (JSON.parse(currentContext).submitted_form_evidence) {
     const snapshot = await ctx.db.query("communityAgentRunEvents")
       .withIndex("by_run_seq", (q: any) => q.eq("runId", buildCommunityAgentServeRunId(request._id, request.attempt)).eq("seq", 0)).first();

@@ -10,7 +10,7 @@ import {
 } from "./communityCore";
 import { resolveUserProfileDisplayProjection } from "./userProfileProjection";
 import { resolveMemberServiceChannel } from "./communityMemberServiceChannelCore";
-import { requireTimedWorkflowDestination } from "./communityAgentTimedWorkflowCore";
+import { requireServiceWorkflowDestination } from "./communityAgentServiceWorkflowCore";
 import { requireAgentSourceChannelAccess } from "./communityAgentChannelAccess";
 import { buildCommunityTabPath } from "../shared/webAppRouteState";
 import {
@@ -137,8 +137,8 @@ export async function resolveWorkflowExecutionMembershipContext(args: {
   const configs = await ctx.db.query("communityAgentConfigs")
     .withIndex("by_community", q => q.eq("communityId", request.communityId)).take(5);
   if (configs.sort((a, b) => b.updatedAt - a.updatedAt)[0]?.agentEnabled === false) throw new Error("workflow_context_forbidden");
-  if (request.workflowTimerId) {
-    await requireTimedWorkflowDestination(ctx, request);
+  if (request.workflowTimerId || request.workflowFormRequestId) {
+    await requireServiceWorkflowDestination(ctx, request);
   } else {
     const root = request.sourceRootId ? await ctx.db.get(request.sourceRootId) : null;
     const source = request.sourceReplyId ? await ctx.db.get(request.sourceReplyId) : root;
@@ -256,9 +256,9 @@ async function readMembershipContextRecords(args: {
           serveRequest.workflowRunId === run._id &&
           serveRequest.workflowActionKey === run.actionSnapshot.key &&
           serveRequest.workflowPromptSnapshot === run.actionSnapshot.prompt &&
-          Boolean(serveRequest.workflowTimerId ?? serveRequest.sourceReplyId ?? serveRequest.sourceRootId) &&
+          Boolean(serveRequest.workflowTimerId ?? serveRequest.workflowFormRequestId ?? serveRequest.sourceReplyId ?? serveRequest.sourceRootId) &&
           run.triggerReceiptRef ===
-            (serveRequest.workflowTimerId ? `workflow-timer:${serveRequest.workflowTimerId}` : buildCommunityInteractionEvidenceRef({
+            (serveRequest.workflowTimerId ? `workflow-timer:${serveRequest.workflowTimerId}` : serveRequest.workflowFormRequestId ? `form_submission:${serveRequest.workflowFormRequestId}` : buildCommunityInteractionEvidenceRef({
               objectType: serveRequest.sourceReplyId ? "reply" : "root",
               objectId: String(
                 serveRequest.sourceReplyId ?? serveRequest.sourceRootId ?? "",
@@ -274,7 +274,7 @@ async function readMembershipContextRecords(args: {
                 ? ("failed" as const)
                 : serveRequest.status;
         let deliveryChannelUrl: string | null = null;
-        if (validRequest && status === "responded" && serveRequest.workflowTimerId && serveRequest.responseRootId) {
+        if (validRequest && status === "responded" && (serveRequest.workflowTimerId || serveRequest.workflowFormRequestId) && serveRequest.responseRootId) {
           const root = await args.ctx.db.get(serveRequest.responseRootId);
           if (root?.status === "live" && root.communityId === args.communityId
             && root.channelId === serveRequest.serviceChannelId

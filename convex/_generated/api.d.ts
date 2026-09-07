@@ -35,7 +35,7 @@ import type * as communityAgentFilesystem from "../communityAgentFilesystem.js";
 import type * as communityAgentHeartbeat from "../communityAgentHeartbeat.js";
 import type * as communityAgentRuntime from "../communityAgentRuntime.js";
 import type * as communityAgentServeWorker from "../communityAgentServeWorker.js";
-import type * as communityAgentTimedWorkflowCore from "../communityAgentTimedWorkflowCore.js";
+import type * as communityAgentServiceWorkflowCore from "../communityAgentServiceWorkflowCore.js";
 import type * as communityAiFeedEvidence from "../communityAiFeedEvidence.js";
 import type * as communityAiFeedEvidenceCore from "../communityAiFeedEvidenceCore.js";
 import type * as communityAiFeedRetirement from "../communityAiFeedRetirement.js";
@@ -266,7 +266,7 @@ declare const fullApi: ApiFromModules<{
   communityAgentHeartbeat: typeof communityAgentHeartbeat;
   communityAgentRuntime: typeof communityAgentRuntime;
   communityAgentServeWorker: typeof communityAgentServeWorker;
-  communityAgentTimedWorkflowCore: typeof communityAgentTimedWorkflowCore;
+  communityAgentServiceWorkflowCore: typeof communityAgentServiceWorkflowCore;
   communityAiFeedEvidence: typeof communityAiFeedEvidence;
   communityAiFeedEvidenceCore: typeof communityAiFeedEvidenceCore;
   communityAiFeedRetirement: typeof communityAiFeedRetirement;

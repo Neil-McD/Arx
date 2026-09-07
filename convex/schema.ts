@@ -2024,6 +2024,7 @@ export default defineSchema({
     workflowActionKey: v.optional(v.string()),
     workflowPromptSnapshot: v.optional(v.string()),
     workflowTimerId: v.optional(v.id("communityMemberWorkflowTimers")),
+    workflowFormRequestId: v.optional(v.id("communityFormRequests")),
     serviceChannelId: v.optional(v.id("communityChannels")),
     serviceChannelRevision: v.optional(v.number()),
     status: v.union(

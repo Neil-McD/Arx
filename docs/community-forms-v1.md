@@ -39,13 +39,15 @@ Publishing alone never runs an agent or moves a member.
   briefly lock editing. Failures pause saving until explicit retry or reload.
 - Retry preserves the exact failed payload and operation (including Submit),
   using existing server idempotency. No second save queue or persistence is added.
-- `form_submitted` currently supports `move_member` only. Submission and movement
-  share one transaction; no synthetic channel source or agent destination is invented.
+- `form_submitted` supports one `move_member` or `prompt_agent` rule per form and
+  milestone. Movement remains transactional. Agent actions bind the exact submitted
+  request to the existing queue and assigned private service channel. No synthetic
+  channel source or timer is invented; delivery failure does not discard answers.
 - Milestone movement cancels unfinished requests. Stale/revoked visits fail closed
   on reads and writes. Historical submitted answers remain available to managers.
 - Owners/admins read submitted responses in the member dossier. Answers are not
   exported to shared memory, global profile, or ordinary channel-agent prompts.
-  Scheduled workflow actions may use the bounded form evidence under the
+  Scheduled and form-submission workflow actions may use bounded form evidence under the
   member-and-managers disclosure boundary below.
 - Dark/light use existing semantic tokens; mobile reuses the same navigation slot.
 

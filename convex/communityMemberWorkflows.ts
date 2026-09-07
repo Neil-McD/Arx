@@ -171,6 +171,7 @@ function normalizeAutomations(
   );
   const usedAutomationKeys = new Set<string>();
   const usedActionKeys = new Set<string>();
+  const submittedForms = new Set<string>();
   const automations: CommunityMemberWorkflowAutomation[] = inputs.map((input) => {
     const suppliedAutomationKey = input.key
       ? normalizeCommunityMemberWorkflowAutomationKey(input.key)
@@ -223,7 +224,11 @@ function normalizeAutomations(
             destination: "next_or_complete",
           };
     if ((action.type === "request_form" && !action.formKey.trim()) || (input.trigger.type === "form_submitted" && !input.trigger.formKey.trim())) throw new Error("form_required");
-    if (input.trigger.type === "form_submitted" && action.type !== "move_member") throw new Error("form_submission_requires_move_action");
+    if (input.trigger.type === "form_submitted") {
+      if (action.type === "request_form") throw new Error("form_submission_action_invalid");
+      if (submittedForms.has(input.trigger.formKey)) throw new Error("form_submission_trigger_duplicate");
+      submittedForms.add(input.trigger.formKey);
+    }
     return {
       key: automationKey,
       ...(input.trigger.type === "milestone_elapsed" ? {
@@ -751,6 +756,7 @@ async function executeWorkflowAutomation(args: {
   row?: ChannelContributionRow;
   timerReceiptRef?: string;
   workflowTimerId?: any;
+  workflowFormRequestId?: any;
   workflow: WorkflowRow;
   membership: CommunityMembershipLike;
   current: ReturnType<typeof resolveCurrentMilestone>;
@@ -803,13 +809,14 @@ async function executeWorkflowAutomation(args: {
       return { status: "form_requested" as const, workflow_run_id: String(workflowRunId), replayed: false };
     }
     if (args.automation.action.type === "prompt_agent") {
-      if (!args.workflowTimerId && (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed")) {
+      if (!args.workflowTimerId && !args.workflowFormRequestId && (!args.row || !args.objectType || args.automation.trigger.type !== "member_contributed")) {
         throw new Error("community_member_workflow_timer_action_invalid");
       }
       const intake = await intakeCommunityAgentWorkflowAction({
         ctx: args.ctx,
         communityId: args.workflow.communityId,
         workflowTimerId: args.workflowTimerId,
+        workflowFormRequestId: args.workflowFormRequestId,
         rootId: args.row ? (args.objectType === "root" ? args.row._id : (args.row as any).rootId) : undefined,
         replyId: args.objectType === "reply" ? args.row?._id : undefined,
         requesterUserId: args.membership.userId,
@@ -900,15 +907,18 @@ async function executeWorkflowAutomation(args: {
 // Submission and deterministic movement commit together; no new scheduler or
 // user-writable event authority. The exact request is the replay receipt.
 export async function processSubmittedWorkflowForm(ctx: any, request: any) {
+  if (!request || request.status !== "submitted") throw new Error("form_submission_missing");
   if (!await requestIsCurrent(ctx, request)) throw new Error("form_request_expired");
   const workflow = await ctx.db.get(request.workflowId);
   const membership = await ctx.db.get(request.membershipId);
   const state = await getMemberMilestone({ ctx, workflowId: workflow._id, membershipId: membership._id });
   const current = resolveCurrentMilestone({ workflow, membership, state });
-  const automation = current.milestone.automations.find((a: CommunityMemberWorkflowAutomation) =>
-    a.trigger.type === "form_submitted" && a.trigger.formKey === request.formKey && a.action.type === "move_member");
+  const matches = current.milestone.automations.filter((a: CommunityMemberWorkflowAutomation) =>
+    a.trigger.type === "form_submitted" && a.trigger.formKey === request.formKey);
+  // Fail closed on historical conflicting rules without losing submitted answers.
+  const automation = matches.length === 1 ? matches[0] : null;
   if (automation) await executeWorkflowAutomation({ ctx, workflow, membership, current, automation,
-    timerReceiptRef: `form_submission:${request._id}` });
+    workflowFormRequestId: request._id, timerReceiptRef: `form_submission:${request._id}` });
 }
 
 async function handleChannelContributionCore(args: {

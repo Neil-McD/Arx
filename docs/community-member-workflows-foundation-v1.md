@@ -11,14 +11,35 @@ The V1 grammar is intentionally small:
 Workflow = ordered Milestones[]
 Milestone = name + Automations[]
 Automation = one Trigger + one Action
-Trigger = member_contributed(channelId?) | milestone_elapsed(delayMinutes)
-Action = prompt_agent(prompt) | move_member(next_or_complete)
+Trigger = member_contributed(channelId?) | milestone_elapsed(delayMinutes) | form_submitted(formKey)
+Action = prompt_agent(prompt) | move_member(next_or_complete) | request_form(formKey)
 ```
 
 A new milestone has no hidden behavior. Merely occupying a milestone never
 causes work without a configured trigger. Contribution prompts reply to their
 authorized source thread. Elapsed-time prompts publish one check-in to the
 member's authorized service channel; either trigger can also move the member.
+
+### Form submission actions
+
+- One submission rule per form per milestone: **Ask agent** or **Move member**.
+  Submission cannot request another form or both respond and move in the same rule.
+- The saved submitted request is the event authority. Answers are pinned to the
+  assigned published version; exact submission retries do not create another run.
+- Ask agent binds the existing serve queue to `workflowFormRequestId`, never a
+  synthetic timer or post. The exact triggering form is prioritized ahead of
+  bounded historical evidence, even outside the recent scan window.
+- Timer and form delivery share `communityAgentServiceWorkflowCore`. A form
+  response requires the assigned private service channel with only the subject
+  member and managers able to read; there is no public fallback or extra tools.
+- Membership activation, milestone visit, rule, source, destination revision,
+  audience, execution lease and captured evidence are checked again before publication.
+  Answers remain saved if admission or delivery fails; the action records failure.
+- Submitted answers are untrusted evidence, not instructions or milestone proof.
+  Ask agent does not move the member. Existing snapshot field `timed_member_context`
+  remains the compatible service-delivery receipt field for both source types.
+- Channel audience checks apply at delivery. Later invitations can expose existing
+  channel history; this does not introduce per-message secrecy.
 
 ### One-shot milestone timers
 

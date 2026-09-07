@@ -56,7 +56,7 @@ export const saveMyAnswers = mutation({ args: { ...scope, requestId: v.id("commu
   const revision = row.revision + 1;
   await ctx.db.patch(row._id, { answers: args.answers, revision, updatedAt: Date.now(),
     ...(args.submit ? { status: "submitted" as const, submittedAt: Date.now() } : {}) });
-  if (args.submit) await processSubmittedWorkflowForm(ctx, row);
+  if (args.submit) await processSubmittedWorkflowForm(ctx, await ctx.db.get(row._id));
   return { revision, submitted: args.submit };
 } });
 export const listBuilderResponses = query({ args: { ...scope, membershipId: v.id("communityMemberships") }, handler: async (ctx, args) => {
