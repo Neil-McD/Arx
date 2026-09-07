@@ -13,6 +13,78 @@ import { renderCommunityMemberSelfContext } from "../shared/communityMemberSelfC
 
 const selfContextPath = "/communities/canonical-community/members/me/context.md";
 
+test("builder context discovery paginates and rechecks administrator authority", async () => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const memberId = await t.run(async ctx => {
+    const membership = (await ctx.db.query("communityMemberships").withIndex("by_community_user", q => q.eq("communityId", f.communityId).eq("userId", f.memberId)).first())!;
+    await ctx.db.patch(membership._id, { role: "admin" });
+    for (let i = 0; i < 51; i++) {
+      const userId = await ctx.db.insert("users", { authSubject: `page-${i}`, displayName: "Same name", createdAt: i, updatedAt: i });
+      await ctx.db.insert("communityMemberships", { communityId: f.communityId, userId, role: "member", active: true, createdAt: i, updatedAt: i });
+    }
+    return membership._id;
+  });
+  const client = t.withIdentity({ subject: f.memberSubject });
+  const first = await client.query(api.communityMemberWorkflows.listBuilderWorkflowContextMembers, { communityId: f.communityId });
+  expect(first.members).toHaveLength(50);
+  expect(first.next_cursor).toBeTruthy();
+  const second = await client.query(api.communityMemberWorkflows.listBuilderWorkflowContextMembers, { communityId: f.communityId, cursor: first.next_cursor! });
+  expect(second.next_cursor).toBeNull();
+  const all = [...first.members, ...second.members];
+  expect(new Set(all.map(m => m.membership_id)).size).toBe(all.length);
+  await t.run(ctx => ctx.db.patch(memberId, { role: "member" }));
+  await expect(client.query(api.communityMemberWorkflows.listBuilderWorkflowContextMembers, { communityId: f.communityId })).rejects.toThrow();
+  await expect(client.query(api.communityMemberWorkflows.getBuilderWorkflowMemberSuccessDossier, { communityId: f.communityId, membershipId: memberId })).rejects.toThrow();
+});
+
+test.each(["personal_agent", "external_mcp"] as const)("%s reads builder workflow dossiers with current authority", async principalKind => {
+  const t = convexTest(schema, modules);
+  const f = await createFixture(t);
+  const directory = "/communities/canonical-community/builder/workflow-members/";
+  const execute = (subject: string, userId: any, toolName: "polynet_list" | "polynet_read", path: string, kind = principalKind as "personal_agent" | "external_mcp" | "community_agent") => executePolynetCanonicalTool({
+    ctx: executionContext(t.withIdentity({ subject })), authSubject: subject, userId, principalKind: kind,
+    evidenceSurface: "member_agent_dock", toolName, input: { path },
+  });
+  const listed = await execute(f.ownerSubject, f.ownerId, "polynet_list", directory);
+  expect(listed, JSON.stringify(listed)).toMatchObject({ ok: true, value: { writable: false, next_cursor: null } });
+  if (!listed.ok) throw new Error(listed.code);
+  const entry = (listed.value.entries as any[]).find(e => e.user_id === f.memberId);
+  expect(entry.name).toBe("canonical-member");
+  const versionId = await t.run(async ctx => {
+    const now = Date.now();
+    const workflowId = await ctx.db.insert("communityMemberWorkflows", { communityId: f.communityId,
+      milestones: [{ key: "new", name: "New", automations: [] }], revision: 1, createdByUserId: f.ownerId, updatedByUserId: f.ownerId, createdAt: now, updatedAt: now });
+    const runId = await ctx.db.insert("communityMemberWorkflowRuns", { communityId: f.communityId, workflowId,
+      membershipId: entry.membership_id, milestoneKey: "new", milestoneName: "New", milestoneEnteredAt: now,
+      workflowRevision: 1, automationKey: "intake", triggerType: "member_contributed", triggerReceiptRef: "fixture",
+      actionSnapshot: { key: "request", type: "request_form", formKey: "intake" }, status: "finished", createdAt: now, updatedAt: now });
+    const questions = [{ key: "q", title: "What help?", description: "", type: "short_text" as const, required: true, options: [] }];
+    const formId = await ctx.db.insert("communityForms", { communityId: f.communityId, key: "intake", name: "Changed draft", questions: [], revision: 2, createdAt: now, updatedAt: now });
+    const versionId = await ctx.db.insert("communityFormVersions", { communityId: f.communityId, formId, revision: 1,
+      name: "Original intake", questions, publishedBy: f.ownerId, publishedAt: now });
+    await ctx.db.insert("communityFormRequests", { communityId: f.communityId, membershipId: entry.membership_id,
+      workflowId, workflowRunId: runId, automationKey: "intake", milestoneKey: "new", milestoneEnteredAt: now,
+      activationSequence: (await ctx.db.get(entry.membership_id) as any).activationSequence ?? 0, formKey: "intake", versionId, status: "submitted", answers: { q: "PRIVATE_PRICING_HELP" },
+      revision: 1, createdAt: now, updatedAt: now, submittedAt: now });
+    return versionId;
+  });
+  const read = await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.path);
+  expect(read, JSON.stringify(read)).toMatchObject({ ok: true, value: { writable: false, context: {
+    user_id: f.memberId, community_id: f.communityId, submitted_form_evidence: { submissions: [expect.objectContaining({ form_name: "Original intake", form_revision: 1 })] },
+  } } });
+  expect(JSON.stringify(read)).toContain("PRIVATE_PRICING_HELP");
+  expect(JSON.stringify(read)).toContain(versionId);
+  expect(JSON.stringify(read)).not.toContain("Changed draft");
+  expect((await execute(f.memberSubject, f.ownerId, "polynet_read", entry.path)).ok).toBe(false);
+  for (const [tool, path] of [["polynet_list", directory], ["polynet_read", entry.path]] as const) {
+    expect((await execute(f.memberSubject, f.memberId, tool, path)).ok).toBe(false);
+    expect((await execute(f.ownerSubject, f.ownerId, tool, path, "community_agent")).ok).toBe(false);
+  }
+  await t.run(async ctx => { await ctx.db.patch(entry.membership_id, { active: false }); });
+  expect((await execute(f.ownerSubject, f.ownerId, "polynet_read", entry.path)).ok).toBe(false);
+});
+
 test.each(["personal_agent", "external_mcp"] as const)("%s discovers and reads its own community context without writing state", async (principalKind) => {
   vi.stubEnv("ARX_PUBLIC_APP_URL", "https://polynet-staging.vercel.app");
   const t = convexTest(schema, modules);
@@ -199,6 +271,7 @@ test("self-context query rechecks access after path resolution and refuses direc
 });
 
 const modules = import.meta.glob([
+  "./communityMemberWorkflows.ts",
   "./authActor.ts",
   "./authIdentity.ts",
   "./communityActivity.ts",

@@ -590,6 +590,23 @@ export const getBuilderWorkflowBoardProjectionToken = query({
     };
   },
 });
+// Paginated identity discovery only; answers remain in the authorized dossier read.
+export const listBuilderWorkflowContextMembers = query({
+  args: { ...managerIdentityArgs, communityId: v.id("communities"), cursor: v.optional(v.string()) },
+  handler: async (ctx, args) => {
+    const actorUserId = await resolveUserIdForAuthenticatedRequest({ ctx, userId: args.userId, authSubject: args.authSubject });
+    await requireCommunityManager({ ctx, communityId: args.communityId, userId: actorUserId });
+    const page = await ctx.db.query("communityMemberships")
+      .withIndex("by_community", q => q.eq("communityId", args.communityId))
+      .paginate({ numItems: 50, cursor: args.cursor ?? null });
+    const members = await Promise.all(page.page.filter(communityMembershipRowIsActive).map(async membership => {
+      const profile = await resolveUserProfileDisplayProjection(ctx, membership.userId);
+      return { membership_id: String(membership._id), user_id: String(membership.userId), name: profile.display_name };
+    }));
+    return { members, next_cursor: page.isDone ? null : page.continueCursor };
+  },
+});
+
 export const getBuilderWorkflowMemberSuccessDossier = query({
   args: {
     ...managerIdentityArgs,

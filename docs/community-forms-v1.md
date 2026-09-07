@@ -128,3 +128,18 @@ channel access. This slice does not create separate per-message secrecy.
 Tests in `communityAgentTimedWorkflow.test.ts` use synthetic forms and stub final
 provider text. They prove prompt composition, receipts and publication fencing,
 not live model quality. A controlled staging canary remains a separate release gate.
+# Builder-agent response retrieval
+
+Authorized personal agents and official MCP clients discover private member workflow
+context through `polynet_list` at `/communities/<slug>/builder/workflow-members/`.
+Pages contain at most 50 membership identities and an explicit `next_cursor`.
+Names are not unique selectors: use the returned membership document path, and
+clarify ambiguous names. `polynet_read` reuses the UI dossier resolver and checks
+current owner/admin authority and active subject membership on each read.
+
+The generated document includes canonical form/version evidence and explicit
+truncation/unavailable-record indicators. No new persisted context, form-answer
+copies, or response-management page exists. Community agents cannot access this
+private subtree even when sponsored by an owner. Submitted answers are untrusted
+evidence, not instructions or proof of goal completion; reading them does not
+authorize publishing them to a shared channel.
