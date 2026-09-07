@@ -1,4 +1,5 @@
 import { api } from "../convex/_generated/api";
+import { subscribeCommunityPages } from "./subscribeCommunityPages";
 import { bootstrapConvexAuthenticatedClient } from "./convexAuthenticatedClient";
 import type { CloudCommunityChatLiveClient } from "./cloudCommunityChatGateway";
 
@@ -146,44 +147,13 @@ export function subscribeChannelDirectoryPages(params: {
   onUpdate: (result: CloudCommunityChannelsResult) => void;
   onError?: (error: unknown) => void;
 }): () => void {
-  type Slot = { active: boolean; stop?: () => void; fingerprint?: string; channels: CloudCommunityChannel[] };
-  const pages: Slot[] = [];
-  let closed = false;
-  const trim = (index: number) => {
-    for (const slot of pages.splice(index)) { slot.active = false; slot.stop?.(); }
-  };
-  const load = (section: "shared" | "private", cursor: string | null) => {
-    if (closed) return;
-    const index = pages.length;
-    const slot: Slot = { active: true, channels: [] }; pages.push(slot);
-    const watch = params.watch(section, cursor);
-    const publish = () => {
-      if (closed || !slot.active) return;
-      try {
-        const result = watch.localQueryResult();
-        if (result === undefined) return;
-        const fingerprint = JSON.stringify(result);
-        if (slot.fingerprint === fingerprint) return;
-        slot.fingerprint = fingerprint;
-        trim(index + 1);
-        slot.channels = Array.isArray(result.page) ? result.page : [];
-        const isComplete = result.isDone === true && section === "private";
-        const unique = new Map(pages.flatMap(page => page.channels).map(channel => [channel.id || channel.slug, channel]));
-        params.onUpdate({ ...coerceCommunityChannelsResult({ channels: [...unique.values()].sort((a, b) =>
-          a.position - b.position || a.id.localeCompare(b.id)), max_active_channels: result.max_active_channels }), isComplete });
-        if (!result.isDone) {
-          if (!result.continueCursor || result.continueCursor === cursor) throw new Error("community_channel_cursor_invalid");
-          load(section, result.continueCursor);
-        } else if (section === "shared") load("private", null);
-      } catch (error) {
-        trim(index + 1); slot.channels = []; slot.fingerprint = undefined;
-        params.onUpdate({ channels: [], max_active_channels: 10, isComplete: false });
-        params.onError?.(error);
-      }
-    };
-    slot.stop = watch.onUpdate(publish);
-    publish();
-  };
-  load("shared", null);
-  return () => { closed = true; trim(0); };
+  return subscribeCommunityPages<any>({
+    watch: params.watch,
+    onUpdate: (pages, isComplete) => {
+      const unique = new Map<string, CloudCommunityChannel>(pages.flatMap(page => page.page).map(channel => [channel.id || channel.slug, channel]));
+      params.onUpdate({ ...coerceCommunityChannelsResult({ channels: [...unique.values()].sort((a, b) =>
+        a.position - b.position || a.id.localeCompare(b.id)), max_active_channels: pages.at(-1)?.max_active_channels ?? 10 }), isComplete });
+    },
+    onError: params.onError,
+  });
 }

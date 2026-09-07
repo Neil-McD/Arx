@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+import { paginationOptsValidator } from "convex/server";
 import { resolveMentionRecipientSource } from "./communityNotificationAccess";
 import { mutation, query } from "./_generated/server";
 import {
@@ -19,6 +20,7 @@ import {
   type CommunityChannelLike,
   listChannelReadableRows,
   listAuthorizedCommunityChannels,
+  listAuthorizedCommunityChannelPage,
   resolveAuthorizedCommunityChannel,
   resolveRequestedCommunityChannel,
 } from "./communityChannelCore";
@@ -299,10 +301,11 @@ async function getCommunityAttentionRow(
   ctx: any,
   communityId: any,
   userId: any,
+  selectedChannels?: CommunityChannelLike[],
 ): Promise<CommunityAttentionRow> {
   const settingsRow = await getCommunityMemberSettingsRow(ctx, communityId, userId);
   const actor = await resolveCommunityChannelActor({ ctx, communityId, userId });
-  const channels = await listAuthorizedCommunityChannels({ ctx, communityId, actor });
+  const channels = selectedChannels ?? await listAuthorizedCommunityChannels({ ctx, communityId, actor });
   const [
     channelAttentionInputs,
     latestMentionsByChannel,
@@ -517,6 +520,22 @@ async function acknowledgeCommunityChatReadForUser(args: {
   };
 }
 
+export const listMyCommunityAttentionPage = query({
+  args: { authSubject: v.optional(v.string()), communityId: v.id("communities"),
+    section: v.union(v.literal("shared"), v.literal("private")), paginationOpts: paginationOptsValidator },
+  handler: async (ctx, args) => {
+    const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
+    // Attention has several indexed reads per room, so use smaller pages than
+    // a plain directory listing. No read cursor is mutated by this query.
+    const result = await listAuthorizedCommunityChannelPage({ ctx, communityId: args.communityId, actor,
+      section: args.section, paginationOpts: { ...args.paginationOpts, numItems: Math.min(10, args.paginationOpts.numItems) } });
+    const attention = await getCommunityAttentionRow(ctx, args.communityId, userId, result.page);
+    return { ...result, page: attention.channels, attention };
+  },
+});
+
+// Cached-client bounded adapter. New clients use the paged endpoint above.
 export const listMyCommunityAttention = query({
   args: {
     userId: v.optional(v.id("users")),

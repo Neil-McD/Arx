@@ -9,6 +9,7 @@ import schema from "./schema";
 
 const modules = import.meta.glob([
   "./communityChannels.ts",
+  "./communityAttention.ts",
   "./communityInteractions.ts",
   "./communityInteractionEvidence.ts",
   "./_generated/**/*.*s",
@@ -45,13 +46,58 @@ test("paged directory isolates member grants from 120 private rooms and bounds m
   expect(third.isDone).toBe(true);
   const own = await member.query(api.communityChannels.listCommunityChannelPage, args);
   expect(own.page.map(c => c.id)).toEqual([seeded.last]); expect(own.isDone).toBe(true);
+  await t.run(ctx => ctx.db.insert("communityInteractionRoots", {
+    communityId: f.communityId, channelId: seeded.last, actorType: "human", actorUserId: f.ownerId,
+    kind: "discussion", status: "live", visibilityScope: "community", contentSummary: "Late room unread",
+    replyCount: 0, reactionSummary: [], idempotencyKey: "late-room", createdAt: 10000, updatedAt: 10000,
+  }));
+  const attentionArgs = { ...args, paginationOpts: { cursor: null, numItems: 1000 } };
+  const ownAttention = await member.query(api.communityAttention.listMyCommunityAttentionPage, attentionArgs);
+  expect(ownAttention.page).toEqual([expect.objectContaining({ channel_id: String(seeded.last), chat: true })]);
+  let attentionCursor: string | null = null;
+  const attentionRows: any[] = [];
+  do {
+    const page: any = await owner.query(api.communityAttention.listMyCommunityAttentionPage, {
+      ...attentionArgs, paginationOpts: { cursor: attentionCursor, numItems: 1000 },
+    });
+    expect(page.page.length).toBeLessThanOrEqual(10);
+    attentionRows.push(...page.page);
+    attentionCursor = page.isDone ? null : page.continueCursor;
+  } while (attentionCursor);
+  expect(attentionRows).toHaveLength(120);
+  expect(attentionRows[attentionRows.length - 1]).toMatchObject({ channel_id: String(seeded.last), chat: true });
+  let agentCursor: string | undefined;
+  const agentRows: any[] = [];
+  do {
+    const page: any = await t.query(internal.communityChannels.listCommunityChannelPageInternal, {
+      communityId: f.communityId, userId: f.ownerId, actorKind: "external_mcp", cursor: agentCursor,
+    });
+    expect(page.channels.length).toBeLessThanOrEqual(50);
+    agentRows.push(...page.channels); agentCursor = page.next_cursor ?? undefined;
+  } while (agentCursor);
+  expect(new Set(agentRows.map(row => row.id)).size).toBe(122);
+  const sharedAgent = await t.query(internal.communityChannels.listCommunityChannelPageInternal, {
+    communityId: f.communityId, userId: f.ownerId, actorKind: "community_agent",
+  });
+  expect(sharedAgent.channels.map(c => c.name)).toEqual(["General", "Shared"]);
+  expect(sharedAgent.next_cursor).toBeNull();
+  const memberDirectory = await t.query(internal.communityChannels.listCommunityChannelPageInternal, {
+    communityId: f.communityId, userId: seeded.membership.userId, actorKind: "external_mcp",
+  });
+  await expect(t.query(internal.communityChannels.listCommunityChannelPageInternal, {
+    communityId: f.communityId, userId: f.ownerId, actorKind: "external_mcp", cursor: memberDirectory.next_cursor!,
+  })).rejects.toThrow("community_channel_cursor_invalid");
   expect((await member.query(api.communityChannels.listCommunityChannelPage, { ...args, section: "shared" })).page.map(c => c.name)).toEqual(["General", "Shared"]);
   await t.run(ctx => ctx.db.patch(seeded.membership._id, { activationSequence: 1 }));
   expect((await member.query(api.communityChannels.listCommunityChannelPage, args)).page).toEqual([]);
+  expect((await member.query(api.communityAttention.listMyCommunityAttentionPage, attentionArgs)).page).toEqual([]);
   await t.run(ctx => ctx.db.patch(seeded.grant, { membershipActivationSequence: 1 }));
   expect((await member.query(api.communityChannels.listCommunityChannelPage, args)).page).toHaveLength(1);
   await t.run(ctx => ctx.db.patch(seeded.grant, { status: "revoked" }));
   expect((await member.query(api.communityChannels.listCommunityChannelPage, args)).page).toEqual([]);
+  expect((await member.query(api.communityAttention.listMyCommunityAttentionPage, attentionArgs)).page).toEqual([]);
+  await t.run(ctx => ctx.db.patch(seeded.last, { status: "archived" }));
+  expect((await member.query(api.communityAttention.listMyCommunityAttentionPage, attentionArgs)).page).toEqual([]);
   await expect(t.withIdentity({ subject: OUTSIDER_SUBJECT }).query(api.communityChannels.listCommunityChannelPage, args)).rejects.toThrow();
 });
 

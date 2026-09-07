@@ -23,8 +23,8 @@ Selection and reorder wait for a complete directory, avoiding false not-found
 decisions while later pages are loading. This is bounded per query, not a claim
 that rendering every authorized room is constant-cost.
 
-The creation limit intentionally remains until attention aggregation and the
-internal agent directory are migrated.
+The creation limit intentionally remains while shared-context readers and
+cached-client capacity behavior are reviewed before a separate capacity change.
 This read foundation is not automatic service-channel provisioning and does not
 yet authorize increasing the number of live channels.
 
@@ -52,8 +52,29 @@ and rejects existing duplicate active names. Communities with missing normalized
 names fail closed for creation/rename until backfilled. This slice targets only
 `dev:quick-porcupine-949`; production migration is not authorized.
 
-Remaining capacity work: attention aggregation and the internal directory listing
-(not exact lookup). Automatic member-join service rooms remain a later slice.
+Directory, attention, and agent discovery now share the same authorized page
+reader. Attention reads at most 10 stored rooms/grants per query; directory reads
+at most 50. The existing synthetic General fallback may add one row. Members'
+private pages scan only their own indexed grants. Permissions are rechecked on
+every page. No new tables, counters, scheduled jobs, or read-cursor writes exist.
+
+Web directory and attention share one reactive-page lifecycle. Changes invalidate
+descendant pages before publication. Attention publishes a community only when
+both shared and private sections finish; missing rows mean unknown, not all-read.
+Errors discard old private results. Per-channel read acknowledgements are unchanged.
+Total work remains proportional to authorized rooms; paging bounds each query,
+not the number of subscriptions across a large account.
+
+The canonical agent `/channels/` directory returns `next_cursor` and `truncated`.
+Continue until the cursor is null, including when a filtered page is empty.
+Cursor envelopes bind community, principal, actor kind, and membership activation.
+Community-agent directory discovery stays shared-only. The old internal full-list
+endpoint is deleted. Capped public list/attention endpoints remain solely for
+cached clients; current web code does not call them.
+
+Remaining capacity work: shared-context readers still assume at most ten shared
+rooms; cached-client adapters must have an explicit capacity policy before raising
+limits. Automatic member-join service rooms remain a later slice.
 
 Invite-only rooms are visible to invited active members and community
 owners/admins. Personal agents and external MCP inherit the authenticated

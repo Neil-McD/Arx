@@ -340,6 +340,41 @@ export async function listActiveCommunityChannels(args: {
   });
 }
 
+// The canonical bounded directory read. Authorization is evaluated on every
+// page; a member's private scan starts from their grants, not other clients.
+export async function listAuthorizedCommunityChannelPage(args: {
+  ctx: any; communityId: any; actor: ChannelActor;
+  section: "shared" | "private";
+  paginationOpts: { cursor: string | null; numItems: number };
+}): Promise<{ page: CommunityChannelLike[]; isDone: boolean; continueCursor: string }> {
+  if (args.actor.kind === "community_agent" && args.section === "private") {
+    return { page: [], isDone: true, continueCursor: "" };
+  }
+  const { ctx, communityId, actor, section } = args;
+  const opts = { ...args.paginationOpts, numItems: Math.min(50, Math.max(1, args.paginationOpts.numItems)) };
+  const byGrant = section === "private" && !actor.isManager;
+  const result = byGrant
+    ? await ctx.db.query("communityChannelParticipants").withIndex("by_community_principal_status", (q: any) =>
+      q.eq("communityId", communityId).eq("principalKey", actor.principalKey).eq("status", "active")).paginate(opts)
+    : await ctx.db.query("communityChannels").withIndex("by_community_access_status_position", (q: any) =>
+      q.eq("communityId", communityId).eq("accessMode", section === "shared" ? "all_members" : "restricted")
+        .eq("status", "active")).paginate(opts);
+  const candidates = byGrant
+    ? await Promise.all(result.page.map((row: any) => ctx.db.get(row.channelId))) : result.page;
+  const page: CommunityChannelLike[] = [];
+  for (const channel of candidates) {
+    if (!channel || normalizeIdValue(channel.communityId) !== normalizeIdValue(communityId) || channel.status !== "active"
+      || channel.accessMode !== (section === "shared" ? "all_members" : "restricted")) continue;
+    assertChannelForCommunity(channel, communityId);
+    if ((await getCommunityChannelCapabilities({ ctx, channel, actor })).canRead) page.push(channel);
+  }
+  if (section === "shared" && args.paginationOpts.cursor === null && !await getGeneralChannel(ctx, communityId)) {
+    const general = legacyGeneralChannelSelection(communityId);
+    if ((await getCommunityChannelCapabilities({ ctx, channel: general, actor })).canRead) page.unshift(general);
+  }
+  return { ...result, page };
+}
+
 export async function listAuthorizedCommunityChannels(args: {
   ctx: any; communityId: any; actor: ChannelActor;
 }): Promise<CommunityChannelLike[]> {

@@ -193,8 +193,8 @@ assert.match(
 );
 assert.match(
   attentionGateway,
-  /MAX_COMMUNITY_ATTENTION_COMMUNITIES_PER_QUERY[\s\S]*communityIdBatches[\s\S]*watchQuery[\s\S]*listMyCommunityAttention/,
-  "attention subscriptions must chunk account growth into bounded backend executions",
+  /subscribeCommunityPages[\s\S]*watchQuery[\s\S]*listMyCommunityAttentionPage[\s\S]*numItems: 10/,
+  "attention subscriptions must bound each execution to one community and a channel page",
 );
 assert.match(
   attentionBackend,

@@ -15,13 +15,12 @@ import {
   createActiveCommunityChannel,
   getGeneralChannel,
   listAuthorizedCommunityChannels,
-  listSharedCommunityChannels,
+  listAuthorizedCommunityChannelPage,
   moveActiveCommunityChannel,
   normalizeCommunityChannelName,
   renameActiveCommunityChannel,
   resolveAuthorizedCommunityChannel,
   setActiveCommunityChannelPinnedRoot,
-  legacyGeneralChannelSelection,
 } from "./communityChannelCore";
 import {
   normalizeIdValue,
@@ -82,28 +81,10 @@ export const listCommunityChannelPage = query({
   handler: async (ctx, args) => {
     const userId = await resolveUserIdForAuthenticatedRequest({ ctx, authSubject: args.authSubject ?? null });
     const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId, userId });
-    const opts = { ...args.paginationOpts, numItems: Math.min(50, Math.max(1, args.paginationOpts.numItems)) };
-    const byGrant = args.section === "private" && !actor.isManager;
-    const result = byGrant
-      ? await ctx.db.query("communityChannelParticipants").withIndex("by_community_principal_status", q =>
-        q.eq("communityId", args.communityId).eq("principalKey", actor.principalKey).eq("status", "active")).paginate(opts)
-      : await ctx.db.query("communityChannels").withIndex("by_community_access_status_position", q =>
-        q.eq("communityId", args.communityId).eq("accessMode", args.section === "shared" ? "all_members" : "restricted")
-          .eq("status", "active")).paginate(opts);
-    const candidates = byGrant
-      ? await Promise.all(result.page.map(row => ctx.db.get((row as any).channelId))) : result.page;
-    const channels = [];
-    for (const row of candidates) {
-      const channel = row as CommunityChannelLike | null;
-      if (!channel || channel.communityId !== args.communityId || channel.status !== "active"
-        || channel.accessMode !== (args.section === "shared" ? "all_members" : "restricted")) continue;
-      const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
-      if (capabilities.canRead) channels.push({ ...mapCommunityChannel(channel), capabilities });
-    }
-    if (args.section === "shared" && args.paginationOpts.cursor === null && !await getGeneralChannel(ctx, args.communityId)) {
-      const channel = legacyGeneralChannelSelection(args.communityId);
-      channels.unshift({ ...mapCommunityChannel(channel), capabilities: await getCommunityChannelCapabilities({ ctx, channel, actor }) });
-    }
+    const result = await listAuthorizedCommunityChannelPage({ ctx, communityId: args.communityId, actor,
+      section: args.section, paginationOpts: args.paginationOpts });
+    const channels = await Promise.all(result.page.map(async channel => ({ ...mapCommunityChannel(channel),
+      capabilities: await getCommunityChannelCapabilities({ ctx, channel, actor }) })));
     return { ...result, page: channels, max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS };
   },
 });
@@ -349,29 +330,36 @@ function mapCommunityChannelForRepository(channel: CommunityChannelLike) {
   };
 }
 
-export const listCommunityChannelsInternal = internalQuery({
+export const listCommunityChannelPageInternal = internalQuery({
   args: {
-    userId: v.id("users"),
-    communityId: v.id("communities"),
+    userId: v.id("users"), communityId: v.id("communities"),
     actorKind: v.optional(channelActorKindValidator),
+    cursor: v.optional(v.string()), limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const actor = await resolveCommunityChannelActor({
-      ctx,
-      communityId: args.communityId,
-      userId: args.userId,
-      kind: args.actorKind,
-    });
+    const actor = await resolveCommunityChannelActor({ ctx, communityId: args.communityId,
+      userId: args.userId, kind: args.actorKind });
+    const scope = JSON.stringify([args.communityId, actor.principalKey, actor.kind,
+      actor.isManager, actor.membershipId, actor.membershipActivationSequence]);
+    let section: "shared" | "private" = "shared";
+    let cursor: string | null = null;
+    if (args.cursor) {
+      let decoded: any;
+      try { decoded = JSON.parse(args.cursor); } catch { throw new Error("community_channel_cursor_invalid"); }
+      if (decoded?.scope !== scope || !["shared", "private"].includes(decoded.section)
+        || !(decoded.cursor === null || typeof decoded.cursor === "string")) throw new Error("community_channel_cursor_invalid");
+      section = decoded.section; cursor = decoded.cursor;
+    }
+    const result = await listAuthorizedCommunityChannelPage({ ctx, communityId: args.communityId,
+      actor, section, paginationOpts: { cursor, numItems: args.limit ?? 50 } });
+    const next = !result.isDone ? { section, cursor: result.continueCursor }
+      : section === "shared" && actor.kind !== "community_agent" ? { section: "private", cursor: null } : null;
     return {
-      channels: await Promise.all((await (args.actorKind === "community_agent" ? listSharedCommunityChannels : listAuthorizedCommunityChannels)({
-        ctx,
-        communityId: args.communityId,
-        actor,
-      })).map(async (channel) => ({
+      channels: await Promise.all(result.page.map(async channel => ({
         ...mapCommunityChannelForRepository(channel),
         capabilities: await requireCommunityChannelCapability({ ctx, channel, actor, capability: "canRead" }),
       }))),
-      max_active_channels: MAX_ACTIVE_COMMUNITY_CHANNELS,
+      next_cursor: next ? JSON.stringify({ scope, ...next }) : null,
     };
   },
 });

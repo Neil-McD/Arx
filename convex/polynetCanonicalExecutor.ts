@@ -703,8 +703,9 @@ async function executeCanonicalList(args: {
 
   if (target.localPath === POLYNET_CHANNELS_DIRECTORY_PATH) {
     const value = (await args.ctx.runQuery(
-      (internal as any).communityChannels.listCommunityChannelsInternal,
-      { userId: args.userId, communityId: target.communityId, actorKind: args.principalKind },
+      (internal as any).communityChannels.listCommunityChannelPageInternal,
+      { userId: args.userId, communityId: target.communityId, actorKind: args.principalKind,
+        ...(typeof args.input.cursor === "string" ? { cursor: args.input.cursor } : {}) },
     )) as Record<string, unknown>;
     const channels = Array.isArray(value.channels)
       ? (value.channels as Array<Record<string, unknown>>)
@@ -727,6 +728,8 @@ async function executeCanonicalList(args: {
             },
           ];
         }),
+        nextCursor: typeof value.next_cursor === "string" ? value.next_cursor : null,
+        truncated: typeof value.next_cursor === "string",
         searchable: true,
         writable: false,
       }),
