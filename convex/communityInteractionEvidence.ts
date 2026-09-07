@@ -40,7 +40,6 @@ import {
   listSharedCommunityChannels,
   requireSharedChannelForAddressableRow,
   requireChannelFromAuthorizedSet,
-  listAuthorizedCommunityChannels,
   resolveAuthorizedCommunityChannel,
 } from "./communityChannelCore";
 
@@ -263,24 +262,17 @@ async function searchRecentCommunityInteractionEvidence(args: {
   if (!community) throw new Error("community_not_found");
   const actor = args.actorKind && args.actorKind !== "community_agent" && (args.channelId || args.channelSlug)
     ? await resolveCommunityChannelActor({ ...args, kind: args.actorKind }) : undefined;
-  const channels = actor ? await listAuthorizedCommunityChannels({ ctx: args.ctx, communityId: args.communityId, actor }) : await listSharedCommunityChannels({
-    ctx: args.ctx,
-    communityId: args.communityId,
-  });
   const requestedChannelId = normalizeIdValue(args.channelId);
   const requestedChannelSlug = String(args.channelSlug ?? "").trim();
-  const selectedChannel = requestedChannelId || requestedChannelSlug
-    ? channels.find(
-        (channel) =>
-          (!requestedChannelId ||
-            normalizeIdValue(channel._id) === requestedChannelId) &&
-          (!requestedChannelSlug || channel.slug === requestedChannelSlug),
-      ) ?? null
-    : null;
-  if ((requestedChannelId || requestedChannelSlug) && !selectedChannel) {
-    throw new Error("community_channel_unavailable");
+  let selectedChannel: CommunityChannelLike | null = null;
+  if (requestedChannelId || requestedChannelSlug) {
+    const scopedActor = actor ?? await resolveCommunityChannelActor({ ...args, kind: "community_agent" });
+    selectedChannel = await resolveAuthorizedCommunityChannel({ ctx: args.ctx, communityId: args.communityId,
+      channelId: requestedChannelId || null, channelSlug: requestedChannelSlug || null,
+      actor: scopedActor, capability: "canRead" });
+    if (!actor && selectedChannel.accessMode !== "all_members") throw new Error("community_channel_unavailable");
   }
-  const channelsForRead = selectedChannel ? [selectedChannel] : channels;
+  const channelsForRead = selectedChannel ? [selectedChannel] : await listSharedCommunityChannels({ ctx: args.ctx, communityId: args.communityId });
   const [roots, replies] = await Promise.all([
     selectedChannel
       ? listChannelReadableRows<InteractionRow>({

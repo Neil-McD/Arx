@@ -348,12 +348,17 @@ export const resolveCommunityChannelBySlugInternal = internalQuery({
       userId: args.userId,
       kind: args.actorKind,
     });
-    const channel = (await (args.actorKind === "community_agent" ? listSharedCommunityChannels : listAuthorizedCommunityChannels)({
-      ctx,
-      communityId: args.communityId,
-      actor,
-    })).find((candidate) => candidate.slug === args.slug);
-    if (!channel) return null;
+    let channel;
+    try {
+      channel = await resolveAuthorizedCommunityChannel({ ctx, communityId: args.communityId,
+        channelSlug: args.slug, actor, capability: "canRead" });
+    } catch (error) {
+      if (error instanceof Error && error.message === "community_channel_unavailable") return null;
+      throw error;
+    }
+    // Broad community-agent repository lookup remains shared-only, even when
+    // that agent has an explicit grant for an originating private thread.
+    if (args.actorKind === "community_agent" && channel.accessMode !== "all_members") return null;
     const capabilities = await getCommunityChannelCapabilities({ ctx, channel, actor });
     return capabilities.canRead ? { ...mapCommunityChannelForRepository(channel), capabilities } : null;
   },

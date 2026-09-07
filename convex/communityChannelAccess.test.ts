@@ -21,6 +21,32 @@ const shared: ChannelPolicy = {
   _id: "channel", communityId: "community", status: "active", accessMode: "all_members", postingPolicy: "members",
 };
 
+test("exact private-room lookup and scoped search do not enumerate a large directory", async () => {
+  const t = convexTest(schema, modules), f = await fixture(t);
+  const grantId = await t.run(async ctx => {
+    const original = (await ctx.db.get(f.channelId))!;
+    const { _id, _creationTime, ...fields } = original;
+    for (let i = 0; i < 120; i++) await ctx.db.insert("communityChannels", {
+      ...fields, name: `Other ${i}`, slug: `other-${i}`, position: i + 2,
+    });
+    return ctx.db.insert("communityChannelParticipants", { communityId: f.communityId, channelId: f.channelId,
+      principalKey: `user:${f.users.member}`, membershipId: f.memberships.member, membershipActivationSequence: 0,
+      status: "active", createdByUserId: f.users.owner, createdAt: 1, updatedAt: 1 });
+  });
+  const lookup = { communityId: f.communityId, userId: f.users.member, actorKind: "external_mcp" as const, slug: "client" };
+  expect((await t.query(internal.communityChannels.resolveCommunityChannelBySlugInternal, lookup))?.id).toBe(String(f.channelId));
+  const search = { communityId: f.communityId, userId: f.users.member, actorKind: "external_mcp" as const,
+    channelSlug: "client", query: "canary", limit: 5 };
+  await expect(t.query(internal.communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal, search)).resolves.toBeDefined();
+  await expect(t.query(internal.communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal,
+    { ...search, channelId: f.channelId, channelSlug: "other-0" })).rejects.toThrow("community_channel_unavailable");
+  expect(await t.query(internal.communityChannels.resolveCommunityChannelBySlugInternal,
+    { ...lookup, actorKind: "community_agent", userId: f.users.owner })).toBeNull();
+  await t.run(ctx => ctx.db.patch(grantId, { status: "revoked" }));
+  expect(await t.query(internal.communityChannels.resolveCommunityChannelBySlugInternal, lookup)).toBeNull();
+  await expect(t.query(internal.communityInteractionEvidence.searchRecentCommunityInteractionEvidenceInternal, search)).rejects.toThrow("community_channel_unavailable");
+});
+
 test.each<ChannelActorKind>(["human", "personal_agent", "external_mcp", "community_agent"])(
   "%s keeps shared-room participation without gaining management", (kind) => {
     expect(evaluateCommunityChannelCapabilities({

@@ -291,6 +291,7 @@ export async function resolveAuthorizedCommunityChannel(args: {
   ctx: any;
   communityId: any;
   channelId?: any | null;
+  channelSlug?: string | null;
   ensureGeneralForWrite?: boolean;
   nowMs?: number;
   actor: ChannelActor;
@@ -298,8 +299,17 @@ export async function resolveAuthorizedCommunityChannel(args: {
 }): Promise<CommunityChannelLike> {
   let channel: CommunityChannelLike;
   try {
-    channel = args.channelId ? await requireCommunityChannelLineage({ ...args, channelId: args.channelId })
-      : await resolveRequestedCommunityChannel(args);
+    const slug = String(args.channelSlug ?? "").trim();
+    if (args.channelId) channel = await requireCommunityChannelLineage({ ...args, channelId: args.channelId });
+    else if (slug) {
+      const matches = await args.ctx.db.query("communityChannels").withIndex("by_community_slug", (q: any) =>
+        q.eq("communityId", args.communityId).eq("slug", slug)).take(2);
+      if (matches.length > 1) throw new Error("community_channel_unavailable");
+      if (!matches.length && slug === GENERAL_CHANNEL_SLUG) channel = await resolveRequestedCommunityChannel(args);
+      else if (matches.length === 1) channel = await requireCommunityChannelLineage({ ...args, channelId: matches[0]._id });
+      else throw new Error("community_channel_unavailable");
+    } else channel = await resolveRequestedCommunityChannel(args);
+    if (slug && channel.slug !== slug) throw new Error("community_channel_unavailable");
   } catch {
     throw new Error("community_channel_unavailable");
   }

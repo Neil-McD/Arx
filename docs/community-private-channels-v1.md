@@ -28,6 +28,14 @@ reorder, attention/evidence consumers and the internal agent directory are migra
 This read foundation is not automatic service-channel provisioning and does not
 yet authorize increasing the number of live channels.
 
+Exact room resolution by ID/slug and channel-scoped evidence search no longer
+enumerate the community directory. Both use canonical room lineage and current
+capabilities; supplying conflicting ID and slug fails closed. The broad community
+agent repository remains shared-only even for an explicitly granted private room.
+Automated fixtures verify these exact paths with 120 unrelated private rooms.
+The remaining capacity work is creation/name/order allocation, full-list reorder,
+attention aggregation and the internal directory listing (not exact lookup).
+
 Invite-only rooms are visible to invited active members and community
 owners/admins. Personal agents and external MCP inherit the authenticated
 member's current access; the community agent requires its own explicit grant.
