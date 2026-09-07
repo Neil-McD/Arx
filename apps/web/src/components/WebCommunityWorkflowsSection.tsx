@@ -17,8 +17,11 @@ import type { CloudCommunityChannel } from "../../../../shared/cloudCommunityCha
 import { WebCommunityWorkflowMemberStub } from "./WebCommunityWorkflowMemberStub";
 import { WebCommunityWorkflowMilestoneModal } from "./WebCommunityWorkflowMilestoneModal";
 import "./WebCommunityWorkflowsSection.css";
+import { WebCommunityForms } from "./WebCommunityForms";
+import type { CommunityFormsGateway } from "../controllers/useWebCommunityFormsGateway";
 
 export type WebCommunityWorkflowsSectionProps = {
+  forms?: CommunityFormsGateway;
   channels: CloudCommunityChannel[];
   channelsUnavailable: boolean;
   board: CloudCommunityMemberWorkflowBoard | null;
@@ -63,6 +66,7 @@ const BLANK_MILESTONE: CommunityMemberWorkflowMilestone = {
 export function WebCommunityWorkflowsSection(
   props: WebCommunityWorkflowsSectionProps,
 ) {
+  const [showForms, setShowForms] = useState(false);
   const [editingMilestoneKey, setEditingMilestoneKey] = useState<string | null>(null);
   const [isCreatingMilestone, setIsCreatingMilestone] = useState(false);
   const milestones = props.board?.milestones ?? [BLANK_MILESTONE];
@@ -148,6 +152,8 @@ export function WebCommunityWorkflowsSection(
     );
   }
 
+  if (showForms && props.forms) return <WebCommunityForms key={props.forms.scopeKey} gateway={props.forms} onBack={() => setShowForms(false)} />;
+
   return (
     <div className="workflow-page workflow-pipeline-page">
       <section
@@ -156,6 +162,7 @@ export function WebCommunityWorkflowsSection(
       >
         <header className="feed-header-row workflow-pipeline-header">
           <h1 className="resources-header" id="workflow-title">Workflows</h1>
+          {props.forms ? <button type="button" className="workflow-secondary-button" onClick={() => setShowForms(true)}>Forms</button> : null}
         </header>
 
         <div className="workflow-milestone-canvas" aria-label="Member success milestones">

@@ -1,10 +1,21 @@
 import { defineSchema, defineTable } from "convex/server";
+import { communityFormQuestionValidator } from "./communityFormValidators";
 import { v } from "convex/values";
 import { communityFunnelContentV2Validator } from "./communityFunnelValidators";
 import { communityWeeklyDigestSnapshotValidator } from "./communityWeeklyDigestValidators";
 import { channelAccessModeValidator, channelPostingPolicyValidator, channelReplyPolicyValidator } from "./communityChannelValidators";
 
 export default defineSchema({
+  communityForms: defineTable({
+    communityId: v.id("communities"), key: v.string(), name: v.string(),
+    questions: v.array(communityFormQuestionValidator), revision: v.number(),
+    publishedRevision: v.optional(v.number()), createdAt: v.number(), updatedAt: v.number(),
+  }).index("by_community_key", ["communityId", "key"]),
+  communityFormVersions: defineTable({
+    communityId: v.id("communities"), formId: v.id("communityForms"), revision: v.number(),
+    name: v.string(), questions: v.array(communityFormQuestionValidator),
+    publishedBy: v.id("users"), publishedAt: v.number(),
+  }).index("by_form_revision", ["formId", "revision"]),
   users: defineTable({
     authSubject: v.string(),
     email: v.optional(v.string()),
